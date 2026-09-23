@@ -38,9 +38,8 @@ See also: [`normal_vector`](@ref), [`inner_Γ`](@ref)
 """
 function normal_vector(Wₕ::ScalarGridSpace{D}, marker::Symbol) where {D}
     Ωₕ = mesh(Wₕ)
-    ν = normal_vector(Ωₕ, marker)
-    mask = _face_mask(Val(D), (marker,))
-    np = npoints(Ωₕ, Tuple)
+    ν = normal_vector(Ωₕ, marker)  # throws the ArgumentError for an unknown marker
+    facet = boundary_symbol_to_cartesian(indices(Ωₕ))[marker]
     lin = LinearIndices(indices(Ωₕ))
 
     # `element(Wₕ, zero(eltype(Wₕ)))` fills through the `VectorElement` wrapper's generic
@@ -53,16 +52,13 @@ function normal_vector(Wₕ::ScalarGridSpace{D}, marker::Symbol) where {D}
     for d in 1:D
         fill!(parent(nₕ[d]), zero(T))
     end
-    _fill_normal!(locality(backend(Wₕ)), nₕ, Ωₕ, mask, ν, np, lin, Val(D))
+    _fill_normal!(locality(backend(Wₕ)), nₕ, facet, ν, lin, Val(D))
     return nₕ
 end
 
-# Host fill: the per-point loop `normal_vector` always ran, moved behind a locality-dispatched
-# helper (gpena/Bramble.jl#311) so a device-backed space can take the bulk-copy path below
-# instead, without duplicating the mask/index setup above in a second method.
-@inline function _fill_normal!(::HostLocality, nₕ, Ωₕ, mask, ν, np, lin, ::Val{D}) where {D}
-    @inbounds for I in indices(Ωₕ)
-        _on_face(mask, I, np, Val(D)) || continue
+# Host fill: visits only the facet slice (gpena/Bramble.jl#333), never the whole volume.
+@inline function _fill_normal!(::HostLocality, nₕ, facet, ν, lin, ::Val{D}) where {D}
+    @inbounds for I in facet
         k = lin[I]
         for d in 1:D
             parent(nₕ[d])[k] = ν[d]
@@ -71,31 +67,16 @@ end
     return nothing
 end
 
-# Device counterpart: the loop above would scalar-write a device array once per boundary
-# point. Fill one host buffer per component with the same loop, then `copyto!` it onto the
-# device array once -- one transfer per component instead of one write per boundary point.
-@noinline function _fill_normal!(::DeviceLocality, nₕ, Ωₕ, mask, ν, np, lin, ::Val{D}) where {D}
+# Device counterpart (gpena/Bramble.jl#311, #333): the components are already zeroed on the
+# device, so only the facet's linear indices -- O(facet), not O(volume) -- are built on the
+# host, moved to the device once, and each component is written there by indexed broadcast.
+@noinline function _fill_normal!(::DeviceLocality, nₕ, facet, ν, lin, ::Val{D}) where {D}
     T = eltype(parent(nₕ[1]))
-    host = ntuple(_ -> zeros(T, length(lin)), Val(D))
-    @inbounds for I in indices(Ωₕ)
-        _on_face(mask, I, np, Val(D)) || continue
-        k = lin[I]
-        for d in 1:D
-            host[d][k] = ν[d]
-        end
-    end
+    host_idx = Int[lin[I] for I in facet]
+    idx = similar(parent(nₕ[1]), Int, length(host_idx))
+    copyto!(idx, host_idx)
     for d in 1:D
-        copyto!(parent(nₕ[d]), host[d])
+        view(parent(nₕ[d]), idx) .= T(ν[d])
     end
     return nothing
-end
-
-# Whether `I` lies on any face of the mask. `_surface_weight` asks the same question per
-# direction; this one only needs the disjunction, and is not on an assembly hot path.
-@inline function _on_face(mask, I, np, ::Val{D}) where {D}
-    for d in 1:D
-        (mask[d][1] && I[d] == 1) && return true
-        (mask[d][2] && I[d] == np[d]) && return true
-    end
-    return false
 end
