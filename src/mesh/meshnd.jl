@@ -260,9 +260,19 @@ end
 @inline Base.getindex(Ωₕ::MeshnD, idx::CartesianIndex) = point(Ωₕ, idx)
 @inline Base.getindex(Ωₕ::MeshnD, idx...) = point(Ωₕ, idx)
 
-function locate_cell(Ωₕ::MeshnD{D}, x::Tuple) where {D}
+function locate_cell(Ωₕ::MeshnD{D}, x::NTuple{D, Real}) where {D}
     indices_tuple = ntuple(i -> locate_cell(Ωₕ(i), x[i]), Val(D))
     return CartesianIndex(indices_tuple)
+end
+
+# Disambiguates against `locate_cell(::AbstractMeshType{1}, ::Tuple{Real})`
+# (mesh/queries.jl): both match `(MeshnD{1}, Tuple{Real})` and neither is more specific
+# than the other, so `Test.detect_ambiguities` flags the pair. `MeshnD{1}` is never
+# actually produced by the public `mesh()` constructor (`_mesh` routes `D == 1` to
+# `Mesh1D` instead), so this exists only to make the method table unambiguous, with the
+# same body the generic method above would have run for `D == 1`.
+@inline function locate_cell(Ωₕ::MeshnD{1}, x::NTuple{1, Real})
+    return CartesianIndex(locate_cell(Ωₕ(1), x[1]))
 end
 
 # The geometric refinement alone, with markers left untouched: shared by both public

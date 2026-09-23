@@ -214,6 +214,10 @@ explicit, checked choice about one layer up, rather than leaving to a bare cell 
 no way to say "no" -- a new caller of `locate_cell` directly should decide its own
 out-of-range policy the same way, not assume this one already did.
 
+In a hot loop, pass `x` as a `Tuple` or an `SVector`: both are stack-allocated and go
+through the zero-cost `ntuple`-based methods below, while a `Vector` allocates wherever
+it is built.
+
 # Examples
 
 ```julia
@@ -223,7 +227,25 @@ locate_cell(Ωₕ, 5.0)   # returns 10 (the last cell) -- no error, x = 5.0 is w
 ```
 """
 function locate_cell end
-@inline locate_cell(Ωₕ::AbstractMeshType{D}, x::AbstractVector) where {D} = locate_cell(Ωₕ, Tuple(x))
+
+@inline function locate_cell(Ωₕ::AbstractMeshType{1}, x::Tuple{Real})
+    x1 = x[1]
+    return locate_cell(Ωₕ, x1)
+end
+
+@inline function locate_cell(Ωₕ::AbstractMeshType{1}, x::AbstractVector)
+    @boundscheck length(x) == 1 ||
+                 throw(DimensionMismatch("locate_cell expected a length-1 vector, got length $(length(x))"))
+    x1 = @inbounds x[1]
+    return locate_cell(Ωₕ, x1)
+end
+
+@inline function locate_cell(Ωₕ::AbstractMeshType{D}, x::AbstractVector) where {D}
+    @boundscheck length(x) == D ||
+                 throw(DimensionMismatch("locate_cell expected a length-$D vector, got length $(length(x))"))
+    xt = ntuple(i -> (@inbounds x[i]), Val(D))
+    return locate_cell(Ωₕ, xt)
+end
 
 """
     normal_vector(Ωₕ::AbstractMeshType{D}, symbol::Symbol) -> NTuple{D, Float64}

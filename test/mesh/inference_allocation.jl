@@ -34,6 +34,16 @@ using ..TestUtils: alloc_test, @test_allocs
     )
     Ωu = mesh(domain(interval(0.0, 1.0)), 32, true)     # uniform, for stepsize
 
+    # Fully non-uniform, for locate_cell's vector/tuple overloads: uniform is a special
+    # case and must not be the only shape these are checked against.
+    Ωₙ1 = mesh(domain(interval(0.0, 1.0)), 11, false)
+    Ωₙ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 9), (false, false))
+    Ωₙ3 = mesh(
+        domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+        (5, 6, 7),
+        (false, false, false)
+    )
+
     @testset "Type stability" begin
         for (lbl, Ωₕ) in (("1D", Ωₕ1), ("2D", Ωₕ2), ("3D", Ωₕ3))
             @testset "$lbl" begin
@@ -77,6 +87,26 @@ using ..TestUtils: alloc_test, @test_allocs
         @test @inferred(locate_cell(Ωₕ1, 0.5)) isa Int
         @test @inferred(normal_vector(Ωₕ1, :left)) isa NTuple{1, Float64}
         @test @inferred(stepsize(Ωu)) isa Float64
+
+        @testset "locate_cell vector/tuple overloads" begin
+            v1 = [0.37]
+            v2 = [0.3, 1.1]
+            v3 = [0.3, 0.6, 0.9]
+
+            @test locate_cell(Ωₙ1, v1) == locate_cell(Ωₙ1, 0.37)
+            @test locate_cell(Ωₙ1, (0.37,)) == locate_cell(Ωₙ1, 0.37)
+            @test locate_cell(Ωₙ2, v2) == locate_cell(Ωₙ2, (0.3, 1.1))
+            @test locate_cell(Ωₙ3, v3) == locate_cell(Ωₙ3, (0.3, 0.6, 0.9))
+
+            @test @inferred(locate_cell(Ωₙ1, v1)) isa Int
+            @test @inferred(locate_cell(Ωₙ1, (0.37,))) isa Int
+            @test @inferred(locate_cell(Ωₙ2, v2)) isa CartesianIndex{2}
+            @test @inferred(locate_cell(Ωₙ3, v3)) isa CartesianIndex{3}
+
+            @test_throws DimensionMismatch locate_cell(Ωₙ1, [0.1, 0.2])
+            @test_throws DimensionMismatch locate_cell(Ωₙ2, [0.1])
+            @test_throws DimensionMismatch locate_cell(Ωₙ3, [0.1, 0.2])
+        end
     end
 
     @testset "Zero allocations" begin
@@ -97,6 +127,15 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs locate_cell(Ωₕ1, 0.5)
         @test_allocs normal_vector(Ωₕ1, :left)
         @test_allocs stepsize(Ωu)
+
+        # locate_cell's vector/tuple overloads, D = 1, 2, 3, with a pre-built vector
+        v1 = [0.37]
+        v2 = [0.3, 1.1]
+        v3 = [0.3, 0.6, 0.9]
+        @test_allocs locate_cell(Ωₙ1, v1)
+        @test_allocs locate_cell(Ωₙ1, (0.37,))
+        @test_allocs locate_cell(Ωₙ2, v2)
+        @test_allocs locate_cell(Ωₙ3, v3)
 
         @test_allocs point(Ωₕ2, CartesianIndex(2, 3))
         @test_allocs cell_measure(Ωₕ2, CartesianIndex(2, 3))
