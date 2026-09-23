@@ -508,13 +508,22 @@ times the Kronecker product of its `D` one-dimensional factors, last axis leftmo
 (`A_2D = H_y ⊗ A_x + A_y ⊗ H_x`, matching gpena/Bramble.jl#162's own formula). For testing
 and inspection only -- this is exactly the `D`-dimensional matrix [`kronecker_operator`](@ref)
 is built to avoid forming.
+
+Built as a single `sparse(I, J, V, n, n)` call over every term's `findnz` triplets (`V`
+pre-scaled by that term's coefficient) rather than summing each term's Kronecker product
+into an accumulator one term at a time, which reallocates the whole `n x n` matrix per term.
 """
 function SparseArrays.SparseMatrixCSC(K::KroneckerLinearOperator{T}) where {T}
-    A = spzeros(T, K.n, K.n)
+    I = Int[]
+    J = Int[]
+    V = T[]
     for term in K.terms
         c = _kron_coeff(term.scales)
         Aterm = foldl(kron, reverse(map(_kron_as_sparse, term.factors)))
-        A = A + c * Aterm
+        i, j, v = SparseArrays.findnz(Aterm)
+        append!(I, i)
+        append!(J, j)
+        append!(V, c .* v)
     end
-    return A
+    return sparse(I, J, V, K.n, K.n)
 end
