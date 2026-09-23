@@ -173,12 +173,13 @@ supports `size`, `eltype`, `getindex`, `Base.:*`, `LinearAlgebra.issymmetric`, a
 `SparseMatrixCSC(K)` (an explicit `kron` of the factors, for testing and inspection -- the
 very matrix this operator avoids forming).
 
-The two `n`-length work buffers `mul!` needs for sum factorisation are grown on the first
-call rather than at construction (`resize!`, starting from an empty vector), so a freshly
-built `K` that has never multiplied anything costs only its `D` one-dimensional factors --
-this is what keeps `Base.summarysize(K)` small immediately after
-[`kronecker_operator`](@ref) returns. `mul!` still allocates nothing **after that first
-call**, matching every other zero-allocation refill in this package.
+`K` holds no work buffers: it stores only its `D` one-dimensional factors, so it is
+immutable after construction and safe to share across threads (concurrent `mul!` calls on
+one `K` never race). Sum factorisation needs two `n`-length scratch vectors;
+`mul!(y, K, x)` allocates them afresh on every call, with element type
+`promote_type(T, eltype(x), eltype(y))` so ForwardDiff `Dual`s pass through, while
+`mul!(y, K, x; scratch = (b1, b2))` uses caller-owned vectors and allocates nothing --
+give each thread its own pair.
 
 Dirichlet rows are out of scope: this operator carries no boundary constraint of its own.
 `bramble-plan`'s v3.3.0 subplan S5.2 layers that on top, through the `Kronecker.jl`
@@ -190,8 +191,6 @@ struct KroneckerLinearOperator{T, D, TermsT <: Tuple} <: AbstractMatrix{T}
     terms::TermsT
     dims::NTuple{D, Int}
     n::Int
-    buf1::Vector{T}
-    buf2::Vector{T}
 end
 
 @noinline function _throw_not_separable_dim(D::Int)
@@ -292,11 +291,7 @@ function kronecker_operator(a::BilinearForm{D}) where {D}
     dims = ndofs(Wu, Tuple)
     n = ndofs(Wu)
     T = eltype(mass_vecs[1])
-    # Empty, not `Vector{T}(undef, n)`: `mul!` grows them to `n` on its first call
-    # (`_kron_ensure_buffers!`), so a freshly built `K` costs only its factors.
-    return KroneckerLinearOperator{T, D, typeof(terms)}(
-        terms, dims, n, Vector{T}(undef, 0), Vector{T}(undef, 0)
-    )
+    return KroneckerLinearOperator{T, D, typeof(terms)}(terms, dims, n)
 end
 
 # --- Sum factorisation: mode-d contraction on a flat buffer -------------------------- #
@@ -313,8 +308,8 @@ end
 # non-abstract type and unrolls the whole `D`-axis loop with no dynamic dispatch.
 
 @inline function _kron_apply_mode!(
-        Y::Vector{T}, F::Diagonal, X::Vector{T}, pre::Int, m::Int, post::Int
-) where {T}
+        Y::AbstractVector, F::Diagonal, X::AbstractVector, pre::Int, m::Int, post::Int
+)
     d = F.diag
     @inbounds for k in 0:(post - 1)
         base = k * pre * m
@@ -330,9 +325,9 @@ end
 end
 
 @inline function _kron_apply_mode!(
-        Y::Vector{T}, F::SparseMatrixCSC, X::Vector{T}, pre::Int, m::Int, post::Int
-) where {T}
-    fill!(Y, zero(T))
+        Y::AbstractVector, F::SparseMatrixCSC, X::AbstractVector, pre::Int, m::Int, post::Int
+)
+    fill!(Y, zero(eltype(Y)))
     rows = rowvals(F)
     vals = nonzeros(F)
     @inbounds for k in 0:(post - 1)
@@ -354,8 +349,8 @@ end
 
 # One-axis-left base case: writes the result into `nxt` and returns it.
 @inline function _kron_apply_axes!(
-        cur::Vector{T}, nxt::Vector{T}, factors::Tuple{Any}, dims::Tuple{Any}, pre::Int, n::Int
-) where {T}
+        cur::AbstractVector, nxt::AbstractVector, factors::Tuple{Any}, dims::Tuple{Any}, pre::Int, n::Int
+)
     m = dims[1]
     post = n ÷ (pre * m)
     _kron_apply_mode!(nxt, factors[1], cur, pre, m, post)
@@ -363,8 +358,8 @@ end
 end
 
 @inline function _kron_apply_axes!(
-        cur::Vector{T}, nxt::Vector{T}, factors::Tuple, dims::Tuple, pre::Int, n::Int
-) where {T}
+        cur::AbstractVector, nxt::AbstractVector, factors::Tuple, dims::Tuple, pre::Int, n::Int
+)
     m = dims[1]
     post = n ÷ (pre * m)
     _kron_apply_mode!(nxt, factors[1], cur, pre, m, post)
@@ -375,8 +370,8 @@ end
 # ping-pongs `buf1`/`buf2` one axis at a time, returning whichever one ends up holding the
 # `D`-th axis's result -- `mul!` reads it back rather than assuming a fixed parity.
 @inline function _kron_apply_term!(
-        buf1::Vector{T}, buf2::Vector{T}, term::KroneckerTerm, x::AbstractVector, dims::Tuple
-) where {T}
+        buf1::AbstractVector, buf2::AbstractVector, term::KroneckerTerm, x::AbstractVector, dims::Tuple
+)
     copyto!(buf1, x)
     return _kron_apply_axes!(buf1, buf2, term.factors, dims, 1, length(buf1))
 end
@@ -388,8 +383,8 @@ end
 # contract is measured, not assumed (`bramble-verification` #1) -- a `for` loop here
 # measured a nonzero `@allocated` on the very mixed-factor terms this operator exists for.
 @inline function _kron_accumulate!(
-        y::AbstractVector, buf1::Vector{T}, buf2::Vector{T}, terms::Tuple{Any}, x::AbstractVector, dims::Tuple, n::Int
-) where {T}
+        y::AbstractVector, buf1::AbstractVector, buf2::AbstractVector, terms::Tuple{Any}, x::AbstractVector, dims::Tuple, n::Int
+)
     term = terms[1]
     cur = _kron_apply_term!(buf1, buf2, term, x, dims)
     c = _kron_coeff(term.scales)
@@ -400,8 +395,8 @@ end
 end
 
 @inline function _kron_accumulate!(
-        y::AbstractVector, buf1::Vector{T}, buf2::Vector{T}, terms::Tuple, x::AbstractVector, dims::Tuple, n::Int
-) where {T}
+        y::AbstractVector, buf1::AbstractVector, buf2::AbstractVector, terms::Tuple, x::AbstractVector, dims::Tuple, n::Int
+)
     term = terms[1]
     cur = _kron_apply_term!(buf1, buf2, term, x, dims)
     c = _kron_coeff(term.scales)
@@ -418,16 +413,6 @@ end
         "$(length(x)) into one of length $(length(y))",
     ),
     )
-end
-
-# Grows the two scratch buffers to `n` on the first call and never again -- see
-# `KroneckerLinearOperator`'s own docstring for why they start empty.
-@inline function _kron_ensure_buffers!(K::KroneckerLinearOperator, n::Int)
-    if length(K.buf1) != n
-        resize!(K.buf1, n)
-        resize!(K.buf2, n)
-    end
-    return nothing
 end
 
 # Ambiguous against `ReverseDiff.mul!(::TrackedArray, ::AbstractMatrix, ::TrackedArray{V,
@@ -447,12 +432,23 @@ end
 # dependency only, pulled in to check that `pde_solve`'s AD rules compose with third-party
 # backends, not something Bramble's own code touches. `test/quality/aqua.jl`'s "Extension
 # method ambiguity" testset documents and excludes this specific pair for the same reason.
-function mul!(y::AbstractVector, K::KroneckerLinearOperator{T}, x::AbstractVector) where {T}
+#
+# `scratch = (b1, b2)` supplies the two `n`-length sum-factorisation vectors (0 bytes
+# allocated); left at `nothing`, both are allocated per call so `K` itself stays
+# buffer-free and thread-safe (see `KroneckerLinearOperator`'s docstring).
+function mul!(
+        y::AbstractVector, K::KroneckerLinearOperator{T}, x::AbstractVector; scratch = nothing
+) where {T}
     n = K.n
     (length(x) == n && length(y) == n) || _throw_kron_dimmismatch(K, x, y)
-    _kron_ensure_buffers!(K, n)
+    if scratch === nothing
+        Tp = promote_type(T, eltype(x), eltype(y))
+        b1, b2 = similar(x, Tp, n), similar(x, Tp, n)
+    else
+        b1, b2 = scratch
+    end
     fill!(y, zero(eltype(y)))
-    _kron_accumulate!(y, K.buf1, K.buf2, K.terms, x, K.dims, n)
+    _kron_accumulate!(y, b1, b2, K.terms, x, K.dims, n)
     return y
 end
 
