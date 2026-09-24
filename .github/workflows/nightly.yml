@@ -1,7 +1,7 @@
 name: Nightly
 
-# Everything the per-push CI.yml deliberately leaves off, once a day: Linux entirely, Julia
-# nightly, and the checks that are not canaries but don't need every-push feedback either.
+# Everything the per-push CI.yml deliberately leaves off, once a day: Linux entirely, and the
+# checks that are not canaries but don't need every-push feedback either.
 # The 1.12 floor is covered weekly instead — see Weekly.yml.
 #
 # CI.yml's push gate is macOS-only, and runs the `unit` group. Linux lives here, in the
@@ -26,9 +26,13 @@ name: Nightly
 # time after CompatHelper: a compat bump it opens has already landed or not by the time this
 # decides what to install.
 #
-# `test` runs Julia nightly on both platforms — the 1.12 floor moved to Weekly.yml, which
-# already runs the full suite (a superset of `unit`) on 1.12 and 1.13, ubuntu and macOS, so
-# a separate 1.12 leg here would only repeat a narrower version of that coverage.
+# `test` runs Julia nightly on both platforms, and is switched off (`if: false`) while the
+# 1.14 dev series breaks upstream packages Bramble tests against: GPUCompiler and Mooncake fail
+# to precompile (`WorldView` not defined in `Compiler`), JET refuses to run, and SparseArrays'
+# `lu` recurses without end on a `Dual` matrix. Delete the `if:` to bring it back. The 1.12
+# floor moved to Weekly.yml, which already runs the full suite (a superset of `unit`) on 1.12
+# and 1.13, ubuntu and macOS, so a separate 1.12 leg here would only repeat a narrower version
+# of that coverage.
 
 permissions:
   contents: read
@@ -92,6 +96,8 @@ jobs:
 
   test:
     name: Julia nightly (${{ matrix.os }})
+    # Switched off on 2026-09-25; see the header comment for why and how to restore it.
+    if: false
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     # `nightly` is an unreleased Julia that changes daily, so it reports rather than gates:
