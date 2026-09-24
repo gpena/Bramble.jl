@@ -156,8 +156,8 @@ function (p::_CoordPass)(
         _coord_walk!(sink, term, hp, row_offset, col_offset)
         p.base += nd + _transposed_count(n, half)
     else
-        _validate_term_markers(term, markers(mesh(hp)), p.context)
-        npts = length(indices(mesh(hp)))
+        _validate_term_markers(term, markers(mesh(sp)), p.context)
+        npts = length(indices(mesh(sp)))
         ptr = Vector{Int}(undef, npts + 1)
         sink = _CoordSink(ptr, p.I, p.J, 0, 0, dr, dc, half, false, 0)
         _coord_walk!(sink, term, hp, row_offset, col_offset)
