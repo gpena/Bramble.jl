@@ -516,7 +516,8 @@ end
 # contract is measured, not assumed (`bramble-verification` #1) -- a `for` loop here
 # measured a nonzero `@allocated` on the very mixed-factor terms this operator exists for.
 @inline function _kron_accumulate!(
-        y::AbstractVector, buf1::AbstractVector, buf2::AbstractVector, terms::Tuple{Any}, x::AbstractVector, dims::Tuple, n::Int, α::Number
+        y::AbstractVector, buf1::AbstractVector, buf2::AbstractVector, terms::Tuple{Any},
+        x::AbstractVector, dims::Tuple, n::Int, α::Number
 )
     term = terms[1]
     cur = _kron_apply_term!(buf1, buf2, term, x, dims)

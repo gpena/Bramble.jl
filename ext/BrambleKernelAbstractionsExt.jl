@@ -802,7 +802,8 @@ end
     end
 end
 
-function _launch_kron_sparse_mode!(Y::AbstractVector, colptr, rowval, nzval, X::AbstractVector, pre::Int, m::Int, post::Int)
+function _launch_kron_sparse_mode!(
+        Y::AbstractVector, colptr, rowval, nzval, X::AbstractVector, pre::Int, m::Int, post::Int)
     dev = get_backend(Y)
     try
         _kron_sparse_mode_kernel!(dev)(Y, colptr, rowval, nzval, X, pre, m; ndrange = pre * m * post)
