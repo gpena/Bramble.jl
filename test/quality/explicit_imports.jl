@@ -98,6 +98,10 @@ using ExplicitImports
                 # exported or public.
                 :SeparableWeights,
                 :sparse!,
+                # `TrackedArray` (BrambleReverseDiffExt, commit c5ae771f): the argument type of the
+                # `mul!` method that resolves the ambiguity with `KroneckerLinearOperator`
+                # (gpena/Bramble.jl#295). ReverseDiff exports no public name for it.
+                :TrackedArray,
                 :Backend,
                 :_backend_eye,
                 :_backend_zeros,
@@ -338,6 +342,9 @@ using ExplicitImports
                 # transposed pair whose two block tuples differ in length, a case the types
                 # already rule out, so the barrier keeps it from being inferred at all.
                 :inferencebarrier,
+                # `ReverseDiff.record_mul!` (BrambleReverseDiffExt, #295): records the tape entry
+                # for that `mul!`; ReverseDiff has no public equivalent.
+                :record_mul!,
                 # `Core.kwcall` (gpena/Bramble.jl#283): named in `precompile(Core.kwcall,
                 # (...))` directives in `src/precompile/solver_sessions.jl` and
                 # `src/precompile/form_sessions.jl`, caching the keyword-call entry
