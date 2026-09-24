@@ -249,8 +249,9 @@ Return the resolved AST stored inside the bilinear form.
 
 Construct a `BilinearForm` over the trial space `Wₕ` and the test space `Vₕ` from the
 bilinear expression `f` (a function of trial and test arguments `(u, v)`). The AST is
-resolved once and run through [`simplify_ast`](@ref) -- factoring common scalings,
-combining like terms, and eliding zero-scaled ones -- before it is stored.
+resolved once and run through [`simplify_ast`](@ref) -- factoring common scalings and
+shared inner-product arguments, combining like terms, and eliding zero-scaled ones -- before
+it is stored.
 
 # Examples
 ```julia

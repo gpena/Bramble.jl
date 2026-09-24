@@ -223,8 +223,25 @@ of its way to avoid.
 | `⟨c * u, v⟩`, `⟨u, c * v⟩` | `c * ⟨u, v⟩` | exposes `c` to the rules above, and to `symmetry.jl` |
 | `⟨u, v(i) + v(j)⟩`, `i ≠ j` (or the trial-side mirror) | `⟨u, v(i)⟩ + ⟨u, v(j)⟩` | the combined shape has no valid single-term routing at all |
 | `u_h * (v_h * A)` | `(u_h .* v_h) * A` | one elementwise multiply at construction, not two scalings per point per assembly |
+| `⟨Au, Bv⟩ + ⟨Au, Cv⟩` (or `⟨Au, Bv⟩ + ⟨Cu, Bv⟩`), shared `A` a singleton node, anywhere in the sum | `⟨Au, (B + C)v⟩` (or `⟨(A + C)u, Bv⟩`) | one product, one compiled term, instead of two |
+| `⟨f, Av⟩ + ⟨f, Bv⟩`, shared source a singleton node | `⟨f, (A + B)v⟩` | as above, for a linear form |
 | `Shift₀(u)` | `u` | a zero shift is the identity |
 | `Shift_a(Shift_b(u))`, same dimension | `Shift_{a+b}(u)` | additive, so `Shift_k(Shift_{-k}(u))` collapses to `u` via the rule above |
+
+Factoring a shared argument uses the like-term rule's gate: the shared argument must pass
+`_statically_equal`, so whether the rule fires is settled by the argument types, and a
+data-carrying argument (a grid-function scaling, a `SourceVector`) is never shared. The
+unshared arguments are not compared at all, so they may carry data: `⟨g₁u, v⟩ + ⟨g₂u, v⟩`
+becomes `⟨g₁u + g₂u, v⟩`. Each term's coefficient moves onto its own unshared argument,
+`c⟨Au, Bv⟩ = ⟨Au, c Bv⟩`, so coefficients are never compared either, and two distinct `Ref`
+coefficients still factor. Only products naming no component on either side factor, so the
+rule never builds a component-mixing sum. `simplify_ast(::OperatorAdd)` searches the already
+simplified left operand for a summand sharing an argument with the right one
+(`_absorb`), so a left-deep sum of many terms factors every match, not only adjacent ones.
+Fewer products is fewer compiled terms: the 3D scalar form of 27 distinct `innerₕ` terms in
+`nterm-form.jl`, whose pairs share trial operators three at a time, compiles its first
+assemble in 6.6–6.7 s factored against 16.4–17.1 s unfactored (two interleaved runs each,
+2 threads).
 
 Scalar lifting matters beyond routing: `_same_operator_shape` (`symmetry.jl`) recognises
 `⟨L(u), L(v)⟩` — the same operator chain on both sides — structurally, by comparing the

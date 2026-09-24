@@ -181,7 +181,8 @@ end
 Construct a `LinearForm` over the test space `Wₕ` using the linear expression `f`.
 
 Construction resolves the AST once and runs [`simplify_ast`](@ref) over it -- factoring
-common scalings, combining like terms, and eliding zero-scaled ones -- before it is stored.
+common scalings and shared inner-product arguments, combining like terms, and eliding
+zero-scaled ones -- before it is stored.
 Grid partitioning for parallel assembly is determined from the resolved AST during assembly
 (see `_colour_strides`).
 

@@ -126,7 +126,10 @@ using Bramble:
         # may never move. Checked through `form`, against the single-term form scaled by hand.
         five = form(Wₕ, Wₕ, (u, v) -> 2 * innerₕ(vₕ * u, v) + 3 * innerₕ(vₕ * u, v))
         one_term = form(Wₕ, Wₕ, (u, v) -> innerₕ(vₕ * u, v))
-        @test resolve_form_ast(five) isa OperatorAdd
+        # The shared test function factors out, but the two data-carrying trial arguments
+        # stay two summands inside it: `⟨2vₕu + 3vₕu, v⟩`, not `⟨5vₕu, v⟩`.
+        @test resolve_form_ast(five) isa BilinearProduct
+        @test resolve_form_ast(five).left_op isa OperatorAdd
         @test Matrix(assemble(five)) ≈ 5 .* Matrix(assemble(one_term))
 
         # two independently-built grid functions were never merged even before the gate --
@@ -602,6 +605,70 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
     # inference settles from the types, so it never cost stability in the first place.
     β = Ref(1.5)
     @test simplify_ast(β * A + β * B) isa OperatorScale
+end
+
+# --- Shared inner-product arguments ------------------------------------------------- #
+
+using Bramble: D₊ₓ, D₋ᵧ, D₊ᵧ, Dcₓ
+
+function _nprod(x, T)
+    (x isa T ? 1 : 0) +
+    (x isa Union{Bramble.LazyOp, Tuple} ?
+     sum((_nprod(getfield(x, i), T) for i in 1:nfields(x)); init = 0) : 0)
+end
+
+_rt_factor(θ::Float64, W) = form(W, W,
+    (u, v) -> θ * innerₕ(D₋ₓ(u), D₊ₓ(v)) + innerₕ(D₋ₓ(u), D₋ᵧ(v)))
+
+@testset "Shared inner-product arguments factor" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    bf(g) = form(Wₕ, Wₕ, g)
+    M(g) = Matrix(assemble(bf(g)))
+
+    # Same trial side, same test side, and a shared argument found three summands back.
+    right = bf((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v)) + innerₕ(D₋ₓ(u), D₋ᵧ(v)))
+    left = bf((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v)) + innerₕ(D₊ᵧ(u), D₊ₓ(v)))
+    deep = bf((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v)) + innerₕ(Dcₓ(u), D₊ᵧ(v)) +
+                        innerₕ(D₊ᵧ(u), D₋ᵧ(v)) + 2 * innerₕ(D₋ₓ(u), D₋ᵧ(v)))
+    @test _nprod(right.ast, BilinearProduct) == 1
+    @test _nprod(left.ast, BilinearProduct) == 1
+    @test _nprod(deep.ast, BilinearProduct) == 3
+    @test Matrix(assemble(right)) ≈ M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) +
+                                    M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)))
+    @test Matrix(assemble(left)) ≈ M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) +
+                                   M((u, v) -> innerₕ(D₊ᵧ(u), D₊ₓ(v)))
+    @test Matrix(assemble(deep)) ≈
+          M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) +
+          M((u, v) -> innerₕ(Dcₓ(u), D₊ᵧ(v))) +
+          M((u, v) -> innerₕ(D₊ᵧ(u), D₋ᵧ(v))) +
+          2 .* M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)))
+
+    # Nothing shared, or the shared argument carries data: left as written.
+    none = bf((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v)) + innerₕ(Dcₓ(u), D₊ᵧ(v)))
+    @test _nprod(none.ast, BilinearProduct) == 2
+    gₕ = Rₕ(Wₕ, x -> 1.0 + x[1])
+    data = bf((u, v) -> innerₕ(gₕ * u, D₊ₓ(v)) + innerₕ(gₕ * u, D₋ᵧ(v)))
+    @test _nprod(data.ast, BilinearProduct) == 2
+
+    # Coefficients move onto the unshared argument, never compared: distinct `Ref`s factor,
+    # and changing one after construction still changes the matrix.
+    a, b = Ref(2.0), Ref(3.0)
+    coef = bf((u, v) -> innerₕ(a * D₋ₓ(u), D₊ₓ(v)) + innerₕ(b * D₋ₓ(u), D₋ᵧ(v)))
+    @test _nprod(coef.ast, BilinearProduct) == 1
+    a[] = 5.0
+    @test Matrix(assemble(coef)) ≈
+          5.0 .* M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) +
+          3.0 .* M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)))
+
+    # Component-indexed products never factor, so no component-mixing sum is formed.
+    V2 = Wₕ × Wₕ
+    mixed = form(V2, V2, (p, q) -> innerₕ(D₋ₓ(p(1)), D₊ₓ(q(1))) + innerₕ(D₋ₓ(p(1)), D₊ₓ(q(2))))
+    @test _nprod(mixed.ast, BilinearProduct) == 2
+
+    # A runtime `Float64` coefficient keeps `form` type-stable.
+    @test _infers(_rt_factor, (Float64, typeof(Wₕ)))
+    @test simplify_ast(right.ast) == right.ast
 end
 
 end # module FormSimplifierTests
