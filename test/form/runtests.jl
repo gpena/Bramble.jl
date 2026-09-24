@@ -65,4 +65,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     # platforms) rather than paid on every push until the hand-expanded helpers are
     # rewritten to keep each term's type concrete (gpena/Bramble.jl -- compile-time issue).
     TestUtils.WITH_SLOW_TESTS && include("vector_calculus.jl")
+    # Guards the linear compile cost of many-term forms by measuring it directly, rather than
+    # waiting for a SIGKILLed CI job. Behind `slow`, like the files above: it catches a
+    # regression that moves with the simplifier/assembly pipeline, not with a per-push change.
+    TestUtils.WITH_SLOW_TESTS && include("compile_scaling.jl")
 end
