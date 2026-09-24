@@ -1,5 +1,5 @@
 # bilinear_traversal.jl: one shared walk over a term's local stencils
-# (`visit_bilinear_stencil`), and the sinks that plug into it (`PatternSink`, `RecordSink`,
+# (`visit_bilinear_stencil`), and the sinks that plug into it (`PatternSink`, `_CoordSink`,
 # `ReplaySink`). Kept as a single file deliberately: the walk and its sinks are a tightly
 # coupled design for guaranteeing allocation-free inner loops (gpena/Bramble.jl#50), and
 # splitting them further would scatter that coupling across files without a readability
@@ -15,8 +15,8 @@ answer "not stored" (only `SparseMatrixCSC` does; every dense fallback below alw
 answers a valid position).
 
 The seam a new backend's matrix type implements to plug into assembly (S1.1,
-gpena/Bramble.jl#12): `PatternSink`, `RecordSink`, `ReplaySink`, `DiagonalReplaySink` and
-[`add_to_sparse!`](@ref) reduce to this and [`_scatter_add!`](@ref) once the raw `nzval`/
+gpena/Bramble.jl#12): `ReplaySink`, `DiagonalReplaySink`, the positions search of the
+coordinate walk (`_coordinates_to_positions!`) and [`add_to_sparse!`](@ref) reduce to this and [`_scatter_add!`](@ref) once the raw `nzval`/
 linear-index field access each used to do directly is factored out here.
 
 The `SparseMatrixCSC` method is exactly the position search this file always ran: a linear
@@ -102,7 +102,7 @@ end
 # same way before every later `assemble!`, and `A.nzVal` on the device side is never touched
 # until `_flush_device_scatter!` copies `nzval` across in one bulk `copyto!`.
 #
-# `visit_bilinear_stencil`'s own sinks (`RecordSink`/`ReplaySink`) reduce to exactly
+# `visit_bilinear_stencil`'s own sinks (`ReplaySink` and its kin) reduce to exactly
 # `_scatter_position`/`_scatter_add!` too, so they pick up this method for free; the only
 # path that actually reaches a device matrix today is the band-coloured sweep
 # (`_assemble_bilinear_parallel_core!`, `bilinear_execution.jl`) that a `GpuPolicy` backend's
@@ -320,8 +320,8 @@ locality: a host matrix searches/writes `A` directly, a device one searches/writ
 `A.mirror` (gpena/Bramble.jl#313) -- either way this function itself carries no
 device-specific branch or parameter.
 
-See also: [`allocate_system_matrix`](@ref) and [`RecordSink`](@ref), which raises the same
-way on the serial recording pass.
+See also: [`allocate_system_matrix`](@ref), whose positions search raises the same way on
+the serial path.
 """
 @inline function add_to_sparse!(A::AbstractMatrix, row::Int, col::Int, val::Number, term)
     pos = _scatter_position(A, row, col)
@@ -481,8 +481,8 @@ See also: [`_step_entry!`](@ref), [`_trial_inbounds`](@ref).
 Announce grid point `lin_idx` (at cartesian index `I`) to `sink`, and answer the base slot
 for its entries.
 
-The default answers `0`. [`RecordSink`](@ref) uses the call to open that point's slice of
-the position list; [`ReplaySink`](@ref) answers the start of that slice, which the traversal
+The default answers `0`. `_CoordSink` uses the call to open that point's slice of the
+position list; [`ReplaySink`](@ref) answers the start of that slice, which the traversal
 then adds the entry ordinal to. Addressing each point from its own base is what lets a
 replay stay correct regardless of the order grid points are visited in, without any sink
 having to carry a mutable cursor. `I` is passed alongside `lin_idx` for
@@ -727,8 +727,12 @@ end
     end
 end
 
-# One point's stencil, guarded -- shared by the whole-grid fallback and every boundary slab.
-@inline function _visit_guarded_region!(
+# One point's stencil, guarded -- shared by the whole-grid fallback, every boundary slab and
+# the coordinate walk's interior box. `@noinline`, and every region passed as the same
+# `CartesianIndices` of `UnitRange{Int}`s, so all of them and every sink pairing that shares
+# this `(sink, term)` compile one copy of the term's stencil between them; the call happens
+# once per region, never per point.
+@noinline function _visit_guarded_region!(
         sink::SINK,
         term::TERM,
         sp,
@@ -789,8 +793,8 @@ Splits into an interior core and a boundary shell when [`_stencil_margin`](@ref)
 grid size allow it (see the comment above `_peelable`), so most points skip the bounds
 guard entirely; every point still gets exactly one visit either way, so a sink sees the same
 set of entries regardless of which path ran, in a possibly different order.
-[`RecordSink`](@ref)/[`ReplaySink`](@ref) are unaffected by that: they address each point by
-its own linear index, not by visit order (see their docstrings).
+[`ReplaySink`](@ref) is unaffected by that: it addresses each point by its own linear
+index, not by visit order (see its docstring).
 
 The two-sink form lets the interior and the boundary shell be handled by different sinks --
 only [`DiagonalReplaySink`](@ref) needs this, pairing itself (interior) with an ordinary
@@ -798,7 +802,7 @@ only [`DiagonalReplaySink`](@ref) needs this, pairing itself (interior) with an 
 
 # Arguments
 - `sink` (or `interior_sink`/`boundary_sink`): What to do per entry. See [`PatternSink`](@ref),
-  [`RecordSink`](@ref), [`ReplaySink`](@ref) and [`DiagonalReplaySink`](@ref), and the
+  [`ReplaySink`](@ref) and [`DiagonalReplaySink`](@ref), and the
   contract in [`_sink_entry!`](@ref), [`_sink_point!`](@ref) and [`_sink_dedups`](@ref).
 - `term`: The AST node whose stencil is evaluated at each point.
 - `sp`: The test leaf whose grid is walked and whose markers the stencil sees.
@@ -862,7 +866,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
             sp,
             mesh_markers,
             lin_indices,
-            grid_inds,
+            CartesianIndices(map(_full_range, ax)),
             row_offset,
             col_offset
         )
@@ -890,22 +894,19 @@ end
 # faster and `inner₊(∇ₕ(u), ∇ₕ(v))` unchanged. The enclosing function's LLVM is
 # near-identical, so the difference is a codegen subtlety that was not localised further.
 #
-# Accepted deliberately. `allocate_system_matrix` runs once per form, and the per-refill
-# path (`RecordSink`/`ReplaySink`) is neutral, so this is a one-time setup cost rather than
-# something a time loop pays -- a cheap place to buy pattern and scatter sharing one walk,
-# which is what makes "every scattered entry is in the pattern" assertable at all. Reverting
-# just this sink would recover it and cost that.
+# `allocate_system_matrix` no longer walks a form with it: its coordinate walk
+# (`_CoordSink`) keeps every entry, duplicates included, so the same coordinates also give
+# the replay positions; `sparse!` combines the duplicates.
 """
     PatternSink(I_vec::Vector{Int}, J_vec::Vector{Int})
 
 Collect the `(row, col)` coordinates a term can reach, for building a sparsity pattern.
 
-Appends each coordinate to `I_vec` and `J_vec`, which [`allocate_system_matrix`](@ref) then
-hands to `sparse!`. The only sink that de-duplicates ([`_sink_dedups`](@ref)): a coordinate
-named twice by one point's stencil is one entry of the pattern, and the weights it carries
-are not read here at all.
+Appends each coordinate to `I_vec` and `J_vec`, for a caller to hand to `sparse!`. The only
+sink that de-duplicates ([`_sink_dedups`](@ref)): a coordinate named twice by one point's
+stencil is one entry of the pattern, and the weights it carries are not read here at all.
 
-See also: [`visit_bilinear_stencil`](@ref), [`RecordSink`](@ref).
+See also: [`visit_bilinear_stencil`](@ref).
 """
 struct PatternSink
     I_vec::Vector{Int}
@@ -929,10 +930,11 @@ counts accepted entries from this point's base ([`_sink_point!`](@ref)) and matt
     return nothing
 end
 
-# Kept beside `RecordSink` below, its only caller: this pass builds the replay cache, so a
-# pattern that cannot hold the term is reported rather than skipped, as `add_to_sparse!`
-# (used by the threaded path in `bilinear_execution.jl`) already does.
-@noinline function _throw_missing_pattern_entry(term)
+# Raised by the positions search that builds the replay cache
+# (`_coordinates_to_positions!`) and by `add_to_sparse!` on the threaded path: a pattern that
+# cannot hold the form is reported rather than skipped. `@nospecialize`: an error path, not
+# worth one compiled copy per term type.
+@noinline function _throw_missing_pattern_entry(@nospecialize(term))
     throw(
         ArgumentError(
         "assembling $(typeof(term)) reached a matrix entry outside its preallocated " *
@@ -943,96 +945,61 @@ end
 end
 
 """
-    _SegmentCountSink(point_ptr::Vector{Int})
+    _CoordSink(point_ptr, I, J, base, tbase, dr, dc, half, fill, n)
 
-Count-only pass over a term's stencil: how many entries each grid point contributes and how
-many the whole block has, with `A` never touched at all (weights are still evaluated -- the
-shared traversal computes them before any sink sees an entry -- just discarded).
+The coordinate walk's sink (`_coord_walk!`, bilinear_pattern.jl): opens each grid point's
+slice of the unit's entries in `point_ptr` (counting pass) or writes each entry's `(row,
+col)` into `I[base + n]`/`J[base + n]` (filling pass, `fill = true`), `n` counting the unit's
+entries. For a transposed pair's unit (`half >= 0`) the filling pass also writes the
+transposed coordinate `(col + dr, row + dc)` at `tbase + n`; `half = 1` writes the direct
+coordinate only and `half = 2` the transposed only, as `_PairReplaySink` scatters them.
 
-Exists solely so [`RecordSink`](@ref) can preallocate its own `positions` to the exact right
-size instead of growing it with `push!` (gpena/Bramble.jl#240): `push!`, called from inside
-`_record_segment!` while a term's own coefficient is what is being differentiated, is what
-made `Enzyme` fail to compile the recording pass at all (`EnzymeNoTypeError`) -- confirmed
-directly by isolating it, not assumed: a hand-rolled sink identical to `RecordSink` except
-for pre-sized, `setindex!`-only `positions` compiled and differentiated correctly, matching
-finite differences, with no `Enzyme.API` flag of any kind. The one-time cost is walking a
-term's stencil twice during recording (once to count, once to search and scatter) rather than
-once -- recording is already the expensive half of assembly and happens once per matrix
-(replayed thereafter by [`ReplaySink`](@ref)), so this doubles a cost paid once, never the
-per-replay cost `assemble!`'s zero-allocation guarantee actually protects.
+One concrete type for both passes and every unit, so a term's walk compiles once. Entries
+are written with `setindex!` into vectors sized by the counting pass, never grown with
+`push!`: `push!` in a recording pass is what made `Enzyme` unable to compile it when a
+term's own coefficient is differentiated (gpena/Bramble.jl#240).
 
-Uses the same coordinate-computing path `RecordSink` does (`_sink_needs_coordinates` left at
-its default `true`), deliberately not the cheaper coordinate-free path `ReplaySink`/
-`DiagonalReplaySink` use: this pass's whole point is to agree with `RecordSink`'s own entry
-count exactly, and sharing its guard branch removes any risk of the two disagreeing.
-
-See also: [`RecordSink`](@ref), [`visit_bilinear_stencil`](@ref).
+See also: [`visit_bilinear_stencil`](@ref), [`ReplaySink`](@ref).
 """
-mutable struct _SegmentCountSink
+mutable struct _CoordSink
     const point_ptr::Vector{Int}
+    const I::Vector{Int}
+    const J::Vector{Int}
+    const base::Int
+    const tbase::Int
+    const dr::Int
+    const dc::Int
+    const half::Int
+    const fill::Bool
     n::Int
 end
-# Not `@inline` -- deliberately: `@inline` here is what made `Enzyme` unable to compile
-# `_record_segment!` at all when the term's coefficient is what is being differentiated
-# (`EnzymeNoTypeError`), confirmed directly by isolating it (`@inline` alone reproduces the
-# failure, `const` fields do not). One-time recording cost either way; no measurable effect
-# on `assemble!`'s own zero-allocation replay, which never touches this sink.
-function _sink_point!(sink::_SegmentCountSink, lin_idx::Int, ::CartesianIndex)
-    (
-        @inbounds sink.point_ptr[lin_idx] = sink.n + 1; 0)
+# Not `@inline`: `@inline` on a recording sink's methods is what made `Enzyme` unable to
+# compile the recording pass (`EnzymeNoTypeError`, gpena/Bramble.jl#240).
+function _sink_point!(s::_CoordSink, lin_idx::Int, ::CartesianIndex)
+    s.fill || (@inbounds s.point_ptr[lin_idx] = s.n + 1)
+    return 0
 end
-function _sink_entry!(sink::_SegmentCountSink, ::Int, ::Int, weight, ::Int)
-    sink.n += 1
-    return nothing
-end
-
-"""
-    RecordSink(A::AbstractMatrix, term, point_ptr::Vector{Int}, positions::Vector{Int}, α, n::Int)
-
-Add a term's values to `A` and record where each entry landed, building the replay cache.
-
-For each entry it finds the `(row, col)`'s slot via [`_scatter_position`](@ref), adds the
-weight there with [`_scatter_add!`](@ref), and writes the slot into `positions[n]` for a
-running `n` (`positions` is preallocated to its final size by [`_SegmentCountSink`](@ref)
-before `RecordSink` ever runs -- see its docstring for why this is `setindex!`, not `push!`).
-[`_sink_point!`](@ref) opens each grid point's own slice of that list in `point_ptr`, so a
-later replay can address a point directly instead of relying on the walk order.
-
-The search is the expensive half of assembly, which is why it is done once and replayed by
-[`ReplaySink`](@ref) afterwards.
-
-# Throws
-- `ArgumentError`: A `(row, col)` the pattern does not contain. This pass builds the cache,
-  so a pattern that cannot hold the term is reported rather than skipped, as
-  [`add_to_sparse!`](@ref) now does on the threaded path too.
-
-See also: [`visit_bilinear_stencil`](@ref), [`NzvalSegment`](@ref).
-"""
-mutable struct RecordSink{M <: AbstractMatrix, TERM, S}
-    const A::M
-    const term::TERM
-    const point_ptr::Vector{Int}
-    const positions::Vector{Int}
-    const α::S
-    n::Int
-end
-# Not `@inline` -- see `_SegmentCountSink`'s comment just above: the same reason, verified
-# the same way.
-_sink_point!(sink::RecordSink, lin_idx::Int, ::CartesianIndex) = (
-    @inbounds sink.point_ptr[lin_idx] = sink.n + 1; 0)
-function _sink_entry!(sink::RecordSink, row::Int, col::Int, weight, ::Int)
-    pos = _scatter_position(sink.A, row, col)
-    pos == 0 && _throw_missing_pattern_entry(sink.term)
-    _scatter_add!(sink.A, pos, sink.α * weight)
-    sink.n += 1
-    @inbounds sink.positions[sink.n] = pos
+function _sink_entry!(s::_CoordSink, row::Int, col::Int, _, ::Int)
+    s.n += 1
+    if s.fill
+        n = s.n
+        if s.half != 2
+            @inbounds s.I[s.base + n] = row
+            @inbounds s.J[s.base + n] = col
+        end
+        if s.half == 0 || s.half == 2
+            @inbounds s.I[s.tbase + n] = col + s.dr
+            @inbounds s.J[s.tbase + n] = row + s.dc
+        end
+    end
     return nothing
 end
 
 """
     ReplaySink(A::AbstractMatrix, point_ptr::Vector{Int}, positions::Vector{Int}, α)
 
-Add a term's values to `A` using slots recorded earlier by [`RecordSink`](@ref).
+Add a term's values to `A` using slots the coordinate walk recorded (`_CoordSink`, searched
+in `A` by `_coordinates_to_positions!`).
 
 The same walk and the same fresh stencil evaluation, because weights may be live: a
 coefficient grid function updated in place through `Rₕ!` is seen by the next assembly. Only
@@ -1063,65 +1030,17 @@ Base.@propagate_inbounds function _sink_entry!(
 end
 
 """
-    _PairRecordSink(A, term, point_ptr, positions, positions_t, dr::Int, dc::Int, α1, α2, half::Int, n::Int)
-
-[`RecordSink`](@ref) for a transposed pair ⟨Au, Bv⟩ + ⟨Bu, Av⟩, walking ⟨Au, Bv⟩ only. An
-entry at `(row, col)` adds `α1 * weight` there, and `α2 * weight` at the transposed entry
-`(col + dr, row + dc)` the second term would have written: at a grid point the second term's
-stencil is the first's with trial and test offsets exchanged, and `dr`/`dc` move the entry
-from the first term's block offsets to the second's (both `0` on a scalar space). Records
-both positions, entry for entry, into `positions` and `positions_t`.
-
-`half` is `0` for both entries, `1` for the first term's only and `2` for the transposed only
-(stored position `0` for the half skipped): a pair whose two blocks sit on different leaf
-objects walks ⟨Au, Bv⟩ once per leaf, one half each, since the second term's stencil is the
-first's exchanged only on its own leaf.
-
-See also: `_record_pair_segment!`, [`_PairReplaySink`](@ref).
-"""
-mutable struct _PairRecordSink{M <: AbstractMatrix, TERM, S1, S2}
-    const A::M
-    const term::TERM
-    const point_ptr::Vector{Int}
-    const positions::Vector{Int}
-    const positions_t::Vector{Int}
-    const dr::Int
-    const dc::Int
-    const α1::S1
-    const α2::S2
-    const half::Int
-    n::Int
-end
-# Not `@inline`, as `RecordSink`.
-function _sink_point!(sink::_PairRecordSink, lin_idx::Int, ::CartesianIndex)
-    (
-        @inbounds sink.point_ptr[lin_idx] = sink.n + 1; 0)
-end
-function _sink_entry!(sink::_PairRecordSink, row::Int, col::Int, weight, ::Int)
-    pos = 0
-    if sink.half != 2
-        pos = _scatter_position(sink.A, row, col)
-        pos == 0 && _throw_missing_pattern_entry(sink.term)
-        _scatter_add!(sink.A, pos, sink.α1 * weight)
-    end
-    pos_t = 0
-    if sink.half != 1
-        pos_t = _scatter_position(sink.A, col + sink.dr, row + sink.dc)
-        pos_t == 0 && _throw_missing_pattern_entry(sink.term)
-        _scatter_add!(sink.A, pos_t, sink.α2 * weight)
-    end
-    sink.n += 1
-    @inbounds sink.positions[sink.n] = pos
-    @inbounds sink.positions_t[sink.n] = pos_t
-    return nothing
-end
-
-"""
     _PairReplaySink(A, point_ptr, positions, positions_t, α1, α2, half::Int)
 
-[`ReplaySink`](@ref) for a segment [`_PairRecordSink`](@ref) recorded: each entry adds
-`α1 * weight` at its recorded position and `α2 * weight` at its recorded transposed one,
-skipping the half `half` names, as the record did.
+[`ReplaySink`](@ref) for a transposed pair ⟨Au, Bv⟩ + ⟨Bu, Av⟩, walking ⟨Au, Bv⟩ only. An
+entry adds `α1 * weight` at its recorded position and `α2 * weight` at its recorded
+transposed one, the entry `(col + dr, row + dc)` the second term writes (`_CoordSink`): at a
+grid point the second term's stencil is the first's with trial and test offsets exchanged.
+
+`half` is `0` for both entries, `1` for the first term's only and `2` for the transposed only:
+a pair whose two blocks sit on different leaf objects walks ⟨Au, Bv⟩ once per leaf, one half
+each, since the second term's stencil is the first's exchanged only on its own leaf. The
+skipped half's positions are never read.
 """
 struct _PairReplaySink{M <: AbstractMatrix, S1, S2}
     A::M
@@ -1168,7 +1087,7 @@ Paired with an ordinary [`ReplaySink`](@ref) for the boundary shell through the 
 form of [`visit_bilinear_stencil`](@ref): this sink is only ever handed the interior region,
 so `_sink_point!` addresses a point by its rank `n` in `interior`'s own iteration order
 (zero-based, via an incrementing counter on the sink itself) rather than by `lin_idx`, matching the order
-`_record_segment!` validated the stride against. The `k`-th tap of that point
+`_try_diagonal_segment` validated the stride against. The `k`-th tap of that point
 (`1`-based, `k in 1:P`) then lands at `base[k] + stride[k] * n`, recovered from the running
 `slot` the shared walk already threads (`slot = n * P + (k - 1)`), so no per-entry lookup
 runs at all.

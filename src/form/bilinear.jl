@@ -23,7 +23,7 @@ point `lin_idx`'s own entries, in the order a scatter walk visits them. Addresse
 rather than by a shared running counter, so a replay stays correct whatever order the grid
 is visited in.
 
-See also: [`RecordSink`](@ref), [`ReplaySink`](@ref).
+See also: [`ReplaySink`](@ref).
 """
 const NzvalSegment = Tuple{Vector{Int}, Vector{Int}}
 
@@ -43,10 +43,11 @@ Enzyme can reason about -- a discriminated struct, not a two-branch `Union`.
 - `true` (diagonal, gpena/Bramble.jl#160): `point_ptr`/`positions` cover only the boundary
   shell; `base`/`stride`/`P`/`interior` carry the interior's per-tap stride arithmetic --
   interior entries are `base[k] + stride[k] * n` for the `n`-th point `interior`'s own
-  iteration order visits (`n` zero-based, `_interior_rank`), rather than one stored `Int` per
-  entry, so `positions` never carries the interior's `O(N * P)` share at all.
+  iteration order visits (`n` zero-based), rather than one stored `Int` per entry, so
+  `positions` never carries the interior's `O(N * P)` share at all. 1D forms only
+  (`_diagonal_replay`): from 2D up no difference term's interior has a constant stride.
 
-Built by `_record_segment!` only when every interior point produces the same number of
+Built by `_try_diagonal_segment` only when every interior point produces the same number of
 entries `P` and the same per-tap stride holds across the whole interior -- checked once, not
 assumed, because a form summing terms of different margins can make a column's true `nzval`
 footprint vary inside what this one term calls its own interior (see [`_stencil_margin`](@ref)).
@@ -61,9 +62,10 @@ concrete (its ranges type is still a `UnionAll`) and stores boxed: exactly what 
 version of this allocate 80-400 B on every replay, `@test_allocs`-checked paths included.
 
 `positions_t` is empty except on a segment recorded for a transposed pair
-⟨Au, Bv⟩ + ⟨Bu, Av⟩ (`_record_pair_segment!`): there it holds, entry for entry, the `nzval`
+⟨Au, Bv⟩ + ⟨Bu, Av⟩ (`_segments_from_positions`): there it holds, entry for entry, the `nzval`
 position of the transposed entry the second term writes, so one walk of ⟨Au, Bv⟩ fills both.
-A pair segment is always flat.
+The half a pair's unit does not write (`_PairReplaySink`) leaves `positions` or
+`positions_t` empty. A pair segment is always flat.
 
 See also: [`DiagonalReplaySink`](@ref).
 """
@@ -285,7 +287,7 @@ end
 # guard, so it is stated once, here, rather than once per caller.
 
 # Refuse cross-mesh coupling unless an explicit mapping (such as interpolation) is provided.
-@noinline function _throw_cross_mesh_block(term, Ωu, Ωv)
+@noinline function _throw_cross_mesh_block(@nospecialize(term), Ωu, Ωv)
     throw(
         ArgumentError(
         "a bilinear term coupling two leaves over different meshes has no assembly: the " *
