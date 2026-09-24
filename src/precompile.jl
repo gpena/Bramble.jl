@@ -136,6 +136,26 @@ if PRECOMPILE_WORKLOAD
                 Ωₕ2, be, :wall, x -> x[1] * x[2], (x, t) -> x[1] * x[2] * t, I_time, Val(2)
             )
 
+            # The 3D scalar Laplacian, non-uniform (gpena/Bramble.jl#S9): both spellings a
+            # caller writes, `inner₊(∇ₕ(u), ∇ₕ(v))` (the tutorials' own, e.g.
+            # docs/src/getting_started.md) and the summed one-sided-difference form. Measured
+            # against the workload above with the one-walk change already in: +2.7 s
+            # precompile, +5.3 MiB cache, fresh-session first assemble+assemble! of the
+            # three-term form 0.79 s -> 0.011 s.
+            Ωₕ3n = mesh(Ω3, (3, 3, 3), (false, false, false); backend = be)
+            W3n = gridspace(Ωₕ3n)
+            for f3 in (
+                form(W3n, W3n, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))),
+                form(
+                W3n, W3n,
+                (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(D₋ᵧ(u), D₋ᵧ(v)) +
+                          innerₕ(D₋₂(u), D₋₂(v))
+            )
+            )
+                A3 = assemble(f3)
+                assemble!(A3, f3)
+            end
+
             # Jacobian sparsity from the AST, scalar and composite, and the per-element-type
             # assembly cache (gpena/Bramble.jl#21/#95/#20). Kept to 1D, the same economy the
             # sessions above already apply.
