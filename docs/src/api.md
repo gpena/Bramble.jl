@@ -457,7 +457,8 @@ evaluate!
 For a separable `BilinearForm` -- one whose assembled matrix is an exact sum of Kronecker
 products of one-dimensional factors over a `MeshnD`, such as `innerₕ(u, v) +
 inner₊(∇ₕ(u), ∇ₕ(v))` -- `kronecker_operator` builds a `KroneckerLinearOperator` that
-applies by sum factorisation instead of ever assembling the `D`-dimensional matrix: a
+applies in one fused pass over the grid instead of ever assembling the `D`-dimensional
+matrix: a
 `200^3` mesh stores `O(200)` numbers per axis rather than the assembled matrix's `O(200^3)`
 stored entries ([#162](https://github.com/gpena/Bramble.jl/issues/162)). `is_separable`
 checks the condition beforehand. `fdm_solve` requires `using Kronecker` (the

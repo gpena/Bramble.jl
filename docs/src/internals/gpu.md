@@ -316,16 +316,25 @@ assemble a 1D factor. Each factor is then moved to the backend's storage once, b
 device vector, and a `SparseMatrixCSC` difference factor becomes a `_KronDeviceSparse`
 holding its `colptr`/`rowval`/`nzval` as three separate device arrays -- never the matrix
 struct itself, for the same non-bitstype-kernel-argument reason as "A struct nesting a
-device array will not compile" above. `mul!`'s per-axis mode
-contraction then dispatches on which of the two factor types it is holding: a mass mode
-runs as a broadcast (`_kron_apply_mode!` for `_KronDeviceDiagonal`), and a difference mode
-runs through `_launch_kron_sparse_mode!`, a `@kernel` in
-`ext/BrambleKernelAbstractionsExt.jl` (`_kron_sparse_mode_kernel!`) that reads the factor's
-raw CSC arrays directly, one work item per output entry. Neither path leaves the device
-between axes, and `src/form/kronecker.jl` names no GPU package anywhere in this machinery
--- the stub `_launch_kron_sparse_mode!` in `src/` throws unless
+device array will not compile" above. `mul!` no longer sweeps the grid once per axis per
+term ([gpena/Bramble.jl#323](https://github.com/gpena/Bramble.jl/issues/323) shipped that
+version; a later change replaced it): every term `kronecker_operator` builds has at most
+one non-diagonal factor, so `mul!` now applies the whole operator in a single fused pass,
+writing each entry of `y` once. On the host that pass walks grid lines along axis 1,
+folding the other axes' diagonal entries into one scalar per line, and a term whose
+non-diagonal factor sits on axis 1 runs as one `@simd` sweep along the line
+(`_KronTridiag`, since the `inner₊(D₋ₓ(u), D₋ₓ(v))` factor `kronecker_operator` builds is
+always tridiagonal). On the device the whole operator runs as one `KernelAbstractions`
+kernel, one work item per entry of `y` and no write conflicts or atomics
+(`_launch_kron_fused!`, which replaced the earlier per-axis-mode kernel), using `Int32`
+index arithmetic to recover each work item's grid index from `dims`/
+`strides` -- 64-bit integer division is emulated on Apple GPUs. Neither path leaves the
+device between terms, and `src/form/kronecker.jl` names no GPU package anywhere in this
+machinery -- the stub `_launch_kron_fused!` in `src/` throws unless
 `BrambleKernelAbstractionsExt` has supplied the real method, the same extension-contract
-idiom as everywhere else on this page.
+idiom as everywhere else on this page. `mul!` allocates nothing on the host either way, and
+the `scratch` keyword some callers still pass is accepted and ignored: the fused pass needs
+no work buffers.
 
 **`fdm_solve`.** The 1D factors' generalised eigendecomposition (`_fdm_eigendecompose`)
 stays on the host: it is a small, per-axis LAPACK call regardless of `K`'s own storage, so
@@ -344,31 +353,37 @@ eigensolve, then embeds the interior solution back into a zero-filled `K.n`-leng
 with the same view-and-broadcast pattern afterward -- no scalar indexing appears on either
 branch's device path.
 
-**Measured throughput.** `benchmark/kronecker_device.jl` (commit `f5005af0`) timed the host
-and Metal backends back to back, `Float32`, 4 threads, AC power, load 2.74:
+**Measured throughput.** `benchmark/kronecker_device.jl` timed the host and Metal backends
+back to back on uniform meshes, `Float32`, 4 threads, AC power, load 2.4:
 
 | Case | Operation | Host | Metal | Ratio (host/Metal) |
 |---|---|---|---|---|
-| 2D 3000x3000 | `mul!` | 41.49 ms | 41.12 ms | 1.009 |
-| 2D 3000x3000 | 30 CG-shaped iterations | 1686.1 ms | 1416.5 ms | 1.19 |
-| 2D 3000x3000 | `fdm_solve` | 5453.9 ms | 2107.2 ms | 2.588 |
-| 3D 200x200x200 | `mul!` | 43.43 ms | 77.39 ms | 0.561 |
-| 3D 200x200x200 | 30 CG-shaped iterations | 1755.7 ms | 2484.1 ms | 0.707 |
-| 3D 200x200x200 | `fdm_solve` | 492.2 ms | 135.4 ms | 3.635 |
+| 2D 3000x3000 | `mul!` | 5.97 ms | 4.28 ms | 1.39 |
+| 2D 3000x3000 | 30 CG-shaped iterations | 523.9 ms | 304.5 ms | 1.72 |
+| 2D 3000x3000 | `fdm_solve` | 5382.2 ms | 2088.6 ms | 2.58 |
+| 3D 200x200x200 | `mul!` | 7.86 ms | 7.08 ms | 1.11 |
+| 3D 200x200x200 | 30 CG-shaped iterations | 577.2 ms | 369.0 ms | 1.56 |
+| 3D 200x200x200 | `fdm_solve` | 486.1 ms | 122.2 ms | 3.98 |
 
 The `fdm_solve` host eigendecomposition alone (the LAPACK call above, unaffected by
-backend) took 1800.8 ms in the 2D case and 4.97 ms in the 3D case, out of the totals above.
-For comparison, #323's hand-rolled matrix-free CG loop -- calling `Δₕ!` directly rather
-than going through `mul!(y, K, x, ...)` -- measured 1.55x (2D) and 1.16x (3D),
-Serial/Metal.
+backend) took 1821.3 ms in the 2D case and 4.99 ms in the 3D case, out of the totals above.
+Before the fused pass replaced the per-axis sweep, the same benchmark measured `mul!` at
+41.49 ms host / 41.12 ms Metal in 2D and 43.43 ms host / 77.39 ms Metal in 3D, and the
+30-iteration CG loop at 1686.1 ms host / 1416.5 ms Metal in 2D and 1755.7 ms host / 2484.1
+ms Metal in 3D. For comparison, #323's hand-rolled matrix-free CG loop -- calling `Δₕ!`
+directly rather than going through `mul!(y, K, x, ...)` -- measured 1.55x (2D) and 1.16x
+(3D) Serial/Metal, at an absolute Metal time of 867.1 ms (2D) and 1144.0 ms (3D). The CG
+loop through `K` now beats that hand-rolled loop on both counts: a higher Serial/Metal
+ratio (1.72x and 1.56x) and a lower absolute Metal time (304.5 ms and 369.0 ms).
 
-**The plain conclusion.** `fdm_solve` gains 2.6-3.6x on the device: its cost is dominated
-by dense matmuls and broadcasts that scale with grid size, and the device wins even after
-the host-only eigendecomposition is added back in. The operator's own device `mul!`
-does not show the same gain -- it roughly breaks even in 2D (1.009x) and is slower on the
-device in 3D (0.561x) -- so an iterative solve that repeatedly applies `K` does not beat
-the host path on this hardware. No cause for the `mul!` figures is established by this
-benchmark; any explanation would be unmeasured.
+**The plain conclusion.** The fused pass turns the device `mul!` from roughly break-even
+(2D) or slower-on-device (3D) into a device win, and that carries through to an iterative
+solve: 30 CG-shaped iterations through `K` now gain 1.72x in 2D and 1.56x in 3D, and
+`fdm_solve` gains 2.6-4.0x. No cause for the `fdm_solve` gain is established beyond what
+the eigendecomposition split above already shows. For `mul!` itself, the one cause
+measured is the switch to `Int32` index arithmetic in the device kernel, which took its
+time from 10.8/18.4 ms (2D/3D) to 4.3/7.1 ms; no other cause was measured, so none is
+claimed.
 
 ## Traps worth knowing before touching any of this
 

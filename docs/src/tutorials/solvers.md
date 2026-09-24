@@ -322,7 +322,7 @@ is_separable(Kform_w)
 
 ```@example solvers
 Kw_assembled = assemble(Kform_w)      # SparseMatrixCSC, action by SpMV
-Kw_kron = kronecker_operator(Kform_w) # KroneckerLinearOperator, action by sum factorisation
+Kw_kron = kronecker_operator(Kform_w) # KroneckerLinearOperator, action as one fused pass
 Base.summarysize(Kw_assembled), Base.summarysize(Kw_kron)
 ```
 

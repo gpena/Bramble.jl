@@ -4,7 +4,7 @@
 # but its storage grows with the number of nonzeros, which on a Cartesian mesh grows with
 # the number of unknowns. A separable form -- one whose assembled matrix is an exact sum of
 # Kronecker products of one-dimensional factors -- never needs that matrix at all: applying
-# it is sum factorisation over the per-axis factors, so the storage is `O(D \cdot n)` instead
+# it is one fused pass over the per-axis factors, so the storage is `O(D \cdot n)` instead
 # of `O(n^D)` stored nonzeros. This page builds that operator, measures what it actually
 # costs against the matrix it replaces, and checks that it still computes the right answer.
 # Every number below was produced by the code shown.
@@ -103,8 +103,8 @@ bytes_csc = Base.summarysize(A)
 # ## Solving it: iteratively, through the operator itself
 #
 # `K` subtypes `AbstractMatrix`, so `LinearSolve`'s `KrylovJL_CG` runs against it exactly as
-# it would against `A`, applying `K` by `mul!` (sum factorisation) rather than a sparse
-# matrix-vector product:
+# it would against `A`, applying `K` by `mul!` (one fused pass over the grid) rather than a
+# sparse matrix-vector product:
 
 gₕ = element(Wₕ)
 avgₕ!(gₕ, rhs)
