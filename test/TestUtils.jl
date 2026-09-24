@@ -87,6 +87,15 @@ const WITH_SLOW_TESTS = TEST_GROUP in ("all", "slow", "full")
 const TRACE_TESTS = get(ENV, "CI", "false") == "true" ||
                     get(ENV, "BRAMBLE_TEST_TRACE", "0") == "1"
 
+# Turns the trace above into a budget: unset (the default) is today's behaviour, no check at
+# all. Set, `Sys.maxrss()` is the process peak (see the comment on `TRACE_TESTS`), so the
+# first file whose *end-of-file* peak crosses the budget is the one that fails -- not
+# necessarily the file that allocated the most, only the one that tipped the running total
+# over. Parsed once here rather than in every call to `traced_include`.
+const MAXRSS_BUDGET_GB = let v = get(ENV, "BRAMBLE_TEST_MAXRSS_GB", "")
+    isempty(v) ? nothing : parse(Float64, v)
+end
+
 # Prints the start/end trace lines around one `Base.include(Main, path)` call, when active.
 # Broken out so the `include` override below (installed once, outside this module) is a
 # one-line forward into it.
@@ -104,6 +113,15 @@ function traced_include(real_include::F, path) where {F}
         " maxrss=", round(maxrss_gb; digits = 2), "GB"
     )
     flush(stdout)
+    # A named, failing `@test` beats a SIGKILL with no indication which file was running --
+    # the whole reason the trace above exists (see its comment). A `@testset` whose
+    # description carries the message is the only way to attach one to a `@test` failure:
+    # the `@test` macro itself takes no message argument.
+    if MAXRSS_BUDGET_GB !== nothing && maxrss_gb > MAXRSS_BUDGET_GB
+        @testset "maxrss $(round(maxrss_gb; digits = 2)) GB > budget $(MAXRSS_BUDGET_GB) GB after $path" begin
+            @test false
+        end
+    end
     return result
 end
 

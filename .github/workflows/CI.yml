@@ -101,3 +101,6 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         env:
           BRAMBLE_TEST_GROUP: unit
+          # 5, below this macOS runner's 7 GB, so a blow-up fails by name (see TestUtils.jl)
+          # before the runner just kills the job. Coverage is on by default here.
+          BRAMBLE_TEST_MAXRSS_GB: 5
