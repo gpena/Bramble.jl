@@ -737,10 +737,10 @@ end
 # method's signature distinct from the `Array` one above -- with `unif` dropped, a
 # three-argument device method would be ambiguous with it. Past the single-point guard
 # `unif` is always `false`, so there is no uniform branch here to take. The non-uniform fill
-# has no device RNG/sort to launch, so it generates the coordinates on the host with the
-# same routine the `Array` method above uses, into a scratch `Vector`, and transfers them to
-# `x` in one `copyto!` (gpena/Bramble.jl#304) -- a one-time O(n) construction cost, not a
-# per-iteration one.
+# generates the coordinates on the host with the same routine the `Array` method above uses,
+# into a scratch `Vector`, and transfers them to `x` in one `copyto!` (gpena/Bramble.jl#304).
+# Device `rand!`/`sort!` exist, but host generation keeps a seeded mesh identical across
+# backends; the cost is a one-time O(n) construction, not a per-iteration one.
 function _points!(x::AbstractVector, I::CartesianProduct{1}, unif::Bool, backend)
     npts = length(x)
     T = eltype(I)
