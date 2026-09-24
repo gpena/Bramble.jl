@@ -616,6 +616,11 @@ else
             mul!(y, Kd, x; scratch = s)
             @test isapprox(Array(y), ref; rtol = 1.0f-5)
 
+            # `β = 0` overwrites `y`: a NaN already there must not survive the fused kernel.
+            y = MtlArray(fill(NaN32, n))
+            mul!(y, Kd, x, 1.0f0, 0.0f0)
+            @test isapprox(Array(y), ref; rtol = 1.0f-5)
+
             @test_throws ArgumentError Kd[1, 1]
         end
     end

@@ -21,6 +21,7 @@ const KRON_SEED = 20260919
 # Inside a function so `@allocated` measures `mul!` alone, not global-scope boxing.
 _kron_alloc_with_scratch(y, K, x, s) = @allocated mul!(y, K, x; scratch = s)
 _kron_alloc5_with_scratch(y, K, x, α, β, s) = @allocated mul!(y, K, x, α, β; scratch = s)
+_kron_alloc_no_scratch(y, K, x) = @allocated mul!(y, K, x)
 
 @testset "Kronecker" begin
     @testset "is_separable" begin
@@ -149,7 +150,40 @@ _kron_alloc5_with_scratch(y, K, x, α, β, s) = @allocated mul!(y, K, x, α, β;
             @test _kron_alloc5_with_scratch(du, K, x, -1, 1, s) == 0
             _kron_alloc5_with_scratch(du, K, x, 0.5, 0.0, s)
             @test _kron_alloc5_with_scratch(du, K, x, 0.5, 0.0, s) == 0
+
+            # The fused pass needs no work vectors: 0 bytes without `scratch` too.
+            _kron_alloc_no_scratch(y, K, x)
+            @test _kron_alloc_no_scratch(y, K, x) == 0
+
+            # A `Ref` coefficient stays live through `mul!`.
+            c = Ref(2.5)
+            aref = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v)))
+            Kref = kronecker_operator(aref)
+            c[] = -0.75
+            @test isapprox(Kref * x, assemble(aref) * x; rtol = 1e-12, atol = 1e-12)
         end
+    end
+
+    @testset "fused mul!: axis-1 factor that is not tridiagonal" begin
+        # `kronecker_operator` always stores the axis-1 difference factor in tridiagonal
+        # form (`_KronTridiag`); a factor with any other sparsity keeps its CSC matrix and
+        # takes the row-gather path. Force that path on the same factors and compare.
+        Random.seed!(KRON_SEED + 4)
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (13, 9), (false, false))
+        Wₕ = gridspace(Ωₕ)
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        K = kronecker_operator(a)
+        @test any(t -> t.line isa Bramble._KronTridiag, K.terms)
+        terms = map(K.terms) do t
+            line = t.line isa Bramble._KronTridiag ? t.factors[1] : t.line
+            Bramble.KroneckerTerm{2, typeof(t.scales), typeof(t.factors), typeof(line)}(
+                t.scales, t.factors, line
+            )
+        end
+        Kcsc = KroneckerLinearOperator{eltype(K), 2, typeof(terms)}(terms, K.dims, K.n)
+        x = rand(size(K, 1))
+        @test isapprox(Kcsc * x, K * x; rtol = 1e-12, atol = 1e-12)
+        @test isapprox(Kcsc * x, assemble(a) * x; rtol = 1e-12, atol = 1e-12)
     end
 
     @testset "LinearSolve agreement (SPD, no Dirichlet)" begin

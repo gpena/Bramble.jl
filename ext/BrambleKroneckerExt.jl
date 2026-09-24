@@ -245,10 +245,10 @@ end
 # `Y = M *_d X`: dense matrix `M` applied along axis `d` of the `D`-array `X`, viewed as
 # `(pre, dims[d], post)` (`pre = prod(dims[1:d-1])`, `post = prod(dims[d+1:end])`) and
 # right-multiplying each `pre x dims[d]` slab by `M'`, so `Y[i, j, k] = Σ_l M[j, l]
-# X[i, l, k]`. Dense `reshape`/matrix-multiply rather than `kronecker.jl`'s own
-# zero-allocation `_kron_apply_mode!`: `Q_d` is a full (not diagonal or sparse) matrix here,
-# and this runs once per `fdm_solve` call, not once per Krylov iteration, so it is not on the
-# path that contract measures allocation-free.
+# X[i, l, k]`. Dense `reshape`/matrix-multiply rather than anything like `kronecker.jl`'s
+# fused `mul!`: `Q_d` is a full (not diagonal or sparse) matrix here, and this runs once per
+# `fdm_solve` call, not once per Krylov iteration, so it is not on the path whose `mul!` is
+# measured allocation-free.
 function _fdm_apply_mode(X::Array{T}, M::AbstractMatrix, d::Int) where {T}
     dims = size(X)
     pre = prod(dims[1:(d - 1)]; init = 1)

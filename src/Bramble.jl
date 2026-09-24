@@ -50,7 +50,7 @@ public _launch_uniform_mesh1d_init!, _launch_nonuniform_mesh1d_metrics!
 public _launch_fused_divergence!, _launch_fused_curl2d!, _launch_fused_curl3d!
 public _launch_fused_laplacian!, _launch_fused_strain_offdiag!
 public _launch_spmv_csr!, _launch_spmm_csr!
-public _launch_kron_sparse_mode!
+public _launch_kron_fused!
 
 # --- Domain & Geometry ---
 export box, interval, ×, dim, topo_dim, extrema, point, center, projection, boundary_symbols

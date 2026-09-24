@@ -51,7 +51,7 @@ import Bramble:
                 _launch_average_engine!,
                 _launch_spmv_csr!,
                 _launch_spmm_csr!,
-                _launch_kron_sparse_mode!,
+                _launch_kron_fused!,
                 _launch_fused_divergence!,
                 _launch_fused_curl2d!,
                 _launch_fused_curl3d!,
@@ -782,31 +782,63 @@ function _launch_spmv_csr!(y::AbstractVector, rowPtr, colVal, nzVal, x::Abstract
     return nothing
 end
 
-# `KroneckerLinearOperator` mode contraction by a symmetric sparse 1D factor
-# (gpena/Bramble.jl#323, `src/form/kronecker.jl`). One work item per output entry of the flat
-# `pre x m x post` array: output `(i, j, k)` gathers column `j` of the CSC storage, which
-# equals row `j` because every factor is symmetric, so no write conflicts and no atomics.
-@kernel function _kron_sparse_mode_kernel!(Y, @Const(colptr), @Const(rowval), @Const(nzval), @Const(X), pre, m)
-    g = @index(Global)
+# `KroneckerLinearOperator` `mul!` as one fused kernel (gpena/Bramble.jl#323,
+# `src/form/kronecker.jl`). One work item per entry `g` of `y`: it recovers its grid index
+# from `dims`/`strides`, then sums every term's contribution -- the product of the term's
+# diagonal entries at that index times, for its one sparse factor (if any) on axis `e`, the
+# factor's row `i_e` against `x` along axis `e`, or `x[g]` itself for the mass term. Every
+# 1D factor is symmetric, so row `i_e` is read from CSC column `i_e`. No write conflicts and
+# no atomics. The per-term tuples are peeled recursively, so the term structure is resolved
+# at compile time from the factor types (a vector is a diagonal, a tuple is CSC storage).
+
+@inline _kron_pt_split(d::AbstractVector, i, ::Any) = (d[i], nothing)
+@inline _kron_pt_split(sp::Tuple, i, stride) = (one(eltype(sp[3])), (sp, i, stride))
+
+@inline _kron_pt_pick(::Nothing, ::Nothing) = nothing
+@inline _kron_pt_pick(a, ::Nothing) = a
+@inline _kron_pt_pick(::Nothing, b) = b
+
+@inline _kron_pt_fold(::Tuple{}, ::Tuple{}, ::Tuple{}) = (true, nothing)
+@inline function _kron_pt_fold(fs::Tuple, idx::Tuple, ss::Tuple)
+    w, sp = _kron_pt_split(fs[1], idx[1], ss[1])
+    wr, spr = _kron_pt_fold(Base.tail(fs), Base.tail(idx), Base.tail(ss))
+    return (w * wr, _kron_pt_pick(sp, spr))
+end
+
+@inline _kron_pt_apply(::Nothing, x, g) = @inbounds x[g]
+@inline function _kron_pt_apply(nb::Tuple, x, g)
+    (colptr, rowval, nzval), i, stride = nb
+    acc = zero(eltype(nzval))
+    @inbounds for p in colptr[i]:(colptr[i + 1] - Int32(1))
+        acc += nzval[p] * x[g + (rowval[p] - i) * stride]
+    end
+    return acc
+end
+
+@inline _kron_pt_terms(::Tuple{}, ::Tuple{}, x, g, idx, ss, acc) = acc
+@inline function _kron_pt_terms(facs::Tuple, cs::Tuple, x, g, idx, ss, acc)
+    w, nb = _kron_pt_fold(facs[1], idx, ss)
+    acc += cs[1] * (w * _kron_pt_apply(nb, x, g))
+    return _kron_pt_terms(Base.tail(facs), Base.tail(cs), x, g, idx, ss, acc)
+end
+
+@kernel function _kron_fused_kernel!(y, @Const(x), dims, strides, cs, facs, β, βzero)
+    g = @index(Global) % Int32
     @inbounds begin
-        g0 = g - 1
-        i = g0 % pre
-        r = g0 ÷ pre
-        j = r % m + 1
-        base = (r ÷ m) * pre * m + i + 1
-        acc = zero(eltype(Y))
-        for p in colptr[j]:(colptr[j + 1] - Int32(1))
-            acc += nzval[p] * X[base + (rowval[p] - 1) * pre]
-        end
-        Y[g] = acc
+        idx = map((s, m) -> (g - Int32(1)) ÷ s % m + Int32(1), strides, dims)
+        acc = _kron_pt_terms(facs, cs, x, g, idx, strides, zero(eltype(y)))
+        y[g] = βzero ? acc : acc + β * y[g]
     end
 end
 
-function _launch_kron_sparse_mode!(
-        Y::AbstractVector, colptr, rowval, nzval, X::AbstractVector, pre::Int, m::Int, post::Int)
-    dev = get_backend(Y)
+function _launch_kron_fused!(y::AbstractVector, x::AbstractVector, dims, strides, cs, facs, β, βzero)
+    dev = get_backend(y)
+    # `Int32` index arithmetic (an `InexactError` past `typemax(Int32)` entries): 64-bit
+    # integer division is emulated on Apple GPUs.
+    dims32 = map(Int32, dims)
+    strides32 = map(Int32, strides)
     try
-        _kron_sparse_mode_kernel!(dev)(Y, colptr, rowval, nzval, X, pre, m; ndrange = pre * m * post)
+        _kron_fused_kernel!(dev)(y, x, dims32, strides32, cs, facs, β, βzero; ndrange = length(y))
     catch err
         _wrap_device_kernel_error(err, "KroneckerLinearOperator mul!")
     end
