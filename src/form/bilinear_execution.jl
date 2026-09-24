@@ -180,7 +180,7 @@ function _record_bilinear_core!(
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
     sp = _walked_leaf(bound, trial_space, test_space)
-    push!(segments, _record_segment!(A, bound, sp, 0, 0, α))
+    _record_summands!(A, bound, sp, segments, α)
     return nothing
 end
 
@@ -202,19 +202,64 @@ function _replay_bilinear_core!(
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
     sp = _walked_leaf(bound, trial_space, test_space)
-    _replay_segment!(A, bound, sp, 0, 0, segments[1], α)
+    _replay_summands!(A, bound, sp, segments, 0, α)
     return nothing
 end
 
-function _record_blocks!(
+# A sum's terms are walked as `_summands(op)` (`stencil_eval.jl`), not by recursing
+# left/right, for the reason given there. Every method below is `@noinline`, so each term's
+# block loop stays its own method instance instead of inlining into the walk (3D
+# `innerₕ(εcₕ(u), εcₕ(v))`, first assemble: 13.0–13.5 s with the barrier, 14.2–14.4 s
+# without). One call per term per assembly is what it costs at run time.
+
+# `next` through every summand in order, unrolled over the tuple.
+@inline _foldl_summands(f::F, acc, ::Tuple{}) where {F} = acc
+@inline _foldl_summands(f::F, acc, t::Tuple) where {F} = _foldl_summands(f, f(acc, first(t)), Base.tail(t))
+
+# A scalar form's top-level sum is recorded one segment per summand, as a composite form's
+# blocks already are, not as one fused stencil: fused, every grid-point walk inlines the
+# whole sum's stencil, and optimising that body grows superlinearly with the term count
+# (3D scalar form of N distinct `innerₕ` difference terms: `_record_segment!` inference
+# 0.64 s at N = 9, 11.0 s at N = 27; first assemble at N = 27 went from 44.4 s to 16.0 s).
+@noinline function _record_summands!(
+        A::AbstractMatrix, op::OperatorAdd, sp, segments::Vector{Segment{D}}, α
+) where {D}
+    map(t -> _record_summands!(A, t, sp, segments, α), _summands(op))
+    return nothing
+end
+
+@noinline function _record_summands!(
+        A::AbstractMatrix, term::TERM, sp, segments::Vector{Segment{D}}, α
+) where {TERM, D}
+    push!(segments, _record_segment!(A, term, sp, 0, 0, α))
+    return nothing
+end
+
+# The replay counterpart, `next` threaded as in `_replay_blocks!`.
+@noinline function _replay_summands!(
+        A::AbstractMatrix, op::OperatorAdd, sp, segments::Vector{Segment{D}}, next::Int, α
+) where {D}
+    return _foldl_summands(
+        (n, t) -> _replay_summands!(A, t, sp, segments, n, α), next, _summands(op)
+    )
+end
+
+@noinline function _replay_summands!(
+        A::AbstractMatrix, term::TERM, sp, segments::Vector{Segment{D}}, next::Int, α
+) where {TERM, D}
+    next += 1
+    _replay_segment!(A, term, sp, 0, 0, segments[next], α)
+    return next
+end
+
+@noinline function _record_blocks!(
         A::AbstractMatrix, op::OperatorAdd, trial_leaves, test_leaves, segments::Vector{Segment{D}}, α
 ) where {D}
-    _record_blocks!(A, op.left_op, trial_leaves, test_leaves, segments, α)
-    _record_blocks!(A, op.right_op, trial_leaves, test_leaves, segments, α)
+    map(t -> _record_blocks!(A, t, trial_leaves, test_leaves, segments, α), _summands(op))
     return nothing
 end
 
-function _record_blocks!(
+@noinline function _record_blocks!(
         A::AbstractMatrix, term::TERM, trial_leaves, test_leaves, segments::Vector{Segment{D}}, α
 ) where {TERM, D}
     for blk in blocks(term, trial_leaves, test_leaves)
@@ -231,7 +276,7 @@ end
 # `next` is threaded through by value and returned, rather than via a mutable `Ref`, so
 # this stays allocation-free: the segment index the *next* leaf-term/block should consume,
 # in the same left-then-right order `_record_blocks!` built `segments` in.
-function _replay_blocks!(
+@noinline function _replay_blocks!(
         A::AbstractMatrix,
         op::OperatorAdd,
         trial_leaves,
@@ -240,12 +285,14 @@ function _replay_blocks!(
         next::Int,
         α
 ) where {D}
-    next = _replay_blocks!(A, op.left_op, trial_leaves, test_leaves, segments, next, α)
-    next = _replay_blocks!(A, op.right_op, trial_leaves, test_leaves, segments, next, α)
-    return next
+    return _foldl_summands(
+        (n, t) -> _replay_blocks!(A, t, trial_leaves, test_leaves, segments, n, α),
+        next,
+        _summands(op)
+    )
 end
 
-function _replay_blocks!(
+@noinline function _replay_blocks!(
         A::AbstractMatrix,
         term::TERM,
         trial_leaves,

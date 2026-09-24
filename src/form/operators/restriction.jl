@@ -97,9 +97,8 @@ end
 # --- AST resolution ---------------------------------------------------------------- #
 
 function resolve_ast(op::RegionRestriction{D, RegionType}) where {D, RegionType}
-    return RegionRestriction{D, RegionType, typeof(resolve_ast(op.inner_op))}(
-        op.region, resolve_ast(op.inner_op)
-    )
+    inner = resolve_ast(op.inner_op)
+    return RegionRestriction{D, RegionType, typeof(inner)}(op.region, inner)
 end
 
 function _bind_interp_spaces(

@@ -205,9 +205,8 @@ const AverageNode{D, Dim} = Union{
     BackwardAverage{D, Dim}, ForwardAverage{D, Dim}, CenteredAverage{D, Dim}}
 
 function resolve_ast(op::ShiftNode{D, Dim}) where {D, Dim}
-    return ShiftNode{D, Dim, typeof(resolve_ast(op.inner_op))}(
-        op.shift_amount, resolve_ast(op.inner_op)
-    )
+    inner = resolve_ast(op.inner_op)
+    return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
 end
 
 # `ShiftNode` carries a second field, so it writes its own binder rather than taking the one
