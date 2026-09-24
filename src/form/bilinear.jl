@@ -23,7 +23,7 @@ point `lin_idx`'s own entries, in the order a scatter walk visits them. Addresse
 rather than by a shared running counter, so a replay stays correct whatever order the grid
 is visited in.
 
-See also: [`RecordSink`](@ref), [`ReplaySink`](@ref).
+See also: [`ReplaySink`](@ref).
 """
 const NzvalSegment = Tuple{Vector{Int}, Vector{Int}}
 
@@ -43,10 +43,11 @@ Enzyme can reason about -- a discriminated struct, not a two-branch `Union`.
 - `true` (diagonal, gpena/Bramble.jl#160): `point_ptr`/`positions` cover only the boundary
   shell; `base`/`stride`/`P`/`interior` carry the interior's per-tap stride arithmetic --
   interior entries are `base[k] + stride[k] * n` for the `n`-th point `interior`'s own
-  iteration order visits (`n` zero-based, `_interior_rank`), rather than one stored `Int` per
-  entry, so `positions` never carries the interior's `O(N * P)` share at all.
+  iteration order visits (`n` zero-based), rather than one stored `Int` per entry, so
+  `positions` never carries the interior's `O(N * P)` share at all. 1D forms only
+  (`_diagonal_replay`): from 2D up no difference term's interior has a constant stride.
 
-Built by `_record_segment!` only when every interior point produces the same number of
+Built by `_try_diagonal_segment` only when every interior point produces the same number of
 entries `P` and the same per-tap stride holds across the whole interior -- checked once, not
 assumed, because a form summing terms of different margins can make a column's true `nzval`
 footprint vary inside what this one term calls its own interior (see [`_stencil_margin`](@ref)).
@@ -60,6 +61,12 @@ is concrete. A `CartesianIndices{D}` alone, or a `Segment` with `D` left to vary
 concrete (its ranges type is still a `UnionAll`) and stores boxed: exactly what made an early
 version of this allocate 80-400 B on every replay, `@test_allocs`-checked paths included.
 
+`positions_t` is empty except on a segment recorded for a transposed pair
+⟨Au, Bv⟩ + ⟨Bu, Av⟩ (`_segments_from_positions`): there it holds, entry for entry, the `nzval`
+position of the transposed entry the second term writes, so one walk of ⟨Au, Bv⟩ fills both.
+The half a pair's unit does not write (`_PairReplaySink`) leaves `positions` or
+`positions_t` empty. A pair segment is always flat.
+
 See also: [`DiagonalReplaySink`](@ref).
 """
 struct Segment{D}
@@ -70,6 +77,7 @@ struct Segment{D}
     stride::Vector{Int}
     P::Int
     interior::CartesianIndices{D, NTuple{D, UnitRange{Int}}}
+    positions_t::Vector{Int}
 end
 
 # A concrete, zero-length placeholder for `interior` on the flat path, where nothing reads
@@ -81,7 +89,7 @@ _empty_interior(::Val{D}) where {D} = CartesianIndices(ntuple(_ -> 1:0, D))
 # The flat shape: built at every early return in `_try_diagonal_segment` (bilinear_execution.jl)
 # where the interior/boundary split does not hold or is not worth it.
 function _flat_segment(::Val{D}, point_ptr::Vector{Int}, positions::Vector{Int}) where {D}
-    Segment{D}(false, point_ptr, positions, Int[], Int[], 0, _empty_interior(Val(D)))
+    Segment{D}(false, point_ptr, positions, Int[], Int[], 0, _empty_interior(Val(D)), Int[])
 end
 
 # One `BilinearForm`'s nzval-position cache: valid only for the exact matrix object last
@@ -249,8 +257,9 @@ Return the resolved AST stored inside the bilinear form.
 
 Construct a `BilinearForm` over the trial space `Wₕ` and the test space `Vₕ` from the
 bilinear expression `f` (a function of trial and test arguments `(u, v)`). The AST is
-resolved once and run through [`simplify_ast`](@ref) -- factoring common scalings,
-combining like terms, and eliding zero-scaled ones -- before it is stored.
+resolved once and run through [`simplify_ast`](@ref) -- factoring common scalings and
+shared inner-product arguments, combining like terms, and eliding zero-scaled ones -- before
+it is stored.
 
 # Examples
 ```julia
@@ -278,7 +287,7 @@ end
 # guard, so it is stated once, here, rather than once per caller.
 
 # Refuse cross-mesh coupling unless an explicit mapping (such as interpolation) is provided.
-@noinline function _throw_cross_mesh_block(term, Ωu, Ωv)
+@noinline function _throw_cross_mesh_block(@nospecialize(term), Ωu, Ωv)
     throw(
         ArgumentError(
         "a bilinear term coupling two leaves over different meshes has no assembly: the " *

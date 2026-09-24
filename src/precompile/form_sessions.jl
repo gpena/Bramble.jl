@@ -186,9 +186,11 @@ end
 # Measured in a fresh session before this was added, the shapes below cost 1,032 ms of
 # first-call latency in 1D and 2D together.
 #
-# 3D is deliberately absent, as it is in the sessions above. Its shapes are the most
-# expensive to reach (78 to 114 ms apiece) and introduce three more specializations of
-# every core, paying build costs whether or not the caller computes in 3D.
+# 3D is deliberately absent from the shapes below, as it is in the sessions above: the
+# mass/mixed/directional/composite/reaction/Jacobian/type-cache shapes each cost their own
+# 78-114 ms and would multiply the specializations of every core in this file. The one 3D
+# shape that does matter to a caller -- the scalar Laplacian -- is warmed separately in
+# src/precompile.jl's own workload (measured there: +2.7 s precompile, +5.3 MiB cache).
 #
 # One call per shape rather than a loop over a tuple of closures. A loop creates a union
 # type at the call site and compiles a generic fallback rather than concrete specialized kernels.
@@ -467,9 +469,9 @@ end
 # --- Jacobian sparsity and per-type assembly caching (gpena/Bramble.jl#21/#95/#20) ------- #
 #
 # Neither is reachable from the sessions above. jacobian_pattern walks a BilinearForm's own
-# local_stencil through a fresh set of helpers (_coefficient_offsets, _pattern_term!,
-# _resolve_dependency_ops, _pattern_term_jacobian! for the composite dispatch) that nothing
-# else here calls. type_cached_assemble! is its own dispatch on the element type `T`, not
+# local_stencil through a fresh set of helpers (_coefficient_offsets, _resolve_dependency_ops,
+# _pattern_term_jacobian! for the composite dispatch) that nothing else here calls.
+# type_cached_assemble! is its own dispatch on the element type `T`, not
 # exercised anywhere assemble/assemble! already are.
 _pc_alpha(u) = 3.0 + 1.0 / (1.0 + u^2)
 

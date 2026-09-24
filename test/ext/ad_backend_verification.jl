@@ -5,6 +5,7 @@ using Bramble
 using ADTypes
 using ForwardDiff, ReverseDiff, FiniteDiff, DifferentiationInterface
 using Random
+using LinearAlgebra: mul!
 using ..ExtSparseAdExtTests: nonlinear_diffusion_problem
 
 # Verifies two things gpena/Bramble.jl#122 asks for: that `jacobian_pattern` never misses a

@@ -859,19 +859,16 @@ end
 # AST Resolution
 # ==============================================================================
 
+# Each side resolved once, as `resolve_ast(::OperatorAdd)` explains.
 function resolve_ast(op::BilinearProduct{D, InnerType}) where {D, InnerType}
-    return BilinearProduct{
-        D, InnerType, typeof(resolve_ast(op.left_op)), typeof(resolve_ast(op.right_op))
-    }(
-        resolve_ast(op.left_op), resolve_ast(op.right_op)
-    )
+    left = resolve_ast(op.left_op)
+    right = resolve_ast(op.right_op)
+    return BilinearProduct{D, InnerType, typeof(left), typeof(right)}(left, right)
 end
 function resolve_ast(op::LinearProduct{D, InnerType}) where {D, InnerType}
-    return LinearProduct{
-        D, InnerType, typeof(resolve_ast(op.left_op)), typeof(resolve_ast(op.right_op))
-    }(
-        resolve_ast(op.left_op), resolve_ast(op.right_op)
-    )
+    left = resolve_ast(op.left_op)
+    right = resolve_ast(op.right_op)
+    return LinearProduct{D, InnerType, typeof(left), typeof(right)}(left, right)
 end
 
 # Disambiguation for the empty tuple.

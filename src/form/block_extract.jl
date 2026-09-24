@@ -207,7 +207,7 @@ _collect_region_labels(op) = ()
 
 Throws if `term` names, via `restrict_to` or `markers = (...)`, a label that does not exist
 in `mesh_markers` (the mesh a term is about to be scattered against). Checked once, while the
-sparsity pattern is built (`allocate_system_matrix`/`_pattern_term!`), rather than left to
+sparsity pattern is built (`allocate_system_matrix`/`_coord_walk!`), rather than left to
 `RegionRestriction`'s own `local_stencil`: that answers `false` for a missing key the same way
 it does for "not marked", so a typo'd or leaf-missing label would otherwise assemble to a
 silent all-zero contribution instead of failing loudly.

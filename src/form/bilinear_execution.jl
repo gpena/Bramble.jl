@@ -7,74 +7,48 @@
 
 # --- Serial: record once, replay thereafter ---------------------------------------- #
 #
-# Two ways to fill a term's block, serially: `_record_segment!` searches for each entry's
-# nzval position (as every call used to) and also records it; `_replay_segment!` reads a
-# previously recorded position back instead of searching. `_assemble_bilinear_core_cached!`
-# picks between them by whether `A` is the exact matrix object the form's cache was last
-# built against (gpena/Bramble.jl#26).
+# A form's first serial fill is a replay: the coordinate walk (`_form_coordinates`,
+# bilinear_pattern.jl) gives every entry's `(row, col)`, which searched in `A` become the
+# recorded `nzval` positions, one `Segment` per (term, block) unit, and `_replay_segment!`
+# reads them back instead of searching. `allocate_system_matrix` stores that recording for
+# the matrix it builds; `_assemble_bilinear_core_cached!` records afresh when `A` is not the
+# exact matrix object the form's cache was last built against (gpena/Bramble.jl#26).
 #
 # The parallel path below is untouched by this cache: it always threads, and recording is an
 # inherently serial, one-time pass (concurrent writes into a shared cache would race), so
 # caching it would mean its first call silently stopped threading -- breaking
 # `assemble_parallel!`'s own documented contract ("always threads").
 
-# One term into one block, serially, searching for each entry's nzval position (once) and
-# recording it into a fresh `Segment` alongside performing the (first) real scatter.
-# `row_offset` comes from the test leaf and `col_offset` from the trial leaf: a matrix row
-# is indexed by the test function.
-#
-# Two passes, not one: `_SegmentCountSink` walks the term first to learn exactly how many
-# entries it has, so `RecordSink`'s own `positions` can be preallocated to that size and
-# filled with `setindex!` -- never grown with `push!` (gpena/Bramble.jl#240). See
-# `_SegmentCountSink`'s own docstring for why: `push!` here is what made `Enzyme` unable to
-# compile this function at all when the term's own coefficient is what is being
-# differentiated, independent of (and found only after fixing) the `Union` gpena/Bramble.jl#240
-# was originally filed against.
-function _record_segment!(
-        A::AbstractMatrix, term::TERM, sp, row_offset::Int, col_offset::Int, α
-) where {TERM}
-    n = length(indices(mesh(sp)))
-    point_ptr = Vector{Int}(undef, n + 1)
-    count_sink = _SegmentCountSink(point_ptr, 0)
-    visit_bilinear_stencil(count_sink, term, sp, row_offset, col_offset)
-    total = count_sink.n
-    @inbounds point_ptr[n + 1] = total + 1
+# Whether a `D`-dimensional form records diagonal segments at all. Only in 1D: from 2D up a
+# difference term's interior has no constant per-tap stride (a boundary column between two
+# interior rows holds fewer entries), so every such segment came back flat and the diagonal
+# replay was compiled per term for nothing. Decided from `D` alone, so the branch folds away.
+@inline _diagonal_replay(::Val{1}) = true
+@inline _diagonal_replay(::Val) = false
 
-    sink = RecordSink(A, term, point_ptr, Vector{Int}(undef, total), α, 0)
-    visit_bilinear_stencil(sink, term, sp, row_offset, col_offset)
-    # No `::Segment{D}` type assertion here: `Segment` alone (no `D`) is an abstract
-    # `UnionAll`, and asserting a value into it would *widen* what the compiler tracks the
-    # result as, discarding the concrete `Segment{D}` `_try_diagonal_segment` actually
-    # returns for this specialization -- exactly the boxing `Segment{D}`'s own docstring
-    # warns about, just moved one call up.
-    return _try_diagonal_segment(term, sp, sink.point_ptr, sink.positions)
-end
-
-# Attempts to repackage a freshly recorded flat segment as a diagonal `Segment`, restricted
-# to `term`'s own interior/boundary split (gpena/Bramble.jl#160): `_visit_interior!` --
-# called by `visit_bilinear_stencil` before any boundary slab -- pushes every interior
-# point's `P` entries, in `LinearIndices(interior)` order, so `positions[1:n_interior*P]`
-# already *is* the interior in that order, with no need to touch `point_ptr` to find it.
+# Attempts to repackage a unit's flat positions as a diagonal `Segment`, restricted to the
+# unit's own interior/boundary split (gpena/Bramble.jl#160): the coordinate walk visits the
+# interior box before any boundary slab, pushing every interior point's `P` entries in
+# `LinearIndices(interior)` order, so `positions[1:n_interior*P]` already *is* the interior
+# in that order, with no need to touch `point_ptr` to find it.
 #
-# Validated against the actual recorded positions, not assumed from `term`'s own margin
+# Validated against the actual positions, not assumed from the term's own margin
 # (gpena/Bramble.jl#161): a form summing terms of different margins into the same block
-# (`_record_blocks!(::OperatorAdd, ...)`) records one segment per summand, and a narrower
-# term's own "interior" can still include columns whose true `nzval` footprint -- set by
-# every segment sharing that column, not just this one -- varies where a wider-margin
-# sibling still adds taps. That shows up here as a non-constant per-tap stride; any mismatch,
-# or too little interior to bother, falls back to the plain flat segment unchanged, which
-# `ReplaySink` already handles.
+# records one segment per summand, and a narrower term's own "interior" can still include
+# columns whose true `nzval` footprint -- set by every segment sharing that column, not just
+# this one -- varies where a wider-margin sibling still adds taps. That shows up here as a
+# non-constant per-tap stride; any mismatch, or too little interior to bother, falls back to
+# the plain flat segment unchanged, which `ReplaySink` already handles.
 #
 # Every early return builds a `Segment{D}` via `_flat_segment`, never a bare tuple: the
 # return type must stay the single concrete `Segment{D}` on every path, not a `Union` with
 # some other flat representation -- that Union is exactly what gpena/Bramble.jl#240 removed.
 function _try_diagonal_segment(
-        term::TERM, sp, point_ptr::Vector{Int}, positions::Vector{Int}
-) where {TERM}
-    grid_inds = indices(mesh(sp))
+        margin::Int, grid_inds::CartesianIndices, point_ptr::Vector{Int}, positions::Vector{Int}
+)
     ax = axes(grid_inds)
     D = length(ax)
-    margin = _stencil_margin(term)
+    _diagonal_replay(Val(D)) || return _flat_segment(Val(D), point_ptr, positions)
     _peelable(ax, margin) || return _flat_segment(Val(D), point_ptr, positions)
 
     interior = CartesianIndices(map(r -> _interior_range(r, margin), ax))
@@ -105,31 +79,32 @@ function _try_diagonal_segment(
 
     boundary_positions = positions[(total_interior + 1):end]
     boundary_point_ptr = point_ptr .- total_interior
-    return Segment{D}(true, boundary_point_ptr, boundary_positions, base, stride, P, interior)
+    return Segment{D}(
+        true, boundary_point_ptr, boundary_positions, base, stride, P, interior, Int[]
+    )
 end
 
-# The replay counterpart: same walk, same fresh stencil evaluation (weights may be live --
-# only positions are fixed), but each entry's nzval index comes from `segment` instead of a
-# search. `point_ptr[lin_idx]` addresses each point's own slice of `positions` directly, so
-# this stays correct regardless of what order grid points are visited in.
+# One term into one block: the walk, a fresh stencil evaluation (weights may be live -- only
+# positions are fixed), and each entry's nzval index read from `segment` instead of searched.
+# `point_ptr[lin_idx]` addresses each point's own slice of `positions` directly, so this
+# stays correct regardless of what order grid points are visited in.
 #
 # One method branching on `segment.is_diagonal`, not two dispatching on `NzvalSegment` versus
 # `DiagonalSegment` (gpena/Bramble.jl#240): both branches are fully concrete (`Segment{D}`
-# has one shape, not a Union), so the runtime `if` costs nothing extra over the dispatch it
-# replaced -- flat replays exactly as before through `ReplaySink`; diagonal replays the
-# interior core through `DiagonalReplaySink`'s stride arithmetic and the boundary shell
-# through an ordinary `ReplaySink`, the two-sink form of `visit_bilinear_stencil` running
-# both in the one walk.
+# has one shape, not a Union). Flat replays through `ReplaySink`; diagonal (1D only,
+# `_diagonal_replay`) replays the interior core through `DiagonalReplaySink`'s stride
+# arithmetic and the boundary shell through an ordinary `ReplaySink`, the two-sink form of
+# `visit_bilinear_stencil` running both in the one walk.
 function _replay_segment!(
         A::AbstractMatrix,
         term::TERM,
         sp,
         row_offset::Int,
         col_offset::Int,
-        segment::Segment,
+        segment::Segment{D},
         α
-) where {TERM}
-    if segment.is_diagonal
+) where {TERM, D}
+    if _diagonal_replay(Val(D)) && segment.is_diagonal
         visit_bilinear_stencil(
             DiagonalReplaySink(
                 A, segment.interior, segment.base, segment.stride, segment.P, α
@@ -152,36 +127,30 @@ function _replay_segment!(
     return nothing
 end
 
-# The scalar case: one block, no offsets, so exactly one segment either way.
-#
 # `segments::Vector{Segment{D}}` throughout this file: `D` is fixed per call (the form's own
 # dimension) and, since gpena/Bramble.jl#240, `Segment{D}` is the single concrete element
 # type regardless of whether a given element is flat or diagonal (`is_diagonal` selects the
-# shape at the value level, not the type level) -- no `where {T <: ...}` indirection needed
-# to keep the vector unboxed, unlike the `AnySegment{D}` union this replaced.
+# shape at the value level, not the type level).
+#
 # A composite space on either side is assembled block by block, the scalar side (if any) as
-# a one-leaf composite (see `allocate_system_matrix`). `_walked_leaf` on a mixed pair would
-# pick one whole space and drop the component the term names on the composite side. Decided
-# from the types alone, so the branch folds away.
+# a one-leaf composite. `_walked_leaf` on a mixed pair would pick one whole space and drop the
+# component the term names on the composite side. Decided from the types alone, so the branch
+# folds away.
 @inline _is_block_pair(::Any, ::Any) = false
 @inline _is_block_pair(::CompositeGridSpace, ::Any) = true
 @inline _is_block_pair(::Any, ::CompositeGridSpace) = true
 @inline _is_block_pair(::CompositeGridSpace, ::CompositeGridSpace) = true
 
+# A cache miss: the recording `allocate_system_matrix` would have stored, built against `A`,
+# then replayed. Its positions search reports an entry `A`'s pattern cannot hold.
 function _record_bilinear_core!(
-        A::AbstractMatrix, trial_space, test_space, ast::AST_TYPE, segments::Vector{Segment{D}}, α
+        A::AbstractMatrix, trial_space, test_space, ast::AST_TYPE, ::Val{D}, α
 ) where {AST_TYPE, D}
-    if _is_block_pair(trial_space, test_space)
-        _record_blocks!(
-            A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space), segments, α
-        )
-        return nothing
-    end
-    bound = _bind_interp_spaces(ast, trial_space, test_space)
-    _check_block_meshes(bound, trial_space, test_space)
-    sp = _walked_leaf(bound, trial_space, test_space)
-    push!(segments, _record_segment!(A, bound, sp, 0, 0, α))
-    return nothing
+    p = _form_coordinates(trial_space, test_space, ast)
+    _coordinates_to_positions!(A, p, ast)
+    segments = _segments_from_positions(Val(D), p)
+    _replay_bilinear_core!(A, trial_space, test_space, ast, segments, α)
+    return segments
 end
 
 function _replay_bilinear_core!(
@@ -202,36 +171,110 @@ function _replay_bilinear_core!(
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
     sp = _walked_leaf(bound, trial_space, test_space)
-    _replay_segment!(A, bound, sp, 0, 0, segments[1], α)
+    _replay_summands!(A, bound, sp, segments, 0, α)
     return nothing
 end
 
-function _record_blocks!(
-        A::AbstractMatrix, op::OperatorAdd, trial_leaves, test_leaves, segments::Vector{Segment{D}}, α
-) where {D}
-    _record_blocks!(A, op.left_op, trial_leaves, test_leaves, segments, α)
-    _record_blocks!(A, op.right_op, trial_leaves, test_leaves, segments, α)
+# --- The (term, block) units, in segment order ---------------------------------------- #
+#
+# `_foreach_unit` (setup: the coordinate walk) and `_replay_summands!`/`_replay_blocks!`
+# (every fill) visit the same units in the same order, so segment `k` of the one is unit `k`
+# of the other. A sum's terms are walked as `_summands(op)` (`stencil_eval.jl`), not by
+# recursing left/right, for the reason given there. Every method is `@noinline`, so each
+# term's block loop stays its own method instance instead of inlining into the walk (3D
+# `innerₕ(εcₕ(u), εcₕ(v))`, first assemble: 13.0–13.5 s with the barrier, 14.2–14.4 s
+# without). One call per term per assembly is what it costs at run time.
+#
+# A scalar form's top-level sum is one unit per summand, as a composite form's blocks
+# already are, never one fused stencil: fused, every grid-point walk inlines the whole sum's
+# stencil, and optimising that body grows superlinearly with the term count (3D scalar form
+# of N distinct `innerₕ` difference terms: recording inference 0.64 s at N = 9, 11.0 s at
+# N = 27; first assemble at N = 27 went from 44.4 s to 16.0 s).
+#
+# A transposed pair ⟨Au, Bv⟩ + ⟨Bu, Av⟩ among the summands (`_pair_plan`, form/symmetry.jl)
+# is one unit, not two: ⟨Au, Bv⟩ is walked once and each entry is also added, with the second
+# term's scaling, at its transpose (`_PairReplaySink`). First assemble of a 3D scalar form of
+# 9 such pairs: 11.9 s unpaired, 4.9 s paired; 3D `innerₕ(εcₕ(u), εcₕ(v))` (3 pairs among 15
+# summands) 14.8 s to 13.0 s, and its warm `assemble!` on 24³ 5.0 ms to 3.65 ms.
+#
+# `f(term, sp, row_offset, col_offset, dr, dc, half)` is called once per unit: `half` is `-1`
+# for a term walked alone, and for a pair's unit `0`, `1` or `2` as `_PairReplaySink` reads
+# it, `dr`/`dc` moving an entry from the first term's block to the second's.
+function _foreach_unit(f::F, trial_space, test_space, ast) where {F}
+    if _is_block_pair(trial_space, test_space)
+        _foreach_block_unit(
+            f, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space)
+        )
+        return nothing
+    end
+    bound = _bind_interp_spaces(ast, trial_space, test_space)
+    _check_block_meshes(bound, trial_space, test_space)
+    sp = _walked_leaf(bound, trial_space, test_space)
+    _foreach_summand_unit(f, bound, sp)
     return nothing
 end
 
-function _record_blocks!(
-        A::AbstractMatrix, term::TERM, trial_leaves, test_leaves, segments::Vector{Segment{D}}, α
-) where {TERM, D}
+@noinline function _foreach_summand_unit(f::F, op::OperatorAdd, sp) where {F}
+    _foldl_pairs(
+        (_, t) -> _foreach_summand_unit(f, t, sp),
+        (_, t1, t2) -> f(_bare_product(t1), sp, 0, 0, 0, 0, 0),
+        nothing,
+        _summands(op)
+    )
+    return nothing
+end
+
+@noinline function _foreach_summand_unit(f::F, term::TERM, sp) where {F, TERM}
+    f(term, sp, 0, 0, 0, 0, -1)
+    return nothing
+end
+
+@noinline function _foreach_block_unit(
+        f::F, op::OperatorAdd, trial_leaves, test_leaves
+) where {F}
+    _foldl_pairs(
+        (_, t) -> _foreach_block_unit(f, t, trial_leaves, test_leaves),
+        (_, t1, t2) -> _foreach_pair_block_unit(f, t1, t2, trial_leaves, test_leaves),
+        nothing,
+        _summands(op)
+    )
+    return nothing
+end
+
+@noinline function _foreach_block_unit(
+        f::F, term::TERM, trial_leaves, test_leaves
+) where {F, TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
-        push!(
-            segments, _record_segment!(A, bound, sp, blk.row_offset, blk.col_offset, α)
-        )
+        f(bound, sp, blk.row_offset, blk.col_offset, 0, 0, -1)
     end
     return nothing
 end
 
-# `next` is threaded through by value and returned, rather than via a mutable `Ref`, so
-# this stays allocation-free: the segment index the *next* leaf-term/block should consume,
-# in the same left-then-right order `_record_blocks!` built `segments` in.
-function _replay_blocks!(
+# The replay counterpart, `next` threaded by value and returned, rather than via a mutable
+# `Ref`, so this stays allocation-free: the segment index the *next* unit should consume.
+@noinline function _replay_summands!(
+        A::AbstractMatrix, op::OperatorAdd, sp, segments::Vector{Segment{D}}, next::Int, α
+) where {D}
+    return _foldl_pairs(
+        (n, t) -> _replay_summands!(A, t, sp, segments, n, α),
+        (n, t1, t2) -> _replay_pair!(A, t1, t2, sp, segments, n, α),
+        next,
+        _summands(op)
+    )
+end
+
+@noinline function _replay_summands!(
+        A::AbstractMatrix, term::TERM, sp, segments::Vector{Segment{D}}, next::Int, α
+) where {TERM, D}
+    next += 1
+    _replay_segment!(A, term, sp, 0, 0, segments[next], α)
+    return next
+end
+
+@noinline function _replay_blocks!(
         A::AbstractMatrix,
         op::OperatorAdd,
         trial_leaves,
@@ -240,12 +283,15 @@ function _replay_blocks!(
         next::Int,
         α
 ) where {D}
-    next = _replay_blocks!(A, op.left_op, trial_leaves, test_leaves, segments, next, α)
-    next = _replay_blocks!(A, op.right_op, trial_leaves, test_leaves, segments, next, α)
-    return next
+    return _foldl_pairs(
+        (n, t) -> _replay_blocks!(A, t, trial_leaves, test_leaves, segments, n, α),
+        (n, t1, t2) -> _replay_pair_blocks!(A, t1, t2, trial_leaves, test_leaves, segments, n, α),
+        next,
+        _summands(op)
+    )
 end
 
-function _replay_blocks!(
+@noinline function _replay_blocks!(
         A::AbstractMatrix,
         term::TERM,
         trial_leaves,
@@ -266,6 +312,123 @@ function _replay_blocks!(
     return next
 end
 
+# --- Transposed pairs: one kernel for ⟨Au, Bv⟩ + ⟨Bu, Av⟩ ---------------------------- #
+#
+# `_pair_plan` pairs two summands by type, and only product types whose values carry
+# nothing but component indices (`_pairable_type`), so at every grid point of one leaf the
+# second term's stencil is the first's with trial and test offsets exchanged. Component
+# indices only route a term to its block, and the second term's own blocks give the offsets
+# of its entries. On a composite space whose two blocks sit on different leaf objects,
+# ⟨Au, Bv⟩ is walked once on each leaf, the first term's half on its own leaf and the
+# transposed half on the second's: the same kernel, so nothing new is compiled when the
+# leaves share a type, and nothing is dispatched at run time.
+
+@inline function _replay_pair_segment!(
+        A::AbstractMatrix, term::TERM, sp, row_offset::Int, col_offset::Int,
+        segment::Segment, α1, α2, half::Int
+) where {TERM}
+    visit_bilinear_stencil(
+        _PairReplaySink(
+            A, segment.point_ptr, segment.positions, segment.positions_t, α1, α2, half
+        ),
+        term,
+        sp,
+        row_offset,
+        col_offset
+    )
+    return nothing
+end
+
+@noinline function _replay_pair!(
+        A::AbstractMatrix, t1, t2, sp, segments::Vector{Segment{D}}, next::Int, α
+) where {D}
+    next += 1
+    _replay_pair_segment!(
+        A, _bare_product(t1), sp, 0, 0, segments[next], α * _term_scale(t1),
+        α * _term_scale(t2), 0
+    )
+    return next
+end
+
+# Block `k` of the second term holds the transposes of block `k` of the first. Decided by the
+# tuple types, so the fallback folds away.
+@inline _pair_blocks_ok(b1::Tuple, b2::Tuple) = length(b1) == length(b2)
+
+# Entry `(row, col)` of the first term's block moves to `(col + dr, row + dc)` in the second's.
+@inline _pair_shift(blk, blk2) = (blk2.row_offset - blk.col_offset, blk2.col_offset - blk.row_offset)
+
+@noinline function _foreach_pair_block_unit(
+        f::F, t1, t2, trial_leaves, test_leaves
+) where {F}
+    p1 = _bare_product(t1)
+    p2 = _bare_product(t2)
+    b1 = blocks(p1, trial_leaves, test_leaves)
+    b2 = blocks(p2, trial_leaves, test_leaves)
+    if _pair_blocks_ok(b1, b2)
+        for (blk, blk2) in map(tuple, b1, b2)
+            bound = _bind_interp_spaces(p1, blk.trial_leaf, blk.test_leaf)
+            _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
+            _check_block_meshes(p2, blk2.trial_leaf, blk2.test_leaf)
+            sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
+            dr, dc = _pair_shift(blk, blk2)
+            ro, co = blk.row_offset, blk.col_offset
+            if sp === blk2.test_leaf
+                f(bound, sp, ro, co, dr, dc, 0)
+            else
+                f(bound, sp, ro, co, dr, dc, 1)
+                f(bound, blk2.test_leaf, ro, co, dr, dc, 2)
+            end
+        end
+    else
+        Base.inferencebarrier(_foreach_block_unit)(f, t1, trial_leaves, test_leaves)
+        Base.inferencebarrier(_foreach_block_unit)(f, t2, trial_leaves, test_leaves)
+    end
+    return nothing
+end
+
+@noinline function _replay_pair_blocks!(
+        A::AbstractMatrix,
+        t1,
+        t2,
+        trial_leaves,
+        test_leaves,
+        segments::Vector{Segment{D}},
+        next::Int,
+        α
+) where {D}
+    p1 = _bare_product(t1)
+    p2 = _bare_product(t2)
+    b1 = blocks(p1, trial_leaves, test_leaves)
+    b2 = blocks(p2, trial_leaves, test_leaves)
+    if _pair_blocks_ok(b1, b2)
+        α1 = α * _term_scale(t1)
+        α2 = α * _term_scale(t2)
+        for (blk, blk2) in map(tuple, b1, b2)
+            bound = _bind_interp_spaces(p1, blk.trial_leaf, blk.test_leaf)
+            _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
+            sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
+            ro, co = blk.row_offset, blk.col_offset
+            if sp === blk2.test_leaf
+                next += 1
+                _replay_pair_segment!(A, bound, sp, ro, co, segments[next], α1, α2, 0)
+            else
+                _replay_pair_segment!(A, bound, sp, ro, co, segments[next + 1], α1, α2, 1)
+                _replay_pair_segment!(
+                    A, bound, blk2.test_leaf, ro, co, segments[next + 2], α1, α2, 2
+                )
+                next += 2
+            end
+        end
+        return next
+    end
+    next = Base.inferencebarrier(_replay_blocks!)(
+        A, t1, trial_leaves, test_leaves, segments, next, α
+    )::Int
+    return Base.inferencebarrier(_replay_blocks!)(
+        A, t2, trial_leaves, test_leaves, segments, next, α
+    )::Int
+end
+
 # Picks recording (cache miss: a fresh `A`, a changed `ast` -- e.g. `assemble!(A, form;
 # ast = ...)` given something other than `form.ast` -- or the first call ever) or replay
 # (cache hit) and keeps `cache` in step with whichever one ran. `ast` is checked as well as
@@ -282,18 +445,12 @@ function _assemble_bilinear_core_cached!(
     if cache.valid && cache.A_id === objectid(A) && cache.ast === ast
         _replay_bilinear_core!(A, trial_space, test_space, ast, cache.segments, α)
     else
-        # A fresh vector, not `empty!` on whatever `cache.segments` currently references,
-        # in case that reference is ever shared (it never is, today, but nothing here
-        # relies on `cache.segments` being exclusively owned).
+        # A fresh vector, never `empty!` on whatever `cache.segments` currently references.
         #
-        # Recorded with `α`: recording performs the (first) real scatter as well as
-        # learning the `nzval` positions (`_record_segment!`'s own docstring), so the very
-        # first `assemble_add!(A, a, α)` call must scale that scatter too, not only the
-        # replays after it -- the cache is keyed on `(A, ast)` alone, never on `α`, since
+        # Replayed with `α`: the cache is keyed on `(A, ast)` alone, never on `α`, since
         # nzval *positions* never depend on it: an `assemble_add!` caller is free to change
         # `α` (a `Ref`'s current value, say) on every call and still replay from cache.
-        segments = Segment{D}[]
-        _record_bilinear_core!(A, trial_space, test_space, ast, segments, α)
+        segments = _record_bilinear_core!(A, trial_space, test_space, ast, Val(D), α)
         _store_recording!(cache, ast, segments, A)
     end
     return A

@@ -326,6 +326,18 @@ using ExplicitImports
                 :AbstractGPUSparseMatrixCSC,
                 :Adapt,
                 :GPUArrays,
+                # `_KronDeviceDiagonal`, `_KronDeviceSparse` (BrambleKroneckerExt, commit
+                # ece71258): the device-resident factor types `mul!` dispatches on, named in
+                # the extension's method signatures. Plain internals, not a launch hook.
+                :_KronDeviceDiagonal,
+                :_KronDeviceSparse,
+                # `SparseArrays.getcolptr` (src/form/kronecker.jl, commit ece71258): copies a
+                # factor's column pointers to the device; no public accessor exists.
+                :getcolptr,
+                # `Base.inferencebarrier` (src/form/bilinear_execution.jl): the fallback for a
+                # transposed pair whose two block tuples differ in length, a case the types
+                # already rule out, so the barrier keeps it from being inferred at all.
+                :inferencebarrier,
                 # `Core.kwcall` (gpena/Bramble.jl#283): named in `precompile(Core.kwcall,
                 # (...))` directives in `src/precompile/solver_sessions.jl` and
                 # `src/precompile/form_sessions.jl`, caching the keyword-call entry

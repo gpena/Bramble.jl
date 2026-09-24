@@ -558,15 +558,23 @@ function εcₕ(u::LazyOp{D}) where {D}
     return _CenteredStrainTensor{D, typeof(entries)}(entries)
 end
 
+# The upper triangle only: `ε^{ij} = ε^{ji}`, so each off-diagonal pair enters once, doubled
+# (27 terms in 3D become 15). The diagonal's `1.0` is not a no-op for the compiler: a
+# `Float64` scale is kept (`_wrap_scale`), so a diagonal `Dcₓ(u(1)) Dcₓ(v(1))` term shares
+# its type with the off-diagonal `Dcₓ(u(2)) Dcₓ(v(2))` one, and 12 distinct term types become
+# 9 (first assemble in 3D: 15.2–17.6 s without it, 13.0–13.5 s with).
+@inline function _centered_strain_products(left, right, i::Int, j::Int)
+    products = _flatten_tuples(
+        map(a -> map(b -> innerₕ(a, b), right.entries[i][j]), left.entries[i][j])
+    )
+    return map(p -> (i == j ? 1.0 : 2.0) * p, products)
+end
+
 @inline function innerₕ(left::_CenteredStrainTensor{D}, right::_CenteredStrainTensor{D}) where {D}
     terms = _flatten_tuples(
         ntuple(Val(D)) do i
         _flatten_tuples(
-            ntuple(Val(D)) do j
-            _flatten_tuples(
-                map(a -> map(b -> innerₕ(a, b), right.entries[i][j]), left.entries[i][j])
-            )
-        end
+            ntuple(j -> j < i ? () : _centered_strain_products(left, right, i, j), Val(D))
         )
     end
     )

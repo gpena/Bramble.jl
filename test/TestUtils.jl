@@ -75,6 +75,56 @@ const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 # a property is not vacuously true has no job in a run where the property does not execute.
 const WITH_SLOW_TESTS = TEST_GROUP in ("all", "slow", "full")
 
+# Per-file trace, active only under CI (which sets `CI=true`) or `BRAMBLE_TEST_TRACE=1`,
+# silent otherwise -- a maintainer's local run stays quiet by default. Exists because macOS
+# CI's unit job was once SIGKILLed by a single test file's compile blowing past the runner's
+# memory budget (a 27-term 3D form under `--code-coverage`): the job's log ended mid-file with no
+# indication which one was running, and no memory figure to compare against. A start line
+# printed (and flushed) before each file names the file that was running if the job dies
+# partway through; an end line's `maxrss` shows which file actually holds the peak memory,
+# since `Sys.maxrss()` is cumulative for the process and so only distinguishes files when
+# read at each file's own boundary.
+const TRACE_TESTS = get(ENV, "CI", "false") == "true" ||
+                    get(ENV, "BRAMBLE_TEST_TRACE", "0") == "1"
+
+# Turns the trace above into a budget: unset (the default) is today's behaviour, no check at
+# all. Set, `Sys.maxrss()` is the process peak (see the comment on `TRACE_TESTS`), so the
+# first file whose *end-of-file* peak crosses the budget is the one that fails -- not
+# necessarily the file that allocated the most, only the one that tipped the running total
+# over. Parsed once here rather than in every call to `traced_include`.
+const MAXRSS_BUDGET_GB = let v = get(ENV, "BRAMBLE_TEST_MAXRSS_GB", "")
+    isempty(v) ? nothing : parse(Float64, v)
+end
+
+# Prints the start/end trace lines around one `Base.include(Main, path)` call, when active.
+# Broken out so the `include` override below (installed once, outside this module) is a
+# one-line forward into it.
+function traced_include(real_include::F, path) where {F}
+    TRACE_TESTS || return real_include(Main, path)
+    println("[trace] start ", path)
+    flush(stdout)
+    t0 = time()
+    result = real_include(Main, path)
+    elapsed = time() - t0
+    maxrss_gb = Sys.maxrss() / 1024^3
+    println(
+        "[trace] end ", path,
+        " elapsed=", round(elapsed; digits = 2), "s",
+        " maxrss=", round(maxrss_gb; digits = 2), "GB"
+    )
+    flush(stdout)
+    # A named, failing `@test` beats a SIGKILL with no indication which file was running --
+    # the whole reason the trace above exists (see its comment). A `@testset` whose
+    # description carries the message is the only way to attach one to a `@test` failure:
+    # the `@test` macro itself takes no message argument.
+    if MAXRSS_BUDGET_GB !== nothing && maxrss_gb > MAXRSS_BUDGET_GB
+        @testset "maxrss $(round(maxrss_gb; digits = 2)) GB > budget $(MAXRSS_BUDGET_GB) GB after $path" begin
+            @test false
+        end
+    end
+    return result
+end
+
 @inline function alloc_test(f::F, args...; kwargs...) where {F}
     f(args...; kwargs...) # warm up
     return @allocated(f(args...; kwargs...))
@@ -222,3 +272,20 @@ function _run_example_page(name::Symbol)
 end
 
 end # module TestUtils
+
+# Installs the per-file trace by overriding Main's own `include`, once, when this file loads
+# (guarded, like TestUtils itself, by the `isdefined(Main, :TestUtils) || include(...)` line
+# at the top of test/runtests.jl and every test/*/runtests.jl) -- so every already-existing
+# `include(path)` call in those files traces automatically, with no call site changed.
+#
+# `include` in Main is a `const` binding to a callable that forwards to `Base.include(Main,
+# path)`; it cannot be redefined with `function include(...)` or a plain assignment (both
+# error, the latter suggesting `const`), only reassigned via `const`. Calling
+# `Base.include(Main, path)` directly, as the replacement does, resolves `path` exactly like
+# a bare `include(path)` would -- relative to whichever file is *currently* being included --
+# including through a nested `include` chain (test/runtests.jl -> mesh/runtests.jl ->
+# constructors.jl), since that resolution is tracked per-task, not by which callable name
+# was used to trigger it.
+const include = function (path)
+    TestUtils.traced_include(Base.include, path)
+end

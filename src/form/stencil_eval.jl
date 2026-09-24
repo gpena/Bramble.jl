@@ -238,12 +238,13 @@ end
     return ((zero_offset(Val(D)), acc),)
 end
 
+# Every summand's stencil, concatenated once in `_summands` order -- entry for entry what
+# pairwise `concatenate_stencils` down the tree gives, without a left-deep sum building one
+# intermediate tuple type per node.
 @inline function local_stencil(
         op::OperatorAdd, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
-    left_stencil = local_stencil(op.left_op, space, I, markers, lin_idx)
-    right_stencil = local_stencil(op.right_op, space, I, markers, lin_idx)
-    return concatenate_stencils(left_stencil, right_stencil)
+    return _flatten_tuples(map(t -> local_stencil(t, space, I, markers, lin_idx), _summands(op)))
 end
 
 @inline function local_stencil(
@@ -278,28 +279,29 @@ end
 # 2. AST Resolution & Thunk Eval
 # ==============================================================================
 
+# Each child is resolved once and its value reused for the type parameter. Calling
+# `resolve_ast` again inside `typeof(...)` doubles the work per level, `2^depth` calls on a
+# left-deep sum: free without coverage, where the compiler removes the duplicate, but under
+# `--code-coverage` a 27-term sum's `form` did not finish within 10 GB.
 function resolve_ast(op::OperatorAdd{D}) where {D}
-    return OperatorAdd{D, typeof(resolve_ast(op.left_op)), typeof(resolve_ast(op.right_op))}(
-        resolve_ast(op.left_op), resolve_ast(op.right_op)
-    )
+    left = resolve_ast(op.left_op)
+    right = resolve_ast(op.right_op)
+    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
 end
 function resolve_ast(op::OperatorScale{D}) where {D}
-    return OperatorScale{D, typeof(op.scalar), typeof(resolve_ast(op.inner_op))}(
-        op.scalar, resolve_ast(op.inner_op)
-    )
+    inner = resolve_ast(op.inner_op)
+    return OperatorScale{D, typeof(op.scalar), typeof(inner)}(op.scalar, inner)
 end
 
 function resolve_ast(op::GridFunctionScale{D, VType}) where {D, VType}
-    return GridFunctionScale{D, VType, typeof(resolve_ast(op.inner_op))}(
-        op.grid_function, resolve_ast(op.inner_op)
-    )
+    inner = resolve_ast(op.inner_op)
+    return GridFunctionScale{D, VType, typeof(inner)}(op.grid_function, inner)
 end
 
 function resolve_ast(op::GridFunctionScale{D, <:Function}) where {D}
     vec = op.grid_function()
-    return GridFunctionScale{D, typeof(vec), typeof(resolve_ast(op.inner_op))}(
-        vec, resolve_ast(op.inner_op)
-    )
+    inner = resolve_ast(op.inner_op)
+    return GridFunctionScale{D, typeof(vec), typeof(inner)}(vec, inner)
 end
 
 resolve_ast(ops::NTuple{N, Any}) where {N} = map(resolve_ast, ops)
@@ -399,8 +401,8 @@ _is_source_only(::LazyOp) = false
 # 4. Walking an OperatorAdd tree: shared by every router in linear.jl/bilinear.jl
 # ==============================================================================
 
-# Six functions across `linear.jl`/`bilinear.jl` (`_check_block_meshes`,
-# `_route_terms!`, `_route_terms_parallel!`, `_pattern_blocks!`, `_assemble_blocks!`,
+# Functions across `linear.jl`/`bilinear.jl`/`jacobian_pattern.jl` (`_check_block_meshes`,
+# `_route_terms!`, `_route_terms_parallel!`, `_pattern_blocks_jacobian!`,
 # `_assemble_blocks_parallel!`) walk a form's `OperatorAdd` tree to send each summand where
 # it belongs, all with the same shape: recurse left, recurse right, done. Recursing the tree
 # rather than flattening it into a vector of terms first preserves concrete types: a
@@ -420,25 +422,33 @@ _is_source_only(::LazyOp) = false
 # `@code_warntype` still sees ordinary calls to `f`, specialized on `F = typeof(f)` like any
 # other higher-order call in Julia.
 
+# The summands of a sum, left to right, flattened into one tuple.
+@inline _summands(op::OperatorAdd) = (_summands(op.left_op)..., _summands(op.right_op)...)
+@inline _summands(op) = (op,)
+
+# The three walks below visit `_summands(op)` with one `map` rather than recursing
+# left/right: recursing, every `OperatorAdd` node is its own method instance whose type
+# carries its whole subtree, so a left-deep `a + b + c + ...` (what `foldl(+, terms)` and a
+# hand-written sum build) is inferred over types of total size quadratic in the term count.
+# 3D `innerₕ(εcₕ(u), εcₕ(v))` built with `foldl(+, ...)`, first assemble: 18.6–21.0 s
+# recursing, 16.6–17.6 s over `_summands`. Only leaves reach `f`; the walk order is unchanged.
+
 # `op` first, nothing to mutate: `_check_block_meshes`.
 @inline function _visit_operator_add1(f::F, op::OperatorAdd, rest...) where {F}
-    f(op.left_op, rest...)
-    f(op.right_op, rest...)
+    map(t -> f(t, rest...), _summands(op))
     return nothing
 end
 
 # `op` second, one mutated argument returned unchanged: `_route_terms!`,
 # `_route_terms_parallel!`, `_assemble_blocks!`, `_assemble_blocks_parallel!`.
 @inline function _visit_operator_add2(f::F, first_arg, op::OperatorAdd, rest...) where {F}
-    f(first_arg, op.left_op, rest...)
-    f(first_arg, op.right_op, rest...)
+    map(t -> f(first_arg, t, rest...), _summands(op))
     return first_arg
 end
 
-# `op` third, two mutated arguments, nothing returned: `_pattern_blocks!`.
+# `op` third, two mutated arguments, nothing returned: `_pattern_blocks_jacobian!`.
 @inline function _visit_operator_add3(f::F, a1, a2, op::OperatorAdd, rest...) where {F}
-    f(a1, a2, op.left_op, rest...)
-    f(a1, a2, op.right_op, rest...)
+    map(t -> f(a1, a2, t, rest...), _summands(op))
     return nothing
 end
 

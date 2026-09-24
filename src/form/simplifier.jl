@@ -24,7 +24,7 @@ same matrix or vector:
     a `Float64` would make `form`'s return type depend on a number the compiler need not
     know.
 
-Two more rules reach one layer deeper, into `BilinearProduct`/`LinearProduct` (the nodes
+Three more rules reach one layer deeper, into `BilinearProduct`/`LinearProduct` (the nodes
 `innerₕ`/`inner₊`/... build) and `ShiftNode`, because leaving them out would mean either a
 correctness gap (a component-mixing sum inside one inner product currently has no valid
 routing at all) or a documented dead end (a hidden scalar defeating symmetry detection):
@@ -38,6 +38,12 @@ routing at all) or a documented dead end (a hidden scalar defeating symmetry det
     (`test_component_or_nothing`/`trial_component_or_nothing`, `block_extract.jl`, throw on
     it), so distributing is the only way to assemble it at all. A same-component sum, the
     ordinary `innerₕ(uₕ, v + 2 * D₋ₓ(v))` case, is left as the single term it already is.
+  - `⟨Au, Bv⟩ + ⟨Au, Cv⟩ -> ⟨Au, (B + C)v⟩`, the mirror `⟨Au, Bv⟩ + ⟨Cu, Bv⟩ ->
+    ⟨(A + C)u, Bv⟩`, and `⟨f, Av⟩ + ⟨f, Bv⟩ -> ⟨f, (A + B)v⟩` for a linear form, anywhere in
+    a sum (`_absorb`). The shared argument must be a singleton node (`_statically_equal`, as
+    for like terms), both products must name no component, and each coefficient moves onto
+    its own unshared argument, so no coefficient is compared. Fewer products is fewer
+    compiled terms: see `_factor`.
   - `u_h * (v_h * A) -> (u_h .* v_h) * A`, precomputing the elementwise product once rather
     than evaluating both scalings at every grid point of every assembly.
   - `Shift₀(u) -> u`, and two nested shifts along the *same* dimension combine their amounts,
@@ -380,7 +386,80 @@ function simplify_ast(op::OperatorAdd)
         return OperatorScale(cl, OperatorAdd(al, ar))
     end
 
+    # Factor a shared inner-product argument out of `right` and whichever summand of `left`
+    # shares one: `⟨Au, Bv⟩ + ⟨Au, Cv⟩ -> ⟨Au, (B + C)v⟩` and the mirror on the test side.
+    # `left` is already factored, so a left-deep sum of many terms reaches every match.
+    merged = _absorb(left, right)
+    merged === nothing || return merged
+
     return left === op.left_op && right === op.right_op ? op : OperatorAdd(left, right)
+end
+
+# --- Shared inner-product arguments ------------------------------------------------- #
+
+# Whether `op` names no component on either side, settled by its type: the two classes are
+# `nothing` by type or an `Int` field, never compared at run time. Factoring is limited to
+# component-free products, so it can never assemble a component-mixing sum as one term.
+@inline _component_free(op::LazyOp) = _trial_component_class(op) === nothing && _test_component_class(op) === nothing
+
+# `X` carried under the coefficient the term `t` had, decided by `t`'s type and not by the
+# coefficient's value, so an `Integer` read from a stored `OperatorScale` never reaches
+# `_wrap_scale`'s value branch and the result keeps one type.
+@inline _rescale(t::OperatorScale, X::LazyOp) = OperatorScale(t.scalar, X)
+@inline _rescale(::LazyOp, X::LazyOp) = X
+
+# The product of `a` and `b` with their shared argument factored out, or `nothing`. Which
+# one it returns depends only on the argument types: the shared argument must pass
+# `_statically_equal` (a singleton type, so data-carrying arguments never factor), exactly
+# as the like-term rule requires of the terms it combines. Each term's coefficient moves
+# onto its own unshared argument, `c⟨Au, Bv⟩ = ⟨Au, c Bv⟩`, so coefficients are never
+# compared at all. Identical products are left to the like-term rule.
+#
+# One factored product compiles faster than the products it replaces: the 3D scalar form of
+# 27 distinct `innerₕ` terms whose pairs share trial operators three at a time, first
+# assemble, 16.4–17.1 s unfactored, 6.6–6.7 s factored (interleaved, 2 threads).
+@inline _factor(::LazyOp, ::LazyOp) = nothing
+@inline _factor_products(a, b, pa, pb) = nothing
+@inline _factor(a::OperatorScale, b::LazyOp) = _factor_products(a, b, a.inner_op, b)
+@inline _factor(a::LazyOp, b::OperatorScale) = _factor_products(a, b, a, b.inner_op)
+@inline _factor(a::OperatorScale, b::OperatorScale) = _factor_products(a, b, a.inner_op, b.inner_op)
+@inline _factor(a::BilinearProduct, b::BilinearProduct) = _factor_products(a, b, a, b)
+@inline _factor(a::LinearProduct, b::LinearProduct) = _factor_products(a, b, a, b)
+
+function _factor_products(a, b, pa::BilinearProduct{D, W}, pb::BilinearProduct{D, W}) where {D, W}
+    (_component_free(pa) && _component_free(pb)) || return nothing
+    _statically_equal(pa, pb) && return nothing
+    if _statically_equal(pa.left_op, pb.left_op) && _ast_equal(pa.left_op, pb.left_op)
+        r = OperatorAdd(_rescale(a, pa.right_op), _rescale(b, pb.right_op))
+        return BilinearProduct{D, W, typeof(pa.left_op), typeof(r)}(pa.left_op, r)
+    end
+    if _statically_equal(pa.right_op, pb.right_op) && _ast_equal(pa.right_op, pb.right_op)
+        l = OperatorAdd(_rescale(a, pa.left_op), _rescale(b, pb.left_op))
+        return BilinearProduct{D, W, typeof(l), typeof(pa.right_op)}(l, pa.right_op)
+    end
+    return nothing
+end
+
+# A linear form's left argument is its source, so only the source can be shared.
+function _factor_products(a, b, pa::LinearProduct{D, W}, pb::LinearProduct{D, W}) where {D, W}
+    (_component_free(pa) && _component_free(pb)) || return nothing
+    _statically_equal(pa, pb) && return nothing
+    if _statically_equal(pa.left_op, pb.left_op) && _ast_equal(pa.left_op, pb.left_op)
+        r = OperatorAdd(_rescale(a, pa.right_op), _rescale(b, pb.right_op))
+        return LinearProduct{D, W, typeof(pa.left_op), typeof(r)}(pa.left_op, r)
+    end
+    return nothing
+end
+
+# `s` with `t` factored into the first summand (searched right to left) sharing an argument
+# with it, or `nothing` when none does.
+@inline _absorb(s::LazyOp, t::LazyOp) = _factor(s, t)
+function _absorb(s::OperatorAdd, t::LazyOp)
+    r = _absorb(s.right_op, t)
+    r === nothing || return OperatorAdd(s.left_op, r)
+    l = _absorb(s.left_op, t)
+    l === nothing || return OperatorAdd(l, s.right_op)
+    return nothing
 end
 
 # --- Inner products: scalar lifting and component distribution ---------------------- #

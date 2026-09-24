@@ -223,8 +223,25 @@ of its way to avoid.
 | `⟨c * u, v⟩`, `⟨u, c * v⟩` | `c * ⟨u, v⟩` | exposes `c` to the rules above, and to `symmetry.jl` |
 | `⟨u, v(i) + v(j)⟩`, `i ≠ j` (or the trial-side mirror) | `⟨u, v(i)⟩ + ⟨u, v(j)⟩` | the combined shape has no valid single-term routing at all |
 | `u_h * (v_h * A)` | `(u_h .* v_h) * A` | one elementwise multiply at construction, not two scalings per point per assembly |
+| `⟨Au, Bv⟩ + ⟨Au, Cv⟩` (or `⟨Au, Bv⟩ + ⟨Cu, Bv⟩`), shared `A` a singleton node, anywhere in the sum | `⟨Au, (B + C)v⟩` (or `⟨(A + C)u, Bv⟩`) | one product, one compiled term, instead of two |
+| `⟨f, Av⟩ + ⟨f, Bv⟩`, shared source a singleton node | `⟨f, (A + B)v⟩` | as above, for a linear form |
 | `Shift₀(u)` | `u` | a zero shift is the identity |
 | `Shift_a(Shift_b(u))`, same dimension | `Shift_{a+b}(u)` | additive, so `Shift_k(Shift_{-k}(u))` collapses to `u` via the rule above |
+
+Factoring a shared argument uses the like-term rule's gate: the shared argument must pass
+`_statically_equal`, so whether the rule fires is settled by the argument types, and a
+data-carrying argument (a grid-function scaling, a `SourceVector`) is never shared. The
+unshared arguments are not compared at all, so they may carry data: `⟨g₁u, v⟩ + ⟨g₂u, v⟩`
+becomes `⟨g₁u + g₂u, v⟩`. Each term's coefficient moves onto its own unshared argument,
+`c⟨Au, Bv⟩ = ⟨Au, c Bv⟩`, so coefficients are never compared either, and two distinct `Ref`
+coefficients still factor. Only products naming no component on either side factor, so the
+rule never builds a component-mixing sum. `simplify_ast(::OperatorAdd)` searches the already
+simplified left operand for a summand sharing an argument with the right one
+(`_absorb`), so a left-deep sum of many terms factors every match, not only adjacent ones.
+Fewer products is fewer compiled terms: the 3D scalar form of 27 distinct `innerₕ` terms in
+`nterm-form.jl`, whose pairs share trial operators three at a time, compiles its first
+assemble in 6.6–6.7 s factored against 16.4–17.1 s unfactored (two interleaved runs each,
+2 threads).
 
 Scalar lifting matters beyond routing: `_same_operator_shape` (`symmetry.jl`) recognises
 `⟨L(u), L(v)⟩` — the same operator chain on both sides — structurally, by comparing the
@@ -253,6 +270,37 @@ fire when `A`/`B` mix components, and `simplify_ast(::OperatorScale)`/
 mixes, rather than wrapping it, whenever `BilinearProduct`'s/`LinearProduct`'s own
 distribution produces one and something still wraps it from outside.
 
+## One setup walk per term
+
+A bilinear form is assembled one (term, block) unit at a time: every summand of a scalar
+form, every block a composite form's term routes to, and one unit for a transposed pair
+⟨Au, Bv⟩ + ⟨Bu, Av⟩ (`_pair_plan`, `symmetry.jl`). `_foreach_unit` (`bilinear_execution.jl`)
+enumerates the units in the order the replay consumes segments. Before the first fill each
+unit is walked once by `_coord_walk!` (`bilinear_pattern.jl`), in two passes over one sink
+type (`_CoordSink`): a counting pass sizes the coordinate vectors and fills the unit's
+`point_ptr`, a filling pass writes every entry's `(row, col)`, and for a pair also the
+transposed entry `(col + dr, row + dc)` its second term writes. Those coordinates are the
+sparsity pattern (`sparse!`, keeping `I`/`J`), and, searched in the new matrix, the replay
+positions: one `Segment` per unit. For a `SparseMatrixCSC` under `CpuSerial`,
+`allocate_system_matrix` stores that recording in `form.cache`, so the first fill of
+`assemble` is already the replay. Any other `A` records the same way on its first
+`assemble!`.
+
+So a term's stencil is compiled for two walks, the coordinate walk and the replay, and no
+fused stencil of the whole sum is compiled anywhere (pattern, size hint and element-type
+probe included: the element type is promoted one summand at a time). The coordinate walk
+visits the interior box and the boundary slabs through one `@noinline`
+`_visit_guarded_region!`, every region the same `CartesianIndices` type, so the guarded
+stencil is one copy shared with the replay's boundary shell. Diagonal (stride) replay is
+compiled in 1D only (`_diagonal_replay`): from 2D up no difference term's interior has a
+constant per-tap stride, so every such segment came out flat.
+
+A pair whose two blocks sit on different leaf objects is two units, `half = 1` (the first
+term's entries, on its own leaf) and `half = 2` (the transposed entries, on the second
+term's leaf); the half a unit does not write is neither in the pattern nor searched.
+`test/form/coordinate_walk.jl` checks the coordinates against the assembled matrix for
+scalar, coefficient, restricted, composite, coupled, shift, pair and 1D forms.
+
 ## The matrix-type seam (S1.1)
 
 Assembly used to name `SparseMatrixCSC` in every signature between `allocate_system_matrix`
@@ -270,16 +318,17 @@ traversal (`visit_bilinear_stencil`, above) and into `allocate_system_matrix`:
 | `_allocate_from_pattern(::Type{MT}, nrows, ncols, I, J, V) -> MT` | `bilinear_pattern.jl` | `sparse!(I, J, V, nrows, ncols, +)` | `Array{T}(undef, nrows, ncols)` filled with zeros, scattered from `(I, J, V)` with `+=` |
 | `_zero_stored!(A)` | `bilinear.jl` | `fill!(nonzeros(A), 0)` | `fill!(A, 0)` |
 
-`PatternSink`, `RecordSink`, `ReplaySink` and `DiagonalReplaySink` (`bilinear_traversal.jl`)
-reduce to the first two: their `_sink_entry!` methods call `_scatter_position`/
-`_scatter_add!` instead of reading `nzval`/`rowval` directly, so `RecordSink{M<:AbstractMatrix,...}`
-et al. record and replay through the seam rather than around it. `add_to_sparse!` (the
-threaded path's per-point scatter) is the same two calls. `allocate_system_matrix`
-(`bilinear_pattern.jl`) reads `matrix_type(backend(test_space(form)))` and hands the
-coordinate triplet `PatternSink` collected to `_allocate_from_pattern`; `assemble`/`assemble!`
-(`bilinear.jl`) then just operate on whatever concrete `A` that returned, dispatching through
-the same four primitives via ordinary Julia method dispatch, not by inspecting the type
-themselves.
+`ReplaySink`, `DiagonalReplaySink` and `_PairReplaySink` (`bilinear_traversal.jl`) reduce to
+the first two: their `_sink_entry!` methods call `_scatter_position`/`_scatter_add!` instead of
+reading `nzval`/`rowval` directly, and the positions search that builds the replay cache
+(`_coordinates_to_positions!`) is `_scatter_position` again, so recording and replay go
+through the seam rather than around it. `add_to_sparse!` (the threaded path's per-point
+scatter) is the same two calls. `allocate_system_matrix` (`bilinear_pattern.jl`) reads
+`matrix_type(backend(test_space(form)))` and hands the coordinates the setup walk collected
+(below) to `_allocate_from_pattern`, duplicates included, which every method combines;
+`assemble`/`assemble!` (`bilinear.jl`) then just operate on whatever concrete `A` that
+returned, dispatching through the same four primitives via ordinary Julia method dispatch,
+not by inspecting the type themselves.
 
 `dirichlet_constraints.jl` needed none of this: `dirichlet_bc!`, `_dirichlet_bc_rows!`,
 `_dirichlet_bc_indices!` and `symmetrize!` already carried a `SparseMatrixCSC` fast path

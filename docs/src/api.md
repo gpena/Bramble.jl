@@ -541,6 +541,9 @@ reaction_density
 
 Whether a `BilinearForm` is symmetric, or symmetric positive semi-definite, by construction
 — a cheap, symbolic check on its expression, answered before any matrix is assembled.
+`issymmetric` recognises terms `innerₕ(L(u), L(v))` with the same `L` on both sides, and
+transposed pairs `innerₕ(A(u), B(v)) + innerₕ(B(u), A(v))` anywhere in a sum, the pair's
+coefficients being the same object (or both absent); `isposdef` recognises the first kind only.
 
 ```@docs
 issymmetric(::BilinearForm)

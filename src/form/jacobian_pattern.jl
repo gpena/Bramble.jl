@@ -203,8 +203,9 @@ function _dependency_leaf(
     return (LinearIndices(indices(leaf_mesh)), leaf_col_offset)
 end
 
-# One term's contribution to one block, mirroring `_pattern_term!` (form/bilinear.jl) for
-# the base pattern, plus the same per-point coefficient widening the scalar `jacobian_pattern`
+# One term's contribution to one block, mirroring the coordinate walk (`_coord_walk!`,
+# form/bilinear_pattern.jl) for the base pattern, plus the same per-point coefficient widening
+# the scalar `jacobian_pattern`
 # does above -- resolved once per block (not per point) into `(lin_indices, col_offset)`
 # pairs, since neither depends on the grid point being visited.
 function _pattern_term_jacobian!(
@@ -270,7 +271,7 @@ function _pattern_term_jacobian!(
 end
 
 # Recursion shape shared via `_visit_operator_add3` (form/common.jl), the same one
-# `_pattern_blocks!` (form/bilinear.jl) uses for the base (non-Jacobian) pattern.
+# `_foreach_unit` (form/bilinear_pattern.jl) uses for the base (non-Jacobian) pattern.
 function _pattern_blocks_jacobian!(
         I_vec::Vector{Int},
         J_vec::Vector{Int},

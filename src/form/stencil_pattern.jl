@@ -97,7 +97,7 @@ stencil_offsets(op::LinearProduct) = stencil_offsets(op.right_op)
 # from coinciding, the pair can't either, whatever the columns are -- so this reduces to the
 # test factor's reach, the same way `stencil_offsets(::LinearProduct)` above already does.
 # Building the full sparsity pattern (both sets) is a different question, answered
-# separately by walking `local_stencil` directly (`_pattern_term!`, form/bilinear.jl).
+# separately by walking `local_stencil` directly (`_coord_walk!`, form/bilinear_pattern.jl).
 stencil_offsets(op::BilinearProduct) = stencil_offsets(op.right_op)
 
 function stencil_offsets(op::OperatorAdd)

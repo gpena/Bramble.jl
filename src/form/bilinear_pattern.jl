@@ -1,6 +1,7 @@
 # bilinear_pattern.jl: matrix allocation and sparsity pattern discovery for a
-# `BilinearForm`. Walks each term once with `PatternSink` (`bilinear_traversal.jl`) to
-# collect every `(row, col)` it can reach, then hands the coordinates to `sparse!`.
+# `BilinearForm`. Each (term, block) unit is walked once for the `(row, col)` of every entry
+# it writes (`_form_coordinates`); the coordinates build the pattern (`sparse!`) and, searched
+# in the new matrix, the replay cache's positions (`bilinear_execution.jl`).
 
 # Dispatches on `::Type{T}` to ensure concrete vector return type.
 @inline _zeros_of(::Type{T}, n::Int) where {T} = zeros(T, n)
@@ -19,15 +20,33 @@
 # reading it from the space alone instead of promoting against the data broke ForwardDiff in
 # four separate places, each with the same symptom (`MethodError: no method matching
 # Float64(::Dual)`), each time only on the AD path (bramble-verification §4).
-@inline _matrix_eltype(ast, form::BilinearForm) = promote_type(
-    _assembled_eltype(ast, _pattern_probe_space(form.test_space)), eltype(form.trial_space)
+#
+# Probed one summand at a time, never through the whole sum's fused stencil: a fused probe
+# compiles every term's stencil into one method a second time. The interpolation in a term
+# is bound to the first leaves, which every leaf answers the same way for a weight's type.
+function _matrix_eltype(form::BilinearForm, ast)
+    probe = _bind_interp_spaces(ast, _first_leaf(form.trial_space), _first_leaf(form.test_space))
+    return promote_type(
+        _summands_eltype(_summands(probe), _pattern_probe_space(form.test_space)),
+        eltype(form.trial_space)
+    )
+end
+
+# Tail recursion, one small method per remaining length, rather than `mapreduce`'s one
+# unrolled fold over the whole summand tuple.
+@inline _summands_eltype(ts::Tuple{Any}, space) = _assembled_eltype(first(ts), space)
+@inline _summands_eltype(ts::Tuple, space) = promote_type(
+    _assembled_eltype(first(ts), space), _summands_eltype(Base.tail(ts), space)
 )
+
+@inline _first_leaf(sp::CompositeGridSpace) = first(first(leaf_spaces_offsets(sp)))
+@inline _first_leaf(sp) = sp
 
 """
     _allocate_from_pattern(::Type{MT}, nrows::Int, ncols::Int, I::Vector{Int}, J::Vector{Int}, V::AbstractVector) -> MT
 
 Build the `nrows × ncols` matrix a form's sparsity pattern describes, from the coordinate
-triplet `(I, J, V)` `visit_bilinear_stencil`/`PatternSink` collected -- summing `V[k]` into
+triplet `(I, J, V)` the coordinate walk (`_form_coordinates`) collected -- summing `V[k]` into
 any `(row, col)` that `I`/`J` name more than once, matching `sparse!`'s own combiner.
 
 The one place a fresh system matrix is born (S1.1, gpena/Bramble.jl#12): every backend's
@@ -63,12 +82,10 @@ function _allocate_from_pattern(
     return A
 end
 
-# A hint for `sizehint!`, not a real bound: `local_stencil` can return a longer stencil at a
-# boundary point than at this representative interior one, so this can undercount. Cheap to
-# get wrong, since the only cost is a reallocation of `I_vec`/`J_vec` -- computing the true
-# maximum (over the boundary stencils too) would cost more than the reallocation it saves.
-# Named for what it is after gpena/Bramble.jl#41 pointed out that "upper bound" was a
-# guarantee this never gave.
+# A hint for `sizehint!`, not a real bound, used by the Jacobian pattern
+# (`form/jacobian_pattern.jl`): `local_stencil` can return a longer stencil at a boundary
+# point than at this representative interior one, so this can undercount. Cheap to get
+# wrong, since the only cost is a reallocation of the coordinate vectors.
 #
 # `host_weights` (gpena/Bramble.jl#94 S4.0): `local_stencil` reads `sp`'s weights and its
 # mesh's spacings one grid point at a time, which a device-backed `sp` refuses outright --
@@ -87,6 +104,181 @@ function _pattern_size_hint(
     npts = length(grid_inds)
     I = grid_inds[length(grid_inds) ÷ 2 + 1]
     return npts * length(local_stencil(ast, hp, I, mesh_markers, lin_indices[I]))
+end
+
+# --- One setup walk per term: coordinates for the pattern and the replay cache ----- #
+#
+# Every (term, block) unit is walked by `_coord_walk!` twice: a counting pass sizes the
+# coordinate vectors and fills the unit's `point_ptr`, a filling pass writes each entry's
+# `(row, col)`. The same coordinates build the sparsity pattern (`sparse!`) and, searched in
+# the new matrix, the replay cache's positions, so a term's stencil is compiled for this one
+# walk and for the replay walk, and the first values come from the replay.
+#
+# A transposed pair's unit (`_foreach_unit`, `half >= 0`) also writes, after its own
+# coordinates, the transposed coordinate `(col + dr, row + dc)` of every entry: the entry the
+# pair's second term writes (`_PairReplaySink`). `half` is `0` for both halves, `1` for the
+# first term's only and `2` for the transposed only, as on a pair whose blocks sit on two
+# leaf objects; a half that is skipped is neither in the pattern nor searched.
+
+# Unit `u`'s share of the coordinate vectors: `n` direct entries unless only the transposed
+# half is written, and `n` transposed entries for a pair writing that half.
+@inline _direct_count(n::Int, half::Int) = half == 2 ? 0 : n
+@inline _transposed_count(n::Int, half::Int) = (half == 0 || half == 2) ? n : 0
+
+# Per-unit state for the two coordinate passes.
+mutable struct _CoordPass
+    const I::Vector{Int}
+    const J::Vector{Int}
+    const ptrs::Vector{Vector{Int}}
+    const counts::Vector{Int}
+    const margins::Vector{Int}
+    const halves::Vector{Int}
+    const context::String
+    fill::Bool
+    unit::Int
+    base::Int
+end
+function _CoordPass(context::String)
+    return _CoordPass(Int[], Int[], Vector{Int}[], Int[], Int[], Int[], context, false, 0, 0)
+end
+
+# One unit, in whichever pass `p` is in. `half` is `-1` for a term walked alone.
+function (p::_CoordPass)(
+        term::TERM, sp, row_offset::Int, col_offset::Int, dr::Int, dc::Int, half::Int
+) where {TERM}
+    hp = host_weights(sp)
+    if p.fill
+        p.unit += 1
+        u = p.unit
+        n = p.counts[u]
+        nd = _direct_count(n, half)
+        sink = _CoordSink(p.ptrs[u], p.I, p.J, p.base, p.base + nd, dr, dc, half, true, 0)
+        _coord_walk!(sink, term, hp, row_offset, col_offset)
+        p.base += nd + _transposed_count(n, half)
+    else
+        _validate_term_markers(term, markers(mesh(sp)), p.context)
+        npts = length(indices(mesh(sp)))
+        ptr = Vector{Int}(undef, npts + 1)
+        sink = _CoordSink(ptr, p.I, p.J, 0, 0, dr, dc, half, false, 0)
+        _coord_walk!(sink, term, hp, row_offset, col_offset)
+        @inbounds ptr[npts + 1] = sink.n + 1
+        push!(p.ptrs, ptr)
+        push!(p.counts, sink.n)
+        push!(p.margins, _stencil_margin(term))
+        push!(p.halves, half)
+    end
+    return nothing
+end
+
+# Interior box first, then the boundary slabs, all through the one guarded region walk: the
+# visit order `visit_bilinear_stencil` gives, so a unit's coordinates line up with its replay
+# entry for entry, and one compiled copy of the term's stencil instead of an unguarded one
+# beside it.
+@noinline function _coord_walk!(
+        sink::_CoordSink, term::TERM, sp, row_offset::Int, col_offset::Int
+) where {TERM}
+    Ωₕ = mesh(sp)
+    mesh_markers = markers(Ωₕ)
+    grid_inds = indices(Ωₕ)
+    lin_indices = LinearIndices(grid_inds)
+    ax = axes(grid_inds)
+    margin = _stencil_margin(term)
+    if _peelable(ax, margin)
+        interior = CartesianIndices(map(r -> _interior_range(r, margin), ax))
+        _visit_guarded_region!(
+            sink, term, sp, mesh_markers, lin_indices, interior, row_offset, col_offset
+        )
+        for slab in _boundary_shell_slabs(ax, margin)
+            _visit_guarded_region!(
+                sink, term, sp, mesh_markers, lin_indices, slab, row_offset, col_offset
+            )
+        end
+    else
+        whole = CartesianIndices(map(_full_range, ax))
+        _visit_guarded_region!(
+            sink, term, sp, mesh_markers, lin_indices, whole, row_offset, col_offset
+        )
+    end
+    return nothing
+end
+
+# Count, size, fill: every unit's coordinates in one pair of vectors, in the order
+# `_replay_bilinear_core!` consumes segments.
+function _form_coordinates(trial_space, test_space, ast)
+    p = _CoordPass(
+        _is_block_pair(trial_space, test_space) ? "one of the composite space's leaves" :
+        "the form's space"
+    )
+    _foreach_unit(p, trial_space, test_space, ast)
+    total = 0
+    for u in eachindex(p.counts)
+        n = p.counts[u]
+        total += _direct_count(n, p.halves[u]) + _transposed_count(n, p.halves[u])
+    end
+    resize!(p.I, total)
+    resize!(p.J, total)
+    p.fill = true
+    _foreach_unit(p, trial_space, test_space, ast)
+    return p
+end
+
+# Coordinates become positions in `A`, in place in `p.I`. `ast` only names the form in the
+# error.
+function _coordinates_to_positions!(A::AbstractMatrix, p::_CoordPass, ast)
+    I = p.I
+    J = p.J
+    @inbounds for k in eachindex(I, J)
+        pos = _scatter_position(A, I[k], J[k])
+        pos == 0 && _throw_missing_pattern_entry(ast)
+        I[k] = pos
+    end
+    return nothing
+end
+
+# One `Segment{D}` per unit, cut from the positions.
+function _segments_from_positions(::Val{D}, p::_CoordPass) where {D}
+    segments = Segment{D}[]
+    base = 0
+    for u in eachindex(p.counts)
+        n = p.counts[u]
+        half = p.halves[u]
+        if half < 0
+            positions = p.I[(base + 1):(base + n)]
+            push!(segments, _unit_segment(Val(D), p.margins[u], p.ptrs[u], positions))
+            base += n
+        else
+            nd = _direct_count(n, half)
+            nt = _transposed_count(n, half)
+            push!(
+                segments,
+                Segment{D}(
+                    false, p.ptrs[u], p.I[(base + 1):(base + nd)], Int[], Int[], 0,
+                    _empty_interior(Val(D)), p.I[(base + nd + 1):(base + nd + nt)]
+                )
+            )
+            base += nd + nt
+        end
+    end
+    return segments
+end
+
+# Only 1D segments can be diagonal (`_diagonal_replay`), and a 1D unit's grid is exactly its
+# own points, so each unit (a cross-mesh leaf included) is checked against its own grid.
+_unit_segment(::Val{D}, _, ptr, positions) where {D} = _flat_segment(Val(D), ptr, positions)
+function _unit_segment(::Val{1}, margin::Int, ptr::Vector{Int}, positions::Vector{Int})
+    grid = CartesianIndices((Base.OneTo(length(ptr) - 1),))
+    return _try_diagonal_segment(margin, grid, ptr, positions)
+end
+
+# The pattern from coordinates, leaving `I`/`J` intact for the positions search.
+function _allocate_keeping(
+        ::Type{MT}, nrows::Int, ncols::Int, I::Vector{Int}, J::Vector{Int}, V::Vector{Tv}
+) where {MT <: SparseMatrixCSC, Tv}
+    m = length(I)
+    return sparse!(
+        I, J, V, nrows, ncols, +, Vector{Int}(undef, ncols), Vector{Int}(undef, nrows + 1),
+        Vector{Int}(undef, m), Vector{Tv}(undef, m), Vector{Int}(undef, ncols + 1), Int[], Tv[]
+    )
 end
 
 """
@@ -114,136 +306,19 @@ Only the structure is preallocated here; all stored entries are zero until `asse
 
 See also [`assemble`](@ref) and [`assemble!`](@ref).
 """
-function allocate_system_matrix(
-        form::BilinearForm{D, TrialSpace, TestSpace, AST}, ast = form.ast
-) where {D, TrialSpace, TestSpace, AST}
-    # The test space: matrix rows are indexed by the test function and the quadrature weight
-    # belongs to the integral over the test space mesh -- unless the test side is what
-    # interpolates, in which case the trial leaf is the one that stays native and supplies
-    # both (gpena/Bramble.jl#263, `_walked_leaf`).
-    ast = _bind_interp_spaces(ast, form.trial_space, form.test_space)
-    _check_block_meshes(ast, form.trial_space, form.test_space)
-    space = _walked_leaf(ast, form.trial_space, form.test_space)
-    Ωₕ = mesh(space)
-    mesh_markers = markers(Ωₕ)
-    _validate_term_markers(ast, mesh_markers, "the form's space")
-    lin_indices = LinearIndices(indices(Ωₕ))
-
-    I_vec = Int[]
-    J_vec = Int[]
-    hint = _pattern_size_hint(ast, space, mesh_markers, lin_indices)
-    sizehint!(I_vec, hint)
-    sizehint!(J_vec, hint)
-
-    # `host_weights` (gpena/Bramble.jl#94 S4.0): the walk below reads `space`'s weights and
-    # mesh spacings one grid point at a time, same reasoning as `_pattern_size_hint` above.
-    visit_bilinear_stencil(PatternSink(I_vec, J_vec), ast, host_weights(space), 0, 0)
-
+function allocate_system_matrix(form::BilinearForm{D}, ast = form.ast) where {D}
+    p = _form_coordinates(form.trial_space, form.test_space, ast)
     MT = matrix_type(backend(form.test_space))
-    V_vec = _zeros_of(_matrix_eltype(ast, form), length(I_vec))
-    return _allocate_from_pattern(
-        MT, ndofs(form.test_space), ndofs(form.trial_space), I_vec, J_vec, V_vec
-    )
-end
-
-# Which entries a term can reach, block by block.
-function _pattern_term!(
-        I_vec::Vector{Int},
-        J_vec::Vector{Int},
-        term::TERM,
-        trial_leaf,
-        test_leaf,
-        row_offset::Int,
-        col_offset::Int
-) where {TERM}
-    sp = _walked_leaf(term, trial_leaf, test_leaf)
-    Ωₕ = mesh(sp)
-    mesh_markers = markers(Ωₕ)
-    _validate_term_markers(term, mesh_markers, "one of the composite space's leaves")
-    # `host_weights` (gpena/Bramble.jl#94 S4.0), same reasoning as the scalar overload above.
-    visit_bilinear_stencil(
-        PatternSink(I_vec, J_vec), term, host_weights(sp), row_offset, col_offset
-    )
-    return nothing
-end
-
-# Recursion shape shared via `_visit_operator_add3` (form/common.jl).
-function _pattern_blocks!(
-        I_vec::Vector{Int}, J_vec::Vector{Int}, op::OperatorAdd, trial_leaves, test_leaves
-)
-    return _visit_operator_add3(
-        _pattern_blocks!, I_vec, J_vec, op, trial_leaves, test_leaves
-    )
-end
-
-function _pattern_blocks!(
-        I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, trial_leaves, test_leaves
-) where {TERM}
-    for blk in blocks(term, trial_leaves, test_leaves)
-        bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
-        _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
-        _pattern_term!(
-            I_vec,
-            J_vec,
-            bound,
-            blk.trial_leaf,
-            blk.test_leaf,
-            blk.row_offset,
-            blk.col_offset
-        )
-    end
-    return nothing
-end
-
-# A composite space on either side is walked block by block, the scalar side (if any) as a
-# one-leaf composite. `_walked_leaf` on a mixed pair would pick one whole space and drop the
-# component the term names on the composite side, so a term on leaf `d > 1` would land in
-# block 1 (composite trial) or not resolve at all (composite test).
-function allocate_system_matrix(
-        form::BilinearForm{D, <:CompositeGridSpace, <:CompositeGridSpace}, ast = form.ast
-) where {D}
-    return _allocate_block_system_matrix(form, ast)
-end
-
-function allocate_system_matrix(
-        form::BilinearForm{D, <:ScalarGridSpace, <:CompositeGridSpace}, ast = form.ast
-) where {D}
-    return _allocate_block_system_matrix(form, ast)
-end
-
-function allocate_system_matrix(
-        form::BilinearForm{D, <:CompositeGridSpace, <:ScalarGridSpace}, ast = form.ast
-) where {D}
-    return _allocate_block_system_matrix(form, ast)
-end
-
-function _allocate_block_system_matrix(form::BilinearForm, ast)
-    trial_leaves = leaf_spaces_offsets(form.trial_space)
-    test_leaves = leaf_spaces_offsets(form.test_space)
-
-    I_vec = Int[]
-    J_vec = Int[]
-
-    sp = first(first(test_leaves))
-    Ωₛ = mesh(sp)
-    # Both scaffolding walks below -- the size hint and the element-type probe -- evaluate a
-    # stencil once, so an interpolation in the term needs a source space for them too. The
-    # first leaf serves: neither walk reads which columns come back, only how many and what
-    # their weights' type is, and every leaf answers those the same way. The entries
-    # themselves are produced by `_pattern_blocks!`, which binds the term block by block.
-    probe_ast = _bind_interp_spaces(
-        ast, first(first(trial_leaves)), first(first(test_leaves))
-    )
-    hint = length(test_leaves) *
-           _pattern_size_hint(probe_ast, sp, markers(Ωₛ), LinearIndices(indices(Ωₛ)))
-    sizehint!(I_vec, hint)
-    sizehint!(J_vec, hint)
-
-    _pattern_blocks!(I_vec, J_vec, ast, trial_leaves, test_leaves)
-
-    ncols = ndofs(form.trial_space)
+    V = _zeros_of(_matrix_eltype(form, ast), length(p.I))
     nrows = ndofs(form.test_space)
-    MT = matrix_type(backend(form.test_space))
-    V_vec = _zeros_of(_matrix_eltype(probe_ast, form), length(I_vec))
-    return _allocate_from_pattern(MT, nrows, ncols, I_vec, J_vec, V_vec)
+    ncols = ndofs(form.trial_space)
+    # The walk's coordinates are the replay cache's positions too, once searched in the new
+    # matrix, so a serial sparse form keeps them: its first fill is then a replay.
+    keep = MT <: SparseMatrixCSC && ast === form.ast &&
+           execution_policy(form.trial_space) isa CpuSerial
+    keep || return _allocate_from_pattern(MT, nrows, ncols, p.I, p.J, V)
+    A = _allocate_keeping(MT, nrows, ncols, p.I, p.J, V)
+    _coordinates_to_positions!(A, p, ast)
+    _store_recording!(form.cache, ast, _segments_from_positions(Val(D), p), A)
+    return A
 end
