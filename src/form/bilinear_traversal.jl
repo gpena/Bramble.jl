@@ -1062,6 +1062,86 @@ Base.@propagate_inbounds function _sink_entry!(
     return nothing
 end
 
+"""
+    _PairRecordSink(A, term, point_ptr, positions, positions_t, dr::Int, dc::Int, α1, α2, half::Int, n::Int)
+
+[`RecordSink`](@ref) for a transposed pair ⟨Au, Bv⟩ + ⟨Bu, Av⟩, walking ⟨Au, Bv⟩ only. An
+entry at `(row, col)` adds `α1 * weight` there, and `α2 * weight` at the transposed entry
+`(col + dr, row + dc)` the second term would have written: at a grid point the second term's
+stencil is the first's with trial and test offsets exchanged, and `dr`/`dc` move the entry
+from the first term's block offsets to the second's (both `0` on a scalar space). Records
+both positions, entry for entry, into `positions` and `positions_t`.
+
+`half` is `0` for both entries, `1` for the first term's only and `2` for the transposed only
+(stored position `0` for the half skipped): a pair whose two blocks sit on different leaf
+objects walks ⟨Au, Bv⟩ once per leaf, one half each, since the second term's stencil is the
+first's exchanged only on its own leaf.
+
+See also: `_record_pair_segment!`, [`_PairReplaySink`](@ref).
+"""
+mutable struct _PairRecordSink{M <: AbstractMatrix, TERM, S1, S2}
+    const A::M
+    const term::TERM
+    const point_ptr::Vector{Int}
+    const positions::Vector{Int}
+    const positions_t::Vector{Int}
+    const dr::Int
+    const dc::Int
+    const α1::S1
+    const α2::S2
+    const half::Int
+    n::Int
+end
+# Not `@inline`, as `RecordSink`.
+function _sink_point!(sink::_PairRecordSink, lin_idx::Int, ::CartesianIndex)
+    (
+        @inbounds sink.point_ptr[lin_idx] = sink.n + 1; 0)
+end
+function _sink_entry!(sink::_PairRecordSink, row::Int, col::Int, weight, ::Int)
+    pos = 0
+    if sink.half != 2
+        pos = _scatter_position(sink.A, row, col)
+        pos == 0 && _throw_missing_pattern_entry(sink.term)
+        _scatter_add!(sink.A, pos, sink.α1 * weight)
+    end
+    pos_t = 0
+    if sink.half != 1
+        pos_t = _scatter_position(sink.A, col + sink.dr, row + sink.dc)
+        pos_t == 0 && _throw_missing_pattern_entry(sink.term)
+        _scatter_add!(sink.A, pos_t, sink.α2 * weight)
+    end
+    sink.n += 1
+    @inbounds sink.positions[sink.n] = pos
+    @inbounds sink.positions_t[sink.n] = pos_t
+    return nothing
+end
+
+"""
+    _PairReplaySink(A, point_ptr, positions, positions_t, α1, α2, half::Int)
+
+[`ReplaySink`](@ref) for a segment [`_PairRecordSink`](@ref) recorded: each entry adds
+`α1 * weight` at its recorded position and `α2 * weight` at its recorded transposed one,
+skipping the half `half` names, as the record did.
+"""
+struct _PairReplaySink{M <: AbstractMatrix, S1, S2}
+    A::M
+    point_ptr::Vector{Int}
+    positions::Vector{Int}
+    positions_t::Vector{Int}
+    α1::S1
+    α2::S2
+    half::Int
+end
+@inline _sink_point!(sink::_PairReplaySink, lin_idx::Int, ::CartesianIndex) = @inbounds(sink.point_ptr[lin_idx])
+@inline _sink_needs_coordinates(::_PairReplaySink) = false
+Base.@propagate_inbounds function _sink_entry!(
+        sink::_PairReplaySink, ::Int, ::Int, weight, slot::Int
+)
+    sink.half != 2 && @inbounds _scatter_add!(sink.A, sink.positions[slot], sink.α1 * weight)
+    sink.half != 1 && @inbounds _scatter_add!(sink.A, sink.positions_t[slot], sink.α2 * weight)
+    return nothing
+end
+
 # `n` is mutable, unlike every other field: `_sink_point!` sets it once per point and
 # `_sink_entry!` reads it for every one of that point's `P` taps, recovering the tap number
 # as `slot - n * P` (a multiply and a subtract). The alternative -- reconstructing `n` from

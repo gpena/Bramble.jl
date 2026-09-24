@@ -105,7 +105,9 @@ function _try_diagonal_segment(
 
     boundary_positions = positions[(total_interior + 1):end]
     boundary_point_ptr = point_ptr .- total_interior
-    return Segment{D}(true, boundary_point_ptr, boundary_positions, base, stride, P, interior)
+    return Segment{D}(
+        true, boundary_point_ptr, boundary_positions, base, stride, P, interior, Int[]
+    )
 end
 
 # The replay counterpart: same walk, same fresh stencil evaluation (weights may be live --
@@ -212,19 +214,26 @@ end
 # `innerₕ(εcₕ(u), εcₕ(v))`, first assemble: 13.0–13.5 s with the barrier, 14.2–14.4 s
 # without). One call per term per assembly is what it costs at run time.
 
-# `next` through every summand in order, unrolled over the tuple.
-@inline _foldl_summands(f::F, acc, ::Tuple{}) where {F} = acc
-@inline _foldl_summands(f::F, acc, t::Tuple) where {F} = _foldl_summands(f, f(acc, first(t)), Base.tail(t))
-
 # A scalar form's top-level sum is recorded one segment per summand, as a composite form's
 # blocks already are, not as one fused stencil: fused, every grid-point walk inlines the
 # whole sum's stencil, and optimising that body grows superlinearly with the term count
 # (3D scalar form of N distinct `innerₕ` difference terms: `_record_segment!` inference
 # 0.64 s at N = 9, 11.0 s at N = 27; first assemble at N = 27 went from 44.4 s to 16.0 s).
+#
+# A transposed pair ⟨Au, Bv⟩ + ⟨Bu, Av⟩ among the summands (`_pair_plan`, form/symmetry.jl)
+# is one kernel, not two: ⟨Au, Bv⟩ is walked once and each entry is also added, with the
+# second term's scaling, at its transpose (`_record_pair!`). First assemble of a 3D scalar
+# form of 9 such pairs: 11.9 s unpaired, 4.9 s paired; 3D `innerₕ(εcₕ(u), εcₕ(v))` (3 pairs
+# among 15 summands) 14.8 s to 13.0 s, and its warm `assemble!` on 24³ 5.0 ms to 3.65 ms.
 @noinline function _record_summands!(
         A::AbstractMatrix, op::OperatorAdd, sp, segments::Vector{Segment{D}}, α
 ) where {D}
-    map(t -> _record_summands!(A, t, sp, segments, α), _summands(op))
+    _foldl_pairs(
+        (_, t) -> _record_summands!(A, t, sp, segments, α),
+        (_, t1, t2) -> _record_pair!(A, t1, t2, sp, segments, α),
+        nothing,
+        _summands(op)
+    )
     return nothing
 end
 
@@ -239,8 +248,11 @@ end
 @noinline function _replay_summands!(
         A::AbstractMatrix, op::OperatorAdd, sp, segments::Vector{Segment{D}}, next::Int, α
 ) where {D}
-    return _foldl_summands(
-        (n, t) -> _replay_summands!(A, t, sp, segments, n, α), next, _summands(op)
+    return _foldl_pairs(
+        (n, t) -> _replay_summands!(A, t, sp, segments, n, α),
+        (n, t1, t2) -> _replay_pair!(A, t1, t2, sp, segments, n, α),
+        next,
+        _summands(op)
     )
 end
 
@@ -255,7 +267,12 @@ end
 @noinline function _record_blocks!(
         A::AbstractMatrix, op::OperatorAdd, trial_leaves, test_leaves, segments::Vector{Segment{D}}, α
 ) where {D}
-    map(t -> _record_blocks!(A, t, trial_leaves, test_leaves, segments, α), _summands(op))
+    _foldl_pairs(
+        (_, t) -> _record_blocks!(A, t, trial_leaves, test_leaves, segments, α),
+        (_, t1, t2) -> _record_pair_blocks!(A, t1, t2, trial_leaves, test_leaves, segments, α),
+        nothing,
+        _summands(op)
+    )
     return nothing
 end
 
@@ -285,8 +302,9 @@ end
         next::Int,
         α
 ) where {D}
-    return _foldl_summands(
+    return _foldl_pairs(
         (n, t) -> _replay_blocks!(A, t, trial_leaves, test_leaves, segments, n, α),
+        (n, t1, t2) -> _replay_pair_blocks!(A, t1, t2, trial_leaves, test_leaves, segments, n, α),
         next,
         _summands(op)
     )
@@ -311,6 +329,164 @@ end
         )
     end
     return next
+end
+
+# --- Transposed pairs: one kernel for ⟨Au, Bv⟩ + ⟨Bu, Av⟩ ---------------------------- #
+#
+# `_pair_plan` pairs two summands by type, and only product types whose values carry
+# nothing but component indices (`_pairable_type`), so at every grid point of one leaf the
+# second term's stencil is the first's with trial and test offsets exchanged. Component
+# indices only route a term to its block, and the second term's own blocks give the offsets
+# of its entries. On a composite space whose two blocks sit on different leaf objects,
+# ⟨Au, Bv⟩ is walked once on each leaf, the first term's half on its own leaf and the
+# transposed half on the second's: the same kernel, so nothing new is compiled when the
+# leaves share a type, and nothing is dispatched at run time.
+
+# One pair into one block: `_record_segment!`'s two passes, with `_PairRecordSink`.
+function _record_pair_segment!(
+        A::AbstractMatrix, term::TERM, sp, row_offset::Int, col_offset::Int, dr::Int,
+        dc::Int, α1, α2, half::Int, ::Val{D}
+) where {TERM, D}
+    n = length(indices(mesh(sp)))
+    point_ptr = Vector{Int}(undef, n + 1)
+    count_sink = _SegmentCountSink(point_ptr, 0)
+    visit_bilinear_stencil(count_sink, term, sp, row_offset, col_offset)
+    total = count_sink.n
+    @inbounds point_ptr[n + 1] = total + 1
+
+    sink = _PairRecordSink(
+        A, term, point_ptr, Vector{Int}(undef, total), Vector{Int}(undef, total), dr, dc,
+        α1, α2, half, 0
+    )
+    visit_bilinear_stencil(sink, term, sp, row_offset, col_offset)
+    return Segment{D}(
+        false, point_ptr, sink.positions, Int[], Int[], 0, _empty_interior(Val(D)),
+        sink.positions_t
+    )
+end
+
+@inline function _replay_pair_segment!(
+        A::AbstractMatrix, term::TERM, sp, row_offset::Int, col_offset::Int,
+        segment::Segment, α1, α2, half::Int
+) where {TERM}
+    visit_bilinear_stencil(
+        _PairReplaySink(
+            A, segment.point_ptr, segment.positions, segment.positions_t, α1, α2, half
+        ),
+        term,
+        sp,
+        row_offset,
+        col_offset
+    )
+    return nothing
+end
+
+@noinline function _record_pair!(
+        A::AbstractMatrix, t1, t2, sp, segments::Vector{Segment{D}}, α
+) where {D}
+    push!(
+        segments,
+        _record_pair_segment!(
+            A, _bare_product(t1), sp, 0, 0, 0, 0, α * _term_scale(t1), α * _term_scale(t2),
+            0, Val(D)
+        )
+    )
+    return nothing
+end
+
+@noinline function _replay_pair!(
+        A::AbstractMatrix, t1, t2, sp, segments::Vector{Segment{D}}, next::Int, α
+) where {D}
+    next += 1
+    _replay_pair_segment!(
+        A, _bare_product(t1), sp, 0, 0, segments[next], α * _term_scale(t1),
+        α * _term_scale(t2), 0
+    )
+    return next
+end
+
+# Block `k` of the second term holds the transposes of block `k` of the first. Decided by the
+# tuple types, so the fallback folds away.
+@inline _pair_blocks_ok(b1::Tuple, b2::Tuple) = length(b1) == length(b2)
+
+# Entry `(row, col)` of the first term's block moves to `(col + dr, row + dc)` in the second's.
+@inline _pair_shift(blk, blk2) = (blk2.row_offset - blk.col_offset, blk2.col_offset - blk.row_offset)
+
+@noinline function _record_pair_blocks!(
+        A::AbstractMatrix, t1, t2, trial_leaves, test_leaves, segments::Vector{Segment{D}}, α
+) where {D}
+    p1 = _bare_product(t1)
+    p2 = _bare_product(t2)
+    b1 = blocks(p1, trial_leaves, test_leaves)
+    b2 = blocks(p2, trial_leaves, test_leaves)
+    if _pair_blocks_ok(b1, b2)
+        α1 = α * _term_scale(t1)
+        α2 = α * _term_scale(t2)
+        for (blk, blk2) in map(tuple, b1, b2)
+            bound = _bind_interp_spaces(p1, blk.trial_leaf, blk.test_leaf)
+            _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
+            _check_block_meshes(p2, blk2.trial_leaf, blk2.test_leaf)
+            sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
+            dr, dc = _pair_shift(blk, blk2)
+            ro, co = blk.row_offset, blk.col_offset
+            if sp === blk2.test_leaf
+                push!(segments, _record_pair_segment!(A, bound, sp, ro, co, dr, dc, α1, α2, 0, Val(D)))
+            else
+                push!(segments, _record_pair_segment!(A, bound, sp, ro, co, dr, dc, α1, α2, 1, Val(D)))
+                push!(
+                    segments,
+                    _record_pair_segment!(A, bound, blk2.test_leaf, ro, co, dr, dc, α1, α2, 2, Val(D))
+                )
+            end
+        end
+    else
+        Base.inferencebarrier(_record_blocks!)(A, t1, trial_leaves, test_leaves, segments, α)
+        Base.inferencebarrier(_record_blocks!)(A, t2, trial_leaves, test_leaves, segments, α)
+    end
+    return nothing
+end
+
+@noinline function _replay_pair_blocks!(
+        A::AbstractMatrix,
+        t1,
+        t2,
+        trial_leaves,
+        test_leaves,
+        segments::Vector{Segment{D}},
+        next::Int,
+        α
+) where {D}
+    p1 = _bare_product(t1)
+    p2 = _bare_product(t2)
+    b1 = blocks(p1, trial_leaves, test_leaves)
+    b2 = blocks(p2, trial_leaves, test_leaves)
+    if _pair_blocks_ok(b1, b2)
+        α1 = α * _term_scale(t1)
+        α2 = α * _term_scale(t2)
+        for (blk, blk2) in map(tuple, b1, b2)
+            bound = _bind_interp_spaces(p1, blk.trial_leaf, blk.test_leaf)
+            _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
+            sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
+            ro, co = blk.row_offset, blk.col_offset
+            if sp === blk2.test_leaf
+                next += 1
+                _replay_pair_segment!(A, bound, sp, ro, co, segments[next], α1, α2, 0)
+            else
+                _replay_pair_segment!(A, bound, sp, ro, co, segments[next + 1], α1, α2, 1)
+                _replay_pair_segment!(
+                    A, bound, blk2.test_leaf, ro, co, segments[next + 2], α1, α2, 2
+                )
+                next += 2
+            end
+        end
+        return next
+    end
+    next = Base.inferencebarrier(_replay_blocks!)(
+        A, t1, trial_leaves, test_leaves, segments, next, α
+    )::Int
+    return Base.inferencebarrier(_replay_blocks!)(
+        A, t2, trial_leaves, test_leaves, segments, next, α
+    )::Int
 end
 
 # Picks recording (cache miss: a fresh `A`, a changed `ast` -- e.g. `assemble!(A, form;

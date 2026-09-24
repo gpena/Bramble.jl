@@ -4,6 +4,7 @@ using Test
 using Bramble
 using Random
 using LinearAlgebra: issymmetric, isposdef, cholesky, Symmetric, issuccess
+using SparseArrays: nonzeros
 using Bramble:
                form,
                assemble,
@@ -12,7 +13,13 @@ using Bramble:
                restrict_to,
                shift_op,
                IdentityOperator,
-               ZeroOperator
+               ZeroOperator,
+               assemble_add!,
+               D₋ₓ,
+               D₊ᵧ,
+               D₋ᵧ,
+               Dcₓ,
+               Dcᵧ
 
 # `issymmetric`/`isposdef` on a `BilinearForm` are a purely structural, symbolic check:
 # every test here has a positive case checked against a real assembled matrix (not just the
@@ -194,6 +201,114 @@ using Bramble:
         Wₕ3 = gridspace(Ωₕ)
         k3 = form(Wₕ, Wₕ, (u, v) -> innerₕ(IdentityOperator(Wₕ), IdentityOperator(Wₕ3)))
         @test !issymmetric(k3)
+    end
+
+    @testset "Transposed pairs" begin
+        g1 = (u, v) -> innerₕ(D₋ₓ(u), D₊ᵧ(v))
+        g2 = (u, v) -> innerₕ(D₊ᵧ(u), D₋ₓ(v))
+        pair = form(Wₕ, Wₕ, (u, v) -> g1(u, v) + g2(u, v))
+        @test issymmetric(pair)
+        @test !isposdef(pair)
+        @test !issymmetric(form(Wₕ, Wₕ, g1))
+        A = assemble(pair)
+        @test issymmetric(Matrix(A))
+        @test A ≈ assemble(form(Wₕ, Wₕ, g1)) + assemble(form(Wₕ, Wₕ, g2))
+        # One kernel, one recorded segment, for the pair.
+        @test length(pair.cache.segments) == 1
+
+        # Coefficients: the same object on both terms, or none.
+        a, b = Ref(2.0), Ref(3.0)
+        @test issymmetric(form(
+            Wₕ, Wₕ, (u, v) -> innerₕ(a * D₋ₓ(u), D₊ᵧ(v)) + innerₕ(a * D₊ᵧ(u), D₋ₓ(v))
+        ))
+        @test !issymmetric(form(
+            Wₕ, Wₕ, (u, v) -> innerₕ(a * D₋ₓ(u), D₊ᵧ(v)) + innerₕ(b * D₊ᵧ(u), D₋ₓ(v))
+        ))
+
+        # Mixed with symmetric terms, anywhere in the sum; a lone partner-less term is not.
+        @test issymmetric(form(
+            Wₕ, Wₕ, (u, v) -> g1(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)) + g2(u, v)
+        ))
+        @test !issymmetric(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)) + g1(u, v)))
+        @test !issymmetric(form(Wₕ, Wₕ, (u, v) -> g1(u, v) + g2(u, v) + g1(u, v)))
+
+        # A sum on one side, as `simplify_ast` factoring can store it.
+        c = form(Wₕ, Wₕ,
+            (u, v) -> innerₕ(D₋ₓ(u), D₊ᵧ(v) + D₋ᵧ(v)) + innerₕ(D₊ᵧ(u), D₋ₓ(v)) +
+                      innerₕ(D₋ᵧ(u), D₋ₓ(v)))
+        @test issymmetric(c)
+        @test issymmetric(Matrix(assemble(c)))
+    end
+
+    @testset "Transposed pairs assemble as their two terms" begin
+        Random.seed!(20260924)
+        Ωr = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (false, false))
+        Wr = gridspace(Ωr)
+        Vr = gridspace(Ωr, Val(2))
+        # Component-indexed pairs: components matching (a transposed pair), and not (types
+        # still transposed, so one kernel, with the second term's own block); then two
+        # distinct leaf spaces, which records the terms apart.
+        cases = (
+            (Wr,
+                (
+                    (u, v) -> 0.5 * innerₕ(D₋ₓ(u), D₊ᵧ(v)),
+                    (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)),
+                    (u, v) -> 3.0 * innerₕ(D₊ᵧ(u), D₋ₓ(v))
+                )),
+            (Vr,
+                (
+                    (u, v) -> innerₕ(Dcᵧ(u(1)), Dcₓ(v(2))),
+                    (u, v) -> innerₕ(Dcₓ(u(2)), Dcᵧ(v(1))),
+                    (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2))
+                )),
+            (Vr,
+                (
+                    (u, v) -> innerₕ(Dcᵧ(u(1)), Dcₓ(v(2))),
+                    (u, v) -> innerₕ(Dcₓ(u(1)), Dcᵧ(v(2))),
+                    (u, v) -> innerₕ(u(2), v(2))
+                )),
+            (Bramble.CompositeGridSpace((Wr, gridspace(Ωr))),
+                (
+                    (u, v) -> innerₕ(Dcᵧ(u(1)), Dcₓ(v(2))),
+                    (u, v) -> innerₕ(Dcₓ(u(2)), Dcᵧ(v(1))),
+                    (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2))
+                ))
+        )
+        for (S, gs) in cases
+            f = form(S, S, (u, v) -> foldl(+, map(g -> g(u, v), gs)))
+            R = sum(assemble(form(S, S, g)) for g in gs)
+            A = assemble(f)
+            @test A ≈ R
+            assemble!(A, f)
+            @test A ≈ R
+            B = copy(A)
+            fill!(nonzeros(B), 1.0)
+            B0 = Matrix(B)
+            assemble_add!(B, f, 2.0)
+            @test Matrix(B) ≈ B0 + 2 * Matrix(R)
+        end
+        # The warm refill of a pair allocates nothing.
+        f = form(Vr, Vr, (u, v) -> foldl(+, map(g -> g(u, v), cases[2][2])))
+        A = assemble(f)
+        assemble!(A, f)
+        @test (@allocated assemble!(A, f)) == 0
+        @testset "pair on distinct leaves allocates nothing" begin
+            S, gs = cases[4]
+            f = form(S, S, (u, v) -> foldl(+, map(g -> g(u, v), gs)))
+            A = assemble(f)
+            assemble!(A, f)
+            @test (@allocated assemble!(A, f)) == 0
+        end
+    end
+
+    @testset "3D symmetric strain form" begin
+        Random.seed!(287)
+        Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (6, 5, 4), (false, false, false))
+        V3 = gridspace(Ω3, Val(3))
+        E = form(V3, V3, (u, v) -> innerₕ(εcₕ(u), εcₕ(v)))
+        @test issymmetric(E)
+        M = assemble(E)
+        @test M ≈ M'
     end
 
     @testset "Numerically SPD after assembly" begin

@@ -60,6 +60,11 @@ is concrete. A `CartesianIndices{D}` alone, or a `Segment` with `D` left to vary
 concrete (its ranges type is still a `UnionAll`) and stores boxed: exactly what made an early
 version of this allocate 80-400 B on every replay, `@test_allocs`-checked paths included.
 
+`positions_t` is empty except on a segment recorded for a transposed pair
+⟨Au, Bv⟩ + ⟨Bu, Av⟩ (`_record_pair_segment!`): there it holds, entry for entry, the `nzval`
+position of the transposed entry the second term writes, so one walk of ⟨Au, Bv⟩ fills both.
+A pair segment is always flat.
+
 See also: [`DiagonalReplaySink`](@ref).
 """
 struct Segment{D}
@@ -70,6 +75,7 @@ struct Segment{D}
     stride::Vector{Int}
     P::Int
     interior::CartesianIndices{D, NTuple{D, UnitRange{Int}}}
+    positions_t::Vector{Int}
 end
 
 # A concrete, zero-length placeholder for `interior` on the flat path, where nothing reads
@@ -81,7 +87,7 @@ _empty_interior(::Val{D}) where {D} = CartesianIndices(ntuple(_ -> 1:0, D))
 # The flat shape: built at every early return in `_try_diagonal_segment` (bilinear_execution.jl)
 # where the interior/boundary split does not hold or is not worth it.
 function _flat_segment(::Val{D}, point_ptr::Vector{Int}, positions::Vector{Int}) where {D}
-    Segment{D}(false, point_ptr, positions, Int[], Int[], 0, _empty_interior(Val(D)))
+    Segment{D}(false, point_ptr, positions, Int[], Int[], 0, _empty_interior(Val(D)), Int[])
 end
 
 # One `BilinearForm`'s nzval-position cache: valid only for the exact matrix object last
