@@ -300,6 +300,76 @@ version -- `assemble` on a device-backed form returning a matrix-free operator f
 the already-fused device kernels can express, rather than a matrix -- is recorded on #317
 but not yet scoped as its own issue.
 
+## Matrix-free Kronecker operators on a device
+
+[gpena/Bramble.jl#323](https://github.com/gpena/Bramble.jl/issues/323) is the first
+concrete step toward the matrix-free-on-device direction the previous section leaves
+undecided: a [`KroneckerLinearOperator`](@ref) built from a device-backed form, and
+[`fdm_solve`](@ref) on top of it, both apply on the device with no host round trip once
+built. The split below is decided and built, not a target.
+
+**`KroneckerLinearOperator`.** [`kronecker_operator`](@ref) always builds the 1D mass and
+difference factors on the host mirror of the mesh (`_host_mirror_mesh`), the same way it
+does for a host-backed form -- a device-backed axis space cannot be scalar-indexed to
+assemble a 1D factor. Each factor is then moved to the backend's storage once, by
+`_kron_to_storage`: a `Diagonal` mass factor becomes a `_KronDeviceDiagonal` holding one
+device vector, and a `SparseMatrixCSC` difference factor becomes a `_KronDeviceSparse`
+holding its `colptr`/`rowval`/`nzval` as three separate device arrays -- never the matrix
+struct itself, for the same non-bitstype-kernel-argument reason as "A struct nesting a
+device array will not compile" above. `mul!`'s per-axis mode
+contraction then dispatches on which of the two factor types it is holding: a mass mode
+runs as a broadcast (`_kron_apply_mode!` for `_KronDeviceDiagonal`), and a difference mode
+runs through `_launch_kron_sparse_mode!`, a `@kernel` in
+`ext/BrambleKernelAbstractionsExt.jl` (`_kron_sparse_mode_kernel!`) that reads the factor's
+raw CSC arrays directly, one work item per output entry. Neither path leaves the device
+between axes, and `src/form/kronecker.jl` names no GPU package anywhere in this machinery
+-- the stub `_launch_kron_sparse_mode!` in `src/` throws unless
+`BrambleKernelAbstractionsExt` has supplied the real method, the same extension-contract
+idiom as everywhere else on this page.
+
+**`fdm_solve`.** The 1D factors' generalised eigendecomposition (`_fdm_eigendecompose`)
+stays on the host: it is a small, per-axis LAPACK call regardless of `K`'s own storage, so
+a device-backed `K`'s factors are copied back to the host first (`_fdm_host_factor`) before
+the eigensolve runs. Everything downstream of that eigensolve follows the storage of the
+right-hand side `F` instead: `_fdm_apply` copies the eigenvector matrices `Q_d`, their
+transposes and the combined eigenvalue grid `Λ` to `F`'s storage once per call
+(`_fdm_to_storage`), then runs the sum-factorisation as dense device matmuls
+(`_fdm_apply_mode`, `mul!` against a `(m, pre * post)` matricisation, with `permutedims` to
+bring the contracted axis to the front when it is not already axis 1) and a device
+broadcast for the division by `Λ`. This holds for both `dirichlet` branches:
+`dirichlet = nothing` runs the sum-factorisation over the whole grid, and
+`dirichlet = :boundary` first restricts `F` to the interior with a view and a broadcast
+(not `getindex` on a range, which would scalar-index a device array) before the
+eigensolve, then embeds the interior solution back into a zero-filled `K.n`-length result
+with the same view-and-broadcast pattern afterward -- no scalar indexing appears on either
+branch's device path.
+
+**Measured throughput.** `benchmark/kronecker_device.jl` (commit `f5005af0`) timed the host
+and Metal backends back to back, `Float32`, 4 threads, AC power, load 2.74:
+
+| Case | Operation | Host | Metal | Ratio (host/Metal) |
+|---|---|---|---|---|
+| 2D 3000x3000 | `mul!` | 41.49 ms | 41.12 ms | 1.009 |
+| 2D 3000x3000 | 30 CG-shaped iterations | 1686.1 ms | 1416.5 ms | 1.19 |
+| 2D 3000x3000 | `fdm_solve` | 5453.9 ms | 2107.2 ms | 2.588 |
+| 3D 200x200x200 | `mul!` | 43.43 ms | 77.39 ms | 0.561 |
+| 3D 200x200x200 | 30 CG-shaped iterations | 1755.7 ms | 2484.1 ms | 0.707 |
+| 3D 200x200x200 | `fdm_solve` | 492.2 ms | 135.4 ms | 3.635 |
+
+The `fdm_solve` host eigendecomposition alone (the LAPACK call above, unaffected by
+backend) took 1800.8 ms in the 2D case and 4.97 ms in the 3D case, out of the totals above.
+For comparison, #323's hand-rolled matrix-free CG loop -- calling `Δₕ!` directly rather
+than going through `mul!(y, K, x, ...)` -- measured 1.55x (2D) and 1.16x (3D),
+Serial/Metal.
+
+**The plain conclusion.** `fdm_solve` gains 2.6-3.6x on the device: its cost is dominated
+by dense matmuls and broadcasts that scale with grid size, and the device wins even after
+the host-only eigendecomposition is added back in. The operator's own device `mul!`
+does not show the same gain -- it roughly breaks even in 2D (1.009x) and is slower on the
+device in 3D (0.561x) -- so an iterative solve that repeatedly applies `K` does not beat
+the host path on this hardware. No cause for the `mul!` figures is established by this
+benchmark; any explanation would be unmeasured.
+
 ## Traps worth knowing before touching any of this
 
 - **A struct nesting a device array fails kernel compilation.** Covered above; pass plain
