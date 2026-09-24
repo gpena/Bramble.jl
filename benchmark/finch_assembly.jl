@@ -29,7 +29,7 @@
 # identical (row, col, value) triplets, how fast does a genuine
 # `@finch`-compiled loop nest write them into a
 # `Tensor(Dense(SparseList(Element(0.0))))` (Finch's CSC-equivalent format),
-# next to how fast Bramble's own `RecordSink`/`ReplaySink` write the same
+# next to how fast Bramble's own record/replay sinks write the same
 # triplets into a `SparseMatrixCSC`. The "verify the Finch matrix equals
 # Bramble's to 1e-12" step the plan asks for is exactly this: Finch's
 # reconstructed matrix against Bramble's, both carrying the same

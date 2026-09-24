@@ -401,8 +401,8 @@ _is_source_only(::LazyOp) = false
 # 4. Walking an OperatorAdd tree: shared by every router in linear.jl/bilinear.jl
 # ==============================================================================
 
-# Six functions across `linear.jl`/`bilinear.jl` (`_check_block_meshes`,
-# `_route_terms!`, `_route_terms_parallel!`, `_pattern_blocks!`, `_assemble_blocks!`,
+# Functions across `linear.jl`/`bilinear.jl`/`jacobian_pattern.jl` (`_check_block_meshes`,
+# `_route_terms!`, `_route_terms_parallel!`, `_pattern_blocks_jacobian!`,
 # `_assemble_blocks_parallel!`) walk a form's `OperatorAdd` tree to send each summand where
 # it belongs, all with the same shape: recurse left, recurse right, done. Recursing the tree
 # rather than flattening it into a vector of terms first preserves concrete types: a
@@ -446,7 +446,7 @@ end
     return first_arg
 end
 
-# `op` third, two mutated arguments, nothing returned: `_pattern_blocks!`.
+# `op` third, two mutated arguments, nothing returned: `_pattern_blocks_jacobian!`.
 @inline function _visit_operator_add3(f::F, a1, a2, op::OperatorAdd, rest...) where {F}
     map(t -> f(a1, a2, t, rest...), _summands(op))
     return nothing

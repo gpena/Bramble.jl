@@ -469,9 +469,9 @@ end
 # --- Jacobian sparsity and per-type assembly caching (gpena/Bramble.jl#21/#95/#20) ------- #
 #
 # Neither is reachable from the sessions above. jacobian_pattern walks a BilinearForm's own
-# local_stencil through a fresh set of helpers (_coefficient_offsets, _pattern_term!,
-# _resolve_dependency_ops, _pattern_term_jacobian! for the composite dispatch) that nothing
-# else here calls. type_cached_assemble! is its own dispatch on the element type `T`, not
+# local_stencil through a fresh set of helpers (_coefficient_offsets, _resolve_dependency_ops,
+# _pattern_term_jacobian! for the composite dispatch) that nothing else here calls.
+# type_cached_assemble! is its own dispatch on the element type `T`, not
 # exercised anywhere assemble/assemble! already are.
 _pc_alpha(u) = 3.0 + 1.0 / (1.0 + u^2)
 

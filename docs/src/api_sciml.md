@@ -319,7 +319,7 @@ clear.
 **Finch.jl: not adopted.** [gpena/Bramble.jl#217](https://github.com/gpena/Bramble.jl/issues/217)
 asked whether a `@finch`-compiled loop nest -- [Finch.jl](https://github.com/finch-tensor/Finch.jl)'s
 domain-specific compiler for structured and sparse tensors -- beats Bramble's own
-`RecordSink`/`ReplaySink` assembly by enough to justify a dedicated backend. The issue set its
+record/replay sink assembly by enough to justify a dedicated backend. The issue set its
 own threshold: greater than 1.5x speedup or greater than 50% memory reduction on the resulting
 object, at N = 1e6.
 

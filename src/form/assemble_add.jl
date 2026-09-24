@@ -11,14 +11,14 @@ stencil taps that land on the same matrix entry accumulate correctly within one 
 only thing that makes `assemble!` read as "replace" from the outside is the `fill!(A/b,
 0)` immediately before that sweep (`_assemble_bilinear!`/`_assemble_linear!`). `assemble_add!`
 is therefore the *same* serial-cached/parallel core `assemble!` already calls, minus that
-`fill!` and minus the Dirichlet pass -- reusing the record/replay cache, the threaded
+`fill!` and minus the Dirichlet pass -- reusing the coordinate-walk/replay cache, the threaded
 band-coloured sweep, and the "pattern must already contain this entry" error
-(`add_to_sparse!`/`RecordSink`'s `ArgumentError`) exactly as they already existed.
+(`add_to_sparse!`'s `ArgumentError`) exactly as they already existed.
 
 ## The scale factor
 
 `α` is threaded through as a plain multiplier at the point each entry's weight is about to
-be added (`sink.α * weight` in every `RecordSink`/`ReplaySink`/`DiagonalReplaySink`, `α *
+be added (`sink.α * weight` in every `ReplaySink`/`DiagonalReplaySink`, `α *
 weight` in the parallel scatter and in the linear-form scatter) -- never folded into the
 AST as an `OperatorScale` node. Wrapping the AST would build a *new* object on every call,
 which the replay cache is keyed on by identity (`cache.ast === ast`): every
@@ -29,7 +29,7 @@ slots a term touches never depends on how the term is scaled -- so a caller is f
 change `α` (typically a `Ref`'s current value) on every call and still replay from cache
 with 0 allocations.
 
-Every internal function this threads `α` through (`_record_segment!`, `_replay_segment!`,
+Every internal function this threads `α` through (`_replay_segment!`,
 `_scatter_point!`, `_scatter_term!`, ... ) defaults it to `true`, so `assemble!`/`assemble`'s
 own call sites need no changes at all: `weight * true` is the exact algebraic identity
 (unlike `weight * false`, which is not, for `NaN`/`Inf`/signed zero), so this is the same
