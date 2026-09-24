@@ -243,7 +243,10 @@ Return the test space of the bilinear form.
 test_space(form::BilinearForm) = form.test_space
 
 # `a(uₕ, vₕ) = vᵀ A u`. Assembles a whole matrix per call: intended for testing/convenience.
-@inline (form::BilinearForm)(u, v) = dot(v, assemble(form) * u)
+# Multiplies by `parent(u)`, the raw vector: on Julia 1.14 SparseArrays reads `u[k, 1]`, which a
+# 2D `VectorElement` answers as grid point `(k, 1)` rather than entry `k` (BoundsError in the
+# nightly precompile run of 1e0352c3). `parent` of a plain vector is the vector itself.
+@inline (form::BilinearForm)(u, v) = dot(v, assemble(form) * parent(u))
 
 """
     resolve_form_ast(form::BilinearForm)
