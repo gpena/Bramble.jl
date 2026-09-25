@@ -333,7 +333,7 @@ end
 
 # --- Expression rendering (gpena/Bramble.jl#274) ----------------------------------- #
 
-# `_inner_name` (src/form/operators/inner.jl, S1.3) gets its `InnerGammaNormal` case here --
+# `_inner_name` (src/ast/operators/inner.jl, S1.3) gets its `InnerGammaNormal` case here --
 # no forward declaration needed, only consistent naming. Named after `InnerGamma`'s own
 # `"inner_Γ"` (both are surface integrals) plus the directional subscript
 # `InnerPlus{Dim}`/`_inner_name` already appends for its own directional weight, since this

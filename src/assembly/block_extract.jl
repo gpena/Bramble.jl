@@ -192,7 +192,7 @@ _region_labels(region::Symbol) = (region,)
 _region_labels(region::NTuple{N, Symbol}) where {N} = region
 
 # `RegionRestriction`'s own method above wins on specificity, so it is untouched by this
-# collapse; only `InterpolationNode`'s separate method (form/operators/interpolation.jl)
+# collapse; only `InterpolationNode`'s separate method (ast/operators/interpolation.jl)
 # becomes redundant, since it recursed the same way.
 _collect_region_labels(op::UnaryWrapper) = _collect_region_labels(op.inner_op)
 

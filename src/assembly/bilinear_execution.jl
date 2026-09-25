@@ -756,7 +756,7 @@ function _assemble_blocks_parallel!(
         # `host_weights` (gpena/Bramble.jl#94, S4.2): the mirror of S4.0's own fix to the
         # *pattern* walk (`bilinear_pattern.jl`), now applied to the walk that *refills* the
         # matrix. `local_stencil` below reads this leaf's weights and its mesh's spacings one
-        # grid point at a time (`compute_weight`, `form/operators/inner.jl`); on a device
+        # grid point at a time (`compute_weight`, `ast/operators/inner.jl`); on a device
         # backend those are `MtlVector`s, and reading them element-by-element is exactly the
         # `Scalar indexing is disallowed` this milestone has hit three times already
         # (`_probe_point` -> S2.3, `spacing`/`forward_spacing` -> S2.10, the pattern walk's own

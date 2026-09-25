@@ -263,7 +263,7 @@ end
 # the operator type alone, allowing the trait to fold away at compile time.
 #
 # A source is also point-dependent. Marking it here allows `_contracted_left_stencil`
-# (form/operators/inner.jl) to avoid re-deriving masks and spacings manually: a source-only
+# (ast/operators/inner.jl) to avoid re-deriving masks and spacings manually: a source-only
 # subtree's own `local_stencil`, read through this trait, re-evaluates at each neighbour as
 # required by value contraction.
 stencil_shift_trait(::InterpolationNode) = PointDependentStencil()
@@ -353,7 +353,7 @@ _has_test_interp(::LazyOp) = false
 _has_test_interp(op::InterpolationNode) = _interp_side(op) === TestSide
 
 # The same question for the trial side, which only `_check_one_interpolated_side`
-# (form/operators/inner.jl) asks: the walked leaf does not depend on it, since a trial-side
+# (ast/operators/inner.jl) asks: the walked leaf does not depend on it, since a trial-side
 # interpolation leaves the test side native and that is where the sweep already walks.
 _has_trial_interp(::LazyOp) = false
 _has_trial_interp(op::InterpolationNode) = _interp_side(op) === TrialSide

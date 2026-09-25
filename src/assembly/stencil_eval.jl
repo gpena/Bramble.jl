@@ -92,7 +92,7 @@ const UnaryWrapper{D} = Union{
 # types by hand (gpena/Bramble.jl#52).
 #
 # They live here rather than beside their own ladders because `UnaryWrapper` names
-# `InterpolationNode`, which `form/operators/interpolation.jl` defines -- so the union, and
+# `InterpolationNode`, which `ast/operators/interpolation.jl` defines -- so the union, and
 # anything dispatching on it, has to come after every operator file. The node-specific
 # overrides stay in their own files; `InterpolationNode` deviates from three of these and
 # says so there.
@@ -306,7 +306,7 @@ end
 
 resolve_ast(ops::NTuple{N, Any}) where {N} = map(resolve_ast, ops)
 
-# The two scaling wrappers' half of `_bind_interp_spaces` (form/operators/interpolation.jl),
+# The two scaling wrappers' half of `_bind_interp_spaces` (ast/operators/interpolation.jl),
 # beside their `resolve_ast` because they are the same walk. `GridFunctionScale`'s thunk
 # form has already been evaluated by `resolve_ast` when binding runs, so one method covers
 # both: the scale itself is carried across untouched.
@@ -393,9 +393,9 @@ _is_source_only(::LinearProduct) = false
 _is_source_only(::LazyOp) = false
 
 # The value of a source-only subtree at a grid point: `_contracted_left_stencil`
-# (form/operators/inner.jl) reads it from the subtree's own `local_stencil`, correctly
+# (ast/operators/inner.jl) reads it from the subtree's own `local_stencil`, correctly
 # re-evaluated at every neighbour because a source is `PointDependentStencil`
-# (form/operators/interpolation.jl).
+# (ast/operators/interpolation.jl).
 
 # ==============================================================================
 # 4. Walking an OperatorAdd tree: shared by every router in linear.jl/bilinear.jl

@@ -46,7 +46,7 @@ set `S` names at once, for `|S| \\geq 2` (gpena/Bramble.jl#115, #234).
 
 The empty set is [`InnerH`](@ref) and a one-element set is [`InnerPlus`](@ref): those two
 keep their own node types rather than becoming a special case of this one, because other
-code matches on their literal types (`src/form/kronecker.jl`'s separability match, and the
+code matches on their literal types (`src/assembly/kronecker.jl`'s separability match, and the
 `typeof(inner₊ₓ(id, id)).parameters[2] === InnerPlus{1}`-style pin in
 `test/form/inner_products.jl`) and widening what they resolve to would change what those
 match. [`inner₊`](@ref)`(u, v, Val(S))` is what builds this node; it is never constructed
