@@ -22,10 +22,10 @@ export domain, markers, labels
 public center, projection, point, topo_dim
 
 # --- Mesh ---
-export Mesh1D, MeshnD
 export mesh, npoints, points, hₘₐₓ, hₘᵢₙ, iterative_refinement!, normal_vector
 export spacing, forward_spacing
 
+public Mesh1D, MeshnD
 public change_points!, set_points!, is_uniform
 public half_spacing, spacings, cell_measure, half_point, half_points
 public indices, boundary_indices, interior_indices, is_boundary_index, index_in_marker
