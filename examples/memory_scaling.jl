@@ -4,7 +4,7 @@
 # but its storage grows with the number of nonzeros, which on a Cartesian mesh grows with
 # the number of unknowns. A separable form -- one whose assembled matrix is an exact sum of
 # Kronecker products of one-dimensional factors -- never needs that matrix at all: applying
-# it is sum factorisation over the per-axis factors, so the storage is `O(D \cdot n)` instead
+# it is one fused pass over the per-axis factors, so the storage is `O(D \cdot n)` instead
 # of `O(n^D)` stored nonzeros. This page builds that operator, measures what it actually
 # costs against the matrix it replaces, and checks that it still computes the right answer.
 # Every number below was produced by the code shown.
@@ -84,24 +84,27 @@ bytes_csc = Base.summarysize(A)
 
 # Bracketed rather than pinned to one figure: allocator bookkeeping moves the byte counts a #src
 # little between Julia versions, the ratio itself is what this page is making a claim about. #src
+# `A` stores 472,361 nonzeros in arrays sized exactly to them, 8,109,312 bytes (Julia 1.13). #src
 @test ndofs(Wₕ) == 68921                             #src
-@test bytes_kronecker < 0.001 * bytes_csc             #src
-@test bytes_csc > 15_000_000                          #src
+@test bytes_kronecker < 0.002 * bytes_csc             #src
+@test bytes_csc > 7_500_000                           #src
 
 # The operator holds three `41`-length one-dimensional factors per term instead of the
 # assembled matrix's stored nonzeros, so it costs a fraction of a percent of `A` here -- and
 # the gap only widens with `n`, since `bytes_csc` grows like `n^3` while `bytes_kronecker`
 # grows like `n`. Measured separately (not by this page, to keep this one fast): on a
 # uniform `60x60x60` mesh with the same mass-plus-stiffness form, `test/form/kronecker.jl`
-# (gpena/Bramble.jl#162) records `19,432` bytes for the operator against `61,948,960` bytes
+# (gpena/Bramble.jl#162) recorded `19,432` bytes for the operator against `61,948,960` bytes
 # for the equivalent `SparseMatrixCSC` -- about `0.03%`, for a 216,000-unknown problem this
-# page does not build directly.
+# page does not build directly. That matrix figure predates assembly sizing the matrix's
+# arrays exactly to their nonzeros, which on this page's `41x41x41` mesh took `A` from
+# `18,625,640` to `8,109,312` bytes with the same 472,361 nonzeros.
 #
 # ## Solving it: iteratively, through the operator itself
 #
 # `K` subtypes `AbstractMatrix`, so `LinearSolve`'s `KrylovJL_CG` runs against it exactly as
-# it would against `A`, applying `K` by `mul!` (sum factorisation) rather than a sparse
-# matrix-vector product:
+# it would against `A`, applying `K` by `mul!` (one fused pass over the grid) rather than a
+# sparse matrix-vector product:
 
 gₕ = element(Wₕ)
 avgₕ!(gₕ, rhs)
