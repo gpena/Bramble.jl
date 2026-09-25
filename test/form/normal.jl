@@ -229,7 +229,8 @@ using ..TestUtils: @test_allocs
         nx, ny = n
         a = form(Wₕ, Wₕ,
             (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) +
-                      inner_Γ(u * nx - 2.0u * ny, v; markers = (:xmax, :ymin)))
+                      inner_Γ(u * nx - 2.0u * ny + Ref(0.5) * (u * nx), v;
+                markers = (:xmax, :ymin)))
         A = assemble(a)
         B = copy(A)
         assemble!(B, a)
@@ -237,6 +238,69 @@ using ..TestUtils: @test_allocs
         @test_allocs assemble!(B, a)
         second(V) = V[2]
         @test only(Base.return_types(second, (typeof(n),))) === typeof(ny)
+    end
+
+    @testset "Component scales keep the element type" begin
+        # An integer scale, a negation and a difference promote against the space's element
+        # type, as `A - B` does, and never widen a Float32 form to Float64.
+        @testset "$T, $(D)D" for T in (Float32, Float64), D in (2, 3)
+
+            S = D == 2 ? domain(interval(zero(T), one(T)) × interval(zero(T), T(2))) :
+                domain(interval(zero(T), one(T)) × interval(zero(T), T(2)) ×
+                       interval(zero(T), T(3)))
+            Wₕ = gridspace(mesh(S, D == 2 ? (7, 6) : (5, 6, 4), ntuple(_ -> false, D)))
+            nx, ny = n
+            g = x -> one(T) + x[1]
+            m = (:boundary,)
+            lin(t) = assemble(form(Wₕ, v -> inner_Γ(t, v; markers = m)))
+            bil(h) = assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(h(u), v; markers = m)))
+            for t in (2 * (g * nx), (g * nx) * 2, -(g * nx), g * nx - g * ny, -nx, nx,
+                Ref(T(2)) * (g * nx), Ref(T(2)) * nx, dot((g, g, g)[1:D], n) + g * nx)
+                @test eltype(lin(t)) === T
+            end
+            @test eltype(bil(u -> u * nx - u * ny)) === T
+            @test eltype(bil(u -> -(u * nx))) === T
+            @test eltype(bil(u -> 2 * nx * u)) === T
+            @test eltype(bil(u -> dot(ntuple(_ -> u, D), n) - u * ny)) === T
+            # and the values are the scaled ones
+            @test lin(2 * (g * nx)) ≈ 2 .* lin(g * nx)
+            @test lin(-(g * nx)) ≈ -lin(g * nx)
+            @test bil(u -> u * nx - u * ny) ≈ bil(u -> u * nx) - bil(u -> u * ny)
+        end
+    end
+
+    @testset "Component terms times the unknown, Ref scales, and dot(F, n) in a sum" begin
+        Wₕ = gridspace(mesh(Ω, (9, 7), (false, false)))
+        nx, ny = n
+        f = x -> x[1]^2 + 0.5x[2]
+        h = x -> sin(x[1]) * x[2]
+        m = (:boundary,)
+        lin(t) = assemble(form(Wₕ, v -> inner_Γ(t, v; markers = m)))
+        bil(t) = assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(t(u), v; markers = m)))
+
+        # a scaled component times the unknown, from either side: the unknown joins the factor
+        A = bil(u -> u * nx)
+        @test bil(u -> 2.0 * nx * u) ≈ 2 .* A
+        @test bil(u -> u * (2.0 * nx)) ≈ 2 .* A
+        @test bil(u -> (2.0 * nx + 3.0 * ny) * u) ≈ 2 .* A .+ 3 .* bil(u -> u * ny)
+        # a grid-function factor, in the thunk form a `Function` times an unknown takes
+        gvec = parent(Rₕ(Wₕ, f))
+        @test bil(u -> ((() -> gvec) * nx) * u) ≈ bil(u -> ((() -> gvec) * u) * nx)
+
+        # a `Ref` scale, the runtime-scalar idiom, on a product, a bare component and a sum
+        @test lin(Ref(2.0) * (f * nx)) ≈ 2 .* lin(f * nx)
+        @test lin((f * nx) * Ref(2.0)) ≈ 2 .* lin(f * nx)
+        @test lin(Ref(2.0) * nx) ≈ 2 .* lin(nx)
+        @test lin(nx * Ref(2.0)) ≈ 2 .* lin(nx)
+        @test lin(Ref(2.0) * (f * nx + h * ny)) ≈ 2 .* lin(dot((f, h), n))
+        @test bil(u -> Ref(2.0) * (u * ny)) ≈ 2 .* bil(u -> u * ny)
+
+        # `dot(F, n)` joins a sum of components, on either side and in a difference
+        @test lin(dot((f, h), n) + f * nx) ≈ lin(dot((x -> 2 * f(x), h), n))
+        @test lin(f * nx + dot((f, h), n)) ≈ lin(dot((x -> 2 * f(x), h), n))
+        @test lin(dot((f, h), n) - h * ny) ≈ lin(f * nx)
+        @test lin(dot((f, h), n) + dot((h, f), n)) ≈ lin(dot((x -> f(x) + h(x), x -> h(x) + f(x)), n))
+        @test bil(u -> dot((u, u), n) + u * nx) ≈ 2 .* A .+ bil(u -> u * ny)
     end
 
     @testset "Refusals" begin

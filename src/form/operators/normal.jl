@@ -174,14 +174,15 @@ end
 """
     NormalComponentProduct{DIM, T, S}
 
-`c * (g * n[DIM])`: the factor `g` and the scalar `c`, held until [`inner_Γ`](@ref) gives
-the factor the signed face selection of direction `DIM` and scales the term by `c`. The
-scale is `nothing` when there is none, so an unscaled product lowers to the bare term. Not a
-`LazyOp`, for the reason `n` is not one.
+`c * (g * n[DIM])`: the factor `g` and the scalars `c`, held until [`inner_Γ`](@ref) gives
+the factor the signed face selection of direction `DIM` and wraps the term in each scalar,
+outermost first, exactly as `c * term` would. The scales are a tuple, empty when there are
+none, so an unscaled product lowers to the bare term. Not a `LazyOp`, for the reason `n` is
+not one.
 """
-struct NormalComponentProduct{DIM, T, S} <: AbstractNormalTerm
+struct NormalComponentProduct{DIM, T, S <: Tuple} <: AbstractNormalTerm
     factor::T
-    scale::S
+    scales::S
 end
 
 """
@@ -194,8 +195,8 @@ struct NormalComponentSum{T <: Tuple{Vararg{NormalComponentProduct}}} <: Abstrac
     terms::T
 end
 
-@inline function _normal_product(g, ::NormalComponent{DIM}, scale = nothing) where {DIM}
-    return NormalComponentProduct{DIM, typeof(g), typeof(scale)}(g, scale)
+@inline function _normal_product(g, ::NormalComponent{DIM}, scales::Tuple = ()) where {DIM}
+    return NormalComponentProduct{DIM, typeof(g), typeof(scales)}(g, scales)
 end
 
 for G in (LazyOp, Function, Number, VectorElement)
@@ -203,31 +204,48 @@ for G in (LazyOp, Function, Number, VectorElement)
     @eval @inline Base.:*(c::NormalComponent, g::$G) = _normal_product(g, c)
 end
 
-# Scalar multiples. An integer scale is stored as a float: once it is a field, its value is
-# a runtime one, and a runtime `Int` must not reach `_wrap_scale` (bramble-form §6).
-@inline _normal_scale(c::Integer) = float(c)
-@inline _normal_scale(c::Number) = c
-@inline _combine_scale(c, ::Nothing) = c
-@inline _combine_scale(c, s) = c * s
-
-@inline function Base.:*(c::Number, p::NormalComponentProduct{DIM}) where {DIM}
-    return _normal_product(p.factor, NormalComponent{DIM}(), _combine_scale(_normal_scale(c), p.scale))
+# `(α * nx) * u` and `(f * nx) * u`: the unknown joins the factor, since `n[d]` commutes with
+# every scalar-valued thing a surface integral can hold.
+@inline function Base.:*(p::NormalComponentProduct{DIM}, u::LazyOp) where {DIM}
+    return _normal_product(p.factor * u, NormalComponent{DIM}(), p.scales)
 end
-@inline Base.:*(p::NormalComponentProduct, c::Number) = c * p
-@inline Base.:*(c::Number, s::NormalComponentSum) = NormalComponentSum(map(p -> c * p, s.terms))
-@inline Base.:*(s::NormalComponentSum, c::Number) = c * s
-@inline Base.:-(t::AbstractNormalTerm) = -1.0 * _as_normal_sum(t)
+@inline Base.:*(u::LazyOp, p::NormalComponentProduct) = p * u
+@inline Base.:*(s::NormalComponentSum, u::LazyOp) = NormalComponentSum(map(p -> p * u, s.terms))
+@inline Base.:*(u::LazyOp, s::NormalComponentSum) = s * u
 
-# Sums. A bare component in a sum is the product `1.0 * n[d]`, as it is inside `inner_Γ`.
-@inline _normal_terms_of(c::NormalComponent) = (_normal_product(1.0, c),)
+# Scalar multiples: a `Number` or a `Ref` to one, the scalars `OperatorScale` carries. Each is
+# kept as given and applied at expansion through the same `c * term` a `LazyOp` uses, so an
+# integer literal stays an `Integer` (and promotes to the space's element type, as `-1` does
+# in `A - B`) and a `Ref` stays a runtime scalar (bramble-form §6).
+const _NormalScalar = Union{Number, Base.RefValue{<:Number}}
+
+@inline function Base.:*(c::_NormalScalar, p::NormalComponentProduct{DIM}) where {DIM}
+    return _normal_product(p.factor, NormalComponent{DIM}(), (c, p.scales...))
+end
+@inline Base.:*(p::NormalComponentProduct, c::_NormalScalar) = c * p
+@inline Base.:*(c::_NormalScalar, s::NormalComponentSum) = NormalComponentSum(map(p -> c * p, s.terms))
+@inline Base.:*(s::NormalComponentSum, c::_NormalScalar) = c * s
+@inline Base.:*(c::Base.RefValue{<:Number}, nc::NormalComponent) = c * _normal_product(1, nc)
+@inline Base.:*(nc::NormalComponent, c::Base.RefValue{<:Number}) = c * nc
+@inline Base.:-(t::AbstractNormalTerm) = -1 * _as_normal_sum(t)
+
+# Sums. A bare component in a sum is the product `1 * n[d]`, as it is inside `inner_Γ`: an
+# integer one, so it takes the space's element type. `dot(F, n)` joins a sum as its `D`
+# directional products.
+@inline _normal_terms_of(c::NormalComponent) = (_normal_product(1, c),)
 @inline _normal_terms_of(p::NormalComponentProduct) = (p,)
 @inline _normal_terms_of(s::NormalComponentSum) = s.terms
-@inline _as_normal_sum(t::AbstractNormalTerm) = NormalComponentSum(_normal_terms_of(t))
+@inline function _normal_terms_of(c::NormalContraction{D}) where {D}
+    return ntuple(d -> _normal_product(c.terms[d], NormalComponent{d}()), Val(D))
+end
+@inline _as_normal_sum(t) = NormalComponentSum(_normal_terms_of(t))
 
-@inline function Base.:+(a::AbstractNormalTerm, b::AbstractNormalTerm)
+const _NormalSummand = Union{AbstractNormalTerm, NormalContraction}
+
+@inline function Base.:+(a::_NormalSummand, b::_NormalSummand)
     return NormalComponentSum((_normal_terms_of(a)..., _normal_terms_of(b)...))
 end
-@inline Base.:-(a::AbstractNormalTerm, b::AbstractNormalTerm) = a + (-b)
+@inline Base.:-(a::_NormalSummand, b::_NormalSummand) = a + (-_as_normal_sum(b))
 
 # A product of two components has no meaning here: the normal enters a surface integral
 # linearly, once.
@@ -246,7 +264,7 @@ Base.:*(::AbstractNormalTerm, ::AbstractNormalTerm) = _throw_normal_squared()
 
 The surface integral ``\\int_\\Gamma g\\, n_d\\, v\\, ds``: the direction-`d` term of
 `inner_Γ(dot(F, n), v)`, so summing it over `d` with `g = F[d]` gives that integral. A bare
-component `n[d]` is `1.0 * n[d]`, and a linear combination of such products expands to the
+component `n[d]` is `1 * n[d]`, and a linear combination of such products expands to the
 sum of their terms, so `inner_Γ(f1 * nx + f2 * ny, v)` is `inner_Γ(dot((f1, f2), n), v)`.
 
 ```julia
@@ -268,11 +286,11 @@ end
         p::NormalComponentProduct{DIM}, right, ::Val{MASK}, ::Val{D}
 ) where {DIM, MASK, D}
     DIM <= D || _throw_normal_component_dim(DIM, D)
-    return _apply_normal_scale(p.scale, _normal_term(InnerGammaNormal{MASK, DIM}(), p.factor, right))
+    return _apply_normal_scale(p.scales, _normal_term(InnerGammaNormal{MASK, DIM}(), p.factor, right))
 end
 
-@inline _apply_normal_scale(::Nothing, term) = term
-@inline _apply_normal_scale(c, term) = c * term
+@inline _apply_normal_scale(::Tuple{}, term) = term
+@inline _apply_normal_scale(s::Tuple, term) = first(s) * _apply_normal_scale(Base.tail(s), term)
 
 @noinline function _throw_normal_component_dim(dim, D)
     count = D == 1 ? "1 component" : "$D components"
