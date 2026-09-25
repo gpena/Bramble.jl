@@ -56,7 +56,10 @@ const __bramble_with_slow_tests = TestUtils.WITH_SLOW_TESTS
 #
 # Either file skips a backend absent from the environment, so running a group without one
 # installed reports a skip rather than an error.
-const __bramble_with_ad_backends = __bramble_test_group in ("ad", "full")
+#
+# `backends` is `ad` plus `ext` with no unit suite: Weekly.yml runs it as one half of the
+# full suite and `slow` as the other, since the Julia 1.12 legs outgrew one 90-minute job.
+const __bramble_with_ad_backends = __bramble_test_group in ("ad", "full", "backends")
 
 # The Makie/Meshes/RecipesBase/Metal weak deps: `test/Project.toml` lists them (so
 # `Pkg.instantiate()` always resolves and can precompile them, the same tradeoff already
@@ -65,7 +68,7 @@ const __bramble_with_ad_backends = __bramble_test_group in ("ad", "full")
 # Metal within this group further gates on `Metal.functional()`, since installing and
 # precompiling it succeeds on any platform (it degrades gracefully, the same convention
 # CUDA.jl uses) while only a real Apple Silicon device can actually run anything on it.
-const __bramble_with_ext_backends = __bramble_test_group in ("ext", "full")
+const __bramble_with_ext_backends = __bramble_test_group in ("ext", "full", "backends")
 
 # `manual/test_snippets.jl` checks that the code in the 12-chapter PDF manual still
 # compiles and gives the answers it claims. Kept out of the every-push groups because it

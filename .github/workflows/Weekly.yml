@@ -6,7 +6,14 @@ name: Weekly
 # daily in nightly.yml, and `full` used to drag them in here as well, four times over on this
 # matrix. `full` no longer implies `quality` (see test/runtests.jl); this job is the unit
 # suite across both Julia versions and both platforms, plus the expensive AD backends, the
-# package extensions, the manual snippets and coverage.
+# package extensions and coverage.
+#
+# Each version/OS pair runs as two jobs, `part: suite` (the `slow` group: unit plus the slow
+# blocks) and `part: backends` (the `backends` group: the expensive AD backends and the
+# package extensions), which together cover what `full` does except the manual snippets,
+# which only run locally anyway. One `full` job per pair took 99 minutes on Julia 1.12
+# macOS at v3.11.1, where 1.12 compiles `form/` (870 s) and `ext/chainrules_enzyme_ext.jl`
+# (879 s) far more slowly than 1.13; the two halves each fit well inside the limit.
 #
 # Enzyme and Mooncake are the reason this exists. They spend 58 seconds compiling on first
 # call between them, against 1.1 s for ReverseDiff and PolyesterForwardDiff, which run on
@@ -42,7 +49,7 @@ env:
 
 jobs:
   full:
-    name: Full suite (Julia ${{ matrix.version }}, ${{ matrix.os }})
+    name: Full suite, ${{ matrix.part }} (Julia ${{ matrix.version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     # 120, not 90: on the v3.11.0 tag both Julia 1.12 legs were cancelled at 90 minutes
     # inside the last file (examples/ext_pages.jl); 1.12 compiles the Enzyme and form files
@@ -72,6 +79,7 @@ jobs:
         # would make a red leg here noise rather than signal.
         version: ["1.12", "1.13"]
         os: [ubuntu-latest, macOS-latest]
+        part: [suite, backends]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -92,7 +100,10 @@ jobs:
       # because they are slow to compile, PolyesterForwardDiff because it adds nothing
       # ForwardDiff does not cover and nests threading inside kernels that already thread. Failing to add one is not fatal: the test file skips a backend it cannot
       # load, and the run still reports on the others.
+      # Only the `backends` half needs them; the `suite` half's autodiff_backends.jl skips
+      # them, and the `backends` half runs that file again with them installed.
       - name: Add the expensive differentiation backends and SciMLSensitivity
+        if: matrix.part == 'backends'
         run: |
           julia --project=test -e '
             using Pkg
@@ -111,7 +122,7 @@ jobs:
         with:
           coverage: ${{ matrix.version == '1.12' && matrix.os == 'ubuntu-latest' }}
         env:
-          BRAMBLE_TEST_GROUP: full
+          BRAMBLE_TEST_GROUP: ${{ matrix.part == 'suite' && 'slow' || 'backends' }}
 
       - uses: julia-actions/julia-processcoverage@v1
         if: matrix.version == '1.12' && matrix.os == 'ubuntu-latest'
