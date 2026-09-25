@@ -5,37 +5,37 @@
 # Why this is not a node.
 #
 # A `LazyOp` is scalar-valued and its `local_stencil` returns one coefficient per point per
-# column, so `n` cannot be one: it is vector-valued, and what a form does with it is always
+# column, so `η` cannot be one: it is vector-valued, and what a form does with it is always
 # to contract it against another vector-valued quantity. More decisively, the *weight* of a
 # normal term is directional. A surface integral of a normal flux is
 #
-#     ∫_Γ (F · n) v ds = Σ_{faces F_d} ± ∫_{F_d} F_d v ds
+#     ∫_Γ (F · η) v ds = Σ_{faces F_d} ± ∫_{F_d} F_d v ds
 #
 # and the measure of the face with normal `d` is the transverse product `∏_{e ≠ d} ĥ_e`, not
 # the lumped `ω` that `InnerGamma` carries. At a corner the two differ: `ω` sums the incident
-# faces' measures into one number, which is right for `∫_Γ g v` and wrong for `∫_Γ (F·n) v`,
+# faces' measures into one number, which is right for `∫_Γ g v` and wrong for `∫_Γ (F·η) v`,
 # where each face contributes its own component of `F` with its own sign.
 #
-# So `dot(F, n)` records the tuple, and `inner_Γ` expands it, at the builder, into one
+# So `dot(F, η)` records the tuple, and `inner_Γ` expands it, at the builder, into one
 # ordinary product per direction carrying `InnerGammaNormal{MASK, d}` -- the signed
 # transverse measure of the faces with normal `d`. No new node type, no new stencil path, and
 # the resulting AST is the sum a caller would have written by hand.
 
-# The type behind `n`. A singleton, so `dot(F, n)` folds at compile time and the symbol costs
+# The type behind `η`. A singleton, so `dot(F, η)` folds at compile time and the symbol costs
 # nothing to carry through a form.
 struct NormalSymbol end
 
 """
-    n
+    η
 
 The outward unit normal, as a symbol usable inside a form.
 
 Only meaningful contracted against a vector-valued quantity whose values are known -- a flux
-field, `dot(F, n)` -- and only inside [`inner_Γ`](@ref), which is where a normal has a face to
+field, `dot(F, η)` -- and only inside [`inner_Γ`](@ref), which is where a normal has a face to
 be normal to.
 
 ```julia
-l = form(Wₕ, v -> inner_Γ(dot(Fₕ, n), v; markers = (:xmax,)))
+l = form(Wₕ, v -> inner_Γ(dot(Fₕ, η), v; markers = (:xmax,)))
 ```
 
 The normal *derivative* of an unknown is not built on this yet; see the note below the
@@ -43,12 +43,12 @@ The normal *derivative* of an unknown is not built on this yet; see the note bel
 
 See also: [`inner_Γ`](@ref), [`normal_vector`](@ref)
 """
-const n = NormalSymbol()
+const η = NormalSymbol()
 
 """
     NormalContraction{D, T}
 
-`dot(F, n)`: the tuple `F`, held until [`inner_Γ`](@ref) expands it into one product per
+`dot(F, η)`: the tuple `F`, held until [`inner_Γ`](@ref) expands it into one product per
 direction. Not a `LazyOp`, deliberately -- see the note at the head of this file.
 """
 struct NormalContraction{D, T <: Tuple}
@@ -56,11 +56,11 @@ struct NormalContraction{D, T <: Tuple}
 end
 
 @inline dot(F::NTuple{D, Any}, ::NormalSymbol) where {D} = NormalContraction{D, typeof(F)}(F)
-@inline dot(::NormalSymbol, F::NTuple{D, Any}) where {D} = dot(F, n)
+@inline dot(::NormalSymbol, F::NTuple{D, Any}) where {D} = dot(F, η)
 
 # The normal *derivative* is not here yet, deliberately.
 #
-# `∂ₙ(u) = ∇u · n` needs a gradient that still has a stencil on a boundary face. `∇ₕ` has
+# `∂ₙ(u) = ∇u · η` needs a gradient that still has a stencil on a boundary face. `∇ₕ` has
 # none there (it is the backward one, truncated on the first slice of each axis) and `Dcₕ`,
 # the centered one this should be built on, is truncated to zero on both end slices. What
 # makes a centered difference meaningful at a boundary point is a ghost point beyond it, and
@@ -69,7 +69,7 @@ end
 # (gpena/Bramble.jl#27, #30). Defining `∂ₙ` on a one-sided stand-in now would fix the wrong
 # convention in the API before the right one exists.
 #
-# `dot(F, n)` below is a different question and is well defined today: `F` is a field whose
+# `dot(F, η)` below is a different question and is well defined today: `F` is a field whose
 # values are already known at every point, so nothing has to be differenced at the face.
 
 """
@@ -98,7 +98,7 @@ end
 """
     inner_Γ(F::NormalContraction, v; markers) -> LazyOp
 
-The surface integral of a normal flux, ``\\int_\\Gamma (\\mathbf{F} \\cdot \\mathbf{n})\\, v\\, ds``.
+The surface integral of a normal flux, ``\\int_\\Gamma (\\mathbf{F} \\cdot \\boldsymbol{\\eta})\\, v\\, ds``.
 
 Expanded here, at the builder, into one ordinary product per direction, each carrying that
 direction's signed transverse measure. The term is the sum a caller would otherwise write out,
@@ -130,12 +130,12 @@ end
 
 # --- Components of the normal (gpena/Bramble.jl#341) -------------------------------- #
 #
-# `nx, ny = n` names one direction of the normal at a time. A component is a singleton like
-# `n` itself, and a product with it is held, not built, until `inner_Γ` expands it into the
-# single term `dot(F, n)` would have produced for that direction: the same `_normal_term`
+# `ηₓ, ηᵧ = η` names one direction of the normal at a time. A component is a singleton like
+# `η` itself, and a product with it is held, not built, until `inner_Γ` expands it into the
+# single term `dot(F, η)` would have produced for that direction: the same `_normal_term`
 # with the same `InnerGammaNormal{MASK, d}` weight. Sums and scalar multiples of such
 # products are held too, as a tuple of products each carrying its own scale, so
-# `f1 * nx + f2 * ny`, integrated face by face, is `dot((f1, f2), n)` term for term, and
+# `f1 * ηₓ + f2 * ηᵧ`, integrated face by face, is `dot((f1, f2), η)` term for term, and
 # nothing downstream sees a new node.
 
 # What a component, a product with one, or a sum of such products has in common: each is
@@ -145,8 +145,8 @@ abstract type AbstractNormalTerm end
 """
     NormalComponent{DIM}
 
-`n[DIM]`: the component of the outward normal along axis `DIM`, as a symbol usable inside a
-form. Obtained by indexing or destructuring [`n`](@ref), never constructed directly.
+`η[DIM]`: the component of the outward normal along axis `DIM`, as a symbol usable inside a
+form. Obtained by indexing or destructuring [`η`](@ref), never constructed directly.
 """
 struct NormalComponent{DIM} <: AbstractNormalTerm end
 
@@ -157,10 +157,10 @@ struct NormalComponent{DIM} <: AbstractNormalTerm end
 @inline Base.lastindex(::NormalSymbol) = 3
 @inline Base.getindex(::NormalSymbol, d::Integer) = _normal_component(Val(Int(d)))
 @inline Base.getindex(::NormalSymbol, s::Symbol) = _normal_component(Val(_normal_axis(s)))
-@inline Base.iterate(::NormalSymbol, state::Int = 1) = state > 3 ? nothing : (n[state], state + 1)
+@inline Base.iterate(::NormalSymbol, state::Int = 1) = state > 3 ? nothing : (η[state], state + 1)
 
 @inline function _normal_component(::Val{d}) where {d}
-    1 <= d <= 3 || throw(BoundsError(n, d))
+    1 <= d <= 3 || throw(BoundsError(η, d))
     return NormalComponent{d}()
 end
 
@@ -174,10 +174,10 @@ end
 """
     NormalComponentProduct{DIM, T, S}
 
-`c * (g * n[DIM])`: the factor `g` and the scalars `c`, held until [`inner_Γ`](@ref) gives
+`c * (g * η[DIM])`: the factor `g` and the scalars `c`, held until [`inner_Γ`](@ref) gives
 the factor the signed face selection of direction `DIM` and wraps the term in each scalar,
 outermost first, exactly as `c * term` would. The scales are a tuple, empty when there are
-none, so an unscaled product lowers to the bare term. Not a `LazyOp`, for the reason `n` is
+none, so an unscaled product lowers to the bare term. Not a `LazyOp`, for the reason `η` is
 not one.
 """
 struct NormalComponentProduct{DIM, T, S <: Tuple} <: AbstractNormalTerm
@@ -188,7 +188,7 @@ end
 """
     NormalComponentSum{T}
 
-A sum of [`NormalComponentProduct`](@ref)s, `f1 * nx + f2 * ny`, held as a tuple so that
+A sum of [`NormalComponentProduct`](@ref)s, `f1 * ηₓ + f2 * ηᵧ`, held as a tuple so that
 [`inner_Γ`](@ref) can expand each product into its own directional term.
 """
 struct NormalComponentSum{T <: Tuple{Vararg{NormalComponentProduct}}} <: AbstractNormalTerm
@@ -204,7 +204,7 @@ for G in (LazyOp, Function, Number, VectorElement)
     @eval @inline Base.:*(c::NormalComponent, g::$G) = _normal_product(g, c)
 end
 
-# `(α * nx) * u` and `(f * nx) * u`: the unknown joins the factor, since `n[d]` commutes with
+# `(α * ηₓ) * u` and `(f * ηₓ) * u`: the unknown joins the factor, since `η[d]` commutes with
 # every scalar-valued thing a surface integral can hold.
 @inline function Base.:*(p::NormalComponentProduct{DIM}, u::LazyOp) where {DIM}
     return _normal_product(p.factor * u, NormalComponent{DIM}(), p.scales)
@@ -229,8 +229,8 @@ end
 @inline Base.:*(nc::NormalComponent, c::Base.RefValue{<:Number}) = c * nc
 @inline Base.:-(t::AbstractNormalTerm) = -1 * _as_normal_sum(t)
 
-# Sums. A bare component in a sum is the product `1 * n[d]`, as it is inside `inner_Γ`: an
-# integer one, so it takes the space's element type. `dot(F, n)` joins a sum as its `D`
+# Sums. A bare component in a sum is the product `1 * η[d]`, as it is inside `inner_Γ`: an
+# integer one, so it takes the space's element type. `dot(F, η)` joins a sum as its `D`
 # directional products.
 @inline _normal_terms_of(c::NormalComponent) = (_normal_product(1, c),)
 @inline _normal_terms_of(p::NormalComponentProduct) = (p,)
@@ -252,25 +252,25 @@ end
 @noinline function _throw_normal_squared()
     throw(
         ArgumentError(
-        "a product of two components of the normal n (such as nx * ny or f * nx * ny) " *
-        "is not a normal flux: n may appear only once, linearly, in each term of inner_Γ",
+        "a product of two components of the normal η (such as ηₓ * ηᵧ or f * ηₓ * ηᵧ) " *
+        "is not a normal flux: η may appear only once, linearly, in each term of inner_Γ",
     ),
     )
 end
 Base.:*(::AbstractNormalTerm, ::AbstractNormalTerm) = _throw_normal_squared()
 
 """
-    inner_Γ(g * n[d], v; markers) -> LazyOp
+    inner_Γ(g * η[d], v; markers) -> LazyOp
 
-The surface integral ``\\int_\\Gamma g\\, n_d\\, v\\, ds``: the direction-`d` term of
-`inner_Γ(dot(F, n), v)`, so summing it over `d` with `g = F[d]` gives that integral. A bare
-component `n[d]` is `1 * n[d]`, and a linear combination of such products expands to the
-sum of their terms, so `inner_Γ(f1 * nx + f2 * ny, v)` is `inner_Γ(dot((f1, f2), n), v)`.
+The surface integral ``\\int_\\Gamma g\\, \\eta_d\\, v\\, ds``: the direction-`d` term of
+`inner_Γ(dot(F, η), v)`, so summing it over `d` with `g = F[d]` gives that integral. A bare
+component `η[d]` is `1 * η[d]`, and a linear combination of such products expands to the
+sum of their terms, so `inner_Γ(f1 * ηₓ + f2 * ηᵧ, v)` is `inner_Γ(dot((f1, f2), η), v)`.
 
 ```julia
-nx, ny = n
-l = form(Wₕ, v -> inner_Γ(f * nx, v; markers = (:xmax,)))
-a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(u * ny, v; markers = (:boundary,)))
+ηₓ, ηᵧ = η
+l = form(Wₕ, v -> inner_Γ(f * ηₓ, v; markers = (:xmax,)))
+a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(u * ηᵧ, v; markers = (:boundary,)))
 ```
 """
 function inner_Γ(t::AbstractNormalTerm, right::LazyOp{D}; markers = ()) where {D}
@@ -294,14 +294,14 @@ end
 
 @noinline function _throw_normal_component_dim(dim, D)
     count = D == 1 ? "1 component" : "$D components"
-    throw(ArgumentError("n[$dim] has no face in a $(D)D form: the normal has $count here"))
+    throw(ArgumentError("η[$dim] has no face in a $(D)D form: the normal has $count here"))
 end
 
 @noinline function _throw_normal_on_test_side()
     throw(
         ArgumentError(
-        "the normal n belongs on the left of inner_Γ, with the flux: write " *
-        "inner_Γ(g * n[d], v; markers = ...), not inner_Γ(v, g * n[d]; ...)",
+        "the normal η belongs on the left of inner_Γ, with the flux: write " *
+        "inner_Γ(g * η[d], v; markers = ...), not inner_Γ(v, g * η[d]; ...)",
     ),
     )
 end
@@ -314,8 +314,8 @@ inner_Γ(::AbstractNormalTerm, ::AbstractNormalTerm; markers = ()) = _throw_norm
 @noinline function _throw_normal_outside_gamma()
     throw(
         ArgumentError(
-        "a component of the normal n is only defined on a boundary face: use it inside " *
-        "inner_Γ(g * n[d], v; markers = ...), not in innerₕ or inner₊, and not added to " *
+        "a component of the normal η is only defined on a boundary face: use it inside " *
+        "inner_Γ(g * η[d], v; markers = ...), not in innerₕ or inner₊, and not added to " *
         "an ordinary form term",
     ),
     )

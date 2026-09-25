@@ -534,25 +534,25 @@ half-spacing, and in 3D a face integral.
 viewpoint alias — and needs no marker declared in `domain(...)`, since it reads the face from
 the point's index rather than from a marker table.
 
-### The outward normal, `n`
+### The outward normal, `η`
 
-A flux term ``\int_\Gamma \mathbf{F} \cdot \mathbf{n}\, v`` needs the outward normal at
-each boundary point. `n` is exported for this; like `∇ₕ`, it destructures and indexes into
+A flux term ``\int_\Gamma \mathbf{F} \cdot \boldsymbol{\eta}\, v`` needs the outward normal at
+each boundary point. `η` is exported for this; like `∇ₕ`, it destructures and indexes into
 its per-coordinate components:
 
 ```@example forms
 Ω2 = mesh(domain(box((0.0, 0.0), (1.0, 1.0)),
     :xmin => :xmin, :xmax => :xmax, :ymin => :ymin, :ymax => :ymax), (6, 6), (true, true))
 W2 = gridspace(Ω2)
-nx, ny = n
+ηₓ, ηᵧ = η
 F1 = Rₕ(W2, x -> 1.0 + x[1])
 F2 = Rₕ(W2, x -> 2.0 + x[2])
-l_flux = form(W2, v -> inner_Γ(F1 * nx + F2 * ny, v; markers = (:xmax,)))
+l_flux = form(W2, v -> inner_Γ(F1 * ηₓ + F2 * ηᵧ, v; markers = (:xmax,)))
 b_flux = assemble(l_flux)
 sum(b_flux)
 ```
 
-`F1 * nx + F2 * ny` is the same quantity `dot((F1, F2), n)` computes with `LinearAlgebra.dot`,
+`F1 * ηₓ + F2 * ηᵧ` is the same quantity `dot((F1, F2), η)` computes with `LinearAlgebra.dot`,
 component by component; the destructured form is what reads naturally inside a form.
 
 A marker that does not exist anywhere the term reaches is a loud error rather than a silent

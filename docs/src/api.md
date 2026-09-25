@@ -404,7 +404,7 @@ M₊ₕ
 ```@docs
 innerₕ
 inner_Γ
-n
+η
 skew_symmetric
 inner₊
 inner₊ₓ

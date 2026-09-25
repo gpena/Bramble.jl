@@ -33,7 +33,7 @@ export Rₕ, Rₕ!, avgₕ, avgₕ!
 export interpolate_at, πₕ, πₕ!
 
 export innerₕ, inner_Γ, dirac
-export n
+export η
 export inner₊
 export snorm₁ₕ, norm₁ₕ, norm₊, normₕ, norm∞ₕ
 
