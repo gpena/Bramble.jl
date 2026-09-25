@@ -180,6 +180,7 @@ if __bramble_with_quality
         include("quality/aqua.jl")
         include("quality/exports.jl")
         include("quality/explicit_imports.jl")
+        include("quality/source_imports.jl")
         include("quality/jet.jl")
         include("quality/invalidations.jl")
         # Decoupled from docs/make.jl (doctest = false there) so a doctest regression is

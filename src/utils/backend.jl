@@ -85,7 +85,6 @@ function locality end
 # specific than the `AbstractArray` fallback above but strictly less specific than
 # `BrambleMetalExt`'s own `MtlVector`/`MtlMatrix`/sparse-matrix methods, which Julia still
 # dispatches to and which this change does not touch.
-import GPUArraysCore
 
 @inline locality(::Type{<:GPUArraysCore.AbstractGPUArray}) = DeviceLocality()
 

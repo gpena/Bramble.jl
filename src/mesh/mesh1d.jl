@@ -509,8 +509,6 @@ end
 # exactly as before (`_MESH1D_RNG_ARMED` stays `false`, so the `else` branch below runs,
 # unchanged from the original code) while still giving device-mesh-reproducibility code
 # (gpena/Bramble.jl#320's S1.2) a way to opt out of the global stream entirely.
-import Random
-
 const _MESH1D_RNG = Random.Xoshiro()
 const _MESH1D_RNG_ARMED = Ref(false)
 

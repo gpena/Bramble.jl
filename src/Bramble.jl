@@ -8,15 +8,17 @@ using SparseArrays: SparseArrays, SparseMatrixCSC, spdiagm, spzeros, rowvals, no
                     dropzeros!
 
 using LinearAlgebra: I, Diagonal
-import LinearAlgebra: mul!, issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot
+import LinearAlgebra: mul!, issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot, lu, cholesky
 
 import Base: copy
 using Base: @propagate_inbounds
+import Random
 using Random: rand!
 
 using PrecompileTools: @setup_workload, @compile_workload
 using Preferences: @load_preference
 using QuadGK: gauss
+import GPUArraysCore
 
 # --- Backend & Execution Policies ---
 export backend, gpu_backend, metal_backend, vector_type, matrix_type, backend_types
