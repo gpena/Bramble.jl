@@ -38,10 +38,12 @@ backend_types
 backend_eye
 backend_zeros
 metal_sparse_csr
+metal_sparse_csc
 ka_device
 gpu_backend
 metal_backend
 csr_backend
+sparse_refactor!
 ```
 
 #### Deprecated
@@ -149,6 +151,7 @@ set_points!
 ```@docs
 ScalarGridSpace
 CompositeGridSpace
+VectorGridSpace
 gridspace
 vector_gridspace
 ```
@@ -338,21 +341,31 @@ trial or test function -- the same name spans both, dispatching on what it is gi
 divₕ
 divₕ!
 div₊ₕ
+div₊ₕ!
 divcₕ
 divcₕ!
+div̽ₕ
+div̽ₕ!
 curlₕ
 curlₕ!
 curl₊ₕ
+curl₊ₕ!
 curlcₕ
 curlcₕ!
+curl̽ₕ
+curl̽ₕ!
 Δₕ
 Δₕ!
 εₕ
 εₕ!
 εcₕ
 εcₕ!
+ε̽ₕ
+ε̽ₕ!
 ∇cₕ
 ∇cₕ!
+∇̽ₕ
+∇̽ₕ!
 ∇̃ₕ
 ∇̃ₕ!
 diṽₕ
@@ -542,7 +555,9 @@ suitable for `export_vtk`.
 
 ```@docs
 reaction
+reaction!
 reaction_density
+reaction_density!
 ```
 
 ### Structural properties

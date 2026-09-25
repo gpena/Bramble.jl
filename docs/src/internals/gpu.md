@@ -52,7 +52,7 @@ A method written `f(::GpuPolicy, ...)` instead of `f(::DeviceLocality, ::GpuPoli
 is silently unreachable: `locality` is checked on the *storage*, and the dispatch tables
 this package builds (`_sweep_for!`/`_sweep_scatter_for!` in
 `src/utils/linear_algebra.jl`, `_scatter_position`/`_scatter_add!`/`_flush_device_scatter!`/
-`_zero_stored!` in `src/form/bilinear_traversal.jl`) all branch on locality first, policy
+`_zero_stored!` in `src/assembly/bilinear_traversal.jl`) all branch on locality first, policy
 second. Keying on the policy alone skips that branch and never gets called.
 
 ## The extension-contract idiom
@@ -111,12 +111,12 @@ widened to `Int` -- on hardware where the device and host share physical memory 
 Silicon's unified DRAM), an `Int`-hardcoded mirror would cost more host memory than the
 device arrays it stages for the moment `Ti` is narrower than `Int` -- and `nzval` is what a
 scatter into the matrix actually accumulates into (the device array itself is left alone
-until the sweep finishes). `src/form/bilinear_traversal.jl`'s `_scatter_position`/
+until the sweep finishes). `src/assembly/bilinear_traversal.jl`'s `_scatter_position`/
 `_scatter_add!` read `A.mirror` straight off the matrix under `::DeviceLocality`, duck-typed
 rather than dispatched on a concrete type -- this file has no dependency on Metal or
 `GPUArrays` and cannot name `MetalSparseMatrixCSR` -- so any type providing this one field,
 of this shape, is a sparsity-search-and-scatter-ready backend with no further code in
-`src/form/` at all. `MetalSparseMatrixCSR` (`ext/BrambleMetalExt.jl`) builds its `mirror`
+`src/assembly/` at all. `MetalSparseMatrixCSR` (`ext/BrambleMetalExt.jl`) builds its `mirror`
 once, when the matrix itself is built, straight from the host `Vector{Ti}`s already on hand
 before they are uploaded to the device -- no conversion, no separate transfer.
 
@@ -215,7 +215,7 @@ per call, and the walk reads that mirror instead of the device space. On a host 
 
 Scatter never writes a device array element by element either. `_scatter_add!` for a
 `DeviceLocality` matrix accumulates into `A`'s own `mirror` field
-(`src/form/bilinear_traversal.jl`) -- read straight off the matrix, never resolved from a
+(`src/assembly/bilinear_traversal.jl`) -- read straight off the matrix, never resolved from a
 cache -- and `_flush_device_scatter!` ends the sweep with one
 `copyto!(A.nzVal, A.mirror.nzval)`, a single bulk transfer, not one write per nonzero. See
 "What a device sparse type must provide" above for the field's shape.
@@ -262,7 +262,7 @@ Across Metal, CUDA and ROCm, the target follows the architecture
 3. Constrained entries would be carried in that table as a negative sentinel, so the
    scatter kernel has no boundary-condition branch -- it skips whenever the position it
    reads is negative.
-4. Accumulation would be atomic rather than colour-scheduled. `src/form/` colours
+4. Accumulation would be atomic rather than colour-scheduled. `src/assembly/` colours
    contributions into non-conflicting bands so CPU threads can scatter without a race; on
    a device, an atomic add is meant to be cheaper than reproducing that colouring.
 
@@ -331,7 +331,7 @@ kernel, one work item per entry of `y` and no write conflicts or atomics
 (`_launch_kron_fused!`, which replaced the earlier per-axis-mode kernel), using `Int32`
 index arithmetic to recover each work item's grid index from `dims`/
 `strides` -- 64-bit integer division is emulated on Apple GPUs. Neither path leaves the
-device between terms, and `src/form/kronecker.jl` names no GPU package anywhere in this
+device between terms, and `src/assembly/kronecker.jl` names no GPU package anywhere in this
 machinery -- the stub `_launch_kron_fused!` in `src/` throws unless
 `BrambleKernelAbstractionsExt` has supplied the real method, the same extension-contract
 idiom as everywhere else on this page. `mul!` allocates nothing on the host either way, and
