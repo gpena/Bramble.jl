@@ -266,7 +266,7 @@ end
 
 @inline _surface_sum(::HostLocality, ::CpuSerial, Ωₕ, mask, u, v) = _surface_sum(Ωₕ, mask, u, v)
 @inline _surface_sum(::HostLocality, ::CpuThreaded, Ωₕ, mask, u, v) = _surface_sum(Ωₕ, mask, u, v)
-@inline _surface_sum(::HostLocality, ::CpuBatch, Ωₕ, mask, u, v) = _surface_sum(Ωₕ, mask, u, v)
+@inline _surface_sum(::HostLocality, ::CpuPolyester, Ωₕ, mask, u, v) = _surface_sum(Ωₕ, mask, u, v)
 
 @noinline _surface_sum(loc::Locality, policy, Ωₕ, mask, u, v) = _throw_locality_mismatch(loc, policy)
 
@@ -431,13 +431,13 @@ const norm∞ₕ = norminf_h
 # `CartesianIndex` and read `w` through its `CartesianIndex` `getindex`, which multiplies
 # the per-axis factors directly instead of dividing by each axis length in turn.
 #
-# No separate `CpuBatch` override is needed here: `inner₊(uₕ, vₕ, Val(S))` calls the
+# No separate `CpuPolyester` override is needed here: `inner₊(uₕ, vₕ, Val(S))` calls the
 # policy-dispatched `_dot`/`_dot_masked(policy, u, v, w[, mask])` (S7.1,
 # `src/utils/linear_algebra.jl`), whose `CpuSerial`/`CpuThreaded` methods fall through to
 # the plain three/four-argument methods below -- where ordinary dispatch on the weight
-# argument's runtime type reaches this specialization -- while its `CpuBatch` method calls
+# argument's runtime type reaches this specialization -- while its `CpuPolyester` method calls
 # `_batch_dot`/`_batch_dot_masked` directly, before the weight's type is ever consulted, so
-# a `CpuBatch` policy reaches S7.1's Polyester hook (or its "not loaded" error) regardless
+# a `CpuPolyester` policy reaches S7.1's Polyester hook (or its "not loaded" error) regardless
 # of whether the weight is dense or a `SeparableWeights`, never this loop.
 @inline function _dot(
         u::AbstractVector, w::SeparableWeights{D, <:Any, VT}, v::AbstractVector

@@ -514,9 +514,9 @@ end
 
 # One colour, threaded, writing directly into the matrix. Dispatches on the *effective*
 # execution policy (`_sweep_bilinear!` computes it): `CpuThreaded` keeps `Threads.@threads`
-# exactly as before; `CpuBatch` reaches its own hook instead, so it never silently threads
+# exactly as before; `CpuPolyester` reaches its own hook instead, so it never silently threads
 # with the wrong mechanism (gpena/Bramble.jl#190). `CpuSerial` never reaches this function --
-# `_effective_parallel_policy` only ever hands it `CpuThreaded` or `CpuBatch`.
+# `_effective_parallel_policy` only ever hands it `CpuThreaded` or `CpuPolyester`.
 @noinline function _sweep_bilinear_colour!(
         ::CpuThreaded,
         A::AbstractMatrix,
@@ -536,7 +536,7 @@ end
 end
 
 @noinline function _sweep_bilinear_colour!(
-        ::CpuBatch,
+        ::CpuPolyester,
         A::AbstractMatrix,
         sp,
         term::TERM,
@@ -555,7 +555,7 @@ end
 """
     _batch_bilinear_colour_sweep!(A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α) -> Nothing
 
-[`CpuBatch`](@ref)'s counterpart of the `Threads.@threads` body in
+[`CpuPolyester`](@ref)'s counterpart of the `Threads.@threads` body in
 `_sweep_bilinear_colour!`, filled by `BramblePolyesterExt` (gpena/Bramble.jl#190).
 The only `src/` method errors naming Polyester.
 """
@@ -603,7 +603,7 @@ once.
 end
 
 @noinline function _sweep_band_colour!(
-        ::CpuBatch,
+        ::CpuPolyester,
         A::AbstractMatrix,
         sp,
         term::TERM,
@@ -625,7 +625,7 @@ end
 """
     _batch_bilinear_band_sweep!(A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α) -> Nothing
 
-[`CpuBatch`](@ref)'s counterpart of the `Threads.@threads` body in
+[`CpuPolyester`](@ref)'s counterpart of the `Threads.@threads` body in
 [`_sweep_band_colour!`](@ref), filled by `BramblePolyesterExt` (gpena/Bramble.jl#190). The
 only `src/` method errors naming Polyester.
 """
@@ -665,7 +665,7 @@ end
 # (`_effective_parallel_policy(sp)`, computed once here): `CpuSerial` is coerced to
 # `CpuThreaded` since every call into this function is already on the forced-threaded path
 # (`_assemble_bilinear_parallel_core!`, always entered from a non-`CpuSerial` branch, or from
-# `assemble_parallel!`'s own "regardless of policy" contract); `CpuBatch` passes through
+# `assemble_parallel!`'s own "regardless of policy" contract); `CpuPolyester` passes through
 # unchanged so the colour/band sweeps below reach their own hook instead of `Threads.@threads`
 # (gpena/Bramble.jl#190).
 function _sweep_bilinear!(
@@ -785,7 +785,7 @@ end
 # nothing here races any differently for a dense `Matrix` than for `SparseMatrixCSC` --
 # verified equal to the serial record/replay pass on a dense backend (S7.1's own check).
 # `_sweep_bilinear!` reads the space's effective policy itself (`_effective_parallel_policy`)
-# and only `Threads.@threads`es under `CpuThreaded`; a `CpuBatch` backend reaches its own
+# and only `Threads.@threads`es under `CpuThreaded`; a `CpuPolyester` backend reaches its own
 # hook instead of silently threading with the wrong mechanism, so this function no longer
 # needs a separate non-threading fallback for a matrix type it cannot thread.
 function _assemble_bilinear_parallel_core!(

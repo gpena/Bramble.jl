@@ -49,7 +49,7 @@ already queued against `x`'s device backend has completed.
 
 Through gpena/Bramble.jl#94's S4.2, every `@kernel` launch in `BrambleKernelAbstractionsExt`
 called this right after launching, unconditionally. gpena/Bramble.jl#302/#306 (S11) removed
-that: under [`GpuAsync`](@ref) -- the only [`GpuPolicy`](@ref) there is -- a kernel launch
+that: under [`GpuKernel`](@ref) -- the only [`GpuPolicy`](@ref) there is -- a kernel launch
 now only enqueues onto the device's own command queue and returns, so a chain of operators
 (`D₋ₓ` into `D₋ᵧ`, say) pipelines instead of paying a host round-trip after each step.
 Kernels enqueued on the same queue still run in that queue's order, so this is *not* needed

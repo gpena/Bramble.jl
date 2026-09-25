@@ -1183,7 +1183,7 @@ end
 #
 # Through S10, every launcher above called `synchronize(dev)` right after launching, so
 # each device kernel paid a host round-trip before the next one could even be enqueued --
-# exactly what `GpuAsync` (`src/utils/backend.jl`) claims not to do. S11 removes that call
+# exactly what `GpuKernel` (`src/utils/backend.jl`) claims not to do. S11 removes that call
 # from every launcher in this file: a kernel launch now only enqueues onto the device's own
 # command queue and returns, so a chain of them (`D₋ₓ` into `D₋ᵧ` into a sum, say) pipelines
 # instead of blocking after each step. Kernels enqueued on the same queue still run in that
@@ -1191,7 +1191,7 @@ end
 # chaining operators) needs no synchronisation between them -- only code that leaves the
 # queue and touches the array some other way needs a barrier first.
 #
-# `GpuAsync` is the only `GpuPolicy` that exists today, and no `_launch_*!` here is ever
+# `GpuKernel` is the only `GpuPolicy` that exists today, and no `_launch_*!` here is ever
 # reached under anything else, so there is deliberately no policy argument threaded through
 # to branch on: adding one now would be conditional logic with nothing to condition on.
 # `ka_synchronize` below is that barrier, kept for the two kinds of caller that still need

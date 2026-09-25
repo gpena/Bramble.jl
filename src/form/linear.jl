@@ -429,7 +429,7 @@ reaches only its own point cannot collide at all, and then `bidx` is every band 
 end
 
 @noinline function _sweep_linear_band_colour!(
-        ::CpuBatch,
+        ::CpuPolyester,
         b::AbstractVector,
         sp,
         term::TERM,
@@ -450,7 +450,7 @@ end
 """
     _batch_linear_band_sweep!(b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α) -> Nothing
 
-[`CpuBatch`](@ref)'s counterpart of the `Threads.@threads` body in
+[`CpuPolyester`](@ref)'s counterpart of the `Threads.@threads` body in
 [`_sweep_linear_band_colour!`](@ref), filled by `BramblePolyesterExt`
 (gpena/Bramble.jl#190). The only `src/` method errors naming Polyester.
 """
@@ -461,10 +461,10 @@ end
 end
 
 # Dispatches on the *effective* execution policy (`_sweep_parallel!` computes it):
-# `CpuThreaded` keeps `Threads.@threads` exactly as before; `CpuBatch` reaches its own hook
+# `CpuThreaded` keeps `Threads.@threads` exactly as before; `CpuPolyester` reaches its own hook
 # instead, so it never silently threads with the wrong mechanism (gpena/Bramble.jl#190).
 # `CpuSerial` never reaches this function -- `_effective_parallel_policy` only ever hands it
-# `CpuThreaded` or `CpuBatch`.
+# `CpuThreaded` or `CpuPolyester`.
 @noinline function _sweep_colour!(
         ::CpuThreaded, b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int, α = true
 ) where {TERM}
@@ -475,7 +475,7 @@ end
 end
 
 @noinline function _sweep_colour!(
-        ::CpuBatch, b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int, α = true
+        ::CpuPolyester, b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int, α = true
 ) where {TERM}
     return _batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mesh_markers, offset, α)
 end
@@ -483,7 +483,7 @@ end
 """
     _batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mesh_markers, offset, α) -> Nothing
 
-[`CpuBatch`](@ref)'s counterpart of the `Threads.@threads` body in `_sweep_colour!`,
+[`CpuPolyester`](@ref)'s counterpart of the `Threads.@threads` body in `_sweep_colour!`,
 filled by `BramblePolyesterExt` (gpena/Bramble.jl#190). The only `src/` method errors
 naming Polyester.
 """
@@ -495,7 +495,7 @@ end
 # computed once here): `CpuSerial` is coerced to `CpuThreaded` since every call into this
 # function is already on the forced-threaded path (`_assemble_linear_parallel_core!`,
 # entered from a non-`CpuSerial` branch, or from `assemble_parallel!`'s own "regardless of
-# policy" contract); `CpuBatch` passes through unchanged so the colour/band sweeps below
+# policy" contract); `CpuPolyester` passes through unchanged so the colour/band sweeps below
 # reach their own hook instead of `Threads.@threads` (gpena/Bramble.jl#190).
 function _sweep_parallel!(
         b::AbstractVector, sp, term::TERM, grid_inds, strides, offset::Int, α = true
@@ -777,14 +777,14 @@ function _assemble_linear!(
     _validate_term_markers(ast, markers(mesh(space)), "the form's space")
 
     # A genuine 3-way dispatch, not a binary `isa CpuSerial` check (gpena/Bramble.jl#190):
-    # `CpuBatch` is neither `CpuSerial` nor `CpuThreaded`'s `Threads.@threads` path, and
+    # `CpuPolyester` is neither `CpuSerial` nor `CpuThreaded`'s `Threads.@threads` path, and
     # Two branches, not three: `CpuSerial` runs the serial core, and everything else goes
     # to `_assemble_linear_parallel_core!`, whose own `_sweep_parallel!` computes the
     # effective policy and dispatches to `Threads.@threads` for `CpuThreaded` or to the
-    # `_batch_*` hook for `CpuBatch`. A `CpuBatch` fast-fail used to sit here, on the
+    # `_batch_*` hook for `CpuPolyester`. A `CpuPolyester` fast-fail used to sit here, on the
     # reasoning that failing before the call chain was more honest; it was neither, since
     # it fired even with Polyester loaded and the hooks implemented, so `assemble` on a
-    # `LinearForm` could never work under `CpuBatch` at all (gpena/Bramble.jl#190). Without
+    # `LinearForm` could never work under `CpuPolyester` at all (gpena/Bramble.jl#190). Without
     # Polyester the hook still raises, one frame deeper, naming the package.
     policy = execution_policy(space)
     if policy isa CpuSerial

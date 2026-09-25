@@ -24,8 +24,8 @@ import GPUArraysCore
 export backend, gpu_backend, metal_backend, vector_type, matrix_type, backend_types
 export csr_backend
 export ExecutionPolicy, Serial, Parallel, execution_policy
-export CpuPolicy, CpuSerial, CpuThreaded, GpuPolicy, GpuAsync
-export CpuBatch
+export CpuPolicy, CpuSerial, CpuThreaded, GpuPolicy, GpuKernel, GpuAsync
+export CpuPolyester, CpuBatch
 
 # Backend extension hooks and traits
 public _batch_for!, _batch_axis_for!, _batch_scatter_for!, _batch_dot, _batch_dot_masked

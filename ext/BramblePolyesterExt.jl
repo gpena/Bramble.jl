@@ -1,4 +1,4 @@
-# ext/BramblePolyesterExt.jl: the Polyester-batched sweeps behind `CpuBatch` (S7.2,
+# ext/BramblePolyesterExt.jl: the Polyester-batched sweeps behind `CpuPolyester` (S7.2,
 # gpena/Bramble.jl#190, .agents/plans/v3-3-0-memory-scaling.md).
 #
 # S7.1 left nine hooks in `src/` as `@noinline` methods that error naming Polyester
@@ -7,7 +7,7 @@
 # `_batch_bilinear_colour_sweep!`, `_batch_bilinear_band_sweep!`, `_batch_linear_colour_sweep!`
 # and `_batch_linear_band_sweep!`. Every one of them is the `Polyester.@batch` counterpart of
 # an existing `Threads.@threads` body, called from the identical call site once `execution_policy`
-# resolves to `CpuBatch()` instead of `CpuThreaded()` -- so the colouring, the band splitting and,
+# resolves to `CpuPolyester()` instead of `CpuThreaded()` -- so the colouring, the band splitting and,
 # critically, the matrix/vector zeroing that happens in the *callers* (`_assemble_bilinear!`,
 # `assemble_parallel!`, `_assemble_linear!`) are untouched by this file: this only supplies what
 # runs once the caller has already zeroed and dispatched.
@@ -140,7 +140,7 @@ end
 
 # `SeparableWeights` specializations (gpena/Bramble.jl#281, #288): `inner₊(uₕ, vₕ, Val(S))`
 # passes the weight as the *second* positional argument (space/inner_product.jl:609), so
-# under `CpuBatch` it is `_batch_dot`'s own second parameter, not third -- these dispatch on
+# under `CpuPolyester` it is `_batch_dot`'s own second parameter, not third -- these dispatch on
 # that position, mirroring the `CpuSerial`/`CpuThreaded` specializations at
 # space/inner_product.jl:435-476. Same reasoning as those: `w[I]` (the `CartesianIndex`
 # `getindex`) multiplies per-axis factors directly, while `w[i]` (linear) divrems `i` back
@@ -211,7 +211,7 @@ end
 # hooks were the only ones left unconstrained, so `BramblePolyesterExt`'s own module body
 # aborted evaluating itself partway through (right here), leaving everything defined after
 # this point in the file -- including the linear sweeps below -- never installed, which is
-# why a bilinear `assemble!` under `CpuBatch` still reached the `src/` error stub with
+# why a bilinear `assemble!` under `CpuPolyester` still reached the `src/` error stub with
 # Polyester loaded.
 #
 # A trailing device-only parameter once lived here (gpena/Bramble.jl#94, S4.2), threading a

@@ -34,7 +34,7 @@ caller actually uses, deriving `loc` from the destination array itself
 
 # Arguments
 - `loc`: [`Locality`](@ref) of the destination array (derived, not passed by callers).
-- `policy`: Execution policy ([`CpuSerial`](@ref), [`CpuThreaded`](@ref), [`CpuBatch`](@ref)
+- `policy`: Execution policy ([`CpuSerial`](@ref), [`CpuThreaded`](@ref), [`CpuPolyester`](@ref)
   or a [`GpuPolicy`](@ref)).
 - `v`: Destination array mutated in place.
 - `idxs`: Iterable collection of linear or Cartesian indices.
@@ -42,7 +42,7 @@ caller actually uses, deriving `loc` from the destination array itself
 """
 @inline _sweep_for!(::HostLocality, ::CpuSerial, v, idxs, f) = _serial_for!(v, idxs, f)
 @inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs, f) = _threaded_for!(v, idxs, f)
-@noinline _sweep_for!(::HostLocality, ::CpuBatch, v, idxs, f) = _batch_for!(v, idxs, f)
+@noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs, f) = _batch_for!(v, idxs, f)
 @noinline _sweep_for!(::DeviceLocality, policy::GpuPolicy, v, idxs, f) = _gpu_for!(policy, v, idxs, f)
 @noinline _sweep_for!(loc::Locality, policy, v, idxs, f) = _throw_locality_mismatch(loc, policy)
 
@@ -63,7 +63,7 @@ caller actually uses, deriving `loc` from the destination array itself
 # removed index conversion, which is a penalty in every power state; the parallel gain on
 # top of it is the machine's to give.
 @inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs::CartesianIndices, f) = _threaded_axis_for!(v, idxs, f)
-@noinline _sweep_for!(::HostLocality, ::CpuBatch, v, idxs::CartesianIndices, f) = _batch_axis_for!(v, idxs, f)
+@noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs::CartesianIndices, f) = _batch_axis_for!(v, idxs, f)
 
 """
     _throw_locality_mismatch(loc::Locality, policy)
@@ -93,7 +93,7 @@ this message may point to.
         "the destination array has host locality, but execution policy $(typeof(policy)) " *
         "claims device locality: a sweep cannot mix the two. Reach for a kernel that runs " *
         "on the device, or pass a policy whose locality matches the destination -- " *
-        "CpuSerial(), CpuThreaded() or CpuBatch().",
+        "CpuSerial(), CpuThreaded() or CpuPolyester().",
     ),
     )
 end
@@ -102,7 +102,7 @@ end
         ArgumentError(
         "the destination array has device locality, but execution policy $(typeof(policy)) " *
         "claims host locality: a sweep cannot mix the two. A host loop cannot scalar-index " *
-        "device memory; pass a GpuPolicy (GpuAsync()) instead, with the device extension " *
+        "device memory; pass a GpuPolicy (GpuKernel()) instead, with the device extension " *
         "that recognises the destination's array type loaded.",
     ),
     )
@@ -178,17 +178,17 @@ GPU-compilability requirement on `g` as [`_gpu_for!`](@ref).
 """
 @noinline _gpu_scatter_for!(policy, mats, idxs, g) = _throw_gpu_in_cpu_loop(policy)
 
-# The message every `CpuBatch` hook gives without `Polyester` loaded (gpena/Bramble.jl#190).
-# `CpuBatch`'s own sweeps have no `src/` implementation -- `BramblePolyesterExt` (S7.2) adds
-# it -- so a `CpuBatch` backend used without that extension loaded stops here, named, rather
+# The message every `CpuPolyester` hook gives without `Polyester` loaded (gpena/Bramble.jl#190).
+# `CpuPolyester`'s own sweeps have no `src/` implementation -- `BramblePolyesterExt` (S7.2) adds
+# it -- so a `CpuPolyester` backend used without that extension loaded stops here, named, rather
 # than silently falling through to `CpuThreaded`'s `Threads.@threads` code (which would
-# defeat the whole point of choosing `CpuBatch`) or a bare `MethodError`. Mirrors
+# defeat the whole point of choosing `CpuPolyester`) or a bare `MethodError`. Mirrors
 # `_throw_gpu_in_cpu_loop` above and `_metal_backend` (`src/utils/backend.jl`).
 @noinline function _throw_cpubatch_without_polyester(fname::Symbol)
     throw(
         ArgumentError(
-        "CpuBatch requires Polyester.jl. Add `using Polyester` before calling $(fname) " *
-        "under a CpuBatch backend.",
+        "CpuPolyester requires Polyester.jl. Add `using Polyester` before calling $(fname) " *
+        "under a CpuPolyester backend.",
     ),
     )
 end
@@ -196,7 +196,7 @@ end
 """
     _batch_for!(v::AbstractArray, idxs, f::Function) -> Nothing
 
-[`CpuBatch`](@ref)'s counterpart of [`_threaded_for!`](@ref), filled by
+[`CpuPolyester`](@ref)'s counterpart of [`_threaded_for!`](@ref), filled by
 `BramblePolyesterExt` (gpena/Bramble.jl#190). The only `src/` method errors naming
 Polyester, the way `_metal_backend` errors naming Metal.
 """
@@ -207,7 +207,7 @@ end
 """
     _batch_axis_for!(v::AbstractArray, idxs::CartesianIndices, f::Function) -> Nothing
 
-[`CpuBatch`](@ref)'s counterpart of [`_threaded_axis_for!`](@ref), filled by
+[`CpuPolyester`](@ref)'s counterpart of [`_threaded_axis_for!`](@ref), filled by
 `BramblePolyesterExt`. The only `src/` method errors naming Polyester.
 """
 @noinline function _batch_axis_for!(v, idxs::CartesianIndices, f)
@@ -220,8 +220,8 @@ end
 The policy a forced-threaded sweep (`assemble_parallel!`, or the non-serial branch of
 `assemble!`/`assemble_add!`) actually runs under: [`CpuSerial`](@ref) is coerced to
 [`CpuThreaded`](@ref) -- a threaded sweep threads even from a serially configured backend,
-which is the entire point of forcing it -- while [`CpuThreaded`](@ref) and [`CpuBatch`](@ref)
-pass through unchanged, so a `CpuBatch` backend still runs its own (Polyester) sweep, or
+which is the entire point of forcing it -- while [`CpuThreaded`](@ref) and [`CpuPolyester`](@ref)
+pass through unchanged, so a `CpuPolyester` backend still runs its own (Polyester) sweep, or
 errors clearly without it, rather than silently substituting `Threads.@threads`.
 """
 @inline _effective_parallel_policy(sp) = _coerce_serial_to_threaded(execution_policy(sp))
@@ -388,7 +388,7 @@ so callers pass a policy alone and never compute a locality.
 
 # Arguments
 - `loc`: [`Locality`](@ref) of the destination arrays (derived, not passed by callers).
-- `policy`: Execution policy ([`CpuSerial`](@ref), [`CpuThreaded`](@ref), [`CpuBatch`](@ref)
+- `policy`: Execution policy ([`CpuSerial`](@ref), [`CpuThreaded`](@ref), [`CpuPolyester`](@ref)
   or a [`GpuPolicy`](@ref)).
 - `mats`: Tuple of destination arrays mutated in place.
 - `idxs`: Iterable collection of indices.
@@ -401,7 +401,7 @@ so callers pass a policy alone and never compute a locality.
     return nothing
 end
 @inline _sweep_scatter_for!(::HostLocality, ::CpuThreaded, mats::Tuple, idxs, g) = _threaded_scatter_for!(mats, idxs, g)
-@noinline _sweep_scatter_for!(::HostLocality, ::CpuBatch, mats::Tuple, idxs, g) = _batch_scatter_for!(mats, idxs, g)
+@noinline _sweep_scatter_for!(::HostLocality, ::CpuPolyester, mats::Tuple, idxs, g) = _batch_scatter_for!(mats, idxs, g)
 @noinline _sweep_scatter_for!(::DeviceLocality, policy::GpuPolicy, mats::Tuple, idxs, g) = _gpu_scatter_for!(policy, mats, idxs, g)
 @noinline _sweep_scatter_for!(loc::Locality, policy, mats::Tuple, idxs, g) = _throw_locality_mismatch(loc, policy)
 
@@ -427,7 +427,7 @@ end
 """
     _batch_scatter_for!(mats::Tuple, idxs, g::Function) -> Nothing
 
-[`CpuBatch`](@ref)'s counterpart of `_threaded_scatter_for!`, filled by
+[`CpuPolyester`](@ref)'s counterpart of `_threaded_scatter_for!`, filled by
 `BramblePolyesterExt`. The only `src/` method errors naming Polyester.
 """
 @noinline function _batch_scatter_for!(mats::Tuple, idxs, g)
@@ -616,33 +616,33 @@ end
 # `inner₊` (`src/space/inner_product.jl`) does pass a policy into `_dot`/`_dot_masked`.
 # `CpuSerial`/`CpuThreaded` both fall through to today's single (already vectorised)
 # implementation -- there is no separate threaded reduction to pick between, only a
-# `CpuBatch` one, which the `_batch_dot`/`_batch_dot_masked` hooks below supply once
-# `BramblePolyesterExt` is loaded, and a `GpuPolicy` one, below the CpuBatch hooks.
+# `CpuPolyester` one, which the `_batch_dot`/`_batch_dot_masked` hooks below supply once
+# `BramblePolyesterExt` is loaded, and a `GpuPolicy` one, below the CpuPolyester hooks.
 
 """
     _dot(policy::ExecutionPolicy, u, v, w) -> Real
 
 Policy-dispatched [`_dot`](@ref): [`CpuSerial`](@ref) and [`CpuThreaded`](@ref) fall
-through to the plain three-vector method; [`CpuBatch`](@ref) reaches [`_batch_dot`](@ref).
+through to the plain three-vector method; [`CpuPolyester`](@ref) reaches [`_batch_dot`](@ref).
 """
 @inline _dot(::CpuSerial, u, v, w) = _dot(u, v, w)
 @inline _dot(::CpuThreaded, u, v, w) = _dot(u, v, w)
-@noinline _dot(::CpuBatch, u, v, w) = _batch_dot(u, v, w)
+@noinline _dot(::CpuPolyester, u, v, w) = _batch_dot(u, v, w)
 
 """
     _dot_masked(policy::ExecutionPolicy, u, v, w, mask) -> Real
 
 Policy-dispatched [`_dot_masked`](@ref): [`CpuSerial`](@ref) and [`CpuThreaded`](@ref) fall
-through to the plain masked method; [`CpuBatch`](@ref) reaches [`_batch_dot_masked`](@ref).
+through to the plain masked method; [`CpuPolyester`](@ref) reaches [`_batch_dot_masked`](@ref).
 """
 @inline _dot_masked(::CpuSerial, u, v, w, mask) = _dot_masked(u, v, w, mask)
 @inline _dot_masked(::CpuThreaded, u, v, w, mask) = _dot_masked(u, v, w, mask)
-@noinline _dot_masked(::CpuBatch, u, v, w, mask) = _batch_dot_masked(u, v, w, mask)
+@noinline _dot_masked(::CpuPolyester, u, v, w, mask) = _batch_dot_masked(u, v, w, mask)
 
 """
     _batch_dot(u, v, w) -> Real
 
-[`CpuBatch`](@ref)'s counterpart of [`_dot`](@ref), filled by `BramblePolyesterExt`. The
+[`CpuPolyester`](@ref)'s counterpart of [`_dot`](@ref), filled by `BramblePolyesterExt`. The
 only `src/` method errors naming Polyester.
 """
 @noinline function _batch_dot(u, v, w)
@@ -652,7 +652,7 @@ end
 """
     _batch_dot_masked(u, v, w, mask) -> Real
 
-[`CpuBatch`](@ref)'s counterpart of [`_dot_masked`](@ref), filled by
+[`CpuPolyester`](@ref)'s counterpart of [`_dot_masked`](@ref), filled by
 `BramblePolyesterExt`. The only `src/` method errors naming Polyester.
 """
 @noinline function _batch_dot_masked(u, v, w, mask)
@@ -663,8 +663,8 @@ end
 # Device reductions (gpena/Bramble.jl#94, #174, S2.5 of
 # .agents/plans/metal-and-apple-silicon-acceleration.md).
 #
-# `CpuSerial`/`CpuThreaded`/`CpuBatch` above are each a concrete `CpuPolicy`, so a
-# `GpuPolicy` (`GpuAsync`) never matches one of them and falls through to the generic
+# `CpuSerial`/`CpuThreaded`/`CpuPolyester` above are each a concrete `CpuPolicy`, so a
+# `GpuPolicy` (`GpuKernel`) never matches one of them and falls through to the generic
 # `ExecutionPolicy` method below instead. That method derives locality from the policy
 # itself -- `locality(::GpuPolicy) = DeviceLocality()` (`src/utils/backend.jl`) -- the same
 # "legality first, strategy second" shape `_sweep_for!` uses, so the actual device
@@ -692,11 +692,11 @@ end
 # only sees the `(DeviceLocality, GpuPolicy)` case and flags the rest as unreachable dispatch.
 @inline _dot(::HostLocality, ::CpuSerial, u, v, w) = _dot(u, v, w)
 @inline _dot(::HostLocality, ::CpuThreaded, u, v, w) = _dot(u, v, w)
-@noinline _dot(::HostLocality, ::CpuBatch, u, v, w) = _batch_dot(u, v, w)
+@noinline _dot(::HostLocality, ::CpuPolyester, u, v, w) = _batch_dot(u, v, w)
 
 @inline _dot_masked(::HostLocality, ::CpuSerial, u, v, w, mask) = _dot_masked(u, v, w, mask)
 @inline _dot_masked(::HostLocality, ::CpuThreaded, u, v, w, mask) = _dot_masked(u, v, w, mask)
-@noinline _dot_masked(::HostLocality, ::CpuBatch, u, v, w, mask) = _batch_dot_masked(u, v, w, mask)
+@noinline _dot_masked(::HostLocality, ::CpuPolyester, u, v, w, mask) = _batch_dot_masked(u, v, w, mask)
 
 """
     _dot(::DeviceLocality, ::GpuPolicy, u::AbstractVector, v::AbstractVector, w::AbstractVector) -> Real
