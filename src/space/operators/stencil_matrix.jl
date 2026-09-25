@@ -396,7 +396,8 @@ function _stencil_matrix(
     # one `copyto!` -- not one device-side scalar write per stored entry (gpena/Bramble.jl#94;
     # see `_shift_ones` for the same trade). `mirror` (above) is what makes `_stencil_weights`
     # itself safe to call in this loop despite `Ωₕ` possibly being device-backed.
-    mirror = _HostAxisSpacings{T, Dim}(host_spacings(Ωₕ(Dim)))
+h = host_spacings(Ωₕ(Dim))
+    mirror = _HostAxisSpacings{eltype(h), Dim}(h)
     host = zeros(T, N, N)
     @inbounds for I in CartesianIndices(dims)
         idim = I[Dim]
