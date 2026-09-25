@@ -46,7 +46,7 @@ using Bramble:
 # relabelled copies of f(xᵢ) cancelled) and `innerₕ(Mₓ(f), v)` reproduced `innerₕ(f, v)`
 # (they summed back to f(xᵢ)): the operator silently dropped either way.
 # Now, `_contracted_left_stencil` reads the subtree's own `local_stencil`, correct once a
-# source is marked `PointDependentStencil` (`form/operators/interpolation.jl`).
+# source is marked `PointDependentStencil` (`ast/operators/interpolation.jl`).
 # This file's checks pin the observable behaviour.
 #
 # Every check below is against the NUMERIC operator layer, which is a third, independent

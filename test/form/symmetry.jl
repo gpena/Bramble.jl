@@ -131,7 +131,7 @@ using Bramble:
         # explicitly (form/symmetry.jl) rather than folded into the same `where`-clause
         # trick used for BackwardDifference et al. Before that field comparison existed,
         # two DIFFERENT shifts read as the same operator, and local_stencil(::BilinearProduct)
-        # (form/operators/inner.jl:521-532) takes that as license to evaluate one side only
+        # (ast/operators/inner.jl:521-532) takes that as license to evaluate one side only
         # and mirror it — corrupting the assembled matrix itself, not just the `issymmetric`
         # trait.
         m = form(Wₕ, Wₕ, (u, v) -> innerₕ(shift_op(u, 1, 1), shift_op(v, 1, 1)))

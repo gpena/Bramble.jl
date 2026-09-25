@@ -373,10 +373,10 @@ using ExplicitImports
                 # the extension's method signatures. Plain internals, not a launch hook.
                 :_KronDeviceDiagonal,
                 :_KronDeviceSparse,
-                # `SparseArrays.getcolptr` (src/form/kronecker.jl, commit ece71258): copies a
+                # `SparseArrays.getcolptr` (src/assembly/kronecker.jl, commit ece71258): copies a
                 # factor's column pointers to the device; no public accessor exists.
                 :getcolptr,
-                # `Base.inferencebarrier` (src/form/bilinear_execution.jl): the fallback for a
+                # `Base.inferencebarrier` (src/assembly/bilinear_execution.jl): the fallback for a
                 # transposed pair whose two block tuples differ in length, a case the types
                 # already rule out, so the barrier keeps it from being inferred at all.
                 :inferencebarrier,

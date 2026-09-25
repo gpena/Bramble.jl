@@ -5,7 +5,7 @@
 # composite spaces. The numeric operators (`πₕ` / `πₕ!`) live here, alongside
 # the other operators over `VectorElement`, following the `Xₕ` / `Xₕ!` in-place
 # convention used by `Rₕ` / `Rₕ!` and `avgₕ` / `avgₕ!`. The symbolic AST wrapper
-# `πₕ` (taking one argument) lives in `form/operators/interpolation.jl`,
+# `πₕ` (taking one argument) lives in `ast/operators/interpolation.jl`,
 # distinguished by dispatch arity.
 #===========================================================================#
 
@@ -30,7 +30,7 @@
 # point endpoint noise (gpena/Bramble.jl#223's own acceptance criterion).
 #
 # The fill-value policy is pointwise-only, by mathematical necessity, not by omission:
-# `interpolation_matrix`/`InterpolationNode` (form/operators/interpolation.jl) represent
+# `interpolation_matrix`/`InterpolationNode` (ast/operators/interpolation.jl) represent
 # interpolation as a *linear* map, `P * parent(src)`, and a row that returns a constant
 # regardless of `src` cannot be written as a weighted combination of `src`'s own entries
 # unless that constant is exactly zero. Those two paths accept only the three symbols and
@@ -188,7 +188,7 @@ end
 # Which cell of `Ωₕ` holds `x`, and where inside it, per direction. Three callers want
 # exactly this and nothing more: `interpolate_at` above blends grid *values* with the
 # weights, `interpolation_matrix` emits them as matrix entries, and the symbolic
-# `InterpolationNode` (form/operators/interpolation.jl) emits them as stencil entries against
+# `InterpolationNode` (ast/operators/interpolation.jl) emits them as stencil entries against
 # absolute trial columns. Factored so the three cannot drift.
 #
 # Returns `(i, t)`/`(idx, ts)` as before, or the sentinel `nothing` when `outside isa
@@ -355,7 +355,7 @@ end
 
 Evaluates `Rₕ(Wₕ, x -> interpolate_at(src, x; outside))`; see [`πₕ!`](@ref). Distinguished
 by multiple dispatch from the one-argument symbolic wrapper `πₕ(uₕ)` in
-`form/operators/interpolation.jl`. The element type is promoted from `Wₕ`'s and `src`'s
+`ast/operators/interpolation.jl`. The element type is promoted from `Wₕ`'s and `src`'s
 own, so interpolating a `Dual`-valued `src` yields a `Dual`-valued result on an
 undifferentiated `Wₕ`. `outside` is forwarded to [`interpolate_at`](@ref) unchanged
 (gpena/Bramble.jl#223).

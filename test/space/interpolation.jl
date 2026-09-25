@@ -8,7 +8,7 @@ using Bramble: D₋ₓ, Mₓ, interpolation_matrix
 # at any physical point, not only at its own mesh's points. `πₕ!`/`πₕ` are the numeric
 # interpolation operator, exactly `Rₕ!`/`Rₕ` applied to `x -> interpolate_at(src, x)`, named
 # after `Rₕ`/`Rₕ!`'s own convention, sharing the name `πₕ` with the one-argument symbolic
-# wrapper (form/operators/interpolation.jl), told apart by arity. The checks below verify
+# wrapper (ast/operators/interpolation.jl), told apart by arity. The checks below verify
 # the interpolant's own correctness (exact on affine data, correct on a non-uniform mesh,
 # clamped rather than extrapolated past the boundary) and transfers between distinct meshes
 # (moving a grid function between two leaves of a heterogeneous composite space).

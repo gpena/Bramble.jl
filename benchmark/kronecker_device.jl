@@ -7,7 +7,7 @@
 #         julia --threads=4 --project=benchmark benchmark/kronecker_device.jl
 #
 # S4.1/S4.2 gave `KroneckerLinearOperator`'s `mul!` and `fdm_solve` a device path
-# (`src/form/kronecker.jl`, `ext/BrambleKroneckerExt.jl`): a device-backed `K` moves its
+# (`src/assembly/kronecker.jl`, `ext/BrambleKroneckerExt.jl`): a device-backed `K` moves its
 # factors to device storage once and runs sum factorisation with no host round-trip between
 # axes. This file measures whether that device path actually beats the host Kronecker path
 # for the two sizes #323's own hand-rolled matrix-free CG loop measured -- 2D 3000x3000 and

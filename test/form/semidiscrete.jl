@@ -17,7 +17,7 @@ using Bramble:
                type_cached_assemble!
 using ..TestUtils: _check_eoc
 
-# `semidiscretize` and the residual it returns (src/form/semidiscrete.jl) need no SciMLBase:
+# `semidiscretize` and the residual it returns (src/problems/semidiscrete.jl) need no SciMLBase:
 # a `Semidiscretization` is a callable with the `(du, u, p, t)` signature plus two matrices.
 # Everything here therefore belongs in the always-run unit group, and only the
 # `ODEFunction`/`ODEProblem`/`LinearProblem` wrapping is left to test/ext/sciml_ext.jl.

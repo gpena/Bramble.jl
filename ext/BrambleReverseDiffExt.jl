@@ -1,5 +1,5 @@
 # ext/BrambleReverseDiffExt.jl: disambiguates `LinearAlgebra.mul!` between
-# `KroneckerLinearOperator` (src/form/kronecker.jl) and `ReverseDiff.TrackedArray`
+# `KroneckerLinearOperator` (src/assembly/kronecker.jl) and `ReverseDiff.TrackedArray`
 # (gpena/Bramble.jl#295).
 #
 # `KroneckerLinearOperator <: AbstractMatrix`, so it satisfies the unconstrained middle
@@ -19,7 +19,7 @@
 # correct: the forward value is `K * value(x)` (via `*`, which `KroneckerLinearOperator`
 # inherits from `AbstractMatrix` through the very `mul!` this disambiguates), and the pullback
 # multiplies the incoming cotangent by `Kᵀ` (`K` is always symmetric, `issymmetric(K) ==
-# true`, src/form/kronecker.jl) through `LinearAlgebra`'s generic `Transpose`-of-`AbstractMatrix`
+# true`, src/assembly/kronecker.jl) through `LinearAlgebra`'s generic `Transpose`-of-`AbstractMatrix`
 # path -- correct, if not on the zero-allocation fast path `mul!(y, K, x; scratch)` gives an
 # untracked caller.
 module BrambleReverseDiffExt

@@ -63,7 +63,7 @@ between chained device calls, only at a genuine host boundary:
   - a write that reaches device memory some way other than a `@kernel` launch on that same
     queue -- a plain `copyto!`, which queues asynchronously exactly like a kernel launch
     does, but is not one of the launches above. `_flush_device_scatter!`
-    (`src/form/bilinear_traversal.jl`) is this function's first caller for exactly that
+    (`src/assembly/bilinear_traversal.jl`) is this function's first caller for exactly that
     reason: it ends a device-resident matrix's assembly with
     `copyto!(A.nzVal, mirror.nzval)`, and calling this right after is what keeps
     `assemble`/`assemble!` from returning before that write lands (S4.2's race, found at

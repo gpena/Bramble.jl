@@ -1,6 +1,6 @@
 # precompile/semidiscretize_sessions.jl: `semidiscretize`, the `Semidiscretization`
 # residual `(du, u, p, t)`, `Bramble.jacobian!`, `jacobian_prototype`, and display --
-# src/form/semidiscrete.jl, none of which needs SciMLBase.
+# src/problems/semidiscrete.jl, none of which needs SciMLBase.
 #
 # Not reachable from the form sessions: `Semidiscretization` is a new struct built on top
 # of an already-assembled `BilinearForm`/`LinearForm` pair. Its constraint handling
@@ -42,8 +42,8 @@
 #
 # gpena/Bramble.jl#283 extended this file with the second-order semidiscretisation
 # (`semidiscretize_second_order`, its `(dv, v, u, p, t)` residual and display,
-# `src/form/second_order_semidiscrete.jl`) and the matrix-free explicit RHS
-# (`semidiscretize_rhs`, its `(du, u, p, t)` residual, `src/form/semidiscrete_rhs.jl`).
+# `src/problems/second_order_semidiscrete.jl`) and the matrix-free explicit RHS
+# (`semidiscretize_rhs`, its `(du, u, p, t)` residual, `src/problems/semidiscrete_rhs.jl`).
 # Neither is reachable from the first-order session above: a `SecondOrderSemidiscretization`
 # and a `SemidiscretizeRHS` are new structs built on top of an already-assembled
 # `BilinearForm`/`LinearForm` pair, same reasoning as `Semidiscretization` itself needing its

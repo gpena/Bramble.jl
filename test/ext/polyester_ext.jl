@@ -111,7 +111,7 @@ end
             # `assemble(a::BilinearForm, l::LinearForm; ...)` calls `assemble(l; ...)` for
             # the vector half, and `LinearForm`'s own `assemble`/`assemble!` refuse any
             # `CpuPolyester` policy unconditionally, Polyester loaded or not
-            # (`src/form/linear.jl`'s own fail-fast, S7.1's design -- see the "integrator
+            # (`src/assembly/linear.jl`'s own fail-fast, S7.1's design -- see the "integrator
             # item" testset below, and this subplan's final report). `BilinearForm`'s
             # `assemble`/`assemble!` carry no such guard, so the matrix half reaches this
             # extension's hooks the direct way; the vector half is built the way
@@ -133,7 +133,7 @@ end
 
     @testset "Linear assemble_parallel! agrees with Parallel(); assemble/assemble! (integrator item)" begin
         # `assemble_parallel!(b, ::LinearForm)` forces `_assemble_linear_parallel_core!`
-        # regardless of the space's own backend policy (`src/form/linear.jl`'s own
+        # regardless of the space's own backend policy (`src/assembly/linear.jl`'s own
         # documented contract), and that core computes its *effective* policy the same way
         # the bilinear sweep does, so `CpuPolyester` reaches this extension's
         # `_batch_linear_colour_sweep!`/`_batch_linear_band_sweep!` exactly as `Parallel()`

@@ -2,7 +2,7 @@
 # gpena/Bramble.jl#190, .agents/plans/v3-3-0-memory-scaling.md).
 #
 # S7.1 left nine hooks in `src/` as `@noinline` methods that error naming Polyester
-# (`src/utils/linear_algebra.jl`, `src/form/bilinear_execution.jl`, `src/form/linear.jl`):
+# (`src/utils/linear_algebra.jl`, `src/assembly/bilinear_execution.jl`, `src/assembly/linear.jl`):
 # `_batch_for!`, `_batch_axis_for!`, `_batch_scatter_for!`, `_batch_dot`, `_batch_dot_masked`,
 # `_batch_bilinear_colour_sweep!`, `_batch_bilinear_band_sweep!`, `_batch_linear_colour_sweep!`
 # and `_batch_linear_band_sweep!`. Every one of them is the `Polyester.@batch` counterpart of
@@ -195,7 +195,7 @@ function Bramble._batch_dot_masked(
     return s
 end
 
-# --- _batch_bilinear_colour_sweep!/_batch_bilinear_band_sweep! (src/form/bilinear_execution.jl) --- #
+# --- _batch_bilinear_colour_sweep!/_batch_bilinear_band_sweep! (src/assembly/bilinear_execution.jl) --- #
 #
 # Direct translations of `_sweep_bilinear_colour!`/`_sweep_band_colour!`'s `CpuThreaded`
 # bodies: each colour/band is independent by construction (the caller's colouring already
@@ -249,7 +249,7 @@ function Bramble._batch_bilinear_band_sweep!(
     return nothing
 end
 
-# --- _batch_linear_colour_sweep!/_batch_linear_band_sweep! (src/form/linear.jl) ---- #
+# --- _batch_linear_colour_sweep!/_batch_linear_band_sweep! (src/assembly/linear.jl) ---- #
 #
 # As above, for the right-hand-side sweep: `_scatter_linear_point!` is the shared entry rule
 # with `_sweep_colour!`/`_sweep_linear_band_colour!`'s `CpuThreaded` bodies.

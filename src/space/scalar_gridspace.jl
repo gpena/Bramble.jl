@@ -16,7 +16,7 @@ tuples, since nothing yet asks for the same larger set twice in a hot loop.
 A linear `getindex` converts to a `CartesianIndex` first (one division per axis); a caller
 that already holds the `CartesianIndex` -- an assembly loop over `local_stencil`, for
 instance -- should use it directly and skip that cost. `src/space/inner_product.jl`'s
-`_dot`/`_dot_masked` do this for every weight family alike. `src/form/operators/inner.jl`'s
+`_dot`/`_dot_masked` do this for every weight family alike. `src/ast/operators/inner.jl`'s
 `compute_weight` does it only for `InnerPlusSet` (`|S| ≥ 2`); `InnerH` and `InnerPlus{Dim}`
 still index by linear position, so a symbolic `innerₕ`/`inner₊ₓ`/etc. term inside a form now
 pays that division per point during assembly, not only the two hot paths already routed
@@ -448,8 +448,8 @@ end
 # ...)[i]` (`SeparableWeights`'s `getindex` -> `__prod` just below) for an `innerₕ`/
 # `inner₊*` node, and through `spacing`/`forward_spacing`
 # (`mesh(space)`, `mesh/mesh1d.jl`) for a difference/average/jump node
-# (`form/operators/difference.jl` and siblings). Both scalar-index a device array, and
-# neither `form/operators/inner.jl` nor `form/operators/difference.jl`/`mesh/mesh1d.jl` is
+# (`ast/operators/difference.jl` and siblings). Both scalar-index a device array, and
+# neither `ast/operators/inner.jl` nor `ast/operators/difference.jl`/`mesh/mesh1d.jl` is
 # owned by this subplan, so the fix has to happen at the pattern walk's own call site
 # instead of inside either accessor.
 #

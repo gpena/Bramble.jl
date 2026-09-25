@@ -50,7 +50,7 @@ using PrecompileTools: @setup_workload, @compile_workload
 # `LinearSolve` and `NonlinearSolve` each depend on it, so loading any one of them loads this
 # extension, and none needs to be a weak dependency of its own.
 #
-# Everything with substance lives in `src/form/semidiscrete.jl`: a `Semidiscretization` is
+# Everything with substance lives in `src/problems/semidiscrete.jl`: a `Semidiscretization` is
 # already a callable with the `(du, u, p, t)` signature, already carries its mass matrix, and
 # already knows its own Jacobian. This file only names those pieces the way SciMLBase does.
 

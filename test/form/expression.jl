@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: restrict_to, dirac, D₋ᵧ, D₋₂, D₋ₓ, Mₓ, jumpₓ
 
-# `expression(form)`/`expression(ast::LazyOp)` (src/form/expression.jl, issue #274) render a
+# `expression(form)`/`expression(ast::LazyOp)` (src/ast/expression.jl, issue #274) render a
 # resolved form AST in Bramble's own operator notation. Every string asserted below was
 # observed by actually running the corresponding `expression(...)` call in a REPL, not
 # guessed from the rendering conventions alone.

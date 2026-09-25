@@ -64,7 +64,7 @@ using Bramble:
 
         # Two exceptions, and both are the same exception. `inner₊` is the documented one:
         # the modified inner product is defined against backward differences and has no
-        # forward counterpart. `_separable_axis` (`src/form/kronecker.jl`, gpena/Bramble.jl#162)
+        # forward counterpart. `_separable_axis` (`src/assembly/kronecker.jl`, gpena/Bramble.jl#162)
         # inherits it rather than introducing a second asymmetry -- it matches
         # `BilinearProduct{D, InnerPlus{Dim}, ...}`, so it can only ever see the operand
         # `inner₊` itself admits. A form written with forward differences is simply not
@@ -86,7 +86,7 @@ using Bramble:
         for T in (FD, typeof(D₊ᵧ(id)))
             m = which(inner₊, Tuple{IndexedTrialFunction{2}, T})
             @test !occursin("ForwardDifference", string(m.sig))
-            @test occursin("form/operators/inner.jl", replace(string(m.file), "\\" => "/"))
+            @test occursin("ast/operators/inner.jl", replace(string(m.file), "\\" => "/"))
         end
 
         u2, v2 = TrialFunction{2}(), TestFunction{2}()

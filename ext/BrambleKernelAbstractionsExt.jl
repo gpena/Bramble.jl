@@ -783,7 +783,7 @@ function _launch_spmv_csr!(y::AbstractVector, rowPtr, colVal, nzVal, x::Abstract
 end
 
 # `KroneckerLinearOperator` `mul!` as one fused kernel (gpena/Bramble.jl#323,
-# `src/form/kronecker.jl`). One work item per entry `g` of `y`: it recovers its grid index
+# `src/assembly/kronecker.jl`). One work item per entry `g` of `y`: it recovers its grid index
 # from `dims`/`strides`, then sums every term's contribution -- the product of the term's
 # diagonal entries at that index times, for its one sparse factor (if any) on axis `e`, the
 # factor's row `i_e` against `x` along axis `e`, or `x[g]` itself for the mass term. Every
@@ -1203,7 +1203,7 @@ end
 #   - a write that reaches device memory through something other than a `@kernel` launch on
 #     that queue -- a plain `copyto!`, which queues a transfer exactly like a kernel launch
 #     does but is not itself one of the launches this file just stopped synchronising.
-#     `_flush_device_scatter!` and `_zero_stored!` (`src/form/bilinear_traversal.jl`) are
+#     `_flush_device_scatter!` and `_zero_stored!` (`src/assembly/bilinear_traversal.jl`) are
 #     this second kind: `_flush_device_scatter!` ends a device-resident matrix's assembly
 #     with `copyto!(A.nzVal, mirror.nzval)` and calls `ka_synchronize` right after, exactly
 #     as it already did before S11 -- that call was never one of the ones removed above, and

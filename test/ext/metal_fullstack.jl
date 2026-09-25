@@ -338,7 +338,7 @@ else
             @test isapprox(Array(SparseMatrixCSC(Ag1)), Array(Ac1); rtol = _TOL)
         end
 
-        # Two device-scatter races (both now fixed in `src/form/`) only ever surfaced at a grid
+        # Two device-scatter races (both now fixed in `src/assembly/`) only ever surfaced at a grid
         # large enough to give the sweep many scattered entries, and only across many repeated
         # assemblies -- a single small assembly (the testset above, n=33/(9,7)) always looked
         # correct even while both races were live. `_zero_stored!`'s device `fill!` over

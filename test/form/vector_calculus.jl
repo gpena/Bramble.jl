@@ -231,7 +231,7 @@ const _CONTRACT_FAMILIES = (
 
     @testset "forms: ∇ₕ ⋅ u in a bilinear form on a composite space" begin
         # Only the backward, centered and cross-weighted families have a *symbolic* `div`
-        # over a trial/test function (src/form/operators/difference.jl); `∇̃ₕ`/`∇₊ₕ` have
+        # over a trial/test function (src/ast/operators/difference.jl); `∇̃ₕ`/`∇₊ₕ` have
         # none, so `∇̃ₕ ⋅ u`/`∇₊ₕ ⋅ u` inside a form is out of scope here -- the contraction
         # still reaches whatever `diṽₕ`/`div₊ₕ` themselves support, symbolic or not. The
         # staggered `divₕ` builds an `inner₊`-only container; the collocated `divcₕ`/`div̽ₕ`

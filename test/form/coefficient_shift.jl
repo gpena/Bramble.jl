@@ -94,7 +94,7 @@ using Bramble: Dcₓ, D₋ᵧ, D₋ₓ, Mᵧ, Mₓ, indices, jumpₓ
     end
 
     # gpena/Bramble.jl#271, O5: the fix makes `D₋ₓ(cₕ * u)` take the point-dependent path
-    # (`shifted_inner_stencil` on `GridFunctionScale`, src/form/common.jl) -- it re-evaluates
+    # (`shifted_inner_stencil` on `GridFunctionScale`, src/ast/common.jl) -- it re-evaluates
     # the inner stencil at the shifted point on every tap, rather than relabelling offsets
     # once the way the coefficient-outside form `cₕ * D₋ₓ(u)` does. The acceptance criterion
     # is that this cost is measured and recorded, not assumed.
@@ -118,7 +118,7 @@ using Bramble: Dcₓ, D₋ᵧ, D₋ₓ, Mᵧ, Mₓ, indices, jumpₓ
         end
 
         @testset "Allocation does not scale with ndofs" begin
-            # `assemble!` refills a preallocated matrix and is documented (src/form/bilinear.jl)
+            # `assemble!` refills a preallocated matrix and is documented (src/assembly/bilinear.jl)
             # to cost 0 bytes; the point-dependent path's extra per-tap re-evaluation must not
             # turn into extra per-tap allocation, at any grid size.
             #

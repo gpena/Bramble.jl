@@ -286,7 +286,7 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
     @testset "Dirichlet interaction is left to the caller, not applied here" begin
         # assemble_add! never zeros or constrains rows -- accumulating twice doubles
         # every entry, exactly what a raw additive scatter should do; dirichlet_bc! is a
-        # separate, explicit step the caller runs once, last (see src/form/assemble_add.jl).
+        # separate, explicit step the caller runs once, last (see src/assembly/assemble_add.jl).
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, true)
         Wₕ = gridspace(Ωₕ)
         m_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))

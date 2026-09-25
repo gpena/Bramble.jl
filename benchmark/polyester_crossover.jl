@@ -75,9 +75,9 @@
 #
 # ## Workload 4's table is not a threading comparison -- read this before the table
 #
-# `assemble_parallel!` (`src/form/bilinear.jl`) always takes the band-coloured
+# `assemble_parallel!` (`src/assembly/bilinear.jl`) always takes the band-coloured
 # sweep (`_assemble_bilinear_parallel_core!`), regardless of `trial_space`'s
-# own policy: `_effective_parallel_policy` (`src/form/bilinear_execution.jl:510-513`)
+# own policy: `_effective_parallel_policy` (`src/assembly/bilinear_execution.jl:510-513`)
 # coerces `CpuSerial` to `CpuThreaded` on exactly this path, so there is no
 # space you can hand `assemble_parallel!` that makes it run the *sweep*
 # single-threaded. What this script's "serial (ms)" column measures instead

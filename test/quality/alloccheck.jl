@@ -58,7 +58,7 @@ using Bramble:
 #         copyto!(uₕ, v)           0 B       3 reports
 #
 #     Each of those is a path the compiled method keeps and the call never enters: for
-#     `assemble!`, the first-assembly recording in `src/form/bilinear_execution.jl`, which
+#     `assemble!`, the first-assembly recording in `src/assembly/bilinear_execution.jl`, which
 #     allocates once by design and is replaced by the replay plan on every call after; for
 #     the others, a `Base` copy or resize branch. They are documented at the end of this
 #     file rather than asserted, since the guarantee they would break is the runtime one,
@@ -228,7 +228,7 @@ end
               ""
 
         # The residual a time integrator calls once per stage, on the matching element type.
-        # `src/form/semidiscrete.jl` documents this as 0 bytes; here it is the stronger
+        # `src/problems/semidiscrete.jl` documents this as 0 bytes; here it is the stronger
         # statement, that no branch of that specialisation can allocate at all.
         sd = semidiscretize(a, l; dirichlet = :boundary)
         u = collect(range(0.25, 1.75; length = ndofs(Wₕ1)))

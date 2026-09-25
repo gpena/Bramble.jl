@@ -1422,7 +1422,7 @@ end
 # and zip it against `uₕ`. Dispatch on `typeof(alias)` -- a concrete singleton function type
 # -- is strictly more specific than that generic `(x, y)` fallback, so these methods win
 # outright and add no ambiguity: `Test.detect_ambiguities(Bramble)` is unchanged (verified in
-# EVIDENCE), and neither overlaps `dot(F::NTuple, ::NormalSymbol)` (src/form/operators/normal.jl)
+# EVIDENCE), and neither overlaps `dot(F::NTuple, ::NormalSymbol)` (src/ast/operators/normal.jl)
 # or the domain/space `×(::AbstractSpaceType, ::AbstractSpaceType)` (first-argument types never
 # coincide). `∇ₕ ⋅ n` and `∇ₕ × n` therefore hit no method and raise the ordinary `MethodError`.
 @inline dot(::typeof(∇ₕ), uₕ) = divₕ(uₕ)

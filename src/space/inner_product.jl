@@ -20,7 +20,7 @@ form is accepted there.
 
 `inner₊` and `innerₕ` are each spelled twice in this package, and the two meanings do not
 live in the same layer. Here they take grid functions and return a **number**. In
-`src/form/operators/inner.jl` they take operators and return an **AST node** for a form to
+`src/ast/operators/inner.jl` they take operators and return an **AST node** for a form to
 be assembled from. CONTEXT.md draws that line at the domain level: a form is symbolic, a
 grid function is data.
 
@@ -197,7 +197,7 @@ surface is cut at an interior transverse index, and needs the explicit one-sided
 and is refused rather than silently given the factorised weight.
 
 The symbolic twin, for use inside a form, is `inner_Γ(g, v; markers = …)`
-(`form/operators/inner.jl`). It takes its regions as a keyword, to sit beside `innerₕ`; this
+(`ast/operators/inner.jl`). It takes its regions as a keyword, to sit beside `innerₕ`; this
 one keeps the positional labels it has always had.
 
 # Examples
@@ -243,7 +243,7 @@ end
 # grid walk is the one every other inner product here does, and the boundary is a vanishing
 # fraction of the points, so the arithmetic saved by a marked-index walk is not worth a
 # second traversal shape. The same weight is read per point by the symbolic path
-# (`compute_weight(::InnerGamma, …)`, form/operators/inner.jl), so the two layers compute the
+# (`compute_weight(::InnerGamma, …)`, ast/operators/inner.jl), so the two layers compute the
 # same number by construction.
 @inline function _surface_sum(Ωₕ, mask, u, v)
     acc = zero(eltype(u)) * zero(eltype(v)) * zero(eltype(Ωₕ))

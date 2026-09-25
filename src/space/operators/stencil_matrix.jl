@@ -214,12 +214,12 @@ end
 # the coefficients matching those offsets at a grid point.
 #
 # This mirrors, rather than calls, the offsets and arithmetic `local_stencil` uses for the
-# same families in `src/form/operators/{difference,average,jump}.jl` (their own
+# same families in `src/ast/operators/{difference,average,jump}.jl` (their own
 # `_stencil_taps`/`_stencil_weights`, keyed on AST node types such as `BackwardDifference`
 # and `JumpNode`). Calling those directly would mean constructing a `LazyOp` tree from this
 # file to stand in for the node's `inner_op` field, which `src/space/` has no business
 # doing: forms are built on top of the space layer's operators, not the other way around,
-# and `src/form/` is out of scope for this subplan besides. The two are proved equal by the
+# and `src/ast/` is out of scope for this subplan besides. The two are proved equal by the
 # equality test against `kronecker_operator_matrix` below instead of by sharing code --
 # reported as the duplication the plan anticipated rather than resolved.
 
