@@ -9,7 +9,7 @@ using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 # The cross-weighted centered difference.
 #
-#   Dₕ(uₕ)(i) = (h_i / (h_i + h_{i+1})) D₋(uₕ)(x_{i+1})
+#   D̽ₕ(uₕ)(i) = (h_i / (h_i + h_{i+1})) D₋(uₕ)(x_{i+1})
 #             + (h_{i+1} / (h_i + h_{i+1})) D₋(uₕ)(x_i)
 #
 # The same two one-sided differences the centered difference combines, weighted by the
@@ -22,9 +22,9 @@ using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 # which is the whole difference between the two operators.
 
 # The operators as matrices, for `test_operator_matrix_equivalence` (test/space/difference.jl).
-cross_weighted_ops(::Val{1}) = (Dₕₓ,)
-cross_weighted_ops(::Val{2}) = (Dₕₓ, Dₕᵧ)
-cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
+cross_weighted_ops(::Val{1}) = (D̽ₓ,)
+cross_weighted_ops(::Val{2}) = (D̽ₓ, D̽ᵧ)
+cross_weighted_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
 
 @testset "Cross-weighted difference" begin
     @testset "Definition match" begin
@@ -48,13 +48,13 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
                             (h[i + 1] / (h[i] + h[i + 1])) * dm[i]
                         end
                         for i in 1:n]
-                @test parent(Dₕₓ(uₕ)) ≈ want
+                @test parent(D̽ₓ(uₕ)) ≈ want
             end
         end
     end
 
     @testset "Boundary is one-sided, not truncated (#183)" begin
-        # gpena/Bramble.jl#183: Dₕ used to truncate both ends to zero; it now falls back
+        # gpena/Bramble.jl#183: D̽ₕ used to truncate both ends to zero; it now falls back
         # to the one-sided difference the near side still defines, so nothing here is
         # zero for a function with no flat point.
         Random.seed!(20260830)
@@ -64,13 +64,13 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         uₕ = Rₕ(Wₕ, x -> exp(x[1]) * (x[2] + 1))
         u = reshape(parent(uₕ), n)
 
-        rx = reshape(parent(Dₕₓ(uₕ)), n)
+        rx = reshape(parent(D̽ₓ(uₕ)), n)
         @test !any(iszero, rx)
         hx = [spacing(Ωₕ(1), i) for i in 1:n[1]]
         @test rx[1, :] ≈ (u[2, :] .- u[1, :]) ./ hx[1]
         @test rx[end, :] ≈ (u[end, :] .- u[end - 1, :]) ./ hx[end]
 
-        ry = reshape(parent(Dₕᵧ(uₕ)), n)
+        ry = reshape(parent(D̽ᵧ(uₕ)), n)
         @test !any(iszero, ry)
         hy = [spacing(Ωₕ(2), i) for i in 1:n[2]]
         @test ry[:, 1] ≈ (u[:, 2] .- u[:, 1]) ./ hy[1]
@@ -80,19 +80,19 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
     @testset "Uniform Dc agreement" begin
         # Both are the mean of D₋ and D₊ in the interior; they part company there only
         # where the two spacings differ. At the boundary they now differ regardless of
-        # spacing: Dc still truncates to zero, Dₕ falls back to a one-sided difference
+        # spacing: Dc still truncates to zero, D̽ₕ falls back to a one-sided difference
         # (gpena/Bramble.jl#183).
         Ωu = mesh(domain(interval(0.0, 1.0)), 21, true)
         n = npoints(Ωu)
         uu = Rₕ(gridspace(Ωu), x -> sin(3x))
-        dh, dc = parent(Dₕₓ(uu)), parent(Dcₓ(uu))
+        dh, dc = parent(D̽ₓ(uu)), parent(Dcₓ(uu))
         @test dh[2:(n - 1)] ≈ dc[2:(n - 1)]
         @test !(dh[1] ≈ dc[1]) && !(dh[n] ≈ dc[n])
 
         Random.seed!(20260830)
         Ωr = mesh(domain(interval(0.0, 1.0)), 21, false)
         ur = Rₕ(gridspace(Ωr), x -> sin(3x))
-        @test !isapprox(parent(Dₕₓ(ur)), parent(Dcₓ(ur)))
+        @test !isapprox(parent(D̽ₓ(ur)), parent(Dcₓ(ur)))
     end
 
     @testset "Exact on quadratics" begin
@@ -106,11 +106,11 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
                 n = npoints(Ωₕ)
                 x = points(Ωₕ)
 
-                q = parent(Dₕₓ(Rₕ(Wₕ, t -> 5t^2 - 2t + 1)))
+                q = parent(D̽ₓ(Rₕ(Wₕ, t -> 5t^2 - 2t + 1)))
                 @test all(q[i] ≈ 10x[i] - 2 for i in 2:(n - 1))
 
                 # a cubic is not reproduced, so the test above is not vacuous
-                c = parent(Dₕₓ(Rₕ(Wₕ, t -> t^3)))
+                c = parent(D̽ₓ(Rₕ(Wₕ, t -> t^3)))
                 @test !all(c[i] ≈ 3x[i]^2 for i in 2:(n - 1))
 
                 # and on a non-uniform grid Dc misses the quadratic, which is what the
@@ -129,7 +129,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         )
         W3 = gridspace(Ω3)
         n3 = npoints(Ω3, Tuple)
-        for (d, op) in ((1, Dₕₓ), (2, Dₕᵧ), (3, Dₕ₂))
+        for (d, op) in ((1, D̽ₓ), (2, D̽ᵧ), (3, D̽₂))
             @test all(iszero, parent(op(Rₕ(W3, x -> x[mod1(d + 1, 3)]))))
             r = reshape(parent(op(Rₕ(W3, x -> x[d]^2))), n3)
             xd = points(Ω3)[d]
@@ -150,7 +150,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
             for k in 0:steps
                 k > 0 && iterative_refinement!(Ωₕ)
                 Wₕ = gridspace(Ωₕ)
-                e = parent(Dₕₓ(Rₕ(Wₕ, sin))) .- parent(Rₕ(Wₕ, cos))
+                e = parent(D̽ₓ(Rₕ(Wₕ, sin))) .- parent(Rₕ(Wₕ, cos))
                 push!(errs, maximum(abs, e[2:(end - 1)]))
             end
             return [log2(errs[k] / errs[k + 1]) for k in 1:(length(errs) - 1)]
@@ -172,24 +172,24 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         Vₕ = gridspace(Ωₕ, Val(2))
         uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
 
-        @test Dₕ(uₕ) isa NTuple{2, VectorElement}
-        @test parent(Dₕ(uₕ)[1]) == parent(Dₕₓ(uₕ))
-        @test parent(Dₕ(uₕ)[2]) == parent(Dₕᵧ(uₕ))
+        @test D̽ₕ(uₕ) isa NTuple{2, VectorElement}
+        @test parent(D̽ₕ(uₕ)[1]) == parent(D̽ₓ(uₕ))
+        @test parent(D̽ₕ(uₕ)[2]) == parent(D̽ᵧ(uₕ))
 
         # in one dimension the tuple and the grid function coincide, as for ∇ₕ
         Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)
         u1 = Rₕ(gridspace(Ω1), sin)
-        @test !(Dₕ(u1) isa Tuple)
-        @test parent(Dₕ(u1)) == parent(Dₕₓ(u1))
+        @test !(D̽ₕ(u1) isa Tuple)
+        @test parent(D̽ₕ(u1)) == parent(D̽ₓ(u1))
 
         # composite grid functions apply componentwise, as the other operators do
         fs = (x -> x[1], x -> x[2]^2)
         cₕ = Rₕ(Vₕ, fs)
         scalars = (Rₕ(Wₕ, fs[1]), Rₕ(Wₕ, fs[2]))
-        rₕ = Dₕₓ(cₕ)
+        rₕ = D̽ₓ(cₕ)
         @test length(parent(rₕ)) == length(parent(cₕ))
         for k in 1:2
-            @test parent(components(rₕ)[k]) == parent(Dₕₓ(scalars[k]))
+            @test parent(components(rₕ)[k]) == parent(D̽ₓ(scalars[k]))
         end
     end
 
@@ -199,12 +199,12 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         u1 = Rₕ(gridspace(Ωₕ1), sin)
         u2 = Rₕ(gridspace(Ωₕ2), x -> x[1] * x[2])
 
-        @test @inferred(Dₕₓ(u1)) isa VectorElement
-        @test @inferred(Dₕᵧ(u2)) isa VectorElement
-        @test @inferred(Dₕ(u2)) isa NTuple{2, VectorElement}
+        @test @inferred(D̽ₓ(u1)) isa VectorElement
+        @test @inferred(D̽ᵧ(u2)) isa VectorElement
+        @test @inferred(D̽ₕ(u2)) isa NTuple{2, VectorElement}
 
-        @test alloc_test(Dₕₓ, u1) == alloc_test(similar, u1)
-        @test alloc_test(Dₕᵧ, u2) == alloc_test(similar, u2)
+        @test alloc_test(D̽ₓ, u1) == alloc_test(similar, u1)
+        @test alloc_test(D̽ᵧ, u2) == alloc_test(similar, u2)
     end
 
     @testset "Matrix agreement" begin
@@ -215,10 +215,10 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         test_operator_matrix_equivalence(cross_weighted_ops)
 
         Ωm = mesh(domain(interval(0.0, 1.0)), 7, false)
-        @test Dₕₓ(gridspace(Ωm)) == Dₕₓ(Ωm)
+        @test D̽ₓ(gridspace(Ωm)) == D̽ₓ(Ωm)
 
         n = npoints(Ωm)
-        M = Matrix(Dₕₓ(Ωm))
+        M = Matrix(D̽ₓ(Ωm))
         h = [spacing(Ωm, i) for i in 1:n]
         # no truncated row: row 1 is D₊ at the first point, row n is D₋ at the last
         # (gpena/Bramble.jl#183)
@@ -229,7 +229,7 @@ cross_weighted_ops(::Val{3}) = (Dₕₓ, Dₕᵧ, Dₕ₂)
         # three points wide in the interior, where the ends are two
         @test count(!iszero, M[4, :]) == 3
 
-        @test_throws ArgumentError Dₕₓ(mesh(domain(interval(0.0, 1.0)), 2, true))
+        @test_throws ArgumentError D̽ₓ(mesh(domain(interval(0.0, 1.0)), 2, true))
     end
 end
 

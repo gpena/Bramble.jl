@@ -64,11 +64,11 @@ const F32_BACKEND = backend(;
         @test eltype(parent(avgₕ(Wₕ, x -> sin(x[1]) * x[2]))) === Float32
 
         for op in (
-            diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, Mₓ, M₊ₓ, D̽ₓ, Dcₓ, Dₕₓ, D₋ᵧ, M₊ᵧ, Dcᵧ, Dₕᵧ
+            diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, Mₓ, M₊ₓ, D̃ₓ, Dcₓ, D̽ₓ, D₋ᵧ, M₊ᵧ, Dcᵧ, D̽ᵧ
         )
             @test eltype(parent(op(uₕ))) === Float32
         end
-        for op in (∇ₕ, ∇₊ₕ, D̽ₕ, Dcₕ, Dₕ, Mₕ, jumpₕ)
+        for op in (∇ₕ, ∇₊ₕ, D̃ₕ, Dcₕ, D̽ₕ, Mₕ, jumpₕ)
             @test all(g -> eltype(parent(g)) === Float32, op(uₕ))
         end
     end

@@ -13,19 +13,19 @@ using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 # The starred forward difference and the identity it exists for.
 #
-#   D̽(uₕ)(i) = (u(x_{i+1}) - u(x_i)) / ((h_i + h_{i+1}) / 2)
+#   D̃(uₕ)(i) = (u(x_{i+1}) - u(x_i)) / ((h_i + h_{i+1}) / 2)
 #
 # It is the forward difference over the averaged spacing rather than over the forward
 # spacing, and it is the operator that makes the discrete integration by parts close:
 #
-#   innerₕ(D̽ₓ(uₕ), vₕ) == -inner₊ₓ(uₕ, D₋ₓ(vₕ))
+#   innerₕ(D̃ₓ(uₕ), vₕ) == -inner₊ₓ(uₕ, D₋ₓ(vₕ))
 #
 # whenever vₕ vanishes on the boundary.
 
 # The operators as matrices, for `test_operator_matrix_equivalence` (test/space/difference.jl).
-star_ops(::Val{1}) = (D̽ₓ,)
-star_ops(::Val{2}) = (D̽ₓ, D̽ᵧ)
-star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
+star_ops(::Val{1}) = (D̃ₓ,)
+star_ops(::Val{2}) = (D̃ₓ, D̃ᵧ)
+star_ops(::Val{3}) = (D̃ₓ, D̃ᵧ, D̃₂)
 
 @testset "Starred forward difference" begin
     @testset "Averaged spacing" begin
@@ -68,10 +68,10 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
                             (u[i + 1] - u[i]) / ((spacing(Ωₕ, i) + spacing(Ωₕ, i + 1)) / 2)
                         end
                         for i in 1:n]
-                @test parent(D̽ₓ(uₕ)) ≈ want
+                @test parent(D̃ₓ(uₕ)) ≈ want
 
                 # the last point has no forward neighbour and is truncated, as in D₊ₓ
-                @test parent(D̽ₓ(uₕ))[n] == 0.0
+                @test parent(D̃ₓ(uₕ))[n] == 0.0
             end
         end
     end
@@ -84,9 +84,9 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
         Wₕ = gridspace(Ωₕ)
         n = npoints(Ωₕ, Tuple)
 
-        @test all(iszero, parent(D̽ₓ(Rₕ(Wₕ, x -> 3.0))))
+        @test all(iszero, parent(D̃ₓ(Rₕ(Wₕ, x -> 3.0))))
 
-        for (d, op) in ((1, D̽ₓ), (2, D̽ᵧ), (3, D̽₂))
+        for (d, op) in ((1, D̃ₓ), (2, D̃ᵧ), (3, D̃₂))
             # a function constant along d differences to zero along d
             @test all(iszero, parent(op(Rₕ(Wₕ, x -> x[mod1(d + 1, 3)]))))
             # and one linear along d differences to one, away from the truncated slice
@@ -102,24 +102,24 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
         Vₕ = gridspace(Ωₕ, Val(2))
         uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
 
-        @test D̽ₕ(uₕ) isa NTuple{2, VectorElement}
-        @test parent(D̽ₕ(uₕ)[1]) == parent(D̽ₓ(uₕ))
-        @test parent(D̽ₕ(uₕ)[2]) == parent(D̽ᵧ(uₕ))
+        @test D̃ₕ(uₕ) isa NTuple{2, VectorElement}
+        @test parent(D̃ₕ(uₕ)[1]) == parent(D̃ₓ(uₕ))
+        @test parent(D̃ₕ(uₕ)[2]) == parent(D̃ᵧ(uₕ))
 
         # in one dimension the tuple and the grid function coincide
         Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)
         u1 = Rₕ(gridspace(Ω1), sin)
-        @test !(D̽ₕ(u1) isa Tuple)
-        @test parent(D̽ₕ(u1)) == parent(D̽ₓ(u1))
+        @test !(D̃ₕ(u1) isa Tuple)
+        @test parent(D̃ₕ(u1)) == parent(D̃ₓ(u1))
 
         # composite grid functions apply componentwise, as the other operators do
         fs = (x -> x[1], x -> x[2]^2)
         cₕ = Rₕ(Vₕ, fs)
         scalars = (Rₕ(Wₕ, fs[1]), Rₕ(Wₕ, fs[2]))
-        rₕ = D̽ₓ(cₕ)
+        rₕ = D̃ₓ(cₕ)
         @test length(parent(rₕ)) == length(parent(cₕ))
         for k in 1:2
-            @test parent(components(rₕ)[k]) == parent(D̽ₓ(scalars[k]))
+            @test parent(components(rₕ)[k]) == parent(D̃ₓ(scalars[k]))
         end
     end
 
@@ -129,19 +129,19 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
         u1 = Rₕ(gridspace(Ωₕ1), sin)
         u2 = Rₕ(gridspace(Ωₕ2), x -> x[1] * x[2])
 
-        @test @inferred(D̽ₓ(u1)) isa VectorElement
-        @test @inferred(D̽ᵧ(u2)) isa VectorElement
-        @test @inferred(D̽ₕ(u2)) isa NTuple{2, VectorElement}
+        @test @inferred(D̃ₓ(u1)) isa VectorElement
+        @test @inferred(D̃ᵧ(u2)) isa VectorElement
+        @test @inferred(D̃ₕ(u2)) isa NTuple{2, VectorElement}
         @test @inferred(star_spacings(Ωₕ1)) isa StarSpacings
 
         # the denominator is a lazy view over the cached spacings, so it costs nothing
         @test_allocs star_spacings(Ωₕ1)
-        @test alloc_test(D̽ₓ, u1) == alloc_test(similar, u1)
-        @test alloc_test(D̽ᵧ, u2) == alloc_test(similar, u2)
+        @test alloc_test(D̃ₓ, u1) == alloc_test(similar, u1)
+        @test alloc_test(D̃ᵧ, u2) == alloc_test(similar, u2)
     end
 
     @testset "Summation by parts" begin
-        # innerₕ(D̽(uₕ), vₕ) == -inner₊(uₕ, D₋(vₕ)) when vₕ vanishes on the boundary.
+        # innerₕ(D̃(uₕ), vₕ) == -inner₊(uₕ, D₋(vₕ)) when vₕ vanishes on the boundary.
         #
         # Only vₕ has to vanish: the boundary term of the discrete integration by parts
         # is the product of the two, so vₕ being zero there is enough. uₕ below is
@@ -160,7 +160,7 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
                 Wₕ = gridspace(Ωₕ)
                 uₕ = Rₕ(Wₕ, x -> cos(x) + 0.7)          # not zero at the boundary
                 vₕ = Rₕ(Wₕ, x -> sin(pi * x))           # zero at both ends
-                @test agree(innerₕ(D̽ₓ(uₕ), vₕ), -inner₊ₓ(uₕ, D₋ₓ(vₕ)))
+                @test agree(innerₕ(D̃ₓ(uₕ), vₕ), -inner₊ₓ(uₕ, D₋ₓ(vₕ)))
             end
         end
 
@@ -177,8 +177,8 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
                 )
                 W2 = gridspace(Ω2)
                 a, b = Rₕ(W2, u2), Rₕ(W2, v2)
-                @test agree(innerₕ(D̽ₓ(a), b), -inner₊ₓ(a, D₋ₓ(b)))
-                @test agree(innerₕ(D̽ᵧ(a), b), -inner₊ᵧ(a, D₋ᵧ(b)))
+                @test agree(innerₕ(D̃ₓ(a), b), -inner₊ₓ(a, D₋ₓ(b)))
+                @test agree(innerₕ(D̃ᵧ(a), b), -inner₊ᵧ(a, D₋ᵧ(b)))
 
                 Ω3 = mesh(
                     domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
@@ -187,9 +187,9 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
                 )
                 W3 = gridspace(Ω3)
                 c, d = Rₕ(W3, u3), Rₕ(W3, v3)
-                @test agree(innerₕ(D̽ₓ(c), d), -inner₊ₓ(c, D₋ₓ(d)))
-                @test agree(innerₕ(D̽ᵧ(c), d), -inner₊ᵧ(c, D₋ᵧ(d)))
-                @test agree(innerₕ(D̽₂(c), d), -inner₊₂(c, D₋₂(d)))
+                @test agree(innerₕ(D̃ₓ(c), d), -inner₊ₓ(c, D₋ₓ(d)))
+                @test agree(innerₕ(D̃ᵧ(c), d), -inner₊ᵧ(c, D₋ᵧ(d)))
+                @test agree(innerₕ(D̃₂(c), d), -inner₊₂(c, D₋₂(d)))
             end
         end
 
@@ -199,7 +199,7 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
             zero_bdry = Rₕ(Wₕ, x -> sin(pi * x))
             nonzero = Rₕ(Wₕ, x -> cos(x) + 0.7)
 
-            sbp(uₕ, vₕ) = agree(innerₕ(D̽ₓ(uₕ), vₕ), -inner₊ₓ(uₕ, D₋ₓ(vₕ)))
+            sbp(uₕ, vₕ) = agree(innerₕ(D̃ₓ(uₕ), vₕ), -inner₊ₓ(uₕ, D₋ₓ(vₕ)))
 
             @test sbp(zero_bdry, zero_bdry)
             @test sbp(nonzero, zero_bdry)      # uₕ need not vanish
@@ -213,9 +213,9 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
             # differences of the components, and the right-hand side as one call to the
             # tuple method of inner₊ against ∇ₕ(wₕ), which sums the directional inner
             # products. Only wₕ vanishes on the boundary, as in the componentwise form.
-            div_star(vₕ::NTuple{2, VectorElement}) = D̽ₓ(vₕ[1]) + D̽ᵧ(vₕ[2])
-            div_star(vₕ::NTuple{3, VectorElement}) = D̽ₓ(vₕ[1]) + D̽ᵧ(vₕ[2]) +
-                                                     D̽₂(vₕ[3])
+            div_star(vₕ::NTuple{2, VectorElement}) = D̃ₓ(vₕ[1]) + D̃ᵧ(vₕ[2])
+            div_star(vₕ::NTuple{3, VectorElement}) = D̃ₓ(vₕ[1]) + D̃ᵧ(vₕ[2]) +
+                                                     D̃₂(vₕ[3])
 
             Random.seed!(20260830)
             Ω1 = mesh(domain(interval(0.0, 1.0)), 41, false)
@@ -223,7 +223,7 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
             v1 = Rₕ(W1, x -> cos(x) + 0.7)          # not zero at the boundary
             w1 = Rₕ(W1, x -> sin(pi * x))
             # in one dimension ∇ₕ is the grid function D₋ₓ gives, not a tuple
-            @test agree(innerₕ(D̽ₕ(v1), w1), -inner₊(v1, ∇ₕ(w1)))
+            @test agree(innerₕ(D̃ₕ(v1), w1), -inner₊(v1, ∇ₕ(w1)))
 
             Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 15), (false, false))
             W2 = gridspace(Ω2)
@@ -273,7 +273,7 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
                 uₕ = element(Wₕ, copy(u_raw[1:n]))                      # unconstrained
                 vₕ = element(Wₕ, _zero_boundary!(copy(v_raw[1:n])))
 
-                lhs = innerₕ(D̽ₓ(uₕ), vₕ)
+                lhs = innerₕ(D̃ₓ(uₕ), vₕ)
                 rhs = -inner₊ₓ(uₕ, D₋ₓ(vₕ))
                 scale = max(abs(lhs), abs(rhs), 1.0)
                 isapprox(lhs, rhs; atol = 1e-10 * scale, rtol = 1e-10)
@@ -305,12 +305,12 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
                 uₕ = element(Wₕ, vec(grid(u_raw)))                       # unconstrained
                 vₕ = element(Wₕ, vec(_zero_boundary!(grid(v_raw))))
 
-                lhs_x = innerₕ(D̽ₓ(uₕ), vₕ)
+                lhs_x = innerₕ(D̃ₓ(uₕ), vₕ)
                 rhs_x = -inner₊ₓ(uₕ, D₋ₓ(vₕ))
                 scale_x = max(abs(lhs_x), abs(rhs_x), 1.0)
                 ok_x = isapprox(lhs_x, rhs_x; atol = 1e-10 * scale_x, rtol = 1e-10)
 
-                lhs_y = innerₕ(D̽ᵧ(uₕ), vₕ)
+                lhs_y = innerₕ(D̃ᵧ(uₕ), vₕ)
                 rhs_y = -inner₊ᵧ(uₕ, D₋ᵧ(vₕ))
                 scale_y = max(abs(lhs_y), abs(rhs_y), 1.0)
                 ok_y = isapprox(lhs_y, rhs_y; atol = 1e-10 * scale_y, rtol = 1e-10)
@@ -349,17 +349,17 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
                 uₕ = element(Wₕ, vec(grid(u_raw)))                       # unconstrained
                 vₕ = element(Wₕ, vec(_zero_boundary!(grid(v_raw))))
 
-                lhs_x = innerₕ(D̽ₓ(uₕ), vₕ)
+                lhs_x = innerₕ(D̃ₓ(uₕ), vₕ)
                 rhs_x = -inner₊ₓ(uₕ, D₋ₓ(vₕ))
                 scale_x = max(abs(lhs_x), abs(rhs_x), 1.0)
                 ok_x = isapprox(lhs_x, rhs_x; atol = 1e-10 * scale_x, rtol = 1e-10)
 
-                lhs_y = innerₕ(D̽ᵧ(uₕ), vₕ)
+                lhs_y = innerₕ(D̃ᵧ(uₕ), vₕ)
                 rhs_y = -inner₊ᵧ(uₕ, D₋ᵧ(vₕ))
                 scale_y = max(abs(lhs_y), abs(rhs_y), 1.0)
                 ok_y = isapprox(lhs_y, rhs_y; atol = 1e-10 * scale_y, rtol = 1e-10)
 
-                lhs_z = innerₕ(D̽₂(uₕ), vₕ)
+                lhs_z = innerₕ(D̃₂(uₕ), vₕ)
                 rhs_z = -inner₊₂(uₕ, D₋₂(vₕ))
                 scale_z = max(abs(lhs_z), abs(rhs_z), 1.0)
                 ok_z = isapprox(lhs_z, rhs_z; atol = 1e-10 * scale_z, rtol = 1e-10)
@@ -399,7 +399,7 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
                 )
                 wₕ = element(Wₕ, vec(_zero_boundary!(grid(w_raw))))
 
-                lhs = innerₕ(D̽ₓ(vₕ[1]) + D̽ᵧ(vₕ[2]), wₕ)
+                lhs = innerₕ(D̃ₓ(vₕ[1]) + D̃ᵧ(vₕ[2]), wₕ)
                 rhs = -inner₊(vₕ, ∇ₕ(wₕ))
                 scale = max(abs(lhs), abs(rhs), 1.0)
                 isapprox(lhs, rhs; atol = 1e-10 * scale, rtol = 1e-10)
@@ -414,11 +414,11 @@ star_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
         test_operator_matrix_equivalence(star_ops)
 
         Ωm = mesh(domain(interval(0.0, 1.0)), 7, false)
-        @test D̽ₓ(gridspace(Ωm)) == D̽ₓ(Ωm)     # a space answers as its mesh does
+        @test D̃ₓ(gridspace(Ωm)) == D̃ₓ(Ωm)     # a space answers as its mesh does
 
         # the truncated point is an empty row, matching the zero the grid function gets
         n = npoints(Ωm)
-        @test all(iszero, Matrix(D̽ₓ(Ωm))[n, :])
+        @test all(iszero, Matrix(D̃ₓ(Ωm))[n, :])
     end
 end
 

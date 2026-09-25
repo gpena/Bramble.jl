@@ -18,16 +18,17 @@ using Bramble
 #
 # and read the diff before committing it -- a surprise in that diff is the point of the test.
 
-const STEMS = ("diff₋", "diff₊", "D₋", "D₊", "jump", "M", "Mc", "M₊", "D̽", "Dc", "Dₕ")
+const STEMS = ("diff₋", "diff₊", "D₋", "D₊", "jump", "M", "Mc", "M₊", "D̃", "Dc", "D̽")
 const SUFFIXES = ("ₓ", "ᵧ", "₂")
 const VECTORIAL = (
-    "∇ₕ", "∇₊ₕ", "∇cₕ", "∇̽ₕ", "diff₋ₕ", "diff₊ₕ", "jumpₕ", "Mₕ", "Mcₕ", "M₊ₕ", "D̽ₕ", "Dcₕ", "Dₕ"
+    "∇ₕ", "∇₊ₕ", "∇cₕ", "∇̃ₕ", "∇̽ₕ", "diff₋ₕ", "diff₊ₕ", "jumpₕ", "Mₕ", "Mcₕ", "M₊ₕ", "D̃ₕ", "Dcₕ",
+    "D̽ₕ"
 )
 
-# The dimensional entry points (gpena/Bramble.jl#74). `Dₕ`, `Mₕ` and `M₊ₕ` are absent here
+# The dimensional entry points (gpena/Bramble.jl#74). `D̽ₕ`, `Mₕ` and `M₊ₕ` are absent here
 # and present above: those three carry both the tuple-valued docstring and the entry
 # point's, and `docstring_of` already renders every docstring a name has.
-const DISPATCH = ("diff₋", "diff₊", "D₋", "D₊", "jump", "D̽", "Dc")
+const DISPATCH = ("diff₋", "diff₊", "D₋", "D₊", "jump", "D̃", "Dc")
 
 # The scalar `!` method each family applies a grid function through; it carries the family's
 # own docstring for the three centred families and none for the rest, and both cases are

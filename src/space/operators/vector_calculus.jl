@@ -135,10 +135,10 @@ end
     return nothing
 end
 
-# One direction of the conservative Laplacian, fused: `D̽(D₋(u))` without the intermediate
+# One direction of the conservative Laplacian, fused: `D̃(D₋(u))` without the intermediate
 # grid function. Reading the composition off the two engines rather than re-deriving it is
 # what keeps the boundary conventions identical -- `D₋` is zero on the first slice, so the
-# term it would contribute is simply absent there, and `D̽` is zero on the last, so nothing
+# term it would contribute is simply absent there, and `D̃` is zero on the last, so nothing
 # is written on it at all.
 @inline function _accumulate_laplacian!(
         out, u, hb::HB, hs::HS, dims::NTuple{D, Int}, ::Val{DIM}
@@ -405,7 +405,7 @@ Returns the conservative discrete Laplacian of the grid function `uₕ`, matrix-
 
 ```math
 \\Delta_h(\\textrm{u}_h)(I) = \\sum_{d=1}^{D}
-    \\overset{\\times}{\\textrm{D}}_{+,x_d}\\big(\\textrm{D}_{-,x_d}(\\textrm{u}_h)\\big)(I)
+    \\tilde{\\textrm{D}}_{+,x_d}\\big(\\textrm{D}_{-,x_d}(\\textrm{u}_h)\\big)(I)
 ```
 
 which on a non-uniform mesh is the flux-difference form
@@ -423,9 +423,9 @@ several plausible five-point stencils.
 
 Evaluated in a single traversal per direction rather than as two nested operator calls, so
 `Δₕ!` needs no scratch grid function and allocates nothing. It agrees with the composition
-`D̽ₓ(D₋ₓ(uₕ))` entry for entry, truncation at the two ends of each axis included.
+`D̃ₓ(D₋ₓ(uₕ))` entry for entry, truncation at the two ends of each axis included.
 
-See also: [`divₕ`](@ref), [`∇ₕ`](@ref), [`D̽ₓ`](@ref)
+See also: [`divₕ`](@ref), [`∇ₕ`](@ref), [`D̃ₓ`](@ref)
 """
 @inline Δₕ(uₕ::VectorElement) = Δₕ!(similar(uₕ), uₕ)
 
@@ -922,12 +922,12 @@ end
 
 @inline _centered_strain_rows!(dest, comps, Ωₕ, dims, ::Val{0}, ::Val{D}) where {D} = nothing
 
-# --- Starred vector calculus and the forward strain (gpena/Bramble.jl#287) ---------------- #
+# --- Tilde vector calculus and the forward strain (gpena/Bramble.jl#287) ------------------- #
 #
-# `D̽` is a forward difference over the averaged spacing `star_spacings` returns, not over the
+# `D̃` is a forward difference over the averaged spacing `star_spacings` returns, not over the
 # forward spacing. `StarForward` is the marker that lets the accumulating machinery above
 # select that spacing: `_accumulate_one!` gains a method that runs the forward engine over
-# `star_spacings`, and `div̽ₕ`/`curl̽ₕ` then go through `_divergence!`/`_curl!` unchanged. It is
+# `star_spacings`, and `diṽₕ`/`curl̃ₕ` then go through `_divergence!`/`_curl!` unchanged. It is
 # not a `GridDirection`, since no stencil traversal of its own is needed: the traversal is
 # `Forward()`'s.
 #
@@ -938,7 +938,7 @@ struct StarForward end
 
 @noinline function _throw_no_star_device_kernel(fname::String)
     error(
-        "$fname has no device kernel yet: the starred vector-calculus operators and the " *
+        "$fname has no device kernel yet: the tilde vector-calculus operators and the " *
         "forward strain run on host arrays only. Apply it to a host-backed grid function " *
         "instead.",
     )
@@ -950,47 +950,73 @@ end
 @inline _check_star_host(v::Tuple, fname) = _check_star_host(first(v), fname)
 
 # `out[I] += s * (u[I + eᵢ] - u[I]) / h*ᵢ`, zero on the last slice: `_accumulate_forward!`
-# over the spacing `D̽` divides by, so each term is exactly the value `D̽` writes.
+# over the spacing `D̃` divides by, so each term is exactly the value `D̃` writes.
 @inline function _accumulate_one!(out, u, Ωₕ, dims, ::StarForward, ::Val{d}, s) where {d}
     return _accumulate_forward!(out, u, star_spacings(Ωₕ(d)), dims, Val(d), s)
 end
 
 """
-    ∇̽ₕ(uₕ::VectorElement) -> VectorElement or NTuple{D, VectorElement}
+    ∇̃ₕ(uₕ::VectorElement) -> VectorElement or NTuple{D, VectorElement}
 
-Returns the starred discrete gradient of the grid function `uₕ`, one starred forward
+Returns the tilde discrete gradient of the grid function `uₕ`, one tilde forward
 difference per direction:
 
 ```math
-\\overset{\\times}{\\nabla}_h(\\textrm{u}_h) = \\left(\\overset{\\times}{\\textrm{D}}_{x_1}(\\textrm{u}_h),
-    \\ldots, \\overset{\\times}{\\textrm{D}}_{x_D}(\\textrm{u}_h)\\right), \\qquad
-\\overset{\\times}{\\textrm{D}}_{x_d}(\\textrm{u}_h)(i) = \\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}.
+\\tilde{\\nabla}_h(\\textrm{u}_h) = \\left(\\tilde{\\textrm{D}}_{x_1}(\\textrm{u}_h),
+    \\ldots, \\tilde{\\textrm{D}}_{x_D}(\\textrm{u}_h)\\right), \\qquad
+\\tilde{\\textrm{D}}_{x_d}(\\textrm{u}_h)(i) = \\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}.
 ```
 
-The same function as [`D̽ₕ`](@ref), under the name the starred vector calculus family shares.
+The same function as [`D̃ₕ`](@ref), under the name the tilde vector calculus family shares.
 In 1D it returns the bare grid function, above a `D`-tuple. Each difference is truncated to
 zero on the last slice of its direction.
 
-[`∇̽ₕ!`](@ref) writes into a destination instead, and allocates nothing.
+[`∇̃ₕ!`](@ref) writes into a destination instead, and allocates nothing.
 
-See also: [`div̽ₕ`](@ref), [`curl̽ₕ`](@ref), [`∇ₕ`](@ref)
+See also: [`diṽₕ`](@ref), [`curl̃ₕ`](@ref), [`∇ₕ`](@ref)
+"""
+const ∇̃ₕ = D̃ₕ
+
+"""
+    ∇̽ₕ(uₕ::VectorElement) -> VectorElement or NTuple{D, VectorElement}
+
+Returns the cross-weighted discrete gradient of the grid function `uₕ`, one cross-weighted
+centered difference per direction:
+
+```math
+\\overset{\\times}{\\nabla}_h(\\textrm{u}_h) = \\left(
+    \\overset{\\times}{\\textrm{D}}_{x_1}(\\textrm{u}_h), \\ldots,
+    \\overset{\\times}{\\textrm{D}}_{x_D}(\\textrm{u}_h)\\right), \\qquad
+\\overset{\\times}{\\textrm{D}}_{x_d}(\\textrm{u}_h)(i) =
+    \\frac{h_i}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_{i+1}) +
+    \\frac{h_{i+1}}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_i).
+```
+
+The same function as [`D̽ₕ`](@ref): the dispatch alias and the tuple-valued alias coincide
+for this family (gpena/Bramble.jl#140), so `∇̽ₕ` is simply another name for it, under the
+`∇` notation the other vectorial gradients share. In 1D it returns the bare grid function,
+above a `D`-tuple. The first and last point along each direction have no truncated-boundary
+convention of their own and fall back to the one-sided difference the near side still
+defines, unlike [`∇cₕ`](@ref).
+
+See also: [`D̽ₓ`](@ref), [`∇ₕ`](@ref), [`∇₊ₕ`](@ref)
 """
 const ∇̽ₕ = D̽ₕ
 
 """
-    ∇̽ₕ!(dest, uₕ::VectorElement) -> dest
+    ∇̃ₕ!(dest, uₕ::VectorElement) -> dest
 
-The in-place form of [`∇̽ₕ`](@ref): the starred gradient of `uₕ`, written into `dest` -- a
-grid function in 1D, a `D`-tuple of them above, the shape `∇̽ₕ` returns.
+The in-place form of [`∇̃ₕ`](@ref): the tilde gradient of `uₕ`, written into `dest` -- a
+grid function in 1D, a `D`-tuple of them above, the shape `∇̃ₕ` returns.
 
 Allocates nothing. No destination may alias `uₕ`.
 """
-function ∇̽ₕ!(dest, uₕ::VectorElement)
-    _check_star_host(dest, "∇̽ₕ!")
+function ∇̃ₕ!(dest, uₕ::VectorElement)
+    _check_star_host(dest, "∇̃ₕ!")
     Ωₕ = mesh(space(uₕ))
     D = dim(Ωₕ)
     outs = dest isa VectorElement ? (dest,) : dest
-    length(outs) == D || _throw_field_arity(length(outs), D, "∇̽ₕ!")
+    length(outs) == D || _throw_field_arity(length(outs), D, "∇̃ₕ!")
     _star_gradient!(outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), Val(D))
     return dest
 end
@@ -1004,74 +1030,74 @@ end
 @inline _star_gradient!(outs, u, Ωₕ, dims, ::Val{0}) = nothing
 
 """
-    div̽ₕ(uₕ) -> VectorElement
-    div̽ₕ!(vₕ::VectorElement, uₕ) -> vₕ
+    diṽₕ(uₕ) -> VectorElement
+    diṽₕ!(vₕ::VectorElement, uₕ) -> vₕ
 
-Returns the starred discrete divergence of the vector field `uₕ`:
+Returns the tilde discrete divergence of the vector field `uₕ`:
 
 ```math
-\\overset{\\times}{\\textrm{div}}_h(\\textrm{u}_h)(I) =
-    \\sum_{d=1}^{D} \\overset{\\times}{\\textrm{D}}_{x_d}(\\textrm{u}_{h,d})(I)
+\\tilde{\\textrm{div}}_h(\\textrm{u}_h)(I) =
+    \\sum_{d=1}^{D} \\tilde{\\textrm{D}}_{x_d}(\\textrm{u}_{h,d})(I)
 ```
 
 `uₕ` is spelled as for [`divₕ`](@ref): an `NTuple{D, VectorElement}`, or a grid function of a
 [`CompositeGridSpace`](@ref) with one leaf per spatial dimension (in 1D, a scalar grid
-function). Each starred difference is zero on the last slice of its direction.
+function). Each tilde difference is zero on the last slice of its direction.
 
 For fields vanishing on the boundary it pairs with the backward difference by summation by
-parts, ``(\\overset{\\times}{\\textrm{div}}_h \\textrm{F}, \\textrm{v})_h =
+parts, ``(\\tilde{\\textrm{div}}_h \\textrm{F}, \\textrm{v})_h =
 -\\sum_d (\\textrm{F}_d, \\textrm{D}_{-,x_d} \\textrm{v})_{+,d}``.
 
-`div̽ₕ!` writes into `vₕ`, which must not be one of the components, and allocates nothing.
+`diṽₕ!` writes into `vₕ`, which must not be one of the components, and allocates nothing.
 
-See also: [`divₕ`](@ref), [`curl̽ₕ`](@ref), [`∇̽ₕ`](@ref)
+See also: [`divₕ`](@ref), [`curl̃ₕ`](@ref), [`∇̃ₕ`](@ref)
 """
-function div̽ₕ(uₕ)
-    _check_star_host(first(_field_components(uₕ)), "div̽ₕ")
-    return div̽ₕ!(similar(first(_field_components(uₕ))), uₕ)
+function diṽₕ(uₕ)
+    _check_star_host(first(_field_components(uₕ)), "diṽₕ")
+    return diṽₕ!(similar(first(_field_components(uₕ))), uₕ)
 end
 
-@doc (@doc div̽ₕ)
-function div̽ₕ!(vₕ::VectorElement, uₕ)
-    _check_star_host(vₕ, "div̽ₕ!")
+@doc (@doc diṽₕ)
+function diṽₕ!(vₕ::VectorElement, uₕ)
+    _check_star_host(vₕ, "diṽₕ!")
     comps = _field_components(uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
-    _check_field_arity(comps, Val(D), "div̽ₕ")
+    _check_field_arity(comps, Val(D), "diṽₕ")
     _divergence!(vₕ, comps, Wₕ, StarForward(), Val(D))
     return vₕ
 end
 
 """
-    curl̽ₕ(uₕ) -> VectorElement or NTuple{3, VectorElement}
-    curl̽ₕ!(vₕ, uₕ) -> vₕ
+    curl̃ₕ(uₕ) -> VectorElement or NTuple{3, VectorElement}
+    curl̃ₕ!(vₕ, uₕ) -> vₕ
 
-Returns the starred discrete curl of the vector field `uₕ`. In 2D it is the scalar
+Returns the tilde discrete curl of the vector field `uₕ`. In 2D it is the scalar
 
 ```math
-\\overset{\\times}{\\textrm{curl}}_h(\\textrm{u}_h) =
-    \\overset{\\times}{\\textrm{D}}_{x}(\\textrm{u}_{h,2}) -
-    \\overset{\\times}{\\textrm{D}}_{y}(\\textrm{u}_{h,1})
+\\tilde{\\textrm{curl}}_h(\\textrm{u}_h) =
+    \\tilde{\\textrm{D}}_{x}(\\textrm{u}_{h,2}) -
+    \\tilde{\\textrm{D}}_{y}(\\textrm{u}_{h,1})
 ```
 
 and in 3D the three-component field
 ``(\\partial_y u_3 - \\partial_z u_2,\\; \\partial_z u_1 - \\partial_x u_3,\\;
-\\partial_x u_2 - \\partial_y u_1)``, each derivative a starred forward difference. There is
+\\partial_x u_2 - \\partial_y u_1)``, each derivative a tilde forward difference. There is
 no 1D curl, and asking for one is an `ArgumentError`.
 
-`curl̽ₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
+`curl̃ₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
 allocates nothing.
 
-See also: [`curlₕ`](@ref), [`div̽ₕ`](@ref), [`∇̽ₕ`](@ref)
+See also: [`curlₕ`](@ref), [`diṽₕ`](@ref), [`∇̃ₕ`](@ref)
 """
-function curl̽ₕ(uₕ)
-    _check_star_host(first(_field_components(uₕ)), "curl̽ₕ")
+function curl̃ₕ(uₕ)
+    _check_star_host(first(_field_components(uₕ)), "curl̃ₕ")
     return _curl(uₕ, StarForward())
 end
 
-@doc (@doc curl̽ₕ)
-function curl̽ₕ!(vₕ, uₕ)
-    _check_star_host(vₕ, "curl̽ₕ!")
+@doc (@doc curl̃ₕ)
+function curl̃ₕ!(vₕ, uₕ)
+    _check_star_host(vₕ, "curl̃ₕ!")
     return _curl!(vₕ, uₕ, StarForward())
 end
 

@@ -27,9 +27,9 @@ const FAMILIES = (
     (diff₊, (diff₊ₓ, diff₊ᵧ, diff₊₂)),
     (D₋, (D₋ₓ, D₋ᵧ, D₋₂)),
     (D₊, (D₊ₓ, D₊ᵧ, D₊₂)),
-    (D̽, (D̽ₓ, D̽ᵧ, D̽₂)),
+    (D̃, (D̃ₓ, D̃ᵧ, D̃₂)),
     (Dc, (Dcₓ, Dcᵧ, Dc₂)),
-    (Dₕ, (Dₕₓ, Dₕᵧ, Dₕ₂)),
+    (D̽ₕ, (D̽ₓ, D̽ᵧ, D̽₂)),
     (jump, (jumpₓ, jumpᵧ, jump₂)),
     (Mₕ, (Mₓ, Mᵧ, M₂)),
     (M₊ₕ, (M₊ₓ, M₊ᵧ, M₊₂))
@@ -80,17 +80,17 @@ const SYMBOLS = (:x, :y, :z)
         end
     end
 
-    # `Dₕ`, `Mₕ` and `M₊ₕ` carry both arities: the tuple with one argument, one direction
+    # `D̽ₕ`, `Mₕ` and `M₊ₕ` carry both arities: the tuple with one argument, one direction
     # with two. They coexist by arity, and this is the test that says so on purpose.
     @testset "the tuple-valued aliases keep their one-argument meaning" begin
-        @test Dₕ(uₕ2) == (Dₕₓ(uₕ2), Dₕᵧ(uₕ2))
+        @test D̽ₕ(uₕ2) == (D̽ₓ(uₕ2), D̽ᵧ(uₕ2))
         @test Mₕ(uₕ2) == (Mₓ(uₕ2), Mᵧ(uₕ2))
         @test M₊ₕ(uₕ2) == (M₊ₓ(uₕ2), M₊ᵧ(uₕ2))
-        @test Dₕ(uₕ3) == (Dₕₓ(uₕ3), Dₕᵧ(uₕ3), Dₕ₂(uₕ3))
+        @test D̽ₕ(uₕ3) == (D̽ₓ(uₕ3), D̽ᵧ(uₕ3), D̽₂(uₕ3))
         # in one dimension the tuple collapses to the entry itself, and the two arities
         # then agree on the same value rather than disagreeing on its shape
         @test Mₕ(uₕ1) == Mₓ(uₕ1) == Mₕ(uₕ1, 1)
-        @test Dₕ(uₕ1) == Dₕₓ(uₕ1) == Dₕ(uₕ1, :x)
+        @test D̽ₕ(uₕ1) == D̽ₓ(uₕ1) == D̽ₕ(uₕ1, :x)
     end
 
     @testset "out-of-range directions throw" begin

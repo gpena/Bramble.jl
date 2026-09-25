@@ -159,14 +159,14 @@ using ..TestUtils: alloc_test, @test_allocs
     end
 
     @testset "Zero dynamic dispatch (vectorial aliases)" begin
-        # gpena/Bramble.jl#146: `∇ₕ`/`∇₊ₕ`/`diff₋ₕ`/`diff₊ₕ`/`Mₕ`/`M₊ₕ`/`D̽ₕ`/`Dcₕ`/`Dₕ`
+        # gpena/Bramble.jl#146: `∇ₕ`/`∇₊ₕ`/`diff₋ₕ`/`diff₊ₕ`/`Mₕ`/`M₊ₕ`/`D̃ₕ`/`Dcₕ`/`D̽ₕ`
         # used to generate their 2D/3D methods from `ntuple(i -> base_op(arg, Val(i)),
         # Val(D))`, which boxes `i` as a runtime Int inside the closure: `Val(i)` can
         # never constant-fold, so every coordinate paid for dynamic dispatch all the way
         # down the difference-engine call stack (2-8 dispatches per call, per JET).
         # `_vectorial_expr` now writes the 2D/3D methods out with literal `Val(1)`,
         # `Val(2)`, `Val(3)` calls instead, so this must report zero.
-        for op in (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M₊ₕ, D̽ₕ, Dcₕ, Dₕ)
+        for op in (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M₊ₕ, D̃ₕ, Dcₕ, D̽ₕ)
             rep2 = JET.report_call(op, (typeof(uₕ2),))
             @test isempty(JET.get_reports(rep2))
             rep3 = JET.report_call(op, (typeof(uₕ3),))

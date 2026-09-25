@@ -151,7 +151,7 @@ let Wₕ = gridspace(_mesh2()), uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
     g["Dcₓ"] = @benchmarkable Dcₓ($uₕ)
 
     # The vector calculus operators (gpena/Bramble.jl#158). `Δₕ!` is the entry that matters:
-    # it is one traversal per direction against the two a `D̽(D₋(u))` composition walks, and
+    # it is one traversal per direction against the two a `D̃(D₋(u))` composition walks, and
     # it carries no scratch grid function, so the bound below is 0 and stays 0.
     let vₕ = similar(uₕ), gₕ = ∇ₕ(uₕ)
         g["Δₕ"] = @benchmarkable Δₕ($uₕ)

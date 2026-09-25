@@ -257,7 +257,7 @@ grid-function traversal, symbolic form-AST evaluation, and Kronecker matrix cons
 
 This milestone implements option 2 as `stencil_matrix`
 (`src/space/operators/stencil.jl`), routing every family's public per-axis alias (`D₋`,
-`D₊`, `D̽`, `Dc`, `Dₕ`, `jump`, `M`, `M₊`) through it. Option 3 is delivered separately, as
+`D₊`, `D̃`, `Dc`, `D̽ₕ`, `jump`, `M`, `M₊`) through it. Option 3 is delivered separately, as
 `KroneckerLinearOperator` (gpena/Bramble.jl#162) -- a matrix-free operator built
 for a whole separable bilinear *form*, not a lazy wrapper around one operator's matrix
 call -- rather than as a lazy mode of `D₋ₓ`/`Mᵧ`/etc. themselves. Option 1 was reasoned
@@ -273,7 +273,7 @@ over every family's public alias. gpena/Bramble.jl#185's acceptance criterion is
 agreement between the old and new matrices, and proving that needs two independent
 constructions to compare -- checking `stencil_matrix`'s output against itself would prove
 nothing. `test/space/operators.jl`'s "stencil_matrix agrees with the Kronecker oracle
-(#185)" testset builds both for `D₋`, `D₊`, `D̽`, `Dc`, `Dₕ`, `jump`, `M` and `M₊`, along
+(#185)" testset builds both for `D₋`, `D₊`, `D̃`, `Dc`, `D̽ₕ`, `jump`, `M` and `M₊`, along
 every axis, in 1D/2D/3D, on non-uniform meshes, and asserts entrywise equality (`==`) and
 matching `nnz`.
 

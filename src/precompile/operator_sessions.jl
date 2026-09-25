@@ -24,13 +24,13 @@
 
 # `const` so that each tuple has a concrete type and the loops below stay
 # inferable, the same reason the operator config tables are `const`.
-const _PC_OPS_X = (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, Mₓ, M₊ₓ, D̽ₓ, Dcₓ, Dₕₓ)
-const _PC_OPS_Y = (diff₋ᵧ, diff₊ᵧ, D₋ᵧ, D₊ᵧ, jumpᵧ, Mᵧ, M₊ᵧ, D̽ᵧ, Dcᵧ, Dₕᵧ)
-const _PC_OPS_Z = (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₂, M₂, M₊₂, D̽₂, Dc₂, Dₕ₂)
+const _PC_OPS_X = (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, Mₓ, M₊ₓ, D̃ₓ, Dcₓ, D̽ₓ)
+const _PC_OPS_Y = (diff₋ᵧ, diff₊ᵧ, D₋ᵧ, D₊ᵧ, jumpᵧ, Mᵧ, M₊ᵧ, D̃ᵧ, Dcᵧ, D̽ᵧ)
+const _PC_OPS_Z = (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₂, M₂, M₊₂, D̃₂, Dc₂, D̽₂)
 
 # The vectorial aliases, which return a bare element in 1D and a tuple above it,
 # so both returns get compiled.
-const _PC_OPS_ALL = (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M₊ₕ, D̽ₕ, Dcₕ, Dₕ)
+const _PC_OPS_ALL = (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M₊ₕ, D̃ₕ, Dcₕ, D̽ₕ)
 
 # Applied with a plain loop over the tuple, which inference unrolls into a static
 # call per operator. Going through `foreach` and a closure instead leaves the
@@ -59,13 +59,13 @@ function _pc_directional_ops(uₕ, ::Val{3})
 end
 
 const _PC_OPS_X_INPLACE = (
-    diff₋ₓ!, diff₊ₓ!, D₋ₓ!, D₊ₓ!, jumpₓ!, Mₓ!, M₊ₓ!, D̽ₓ!, Dcₓ!, Dₕₓ!
+    diff₋ₓ!, diff₊ₓ!, D₋ₓ!, D₊ₓ!, jumpₓ!, Mₓ!, M₊ₓ!, D̃ₓ!, Dcₓ!, D̽ₓ!
 )
 const _PC_OPS_Y_INPLACE = (
-    diff₋ᵧ!, diff₊ᵧ!, D₋ᵧ!, D₊ᵧ!, jumpᵧ!, Mᵧ!, M₊ᵧ!, D̽ᵧ!, Dcᵧ!, Dₕᵧ!
+    diff₋ᵧ!, diff₊ᵧ!, D₋ᵧ!, D₊ᵧ!, jumpᵧ!, Mᵧ!, M₊ᵧ!, D̃ᵧ!, Dcᵧ!, D̽ᵧ!
 )
 const _PC_OPS_Z_INPLACE = (
-    diff₋₂!, diff₊₂!, D₋₂!, D₊₂!, jump₂!, M₂!, M₊₂!, D̽₂!, Dc₂!, Dₕ₂!
+    diff₋₂!, diff₊₂!, D₋₂!, D₊₂!, jump₂!, M₂!, M₊₂!, D̃₂!, Dc₂!, D̽₂!
 )
 
 function _pc_apply_each_inplace(ops, vₕ, uₕ)

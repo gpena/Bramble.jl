@@ -18,7 +18,7 @@ using ..TestUtils: alloc_test, @test_allocs
 # Base names for the 10 directional operator families across spatial dimensions.
 # Deriving the per-dimension list mechanically from this tuple and `_DIR_SUFFIXES`
 # ensures complete and uniform test coverage across 1D, 2D, and 3D.
-const _INPLACE_FAMILIES = (:D₋, :D₊, :diff₋, :diff₊, :M, :M₊, :jump, :Dc, :D̽, :Dₕ)
+const _INPLACE_FAMILIES = (:D₋, :D₊, :diff₋, :diff₊, :M, :M₊, :jump, :Dc, :D̃, :D̽)
 const _DIR_SUFFIXES = ("ₓ", "ᵧ", "₂")
 
 function _ops(::Val{D}) where {D}
@@ -83,7 +83,7 @@ end
     end
 
     @testset "Destination overwrite" begin
-        # Most of these truncate a boundary slice to zero (Dₕ instead falls back to a
+        # Most of these truncate a boundary slice to zero (D̽ instead falls back to a
         # one-sided difference there, gpena/Bramble.jl#183, but still writes a real,
         # non-sentinel value). If a `!` form skipped those entries instead of writing
         # them, whatever was in the destination would survive (with a fresh `similar`

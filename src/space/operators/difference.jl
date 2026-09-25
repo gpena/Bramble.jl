@@ -2,7 +2,7 @@
 #
 # The difference families over grid functions: the undivided difference (`diff₋`/`diff₊`),
 # the divided one that approximates a derivative (`D₋`/`D₊`), the summation-by-parts pairing
-# `D̽`, the centered `Dc`, and the second-order non-uniform `Dₕ`. Each is generated per
+# `D̃`, the centered `Dc`, and the second-order non-uniform `D̽ₕ`. Each is generated per
 # coordinate from the templates below.
 #
 # A stencil that runs off the grid is truncated rather than extrapolated: a backward operator
@@ -79,7 +79,7 @@ end
 # a point and its neighbour. `Centered` does not read the middle one; it is passed anyway
 # so that both centered operators can share one traversal.
 #
-# `h` is the averaged spacing, the same view `D̽` divides by, because
+# `h` is the averaged spacing, the same view `D̃` divides by, because
 #
 #     x_{i+1} - x_{i-1} = h_i + h_{i+1} = 2 h*_i
 #
@@ -91,7 +91,7 @@ end
 # The cross-weighted kernel needs the two spacings separately rather than their sum, so
 # its `h` is the mesh's cached spacings themselves:
 #
-#     Dₕ(u)(i) = [h_i (u_{i+1} - u_i) / h_{i+1} + h_{i+1} (u_i - u_{i-1}) / h_i]
+#     D̽ₕ(u)(i) = [h_i (u_{i+1} - u_i) / h_{i+1} + h_{i+1} (u_i - u_{i-1}) / h_i]
 #                / (h_i + h_{i+1})
 #
 # which is the backward differences at x_{i+1} and at x_i weighted by h_i and h_{i+1}
@@ -113,7 +113,7 @@ end
 @inline @propagate_inbounds _compute_difference(::GridDirection, ::Val{true}, cur, h, i) = zero(cur)
 
 # The two-sided (centred) engine's boundary call carries the one neighbour still on the
-# grid, in addition to `cur` -- `Centered`/`D̽` (the latter routed through the one-sided
+# grid, in addition to `cur` -- `Centered`/`D̃` (the latter routed through the one-sided
 # engine and the fallback above; only `Centered` reaches this one) still have no stencil at
 # a truncated end and read zero regardless, ignoring it. `CrossWeighted` overrides this
 # below to use it (gpena/Bramble.jl#183).
@@ -121,7 +121,7 @@ end
     ::CenteredStencil, ::Val{true}, cur, neighbour, h, i
 ) = zero(cur)
 
-# `Dₕ` has no missing-neighbour convention of its own to truncate to: with only one side
+# `D̽ₕ` has no missing-neighbour convention of its own to truncate to: with only one side
 # of the stencil still on the grid, it collapses to the one-sided difference that side
 # still defines -- the forward difference at the first point (`neighbour` is `u_2`) and
 # the backward difference at the last (`neighbour` is `u_{n-1}`). The engine only ever
@@ -134,9 +134,9 @@ end
     return i == 1 ? (neighbour - cur) / hᵢ : (cur - neighbour) / hᵢ
 end
 
-# --- The starred forward difference ----------------------------------------------- #
+# --- The forward difference over the averaged spacing (D̃) ------------------------- #
 #
-#   D̽(uₕ)(i) = (u(xᵢ₊₁) - u(xᵢ)) / ((hᵢ + hᵢ₊₁) / 2)
+#   D̃(uₕ)(i) = (u(xᵢ₊₁) - u(xᵢ)) / ((hᵢ + hᵢ₊₁) / 2)
 #
 # The forward difference divided by the averaged spacing rather than by the forward
 # spacing. Away from the boundary that denominator is the width of the cell around xᵢ,
@@ -151,7 +151,7 @@ end
     StarSpacings(h)
 
 Lazy view of the averaged spacings ``(h_i + h_{i+1})/2`` over a mesh's cached backward
-spacings `h`, which is what [`D̽ₓ`](@ref) divides by.
+spacings `h`, which is what [`D̃ₓ`](@ref) divides by.
 
 Entry `i` reads `h[i]` and `h[i+1]`, so it is defined for `i < length(h)`. That is exactly
 the range the forward stencil's interior covers; the last point has no forward neighbour
@@ -232,7 +232,7 @@ end
 
 # --- Deriving h and checking preconditions from a leaf's own submesh -------------- #
 #
-# Every family below (unscaled and finite differences, D̽, Dc, Dₕ) shares one shape:
+# Every family below (unscaled and finite differences, D̃, Dc, D̽ₕ) shares one shape:
 # derive `h` (or nothing) from the direction's submesh, optionally check a precondition on
 # it, then apply the stencil. Only what `h` is and whether there is a precondition differ.
 # `spacing_func`/`precheck` are ordinary named functions, never closures over local state,
@@ -242,7 +242,7 @@ end
 @inline _no_spacing(sub) = nothing
 @inline _no_precheck(sub, dim::Int) = nothing
 
-# A centered stencil needs a point on each side; shared by Dc and Dₕ, the two families that
+# A centered stencil needs a point on each side; shared by Dc and D̽ₕ, the two families that
 # check it.
 @inline function _check_centered_points(sub, dim::Int)
     npoints(sub) >= 3 || _throw_centered_too_few_points(dim, npoints(sub))
@@ -678,7 +678,7 @@ end
     formula_note="The unscaled difference is not divided by the grid spacing; the finite difference is.",
     vectorial_alias=∇ₕ)
 
-# --- The three centred families: D̽, Dc, Dₕ ------------------------------------ #
+# --- The three centred families: D̃, Dc, D̽ₕ ------------------------------------ #
 #
 # Each family's grid-function form is the same three-method shape `_DIFFERENCE_OP_CONFIGS`
 # already generates above for the two one-sided families: a scalar `!`, a composite `!`
@@ -697,7 +697,7 @@ end
 # gpena/Bramble.jl#258 removed the `Core.eval` these were generated through.
 
 @operator_family(base=forward_star_difference,
-    stem=D̽,
+    stem=D̃,
     apply_fn=_apply_spaced!,
     extra_args=(star_spacings, _no_precheck),
     direction=Forward(),
@@ -707,11 +707,11 @@ end
       The forward difference of `uₕ` along `dim_val`, divided by the averaged spacing:
 
       ```math
-      \\overset{\\times}{\\textrm{D}}_{+}(\\textrm{u}_h)(i) =
+      \\tilde{\\textrm{D}}_{+}(\\textrm{u}_h)(i) =
           \\frac{\\textrm{u}_h(x_{i+1}) - \\textrm{u}_h(x_i)}{(h_i + h_{i+1})/2}
       ```
 
-      Reached through [`D̽ₓ`](@ref) and its siblings, and takes a mesh, a grid space or a
+      Reached through [`D̃ₓ`](@ref) and its siblings, and takes a mesh, a grid space or a
       grid function as the other difference families do.
 
       The last point has no forward neighbour, so it is truncated to zero, as in
@@ -727,8 +727,8 @@ end
                           "direction over the averaged spacing, "*
                           "``\\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``, written "*
                           "into `vₕ`.",
-    vectorial_alias=D̽ₕ,
-    vectorial_dir_string="starred forward",
+    vectorial_alias=D̃ₕ,
+    vectorial_dir_string="averaged-spacing forward",
     vectorial_what="difference")
 
 @operator_family(base=centered_difference,
@@ -769,7 +769,7 @@ end
     vectorial_what="difference")
 
 @operator_family(base=cross_weighted_difference,
-    stem=Dₕ,
+    stem=D̽,
     apply_fn=_apply_spaced!,
     extra_args=(spacings, _check_centered_points),
     direction=CrossWeighted(),
@@ -779,12 +779,12 @@ end
       The cross-weighted centered difference of `uₕ` along `dim_val`:
 
       ```math
-      \\textrm{D}_{h}(\\textrm{u}_h)(i) =
+      \\overset{\\times}{\\textrm{D}}_{h}(\\textrm{u}_h)(i) =
           \\frac{h_i}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_{i+1}) +
           \\frac{h_{i+1}}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_i)
       ```
 
-      Reached through [`Dₕₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
+      Reached through [`D̽ₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
       function as the other difference families do.
 
       It is the same two one-sided differences [`Dcₓ`](@ref) combines, weighted by the opposite
@@ -815,18 +815,19 @@ end
                           "the `{direction}` direction, the backward differences "*
                           "at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and "*
                           "``h_{i+1}``, written into `vₕ`.",
-    vectorial_alias=Dₕ,
+    dispatch_alias=D̽ₕ,
+    vectorial_alias=D̽ₕ,
     vectorial_dir_string="cross-weighted centered",
     vectorial_what="difference",
-    vectorial_note="The centered counterpart of [`∇ₕ`](@ref) and [`∇₊ₕ`](@ref), "*
-                   "built from [`Dₕₓ`](@ref) rather than from the one-sided "*
+    vectorial_note="The second-order, non-uniform-grid counterpart of [`∇ₕ`](@ref) and "*
+                   "[`∇₊ₕ`](@ref), built from [`D̽ₓ`](@ref) rather than from the one-sided "*
                    "differences.")
 
 # ==============================================================================
 # Matrix forms for the three centred families
 # ==============================================================================
 #
-# `D̽`, `Dc` and `Dₕ` had grid-function forms only, so of the eight operator families
+# `D̃`, `Dc` and `D̽ₕ` had grid-function forms only, so of the eight operator families
 # five could be had as a matrix and three could not. That asymmetry had to be explained in
 # every one of their docstrings, and it left the form layer's nodes for them with nothing
 # to be checked against.
@@ -834,9 +835,9 @@ end
 # Each is a diagonal scaling of unscaled difference matrices this file already builds, so
 # none needs a new traversal:
 #
-#     D̽ = diag(2/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₀)
+#     D̃ = diag(2/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₀)
 #     Dc     = diag(1/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₋₁)
-#     Dₕ     = diag(hᵢ/((hᵢ+hᵢ₊₁)hᵢ₊₁))             · diff₊
+#     D̽ₕ     = diag(hᵢ/((hᵢ+hᵢ₊₁)hᵢ₊₁))             · diff₊
 #            + diag(hᵢ₊₁/((hᵢ+hᵢ₊₁)hᵢ))             · diff₋
 #
 # The cross-weighted one falls out of its own definition: it is D₋ at xᵢ₊₁ weighted by hᵢ
@@ -888,7 +889,7 @@ end
 """
     forward_star_difference(Ωₕ::AbstractMeshType, dim_val::Val)
 
-The starred forward difference along `dim_val`, as a sparse matrix.
+The forward difference over the averaged spacing along `dim_val`, as a sparse matrix.
 
 The forward difference scaled by the averaged spacing instead of the forward one. The last
 point along the direction has no forward neighbour, so its row is empty.
@@ -974,9 +975,9 @@ for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
     for (stem, kron_fn) in (
         (:D₋, :_kron_backward_finite_difference),
         (:D₊, :_kron_forward_finite_difference),
-        (:D̽, :_kron_forward_star_difference),
+        (:D̃, :_kron_forward_star_difference),
         (:Dc, :_kron_centered_difference),
-        (:Dₕ, :_kron_cross_weighted_difference)
+        (:D̽, :_kron_cross_weighted_difference)
     )
         alias = Symbol(stem, suffix)
         @eval kronecker_operator_matrix(Ωₕ::AbstractMeshType, ::typeof($alias)) = $kron_fn(Ωₕ, Val($i))

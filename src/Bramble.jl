@@ -93,14 +93,14 @@ export divₕ, divₕ!, curlₕ, curlₕ!, Δₕ, Δₕ!
 export εₕ, εₕ!
 export D₋ₓ!, D₋ᵧ!, D₋₂!
 
-export D̽ₓ, D̽ᵧ, D̽₂, D̽ₕ, D̽
-export D̽ₓ!, D̽ᵧ!, D̽₂!, ∇̽ₕ, ∇̽ₕ!, div̽ₕ, div̽ₕ!, curl̽ₕ, curl̽ₕ!
+export D̃ₓ, D̃ᵧ, D̃₂, D̃ₕ, D̃
+export D̃ₓ!, D̃ᵧ!, D̃₂!, ∇̃ₕ, ∇̃ₕ!, diṽₕ, diṽₕ!, curl̃ₕ, curl̃ₕ!
 
 export Dcₓ, Dcᵧ, Dc₂, Dcₕ, Dc
 export Dcₓ!, Dcᵧ!, Dc₂!, ∇cₕ, ∇cₕ!, divcₕ, divcₕ!, curlcₕ, curlcₕ!, εcₕ, εcₕ!
 
-export Dₕₓ, Dₕᵧ, Dₕ₂, Dₕ
-export Dₕₓ!, Dₕᵧ!, Dₕ₂!
+export D̽ₓ, D̽ᵧ, D̽₂, D̽ₕ, ∇̽ₕ
+export D̽ₓ!, D̽ᵧ!, D̽₂!
 
 export jumpₓ, jumpᵧ, jump₂, jumpₕ, jump
 export jumpₓ!, jumpᵧ!, jump₂!

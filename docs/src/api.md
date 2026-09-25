@@ -277,18 +277,18 @@ D₊
 
 The forward difference over the averaged spacing, which is the one that satisfies
 the discrete summation-by-parts identity
-``(\overset{\times}{\textrm{D}}_{+x} u_h, v_h)_h = -(u_h, D_{-x} v_h)_{+x}`` for grid functions
+``(\tilde{\textrm{D}}_{+x} u_h, v_h)_h = -(u_h, D_{-x} v_h)_{+x}`` for grid functions
 `vₕ` vanishing on the boundary.
 
 ```@docs
-D̽ₓ
-D̽ₓ!
-D̽ᵧ
-D̽ᵧ!
-D̽₂
-D̽₂!
-D̽ₕ
-D̽
+D̃ₓ
+D̃ₓ!
+D̃ᵧ
+D̃ᵧ!
+D̃₂
+D̃₂!
+D̃ₕ
+D̃
 ```
 
 The centered difference, over the span its stencil covers. It reproduces the derivative
@@ -311,13 +311,13 @@ the opposite spacings. It reproduces the derivative of a quadratic exactly on an
 grid, and so is second order on a non-uniform one where `Dcₓ` is first.
 
 ```@docs
-Dₕₓ
-Dₕₓ!
-Dₕᵧ
-Dₕᵧ!
-Dₕ₂
-Dₕ₂!
-Dₕ
+D̽ₓ
+D̽ₓ!
+D̽ᵧ
+D̽ᵧ!
+D̽₂
+D̽₂!
+D̽ₕ
 ```
 
 The vector calculus operators built on those differences: the divergence and the curl of a
@@ -346,12 +346,12 @@ curlcₕ!
 εcₕ!
 ∇cₕ
 ∇cₕ!
-∇̽ₕ
-∇̽ₕ!
-div̽ₕ
-div̽ₕ!
-curl̽ₕ
-curl̽ₕ!
+∇̃ₕ
+∇̃ₕ!
+diṽₕ
+diṽₕ!
+curl̃ₕ
+curl̃ₕ!
 ε₊ₕ
 ε₊ₕ!
 ```

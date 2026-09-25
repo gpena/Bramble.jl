@@ -57,7 +57,7 @@ using ..TestUtils: alloc_test, @test_allocs
 
         # the whole directional family generated in difference.jl/average.jl/jump.jl:
         # every one rebuilds around the indexed leaf rather than being left behind
-        for op in (D₋ₓ, D₊ₓ, Dcₓ, D̽ₓ, Dₕₓ, jumpₓ, Mₓ, M₊ₓ)
+        for op in (D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, jumpₓ, Mₓ, M₊ₓ)
             @test test_component_or_nothing(op(v)(3)) == 3
         end
 

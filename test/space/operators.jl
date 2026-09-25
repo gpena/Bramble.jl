@@ -86,7 +86,7 @@ end
     Ω2 = domain(interval(0.0, 1.0) × interval(0.0, 2.0))
     Ω3 = domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 1.5))
 
-    @testset "Δₕ is D̽(D₋(·)) summed over directions" begin
+    @testset "Δₕ is D̃(D₋(·)) summed over directions" begin
         for (Ω, n, unif) in (
             (Ω1, 21, true), (Ω1, 17, false),
             (Ω2, (9, 8), (true, true)), (Ω2, (11, 9), (false, false)),
@@ -213,9 +213,9 @@ end
     families = (
         (:D₋, (D₋ₓ, D₋ᵧ, D₋₂)),
         (:D₊, (D₊ₓ, D₊ᵧ, D₊₂)),
-        (:D̽, (D̽ₓ, D̽ᵧ, D̽₂)),
+        (:D̃, (D̃ₓ, D̃ᵧ, D̃₂)),
         (:Dc, (Dcₓ, Dcᵧ, Dc₂)),
-        (:Dₕ, (Dₕₓ, Dₕᵧ, Dₕ₂)),
+        (:D̽, (D̽ₓ, D̽ᵧ, D̽₂)),
         (:jump, (jumpₓ, jumpᵧ, jump₂)),
         (:M, (Mₓ, Mᵧ, M₂)),
         (:M₊, (M₊ₓ, M₊ᵧ, M₊₂))

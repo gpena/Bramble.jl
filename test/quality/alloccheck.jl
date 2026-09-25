@@ -157,7 +157,7 @@ end
         )
             @testset "$suffix" begin
                 for stem in (
-                    "D₋", "D₊", "Dc", "D̽", "Dₕ", "M", "M₊", "diff₋", "diff₊", "jump"
+                    "D₋", "D₊", "Dc", "D̃", "D̽", "M", "M₊", "diff₋", "diff₊", "jump"
                 )
                     op = getfield(Bramble, Symbol(stem, suffix, "!"))
                     @test _alloc_report(op, (typeof(dst), typeof(src))) == ""

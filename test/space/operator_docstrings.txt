@@ -868,8 +868,8 @@ Alias for `forward_average!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
 
 ### end M₊₂!
-### D̽ₓ
-    D̽ₓ(arg)
+### D̃ₓ
+    D̃ₓ(arg)
 
 The forward difference of `uₕ` along the `x` direction over the averaged spacing, ``\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.
 
@@ -882,21 +882,21 @@ the operator is applied to each component in turn, and the result is the composi
 grid function whose components are those results.
 
 ---
-    D̽ₓ(op::LazyOp{D})
+    D̃ₓ(op::LazyOp{D})
 
-The symbolic starred forward difference of `op` along the `x` direction.
+The symbolic averaged-spacing forward difference of `op` along the `x` direction.
 
-Alias for `D̽(op, Val(1))`.
+Alias for `D̃(op, Val(1))`.
 
-### end D̽ₓ
-### D̽ₓ!
-    D̽ₓ!(vₕ, uₕ)
+### end D̃ₓ
+### D̃ₓ!
+    D̃ₓ!(vₕ, uₕ)
 
 The forward difference of `uₕ` along the `x` direction over the averaged spacing, ``\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``, written into `vₕ`.
 
-The in-place form of [`D̽ₓ`](@ref): it allocates
+The in-place form of [`D̃ₓ`](@ref): it allocates
 nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
-`normₕ(D̽ₓ!(vₕ, uₕ))`.
+`normₕ(D̃ₓ!(vₕ, uₕ))`.
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
@@ -905,9 +905,9 @@ would read values that have already been overwritten.
 Alias for `forward_star_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
 
-### end D̽ₓ!
-### D̽ᵧ
-    D̽ᵧ(arg)
+### end D̃ₓ!
+### D̃ᵧ
+    D̃ᵧ(arg)
 
 The forward difference of `uₕ` along the `y` direction over the averaged spacing, ``\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.
 
@@ -920,21 +920,21 @@ the operator is applied to each component in turn, and the result is the composi
 grid function whose components are those results.
 
 ---
-    D̽ᵧ(op::LazyOp{D})
+    D̃ᵧ(op::LazyOp{D})
 
-The symbolic starred forward difference of `op` along the `y` direction.
+The symbolic averaged-spacing forward difference of `op` along the `y` direction.
 
-Alias for `D̽(op, Val(2))`.
+Alias for `D̃(op, Val(2))`.
 
-### end D̽ᵧ
-### D̽ᵧ!
-    D̽ᵧ!(vₕ, uₕ)
+### end D̃ᵧ
+### D̃ᵧ!
+    D̃ᵧ!(vₕ, uₕ)
 
 The forward difference of `uₕ` along the `y` direction over the averaged spacing, ``\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``, written into `vₕ`.
 
-The in-place form of [`D̽ᵧ`](@ref): it allocates
+The in-place form of [`D̃ᵧ`](@ref): it allocates
 nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
-`normₕ(D̽ᵧ!(vₕ, uₕ))`.
+`normₕ(D̃ᵧ!(vₕ, uₕ))`.
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
@@ -943,9 +943,9 @@ would read values that have already been overwritten.
 Alias for `forward_star_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
 
-### end D̽ᵧ!
-### D̽₂
-    D̽₂(arg)
+### end D̃ᵧ!
+### D̃₂
+    D̃₂(arg)
 
 The forward difference of `uₕ` along the `z` direction over the averaged spacing, ``\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.
 
@@ -958,21 +958,21 @@ the operator is applied to each component in turn, and the result is the composi
 grid function whose components are those results.
 
 ---
-    D̽₂(op::LazyOp{D})
+    D̃₂(op::LazyOp{D})
 
-The symbolic starred forward difference of `op` along the `z` direction.
+The symbolic averaged-spacing forward difference of `op` along the `z` direction.
 
-Alias for `D̽(op, Val(3))`.
+Alias for `D̃(op, Val(3))`.
 
-### end D̽₂
-### D̽₂!
-    D̽₂!(vₕ, uₕ)
+### end D̃₂
+### D̃₂!
+    D̃₂!(vₕ, uₕ)
 
 The forward difference of `uₕ` along the `z` direction over the averaged spacing, ``\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``, written into `vₕ`.
 
-The in-place form of [`D̽₂`](@ref): it allocates
+The in-place form of [`D̃₂`](@ref): it allocates
 nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
-`normₕ(D̽₂!(vₕ, uₕ))`.
+`normₕ(D̃₂!(vₕ, uₕ))`.
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
@@ -981,7 +981,7 @@ would read values that have already been overwritten.
 Alias for `forward_star_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
 
-### end D̽₂!
+### end D̃₂!
 ### Dcₓ
     Dcₓ(arg)
 
@@ -1096,8 +1096,8 @@ Alias for `centered_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of
 scalar or of a composite grid space, componentwise on the latter.
 
 ### end Dc₂!
-### Dₕₓ
-    Dₕₓ(arg)
+### D̽ₓ
+    D̽ₓ(arg)
 
 The cross-weighted centered difference of `uₕ` along the `x` direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and ``h_{i+1}``.
 
@@ -1110,21 +1110,21 @@ the operator is applied to each component in turn, and the result is the composi
 grid function whose components are those results.
 
 ---
-    Dₕₓ(op::LazyOp{D})
+    D̽ₓ(op::LazyOp{D})
 
 The symbolic cross-weighted centered difference of `op` along the `x` direction.
 
-Alias for `Dₕ(op, Val(1))`.
+Alias for `D̽ₕ(op, Val(1))`.
 
-### end Dₕₓ
-### Dₕₓ!
-    Dₕₓ!(vₕ, uₕ)
+### end D̽ₓ
+### D̽ₓ!
+    D̽ₓ!(vₕ, uₕ)
 
 The cross-weighted centered difference of `uₕ` along the `x` direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and ``h_{i+1}``, written into `vₕ`.
 
-The in-place form of [`Dₕₓ`](@ref): it allocates
+The in-place form of [`D̽ₓ`](@ref): it allocates
 nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
-`normₕ(Dₕₓ!(vₕ, uₕ))`.
+`normₕ(D̽ₓ!(vₕ, uₕ))`.
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
@@ -1133,9 +1133,9 @@ would read values that have already been overwritten.
 Alias for `cross_weighted_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
 
-### end Dₕₓ!
-### Dₕᵧ
-    Dₕᵧ(arg)
+### end D̽ₓ!
+### D̽ᵧ
+    D̽ᵧ(arg)
 
 The cross-weighted centered difference of `uₕ` along the `y` direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and ``h_{i+1}``.
 
@@ -1148,21 +1148,21 @@ the operator is applied to each component in turn, and the result is the composi
 grid function whose components are those results.
 
 ---
-    Dₕᵧ(op::LazyOp{D})
+    D̽ᵧ(op::LazyOp{D})
 
 The symbolic cross-weighted centered difference of `op` along the `y` direction.
 
-Alias for `Dₕ(op, Val(2))`.
+Alias for `D̽ₕ(op, Val(2))`.
 
-### end Dₕᵧ
-### Dₕᵧ!
-    Dₕᵧ!(vₕ, uₕ)
+### end D̽ᵧ
+### D̽ᵧ!
+    D̽ᵧ!(vₕ, uₕ)
 
 The cross-weighted centered difference of `uₕ` along the `y` direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and ``h_{i+1}``, written into `vₕ`.
 
-The in-place form of [`Dₕᵧ`](@ref): it allocates
+The in-place form of [`D̽ᵧ`](@ref): it allocates
 nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
-`normₕ(Dₕᵧ!(vₕ, uₕ))`.
+`normₕ(D̽ᵧ!(vₕ, uₕ))`.
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
@@ -1171,9 +1171,9 @@ would read values that have already been overwritten.
 Alias for `cross_weighted_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
 
-### end Dₕᵧ!
-### Dₕ₂
-    Dₕ₂(arg)
+### end D̽ᵧ!
+### D̽₂
+    D̽₂(arg)
 
 The cross-weighted centered difference of `uₕ` along the `z` direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and ``h_{i+1}``.
 
@@ -1186,21 +1186,21 @@ the operator is applied to each component in turn, and the result is the composi
 grid function whose components are those results.
 
 ---
-    Dₕ₂(op::LazyOp{D})
+    D̽₂(op::LazyOp{D})
 
 The symbolic cross-weighted centered difference of `op` along the `z` direction.
 
-Alias for `Dₕ(op, Val(3))`.
+Alias for `D̽ₕ(op, Val(3))`.
 
-### end Dₕ₂
-### Dₕ₂!
-    Dₕ₂!(vₕ, uₕ)
+### end D̽₂
+### D̽₂!
+    D̽₂!(vₕ, uₕ)
 
 The cross-weighted centered difference of `uₕ` along the `z` direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and ``h_{i+1}``, written into `vₕ`.
 
-The in-place form of [`Dₕ₂`](@ref): it allocates
+The in-place form of [`D̽₂`](@ref): it allocates
 nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
-`normₕ(Dₕ₂!(vₕ, uₕ))`.
+`normₕ(D̽₂!(vₕ, uₕ))`.
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
@@ -1209,7 +1209,7 @@ would read values that have already been overwritten.
 Alias for `cross_weighted_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
 
-### end Dₕ₂!
+### end D̽₂!
 ### ∇ₕ
     ∇ₕ(arg)
 
@@ -1305,25 +1305,50 @@ truncated to zero on the first and last slice of its direction.
 See also: [`divcₕ`](@ref), [`curlcₕ`](@ref), [`εcₕ`](@ref), [`∇ₕ`](@ref)
 
 ### end ∇cₕ
-### ∇̽ₕ
-    ∇̽ₕ(uₕ::VectorElement) -> VectorElement or NTuple{D, VectorElement}
+### ∇̃ₕ
+    ∇̃ₕ(uₕ::VectorElement) -> VectorElement or NTuple{D, VectorElement}
 
-Returns the starred discrete gradient of the grid function `uₕ`, one starred forward
+Returns the tilde discrete gradient of the grid function `uₕ`, one tilde forward
 difference per direction:
 
 ```math
-\overset{\times}{\nabla}_h(\textrm{u}_h) = \left(\overset{\times}{\textrm{D}}_{x_1}(\textrm{u}_h),
-    \ldots, \overset{\times}{\textrm{D}}_{x_D}(\textrm{u}_h)\right), \qquad
-\overset{\times}{\textrm{D}}_{x_d}(\textrm{u}_h)(i) = \frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}.
+\tilde{\nabla}_h(\textrm{u}_h) = \left(\tilde{\textrm{D}}_{x_1}(\textrm{u}_h),
+    \ldots, \tilde{\textrm{D}}_{x_D}(\textrm{u}_h)\right), \qquad
+\tilde{\textrm{D}}_{x_d}(\textrm{u}_h)(i) = \frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}.
 ```
 
-The same function as [`D̽ₕ`](@ref), under the name the starred vector calculus family shares.
+The same function as [`D̃ₕ`](@ref), under the name the tilde vector calculus family shares.
 In 1D it returns the bare grid function, above a `D`-tuple. Each difference is truncated to
 zero on the last slice of its direction.
 
-[`∇̽ₕ!`](@ref) writes into a destination instead, and allocates nothing.
+[`∇̃ₕ!`](@ref) writes into a destination instead, and allocates nothing.
 
-See also: [`div̽ₕ`](@ref), [`curl̽ₕ`](@ref), [`∇ₕ`](@ref)
+See also: [`diṽₕ`](@ref), [`curl̃ₕ`](@ref), [`∇ₕ`](@ref)
+
+### end ∇̃ₕ
+### ∇̽ₕ
+    ∇̽ₕ(uₕ::VectorElement) -> VectorElement or NTuple{D, VectorElement}
+
+Returns the cross-weighted discrete gradient of the grid function `uₕ`, one cross-weighted
+centered difference per direction:
+
+```math
+\overset{\times}{\nabla}_h(\textrm{u}_h) = \left(
+    \overset{\times}{\textrm{D}}_{x_1}(\textrm{u}_h), \ldots,
+    \overset{\times}{\textrm{D}}_{x_D}(\textrm{u}_h)\right), \qquad
+\overset{\times}{\textrm{D}}_{x_d}(\textrm{u}_h)(i) =
+    \frac{h_i}{h_i + h_{i+1}}\, \textrm{D}_{-}\textrm{u}_h(x_{i+1}) +
+    \frac{h_{i+1}}{h_i + h_{i+1}}\, \textrm{D}_{-}\textrm{u}_h(x_i).
+```
+
+The same function as [`D̽ₕ`](@ref): the dispatch alias and the tuple-valued alias coincide
+for this family (gpena/Bramble.jl#140), so `∇̽ₕ` is simply another name for it, under the
+`∇` notation the other vectorial gradients share. In 1D it returns the bare grid function,
+above a `D`-tuple. The first and last point along each direction have no truncated-boundary
+convention of their own and fall back to the one-sided difference the near side still
+defines, unlike [`∇cₕ`](@ref).
+
+See also: [`D̽ₓ`](@ref), [`∇ₕ`](@ref), [`∇₊ₕ`](@ref)
 
 ### end ∇̽ₕ
 ### diff₋ₕ
@@ -1543,14 +1568,14 @@ dimension there is one direction, so the node itself is returned rather than a
 one-element tuple.
 
 ### end M₊ₕ
-### D̽ₕ
-    D̽ₕ(arg)
+### D̃ₕ
+    D̃ₕ(arg)
 
-The starred forward difference of `arg` along every coordinate, as a tuple with one entry per
+The averaged-spacing forward difference of `arg` along every coordinate, as a tuple with one entry per
 spatial dimension. On a one-dimensional mesh it returns that single entry rather than
 a one-tuple.
 
-For a 2D space, `D̽ₕ(uₕ)` is
+For a 2D space, `D̃ₕ(uₕ)` is
 `(forward_star_difference(uₕ, Val(1)), forward_star_difference(uₕ, Val(2)))`. `arg` is a mesh, a grid
 space or a [`VectorElement`](@ref), as for `forward_star_difference`.
 
@@ -1558,13 +1583,13 @@ Accepts a grid function of a scalar or of a composite grid space, componentwise 
 the latter: each entry of the tuple is then itself a composite grid function.
 
 ---
-    D̽ₕ(op::LazyOp{D})
+    D̃ₕ(op::LazyOp{D})
 
-The symbolic starred forward difference of `op` along every coordinate, as a `D`-tuple of nodes. In one
+The symbolic averaged-spacing forward difference of `op` along every coordinate, as a `D`-tuple of nodes. In one
 dimension there is one direction, so the node itself is returned rather than a
 one-element tuple.
 
-### end D̽ₕ
+### end D̃ₕ
 ### Dcₕ
     Dcₕ(arg)
 
@@ -1587,14 +1612,14 @@ dimension there is one direction, so the node itself is returned rather than a
 one-element tuple.
 
 ### end Dcₕ
-### Dₕ
-    Dₕ(arg, d)
+### D̽ₕ
+    D̽ₕ(arg, d)
 
 The cross-weighted centered difference of `uₕ` along the `d` direction, the backward differences at ``x_{i+1}`` and ``x_i`` weighted by ``h_i`` and ``h_{i+1}``.
 
 `d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
 `Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
-[`Dₕₓ`](@ref) and its siblings forward through; the other two select between
+[`D̽ₓ`](@ref) and its siblings forward through; the other two select between
 literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
 stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
 its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
@@ -1609,39 +1634,39 @@ the operator is applied to each component in turn, and the result is the composi
 grid function whose components are those results.
 
 ---
-    Dₕ(arg)
+    D̽ₕ(arg)
 
 The cross-weighted centered difference of `arg` along every coordinate, as a tuple with one entry per
 spatial dimension. On a one-dimensional mesh it returns that single entry rather than
 a one-tuple.
 
-For a 2D space, `Dₕ(uₕ)` is
+For a 2D space, `D̽ₕ(uₕ)` is
 `(cross_weighted_difference(uₕ, Val(1)), cross_weighted_difference(uₕ, Val(2)))`. `arg` is a mesh, a grid
-space or a [`VectorElement`](@ref), as for `cross_weighted_difference`. The centered counterpart of [`∇ₕ`](@ref) and [`∇₊ₕ`](@ref), built from [`Dₕₓ`](@ref) rather than from the one-sided differences.
+space or a [`VectorElement`](@ref), as for `cross_weighted_difference`. The second-order, non-uniform-grid counterpart of [`∇ₕ`](@ref) and [`∇₊ₕ`](@ref), built from [`D̽ₓ`](@ref) rather than from the one-sided differences.
 
 Accepts a grid function of a scalar or of a composite grid space, componentwise on
 the latter: each entry of the tuple is then itself a composite grid function.
 
 ---
-    Dₕ(op::LazyOp{D}, ::Val{Dim})
+    D̽ₕ(op::LazyOp{D}, ::Val{Dim})
 
 The symbolic cross-weighted centered difference of `op` along direction `Dim`, as a `CrossWeightedDifference` node.
 
-The entry point [`Dₕₓ`](@ref) and its siblings forward through, and the same
-function the space layer applies to a grid function: `Dₕ(uₕ, Val(1))` computes
-values, `Dₕ(U, Val(1))` builds the node that will compute them during assembly.
+The entry point [`D̽ₓ`](@ref) and its siblings forward through, and the same
+function the space layer applies to a grid function: `D̽ₕ(uₕ, Val(1))` computes
+values, `D̽ₕ(U, Val(1))` builds the node that will compute them during assembly.
 
 Takes a `Val` and not an `Int`, unlike its space-layer namesake: `Dim` is a type
 parameter of the node, so a runtime direction would make the return type a `Union`.
 
 ---
-    Dₕ(op::LazyOp{D})
+    D̽ₕ(op::LazyOp{D})
 
 The symbolic cross-weighted centered difference of `op` along every coordinate, as a `D`-tuple of nodes. In one
 dimension there is one direction, so the node itself is returned rather than a
 one-element tuple.
 
-### end Dₕ
+### end D̽ₕ
 ### diff₋
     diff₋(arg, d)
 
@@ -1799,14 +1824,14 @@ Takes a `Val` and not an `Int`, unlike its space-layer namesake: `Dim` is a type
 parameter of the node, so a runtime direction would make the return type a `Union`.
 
 ### end jump
-### D̽
-    D̽(arg, d)
+### D̃
+    D̃(arg, d)
 
 The forward difference of `uₕ` along the `d` direction over the averaged spacing, ``\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}``.
 
 `d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
 `Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
-[`D̽ₓ`](@ref) and its siblings forward through; the other two select between
+[`D̃ₓ`](@ref) and its siblings forward through; the other two select between
 literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
 stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
 its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
@@ -1821,18 +1846,18 @@ the operator is applied to each component in turn, and the result is the composi
 grid function whose components are those results.
 
 ---
-    D̽(op::LazyOp{D}, ::Val{Dim})
+    D̃(op::LazyOp{D}, ::Val{Dim})
 
-The symbolic starred forward difference of `op` along direction `Dim`, as a `StarDifference` node.
+The symbolic averaged-spacing forward difference of `op` along direction `Dim`, as a `StarDifference` node.
 
-The entry point [`D̽ₓ`](@ref) and its siblings forward through, and the same
-function the space layer applies to a grid function: `D̽(uₕ, Val(1))` computes
-values, `D̽(U, Val(1))` builds the node that will compute them during assembly.
+The entry point [`D̃ₓ`](@ref) and its siblings forward through, and the same
+function the space layer applies to a grid function: `D̃(uₕ, Val(1))` computes
+values, `D̃(U, Val(1))` builds the node that will compute them during assembly.
 
 Takes a `Val` and not an `Int`, unlike its space-layer namesake: `Dim` is a type
 parameter of the node, so a runtime direction would make the return type a `Union`.
 
-### end D̽
+### end D̃
 ### Dc
     Dc(arg, d)
 
@@ -1885,11 +1910,11 @@ parameter of the node, so a runtime direction would make the return type a `Unio
 The forward difference of `uₕ` along `dim_val`, divided by the averaged spacing:
 
 ```math
-\overset{\times}{\textrm{D}}_{+}(\textrm{u}_h)(i) =
+\tilde{\textrm{D}}_{+}(\textrm{u}_h)(i) =
     \frac{\textrm{u}_h(x_{i+1}) - \textrm{u}_h(x_i)}{(h_i + h_{i+1})/2}
 ```
 
-Reached through [`D̽ₓ`](@ref) and its siblings, and takes a mesh, a grid space or a
+Reached through [`D̃ₓ`](@ref) and its siblings, and takes a mesh, a grid space or a
 grid function as the other difference families do.
 
 The last point has no forward neighbour, so it is truncated to zero, as in
@@ -1924,12 +1949,12 @@ See also: [`star_spacings`](@ref), [`D₋ₓ`](@ref), [`D₊ₓ`](@ref).
 The cross-weighted centered difference of `uₕ` along `dim_val`:
 
 ```math
-\textrm{D}_{h}(\textrm{u}_h)(i) =
+\overset{\times}{\textrm{D}}_{h}(\textrm{u}_h)(i) =
     \frac{h_i}{h_i + h_{i+1}}\, \textrm{D}_{-}\textrm{u}_h(x_{i+1}) +
     \frac{h_{i+1}}{h_i + h_{i+1}}\, \textrm{D}_{-}\textrm{u}_h(x_i)
 ```
 
-Reached through [`Dₕₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
+Reached through [`D̽ₓ`](@ref) and its siblings, and takes a mesh, a grid space or a grid
 function as the other difference families do.
 
 It is the same two one-sided differences [`Dcₓ`](@ref) combines, weighted by the opposite

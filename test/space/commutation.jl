@@ -24,7 +24,7 @@ using ..TestUtils: WITH_SLOW_TESTS
 # error; this compares two orderings that must agree independently of the formula.
 #
 # It also holds at every boundary and corner slice, and that is not an accident: each
-# operator's boundary rule -- truncate to zero, or (`Dₕ`, gpena/Bramble.jl#183) fall back
+# operator's boundary rule -- truncate to zero, or (`D̽ₕ`, gpena/Bramble.jl#183) fall back
 # to a one-sided difference -- is decided purely from its own axis's index, with the other
 # axis riding along unchanged. Two operators along different axes never touch the same
 # index in the direction the other one differences, so the identity is exact everywhere,
@@ -37,9 +37,9 @@ using ..TestUtils: WITH_SLOW_TESTS
         ("D₊ₓ", D₊ₓ, "D₋ᵧ", D₋ᵧ),
         ("D₋ₓ", D₋ₓ, "D₊ᵧ", D₊ᵧ),
         ("Dcₓ", Dcₓ, "Dcᵧ", Dcᵧ),
-        ("Dₕₓ", Dₕₓ, "Dₕᵧ", Dₕᵧ),
-        ("D̽ₓ", D̽ₓ, "D₋ᵧ", D₋ᵧ),
-        ("Dcₓ", Dcₓ, "Dₕᵧ", Dₕᵧ),
+        ("D̽ₓ", D̽ₓ, "D̽ᵧ", D̽ᵧ),
+        ("D̃ₓ", D̃ₓ, "D₋ᵧ", D₋ᵧ),
+        ("Dcₓ", Dcₓ, "D̽ᵧ", D̽ᵧ),
         ("Mₓ", Mₓ, "D₋ᵧ", D₋ᵧ),
         ("M₊ₓ", M₊ₓ, "Mᵧ", Mᵧ),
         ("diff₋ₓ", diff₋ₓ, "diff₊ᵧ", diff₊ᵧ),
@@ -82,7 +82,7 @@ using ..TestUtils: WITH_SLOW_TESTS
                     ("D₋ₓ", D₋ₓ, "D₋₂", D₋₂),
                     ("D₋ᵧ", D₋ᵧ, "D₋₂", D₋₂),
                     ("Dcₓ", Dcₓ, "Dc₂", Dc₂),
-                    ("Dₕᵧ", Dₕᵧ, "Dₕ₂", Dₕ₂),
+                    ("D̽ᵧ", D̽ᵧ, "D̽₂", D̽₂),
                     ("M₊ₓ", M₊ₓ, "D₋₂", D₋₂)
                 )
                     @testset "$n1 ∘ $n2" begin
@@ -102,7 +102,7 @@ using ..TestUtils: WITH_SLOW_TESTS
         Vₕ = gridspace(Ωₕ, Val(3))
         cₕ = Rₕ(Vₕ, (x -> x[1] * x[2], x -> sin(x[1]), x -> exp(x[2])))
 
-        for (op1, op2) in ((D₋ₓ, D₋ᵧ), (Dcₓ, Dcᵧ), (Dₕₓ, Dₕᵧ), (Mₓ, D₊ᵧ))
+        for (op1, op2) in ((D₋ₓ, D₋ᵧ), (Dcₓ, Dcᵧ), (D̽ₓ, D̽ᵧ), (Mₓ, D₊ᵧ))
             @test parent(op1(op2(cₕ))) ≈ parent(op2(op1(cₕ)))
         end
     end
@@ -167,7 +167,7 @@ using ..TestUtils: WITH_SLOW_TESTS
         uₕ = Rₕ(gridspace(Ωₕ), x -> exp(x) + x^3)
 
         @test !isapprox(parent(D₋ₓ(Mₓ(uₕ))), parent(Mₓ(D₊ₓ(uₕ))))
-        @test !isapprox(parent(Dcₓ(D₋ₓ(uₕ))), parent(Dₕₓ(D₋ₓ(uₕ))))
+        @test !isapprox(parent(Dcₓ(D₋ₓ(uₕ))), parent(D̽ₓ(D₋ₓ(uₕ))))
     end
 end
 

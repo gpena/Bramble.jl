@@ -85,8 +85,8 @@ end
                 ("M₊ᵧ", M₊ᵧ(id2)),
                 ("jumpᵧ", jumpᵧ(id2)),
                 ("Dcᵧ", Dcᵧ(id2)),
-                ("Dₕₓ", Dₕₓ(id2)),
-                ("D̽ᵧ", D̽ᵧ(id2))
+                ("D̽ₓ", D̽ₓ(id2)),
+                ("D̃ᵧ", D̃ᵧ(id2))
             )
                 @testset "$nm" begin
                     @test sort(stencil_offsets(node)) == _stencil_at(node, Wₕ2, I, lin2)
@@ -106,8 +106,8 @@ end
             ("M₊ₓ", M₊ₓ(id1), M₊ₓ(Ωₕ1)),
             ("jumpₓ", jumpₓ(id1), jumpₓ(Ωₕ1)),
             ("Dcₓ", Dcₓ(id1), Dcₓ(Ωₕ1)),
-            ("D̽ₓ", D̽ₓ(id1), D̽ₓ(Ωₕ1)),
-            ("Dₕₓ", Dₕₓ(id1), Dₕₓ(Ωₕ1))
+            ("D̃ₓ", D̃ₓ(id1), D̃ₓ(Ωₕ1)),
+            ("D̽ₓ", D̽ₓ(id1), D̽ₓ(Ωₕ1))
         )
             @testset "$nm" begin
                 predicted = sort([o[1] for o in stencil_offsets(node)])
@@ -138,7 +138,7 @@ end
         @test sort(stencil_offsets(D₋ₓ(id1))) == [(-1,), (0,)]
         @test sort(stencil_offsets(D₊ₓ(id1))) == [(0,), (1,)]
         @test sort(stencil_offsets(Dcₓ(id1))) == [(-1,), (1,)]
-        @test sort(stencil_offsets(Dₕₓ(id1))) == [(-1,), (0,), (1,)]
+        @test sort(stencil_offsets(D̽ₓ(id1))) == [(-1,), (0,), (1,)]
         @test sort(stencil_offsets(jumpₓ(id1))) == [(0,), (1,)]
 
         # composing widens, and the widening is the sum of the two reaches
@@ -169,7 +169,7 @@ end
 
         # nesting composes the two reaches
         @test sort(stencil_offsets(D₊ₓ(D₊ₓ(id1)))) == [(0,), (1,), (2,)]
-        @test sort(stencil_offsets(Dₕₓ(D₋ₓ(id1)))) == [(-2,), (-1,), (0,), (1,)]
+        @test sort(stencil_offsets(D̽ₓ(D₋ₓ(id1)))) == [(-2,), (-1,), (0,), (1,)]
 
         # a shift moves the reach without widening it, and moves it exactly
         @test sort(stencil_offsets(shift_op(D₋ₓ(id1), 1, 3))) == [(2,), (3,)]
@@ -185,7 +185,7 @@ end
         # its coefficients, so one prediction covers the grid. If a node ever truncated by
         # dropping entries instead, the pattern would depend on position and this would
         # stop being sound.
-        for node in (D₋ₓ(id1), D₊ₓ(id1), Dcₓ(id1), Dₕₓ(id1), D̽ₓ(id1), jumpₓ(id1))
+        for node in (D₋ₓ(id1), D₊ₓ(id1), Dcₓ(id1), D̽ₓ(id1), D̃ₓ(id1), jumpₓ(id1))
             predicted = sort(stencil_offsets(node))
             for i in 1:npoints(Ωₕ1)
                 @test _stencil_at(node, Wₕ1, CartesianIndex(i), lin1) == predicted

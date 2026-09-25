@@ -58,8 +58,8 @@ using Bramble:
             ("M₊ₓ", M₊ₓ),
             ("jumpₓ", jumpₓ),
             ("Dcₓ", Dcₓ),
-            ("D̽ₓ", D̽ₓ),
-            ("Dₕₓ", Dₕₓ)
+            ("D̃ₓ", D̃ₓ),
+            ("D̽ₓ", D̽ₓ)
         )
             b = assemble(form(Wₕ, v -> innerₕ(op(sf), v)))
             @test b ≈ parent(op(fₕ)) .* w                     # the oracle
@@ -88,8 +88,8 @@ using Bramble:
             ("jumpᵧ", jumpᵧ),
             ("Dcₓ", Dcₓ),
             ("Dcᵧ", Dcᵧ),
-            ("D̽ₓ", D̽ₓ),
-            ("Dₕₓ", Dₕₓ)
+            ("D̃ₓ", D̃ₓ),
+            ("D̽ₓ", D̽ₓ)
         )
             b = assemble(form(Wₕ, v -> innerₕ(op(sf), v)))
             @test b ≈ parent(op(fₕ)) .* w

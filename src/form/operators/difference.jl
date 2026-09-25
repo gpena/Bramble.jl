@@ -132,10 +132,10 @@ end
 """
     StarDifference{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
 
-An AST node for the starred forward difference along `Dim`,
+An AST node for the forward difference over the averaged spacing along `Dim`,
 
 ```math
-D^{*}_{+}(u)_i = \\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}
+\\tilde{D}_{+}(u)_i = \\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}
 ```
 
 The forward difference over the *averaged* spacing rather than the forward one, which is
@@ -151,7 +151,7 @@ end
 An AST node for the cross-weighted centered difference along `Dim`,
 
 ```math
-D_h(u)_i = \\frac{h_i}{h_i + h_{i+1}} D_{-}(u)_{i+1}
+\\overset{\\times}{D}_h(u)_i = \\frac{h_i}{h_i + h_{i+1}} D_{-}(u)_{i+1}
          + \\frac{h_{i+1}}{h_i + h_{i+1}} D_{-}(u)_i
 ```
 
@@ -165,12 +165,13 @@ end
 
 # The three extended families, as `@node_family` calls like the one-sided pair above. Their
 # prose is thinner than the space layer's: the boundary conventions and the order-of-accuracy
-# comparisons that `Dcₓ` and `Dₕₓ` carry there describe arithmetic, and the arithmetic of
+# comparisons that `Dcₓ` and `D̽ₓ` carry there describe arithmetic, and the arithmetic of
 # these nodes is `_stencil_weights` below, which documents itself.
 #
-# `Dₕ` is the one family whose stem and tuple-valued alias are the same name, so `Dₕ(op)`
-# gives the `D`-tuple and `Dₕ(op, Val(2))` the `y` node. They coexist by arity, which is the
-# decision gpena/Bramble.jl#140 asked to be made on purpose rather than by merge.
+# `D̽ₕ` is the one family whose dispatch alias and tuple-valued alias are the same name
+# (gpena/Bramble.jl#349: the family formerly called `Dₕ`), so `D̽ₕ(op)` gives the `D`-tuple
+# and `D̽ₕ(op, Val(2))` the `y` node. They coexist by arity, which is the decision
+# gpena/Bramble.jl#140 asked to be made on purpose rather than by merge.
 
 @node_family(node=CenteredDifference,
     stem=Dc,
@@ -178,14 +179,15 @@ end
     vectorial_alias=Dcₕ)
 
 @node_family(node=StarDifference,
-    stem=D̽,
-    what="starred forward difference",
-    vectorial_alias=D̽ₕ)
+    stem=D̃,
+    what="averaged-spacing forward difference",
+    vectorial_alias=D̃ₕ)
 
 @node_family(node=CrossWeightedDifference,
-    stem=Dₕ,
+    stem=D̽,
     what="cross-weighted centered difference",
-    vectorial_alias=Dₕ)
+    dispatch_alias=D̽ₕ,
+    vectorial_alias=D̽ₕ)
 
 # --- Stencils --------------------------------------------------------------------- #
 
@@ -207,7 +209,7 @@ end
 ) where {D, Dim}
     m = mesh(space)
     mask = I[Dim] == npoints(m, Tuple)[Dim] ? 0 : 1
-    # the averaged spacing, which is what the starred difference divides by
+    # the averaged spacing, which is what D̃ divides by
     c = 2 * mask / (spacing(m, I, Dim) + forward_spacing(m, I, Dim))
     return (c, -c)
 end
@@ -227,7 +229,7 @@ end
     m = mesh(space)
 
     if I[Dim] == 1
-        # No point behind the first one: Dₕ has no truncated-boundary convention of its
+        # No point behind the first one: D̽ₕ has no truncated-boundary convention of its
         # own, so it collapses to the one-sided difference the near side still gives,
         # D₊(u)_1 = (u_2 - u_1)/h_1 (gpena/Bramble.jl#183).
         a = inv(spacing(m, I, Dim))
@@ -588,7 +590,7 @@ end
 expression(op::BackwardDifference{D, Dim}) where {D, Dim} = "D₋$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
 expression(op::ForwardDifference{D, Dim}) where {D, Dim} = "D₊$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
 expression(op::CenteredDifference{D, Dim}) where {D, Dim} = "Dc$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
-expression(op::StarDifference{D, Dim}) where {D, Dim} = "D̽$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+expression(op::StarDifference{D, Dim}) where {D, Dim} = "D̃$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
 function expression(op::CrossWeightedDifference{D, Dim}) where {D, Dim}
-    "Dₕ$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+    "D̽$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
 end

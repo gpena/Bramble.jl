@@ -573,7 +573,7 @@ end
 # which are not the mesh's own cached `spacings` field).
 #
 # Applied to the two families #302/#306 actually measured as bottlenecks (`D₋ₓ`/`D₊ₓ`, the
-# one-sided finite differences, and `Dcₓ`, `Centered`): `CrossWeighted` (`Dₕ`) reads two
+# one-sided finite differences, and `Dcₓ`, `Centered`): `CrossWeighted` (`D̽`) reads two
 # distinct raw spacings and combines them in a weighted average that is not a single
 # reciprocal multiply, so its interior branch keeps calling `_compute_difference` unchanged
 # (still a division, functionally identical to before this file) -- it still gets the
@@ -705,7 +705,7 @@ end
 # (`star_spacings`, resolved before this launch): one multiply by `invh[i] / 2` replaces it.
 @inline _centered_interior(dir::Bramble.Centered, back, cur, fwd, h, invh::AbstractVector, i) = (fwd - back) *
                                                                                                 (@inbounds invh[i]) / 2
-# `CrossWeighted` (`Dₕ`) reads two distinct raw spacings and combines them in a weighted
+# `CrossWeighted` (`D̽`) reads two distinct raw spacings and combines them in a weighted
 # average that is not a single reciprocal multiply (see the file-level note above); kept on
 # `_compute_difference`, unchanged.
 @inline _centered_interior(dir::Bramble.CrossWeighted, back, cur, fwd, h, invh, i) = Bramble._compute_difference(

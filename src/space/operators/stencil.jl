@@ -124,9 +124,10 @@ end
 #
 # It lived in `_vectorial_expr` as three `alias(arg, ::Val{D})` methods until
 # gpena/Bramble.jl#74. That put the *mesh dimension* on a public two-argument signature,
-# which is the signature #74 needs for the *direction*: on a 2D mesh `Dₕ(u, Val(2))` meant
-# the pair, and has to mean the `y` difference. `Dₕ` is the one family whose stem and
-# vectorial alias are the same name, so only it collided -- but moving the unrolling here
+# which is the signature #74 needs for the *direction*: on a 2D mesh `D̽ₕ(u, Val(2))` meant
+# the pair, and has to mean the `y` difference. `D̽ₕ` (gpena/Bramble.jl#349: the family
+# formerly called `Dₕ`) is the one family whose dispatch alias and vectorial alias are the
+# same name, so only it collided -- but moving the unrolling here
 # removes the shape rather than special-casing the one name, and drops three generated
 # methods per family while doing it.
 @inline _vectorial_apply(f::F, arg, ::Val{1}) where {F} = f(arg, Val(1))
@@ -286,7 +287,7 @@ functions.
 
 `opening_sentence`, given non-empty, replaces the generic "The `\$dir_string` `\$what` of
 `uₕ` along the `\$suffix` direction, ``\$formula``, written into `vₕ`." the same way it does
-for `_alias_expr` -- `Dc!`/`Dₕ!` have no backward/forward adjective to put in `dir_string`
+for `_alias_expr` -- `Dc!`/`D̽!` have no backward/forward adjective to put in `dir_string`
 either.
 
 `source` is the `LineNumberNode` the generated method is attributed to; the macro passes its
@@ -350,16 +351,16 @@ not separate the unscaled difference from the finite difference.
 
 `opening_sentence`, given non-empty, replaces the generic "The `\$dir_string` `\$what`
 along the `\$suffix` direction, ``\$formula``." with the caller's own wording: `Dc` and
-`Dₕ` have no backward/forward adjective to put in `dir_string` at all.
+`D̽` have no backward/forward adjective to put in `dir_string` at all.
 
 The three remaining keyword notes are each a sentence the docstring includes only when
 given (non-empty), one per insertion point a family may need: `formula_note` follows the
 opening sentence (the diff/finite-difference families use this to contrast the two, which
 does not apply to an average); `alias_note` follows the `Alias for ...` sentence, before
-`arg` is described (`Dₕ` uses this to compare itself with `Dc`); `trailing_note` follows
+`arg` is described (`D̽` uses this to compare itself with `Dc`); `trailing_note` follows
 the description of `arg`, before the closing "Accepts a grid function..." paragraph
-(`D̽`, `Dc` and `Dₕ` use this for their boundary-behaviour and precondition caveats,
-which differ both in what happens at the ends -- `D̽`/`Dc` truncate, `Dₕ` falls back
+(`D̃`, `Dc` and `D̽` use this for their boundary-behaviour and precondition caveats,
+which differ both in what happens at the ends -- `D̃`/`Dc` truncate, `D̽` falls back
 to a one-sided difference (gpena/Bramble.jl#183) -- and in whether a mesh needs at least
 three points along the direction).
 
@@ -423,7 +424,7 @@ The counterpart of `_alias_expr` for the tuple-valued aliases (`∇ₕ`, `diff�
 operator families generated the same three methods independently before this existed.
 
 `note`, given non-empty, is an extra sentence appended after the worked 2D example --
-`Dₕ` uses this to place itself relative to `∇ₕ`/`∇₊ₕ`, a comparison none of the other
+`D̽ₕ` uses this to place itself relative to `∇ₕ`/`∇₊ₕ`, a comparison none of the other
 vectorial aliases need.
 """
 function _vectorial_expr(
@@ -571,7 +572,7 @@ what it takes before the direction (gpena/Bramble.jl#101); `difference.jl` and
 |:--|:--|:--|
 | unscaled difference | `_apply_spaced!` | `(_no_spacing, _no_precheck)` |
 | finite difference | `_apply_spaced!` | `(spacings_func, _no_precheck)` |
-| `D̽`/`Dc`/`Dₕ` | `_apply_spaced!` | `(spacing_func, precheck)` |
+| `D̃`/`Dc`/`D̽ₕ` | `_apply_spaced!` | `(spacing_func, precheck)` |
 | average | `_apply_averaged!` | `()` |
 
 `extra_args` are spliced as bare identifiers, so each generated method names an ordinary
@@ -644,8 +645,8 @@ first") travel as string literals instead.
 
 `vectorial_dir_string`/`vectorial_what` default to `dir_string`/`what` and exist for the
 families that describe the tuple-valued alias differently from the per-coordinate ones:
-`D̽`/`Dc`/`Dₕ` override every directional `opening_sentence` and so pass `dir_string`
-and `what` empty, while `D̽ₕ`/`Dcₕ`/`Dₕ` still want "the centered difference of `arg`
+`D̃`/`Dc`/`D̽` override every directional `opening_sentence` and so pass `dir_string`
+and `what` empty, while `D̃ₕ`/`Dcₕ`/`D̽ₕ` still want "the centered difference of `arg`
 along every coordinate".
 """
 function _operator_aliases_expr(
