@@ -140,8 +140,14 @@ using ..TestUtils: alloc_test, @test_allocs
         @test all(m -> label(m) === :boundary && identifier(m) === :left, dm_dup_marker.symbols)
 
         # What the deduplication was protecting is the marked set, and that is unchanged.
-        mesh_dup = mesh(domain(I1D, dm_dup_marker), (7,), (false,))
-        mesh_one = mesh(domain(I1D, markers(I1D, :boundary => :left)), (7,), (false,))
+        # :boundary => :left only covers one face, a deliberate mismatch with the mesh's
+        # geometric boundary (both faces), not a mistake (gpena/Bramble.jl#18).
+        mesh_dup = @test_logs (:warn, r"boundary.*something other than") mesh(
+            domain(I1D, dm_dup_marker), (7,), (false,)
+        )
+        mesh_one = @test_logs (:warn, r"boundary.*something other than") mesh(
+            domain(I1D, markers(I1D, :boundary => :left)), (7,), (false,)
+        )
         @test Bramble.markers(mesh_dup)[:boundary] == Bramble.markers(mesh_one)[:boundary]
 
         # Declaration order is preserved, where the `Set` gave hash order.
