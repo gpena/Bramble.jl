@@ -163,7 +163,7 @@ smaller number of sweeps for the same matrix or vector:
 
 | Input | Simplifies to | Effect on routing |
 |:--- |:--- |:--- |
-| `0 * A` | a `ZeroOperator` | a one-point pattern instead of `A`'s full stencil |
+| `0 * A` | a `ZeroOperator` | an empty stencil: no pattern entries instead of `A`'s full stencil |
 | `A + 0`, `0 + A` | `A` | the zero term is not a term at all |
 | `1 * A` | `A` | no wrapper node to route through |
 | `c1 * (c2 * A)`, both static | `(c1 * c2) * A` | unchanged term count, one multiply instead of two |

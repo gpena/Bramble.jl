@@ -191,7 +191,7 @@ using Bramble:
         )
             @test local_stencil(op, Wₕ, I, nothing, lin) == ((O, 1.0),)
         end
-        @test local_stencil(ZeroOperator(Wₕ), Wₕ, I, nothing, lin) == ((O, 0.0),)
+        @test local_stencil(ZeroOperator(Wₕ), Wₕ, I, nothing, lin) == ()
 
         # and in one dimension the offset is a 1-tuple
         @test local_stencil(TrialFunction{1}(), Wₕ1, CartesianIndex(4), nothing, 4) ==

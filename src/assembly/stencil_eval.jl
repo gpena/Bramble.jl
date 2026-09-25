@@ -271,9 +271,13 @@ end
 @inline local_stencil(
     op::IdentityOperator{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D} = ((zero_offset(Val(D)), 1),)
+# No entries at all, the same "contributes nothing here" `RegionRestriction` answers with.
+# A one-entry `((offset, 0),)` is a linear-form entry only: a bilinear walk reads each entry
+# as `(off_u, off_v, weight)`, and a form whose whole AST simplified to zero (`0 * a`, or a
+# runtime `k = 0`) crashed destructuring it with a `BoundsError`.
 @inline local_stencil(
     op::ZeroOperator{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
-) where {D} = ((zero_offset(Val(D)), 0),)
+) where {D} = ()
 
 # ==============================================================================
 # 2. AST Resolution & Thunk Eval
