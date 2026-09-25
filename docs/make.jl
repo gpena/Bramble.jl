@@ -112,6 +112,12 @@ internals = "Internals" => [
 ]
 documentation = "Documentation" => ["api.md", "api_sciml.md", internals]
 
+# Every new page needs `CurrentModule = Bramble` in its `@meta` block, or its page-level
+# `@ref`s resolve against `Main` and fail even when the docstring is included
+# (docs/src/internals/gpu.md hit this, gpena/Bramble.jl#314):
+#     ```@meta
+#     CurrentModule = Bramble
+#     ```
 allpages = [home, getting_started, foundations, forms, scientific,
     visualization, examples, benchmarks, documentation]
 
