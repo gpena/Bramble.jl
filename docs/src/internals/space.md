@@ -133,25 +133,26 @@ the same fixed handful of kilobytes regardless.
 
 `innerₕ(u, u)` and `inner₊ₓ(u, u)` on the same `100³` space, against a dense-vector
 reduction over the identical values (the same `muladd`/`@simd` shape `_dot` uses for a
-plain `AbstractVector`), minimum of 7 back-to-back calls each, warmed up first:
+plain `AbstractVector`), minimum of 7 back-to-back calls each, warmed up first, before the
+2026-09-25 line-walk rewrite below:
 
 | call | time | dense equivalent | ratio |
 |---|---|---|---|
 | `innerₕ(u, u)` | 0.868 ms | 0.231-0.240 ms | 3.6-3.8x |
 | `inner₊ₓ(u, u)` | 0.868 ms | 0.227-0.234 ms | 3.7-3.8x |
 
-Both agree with the dense reduction to `rtol = 1e-12`.
+Both agreed with the dense reduction to `rtol = 1e-12`.
 
 `_dot` itself, called directly rather than through `innerₕ`, minimum of 15 back-to-back
 calls: `SeparableWeights` 0.868-0.892 ms against the dense vector's 0.180-0.182 ms, a
-ratio of 4.81-4.90. `@which` confirms dispatch reaches the `CartesianIndex`-walking
+ratio of 4.81-4.90. `@which` confirmed dispatch reached the `CartesianIndex`-walking
 specialization (`src/space/inner_product.jl:333`), not the generic `AbstractVector`
-method (`src/utils/linear_algebra.jl:408`) -- so this is the intended path, not the
-linear-`getindex` fallback. The ratio measured here sits near that fallback's own ≈4.9x
+method (`src/utils/linear_algebra.jl:408`) -- so this was the intended path, not the
+linear-`getindex` fallback. The ratio measured here sat near that fallback's own ≈4.9x
 figure rather than nearer the ≈2.475x S6.3 recorded for this same specialization; the
-likely reason, from reading the loop (previous section): it carries no `@simd`
+likely reason, from reading the loop as it stood then: it carried no `@simd`
 annotation. The load and power state moved during this session (above), so a second
-contributor cannot be ruled out; both figures are reported rather than one silently
+contributor could not be ruled out; both figures were reported rather than one silently
 preferred, per `bramble-verification`.
 
 **Reconciled for gpena/Bramble.jl#273** (2026-09-22, Julia 1.13.0, this machine,
@@ -160,16 +161,24 @@ machine `bramble-verification` asks for, but the same caveat the paragraph above
 carries): re-running the exact 100³/`weights(Wₕ, Val((1,2)))` case from this page's own
 `CHECK` script, `_dot` against that `SeparableWeights` versus the same weights `collect`ed
 to a dense vector, `@belapsed`, four independent process runs gave 2.43-2.49x -- not the
-4.81-4.90x above, but squarely the ≈2.4x the source comment
-(`src/space/inner_product.jl:415-434`) and the ≈2.475x S6.3 recorded for this same
-specialization. The loop is unchanged (`@simd` was tried and reverted: on a
-deterministic-seed mesh it changes the reduction at the bit level, not only its speed, so
-it fails the correctness bar this figure is measured under). Nothing else moved either --
-same specialization, same `@which` dispatch, same missing `@simd`. The likeliest
-explanation is the one this section already named for the earlier run: its own mixed
-battery/AC/competing-language-server state, not a property of the code. **2.4-2.5x is the
-number both locations now report**; the 4.81-4.90x above is kept for the historical record
-but is superseded.
+4.81-4.90x above, but squarely the ≈2.4x the source comment then carried and the ≈2.475x
+S6.3 recorded for this same specialization. At the time the loop was unchanged (`@simd`
+had been tried and reverted: on a deterministic-seed mesh it changed the reduction at the
+bit level, not only its speed, so it failed the correctness bar this figure was measured
+under). Nothing else had moved either -- same specialization, same `@which` dispatch,
+same missing `@simd`. The likeliest explanation was the one this section already named
+for the earlier run: its own mixed battery/AC/competing-language-server state, not a
+property of the code.
+
+**Superseded by the 2026-09-25 line-walk rewrite.** The loop no longer walks
+`CartesianIndices(w.dims)` point by point with a serial `muladd` chain and no `@simd`; it
+walks axis-1 lines with the product of the other axes' factors hoisted out once per line,
+and reduces each line with `@inbounds @simd` (`src/space/inner_product.jl`, comment above
+`_dot`). Measured the same way, on non-uniform 1000² and 100³ grids, minimum of 15 runs:
+`innerₕ`/`inner₊ₓ` now cost **0.74-0.78x** the dense reduction over the collected weights
+-- faster than dense, because there is one fewer full-length vector to read, not slower.
+The 3.6-3.8x, 4.81-4.90x and 2.4-2.5x figures above are the pre-rewrite history; none of
+them is the current cost.
 
 One `assemble!` refill of `innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))` on the uniform `60³` mesh
 S6.2 used (`ndofs = 216,000`, `nnz(A) = 1,490,400`), warmed up, minimum of 5, at 4
@@ -197,28 +206,32 @@ tens of megabytes, and completes in well under a microsecond on a `10^6`-point m
 
 ### Why the trade is worth taking
 
-Eliminating the last `O(n^D)` storage costs roughly a 3.6-3.8x slower `innerₕ`/`inner₊`
-whole-vector reduction, against weights that no longer scale with the grid at all: 5,288
-B instead of 32,005,288 B on `100³`, a figure that would only have grown had the `2^D`
-staggered family S6.3/S6.4 added stayed dense alongside it. The one path that matters for
-a typical solve, `assemble!`, is unaffected -- it does not move outside the range already
-on record.
+Eliminating the last `O(n^D)` storage now costs nothing extra: after the 2026-09-25
+line-walk rewrite, `innerₕ`/`inner₊` cost **0.74-0.78x** a dense whole-vector reduction --
+faster than dense, not slower -- against weights that no longer scale with the grid at
+all: 5,288 B instead of 32,005,288 B on `100³`, a figure that would only have grown had
+the `2^D` staggered family S6.3/S6.4 added stayed dense alongside it. Before that
+rewrite the same reduction cost roughly 3.6-3.8x dense (measured above); that history no
+longer applies. The one path that matters for a typical solve, `assemble!`, is unaffected
+-- it does not move outside the range already on record.
 
-The case that would make this the wrong trade: an algorithm that calls
-`innerₕ`/`inner₊` (or `normₕ`/`norm₊`, built on them) as its own per-iteration hot loop,
-at a frequency comparable to `assemble!` itself, on a grid small enough that the old
-dense storage was still affordable. A Krylov solver checking a residual norm once per
-outer iteration does not qualify -- that is `O(1)` calls per solve, not one per assembled
-point -- but a method recomputing `normₕ` on every inner-loop pass over a grid well under
-`100³` would pay the 3.6-3.8x penalty often enough to matter, with nothing to show for it
-in memory saved.
+The case that would make this the wrong trade has mostly closed with the rewrite: there
+is no whole-vector-reduction penalty left to pay for calling `innerₕ`/`inner₊` (or
+`normₕ`/`norm₊`, built on them) in a per-iteration hot loop. The one place a penalty
+remains is a grid whose axis 1 has only 1-4 points, where the per-line overhead leaves
+the reduction at 1.4-3.3x dense -- still never slower than the pre-rewrite loop, but not
+free either.
 
 ### Adding a new weight consumer
 
-Read a weight by the `CartesianIndex` you already hold, the way `compute_weight`'s
-`InnerPlusSet` branch and `_dot`/`_dot_masked` both do, rather than by a linear index
-built from it -- and expect `weights(Wₕ, ...)` to hand back a `SeparableWeights`, never a
-`Vector`, whichever inner product it names.
+For a full-grid sweep, walk axis-1 lines and hoist the other axes' factor product once
+per line, the way the unmasked `_dot` and `_seminorm_sq_along` do, rather than reading a
+weight by `CartesianIndex` (or a linear index converted to one) at every point -- and
+repeat the `#310` device-factor guard wherever a factor is indexed directly. For scattered
+indices with no line structure to hoist over, read by the `CartesianIndex` you already
+hold instead, the way `_dot_masked` and `compute_weight`'s `InnerPlusSet` branch both do,
+rather than by a linear index built from it. Either way, expect `weights(Wₕ, ...)` to hand
+back a `SeparableWeights`, never a `Vector`, whichever inner product it names.
 
 ## Operator matrices: stencil_matrix versus the Kronecker construction
 
