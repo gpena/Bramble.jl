@@ -217,6 +217,27 @@ Returns the underlying mesh object associated with the function space `Wₕ`.
 function mesh end
 
 """
+    points(Wₕ::AbstractSpaceType) -> Union{Vector, NTuple}
+
+Forwards to [`points`](@ref)`(mesh(Wₕ))`: the coordinates of the mesh points underlying `Wₕ`.
+
+```julia
+x, y = points(Wₕ)
+```
+
+See also: [`half_points`](@ref).
+"""
+@inline points(Wₕ::AbstractSpaceType) = points(mesh(Wₕ))
+
+"""
+    half_points(Wₕ::AbstractSpaceType)
+
+Forwards to [`half_points`](@ref)`(mesh(Wₕ))`: the precomputed cell centers (half-points) of
+the mesh underlying `Wₕ`.
+"""
+@inline half_points(Wₕ::AbstractSpaceType) = half_points(mesh(Wₕ))
+
+"""
     mesh_type(Wₕ::AbstractSpaceType) -> Type{<:AbstractMeshType}
     mesh_type(::Type{<:AbstractSpaceType}) -> Type{<:AbstractMeshType}
 

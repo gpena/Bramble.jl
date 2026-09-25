@@ -629,6 +629,25 @@ end
         @test occursin("Values", detailed)
         @test !endswith(detailed, '\n')
     end
+
+    @testset "points/half_points forward to the mesh" begin
+        @testset "1D" begin
+            Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 9, false)
+            Wₕ1 = gridspace(Ωₕ1)
+            @test points(Wₕ1) == points(Ωₕ1)
+            @test Bramble.half_points(Wₕ1) == Bramble.half_points(Ωₕ1)
+        end
+
+        @testset "2D" begin
+            Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false))
+            Wₕ2 = gridspace(Ωₕ2)
+            @test points(Wₕ2) == points(Ωₕ2)
+            @test Bramble.half_points(Wₕ2) == Bramble.half_points(Ωₕ2)
+
+            x, y = points(Wₕ2)
+            @test x == points(Ωₕ2)[1] && y == points(Ωₕ2)[2]
+        end
+    end
 end
 
 # Composite grid space invariants (gpena/Bramble.jl#120).
