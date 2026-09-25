@@ -2,6 +2,7 @@ module ExtMetalExtTests
 
 using Test
 using Bramble
+using Bramble: execution_policy, KroneckerLinearOperator, normal_vector
 using Metal
 # BrambleMetalExt's trigger is now the pair `["Metal", "GPUArrays"]` (gpena/Bramble.jl#321),
 # not `Metal` alone -- both must be `using`'d here for the extension to load at all.

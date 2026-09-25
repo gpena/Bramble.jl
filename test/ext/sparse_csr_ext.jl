@@ -10,6 +10,7 @@ module TestSparseMatricesCSRExt
 
 using Test
 using Bramble
+using Bramble: vector_type, matrix_type, execution_policy
 using Bramble: matrix, backend_eye, backend_zeros, allocate_system_matrix,
                assemble_parallel!, refactor!, sparse_factorize, sparse_refactor!,
                SuiteSparseFactorization

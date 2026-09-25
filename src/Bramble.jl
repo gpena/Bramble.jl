@@ -8,7 +8,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC, spdiagm, spzeros, rowvals, no
                     dropzeros!
 
 using LinearAlgebra: I, Diagonal
-import LinearAlgebra: mul!, issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot, lu, cholesky, ⋅
+import LinearAlgebra: mul!, issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot, lu, cholesky, ⋅, norm
 
 import Base: copy
 using Base: @propagate_inbounds

@@ -2,6 +2,7 @@ module ExtMetalFullstackTests
 
 using Test
 using Bramble
+using Bramble: divₕ!, curlₕ!, Δₕ!
 using Bramble: D₋ᵧ, D₋ₓ, D₋ₓ!, Mᵧ, Mₓ, change_points!, half_points, inner₊ᵧ, inner₊ₓ,
                jumpᵧ, jumpₓ, spacings, weights
 using Metal

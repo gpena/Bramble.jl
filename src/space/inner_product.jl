@@ -374,8 +374,8 @@ the inner product there: the square root of the sum of the components' squared n
 @inline normₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(innerₕ(uₕ, uₕ))
 
 """
-    norminf_h(uₕ::VectorElement) -> Real
-    norminf_h(uₕ::NTuple{D, VectorElement}) -> Real
+    norminf(uₕ::VectorElement) -> Real
+    norminf(uₕ::NTuple{D, VectorElement}) -> Real
 
 Returns the discrete maximum norm of the grid function `uₕ`, defined as
 
@@ -394,19 +394,29 @@ function returns a `Dual`.
 
 See also: [`normₕ`](@ref), [`norm₁ₕ`](@ref)
 """
-@inline function norminf_h(uₕ::VectorElement)
+@inline function norminf(uₕ::VectorElement)
     data = parent(uₕ)
     return mapreduce(abs, max, data; init = abs(zero(eltype(data))))
 end
 
-@inline norminf_h(uₕ::NTuple{<:Any, VectorElement}) = maximum(norminf_h, uₕ)
+@inline norminf(uₕ::NTuple{<:Any, VectorElement}) = maximum(norminf, uₕ)
 
 """
-    norm∞ₕ(uₕ::VectorElement) -> Real
+    norm(uₕ::VectorElement, kind::AbstractString) -> Real
 
-Unicode alias for [`norminf_h`](@ref).
+Returns the discrete norm of `uₕ` that `kind` names: `"h"` is [`normₕ`](@ref), `"1h"` is
+[`norm₁ₕ`](@ref) and `"∞"` is [`norminf`](@ref). Any other `kind` throws an `ArgumentError`.
+
+The one-argument `norm(uₕ)` is unchanged: a [`VectorElement`](@ref) is an `AbstractVector`,
+so it is still `LinearAlgebra`'s Euclidean norm of the values, which carries no quadrature
+weight.
 """
-const norm∞ₕ = norminf_h
+function norm(uₕ::VectorElement, kind::AbstractString)
+    kind == "h" && return normₕ(uₕ)
+    kind == "1h" && return norm₁ₕ(uₕ)
+    kind == "∞" && return norminf(uₕ)
+    throw(ArgumentError("the norm must be \"h\", \"1h\" or \"∞\", got \"$kind\""))
+end
 
 ################################################################################
 #                 Discrete Modified L² Inner Product and Norm                  #

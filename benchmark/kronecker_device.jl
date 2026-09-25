@@ -54,6 +54,8 @@
 #===========================================================================#
 
 using Bramble
+
+using Bramble: Δₕ!, KroneckerLinearOperator
 using Bramble: D₋ₓ, weights
 using Metal
 using KernelAbstractions

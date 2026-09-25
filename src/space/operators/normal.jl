@@ -26,7 +26,7 @@ against one restricts to the face without a second mask.
 ```jldoctest
 Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
 Wₕ = gridspace(Ωₕ)
-nₕ = normal_vector(Wₕ, :ymin)
+nₕ = Bramble.normal_vector(Wₕ, :ymin)
 (sum(parent(nₕ[1])), sum(parent(nₕ[2])))
 
 # output

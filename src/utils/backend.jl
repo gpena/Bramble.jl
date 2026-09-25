@@ -426,6 +426,7 @@ Allows meshes to inherit their scalar coordinate type from the underlying geomet
 # Examples
 ```jldoctest
 using Bramble, SparseArrays
+using Bramble: vector_type, matrix_type
 b = backend(Float32)
 vector_type(b) === Vector{Float32} && matrix_type(b) === SparseMatrixCSC{Float32, Int}
 

@@ -2,6 +2,7 @@ module FormNormalTests
 
 using Test
 using Bramble
+using Bramble: normal_vector
 using LinearAlgebra: dot
 using ..TestUtils: @test_allocs
 

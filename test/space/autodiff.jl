@@ -2,6 +2,7 @@ module SpaceAutodiffTests
 
 using Test
 using Bramble
+using Bramble: Dcₕ, D̃ₕ, D̽ₕ, norm₊
 using Bramble: Dcₓ, D̃ₓ, D̽ₓ, D₋ₓ, Mₓ, inner₊ᵧ, inner₊ₓ, jumpₓ, spacings
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: diff₋ₓ, diff₊ₓ, D₊ₓ, ∇₊ₕ, M₊ₓ

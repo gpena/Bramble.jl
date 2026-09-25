@@ -2,6 +2,7 @@ module SpaceWeightsStalenessTests
 
 using Test
 using Bramble
+using Bramble: norm₊
 using Bramble: change_points!, set_points!, weights
 using ..TestUtils: alloc_test, @test_allocs
 

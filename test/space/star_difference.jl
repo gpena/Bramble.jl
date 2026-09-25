@@ -2,6 +2,7 @@ module SpaceStarDifferenceTests
 
 using Test
 using Bramble
+using Bramble: D̃ₕ
 using Bramble: D̃ᵧ, D̃₂, D̃ₓ, D₋ᵧ, D₋₂, D₋ₓ, VectorElement, half_spacing, inner₊ᵧ, inner₊₂
 using Bramble: inner₊ₓ, set_points!
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.

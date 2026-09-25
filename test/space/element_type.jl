@@ -2,8 +2,9 @@ module SpaceElementTypeTests
 
 using Test
 using Bramble
+using Bramble: Dcₕ, D̃ₕ, D̽ₕ, vector_type, matrix_type, norm₊
 using Bramble: Dcᵧ, Dcₓ, D̃ₓ, D̽ᵧ, D̽ₓ, D₋ᵧ, D₋ₓ, Mᵧ, Mₓ, inner₊ᵧ, inner₊ₓ, jumpₓ
-using Bramble: norminf_h, spacings
+using Bramble: norminf, spacings
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: diff₋ₓ, diff₊ₓ, D₊ₓ, ∇₊ₕ, M₊ₓ, M₊ᵧ
 using SparseArrays
@@ -108,8 +109,8 @@ const F32_BACKEND = backend(;
         @test inner₊(uₕ, uₕ) isa Float32
         @test inner₊(gₕ, gₕ) isa Float32
         @test norm₊(gₕ) isa Float32
-        @test norminf_h(uₕ) isa Float32
-        @test norminf_h(gₕ) isa Float32
+        @test norminf(uₕ) isa Float32
+        @test norminf(gₕ) isa Float32
         @test inner₊ₓ(uₕ, uₕ) isa Float32
         @test inner₊ᵧ(uₕ, uₕ) isa Float32
     end

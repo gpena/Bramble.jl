@@ -2,6 +2,7 @@ module SpaceGridspacesTests
 
 using Test
 using Bramble
+using Bramble: vector_type
 using Bramble: D₋ₓ, Mₓ, ScalarGridSpace, CompositeGridSpace, cell_measure, jumpₓ, weights
 using Bramble:
                __prod,

@@ -62,7 +62,7 @@ which is why a uniform-grid benchmark cannot tell them apart.
 The direction can also come from a variable rather than from the name. Index the
 vectorial operator with it: `∇ₕ[d]` is the coordinate operator itself, so `∇ₕ[1]`,
 `∇ₕ[:x]` and `D₋ₓ` are the same function object, and `dx, dy = ∇ₕ` destructures it. The
-same holds for `D̃ₕ`, `Dcₕ`, `D̽ₕ`, `jumpₕ`, `Mₕ` and `Mcₕ`.
+same holds for `∇̃ₕ`, `∇cₕ`, `∇̽ₕ`, `jumpₕ`, `Mₕ` and `Mcₕ`.
 
 That is what makes a loop over directions writable, which the subscript names cannot
 express on their own:
@@ -86,7 +86,7 @@ are written `Bramble.D₋` or imported by name. The `Val` form is the one to rea
 direction must be a compile-time constant, as it must inside a form. The averages use
 `Mₕ`/`M₊ₕ` for this rather than a bare `M`: `M` is what most finite-element code calls its
 mass matrix. So `Mₕ(uₕ)` is the tuple over every coordinate and `Mₕ(uₕ, 2)` is the average
-along ``y`` — the same name, told apart by how many arguments it is given. `D̽ₕ` carries both
+along ``y`` — the same name, told apart by how many arguments it is given. `∇̽ₕ` carries both
 in the same way.
 
 An `Int` or a `Symbol` selects between literal `Val`s, one branch per direction the mesh
@@ -339,12 +339,12 @@ derivatives of ``x + 2y``. The same suffix works for the other families as `jump
 These are separate names from the dimensional entry points of [1.3](@ref
 operators_direction_argument) rather than one name with an extra argument, and deliberately:
 `∇ₕ(uₕ)` returns a tuple where `Bramble.D₋(uₕ, d)` returns a grid function, so folding them together
-would make the return type depend on whether an argument was passed at all. `D̽ₕ` and
+would make the return type depend on whether an argument was passed at all. `∇̽ₕ` and
 `Mₕ`/`M₊ₕ` are the exception, and they get away with it because the two meanings differ by
 arity rather than by the value of an argument:
 
 ```@repl operators
-D̽ₕ(vₕ) == (D̽ₕ(vₕ, 1), D̽ₕ(vₕ, 2))
+∇̽ₕ(vₕ) == (∇̽ₕ(vₕ, 1), ∇̽ₕ(vₕ, 2))
 Mₕ(vₕ) == (Mₕ(vₕ, :x), Mₕ(vₕ, :y))
 ```
 
@@ -421,7 +421,7 @@ innerₕ(D₊ₓ(aₕ), bₕ)                                # D₊ₓ does not 
 ```
 
 It holds per coordinate in two and three dimensions as well, with `D̃ᵧ`, `D̃₂`
-and their inner products. `D̃ₕ` returns all coordinates at once, as `∇₊ₕ` does.
+and their inner products. `∇̃ₕ` returns all coordinates at once, as `∇₊ₕ` does.
 
 This is why the operator exists. Energy estimates for these schemes are derived by
 moving a difference from one factor to the other, and that step is exact only with this
@@ -480,7 +480,7 @@ Accuracy follows the usual rule: the centered difference approximates the deriva
 the midpoint of its stencil, which is ``x_i`` only when the two spacings match. So it is
 second order on a uniform grid and first order otherwise, where the one-sided differences
 are first order on both. Like every other family, `Dcₓ` accepts a mesh or a grid space for
-the matrix and a grid function to apply it; `Dcₕ` gives every coordinate at once. Both end
+the matrix and a grid function to apply it; `∇cₕ` gives every coordinate at once. Both end
 rows of the matrix are empty, which is the truncation.
 
 ## 8. Second order on a non-uniform grid, `D̽ₓ`
@@ -520,7 +520,7 @@ nested:
 
 `D̽ₓ` is not skew-symmetric, so `Dcₓ` remains the one to reach for when the scheme needs
 that structure and `D̽ₓ` the one to reach for when it needs the order. Both accept a mesh
-or a grid space for the matrix and a grid function to apply it, and `D̽ₕ` gives every
+or a grid space for the matrix and a grid function to apply it, and `∇̽ₕ` gives every
 coordinate at once, the second-order, non-uniform-grid counterpart of `∇ₕ` and `∇₊ₕ`.
 They differ at the boundary: `Dcₓ` truncates both end rows to zero, while `D̽ₓ` has no
 truncated-boundary convention of its own and falls back to `D₊ₓ`/`D₋ₓ` there instead.

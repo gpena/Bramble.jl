@@ -471,7 +471,7 @@ Wₕ_par = gridspace(mesh(domain(interval(0.0, 1.0)), 33, true;
 l_par = form(Wₕ_par, v -> innerₕ(Rₕ(Wₕ_par, x -> sin(π * x)), v))
 b_par = assemble(l_par)      # threads, because Wₕ_par's backend says Parallel()
 
-execution_policy(Wₕ_par)
+Bramble.execution_policy(Wₕ_par)
 ```
 
 `assemble_parallel!` is the lower-level entry point that threads whatever the backend says,

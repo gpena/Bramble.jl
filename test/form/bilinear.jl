@@ -2,6 +2,7 @@ module FormBilinearTests
 
 using Test
 using Bramble
+using Bramble: matrix_type, execution_policy
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: M₊ᵧ
 using ForwardDiff

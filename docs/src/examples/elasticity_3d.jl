@@ -257,7 +257,7 @@ for n in ((17, 5, 5), (25, 7, 5), (33, 9, 7))
 end
 round.(tips ./ (-δ_eb), digits = 3)
 
-# Converging on beam theory from below. Write the shear terms with `D̽ₕ` and `innerₕ` instead of
+# Converging on beam theory from below. Write the shear terms with `∇̽ₕ` and `innerₕ` instead of
 # `εₕ`/`divₕ`'s staggered placements — collocating everything at the nodes rather than the
 # face/edge/cell centres the discrete strain and divergence actually live on — and the same beam
 # on these same three grids gives `+0.00011`, `-0.00005` and `+0.00009`: three to four orders of
@@ -274,7 +274,7 @@ round.(tips ./ (-δ_eb), digits = 3)
 # ## The deformed solid
 #
 # The stress to colour it by is recovered at the nodes with [`D̽ₓ`](@ref) and its siblings
-# rather than the staggered differences the form uses: `D̽ₕ` collapses to a one-sided difference
+# rather than the staggered differences the form uses: `∇̽ₕ` collapses to a one-sided difference
 # at the boundary instead of truncating to zero, and the boundary is the part being drawn.
 
 const Dh = Tuple(∇̽ₕ)

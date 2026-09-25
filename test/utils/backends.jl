@@ -2,6 +2,7 @@ module UtilsBackendsTests
 
 using Test
 using Bramble
+using Bramble: vector_type, matrix_type, backend_types, execution_policy
 using Bramble:
                Backend,
                backend,

@@ -318,7 +318,10 @@ vector field, and the conservative discrete Laplacian of a grid function. The un
 spellings use the backward differences, as [`∇ₕ`](@ref) does; `div₊ₕ` and `curl₊ₕ` are their
 forward twins. [`εₕ`](@ref)/[`εₕ!`](@ref) are the discrete symmetric small-strain tensor,
 over a composite `VectorElement` at runtime or, inside a [`form`](@ref), over a composite
-trial or test function -- the same name spans both, dispatching on what it is given.
+trial or test function -- the same name spans both, dispatching on what it is given. The
+in-place `!` forms write into a preallocated result and are `public` but not exported, as
+are `D̃ₕ`, `Dcₕ` and `D̽ₕ`, which are the same functions as the exported `∇̃ₕ`, `∇cₕ` and
+`∇̽ₕ`.
 
 ```@docs
 divₕ
@@ -415,8 +418,8 @@ normₕ
 norm₁ₕ
 snorm₁ₕ
 norm₊
-norminf_h
-norm∞ₕ
+norminf
+norm(::VectorElement, ::AbstractString)
 ```
 
 ---

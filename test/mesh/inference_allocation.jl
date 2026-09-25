@@ -2,6 +2,7 @@ module MeshInferenceAllocationTests
 
 using Test
 using Bramble
+using Bramble: hₘᵢₙ, normal_vector
 using Bramble:
                spacings,
                normal_vector,

@@ -2,8 +2,9 @@ module SpaceDiscreteCalculusIdentitiesTests
 
 using Test
 using Bramble
+using Bramble: norm₊
 using Bramble: D₋
-using Bramble: Dcₓ, D₋ₓ, Mₓ, inner₊ₓ, norminf_h, set_points!
+using Bramble: Dcₓ, D₋ₓ, Mₓ, inner₊ₓ, norminf, set_points!
 using Random
 using Supposition
 using Bramble: cell_measures, AbstractMeshType, weights, Innerplus
@@ -34,7 +35,7 @@ _Hmin(Ωₕ::AbstractMeshType{1}) = minimum(cell_measures(Ωₕ))
 _Hmin(Ωₕ::AbstractMeshType) = prod(minimum, cell_measures(Ωₕ))
 
 # ‖uₕ‖_{1,H,∞}, the maximum norm of the function and of every backward difference of it.
-_w1inf(uₕ, D) = max(norminf_h(uₕ), maximum(d -> norminf_h(D₋(uₕ, Val(d))), 1:D))
+_w1inf(uₕ, D) = max(norminf(uₕ), maximum(d -> norminf(D₋(uₕ, Val(d))), 1:D))
 
 # The smallest *staggered* weight, over every direction. `inner₊`'s weight along `d` is
 # `h_d(i) ∏_{e≠d} ĥ_e(i_e)` -- a full spacing along `d` where the cell measure carries a half
@@ -128,9 +129,9 @@ end
             for _ in 1:3
                 uₕ = _random_vanishing(Wₕ, dims)
                 g = norm₊(∇ₕ(uₕ))
-                @test holds(norminf_h(uₕ), normₕ(uₕ) / sqrt(Hm))
-                @test holds(norminf_h(uₕ), normₕ(uₕ) / Hm)
-                @test holds(norminf_h(uₕ), g / sqrt(2 * Hm))
+                @test holds(norminf(uₕ), normₕ(uₕ) / sqrt(Hm))
+                @test holds(norminf(uₕ), normₕ(uₕ) / Hm)
+                @test holds(norminf(uₕ), g / sqrt(2 * Hm))
                 @test holds(_w1inf(uₕ, D), max(normₕ(uₕ) / sqrt(Hm), g / sqrt(wm)))
                 # on these meshes, which are not strongly graded, the issue's constant holds
                 # too -- it is the graded case below that separates them
@@ -264,8 +265,8 @@ end
             wm = _wplus_min(Wₕ, 2)
             g = norm₊(∇ₕ(uₕ))
             holds(normₕ(uₕ), g) &&
-                holds(norminf_h(uₕ), normₕ(uₕ) / sqrt(Hm)) &&
-                holds(norminf_h(uₕ), g / sqrt(2 * Hm)) &&
+                holds(norminf(uₕ), normₕ(uₕ) / sqrt(Hm)) &&
+                holds(norminf(uₕ), g / sqrt(2 * Hm)) &&
                 holds(_w1inf(uₕ, 2), max(normₕ(uₕ) / sqrt(Hm), g / sqrt(wm)))
         end
     end

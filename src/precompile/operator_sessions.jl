@@ -124,12 +124,12 @@ function _pc_inner_products(uₕ, dim_val::Val{D}) where {D}
     normₕ(uₕ)
     snorm₁ₕ(uₕ)
     norm₁ₕ(uₕ)
-    norminf_h(uₕ)
+    norminf(uₕ)
 
     gₕ = ∇ₕ(uₕ)
     inner₊(gₕ, gₕ)
     norm₊(gₕ)
-    norminf_h(gₕ)
+    norminf(gₕ)
     inner₊(uₕ, uₕ)
 
     _pc_directional_inner(uₕ, dim_val)

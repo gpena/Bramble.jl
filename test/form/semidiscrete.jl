@@ -2,6 +2,7 @@ module FormSemidiscreteTests
 
 using Test
 using Bramble
+using Bramble: matrix_type
 using SparseArrays
 using ForwardDiff: Dual, value
 using Bramble:

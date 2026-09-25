@@ -2,6 +2,7 @@ module FormExtendedOperatorsTests
 
 using Test
 using Bramble
+using Bramble: Dcₕ, D̃ₕ, D̽ₕ
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, M₊ₓ
 using Random

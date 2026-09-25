@@ -2,6 +2,7 @@ module QualityAlloccheckTests
 
 using Test
 using Bramble
+using Bramble: hₘᵢₙ, normal_vector
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: diff₋ₓ!, diff₋ᵧ!, diff₋₂!, diff₊ₓ!, diff₊ᵧ!, diff₊₂!
 using AllocCheck

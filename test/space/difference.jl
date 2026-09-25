@@ -2,6 +2,7 @@ module SpaceDifferenceTests
 
 using Test
 using Bramble
+using Bramble: vector_type, matrix_type
 using Bramble: D₋ᵧ, D₋₂, D₋ₓ, GpuKernel, set_points!
 import Bramble: space, eltype, ⊗, _Eye, shift, npoints, spacing, diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff₊₂, D₊ₓ,
                 D₊ᵧ, D₊₂

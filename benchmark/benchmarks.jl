@@ -42,6 +42,7 @@
 
 using BenchmarkTools
 using Bramble
+using Bramble: divₕ!, curlₕ!, Δₕ!
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: M₊ₓ, M₊ᵧ, M₊₂
 using Bramble: Dcₓ, D₋, D₋ₓ, D₋ᵧ, D₋₂, Mₓ, jump, jumpₓ, jumpᵧ, jump₂
