@@ -145,6 +145,100 @@ using ..TestUtils: @test_allocs
         end
     end
 
+    @testset "Components of n inside inner_Γ, 2D and 3D, non-uniform (#341)" begin
+        # Independent reference: g is affine, so the lumped face weights integrate it exactly,
+        # and its integral over a face is the face's area times g at the face's centroid.
+        # The component n[d] is ±1 on the two faces normal to axis d and 0 on the others.
+        labels = ((:xmin, :xmax), (:ymin, :ymax), (:zmin, :zmax))
+        function face_flux(L, axis, side, d, g)
+            axis == d || return 0.0
+            area = prod(L[e] for e in eachindex(L) if e != axis)
+            c = ntuple(e -> e == axis ? (side == 1 ? 0.0 : L[e]) : L[e] / 2, length(L))
+            return (side == 1 ? -1.0 : 1.0) * area * g(c)
+        end
+        cases = (
+            (domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (1.0, 2.0), (9, 7)),
+            (domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
+                (1.0, 2.0, 3.0), (5, 6, 4))
+        )
+        for (S, L, sz) in cases
+            D = length(L)
+            Wₕ = gridspace(mesh(S, sz, ntuple(_ -> false, D)))
+            ones_ = parent(Rₕ(Wₕ, x -> 1.0))
+            g = x -> 1.0 + x[1] + 2x[2] + (D == 3 ? 3x[3] : 0.0)
+            gₕ = parent(Rₕ(Wₕ, g))
+            lin(h, m) = assemble(form(Wₕ, v -> inner_Γ(h, v; markers = m)))
+            bil(h, m) = assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(h(u), v; markers = m)))
+
+            # destructuring, integer and symbol indexing name the same singletons
+            comps = Tuple(n)[1:D]
+            @test length(n) == 3
+            @test comps === ntuple(d -> n[d], D)
+            @test n[:x] === n[1] && n[:y] === n[2] && n[:z] === n[3]
+            @test n[end] === n[3] && n[begin] === n[1] && n[Int32(2)] === n[2]
+            @test Base.issingletontype(typeof(n[1]))
+
+            for axis in 1:D, side in 1:2, d in 1:D
+                m = (labels[axis][side],)
+                ref = face_flux(L, axis, side, d, g)
+                c = comps[d]
+                # a coefficient function, from either side
+                @test dot(lin(g * c, m), ones_) ≈ ref atol=1e-12
+                @test lin(c * g, m) == lin(g * c, m)
+                # a grid function
+                @test dot(lin(Rₕ(Wₕ, g) * c, m), ones_) ≈ ref atol=1e-12
+                # a trial function, from either side: ones' A gₕ is the same surface integral
+                A = bil(u -> u * c, m)
+                @test dot(ones_, A * gₕ) ≈ ref atol=1e-12
+                @test bil(u -> c * u, m) == A
+                # an AST expression: a scaled trial function
+                @test bil(u -> (2.0 * u) * c, m) ≈ 2.0 * A
+            end
+
+            # Σ_d F_d n[d] == dot(F, n), for a field that is not affine
+            F = ntuple(d -> (x -> sin(d + x[1]) * x[2] + d * x[end]^2), D)
+            m = (:boundary,)
+            @test sum(lin(F[d] * comps[d], m) for d in 1:D) ≈ lin(dot(F, n), m)
+            @test sum(bil(u -> u * comps[d], m) for d in 1:D) ≈
+                  bil(u -> dot(ntuple(_ -> u, D), n), m)
+
+            # the same sum written as one linear combination inside inner_Γ
+            combo = foldl(+, ntuple(d -> F[d] * comps[d], D))
+            @test lin(combo, m) ≈ lin(dot(F, n), m)
+            @test bil(u -> foldl(+, ntuple(d -> (d * u) * comps[d], D)), m) ≈
+                  bil(u -> dot(ntuple(d -> d * u, D), n), m)
+            # scalar multiples, negation and differences of component terms
+            @test lin(2 * (F[1] * comps[1]), m) ≈ 2 * lin(F[1] * comps[1], m)
+            @test lin((F[1] * comps[1]) * 0.5, m) ≈ 0.5 * lin(F[1] * comps[1], m)
+            @test lin(3.0 * combo, m) ≈ 3.0 * lin(dot(F, n), m)
+            @test lin(-combo, m) ≈ -lin(dot(F, n), m)
+            @test bil(u -> -(u * comps[D]), m) ≈ -bil(u -> u * comps[D], m)
+            @test lin(F[1] * comps[1] - F[2] * comps[2], m) ≈
+                  lin(F[1] * comps[1], m) - lin(F[2] * comps[2], m)
+            # a bare component is the component times one, alone or in a sum
+            for d in 1:D
+                @test dot(lin(comps[d], (labels[d][2],)), ones_) ≈
+                      face_flux(L, d, 2, d, x -> 1.0) atol=1e-12
+            end
+            @test lin(comps[1] + g * comps[2], m) ≈ lin(1.0 * comps[1], m) + lin(g * comps[2], m)
+        end
+    end
+
+    @testset "A component refills in place at zero allocations" begin
+        Wₕ = gridspace(mesh(Ω, (9, 8), (false, false)))
+        nx, ny = n
+        a = form(Wₕ, Wₕ,
+            (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) +
+                      inner_Γ(u * nx - 2.0u * ny, v; markers = (:xmax, :ymin)))
+        A = assemble(a)
+        B = copy(A)
+        assemble!(B, a)
+        @test A ≈ B
+        @test_allocs assemble!(B, a)
+        second(V) = V[2]
+        @test only(Base.return_types(second, (typeof(n),))) === typeof(ny)
+    end
+
     @testset "Refusals" begin
         Wₕ = gridspace(mesh(Ω, (7, 7), (true, true)))
         v = Bramble.TestFunction{2}()
@@ -152,6 +246,40 @@ using ..TestUtils: @test_allocs
         @test_throws ArgumentError inner_Γ(dot(F, n), v; markers = (:inlet,))
         @test_throws ArgumentError inner_Γ(dot(F, n), v)
         @test_throws ArgumentError normal_vector(Wₕ, :inlet)
+        # a component of n is refused outside inner_Γ, by name, and past the form's dimension
+        f = x -> 1.0
+        nx = n[1]
+        @test_throws ArgumentError innerₕ(f * nx, v)
+        @test_throws ArgumentError innerₕ(v, f * nx)
+        @test_throws ArgumentError inner₊(f * nx, v)
+        @test_throws ArgumentError inner_Γ(f * n[3], v; markers = (:boundary,))
+        @test_throws ArgumentError inner_Γ(f * nx, v)
+        @test_throws BoundsError n[4]
+        @test_throws BoundsError n[0]
+        # products of two components, on either side and inside inner_Γ
+        ny = n[2]
+        @test_throws ArgumentError nx * ny
+        @test_throws ArgumentError f * nx * ny
+        @test_throws ArgumentError (f * nx) * (f * ny)
+        @test_throws ArgumentError inner_Γ(f * nx, f * ny; markers = (:boundary,))
+        # a bare component, or a sum of them, outside inner_Γ
+        @test_throws ArgumentError innerₕ(nx, v)
+        @test_throws ArgumentError innerₕ(f * nx, f * ny)
+        @test_throws ArgumentError inner₊(v, f * nx + f * ny)
+        @test_throws ArgumentError f * nx + v
+        @test_throws ArgumentError v - f * nx
+        # the component belongs with the flux, on the left
+        @test_throws ArgumentError inner_Γ(v, f * nx; markers = (:boundary,))
+        # the dimension message names one component in 1D, not "1 components"
+        v1 = Bramble.TestFunction{1}()
+        msg = try
+            inner_Γ(f * ny, v1; markers = (:boundary,))
+            ""
+        catch e
+            sprint(showerror, e)
+        end
+        @test occursin("has 1 component here", msg)
+        @test_throws ArgumentError n[:w]
     end
 end
 
