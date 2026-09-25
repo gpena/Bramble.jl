@@ -44,7 +44,11 @@ jobs:
   full:
     name: Full suite (Julia ${{ matrix.version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    # 120, not 90: on the v3.11.0 tag both Julia 1.12 legs were cancelled at 90 minutes
+    # inside the last file (examples/ext_pages.jl); 1.12 compiles the Enzyme and form files
+    # far more slowly than 1.13 (ext/chainrules_enzyme_ext.jl alone took 879 s on macOS),
+    # while the 1.13 legs finish in about 69.
+    timeout-minutes: 120
     # Nothing here gates a merge, but a red run should still mean something specific.
     # Julia nightly is not in this matrix (see below), so a failure here is Bramble's own —
     # either the 1.12 floor or the 1.13 release, on either OS.

@@ -10,7 +10,14 @@ using OrdinaryDiffEqRosenbrock: Rodas5P
 using OrdinaryDiffEqTsit5: Tsit5
 using ..TestUtils: _check_eoc
 using NonlinearSolve: NewtonRaphson
-using ADTypes: AutoFiniteDiff
+using ADTypes: AutoFiniteDiff, AutoForwardDiff
+
+# Every `NewtonRaphson` below names its Jacobian backend. Left to choose, NonlinearSolve
+# picks `AutoPolyesterForwardDiff` whenever PolyesterForwardDiff is loaded (the `full`
+# group loads it), and Polyester's closure path fails on the macOS CI runners with
+# "closures are not supported on this platform" -- two errors in every Weekly macOS leg
+# since v3.4.0, from a choice that depends on which packages happen to be loaded.
+const _NEWTON = NewtonRaphson(; autodiff = AutoForwardDiff())
 using LinearSolve: KrylovJL_GMRES
 
 # BrambleSciMLExt: the `ODEFunction`/`ODEProblem`/`LinearProblem` wrapping of a
@@ -243,8 +250,8 @@ end
 
         # Out-of-place and in-place residuals reach the same answer, both agreeing with the
         # direct linear solve (a linear residual, so Newton converges in one step exactly).
-        sol_oop = solve(nonlinear_problem(residual, zeros(n)), NewtonRaphson())
-        sol_iip = solve(nonlinear_problem(residual!, zeros(n)), NewtonRaphson())
+        sol_oop = solve(nonlinear_problem(residual, zeros(n)), _NEWTON)
+        sol_iip = solve(nonlinear_problem(residual!, zeros(n)), _NEWTON)
         @test SciMLBase.successful_retcode(sol_oop)
         @test SciMLBase.successful_retcode(sol_iip)
         @test sol_oop.u ≈ A \ F
@@ -565,7 +572,7 @@ end
                 return nothing
             end
 
-            sol = solve(nonlinear_problem(residual!, copy(F)), NewtonRaphson())
+            sol = solve(nonlinear_problem(residual!, copy(F)), _NEWTON)
             @test SciMLBase.successful_retcode(sol)
             uₕ = Bramble.element(Wₕ)
             parent(uₕ) .= sol.u
