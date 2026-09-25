@@ -898,23 +898,65 @@ itself a scalar grid function and is accepted.
 ################################################################################
 #                        Discrete H¹ Norm and Seminorm                         #
 ################################################################################
-# The squared seminorm along one direction. `d` arrives as a `Val` so the stencil step
-# is built at compile time, and the spacing, weight and step are read once per direction
-# rather than once per grid point.
+# The squared seminorm along one direction. `d` arrives as a `Val` so the backward-neighbour
+# offset and the loop shape are fixed at compile time, and the spacing and weight are read
+# once per direction rather than once per grid point.
 #
-# The boundary slice contributes nothing: the backward difference is truncated to zero
-# there, so its square is zero. Only the interior is walked.
+# The loop mirrors `_dot`'s `SeparableWeights` specialization above: the outer loop runs
+# over the axis-1 lines (`CartesianIndices` of `dims[2:D]`), and the inner `@inbounds @simd`
+# loop walks each line's contiguous entries. The boundary slice contributes nothing (the
+# backward difference is truncated to zero there, so its square is zero), so only the
+# interior is walked:
+#   - d = 1: the line runs over `i₁ ∈ 2:n₁`, reading the weight factor `factors[1][i₁]` and
+#     dividing by the spacing `h[i₁]` per point; the backward neighbour is the previous entry.
+#     The division is kept: on 2D 1000² this pass takes 1.21x a dense `_dot`, and 1.07x
+#     with a multiplication in its place, so it does not limit the speed.
+#   - d ≥ 2: lines with `I_d = 1` are skipped. Along a line the spacing `h[I_d]` and every
+#     weight factor but the first are constant, so the line sum is `Σ factors[1][i₁] δ²`
+#     over the undivided differences `δ = u[k] - u[k - stride_d]`, and it is scaled once by
+#     `c · inv(h[I_d])²`, where `c` is the product of the other axes' factors and
+#     `stride_d = n₁ ⋯ n_{d-1}`.
+# The weight factors are read directly, so `getindex`'s device guard is repeated (#310).
+# Measured on non-uniform 1000² and 100³ grids (minimum of 15 runs): snorm₁ₕ takes 2.56x
+# (2D) and 3.82x (3D) the time of a dense `_dot` over the collected `innerₕ` weights, about
+# 1.3x per direction; the previous point-wise walk over `CartesianIndices(interior)`, whose
+# per-point division did not vectorise, took 12.7x in 2D.
 @inline function _seminorm_sq_along(data, space, Ωₕ, li, ::Val{d}, ::Val{D}) where {d, D}
     h = backward_spacings_for_derivative(Ωₕ(d))
     w = weights(space, Innerplus(), d)
-    step = _stencil_step(Val(d), Val(D))
-    interior, _ = _stencil_ranges(axes(li), Val(d), Backward())
+    locality(typeof(first(w.factors))) isa DeviceLocality && _throw_device_scalar_weights()
+    dims = size(li)
+    T = promote_type(eltype(data), eltype(w), eltype(h))
+    f₁ = first(w.factors)
+    n₁ = first(dims)
+    stride = d == 1 ? 1 : prod(ntuple(k -> dims[k], Val(d - 1)))
+    lines = CartesianIndices(ntuple(
+        k -> k + 1 == d ? (2:dims[k + 1]) : (1:dims[k + 1]), Val(D - 1)))
 
-    s = zero(eltype(data))
-    @inbounds @simd for I in CartesianIndices(interior)
-        idx = li[I]
-        δ = (data[idx] - data[li[I - step]]) / h[I[d]]
-        s = muladd(w[idx], δ * δ, s)
+    s = zero(T)
+    @inbounds for J in lines
+        c = one(T)
+        for k in 2:D
+            c *= T(w.factors[k][J[k - 1]])
+        end
+        offset = li[CartesianIndex(1, Tuple(J)...)] - 1
+        line_sum = zero(T)
+        if d == 1
+            @simd for i₁ in 2:n₁
+                k = offset + i₁
+                δ = (T(data[k]) - T(data[k - 1])) / T(h[i₁])
+                line_sum = muladd(T(f₁[i₁]), δ * δ, line_sum)
+            end
+        else
+            @simd for i₁ in 1:n₁
+                k = offset + i₁
+                δ = T(data[k]) - T(data[k - stride])
+                line_sum = muladd(T(f₁[i₁]), δ * δ, line_sum)
+            end
+            ih = inv(T(h[J[d - 1]]))
+            c *= ih * ih
+        end
+        s = muladd(c, line_sum, s)
     end
 
     return s

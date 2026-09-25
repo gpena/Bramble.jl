@@ -333,6 +333,52 @@ end
     end
 end
 
+# `snorm₁ₕ` walks axis-1 lines too: for d = 1 each line runs over i₁ ≥ 2, for d ≥ 2 it
+# skips the lines with I_d = 1 and scales the undivided line sum by the hoisted
+# `inv(h[I_d])²`. Checked against the dense backward difference weighted by the collected
+# `Innerplus` weights, on non-uniform meshes and on degenerate axes of one or two points.
+@testset "snorm₁ₕ line walk against the dense reduction" begin
+    unit(T) = interval(zero(T), one(T))
+    function dense_snorm_sq(u)
+        Wₕ = Bramble.space(u)
+        Ωₕ = mesh(Wₕ)
+        dims = npoints(Ωₕ, Tuple)
+        D = length(dims)
+        U = reshape(parent(u), dims)
+        return sum(1:D) do d
+            h = Bramble.backward_spacings_for_derivative(Ωₕ(d))[2:end]
+            W = reshape(collect(Bramble.weights(Wₕ, Bramble.Innerplus(), d)), dims)
+            δ = diff(U; dims = d) ./ reshape(h, ntuple(k -> k == d ? length(h) : 1, D))
+            sum(selectdim(W, d, 2:dims[d]) .* δ .^ 2)
+        end
+    end
+    for (T, rtol) in ((Float64, 1e-12), (Float32, 1.0f-5))
+        Ωs = (mesh(domain(unit(T)), 37, false),
+            mesh(domain(unit(T) × unit(T)), (31, 17), (false, false)),
+            mesh(domain(unit(T) × unit(T) × unit(T)), (9, 8, 7), (false, false, false)))
+        for Ωₕ in Ωs
+            u = Rₕ(gridspace(Ωₕ), x -> 1 + sum(sin, x))
+            @test snorm₁ₕ(u)^2 ≈ dense_snorm_sq(u) rtol = rtol
+            @test norm₁ₕ(u)^2 ≈ innerₕ(u, u) + snorm₁ₕ(u)^2 rtol = rtol
+            @test snorm₁ₕ(u) === snorm₁ₕ(u)
+        end
+    end
+    @testset "Degenerate axes" begin
+        Ωs = (mesh(domain(unit(Float64)), 2, false),
+            mesh(domain(unit(Float64) × unit(Float64)), (2, 5), (false, false)),
+            mesh(domain(unit(Float64) × unit(Float64)), (6, 2), (false, false)),
+            mesh(domain(unit(Float64) × unit(Float64)), (1, 5), (false, false)),
+            mesh(domain(unit(Float64) × unit(Float64)), (5, 1), (false, false)),
+            mesh(domain(unit(Float64) × unit(Float64) × unit(Float64)), (2, 3, 2),
+                (false, false, false)))
+        for Ωₕ in Ωs
+            u = Rₕ(gridspace(Ωₕ), x -> 1 + sum(sin, x))
+            @test snorm₁ₕ(u)^2 ≈ dense_snorm_sq(u) rtol = 1e-12
+            @test norm₁ₕ(u)^2 ≈ innerₕ(u, u) + snorm₁ₕ(u)^2 rtol = 1e-12
+        end
+    end
+end
+
 @testset "inner₊ dimension" begin
     import Bramble: get_dimension_from_type, _get_h_val
 
