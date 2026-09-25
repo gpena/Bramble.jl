@@ -204,6 +204,11 @@ stencil.
 
 [`divₕ!`](@ref) writes into a destination instead, and allocates nothing.
 
+`∇ₕ ⋅ uₕ` is the same call written with `⋅` (`LinearAlgebra.dot`, exported from Bramble)
+in place of the function name: `∇ₕ ⋅ uₕ === divₕ(uₕ)`. It needs `⋅` in scope (`using
+LinearAlgebra: ⋅` or Bramble's own re-export). `∇cₕ`, `∇̽ₕ`, `∇̃ₕ` and `∇₊ₕ` contract to
+[`divcₕ`](@ref), [`div̽ₕ`](@ref), [`diṽₕ`](@ref) and [`div₊ₕ`](@ref) the same way.
+
 See also: [`div₊ₕ`](@ref), [`curlₕ`](@ref), [`Δₕ`](@ref)
 """
 @inline divₕ(uₕ) = divₕ!(similar(first(_field_components(uₕ))), uₕ)
@@ -236,6 +241,8 @@ The forward-difference discrete divergence, ``\\sum_d \\textrm{D}_{+,x_d}(\\text
 
 The forward twin of [`divₕ`](@ref), standing to it as [`∇₊ₕ`](@ref) stands to [`∇ₕ`](@ref),
 and truncated to zero on the *last* slice of each direction rather than the first.
+
+`∇₊ₕ ⋅ uₕ === div₊ₕ(uₕ)`.
 """
 @inline div₊ₕ(uₕ) = div₊ₕ!(similar(first(_field_components(uₕ))), uₕ)
 
@@ -312,6 +319,10 @@ curl, and asking for one is an error rather than a zero.
 `curlₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
 allocates nothing. [`curl₊ₕ`](@ref) is the forward twin.
 
+`∇ₕ × uₕ` is the same call written with `×` (`LinearAlgebra.cross`) in place of the
+function name: `∇ₕ × uₕ === curlₕ(uₕ)`, needing `×` in scope. `∇cₕ`, `∇̽ₕ` and `∇̃ₕ`
+contract to [`curlcₕ`](@ref), [`curl̽ₕ`](@ref) and [`curl̃ₕ`](@ref) the same way.
+
 See also: [`divₕ`](@ref), [`∇ₕ`](@ref)
 """
 @inline curlₕ(uₕ) = _curl(uₕ, Backward(), "curlₕ")
@@ -321,6 +332,8 @@ See also: [`divₕ`](@ref), [`∇ₕ`](@ref)
     curl₊ₕ!(vₕ, uₕ) -> vₕ
 
 The forward-difference discrete curl, the twin of [`curlₕ`](@ref).
+
+`∇₊ₕ × uₕ === curl₊ₕ(uₕ)`.
 """
 @inline curl₊ₕ(uₕ) = _curl(uₕ, Forward(), "curl₊ₕ")
 
@@ -805,6 +818,8 @@ For fields vanishing on the boundary it is minus the adjoint of [`∇cₕ`](@ref
 
 `divcₕ!` writes into `vₕ`, which must not be one of the components, and allocates nothing.
 
+`∇cₕ ⋅ uₕ === divcₕ(uₕ)`.
+
 See also: [`divₕ`](@ref), [`curlcₕ`](@ref), [`εcₕ`](@ref)
 """
 function divcₕ(uₕ)
@@ -841,6 +856,8 @@ curl, and asking for one is an `ArgumentError`.
 
 `curlcₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
 allocates nothing.
+
+`∇cₕ × uₕ === curlcₕ(uₕ)`.
 
 See also: [`curlₕ`](@ref), [`divcₕ`](@ref), [`∇cₕ`](@ref)
 """
@@ -1030,6 +1047,8 @@ parts, ``(\\tilde{\\textrm{div}}_h \\textrm{F}, \\textrm{v})_h =
 
 `diṽₕ!` writes into `vₕ`, which must not be one of the components, and allocates nothing.
 
+`∇̃ₕ ⋅ uₕ === diṽₕ(uₕ)`.
+
 See also: [`divₕ`](@ref), [`curl̃ₕ`](@ref), [`∇̃ₕ`](@ref)
 """
 function diṽₕ(uₕ)
@@ -1067,6 +1086,8 @@ no 1D curl, and asking for one is an `ArgumentError`.
 
 `curl̃ₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
 allocates nothing.
+
+`∇̃ₕ × uₕ === curl̃ₕ(uₕ)`.
 
 See also: [`curlₕ`](@ref), [`diṽₕ`](@ref), [`∇̃ₕ`](@ref)
 """
@@ -1293,6 +1314,8 @@ near side still defines, as for [`D̽ₓ`](@ref).
 
 `div̽ₕ!` writes into `vₕ`, which must not be one of the components, and allocates nothing.
 
+`∇̽ₕ ⋅ uₕ === div̽ₕ(uₕ)`.
+
 See also: [`divcₕ`](@ref), [`curl̽ₕ`](@ref), [`ε̽ₕ`](@ref), [`∇̽ₕ`](@ref)
 """
 function div̽ₕ(uₕ)
@@ -1330,6 +1353,8 @@ There is no 1D curl, and asking for one is an `ArgumentError`.
 
 `curl̽ₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
 allocates nothing.
+
+`∇̽ₕ × uₕ === curl̽ₕ(uₕ)`.
 
 See also: [`curlcₕ`](@ref), [`div̽ₕ`](@ref), [`∇̽ₕ`](@ref)
 """
@@ -1384,3 +1409,33 @@ function ε̽ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     _centered_strain_rows!(dest, comps, Ωₕ, npoints(Ωₕ, Tuple), CrossWeighted(), Val(D), Val(D))
     return dest
 end
+
+# --- ⋅ and × contract a gradient alias to its divergence/curl (gpena/Bramble.jl#341) ------- #
+#
+# `∇ₕ ⋅ uₕ` / `∇ₕ × uₕ` read as the textbook notation for `divₕ(uₕ)` / `curlₕ(uₕ)`, and the
+# same for the other four gradient aliases (`∇cₕ`/`∇̽ₕ`/`∇̃ₕ` are `const` aliases of
+# `Dcₕ`/`D̽ₕ`/`D̃ₕ`, operators/difference.jl, so the methods below dispatch on those function
+# types directly). `dot`/`×` are already `import`ed from LinearAlgebra by `src/Bramble.jl`.
+#
+# Each alias now supports `iterate`/`getindex` (gpena/Bramble.jl#340), so LinearAlgebra's
+# generic `dot`/`cross` fallback would otherwise try to treat `∇ₕ` as a 3-element collection
+# and zip it against `uₕ`. Dispatch on `typeof(alias)` -- a concrete singleton function type
+# -- is strictly more specific than that generic `(x, y)` fallback, so these methods win
+# outright and add no ambiguity: `Test.detect_ambiguities(Bramble)` is unchanged (verified in
+# EVIDENCE), and neither overlaps `dot(F::NTuple, ::NormalSymbol)` (src/form/operators/normal.jl)
+# or the domain/space `×(::AbstractSpaceType, ::AbstractSpaceType)` (first-argument types never
+# coincide). `∇ₕ ⋅ n` and `∇ₕ × n` therefore hit no method and raise the ordinary `MethodError`.
+@inline dot(::typeof(∇ₕ), uₕ) = divₕ(uₕ)
+@inline ×(::typeof(∇ₕ), uₕ) = curlₕ(uₕ)
+
+@inline dot(::typeof(∇₊ₕ), uₕ) = div₊ₕ(uₕ)
+@inline ×(::typeof(∇₊ₕ), uₕ) = curl₊ₕ(uₕ)
+
+@inline dot(::typeof(∇cₕ), uₕ) = divcₕ(uₕ)
+@inline ×(::typeof(∇cₕ), uₕ) = curlcₕ(uₕ)
+
+@inline dot(::typeof(∇̃ₕ), uₕ) = diṽₕ(uₕ)
+@inline ×(::typeof(∇̃ₕ), uₕ) = curl̃ₕ(uₕ)
+
+@inline dot(::typeof(∇̽ₕ), uₕ) = div̽ₕ(uₕ)
+@inline ×(::typeof(∇̽ₕ), uₕ) = curl̽ₕ(uₕ)

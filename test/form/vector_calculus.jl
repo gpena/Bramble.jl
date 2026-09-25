@@ -3,6 +3,8 @@ module TestFormVectorCalculus
 using Test
 using Bramble
 using Bramble: OperatorAdd, block_of, resolve_form_ast
+using Bramble: ∇₊ₕ, div₊ₕ, curl₊ₕ
+using LinearAlgebra: dot, ⋅, ×
 
 # gpena/Bramble.jl#234 (v3.3.0 plan S6.5): `∇ₕ`/`∇₊ₕ`/`εₕ`/`divₕ` accept a composite trial or
 # test function and expand, at the builder, into the same single-block products a user would
@@ -173,6 +175,102 @@ end
 
             check_single_block_leaves(a_compact, D)
         end
+    end
+end
+
+# gpena/Bramble.jl#341 (S5.4): `∇ₕ ⋅ u`/`∇ₕ × u` (and the four sibling gradient aliases)
+# contract to `divₕ(u)`/`curlₕ(u)` via `LinearAlgebra.dot`/`×`. Every mesh here is
+# non-uniform in every direction, as elsewhere in the suite.
+const _CONTRACT_FAMILIES = (
+    (∇ₕ, divₕ, curlₕ), (∇cₕ, divcₕ, curlcₕ), (∇̽ₕ, div̽ₕ, curl̽ₕ),
+    (∇̃ₕ, diṽₕ, curl̃ₕ), (∇₊ₕ, div₊ₕ, curl₊ₕ)
+)
+
+@testset "∇ₕ ⋅ u and ∇ₕ × u contract to div/curl (S5.4, #341)" begin
+    @testset "numeric, 2D non-uniform" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (9, 7), (false, false))
+        Wₕ = gridspace(Ωₕ)
+        u1 = Rₕ(Wₕ, x -> x[1]^2 + 0.3x[2])
+        u2 = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
+
+        for (G, Dv, Cu) in _CONTRACT_FAMILIES
+            @test parent(G ⋅ (u1, u2)) == parent(Dv((u1, u2)))
+            @test parent(dot(G, (u1, u2))) == parent(Dv((u1, u2)))
+            @test parent(G × (u1, u2)) == parent(Cu((u1, u2)))
+        end
+    end
+
+    @testset "numeric, 3D non-uniform" begin
+        Ω3 = mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (6, 5, 7), (false, false, false)
+        )
+        W3 = gridspace(Ω3)
+        a = Rₕ(W3, x -> x[1] * x[2])
+        b = Rₕ(W3, x -> x[3]^2 + x[1])
+        c = Rₕ(W3, x -> sin(x[2]))
+
+        for (G, Dv, Cu) in _CONTRACT_FAMILIES
+            @test parent(G ⋅ (a, b, c)) == parent(Dv((a, b, c)))
+            cu1 = G × (a, b, c)
+            cu2 = Cu((a, b, c))
+            @test all(i -> parent(cu1[i]) == parent(cu2[i]), 1:3)
+        end
+    end
+
+    @testset "composite VectorElement, not just an NTuple" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (8, 6), (false, false))
+        Vₕ = gridspace(Ωₕ)^Val(2)
+        uₕ = Rₕ(Vₕ, (x -> x[1]^2, x -> x[1] * x[2]))
+
+        for (G, Dv, Cu) in _CONTRACT_FAMILIES
+            @test parent(G ⋅ uₕ) == parent(Dv(uₕ))
+            @test parent(G × uₕ) == parent(Cu(uₕ))
+        end
+    end
+
+    @testset "forms: ∇ₕ ⋅ u in a bilinear form on a composite space" begin
+        # Only the backward, centered and cross-weighted families have a *symbolic* `div`
+        # over a trial/test function (src/form/operators/difference.jl); `∇̃ₕ`/`∇₊ₕ` have
+        # none, so `∇̃ₕ ⋅ u`/`∇₊ₕ ⋅ u` inside a form is out of scope here -- the contraction
+        # still reaches whatever `diṽₕ`/`div₊ₕ` themselves support, symbolic or not. The
+        # staggered `divₕ` builds an `inner₊`-only container; the collocated `divcₕ`/`div̽ₕ`
+        # are plain operator sums that `innerₕ` accepts directly.
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false))
+        Vₕ = gridspace(Ωₕ)^Val(2)
+
+        a1 = assemble(form(Vₕ, Vₕ, (u, v) -> inner₊(∇ₕ ⋅ u, ∇ₕ ⋅ v)))
+        a2 = assemble(form(Vₕ, Vₕ, (u, v) -> inner₊(divₕ(u), divₕ(v))))
+        @test a1 == a2
+
+        for (G, Dv) in ((∇cₕ, divcₕ), (∇̽ₕ, div̽ₕ))
+            b1 = assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(G ⋅ u, G ⋅ v)))
+            b2 = assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(Dv(u), Dv(v))))
+            @test b1 == b2
+        end
+    end
+
+    @testset "in-place divₕ!/curlₕ! stay allocation-free" begin
+        # `⋅`/`×` forward to the allocating `divₕ`/`curlₕ`, never the `!` forms; this
+        # confirms the in-place paths are untouched by adding those two methods.
+        function alloc_counts()
+            Ωₕ = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (8, 6), (false, false)
+            )
+            Wₕ = gridspace(Ωₕ)
+            u1 = Rₕ(Wₕ, x -> x[1]^2 + 0.3x[2])
+            u2 = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
+            v = similar(u1)
+            divₕ!(v, (u1, u2))   # warm up
+            dv = @allocated divₕ!(v, (u1, u2))
+            w = similar(u1)
+            curlₕ!(w, (u1, u2))  # warm up
+            cw = @allocated curlₕ!(w, (u1, u2))
+            return dv, cw
+        end
+
+        dv, cw = alloc_counts()
+        @test dv == 0
+        @test cw == 0
     end
 end
 
