@@ -307,6 +307,68 @@ end
     end
 end
 
+@testset "inner₊ direction selector and destructuring (#341)" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    u = Rₕ(Wₕ, x -> x[1]^2 + 0.5x[2])
+    v = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
+
+    @testset "Numeric selector agrees with the coordinate aliases" begin
+        @test inner₊(u, v, :x) == inner₊ₓ(u, v)
+        @test inner₊(u, v, 1) == inner₊ₓ(u, v)
+        @test inner₊(u, v, :y) == inner₊ᵧ(u, v)
+        @test inner₊(u, v, 2) == inner₊ᵧ(u, v)
+
+        # `markers` still threads through the selector spelling.
+        S = interval(0.0, 1.0) × interval(0.0, 2.0)
+        Ωm = mesh(domain(S, :bottom => :bottom), (6, 6), (true, true))
+        Wm = gridspace(Ωm)
+        um = Rₕ(Wm, x -> 1.0)
+        vm = Rₕ(Wm, x -> 1.0)
+        @test inner₊(um, vm, :x; markers = (:bottom,)) ≈
+              inner₊ₓ(um, vm; markers = (:bottom,))
+    end
+
+    @testset "Numeric selector errors" begin
+        @test_throws BoundsError inner₊(u, v, 0)
+        @test_throws BoundsError inner₊(u, v, 4)
+        @test_throws ArgumentError inner₊(u, v, :w)
+    end
+
+    @testset "Symbolic selector agrees with the coordinate aliases, in a form" begin
+        a1 = assemble(form(Wₕ, Wₕ, (uu, vv) -> inner₊(D₋ₓ(uu), D₋ₓ(vv), :x)))
+        a2 = assemble(form(Wₕ, Wₕ, (uu, vv) -> inner₊ₓ(D₋ₓ(uu), D₋ₓ(vv))))
+        @test a1 == a2
+
+        b1 = assemble(form(Wₕ, Wₕ, (uu, vv) -> inner₊(D₋ᵧ(uu), D₋ᵧ(vv), 2)))
+        b2 = assemble(form(Wₕ, Wₕ, (uu, vv) -> inner₊ᵧ(D₋ᵧ(uu), D₋ᵧ(vv))))
+        @test b1 == b2
+    end
+
+    @testset "Symbolic selector errors" begin
+        @test_throws BoundsError form(Wₕ, Wₕ, (uu, vv) -> inner₊(D₋ₓ(uu), D₋ₓ(vv), 0))
+        @test_throws ArgumentError form(Wₕ, Wₕ, (uu, vv) -> inner₊(D₋ₓ(uu), D₋ₓ(vv), :w))
+    end
+
+    @testset "Destructuring and indexing, following the vectorial aliases (#340)" begin
+        ix, iy, iz = inner₊
+        @test (ix, iy, iz) === (inner₊ₓ, inner₊ᵧ, inner₊₂)
+        @test inner₊[1] === inner₊ₓ && inner₊[2] === inner₊ᵧ && inner₊[3] === inner₊₂
+        @test inner₊[:x] === inner₊ₓ && inner₊[:y] === inner₊ᵧ && inner₊[:z] === inner₊₂
+        @test length(inner₊) == 3
+        @test firstindex(inner₊) == 1 && lastindex(inner₊) == 3
+        @test collect(inner₊) == [inner₊ₓ, inner₊ᵧ, inner₊₂]
+
+        @test_throws BoundsError inner₊[4]
+        @test_throws ArgumentError inner₊[:w]
+
+        second(V) = V[2]
+        @test only(Base.return_types(second, (typeof(inner₊),))) === typeof(inner₊ᵧ)
+        second(inner₊)
+        @test (@allocated second(inner₊)) == 0
+    end
+end
+
 # The unmasked `_dot` on a `SeparableWeights` walks axis-1 lines with a hoisted product of
 # the other axes' factors, so it sums in a different order from the dense reduction over the
 # collected weights. Checked on non-uniform meshes in every dimension and element type.

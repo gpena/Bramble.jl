@@ -643,6 +643,41 @@ function inner₊₂(
     return _inner(InnerPlus{3}(), left, right, markers)
 end
 
+"""
+    inner₊(left::LazyOp{D}, right::LazyOp{D}, d; markers = ()) where D
+
+Constructs [`inner₊ₓ`](@ref)/[`inner₊ᵧ`](@ref)/[`inner₊₂`](@ref)`(left, right; markers)`,
+selected by `d`: an `Integer` (`1`, `2` or `3`) or a `Symbol` (`:x`, `:y` or `:z`)
+(gpena/Bramble.jl#341).
+
+This is the preferred spelling: `inner₊(D₋ₓ(u), D₋ₓ(v), :x)` over
+`inner₊ₓ(D₋ₓ(u), D₋ₓ(v))`, which stays reachable as a plain alias.
+
+An `Integer` outside `1:3` throws a `BoundsError`; a `Symbol` that is not `:x`/`:y`/`:z`
+throws an `ArgumentError`.
+
+The numeric twin, for the same selector against grid functions rather than operators, is
+[`inner₊`](@ref)`(uₕ, vₕ, d)` (`src/space/inner_product.jl`), which also documents how
+`inner₊` destructures and indexes (`ix, iy, iz = inner₊`, `inner₊[:x]`) into the same three
+aliases this method dispatches to.
+"""
+@inline function inner₊(
+        left::LazyOp{D}, right::LazyOp{D}, d::Integer;
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
+    d == 1 && return _inner(InnerPlus{1}(), left, right, markers)
+    d == 2 && return _inner(InnerPlus{2}(), left, right, markers)
+    d == 3 && return _inner(InnerPlus{3}(), left, right, markers)
+    _throw_inner_plus_bounds(d)
+end
+
+@inline function inner₊(
+        left::LazyOp{D}, right::LazyOp{D}, s::Symbol;
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {D, N}
+    return inner₊(left, right, _dim_index(s); markers = markers)
+end
+
 @inline function source_number(l::Number, ::Val{D}) where {D}
     return SourceConstant{D, typeof(l)}(l)
 end

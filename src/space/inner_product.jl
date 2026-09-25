@@ -735,6 +735,97 @@ integral).
     markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {N} = _directional_inner_plus(uₕ, vₕ, Val(3); markers = markers)
 
+@noinline _throw_inner_plus_bounds(d) = throw(BoundsError(inner₊, d))
+
+# Selects between literal `Val`s, one arm per direction -- the same shape as
+# `_dispatch_dim` (stencil.jl): a runtime `Integer` never reaches `Val` directly, since
+# `Val(d)` built from a non-constant `d` boxes it and nothing downstream can constant-fold
+# (gpena/Bramble.jl#146). Always three arms regardless of the mesh a caller eventually
+# applies the result to, exactly as `_vectorial_index_expr`'s `getindex` is -- an out-of-range
+# direction is caught downstream, by the operator the index yields.
+@inline function _inner_plus_val(d::Integer)
+    d == 1 && return Val(1)
+    d == 2 && return Val(2)
+    d == 3 && return Val(3)
+    _throw_inner_plus_bounds(d)
+end
+
+"""
+    inner₊(uₕ::VectorElement, vₕ::VectorElement, d; markers = ()) -> Real
+
+Returns [`inner₊ₓ`](@ref)/[`inner₊ᵧ`](@ref)/[`inner₊₂`](@ref)`(uₕ, vₕ; markers)`, selected by
+`d`: an `Integer` (`1`, `2` or `3`) or a `Symbol` (`:x`, `:y` or `:z`) (gpena/Bramble.jl#341).
+
+This is the preferred spelling: `inner₊(uₕ, vₕ, :x)` over `inner₊ₓ(uₕ, vₕ)`, which stays
+reachable as a plain alias.
+
+An `Integer` outside `1:3` throws a `BoundsError`; a `Symbol` that is not `:x`/`:y`/`:z`
+throws an `ArgumentError`.
+
+`inner₊` also destructures and indexes like the vectorial operator aliases
+(gpena/Bramble.jl#340): `ix, iy, iz = inner₊` binds `inner₊ₓ`, `inner₊ᵧ`, `inner₊₂` (the
+very same function objects, not copies), and `inner₊[1]`/`inner₊[:x]` (through
+`length`/`firstindex`/`lastindex`/`getindex`/iteration) index into that same triple.
+
+# Examples
+
+```jldoctest
+using Bramble
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, true))
+Wₕ = gridspace(Ωₕ)
+uₕ = Rₕ(Wₕ, x -> 1.0)
+inner₊(uₕ, uₕ, :x) == inner₊(uₕ, uₕ, 1)
+
+# output
+true
+```
+
+See also: [`inner₊ₓ`](@ref), [`inner₊ᵧ`](@ref), [`inner₊₂`](@ref).
+"""
+@inline function inner₊(
+        uₕ::VectorElement{<:ScalarGridSpace},
+        vₕ::VectorElement{<:ScalarGridSpace},
+        d::Integer;
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {N}
+    return _directional_inner_plus(uₕ, vₕ, _inner_plus_val(d); markers = markers)
+end
+
+@inline function inner₊(
+        uₕ::VectorElement{<:ScalarGridSpace},
+        vₕ::VectorElement{<:ScalarGridSpace},
+        s::Symbol;
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {N}
+    return inner₊(uₕ, vₕ, _dim_index(s); markers = markers)
+end
+
+# --- Iteration and indexing protocol, following `_vectorial_index_expr` -------------- #
+# (stencil.jl, gpena/Bramble.jl#340): `inner₊ₓ`/`inner₊ᵧ`/`inner₊₂` are spliced in as
+# literals, so `inner₊[2]` is a call to a `@inline` function of a literal `Int` against
+# literal comparisons -- the compiler constant-folds it to the concrete function, same as
+# any vectorial alias in stencil.jl. Written by hand rather than generated, since `inner₊`
+# is not built by `@operator_family`.
+@inline Base.iterate(::typeof(inner₊)) = (inner₊ₓ, 2)
+@inline Base.iterate(::typeof(inner₊), state::Int) = state == 2 ? (inner₊ᵧ, 3) :
+                                                      state == 3 ? (inner₊₂, 4) : nothing
+@inline Base.length(::typeof(inner₊)) = 3
+@inline Base.eltype(::Type{typeof(inner₊)}) = Function
+@inline Base.firstindex(::typeof(inner₊)) = 1
+@inline Base.lastindex(::typeof(inner₊)) = 3
+@inline function Base.getindex(::typeof(inner₊), i::Integer)
+    i == 1 && return inner₊ₓ
+    i == 2 && return inner₊ᵧ
+    i == 3 && return inner₊₂
+    throw(BoundsError(inner₊, i))
+end
+@inline function Base.getindex(::typeof(inner₊), s::Symbol)
+    s === :x && return inner₊ₓ
+    s === :y && return inner₊ᵧ
+    s === :z && return inner₊₂
+    throw(ArgumentError("the coordinate direction must be :x, :y or :z, got :$s"))
+end
+
 get_dimension_from_type(::Type{<:NTuple{D, Any}}) where {D} = D
 get_dimension_from_type(::Type{<:VectorElement{S}}) where {S} = dim(mesh_type(S))
 get_dimension_from_type(::Type) = nothing
