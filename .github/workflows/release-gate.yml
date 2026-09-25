@@ -52,7 +52,10 @@ jobs:
     name: Quality (Aqua & JET, Julia ${{ matrix.version }})
     if: startsWith(github.head_ref, 'release/')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 60, not nightly.yml's 30: this workflow runs once per release, so its package cache is
+    # usually cold, and a cold 1.12 run spends its first 30 minutes precompiling under
+    # coverage (JET alone takes five). A cancelled job saves no cache for the next run.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
