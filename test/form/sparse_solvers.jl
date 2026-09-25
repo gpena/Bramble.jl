@@ -4,6 +4,7 @@ using Test
 using Bramble
 using LinearAlgebra
 using SparseArrays
+using Bramble: refactor!, sparse_factorize, sparse_refactor!
 
 @testset "Sparse solver interface (core fallback & validation)" begin
     I1 = interval(0.0, 1.0)

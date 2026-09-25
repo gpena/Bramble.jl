@@ -4,6 +4,7 @@ using Test
 using Bramble
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, M₊ₓ, M₊ᵧ
+using LinearAlgebra: issymmetric
 using Bramble:
                TrialFunction,
                TestFunction,
@@ -36,7 +37,11 @@ using Bramble:
                restrict_to,
                shift_op,
                form,
-               assemble
+               assemble,
+               D₋ₓ,
+               Mₓ,
+               inner₊ₓ,
+               jumpₓ
 
 # The AST leaves, the stencil algebra under them, and the two traits every node answers.
 #

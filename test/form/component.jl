@@ -17,7 +17,18 @@ using Bramble:
                trial_component_or_nothing,
                test_component_or_nothing,
                components,
-               restrict_to
+               restrict_to,
+               Dcₓ,
+               D̃ₓ,
+               D̽ₓ,
+               D₋ᵧ,
+               D₋ₓ,
+               Mᵧ,
+               Mₓ,
+               inner₊ᵧ,
+               inner₊₂,
+               inner₊ₓ,
+               jumpₓ
 using ..TestUtils: alloc_test, @test_allocs
 
 # `component(op, i)` (the mechanism behind `u(1)`, `D₋ₓ(v)(2)`, and the composite

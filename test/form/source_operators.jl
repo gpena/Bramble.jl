@@ -18,7 +18,19 @@ using Bramble:
                resolve_form_ast,
                LinearProduct,
                CompositeGridSpace,
-               components
+               components,
+               Dcᵧ,
+               Dcₓ,
+               D̃ₓ,
+               D̽ₓ,
+               D₋ᵧ,
+               D₋ₓ,
+               Mᵧ,
+               Mₓ,
+               inner₊₂,
+               jumpᵧ,
+               jumpₓ,
+               weights
 
 # An operator wrapped around a *source* in a linear form.
 #

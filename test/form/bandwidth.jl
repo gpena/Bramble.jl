@@ -5,6 +5,7 @@ using Bramble
 using SparseArrays
 using Random
 using Bramble: bandwidths, blockbandwidths, inner₊
+using Bramble: Dcₓ, D̽ₓ, D₋ₓ, Mₓ, jumpₓ
 
 # Reading a form's matrix bandwidth off its AST, before assembling anything.
 #

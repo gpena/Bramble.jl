@@ -3,7 +3,7 @@ module FormReactionFluxTests
 using Test
 using Random
 using Bramble
-using Bramble: reaction, reaction_density
+using Bramble: reaction, reaction_density, weights
 
 # `reaction` (gpena/Bramble.jl#227) extracts the boundary flux a Dirichlet constraint had
 # to supply, from the *unconstrained* operator/load and the already-solved uₕ: r = A uₕ - F

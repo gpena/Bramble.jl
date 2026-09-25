@@ -40,7 +40,16 @@ using Bramble:
                AbsoluteColumn,
                TrialFunction,
                TestFunction,
-               indices
+               indices,
+               Dcₓ,
+               D₋ᵧ,
+               D₋ₓ,
+               Mₓ,
+               index_in_marker,
+               inner₊ᵧ,
+               inner₊ₓ,
+               set_points!,
+               weights
 
 # Assembling the matrix of a bilinear form.
 #

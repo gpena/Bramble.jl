@@ -22,7 +22,17 @@ using Bramble:
                TrialFunction,
                TestFunction,
                LinearProduct,
-               BilinearProduct
+               BilinearProduct,
+               Dcᵧ,
+               Dcₓ,
+               D̃ᵧ,
+               D̃ₓ,
+               D̽ₓ,
+               D₋ᵧ,
+               D₋ₓ,
+               Mₓ,
+               jumpᵧ,
+               jumpₓ
 
 # Reading the sparsity pattern off an AST before assembling it.
 #

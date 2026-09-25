@@ -19,7 +19,9 @@ using Bramble:
                D₊ᵧ,
                D₋ᵧ,
                Dcₓ,
-               Dcᵧ
+               Dcᵧ,
+               inner₊ᵧ,
+               inner₊ₓ
 
 # `issymmetric`/`isposdef` on a `BilinearForm` are a purely structural, symbolic check:
 # every test here has a positive case checked against a real assembled matrix (not just the

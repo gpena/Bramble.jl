@@ -2,7 +2,7 @@ module FormExpressionTests
 
 using Test
 using Bramble
-using Bramble: restrict_to, dirac
+using Bramble: restrict_to, dirac, D₋ᵧ, D₋₂, D₋ₓ, Mₓ, jumpₓ
 
 # `expression(form)`/`expression(ast::LazyOp)` (src/form/expression.jl, issue #274) render a
 # resolved form AST in Bramble's own operator notation. Every string asserted below was

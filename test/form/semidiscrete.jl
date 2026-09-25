@@ -4,6 +4,17 @@ using Test
 using Bramble
 using SparseArrays
 using ForwardDiff: Dual, value
+using Bramble:
+               D₋ₓ,
+               Mₓ,
+               allocate_system_matrix,
+               jacobian_pattern,
+               jacobian_prototype,
+               mass_matrix,
+               operator_matrix,
+               semidiscretize_rhs,
+               set_points!,
+               type_cached_assemble!
 using ..TestUtils: _check_eoc
 
 # `semidiscretize` and the residual it returns (src/form/semidiscrete.jl) need no SciMLBase:

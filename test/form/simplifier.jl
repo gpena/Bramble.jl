@@ -25,7 +25,12 @@ using Bramble:
                form,
                assemble,
                Innerh,
-               Innerplus
+               Innerplus,
+               D₋₂,
+               D₋ₓ,
+               inner₊ᵧ,
+               inner₊ₓ,
+               weights
 
 # `simplify_ast` rewrites only the algebraic layer (`OperatorAdd`, `OperatorScale`,
 # `GridFunctionScale`) that `ast.jl`'s `+`/`*`/`/` overloads build, into a tree that routes

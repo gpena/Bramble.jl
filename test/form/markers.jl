@@ -2,7 +2,7 @@ module FormMarkersTests
 
 using Test
 using Bramble
-using Bramble: dot
+using Bramble: dot, D₋ᵧ, D₋ₓ, inner₊ᵧ, inner₊ₓ
 
 # A `markers` keyword on the *symbolic* innerₕ/inner₊ family
 # (form/operators/inner.jl), implemented by wrapping the constructed

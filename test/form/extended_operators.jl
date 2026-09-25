@@ -22,10 +22,26 @@ using Bramble:
                trial_component_or_nothing,
                test_component_or_nothing,
                indices,
-               restrict_to
+               restrict_to,
+               Dcᵧ,
+               Dc₂,
+               Dcₓ,
+               D̃ᵧ,
+               D̃₂,
+               D̃ₓ,
+               D̽ᵧ,
+               D̽₂,
+               D̽ₓ,
+               D₋ₓ,
+               Mᵧ,
+               Mₓ,
+               jumpᵧ,
+               jump₂,
+               jumpₓ
 
 # The four remaining operator families, as symbolic nodes: the jump, the centered
-# difference, the starred forward difference and the cross-weighted centered difference.
+# difference, the averaged-spacing forward difference and the cross-weighted centered
+# difference.
 #
 # The space layer had all four on grid functions; the form layer had none of them, so a
 # form could only be written from one-sided differences and averages. Three of the four
@@ -157,7 +173,8 @@ end
         @test all(iszero, coeffs(Dcₓ(id), at_end, n))
         @test all(iszero, coeffs(Dcₓ(id), at_start, 1))
 
-        # a starred difference is fine at the first point (it only reaches forward)
+        # an averaged-spacing forward difference is fine at the first point (it only
+        # reaches forward)
         @test any(!iszero, coeffs(D̃ₓ(id), at_start, 1))
 
         # D̽ₕ has no truncated-boundary convention of its own: with no far neighbour it

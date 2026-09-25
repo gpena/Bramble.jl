@@ -31,7 +31,11 @@ using Bramble:
                SeparableWeights,
                spacing,
                half_spacing,
-               values
+               values,
+               D₋ₓ,
+               inner₊ᵧ,
+               inner₊₂,
+               inner₊ₓ
 
 # The inner products, from construction through to the stencil they evaluate to.
 #

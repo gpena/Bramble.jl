@@ -8,6 +8,7 @@ using ForwardDiff, DifferentiationInterface
 using SparseConnectivityTracer: SparseConnectivityTracer
 using SparseMatrixColorings: SparseMatrixColorings
 using SparseArrays: nnz, sparse, findnz
+using Bramble: D₋ₓ, jacobian_pattern
 
 # `jacobian_pattern` (form/jacobian_pattern.jl, gpena/Bramble.jl#21) reads a Newton
 # residual's Jacobian sparsity off `a`'s AST plus each named coefficient dependency's own

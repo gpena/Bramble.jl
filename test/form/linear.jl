@@ -28,7 +28,16 @@ using Bramble:
                ndofs,
                Innerh,
                Innerplus,
-               evaluate!
+               evaluate!,
+               D̽ₓ,
+               D₋ᵧ,
+               D₋ₓ,
+               Mᵧ,
+               Mₓ,
+               index_in_marker,
+               inner₊ₓ,
+               jumpₓ,
+               weights
 using ..TestUtils: alloc_test, @test_allocs
 
 # Assembling the right-hand side of a system.

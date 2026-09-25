@@ -27,7 +27,16 @@ using Bramble:
                shift_op,
                inner_plus,
                is_symbolic,
-               markers
+               markers,
+               D₋ᵧ,
+               D₋₂,
+               D₋ₓ,
+               Mᵧ,
+               M₂,
+               Mₓ,
+               inner₊ᵧ,
+               inner₊₂,
+               inner₊ₓ
 
 # The symbolic operator layer: averages, the shift node, region restriction, and the
 # inner products that turn a pair of operators into a bilinear product.

@@ -9,6 +9,7 @@ import Bramble: D₊ₓ, M₊ₓ, M₊ᵧ
 # S3 (gpena/Bramble.jl#271, O5): the AST accessor and stencil-level entry point needed to
 # assert the point-dependent path infers concretely -- neither is exported.
 import Bramble: local_stencil, resolve_form_ast
+using Bramble: Dcₓ, D₋ᵧ, D₋ₓ, Mᵧ, Mₓ, indices, jumpₓ
 
 # gpena/Bramble.jl#271: a grid-function coefficient inside a shifting node (a difference,
 # average, jump, or `shift_op`) must be read at the point the tap reaches, not at the point

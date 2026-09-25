@@ -3,7 +3,7 @@ module FormAssembleAddTests
 using Test
 using Bramble
 using SparseArrays
-using Bramble: Serial, Parallel, backend, execution_policy
+using Bramble: Serial, Parallel, backend, execution_policy, allocate_system_matrix
 
 # `assemble_add!` (gpena/Bramble.jl#231) accumulates a form's contribution into an already
 # filled matrix/vector, in place, without the `fill!` `assemble!` does first. Every check

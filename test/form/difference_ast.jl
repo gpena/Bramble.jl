@@ -16,7 +16,9 @@ using Bramble:
                is_symbolic,
                resolve_ast,
                trial_component_or_nothing,
-               test_component_or_nothing
+               test_component_or_nothing,
+               D₋ᵧ,
+               D₋ₓ
 
 # The two one-sided difference nodes of the symbolic layer.
 #

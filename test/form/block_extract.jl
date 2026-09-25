@@ -15,7 +15,14 @@ using Bramble:
                trial_component_or_nothing,
                test_component_or_nothing,
                block_of,
-               restrict_to
+               restrict_to,
+               Dcₓ,
+               D̃ₓ,
+               D̽ₓ,
+               D₋ᵧ,
+               D₋ₓ,
+               Mₓ,
+               jumpₓ
 
 # Reading which block of a coupled form a term belongs to.
 #

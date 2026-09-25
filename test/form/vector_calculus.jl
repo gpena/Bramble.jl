@@ -3,6 +3,7 @@ module TestFormVectorCalculus
 using Test
 using Bramble
 using Bramble: OperatorAdd, block_of, resolve_form_ast
+using Bramble: D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, M₂, Mₓ, half_spacing
 using Bramble: ∇₊ₕ, div₊ₕ, curl₊ₕ
 using LinearAlgebra: dot, ⋅, ×
 
