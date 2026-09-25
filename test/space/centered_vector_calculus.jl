@@ -2,6 +2,7 @@ module SpaceCenteredVectorCalculusTests
 
 using Test
 using Bramble
+using Bramble: Dc
 using Random
 using Bramble: components
 using ..TestUtils: alloc_test, _zero_boundary!

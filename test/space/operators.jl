@@ -2,6 +2,7 @@ module SpaceOperatorsTests
 
 using Test
 using Bramble
+using Bramble: D₋
 using Bramble: Dcᵧ, Dc₂, Dcₓ, D̃ᵧ, D̃₂, D̃ₓ, D̽ᵧ, D̽₂, D̽ₓ, D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, M₂, Mₓ
 using Bramble: index_in_marker, jumpᵧ, jump₂, jumpₓ
 using SparseArrays: SparseMatrixCSC, nnz

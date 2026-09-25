@@ -2,6 +2,7 @@ module SpaceStarVectorCalculusTests
 
 using Test
 using Bramble
+using Bramble: D̃
 using Bramble: D₋ₓ
 using Random
 using Bramble: components, D₊, M₊ₕ, ε₊ₕ, ε₊ₕ!

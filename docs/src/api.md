@@ -224,16 +224,16 @@ interpolation_matrix
 The finite difference, the jump and the average, per coordinate and over every coordinate
 at once. See the [operators tutorial](tutorials/operators.md).
 
-Every family also takes the direction as an argument rather than as part of the name:
-`D₋(uₕ, 2)`, `D₋(uₕ, :y)` and `D₋(uₕ, Val(2))` are all `D₋ᵧ(uₕ)`. That is what makes a
-dimension-agnostic expression writable — `sum(innerₕ(D₋(uₕ, d), D₋(uₕ, d)) for d in 1:D)`
-reads the same in 1D, 2D and 3D — and it costs nothing: the `Int` and `Symbol` forms branch
-over literal `Val`s, so the direction still reaches the stencil engine as a compile-time
-constant. The averages put this on `Mₕ`/`M₊ₕ` rather than on a bare `M`, which would take
-the most common local name in finite-element code away from anyone writing `using Bramble`;
-`Mₕ(uₕ)` is still the tuple over every coordinate and `Mₕ(uₕ, 2)` is the `y` average.
+A direction held in a variable indexes the vectorial operator: `∇ₕ[2]`, `∇ₕ[:y]` and
+`D₋ᵧ` are the same function, so `sum(innerₕ(∇ₕ[d](uₕ), ∇ₕ[d](uₕ)) for d in 1:D)` reads the
+same in 1D, 2D and 3D. Underneath, every family has a stem that takes the direction as an
+argument: `Bramble.D₋(uₕ, 2)`, `Bramble.D₋(uₕ, :y)` and `Bramble.D₋(uₕ, Val(2))` are all
+`D₋ᵧ(uₕ)`. The stems `D₋`, `D₊`, `Dc`, `D̃` and `jump` are `public` but not exported. The
+averages put this on `Mₕ`/`M₊ₕ` rather than on a bare `M`, which would take the most common
+local name in finite-element code away from anyone writing `using Bramble`; `Mₕ(uₕ)` is
+still the tuple over every coordinate and `Mₕ(uₕ, 2)` is the `y` average.
 
-The same names carry the symbolic form: `D₋(uₕ, Val(1))` differences a grid function now,
+The same stems carry the symbolic form: `D₋(uₕ, Val(1))` differences a grid function now,
 `D₋(U, Val(1))` builds the AST node that will difference it during assembly. Inside a form
 the direction must be a `Val`, since it is a type parameter of the node.
 

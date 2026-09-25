@@ -59,34 +59,39 @@ which is why a uniform-grid benchmark cannot tell them apart.
 
 ### [1.3 The direction as an argument](@id operators_direction_argument)
 
-Every family also answers to its stem with the direction passed in, which is what the
-coordinate suffix is spelling:
+The direction can also come from a variable rather than from the name. Index the
+vectorial operator with it: `∇ₕ[d]` is the coordinate operator itself, so `∇ₕ[1]`,
+`∇ₕ[:x]` and `D₋ₓ` are the same function object, and `dx, dy = ∇ₕ` destructures it. The
+same holds for `D̃ₕ`, `Dcₕ`, `D̽ₕ`, `jumpₕ`, `Mₕ` and `Mcₕ`.
 
-| Written | Same as |
-|:--|:--|
-| `D₋(uₕ, 1)` | `D₋ₓ(uₕ)` |
-| `D₋(uₕ, :y)` | `D₋ᵧ(uₕ)` |
-| `D₋(uₕ, Val(3))` | `D₋₂(uₕ)` |
-
-`Dc`, `D̃`, `D̽ₕ` and `jump` work the same way. The averages use `Mₕ`/`M₊ₕ` for this rather
-than a bare `M`: `M` is what most finite-element code calls its mass matrix, and exporting
-it would take the name away from anyone writing `using Bramble`. So `Mₕ(uₕ)` is the tuple
-over every coordinate and `Mₕ(uₕ, 2)` is the average along ``y`` — the same name, told apart
-by how many arguments it is given. `D̽ₕ` carries both in the same way.
-
-The point of it is a loop the subscript names cannot express, because the direction is part
-of the name there and cannot come from a variable:
+That is what makes a loop over directions writable, which the subscript names cannot
+express on their own:
 
 ```julia
 # the discrete H¹ seminorm squared, in any dimension
-sum(innerₕ(D₋(uₕ, d), D₋(uₕ, d)) for d in 1:dim(mesh(space(uₕ))))
+sum(innerₕ(∇ₕ[d](uₕ), ∇ₕ[d](uₕ)) for d in 1:dim(mesh(space(uₕ))))
 ```
 
-This costs nothing over writing the coordinate out. An `Int` or a `Symbol` selects between
-literal `Val`s, one branch per direction the mesh has, so the direction still reaches the
-stencil engine as a compile-time constant; the loop above allocates exactly what the
-spelled-out version does. An out-of-range direction throws an `ArgumentError`, and the bound
-is the mesh's own dimension: `D₋(uₕ, :y)` on a 1D grid is an error, not a silent zero.
+Underneath, every family has a stem that takes the direction as a second argument, and the
+coordinate suffix is spelling it:
+
+| Written | Same as |
+|:--|:--|
+| `Bramble.D₋(uₕ, 1)` | `D₋ₓ(uₕ)` |
+| `Bramble.D₋(uₕ, :y)` | `D₋ᵧ(uₕ)` |
+| `Bramble.D₋(uₕ, Val(3))` | `D₋₂(uₕ)` |
+
+The stems `D₋`, `D₊`, `Dc`, `D̃` and `jump` are declared `public` but not exported, so they
+are written `Bramble.D₋` or imported by name. The `Val` form is the one to reach for when the
+direction must be a compile-time constant, as it must inside a form. The averages use
+`Mₕ`/`M₊ₕ` for this rather than a bare `M`: `M` is what most finite-element code calls its
+mass matrix. So `Mₕ(uₕ)` is the tuple over every coordinate and `Mₕ(uₕ, 2)` is the average
+along ``y`` — the same name, told apart by how many arguments it is given. `D̽ₕ` carries both
+in the same way.
+
+An `Int` or a `Symbol` selects between literal `Val`s, one branch per direction the mesh
+has. An out-of-range direction throws an `ArgumentError`, and the bound is the mesh's own
+dimension: `Bramble.D₋(uₕ, :y)` on a 1D grid is an error, not a silent zero.
 
 ## 2. Applying an operator
 
@@ -333,7 +338,7 @@ derivatives of ``x + 2y``. The same suffix works for the other families as `jump
 
 These are separate names from the dimensional entry points of [1.3](@ref
 operators_direction_argument) rather than one name with an extra argument, and deliberately:
-`∇ₕ(uₕ)` returns a tuple where `D₋(uₕ, d)` returns a grid function, so folding them together
+`∇ₕ(uₕ)` returns a tuple where `Bramble.D₋(uₕ, d)` returns a grid function, so folding them together
 would make the return type depend on whether an argument was passed at all. `D̽ₕ` and
 `Mₕ`/`M₊ₕ` are the exception, and they get away with it because the two meanings differ by
 arity rather than by the value of an argument:

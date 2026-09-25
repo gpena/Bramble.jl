@@ -49,22 +49,25 @@ public norminf_h
 public weights, interpolation_matrix
 
 # --- Discrete Differential & Difference Operators ---
-export ∇ₕ, D₋
+export ∇ₕ
 export divₕ, divₕ!, curlₕ, curlₕ!, Δₕ, Δₕ!
 export εₕ, εₕ!
 
-export D̃, D̃ₕ
+export D̃ₕ
 export ∇̃ₕ, ∇̃ₕ!, diṽₕ, diṽₕ!, curl̃ₕ, curl̃ₕ!
 
-export Dc, Dcₕ
+export Dcₕ
 export ∇cₕ, ∇cₕ!, divcₕ, divcₕ!, curlcₕ, curlcₕ!, εcₕ, εcₕ!
 
 export D̽ₕ, ∇̽ₕ
 export div̽ₕ, div̽ₕ!, curl̽ₕ, curl̽ₕ!, ε̽ₕ, ε̽ₕ!, ∇̽ₕ!
 
-export jump, jumpₕ
+export jumpₕ
 
 export Mₕ, Mcₕ
+
+# Dimensional entry points (the direction as an argument; `∇ₕ[d]` is the exported route)
+public D₋, D̃, Dc, jump
 
 # Coordinate aliases (destructure from the vectorial entities above; public for tests and
 # extensions, unexported from default namespace)

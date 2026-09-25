@@ -2,6 +2,7 @@ module SpaceDiscreteCalculusIdentitiesTests
 
 using Test
 using Bramble
+using Bramble: D₋
 using Bramble: Dcₓ, D₋ₓ, Mₓ, inner₊ₓ, norminf_h, set_points!
 using Random
 using Supposition
