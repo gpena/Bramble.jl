@@ -31,7 +31,13 @@ using Bramble:
                spacings,
                cell_measures,
                iterative_refinement!,
-               change_points!
+               change_points!,
+               D₋ᵧ,
+               D₋ₓ,
+               boundary_indices,
+               forward_spacings,
+               half_points,
+               interior_indices
 using LinearAlgebra: hypot
 using Random
 using Supposition

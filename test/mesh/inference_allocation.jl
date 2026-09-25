@@ -15,7 +15,13 @@ using Bramble:
                half_spacing!,
                set_points!,
                change_points!,
-               _mark_indices!
+               _mark_indices!,
+               cell_measure,
+               half_point,
+               half_spacing,
+               locate_cell,
+               point,
+               stepsize
 using StaticArrays: SVector
 using ..TestUtils: alloc_test, @test_allocs
 

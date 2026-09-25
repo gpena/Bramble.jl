@@ -2,6 +2,7 @@ module ExtADBackendVerificationTests
 
 using Test
 using Bramble
+using Bramble: jacobian_pattern
 using ADTypes
 using ForwardDiff, ReverseDiff, FiniteDiff, DifferentiationInterface
 using Random

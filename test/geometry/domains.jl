@@ -22,7 +22,10 @@ using Bramble:
                label_conditions,
                point_type,
                topo_dim,
-               is_collapsed
+               is_collapsed,
+               center,
+               point,
+               projection
 using StaticArrays
 using ..TestUtils: alloc_test, @test_allocs
 

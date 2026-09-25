@@ -2,6 +2,8 @@ module TestSuiteSparseExt
 
 using Test
 using Bramble
+using Bramble: SuiteSparseFactorization, suitesparse_factorize, suitesparse_qr_factorize,
+               suitesparse_qr_solve, suitesparse_refactor!, suitesparse_solve
 using LinearAlgebra
 using SparseArrays
 using SuiteSparse

@@ -2,6 +2,9 @@ module ExtSciMlExtTests
 
 using Test
 using Bramble
+using Bramble: SecondOrderSemidiscretization, block_mass_matrix, damping_matrix,
+               jacobian_prototype, mass_matrix, operator_matrix, semidiscretize_rhs,
+               stiffness_matrix
 using SparseArrays
 using LinearAlgebra: mul!, I as Identity
 using SciMLBase: SciMLBase, ODEProblem, LinearProblem, NonlinearProblem, solve

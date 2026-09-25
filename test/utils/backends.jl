@@ -14,7 +14,15 @@ using Bramble:
                backend_zeros,
                execution_policy,
                Serial,
-               Parallel
+               Parallel,
+               CpuPolicy,
+               CpuPolyester,
+               CpuSerial,
+               CpuThreaded,
+               ExecutionPolicy,
+               GpuAsync,
+               GpuKernel,
+               GpuPolicy
 using SparseArrays
 using LinearAlgebra: diag, I
 using ..TestUtils: alloc_test, @test_allocs

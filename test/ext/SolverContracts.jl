@@ -22,6 +22,7 @@ module ExtSolverContracts
 
 using Test
 using Bramble
+using Bramble: refactor!, sparse_factorize, sparse_refactor!
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ
 using LinearAlgebra: ldiv!

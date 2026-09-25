@@ -6,7 +6,9 @@ module MeshMeshesTests
 using Test
 using Bramble
 import Bramble:
-                set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, hₘᵢₙ, is_collapsed
+                set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, hₘᵢₙ, is_collapsed,
+                change_points!, half_point, half_spacing, indices, is_uniform, locate_cell,
+                point, stepsize
 
 @testset "Comprehensive mesh test suite" begin
     @testset "Domain edge cases" begin

@@ -2,6 +2,7 @@ module TestSparspakExt
 
 using Test
 using Bramble
+using Bramble: SparspakFactorization, sparspak_factorize, sparspak_refactor!, sparspak_solve
 using LinearAlgebra
 using SparseArrays
 using Sparspak

@@ -2,6 +2,7 @@ module ExtSparseAdExtTests
 
 using Test
 using Bramble
+using Bramble: ast_sparsity_detector, jacobian_pattern
 using ADTypes
 using ForwardDiff, DifferentiationInterface
 using SparseMatrixColorings: SparseMatrixColorings

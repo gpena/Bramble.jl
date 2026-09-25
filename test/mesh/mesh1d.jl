@@ -27,7 +27,9 @@ import Bramble:
                 iterative_refinement!,
                 set,
                 is_collapsed,
-                is_uniform
+                is_uniform,
+                spacings,
+                stepsize
 import Bramble:
                 cell_measure, cell_measures, hₘₐₓ, half_points, boundary_indices, interior_indices
 import Bramble: DomainMarkers, Mesh1D, Backend, forward_spacing, MeshMarkers

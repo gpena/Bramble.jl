@@ -2,7 +2,7 @@ module MeshConstructorsTests
 
 using Test
 using Bramble
-using Bramble: _expand_uniform, Backend, Serial
+using Bramble: _expand_uniform, Backend, Serial, stepsize
 using ..TestUtils: alloc_test, @test_allocs
 
 @testset "Mesh constructors" begin

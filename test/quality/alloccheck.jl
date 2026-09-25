@@ -25,7 +25,17 @@ using Bramble:
                spacings,
                TrialFunction,
                TestFunction,
-               πₕ!
+               πₕ!,
+               D₋ₓ,
+               D₋ₓ!,
+               Mₓ!,
+               cell_measure,
+               center,
+               half_spacing,
+               inner₊ₓ,
+               point,
+               projection,
+               topo_dim
 
 # Static allocation verification (gpena/Bramble.jl#118).
 #

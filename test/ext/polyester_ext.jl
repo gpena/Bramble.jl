@@ -10,7 +10,9 @@ module TestPolyesterExt
 
 using Test
 using Bramble
-using Bramble: CpuPolyester, execution_policy, test_space, _normalize_dirichlet, apply_dirichlet_conditions!
+using Bramble: CpuPolyester, execution_policy, test_space, _normalize_dirichlet,
+               apply_dirichlet_conditions!, allocate_system_matrix, assemble_parallel!,
+               inner₊ₓ
 using Polyester
 using SparseArrays
 using LinearAlgebra: issymmetric

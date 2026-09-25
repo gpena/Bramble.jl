@@ -10,7 +10,9 @@ using SparseArrays
 using Kronecker: Kronecker  # loads BrambleKroneckerExt, which owns `fdm_solve`
 using LinearAlgebra: I, mul!
 using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros, metal_sparse_csr,
-               metal_sparse_csc, host_points, host_weights, half_spacings
+               metal_sparse_csc, host_points, host_weights, half_spacings, CpuSerial,
+               CpuThreaded, GpuKernel, half_points, index_in_marker, is_uniform,
+               locate_cell, set_points!, spacings, stepsize, weights
 using ..TestUtils: _run_gpu_tests
 
 # BrambleMetalExt's backend allocation primitives
