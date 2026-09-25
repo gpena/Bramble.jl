@@ -8,7 +8,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC, spdiagm, spzeros, rowvals, no
                     dropzeros!
 
 using LinearAlgebra: I, Diagonal
-import LinearAlgebra: mul!, issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot, lu, cholesky
+import LinearAlgebra: mul!, issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot, lu, cholesky, ⋅
 
 import Base: copy
 using Base: @propagate_inbounds
@@ -21,93 +21,73 @@ using QuadGK: gauss
 import GPUArraysCore
 
 # --- Backend & Execution Policies ---
-export backend, gpu_backend, metal_backend, vector_type, matrix_type, backend_types
-export csr_backend
-export ExecutionPolicy, Serial, Parallel, execution_policy
-export CpuPolicy, CpuSerial, CpuThreaded, GpuPolicy, GpuKernel, GpuAsync
-export CpuPolyester, CpuBatch
+export backend, gpu_backend, metal_backend, csr_backend
+export Serial, Parallel, vector_type, matrix_type, backend_types, execution_policy
 
-# Backend extension hooks and traits
-public _batch_for!, _batch_axis_for!, _batch_scatter_for!, _batch_dot, _batch_dot_masked
-public _batch_bilinear_colour_sweep!, _batch_bilinear_band_sweep!
-public _batch_linear_colour_sweep!, _batch_linear_band_sweep!
-public _allocate_from_pattern, _scatter_position, _scatter_add!, _zero_stored!
-public vector, matrix, backend_eye, backend_zeros
-public metal_sparse_csr, metal_sparse_csc
-public supports_undef_construction
-public ka_device, ka_synchronize
+public ExecutionPolicy, CpuPolicy, CpuSerial, CpuThreaded, CpuPolyester, CpuBatch
+public GpuPolicy, GpuKernel, GpuAsync
 public locality, Locality, HostLocality, DeviceLocality
-public PRECOMPILE_WORKLOAD
-
-# GPU kernel launch hooks (extended by BrambleKernelAbstractionsExt)
-public _gpu_for!, _gpu_scatter_for!
-public _launch_half_points!, _launch_spacing!, _launch_half_spacing!
-public _launch_refine_indices!
-public _launch_restriction!, _launch_restriction_scatter!
-public _launch_restriction_nd!, _launch_restriction_scatter_nd!
-public _launch_cell_average!, _launch_cell_average_scatter!
-public _launch_cell_average_nd!, _launch_cell_average_scatter_nd!
-public _launch_difference_onesided!, _launch_difference_centered!, _launch_average_engine!
-public _launch_uniform_mesh1d_init!, _launch_nonuniform_mesh1d_metrics!
-public _launch_fused_divergence!, _launch_fused_curl2d!, _launch_fused_curl3d!
-public _launch_fused_laplacian!, _launch_fused_strain_offdiag!
-public _launch_spmv_csr!, _launch_spmm_csr!
-public _launch_kron_fused!
+public vector, matrix, metal_sparse_csr, metal_sparse_csc
 
 # --- Domain & Geometry ---
-export box, interval, ×, dim, topo_dim, extrema, point, center, projection, boundary_symbols
+export box, interval, ×, ⋅, dim, boundary_symbols
 export domain, markers, labels
-public set, is_collapsed, point_type
+
+public center, projection, point, topo_dim
 
 # --- Mesh ---
 export Mesh1D, MeshnD
-export mesh, submeshes, hₘₐₓ, stepsize, locate_cell, iterative_refinement!, change_points!, set_points!
-export npoints, points, point, half_points, half_point
-export spacing, forward_spacing, half_spacing, spacings, forward_spacings, cell_measure
-export indices, boundary_indices, interior_indices, is_boundary_index, index_in_marker, is_uniform
-export normal_vector
+export mesh, npoints, points, hₘₐₓ, hₘᵢₙ, iterative_refinement!, normal_vector
+export spacing, forward_spacing
 
-public AbstractMeshType, MeshMarkers
-public mesh_type, hₘᵢₙ, half_spacings, cell_measures
-public host_spacings, host_half_spacings, host_points
+public change_points!, set_points!, is_uniform
+public half_spacing, spacings, cell_measure, half_point, half_points
+public indices, boundary_indices, interior_indices, is_boundary_index, index_in_marker
 
 # --- Spaces & Grid Functions ---
-export gridspace, vector_gridspace, space, spaces, ScalarGridSpace, CompositeGridSpace
-export ndofs, ncomponents, weights
-export VectorElement, element, parent, reshape, components, component_range, component_ranges
-export ldiv!
-export *
+export gridspace, vector_gridspace, space, spaces
+export ndofs, ncomponents
+export element, components
 export Rₕ, Rₕ!, avgₕ, avgₕ!
-export interpolate_at, interpolation_matrix, πₕ, πₕ!
+export interpolate_at, πₕ, πₕ!
 
-export innerₕ, inner_Γ, dirac, skew_symmetric
+export innerₕ, inner_Γ, dirac
 export n
-export inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂
-export snorm₁ₕ, norm₁ₕ, norm₊, normₕ, norminf_h, norm∞ₕ
+export inner₊
+export snorm₁ₕ, norm₁ₕ, norm₊, normₕ, norm∞ₕ
 
-public VectorGridSpace, space_type, host_weights
+public ScalarGridSpace, CompositeGridSpace, VectorGridSpace, VectorElement
+public component_range, component_ranges, skew_symmetric
+public inner₊ₓ, inner₊ᵧ, inner₊₂
+public norminf_h
+public weights, interpolation_matrix
 
 # --- Discrete Differential & Difference Operators ---
-export D₋ₓ, D₋ᵧ, D₋₂, ∇ₕ, D₋
+export ∇ₕ, D₋
 export divₕ, divₕ!, curlₕ, curlₕ!, Δₕ, Δₕ!
 export εₕ, εₕ!
-export D₋ₓ!, D₋ᵧ!, D₋₂!
 
-export D̃ₓ, D̃ᵧ, D̃₂, D̃ₕ, D̃
-export D̃ₓ!, D̃ᵧ!, D̃₂!, ∇̃ₕ, ∇̃ₕ!, diṽₕ, diṽₕ!, curl̃ₕ, curl̃ₕ!
+export D̃, D̃ₕ
+export ∇̃ₕ, ∇̃ₕ!, diṽₕ, diṽₕ!, curl̃ₕ, curl̃ₕ!
 
-export Dcₓ, Dcᵧ, Dc₂, Dcₕ, Dc
-export Dcₓ!, Dcᵧ!, Dc₂!, ∇cₕ, ∇cₕ!, divcₕ, divcₕ!, curlcₕ, curlcₕ!, εcₕ, εcₕ!
+export Dc, Dcₕ
+export ∇cₕ, ∇cₕ!, divcₕ, divcₕ!, curlcₕ, curlcₕ!, εcₕ, εcₕ!
 
-export D̽ₓ, D̽ᵧ, D̽₂, D̽ₕ, ∇̽ₕ
+export D̽ₕ, ∇̽ₕ
 export div̽ₕ, div̽ₕ!, curl̽ₕ, curl̽ₕ!, ε̽ₕ, ε̽ₕ!, ∇̽ₕ!
-export D̽ₓ!, D̽ᵧ!, D̽₂!
 
-export jumpₓ, jumpᵧ, jump₂, jumpₕ, jump
-export jumpₓ!, jumpᵧ!, jump₂!
+export jump, jumpₕ
 
-export Mₓ, Mᵧ, M₂, Mₕ, Mcₓ, Mcᵧ, Mc₂, Mcₕ
-export Mₓ!, Mᵧ!, M₂!, Mcₓ!, Mcᵧ!, Mc₂!
+export Mₕ, Mcₕ
+
+# Coordinate aliases (destructure from the vectorial entities above; public for tests and
+# extensions, unexported from default namespace)
+public D₋ₓ, D₋ᵧ, D₋₂, D₋ₓ!, D₋ᵧ!, D₋₂!
+public D̃ₓ, D̃ᵧ, D̃₂, D̃ₓ!, D̃ᵧ!, D̃₂!
+public Dcₓ, Dcᵧ, Dc₂, Dcₓ!, Dcᵧ!, Dc₂!
+public D̽ₓ, D̽ᵧ, D̽₂, D̽ₓ!, D̽ᵧ!, D̽₂!
+public jumpₓ, jumpᵧ, jump₂, jumpₓ!, jumpᵧ!, jump₂!
+public Mₓ, Mᵧ, M₂, Mₓ!, Mᵧ!, M₂!, Mcₓ, Mcᵧ, Mc₂, Mcₓ!, Mcᵧ!, Mc₂!
 
 # Forward operators (public for tests and extensions, unexported from default namespace)
 public D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ, D₊
@@ -118,32 +98,26 @@ public M₊ₓ!, M₊ᵧ!, M₊₂!
 
 # --- Forms, Assembly & Problems ---
 export dirichlet_constraints, dirichlet_bc!, symmetrize!
-export reaction, reaction_density, reaction!, reaction_density!
-export form, assemble, assemble!, assemble_parallel!, allocate_system_matrix, evaluate!
+export form, assemble, assemble!, assemble_add!
 export expression
 export is_separable, kronecker_operator, KroneckerLinearOperator
-export bandwidths, blockbandwidths
-export assemble_add!
-export jacobian_pattern, ast_sparsity_detector
-export type_cached_assemble!
-export Semidiscretization, semidiscretize, mass_matrix, operator_matrix
-export SemidiscretizeRHS, semidiscretize_rhs
-export SecondOrderSemidiscretization,
-       semidiscretize_second_order, damping_matrix, stiffness_matrix, block_mass_matrix
-public jacobian!
-export jacobian_prototype
+export pde_solve
+export semidiscretize, semidiscretize_second_order
 export ode_function, ode_problem, linear_problem, nonlinear_problem
+export second_order_ode_function, second_order_ode_problem
 export amg_preconditioner
 export ilu_preconditioner
-export second_order_ode_function, second_order_ode_problem
-export SuiteSparseFactorization, suitesparse_factorize, suitesparse_solve, suitesparse_refactor!
-export suitesparse_qr_factorize, suitesparse_qr_solve
-export AccelerateFactorization, accelerate_factorize, accelerate_solve, accelerate_refactor!
-export MUMPSFactorization, mumps_factorize, mumps_solve, mumps_refactor!
-export SparspakFactorization, sparspak_factorize, sparspak_solve, sparspak_refactor!
-export sparse_factorize, sparse_refactor!, refactor!
-export pde_solve
-export issymmetric, isposdef
+
+public jacobian!, jacobian_prototype, jacobian_pattern, ast_sparsity_detector
+public reaction, reaction_density, reaction!, reaction_density!
+public allocate_system_matrix, type_cached_assemble!, evaluate!, assemble_parallel!
+public Semidiscretization, SemidiscretizeRHS, SecondOrderSemidiscretization
+public mass_matrix, operator_matrix, damping_matrix, stiffness_matrix, block_mass_matrix
+public SuiteSparseFactorization, suitesparse_factorize
+public AccelerateFactorization
+public MUMPSFactorization
+public SparspakFactorization
+public sparse_factorize, sparse_refactor!, refactor!
 public DirichletConstraint
 
 # --- Exporters ---
