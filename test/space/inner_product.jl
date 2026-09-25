@@ -307,6 +307,32 @@ end
     end
 end
 
+# The unmasked `_dot` on a `SeparableWeights` walks axis-1 lines with a hoisted product of
+# the other axes' factors, so it sums in a different order from the dense reduction over the
+# collected weights. Checked on non-uniform meshes in every dimension and element type.
+@testset "SeparableWeights _dot against the dense reduction" begin
+    unit(T) = interval(zero(T), one(T))
+    for (T, rtol) in ((Float64, 1e-12), (Float32, 1.0f-5))
+        Ωs = (mesh(domain(unit(T)), 37, false),
+            mesh(domain(unit(T) × unit(T)), (31, 17), (false, false)),
+            mesh(domain(unit(T) × unit(T) × unit(T)), (9, 8, 7), (false, false, false)))
+        for Ωₕ in Ωs
+            Wₕ = gridspace(Ωₕ)
+            u = Rₕ(Wₕ, x -> 1 + sum(sin, x))
+            v = Rₕ(Wₕ, x -> 2 - prod(x))
+            dense(w) = sum(parent(u) .* collect(w) .* parent(v))
+
+            @test innerₕ(u, v) ≈ dense(Bramble.weights(Wₕ, Bramble.Innerh())) rtol = rtol
+            for d in 1:dim(Wₕ)
+                @test inner₊(u, v, Val((d,))) ≈
+                      dense(Bramble.weights(Wₕ, Bramble.Innerplus(), d)) rtol = rtol
+            end
+            @test innerₕ(u, v) === innerₕ(u, v)
+            @test inner₊ₓ(u, v) === inner₊ₓ(u, v)
+        end
+    end
+end
+
 @testset "inner₊ dimension" begin
     import Bramble: get_dimension_from_type, _get_h_val
 

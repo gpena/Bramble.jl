@@ -415,18 +415,21 @@ const norm∞ₕ = norminf_h
 # Weight-side specializations of `_dot`/`_dot_masked` (src/utils/linear_algebra.jl) for a
 # lazy `SeparableWeights` (src/space/scalar_gridspace.jl): `weights(Wₕ, Val(S))` returns one
 # of these for every staggered set `S` that is neither `()` nor a singleton
-# (gpena/Bramble.jl#115, #234). Both walk `CartesianIndices(w.dims)` -- or convert a masked
-# linear index to one -- and then read `w` through its `CartesianIndex` `getindex`, which
-# multiplies the per-axis factors directly, rather than through `SeparableWeights`'s own
-# linear `getindex`, which divides by each axis length in turn to recover the
-# `CartesianIndex` first. Measured on a 100³ grid
-# (`.agents/plans/v3-3-0-memory-scaling-notes.md` §2.3): the Cartesian loop here costs
-# ≈2.4x a dense `_dot`; the same reduction through the linear `getindex` fallback costs
-# ≈4.9x -- the gap this specialization exists to avoid. Re-measured for gpena/Bramble.jl#273:
-# ≈2.4-2.5x holds (docs/src/internals/space.md once reported 4.81-4.90x for this same loop;
-# that figure did not reproduce and has been corrected there to match). `@simd` on the loop
-# below was tried and reverted -- it changes the reduction at the bit level on a
-# deterministic-seed mesh (floating-point reassociation), not merely a speed/no-op change.
+# (gpena/Bramble.jl#115, #234).
+#
+# The unmasked `_dot` walks the grid one axis-1 line at a time. The outer loop runs over
+# `CartesianIndices(w.dims[2:D])`; for each line it forms the scalar
+# `c = ∏_{d ≥ 2} factors[d][I_d]` once, and the inner `@inbounds @simd` loop walks the
+# line's contiguous `dims[1]` entries, accumulating `u[k] * v[k] * factors[1][i₁]` with the
+# same `muladd` shape as the dense `_dot`. The line sum is then folded in as
+# `s = muladd(c, line_sum, s)`. For D = 1 there is one line and `c = one(T)`. Nothing is
+# allocated and the weight tensor is never formed. Measured on non-uniform 1000² and 100³
+# grids (minimum of 15 runs): innerₕ and inner₊ₓ each take 0.74-0.78x the time of a dense
+# `_dot` over the collected weights, which has a third full-length vector to read.
+#
+# The masked methods only visit marked indices, so they convert each linear index to a
+# `CartesianIndex` and read `w` through its `CartesianIndex` `getindex`, which multiplies
+# the per-axis factors directly instead of dividing by each axis length in turn.
 #
 # No separate `CpuBatch` override is needed here: `inner₊(uₕ, vₕ, Val(S))` calls the
 # policy-dispatched `_dot`/`_dot_masked(policy, u, v, w[, mask])` (S7.1,
@@ -436,15 +439,30 @@ const norm∞ₕ = norminf_h
 # `_batch_dot`/`_batch_dot_masked` directly, before the weight's type is ever consulted, so
 # a `CpuBatch` policy reaches S7.1's Polyester hook (or its "not loaded" error) regardless
 # of whether the weight is dense or a `SeparableWeights`, never this loop.
-@inline function _dot(u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector) where {D}
+@inline function _dot(
+        u::AbstractVector, w::SeparableWeights{D, <:Any, VT}, v::AbstractVector
+) where {D, VT}
+    # The factors are indexed directly below, so repeat `getindex`'s device guard (#310).
+    locality(VT) isa DeviceLocality && _throw_device_scalar_weights()
     n = length(w)
     (length(u) == n == length(v)) || _throw_dot_dim_error(length(u), n, length(v))
     T = promote_type(eltype(u), eltype(w), eltype(v))
     s = zero(T)
-    li = LinearIndices(w.dims)
-    @inbounds for I in CartesianIndices(w.dims)
-        i = li[I]
-        s = muladd(T(u[i]) * T(v[i]), T(w[I]), s)
+    f₁ = first(w.factors)
+    n₁ = first(w.dims)
+    offset = 0
+    @inbounds for J in CartesianIndices(Base.tail(w.dims))
+        c = one(T)
+        for d in 2:D
+            c *= T(w.factors[d][J[d - 1]])
+        end
+        line_sum = zero(T)
+        @simd for i₁ in 1:n₁
+            k = offset + i₁
+            line_sum = muladd(T(u[k]) * T(v[k]), T(f₁[i₁]), line_sum)
+        end
+        s = muladd(c, line_sum, s)
+        offset += n₁
     end
     return s
 end
