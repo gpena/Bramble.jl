@@ -461,7 +461,7 @@ else
             @test collect(points(a)) == collect(points(b))
         end
 
-        # #302: no eager `synchronize` remains under `GpuAsync` (S11 removed all 21 call
+        # #302: no eager `synchronize` remains under `GpuKernel` (S11 removed all 21 call
         # sites), so a chained sequence with no explicit sync between calls must still match
         # the CPU on EVERY repetition, not just the first -- two real device races in this
         # repository were invisible at one small run and only showed up across 40

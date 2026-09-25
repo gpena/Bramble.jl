@@ -261,13 +261,13 @@ end
         @test_allocs inner₊(u, v, Val((3,)))
     end
 
-    @testset "CpuBatch reaches the Polyester hook, never the Cartesian loop (#190)" begin
+    @testset "CpuPolyester reaches the Polyester hook, never the Cartesian loop (#190)" begin
         # `inner₊(uₕ, vₕ, Val(S))` passes `execution_policy(space(uₕ))` through to the
         # policy-dispatched `_dot`/`_dot_masked` (S7.1, `src/utils/linear_algebra.jl`):
         # `CpuSerial`/`CpuThreaded` fall through to the plain methods (positive control
-        # below); `CpuBatch` must reach S7.1's `_batch_dot`/`_batch_dot_masked` hook and
+        # below); `CpuPolyester` must reach S7.1's `_batch_dot`/`_batch_dot_masked` hook and
         # its "Polyester not loaded" error, for a dense weight and for a `SeparableWeights`
-        # alike, without ever running this file's Cartesian loop. A `CpuBatch` grid space
+        # alike, without ever running this file's Cartesian loop. A `CpuPolyester` grid space
         # cannot be built at all without Polyester (`space_weights` itself needs the
         # policy-dispatched sweep), so this calls `_dot`/`_dot_masked` directly rather than
         # constructing one.
@@ -284,7 +284,7 @@ end
             @test Bramble._dot(Bramble.CpuSerial(), u, w, v) == expected
             @test Bramble._dot(Bramble.CpuThreaded(), u, w, v) == expected
             err = try
-                Bramble._dot(Bramble.CpuBatch(), u, w, v)
+                Bramble._dot(Bramble.CpuPolyester(), u, w, v)
                 nothing
             catch e
                 e
@@ -296,7 +296,7 @@ end
             @test Bramble._dot_masked(Bramble.CpuSerial(), u, w, v, mask) == expected_m
             @test Bramble._dot_masked(Bramble.CpuThreaded(), u, w, v, mask) == expected_m
             err_m = try
-                Bramble._dot_masked(Bramble.CpuBatch(), u, w, v, mask)
+                Bramble._dot_masked(Bramble.CpuPolyester(), u, w, v, mask)
                 nothing
             catch e
                 e

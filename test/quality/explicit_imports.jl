@@ -93,7 +93,7 @@ using ExplicitImports
                 # Val(S))` returns for `length(S) >= 2` (src/space/scalar_gridspace.jl) --
                 # `_batch_dot`/`_batch_dot_masked` are specialised on it
                 # (ext/BramblePolyesterExt.jl:25) the same way the `CpuSerial`/`CpuThreaded`
-                # methods in `space/inner_product.jl` already are, so a `CpuBatch` inner
+                # methods in `space/inner_product.jl` already are, so a `CpuPolyester` inner
                 # product avoids the same per-point `CartesianIndex` conversion cost. Not
                 # exported or public.
                 :SeparableWeights,

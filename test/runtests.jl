@@ -248,7 +248,7 @@ if __bramble_with_ext_backends
         include("ext/sparspak_ext.jl")
         # The memory-scaling milestone's own backend/operator extensions (v3.3.0 plan S3.1,
         # S5.2, S7.2): SparseMatrixCSR assembly, the Kronecker.jl fast-diagonalisation solve,
-        # and the Polyester-backed CpuBatch sweeps. Grouped with the other package-extension
+        # and the Polyester-backed CpuPolyester sweeps. Grouped with the other package-extension
         # files above rather than the every-push suite because each needs its own weak
         # dependency loaded.
         include("ext/sparse_csr_ext.jl")

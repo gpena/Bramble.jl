@@ -10,7 +10,7 @@ module TestPolyesterExt
 
 using Test
 using Bramble
-using Bramble: CpuBatch, execution_policy, test_space, _normalize_dirichlet, apply_dirichlet_conditions!
+using Bramble: CpuPolyester, execution_policy, test_space, _normalize_dirichlet, apply_dirichlet_conditions!
 using Polyester
 using SparseArrays
 using LinearAlgebra: issymmetric
@@ -28,13 +28,13 @@ function _grid(::Val{D}, Ωd, n; backend) where {D}
     )
 end
 
-# One matched CpuBatch/Parallel/Serial triple -- same domain, same mesh size, one backend
+# One matched CpuPolyester/Parallel/Serial triple -- same domain, same mesh size, one backend
 # swapped for another -- mirroring test/ext/sparse_csr_ext.jl's own `_poisson_pair`.
 function _poisson_pair(dim::Val{D}, n::Integer; source = _sine_source(dim)) where {D}
     Iᴰ = _unit_cube(dim)
     Ωd = domain(Iᴰ, :dir => boundary_symbols(Iᴰ))
     Ωp = _grid(dim, Ωd, n; backend = backend(policy = Parallel()))
-    Ωb = _grid(dim, Ωd, n; backend = backend(policy = CpuBatch()))
+    Ωb = _grid(dim, Ωd, n; backend = backend(policy = CpuPolyester()))
     Ωs = _grid(dim, Ωd, n; backend = backend(policy = Serial()))
     Wp, Wb, Ws = gridspace(Ωp), gridspace(Ωb), gridspace(Ωs)
 
@@ -50,15 +50,15 @@ function _poisson_pair(dim::Val{D}, n::Integer; source = _sine_source(dim)) wher
     return (; Wp = Wp, Wb = Wb, Ws = Ws, ap = ap, lp = lp, ab = ab, lb = lb, as = as, ls = ls)
 end
 
-@testset "Polyester extension (CpuBatch)" begin
-    @testset "CpuBatch backend and grid space (needs this extension, S7.1)" begin
-        be = backend(policy = CpuBatch())
-        @test execution_policy(be) === CpuBatch()
+@testset "Polyester extension (CpuPolyester)" begin
+    @testset "CpuPolyester backend and grid space (needs this extension, S7.1)" begin
+        be = backend(policy = CpuPolyester())
+        @test execution_policy(be) === CpuPolyester()
 
         Ω = domain(box((0.0, 0.0), (1.0, 1.0)))
         Ωb = mesh(Ω, (8, 7), true; backend = be)
         # `space_weights` fills through the same policy-dispatched sweep as everything
-        # else (S7.1's own finding), so this is the first CpuBatch call any program makes
+        # else (S7.1's own finding), so this is the first CpuPolyester call any program makes
         # -- it raises naming Polyester without this extension loaded.
         Wb = gridspace(Ωb)
         @test ndofs(Wb) == ndofs(gridspace(mesh(Ω, (8, 7), true)))
@@ -91,7 +91,7 @@ end
 
             # `assemble!` into a matrix pre-filled with garbage: if the zeroing
             # `_assemble_bilinear!` does before dispatching to the sweep (`_zero_stored!(A)`)
-            # were ever skipped for `CpuBatch`, this would silently add the garbage into the
+            # were ever skipped for `CpuPolyester`, this would silently add the garbage into the
             # real entries instead of replacing them -- exactly the trap gpena/Bramble.jl#190
             # records from a previous attempt.
             Ab2 = allocate_system_matrix(p.ab)
@@ -108,7 +108,7 @@ end
 
             # `assemble(a::BilinearForm, l::LinearForm; ...)` calls `assemble(l; ...)` for
             # the vector half, and `LinearForm`'s own `assemble`/`assemble!` refuse any
-            # `CpuBatch` policy unconditionally, Polyester loaded or not
+            # `CpuPolyester` policy unconditionally, Polyester loaded or not
             # (`src/form/linear.jl`'s own fail-fast, S7.1's design -- see the "integrator
             # item" testset below, and this subplan's final report). `BilinearForm`'s
             # `assemble`/`assemble!` carry no such guard, so the matrix half reaches this
@@ -133,7 +133,7 @@ end
         # `assemble_parallel!(b, ::LinearForm)` forces `_assemble_linear_parallel_core!`
         # regardless of the space's own backend policy (`src/form/linear.jl`'s own
         # documented contract), and that core computes its *effective* policy the same way
-        # the bilinear sweep does, so `CpuBatch` reaches this extension's
+        # the bilinear sweep does, so `CpuPolyester` reaches this extension's
         # `_batch_linear_colour_sweep!`/`_batch_linear_band_sweep!` exactly as `Parallel()`
         # reaches `Threads.@threads`.
         for (D, n) in ((1, 21), (2, 9), (3, 5))
@@ -148,7 +148,7 @@ end
         end
 
         # `assemble`/`assemble!` on a `LinearForm` used to throw unconditionally under
-        # `CpuBatch`: `_assemble_linear!` fast-failed on the policy before it could reach
+        # `CpuPolyester`: `_assemble_linear!` fast-failed on the policy before it could reach
         # `_assemble_linear_parallel_core!`, so it fired even with Polyester loaded and every
         # hook implemented, and a linear form could never be assembled under this policy at
         # all. The integrator removed that branch on 2026-09-19 (gpena/Bramble.jl#190); the
@@ -179,7 +179,7 @@ end
         S = interval(0.0, 1.0) × interval(0.0, 1.0)
         Ωd = domain(S, :bottom => :bottom, :left => :left)
         Ωp = mesh(Ωd, (12, 12), (true, true); backend = backend(policy = Parallel()))
-        Ωb = mesh(Ωd, (12, 12), (true, true); backend = backend(policy = CpuBatch()))
+        Ωb = mesh(Ωd, (12, 12), (true, true); backend = backend(policy = CpuPolyester()))
         Wp, Wb = gridspace(Ωp), gridspace(Ωb)
         up, ub = Rₕ(Wp, x -> x[1] + x[2]), Rₕ(Wb, x -> x[1] + x[2])
         vp, vb = Rₕ(Wp, x -> 1.0), Rₕ(Wb, x -> 1.0)
@@ -201,7 +201,7 @@ end
         I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
         Ωd = domain(I2, :dir => boundary_symbols(I2))
         Ωp = mesh(Ωd, (n1, n2), (true, true); backend = backend(policy = Parallel()))
-        Ωb = mesh(Ωd, (n1, n2), (true, true); backend = backend(policy = CpuBatch()))
+        Ωb = mesh(Ωd, (n1, n2), (true, true); backend = backend(policy = CpuPolyester()))
         Vp, Vb = gridspace(Ωp, Val(2)), gridspace(Ωb, Val(2))
 
         g = (V) -> form(
@@ -217,7 +217,7 @@ end
         @test isapprox(Matrix(Apd), Matrix(Abd); atol = 1.0e-12)
     end
 
-    @testset "Allocation: CpuBatch against what test/space/vector_elements.jl's Parallel() accepts" begin
+    @testset "Allocation: CpuPolyester against what test/space/vector_elements.jl's Parallel() accepts" begin
         # Function barriers (bramble-verification §1): the warm-up call and the measured
         # call both happen inside one function, over its own arguments.
         function _avg_allocs(u, f)
@@ -237,12 +237,12 @@ end
         mk(be, n) = element(gridspace(mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n); backend = be)))
 
-        ub_small = mk(backend(policy = CpuBatch()), 32)
-        ub_large = mk(backend(policy = CpuBatch()), 1024)
+        ub_small = mk(backend(policy = CpuPolyester()), 32)
+        ub_large = mk(backend(policy = CpuPolyester()), 1024)
 
         batch_small = _avg_allocs(ub_small, f2)
         batch_large = _avg_allocs(ub_large, f2)
-        @info "avgₕ! CpuBatch allocation diagnostic: small=$batch_small large=$batch_large " *
+        @info "avgₕ! CpuPolyester allocation diagnostic: small=$batch_small large=$batch_large " *
               "nthreads=$(Threads.nthreads())"
 
         # The same guarantee test/space/vector_elements.jl's own "Allocation scaling"
@@ -256,12 +256,12 @@ end
         p = _poisson_pair(Val(2), 9)
         Ab = allocate_system_matrix(p.ab)
         assemble_allocs = _assemble_allocs(Ab, p.ab)
-        @info "assemble! (CpuBatch) allocation diagnostic: $assemble_allocs B"
+        @info "assemble! (CpuPolyester) allocation diagnostic: $assemble_allocs B"
         @test assemble_allocs < 100_000
 
         u64, v64 = Rₕ(p.Wb, x -> 1.0), Rₕ(p.Wb, x -> 2.0)
         dot_allocs = _dot_allocs(u64, v64)
-        @info "innerₕ (CpuBatch) allocation diagnostic: $dot_allocs B"
+        @info "innerₕ (CpuPolyester) allocation diagnostic: $dot_allocs B"
         @test dot_allocs < 100_000
     end
 

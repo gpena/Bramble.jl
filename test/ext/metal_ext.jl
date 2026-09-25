@@ -65,8 +65,8 @@ using ..TestUtils: _run_gpu_tests
             @test metal_backend() isa Backend
             # a GPU is massively parallel and cannot execute serially, so the default says
             # so (gpena/Bramble.jl#191); it used to be Serial()
-            @test execution_policy(metal_backend()) === GpuAsync()
-            @test execution_policy(metal_backend(Float16)) === GpuAsync()
+            @test execution_policy(metal_backend()) === GpuKernel()
+            @test execution_policy(metal_backend(Float16)) === GpuKernel()
             @test metal_backend(Float32) isa Backend
             @test metal_backend(Float16) isa Backend
             # Float64 is unsupported on Apple Silicon GPUs. The Metal-loaded method only

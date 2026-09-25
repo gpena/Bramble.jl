@@ -79,7 +79,7 @@ end
         @test S_dense isa Matrix{T}
         @test S_dense == Matrix(spdiagm(1 => ones(4)))
 
-        be_generic = backend(vector_type = MockGPUVector{T}, matrix_type = MockGPUMatrix{T}, policy = GpuAsync())
+        be_generic = backend(vector_type = MockGPUVector{T}, matrix_type = MockGPUMatrix{T}, policy = GpuKernel())
         S_generic = _Eye(be_generic, 5, Val(-2))
         @test S_generic isa MockGPUMatrix{T}
         @test S_generic.data == Matrix(spdiagm(-2 => ones(3)))
