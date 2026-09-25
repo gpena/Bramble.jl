@@ -1,0 +1,105 @@
+name: Release gate
+
+# What a release PR has to pass on top of CI.yml before it merges into `main`. CI.yml's gate
+# runs only the `unit` group on macOS; formatting, quality (Aqua & JET) and the docs build
+# otherwise run only daily (nightly.yml) or on a tag (docs-on-demand.yml), so a green
+# ordinary PR can still be unformatted or break the manual. A release is the one merge where
+# finding that out the next morning is too late: the tag goes on the merge commit.
+#
+# Only PRs from a `release/*` branch run it, so everyday PRs stay as cheap as CI.yml makes
+# them. The jobs repeat nightly.yml's `quality` and `format` and docs-on-demand.yml's build;
+# keep them in step when either moves.
+#
+# The docs job builds and never deploys: it gets no token, and Documenter's `deploydocs`
+# does not deploy a pull-request build without `push_preview`. Deploying stays with the tag.
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    name: Format check
+    if: startsWith(github.head_ref, 'release/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1"
+
+      - name: Check SciMLStyle
+        run: |
+          julia --color=yes -e '
+            using Pkg
+            Pkg.activate(mktempdir())
+            Pkg.add("JuliaFormatter")
+            using JuliaFormatter
+            format(["src", "test", "docs", "ext", "benchmark"]; overwrite = false) && exit(0)
+            @error "Source is not SciMLStyle formatted. Run JuliaFormatter over src, test, docs, ext and benchmark."
+            exit(1)'
+
+  quality:
+    name: Quality (Aqua & JET, Julia ${{ matrix.version }})
+    if: startsWith(github.head_ref, 'release/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both supported releases, as in nightly.yml: what Aqua and JET report moves with
+        # the compiler.
+        version: ["1.12", "1.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+
+      - uses: julia-actions/cache@v2
+        with:
+          cache-compiled: "true"
+
+      - uses: julia-actions/julia-buildpkg@v1
+
+      - uses: julia-actions/julia-runtest@v1
+        env:
+          BRAMBLE_TEST_GROUP: quality
+
+  docs:
+    name: Documentation build
+    if: startsWith(github.head_ref, 'release/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.13"
+
+      - uses: julia-actions/cache@v2
+
+      - name: Install dependencies
+        run: |
+          julia --color=yes --project=docs -e '
+            using Pkg
+            Pkg.develop(PackageSpec(path=pwd()))
+            Pkg.instantiate()'
+
+      - name: Build
+        env:
+          JULIA_NUM_THREADS: auto
+        run: julia --color=yes --project=docs docs/make.jl

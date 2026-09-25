@@ -13,9 +13,9 @@ on:
   pull_request:
   workflow_dispatch:
 
-# No `tags:` trigger, deliberately. A release tag points at the version-bump commit, which
-# was pushed to `main` moments earlier and tested by this same workflow on the same tree --
-# so tagging used to re-run an identical two-OS matrix over an identical checkout. The
+# No `tags:` trigger, deliberately. A release tag points at the merge commit of the release
+# PR, which this same workflow tested as the PR's merge result and again on the push to
+# `main` -- so tagging used to re-run an identical matrix over an identical checkout. The
 # release procedure (`.claude/skills/bramble-release`) guarantees the tag is an ancestor of
 # `main` and already green before it exists.
 
