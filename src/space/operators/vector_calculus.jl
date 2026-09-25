@@ -1416,25 +1416,31 @@ end
 # `Dcₕ`/`D̽ₕ`/`D̃ₕ`, operators/difference.jl, so the methods below dispatch on those function
 # types directly). `dot`/`×` are already `import`ed from LinearAlgebra by `src/Bramble.jl`.
 #
-# Each alias now supports `iterate`/`getindex` (gpena/Bramble.jl#340), so LinearAlgebra's
-# generic `dot`/`cross` fallback would otherwise try to treat `∇ₕ` as a 3-element collection
-# and zip it against `uₕ`. Dispatch on `typeof(alias)` -- a concrete singleton function type
-# -- is strictly more specific than that generic `(x, y)` fallback, so these methods win
-# outright and add no ambiguity: `Test.detect_ambiguities(Bramble)` is unchanged (verified in
-# EVIDENCE), and neither overlaps `dot(F::NTuple, ::NormalSymbol)` (src/ast/operators/normal.jl)
-# or the domain/space `×(::AbstractSpaceType, ::AbstractSpaceType)` (first-argument types never
-# coincide). `∇ₕ ⋅ n` and `∇ₕ × n` therefore hit no method and raise the ordinary `MethodError`.
-@inline dot(::typeof(∇ₕ), uₕ) = divₕ(uₕ)
-@inline ×(::typeof(∇ₕ), uₕ) = curlₕ(uₕ)
+# `uₕ` is narrowed to `_DivCurlOperand` -- exactly what `divₕ`/`curlₕ` and their siblings
+# accept here: an `NTuple{D, VectorElement}` or a composite `VectorElement`, both handled by
+# `_field_components`. An untyped second argument is ambiguous with ChainRulesCore's
+# `dot(::Any, ::NoTangent)`/`dot(::Any, ::ZeroTangent)`/`dot(::Any, ::NotImplemented)` (and the
+# `×` counterparts) once BrambleChainRulesCoreExt is loaded, since neither method is more
+# specific than the other on the second argument; narrowing to a type disjoint from those
+# ChainRulesCore singletons resolves the ambiguity without changing what `∇ₕ ⋅ u` computes.
+#
+# The form-side case -- `uₕ` a `LazyOp` trial/test-function expression -- gets its own methods
+# in ast/common.jl instead of here: `LazyOp` (ast/ast.jl) is included after this file (the
+# same include-order rule `_lower_sources` follows just above, ast/common.jl), so it cannot be
+# named in a signature in this file.
+const _DivCurlOperand = Union{Tuple{Vararg{VectorElement}}, VectorElement}
 
-@inline dot(::typeof(∇₊ₕ), uₕ) = div₊ₕ(uₕ)
-@inline ×(::typeof(∇₊ₕ), uₕ) = curl₊ₕ(uₕ)
+@inline dot(::typeof(∇ₕ), uₕ::_DivCurlOperand) = divₕ(uₕ)
+@inline ×(::typeof(∇ₕ), uₕ::_DivCurlOperand) = curlₕ(uₕ)
 
-@inline dot(::typeof(∇cₕ), uₕ) = divcₕ(uₕ)
-@inline ×(::typeof(∇cₕ), uₕ) = curlcₕ(uₕ)
+@inline dot(::typeof(∇₊ₕ), uₕ::_DivCurlOperand) = div₊ₕ(uₕ)
+@inline ×(::typeof(∇₊ₕ), uₕ::_DivCurlOperand) = curl₊ₕ(uₕ)
 
-@inline dot(::typeof(∇̃ₕ), uₕ) = diṽₕ(uₕ)
-@inline ×(::typeof(∇̃ₕ), uₕ) = curl̃ₕ(uₕ)
+@inline dot(::typeof(∇cₕ), uₕ::_DivCurlOperand) = divcₕ(uₕ)
+@inline ×(::typeof(∇cₕ), uₕ::_DivCurlOperand) = curlcₕ(uₕ)
 
-@inline dot(::typeof(∇̽ₕ), uₕ) = div̽ₕ(uₕ)
-@inline ×(::typeof(∇̽ₕ), uₕ) = curl̽ₕ(uₕ)
+@inline dot(::typeof(∇̃ₕ), uₕ::_DivCurlOperand) = diṽₕ(uₕ)
+@inline ×(::typeof(∇̃ₕ), uₕ::_DivCurlOperand) = curl̃ₕ(uₕ)
+
+@inline dot(::typeof(∇̽ₕ), uₕ::_DivCurlOperand) = div̽ₕ(uₕ)
+@inline ×(::typeof(∇̽ₕ), uₕ::_DivCurlOperand) = curl̽ₕ(uₕ)

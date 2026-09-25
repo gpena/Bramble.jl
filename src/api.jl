@@ -10,6 +10,11 @@ public GpuPolicy, GpuKernel, GpuAsync
 public locality, Locality, HostLocality, DeviceLocality
 public vector, matrix, metal_sparse_csr, metal_sparse_csc
 
+# Read by every package extension's own `@compile_workload` gate (gpena/Bramble.jl#196), so
+# a user's `set_preferences!(Bramble, "precompile_workload" => false)` disables the
+# extensions' workloads along with the core one, not just the core one.
+public PRECOMPILE_WORKLOAD
+
 # --- Domain & Geometry ---
 export box, interval, ×, ⋅, dim, boundary_symbols
 export domain, markers, labels

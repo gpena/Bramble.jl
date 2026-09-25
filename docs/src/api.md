@@ -44,6 +44,7 @@ gpu_backend
 metal_backend
 csr_backend
 sparse_refactor!
+PRECOMPILE_WORKLOAD
 ```
 
 #### Deprecated
