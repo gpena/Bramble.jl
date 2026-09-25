@@ -495,7 +495,8 @@ function _vectorial_index_expr(alias_name, alias_stem, source)
 
     exprs = Expr[
         :(@inline Base.iterate(::typeof($alias_name)) = ($stem_x, 2)),
-        :(@inline Base.iterate(::typeof($alias_name), state::Int) = state == 2 ? ($stem_y, 3) : state == 3 ? ($stem_z, 4) : nothing),
+        :(@inline Base.iterate(::typeof($alias_name), state::Int) = state == 2 ? ($stem_y, 3) :
+                                                                    state == 3 ? ($stem_z, 4) : nothing),
         :(@inline Base.length(::typeof($alias_name)) = 3),
         :(@inline Base.eltype(::Type{typeof($alias_name)}) = Function),
         :(@inline Base.firstindex(::typeof($alias_name)) = 1),
@@ -511,7 +512,7 @@ function _vectorial_index_expr(alias_name, alias_stem, source)
             s === :y && return $stem_y
             s === :z && return $stem_z
             throw(ArgumentError("the coordinate direction must be :x, :y or :z, got :$s"))
-        end),
+        end)
     ]
     return Expr[_relocate!(e, source) for e in exprs]
 end

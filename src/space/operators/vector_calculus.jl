@@ -999,7 +999,6 @@ See also: [`diṽₕ`](@ref), [`curl̃ₕ`](@ref), [`∇ₕ`](@ref)
 """
 const ∇̃ₕ = D̃ₕ
 
-
 """
     ∇̃ₕ!(dest, uₕ::VectorElement) -> dest
 

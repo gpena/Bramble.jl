@@ -808,7 +808,7 @@ end
 # is not built by `@operator_family`.
 @inline Base.iterate(::typeof(inner₊)) = (inner₊ₓ, 2)
 @inline Base.iterate(::typeof(inner₊), state::Int) = state == 2 ? (inner₊ᵧ, 3) :
-                                                      state == 3 ? (inner₊₂, 4) : nothing
+                                                     state == 3 ? (inner₊₂, 4) : nothing
 @inline Base.length(::typeof(inner₊)) = 3
 @inline Base.eltype(::Type{typeof(inner₊)}) = Function
 @inline Base.firstindex(::typeof(inner₊)) = 1

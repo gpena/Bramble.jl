@@ -51,7 +51,7 @@ end
         file == _BRAMBLE_JL && continue
 
         text = read(file, String)
-        parsed = Meta.parseall(text; filename=file)
+        parsed = Meta.parseall(text; filename = file)
         found = _find_import(parsed)
 
         rel = relpath(file, _SRC_DIR)

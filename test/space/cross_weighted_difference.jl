@@ -274,6 +274,7 @@ _cw_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
 
         ε = ε̽ₕ(u)
         for i in 1:D, j in 1:D
+
             @test parent(ε[i][j]) ≈ (i == j ? d(i, i) : (d(j, i) .+ d(i, j)) ./ 2)
             @test parent(ε[i][j]) == parent(ε[j][i])
         end
