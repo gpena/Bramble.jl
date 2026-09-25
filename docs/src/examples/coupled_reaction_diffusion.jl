@@ -20,6 +20,7 @@
 # already, so homogeneous Dirichlet data is all that is needed:
 
 using Bramble
+using Bramble: ast_sparsity_detector
 using Random
 
 u_ex(x) = sin(π * x[1]) * sin(π * x[2])

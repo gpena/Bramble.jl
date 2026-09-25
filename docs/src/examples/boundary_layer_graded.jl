@@ -25,6 +25,7 @@
 # ``e^{1/\varepsilon}`` in a denominator, which overflows at this ``\varepsilon``.
 
 using Bramble
+using Bramble: change_points!
 
 const ε = 1.0e-3
 

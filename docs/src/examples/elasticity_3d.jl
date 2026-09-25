@@ -95,6 +95,7 @@
 # `2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₕ(u), divₕ(v))`.
 
 using Bramble
+using Bramble: half_spacing
 using ForwardDiff
 using Random
 
@@ -108,8 +109,8 @@ elasticity_form(Vₕ, μ, λ) = form(
 # through different arithmetic -- this one from `SpaceWeights` directly, the hand-expanded one    #src
 # from a separately computed ratio -- so the last bit or two of a handful of entries can differ,   #src
 # and `atol = 1e-12` is the bound `vector_calculus.jl` found necessary for exactly that reason.    #src
-const _Dm = (D₋ₓ, D₋ᵧ, D₋₂)                                                                       #src
-const _Mm = (Mₓ, Mᵧ, M₂)                                                                          #src
+const _Dm = Tuple(∇ₕ)                                                                             #src
+const _Mm = Tuple(Mₕ)                                                                             #src
 function _hand_stagger_ratio(Wₕ, S, scale)                                                        #src
     Ωₕ = mesh(Wₕ)                                                                                 #src
     npts = npoints(Ωₕ, Tuple)                                                                     #src
@@ -276,7 +277,7 @@ round.(tips ./ (-δ_eb), digits = 3)
 # rather than the staggered differences the form uses: `D̽ₕ` collapses to a one-sided difference
 # at the boundary instead of truncating to zero, and the boundary is the part being drawn.
 
-const Dh = (D̽ₓ, D̽ᵧ, D̽₂)
+const Dh = Tuple(∇̽ₕ)
 
 function von_mises(uₕ, μ, λ)
     u = components(uₕ)
