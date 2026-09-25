@@ -103,3 +103,18 @@ jobs:
         env:
           JULIA_NUM_THREADS: auto
         run: julia --color=yes --project=docs docs/make.jl
+
+  # The one check branch protection requires from this workflow. A matrix job skipped by its
+  # `if:` reports under its unexpanded name (`Julia ${{ matrix.version }}`), so requiring the
+  # jobs above by name would leave every ordinary PR waiting on a check that never arrives.
+  # This job always runs and passes when each job above passed or was skipped.
+  result:
+    name: Release gate result
+    if: always()
+    needs: [format, quality, docs]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for r in ${{ join(needs.*.result, ' ') }}; do
+            case "$r" in success|skipped) ;; *) echo "a release-gate job ended $r"; exit 1 ;; esac
+          done

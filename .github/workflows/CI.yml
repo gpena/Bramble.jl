@@ -104,3 +104,17 @@ jobs:
           # 5, below this macOS runner's 7 GB, so a blow-up fails by name (see TestUtils.jl)
           # before the runner just kills the job. Coverage is on by default here.
           BRAMBLE_TEST_MAXRSS_GB: 5
+
+  # The check branch protection requires, for the reason release-gate.yml's `result` job
+  # gives: `test` is a matrix job skipped by its `if:` when no code changed, and a skipped
+  # matrix job reports under its unexpanded name.
+  result:
+    name: CI result
+    if: always()
+    needs: [changes, test]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for r in ${{ join(needs.*.result, ' ') }}; do
+            case "$r" in success|skipped) ;; *) echo "a CI job ended $r"; exit 1 ;; esac
+          done
