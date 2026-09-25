@@ -54,6 +54,7 @@
 #===========================================================================#
 
 using Bramble
+using Bramble: D₋ₓ, weights
 using Metal
 using KernelAbstractions
 using Kronecker: Kronecker  # loads BrambleKroneckerExt, which owns fdm_solve

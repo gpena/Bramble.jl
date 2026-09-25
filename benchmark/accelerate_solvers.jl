@@ -41,6 +41,7 @@ using Bramble
 # the convection-diffusion fixture below needs them explicitly, the same way
 # test/ext/SolverContracts.jl does for the accuracy audit these numbers follow up on.
 import Bramble: D₊ₓ, D₊ᵧ
+using Bramble: accelerate_solve
 using LinearAlgebra
 using SparseArrays
 using Printf

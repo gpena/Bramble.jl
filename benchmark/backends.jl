@@ -70,6 +70,7 @@
 #===========================================================================#
 
 using Bramble
+using Bramble: allocate_system_matrix
 using SparseMatricesCSR
 using PrettyTables
 using SparseArrays

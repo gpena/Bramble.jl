@@ -44,6 +44,7 @@ using BenchmarkTools
 using Bramble
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: M₊ₓ, M₊ᵧ, M₊₂
+using Bramble: Dcₓ, D₋ₓ, D₋ᵧ, D₋₂, Mₓ, jumpₓ, jumpᵧ, jump₂
 using DoubleFloats: Double64
 using SparseArrays: nonzeros
 

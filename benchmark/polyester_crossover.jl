@@ -202,6 +202,7 @@
 #===========================================================================#
 
 using Bramble
+using Bramble: CpuPolyester, ExecutionPolicy, allocate_system_matrix, assemble_parallel!
 using Polyester
 using BenchmarkTools
 using PrettyTables
