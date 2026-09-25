@@ -285,10 +285,11 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
     # construction, which built the whole AST eagerly until recently: a linear
     # form cost 48 MB and a bilinear one 9.3 MB, where both are now under 400 KB.
     #
-    # The linear form measures 0.001 ns, which is BenchmarkTools reporting that the call
-    # was optimised away: a `LinearForm` is three stored fields and nothing else, so there
-    # is no work left to elide. Kept as a regression guard rather than a measurement —
-    # reintroduce eager work and the number stops being zero.
+    # The linear form is an allocation guard, not a timing: a `LinearForm` is three stored
+    # fields, built in about 10 ns, a scale at which the in-suite median follows whatever
+    # ran before it rather than the code. Its `ALLOCATION_BOUNDS` entry (0) is what it checks,
+    # and docs/generate_benchmarks.jl leaves its time off the charts
+    # (`_BENCH_ALLOCATION_GUARDS`). Reintroduce eager work and the count stops being zero.
     #
     # The bilinear one is not zero-allocation any more: gpena/Bramble.jl#26 gave
     # `BilinearForm` a fourth field, `cache::_AssemblyCache`, a *mutable* struct (so it can

@@ -86,6 +86,14 @@ const _BENCH_GROUP_SPLIT_TAGS = Dict(
     "precision 1D" => ["Float32", "Float64", "Double64"]
 )
 
+# Benchmarks kept in the suite for their allocation count alone (checked against
+# `benchmark/benchmarks.jl`'s `ALLOCATION_BOUNDS`), whose time is not charted. "form
+# (linear, 2D)" constructs a `LinearForm` in about 10 ns: at that scale the in-suite median
+# follows whatever ran before it, not the code (22.1 ns in the v3.11.0 baseline, 10.2 ns
+# measured alone, identical to v3.4.0), and its v2.0.0 reference was a call optimised away
+# entirely, so the chart read a flat 10 ns cost as a tenfold regression.
+const _BENCH_ALLOCATION_GUARDS = Set([("forms", "form (linear, 2D)")])
+
 function _midpoint_clusters(bnames)
     return (mid = cld(length(bnames), 2); [bnames[1:mid], bnames[(mid + 1):end]])
 end
@@ -583,6 +591,7 @@ function generate_benchmarks_markdown(
         for r in runs
             if haskey(r.data, gname)
                 for (k, trial) in r.data[gname]
+                    (gname, string(k)) in _BENCH_ALLOCATION_GUARDS && continue
                     push!(bnames, string(k))
                     t_ns = time(median(trial))
                     max_time_ns = max(max_time_ns, t_ns)
