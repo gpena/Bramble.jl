@@ -320,6 +320,8 @@ produced.
 
 # Examples
 ```julia
+using Bramble: D₋ₓ, D₋ᵧ, inner₊ₓ
+using LinearAlgebra: issymmetric
 a = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
 issymmetric(a)  # true: the same D₋ₓ on both sides
 

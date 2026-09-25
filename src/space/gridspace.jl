@@ -20,6 +20,7 @@ The space framework uses Julia's type system and multiple dispatch to:
 ## Usage
 
 ```julia
+using Bramble: Mᵧ
 # Create a space from a mesh
 Wₕ = gridspace(Ωₕ)
 
@@ -118,6 +119,7 @@ appearing in discrete energy estimates for difference operators.
 # Usage
 
 ```julia
+using Bramble: inner₊ₓ
 # Compute standard L² inner product
 result = innerₕ(uₕ, vₕ)  # Uses Innerh() internally
 
@@ -153,6 +155,7 @@ For a 2D grid in the x-direction:
 # Examples
 
 ```julia
+using Bramble: inner₊ₓ, inner₊ᵧ
 # These functions use Innerplus internally
 result_x = inner₊ₓ(uₕ, vₕ)  # Modified inner product, x-direction
 result_y = inner₊ᵧ(uₕ, vₕ)  # Modified inner product, y-direction

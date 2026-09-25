@@ -72,6 +72,7 @@ For the scalar value alone, `form(vₕ)` fuses the contraction into the assembly
 
 # Examples
 ```julia
+using Bramble: evaluate!
 l = form(Wₕ, v -> innerₕ(fₕ, v))
 scratch = zeros(ndofs(Wₕ))
 for step in 1:nsteps

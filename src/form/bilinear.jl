@@ -214,6 +214,7 @@ The expression itself is not kept: downstream routines evaluate the resolved AST
 Constant scalar coefficients can be written directly as numbers (e.g. `2.0 * innerₕ(D₋ₓ(u), D₋ₓ(v))`).
 `Ref` is only needed if a dynamic scalar coefficient changes across loop iterations:
 ```julia
+using Bramble: D₋ₓ
 β = Ref(1.0)
 a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))
 # Inside time loop:
@@ -266,6 +267,7 @@ it is stored.
 
 # Examples
 ```julia
+using Bramble: D₋ₓ, inner₊ₓ
 # a(u, v) = (∇ₕu, ∇ₕv)₊
 a = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
 

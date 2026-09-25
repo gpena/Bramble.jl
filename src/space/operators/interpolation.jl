@@ -313,6 +313,7 @@ every subsequent call, exactly as `allocate_system_matrix`/`assemble!` split the
 pattern (expensive, built once) from refilling values (cheap, every step):
 
 ```julia
+using Bramble: interpolation_matrix
 P = interpolation_matrix(space(dest), space(src))
 for step in 1:nsteps
     Rₕ!(src, coefficient_at(step))

@@ -37,6 +37,7 @@ iteration: a `do ... end` block re-literalized on every call allocates a new clo
 time, which is exactly the cost this function exists to avoid paying more than once.
 
 ```julia
+using Bramble: Mₓ!, type_cached_assemble!
 function build_diffusion(uₕ)
     Mu = element(Wₕ, eltype(uₕ))     # scratch for Mₓ!'s own output
     αvals = element(Wₕ, eltype(uₕ))

@@ -268,6 +268,7 @@ destination or the `Factorization` source should win.
 # Examples
 
 ```julia
+using LinearAlgebra: ldiv!
 A, F = assemble(a, l; dirichlet = bcs)
 uₕ = element(Wₕ)
 ldiv!(uₕ, factorize(A), F)

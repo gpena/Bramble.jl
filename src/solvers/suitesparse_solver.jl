@@ -33,6 +33,7 @@ Requires `SuiteSparse.jl`; call `using SuiteSparse` before calling this function
 # Examples
 
 ```julia
+using Bramble: suitesparse_factorize
 using SuiteSparse
 
 A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0, symmetrize = true)
@@ -134,6 +135,7 @@ not be square, and this needs only `SparseArrays` -- already a dependency of Bra
 # Examples
 
 ```julia
+using Bramble: suitesparse_qr_factorize
 A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
 fact = suitesparse_qr_factorize(A)
 u = fact \\ F

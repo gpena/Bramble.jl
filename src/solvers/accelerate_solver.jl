@@ -44,6 +44,7 @@ call `using AppleAccelerate` before calling this function.
 # Examples
 
 ```julia
+using Bramble: accelerate_factorize
 using AppleAccelerate
 
 A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0, symmetrize = true)

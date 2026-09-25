@@ -228,6 +228,7 @@ get a space that reads the mutated mesh.
 
 ```jldoctest
 using Bramble
+using Bramble: weights
 Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 11))
 ndofs(Wₕ) == 11 && sum(weights(Wₕ, Bramble.Innerh())) ≈ 1.0
 
@@ -360,6 +361,7 @@ here; the rest are built fresh on each call from the same per-axis factors.
 # Examples
 
 ```julia
+using Bramble: weights
 Wₕ = gridspace(Ωₕ)
 
 # Get all weights

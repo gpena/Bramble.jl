@@ -67,6 +67,7 @@ nonlinear `α` can never narrow the reach its argument already has), suitable fo
 [`ADTypes.KnownJacobianSparsityDetector`](https://github.com/SciML/ADTypes.jl):
 
 ```julia
+using Bramble: jacobian_pattern
 a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))   # αvals = α.(Mₕ(uₕ))
 pattern = jacobian_pattern(a, U -> Mₕ(U))
 sparse_ad = AutoSparse(AutoForwardDiff();
@@ -86,6 +87,7 @@ to every block the walk visits, whichever leaf it names -- a safe superset stays
 however many blocks end up seeing an entry they did not strictly need.
 
 ```julia
+using Bramble: jacobian_pattern
 # a = form(Vₕ, Vₕ, (p, q) -> inner₊(∇ₕ(p(1)), ∇ₕ(q(1))) + innerₕ(v_c * p(1), q(1)) +
 #                            inner₊(∇ₕ(p(2)), ∇ₕ(q(2))) - innerₕ(u_c * p(2), q(2)))
 pattern = jacobian_pattern(a, U -> U(2), U -> U(1))   # block (1,1) reads U(2), (2,2) reads U(1)
@@ -332,6 +334,7 @@ coefficient_dependencies...)` directly as a Newton residual's Jacobian sparsity,
 one detected by tracing:
 
 ```julia
+using Bramble: ast_sparsity_detector
 sparse_ad = AutoSparse(AutoForwardDiff();
     sparsity_detector = ast_sparsity_detector(a, U -> Mₕ(U)),
     coloring_algorithm = GreedyColoringAlgorithm())

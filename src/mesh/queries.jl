@@ -221,6 +221,7 @@ it is built.
 # Examples
 
 ```julia
+using Bramble: locate_cell
 Ωₕ = mesh(domain(interval(0.0, 1.0)), 11)  # h = 0.1
 locate_cell(Ωₕ, 0.35)  # returns 4 (interval [0.3, 0.4])
 locate_cell(Ωₕ, 5.0)   # returns 10 (the last cell) -- no error, x = 5.0 is well outside [0, 1]

@@ -29,6 +29,7 @@ are evaluated on demand from the tensor-product submeshes.
 # Examples
 
 ```julia
+using Bramble: point
 # Create a 2D mesh with 20×30 grid points
 X = domain(interval(0, 1) × interval(0, 2))
 Ωₕ = mesh(X, (20, 30), (true, false))

@@ -296,6 +296,7 @@ and expression structure are unchanged. Preallocating the matrix once outside lo
 in-place assembly:
 
 ```julia
+using Bramble: allocate_system_matrix
 A = allocate_system_matrix(a)
 for step in 1:nsteps
     assemble!(A, a)          # refills values in-place with zero allocations
