@@ -157,7 +157,9 @@ An AST node for the cross-weighted centered difference along `Dim`,
 
 The same two one-sided differences the centered difference combines, weighted by the
 *opposite* spacings. That swap is what makes it second order on a non-uniform grid where
-`Dc` is first, and the two coincide when the spacing is constant. Truncated at both ends.
+`Dc` is first, and the two coincide when the spacing is constant. Neither end is truncated:
+each collapses to the one-sided difference its near side still defines, `D₊` at the first
+point and `D₋` at the last.
 """
 struct CrossWeightedDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
     inner_op::OpType
@@ -524,16 +526,19 @@ end
 """
     Bramble._CenteredStrainTensor{D}
 
-Builder-only container for [`εcₕ`](@ref)'s `D × D` entries, each held as its additive
-pieces. Consumed only by [`innerₕ`](@ref) on two of these, never part of an assembled AST.
+Builder-only container for [`εcₕ`](@ref)'s and [`ε̽ₕ`](@ref)'s `D × D` entries, each held
+as its additive pieces. Consumed only by [`innerₕ`](@ref) on two of these, never part of an
+assembled AST.
 """
 struct _CenteredStrainTensor{D, T}
     entries::T
 end
 
-@inline function _centered_strain_pieces(u, i::Int, j::Int)
-    i == j && return (_vc_centered(u(i), i),)
-    return (0.5 * _vc_centered(u(i), j), 0.5 * _vc_centered(u(j), i))
+# `diff(op, d)` is the family's difference along `d`: `_vc_centered` for `εcₕ`,
+# `_vc_cross_weighted` for `ε̽ₕ`.
+@inline function _centered_strain_pieces(diff::F, u, i::Int, j::Int) where {F}
+    i == j && return (diff(u(i), i),)
+    return ((1 // 2) * diff(u(i), j), (1 // 2) * diff(u(j), i))
 end
 
 """
@@ -555,21 +560,23 @@ See also: [`divcₕ`](@ref), [`εₕ`](@ref).
 """
 function εcₕ(u::LazyOp{D}) where {D}
     entries = ntuple(Val(D)) do i
-        ntuple(j -> _centered_strain_pieces(u, i, j), Val(D))
+        ntuple(j -> _centered_strain_pieces(_vc_centered, u, i, j), Val(D))
     end
     return _CenteredStrainTensor{D, typeof(entries)}(entries)
 end
 
 # The upper triangle only: `ε^{ij} = ε^{ji}`, so each off-diagonal pair enters once, doubled
-# (27 terms in 3D become 15). The diagonal's `1.0` is not a no-op for the compiler: a
-# `Float64` scale is kept (`_wrap_scale`), so a diagonal `Dcₓ(u(1)) Dcₓ(v(1))` term shares
+# (27 terms in 3D become 15). The diagonal's `1 // 1` is not a no-op for the compiler: a
+# non-`Integer` scale is kept (`_wrap_scale`), so a diagonal `Dcₓ(u(1)) Dcₓ(v(1))` term shares
 # its type with the off-diagonal `Dcₓ(u(2)) Dcₓ(v(2))` one, and 12 distinct term types become
-# 9 (first assemble in 3D: 15.2–17.6 s without it, 13.0–13.5 s with).
+# 9 (first assemble in 3D: 15.2–17.6 s without it, 13.0–13.5 s with, measured with `1.0`).
+# The scales here and in `_centered_strain_pieces` are `Rational`, not `Float64`: a rational
+# times a `Float32` weight stays `Float32`, so the form keeps the mesh's element type.
 @inline function _centered_strain_products(left, right, i::Int, j::Int)
     products = _flatten_tuples(
         map(a -> map(b -> innerₕ(a, b), right.entries[i][j]), left.entries[i][j])
     )
-    return map(p -> (i == j ? 1.0 : 2.0) * p, products)
+    return map(p -> (i == j ? 1 // 1 : 2 // 1) * p, products)
 end
 
 @inline function innerₕ(left::_CenteredStrainTensor{D}, right::_CenteredStrainTensor{D}) where {D}
@@ -581,6 +588,65 @@ end
     end
     )
     return foldl(+, terms)
+end
+
+# --- div̽ₕ, ε̽ₕ: cross-weighted divergence and strain over composite functions (#349) ------ #
+#
+# The cross-weighted difference is co-located too, so these are `divcₕ`/`εcₕ` with `D̽` in
+# place of `Dc`: an ordinary operator sum, and a `_CenteredStrainTensor` consumed by the same
+# `innerₕ` method. No form curl, matching the centered family. The same `LazyOp{D}` versus
+# untyped split keeps them apart from the runtime `div̽ₕ(uₕ)`/`ε̽ₕ(uₕ)`.
+
+@inline function _vc_cross_weighted(op, d::Int)
+    d == 1 && return D̽ₕ(op, Val(1))
+    d == 2 && return D̽ₕ(op, Val(2))
+    return D̽ₕ(op, Val(3))
+end
+
+"""
+    div̽ₕ(u::LazyOp{D}) -> LazyOp
+
+The symbolic cross-weighted divergence of a trial or test function `u` with one component
+per spatial dimension,
+
+```math
+\\overset{\\times}{\\textrm{div}}_h(u) = \\sum_{i=1}^{D} \\overset{\\times}{\\textrm{D}}_{x_i}(u_i).
+```
+
+Every term is co-located at the grid point, so the result is a plain operator sum usable
+wherever an operator is, e.g. `innerₕ(p, div̽ₕ(v))`. Shares its name with the runtime
+[`div̽ₕ`](@ref) over grid functions (`space/operators/vector_calculus.jl`).
+
+See also: [`ε̽ₕ`](@ref), [`divcₕ`](@ref).
+"""
+function div̽ₕ(u::LazyOp{D}) where {D}
+    return foldl(+, ntuple(i -> D̽ₕ(u(i), Val(i)), Val(D)))
+end
+
+"""
+    ε̽ₕ(u::LazyOp{D}) -> Bramble._CenteredStrainTensor
+
+The symbolic cross-weighted small-strain tensor of a composite trial or test function `u`,
+
+```math
+\\overset{\\times}{\\varepsilon}^{ii}_h(u) = \\overset{\\times}{\\textrm{D}}_{x_i}(u_i), \\qquad
+\\overset{\\times}{\\varepsilon}^{ij}_h(u) = \\tfrac{1}{2}\\left(
+    \\overset{\\times}{\\textrm{D}}_{x_j}(u_i) + \\overset{\\times}{\\textrm{D}}_{x_i}(u_j)\\right),
+    \\quad i \\neq j.
+```
+
+The only supported use is `innerₕ(ε̽ₕ(u), ε̽ₕ(v))`, which expands to
+``\\sum_{i,j} (\\overset{\\times}{\\varepsilon}^{ij}_h(u),
+\\overset{\\times}{\\varepsilon}^{ij}_h(v))_h``. Shares its name with the runtime
+[`ε̽ₕ`](@ref) over grid functions.
+
+See also: [`div̽ₕ`](@ref), [`εcₕ`](@ref).
+"""
+function ε̽ₕ(u::LazyOp{D}) where {D}
+    entries = ntuple(Val(D)) do i
+        ntuple(j -> _centered_strain_pieces(_vc_cross_weighted, u, i, j), Val(D))
+    end
+    return _CenteredStrainTensor{D, typeof(entries)}(entries)
 end
 
 # ==============================================================================

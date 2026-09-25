@@ -4,6 +4,7 @@ using Test
 using Bramble
 using Random
 using Bramble: components
+using Bramble: div̽ₕ, div̽ₕ!, curl̽ₕ, curl̽ₕ!, ε̽ₕ, ε̽ₕ!, ∇̽ₕ!
 using ..TestUtils: alloc_test
 using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
@@ -230,6 +231,129 @@ cross_weighted_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
         @test count(!iszero, M[4, :]) == 3
 
         @test_throws ArgumentError D̽ₓ(mesh(domain(interval(0.0, 1.0)), 2, true))
+    end
+end
+
+# The cross-weighted vector calculus (gpena/Bramble.jl#349): div̽ₕ, curl̽ₕ, ε̽ₕ and ∇̽ₕ! are
+# contractions of the co-located D̽ differences, so every identity below is checked against
+# the coordinate operators themselves, on meshes non-uniform in every direction.
+function _cw_setup(D)
+    Random.seed!(349)
+    dom = D == 2 ? domain(interval(0.0, 1.0) × interval(0.0, 2.0)) :
+          domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+    Ωₕ = mesh(dom, (9, 8, 7)[1:D], ntuple(_ -> false, D))
+    Wₕ = gridspace(Ωₕ)
+    fs = D == 2 ? (x -> x[1]^2 * x[2], x -> 100 * sin(x[1] + x[2])) :
+         (x -> x[1] * x[2], x -> 100 * (x[3]^2 + x[1]), x -> 10000 * sin(x[2]) * x[3])
+    return Ωₕ, Wₕ, map(f -> Rₕ(Wₕ, f), fs), fs
+end
+
+_cw_ops(::Val{2}) = (D̽ₓ, D̽ᵧ)
+_cw_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
+
+@testset "Cross-weighted vector calculus (#349)" begin
+    @testset "Component-wise identities, $(D)D" for D in 2:3
+        Ωₕ, Wₕ, u, fs = _cw_setup(D)
+        ops = _cw_ops(Val(D))
+        d(k, c) = parent(ops[k](u[c]))
+
+        @test parent(div̽ₕ(u)) ≈ sum(d(k, k) for k in 1:D)
+        # never zero at the ends in 2D, where no component has a flat point: no truncated
+        # slice, unlike divcₕ
+        D == 2 && @test !any(iszero, parent(div̽ₕ(u)))
+
+        cu = curl̽ₕ(u)
+        if D == 2
+            @test parent(cu) ≈ d(1, 2) .- d(2, 1)
+        else
+            @test parent(cu[1]) ≈ d(2, 3) .- d(3, 2)
+            @test parent(cu[2]) ≈ d(3, 1) .- d(1, 3)
+            @test parent(cu[3]) ≈ d(1, 2) .- d(2, 1)
+        end
+
+        ε = ε̽ₕ(u)
+        for i in 1:D, j in 1:D
+            @test parent(ε[i][j]) ≈ (i == j ? d(i, i) : (d(j, i) .+ d(i, j)) ./ 2)
+            @test parent(ε[i][j]) == parent(ε[j][i])
+        end
+
+        g = ∇̽ₕ(u[1])
+        for k in 1:D
+            @test parent(g[k]) == d(k, 1)
+        end
+
+        # a composite grid function is the same field as the tuple of its leaves
+        uc = Rₕ(gridspace(Ωₕ, Val(D)), fs)
+        @test parent(div̽ₕ(uc)) ≈ parent(div̽ₕ(u))
+        @test parent(ε̽ₕ(uc)[1][2]) ≈ parent(ε[1][2])
+
+        @test_throws DimensionMismatch div̽ₕ(ntuple(_ -> u[1], D + 1))
+    end
+
+    @testset "In-place forms, $(D)D" for D in 2:3
+        _, Wₕ, u, _ = _cw_setup(D)
+
+        v = element(Wₕ, 0.0)
+        @test div̽ₕ!(v, u) === v
+        @test parent(v) == parent(div̽ₕ(u))
+        @test alloc_test(div̽ₕ!, v, u) == 0
+
+        c = D == 2 ? element(Wₕ, 0.0) : ntuple(_ -> element(Wₕ, 0.0), 3)
+        @test curl̽ₕ!(c, u) === c
+        want = curl̽ₕ(u)
+        @test D == 2 ? parent(c) == parent(want) : all(parent.(c) .== parent.(want))
+        @test alloc_test(curl̽ₕ!, c, u) == 0
+
+        dest = ntuple(_ -> ntuple(_ -> element(Wₕ, 0.0), D), D)
+        @test ε̽ₕ!(dest, u) === dest
+        εu = ε̽ₕ(u)
+        @test all(parent(dest[i][j]) == parent(εu[i][j]) for i in 1:D, j in 1:D)
+        @test alloc_test(ε̽ₕ!, dest, u) == 0
+
+        g = ntuple(_ -> element(Wₕ, 0.0), D)
+        @test ∇̽ₕ!(g, u[1]) === g
+        @test all(parent(g[k]) == parent(∇̽ₕ(u[1])[k]) for k in 1:D)
+        @test alloc_test(∇̽ₕ!, g, u[1]) == 0
+    end
+
+    @testset "1D and curl dimension" begin
+        Ω1 = mesh(domain(interval(0.0, 1.0)), 9, false)
+        u1 = Rₕ(gridspace(Ω1), x -> x^3)
+        @test parent(div̽ₕ(u1)) == parent(D̽ₓ(u1))
+        @test_throws ArgumentError curl̽ₕ(u1)
+
+        # a wrong-arity field is reported under the name the caller used
+        Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (false, false))
+        u2 = Rₕ(gridspace(Ω2), x -> x[1] * x[2])
+        @test_throws DimensionMismatch("curl̽ₕ needs one component per spatial dimension: " *
+                                       "got 3 components on a 2D mesh.") curl̽ₕ((u2, u2, u2))
+        @test_throws DimensionMismatch("curl̽ₕ! needs one component per spatial dimension: " *
+                                       "got 3 components on a 2D mesh.") curl̽ₕ!(similar(u2), (u2, u2, u2))
+    end
+
+    @testset "Second-order divergence on a non-uniform grid" begin
+        # The leading error of D̽ is h_i h_{i+1} u'''/6, second order on any grid, where
+        # Dc's is (h_{i+1} - h_i) u''/2, first order on a random one. The end slices are
+        # one-sided, so first order, and are left out of the measured error. The rate is a
+        # least-squares slope over five random meshes, since no two share a grading.
+        F = (x -> sin(2x[1]) * cos(x[2]), x -> exp(x[1]) * x[2]^3)
+        divF = x -> 2cos(2x[1]) * cos(x[2]) + 3exp(x[1]) * x[2]^2
+        function rate(op)
+            errs, hs = Float64[], Float64[]
+            for n in (17, 33, 65, 129, 257)
+                Random.seed!(349)
+                Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n), (false, false))
+                Wₕ = gridspace(Ωₕ)
+                r = reshape(parent(op(map(f -> Rₕ(Wₕ, f), F))) .- parent(Rₕ(Wₕ, divF)), (n, n))
+                push!(errs, maximum(abs, @view r[2:(end - 1), 2:(end - 1)]))
+                push!(hs, maximum(maximum(spacing(Ωₕ(k), i) for i in 2:n) for k in 1:2))
+            end
+            lh, le = log.(hs), log.(errs)
+            lh, le = lh .- sum(lh) / length(lh), le .- sum(le) / length(le)
+            return sum(lh .* le) / sum(abs2, lh)
+        end
+        @test rate(div̽ₕ) > 1.7
+        @test rate(divcₕ) < 1.2
     end
 end
 

@@ -100,6 +100,7 @@ export Dcₓ, Dcᵧ, Dc₂, Dcₕ, Dc
 export Dcₓ!, Dcᵧ!, Dc₂!, ∇cₕ, ∇cₕ!, divcₕ, divcₕ!, curlcₕ, curlcₕ!, εcₕ, εcₕ!
 
 export D̽ₓ, D̽ᵧ, D̽₂, D̽ₕ, ∇̽ₕ
+export div̽ₕ, div̽ₕ!, curl̽ₕ, curl̽ₕ!, ε̽ₕ, ε̽ₕ!, ∇̽ₕ!
 export D̽ₓ!, D̽ᵧ!, D̽₂!
 
 export jumpₓ, jumpᵧ, jump₂, jumpₕ, jump

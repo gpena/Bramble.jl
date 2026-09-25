@@ -314,7 +314,7 @@ allocates nothing. [`curl₊ₕ`](@ref) is the forward twin.
 
 See also: [`divₕ`](@ref), [`∇ₕ`](@ref)
 """
-@inline curlₕ(uₕ) = _curl(uₕ, Backward())
+@inline curlₕ(uₕ) = _curl(uₕ, Backward(), "curlₕ")
 
 """
     curl₊ₕ(uₕ) -> VectorElement or NTuple{3, VectorElement}
@@ -322,34 +322,35 @@ See also: [`divₕ`](@ref), [`∇ₕ`](@ref)
 
 The forward-difference discrete curl, the twin of [`curlₕ`](@ref).
 """
-@inline curl₊ₕ(uₕ) = _curl(uₕ, Forward())
+@inline curl₊ₕ(uₕ) = _curl(uₕ, Forward(), "curl₊ₕ")
 
-@inline function _curl(uₕ, dir)
+# `op` is the public name the caller was reached by, so an arity error names it.
+@inline function _curl(uₕ, dir, op::String)
     comps = _field_components(uₕ)
     D = dim(mesh(_field_space(uₕ)))
-    _check_field_arity(comps, Val(D), "curlₕ")
-    return _curl_alloc(uₕ, comps, dir, Val(D))
+    _check_field_arity(comps, Val(D), op)
+    return _curl_alloc(uₕ, comps, dir, op, Val(D))
 end
 
-@inline _curl_alloc(uₕ, comps, dir, ::Val{2}) = _curl!(similar(first(comps)), uₕ, dir)
-@inline _curl_alloc(uₕ, comps, dir, ::Val{3}) = _curl!(
-    ntuple(_ -> similar(first(comps)), Val(3)), uₕ, dir
+@inline _curl_alloc(uₕ, comps, dir, op, ::Val{2}) = _curl!(similar(first(comps)), uₕ, dir, op)
+@inline _curl_alloc(uₕ, comps, dir, op, ::Val{3}) = _curl!(
+    ntuple(_ -> similar(first(comps)), Val(3)), uₕ, dir, op
 )
-@noinline _curl_alloc(uₕ, comps, dir, ::Val{D}) where {D} = throw(
+@noinline _curl_alloc(uₕ, comps, dir, op, ::Val{D}) where {D} = throw(
     ArgumentError("the discrete curl is defined in 2D and 3D; this mesh is $(D)D.")
 )
 
 @doc (@doc curlₕ)
-@inline curlₕ!(vₕ, uₕ) = _curl!(vₕ, uₕ, Backward())
+@inline curlₕ!(vₕ, uₕ) = _curl!(vₕ, uₕ, Backward(), "curlₕ!")
 
 @doc (@doc curl₊ₕ)
-@inline curl₊ₕ!(vₕ, uₕ) = _curl!(vₕ, uₕ, Forward())
+@inline curl₊ₕ!(vₕ, uₕ) = _curl!(vₕ, uₕ, Forward(), "curl₊ₕ!")
 
-function _curl!(vₕ::VectorElement, uₕ, dir)
+function _curl!(vₕ::VectorElement, uₕ, dir, op::String)
     comps = _field_components(uₕ)
     Ωₕ = mesh(_field_space(uₕ))
     dims = npoints(Ωₕ, Tuple)
-    _check_field_arity(comps, Val(2), "curlₕ")
+    _check_field_arity(comps, Val(2), op)
 
     out = parent(vₕ)
     if _is_device(out)
@@ -365,11 +366,11 @@ function _curl!(vₕ::VectorElement, uₕ, dir)
     return vₕ
 end
 
-function _curl!(vₕ::NTuple{3, VectorElement}, uₕ, dir)
+function _curl!(vₕ::NTuple{3, VectorElement}, uₕ, dir, op::String)
     comps = _field_components(uₕ)
     Ωₕ = mesh(_field_space(uₕ))
     dims = npoints(Ωₕ, Tuple)
-    _check_field_arity(comps, Val(3), "curlₕ")
+    _check_field_arity(comps, Val(3), op)
 
     outs = map(parent, vₕ)
     if _is_device(outs[1])
@@ -768,19 +769,21 @@ function ∇cₕ!(dest, uₕ::VectorElement)
     D = dim(Ωₕ)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇cₕ!")
-    _centered_gradient!(outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), Val(D))
+    _centered_gradient!(outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), Centered(), Val(D))
     return dest
 end
 
-@inline function _centered_gradient!(outs, u, Ωₕ, dims, ::Val{d}) where {d}
+# Shared by `∇cₕ!` and `∇̽ₕ!`: `dir` is `Centered()` or `CrossWeighted()`, and
+# `_direction_spacing` picks the spacing each divides by.
+@inline function _centered_gradient!(outs, u, Ωₕ, dims, dir, ::Val{d}) where {d}
     sub = Ωₕ(d)
     _check_centered_points(sub, d)
-    _difference_engine!(parent(outs[d]), u, star_spacings(sub), dims, Centered(), Val(d))
-    _centered_gradient!(outs, u, Ωₕ, dims, Val(d - 1))
+    _difference_engine!(parent(outs[d]), u, _direction_spacing(sub, dir), dims, dir, Val(d))
+    _centered_gradient!(outs, u, Ωₕ, dims, dir, Val(d - 1))
     return nothing
 end
 
-@inline _centered_gradient!(outs, u, Ωₕ, dims, ::Val{0}) = nothing
+@inline _centered_gradient!(outs, u, Ωₕ, dims, dir, ::Val{0}) = nothing
 
 """
     divcₕ(uₕ) -> VectorElement
@@ -843,13 +846,13 @@ See also: [`curlₕ`](@ref), [`divcₕ`](@ref), [`∇cₕ`](@ref)
 """
 function curlcₕ(uₕ)
     _check_centered_host(first(_field_components(uₕ)), "curlcₕ")
-    return _curl(uₕ, Centered())
+    return _curl(uₕ, Centered(), "curlcₕ")
 end
 
 @doc (@doc curlcₕ)
 function curlcₕ!(vₕ, uₕ)
     _check_centered_host(vₕ, "curlcₕ!")
-    return _curl!(vₕ, uₕ, Centered())
+    return _curl!(vₕ, uₕ, Centered(), "curlcₕ!")
 end
 
 """
@@ -888,39 +891,41 @@ function εcₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     Ωₕ = mesh(_field_space(uₕ))
     dim(Ωₕ) == D || throw(DimensionMismatch("εcₕ! destination is $(D)x$D but the mesh is $(dim(Ωₕ))D"))
     _check_field_arity(comps, Val(D), "εcₕ!")
-    _centered_strain_rows!(dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Val(D), Val(D))
+    _centered_strain_rows!(dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Centered(), Val(D), Val(D))
     return dest
 end
 
-# `ε_ij`, `i != j`: `Dc_j(u_i)` into `dest[i][j]`, `Dc_i(u_j)` into `dest[j][i]`, then their
+# Shared by `εcₕ!` and `ε̽ₕ!`, with `dir` `Centered()` or `CrossWeighted()`: both
+# differences are co-located, so the strain is the symmetric part of the gradient as is.
+# `ε_ij`, `i != j`: `D_j(u_i)` into `dest[i][j]`, `D_i(u_j)` into `dest[j][i]`, then their
 # mean into both, so the two entries are equal bit for bit.
-@inline function _centered_strain_pair!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}) where {i, j}
+@inline function _centered_strain_pair!(dest, comps, Ωₕ, dims, dir, ::Val{i}, ::Val{j}) where {i, j}
     dij, dji = dest[i][j], dest[j][i]
-    _difference_engine!(parent(dij), parent(comps[i]), star_spacings(Ωₕ(j)), dims, Centered(), Val(j))
-    _difference_engine!(parent(dji), parent(comps[j]), star_spacings(Ωₕ(i)), dims, Centered(), Val(i))
+    _difference_engine!(parent(dij), parent(comps[i]), _direction_spacing(Ωₕ(j), dir), dims, dir, Val(j))
+    _difference_engine!(parent(dji), parent(comps[j]), _direction_spacing(Ωₕ(i), dir), dims, dir, Val(i))
     dij .= (dij .+ dji) ./ 2
     dji .= dij
     return nothing
 end
 
-@inline function _centered_strain_offdiag!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}) where {i, j}
-    j > i && _centered_strain_pair!(dest, comps, Ωₕ, dims, Val(i), Val(j))
-    _centered_strain_offdiag!(dest, comps, Ωₕ, dims, Val(i), Val(j - 1))
+@inline function _centered_strain_offdiag!(dest, comps, Ωₕ, dims, dir, ::Val{i}, ::Val{j}) where {i, j}
+    j > i && _centered_strain_pair!(dest, comps, Ωₕ, dims, dir, Val(i), Val(j))
+    _centered_strain_offdiag!(dest, comps, Ωₕ, dims, dir, Val(i), Val(j - 1))
     return nothing
 end
 
-@inline _centered_strain_offdiag!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{0}) where {i} = nothing
+@inline _centered_strain_offdiag!(dest, comps, Ωₕ, dims, dir, ::Val{i}, ::Val{0}) where {i} = nothing
 
-@inline function _centered_strain_rows!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{D}) where {i, D}
+@inline function _centered_strain_rows!(dest, comps, Ωₕ, dims, dir, ::Val{i}, ::Val{D}) where {i, D}
     sub = Ωₕ(i)
     _check_centered_points(sub, i)
-    _difference_engine!(parent(dest[i][i]), parent(comps[i]), star_spacings(sub), dims, Centered(), Val(i))
-    _centered_strain_offdiag!(dest, comps, Ωₕ, dims, Val(i), Val(D))
-    _centered_strain_rows!(dest, comps, Ωₕ, dims, Val(i - 1), Val(D))
+    _difference_engine!(parent(dest[i][i]), parent(comps[i]), _direction_spacing(sub, dir), dims, dir, Val(i))
+    _centered_strain_offdiag!(dest, comps, Ωₕ, dims, dir, Val(i), Val(D))
+    _centered_strain_rows!(dest, comps, Ωₕ, dims, dir, Val(i - 1), Val(D))
     return nothing
 end
 
-@inline _centered_strain_rows!(dest, comps, Ωₕ, dims, ::Val{0}, ::Val{D}) where {D} = nothing
+@inline _centered_strain_rows!(dest, comps, Ωₕ, dims, dir, ::Val{0}, ::Val{D}) where {D} = nothing
 
 # --- Tilde vector calculus and the forward strain (gpena/Bramble.jl#287) ------------------- #
 #
@@ -977,31 +982,6 @@ See also: [`diṽₕ`](@ref), [`curl̃ₕ`](@ref), [`∇ₕ`](@ref)
 """
 const ∇̃ₕ = D̃ₕ
 
-"""
-    ∇̽ₕ(uₕ::VectorElement) -> VectorElement or NTuple{D, VectorElement}
-
-Returns the cross-weighted discrete gradient of the grid function `uₕ`, one cross-weighted
-centered difference per direction:
-
-```math
-\\overset{\\times}{\\nabla}_h(\\textrm{u}_h) = \\left(
-    \\overset{\\times}{\\textrm{D}}_{x_1}(\\textrm{u}_h), \\ldots,
-    \\overset{\\times}{\\textrm{D}}_{x_D}(\\textrm{u}_h)\\right), \\qquad
-\\overset{\\times}{\\textrm{D}}_{x_d}(\\textrm{u}_h)(i) =
-    \\frac{h_i}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_{i+1}) +
-    \\frac{h_{i+1}}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_i).
-```
-
-The same function as [`D̽ₕ`](@ref): the dispatch alias and the tuple-valued alias coincide
-for this family (gpena/Bramble.jl#140), so `∇̽ₕ` is simply another name for it, under the
-`∇` notation the other vectorial gradients share. In 1D it returns the bare grid function,
-above a `D`-tuple. The first and last point along each direction have no truncated-boundary
-convention of their own and fall back to the one-sided difference the near side still
-defines, unlike [`∇cₕ`](@ref).
-
-See also: [`D̽ₓ`](@ref), [`∇ₕ`](@ref), [`∇₊ₕ`](@ref)
-"""
-const ∇̽ₕ = D̽ₕ
 
 """
     ∇̃ₕ!(dest, uₕ::VectorElement) -> dest
@@ -1092,13 +1072,13 @@ See also: [`curlₕ`](@ref), [`diṽₕ`](@ref), [`∇̃ₕ`](@ref)
 """
 function curl̃ₕ(uₕ)
     _check_star_host(first(_field_components(uₕ)), "curl̃ₕ")
-    return _curl(uₕ, StarForward())
+    return _curl(uₕ, StarForward(), "curl̃ₕ")
 end
 
 @doc (@doc curl̃ₕ)
 function curl̃ₕ!(vₕ, uₕ)
     _check_star_host(vₕ, "curl̃ₕ!")
-    return _curl!(vₕ, uₕ, StarForward())
+    return _curl!(vₕ, uₕ, StarForward(), "curl̃ₕ!")
 end
 
 # The forward average, in place: `out[I] = (out[I] + out[I + eᵢ]) / 2` along `DIM`, zero on
@@ -1198,5 +1178,209 @@ function ε₊ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     dim(Ωₕ) == D || throw(DimensionMismatch("ε₊ₕ! destination is $(D)x$D but the mesh is $(dim(Ωₕ))D"))
     _check_field_arity(comps, Val(D), "ε₊ₕ!")
     _forward_strain_rows!(dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Val(D), Val(D))
+    return dest
+end
+
+# --- Cross-weighted vector calculus (gpena/Bramble.jl#349) --------------------------------- #
+#
+# The cross-weighted family goes through the centered family's machinery with
+# `CrossWeighted()` as the direction: `_accumulate_one!` gains a method over its own
+# accumulating engine, so `div̽ₕ`/`curl̽ₕ` reach `_divergence!`/`_curl!` unchanged, and
+# `∇̽ₕ!`/`ε̽ₕ!` share `∇cₕ!`'s and `εcₕ!`'s traversals. Every cross-weighted difference sits
+# on the grid point itself, so, as for the centered family, nothing is averaged. Unlike it,
+# nothing is truncated either: each end slice takes the one-sided difference its near side
+# still defines, exactly as `D̽ₓ` does. The device story is the centered family's too: no
+# kernel yet, and the same named error before any scalar indexing.
+
+@inline _direction_spacing(sub, ::CrossWeighted) = spacings(sub)
+
+"""
+    ∇̽ₕ(uₕ::VectorElement) -> VectorElement or NTuple{D, VectorElement}
+
+Returns the cross-weighted discrete gradient of the grid function `uₕ`, one cross-weighted
+centered difference per direction:
+
+```math
+\\overset{\\times}{\\nabla}_h(\\textrm{u}_h) = \\left(
+    \\overset{\\times}{\\textrm{D}}_{x_1}(\\textrm{u}_h), \\ldots,
+    \\overset{\\times}{\\textrm{D}}_{x_D}(\\textrm{u}_h)\\right), \\qquad
+\\overset{\\times}{\\textrm{D}}_{x_d}(\\textrm{u}_h)(i) =
+    \\frac{h_i}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_{i+1}) +
+    \\frac{h_{i+1}}{h_i + h_{i+1}}\\, \\textrm{D}_{-}\\textrm{u}_h(x_i).
+```
+
+The same function as [`D̽ₕ`](@ref): the dispatch alias and the tuple-valued alias coincide
+for this family (gpena/Bramble.jl#140), so `∇̽ₕ` is simply another name for it, under the
+`∇` notation the other vectorial gradients share. In 1D it returns the bare grid function,
+above a `D`-tuple. The first and last point along each direction have no truncated-boundary
+convention of their own and fall back to the one-sided difference the near side still
+defines, unlike [`∇cₕ`](@ref).
+
+See also: [`D̽ₓ`](@ref), [`∇ₕ`](@ref), [`∇₊ₕ`](@ref)
+"""
+const ∇̽ₕ = D̽ₕ
+
+# `out[I] += s * D̽(u)[I]` along `DIM`, over the interior and both end slices, each term the
+# value `D̽`'s own engine writes: the same `_compute_difference` calls over the same
+# `spacings`, only accumulated.
+@inline function _accumulate_cross_weighted!(
+        out, u, h::H, dims::NTuple{D, Int}, ::Val{DIM}, s
+) where {H, D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    interior, lo, hi = _centered_stencil_ranges(axes(li), Val(DIM))
+    dir = CrossWeighted()
+
+    @inbounds @simd for I in CartesianIndices(interior)
+        idx = li[I]
+        out[idx] += s * _compute_difference(
+            dir, Val(false), u[li[I - step]], u[idx], u[li[I + step]], h, I[DIM]
+        )
+    end
+
+    @inbounds @simd for I in CartesianIndices(lo)
+        idx = li[I]
+        out[idx] += s * _compute_difference(dir, Val(true), u[idx], u[li[I + step]], h, I[DIM])
+    end
+
+    @inbounds @simd for I in CartesianIndices(hi)
+        idx = li[I]
+        out[idx] += s * _compute_difference(dir, Val(true), u[idx], u[li[I - step]], h, I[DIM])
+    end
+    return nothing
+end
+
+@inline function _accumulate_one!(out, u, Ωₕ, dims, ::CrossWeighted, ::Val{d}, s) where {d}
+    sub = Ωₕ(d)
+    _check_centered_points(sub, d)
+    return _accumulate_cross_weighted!(out, u, spacings(sub), dims, Val(d), s)
+end
+
+"""
+    ∇̽ₕ!(dest, uₕ::VectorElement) -> dest
+
+The in-place form of [`∇̽ₕ`](@ref): the cross-weighted gradient of `uₕ`, written into
+`dest` -- a grid function in 1D, a `D`-tuple of them above, the shape `∇̽ₕ` returns.
+
+Allocates nothing. No destination may alias `uₕ`.
+"""
+function ∇̽ₕ!(dest, uₕ::VectorElement)
+    _check_centered_host(dest, "∇̽ₕ!")
+    Ωₕ = mesh(space(uₕ))
+    D = dim(Ωₕ)
+    outs = dest isa VectorElement ? (dest,) : dest
+    length(outs) == D || _throw_field_arity(length(outs), D, "∇̽ₕ!")
+    _centered_gradient!(outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), CrossWeighted(), Val(D))
+    return dest
+end
+
+"""
+    div̽ₕ(uₕ) -> VectorElement
+    div̽ₕ!(vₕ::VectorElement, uₕ) -> vₕ
+
+Returns the cross-weighted discrete divergence of the vector field `uₕ`:
+
+```math
+\\overset{\\times}{\\textrm{div}}_h(\\textrm{u}_h)(I) =
+    \\sum_{d=1}^{D} \\overset{\\times}{\\textrm{D}}_{x_d}(\\textrm{u}_{h,d})(I)
+```
+
+`uₕ` is spelled as for [`divₕ`](@ref): an `NTuple{D, VectorElement}`, or a grid function of a
+[`CompositeGridSpace`](@ref) with one leaf per spatial dimension (in 1D, a scalar grid
+function). Each cross-weighted difference is second order on a non-uniform grid and is not
+truncated: on the first and last slice of its direction it is the one-sided difference the
+near side still defines, as for [`D̽ₓ`](@ref).
+
+`div̽ₕ!` writes into `vₕ`, which must not be one of the components, and allocates nothing.
+
+See also: [`divcₕ`](@ref), [`curl̽ₕ`](@ref), [`ε̽ₕ`](@ref), [`∇̽ₕ`](@ref)
+"""
+function div̽ₕ(uₕ)
+    _check_centered_host(first(_field_components(uₕ)), "div̽ₕ")
+    return div̽ₕ!(similar(first(_field_components(uₕ))), uₕ)
+end
+
+@doc (@doc div̽ₕ)
+function div̽ₕ!(vₕ::VectorElement, uₕ)
+    _check_centered_host(vₕ, "div̽ₕ!")
+    comps = _field_components(uₕ)
+    Wₕ = _field_space(uₕ)
+    D = dim(mesh(Wₕ))
+    _check_field_arity(comps, Val(D), "div̽ₕ")
+    _divergence!(vₕ, comps, Wₕ, CrossWeighted(), Val(D))
+    return vₕ
+end
+
+"""
+    curl̽ₕ(uₕ) -> VectorElement or NTuple{3, VectorElement}
+    curl̽ₕ!(vₕ, uₕ) -> vₕ
+
+Returns the cross-weighted discrete curl of the vector field `uₕ`. In 2D it is the scalar
+
+```math
+\\overset{\\times}{\\textrm{curl}}_h(\\textrm{u}_h) =
+    \\overset{\\times}{\\textrm{D}}_{x}(\\textrm{u}_{h,2}) -
+    \\overset{\\times}{\\textrm{D}}_{y}(\\textrm{u}_{h,1})
+```
+
+and in 3D the three-component field
+``(\\partial_y u_3 - \\partial_z u_2,\\; \\partial_z u_1 - \\partial_x u_3,\\;
+\\partial_x u_2 - \\partial_y u_1)``, each derivative a cross-weighted centered difference.
+There is no 1D curl, and asking for one is an `ArgumentError`.
+
+`curl̽ₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
+allocates nothing.
+
+See also: [`curlcₕ`](@ref), [`div̽ₕ`](@ref), [`∇̽ₕ`](@ref)
+"""
+function curl̽ₕ(uₕ)
+    _check_centered_host(first(_field_components(uₕ)), "curl̽ₕ")
+    return _curl(uₕ, CrossWeighted(), "curl̽ₕ")
+end
+
+@doc (@doc curl̽ₕ)
+function curl̽ₕ!(vₕ, uₕ)
+    _check_centered_host(vₕ, "curl̽ₕ!")
+    return _curl!(vₕ, uₕ, CrossWeighted(), "curl̽ₕ!")
+end
+
+"""
+    ε̽ₕ(uₕ) -> NTuple{D, NTuple{D, VectorElement}}
+    ε̽ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) -> dest
+
+Returns the cross-weighted discrete strain tensor of the vector field `uₕ`, entry by entry
+
+```math
+\\overset{\\times}{\\varepsilon}^{ii}_h(\\textrm{u}_h) =
+    \\overset{\\times}{\\textrm{D}}_{x_i}(\\textrm{u}_{h,i}), \\qquad
+\\overset{\\times}{\\varepsilon}^{ij}_h(\\textrm{u}_h) = \\tfrac{1}{2}\\left(
+    \\overset{\\times}{\\textrm{D}}_{x_j}(\\textrm{u}_{h,i}) +
+    \\overset{\\times}{\\textrm{D}}_{x_i}(\\textrm{u}_{h,j})\\right), \\quad i \\neq j.
+```
+
+Every cross-weighted difference sits on the grid point itself, so, as for [`εcₕ`](@ref), no
+average relocates the shear terms. `uₕ` is spelled as for [`div̽ₕ`](@ref). The result is
+symmetric by construction: `dest[i][j]` and `dest[j][i]` hold the same values.
+
+`ε̽ₕ!` writes into a preallocated `D`-by-`D` nested tuple and allocates nothing.
+
+See also: [`εcₕ`](@ref), [`∇̽ₕ`](@ref), [`div̽ₕ`](@ref)
+"""
+function ε̽ₕ(uₕ)
+    comps = _field_components(uₕ)
+    _check_centered_host(first(comps), "ε̽ₕ")
+    D = dim(mesh(_field_space(uₕ)))
+    _check_field_arity(comps, Val(D), "ε̽ₕ")
+    return ε̽ₕ!(_strain_alloc(comps, Val(D)), uₕ)
+end
+
+@doc (@doc ε̽ₕ)
+function ε̽ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
+    _check_centered_host(dest[1], "ε̽ₕ!")
+    comps = _field_components(uₕ)
+    Ωₕ = mesh(_field_space(uₕ))
+    dim(Ωₕ) == D || throw(DimensionMismatch("ε̽ₕ! destination is $(D)x$D but the mesh is $(dim(Ωₕ))D"))
+    _check_field_arity(comps, Val(D), "ε̽ₕ!")
+    _centered_strain_rows!(dest, comps, Ωₕ, npoints(Ωₕ, Tuple), CrossWeighted(), Val(D), Val(D))
     return dest
 end
