@@ -17,6 +17,9 @@ integer per axis, or a single integer for the same resolution along every axis:
 
 ```@example mesh
 using Bramble
+import Bramble: cell_measure, change_points!, half_point, half_points, half_spacing,
+    index_in_marker, indices, interior_indices, is_boundary_index, is_uniform, point,
+    spacings
 
 Ω = domain(interval(0.0, 1.0))
 Ωₕ = mesh(Ω, 11)          # 11 uniformly spaced points

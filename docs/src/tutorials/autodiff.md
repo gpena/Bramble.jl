@@ -30,6 +30,7 @@ space, which in this package it almost always does:
 
 ```@example autodiff_tutorial
 using Bramble, Enzyme, DifferentiationInterface
+import Bramble: ast_sparsity_detector
 
 enzyme_backend = AutoEnzyme(;
     mode = Enzyme.set_runtime_activity(Enzyme.Reverse),

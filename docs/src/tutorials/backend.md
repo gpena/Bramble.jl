@@ -20,6 +20,7 @@ Building one costs nothing at runtime: the types alone tell every downstream `ve
 
 ```@example backend
 using Bramble
+import Bramble: CpuSerial, CpuPolyester, GpuKernel, D₋ₓ, D₋ₓ!, D₋ᵧ, D₋ᵧ!
 
 be = backend()
 ```

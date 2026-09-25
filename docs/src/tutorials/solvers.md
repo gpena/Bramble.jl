@@ -125,6 +125,7 @@ using SciMLBase, LinearSolve, LinearAlgebra, SparseArrays
 using AlgebraicMultigrid: aspreconditioner
 using ILUZero
 using Random
+import Bramble: sparse_factorize, refactor!
 
 Ωd = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
 function spd_system(n)

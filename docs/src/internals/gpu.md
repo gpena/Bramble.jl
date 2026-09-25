@@ -43,6 +43,8 @@ device memory several frames later.
 device-specific method in the package keys on `::DeviceLocality`, never on `::GpuPolicy`:
 
 ```julia
+using Bramble: GpuPolicy
+
 @noinline _sweep_for!(::DeviceLocality, policy::GpuPolicy, v, idxs, f) = _gpu_for!(policy, v, idxs, f)
 ```
 

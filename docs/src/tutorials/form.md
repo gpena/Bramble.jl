@@ -12,6 +12,7 @@ rather than for any particular grid function:
 ```@example forms
 using Bramble
 using SparseArrays
+import Bramble: CompositeGridSpace, allocate_system_matrix, evaluate!, assemble_parallel!, reaction
 
 Ωₕ = mesh(domain(interval(0.0, 1.0)), 33, true)
 Wₕ = gridspace(Ωₕ)
@@ -160,7 +161,7 @@ routes to, so accepting one would make a coupled mismatch silent rather than lou
 A bilinear form takes two symbolic arguments, trial first and test second:
 
 ```@example forms
-a = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v), :x))
 A = assemble(a)
 size(A), nnz(A)
 ```
@@ -198,7 +199,7 @@ issymmetric(a), isposdef(a)
 ```
 
 ```@example forms
-c = form(Wₕ, Wₕ, (u, v) -> inner₊(u, D₋ₓ(v)))
+c = form(Wₕ, Wₕ, (u, v) -> inner₊(u, ∇ₕ(v)))
 issymmetric(c)  # different operators either side, not this pattern
 ```
 
@@ -218,7 +219,7 @@ things done to them. Labels on the domain say where:
 Wd = gridspace(Ωd)
 
 fd = Rₕ(Wd, x -> π^2 * sin(π * x))
-ad = form(Wd, Wd, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+ad = form(Wd, Wd, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v), :x))
 ld = form(Wd, v -> innerₕ(fd, v))
 
 Ad = assemble(ad)
@@ -301,7 +302,7 @@ Vₕ = Wₕ^Val(2)
 ac = form(Vₕ, Vₕ, (u, v) -> begin
     u₁, u₂ = components(u)
     v₁, v₂ = components(v)
-    innerₕ(u₁, v₁) + inner₊ₓ(D₋ₓ(u₂), D₋ₓ(v₂))
+    innerₕ(u₁, v₁) + inner₊(∇ₕ(u₂), ∇ₕ(v₂), :x)
 end)
 Ac = assemble(ac)
 size(Ac)
@@ -404,7 +405,7 @@ Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
 Vh = CompositeGridSpace((Wbig, Wsmall))
 uv = Rₕ(Vh, (x -> 0.0, x -> x[1] + x[2]))   # only the small leaf (2) carries data
 
-lh = form(Vh, v -> innerₕ(πₕ(uv(2)), v(1)) + innerₕ(D₋ₓ(πₕ(uv(2))), D₋ₓ(v(1))))
+lh = form(Vh, v -> innerₕ(πₕ(uv(2)), v(1)) + innerₕ(∇ₕ[:x](πₕ(uv(2))), ∇ₕ[:x](v(1))))
 b = assemble(lh)
 
 # the differenced term is not a no-op: dropping it changes the answer
@@ -532,6 +533,27 @@ half-spacing, and in 3D a face integral.
 `inner_Γ` integrates over whole coordinate faces — `:boundary`, `:xmin`…`:zmax`, or a
 viewpoint alias — and needs no marker declared in `domain(...)`, since it reads the face from
 the point's index rather than from a marker table.
+
+### The outward normal, `n`
+
+A flux term ``\int_\Gamma \mathbf{F} \cdot \mathbf{n}\, v`` needs the outward normal at
+each boundary point. `n` is exported for this; like `∇ₕ`, it destructures and indexes into
+its per-coordinate components:
+
+```@example forms
+Ω2 = mesh(domain(box((0.0, 0.0), (1.0, 1.0)),
+    :xmin => :xmin, :xmax => :xmax, :ymin => :ymin, :ymax => :ymax), (6, 6), (true, true))
+W2 = gridspace(Ω2)
+nx, ny = n
+F1 = Rₕ(W2, x -> 1.0 + x[1])
+F2 = Rₕ(W2, x -> 2.0 + x[2])
+l_flux = form(W2, v -> inner_Γ(F1 * nx + F2 * ny, v; markers = (:xmax,)))
+b_flux = assemble(l_flux)
+sum(b_flux)
+```
+
+`F1 * nx + F2 * ny` is the same quantity `dot((F1, F2), n)` computes with `LinearAlgebra.dot`,
+component by component; the destructured form is what reads naturally inside a form.
 
 A marker that does not exist anywhere the term reaches is a loud error rather than a silent
 all-zero contribution: `RegionRestriction`'s own per-point check cannot tell "nothing here
