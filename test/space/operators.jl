@@ -232,4 +232,92 @@ end
     end
 end
 
+# The vectorial aliases (`∇ₕ`, `Mₕ`, `jumpₕ`, ...) destructure and index into the
+# per-coordinate aliases they already apply through (#340): `dx, dy = ∇ₕ` and `∇ₕ[1]`,
+# `∇ₕ[:x]` are the exact same function object as `D₋ₓ`, not a copy, and the protocol is
+# generated once in `@operator_family` for every family with a `vectorial_alias`. Coordinate
+# names are due to be demoted from `export` to `public` (#340), so this file reaches them
+# through `Bramble.` rather than relying on the bare name staying exported.
+@testset "Vectorial operator aliases destructure and index (#340)" begin
+    Dₓ, Dᵧ, D₂ = Bramble.D₋ₓ, Bramble.D₋ᵧ, Bramble.D₋₂
+
+    @testset "destructuring and indexing agree with the named aliases" begin
+        dx, dy = ∇ₕ
+        @test dx === Dₓ && dy === Dᵧ
+
+        dx3, dy3, dz3 = ∇ₕ
+        @test (dx3, dy3, dz3) === (Dₓ, Dᵧ, D₂)
+
+        @test ∇ₕ[1] === Dₓ && ∇ₕ[2] === Dᵧ && ∇ₕ[3] === D₂
+        @test ∇ₕ[:x] === Dₓ && ∇ₕ[:y] === Dᵧ && ∇ₕ[:z] === D₂
+        @test firstindex(∇ₕ) == 1 && lastindex(∇ₕ) == 3
+        @test length(∇ₕ) == 3
+        @test eltype(∇ₕ) === Function
+        @test collect(∇ₕ) == [Dₓ, Dᵧ, D₂]
+
+        @test_throws BoundsError ∇ₕ[0]
+        @test_throws BoundsError ∇ₕ[4]
+        @test_throws ArgumentError ∇ₕ[:w]
+    end
+
+    @testset "indexing folds at compile time with zero allocations" begin
+        second(V) = V[2]
+        @test only(Base.return_types(second, (typeof(∇ₕ),))) === typeof(Dᵧ)
+        @test @inferred(second(∇ₕ)) === Dᵧ
+        second(∇ₕ) # warm up before measuring
+        @test (@allocated second(∇ₕ)) == 0
+    end
+
+    @testset "every family with a vectorial_alias supports the protocol" begin
+        families = (
+            (∇ₕ, (Bramble.D₋ₓ, Bramble.D₋ᵧ, Bramble.D₋₂)),
+            (∇cₕ, (Bramble.Dcₓ, Bramble.Dcᵧ, Bramble.Dc₂)),
+            (∇̽ₕ, (Bramble.D̽ₓ, Bramble.D̽ᵧ, Bramble.D̽₂)),
+            (∇̃ₕ, (Bramble.D̃ₓ, Bramble.D̃ᵧ, Bramble.D̃₂)),
+            (Mₕ, (Bramble.Mₓ, Bramble.Mᵧ, Bramble.M₂)),
+            (Mcₕ, (Bramble.Mcₓ, Bramble.Mcᵧ, Bramble.Mc₂)),
+            (jumpₕ, (Bramble.jumpₓ, Bramble.jumpᵧ, Bramble.jump₂)),
+            (Bramble.∇₊ₕ, (D₊ₓ, D₊ᵧ, D₊₂)),
+            (Bramble.M₊ₕ, (M₊ₓ, M₊ᵧ, M₊₂))
+        )
+        for (V, ops) in families
+            a, b, c = V
+            @test (a, b, c) === ops
+            @test (V[1], V[2], V[3]) === ops
+            @test (V[:x], V[:y], V[:z]) === ops
+            @test length(V) == 3
+        end
+    end
+
+    # non-uniform in every direction: uniform is only a special case
+    Ω2ₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (9, 8), (false, false))
+    W2 = gridspace(Ω2ₕ)
+
+    @testset "a destructured operator works on a VectorElement" begin
+        uₕ = Rₕ(W2, x -> x[1]^2 * sin(x[2]))
+        dx, dy = ∇ₕ
+        @test parent(dx(uₕ)) == parent(Dₓ(uₕ))
+        @test parent(dy(uₕ)) == parent(Dᵧ(uₕ))
+    end
+
+    @testset "a destructured operator works inside form(...)" begin
+        dx, dy = ∇ₕ
+        a1 = assemble(form(W2, W2, (u, v) -> innerₕ(dx(u), dx(v)) + innerₕ(dy(u), dy(v))))
+        a2 = assemble(form(W2, W2, (u, v) -> innerₕ(Dₓ(u), Dₓ(v)) + innerₕ(Dᵧ(u), Dᵧ(v))))
+        @test a1 == a2
+    end
+
+    @testset "3D destructuring" begin
+        Ω3ₕ = mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (6, 5, 4), (false, false, false)
+        )
+        W3 = gridspace(Ω3ₕ)
+        u3 = Rₕ(W3, x -> x[1] * x[2] + x[3]^2)
+        dx3, dy3, dz3 = ∇ₕ
+        @test parent(dx3(u3)) == parent(Dₓ(u3))
+        @test parent(dy3(u3)) == parent(Dᵧ(u3))
+        @test parent(dz3(u3)) == parent(D₂(u3))
+    end
+end
+
 end # module SpaceOperatorsTests

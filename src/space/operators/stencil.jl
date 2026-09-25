@@ -469,6 +469,54 @@ function _vectorial_expr(
 end
 
 """
+    _vectorial_index_expr(alias_name, alias_stem, source)
+
+Returns the expressions giving one family's vectorial alias (`∇ₕ`, `Mₕ`, `jumpₕ`, ...)
+Julia's iteration and indexing protocol, as a `Vector{Expr}` (gpena/Bramble.jl#340):
+`Base.iterate` (one- and two-argument), `Base.length`, `Base.eltype`, `Base.firstindex`,
+`Base.lastindex` and `Base.getindex` on an `Integer` or a `Symbol` (`:x`/`:y`/`:z`).
+
+Every method reads off the same three per-coordinate aliases (`D₋ₓ`, `D₋ᵧ`, `D₋₂`, from
+`alias_stem`) that `alias_name(arg)` itself calls through `_vectorial_apply`, so
+`dx, dy = ∇ₕ` and `D₋ₓ === ∇ₕ[1] === ∇ₕ[:x]` are the same function object, not a copy. The
+three names are spliced in as literals, so `∇ₕ[2]` is a call to a `@inline` function of a
+literal `Int` against literal comparisons -- the compiler constant-folds it to the concrete
+coordinate operator, same as any other three-armed literal dispatch in this file.
+
+Always three coordinates regardless of the mesh a caller eventually applies the result to:
+the alias itself is dimension-agnostic (`typeof(∇ₕ)`, not tied to any mesh), so indexing it
+out of range along a direction the mesh does not have is caught downstream, by the operator
+the index yields, the same way `∇ₕ(u)` itself is.
+"""
+function _vectorial_index_expr(alias_name, alias_stem, source)
+    stem_x = Symbol(alias_stem, _BRAMBLE_var2symbol[1])
+    stem_y = Symbol(alias_stem, _BRAMBLE_var2symbol[2])
+    stem_z = Symbol(alias_stem, _BRAMBLE_var2symbol[3])
+
+    exprs = Expr[
+        :(@inline Base.iterate(::typeof($alias_name)) = ($stem_x, 2)),
+        :(@inline Base.iterate(::typeof($alias_name), state::Int) = state == 2 ? ($stem_y, 3) : state == 3 ? ($stem_z, 4) : nothing),
+        :(@inline Base.length(::typeof($alias_name)) = 3),
+        :(@inline Base.eltype(::Type{typeof($alias_name)}) = Function),
+        :(@inline Base.firstindex(::typeof($alias_name)) = 1),
+        :(@inline Base.lastindex(::typeof($alias_name)) = 3),
+        :(@inline function Base.getindex(::typeof($alias_name), i::Integer)
+            i == 1 && return $stem_x
+            i == 2 && return $stem_y
+            i == 3 && return $stem_z
+            throw(BoundsError($alias_name, i))
+        end),
+        :(@inline function Base.getindex(::typeof($alias_name), s::Symbol)
+            s === :x && return $stem_x
+            s === :y && return $stem_y
+            s === :z && return $stem_z
+            throw(ArgumentError("the coordinate direction must be :x, :y or :z, got :$s"))
+        end),
+    ]
+    return Expr[_relocate!(e, source) for e in exprs]
+end
+
+"""
     _dimensional_expr(base_op_name, alias_name, alias_stem, dir_string, what, formula;
                       opening_sentence = "", source = nothing)
 
@@ -736,6 +784,7 @@ function _operator_aliases_expr(
             source
         )
     )
+    append!(exprs, _vectorial_index_expr(vectorial_alias, alias_stem, source))
     return exprs
 end
 
