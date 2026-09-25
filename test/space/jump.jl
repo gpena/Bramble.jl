@@ -84,7 +84,11 @@ jump_ops(::Val{3}) = (jumpₓ, jump₂, jump_ops(Val(2))...)
         end
         for name in (:jumpₓ, :jumpᵧ, :jump₂, :jumpₕ)
             @test isdefined(Bramble, name)
-            @test Base.isexported(Bramble, name)
+            @test Base.ispublic(Bramble, name)
+        end
+        @test Base.isexported(Bramble, :jumpₕ)
+        for name in (:jumpₓ, :jumpᵧ, :jump₂)
+            @test !Base.isexported(Bramble, name)
         end
     end
 

@@ -5,6 +5,7 @@ using Bramble
 using LinearAlgebra: Diagonal, issymmetric, isposdef
 using SparseArrays: nnz
 using Bramble:
+               D₋ᵧ,
                IdentityOperator,
                ZeroOperator,
                OperatorAdd,
@@ -614,7 +615,7 @@ end
 
 # --- Shared inner-product arguments ------------------------------------------------- #
 
-using Bramble: D₊ₓ, D₋ᵧ, D₊ᵧ, Dcₓ
+using Bramble: D₊ₓ, D₊ᵧ, Dcₓ
 
 function _nprod(x, T)
     (x isa T ? 1 : 0) +
