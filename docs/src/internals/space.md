@@ -344,6 +344,7 @@ for the new family in `shift.jl` alongside it.
 ```@autodocs
 Modules = [Bramble]
 Public = false
+Filter = x -> x ∉ (Base.parent, Base.:*, Bramble.ldiv!)
 Pages = [
     "space/gridspace.jl",
     "space/scalar_gridspace.jl",
@@ -354,6 +355,7 @@ Pages = [
     "space/operators/cell_average.jl",
     "space/operators/shift.jl",
     "space/operators/stencil.jl",
+    "space/operators/stencil_matrix.jl",
     "space/operators/difference.jl",
     "space/operators/jump.jl",
     "space/operators/average.jl",

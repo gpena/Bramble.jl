@@ -1,3 +1,7 @@
+```@meta
+CurrentModule = Bramble
+```
+
 # Plotting directly
 
 `export_vtk` and `export_pgfplots` write a file for another tool to open. Sometimes a plot

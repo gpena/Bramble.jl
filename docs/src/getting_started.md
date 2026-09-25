@@ -1,3 +1,7 @@
+```@meta
+CurrentModule = Bramble
+```
+
 # Getting started
 
 A Poisson problem, end to end, in twenty lines. Six steps take a continuous problem to a

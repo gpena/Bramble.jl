@@ -1,3 +1,7 @@
+```@meta
+CurrentModule = Bramble
+```
+
 # Grid spaces and discrete functions
 
 A grid space is the discrete function space over a mesh: it fixes how many degrees of

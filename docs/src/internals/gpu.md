@@ -70,8 +70,7 @@ the individual kernels.
 
 ```@autodocs
 Modules = [Bramble]
-Public = true
-Private = false
+Public = false
 Filter = x -> x == Bramble.ka_synchronize
 Pages = ["utils/device_kernels.jl", ]
 ```

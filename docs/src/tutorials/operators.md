@@ -1,3 +1,7 @@
+```@meta
+CurrentModule = Bramble
+```
+
 # Difference, jump and average operators
 
 Bramble provides the finite difference building blocks that discrete schemes are written
