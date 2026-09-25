@@ -1,3 +1,7 @@
+```@meta
+CurrentModule = Bramble
+```
+
 # Writing VTK files
 
 Once a solution exists (the result of the [forms tutorial](form.md), or any grid function),

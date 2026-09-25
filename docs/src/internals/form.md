@@ -352,17 +352,14 @@ default CSC assembly, with and without `dirichlet`/`symmetrize!`, and `assemble!
 
 ## The extension contract
 
-The eight names below are declared `public` in `src/Bramble.jl` rather than exported, because
-an extension has to reach them by name to implement a storage type or a threading policy. That
-makes them a contract rather than an internal, so they are documented here even though the rest
-of this page is private API. The block above filters to private names only, which would
-otherwise drop every one of them -- and with them the cross-references the surrounding
-docstrings make.
+The eight names below are private since gpena/Bramble.jl#339, but an extension still has to
+reach them by their qualified `Bramble.` names to implement a storage type or a threading
+policy. That makes them a contract rather than an internal, so they get a section of their own:
+the block after this one filters them out.
 
 ```@autodocs
 Modules = [Bramble]
-Public = true
-Private = false
+Public = false
 Filter = x -> x in (
     Bramble._allocate_from_pattern, Bramble._scatter_position, Bramble._scatter_add!,
     Bramble._zero_stored!, Bramble._batch_bilinear_colour_sweep!,
@@ -381,7 +378,13 @@ Pages = [
 ```@autodocs
 Modules = [Bramble]
 Public = false
-Filter = x -> x !== Bramble.DiracSource
+Filter = x -> x ∉ (
+    Bramble.DiracSource, Bramble.issymmetric, Bramble.isposdef,
+    Bramble._allocate_from_pattern, Bramble._scatter_position, Bramble._scatter_add!,
+    Bramble._zero_stored!, Bramble._batch_bilinear_colour_sweep!,
+    Bramble._batch_bilinear_band_sweep!, Bramble._batch_linear_colour_sweep!,
+    Bramble._batch_linear_band_sweep!
+)
 Pages = [
     "ast/ast.jl",
     "ast/common.jl",
@@ -410,9 +413,10 @@ Pages = [
 
 `DiracSource` is filtered out of the block above since its docstring's `@ref`s point here
 rather than the autodocs entry. `issymmetric(::BilinearForm)`/`isposdef(::BilinearForm)`
-extend `LinearAlgebra`'s generic functions, so `Modules = [Bramble]` autodocs cannot find
-their docstrings; `bandwidths`/`blockbandwidths` are already picked up by the block above
-once its `Pages` point at the real `ast/stencil_pattern.jl` file.
+extend `LinearAlgebra`'s generic functions; the block above filters them out so they are
+listed here, beside the other structural properties. `bandwidths`/`blockbandwidths` are
+already picked up by the block above once its `Pages` point at the real
+`ast/stencil_pattern.jl` file.
 
 ```@docs
 DiracSource

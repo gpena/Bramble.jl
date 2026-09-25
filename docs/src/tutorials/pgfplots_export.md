@@ -1,3 +1,7 @@
+```@meta
+CurrentModule = Bramble
+```
+
 # Writing PGFPlots data files
 
 `export_vtk` writes a full grid for a viewer like ParaView. For a plot going straight into a

@@ -10,6 +10,7 @@ CurrentModule = Bramble
 ```@autodocs
 Modules = [Bramble]
 Public = false
+Filter = x -> x !== Base.extrema
 Pages = ["geometry/set.jl"]
 ```
 

@@ -1,3 +1,7 @@
+```@meta
+CurrentModule = Bramble
+```
+
 # Choosing a solver, backend, and execution policy
 
 Every worked example so far has used `\` or a single, unremarked `solve(a, l; ...)` call,
