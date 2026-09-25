@@ -13,6 +13,10 @@ Documentation for `Bramble.jl`'s public API.
 
 ### Linear algebra backends
 
+The backend allocation hooks (`backend_eye`, `backend_zeros`, `ka_device`,
+`supports_undef_construction`) are private; see the
+[utilities internals page](internals/utils.md).
+
 ```@docs
 backend
 Locality
@@ -31,15 +35,11 @@ Parallel
 execution_policy
 vector
 matrix
-supports_undef_construction
 vector_type
 matrix_type
 backend_types
-backend_eye
-backend_zeros
 metal_sparse_csr
 metal_sparse_csc
-ka_device
 gpu_backend
 metal_backend
 csr_backend
@@ -59,6 +59,9 @@ GpuAsync
 
 ### Sets and intervals
 
+`is_collapsed`, `point_type` and `set` are private; see the
+[geometry internals page](internals/geometry.md).
+
 ```@docs
 interval
 point
@@ -69,10 +72,7 @@ topo_dim
 Base.extrema(::CartesianProduct, ::Integer)
 center
 projection
-is_collapsed
-point_type
 boundary_symbols
-set
 ```
 
 ### Markers and domains
@@ -89,38 +89,34 @@ labels
 
 ### Mesh types and constructors
 
+`AbstractMeshType`, `MeshMarkers` and `submeshes` are private; see the
+[mesh internals page](internals/mesh.md).
+
 ```@docs
-AbstractMeshType
 Mesh1D
 MeshnD
-MeshMarkers
 mesh
-submeshes
 ```
 
 ### Points and spacings
 
+`host_points`, `host_spacings`, `forward_spacings`, `half_spacings`,
+`host_half_spacings`, `stepsize`, `locate_cell` and `cell_measures` are private; see the
+[mesh internals page](internals/mesh.md).
+
 ```@docs
 npoints
 points
-host_points
 half_points
 half_point
 spacing
 forward_spacing
 half_spacing
 spacings
-host_spacings
-forward_spacings
-half_spacings
-host_half_spacings
 hₘₐₓ
 hₘᵢₙ
-stepsize
-locate_cell
 normal_vector
 cell_measure
-cell_measures
 is_uniform
 ```
 
@@ -158,16 +154,20 @@ vector_gridspace
 
 ### Space properties and degrees of freedom
 
+`host_weights` is private; see the [mesh internals page](internals/mesh.md).
+
 ```@docs
 ndofs
 weights
-host_weights
 spaces
 space
 ncomponents
 ```
 
 ### Vector elements and grid functions
+
+`ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` is private; see the
+[CSR solvers internals page](internals/csr_solvers.md).
 
 ```@docs
 VectorElement
@@ -178,7 +178,6 @@ components
 component_range
 component_ranges
 Base.:*(::Function, ::VectorElement)
-ldiv!(::VectorElement, ::Factorization, ::AbstractVector)
 ```
 
 ### Restriction and averaging operators
@@ -237,36 +236,19 @@ The same names carry the symbolic form: `D₋(uₕ, Val(1))` differences a grid 
 `D₋(U, Val(1))` builds the AST node that will difference it during assembly. Inside a form
 the direction must be a `Val`, since it is a type parameter of the node.
 
-Three families are documented here but not exported, so `using Bramble` does not bring them
-into scope and they are written `Bramble.D₊ₓ` or imported by name: the unscaled differences
-`diff₋*`/`diff₊*`, the forward differences `D₊*`/`∇₊ₕ`, and the forward averages `M₊*`.
-Bramble discretises with the backward operator paired with [`inner₊`](@ref), so the forward
-ones are what the backward ones are built and checked against rather than what a form is
-written with.
+Three families are not exported, so `using Bramble` does not bring them into scope and they
+are written `Bramble.D₊ₓ` or imported by name: the unscaled differences `diff₋*`/`diff₊*`,
+the forward differences `D₊*`/`∇₊ₕ`, and the forward averages `M₊*`. Bramble discretises with
+the backward operator paired with [`inner₊`](@ref), so the forward ones are what the backward
+ones are built and checked against rather than what a form is written with.
 
 The unscaled differences (`diff₋ₓ` and its siblings) are the plain, undivided differences
 these are built from, and are the one family of the three that is not even declared
 `public`: they have no form-layer node, so they cannot appear inside a bilinear form, and in
 a form the undivided forward difference is spelled [`jumpₓ`](@ref), which says which of the
-two is meant.
+two is meant. `diff₋*`/`diff₊*` are private; see the [forms internals page](internals/form.md).
 
 ```@docs
-diff₋ₓ
-diff₋ₓ!
-diff₋ᵧ
-diff₋ᵧ!
-diff₋₂
-diff₋₂!
-diff₋ₕ
-diff₊ₓ
-diff₊ₓ!
-diff₊ᵧ
-diff₊ᵧ!
-diff₊₂
-diff₊₂!
-diff₊ₕ
-diff₋
-diff₊
 D₋ₓ
 D₋ₓ!
 D₋ᵧ
@@ -452,9 +434,10 @@ expression
 
 ### Point (Dirac) sources
 
+`DiracSource` is private; see the [forms internals page](internals/form.md).
+
 ```@docs
 dirac
-DiracSource
 ```
 
 
@@ -526,15 +509,8 @@ Accelerate/MUMPS direct solvers, and `type_cached_assemble!`.
 
 ### Bandwidth analysis
 
-`bandwidths`/`blockbandwidths` read a `BilinearForm`'s resolved AST alone, without
-assembling anything, and answer what storage the assembled matrix would need: the plain
-bandwidth in 1D, or the block/sub-block bandwidth pair a `D >= 2` mesh's blocked
-lexicographic layout has ([#175](https://github.com/gpena/Bramble.jl/issues/175)).
-
-```@docs
-bandwidths
-blockbandwidths
-```
+`bandwidths`/`blockbandwidths` are private; see the
+[forms internals page](internals/form.md).
 
 ### Dirichlet conditions
 
@@ -562,16 +538,8 @@ reaction_density!
 
 ### Structural properties
 
-Whether a `BilinearForm` is symmetric, or symmetric positive semi-definite, by construction
-— a cheap, symbolic check on its expression, answered before any matrix is assembled.
-`issymmetric` recognises terms `innerₕ(L(u), L(v))` with the same `L` on both sides, and
-transposed pairs `innerₕ(A(u), B(v)) + innerₕ(B(u), A(v))` anywhere in a sum, the pair's
-coefficients being the same object (or both absent); `isposdef` recognises the first kind only.
-
-```@docs
-issymmetric(::BilinearForm)
-isposdef(::BilinearForm)
-```
+`issymmetric(::BilinearForm)`/`isposdef(::BilinearForm)` are private; see the
+[forms internals page](internals/form.md).
 
 ---
 

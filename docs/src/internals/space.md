@@ -1,5 +1,6 @@
 ```@meta
 CollapsedDocStrings = false
+CurrentModule = Bramble
 ```
 
 # Spaces
@@ -54,7 +55,7 @@ That last sentence was not always true. S6.2, which first wrote this section, ke
 `innerh` and `innerplus` themselves as dense, full-grid vectors on purpose: the two
 places that read a weight in a hot loop -- `_dot`/`_dot_masked`
 (`src/space/inner_product.jl`) for the numeric `innerₕ`/`inner₊`, and `compute_weight`
-(`src/form/operators/inner.jl`) for the symbolic ones inside a form -- belonged to
+(`src/ast/operators/inner.jl`) for the symbolic ones inside a form -- belonged to
 subplans S6.3 and S6.4, outside S6.2's own file ownership, and neither yet had a way to
 read a `SeparableWeights` without paying a division per axis on every point. Keeping
 `innerh`/`innerplus` densely materialised was the only way to guarantee those two hot
@@ -315,7 +316,7 @@ run.
 `stencil_matrix`'s own `_stencil_taps`/`_stencil_weights` methods
 (`stencil.jl`) are a second, reduced implementation of the same offsets and coefficients
 the form layer already computes under the same names in
-`src/form/operators/{difference,average,jump}.jl`, for the AST node types
+`src/ast/operators/{difference,average,jump}.jl`, for the AST node types
 (`BackwardDifference`, `JumpNode`, and the rest) that back `local_stencil`. They are not
 shared code: `src/space/` cannot depend on form-layer AST nodes without inverting the
 package's own layering (forms are built on top of the space layer's operators, not the

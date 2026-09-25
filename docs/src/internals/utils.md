@@ -1,5 +1,6 @@
 ```@meta
 CollapsedDocStrings = false
+CurrentModule = Bramble
 ```
 
 # Utilities
@@ -10,6 +11,16 @@ CollapsedDocStrings = false
 Modules = [Bramble]
 Public = false
 Pages = ["utils/backend.jl", ]
+```
+
+## Device dispatch
+
+`ka_device` (`utils/device_kernels.jl`) is private. The [GPU internals page](gpu.md)'s own
+`@autodocs` block for that file filters to the public `ka_synchronize` only, so `ka_device`
+is documented here instead.
+
+```@docs
+ka_device
 ```
 
 ## Linear algebra

@@ -1,3 +1,7 @@
+```@meta
+CurrentModule = Bramble
+```
+
 # `SparseMatrixCSR` direct solve
 
 `Bramble.jl`'s sparse direct solvers -- `sparse_factorize`, `pde_solve`, `refactor!`/
@@ -162,3 +166,13 @@ built; the rest, with reasons:
 None of these are attempted by this change. A future direct or iterative CSR-specific
 solver path would start from whichever of these is no longer out of scope for its own
 issue, not from this fallback.
+
+## Refilling a `VectorElement` from a factorization
+
+`ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` extends `LinearAlgebra.ldiv!`,
+so `Modules = [Bramble]` autodocs cannot find its docstring; it is private and documented
+explicitly here.
+
+```@docs
+ldiv!(::VectorElement, ::Factorization, ::AbstractVector)
+```

@@ -1,5 +1,6 @@
 ```@meta
 CollapsedDocStrings = false
+CurrentModule = Bramble
 ```
 
 # Geometry
