@@ -38,7 +38,7 @@ end
         D = length(sz)
         Wₕ = gridspace(mesh(S, sz, ntuple(_ -> false, D)))
         N = ndofs(Wₕ)
-        nx = n[1]
+        ηₓ = η[1]
         m = (:boundary,)
 
         # a literal zero
@@ -48,11 +48,11 @@ end
         # a runtime integer zero, as a scale and inside a normal-component term
         k = Ref(0)[]
         _check_zero(form(Wₕ, Wₕ, (u, v) -> k * inner_Γ(u, v; markers = m)), N, N)
-        _check_zero(form(Wₕ, Wₕ, (u, v) -> inner_Γ(k * (u * nx), v; markers = m)), N, N)
+        _check_zero(form(Wₕ, Wₕ, (u, v) -> inner_Γ(k * (u * ηₓ), v; markers = m)), N, N)
 
         # a runtime Float64 zero is kept as a scale, not elided: stored zeros, same answer
         κ = Ref(0.0)[]
-        a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(κ * (u * nx), v; markers = m))
+        a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(κ * (u * ηₓ), v; markers = m))
         A = assemble(a)
         @test size(A) == (N, N)
         @test iszero(A)
