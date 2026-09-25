@@ -261,6 +261,39 @@ using ExplicitImports
                 :_dirichlet_bc_indices!,
                 :_each_marked,
                 :_kron_coeff,
+                # `_allocate_from_pattern` (BrambleMetalExt, BrambleSparseMatricesCSRExt): the
+                # system-matrix allocation hook a storage backend specialises on its own sparse
+                # type, same shape as `_csr_backend` above.
+                :_allocate_from_pattern,
+                # `ka_device`, `_launch_spmv_csr!`, `_launch_spmm_csr!` (BrambleMetalExt): the
+                # device-kernel substrate seam and the device SpMV/SpMM launch hooks it
+                # specialises, each also reached as `Bramble.name(...)` alongside the
+                # `import Bramble: ...` above -- both forms need declaring.
+                :ka_device,
+                :_launch_spmv_csr!,
+                :_launch_spmm_csr!,
+                # `_scatter_position`, `_scatter_add!`, `_zero_stored!`
+                # (BrambleSparseMatricesCSRExt): the row-major CSR counterparts of the CSC
+                # scatter/zero primitives `bilinear_traversal.jl`/`bilinear.jl` already reach.
+                :_scatter_position,
+                :_scatter_add!,
+                :_zero_stored!,
+                # `_batch_for!`, `_batch_axis_for!`, `_batch_scatter_for!`, `_batch_dot`,
+                # `_batch_dot_masked`, `_batch_bilinear_colour_sweep!`,
+                # `_batch_bilinear_band_sweep!`, `_batch_linear_colour_sweep!`,
+                # `_batch_linear_band_sweep!` (BramblePolyesterExt, gpena/Bramble.jl#190): the
+                # `Polyester.@batch` counterparts of the `CpuThreaded` sweeps and reductions in
+                # `src/utils/linear_algebra.jl`, `src/assembly/bilinear_execution.jl` and
+                # `src/assembly/linear.jl`, extended here rather than called.
+                :_batch_for!,
+                :_batch_axis_for!,
+                :_batch_scatter_for!,
+                :_batch_dot,
+                :_batch_dot_masked,
+                :_batch_bilinear_colour_sweep!,
+                :_batch_bilinear_band_sweep!,
+                :_batch_linear_colour_sweep!,
+                :_batch_linear_band_sweep!,
                 # `BrambleKernelAbstractionsExt` (gpena/Bramble.jl#94, #174): the stencil and
                 # component helpers its `@kernel`s call so the device answer is computed by
                 # the very same quadrature/stencil arithmetic the CPU sweep uses, rather than
