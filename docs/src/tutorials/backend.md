@@ -97,12 +97,12 @@ that is what should decide, not a guess.
 
 ### Measured crossovers
 
-Where `CpuThreaded` and [`CpuBatch`](@ref) (§7 below) start beating `CpuSerial` was
+Where `CpuThreaded` and [`CpuPolyester`](@ref) (§7 below) start beating `CpuSerial` was
 measured per workload, not assumed, on an Apple M2 host, `--threads=4`, on AC power
 (`benchmark/polyester_crossover.jl`, commit `4b76d62b`): the smallest grid size at which
 each policy beats `CpuSerial` twice running.
 
-| Workload | `CpuThreaded` | `CpuBatch` |
+| Workload | `CpuThreaded` | `CpuPolyester` |
 |---|---|---|
 | `Rₕ!` unmasked | 64-96 points/axis | 8-24 |
 | `Rₕ!` masked | 256 | 16 |
@@ -117,7 +117,7 @@ slow, as `CpuSerial` regardless of size, and there is no crossover to report.
 
 The crossover differs by an order of magnitude between workloads, so a figure measured
 for one does not transfer to another -- that is why four rows are published here rather
-than a single number. Where both policies have an entry, `CpuBatch` beats `CpuThreaded`
+than a single number. Where both policies have an entry, `CpuPolyester` beats `CpuThreaded`
 at every crossover measured, falling one to two orders of magnitude below it.
 
 These are one machine's numbers, taken under one power state, not a portable constant:
@@ -134,23 +134,39 @@ ExecutionPolicy
 ├── CpuPolicy
 │   ├── CpuSerial      (Serial)    -- one CPU thread
 │   ├── CpuThreaded    (Parallel)  -- Base.Threads.@threads
-│   └── CpuBatch                   -- Polyester.jl's @batch
+│   └── CpuPolyester                -- Polyester.jl's @batch
 └── GpuPolicy
-    └── GpuAsync                   -- launched on the device
+    └── GpuKernel                   -- launched on the device
 ```
 
 The split exists because "serial or threaded" had no way to say which processor
 ([#191](https://github.com/gpena/Bramble.jl/issues/191)). A GPU backend was constructed
 with `Serial()` -- a policy meaning one CPU thread walks the array element by element,
-which is the one thing a device array refuses. `metal_backend()` now carries `GpuAsync()`
+which is the one thing a device array refuses. `metal_backend()` now carries `GpuKernel()`
 by default, and pairing device storage with a `CpuPolicy` (or host storage with a
 `GpuPolicy`) is rejected outright rather than left to fail on scalar indexing several
 frames deeper -- the next subsection covers why, and what the rejection looks like.
 
-Both spellings work everywhere; use whichever reads better. [`CpuBatch`](@ref) is a third
+Both spellings work everywhere; use whichever reads better. [`CpuPolyester`](@ref) is a third
 `CpuPolicy`, a Polyester-backed sibling of `CpuThreaded`
 ([#190](https://github.com/gpena/Bramble.jl/issues/190)) -- §7 below covers what it needs
 before its first sweep.
+
+Two of these four names replaced an earlier spelling that named the wrong thing
+([#300](https://github.com/gpena/Bramble.jl/issues/300)). `CpuSerial` and `CpuThreaded`
+name who does the work -- nothing, and `Base.Threads` -- so `CpuPolyester` follows the
+same pattern and names its provider, `Polyester.jl`, making the `using Polyester`
+requirement (§7 below) self-evident from the name alone. The name it replaced, `CpuBatch`,
+instead named `Polyester.@batch`, the macro the provider exposes, and gave no hint that a
+weak dependency was involved. `GpuKernel` names only the launch mechanism: work is
+dispatched to a device kernel. The name it replaced, `GpuAsync`, claimed a scheduling
+property the API does not have -- every kernel launched from `BrambleKernelAbstractionsExt`
+is followed by a `KernelAbstractions.synchronize`, so a Bramble-level call under this
+policy has always completed on the device by the time it returns; nothing here is
+asynchronous from the caller's point of view. `CpuBatch` and `GpuAsync` remain as
+deprecated aliases (`const CpuBatch = CpuPolyester`, `const GpuAsync = GpuKernel`) so
+existing code keeps working, but new code should reach for `CpuPolyester` and
+`GpuKernel`.
 
 ### Locality and strategy
 
@@ -163,7 +179,7 @@ by the array types the backend was built with. That is [`locality`](@ref):
 they are called qualified:
 
 ```@example backend
-Bramble.locality(Vector{Float64}), Bramble.locality(CpuSerial()), Bramble.locality(GpuAsync())
+Bramble.locality(Vector{Float64}), Bramble.locality(CpuSerial()), Bramble.locality(GpuKernel())
 ```
 
 Locality is derived from the array type, never declared. A [`CpuPolicy`](@ref) claims
@@ -177,8 +193,8 @@ type to answer [`DeviceLocality`](@ref) instead: `BrambleMetalExt` does this for
 `MtlVector` and `MtlMatrix` (and both Metal sparse matrix types).
 
 Strategy is the genuine choice, and it only exists *within* one locality: host storage
-admits [`CpuSerial`](@ref), [`CpuThreaded`](@ref) and [`CpuBatch`](@ref); device storage
-admits the device kernel, [`GpuAsync`](@ref). A policy whose locality does not match the
+admits [`CpuSerial`](@ref), [`CpuThreaded`](@ref) and [`CpuPolyester`](@ref); device storage
+admits the device kernel, [`GpuKernel`](@ref). A policy whose locality does not match the
 storage it is paired with cannot execute anything -- a CPU loop cannot scalar-index device
 memory, and a host array has no device to schedule against -- so [`Backend`](@ref)'s inner
 constructor checks that the vector type and the policy agree on locality (and, since a
@@ -256,7 +272,7 @@ them for a specific problem size.
 
 ## 7. A Polyester-batched CPU policy
 
-[`CpuBatch`](@ref) is a third [`CpuPolicy`](@ref), alongside [`CpuSerial`](@ref) and
+[`CpuPolyester`](@ref) is a third [`CpuPolicy`](@ref), alongside [`CpuSerial`](@ref) and
 [`CpuThreaded`](@ref): it directs grid operations and form assembly through
 `Polyester.jl`'s `@batch` instead of `Base.Threads.@threads`, a primitive whose lower
 per-call overhead can pay off on grids where `CpuThreaded`'s threading does not
@@ -265,25 +281,25 @@ per-call overhead can pay off on grids where `CpuThreaded`'s threading does not
 ```julia
 using Bramble, Polyester
 
-be = backend(policy = CpuBatch())
+be = backend(policy = CpuPolyester())
 Ωₕ = mesh(domain(interval(0.0, 1.0)), 100_000; backend = be)
 Wₕ = gridspace(Ωₕ)
-execution_policy(Wₕ)   # CpuBatch()
+execution_policy(Wₕ)   # CpuPolyester()
 ```
 
 The policy type ships with `Bramble.jl` itself, but the sweeps it selects live in the
 `BramblePolyesterExt` package extension: `using Polyester` must be loaded before a
-`CpuBatch` backend runs its first sweep, or the call errors, naming `Polyester.jl` -- the
+`CpuPolyester` backend runs its first sweep, or the call errors, naming `Polyester.jl` -- the
 same precedent as [`csr_backend`](@ref) and [`metal_backend`](@ref) without their own
 package. Call `assemble!`/`assemble`, `Rₕ!`/`avgₕ!` exactly as with any other backend;
-choosing `CpuBatch()` on the backend is the only thing that changes.
+choosing `CpuPolyester()` on the backend is the only thing that changes.
 
 ## 8. A GPU backend (Metal), or letting `gpu_backend` pick it
 
 ```julia
 using Bramble, Metal
 
-gpu = metal_backend()                    # Float32, GpuAsync()
+gpu = metal_backend()                    # Float32, GpuKernel()
 ```
 
 `Float64` is not supported on Apple Silicon GPUs; use `Float32` or `Float16`.
@@ -298,7 +314,7 @@ device backend by hand:
 ```julia
 using Bramble, Metal
 
-gpu = gpu_backend()                      # resolves to metal_backend(): Float32, GpuAsync()
+gpu = gpu_backend()                      # resolves to metal_backend(): Float32, GpuKernel()
 ```
 
 It checks which GPU package extension is loaded, with `Base.get_extension`, and
@@ -326,7 +342,7 @@ Two failures give two different diagnostics, deliberately not sharing a message:
 
 ### Asynchronous execution and synchronization points
 
-Every device kernel under [`GpuAsync`](@ref) -- the only [`GpuPolicy`](@ref) there is --
+Every device kernel under [`GpuKernel`](@ref) -- the only [`GpuPolicy`](@ref) there is --
 only enqueues onto the device's own command queue and returns; it does not wait for that
 work to finish. A chain of device operators therefore pipelines instead of paying a host
 round-trip after each step:

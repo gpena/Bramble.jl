@@ -20,7 +20,7 @@ Public = false
 Pages = ["utils/linear_algebra.jl", ]
 ```
 
-## The `CpuBatch` sweep hooks
+## The `CpuPolyester` sweep hooks
 
 Declared `public` in `src/Bramble.jl` rather than exported: `BramblePolyesterExt` implements
 them by name, so they are an extension contract, not an internal. `src/` carries error-only

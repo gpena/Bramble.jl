@@ -23,9 +23,9 @@ ExecutionPolicy
 CpuPolicy
 CpuSerial
 CpuThreaded
-CpuBatch
+CpuPolyester
 GpuPolicy
-GpuAsync
+GpuKernel
 Serial
 Parallel
 execution_policy
@@ -42,6 +42,13 @@ ka_device
 gpu_backend
 metal_backend
 csr_backend
+```
+
+#### Deprecated
+
+```@docs
+CpuBatch
+GpuAsync
 ```
 
 ---

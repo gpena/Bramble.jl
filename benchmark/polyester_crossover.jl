@@ -1,5 +1,5 @@
 #===========================================================================#
-# Polyester (`CpuBatch`) vs Threads (`CpuThreaded`/`Parallel`) crossover
+# Polyester (`CpuPolyester`) vs Threads (`CpuThreaded`/`Parallel`) crossover
 # against serial (`CpuSerial`/`Serial`) -- gpena/Bramble.jl#190, the last open
 # acceptance criterion of the v3.3.0 milestone's Polyester extension work:
 #
@@ -16,7 +16,7 @@
 # Five workloads, the same five the issue's own exploratory table names, each
 # run under all three CPU execution policies (`src/utils/backend.jl`):
 # `CpuSerial`/`Serial`, `CpuThreaded`/`Parallel` (`Threads.@threads`), and
-# `CpuBatch` (`Polyester.@batch`, `ext/BramblePolyesterExt.jl`, requires
+# `CpuPolyester` (`Polyester.@batch`, `ext/BramblePolyesterExt.jl`, requires
 # `using Polyester`):
 #
 #   1. `Rₕ!` unmasked         -- `project!`'s point-value sweep, every entry written
@@ -39,7 +39,7 @@
 # the only thing that differs is `policy` in `backend(Float64; policy = ...)`
 # passed to `mesh(...; backend = ...)`. `_dot`'s two operands are restricted
 # once under `Serial()` and then re-wrapped (`element(Wₕ, parent(uₕ))`, which
-# `copyto!`s) onto the `Parallel()`/`CpuBatch()` spaces, so every arm reduces
+# `copyto!`s) onto the `Parallel()`/`CpuPolyester()` spaces, so every arm reduces
 # over the bit-identical input array.
 #
 # ## Correctness before timing (bramble-verification: "a fast wrong answer is
@@ -274,7 +274,7 @@ set_zero_subnormals(true)
 
 # --- Header ------------------------------------------------------------------ #
 
-_out("Polyester (CpuBatch) vs Threads (CpuThreaded) crossover against serial -- gpena/Bramble.jl#190")
+_out("Polyester (CpuPolyester) vs Threads (CpuThreaded) crossover against serial -- gpena/Bramble.jl#190")
 _out()
 _out("Power source : $power_source ($power_line)")
 _out(
@@ -363,7 +363,7 @@ end
 function _run_grid_size(n::Int)
     Wₕ_s = _space2d(n, Serial())
     Wₕ_t = _space2d(n, Parallel())
-    Wₕ_b = _space2d(n, CpuBatch())
+    Wₕ_b = _space2d(n, CpuPolyester())
     ndofs_n = ndofs(Wₕ_s)
     rows = GridRow[]
 
@@ -375,7 +375,7 @@ function _run_grid_size(n::Int)
     u_b = element(Wₕ_b, Float64)
     Rₕ!(u_b, _f2d)
     ok_t = _check("Rₕ! unmasked n=$n Threads", _agree(parent(u_t), parent(u_s)))
-    ok_b = _check("Rₕ! unmasked n=$n CpuBatch", _agree(parent(u_b), parent(u_s)))
+    ok_b = _check("Rₕ! unmasked n=$n CpuPolyester", _agree(parent(u_b), parent(u_s)))
     t_s = _min_ms(() -> Rₕ!(u_s, _f2d))
     t_t = ok_t ? _min_ms(() -> Rₕ!(u_t, _f2d)) : NaN
     t_b = ok_b ? _min_ms(() -> Rₕ!(u_b, _f2d)) : NaN
@@ -389,7 +389,7 @@ function _run_grid_size(n::Int)
     um_b = element(Wₕ_b, Float64)
     Rₕ!(um_b, _f2d; markers = (:boundary,))
     ok_t = _check("Rₕ! masked n=$n Threads", _agree(parent(um_t), parent(um_s)))
-    ok_b = _check("Rₕ! masked n=$n CpuBatch", _agree(parent(um_b), parent(um_s)))
+    ok_b = _check("Rₕ! masked n=$n CpuPolyester", _agree(parent(um_b), parent(um_s)))
     t_s = _min_ms(() -> Rₕ!(um_s, _f2d; markers = (:boundary,)))
     t_t = ok_t ? _min_ms(() -> Rₕ!(um_t, _f2d; markers = (:boundary,))) : NaN
     t_b = ok_b ? _min_ms(() -> Rₕ!(um_b, _f2d; markers = (:boundary,))) : NaN
@@ -403,7 +403,7 @@ function _run_grid_size(n::Int)
     w_b = element(Wₕ_b, Float64)
     avgₕ!(w_b, _f2d, Val(3))
     ok_t = _check("avgₕ! n=$n Threads", _agree(parent(w_t), parent(w_s)))
-    ok_b = _check("avgₕ! n=$n CpuBatch", _agree(parent(w_b), parent(w_s)))
+    ok_b = _check("avgₕ! n=$n CpuPolyester", _agree(parent(w_b), parent(w_s)))
     t_s = _min_ms(() -> avgₕ!(w_s, _f2d, Val(3)))
     t_t = ok_t ? _min_ms(() -> avgₕ!(w_t, _f2d, Val(3))) : NaN
     t_b = ok_b ? _min_ms(() -> avgₕ!(w_b, _f2d, Val(3))) : NaN
@@ -419,7 +419,7 @@ function _run_grid_size(n::Int)
     A_b = allocate_system_matrix(a_b, a_b.ast)
     assemble_parallel!(A_b, a_b)
     ok_t = _check("assemble_parallel! n=$n Threads", _matrices_agree(A_t, A_s))
-    ok_b = _check("assemble_parallel! n=$n CpuBatch", _matrices_agree(A_b, A_s))
+    ok_b = _check("assemble_parallel! n=$n CpuPolyester", _matrices_agree(A_b, A_s))
     t_s = _min_ms(() -> assemble!(A_s, a_s))
     t_t = ok_t ? _min_ms(() -> assemble_parallel!(A_t, a_t)) : NaN
     t_b = ok_b ? _min_ms(() -> assemble_parallel!(A_b, a_b)) : NaN
@@ -440,7 +440,7 @@ end
 function _run_dot_size(n::Int)
     Wₕ_s = _space1d(n, Serial())
     Wₕ_t = _space1d(n, Parallel())
-    Wₕ_b = _space1d(n, CpuBatch())
+    Wₕ_b = _space1d(n, CpuPolyester())
 
     u_s = Rₕ(Wₕ_s, _f1d)
     v_s = Rₕ(Wₕ_s, _g1d)
@@ -453,7 +453,7 @@ function _run_dot_size(n::Int)
     s_t = innerₕ(u_t, v_t)
     s_b = innerₕ(u_b, v_b)
     ok_t = _check("_dot n=$n Threads", _agree(s_t, s_s))
-    ok_b = _check("_dot n=$n CpuBatch", _agree(s_b, s_s))
+    ok_b = _check("_dot n=$n CpuPolyester", _agree(s_b, s_s))
 
     t_s = _min_ms(() -> innerₕ(u_s, v_s))
     t_t = ok_t ? _min_ms(() -> innerₕ(u_t, v_t)) : NaN

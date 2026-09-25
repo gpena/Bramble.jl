@@ -6,7 +6,7 @@ actually exposes three largely independent choices: a **backend** for how the sy
 stored (`SparseMatrixCSC` by default, `SparseMatrixCSR` via [`csr_backend`](@ref), or a
 matrix-free [`KroneckerLinearOperator`](@ref) for separable forms), an **execution policy** for
 how grid operations and form assembly are threaded ([`CpuSerial`](@ref)/`Serial()`,
-[`CpuThreaded`](@ref)/`Parallel()`, [`CpuBatch`](@ref)), and a **solver** for the resulting
+[`CpuThreaded`](@ref)/`Parallel()`, [`CpuPolyester`](@ref)), and a **solver** for the resulting
 linear system -- four direct factorization backends behind one
 [`sparse_factorize`](@ref)/[`refactor!`](@ref) interface (SuiteSparse, Apple Accelerate, MUMPS,
 Sparspak -- [`sparse_factorize`](@ref)'s own docstring lists all four), iterative Krylov methods
@@ -36,7 +36,7 @@ where the parallel arm beat serial twice running (commit `4b76d62b`, closing
 |---|---|---|---|
 | [`CpuSerial`](@ref) / `Serial()` (default) | -- | Anything below the crossovers to the right; the safe default, no threading overhead. | Never wrong as a default -- only ever worth leaving once a workload is provably above a measured crossover. |
 | [`CpuThreaded`](@ref) / `Parallel()` (`Base.Threads.@threads`, unconditional) | `Rₕ!` unmasked: 64-96 pts/axis. `Rₕ!` masked: 256. `avgₕ!` (`nq = 3`): 24-32. `innerₕ`/`_dot`: no real parallel arm. | Grids at or above these sizes, when Polyester isn't an option. | `innerₕ`/`normₕ` -- `_dot(::CpuThreaded, ...)` forwards to the identical serial reduction ([gpena/Bramble.jl#112](https://github.com/gpena/Bramble.jl/issues/112), closed, superseded by #190), so this policy buys nothing there; a speed ratio for that column would just be the same code timed twice. |
-| [`CpuBatch`](@ref) (Polyester `@batch`, requires `using Polyester`) | `Rₕ!` unmasked: 8-24. `Rₕ!` masked: 16. `avgₕ!` (`nq = 3`): 8. `innerₕ`/`_dot`: 1,000 elements. | Beats `CpuThreaded` at every crossover measured, by 4x-16x in grid size -- the default choice once Polyester is loaded. | Below its own crossover, where `CpuSerial` still wins; requires the `BramblePolyesterExt` extension (`using Polyester`) loaded, or the call errors naming the package. |
+| [`CpuPolyester`](@ref) (Polyester `@batch`, requires `using Polyester`) | `Rₕ!` unmasked: 8-24. `Rₕ!` masked: 16. `avgₕ!` (`nq = 3`): 8. `innerₕ`/`_dot`: 1,000 elements. | Beats `CpuThreaded` at every crossover measured, by 4x-16x in grid size -- the default choice once Polyester is loaded. | Below its own crossover, where `CpuSerial` still wins; requires the `BramblePolyesterExt` extension (`using Polyester`) loaded, or the call errors naming the package. |
 
 ### Direct and iterative solvers
 
@@ -73,10 +73,10 @@ flowchart TD
 </pre>
 <pre class="mermaid">
 flowchart TD
-    G["Grid size for this workload, points per axis or elements"] --> H{"Below the CpuBatch crossover?<br/>8 to 24 unmasked Rₕ!, 16 masked,<br/>8 avgₕ!, 1000 elements innerₕ or _dot"}
+    G["Grid size for this workload, points per axis or elements"] --> H{"Below the CpuPolyester crossover?<br/>8 to 24 unmasked Rₕ!, 16 masked,<br/>8 avgₕ!, 1000 elements innerₕ or _dot"}
     H -->|"Yes"| H1["CpuSerial (default)"]
     H -->|"No"| I{"Is Polyester.jl loaded?<br/>using Polyester"}
-    I -->|"Yes"| I1["CpuBatch<br/>beats CpuThreaded at every<br/>measured crossover, 4x to 16x smaller grid"]
+    I -->|"Yes"| I1["CpuPolyester<br/>beats CpuThreaded at every<br/>measured crossover, 4x to 16x smaller grid"]
     I -->|"No"| J{"Above the CpuThreaded crossover?<br/>64 to 96 unmasked Rₕ!, 256 masked,<br/>24 to 32 avgₕ!"}
     J -->|"Yes"| J1["CpuThreaded<br/>note: innerₕ and _dot gain nothing here,<br/>see issue 112"]
     J -->|"No"| H1
@@ -521,7 +521,7 @@ preferred by problem size and platform. [`amg_preconditioner`](@ref) and
 [gpena/Bramble.jl#244](https://github.com/gpena/Bramble.jl/issues/244)'s full evaluation of
 the wider JuliaSparse ecosystem. [`KroneckerLinearOperator`](@ref) and [`is_separable`](@ref)
 cover the matrix-free path in more depth than the wave-equation section above needs, and
-[`CpuSerial`](@ref), [`CpuThreaded`](@ref), and [`CpuBatch`](@ref) each document their own
+[`CpuSerial`](@ref), [`CpuThreaded`](@ref), and [`CpuPolyester`](@ref) each document their own
 measured crossover in full, workload by workload, rather than the summary table above. The
 [elasticity](../examples/elasticity_3d.md) and [wave equation](../examples/wave_equation_2d.md)
 tutorials are where the two new archetypes above are actually derived and solved end to end;
