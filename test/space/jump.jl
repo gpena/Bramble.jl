@@ -2,6 +2,7 @@ module SpaceJumpTests
 
 using Test
 using Bramble
+using Bramble: VectorElement, jumpᵧ, jump₂, jumpₓ
 import Bramble: forward_difference, jump, jump_dim!, diff₊ₓ, M₊ₓ, M₊ᵧ
 using LinearAlgebra: norm
 using Supposition

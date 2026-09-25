@@ -2,6 +2,7 @@ module SpaceCrossWeightedDifferenceTests
 
 using Test
 using Bramble
+using Bramble: Dcₓ, D̽ᵧ, D̽₂, D̽ₓ, D₋ₓ, VectorElement
 using Random
 using Bramble: components
 using Bramble: div̽ₕ, div̽ₕ!, curl̽ₕ, curl̽ₕ!, ε̽ₕ, ε̽ₕ!, ∇̽ₕ!

@@ -2,6 +2,8 @@ module SpaceCommutationTests
 
 using Test
 using Bramble
+using Bramble: Dcᵧ, Dc₂, Dcₓ, D̃ₓ, D̽ᵧ, D̽₂, D̽ₓ, D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, Mₓ, jumpᵧ, jumpₓ
+using Bramble: set_points!
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: diff₋ₓ, diff₊ᵧ, D₊ₓ, D₊ᵧ, M₊ₓ
 using Bramble: diff₋ₓ, diff₊ᵧ

@@ -2,6 +2,7 @@ module SpaceCenteredDifferenceTests
 
 using Test
 using Bramble
+using Bramble: Dcᵧ, Dc₂, Dcₓ, D₋ₓ, VectorElement, set_points!
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ
 using Random

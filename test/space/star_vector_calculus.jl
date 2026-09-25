@@ -2,6 +2,7 @@ module SpaceStarVectorCalculusTests
 
 using Test
 using Bramble
+using Bramble: D₋ₓ
 using Random
 using Bramble: components, D₊, M₊ₕ, ε₊ₕ, ε₊ₕ!
 using ..TestUtils: alloc_test, _zero_boundary!, @test_allocs
@@ -39,7 +40,7 @@ end
 
 _field(u, D) = D == 1 ? u[1] : u
 
-@testset "Starred vector calculus (#287)" begin
+@testset "Averaged-spacing vector calculus (D̃) (#287)" begin
     Random.seed!(287)
 
     @testset "∇̃ₕ ($(D)D)" for D in 1:3

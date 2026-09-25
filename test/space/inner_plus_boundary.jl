@@ -2,6 +2,7 @@ module SpaceInnerPlusBoundaryTests
 
 using Test
 using Bramble
+using Bramble: inner₊ₓ, weights
 using LinearAlgebra: Symmetric, eigvals, isposdef
 
 # `inner₊ₓ`/`inner₊ᵧ`/`inner₊₂`'s transverse factor used to hand-zero the first and last

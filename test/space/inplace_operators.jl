@@ -2,6 +2,7 @@ module SpaceInplaceOperatorsTests
 
 using Test
 using Bramble
+using Bramble: D₋ₓ!, VectorElement
 using Random
 using ..TestUtils: alloc_test, @test_allocs
 

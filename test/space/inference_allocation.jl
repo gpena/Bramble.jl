@@ -2,6 +2,8 @@ module SpaceInferenceAllocationTests
 
 using Test
 using Bramble
+using Bramble: D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, M₂, Mₓ, VectorElement, inner₊ᵧ, inner₊ₓ, jumpᵧ, jump₂
+using Bramble: jumpₓ, norminf_h
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ, diff₊ₓ, diff₊ᵧ, diff₊₂, diff₊ₕ, D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ, M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 import Bramble: div₊ₕ!

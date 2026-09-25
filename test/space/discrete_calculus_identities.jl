@@ -2,6 +2,7 @@ module SpaceDiscreteCalculusIdentitiesTests
 
 using Test
 using Bramble
+using Bramble: Dcₓ, D₋ₓ, Mₓ, inner₊ₓ, norminf_h, set_points!
 using Random
 using Supposition
 using Bramble: cell_measures, AbstractMeshType, weights, Innerplus

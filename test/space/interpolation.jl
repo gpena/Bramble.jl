@@ -2,6 +2,7 @@ module SpaceInterpolationTests
 
 using Test
 using Bramble
+using Bramble: D₋ₓ, Mₓ, interpolation_matrix
 
 # `interpolate_at` is the piecewise (multi)linear interpolant of a grid function, evaluable
 # at any physical point, not only at its own mesh's points. `πₕ!`/`πₕ` are the numeric

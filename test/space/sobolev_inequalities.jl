@@ -2,6 +2,8 @@ module SpaceSobolevInequalitiesTests
 
 using Test
 using Bramble
+using Bramble: D₋ᵧ, D₋₂, D₋ₓ, index_in_marker, inner₊ᵧ, inner₊₂, inner₊ₓ, norminf_h
+using Bramble: set_points!
 using Random
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS

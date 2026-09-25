@@ -2,6 +2,8 @@ module SpaceDimensionalDispatchTests
 
 using Test
 using Bramble
+using Bramble: Dcᵧ, Dc₂, Dcₓ, D̃ᵧ, D̃₂, D̃ₓ, D̽ᵧ, D̽₂, D̽ₓ, D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, M₂, Mₓ
+using Bramble: VectorElement, jumpᵧ, jump₂, jumpₓ
 # Internal or `public` since v3.0 (gpena/Bramble.jl#211), entry points included.
 import Bramble: diff₋, diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊, diff₊ₓ, diff₊ᵧ, diff₊₂,
                 D₊, D₊ₓ, D₊ᵧ, D₊₂, M₊ₕ, M₊ₓ, M₊ᵧ, M₊₂

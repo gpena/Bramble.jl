@@ -2,6 +2,7 @@ module SpaceCenteredAverageTests
 
 using Test
 using Bramble
+using Bramble: Mcᵧ, Mcᵧ!, Mc₂, Mc₂!, Mcₓ, Mcₓ!, VectorElement
 import Bramble: centered_average, stencil_matrix, kronecker_operator_matrix, CenteredAvgOp
 using Random: Xoshiro
 using SparseArrays: nnz

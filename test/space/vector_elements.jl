@@ -2,6 +2,7 @@ module SpaceVectorElementsTests
 
 using Test
 using Bramble
+using Bramble: CompositeGridSpace, Dcₓ, D₋ₓ, set_points!
 import Bramble:
                 VectorElement, spacing, points, half_points, space, ndofs, half_spacings, indices, point
 using LinearAlgebra: norm, lu

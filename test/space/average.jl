@@ -2,6 +2,7 @@ module SpaceAverageTests
 
 using Test
 using Bramble
+using Bramble: Mᵧ, M₂, Mₓ, VectorElement
 import Bramble: forward_average, backward_average, M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 import Bramble: forward_average_dim!, backward_average_dim!
 using LinearAlgebra: norm

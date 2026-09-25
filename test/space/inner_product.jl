@@ -2,6 +2,8 @@ module SpaceInnerProductTests
 
 using Test
 using Bramble
+using Bramble: D₋ᵧ, D₋ₓ, cell_measure, indices, inner₊ᵧ, inner₊₂, inner₊ₓ, norminf_h
+using Bramble: set_points!, weights
 using LinearAlgebra: norm
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS, @test_allocs

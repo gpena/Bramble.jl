@@ -2,6 +2,8 @@ module SpaceStarDifferenceTests
 
 using Test
 using Bramble
+using Bramble: D̃ᵧ, D̃₂, D̃ₓ, D₋ᵧ, D₋₂, D₋ₓ, VectorElement, half_spacing, inner₊ᵧ, inner₊₂
+using Bramble: inner₊ₓ, set_points!
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ
 using Random
@@ -11,7 +13,7 @@ using Bramble: components, star_spacings, StarSpacings, submeshes
 using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points, _zero_boundary!
 using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
-# The starred forward difference and the identity it exists for.
+# The averaged-spacing forward difference (D̃) and the identity it exists for.
 #
 #   D̃(uₕ)(i) = (u(x_{i+1}) - u(x_i)) / ((h_i + h_{i+1}) / 2)
 #
@@ -27,7 +29,7 @@ star_ops(::Val{1}) = (D̃ₓ,)
 star_ops(::Val{2}) = (D̃ₓ, D̃ᵧ)
 star_ops(::Val{3}) = (D̃ₓ, D̃ᵧ, D̃₂)
 
-@testset "Starred forward difference" begin
+@testset "Averaged-spacing forward difference (D̃)" begin
     @testset "Averaged spacing" begin
         for (lbl, unif) in (("uniform", true), ("random", false))
             @testset "$lbl" begin
@@ -209,7 +211,7 @@ star_ops(::Val{3}) = (D̃ₓ, D̃ᵧ, D̃₂)
 
         @testset "Vectorial form" begin
             # The same identity for a vector field, written through the tuple-valued
-            # operators: the starred divergence as the sum of the directional starred
+            # operators: the D̃ divergence as the sum of the directional averaged-spacing
             # differences of the components, and the right-hand side as one call to the
             # tuple method of inner₊ against ∇ₕ(wₕ), which sums the directional inner
             # products. Only wₕ vanishes on the boundary, as in the componentwise form.

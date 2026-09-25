@@ -2,6 +2,7 @@ module SpaceConservationTests
 
 using Test
 using Bramble
+using Bramble: D₋ᵧ, D₋₂, D₋ₓ, inner₊ᵧ, inner₊₂, inner₊ₓ
 
 # Discrete conservation (Gauss/divergence theorem): for a vector field vanishing on ∂Ω,
 # the total discrete divergence over the mesh must be zero.

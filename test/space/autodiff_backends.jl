@@ -2,6 +2,7 @@ module SpaceAutodiffBackendsTests
 
 using Test
 using Bramble
+using Bramble: D₋ₓ
 using ForwardDiff
 using DifferentiationInterface
 using ..TestUtils: _have
