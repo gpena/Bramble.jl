@@ -553,6 +553,45 @@ with the mirror cache. Launching over the list rather than over every point with
 predicate is also the cheaper choice for the usual case, a `:boundary` marker, which covers
 a vanishing fraction of the grid.
 
+## `GpuOffload`: per-call device routing without a device-typed space
+
+[`GpuOffload`](@ref) ([gpena/Bramble.jl#324](https://github.com/gpena/Bramble.jl/issues/324))
+is a different shape from everything above: a [`CpuPolicy`](@ref) -- `locality` answers
+[`HostLocality`](@ref) for it, and the `Backend` it configures keeps host storage -- that
+wraps an inner `CpuPolicy` alongside a device `Backend`. It routes only `Rₕ!`/`avgₕ!`'s fill
+step through that device backend (`_offload_project!`,
+`src/space/operators/projection.jl`); every other operation on the space runs under the
+wrapped inner policy exactly as it would without `GpuOffload` in play, since
+[`execution_policy`](@ref) on a `GpuOffload`-configured `Backend` returns the inner policy
+instance, not the wrapper. There is deliberately no persistent device state: each call
+uploads the mesh axis it needs and copies the result back, with nothing cached between
+calls (see "Masked projection" above for why a persistent device copy of anything
+mesh-derived is a staleness hazard this package has already removed once, #313).
+
+**Measured, honestly: three wins and one loss, not a universal speedup.**
+`benchmark/gpu_offload.jl` (commit `2c7217e6`) re-measured the issue's own exploratory table
+back to back, `CpuThreaded()` against `GpuOffload(metal_backend(), CpuThreaded())`, on the
+same four rows, correctness gated before timing (`rtol = atol = 1f-5`, `Float64` host vs
+`Float32` device). Apple M2, AC power, load 3.09/4.0, `--threads=4`:
+
+| Case | Host (`CpuThreaded`) | `GpuOffload` | Ratio |
+|---|---|---|---|
+| `Rₕ!` 1D, n=10,000,000 | faster | slower | **0.86x -- offload loses** |
+| `Rₕ!` 2D, 3000x3000 | -- | -- | 1.79x |
+| `avgₕ!` 1D, n=10,000,000 | -- | -- | 3.27x |
+| `avgₕ!` 2D, 3000x3000 | -- | -- | 10.86x |
+
+Three of the four rows win clearly, close to the issue's own exploratory figures
+(1.98x/9.87x/20.52x for the same three rows) -- but `Rₕ!` 1D at ten million points *loses*,
+0.86x, host wins. The reason is the same no-hidden-cache design named above: `Rₕ!` is one
+cheap function evaluation per point, already fast on four CPU threads, and does not
+amortise the per-call mesh-axis upload plus full result copy-back that `GpuOffload` pays on
+every call with nothing cached. `avgₕ!`'s per-cell quadrature is expensive enough on the
+host that the same round trip is dwarfed instead, which is why its two rows show the
+largest wins in the table. Read this policy as a win for expensive per-point/per-cell work
+on a large grid, not as something to reach for by default -- measure the specific call
+before choosing it over the wrapped inner policy alone.
+
 ## A device kernel launch perturbs the global RNG stream
 
 Any code that mixes `rand()`/a seeded RNG with a device kernel launch -- Metal today, a
