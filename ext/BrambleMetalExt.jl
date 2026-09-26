@@ -209,6 +209,11 @@ end
 Bramble.locality(::Type{<:MetalSparseMatrixCSR}) = Bramble.DeviceLocality()
 Bramble.locality(::Type{<:MetalSparseMatrixCSC}) = Bramble.DeviceLocality()
 
+# Only the CSR type carries the `rowPtr`/`colVal`/`nzVal` + `mirror` layout that Dirichlet's
+# device row kernel (`src/assembly/dirichlet_constraints.jl`) rewrites; every other device
+# matrix keeps the generic path.
+Bramble._has_device_csr_mirror(::Type{<:MetalSparseMatrixCSR}) = true
+
 # ---------------------------------------------------------------------------
 # Host -> device conversion (gpena/Bramble.jl#250)
 # ---------------------------------------------------------------------------

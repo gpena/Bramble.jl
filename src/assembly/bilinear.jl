@@ -494,6 +494,8 @@ function assemble(
     if symmetrize
         dirichlet_labels, _ = _normalize_dirichlet(dirichlet)
         dirichlet_labels === nothing && _throw_symmetrize_without_dirichlet()
+        locality(typeof(A)) isa DeviceLocality &&
+            throw(ArgumentError("symmetrize = true is not supported for a matrix in device memory."))
         symmetrize!(
             A, F, test_space(a), dirichlet_labels...; components = dirichlet_components
         )

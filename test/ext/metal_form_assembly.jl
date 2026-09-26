@@ -2,7 +2,7 @@ module ExtMetalFormAssemblyTests
 
 using Test
 using Bramble
-using Bramble: D₋ᵧ, D₋ₓ, change_points!, innerₕ, Rₕ
+using Bramble: D₋ᵧ, D₋ₓ, change_points!, dirichlet_bc!, innerₕ, Rₕ
 using Metal
 using SparseArrays
 using ..TestUtils: _run_gpu_tests
@@ -174,6 +174,84 @@ else
             a(U, V) = innerₕ(U, V) + innerₕ(D₋ₓ(U[1]), D₋ₓ(V[1])) +
                       innerₕ(D₋ᵧ(U[2]), D₋ᵧ(V[2])) + innerₕ(U[1], V[2])
             _check_composite(a, (17, 23))
+        end
+    end
+
+    # Dirichlet conditions on a device CSR matrix (gpena/Bramble.jl#361, S4): the marked rows
+    # are rewritten by one kernel on the device's own arrays, never by scalar `setindex!`, and
+    # only those rows are touched -- a value changed on the device since the last assembly
+    # must survive `dirichlet_bc!`, which a re-flush of the host mirror would overwrite.
+    @testset "Metal Dirichlet conditions (gpena/Bramble.jl#361)" begin
+        g = x -> 1.0f0 + x[1]
+        f = x -> sin(3.0f0 * x[1]) + 1.0f0
+        dir = :boundary => g
+        for npts in ((33,), (17, 23))
+            Wc, Wg = _matched_spaces(npts)
+            cases = (
+                ("scalar", Wc, Wg, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(u, v),
+                    v -> innerₕ(f, v), nothing),
+                ("composite", Wc × Wc, Wg × Wg,
+                    (U, V) -> innerₕ(U, V) + innerₕ(D₋ₓ(U[1]), D₋ₓ(V[1])) + innerₕ(U[2], V[1]),
+                    V -> innerₕ(f, V[1]) + innerₕ(2.0f0, V[2]), 1)
+            )
+            for (label, Sc, Sg, a, l, comps) in cases
+                @testset "$(length(npts))D $label" begin
+                    Ac = assemble(form(Sc, Sc, a); dirichlet = dir, dirichlet_components = comps)
+                    ag = form(Sg, Sg, a)
+                    Ag = assemble(ag; dirichlet = dir, dirichlet_components = comps)
+                    @test _relerr(Ag, Ac) < _RTOL
+                    # The host mirror carries the same rows, so a later accumulation agrees.
+                    @test maximum(abs, Ag.mirror.nzval .- Array(Ag.nzVal)) < _RTOL
+                    assemble!(Ag, ag; dirichlet = dir, dirichlet_components = comps)
+                    @test _relerr(Ag, Ac) < _RTOL
+
+                    Ac2 = 2.0f0 .* assemble(form(Sc, Sc, a))
+                    dirichlet_bc!(Ac2, Sc, :boundary; components = comps)
+                    Ag2 = assemble(ag)
+                    Ag2.nzVal .*= 2.0f0
+                    dirichlet_bc!(Ag2, Sg, :boundary; components = comps)
+                    @test _relerr(Ag2, Ac2) < _RTOL
+
+                    Acc, Fcc = assemble(form(Sc, Sc, a), form(Sc, l); dirichlet = dir,
+                        dirichlet_components = comps)
+                    Agc, Fgc = assemble(ag, form(Sg, l); dirichlet = dir,
+                        dirichlet_components = comps)
+                    @test _relerr(Agc, Acc) < _RTOL
+                    @test Fgc isa Metal.MtlVector{Float32}
+                    @test _vrelerr(Fgc, Fcc) < _RTOL
+                    @test_throws ArgumentError assemble(ag, form(Sg, l); dirichlet = dir,
+                        dirichlet_components = comps, symmetrize = true)
+                end
+            end
+        end
+
+        # Only the device CSR type takes the row kernel; a dense device matrix keeps the
+        # generic body, which works under `@allowscalar`.
+        @testset "dense MtlMatrix under @allowscalar" begin
+            Wc, Wg = _matched_spaces((9,))
+            a = (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(u, v)
+            Ac = Matrix(assemble(form(Wc, Wc, a)))
+            Ad = Metal.MtlMatrix(Ac)
+            Metal.@allowscalar dirichlet_bc!(Ad, Wg, :boundary)
+            dirichlet_bc!(Ac, Wc, :boundary)
+            @test Array(Ad) == Ac
+        end
+
+        @testset "constrained row without a stored diagonal" begin
+            S = sparse([1, 2, 2, 3], [2, 2, 3, 3], Float32[1, 2, 3, 4], 3, 3)
+            A = Bramble.metal_sparse_csr(S)
+            copyto!(A.mirror.nzval, Array(A.nzVal))
+            err = try
+                Bramble._dirichlet_bc_indices!(A, BitVector([true, false, true]))
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            @test occursin("row 1", sprint(showerror, err))
+            # Nothing is written before the check fails.
+            @test Array(A) == Matrix(S)
+            @test A.mirror.nzval == Array(A.nzVal)
         end
     end
 end

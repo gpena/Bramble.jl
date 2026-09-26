@@ -51,6 +51,7 @@ import Bramble:
                 _launch_average_engine!,
                 _launch_spmv_csr!,
                 _launch_spmm_csr!,
+                _launch_dirichlet_rows_csr!,
                 _launch_kron_fused!,
                 _launch_fused_divergence!,
                 _launch_fused_curl2d!,
@@ -797,6 +798,31 @@ function _launch_spmv_csr!(y::AbstractVector, rowPtr, colVal, nzVal, x::Abstract
     catch err
         _wrap_device_kernel_error(err, "Metal sparse mul! (SpMV)")
     end
+    return nothing
+end
+
+# Dirichlet rows of a device CSR matrix (gpena/Bramble.jl#361): `_dirichlet_bc_device!`
+# (`src/assembly/dirichlet_constraints.jl`) hands over the raw arrays and the constrained
+# rows, already checked there to store their diagonal. One work item per constrained row;
+# a row's entries are contiguous, so there are no write conflicts. The host `rows` is
+# uploaded once, and the launch is synchronised because that upload reads host memory.
+
+@kernel function _dirichlet_rows_csr_kernel!(nzVal, @Const(rowPtr), @Const(colVal), @Const(rows))
+    i = @index(Global)
+    @inbounds begin
+        r = rows[i]
+        for k in rowPtr[r]:(rowPtr[r + 1] - one(r))
+            nzVal[k] = colVal[k] == r ? one(eltype(nzVal)) : zero(eltype(nzVal))
+        end
+    end
+end
+
+function _launch_dirichlet_rows_csr!(rowPtr, colVal, nzVal, rows::Vector)
+    dev = get_backend(nzVal)
+    rows_d = KernelAbstractions.allocate(dev, eltype(rows), length(rows))
+    copyto!(rows_d, rows)
+    _dirichlet_rows_csr_kernel!(dev)(nzVal, rowPtr, colVal, rows_d; ndrange = length(rows))
+    synchronize(dev)
     return nothing
 end
 
