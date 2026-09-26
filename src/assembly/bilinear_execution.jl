@@ -802,7 +802,25 @@ end
         col_offset::Int,
         α
 ) where {TERM}
+    return _static_or_serial(_static_bilinear_colour!, _serial_bilinear_colour!,
+        A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α)
+end
+
+# The `Threads.@threads :static` loop of `_sweep_bilinear_colour!(::CpuThreaded, ...)` and the
+# same loop run in order on the calling task, the pair `_static_or_serial` picks between.
+@noinline function _static_bilinear_colour!(
+        A, sp, term::TERM, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
+) where {TERM}
     Threads.@threads :static for I in idxs
+        _sweep_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
+    end
+    return nothing
+end
+
+@noinline function _serial_bilinear_colour!(
+        A, sp, term::TERM, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
+) where {TERM}
+    for I in idxs
         _sweep_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
     end
     return nothing
@@ -900,7 +918,31 @@ once.
         col_offset::Int,
         α
 ) where {TERM}
+    return _static_or_serial(_static_band_colour!, _serial_band_colour!, A, sp, term, ax, bidx,
+        nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α)
+end
+
+# The `Threads.@threads :static` loop of `_sweep_band_colour!(::CpuThreaded, ...)` and the
+# same bands run in order on the calling task, the pair `_static_or_serial` picks between.
+@noinline function _static_band_colour!(
+        A, sp, term::TERM, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset,
+        col_offset, α
+) where {TERM}
     Threads.@threads :static for b in bidx
+        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
+            _sweep_point!(
+                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
+            )
+        end
+    end
+    return nothing
+end
+
+@noinline function _serial_band_colour!(
+        A, sp, term::TERM, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset,
+        col_offset, α
+) where {TERM}
+    for b in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
             _sweep_point!(
                 A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α

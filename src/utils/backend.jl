@@ -145,6 +145,11 @@ by small, frequently repeated calls, use [`CpuSerial`](@ref).
 
 Spelled `Parallel()` as often as not: `const Parallel = CpuThreaded`.
 
+A call made from inside another threaded region, such as the body of a user's own
+`Threads.@threads` loop, or from a spawned task while another task's threaded region runs,
+executes serially on the calling task instead of throwing, and returns exactly what the same
+call returns at top level.
+
 `Base.Threads.@threads` is the primitive, and naming it that way leaves room for the others
 that are not this one -- Polyester's `@batch` (gpena/Bramble.jl#190) and MPI. [`CpuPolyester`](@ref)
 is that Polyester-backed sibling: the policy type ships here, but the sweeps it selects live

@@ -459,18 +459,15 @@ end
     _threaded_difference_engine!(out, in_ref, h, dims::Tuple, dir::GridDirection, dim_val::Val) -> Nothing
 
 [`CpuThreaded`](@ref)'s `_difference_engine!`: one [`_difference_band!`](@ref) per thread
-under `Threads.@threads :static`. Kept in an isolated function, as
-[`_threaded_for!`](@ref) is, so the `Threads.@threads` closure is never built on a serial
-path.
+under `Threads.@threads :static`, or every band in turn where a `:static` loop cannot start
+([`_static_or_serial`](@ref)). Kept in an isolated function, as [`_threaded_for!`](@ref)
+is, so the `Threads.@threads` closure is never built on a serial path.
 """
 @noinline function _threaded_difference_engine!(
         out, in_ref, h::H, dims::NTuple{D, Int}, dir::GridDirection, dim_val::Val
 ) where {H, D}
-    nbands = Threads.nthreads()
-    Threads.@threads :static for b in 1:nbands
-        _difference_band!(out, in_ref, h, dims, dir, dim_val, nbands, b)
-    end
-    return nothing
+    return _static_or_serial(_static_bands!, _serial_bands!, _difference_band!,
+        Threads.nthreads(), out, in_ref, h, dims, dir, dim_val)
 end
 
 """

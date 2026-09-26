@@ -549,46 +549,60 @@ end
     n = length(w)
     (length(u) == n == length(v)) || _throw_dot_dim_error(length(u), n, length(v))
     T = promote_type(eltype(u), eltype(w), eltype(v))
-    f₁ = first(w.factors)
     n₁ = first(w.dims)
     nchunks = Threads.nthreads()
     partials = zeros(T, nchunks)
 
     if D == 1
-        ax = 1:n₁
-        Threads.@threads :static for b in 1:nchunks
-            rng = _band_range(ax, nchunks, b)
-            s = zero(T)
-            @inbounds @simd for i₁ in rng
-                s = muladd(T(u[i₁]) * T(v[i₁]), T(f₁[i₁]), s)
-            end
-            @inbounds partials[b] = s
-        end
+        _static_or_serial(_static_partials!, _serial_partials!, partials, nchunks,
+            _separable_line_band, u, w, v, 1:n₁, nchunks)
     else
         tail_dims = Base.tail(w.dims)
         lin = LinearIndices(tail_dims)
         blocks = _last_axis_chunks(CartesianIndices(tail_dims), nchunks)
-        nblocks = length(blocks)
-        Threads.@threads :static for b in 1:nblocks
-            block = blocks[b]
-            s = zero(T)
-            @inbounds for J in block
-                c = one(T)
-                for d in 2:D
-                    c *= T(w.factors[d][J[d - 1]])
-                end
-                offset = (lin[J] - 1) * n₁
-                line_sum = zero(T)
-                @simd for i₁ in 1:n₁
-                    k = offset + i₁
-                    line_sum = muladd(T(u[k]) * T(v[k]), T(f₁[i₁]), line_sum)
-                end
-                s = muladd(c, line_sum, s)
-            end
-            @inbounds partials[b] = s
-        end
+        _static_or_serial(_static_partials!, _serial_partials!, partials, length(blocks),
+            _separable_block_band, u, w, v, lin, blocks)
     end
     return sum(partials)
+end
+
+# The per-band partial sums of the dense `SeparableWeights` `_threaded_dot` above: one band
+# of the single line when `D == 1`, one block of lines otherwise. Each is one compiled body
+# shared by the threaded loop and the serial one `_static_or_serial`
+# (src/utils/linear_algebra.jl) falls back to, so both return the same partial sums bitwise.
+@noinline function _separable_line_band(u, w::SeparableWeights, v, ax, nchunks::Int, b::Int)
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    f₁ = first(w.factors)
+    rng = _band_range(ax, nchunks, b)
+    s = zero(T)
+    @inbounds @simd for i₁ in rng
+        s = muladd(T(u[i₁]) * T(v[i₁]), T(f₁[i₁]), s)
+    end
+    return s
+end
+
+@noinline function _separable_block_band(
+        u, w::SeparableWeights{D}, v, lin, blocks, b::Int
+) where {D}
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    block = blocks[b]
+    f₁ = first(w.factors)
+    n₁ = first(w.dims)
+    s = zero(T)
+    @inbounds for J in block
+        c = one(T)
+        for d in 2:D
+            c *= T(w.factors[d][J[d - 1]])
+        end
+        offset = (lin[J] - 1) * n₁
+        line_sum = zero(T)
+        @simd for i₁ in 1:n₁
+            k = offset + i₁
+            line_sum = muladd(T(u[k]) * T(v[k]), T(f₁[i₁]), line_sum)
+        end
+        s = muladd(c, line_sum, s)
+    end
+    return s
 end
 
 @noinline function _threaded_dot_masked(
@@ -599,25 +613,12 @@ end
         _throw_dot_dim_error(length(u), n, length(v), length(mask))
     T = promote_type(eltype(u), eltype(w), eltype(v))
     cart = CartesianIndices(w.dims)
-    chunks = mask.chunks
-    nwords = length(chunks)
+    nwords = length(mask.chunks)
     nchunks = Threads.nthreads()
     partials = zeros(T, nchunks)
     ax = 1:nwords
-    Threads.@threads :static for b in 1:nchunks
-        rng = _band_range(ax, nchunks, b)
-        s = zero(T)
-        @inbounds for widx in rng
-            word = chunks[widx]
-            base = (widx - 1) * 64
-            while word != zero(UInt64)
-                i = base + trailing_zeros(word) + 1
-                s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
-                word &= word - 1
-            end
-        end
-        @inbounds partials[b] = s
-    end
+    _static_or_serial(_static_partials!, _serial_partials!, partials, nchunks,
+        _separable_masked_band, u, w, v, cart, mask, ax, nchunks)
     return sum(partials)
 end
 
@@ -633,21 +634,48 @@ end
     nchunks = Threads.nthreads()
     partials = zeros(T, nchunks)
     ax = 1:nwords
-    Threads.@threads :static for b in 1:nchunks
-        rng = _band_range(ax, nchunks, b)
-        s = zero(T)
-        @inbounds for widx in rng
-            word = _reduce_or_chunk(mask.chunks, widx)
-            base = (widx - 1) * 64
-            while word != zero(UInt64)
-                i = base + trailing_zeros(word) + 1
-                s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
-                word &= word - 1
-            end
-        end
-        @inbounds partials[b] = s
-    end
+    _static_or_serial(_static_partials!, _serial_partials!, partials, nchunks,
+        _separable_masked_band, u, w, v, cart, mask, ax, nchunks)
     return sum(partials)
+end
+
+# The per-band partial sums of the two masked `SeparableWeights` `_threaded_dot_masked`
+# methods above, shared by their threaded and serial loops as the dense ones are.
+@noinline function _separable_masked_band(
+        u, w::SeparableWeights, v, cart, mask::BitVector, ax, nchunks::Int, b::Int
+)
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    chunks = mask.chunks
+    rng = _band_range(ax, nchunks, b)
+    s = zero(T)
+    @inbounds for widx in rng
+        word = chunks[widx]
+        base = (widx - 1) * 64
+        while word != zero(UInt64)
+            i = base + trailing_zeros(word) + 1
+            s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
+            word &= word - 1
+        end
+    end
+    return s
+end
+
+@noinline function _separable_masked_band(
+        u, w::SeparableWeights, v, cart, mask::MarkedIndicesUnion, ax, nchunks::Int, b::Int
+)
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    rng = _band_range(ax, nchunks, b)
+    s = zero(T)
+    @inbounds for widx in rng
+        word = _reduce_or_chunk(mask.chunks, widx)
+        base = (widx - 1) * 64
+        while word != zero(UInt64)
+            i = base + trailing_zeros(word) + 1
+            s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
+            word &= word - 1
+        end
+    end
+    return s
 end
 
 # Device counterparts of the three specializations above (gpena/Bramble.jl#94, #174, S2.5 of

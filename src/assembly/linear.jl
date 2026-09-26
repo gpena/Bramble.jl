@@ -421,7 +421,27 @@ reaches only its own point cannot collide at all, and then `bidx` is every band 
         offset::Int,
         α = true
 ) where {TERM}
+    return _static_or_serial(_static_linear_band_colour!, _serial_linear_band_colour!, b, sp,
+        term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α)
+end
+
+# The `Threads.@threads :static` loop of `_sweep_linear_band_colour!(::CpuThreaded, ...)` and
+# the same bands run in order on the calling task, the pair `_static_or_serial` picks between.
+@noinline function _static_linear_band_colour!(
+        b, sp, term::TERM, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
+) where {TERM}
     Threads.@threads :static for k in bidx
+        for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
+            _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
+        end
+    end
+    return nothing
+end
+
+@noinline function _serial_linear_band_colour!(
+        b, sp, term::TERM, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
+) where {TERM}
+    for k in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
             _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
         end
@@ -469,7 +489,25 @@ end
 @noinline function _sweep_colour!(
         ::CpuThreaded, b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int, α = true
 ) where {TERM}
+    return _static_or_serial(_static_linear_colour!, _serial_linear_colour!, b, sp, term, idxs,
+        lin_indices, mesh_markers, offset, α)
+end
+
+# The `Threads.@threads :static` loop of `_sweep_colour!(::CpuThreaded, ...)` and the same
+# loop run in order on the calling task, the pair `_static_or_serial` picks between.
+@noinline function _static_linear_colour!(
+        b, sp, term::TERM, idxs, lin_indices, mesh_markers, offset, α
+) where {TERM}
     Threads.@threads :static for I in idxs
+        _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
+    end
+    return nothing
+end
+
+@noinline function _serial_linear_colour!(
+        b, sp, term::TERM, idxs, lin_indices, mesh_markers, offset, α
+) where {TERM}
+    for I in idxs
         _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
     end
     return nothing

@@ -265,32 +265,27 @@ end
     _threaded_average_engine!(out, in_ref, dims::Tuple, dir::GridDirection, dim_val::Val) -> Nothing
 
 [`CpuThreaded`](@ref)'s `_average_engine!`: one [`_average_band!`](@ref) per thread under
-`Threads.@threads :static`, isolated so the closure is never built on a serial path.
+`Threads.@threads :static` (every band in turn where a `:static` loop cannot start, see
+[`_static_or_serial`](@ref)), isolated so the closure is never built on a serial path.
 """
 @noinline function _threaded_average_engine!(
         out, in_ref, dims::NTuple{D, Int}, dir::GridDirection, dim_val::Val
 ) where {D}
-    nbands = Threads.nthreads()
-    Threads.@threads :static for b in 1:nbands
-        _average_band!(out, in_ref, dims, dir, dim_val, nbands, b)
-    end
-    return nothing
+    return _static_or_serial(_static_bands!, _serial_bands!, _average_band!,
+        Threads.nthreads(), out, in_ref, dims, dir, dim_val)
 end
 
 """
     _threaded_centered_average_engine!(out, in_ref, dims::Tuple, dim_val::Val) -> Nothing
 
 [`CpuThreaded`](@ref)'s `_centered_average_engine!`: one [`_centered_average_band!`](@ref)
-per thread under `Threads.@threads :static`.
+per thread under `Threads.@threads :static`, serially where a `:static` loop cannot start.
 """
 @noinline function _threaded_centered_average_engine!(
         out, in_ref, dims::NTuple{D, Int}, dim_val::Val
 ) where {D}
-    nbands = Threads.nthreads()
-    Threads.@threads :static for b in 1:nbands
-        _centered_average_band!(out, in_ref, dims, dim_val, nbands, b)
-    end
-    return nothing
+    return _static_or_serial(_static_bands!, _serial_bands!, _centered_average_band!,
+        Threads.nthreads(), out, in_ref, dims, dim_val)
 end
 
 """

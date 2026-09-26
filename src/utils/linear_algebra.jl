@@ -229,14 +229,117 @@ errors clearly without it, rather than silently substituting `Threads.@threads`.
 @inline _coerce_serial_to_threaded(policy::CpuPolicy) = policy
 
 """
+    _in_threaded_region() -> Bool
+
+Whether a threaded region is running, so that a `Threads.@threads :static` loop started now
+would throw "`@threads :static` cannot be used concurrently or nested". This is exactly the
+condition `Base.Threads` itself tests before a `:static` loop
+(`ccall(:jl_in_threaded_region, Cint, ()) != 0`, `base/threadingconstructs.jl`): `true`
+inside a user's `Threads.@threads` loop, `false` at top level. The counter behind it is
+process-wide, so it is also `true` in a `Threads.@spawn`ed task while some other task's
+threaded region runs -- and can turn `true` between this check and Base's own, which is why
+[`_static_or_serial`](@ref) also catches Base's error.
+"""
+@inline _in_threaded_region() = ccall(:jl_in_threaded_region, Cint, ()) != 0
+
+"""
+    _is_static_nesting_error(err) -> Bool
+
+Whether `err` is the error `Threads.@threads :static` raises when a threaded region is
+already running: an `ErrorException` carrying exactly Base's message. Base raises it before
+it creates or schedules a single task, so no iteration of the loop has run.
+"""
+@inline _is_static_nesting_error(err) = err isa ErrorException &&
+                                        err.msg == "`@threads :static` cannot be used concurrently or nested"
+
+"""
+    _static_or_serial(threaded!, serial!, args...) -> Nothing
+
+Run `threaded!(args...)`, a function whose only work is one `Threads.@threads :static`
+loop, or `serial!(args...)`, the same loop body run over the same chunks or bands in order
+on the calling task, when a `:static` loop cannot start here.
+
+Every [`CpuThreaded`](@ref) sweep goes through it. [`_in_threaded_region`](@ref) is checked
+first, so a call from inside a user's `Threads.@threads` loop goes straight to `serial!`.
+Because that counter is process-wide, a concurrent task can still enter its own threaded
+region between this check and Base's; Base then throws before running any iteration, and
+exactly that error ([`_is_static_nesting_error`](@ref)) is caught and answered by
+`serial!`. Anything else is rethrown. Either way the caller gets what a top-level call
+returns: reductions fill the same partial sums in the same order, so match it bitwise.
+
+`threaded!` and `serial!` are isolated functions rather than closures, so no closure is
+boxed on the path that runs serially.
+"""
+@inline function _static_or_serial(
+        threaded!::F, serial!::G, args::Vararg{Any, N}
+) where {F, G, N}
+    _in_threaded_region() && return serial!(args...)
+    try
+        return threaded!(args...)
+    catch err
+        _is_static_nesting_error(err) || rethrow()
+    end
+    return serial!(args...)
+end
+
+"""
+    _static_partials!(partials, n::Int, band, args...) -> Nothing
+    _serial_partials!(partials, n::Int, band, args...) -> Nothing
+
+Fill `partials[k] = band(args..., k)` for `k in 1:n`: one `k` per thread under
+`Threads.@threads :static`, or in order on the calling task. The pair every threaded
+reduction hands to [`_static_or_serial`](@ref); both call the same `@noinline` `band`, so
+their partial sums agree bitwise.
+"""
+@noinline function _static_partials!(partials, n::Int, band::F, args::Vararg{Any, N}) where {F, N}
+    Threads.@threads :static for k in 1:n
+        @inbounds partials[k] = band(args..., k)
+    end
+    return nothing
+end
+
+@noinline function _serial_partials!(partials, n::Int, band::F, args::Vararg{Any, N}) where {F, N}
+    for k in 1:n
+        @inbounds partials[k] = band(args..., k)
+    end
+    return nothing
+end
+
+"""
+    _static_bands!(f, nbands::Int, args...) -> Nothing
+    _serial_bands!(f, nbands::Int, args...) -> Nothing
+
+Run `f(args..., nbands, b)` for every band `b in 1:nbands`: one band per thread under
+`Threads.@threads :static`, or in order on the calling task. The pair the banded stencil
+engines hand to [`_static_or_serial`](@ref).
+"""
+@noinline function _static_bands!(f::F, nbands::Int, args::Vararg{Any, N}) where {F, N}
+    Threads.@threads :static for b in 1:nbands
+        f(args..., nbands, b)
+    end
+    return nothing
+end
+
+@noinline function _serial_bands!(f::F, nbands::Int, args::Vararg{Any, N}) where {F, N}
+    for b in 1:nbands
+        f(args..., nbands, b)
+    end
+    return nothing
+end
+
+"""
     _threaded_for!(v::AbstractArray, idxs, f::Function) -> Nothing
 
-Fill `v[idx]` with `f(idx)` across threads, statically partitioning `idxs`.
+Fill `v[idx]` with `f(idx)` across threads, statically partitioning `idxs`, or serially
+where a `:static` loop cannot start ([`_static_or_serial`](@ref)).
 
-Kept in an isolated function to prevent `Threads.@threads` closure boxing allocations on
-paths that execute serially.
+The `Threads.@threads` loop is kept in an isolated function to prevent closure boxing
+allocations on paths that execute serially.
 """
-@noinline function _threaded_for!(v, idxs, f)
+@noinline _threaded_for!(v, idxs, f::F) where {F} = _static_or_serial(
+    _static_for!, _serial_for!, v, idxs, f)
+
+@noinline function _static_for!(v, idxs, f)
     # Static partitioning distributes work evenly across available threads
     Threads.@threads :static for idx in idxs
         @inbounds v[idx] = f(idx)
@@ -343,13 +446,16 @@ end
 As [`_threaded_for!`](@ref), for a `CartesianIndices`: each thread takes one block of
 whole last-axis slices and walks it natively, never converting a linear index.
 """
-@noinline function _threaded_axis_for!(v, idxs::CartesianIndices, f)
+@noinline function _threaded_axis_for!(v, idxs::CartesianIndices, f::F) where {F}
     blocks = _last_axis_chunks(idxs, Threads.nthreads())
-    Threads.@threads :static for k in 1:length(blocks)
-        block = blocks[k]
-        @inbounds for I in block
-            v[I] = f(I)
-        end
+    return _static_or_serial(_static_bands!, _serial_bands!, _fill_block!, length(blocks), v, blocks, f)
+end
+
+# The `b`-th block of `_threaded_axis_for!`, in the `f(args..., nbands, b)` shape
+# `_static_bands!` calls.
+@inline function _fill_block!(v, blocks, f, _, b::Int)
+    @inbounds for I in blocks[b]
+        v[I] = f(I)
     end
     return nothing
 end
@@ -417,9 +523,19 @@ partitioning `idxs` across threads.
 Kept in an isolated function to prevent `Threads.@threads` closure boxing allocations on
 paths that execute serially.
 """
-@noinline function _threaded_scatter_for!(mats::Tuple, idxs, g)
+@noinline _threaded_scatter_for!(mats::Tuple, idxs, g::G) where {G} = _static_or_serial(
+    _static_scatter_for!, _serial_scatter_for!, mats, idxs, g)
+
+@noinline function _static_scatter_for!(mats::Tuple, idxs, g)
     Threads.@threads :static for idx in idxs
         @inbounds _write_components!(mats, g(idx), idx)
+    end
+    return nothing
+end
+
+@noinline function _serial_scatter_for!(mats::Tuple, idxs, g)
+    @inbounds for idx in idxs
+        _write_components!(mats, g(idx), idx)
     end
     return nothing
 end
@@ -651,7 +767,9 @@ masked method; [`CpuThreaded`](@ref) reaches [`_threaded_dot_masked`](@ref);
 [`CpuThreaded`](@ref)'s own counterpart of [`_dot`](@ref): partitions `1:length(u)` into
 `Threads.nthreads()` static bands via [`_band_range`](@ref), each `Threads.@threads :static`
 task accumulating its own `muladd`/`@simd` partial sum, landed in a fixed
-`Threads.nthreads()`-length buffer and summed serially once every task has returned.
+`Threads.nthreads()`-length buffer and summed serially once every task has returned. Where
+a `:static` loop cannot start ([`_static_or_serial`](@ref)) the same bands run in turn on
+the calling task, through the same [`_dot_band`](@ref), so the value is unchanged bitwise.
 
 The buffer's size depends only on the thread count, never on `length(u)`, so allocation is
 independent of vector length rather than zero (gpena/Bramble.jl#301 Departures) -- no size
@@ -672,15 +790,27 @@ Kept in an isolated function, the same reason [`_threaded_for!`](@ref) is, to ke
     nchunks = Threads.nthreads()
     partials = zeros(T, nchunks)
     ax = 1:n
-    Threads.@threads :static for k in 1:nchunks
-        rng = _band_range(ax, nchunks, k)
-        s = zero(T)
-        @inbounds @simd for i in rng
-            s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
-        end
-        @inbounds partials[k] = s
-    end
+    _static_or_serial(
+        _static_partials!, _serial_partials!, partials, nchunks, _dot_band, u, v, w, ax, nchunks)
     return sum(partials)
+end
+
+"""
+    _dot_band(u, v, w, ax, nchunks::Int, k::Int) -> Real
+
+The `k`-th of `nchunks` partial sums of [`_threaded_dot`](@ref), over the band
+[`_band_range`](@ref)`(ax, nchunks, k)`. One compiled body serves both the threaded loop and
+the serial one [`_static_or_serial`](@ref) falls back to, so the two return the same partial
+sums bitwise.
+"""
+@noinline function _dot_band(u, v, w, ax, nchunks::Int, k::Int)
+    T = promote_type(eltype(u), eltype(v), eltype(w))
+    rng = _band_range(ax, nchunks, k)
+    s = zero(T)
+    @inbounds @simd for i in rng
+        s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+    end
+    return s
 end
 
 """
@@ -711,25 +841,12 @@ and a [`MarkedIndicesUnion`](@ref) ORs only `BitVector`s of that same length tog
     (length(u) == length(v) == length(w) == length(mask)) ||
         _throw_dot_dim_error(length(u), length(v), length(w), length(mask))
     T = promote_type(eltype(u), eltype(v), eltype(w))
-    chunks = mask.chunks
-    nwords = length(chunks)
+    nwords = length(mask.chunks)
     nchunks = Threads.nthreads()
     partials = zeros(T, nchunks)
     ax = 1:nwords
-    Threads.@threads :static for k in 1:nchunks
-        rng = _band_range(ax, nchunks, k)
-        s = zero(T)
-        @inbounds for widx in rng
-            word = chunks[widx]
-            base = (widx - 1) * 64
-            while word != zero(UInt64)
-                i = base + trailing_zeros(word) + 1
-                s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
-                word &= word - 1
-            end
-        end
-        @inbounds partials[k] = s
-    end
+    _static_or_serial(_static_partials!, _serial_partials!, partials, nchunks,
+        _dot_masked_band, u, v, w, mask, ax, nchunks)
     return sum(partials)
 end
 
@@ -743,21 +860,50 @@ end
     nchunks = Threads.nthreads()
     partials = zeros(T, nchunks)
     ax = 1:nwords
-    Threads.@threads :static for k in 1:nchunks
-        rng = _band_range(ax, nchunks, k)
-        s = zero(T)
-        @inbounds for widx in rng
-            word = _reduce_or_chunk(mask.chunks, widx)
-            base = (widx - 1) * 64
-            while word != zero(UInt64)
-                i = base + trailing_zeros(word) + 1
-                s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
-                word &= word - 1
-            end
-        end
-        @inbounds partials[k] = s
-    end
+    _static_or_serial(_static_partials!, _serial_partials!, partials, nchunks,
+        _dot_masked_band, u, v, w, mask, ax, nchunks)
     return sum(partials)
+end
+
+"""
+    _dot_masked_band(u, v, w, mask::BitVector, ax, nchunks::Int, k::Int) -> Real
+    _dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -> Real
+
+The `k`-th of `nchunks` partial sums of [`_threaded_dot_masked`](@ref), over the mask words
+[`_band_range`](@ref)`(ax, nchunks, k)`. As [`_dot_band`](@ref), one compiled body serves the
+threaded loop and the serial one.
+"""
+@noinline function _dot_masked_band(u, v, w, mask::BitVector, ax, nchunks::Int, k::Int)
+    T = promote_type(eltype(u), eltype(v), eltype(w))
+    chunks = mask.chunks
+    rng = _band_range(ax, nchunks, k)
+    s = zero(T)
+    @inbounds for widx in rng
+        word = chunks[widx]
+        base = (widx - 1) * 64
+        while word != zero(UInt64)
+            i = base + trailing_zeros(word) + 1
+            s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+            word &= word - 1
+        end
+    end
+    return s
+end
+
+@noinline function _dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int)
+    T = promote_type(eltype(u), eltype(v), eltype(w))
+    rng = _band_range(ax, nchunks, k)
+    s = zero(T)
+    @inbounds for widx in rng
+        word = _reduce_or_chunk(mask.chunks, widx)
+        base = (widx - 1) * 64
+        while word != zero(UInt64)
+            i = base + trailing_zeros(word) + 1
+            s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+            word &= word - 1
+        end
+    end
+    return s
 end
 
 """

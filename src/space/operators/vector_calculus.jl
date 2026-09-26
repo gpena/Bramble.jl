@@ -112,8 +112,9 @@ _launch_fused_strain_offdiag!(out, ui, uj, hi, hj, dims, dim_i, dim_j, dev) = _t
 # slabs of the grid cut along its last axis (`_band_range`/`_band_slab`, the cut
 # `_difference_band!` makes, operators/difference.jl); `1, 1` is the whole grid.
 # `_run_bands!` picks how the bands run from the execution policy (gpena/Bramble.jl#356):
-# `CpuThreaded` runs one band per thread under `Threads.@threads :static`, every other CPU
-# policy the single band serially. Each engine writes `out[idx]` only at its own point and
+# `CpuThreaded` runs one band per thread under `Threads.@threads :static` (every band in turn
+# where a `:static` loop cannot start, `_static_or_serial`), every other CPU policy the
+# single band serially. Each engine writes `out[idx]` only at its own point and
 # reads `out` nowhere else, so the bands' writes are disjoint whatever the differencing axis,
 # and each point receives the very same sum, in the same order of directions, as serially.
 # `CpuPolyester` has no batched hook for these engines in `BramblePolyesterExt`, so it runs
@@ -121,11 +122,7 @@ _launch_fused_strain_offdiag!(out, ui, uj, hi, hj, dims, dim_i, dim_j, dev) = _t
 @inline _run_bands!(::CpuPolicy, f::F, args::Vararg{Any, N}) where {F, N} = f(args..., 1, 1)
 
 @noinline function _run_bands!(::CpuThreaded, f::F, args::Vararg{Any, N}) where {F, N}
-    nbands = Threads.nthreads()
-    Threads.@threads :static for b in 1:nbands
-        f(args..., nbands, b)
-    end
-    return nothing
+    return _static_or_serial(_static_bands!, _serial_bands!, f, Threads.nthreads(), args...)
 end
 
 @inline function _accumulate_backward!(
