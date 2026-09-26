@@ -127,6 +127,25 @@ at every crossover measured, falling one to two orders of magnitude below it.
 These are one machine's numbers, taken under one power state, not a portable constant:
 re-measure before leaning on them for a different host.
 
+### Measuring your own crossovers
+
+To get these figures for your own machine, at the thread count you actually plan to use,
+run the portable crossover script from a checkout of the repository:
+
+```bash
+julia --threads=N --project=benchmark benchmark/policy_crossover.jl
+```
+
+It sweeps every workload above (plus a few more) in 1D, 2D and 3D, and prints one
+`CROSSOVER | ...` line per workload/dimension pair giving the smallest size at which
+`CpuThreaded` and `CpuPolyester` start beating `CpuSerial`, followed by a summary
+recommendation table. It also prints one assemble+solve context row per dimension,
+showing what share of an end-to-end solve the sparse direct solve itself takes -- that
+share does not depend on the execution policy. Pass `--smoke` for a quick check with a
+handful of tiny sizes, or `--max-dofs N` to raise the default 1e6-DOF sweep cap; `--out
+file.md` writes the tables to a Markdown file. By default the run takes about ten
+minutes.
+
 ### The policy hierarchy
 
 `Serial` and `Parallel` are the names above, and they are aliases: `Serial === CpuSerial`
