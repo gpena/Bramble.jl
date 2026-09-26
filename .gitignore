@@ -84,6 +84,8 @@ benchmark/*
 !benchmark/policy_crossover.jl
 # v3.13.0 storage x policy refill grid, the evidence for gpena/Bramble.jl#338 and #342
 !benchmark/storage_policy_grid.jl
+# v3.14.0 scatter-position cache vs matrix footprint, first vs refill assembly (gpena/Bramble.jl#318)
+!benchmark/scatter_table.jl
 !benchmark/baselines/
 !benchmark/baselines/*.json
 research/
