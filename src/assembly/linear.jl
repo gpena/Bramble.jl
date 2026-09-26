@@ -795,7 +795,7 @@ guarantee is the host path's alone.
 - Dynamic scalars: plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `α = Ref(1.0); l = form(Wₕ, v -> α * innerₕ(uₕ, v))`). Mutating `α[] = new_val` evaluates live during assembly with 0 allocations.
 
 # Arguments
-- `b`: Vector to refill, with length `ndofs(test_space(form))`.
+- `b`: Vector to refill, with length `ndofs(test_space(form))`; any other length raises a `DimensionMismatch` before anything is written.
 - `form`: Linear form to assemble.
 
 # Keywords
@@ -823,10 +823,12 @@ end
 # resolved and already past the deprecation check, so neither public entry point warns twice
 # calling into the other. Split on where the test space lives, a type-level choice the
 # compiler folds away: a host space sweeps `b` directly, a device one goes through a host
-# buffer (`_assemble_linear_device!`, below).
+# buffer (`_assemble_linear_device!`, below). The length check comes first, before any write
+# and before the device path builds its buffer.
 @inline function _assemble_linear!(
         b::AbstractVector, form::LinearForm, ast, dirichlet, dirichlet_components
 )
+    _check_linear_length(b, form.test_space)
     return _assemble_linear!(
         locality(backend(form.test_space)), b, form, ast, dirichlet, dirichlet_components
     )
@@ -889,9 +891,32 @@ function _assemble_linear_device!(
     hform = LinearForm{D, typeof(hspace), typeof(hast)}(hspace, hast)
     hb = Vector{eltype(b)}(undef, length(b))
     _assemble_linear!(HostLocality(), hb, hform, hast, dirichlet, dirichlet_components)
-    copyto!(b, hb)
+    copyto!(_vector_storage(b), hb)
     return b
 end
+
+# The sweep writes `b` with `@inbounds`, so a vector of the wrong length would be written out
+# of bounds (a short one) or left with a stale tail (a long one). Every linear entry point
+# (`assemble!`, `assemble_add!`, `assemble_parallel!`) checks it before writing anything.
+@inline function _check_linear_length(b::AbstractVector, space)
+    length(b) == ndofs(space) || _throw_linear_length(length(b), ndofs(space))
+    return nothing
+end
+
+@noinline function _throw_linear_length(actual::Int, expected::Int)
+    throw(
+        DimensionMismatch(
+        "the vector has length $actual, but the form's test space has $expected degrees of freedom",
+    ),
+    )
+end
+
+# The storage a device path downloads from and uploads to. A `VectorElement` passed as `b`
+# is unwrapped, since copying through the wrapper indexes the device array one scalar at a
+# time; any other vector (a device vector, or a strided view of one) is copied as it is.
+# Not `parent` in general: a view's parent is the whole array, not the vector.
+@inline _vector_storage(b::AbstractVector) = b
+@inline _vector_storage(b::VectorElement) = parent(b)
 
 # Leaf by leaf, so a composite mirror keeps the leaf order (and so the offsets) the lowered
 # sources were sampled against.
@@ -976,15 +1001,29 @@ end
 
 Refill `b` with the assembled `form` across threads and return it, regardless of
 `test_space(form)`'s backend execution policy. Unlike [`assemble!`](@ref), does not
-apply Dirichlet conditions.
+apply Dirichlet conditions. On a device test space the threaded sweep runs on a host mirror
+into a host buffer, uploaded to `b` in one `copyto!`, as in [`assemble!`](@ref).
 """
 function assemble_parallel!(b::AbstractVector, form::LinearForm, ast = nothing)
     resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)
-    space = form.test_space
-    _validate_term_markers(resolved_ast, markers(mesh(space)), "the form's space")
+    _check_linear_length(b, form.test_space)
+    return _assemble_linear_parallel!(
+        locality(backend(form.test_space)), b, form.test_space, resolved_ast)
+end
+
+function _assemble_linear_parallel!(::HostLocality, b::AbstractVector, space, ast)
+    _validate_term_markers(ast, markers(mesh(space)), "the form's space")
 
     fill!(b, zero(eltype(b)))
-    _assemble_linear_parallel_core!(b, space, resolved_ast)
+    _assemble_linear_parallel_core!(b, space, ast)
 
+    return b
+end
+
+function _assemble_linear_parallel!(::DeviceLocality, b::AbstractVector, space, ast)
+    hb = Vector{eltype(b)}(undef, length(b))
+    _assemble_linear_parallel!(
+        HostLocality(), hb, _host_mirror_space(space), _host_sources(ast))
+    copyto!(_vector_storage(b), hb)
     return b
 end

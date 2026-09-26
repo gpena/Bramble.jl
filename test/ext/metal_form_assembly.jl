@@ -338,6 +338,83 @@ else
             end
         end
     end
+
+    # `assemble_add!` and `assemble_parallel!` on a linear form call the sweep cores
+    # directly, so they split on locality themselves (gpena/Bramble.jl#361): the device
+    # vector comes to the host, the contribution is added on a host mirror, and the sum is
+    # uploaded once. Unscaled and scaled accumulation onto an assembled vector and a threaded
+    # refill must match the host, scalar and composite, on mirrored non-uniform meshes. A
+    # vector of the wrong length is refused before anything is written, host and device.
+    @testset "Metal linear assemble_add! and assemble_parallel! (gpena/Bramble.jl#361)" begin
+        for npts in ((13,), (13, 11))
+            Wc, Wg = _matched_spaces(npts)
+            cases = (("scalar", Wc, Wg, v -> innerₕ(_f, v) + innerₕ(1.0f0, D₋ₓ(v))),
+                ("composite", Wc × Wc, Wg × Wg, V -> innerₕ(_f, V[1]) + innerₕ(2.0f0, V[2])))
+            for (label, sc, sg, l) in cases
+                @testset "$(length(npts))D $label" begin
+                    lc, lg = form(sc, l), form(sg, l)
+                    bc, bg = assemble(lc), assemble(lg)
+                    Bramble.assemble_add!(bc, lc)
+                    Bramble.assemble_add!(bg, lg)
+                    @test bg isa Metal.MtlVector{Float32}
+                    @test _vrelerr(bg, bc) < _RTOL
+                    Bramble.assemble_add!(bc, lc, Ref(0.5f0))
+                    Bramble.assemble_add!(bg, lg, Ref(0.5f0))
+                    @test _vrelerr(bg, bc) < _RTOL
+                    fill!(bg, 1.0f0)
+                    Bramble.assemble_parallel!(bg, lg)
+                    @test _vrelerr(bg, assemble(lc)) < _RTOL
+                end
+            end
+        end
+        @testset "wrong-length vector refused before any write" begin
+            Wc, Wg = _matched_spaces((13,))
+            for (label, W, zeros_) in (("host", Wc, zeros), ("device", Wg, Metal.zeros))
+                l = form(W, v -> innerₕ(1.0f0, v))
+                for m in (ndofs(W) - 5, ndofs(W) + 5)
+                    b = zeros_(Float32, m)
+                    @testset "$label, length $m" begin
+                        @test_throws DimensionMismatch assemble!(b, l)
+                        @test_throws DimensionMismatch Bramble.assemble_add!(b, l)
+                        @test_throws DimensionMismatch Bramble.assemble_add!(b, l, 2.0f0)
+                        @test_throws DimensionMismatch Bramble.assemble_parallel!(b, l)
+                        @test all(iszero, Array(b))
+                    end
+                end
+            end
+        end
+    end
+
+    # The target vector may be a device `element(Wg, 0f0)` or a strided view of a device
+    # vector, as on the host. The device path downloads from and uploads to the element's
+    # storage, not through the wrapper, which would index the device array one scalar at a
+    # time (gpena/Bramble.jl#361).
+    _hostvec(u) = Array(u isa Bramble.VectorElement ? parent(u) : u)
+    @testset "Metal linear assembly into an element or a strided view (gpena/Bramble.jl#361)" begin
+        for npts in ((13,), (13, 11))
+            Wc, Wg = _matched_spaces(npts)
+            for (label, sc, sg, l) in (("scalar", Wc, Wg, v -> innerₕ(_f, v)),
+                ("composite", Wc × Wc, Wg × Wg, V -> innerₕ(_f, V[1]) + innerₕ(2.0f0, V[2])))
+                lc, lg = form(sc, l), form(sg, l)
+                bc = assemble(lc)
+                n = length(bc)
+                targets = (("element", () -> Bramble.element(sg, 0.0f0)),
+                    ("strided view", () -> view(Metal.zeros(Float32, 2n), 1:2:(2n))))
+                for (tlabel, target) in targets
+                    @testset "$(length(npts))D $label, $tlabel" begin
+                        u = target()
+                        assemble!(u, lg)
+                        @test _vrelerr(_hostvec(u), bc) < _RTOL
+                        Bramble.assemble_add!(u, lg)
+                        Bramble.assemble_add!(u, lg, 0.5f0)
+                        @test _vrelerr(_hostvec(u), 2.5f0 .* bc) < _RTOL
+                        Bramble.assemble_parallel!(u, lg)
+                        @test _vrelerr(_hostvec(u), bc) < _RTOL
+                    end
+                end
+            end
+        end
+    end
 end
 
 end # module

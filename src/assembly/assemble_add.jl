@@ -135,6 +135,10 @@ is simply the existing scatter with the initial `fill!` and the Dirichlet pass l
 same as the bilinear case; see this file's header for the scale factor and the Dirichlet
 note, both of which apply identically here.
 
+On a device test space (a Metal space, say), `F` is copied to the host, the contribution
+added there, and the sum uploaded in one `copyto!`, so that path allocates. An `F` whose
+length is not `ndofs(test_space(l))` raises a `DimensionMismatch` before anything is written.
+
 # Examples
 
 ```julia
@@ -146,24 +150,35 @@ assemble_add!(F, l_source, θ)   # F += θ[] * l_source's contribution
 See also: [`assemble!`](@ref), [`assemble`](@ref).
 """
 function assemble_add!(F::AbstractVector, l::LinearForm)
-    space = test_space(l)
-    _validate_term_markers(l.ast, markers(mesh(space)), "the form's space")
-    if execution_policy(space) isa CpuSerial
-        _assemble_linear_core!(F, space, l.ast)
-    else
-        _assemble_linear_parallel_core!(F, space, l.ast)
-    end
-    return F
+    _check_linear_length(F, test_space(l))
+    return _assemble_add_linear!(locality(backend(test_space(l))), F, test_space(l), l.ast)
 end
 
 function assemble_add!(F::AbstractVector, l::LinearForm, α)
     αv = _scale_value(α)
-    space = test_space(l)
-    _validate_term_markers(l.ast, markers(mesh(space)), "the form's space")
+    _check_linear_length(F, test_space(l))
+    return _assemble_add_linear!(locality(backend(test_space(l))), F, test_space(l), l.ast, αv)
+end
+
+# `αv...` is empty for the unscaled call, so the host cores see exactly the arguments they
+# did before the locality split.
+function _assemble_add_linear!(::HostLocality, F::AbstractVector, space, ast, αv...)
+    _validate_term_markers(ast, markers(mesh(space)), "the form's space")
     if execution_policy(space) isa CpuSerial
-        _assemble_linear_core!(F, space, l.ast, αv)
+        _assemble_linear_core!(F, space, ast, αv...)
     else
-        _assemble_linear_parallel_core!(F, space, l.ast, αv)
+        _assemble_linear_parallel_core!(F, space, ast, αv...)
     end
+    return F
+end
+
+# A device test space: `F`'s current values come to the host, the form's contribution is
+# added there on a host mirror of the space (`_assemble_linear_device!` in linear.jl), and
+# the sum goes back in one `copyto!`, so the accumulation holds without a device scatter.
+function _assemble_add_linear!(::DeviceLocality, F::AbstractVector, space, ast, αv...)
+    hF = Array(_vector_storage(F))
+    _assemble_add_linear!(
+        HostLocality(), hF, _host_mirror_space(space), _host_sources(ast), αv...)
+    copyto!(_vector_storage(F), hF)
     return F
 end
