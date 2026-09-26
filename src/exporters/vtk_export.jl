@@ -63,16 +63,17 @@ end
 # `vtk_grid` wants at least two coordinate vectors, `z` defaulting to a single point when
 # omitted. A 1D mesh gets a degenerate second axis for the same reason, built by hand since
 # there is only one axis to pad.
-_vtk_axes(Ωₕ::AbstractMeshType{1}) = (points(Ωₕ), [zero(eltype(Ωₕ))])
-_vtk_axes(Ωₕ::AbstractMeshType) = points(Ωₕ)
+_vtk_axes(Ωₕ::AbstractMeshType{1}) = (host_points(Ωₕ), [zero(eltype(Ωₕ))])
+_vtk_axes(Ωₕ::AbstractMeshType) = host_points(Ωₕ)
 
 # A scalar space gives an array shaped like the grid: `reshape(uₕ)` already reshapes a
 # `VectorElement`'s flat storage that way, in the same column-major order `points(Ωₕ)`'s
 # axes imply, so no permutation is needed. A composite space gives a `Tuple` of them:
 # WriteVTK reads `length(data)` off a `Tuple` as the number of vector components, one array
-# per component.
-_vtk_data(uₕ::VectorElement{<:CompositeGridSpace}) = map(reshape, components(uₕ))
-_vtk_data(uₕ::VectorElement) = reshape(uₕ)
+# per component. Wrapping each with `Array` brings a device-backed field's storage to the
+# host before `WriteVTK` sees it -- a no-op copy when it is already there.
+_vtk_data(uₕ::VectorElement{<:CompositeGridSpace}) = map(Array ∘ reshape, components(uₕ))
+_vtk_data(uₕ::VectorElement) = Array(reshape(uₕ))
 _vtk_data(a::AbstractArray) = a
 
 """

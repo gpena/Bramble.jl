@@ -7,6 +7,7 @@ using Metal
 # BrambleMetalExt's trigger is now the pair `["Metal", "GPUArrays"]` (gpena/Bramble.jl#321),
 # not `Metal` alone -- both must be `using`'d here for the extension to load at all.
 using GPUArrays
+using WriteVTK
 using SparseArrays
 using Kronecker: Kronecker  # loads BrambleKroneckerExt, which owns `fdm_solve`
 using LinearAlgebra: I, mul!
@@ -667,6 +668,30 @@ else
         v = element(W, 0.0f0)
         v .= 2.0f0
         @test all(==(2.0f0), Array(parent(v)))
+    end
+
+    # #336: export_vtk on a device mesh/field routes coordinates and data through
+    # `host_points`/`Array` before WriteVTK ever sees them -- otherwise WriteVTK's
+    # `unsafe_write` fails on a device pointer. 1D scalar, 2D scalar, and 2D
+    # vector/composite, matching the issue's own repro.
+    @testset "#336: export_vtk writes .vtr files from device meshes and fields" begin
+        b = metal_backend()
+        d = mktempdir()
+
+        Ω1 = mesh(domain(interval(0.0f0, 1.0f0)), 9, true; backend = b)
+        export_vtk(joinpath(d, "a"), Ω1, "u" => Rₕ(gridspace(Ω1), x -> x[1]))
+        @test isfile(joinpath(d, "a.vtr"))
+
+        Ω2 = mesh(
+            domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (9, 9),
+            (true, true); backend = b
+        )
+        export_vtk(
+            joinpath(d, "b"), Ω2,
+            "u" => Rₕ(gridspace(Ω2), x -> x[1] + x[2]),
+            "v" => Rₕ(gridspace(Ω2, Val(2)), x -> (x[1], x[2]))
+        )
+        @test isfile(joinpath(d, "b.vtr"))
     end
 end
 
