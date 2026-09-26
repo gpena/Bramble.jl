@@ -446,7 +446,8 @@ recorded where each entry of `A` lives -- `A` came from [`assemble`](@ref) or
 [`allocate_system_matrix`](@ref) on a serial form, or an earlier fill into this same `A`
 recorded it -- every sweep writes through those positions instead of searching for them.
 The first fill into any other matrix object records once, serially, then replays across
-threads. A device-resident matrix still searches.
+threads. A device-resident matrix replays too, through positions recorded against its
+host mirror, so only its recording fill searches (gpena/Bramble.jl#318).
 """
 function assemble_parallel!(A::AbstractMatrix, form::BilinearForm, ast = nothing)
     resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)

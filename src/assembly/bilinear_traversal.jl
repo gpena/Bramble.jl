@@ -103,10 +103,11 @@ end
 # until `_flush_device_scatter!` copies `nzval` across in one bulk `copyto!`.
 #
 # `visit_bilinear_stencil`'s own sinks (`ReplaySink` and its kin) reduce to exactly
-# `_scatter_position`/`_scatter_add!` too, so they pick up this method for free; the only
-# path that actually reaches a device matrix today is the band-coloured sweep
-# (`_assemble_bilinear_parallel_core!`, `bilinear_execution.jl`) that a `GpuPolicy` backend's
-# assembly is forced into (see `_coerce_serial_to_threaded` below).
+# `_scatter_position`/`_scatter_add!` too, so they pick up this method for free. A
+# `GpuPolicy` backend's assembly is forced into the threaded path (see
+# `_coerce_serial_to_threaded` below): its recording fill searches the mirror once per matrix
+# (`_coordinates_to_positions!`), and every later fill replays those mirror positions through
+# the same band-coloured sweep, writing `_scatter_add!` only (gpena/Bramble.jl#318).
 #
 # Reading `A.mirror` straight off the matrix, rather than resolving it from a cache keyed on
 # `A`, is deliberate and has history (gpena/Bramble.jl#313): an earlier version of this file
