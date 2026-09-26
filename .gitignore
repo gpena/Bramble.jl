@@ -86,6 +86,8 @@ benchmark/*
 !benchmark/storage_policy_grid.jl
 # v3.14.0 scatter-position cache vs matrix footprint, first vs refill assembly (gpena/Bramble.jl#318)
 !benchmark/scatter_table.jl
+# v3.14.0 GpuOffload vs threaded-host Rₕ!/avgₕ! throughput ratio (gpena/Bramble.jl#324)
+!benchmark/gpu_offload.jl
 !benchmark/baselines/
 !benchmark/baselines/*.json
 research/
