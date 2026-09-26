@@ -62,16 +62,13 @@
 # the final `OK-S7.2-CROSSOVER` marker only prints if every check across the
 # whole sweep passed.
 #
-# One correctness fact worth stating up front rather than discovering it in
-# the table: `_dot(::CpuThreaded, u, v, w)` (src/utils/linear_algebra.jl)
-# still forwards to the identical serial reduction -- there never was a
-# `Threads.@threads`-backed `_dot` to begin with (#112 remains open on
-# exactly this). The "Threads/serial" ratio reported for workload 5 is
-# therefore not measuring a second implementation at all: it is the same
-# function called twice, and any difference between the two numbers is pure
-# measurement noise around a true ratio of 1.0, not a parallel speedup or
-# penalty. Only the "Polyester/serial" column is a real comparison for that
-# row.
+# `_dot(::CpuThreaded, u, v, w)` (src/utils/linear_algebra.jl) is now a real
+# threaded reduction (`_threaded_dot`, gpena/Bramble.jl#301, commits ad3ab31a
+# and 237ca306): it partitions `1:length(u)` into `Threads.nthreads()` static
+# chunks, each accumulated with `@simd` and reduced across chunks with
+# `Threads.@threads`. So the "Threads/serial" column for workload 5 below is
+# a genuine comparison, exactly like the "Polyester/serial" one, not the same
+# function measured twice as it was before #301.
 #
 # ## Workload 4's table is not a threading comparison -- read this before the table
 #
@@ -479,6 +476,15 @@ function _crossover(sizes::AbstractVector, ratios::AbstractVector{<:Real})
     return "no crossover found in sweep range"
 end
 
+# Same rule as `_crossover`, phrased for the single summary line the S2.3
+# subplan (gpena/Bramble.jl#301) requires: a bare size (confirmed or
+# provisional-at-top-of-sweep both count as "found") or "none within range".
+function _crossover_summary(sizes::AbstractVector, ratios::AbstractVector{<:Real})
+    result = _crossover(sizes, ratios)
+    m = match(r"^(?:provisional: )?(\d+)", result)
+    return m === nothing ? "none within range" : m.captures[1]
+end
+
 # --- Driver ----------------------------------------------------------------- #
 
 function main()
@@ -624,10 +630,9 @@ function main()
     _out()
     _out("=== _dot reduction (innerₕ) ===")
     _out(
-        "Reminder: _dot(::CpuThreaded, ...) forwards to the plain serial reduction " *
-        "(src/utils/linear_algebra.jl) -- #112 remains open on this. The threads/serial " *
-        "column below is the same code measured twice; only batch/serial is a real " *
-        "comparison.",
+        "_dot(::CpuThreaded, ...) is now a real threaded reduction (_threaded_dot, " *
+        "gpena/Bramble.jl#301) -- both threads/serial and batch/serial below are genuine " *
+        "comparisons.",
     )
     _print_table(data; column_labels = header, fit_table_in_display_horizontally = false)
     ns = [r.n for r in dot_rows]
@@ -643,8 +648,9 @@ function main()
         "Large n=$(large.n): threads/serial = $(round(large.t_threads / large.t_serial; digits = 3)), " *
         "batch/serial = $(round(large.t_batch / large.t_serial; digits = 3))",
     )
-    _out("Crossover (Threads vs serial):   $(_crossover(ns, rt_all)) elements (not a real arm, see above)")
+    _out("Crossover (Threads vs serial):    $(_crossover(ns, rt_all)) elements")
     _out("Crossover (Polyester vs serial):  $(_crossover(ns, rb_all)) elements")
+    _out("_dot CpuThreaded crossover $(_crossover_summary(ns, rt_all))")
 
     _out()
     if ALL_OK[]
