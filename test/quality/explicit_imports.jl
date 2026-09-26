@@ -104,6 +104,16 @@ using ExplicitImports
                 # exported or public.
                 :SeparableWeights,
                 :sparse!,
+                # `_difference_band!`, `_average_band!`, `_centered_average_band!`
+                # (gpena/Bramble.jl#356, S7.2): the per-band loop bodies
+                # `_batch_difference_engine!`/`_batch_average_engine!`/
+                # `_batch_centered_average_engine!` below run under `@batch`, the same bodies
+                # `_threaded_difference_engine!`/`_threaded_average_engine!`/
+                # `_threaded_centered_average_engine!` already run under `Threads.@threads`.
+                # Neither exported nor public.
+                :_difference_band!,
+                :_average_band!,
+                :_centered_average_band!,
                 # `TrackedArray` (BrambleReverseDiffExt, commit c5ae771f): the argument type of the
                 # `mul!` method that resolves the ambiguity with `KroneckerLinearOperator`
                 # (gpena/Bramble.jl#295). ReverseDiff exports no public name for it.
@@ -308,6 +318,14 @@ using ExplicitImports
                 :_threaded_replay_policy,
                 :_batch_bilinear_band_replay!,
                 :_batch_bilinear_colour_replay!,
+                # `_batch_difference_engine!`, `_batch_average_engine!`,
+                # `_batch_centered_average_engine!` (BramblePolyesterExt, gpena/Bramble.jl#356,
+                # S7.2): the `Polyester.@batch` counterparts of the `CpuThreaded` stencil
+                # engines in `src/space/operators/difference.jl` and
+                # `src/space/operators/average.jl`, extended here rather than called.
+                :_batch_difference_engine!,
+                :_batch_average_engine!,
+                :_batch_centered_average_engine!,
                 # `BrambleKernelAbstractionsExt` (gpena/Bramble.jl#94, #174): the stencil and
                 # component helpers its `@kernel`s call so the device answer is computed by
                 # the very same quadrature/stencil arithmetic the CPU sweep uses, rather than

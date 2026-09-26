@@ -18,6 +18,7 @@ using SparseArrays
 using SparseArrays: getcolptr
 using LinearAlgebra: issymmetric
 using Random
+using ..TestUtils: alloc_test
 
 const ZERO_BC = :dir => (x -> 0.0)
 
@@ -344,6 +345,99 @@ end
             @test bytes[1] == bytes[2]
         end
     end
+end
+
+# Under `CpuPolyester` every CPU stencil engine (the one-sided and centered difference
+# engines and both average engines) runs banded along the grid's last axis, one band per
+# `@batch` task (gpena/Bramble.jl#356, S7.2, mirroring `test/space/threaded_stencils.jl`'s own
+# `CpuThreaded` check, `Bramble._batch_difference_engine!`/`_batch_average_engine!`/
+# `_batch_centered_average_engine!` in `ext/BramblePolyesterExt.jl`). Every point is still
+# computed by the very loop body the serial engine runs, so the answer must equal `Serial()`
+# exactly, not merely to a tolerance -- the meshes are non-uniform for the same reason: on a
+# uniform mesh a band that picked up the wrong spacing index would still give the right
+# number.
+
+# Every family reaching `_apply_stencil!` or `_apply_averaged!`, spelled from the operator's
+# base name so no Unicode is retyped here -- the same set `threaded_stencils.jl` names.
+const _POLY_FAMILIES = (:D₋, :D₊, :diff₋, :diff₊, :jump, :Dc, :D̃, :D̽, :M, :M₊, :Mc)
+const _POLY_CENTERED = (:Dc, :D̽, :Mc)   # need three points along their direction
+const _POLY_SUFFIXES = ("ₓ", "ᵧ", "₂")
+
+_poly_op(fam, d) = getproperty(Bramble, Symbol(fam, _POLY_SUFFIXES[d]))
+_poly_op!(fam, d) = getproperty(Bramble, Symbol(fam, _POLY_SUFFIXES[d], :!))
+
+function _poly_domain(D)
+    D == 1 ? domain(interval(0.0, 1.0)) :
+    D == 2 ? domain(interval(0.0, 1.0) × interval(0.0, 1.0)) :
+    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+end
+
+# The same non-uniform mesh twice, once per policy: the seed fixes the random points so
+# `CpuPolyester` and `Serial` share every grid point.
+function _poly_mesh_pair(n::NTuple{D, Int}; seed = 356) where {D}
+    dom = _poly_domain(D)
+    npts = D == 1 ? n[1] : n
+    unif = D == 1 ? false : ntuple(_ -> false, D)
+    Random.seed!(seed)
+    Ωs = mesh(dom, npts, unif; backend = backend(policy = Serial()))
+    Random.seed!(seed)
+    Ωb = mesh(dom, npts, unif; backend = backend(policy = CpuPolyester()))
+    return Ωs, Ωb
+end
+
+const _POLY_F = (x -> sin(3x) + x^2, x -> sin(3x[1] + 2x[2]) + x[1] * x[2],
+    x -> sin(3x[1] + 2x[2] - x[3]) + x[1] * x[3])
+const _POLY_G = (x -> cos(2x), x -> exp(x[1]) * x[2], x -> x[1] + x[2]^2 * x[3])
+
+# Every applicable family and direction, in place and allocating, scalar and composite,
+# `CpuPolyester` against `Serial`, exact `==`.
+function _poly_check_all(n::NTuple{D, Int}) where {D}
+    Ωs, Ωb = _poly_mesh_pair(n)
+    Ws, Wb = gridspace(Ωs), gridspace(Ωb)
+    Vs, Vb = gridspace(Ωs, Val(2)), gridspace(Ωb, Val(2))
+    us, ub = Rₕ(Ws, _POLY_F[D]), Rₕ(Wb, _POLY_F[D])
+    vs, vb = Rₕ(Vs, (_POLY_F[D], _POLY_G[D])), Rₕ(Vb, (_POLY_F[D], _POLY_G[D]))
+    @test parent(us) == parent(ub)
+    for d in 1:D, fam in _POLY_FAMILIES
+
+        fam in _POLY_CENTERED && n[d] < 3 && continue
+        f, f! = _poly_op(fam, d), _poly_op!(fam, d)
+        @testset "$(fam)$(_POLY_SUFFIXES[d]) n=$n" begin
+            ws, wb = similar(us), similar(ub)
+            parent(wb) .= NaN               # every point must be written
+            f!(ws, us)
+            @test f!(wb, ub) === wb
+            @test parent(wb) == parent(ws)
+            @test parent(f(ub)) == parent(f(us))
+
+            ws2, wb2 = similar(vs), similar(vb)
+            f!(ws2, vs)
+            f!(wb2, vb)
+            @test parent(wb2) == parent(ws2)
+            @test parent(f(vb)) == parent(f(vs))
+        end
+    end
+end
+
+@testset "Stencil engines equal to Serial, $(D)D" for D in 1:3
+    sizes = D == 1 ? ((1,), (2,), (3,), (5,), (1001,)) :
+            D == 2 ? ((9, 1), (9, 2), (3, 3), (11, 7), (40, 37)) :
+            ((5, 4, 1), (5, 4, 2), (4, 3, 5), (9, 8, 13))
+    # Banded axes shorter than the thread count, down to a single point, leave some bands
+    # empty; the operator must not notice.
+    foreach(_poly_check_all, sizes)
+end
+
+@testset "Stencil engines: warmed in-place allocation independent of grid size" begin
+    function _poly_min_bytes(n)
+        _, Ωb = _poly_mesh_pair((n, n))
+        ub = Rₕ(gridspace(Ωb), _POLY_F[2])
+        w = similar(ub)
+        return map((:D₋, :D₊, :Dc, :D̃, :D̽, :M, :M₊, :Mc)) do fam
+            minimum(alloc_test(_poly_op!(fam, 2), w, ub) for _ in 1:5)
+        end
+    end
+    @test _poly_min_bytes(16) == _poly_min_bytes(160)
 end
 
 # The Polyester-gated mixed-policy testset of test/form/threaded_replay.jl ("Mixed leaf

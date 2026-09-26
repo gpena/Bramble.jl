@@ -12,6 +12,12 @@
 # `assemble_parallel!`, `_assemble_linear!`) are untouched by this file: this only supplies what
 # runs once the caller has already zeroed and dispatched.
 #
+# S7.2 (gpena/Bramble.jl#356) left three more of the same shape in
+# `src/space/operators/difference.jl`/`src/space/operators/average.jl`: `_batch_difference_engine!`,
+# `_batch_average_engine!` and `_batch_centered_average_engine!`, each the `@batch` counterpart of
+# `_threaded_difference_engine!`/`_threaded_average_engine!`/`_threaded_centered_average_engine!`,
+# running one `_difference_band!`/`_average_band!`/`_centered_average_band!` per band.
+#
 # S3.1 (gpena/Bramble.jl#338) added a warmed refill that replays recorded `nzval` positions
 # instead of searching, gated per unit by `_threaded_replay_policy`: only `CpuThreaded`
 # answered `true` in `src/`, so `CpuPolyester` kept searching even once a recording existed.
@@ -34,7 +40,8 @@ module BramblePolyesterExt
 using Bramble
 using Bramble: MarkedIndicesUnion, SeparableWeights, _reduce_or_chunk, _throw_dot_dim_error,
                _write_components!, _band_range, _scatter_point!, _scatter_linear_point!,
-               CpuPolyester, _ReplayTarget, _replay_point!
+               CpuPolyester, _ReplayTarget, _replay_point!, _difference_band!, _average_band!,
+               _centered_average_band!
 using Polyester: Polyester, @batch
 
 # --- _batch_for!/_batch_axis_for! (src/utils/linear_algebra.jl) -------------------- #
@@ -313,6 +320,40 @@ function Bramble._batch_linear_band_sweep!(
         for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
             _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
         end
+    end
+    return nothing
+end
+
+# --- _batch_difference_engine!/_batch_average_engine!/_batch_centered_average_engine! ---- #
+# (src/space/operators/difference.jl, src/space/operators/average.jl)
+#
+# `CpuPolyester`'s counterpart of `_threaded_difference_engine!`/`_threaded_average_engine!`/
+# `_threaded_centered_average_engine!`: one `_difference_band!`/`_average_band!`/
+# `_centered_average_band!` per band under `@batch`, exactly the shape of the sweeps above.
+# `out::AbstractVector` (matching the `CpuThreaded` reference bodies), the same reasoning as
+# the sweep hooks above, so this is a genuine specialisation of the `src/` stub rather than a
+# redefinition of its fully unconstrained signature.
+
+function Bramble._batch_difference_engine!(out::AbstractVector, in_ref, h, dims, dir, dim_val)
+    n = Threads.nthreads()
+    @batch for b in 1:n
+        _difference_band!(out, in_ref, h, dims, dir, dim_val, n, b)
+    end
+    return nothing
+end
+
+function Bramble._batch_average_engine!(out::AbstractVector, in_ref, dims, dir, dim_val)
+    n = Threads.nthreads()
+    @batch for b in 1:n
+        _average_band!(out, in_ref, dims, dir, dim_val, n, b)
+    end
+    return nothing
+end
+
+function Bramble._batch_centered_average_engine!(out::AbstractVector, in_ref, dims, dim_val)
+    n = Threads.nthreads()
+    @batch for b in 1:n
+        _centered_average_band!(out, in_ref, dims, dim_val, n, b)
     end
     return nothing
 end
