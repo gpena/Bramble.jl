@@ -373,6 +373,9 @@ using ExplicitImports
                 :SizeUnknown,
                 :eval,
                 :mightalias,
+                # `broadcasted` (src/space/vectorelement.jl:510): the customization hook for
+                # `copyto!(dest::VectorElement, src::VectorElement)` (gpena/Bramble.jl#346).
+                :broadcasted,
                 # `instantiate`, `preprocess`, `throwdm` (src/space/vectorelement.jl): Base's
                 # own pre-loop steps the threaded broadcast copyto! repeats before banding
                 # (gpena/Bramble.jl#357).
