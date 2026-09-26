@@ -23,6 +23,7 @@ using Bramble:
                ExecutionPolicy,
                GpuAsync,
                GpuKernel,
+               GpuOffload,
                GpuPolicy
 using SparseArrays
 using LinearAlgebra: diag, I
@@ -670,6 +671,58 @@ end
                 @test occursin("no supported GPU hardware", msg)
             end
         end
+    end
+end
+
+@testset "GpuOffload policy (gpena/Bramble.jl#324)" begin
+    # A device Backend stands in for a real GPU backend (MockGPUVector/MockGPUMatrix answer
+    # DeviceLocality(), see the top of this file), so this testset exercises GpuOffload's own
+    # behaviour without requiring Metal.jl.
+    dev = backend(
+        vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32},
+        policy = GpuKernel()
+    )
+
+    # Invariants tested:
+    # 1. GpuOffload is a public CpuPolicy: HostLocality() no matter the device it wraps.
+    # 2. GpuOffload() with no inner policy argument defaults to CpuSerial().
+    # 3. execution_policy on a Backend configured with a GpuOffload policy returns the wrapped
+    #    inner policy instance, not the GpuOffload itself.
+    @testset "wraps an inner CpuPolicy and a device Backend" begin
+        @test Base.ispublic(Bramble, :GpuOffload)
+
+        P_default = GpuOffload(dev)
+        @test P_default isa CpuPolicy
+        @test P_default isa GpuOffload{CpuSerial}
+        @test Bramble.locality(P_default) === Bramble.HostLocality()
+
+        P_threaded = GpuOffload(dev, CpuThreaded())
+        @test P_threaded isa GpuOffload{CpuThreaded}
+
+        be = backend(vector_type = Vector{Float32}, matrix_type = SparseMatrixCSC{Float32, Int},
+            policy = P_threaded)
+        @test Bramble.locality(be) === Bramble.HostLocality()
+        @test execution_policy(be) === CpuThreaded()
+    end
+
+    # Invariants tested:
+    # 1. A Backend built over a GpuOffload policy is refused at construction, not left to fail
+    #    on first use, when its vector eltype cannot be represented by the wrapped device
+    #    backend's own vector eltype.
+    @testset "refuses an unrepresentable device element type" begin
+        err = try
+            backend(Float64; policy = GpuOffload(dev))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("GpuOffload", msg)
+        @test occursin("Float64", msg)
+
+        # the matching element type still constructs
+        @test backend(Float32; policy = GpuOffload(dev)) isa Backend
     end
 end
 

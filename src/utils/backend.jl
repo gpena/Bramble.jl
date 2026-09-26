@@ -342,6 +342,24 @@ end
     )
 end
 
+# The one message a Backend gives when a `GpuOffload` policy's requested element type cannot
+# be represented on the device backend it wraps (e.g. `Float64` on a Metal device backend,
+# which only supports `Float32`/`Float16`). Checked here, in the `Backend` inner constructor,
+# rather than in `GpuOffload`'s own constructor (`GpuOffload(device_backend)` alone must
+# succeed regardless of what element type is later requested through `backend(T; policy)`).
+@noinline function _throw_gpu_offload_eltype_mismatch(requested, device)
+    throw(
+        ArgumentError(
+        "GpuOffload backend requested element type $requested, but its wrapped device " *
+        "backend only supports $device: $requested cannot be represented on the device.",
+    ),
+    )
+end
+
+# No-op for every policy but `GpuOffload`, whose method is added once `GpuOffload` itself is
+# defined below (it wraps a `Backend`, so it cannot be declared before `Backend` is).
+@inline _check_gpu_offload_eltype(::Type{VT}, ::Type{EP}) where {VT, EP} = nothing
+
 """
     Backend{VT, MT, EP}()
 
@@ -370,6 +388,7 @@ struct Backend{VT <: DenseVector, MT <: AbstractMatrix, EP <: ExecutionPolicy}
             VT <: DenseVector, MT <: AbstractMatrix, EP <: ExecutionPolicy}
         locality(VT) === locality(EP()) || _throw_backend_locality_mismatch(VT, EP)
         locality(MT) === locality(VT) || _throw_backend_matrix_locality_mismatch(VT, MT)
+        _check_gpu_offload_eltype(VT, EP)
         return new{VT, MT, EP}()
     end
 end
@@ -466,6 +485,54 @@ true
 """
 @inline backend(::Type{T}; policy::ExecutionPolicy = Serial()) where {T} = Backend{
     Vector{T}, SparseMatrixCSC{T, Int}, typeof(policy)}()
+
+"""
+    GpuOffload{I, DB}() <: CpuPolicy
+    GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -> GpuOffload
+
+A [`CpuPolicy`](@ref) that wraps a host `inner` policy alongside a device [`Backend`](@ref)
+`device_backend`, for host-side [`Backend`](@ref)s that offload individual calls (`Rₕ!`,
+`avgₕ!`) to the device rather than running them on the host (gpena/Bramble.jl#324).
+
+Carries no runtime fields: `I` and `DB` are type parameters only, so a
+`Backend{VT, MT, GpuOffload{I, DB}}` still rebuilds `EP()` the way every other
+[`ExecutionPolicy`](@ref) does. [`locality`](@ref) answers [`HostLocality`](@ref) for it, as
+for any [`CpuPolicy`](@ref): the `Backend` it configures is a host backend, and `device_backend`
+is only where the offloaded calls are dispatched, not this backend's own storage.
+[`execution_policy`](@ref) on a `Backend` configured with a `GpuOffload` policy returns `I()`,
+the wrapped inner policy instance, not the `GpuOffload` itself -- every existing
+concrete-policy dispatch site sees the inner policy and behaves exactly as it does without a
+`GpuOffload` in play.
+
+# Throws
+- `ArgumentError`: constructing a `Backend` with a `GpuOffload{I, DB}` policy whose requested
+  vector element type cannot be represented by `device_backend`'s own vector element type
+  (e.g. `Float64` requested against a Metal `device_backend`, which only supports `Float32`
+  and `Float16`).
+
+See also: [`CpuPolicy`](@ref), [`Backend`](@ref), [`metal_backend`](@ref), [`execution_policy`](@ref).
+"""
+struct GpuOffload{I <: CpuPolicy, DB <: Backend} <: CpuPolicy end
+
+@inline GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) =
+    GpuOffload{typeof(inner), typeof(device_backend)}()
+
+# `GpuOffload`'s half of the `execution_policy` contract: a `Backend` configured with a
+# `GpuOffload` policy hands every concrete-policy dispatch site the wrapped inner policy
+# instance instead of the `GpuOffload` wrapper itself (gpena/Bramble.jl#324).
+@inline execution_policy(::Backend{VT, MT, GpuOffload{I, DB}}) where {VT, MT, I, DB} = I()
+@inline execution_policy(::Type{<:Backend{VT, MT, GpuOffload{I, DB}}}) where {VT, MT, I, DB} = I()
+
+# The `GpuOffload` half of the eltype check declared as a no-op above: refuses at `Backend`
+# construction when the requested vector eltype cannot be represented by the wrapped device
+# backend's own vector eltype (gpena/Bramble.jl#324).
+@inline function _check_gpu_offload_eltype(::Type{VT}, ::Type{GpuOffload{I, DB}}) where {
+        VT, I, DB}
+    requested = eltype(VT)
+    device = eltype(vector_type(DB))
+    requested === device || _throw_gpu_offload_eltype_mismatch(requested, device)
+    return nothing
+end
 
 """
     backend_types(backend::Backend{VT, MT, EP}) -> Tuple{Type, Type{VT}, Type{MT}, Type{Backend{VT, MT, EP}}}

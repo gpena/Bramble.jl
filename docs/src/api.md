@@ -28,6 +28,7 @@ CpuPolicy
 CpuSerial
 CpuThreaded
 CpuPolyester
+GpuOffload
 GpuPolicy
 GpuKernel
 Serial
