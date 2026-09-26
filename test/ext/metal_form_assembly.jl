@@ -2,7 +2,7 @@ module ExtMetalFormAssemblyTests
 
 using Test
 using Bramble
-using Bramble: D₋ᵧ, D₋ₓ, change_points!, dirichlet_bc!, innerₕ, Rₕ
+using Bramble: D₋ᵧ, D₋ₓ, change_points!, dirichlet_bc!, innerₕ, Rₕ, πₕ
 using Metal
 using SparseArrays
 using ..TestUtils: _run_gpu_tests
@@ -252,6 +252,38 @@ else
             # Nothing is written before the check fails.
             @test Array(A) == Matrix(S)
             @test A.mirror.nzval == Array(A.nzVal)
+        end
+    end
+
+    # `πₕ` across two device meshes (gpena/Bramble.jl#363): each walk binds the interpolation
+    # to its source leaf's `host_weights` mirror, so the cell search reads host points. The
+    # source and target meshes differ in size, both non-uniform and mirrored.
+    @testset "Metal interpolation across device meshes (gpena/Bramble.jl#363)" begin
+        for (ns, nt) in (((7,), (11,)), ((7, 9), (11, 8)))
+            Wsc, Wsg = _matched_spaces(ns)
+            Wtc, Wtg = _matched_spaces(nt)
+            cases = (
+                ("trial πₕ", Wsc, Wtc, Wsg, Wtg, (u, v) -> innerₕ(πₕ(u), v)),
+                ("D₋ₓ of trial πₕ", Wsc, Wtc, Wsg, Wtg,
+                    (u, v) -> innerₕ(D₋ₓ(πₕ(u)), D₋ₓ(v))),
+                ("test πₕ", Wtc, Wsc, Wtg, Wsg, (u, v) -> innerₕ(u, πₕ(v))),
+                ("composite with a cross-mesh block", Wsc × Wtc, Wtc × Wtc, Wsg × Wtg,
+                    Wtg × Wtg,
+                    (U, V) -> innerₕ(πₕ(U[1]), V[1]) + innerₕ(U[2], V[2]) +
+                              innerₕ(U[2], V[1]))
+            )
+            for (label, trc, tec, trg, teg, a) in cases
+                @testset "$(length(ns))D $label" begin
+                    Ac = assemble(form(trc, tec, a))
+                    Fg = form(trg, teg, a)
+                    Ag = assemble(Fg)
+                    @test nameof(typeof(Ag)) === :MetalSparseMatrixCSR
+                    @test size(Ag) == size(Ac)
+                    @test _relerr(Ag, Ac) < _RTOL
+                    _refills_without_search!(() -> assemble!(Ag, Fg), Ag, 3)
+                    @test _relerr(Ag, Ac) < _RTOL
+                end
+            end
         end
     end
 end

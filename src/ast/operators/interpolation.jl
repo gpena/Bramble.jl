@@ -421,12 +421,19 @@ _bind_interp_spaces(op::Any, trial_leaf, test_leaf) = op
 # trial-side interpolation, the test leaf for a test-side one (gpena/Bramble.jl#263). Both
 # leaves are threaded through the whole walk, so one form may interpolate on either side in
 # different terms.
+#
+# The leaf is stored as its `host_weights` mirror (gpena/Bramble.jl#363): the stencil locates
+# the cell by reading the source mesh's points one at a time, which a device mesh cannot serve,
+# and the mirror numbers the same degrees of freedom. On a host leaf `host_weights` returns the
+# leaf itself, so the host path binds exactly what it bound before. Binding happens once per
+# fill, never at `form` construction, so a mirror never outlives a `change_points!`.
 function _bind_interp_spaces(
         op::InterpolationNode{D, S, OpType, TrialSide}, trial_leaf, test_leaf
 ) where {D, S, OpType}
     inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
-    return InterpolationNode{D, typeof(trial_leaf), typeof(inner), TrialSide}(
-        trial_leaf, inner, op.outside
+    src = host_weights(trial_leaf)
+    return InterpolationNode{D, typeof(src), typeof(inner), TrialSide}(
+        src, inner, op.outside
     )
 end
 
@@ -434,8 +441,9 @@ function _bind_interp_spaces(
         op::InterpolationNode{D, S, OpType, TestSide}, trial_leaf, test_leaf
 ) where {D, S, OpType}
     inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
-    return InterpolationNode{D, typeof(test_leaf), typeof(inner), TestSide}(
-        test_leaf, inner, op.outside
+    src = host_weights(test_leaf)
+    return InterpolationNode{D, typeof(src), typeof(inner), TestSide}(
+        src, inner, op.outside
     )
 end
 
