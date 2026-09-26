@@ -8,9 +8,17 @@ module UtilsThreadedDotTests
 # `CpuThreaded()` policy dispatch that now reaches them, against the untouched serial
 # kernels as ground truth -- dense, single-mask (`BitVector`) and multi-marker
 # (`MarkedIndicesUnion`) alike.
+#
+# S2.2 (gpena/Bramble.jl#301, #288) adds the `SeparableWeights` specializations of
+# `_threaded_dot`/`_threaded_dot_masked` in `src/space/inner_product.jl`: without them a
+# `SeparableWeights` weight under `CpuThreaded` fell through to the dense kernels above,
+# reading the weight through its linear `Int` `getindex` (an `O(D)` divrem per point) instead
+# of the serial kernel's line-walk. The final testset here checks those specializations,
+# dense/`BitVector`/`MarkedIndicesUnion` alike, against the untouched serial `SeparableWeights`
+# kernels across 1D/2D/3D non-uniform grids.
 using Test
 using Bramble
-using Bramble: _dot, _dot_masked, _threaded_dot, _threaded_dot_masked, MarkedIndicesUnion, CpuThreaded
+using Bramble: _dot, _dot_masked, _threaded_dot, _threaded_dot_masked, MarkedIndicesUnion, CpuThreaded, weights
 
 @testset "Threaded _dot/_dot_masked (CpuThreaded chunked reduction)" begin
     # Invariants tested:
@@ -151,6 +159,71 @@ using Bramble: _dot, _dot_masked, _threaded_dot, _threaded_dot_masked, MarkedInd
         large_masked = _masked_allocs(200_000)
         @test large_masked <= 4 * small_masked + 1024
         @test large_masked < 100_000
+    end
+end
+
+@testset "SeparableWeights (CpuThreaded chunked reduction, gpena/Bramble.jl#288)" begin
+    # S2.2: `_dot`/`_dot_masked(CpuThreaded(), u, w, v[, mask])` must reach the
+    # `SeparableWeights` specializations of `_threaded_dot`/`_threaded_dot_masked`
+    # (`src/space/inner_product.jl`), not the dense methods above -- which would read `w`
+    # through its linear `Int` `getindex` (an `O(D)` divrem per point, gpena/Bramble.jl#288)
+    # instead of the line-walk the serial `SeparableWeights` kernel uses. Checked against the
+    # untouched serial kernels at rtol=1e-12, for dense, `BitVector`-masked and two-marker
+    # `MarkedIndicesUnion`-masked sums, across D=1/2/3 non-uniform grids -- including one grid
+    # per dimension whose *last* axis is shorter than `Threads.nthreads()`, the axis the
+    # threaded dense kernel bands (`_last_axis_chunks`).
+    nthreads = Threads.nthreads()
+
+    _D1 = domain(interval(0.0, 1.0))
+    _D2 = domain(interval(0.0, 1.0) × interval(0.0, 2.0))
+    _D3 = domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0))
+    _nonuniform_mesh(D, dims) = mesh(
+        D == 1 ? _D1 : D == 2 ? _D2 : _D3, dims, ntuple(_ -> false, D))
+
+    _separable_weights(D, dims) = weights(gridspace(_nonuniform_mesh(D, dims)), Val(()))
+
+    grids = (
+        (1, (37,)),
+        (1, (max(1, nthreads - 1),)),  # the only axis shorter than nthreads
+        (2, (23, 17)),
+        (2, (23, max(1, nthreads - 1))),  # last axis shorter than nthreads
+        (3, (9, 7, 6)),
+        (3, (9, 7, max(1, nthreads - 1))),  # last axis shorter than nthreads
+    )
+
+    @testset "D=$D, dims=$dims" for (D, dims) in grids
+        w = _separable_weights(D, dims)
+        n = length(w)
+        u = Float64[0.3 + 0.11 * i for i in 1:n]
+        v = Float64[-0.6 + 0.07 * i for i in 1:n]
+
+        expected = _dot(u, w, v)
+        got = _threaded_dot(u, w, v)
+        @test isapprox(got, expected; rtol = 1.0e-12, atol = 1.0e-12)
+        @test isapprox(_dot(CpuThreaded(), u, w, v), got; rtol = 1.0e-12, atol = 1.0e-12)
+
+        mask = falses(n)
+        n > 0 && (mask[1:2:n] .= true) # every other index set, exercises both branches
+        expected_m = _dot_masked(u, w, v, mask)
+        got_m = _threaded_dot_masked(u, w, v, mask)
+        @test isapprox(got_m, expected_m; rtol = 1.0e-12, atol = 1.0e-12)
+        @test isapprox(
+            _dot_masked(CpuThreaded(), u, w, v, mask), got_m; rtol = 1.0e-12, atol = 1.0e-12
+        )
+
+        mask1 = falses(n)
+        mask2 = falses(n)
+        n > 0 && (mask1[1:3:n] .= true) # disjoint-ish, overlapping on some indices
+        n > 0 && (mask2[2:3:n] .= true)
+        union_mask = MarkedIndicesUnion((mask1, mask2))
+        bit_union = mask1 .| mask2
+        expected_u = _dot_masked(u, w, v, bit_union)
+        got_u = _threaded_dot_masked(u, w, v, union_mask)
+        @test isapprox(got_u, expected_u; rtol = 1.0e-12, atol = 1.0e-12)
+        @test isapprox(
+            _dot_masked(CpuThreaded(), u, w, v, union_mask), got_u;
+            rtol = 1.0e-12, atol = 1.0e-12
+        )
     end
 end
 
