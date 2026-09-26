@@ -193,8 +193,10 @@ const _SIZES = (41, 13, 7)
         _check_mixed(Serial())
     end
 
-    # A `CpuPolyester` leaf cannot replay (until `BramblePolyesterExt` fills the replay
-    # hooks), so its units search while the `CpuThreaded` leaf's units replay. Building a
+    # A `CpuPolyester` leaf replays too now (gpena/Bramble.jl#318): both leaves' units
+    # replay. This testset still exercises mixed-policy composite assembly — it still checks
+    # that leaves under different CPU policies agree, just that "mixed" no longer means "one
+    # replays, one searches". Building a
     # `CpuPolyester` space needs Polyester, which the `unit` group deliberately does not load
     # (test/space/inner_product.jl checks the error without it), so this runs only where the
     # extension is already loaded.

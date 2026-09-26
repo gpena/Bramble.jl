@@ -699,9 +699,10 @@ end
 # mirror's CSR layout when the recording runs, and `_scatter_add!` writes `mirror.nzval`), and
 # a device leaf replays over `host_weights(sp)`, as the searching sweep walks it. A
 # `GpuPolicy` leaf's effective policy is `CpuThreaded` (`_coerce_serial_to_threaded`), so it
-# replays. Only `CpuThreaded` does in `src/`; `CpuPolyester` searches until `BramblePolyesterExt` fills
-# `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` and adds its own method
-# of `_threaded_replay_policy`. Decided per unit, from the leaf the sweep itself takes its
+# replays. `CpuThreaded` replays directly in `src/`; `CpuPolyester` replays too, via
+# `_threaded_replay_policy(::CpuPolyester) = true` and
+# `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` in `ext/BramblePolyesterExt.jl`
+# (gpena/Bramble.jl#318). Decided per unit, from the leaf the sweep itself takes its
 # policy from (`_sweep_bilinear!`), never from the form's trial space: a composite's leaves,
 # or a cross-mesh form's two meshes, can each carry a different backend. Decided from types
 # alone, so the branch folds away.
