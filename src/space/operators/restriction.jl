@@ -44,8 +44,8 @@ GPU-compilable: `x -> sin(x[1])` is, but a closure boxing a captured value (a `R
 `mutable struct` field, a global variable) or calling a function the device compiler cannot
 inline is not, and fails at kernel-compile time with a `GPUCompiler.InvalidIRError` naming
 the offending call -- inherent to GPU execution, not specific to `Rₕ!`. A masked call
-(`markers` non-empty) and a mesh of more than one dimension currently fall back to the same
-per-index sweep the CPU backend uses, which is not device-compatible either.
+(`markers` non-empty) runs the same kernel over just the marked points, after zeroing `uₕ`
+on the device (gpena/Bramble.jl#297).
 
 For an `N`-component element either shape of `f` works and both give the same result;
 the single vector-valued function is evaluated once per grid point when every
@@ -115,10 +115,11 @@ end
 # `AbstractVector`/`Tuple`, and a fallback with the same signature would overwrite them
 # instead of adding a genuinely more specific dispatch.
 """
-    _launch_restriction!(v::AbstractVector, pts::AbstractVector, f, dev) -> Nothing
+    _launch_restriction!(v::AbstractVector, pts::AbstractVector, f, dev, sel) -> Nothing
 
 Fills `v` with `f` evaluated at every point of a 1D mesh's coordinate vector `pts`
-(`v[i] = f(pts[i])`), via a `KernelAbstractions.@kernel` launch on `dev`, filled by
+(`v[i] = f(pts[i])`), or only at the linear indices in `sel` when `sel` is a device index
+vector rather than `nothing` (a masked call, see [`project!`](@ref)), via a `KernelAbstractions.@kernel` launch on `dev`, filled by
 `ext/BrambleKernelAbstractionsExt.jl`. `f` runs on the device, so it must be GPU-compilable
 in the sense [`Rₕ!`](@ref)'s docstring describes.
 
@@ -126,19 +127,20 @@ in the sense [`Rₕ!`](@ref)'s docstring describes.
 - `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
   kernel to reach (`_throw_no_ka_projection_kernel`).
 """
-_launch_restriction!(v, pts, f, dev) = _throw_no_ka_projection_kernel("_launch_restriction!")
+_launch_restriction!(v, pts, f, dev, sel) = _throw_no_ka_projection_kernel("_launch_restriction!")
 
 """
-    _launch_restriction_scatter!(mats::Tuple, pts::AbstractVector, f, dev) -> Nothing
+    _launch_restriction_scatter!(mats::Tuple, pts::AbstractVector, f, dev, sel) -> Nothing
 
 The scatter counterpart of [`_launch_restriction!`](@ref): evaluates `f(pts[i])` once per
 point of a 1D mesh and scatters its components into the destination tuple `mats`, via a
-`KernelAbstractions.@kernel` launch on `dev`. Same GPU-compilability requirement on `f`.
+`KernelAbstractions.@kernel` launch on `dev`. `sel` restricts it to a marker index list as
+in [`_launch_restriction!`](@ref). Same GPU-compilability requirement on `f`.
 
 # Throws
 - `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
 """
-_launch_restriction_scatter!(mats, pts, f, dev) = _throw_no_ka_projection_kernel("_launch_restriction_scatter!")
+_launch_restriction_scatter!(mats, pts, f, dev, sel) = _throw_no_ka_projection_kernel("_launch_restriction_scatter!")
 
 # The `D >= 2` counterparts: a tensor-product mesh stores one coordinate vector per axis
 # (`points(Ωₕ::MeshnD) -> NTuple{D,AbstractVector}`), so the point at Cartesian index `I`
@@ -148,66 +150,68 @@ _launch_restriction_scatter!(mats, pts, f, dev) = _throw_no_ka_projection_kernel
 # module comment at the top of `ext/BrambleKernelAbstractionsExt.jl` for why that
 # distinction is load-bearing on a device.
 """
-    _launch_restriction_nd!(v::AbstractVector, pts::Tuple, idxs, f, dev) -> Nothing
+    _launch_restriction_nd!(v::AbstractVector, pts::Tuple, idxs, f, dev, sel) -> Nothing
 
 The `D >= 2` counterpart of [`_launch_restriction!`](@ref): builds each grid point from the
 per-axis coordinate vectors `pts` at Cartesian index `idxs[i]` and fills `v[i] = f(point)`,
-via a `KernelAbstractions.@kernel` launch on `dev`. Same GPU-compilability requirement on
-`f`.
+via a `KernelAbstractions.@kernel` launch on `dev`. `sel` restricts it to a marker index
+list as in [`_launch_restriction!`](@ref). Same GPU-compilability requirement on `f`.
 
 # Throws
 - `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
 """
-_launch_restriction_nd!(v, pts, idxs, f, dev) = _throw_no_ka_projection_kernel("_launch_restriction_nd!")
+_launch_restriction_nd!(v, pts, idxs, f, dev, sel) = _throw_no_ka_projection_kernel("_launch_restriction_nd!")
 
 """
-    _launch_restriction_scatter_nd!(mats::Tuple, pts::Tuple, idxs, f, dev) -> Nothing
+    _launch_restriction_scatter_nd!(mats::Tuple, pts::Tuple, idxs, f, dev, sel) -> Nothing
 
 The `D >= 2`, scatter counterpart of [`_launch_restriction!`](@ref): builds each grid point
 from the per-axis coordinate vectors `pts` at Cartesian index `idxs[i]`, evaluates `f` at it
 once, and scatters its components into the destination tuple `mats`, via a
-`KernelAbstractions.@kernel` launch on `dev`. Same GPU-compilability requirement on `f`.
+`KernelAbstractions.@kernel` launch on `dev`. `sel` restricts it to a marker index list as
+in [`_launch_restriction!`](@ref). Same GPU-compilability requirement on `f`.
 
 # Throws
 - `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
 """
-function _launch_restriction_scatter_nd!(mats, pts, idxs, f, dev)
+function _launch_restriction_scatter_nd!(mats, pts, idxs, f, dev, sel)
     _throw_no_ka_projection_kernel(
         "_launch_restriction_scatter_nd!"
     )
 end
 
 """
-    _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{1}) -> Bool
-    _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{D}) where {D} -> Bool
+    _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{1}, sel = nothing) -> Bool
+    _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{D}, sel = nothing) where {D} -> Bool
 
 Fills `raw` with `rule.f` evaluated at every point of the mesh `mesh(sp)`, via a device
 kernel (gpena/Bramble.jl#94, #174, S2.3). The 1D method reads the mesh's own coordinate
 vector directly; the `D`-dimensional method (`D` here is never `1`, since the method above
 is strictly more specific and wins dispatch for it) builds each point from the `D` per-axis
 coordinate vectors instead. `rule.f` runs on the device either way: see [`_gpu_for!`](@ref)
-for what that requires of it.
+for what that requires of it. A device index vector `sel` (a masked call, see
+[`project!`](@ref)) restricts the fill to those linear indices, leaving the rest untouched.
 """
 @inline function _device_project!(
-        ::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{1}
+        ::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{1}, sel = nothing
 )
     Ωₕ = mesh(sp)
     dev = ka_device(backend(sp))
-    _launch_restriction!(raw, points(Ωₕ), rule.f, dev)
+    _launch_restriction!(raw, points(Ωₕ), rule.f, dev, sel)
     return true
 end
 
 @inline function _device_project!(
-        ::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{D}
+        ::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{D}, sel = nothing
 ) where {D}
     Ωₕ = mesh(sp)
     dev = ka_device(backend(sp))
-    _launch_restriction_nd!(raw, points(Ωₕ), indices(Ωₕ), rule.f, dev)
+    _launch_restriction_nd!(raw, points(Ωₕ), indices(Ωₕ), rule.f, dev, sel)
     return true
 end
 
 """
-    _device_scatter_project!(::DeviceLocality, rule::PointValue, raws::Tuple, sp, ::Val{NC}) -> Bool
+    _device_scatter_project!(::DeviceLocality, rule::PointValue, raws::Tuple, sp, ::Val{NC}, sel = nothing) -> Bool
 
 The scatter counterpart of [`_device_project!`](@ref) above, for an `NC`-component
 composite space `sp` whose leaves share one mesh: `rule.f` is evaluated once per point and
@@ -215,17 +219,18 @@ its `NC` components scattered into `raws` in the same device kernel. `sp` is typ
 generically (not `ScalarGridSpace`) because the caller is always the composite branch of
 [`project!`](@ref); the dimension the mesh has determines which launcher runs (1D or the
 `D`-dimensional counterpart), checked on `mesh(sp)` at runtime since it cannot be expressed
-as a type constraint on the composite space itself.
+as a type constraint on the composite space itself. `sel` restricts the fill to a marker
+index list as in [`_device_project!`](@ref).
 """
 @inline function _device_scatter_project!(
-        ::DeviceLocality, rule::PointValue, raws::Tuple, sp, ::Val{NC}
+        ::DeviceLocality, rule::PointValue, raws::Tuple, sp, ::Val{NC}, sel = nothing
 ) where {NC}
     Ωₕ = mesh(sp)
     dev = ka_device(backend(sp))
     if Ωₕ isa AbstractMeshType{1}
-        _launch_restriction_scatter!(raws, points(Ωₕ), rule.f, dev)
+        _launch_restriction_scatter!(raws, points(Ωₕ), rule.f, dev, sel)
     else
-        _launch_restriction_scatter_nd!(raws, points(Ωₕ), indices(Ωₕ), rule.f, dev)
+        _launch_restriction_scatter_nd!(raws, points(Ωₕ), indices(Ωₕ), rule.f, dev, sel)
     end
     return true
 end

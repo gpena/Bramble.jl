@@ -421,15 +421,24 @@ claimed.
   whatever else touches the same buffer, or remove the second writer, and do not trust a
   small, single-run `CHECK` to have exercised the timing at all.
 
-## Current limits
+## Masked projection
 
-A masked [`Rₕ!`](@ref)/`avgₕ!` call (`markers` non-empty) on a `GpuPolicy` backend raises
-rather than running, on either processor -- there is no device kernel for it yet
-([gpena/Bramble.jl#297](https://github.com/gpena/Bramble.jl/issues/297), planned for
-v3.5.0). A masked reduction (`innerₕ`/`normₕ` with a mask) does run on a device today; a
-masked *projection* does not, and those are different mechanisms -- the mask folds into a
-reduction in the first case, but would need folding into a per-point projection kernel in
-the second.
+A masked [`Rₕ!`](@ref)/`avgₕ!` call (`markers` non-empty) on a device backend runs the same
+projection kernel as the unmasked call, launched over an index list rather than the whole
+grid ([gpena/Bramble.jl#297](https://github.com/gpena/Bramble.jl/issues/297)). The host
+path folds the mask into its kernel, but that kernel closes over the mesh's `BitVector`s,
+and a struct nesting an array is not a kernel argument (see above). So each call gathers
+the marked linear indices on the host from the mesh's own masks (the union, for several
+markers), uploads them one way as an `Int32` vector, and passes that vector to the kernel as
+a top-level argument of its own: thread `j` fills grid index `sel[j]`. The destination is
+zeroed on the device first, so off-region entries end up zero, as on the host. A marker
+holding no point launches nothing.
+
+Nothing is cached on the device. A persistent device copy of the markers would need
+invalidating in `set_markers!`: the staleness hazard gpena/Bramble.jl#313 removed along
+with the mirror cache. Launching over the list rather than over every point with a
+predicate is also the cheaper choice for the usual case, a `:boundary` marker, which covers
+a vanishing fraction of the grid.
 
 ## A device kernel launch perturbs the global RNG stream
 

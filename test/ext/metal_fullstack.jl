@@ -239,28 +239,56 @@ else
             @test isapprox(Array(parent(ag2)), Float32.(parent(ac2)); atol = _TOL)
         end
 
-        # A masked call (`markers` non-empty) has no device kernel by design (#297, deferred to
-        # v3.5.0) and must raise, not silently run on the CPU or produce a wrong value.
-        @testset "Rₕ!/avgₕ!: masked call raises (issue #297)" begin
-            u = element(Wg1)
-            err = try
-                Rₕ!(u, f1; markers = (:boundary,))
-                nothing
-            catch e
-                e
-            end
-            @test err isa ArgumentError
-            @test occursin("no device kernel", sprint(showerror, err))
+        # A masked call (`markers` non-empty) runs the rule's device kernel over the marked
+        # indices only, after zeroing the destination on the device (#297). Compared against
+        # the host path on a matched non-uniform mesh pair, in 1D/2D/3D, for a scalar and a
+        # shared-mesh composite space (the scatter kernels), for one marker, a union of two,
+        # and a marker holding no point at all.
+        @testset "Rₕ!/avgₕ!: masked call matches CPU (issue #297)" begin
+            Metal.allowscalar(false)
+            fs(x) = sin(3.0f0 * sum(x))
+            fv(x) = (sin(x[1]), cos(x[end]))
+            for D in 1:3, op in (Rₕ, avgₕ)
 
-            a = element(Wg1)
-            err2 = try
-                avgₕ!(a, f1; markers = (:boundary,))
-                nothing
-            catch e
-                e
+                n = D == 1 ? 33 : (D == 2 ? 17 : 9)
+                Ωc, Ωg = D == 1 ? _matched_meshes_1d(n, false) : _matched_meshes_nd(n, D, false)
+                Wc = gridspace(Ωc)
+                Wg = gridspace(Ωg)
+                bnd = Bramble.index_in_marker(Ωc, :boundary)
+                for mk in ((:boundary,), (:interior,), (:boundary, :interior))
+                    ug = op(Wg, fs; markers = mk)
+                    uc = op(Wc, fs; markers = mk)
+                    @test parent(ug) isa MtlVector{Float32}
+                    @test _close(Array(parent(ug)), parent(uc))
+                end
+                # Off-region entries are exactly zero, as on the host.
+                ub = Array(parent(op(Wg, fs; markers = (:boundary,))))
+                @test all(iszero, ub[.!bnd])
+                @test any(!iszero, ub[bnd])
+                # The union of every region is the unmasked projection.
+                @test _close(Array(parent(op(Wg, fs; markers = (:boundary, :interior)))),
+                    Array(parent(op(Wg, fs))))
+                # In place, over a destination holding stale values: every entry is rewritten.
+                u = element(Wg, 7.0f0)
+                op === Rₕ ? Rₕ!(u, fs; markers = (:boundary,)) : avgₕ!(u, fs; markers = (:boundary,))
+                @test _close(Array(parent(u)), ub)
+
+                Vc = gridspace(Ωc, Val(2))
+                Vg = gridspace(Ωg, Val(2))
+                for mk in ((:boundary,), (:interior,))
+                    cg = components(op(Vg, fv; markers = mk))
+                    cc = components(op(Vc, fv; markers = mk))
+                    @test all(k -> _close(Array(parent(cg[k])), parent(cc[k])), 1:2)
+                end
             end
-            @test err2 isa ArgumentError
-            @test occursin("no device kernel", sprint(showerror, err2))
+
+            # A marker holding no point (a two-point 1D mesh has no interior): nothing is
+            # launched and the result is all zero.
+            W2 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 2, true; backend = metal_backend()))
+            @test all(iszero, Array(parent(Rₕ(W2, fs; markers = (:interior,)))))
+            @test all(iszero, Array(parent(avgₕ(W2, fs; markers = (:interior,)))))
+            V2 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 2, true; backend = metal_backend()), Val(2))
+            @test all(c -> all(iszero, Array(parent(c))), components(Rₕ(V2, fv; markers = (:interior,))))
         end
 
         @testset "difference / jump / average operators match CPU" begin

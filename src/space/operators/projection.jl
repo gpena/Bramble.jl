@@ -96,17 +96,19 @@ function _rule_component end
 # only from the mesh's own coordinate *arrays*, passed to the device launcher as their own
 # top-level arguments rather than nested inside a wrapper struct.
 #
-# Both default to `false` -- "no device kernel for this rule/space/marker combination" --
-# so `project!` falls back to the generic sweep above unchanged: on `HostLocality` that is
-# every call (the CPU path never even asks); on `DeviceLocality` it is only an unmasked
-# `PointValue`/`CellAverage` on a 1D leaf space that answers `true`. A masked call, a
-# higher-dimensional mesh, or a future rule this file has not been taught about all fall
-# through to `_sweep_for!`/`_sweep_scatter_for!`'s own `DeviceLocality` handling,
-# which either runs (if `f`'s fields happen to be GPU-safe) or fails with a real device
-# compiler diagnostic -- never silently the wrong answer.
+# Both default to `false` -- "no device kernel for this rule/space combination" -- so
+# `project!` falls back to the generic sweep above unchanged: on `HostLocality` that is
+# every call (the CPU path never even asks); on `DeviceLocality` every `PointValue`/
+# `CellAverage`, masked or not, on a mesh of any dimension answers `true`. A future rule
+# this file has not been taught about falls through to `_sweep_for!`/`_sweep_scatter_for!`'s
+# own `DeviceLocality` handling, which either runs (if `f`'s fields happen to be GPU-safe)
+# or fails with a real device compiler diagnostic -- never silently the wrong answer.
+#
+# Both take an optional last argument `sel`: `nothing` for an unmasked call, or a device
+# index vector naming the only linear indices to fill (see `_device_masked_project!` below).
 
 """
-    _device_project!(loc, rule, raw, sp) -> Bool
+    _device_project!(loc, rule, raw, sp, sel = nothing) -> Bool
 
 Attempt a dedicated device kernel filling `raw` (a leaf's coefficient vector) according to
 `rule` on space `sp`. Returns `true` when it did; `false` when no such kernel exists for
@@ -115,40 +117,84 @@ this `rule`/`sp` combination on this locality, so the caller runs the generic
 CPU sweep already indexes `raw` directly and never needs this path. Legality here is a
 locality question, not a policy question (gpena/Bramble.jl#298): a device kernel either
 exists for this destination's storage or it doesn't, regardless of which strategy the
-policy names within that locality.
+policy names within that locality. A device index vector `sel` restricts the fill to those
+linear indices and leaves every other entry of `raw` untouched.
 """
-@inline _device_project!(::HostLocality, rule, raw, sp) = false
-@inline _device_project!(::DeviceLocality, rule, raw, sp) = false
+@inline _device_project!(::HostLocality, rule, raw, sp, sel = nothing) = false
+@inline _device_project!(::DeviceLocality, rule, raw, sp, sel = nothing) = false
 
 """
-    _device_scatter_project!(loc, rule, raws::Tuple, sp, ::Val{NC}) -> Bool
+    _device_scatter_project!(loc, rule, raws::Tuple, sp, ::Val{NC}, sel = nothing) -> Bool
 
 The scatter counterpart of [`_device_project!`](@ref): a dedicated device kernel filling
 every leaf array in `raws` (`NC` of them, all sharing `sp`'s mesh) in one launch. Same
 `true`/`false` contract, keyed on locality for the same reason.
 """
-@inline _device_scatter_project!(::HostLocality, rule, raws, sp, ::Val) = false
-@inline _device_scatter_project!(::DeviceLocality, rule, raws, sp, ::Val) = false
+@inline _device_scatter_project!(::HostLocality, rule, raws, sp, ::Val, sel = nothing) = false
+@inline _device_scatter_project!(::DeviceLocality, rule, raws, sp, ::Val, sel = nothing) = false
 
-# A masked call (`markers` non-empty) has no dedicated device kernel (the mask would have
-# to be transferred to the device and folded into the kernel, gpena/Bramble.jl#94, #174):
-# it falls through to the generic `_sweep_for!`/`_sweep_scatter_for!` sweep
-# below like any other case `_device_project!`/`_device_scatter_project!` declines. On
-# `HostLocality` that sweep runs exactly as it always has. On `DeviceLocality`, though, the
-# kernel it would build there closes over the mesh *and* the marker masks -- both fail to
-# compile with a `GPUCompiler` wall of text, not a Bramble message. Caught here instead,
-# before that sweep ever launches.
-@inline _throw_no_device_masked_projection(::HostLocality) = nothing
-@noinline function _throw_no_device_masked_projection(::DeviceLocality)
-    throw(
-        ArgumentError(
-        "a masked Rₕ!/avgₕ! call (markers non-empty) has no device kernel: the " *
-        "per-point mask would have to be transferred to the device and folded into the " *
-        "kernel, which is not implemented (gpena/Bramble.jl#297). On a device backend " *
-        "the options are to restrict the call to the unmasked form, or to use a host " *
-        "backend built from host array types.",
-    ),
+# --- the masked device path (gpena/Bramble.jl#297) --------------------------------- #
+#
+# The host path folds the mask into the kernel (`_MaskedKernel` below), which closes over the
+# mesh's `BitVector`s -- a struct nesting arrays, so not a kernel argument on a device, and a
+# `BitVector` could not be one anyway. The device path launches over an index list instead:
+# the marked linear indices, gathered on the host from the mesh's own (host-resident) masks
+# once per call and uploaded one-way as an `Int32` vector, a top-level kernel argument of its
+# own. A `:boundary` marker is a vanishing fraction of the grid, so launching over the list
+# rather than over every point with a predicate is also the cheaper of the two. Nothing is
+# cached on the device: a persistent copy would go stale under `set_markers!`.
+#
+# The destination is zeroed on the device first, so off-region entries end up zero exactly
+# as the host `_MaskedKernel` path leaves them. The zero fill and the scatter are queued on
+# the same device stream, so the scatter always lands after it.
+
+"""
+    _marker_index_list(like, Ωₕ, markers) -> AbstractVector{Int32}
+
+The linear indices of `Ωₕ`'s points lying in any of the `markers` regions, gathered on the
+host from [`index_in_marker`](@ref)'s masks and copied into a new `Int32` vector allocated
+like `like` (so on `like`'s device).
+
+# Throws
+- `ErrorException`: the mesh has more points than `typemax(Int32)`.
+"""
+function _marker_index_list(like::AbstractArray, Ωₕ, markers::NTuple{N, Symbol}) where {N}
+    masks = _marker_masks(Ωₕ, markers)
+    mask = N == 1 ? masks[1] : reduce(.|, masks)
+    length(mask) <= typemax(Int32) || error(
+        "mesh too large for a masked device projection: $(length(mask)) points, past " *
+        "typemax(Int32) = $(typemax(Int32))",
     )
+    host = Int32.(findall(mask))
+    sel = similar(like, Int32, length(host))
+    copyto!(sel, host)
+    return sel
+end
+
+"""
+    _device_masked_project!(loc, rule, raw, sp, markers) -> Bool
+    _device_masked_project!(loc, rule, raws::Tuple, sp, markers, ::Val{NC}) -> Bool
+
+The masked counterparts of [`_device_project!`](@ref)/[`_device_scatter_project!`](@ref):
+on [`DeviceLocality`](@ref), zero the destination(s) on the device and fill only the points
+in the union of the `markers` regions, through the rule's own device kernel launched over
+[`_marker_index_list`](@ref). Always `false` on [`HostLocality`](@ref), where the generic
+sweep folds the mask into its kernel instead.
+"""
+@inline _device_masked_project!(::HostLocality, rule, raw, sp, markers) = false
+function _device_masked_project!(loc::DeviceLocality, rule, raw, sp, markers)
+    fill!(raw, zero(eltype(raw)))
+    sel = _marker_index_list(raw, mesh(sp), markers)
+    isempty(sel) && return true
+    return _device_project!(loc, rule, raw, sp, sel)
+end
+
+@inline _device_masked_project!(::HostLocality, rule, raws, sp, markers, ::Val) = false
+function _device_masked_project!(loc::DeviceLocality, rule, raws, sp, markers, nc::Val)
+    foreach(r -> fill!(r, zero(eltype(r))), raws)
+    sel = _marker_index_list(raws[1], mesh(sp), markers)
+    isempty(sel) && return true
+    return _device_scatter_project!(loc, rule, raws, sp, nc, sel)
 end
 
 # --- masking, as a property of the kernel rather than of the sweep ----------------- #
@@ -197,10 +243,9 @@ function project! end
     raw = parent(uₕ)
     policy = execution_policy(sp)
     loc = locality(typeof(raw))
-    if N == 0 && _device_project!(loc, rule, raw, sp)
+    if N == 0 ? _device_project!(loc, rule, raw, sp) : _device_masked_project!(loc, rule, raw, sp, markers)
         return uₕ
     end
-    N > 0 && _throw_no_device_masked_projection(loc)
     n = length(indices(Ωₕ))
     kernel = _rule_kernel(rule, sp)
     _sweep_for!(
@@ -222,10 +267,10 @@ end
         NC = length(comps)
         policy = execution_policy(sp)
         loc = locality(typeof(raws[1]))
-        if N == 0 && _device_scatter_project!(loc, rule, raws, sp, Val(NC))
+        if N == 0 ? _device_scatter_project!(loc, rule, raws, sp, Val(NC)) :
+           _device_masked_project!(loc, rule, raws, sp, markers, Val(NC))
             return uₕ
         end
-        N > 0 && _throw_no_device_masked_projection(loc)
         n = length(indices(Ωₕ))
         kernel = _rule_scatter_kernel(rule, sp, Val(NC))
         zeros_nc = ntuple(_ -> zero(eltype(first(raws))), Val(NC))

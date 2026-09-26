@@ -308,31 +308,47 @@ function _gpu_scatter_for!(policy, mats::Tuple, idxs, g)
     return nothing
 end
 
+# --- the marker index list of a masked projection (gpena/Bramble.jl#297) ----------------- #
+#
+# Every projection kernel below takes one more top-level argument, `sel`: `nothing` for an
+# unmasked call, or a device `Int32` vector holding the linear grid indices of the marked
+# points (gathered on the host from the mesh's own `BitVector`s by `project!`,
+# `src/space/operators/projection.jl`). Thread `j` then writes grid index `sel[j]` instead
+# of `j`, and the launch covers `length(sel)` threads rather than the whole grid, so the body
+# of each kernel is the unmasked one unchanged. `nothing` is a singleton, so the unmasked
+# specialisation compiles to exactly the kernel it was before. Off-region entries are zeroed
+# by the caller before launch, not here.
+@inline _selected(::Nothing, j) = j
+@inline _selected(sel, j) = Int(@inbounds sel[j])
+
+@inline _launch_range(::Nothing, n) = n
+@inline _launch_range(sel, n) = length(sel)
+
 # --- `Rₕ!` (src/space/operators/restriction.jl is the CPU original) --------------------- #
 
-@kernel function _restriction_kernel!(v, @Const(pts), f)
-    i = @index(Global)
+@kernel function _restriction_kernel!(v, @Const(pts), f, sel)
+    i = _selected(sel, @index(Global))
     @inbounds v[i] = f(pts[i])
 end
 
-function _launch_restriction!(v::AbstractVector, pts::AbstractVector, f, dev)
+function _launch_restriction!(v::AbstractVector, pts::AbstractVector, f, dev, sel)
     try
-        _restriction_kernel!(dev)(v, pts, f; ndrange = length(v))
+        _restriction_kernel!(dev)(v, pts, f, sel; ndrange = _launch_range(sel, length(v)))
     catch err
         _wrap_device_kernel_error(err, "Rₕ!")
     end
     return nothing
 end
 
-@kernel function _restriction_scatter_kernel!(mats, @Const(pts), f)
-    i = @index(Global)
+@kernel function _restriction_scatter_kernel!(mats, @Const(pts), f, sel)
+    i = _selected(sel, @index(Global))
     vals = f(@inbounds pts[i])
     Bramble._write_components!(mats, vals, i)
 end
 
-function _launch_restriction_scatter!(mats::Tuple, pts::AbstractVector, f, dev)
+function _launch_restriction_scatter!(mats::Tuple, pts::AbstractVector, f, dev, sel)
     try
-        _restriction_scatter_kernel!(dev)(mats, pts, f; ndrange = length(pts))
+        _restriction_scatter_kernel!(dev)(mats, pts, f, sel; ndrange = _launch_range(sel, length(pts)))
     catch err
         _wrap_device_kernel_error(err, "Rₕ!")
     end
@@ -346,33 +362,33 @@ end
 # (`indices(Ωₕ)`) is a bits `CartesianIndices`, so `idxs[i]` and `pts[d][I[d]]` are both
 # ordinary arithmetic, not scalar array indexing. `f` still receives an `NTuple{D}`, per
 # `Rₕ!`'s own docstring.
-@kernel function _restriction_nd_kernel!(v, @Const(pts::NTuple{D}), @Const(idxs), f) where {D}
-    i = @index(Global)
+@kernel function _restriction_nd_kernel!(v, @Const(pts::NTuple{D}), @Const(idxs), f, sel) where {D}
+    i = _selected(sel, @index(Global))
     I = @inbounds idxs[i]
     pt = ntuple(d -> (@inbounds pts[d][I[d]]), Val(D))
     @inbounds v[i] = f(pt)
 end
 
-function _launch_restriction_nd!(v::AbstractVector, pts::Tuple, idxs, f, dev)
+function _launch_restriction_nd!(v::AbstractVector, pts::Tuple, idxs, f, dev, sel)
     try
-        _restriction_nd_kernel!(dev)(v, pts, idxs, f; ndrange = length(v))
+        _restriction_nd_kernel!(dev)(v, pts, idxs, f, sel; ndrange = _launch_range(sel, length(v)))
     catch err
         _wrap_device_kernel_error(err, "Rₕ!")
     end
     return nothing
 end
 
-@kernel function _restriction_scatter_nd_kernel!(mats, @Const(pts::NTuple{D}), @Const(idxs), f) where {D}
-    i = @index(Global)
+@kernel function _restriction_scatter_nd_kernel!(mats, @Const(pts::NTuple{D}), @Const(idxs), f, sel) where {D}
+    i = _selected(sel, @index(Global))
     I = @inbounds idxs[i]
     pt = ntuple(d -> (@inbounds pts[d][I[d]]), Val(D))
     vals = f(pt)
     Bramble._write_components!(mats, vals, i)
 end
 
-function _launch_restriction_scatter_nd!(mats::Tuple, pts::Tuple, idxs, f, dev)
+function _launch_restriction_scatter_nd!(mats::Tuple, pts::Tuple, idxs, f, dev, sel)
     try
-        _restriction_scatter_nd_kernel!(dev)(mats, pts, idxs, f; ndrange = length(idxs))
+        _restriction_scatter_nd_kernel!(dev)(mats, pts, idxs, f, sel; ndrange = _launch_range(sel, length(idxs)))
     catch err
         _wrap_device_kernel_error(err, "Rₕ!")
     end
@@ -385,30 +401,30 @@ end
 # than duplicated, so the device and host answers stay identical by construction, not by
 # two implementations agreeing.
 
-@kernel function _cell_average_kernel!(v, @Const(x), nodes, wts, f)
-    i = @index(Global)
+@kernel function _cell_average_kernel!(v, @Const(x), nodes, wts, f, sel)
+    i = _selected(sel, @index(Global))
     @inbounds v[i] = Bramble._cell_average(f, x, i, nodes, wts)
 end
 
-function _launch_cell_average!(v::AbstractVector, x::AbstractVector, nodes, wts, f, dev)
+function _launch_cell_average!(v::AbstractVector, x::AbstractVector, nodes, wts, f, dev, sel)
     try
-        _cell_average_kernel!(dev)(v, x, nodes, wts, f; ndrange = length(v))
+        _cell_average_kernel!(dev)(v, x, nodes, wts, f, sel; ndrange = _launch_range(sel, length(v)))
     catch err
         _wrap_device_kernel_error(err, "avgₕ!")
     end
     return nothing
 end
 
-@kernel function _cell_average_scatter_kernel!(mats, @Const(x), nodes, wts, f)
-    i = @index(Global)
+@kernel function _cell_average_scatter_kernel!(mats, @Const(x), nodes, wts, f, sel)
+    i = _selected(sel, @index(Global))
     vals = Bramble._cell_average(f, x, i, nodes, wts)
     Bramble._write_components!(mats, vals, i)
 end
 
-function _launch_cell_average_scatter!(mats::Tuple, x::AbstractVector, nodes, wts, f, dev)
+function _launch_cell_average_scatter!(mats::Tuple, x::AbstractVector, nodes, wts, f, dev, sel)
     n = length(x) - 1
     try
-        _cell_average_scatter_kernel!(dev)(mats, x, nodes, wts, f; ndrange = n)
+        _cell_average_scatter_kernel!(dev)(mats, x, nodes, wts, f, sel; ndrange = _launch_range(sel, n))
     catch err
         _wrap_device_kernel_error(err, "avgₕ!")
     end
@@ -419,31 +435,33 @@ end
 # the `x` shape `Bramble._cell_average`'s 2D/3D methods already take, so the kernel calls
 # it unchanged with `x` (a `Tuple` of top-level device arrays) and `I` (a `CartesianIndex{D}`
 # read from the bits `idxs` argument) -- same non-nesting rule as `_restriction_nd_kernel!`.
-@kernel function _cell_average_nd_kernel!(v, @Const(x::NTuple{D}), @Const(idxs), nodes, wts, f) where {D}
-    i = @index(Global)
+@kernel function _cell_average_nd_kernel!(v, @Const(x::NTuple{D}), @Const(idxs), nodes, wts, f, sel) where {D}
+    i = _selected(sel, @index(Global))
     I = @inbounds idxs[i]
     @inbounds v[i] = Bramble._cell_average(f, x, I, nodes, wts)
 end
 
-function _launch_cell_average_nd!(v::AbstractVector, x::Tuple, idxs, nodes, wts, f, dev)
+function _launch_cell_average_nd!(v::AbstractVector, x::Tuple, idxs, nodes, wts, f, dev, sel)
     try
-        _cell_average_nd_kernel!(dev)(v, x, idxs, nodes, wts, f; ndrange = length(v))
+        _cell_average_nd_kernel!(dev)(v, x, idxs, nodes, wts, f, sel; ndrange = _launch_range(sel, length(v)))
     catch err
         _wrap_device_kernel_error(err, "avgₕ!")
     end
     return nothing
 end
 
-@kernel function _cell_average_scatter_nd_kernel!(mats, @Const(x::NTuple{D}), @Const(idxs), nodes, wts, f) where {D}
-    i = @index(Global)
+@kernel function _cell_average_scatter_nd_kernel!(
+        mats, @Const(x::NTuple{D}), @Const(idxs), nodes, wts, f, sel) where {D}
+    i = _selected(sel, @index(Global))
     I = @inbounds idxs[i]
     vals = Bramble._cell_average(f, x, I, nodes, wts)
     Bramble._write_components!(mats, vals, i)
 end
 
-function _launch_cell_average_scatter_nd!(mats::Tuple, x::Tuple, idxs, nodes, wts, f, dev)
+function _launch_cell_average_scatter_nd!(mats::Tuple, x::Tuple, idxs, nodes, wts, f, dev, sel)
     try
-        _cell_average_scatter_nd_kernel!(dev)(mats, x, idxs, nodes, wts, f; ndrange = length(idxs))
+        _cell_average_scatter_nd_kernel!(dev)(
+            mats, x, idxs, nodes, wts, f, sel; ndrange = _launch_range(sel, length(idxs)))
     catch err
         _wrap_device_kernel_error(err, "avgₕ!")
     end

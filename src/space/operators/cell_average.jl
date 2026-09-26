@@ -51,8 +51,9 @@ avgₕ(Wₕ, x -> sin(x[1]) * x[2]; quad_points = Val(4))
 
 On a Metal (or other device) backend, `f` runs *on the device* inside the quadrature
 kernel, evaluated `quad_points^D` times per cell (gpena/Bramble.jl#94, #174), so it must be
-GPU-compilable in the same sense [`Rₕ!`](@ref)'s docstring describes. A masked call and a
-mesh of more than one dimension currently fall back to the CPU-only per-index sweep.
+GPU-compilable in the same sense [`Rₕ!`](@ref)'s docstring describes. A masked call runs
+the same kernel over just the marked cells, after zeroing the result on the device
+(gpena/Bramble.jl#297).
 
 See also: [`avgₕ!`](@ref), [`Rₕ`](@ref).
 """
@@ -220,11 +221,13 @@ end
 #------------------------------------------------------------------------------------------#
 
 """
-    _launch_cell_average!(v::AbstractVector, x::AbstractVector, nodes, wts, f, dev) -> Nothing
+    _launch_cell_average!(v::AbstractVector, x::AbstractVector, nodes, wts, f, dev, sel) -> Nothing
 
 Fills `v[i]` with the [`_cell_average`](@ref) of `f` over the 1D cell around grid point `i`,
-using the Gauss-Legendre `nodes`/`wts` and the mesh's half points `x`, via a
-`KernelAbstractions.@kernel` launch on `dev`, filled by
+using the Gauss-Legendre `nodes`/`wts` and the mesh's half points `x` -- at every `i`, or
+only at the linear indices in `sel` when it is a device index vector rather than `nothing`
+(a masked call, see [`project!`](@ref)) -- via a `KernelAbstractions.@kernel` launch on
+`dev`, filled by
 `ext/BrambleKernelAbstractionsExt.jl`. `f` runs on the device: same GPU-compilability
 requirement as [`_gpu_for!`](@ref).
 
@@ -232,10 +235,10 @@ requirement as [`_gpu_for!`](@ref).
 - `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
   kernel to reach (`_throw_no_ka_projection_kernel`).
 """
-_launch_cell_average!(v, x, nodes, wts, f, dev) = _throw_no_ka_projection_kernel("_launch_cell_average!")
+_launch_cell_average!(v, x, nodes, wts, f, dev, sel) = _throw_no_ka_projection_kernel("_launch_cell_average!")
 
 """
-    _launch_cell_average_scatter!(mats::Tuple, x::AbstractVector, nodes, wts, f, dev) -> Nothing
+    _launch_cell_average_scatter!(mats::Tuple, x::AbstractVector, nodes, wts, f, dev, sel) -> Nothing
 
 The scatter counterpart of [`_launch_cell_average!`](@ref): computes the
 [`_cell_average`](@ref) of `f` over each 1D cell once and scatters its components into the
@@ -245,7 +248,7 @@ GPU-compilability requirement on `f`.
 # Throws
 - `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
 """
-function _launch_cell_average_scatter!(mats, x, nodes, wts, f, dev)
+function _launch_cell_average_scatter!(mats, x, nodes, wts, f, dev, sel)
     _throw_no_ka_projection_kernel(
         "_launch_cell_average_scatter!"
     )
@@ -257,7 +260,7 @@ end
 # top-level device arrays) and `idxs` (`indices(Ωₕ)`, a bits `CartesianIndices`), the same
 # non-nesting rule `restriction.jl`'s `_nd` launchers follow.
 """
-    _launch_cell_average_nd!(v::AbstractVector, x::Tuple, idxs, nodes, wts, f, dev) -> Nothing
+    _launch_cell_average_nd!(v::AbstractVector, x::Tuple, idxs, nodes, wts, f, dev, sel) -> Nothing
 
 The `D >= 2` counterpart of [`_launch_cell_average!`](@ref): fills `v[i]` with the
 [`_cell_average`](@ref) of `f` over the cell at Cartesian index `idxs[i]`, using the
@@ -267,10 +270,12 @@ per-axis half-point vectors `x` and the Gauss-Legendre `nodes`/`wts`, via a
 # Throws
 - `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
 """
-_launch_cell_average_nd!(v, x, idxs, nodes, wts, f, dev) = _throw_no_ka_projection_kernel("_launch_cell_average_nd!")
+function _launch_cell_average_nd!(v, x, idxs, nodes, wts, f, dev, sel)
+    _throw_no_ka_projection_kernel("_launch_cell_average_nd!")
+end
 
 """
-    _launch_cell_average_scatter_nd!(mats::Tuple, x::Tuple, idxs, nodes, wts, f, dev) -> Nothing
+    _launch_cell_average_scatter_nd!(mats::Tuple, x::Tuple, idxs, nodes, wts, f, dev, sel) -> Nothing
 
 The `D >= 2`, scatter counterpart of [`_launch_cell_average!`](@ref): computes the
 [`_cell_average`](@ref) of `f` over the cell at Cartesian index `idxs[i]` once and scatters
@@ -280,15 +285,15 @@ on `dev`. Same GPU-compilability requirement on `f`.
 # Throws
 - `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
 """
-function _launch_cell_average_scatter_nd!(mats, x, idxs, nodes, wts, f, dev)
+function _launch_cell_average_scatter_nd!(mats, x, idxs, nodes, wts, f, dev, sel)
     _throw_no_ka_projection_kernel(
         "_launch_cell_average_scatter_nd!"
     )
 end
 
 """
-    _device_project!(::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{1}) -> Bool
-    _device_project!(::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{D}) where {D} -> Bool
+    _device_project!(::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{1}, sel = nothing) -> Bool
+    _device_project!(::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{D}, sel = nothing) where {D} -> Bool
 
 Fills `raw` with the cell average of `rule.f` over every cell of the mesh `mesh(sp)`, via a
 device kernel that calls the same [`_cell_average`](@ref) quadrature the CPU sweep uses
@@ -296,45 +301,48 @@ device kernel that calls the same [`_cell_average`](@ref) quadrature the CPU swe
 `D`-dimensional one (never reached for `D == 1`, since the method above is strictly more
 specific) hands it the per-axis tuple `_cell_average`'s own 2D/3D methods already expect.
 `rule.f` runs on the device either way: see [`_gpu_for!`](@ref) for what that requires of it.
+A device index vector `sel` (a masked call, see [`project!`](@ref)) restricts the fill to
+those linear indices, leaving the rest untouched.
 """
 @inline function _device_project!(
-        ::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{1}
+        ::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{1}, sel = nothing
 )
     Ωₕ = mesh(sp)
     nodes, wts = _gauss_rule(rule.nq, eltype(Ωₕ))
     dev = ka_device(backend(sp))
-    _launch_cell_average!(raw, half_points(Ωₕ), nodes, wts, rule.f, dev)
+    _launch_cell_average!(raw, half_points(Ωₕ), nodes, wts, rule.f, dev, sel)
     return true
 end
 
 @inline function _device_project!(
-        ::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{D}
+        ::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::ScalarGridSpace{D}, sel = nothing
 ) where {D}
     Ωₕ = mesh(sp)
     nodes, wts = _gauss_rule(rule.nq, eltype(Ωₕ))
     dev = ka_device(backend(sp))
-    _launch_cell_average_nd!(raw, half_points(Ωₕ), indices(Ωₕ), nodes, wts, rule.f, dev)
+    _launch_cell_average_nd!(raw, half_points(Ωₕ), indices(Ωₕ), nodes, wts, rule.f, dev, sel)
     return true
 end
 
 """
-    _device_scatter_project!(::DeviceLocality, rule::CellAverage, raws::Tuple, sp, ::Val{NC}) -> Bool
+    _device_scatter_project!(::DeviceLocality, rule::CellAverage, raws::Tuple, sp, ::Val{NC}, sel = nothing) -> Bool
 
 The scatter counterpart of [`_device_project!`](@ref) above, for an `NC`-component
 composite space `sp` whose leaves share one mesh. `sp` is typed generically for the same
 reason `restriction.jl`'s counterpart is: the mesh's own dimension, checked on `mesh(sp)`
-at runtime, picks the 1D or `D`-dimensional launcher.
+at runtime, picks the 1D or `D`-dimensional launcher. `sel` restricts the fill to a marker
+index list as in [`_device_project!`](@ref).
 """
 @inline function _device_scatter_project!(
-        ::DeviceLocality, rule::CellAverage, raws::Tuple, sp, ::Val{NC}
+        ::DeviceLocality, rule::CellAverage, raws::Tuple, sp, ::Val{NC}, sel = nothing
 ) where {NC}
     Ωₕ = mesh(sp)
     nodes, wts = _gauss_rule(rule.nq, eltype(Ωₕ))
     dev = ka_device(backend(sp))
     if Ωₕ isa AbstractMeshType{1}
-        _launch_cell_average_scatter!(raws, half_points(Ωₕ), nodes, wts, rule.f, dev)
+        _launch_cell_average_scatter!(raws, half_points(Ωₕ), nodes, wts, rule.f, dev, sel)
     else
-        _launch_cell_average_scatter_nd!(raws, half_points(Ωₕ), indices(Ωₕ), nodes, wts, rule.f, dev)
+        _launch_cell_average_scatter_nd!(raws, half_points(Ωₕ), indices(Ωₕ), nodes, wts, rule.f, dev, sel)
     end
     return true
 end
