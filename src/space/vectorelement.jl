@@ -84,6 +84,16 @@ See also: [`space`](@ref), [`VectorElement`](@ref)
 @inline Base.IndexStyle(::Type{<:VectorElement}) = IndexLinear()
 @forward VectorElement.space (Bramble.mesh,)
 
+# Delegates straight to the storage's own `fill!` (gpena/Bramble.jl#336) rather than
+# falling back to `AbstractArray`'s `setindex!`-per-element loop, which is scalar indexing
+# on a device array and `GPUArraysCore` rejects it outright.
+"""
+    fill!(uₕ::VectorElement, α) -> VectorElement
+
+Fills [`VectorElement`](@ref) `uₕ` with the value `α` and returns `uₕ`.
+"""
+@inline Base.fill!(uₕ::VectorElement, α) = (fill!(parent(uₕ), α); uₕ)
+
 # ==============================================================================
 # Component Indexing
 # ==============================================================================
@@ -222,12 +232,9 @@ end
 # while `element(Wₕ, dual)` gives a Dual one.
 function element(Wₕ::AbstractSpaceType, α::Number)
     uₕ = element(Wₕ, promote_type(eltype(backend(Wₕ)), typeof(α)))
-    # `fill!(parent(uₕ), α)`, not `fill!(uₕ, α)`: the wrapper has no `fill!` of its own, so
-    # Base's `AbstractArray` fallback would store through `setindex!` one point at a time.
-    # On a device backend that is scalar indexing of a device array, which `GPUArraysCore`
-    # rejects outright ("Scalar indexing is disallowed."). Filling the storage instead
-    # reaches the device array's own `fill!` -- a single kernel -- and the plain loop as
-    # before on a `Vector`.
+    # `fill!(parent(uₕ), α)` reaches the device array's own `fill!` directly -- a single
+    # kernel -- the same thing `fill!(uₕ, α)` now does via its own method above, spelled out
+    # here since this constructor already holds `uₕ` unwrapped.
     fill!(parent(uₕ), α)
     return uₕ
 end

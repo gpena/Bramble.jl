@@ -654,6 +654,20 @@ else
             @test isapprox(Array(xb), fdm_solve(ah, Fb; dirichlet = :boundary); rtol = 1.0f-5)
         end
     end
+
+    @testset "#336: fill! and broadcast scalar assignment on a device VectorElement" begin
+        Ω = mesh(domain(interval(0.0f0, 1.0f0)), 17, true; backend = metal_backend())
+        W = gridspace(Ω)
+
+        u = element(W, 0.0f0)
+        r = fill!(u, 3.0f0)
+        @test r === u
+        @test all(==(3.0f0), Array(parent(u)))
+
+        v = element(W, 0.0f0)
+        v .= 2.0f0
+        @test all(==(2.0f0), Array(parent(v)))
+    end
 end
 
 end # module ExtMetalExtTests
