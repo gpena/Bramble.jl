@@ -716,6 +716,21 @@ else
         )
         @test isfile(joinpath(d, "b.vtr"))
     end
+
+    # #346: `copyto!(dest::VectorElement, src::VectorElement)` had no method of its own, so
+    # it fell to Base's generic `AbstractArray` `copyto!` -- scalar `getindex`/`setindex!`,
+    # which `GPUArrays` refuses on device storage. Device-to-device must now round-trip
+    # through the same `_broadcast_copyto!` seam as `dest .= src` instead.
+    @testset "#346: copyto! between device-backed VectorElements" begin
+        Ω = mesh(domain(interval(0.0f0, 1.0f0)), 17, true; backend = metal_backend())
+        W = gridspace(Ω)
+
+        u = Rₕ(W, x -> x[1])
+        v = element(W, 0.0f0)
+        r = copyto!(v, u)
+        @test r === v
+        @test Array(parent(v)) == Array(parent(u))
+    end
 end
 
 end # module ExtMetalExtTests

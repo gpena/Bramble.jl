@@ -491,6 +491,25 @@ _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep search
     return dest
 end
 
+# `copyto!(dest, src)` between two `VectorElement`s had no method of its own, so it fell to
+# Base's generic `AbstractArray` `copyto!`: the same scalar-indexing loop the broadcast
+# method above exists to avoid, and one that crashes outright on device storage
+# (gpena/Bramble.jl#346). Wrapping `src` in an identity broadcast reuses that same method
+# -- and so the same `_broadcast_copyto!` seam -- rather than adding a second copy path.
+"""
+    copyto!(dest::VectorElement, src::VectorElement) -> VectorElement
+
+Copies the coefficients of `src` into `dest` in place, and returns `dest`.
+"""
+@inline function Base.copyto!(dest::VectorElement, src::VectorElement)
+    size(dest) == size(src) || throw(
+        DimensionMismatch(
+        "dest has size $(size(dest)), but src has size $(size(src))."
+    ),
+    )
+    return copyto!(dest, Broadcast.broadcasted(identity, src))
+end
+
 # A host destination is banded under `CpuThreaded` and `CpuPolyester`; every other pairing
 # (`CpuSerial`, a device array) keeps the backend's own `copyto!`.
 @inline _broadcast_copyto!(::HostLocality, ::CpuThreaded, v, bc) = _threaded_broadcast!(v, bc)
