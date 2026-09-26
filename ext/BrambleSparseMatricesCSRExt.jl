@@ -11,10 +11,10 @@
 # `assemble_parallel!` needs no method here. The band-coloured threaded sweep in
 # `bilinear_execution.jl` is typed `A::AbstractMatrix` and reaches storage only through
 # `_scatter_position` and `_scatter_add!` (gpena/Bramble.jl#190), so a `SparseMatrixCSR`
-# threads through the two methods below like any other host matrix. A `CpuThreaded` refill
-# replays the form's recorded `nzval` positions through `_scatter_add!` without calling
-# `_scatter_position` (gpena/Bramble.jl#338); the recording itself searches once per matrix
-# object, serially. A `CpuPolyester` fill still searches.
+# threads through the two methods below like any other host matrix. A `CpuThreaded` or
+# `CpuPolyester` refill replays the form's recorded `nzval` positions through `_scatter_add!`
+# without calling `_scatter_position` (gpena/Bramble.jl#338); the recording itself searches
+# once per matrix object, serially.
 #
 # `SparseMatrixCSR`'s own `setindex!` throws on an entry outside the sparsity pattern rather
 # than growing it the way `SparseMatrixCSC`'s does (`A[i,i] = one(T)`), so the Dirichlet and
