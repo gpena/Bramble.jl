@@ -303,12 +303,19 @@ end
 
 # An interior point, so a truncated stencil does not decide the type. A restriction can
 # still answer with nothing, in which case the space's type is used.
-function _probed_eltype(term, sp, T)
-    Ωₕ = mesh(sp)
+#
+# Probed on `host_weights(sp)` (gpena/Bramble.jl#361): `local_stencil` reads the weights and
+# spacings one point at a time, which a device-backed leaf refuses; a no-op on a host leaf.
+# Every leaf, scalar or routed from a composite, bottoms out here, so one swap covers both.
+# `sp` is typed `::ScalarGridSpace` for the reason `_pattern_size_hint` gives
+# (`bilinear_pattern.jl`): an untyped `sp` lets JET reach `host_weights(::SeparableWeights)`.
+function _probed_eltype(term, sp::ScalarGridSpace, T)
+    hp = host_weights(sp)
+    Ωₕ = mesh(hp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     I = grid_inds[length(grid_inds) ÷ 2 + 1]
-    st = local_stencil(term, sp, I, markers(Ωₕ), lin_indices[I])
+    st = local_stencil(term, hp, I, markers(Ωₕ), lin_indices[I])
     isempty(st) && return T
     return promote_type(T, typeof(last(first(st))))
 end

@@ -6,15 +6,6 @@
 # Dispatches on `::Type{T}` to ensure concrete vector return type.
 @inline _zeros_of(::Type{T}, n::Int) where {T} = zeros(T, n)
 
-# `_assembled_eltype`/`_probed_eltype` (`form/linear.jl`, not owned by this subplan) probe
-# the same representative point `_pattern_size_hint` does, through the same `local_stencil`,
-# so they hit the identical device scalar-indexing wall (gpena/Bramble.jl#94 S4.0) -- a third
-# call site reaching it, discovered running S4.1's own CHECK rather than assumed. `host_weights`
-# is only defined for a `ScalarGridSpace`; a `CompositeGridSpace` test space is passed through
-# unchanged; `_routed_eltype` probes its own leaves internally and is out of reach from here.
-@inline _pattern_probe_space(sp::ScalarGridSpace) = host_weights(sp)
-@inline _pattern_probe_space(sp) = sp
-
 # The element type is the one the form's own weights have, promoted against the trial
 # space's (supporting automatic differentiation dual numbers). One place for this rule:
 # reading it from the space alone instead of promoting against the data broke ForwardDiff in
@@ -24,10 +15,13 @@
 # Probed one summand at a time, never through the whole sum's fused stencil: a fused probe
 # compiles every term's stencil into one method a second time. The interpolation in a term
 # is bound to the first leaves, which every leaf answers the same way for a weight's type.
+#
+# A device-backed space needs no swap here: `_probed_eltype` (`linear.jl`) probes every leaf,
+# scalar or composite, on its `host_weights` (gpena/Bramble.jl#94 S4.0, #361).
 function _matrix_eltype(form::BilinearForm, ast)
     probe = _bind_interp_spaces(ast, _first_leaf(form.trial_space), _first_leaf(form.test_space))
     return promote_type(
-        _summands_eltype(_summands(probe), _pattern_probe_space(form.test_space)),
+        _summands_eltype(_summands(probe), form.test_space),
         eltype(form.trial_space)
     )
 end
