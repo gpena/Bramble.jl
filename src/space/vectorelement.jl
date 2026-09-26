@@ -292,19 +292,7 @@ end
     return uₕ
 end
 
-# Multidimensional and Cartesian bounds checks
-@inline function Base.checkbounds(
-        ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{2}}, i, j
-)
-    return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), i, j)
-end
-
-@inline function Base.checkbounds(
-        ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{3}}, i, j, k
-)
-    return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), i, j, k)
-end
-
+# Cartesian bounds checks
 @inline function Base.checkbounds(
         ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}
 ) where {D}
@@ -318,15 +306,20 @@ end
 end
 
 """
-    getindex(uₕ::VectorElement{<:ScalarGridSpace{2}}, i::Integer, j::Integer)
-    getindex(uₕ::VectorElement{<:ScalarGridSpace{3}}, i::Integer, j::Integer, k::Integer)
     getindex(uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}) where {D}
     getindex(uₕ::VectorElement{<:ScalarGridSpace}, I::CartesianIndex)
 
-Access field degrees of freedom by spatial grid coordinates or `CartesianIndex`.
+Access field degrees of freedom by grid coordinates through a `CartesianIndex`.
 
 Translates spatial grid coordinates directly into flat linear coefficient offsets using the
 mesh's `LinearIndices` with zero heap allocations and full `@inbounds` transparency.
+
+`VectorElement` is an `AbstractVector`, so an `Integer` multi-index does **not** address grid
+coordinates: it follows Base's own trailing-index rule for an `AbstractArray` with fewer
+dimensions than indices given (`uₕ[k, 1] == parent(uₕ)[k]`, and any trailing index other than
+`1` throws a `BoundsError`). Grid-coordinate access always goes through `CartesianIndex`
+instead, which is what generic `AbstractVector` code (e.g. `SparseArrays`, which reads
+`u[k, 1]` while building a sparse column) needs `uₕ[i, j]` to *not* mean.
 
 # Examples
 
@@ -335,33 +328,17 @@ mesh's `LinearIndices` with zero heap allocations and full `@inbounds` transpare
 Wₕ = gridspace(Ωₕ)
 uₕ = element(Wₕ, 0.0)
 
-# Set and get via 2D coordinates
-uₕ[2, 3] = 42.0
-uₕ[2, 3] == 42.0
-
-# Access via CartesianIndex
+# Set and get via CartesianIndex grid coordinates
 I = CartesianIndex(2, 3)
+uₕ[I] = 42.0
 uₕ[I] == 42.0
+
+# A bare Integer multi-index is linear (trailing-index) indexing, not grid coordinates
+uₕ[5, 1] == parent(uₕ)[5]
 ```
 
 See also: [`VectorElement`](@ref), [`ScalarGridSpace`](@ref), [`reshape`](@ref)
 """
-@inline Base.@propagate_inbounds function Base.getindex(
-        uₕ::VectorElement{<:ScalarGridSpace{2}}, i::Integer, j::Integer
-)
-    @boundscheck checkbounds(uₕ, i, j)
-    li = LinearIndices(indices(mesh(uₕ)))
-    return @inbounds uₕ.data[li[i, j]]
-end
-
-@inline Base.@propagate_inbounds function Base.getindex(
-        uₕ::VectorElement{<:ScalarGridSpace{3}}, i::Integer, j::Integer, k::Integer
-)
-    @boundscheck checkbounds(uₕ, i, j, k)
-    li = LinearIndices(indices(mesh(uₕ)))
-    return @inbounds uₕ.data[li[i, j, k]]
-end
-
 @inline Base.@propagate_inbounds function Base.getindex(
         uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}
 ) where {D}
@@ -379,36 +356,24 @@ end
 end
 
 """
-    setindex!(uₕ::VectorElement{<:ScalarGridSpace{2}}, val, i::Integer, j::Integer) -> VectorElement
-    setindex!(uₕ::VectorElement{<:ScalarGridSpace{3}}, val, i::Integer, j::Integer, k::Integer) -> VectorElement
     setindex!(uₕ::VectorElement{<:ScalarGridSpace{D}}, val, I::CartesianIndex{D}) where {D} -> VectorElement
     setindex!(uₕ::VectorElement{<:ScalarGridSpace}, val, I::CartesianIndex) -> VectorElement
 
-Mutate field degrees of freedom by spatial grid coordinates or `CartesianIndex` in-place.
+Mutate field degrees of freedom by grid coordinates through a `CartesianIndex`, in-place.
 
 Translates spatial grid coordinates directly into flat linear coefficient offsets using the
 mesh's `LinearIndices` with zero heap allocations and full `@inbounds` transparency.
 
+`VectorElement` is an `AbstractVector`, so an `Integer` multi-index does **not** address grid
+coordinates: it follows Base's own trailing-index rule for an `AbstractArray` with fewer
+dimensions than indices given (`uₕ[k, 1] = v` writes `parent(uₕ)[k]`, and any trailing index
+other than `1` throws a `BoundsError`). Grid-coordinate access always goes through
+`CartesianIndex` instead, which is what generic `AbstractVector` code (e.g. `SparseArrays`,
+which reads and writes `u[k, 1]` while building a sparse column) needs `uₕ[i, j] = val` to
+*not* mean.
+
 Returns `uₕ` matching Base collection conventions.
 """
-@inline Base.@propagate_inbounds function Base.setindex!(
-        uₕ::VectorElement{<:ScalarGridSpace{2}}, val, i::Integer, j::Integer
-)
-    @boundscheck checkbounds(uₕ, i, j)
-    li = LinearIndices(indices(mesh(uₕ)))
-    @inbounds uₕ.data[li[i, j]] = val
-    return uₕ
-end
-
-@inline Base.@propagate_inbounds function Base.setindex!(
-        uₕ::VectorElement{<:ScalarGridSpace{3}}, val, i::Integer, j::Integer, k::Integer
-)
-    @boundscheck checkbounds(uₕ, i, j, k)
-    li = LinearIndices(indices(mesh(uₕ)))
-    @inbounds uₕ.data[li[i, j, k]] = val
-    return uₕ
-end
-
 @inline Base.@propagate_inbounds function Base.setindex!(
         uₕ::VectorElement{<:ScalarGridSpace{D}}, val, I::CartesianIndex{D}
 ) where {D}
@@ -506,13 +471,71 @@ _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep search
 # over `dest.data` from the compiler. Unwrapping every `VectorElement` leaf down to its own
 # `parent` before delegating lets `copyto!` run directly against the backend's own storage
 # instead -- the plain `Vector` broadcast loop for the default backend, whatever loop a
-# GPU backend's own array type provides otherwise (gpena/Bramble.jl#181).
+# GPU backend's own array type provides otherwise (gpena/Bramble.jl#181). Under
+# `CpuThreaded` a host destination instead runs that same loop in static bands, one per
+# thread, and under `CpuPolyester` in bands run under `Polyester.@batch`
+# (gpena/Bramble.jl#357).
 @inline function Base.copyto!(
         dest::VectorElement, bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}
 )
     _check_broadcast_space(space(dest), bc)
-    copyto!(parent(dest), _unwrap_broadcast(bc))
+    v = parent(dest)
+    _broadcast_copyto!(locality(typeof(v)), execution_policy(space(dest)), v, _unwrap_broadcast(bc))
     return dest
+end
+
+# A host destination is banded under `CpuThreaded` and `CpuPolyester`; every other pairing
+# (`CpuSerial`, a device array) keeps the backend's own `copyto!`.
+@inline _broadcast_copyto!(::HostLocality, ::CpuThreaded, v, bc) = _threaded_broadcast!(v, bc)
+@inline _broadcast_copyto!(::HostLocality, ::CpuPolyester, v, bc) = _polyester_broadcast!(v, bc)
+@inline function _broadcast_copyto!(::Locality, ::ExecutionPolicy, v, bc)
+    copyto!(v, bc)
+    return nothing
+end
+
+# What Base does before its own `copyto!(dest, bc)` loop: an operand that might alias `dest`
+# without being `dest` itself is copied first, while `dest` on the right-hand side
+# (`uₕ .= uₕ .+ vₕ`) is read in place, each point written only after it is read. Shared by
+# both the `CpuThreaded` and `CpuPolyester` arms below so neither repeats it.
+@inline function _prepared_broadcast(v, bc)
+    bc′ = Broadcast.preprocess(v, Broadcast.instantiate(bc))
+    axes(v) == axes(bc′) || Broadcast.throwdm(axes(v), axes(bc′))
+    return bc′
+end
+
+# Split over `Threads.nthreads()` static bands of the destination's indices through
+# `_static_or_serial`, so a call from inside a user's own threaded region runs the bands in
+# turn. Every point runs the same body as Base's loop, so the result equals the serial one
+# bitwise.
+@noinline function _threaded_broadcast!(v::AbstractVector, bc::Broadcast.Broadcasted)
+    bc′ = _prepared_broadcast(v, bc)
+    return _static_or_serial(
+        _static_bands!, _serial_bands!, _broadcast_band!, Threads.nthreads(), v, bc′, axes(v, 1))
+end
+
+@noinline function _broadcast_band!(v, bc, ax, nbands::Int, b::Int)
+    @inbounds @simd for i in _band_range(ax, nbands, b)
+        v[i] = bc[i]
+    end
+    return nothing
+end
+
+# `CpuPolyester`'s counterpart of `_threaded_broadcast!`: the same `_broadcast_band!` per
+# band, run under `Polyester.@batch` by `_batch_broadcast!` instead of `_static_or_serial`.
+@noinline function _polyester_broadcast!(v::AbstractVector, bc::Broadcast.Broadcasted)
+    bc′ = _prepared_broadcast(v, bc)
+    return _batch_broadcast!(v, bc′, axes(v, 1))
+end
+
+"""
+    _batch_broadcast!(v, bc, ax) -> Nothing
+
+[`CpuPolyester`](@ref)'s `_polyester_broadcast!`, filled by `BramblePolyesterExt` (one
+`_broadcast_band!` per band under `Polyester.@batch`). The only `src/` method here
+that errors naming Polyester.
+"""
+@noinline function _batch_broadcast!(v, bc, ax)
+    return _throw_cpubatch_without_polyester(:_batch_broadcast!)
 end
 
 # Rebuild the same expression tree over each `VectorElement` leaf's own storage. The

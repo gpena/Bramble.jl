@@ -138,7 +138,7 @@ _launch_average_engine!(out, in_ref, dims, dir, dim_val, dev) = _throw_no_ka_ave
         dev = ka_device(backend(sp))
         _launch_average_engine!(vₕ.data, uₕ.data, _grid_dims(uₕ), dir, dim_val, dev)
     else
-        _average_engine!(vₕ.data, uₕ.data, _grid_dims(uₕ), dir, dim_val)
+        _average_engine!(execution_policy(sp), vₕ.data, uₕ.data, _grid_dims(uₕ), dir, dim_val)
     end
     return vₕ
 end
@@ -190,6 +190,137 @@ function _centered_average_engine!(out, in_ref, dims::NTuple{D, Int}, ::Val{DIM}
     return nothing
 end
 
+#------------------------------------------------------------------------------------------#
+# Policy-dispatched CPU average engines (gpena/Bramble.jl#356)
+#
+# The same split `_difference_engine!`'s policy methods make (operators/difference.jl):
+# `CpuSerial` runs the engines above unchanged, `CpuThreaded` runs one band of the grid's
+# last axis per thread, and `CpuPolyester` reaches the `_batch_…` hooks
+# `BramblePolyesterExt` fills.
+#------------------------------------------------------------------------------------------#
+
+"""
+    _average_band!(out, in_ref, dims::NTuple{D, Int}, dir::GridDirection, dim_val::Val, nbands::Int, b::Int) -> Nothing
+
+Runs `_average_engine!`'s loops for `dir` on the `b`-th of `nbands` slabs of the grid cut
+along its last axis, as [`_difference_band!`](@ref) does for the difference.
+"""
+@inline function _average_band!(
+        out, in_ref, dims::NTuple{D, Int}, dir::GridDirection, ::Val{DIM}, nbands::Int, b::Int
+) where {D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    band = _band_range(axes(li, D), nbands, b)
+    interior, boundary = _stencil_ranges(axes(li), Val(DIM), dir)
+    interior, boundary = _band_slab(interior, band), _band_slab(boundary, band)
+
+    @inbounds @simd for I in CartesianIndices(interior)
+        idx = li[I]
+        out[idx] = _compute_average(
+            dir, Val(false), in_ref[idx], in_ref[li[_neighbour(dir, I, step)]]
+        )
+    end
+
+    @inbounds @simd for I in CartesianIndices(boundary)
+        idx = li[I]
+        out[idx] = _compute_average(dir, Val(true), in_ref[idx])
+    end
+
+    return nothing
+end
+
+"""
+    _centered_average_band!(out, in_ref, dims::NTuple{D, Int}, dim_val::Val, nbands::Int, b::Int) -> Nothing
+
+Runs `_centered_average_engine!`'s loops on the `b`-th of `nbands` slabs of the grid cut
+along its last axis, as [`_difference_band!`](@ref) does for the difference.
+"""
+@inline function _centered_average_band!(
+        out, in_ref, dims::NTuple{D, Int}, ::Val{DIM}, nbands::Int, b::Int
+) where {D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    band = _band_range(axes(li, D), nbands, b)
+    interior, lo, hi = _centered_stencil_ranges(axes(li), Val(DIM))
+    interior, lo, hi = _band_slab(interior, band), _band_slab(lo, band), _band_slab(hi, band)
+
+    @inbounds @simd for I in CartesianIndices(interior)
+        idx = li[I]
+        out[idx] = _compute_average(
+            Centered(), Val(false), in_ref[li[I - step]], in_ref[idx], in_ref[li[I + step]]
+        )
+    end
+
+    @inbounds for bnd in (lo, hi)
+        @simd for I in CartesianIndices(bnd)
+            idx = li[I]
+            out[idx] = _compute_average(Centered(), Val(true), in_ref[idx])
+        end
+    end
+
+    return nothing
+end
+
+"""
+    _threaded_average_engine!(out, in_ref, dims::Tuple, dir::GridDirection, dim_val::Val) -> Nothing
+
+[`CpuThreaded`](@ref)'s `_average_engine!`: one [`_average_band!`](@ref) per thread under
+`Threads.@threads :static` (every band in turn where a `:static` loop cannot start, see
+[`_static_or_serial`](@ref)), isolated so the closure is never built on a serial path.
+"""
+@noinline function _threaded_average_engine!(
+        out, in_ref, dims::NTuple{D, Int}, dir::GridDirection, dim_val::Val
+) where {D}
+    return _static_or_serial(_static_bands!, _serial_bands!, _average_band!,
+        Threads.nthreads(), out, in_ref, dims, dir, dim_val)
+end
+
+"""
+    _threaded_centered_average_engine!(out, in_ref, dims::Tuple, dim_val::Val) -> Nothing
+
+[`CpuThreaded`](@ref)'s `_centered_average_engine!`: one [`_centered_average_band!`](@ref)
+per thread under `Threads.@threads :static`, serially where a `:static` loop cannot start.
+"""
+@noinline function _threaded_centered_average_engine!(
+        out, in_ref, dims::NTuple{D, Int}, dim_val::Val
+) where {D}
+    return _static_or_serial(_static_bands!, _serial_bands!, _centered_average_band!,
+        Threads.nthreads(), out, in_ref, dims, dim_val)
+end
+
+"""
+    _batch_average_engine!(out, in_ref, dims::Tuple, dir::GridDirection, dim_val::Val) -> Nothing
+
+[`CpuPolyester`](@ref)'s `_average_engine!`, filled by `BramblePolyesterExt` (one
+[`_average_band!`](@ref) per band). The only `src/` method errors naming Polyester.
+"""
+@noinline function _batch_average_engine!(out, in_ref, dims, dir, dim_val)
+    return _throw_cpubatch_without_polyester(:_batch_average_engine!)
+end
+
+"""
+    _batch_centered_average_engine!(out, in_ref, dims::Tuple, dim_val::Val) -> Nothing
+
+[`CpuPolyester`](@ref)'s `_centered_average_engine!`, filled by `BramblePolyesterExt` (one
+[`_centered_average_band!`](@ref) per band). The only `src/` method errors naming Polyester.
+"""
+@noinline function _batch_centered_average_engine!(out, in_ref, dims, dim_val)
+    return _throw_cpubatch_without_polyester(:_batch_centered_average_engine!)
+end
+
+@inline _average_engine!(::CpuSerial, out, in_ref, dims, dir, dim_val) = _average_engine!(
+    out, in_ref, dims, dir, dim_val)
+@inline _average_engine!(::CpuThreaded, out, in_ref, dims, dir, dim_val) = _threaded_average_engine!(
+    out, in_ref, dims, dir, dim_val)
+@noinline _average_engine!(::CpuPolyester, out, in_ref, dims, dir, dim_val) = _batch_average_engine!(
+    out, in_ref, dims, dir, dim_val)
+
+@inline _centered_average_engine!(::CpuSerial, out, in_ref, dims, dim_val) = _centered_average_engine!(out, in_ref, dims, dim_val)
+@inline _centered_average_engine!(::CpuThreaded, out, in_ref, dims, dim_val) = _threaded_centered_average_engine!(
+    out, in_ref, dims, dim_val)
+@noinline _centered_average_engine!(::CpuPolyester, out, in_ref, dims, dim_val) = _batch_centered_average_engine!(
+    out, in_ref, dims, dim_val)
+
 @noinline function _throw_no_device_centered_average()
     return error(
         "the centered average (Mcₓ, Mcᵧ, Mc₂, Mcₕ) has no device kernel yet; apply it to " *
@@ -207,7 +338,7 @@ end
     sp = space(uₕ)
     (execution_policy(sp) isa GpuPolicy || locality(typeof(vₕ.data)) isa DeviceLocality ||
      locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_centered_average()
-    _centered_average_engine!(vₕ.data, uₕ.data, _grid_dims(uₕ), dim_val)
+    _centered_average_engine!(execution_policy(sp), vₕ.data, uₕ.data, _grid_dims(uₕ), dim_val)
     return vₕ
 end
 

@@ -109,13 +109,15 @@ each policy beats `CpuSerial` twice running.
 | `Rₕ!` unmasked | 64-96 points/axis | 8-24 |
 | `Rₕ!` masked | 256 | 16 |
 | `avgₕ!` (nq=3) | 24-32 | 8 |
-| `innerₕ`/`_dot` | -- | 1,000 elements |
+| `innerₕ`/`_dot` | 100,000-300,000 elements | 1,000 elements |
 
-The blank `CpuThreaded` cell for `innerₕ`/`_dot` is not a missing measurement: `_dot(::CpuThreaded, ...)`
-(`src/utils/linear_algebra.jl`) forwards to the identical serial reduction, so an inner
-product does not thread under this policy at all
-([#112](https://github.com/gpena/Bramble.jl/issues/112)) -- it runs exactly as fast, or
-slow, as `CpuSerial` regardless of size, and there is no crossover to report.
+`_dot`/`_dot_masked(::CpuThreaded, ...)` (`src/utils/linear_algebra.jl`) are a real threaded
+reduction (static chunks, dependency-free; masked reductions walk set bits per word;
+`SeparableWeights` banded along the last axis), and their crossover against `CpuSerial` was
+measured the same way as the rows above: 100,000-300,000 elements across four runs (Apple M2,
+`--threads=4`, AC power, `benchmark/polyester_crossover.jl`) -- the exact crossing point moved
+within that range from one run to the next, the same jitter the other workloads show near their
+own crossing point.
 
 The crossover differs by an order of magnitude between workloads, so a figure measured
 for one does not transfer to another -- that is why four rows are published here rather
@@ -124,6 +126,25 @@ at every crossover measured, falling one to two orders of magnitude below it.
 
 These are one machine's numbers, taken under one power state, not a portable constant:
 re-measure before leaning on them for a different host.
+
+### Measuring your own crossovers
+
+To get these figures for your own machine, at the thread count you actually plan to use,
+run the portable crossover script from a checkout of the repository:
+
+```bash
+julia --threads=N --project=benchmark benchmark/policy_crossover.jl
+```
+
+It sweeps every workload above (plus a few more) in 1D, 2D and 3D, and prints one
+`CROSSOVER | ...` line per workload/dimension pair giving the smallest size at which
+`CpuThreaded` and `CpuPolyester` start beating `CpuSerial`, followed by a summary
+recommendation table. It also prints one assemble+solve context row per dimension,
+showing what share of an end-to-end solve the sparse direct solve itself takes -- that
+share does not depend on the execution policy. Pass `--smoke` for a quick check with a
+handful of tiny sizes, or `--max-dofs N` to raise the default 1e6-DOF sweep cap; `--out
+file.md` writes the tables to a Markdown file. By default the run takes about ten
+minutes.
 
 ### The policy hierarchy
 

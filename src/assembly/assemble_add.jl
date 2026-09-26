@@ -102,14 +102,14 @@ end
 See also: [`assemble!`](@ref), [`assemble`](@ref).
 """
 # `A::AbstractMatrix`, not `A::SparseMatrixCSC` (S1.2's extension of the matrix-type seam,
-# gpena/Bramble.jl#12): `_assemble_bilinear_core_cached!`/`_assemble_bilinear_parallel_core!`
+# gpena/Bramble.jl#12): `_assemble_bilinear_core_cached!`/`_assemble_bilinear_parallel_cached!`
 # already dispatch on the matrix type themselves (S1.1), so widening this signature is all
 # that is needed for a dense-backend form.
 function assemble_add!(A::AbstractMatrix, a::BilinearForm)
     if execution_policy(a.trial_space) isa CpuSerial
         _assemble_bilinear_core_cached!(A, a.trial_space, a.test_space, a.ast, a.cache)
     else
-        _assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast)
+        _assemble_bilinear_parallel_cached!(A, a.trial_space, a.test_space, a.ast, a.cache)
     end
     return A
 end
@@ -119,7 +119,7 @@ function assemble_add!(A::AbstractMatrix, a::BilinearForm, α)
     if execution_policy(a.trial_space) isa CpuSerial
         _assemble_bilinear_core_cached!(A, a.trial_space, a.test_space, a.ast, a.cache, αv)
     else
-        _assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast, αv)
+        _assemble_bilinear_parallel_cached!(A, a.trial_space, a.test_space, a.ast, a.cache, αv)
     end
     return A
 end

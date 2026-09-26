@@ -80,7 +80,7 @@ probes = ((0.15, 0.15), (0.8, 0.2), (0.5, 0.9))
 errors = map(probes) do p
     i = argmin(abs.(xs .- p[1]))
     j = argmin(abs.(ys .- p[2]))
-    return abs(uₕ[i, j] - Q * green(xs[i], ys[j], x₀...))
+    return abs(uₕ[CartesianIndex(i, j)] - Q * green(xs[i], ys[j], x₀...))
 end
 
 # Small, but bracketed away from zero as well: an exactly zero difference would mean the   #src

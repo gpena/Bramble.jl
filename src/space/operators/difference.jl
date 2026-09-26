@@ -225,7 +225,9 @@ end
             vₕ.data, uₕ.data, _resolve_device_spacing(h), _grid_dims(uₕ), dir, dim_val, dev
         )
     else
-        _difference_engine!(vₕ.data, uₕ.data, h, _grid_dims(uₕ), dir, dim_val)
+        _difference_engine!(
+            execution_policy(sp), vₕ.data, uₕ.data, h, _grid_dims(uₕ), dir, dim_val
+        )
     end
     return nothing
 end
@@ -366,6 +368,128 @@ function _difference_engine!(
 
     return nothing
 end
+
+#------------------------------------------------------------------------------------------#
+# Policy-dispatched CPU stencil engines (gpena/Bramble.jl#356)
+#
+# `CpuSerial` runs the two engines above unchanged. `CpuThreaded` cuts the grid into
+# `Threads.nthreads()` static bands along its last axis (the single axis in 1D) and runs,
+# per band, the same interior and boundary loops restricted to that slab. The
+# interior/boundary split is along the differencing axis `DIM`, which is the banded axis
+# only when `DIM == D`: a band's slab then still reads its neighbour across the band edge,
+# which is safe because only the writes need to be disjoint, and each boundary slice falls
+# in exactly one band. `CpuPolyester` reaches `_batch_difference_engine!`, which
+# `BramblePolyesterExt` fills by running the same `_difference_band!` per band.
+#------------------------------------------------------------------------------------------#
+
+# `ranges` with its last axis cut down to `band`. Built from `first`/`last` rather than
+# `intersect` so every slab has one concrete `UnitRange` type; an empty slab (a band
+# missing the boundary slice, or a band of a grid shorter than the thread count) is an
+# empty range and its loop does nothing.
+@inline function _band_slab(ranges::NTuple{D, Any}, band::AbstractUnitRange) where {D}
+    r = ranges[D]
+    return (Base.front(ranges)..., max(first(r), first(band)):min(last(r), last(band)))
+end
+
+"""
+    _difference_band!(out, in_ref, h, dims::NTuple{D, Int}, dir::GridDirection, dim_val::Val, nbands::Int, b::Int) -> Nothing
+
+Runs `_difference_engine!`'s loops for `dir` on the `b`-th of `nbands` slabs of the grid
+cut along its last axis ([`_band_range`](@ref)). The slabs partition the grid, so running
+every band, in any order or concurrently, writes every point of `out` exactly once with the
+value the serial engine gives it.
+"""
+@inline function _difference_band!(
+        out, in_ref, h::H, dims::NTuple{D, Int}, dir::GridDirection, ::Val{DIM},
+        nbands::Int, b::Int
+) where {H, D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    band = _band_range(axes(li, D), nbands, b)
+    interior, boundary = _stencil_ranges(axes(li), Val(DIM), dir)
+    interior, boundary = _band_slab(interior, band), _band_slab(boundary, band)
+
+    @inbounds @simd for I in CartesianIndices(interior)
+        idx, other = li[I], li[_neighbour(dir, I, step)]
+        out[idx] = _compute_difference(
+            dir, Val(false), in_ref[idx], in_ref[other], h, I[DIM]
+        )
+    end
+
+    @inbounds @simd for I in CartesianIndices(boundary)
+        idx = li[I]
+        out[idx] = _compute_difference(dir, Val(true), in_ref[idx], h, I[DIM])
+    end
+
+    return nothing
+end
+
+@inline function _difference_band!(
+        out, in_ref, h::H, dims::NTuple{D, Int}, dir::CenteredStencil, ::Val{DIM},
+        nbands::Int, b::Int
+) where {H, D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    band = _band_range(axes(li, D), nbands, b)
+    interior, lo, hi = _centered_stencil_ranges(axes(li), Val(DIM))
+    interior, lo, hi = _band_slab(interior, band), _band_slab(lo, band), _band_slab(hi, band)
+
+    @inbounds @simd for I in CartesianIndices(interior)
+        idx = li[I]
+        back, fwd = li[I - step], li[I + step]
+        out[idx] = _compute_difference(
+            dir, Val(false), in_ref[back], in_ref[idx], in_ref[fwd], h, I[DIM]
+        )
+    end
+
+    @inbounds @simd for I in CartesianIndices(lo)
+        idx, fwd = li[I], li[I + step]
+        out[idx] = _compute_difference(dir, Val(true), in_ref[idx], in_ref[fwd], h, I[DIM])
+    end
+
+    @inbounds @simd for I in CartesianIndices(hi)
+        idx, back = li[I], li[I - step]
+        out[idx] = _compute_difference(dir, Val(true), in_ref[idx], in_ref[back], h, I[DIM])
+    end
+
+    return nothing
+end
+
+"""
+    _threaded_difference_engine!(out, in_ref, h, dims::Tuple, dir::GridDirection, dim_val::Val) -> Nothing
+
+[`CpuThreaded`](@ref)'s `_difference_engine!`: one [`_difference_band!`](@ref) per thread
+under `Threads.@threads :static`, or every band in turn where a `:static` loop cannot start
+([`_static_or_serial`](@ref)). Kept in an isolated function, as [`_threaded_for!`](@ref)
+is, so the `Threads.@threads` closure is never built on a serial path.
+"""
+@noinline function _threaded_difference_engine!(
+        out, in_ref, h::H, dims::NTuple{D, Int}, dir::GridDirection, dim_val::Val
+) where {H, D}
+    return _static_or_serial(_static_bands!, _serial_bands!, _difference_band!,
+        Threads.nthreads(), out, in_ref, h, dims, dir, dim_val)
+end
+
+"""
+    _batch_difference_engine!(out, in_ref, h, dims::Tuple, dir::GridDirection, dim_val::Val) -> Nothing
+
+[`CpuPolyester`](@ref)'s `_difference_engine!`, filled by `BramblePolyesterExt` (one
+[`_difference_band!`](@ref) per band). The only `src/` method errors naming Polyester.
+"""
+@noinline function _batch_difference_engine!(out, in_ref, h, dims, dir, dim_val)
+    return _throw_cpubatch_without_polyester(:_batch_difference_engine!)
+end
+
+# `h::H` for the reason the engines above carry it: a spacing callable that is only
+# forwarded is otherwise not specialised on.
+@inline _difference_engine!(::CpuSerial, out, in_ref, h::H, dims, dir, dim_val) where {H} = _difference_engine!(
+    out, in_ref, h, dims, dir, dim_val)
+@inline _difference_engine!(
+    ::CpuThreaded, out, in_ref, h::H, dims, dir, dim_val) where {H} = _threaded_difference_engine!(
+    out, in_ref, h, dims, dir, dim_val)
+@noinline _difference_engine!(
+    ::CpuPolyester, out, in_ref, h::H, dims, dir, dim_val) where {H} = _batch_difference_engine!(
+    out, in_ref, h, dims, dir, dim_val)
 
 #------------------------------------------------------------------------------------------#
 # Device kernel launch stubs (gpena/Bramble.jl#94, #174, S2.4 of

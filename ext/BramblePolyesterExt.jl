@@ -12,6 +12,27 @@
 # `assemble_parallel!`, `_assemble_linear!`) are untouched by this file: this only supplies what
 # runs once the caller has already zeroed and dispatched.
 #
+# S7.2 (gpena/Bramble.jl#356) left three more of the same shape in
+# `src/space/operators/difference.jl`/`src/space/operators/average.jl`: `_batch_difference_engine!`,
+# `_batch_average_engine!` and `_batch_centered_average_engine!`, each the `@batch` counterpart of
+# `_threaded_difference_engine!`/`_threaded_average_engine!`/`_threaded_centered_average_engine!`,
+# running one `_difference_band!`/`_average_band!`/`_centered_average_band!` per band.
+#
+# S3.1 (gpena/Bramble.jl#338) added a warmed refill that replays recorded `nzval` positions
+# instead of searching, gated per unit by `_threaded_replay_policy`: only `CpuThreaded`
+# answered `true` in `src/`, so `CpuPolyester` kept searching even once a recording existed.
+# This file's `_threaded_replay_policy(::CpuPolyester) = true` opts it in, and
+# `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` are the `@batch` counterparts
+# of `_batch_bilinear_band_sweep!`/`_batch_bilinear_colour_sweep!` above, reached instead of
+# them once a unit's leaf can replay (`_leaf_replays`, bilinear_execution.jl): the colouring is
+# identical, only `_replay_point!` (reads the recording) stands in for `_scatter_point!`
+# (searches).
+#
+# S7.5 (gpena/Bramble.jl#356) left one more in `src/space/operators/vector_calculus.jl`:
+# `_batch_run_bands!`, the `@batch` counterpart of `_run_bands!`'s `CpuThreaded` arm, reached
+# by the divergence, curl and strain-average engines. Unlike the three S7.2 hooks, it stays
+# generic over the band function `f` instead of naming one.
+#
 # `Polyester.@batch` accepts a `CartesianIndices` directly (`closure.jl`'s own `splitloop`
 # already splits it along its last axis, the same trick `_threaded_axis_for!` hand-rolls for
 # `Threads.@threads`), so none of the manual axis-chunking `src/utils/linear_algebra.jl` uses
@@ -23,7 +44,9 @@ module BramblePolyesterExt
 
 using Bramble
 using Bramble: MarkedIndicesUnion, SeparableWeights, _reduce_or_chunk, _throw_dot_dim_error,
-               _write_components!, _band_range, _scatter_point!, _scatter_linear_point!
+               _write_components!, _band_range, _scatter_point!, _scatter_linear_point!,
+               CpuPolyester, _ReplayTarget, _replay_point!, _difference_band!, _average_band!,
+               _centered_average_band!, _broadcast_band!
 using Polyester: Polyester, @batch
 
 # --- _batch_for!/_batch_axis_for! (src/utils/linear_algebra.jl) -------------------- #
@@ -72,8 +95,8 @@ end
 
 # --- _batch_dot/_batch_dot_masked (src/utils/linear_algebra.jl) -------------------- #
 #
-# `CpuThreaded`'s own `_dot`/`_dot_masked` (linear_algebra.jl) fall through to the plain
-# serial reduction -- there never was a threaded reduction to match, only this Polyester one.
+# `CpuThreaded` now has its own threaded `_dot`/`_dot_masked` (linear_algebra.jl); this is the
+# Polyester counterpart to that reduction.
 # `@batch reduction=((+, s),)` keeps the running sum as a scalar the macro reduces itself
 # (Polyester's own README: "does not incur any additional allocations"), rather than a
 # per-task buffer this file would have to allocate and reduce by hand.
@@ -249,6 +272,37 @@ function Bramble._batch_bilinear_band_sweep!(
     return nothing
 end
 
+# --- _threaded_replay_policy/_batch_bilinear_band_replay!/_batch_bilinear_colour_replay! ---- #
+# (src/assembly/bilinear_execution.jl, gpena/Bramble.jl#338)
+#
+# Opts `CpuPolyester` into the warmed-refill replay `CpuThreaded` already gets: without this,
+# `_leaf_replays` never answers `true` for a `CpuPolyester` leaf, so its units keep searching
+# even once a recording exists. `target::_ReplayTarget` -- rather than the stub's unconstrained
+# `target` -- is what makes each of these a genuine specialisation of its `src/` stub, the same
+# `A::AbstractMatrix` reasoning the sweep hooks above give.
+Bramble._threaded_replay_policy(::CpuPolyester) = true
+
+function Bramble._batch_bilinear_band_replay!(
+        target::_ReplayTarget, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers,
+        row_offset, col_offset
+)
+    @batch for b in bidx
+        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
+            _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
+        end
+    end
+    return nothing
+end
+
+function Bramble._batch_bilinear_colour_replay!(
+        target::_ReplayTarget, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset
+)
+    @batch for I in idxs
+        _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
+    end
+    return nothing
+end
+
 # --- _batch_linear_colour_sweep!/_batch_linear_band_sweep! (src/assembly/linear.jl) ---- #
 #
 # As above, for the right-hand-side sweep: `_scatter_linear_point!` is the shared entry rule
@@ -271,6 +325,86 @@ function Bramble._batch_linear_band_sweep!(
         for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
             _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
         end
+    end
+    return nothing
+end
+
+# --- _batch_difference_engine!/_batch_average_engine!/_batch_centered_average_engine! ---- #
+# (src/space/operators/difference.jl, src/space/operators/average.jl)
+#
+# `CpuPolyester`'s counterpart of `_threaded_difference_engine!`/`_threaded_average_engine!`/
+# `_threaded_centered_average_engine!`: one `_difference_band!`/`_average_band!`/
+# `_centered_average_band!` per band under `@batch`, exactly the shape of the sweeps above.
+# `out::AbstractVector` (matching the `CpuThreaded` reference bodies), the same reasoning as
+# the sweep hooks above, so this is a genuine specialisation of the `src/` stub rather than a
+# redefinition of its fully unconstrained signature.
+
+function Bramble._batch_difference_engine!(out::AbstractVector, in_ref, h, dims, dir, dim_val)
+    n = Threads.nthreads()
+    @batch for b in 1:n
+        _difference_band!(out, in_ref, h, dims, dir, dim_val, n, b)
+    end
+    return nothing
+end
+
+function Bramble._batch_average_engine!(out::AbstractVector, in_ref, dims, dir, dim_val)
+    n = Threads.nthreads()
+    @batch for b in 1:n
+        _average_band!(out, in_ref, dims, dir, dim_val, n, b)
+    end
+    return nothing
+end
+
+function Bramble._batch_centered_average_engine!(out::AbstractVector, in_ref, dims, dim_val)
+    n = Threads.nthreads()
+    @batch for b in 1:n
+        _centered_average_band!(out, in_ref, dims, dim_val, n, b)
+    end
+    return nothing
+end
+
+# --- _batch_run_bands! (src/space/operators/vector_calculus.jl) -------------------- #
+#
+# `CpuPolyester`'s `_run_bands!`: unlike the three engine-specific hooks above, `f` here is
+# whichever accumulating engine (`_accumulate_backward!`, `_accumulate_centered!`,
+# `_avg_backward_inplace!`, ...) the caller passed to `_run_bands!` itself, so this stays
+# generic over `f` rather than naming one. `out::AbstractVector` is always the first of
+# `args...` at every `_run_bands!` call site (vector_calculus.jl), the same constraint that
+# makes this a genuine specialisation of the `src/` stub rather than a redefinition of its
+# fully unconstrained signature.
+function Bramble._batch_run_bands!(f::F, nbands::Int, out::AbstractVector, rest::Vararg{Any, N}) where {F, N}
+    @batch for b in 1:nbands
+        f(out, rest..., nbands, b)
+    end
+    return nothing
+end
+
+# --- _batch_broadcast! (src/space/vectorelement.jl) --------------------------------- #
+#
+# `CpuPolyester`'s counterpart of `_threaded_broadcast!`: one `_broadcast_band!` per band
+# under `@batch`, exactly the shape of the engine hooks above. `v::AbstractVector` (matching
+# the `CpuThreaded` reference body), the same reasoning as those hooks, so this is a genuine
+# specialisation of the `src/` stub rather than a redefinition of its fully unconstrained
+# signature.
+#
+# `bc` is boxed in a `Ref` before the loop rather than closed over directly: `@batch`
+# gc-preserves every free variable through `StrideArraysCore.object_and_preserve`, which has
+# a `Broadcast.Broadcasted`-specific method that rebuilds the tree through the 3-argument
+# `Broadcasted(f, args, axes)` constructor whenever `bc.f` and `bc.axes` are both `isbits` --
+# true of every broadcast this reaches (`bc.f` a plain function, `bc.axes` a tuple of
+# `OneTo`s). That rebuild recomputes the style via `combine_styles` over the *unpacked*,
+# already-`preprocess`ed args, including each `Broadcast.Extruded` leaf -- and `Extruded` has
+# no `BroadcastStyle` of its own, so combining throws (`MethodError: no method matching
+# ndims(::Type{Extruded{...}})`) before a single band ever runs, for any `bc` this reaches,
+# not only a `VectorElement`-specific shape. A `Base.RefValue` wrapping `bc` has no such
+# specialised `object_and_preserve` method, so it takes the plain, non-reconstructing
+# fallback instead; `bcref[]` inside the loop hands `_broadcast_band!` the same `bc` either
+# way.
+function Bramble._batch_broadcast!(v::AbstractVector, bc, ax)
+    n = Threads.nthreads()
+    bcref = Ref(bc)
+    @batch for b in 1:n
+        _broadcast_band!(v, bcref[], ax, n, b)
     end
     return nothing
 end

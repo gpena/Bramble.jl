@@ -107,12 +107,45 @@ _launch_fused_strain_offdiag!(out, ui, uj, hi, hj, dims, dim_i, dim_j, dev) = _t
 # `h` carries a type parameter for the reason it does in `_difference_engine!`: an argument
 # of function or view type that the body only forwards is not specialised on, and the
 # spacing would be boxed at every grid point.
+#
+# Every accumulating engine takes a trailing `nbands, b` and runs only the `b`-th of `nbands`
+# slabs of the grid cut along its last axis (`_band_range`/`_band_slab`, the cut
+# `_difference_band!` makes, operators/difference.jl); `1, 1` is the whole grid.
+# `_run_bands!` picks how the bands run from the execution policy (gpena/Bramble.jl#356):
+# `CpuThreaded` runs one band per thread under `Threads.@threads :static` (every band in turn
+# where a `:static` loop cannot start, `_static_or_serial`), `CpuPolyester` one band per
+# `Polyester.@batch` task (`_batch_run_bands!`, filled by `BramblePolyesterExt`), every other
+# CPU policy the single band serially. Each engine writes `out[idx]` only at its own point and
+# reads `out` nowhere else, so the bands' writes are disjoint whatever the differencing axis,
+# and each point receives the very same sum, in the same order of directions, as serially.
+@inline _run_bands!(::CpuPolicy, f::F, args::Vararg{Any, N}) where {F, N} = f(args..., 1, 1)
+
+@noinline function _run_bands!(::CpuThreaded, f::F, args::Vararg{Any, N}) where {F, N}
+    return _static_or_serial(_static_bands!, _serial_bands!, f, Threads.nthreads(), args...)
+end
+
+"""
+    _batch_run_bands!(f, nbands::Int, args...) -> Nothing
+
+[`CpuPolyester`](@ref)'s `_run_bands!`, filled by `BramblePolyesterExt` (one `f(args...,
+nbands, b)` per band under `Polyester.@batch`). The only `src/` method errors naming
+Polyester.
+"""
+@noinline function _batch_run_bands!(f, nbands::Int, args::Vararg{Any, N}) where {N}
+    return _throw_cpubatch_without_polyester(:_batch_run_bands!)
+end
+
+@noinline function _run_bands!(::CpuPolyester, f::F, args::Vararg{Any, N}) where {F, N}
+    return _batch_run_bands!(f, Threads.nthreads(), args...)
+end
+
 @inline function _accumulate_backward!(
-        out, u, h::H, dims::NTuple{D, Int}, ::Val{DIM}, s
+        out, u, h::H, dims::NTuple{D, Int}, ::Val{DIM}, s, nbands::Int, b::Int
 ) where {H, D, DIM}
     li = LinearIndices(dims)
     step = _stencil_step(Val(DIM), Val(D))
     interior, _ = _stencil_ranges(axes(li), Val(DIM), Backward())
+    interior = _band_slab(interior, _band_range(axes(li, D), nbands, b))
 
     @inbounds @simd for I in CartesianIndices(interior)
         idx, other = li[I], li[I - step]
@@ -122,11 +155,12 @@ _launch_fused_strain_offdiag!(out, ui, uj, hi, hj, dims, dim_i, dim_j, dev) = _t
 end
 
 @inline function _accumulate_forward!(
-        out, u, h::H, dims::NTuple{D, Int}, ::Val{DIM}, s
+        out, u, h::H, dims::NTuple{D, Int}, ::Val{DIM}, s, nbands::Int, b::Int
 ) where {H, D, DIM}
     li = LinearIndices(dims)
     step = _stencil_step(Val(DIM), Val(D))
     interior, _ = _stencil_ranges(axes(li), Val(DIM), Forward())
+    interior = _band_slab(interior, _band_range(axes(li, D), nbands, b))
 
     @inbounds @simd for I in CartesianIndices(interior)
         idx, other = li[I], li[I + step]
@@ -266,7 +300,7 @@ function _divergence!(vₕ, comps, Wₕ, dir, ::Val{D}) where {D}
         _launch_fused_divergence!(out, map(parent, comps), hs, dims, dir, dev)
     else
         fill!(out, zero(eltype(out)))
-        _accumulate_direction!(vₕ, comps, Ωₕ, dims, dir, Val(D), Val(D))
+        _accumulate_direction!(execution_policy(Wₕ), vₕ, comps, Ωₕ, dims, dir, Val(D), Val(D))
     end
     return nothing
 end
@@ -275,24 +309,26 @@ end
 # `Val(d)` captured in a closure boxes (gpena/Bramble.jl#146) and this is the whole reason
 # the vectorial aliases are written out the way they are.
 @inline function _accumulate_direction!(
-        vₕ, comps, Ωₕ, dims, dir, ::Val{d}, ::Val{D}
+        pol, vₕ, comps, Ωₕ, dims, dir, ::Val{d}, ::Val{D}
 ) where {d, D}
-    _accumulate_one!(parent(vₕ), parent(comps[d]), Ωₕ, dims, dir, Val(d), true)
-    _accumulate_direction!(vₕ, comps, Ωₕ, dims, dir, Val(d - 1), Val(D))
+    _accumulate_one!(pol, parent(vₕ), parent(comps[d]), Ωₕ, dims, dir, Val(d), true)
+    _accumulate_direction!(pol, vₕ, comps, Ωₕ, dims, dir, Val(d - 1), Val(D))
     return nothing
 end
 
-@inline _accumulate_direction!(vₕ, comps, Ωₕ, dims, dir, ::Val{0}, ::Val{D}) where {D} = nothing
+@inline _accumulate_direction!(pol, vₕ, comps, Ωₕ, dims, dir, ::Val{0}, ::Val{D}) where {D} = nothing
 
-@inline function _accumulate_one!(out, u, Ωₕ, dims, ::Backward, ::Val{d}, s) where {d}
-    return _accumulate_backward!(
-        out, u, backward_spacings_for_derivative(Ωₕ(d)), dims, Val(d), s
+@inline function _accumulate_one!(pol, out, u, Ωₕ, dims, ::Backward, ::Val{d}, s) where {d}
+    return _run_bands!(
+        pol, _accumulate_backward!, out, u, backward_spacings_for_derivative(Ωₕ(d)), dims,
+        Val(d), s
     )
 end
 
-@inline function _accumulate_one!(out, u, Ωₕ, dims, ::Forward, ::Val{d}, s) where {d}
-    return _accumulate_forward!(
-        out, u, forward_spacings_for_derivative(Ωₕ(d)), dims, Val(d), s
+@inline function _accumulate_one!(pol, out, u, Ωₕ, dims, ::Forward, ::Val{d}, s) where {d}
+    return _run_bands!(
+        pol, _accumulate_forward!, out, u, forward_spacings_for_derivative(Ωₕ(d)), dims,
+        Val(d), s
     )
 end
 
@@ -361,7 +397,8 @@ end
 
 function _curl!(vₕ::VectorElement, uₕ, dir, op::String)
     comps = _field_components(uₕ)
-    Ωₕ = mesh(_field_space(uₕ))
+    Wₕ = _field_space(uₕ)
+    Ωₕ = mesh(Wₕ)
     dims = npoints(Ωₕ, Tuple)
     _check_field_arity(comps, Val(2), op)
 
@@ -373,15 +410,17 @@ function _curl!(vₕ::VectorElement, uₕ, dir, op::String)
         _launch_fused_curl2d!(out, parent(comps[1]), parent(comps[2]), h1, h2, dims, dir, dev)
     else
         fill!(out, zero(eltype(out)))
-        _accumulate_one!(out, parent(comps[2]), Ωₕ, dims, dir, Val(1), true)
-        _accumulate_one!(out, parent(comps[1]), Ωₕ, dims, dir, Val(2), -true)
+        pol = execution_policy(Wₕ)
+        _accumulate_one!(pol, out, parent(comps[2]), Ωₕ, dims, dir, Val(1), true)
+        _accumulate_one!(pol, out, parent(comps[1]), Ωₕ, dims, dir, Val(2), -true)
     end
     return vₕ
 end
 
 function _curl!(vₕ::NTuple{3, VectorElement}, uₕ, dir, op::String)
     comps = _field_components(uₕ)
-    Ωₕ = mesh(_field_space(uₕ))
+    Wₕ = _field_space(uₕ)
+    Ωₕ = mesh(Wₕ)
     dims = npoints(Ωₕ, Tuple)
     _check_field_arity(comps, Val(3), op)
 
@@ -399,12 +438,13 @@ function _curl!(vₕ::NTuple{3, VectorElement}, uₕ, dir, op::String)
         for k in 1:3
             fill!(outs[k], zero(eltype(outs[k])))
         end
-        _accumulate_one!(outs[1], parent(comps[3]), Ωₕ, dims, dir, Val(2), true)
-        _accumulate_one!(outs[1], parent(comps[2]), Ωₕ, dims, dir, Val(3), -true)
-        _accumulate_one!(outs[2], parent(comps[1]), Ωₕ, dims, dir, Val(3), true)
-        _accumulate_one!(outs[2], parent(comps[3]), Ωₕ, dims, dir, Val(1), -true)
-        _accumulate_one!(outs[3], parent(comps[2]), Ωₕ, dims, dir, Val(1), true)
-        _accumulate_one!(outs[3], parent(comps[1]), Ωₕ, dims, dir, Val(2), -true)
+        pol = execution_policy(Wₕ)
+        _accumulate_one!(pol, outs[1], parent(comps[3]), Ωₕ, dims, dir, Val(2), true)
+        _accumulate_one!(pol, outs[1], parent(comps[2]), Ωₕ, dims, dir, Val(3), -true)
+        _accumulate_one!(pol, outs[2], parent(comps[1]), Ωₕ, dims, dir, Val(3), true)
+        _accumulate_one!(pol, outs[2], parent(comps[3]), Ωₕ, dims, dir, Val(1), -true)
+        _accumulate_one!(pol, outs[3], parent(comps[2]), Ωₕ, dims, dir, Val(1), true)
+        _accumulate_one!(pol, outs[3], parent(comps[1]), Ωₕ, dims, dir, Val(2), -true)
     end
     return vₕ
 end
@@ -534,12 +574,29 @@ end
 # strain tensor's off-diagonal entries average a freshly-written difference into its own
 # destination without a scratch array of their own. Not `@simd`: consecutive iterations can be
 # the very two points this loop's own carried dependency links.
+#
+# Banded like the accumulating engines (`nbands, b`, run by `_run_bands!`), but never along
+# `DIM` itself: a band there would read `out[I - eᵢ]` from the band before it while that band
+# overwrites it. `_inplace_band_axis` picks the last axis, or the first when `DIM` is the last
+# (only the strain tensor's off-diagonal entries reach these, so `D >= 2`), and every line
+# along `DIM` then lies whole in one band and keeps its serial order.
+@inline _inplace_band_axis(::Val{DIM}, ::Val{D}) where {DIM, D} = DIM == D ? 1 : D
+
+@inline _clip_to_band(r, band) = max(first(r), first(band)):min(last(r), last(band))
+
+@inline _slab_on_axis(ranges::NTuple{D, Any}, band, ::Val{D}) where {D} = _band_slab(ranges, band)
+@inline _slab_on_axis(ranges::Tuple, band, ::Val{1}) = (_clip_to_band(ranges[1], band), Base.tail(ranges)...)
+@inline _slab_on_axis(ranges::NTuple{1, Any}, band, ::Val{1}) = _band_slab(ranges, band)
+
 @inline function _avg_backward_inplace!(
-        out::AbstractVector, dims::NTuple{D, Int}, ::Val{DIM}
+        out::AbstractVector, dims::NTuple{D, Int}, ::Val{DIM}, nbands::Int, b::Int
 ) where {D, DIM}
     li = LinearIndices(dims)
     step = _stencil_step(Val(DIM), Val(D))
     interior, boundary = _stencil_ranges(axes(li), Val(DIM), Backward())
+    A = _inplace_band_axis(Val(DIM), Val(D))
+    band = _band_range(axes(li, A), nbands, b)
+    interior, boundary = _slab_on_axis(interior, band, Val(A)), _slab_on_axis(boundary, band, Val(A))
 
     # The interior's first slice (`I[DIM] == 2`) reads the boundary slice
     # (`I[DIM] == 1`) as its neighbour, so the boundary is zeroed *after* the interior
@@ -560,14 +617,14 @@ end
 # in-place hazard to work around. On device this is exactly the same one-sided finite
 # difference `D₋ₓ!`/`D₋ᵧ!`/`D₋₂!` already apply, so it reuses that launcher rather than a
 # new kernel of its own.
-@inline function _strain_diag!(dest, comps, Ωₕ, dims, ::Val{i}) where {i}
+@inline function _strain_diag!(pol, dest, comps, Ωₕ, dims, ::Val{i}) where {i}
     out = parent(dest[i][i])
     h = backward_spacings_for_derivative(Ωₕ(i))
     if _is_device(out)
         dev = ka_device(backend(Ωₕ))
         _launch_difference_onesided!(out, parent(comps[i]), _resolve_device_spacing(h), dims, Backward(), Val(i), dev)
     else
-        _difference_engine!(out, parent(comps[i]), h, dims, Backward(), Val(i))
+        _difference_engine!(pol, out, parent(comps[i]), h, dims, Backward(), Val(i))
     end
     return nothing
 end
@@ -578,7 +635,7 @@ end
 # sum is written into its own destination slot (`dest[i][j]` and `dest[j][i]` in turn), then
 # averaged into itself in place, so the pair needs no scratch array beyond the two
 # destinations the caller already owns.
-@inline function _strain_pair!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}) where {i, j}
+@inline function _strain_pair!(pol, dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}) where {i, j}
     dij, dji = dest[i][j], dest[j][i]
     out_ij = parent(dij)
     hj = backward_spacings_for_derivative(Ωₕ(j))
@@ -592,11 +649,11 @@ end
         )
         copyto!(parent(dji), out_ij)
     else
-        _difference_engine!(out_ij, parent(comps[i]), hj, dims, Backward(), Val(j))
-        _avg_backward_inplace!(out_ij, dims, Val(i))
+        _difference_engine!(pol, out_ij, parent(comps[i]), hj, dims, Backward(), Val(j))
+        _run_bands!(pol, _avg_backward_inplace!, out_ij, dims, Val(i))
 
-        _difference_engine!(parent(dji), parent(comps[j]), hi, dims, Backward(), Val(i))
-        _avg_backward_inplace!(parent(dji), dims, Val(j))
+        _difference_engine!(pol, parent(dji), parent(comps[j]), hi, dims, Backward(), Val(i))
+        _run_bands!(pol, _avg_backward_inplace!, parent(dji), dims, Val(j))
 
         dij .= (dij .+ dji) ./ 2
         dji .= dij
@@ -608,22 +665,22 @@ end
 # `(i, j)` with `j > i` (the mirror `(j, i)` is filled by the same call, `_strain_pair!`
 # writing both). Recursion on `Val(d)` rather than a loop over `1:D`, for the same boxing
 # reason `_accumulate_direction!` above is written this way (gpena/Bramble.jl#146).
-@inline function _strain_offdiag!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}, ::Val{D}) where {i, j, D}
-    j > i && _strain_pair!(dest, comps, Ωₕ, dims, Val(i), Val(j))
-    _strain_offdiag!(dest, comps, Ωₕ, dims, Val(i), Val(j - 1), Val(D))
+@inline function _strain_offdiag!(pol, dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}, ::Val{D}) where {i, j, D}
+    j > i && _strain_pair!(pol, dest, comps, Ωₕ, dims, Val(i), Val(j))
+    _strain_offdiag!(pol, dest, comps, Ωₕ, dims, Val(i), Val(j - 1), Val(D))
     return nothing
 end
 
-@inline _strain_offdiag!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{0}, ::Val{D}) where {i, D} = nothing
+@inline _strain_offdiag!(pol, dest, comps, Ωₕ, dims, ::Val{i}, ::Val{0}, ::Val{D}) where {i, D} = nothing
 
-@inline function _strain_rows!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{D}) where {i, D}
-    _strain_diag!(dest, comps, Ωₕ, dims, Val(i))
-    _strain_offdiag!(dest, comps, Ωₕ, dims, Val(i), Val(D), Val(D))
-    _strain_rows!(dest, comps, Ωₕ, dims, Val(i - 1), Val(D))
+@inline function _strain_rows!(pol, dest, comps, Ωₕ, dims, ::Val{i}, ::Val{D}) where {i, D}
+    _strain_diag!(pol, dest, comps, Ωₕ, dims, Val(i))
+    _strain_offdiag!(pol, dest, comps, Ωₕ, dims, Val(i), Val(D), Val(D))
+    _strain_rows!(pol, dest, comps, Ωₕ, dims, Val(i - 1), Val(D))
     return nothing
 end
 
-@inline _strain_rows!(dest, comps, Ωₕ, dims, ::Val{0}, ::Val{D}) where {D} = nothing
+@inline _strain_rows!(pol, dest, comps, Ωₕ, dims, ::Val{0}, ::Val{D}) where {D} = nothing
 
 @inline _strain_alloc(comps, ::Val{D}) where {D} = ntuple(
     _ -> ntuple(_ -> similar(first(comps)), Val(D)), Val(D)
@@ -693,7 +750,7 @@ function εₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     _check_field_arity(comps, Val(D), "εₕ!")
     Ωₕ = mesh(Wₕ)
     dims = npoints(Ωₕ, Tuple)
-    _strain_rows!(dest, comps, Ωₕ, dims, Val(D), Val(D))
+    _strain_rows!(execution_policy(Wₕ), dest, comps, Ωₕ, dims, Val(D), Val(D))
     return dest
 end
 
@@ -727,11 +784,12 @@ end
 # spacing `star_spacings` returns, the same view `Dc` divides by, so each term is exactly the
 # value `Dc` writes.
 @inline function _accumulate_centered!(
-        out, u, hs::H, dims::NTuple{D, Int}, ::Val{DIM}, s
+        out, u, hs::H, dims::NTuple{D, Int}, ::Val{DIM}, s, nbands::Int, b::Int
 ) where {H, D, DIM}
     li = LinearIndices(dims)
     step = _stencil_step(Val(DIM), Val(D))
     interior, _, _ = _centered_stencil_ranges(axes(li), Val(DIM))
+    interior = _band_slab(interior, _band_range(axes(li, D), nbands, b))
 
     @inbounds @simd for I in CartesianIndices(interior)
         idx = li[I]
@@ -740,10 +798,10 @@ end
     return nothing
 end
 
-@inline function _accumulate_one!(out, u, Ωₕ, dims, ::Centered, ::Val{d}, s) where {d}
+@inline function _accumulate_one!(pol, out, u, Ωₕ, dims, ::Centered, ::Val{d}, s) where {d}
     sub = Ωₕ(d)
     _check_centered_points(sub, d)
-    return _accumulate_centered!(out, u, star_spacings(sub), dims, Val(d), s)
+    return _run_bands!(pol, _accumulate_centered!, out, u, star_spacings(sub), dims, Val(d), s)
 end
 
 """
@@ -782,21 +840,23 @@ function ∇cₕ!(dest, uₕ::VectorElement)
     D = dim(Ωₕ)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇cₕ!")
-    _centered_gradient!(outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), Centered(), Val(D))
+    _centered_gradient!(
+        execution_policy(space(uₕ)), outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), Centered(), Val(D)
+    )
     return dest
 end
 
 # Shared by `∇cₕ!` and `∇̽ₕ!`: `dir` is `Centered()` or `CrossWeighted()`, and
 # `_direction_spacing` picks the spacing each divides by.
-@inline function _centered_gradient!(outs, u, Ωₕ, dims, dir, ::Val{d}) where {d}
+@inline function _centered_gradient!(pol, outs, u, Ωₕ, dims, dir, ::Val{d}) where {d}
     sub = Ωₕ(d)
     _check_centered_points(sub, d)
-    _difference_engine!(parent(outs[d]), u, _direction_spacing(sub, dir), dims, dir, Val(d))
-    _centered_gradient!(outs, u, Ωₕ, dims, dir, Val(d - 1))
+    _difference_engine!(pol, parent(outs[d]), u, _direction_spacing(sub, dir), dims, dir, Val(d))
+    _centered_gradient!(pol, outs, u, Ωₕ, dims, dir, Val(d - 1))
     return nothing
 end
 
-@inline _centered_gradient!(outs, u, Ωₕ, dims, dir, ::Val{0}) = nothing
+@inline _centered_gradient!(pol, outs, u, Ωₕ, dims, dir, ::Val{0}) = nothing
 
 """
     divcₕ(uₕ) -> VectorElement
@@ -908,7 +968,10 @@ function εcₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     Ωₕ = mesh(_field_space(uₕ))
     dim(Ωₕ) == D || throw(DimensionMismatch("εcₕ! destination is $(D)x$D but the mesh is $(dim(Ωₕ))D"))
     _check_field_arity(comps, Val(D), "εcₕ!")
-    _centered_strain_rows!(dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Centered(), Val(D), Val(D))
+    _centered_strain_rows!(
+        execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Centered(),
+        Val(D), Val(D)
+    )
     return dest
 end
 
@@ -916,33 +979,33 @@ end
 # differences are co-located, so the strain is the symmetric part of the gradient as is.
 # `ε_ij`, `i != j`: `D_j(u_i)` into `dest[i][j]`, `D_i(u_j)` into `dest[j][i]`, then their
 # mean into both, so the two entries are equal bit for bit.
-@inline function _centered_strain_pair!(dest, comps, Ωₕ, dims, dir, ::Val{i}, ::Val{j}) where {i, j}
+@inline function _centered_strain_pair!(pol, dest, comps, Ωₕ, dims, dir, ::Val{i}, ::Val{j}) where {i, j}
     dij, dji = dest[i][j], dest[j][i]
-    _difference_engine!(parent(dij), parent(comps[i]), _direction_spacing(Ωₕ(j), dir), dims, dir, Val(j))
-    _difference_engine!(parent(dji), parent(comps[j]), _direction_spacing(Ωₕ(i), dir), dims, dir, Val(i))
+    _difference_engine!(pol, parent(dij), parent(comps[i]), _direction_spacing(Ωₕ(j), dir), dims, dir, Val(j))
+    _difference_engine!(pol, parent(dji), parent(comps[j]), _direction_spacing(Ωₕ(i), dir), dims, dir, Val(i))
     dij .= (dij .+ dji) ./ 2
     dji .= dij
     return nothing
 end
 
-@inline function _centered_strain_offdiag!(dest, comps, Ωₕ, dims, dir, ::Val{i}, ::Val{j}) where {i, j}
-    j > i && _centered_strain_pair!(dest, comps, Ωₕ, dims, dir, Val(i), Val(j))
-    _centered_strain_offdiag!(dest, comps, Ωₕ, dims, dir, Val(i), Val(j - 1))
+@inline function _centered_strain_offdiag!(pol, dest, comps, Ωₕ, dims, dir, ::Val{i}, ::Val{j}) where {i, j}
+    j > i && _centered_strain_pair!(pol, dest, comps, Ωₕ, dims, dir, Val(i), Val(j))
+    _centered_strain_offdiag!(pol, dest, comps, Ωₕ, dims, dir, Val(i), Val(j - 1))
     return nothing
 end
 
-@inline _centered_strain_offdiag!(dest, comps, Ωₕ, dims, dir, ::Val{i}, ::Val{0}) where {i} = nothing
+@inline _centered_strain_offdiag!(pol, dest, comps, Ωₕ, dims, dir, ::Val{i}, ::Val{0}) where {i} = nothing
 
-@inline function _centered_strain_rows!(dest, comps, Ωₕ, dims, dir, ::Val{i}, ::Val{D}) where {i, D}
+@inline function _centered_strain_rows!(pol, dest, comps, Ωₕ, dims, dir, ::Val{i}, ::Val{D}) where {i, D}
     sub = Ωₕ(i)
     _check_centered_points(sub, i)
-    _difference_engine!(parent(dest[i][i]), parent(comps[i]), _direction_spacing(sub, dir), dims, dir, Val(i))
-    _centered_strain_offdiag!(dest, comps, Ωₕ, dims, dir, Val(i), Val(D))
-    _centered_strain_rows!(dest, comps, Ωₕ, dims, dir, Val(i - 1), Val(D))
+    _difference_engine!(pol, parent(dest[i][i]), parent(comps[i]), _direction_spacing(sub, dir), dims, dir, Val(i))
+    _centered_strain_offdiag!(pol, dest, comps, Ωₕ, dims, dir, Val(i), Val(D))
+    _centered_strain_rows!(pol, dest, comps, Ωₕ, dims, dir, Val(i - 1), Val(D))
     return nothing
 end
 
-@inline _centered_strain_rows!(dest, comps, Ωₕ, dims, dir, ::Val{0}, ::Val{D}) where {D} = nothing
+@inline _centered_strain_rows!(pol, dest, comps, Ωₕ, dims, dir, ::Val{0}, ::Val{D}) where {D} = nothing
 
 # --- Tilde vector calculus and the forward strain (gpena/Bramble.jl#287) ------------------- #
 #
@@ -973,8 +1036,8 @@ end
 
 # `out[I] += s * (u[I + eᵢ] - u[I]) / h*ᵢ`, zero on the last slice: `_accumulate_forward!`
 # over the spacing `D̃` divides by, so each term is exactly the value `D̃` writes.
-@inline function _accumulate_one!(out, u, Ωₕ, dims, ::StarForward, ::Val{d}, s) where {d}
-    return _accumulate_forward!(out, u, star_spacings(Ωₕ(d)), dims, Val(d), s)
+@inline function _accumulate_one!(pol, out, u, Ωₕ, dims, ::StarForward, ::Val{d}, s) where {d}
+    return _run_bands!(pol, _accumulate_forward!, out, u, star_spacings(Ωₕ(d)), dims, Val(d), s)
 end
 
 """
@@ -1013,17 +1076,17 @@ function ∇̃ₕ!(dest, uₕ::VectorElement)
     D = dim(Ωₕ)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇̃ₕ!")
-    _star_gradient!(outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), Val(D))
+    _star_gradient!(execution_policy(space(uₕ)), outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), Val(D))
     return dest
 end
 
-@inline function _star_gradient!(outs, u, Ωₕ, dims, ::Val{d}) where {d}
-    _difference_engine!(parent(outs[d]), u, star_spacings(Ωₕ(d)), dims, Forward(), Val(d))
-    _star_gradient!(outs, u, Ωₕ, dims, Val(d - 1))
+@inline function _star_gradient!(pol, outs, u, Ωₕ, dims, ::Val{d}) where {d}
+    _difference_engine!(pol, parent(outs[d]), u, star_spacings(Ωₕ(d)), dims, Forward(), Val(d))
+    _star_gradient!(pol, outs, u, Ωₕ, dims, Val(d - 1))
     return nothing
 end
 
-@inline _star_gradient!(outs, u, Ωₕ, dims, ::Val{0}) = nothing
+@inline _star_gradient!(pol, outs, u, Ωₕ, dims, ::Val{0}) = nothing
 
 """
     diṽₕ(uₕ) -> VectorElement
@@ -1107,11 +1170,14 @@ end
 # slice is zeroed only after the interior pass has read it. Not `@simd`, for the same
 # carried-dependency reason.
 @inline function _avg_forward_inplace!(
-        out::AbstractVector, dims::NTuple{D, Int}, ::Val{DIM}
+        out::AbstractVector, dims::NTuple{D, Int}, ::Val{DIM}, nbands::Int, b::Int
 ) where {D, DIM}
     li = LinearIndices(dims)
     step = _stencil_step(Val(DIM), Val(D))
     interior, boundary = _stencil_ranges(axes(li), Val(DIM), Forward())
+    A = _inplace_band_axis(Val(DIM), Val(D))
+    band = _band_range(axes(li, A), nbands, b)
+    interior, boundary = _slab_on_axis(interior, band, Val(A)), _slab_on_axis(boundary, band, Val(A))
 
     @inbounds for I in CartesianIndices(interior)
         idx = li[I]
@@ -1126,39 +1192,39 @@ end
 
 # `ε_ij = (M₊ᵢ(D₊ⱼ(uᵢ)) + M₊ⱼ(D₊ᵢ(uⱼ))) / 2`, `i != j`: each half written into its own slot
 # and averaged in place, then their mean copied into both, so the entries are equal bit for bit.
-@inline function _forward_strain_pair!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}) where {i, j}
+@inline function _forward_strain_pair!(pol, dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}) where {i, j}
     dij, dji = dest[i][j], dest[j][i]
     _difference_engine!(
-        parent(dij), parent(comps[i]), forward_spacings_for_derivative(Ωₕ(j)), dims, Forward(), Val(j)
+        pol, parent(dij), parent(comps[i]), forward_spacings_for_derivative(Ωₕ(j)), dims, Forward(), Val(j)
     )
-    _avg_forward_inplace!(parent(dij), dims, Val(i))
+    _run_bands!(pol, _avg_forward_inplace!, parent(dij), dims, Val(i))
     _difference_engine!(
-        parent(dji), parent(comps[j]), forward_spacings_for_derivative(Ωₕ(i)), dims, Forward(), Val(i)
+        pol, parent(dji), parent(comps[j]), forward_spacings_for_derivative(Ωₕ(i)), dims, Forward(), Val(i)
     )
-    _avg_forward_inplace!(parent(dji), dims, Val(j))
+    _run_bands!(pol, _avg_forward_inplace!, parent(dji), dims, Val(j))
     dij .= (dij .+ dji) ./ 2
     dji .= dij
     return nothing
 end
 
-@inline function _forward_strain_offdiag!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}) where {i, j}
-    j > i && _forward_strain_pair!(dest, comps, Ωₕ, dims, Val(i), Val(j))
-    _forward_strain_offdiag!(dest, comps, Ωₕ, dims, Val(i), Val(j - 1))
+@inline function _forward_strain_offdiag!(pol, dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}) where {i, j}
+    j > i && _forward_strain_pair!(pol, dest, comps, Ωₕ, dims, Val(i), Val(j))
+    _forward_strain_offdiag!(pol, dest, comps, Ωₕ, dims, Val(i), Val(j - 1))
     return nothing
 end
 
-@inline _forward_strain_offdiag!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{0}) where {i} = nothing
+@inline _forward_strain_offdiag!(pol, dest, comps, Ωₕ, dims, ::Val{i}, ::Val{0}) where {i} = nothing
 
-@inline function _forward_strain_rows!(dest, comps, Ωₕ, dims, ::Val{i}, ::Val{D}) where {i, D}
+@inline function _forward_strain_rows!(pol, dest, comps, Ωₕ, dims, ::Val{i}, ::Val{D}) where {i, D}
     _difference_engine!(
-        parent(dest[i][i]), parent(comps[i]), forward_spacings_for_derivative(Ωₕ(i)), dims, Forward(), Val(i)
+        pol, parent(dest[i][i]), parent(comps[i]), forward_spacings_for_derivative(Ωₕ(i)), dims, Forward(), Val(i)
     )
-    _forward_strain_offdiag!(dest, comps, Ωₕ, dims, Val(i), Val(D))
-    _forward_strain_rows!(dest, comps, Ωₕ, dims, Val(i - 1), Val(D))
+    _forward_strain_offdiag!(pol, dest, comps, Ωₕ, dims, Val(i), Val(D))
+    _forward_strain_rows!(pol, dest, comps, Ωₕ, dims, Val(i - 1), Val(D))
     return nothing
 end
 
-@inline _forward_strain_rows!(dest, comps, Ωₕ, dims, ::Val{0}, ::Val{D}) where {D} = nothing
+@inline _forward_strain_rows!(pol, dest, comps, Ωₕ, dims, ::Val{0}, ::Val{D}) where {D} = nothing
 
 """
     ε₊ₕ(uₕ) -> NTuple{D, NTuple{D, VectorElement}}
@@ -1197,7 +1263,9 @@ function ε₊ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     Ωₕ = mesh(_field_space(uₕ))
     dim(Ωₕ) == D || throw(DimensionMismatch("ε₊ₕ! destination is $(D)x$D but the mesh is $(dim(Ωₕ))D"))
     _check_field_arity(comps, Val(D), "ε₊ₕ!")
-    _forward_strain_rows!(dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Val(D), Val(D))
+    _forward_strain_rows!(
+        execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Val(D), Val(D)
+    )
     return dest
 end
 
@@ -1244,11 +1312,13 @@ const ∇̽ₕ = D̽ₕ
 # value `D̽`'s own engine writes: the same `_compute_difference` calls over the same
 # `spacings`, only accumulated.
 @inline function _accumulate_cross_weighted!(
-        out, u, h::H, dims::NTuple{D, Int}, ::Val{DIM}, s
+        out, u, h::H, dims::NTuple{D, Int}, ::Val{DIM}, s, nbands::Int, b::Int
 ) where {H, D, DIM}
     li = LinearIndices(dims)
     step = _stencil_step(Val(DIM), Val(D))
+    band = _band_range(axes(li, D), nbands, b)
     interior, lo, hi = _centered_stencil_ranges(axes(li), Val(DIM))
+    interior, lo, hi = _band_slab(interior, band), _band_slab(lo, band), _band_slab(hi, band)
     dir = CrossWeighted()
 
     @inbounds @simd for I in CartesianIndices(interior)
@@ -1270,10 +1340,10 @@ const ∇̽ₕ = D̽ₕ
     return nothing
 end
 
-@inline function _accumulate_one!(out, u, Ωₕ, dims, ::CrossWeighted, ::Val{d}, s) where {d}
+@inline function _accumulate_one!(pol, out, u, Ωₕ, dims, ::CrossWeighted, ::Val{d}, s) where {d}
     sub = Ωₕ(d)
     _check_centered_points(sub, d)
-    return _accumulate_cross_weighted!(out, u, spacings(sub), dims, Val(d), s)
+    return _run_bands!(pol, _accumulate_cross_weighted!, out, u, spacings(sub), dims, Val(d), s)
 end
 
 """
@@ -1290,7 +1360,9 @@ function ∇̽ₕ!(dest, uₕ::VectorElement)
     D = dim(Ωₕ)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇̽ₕ!")
-    _centered_gradient!(outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), CrossWeighted(), Val(D))
+    _centered_gradient!(
+        execution_policy(space(uₕ)), outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), CrossWeighted(), Val(D)
+    )
     return dest
 end
 
@@ -1405,7 +1477,10 @@ function ε̽ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     Ωₕ = mesh(_field_space(uₕ))
     dim(Ωₕ) == D || throw(DimensionMismatch("ε̽ₕ! destination is $(D)x$D but the mesh is $(dim(Ωₕ))D"))
     _check_field_arity(comps, Val(D), "ε̽ₕ!")
-    _centered_strain_rows!(dest, comps, Ωₕ, npoints(Ωₕ, Tuple), CrossWeighted(), Val(D), Val(D))
+    _centered_strain_rows!(
+        execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), CrossWeighted(),
+        Val(D), Val(D)
+    )
     return dest
 end
 

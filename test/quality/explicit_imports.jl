@@ -85,6 +85,12 @@ using ExplicitImports
                 :MarkedIndicesUnion,
                 :_band_range,
                 :_reduce_or_chunk,
+                # `_ReplayTarget`, `_replay_point!` (gpena/Bramble.jl#338): the warmed-refill
+                # replay's target union and per-point step, called from
+                # `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` above the
+                # same way the searching sweep calls `_scatter_point!`. Neither is public.
+                :_ReplayTarget,
+                :_replay_point!,
                 :_scatter_linear_point!,
                 :_scatter_point!,
                 :_throw_dot_dim_error,
@@ -98,6 +104,21 @@ using ExplicitImports
                 # exported or public.
                 :SeparableWeights,
                 :sparse!,
+                # `_difference_band!`, `_average_band!`, `_centered_average_band!`
+                # (gpena/Bramble.jl#356, S7.2): the per-band loop bodies
+                # `_batch_difference_engine!`/`_batch_average_engine!`/
+                # `_batch_centered_average_engine!` below run under `@batch`, the same bodies
+                # `_threaded_difference_engine!`/`_threaded_average_engine!`/
+                # `_threaded_centered_average_engine!` already run under `Threads.@threads`.
+                # Neither exported nor public.
+                :_difference_band!,
+                :_average_band!,
+                :_centered_average_band!,
+                # `_broadcast_band!` (BramblePolyesterExt, gpena/Bramble.jl#357, S8.2): the
+                # per-band broadcast loop body `_batch_broadcast!` below runs under `@batch`,
+                # the same body `_threaded_broadcast!` already runs under `Threads.@threads`
+                # (src/space/vectorelement.jl). Neither exported nor public.
+                :_broadcast_band!,
                 # `TrackedArray` (BrambleReverseDiffExt, commit c5ae771f): the argument type of the
                 # `mul!` method that resolves the ambiguity with `KroneckerLinearOperator`
                 # (gpena/Bramble.jl#295). ReverseDiff exports no public name for it.
@@ -294,6 +315,34 @@ using ExplicitImports
                 :_batch_bilinear_band_sweep!,
                 :_batch_linear_colour_sweep!,
                 :_batch_linear_band_sweep!,
+                # `_threaded_replay_policy`, `_batch_bilinear_band_replay!`,
+                # `_batch_bilinear_colour_replay!` (BramblePolyesterExt, gpena/Bramble.jl#338):
+                # opt `CpuPolyester` into the warmed-refill replay and its `Polyester.@batch`
+                # counterparts of `_batch_bilinear_band_sweep!`/`_batch_bilinear_colour_sweep!`
+                # above, reached instead of them once a unit's leaf can replay.
+                :_threaded_replay_policy,
+                :_batch_bilinear_band_replay!,
+                :_batch_bilinear_colour_replay!,
+                # `_batch_difference_engine!`, `_batch_average_engine!`,
+                # `_batch_centered_average_engine!` (BramblePolyesterExt, gpena/Bramble.jl#356,
+                # S7.2): the `Polyester.@batch` counterparts of the `CpuThreaded` stencil
+                # engines in `src/space/operators/difference.jl` and
+                # `src/space/operators/average.jl`, extended here rather than called.
+                :_batch_difference_engine!,
+                :_batch_average_engine!,
+                :_batch_centered_average_engine!,
+                # `_batch_run_bands!` (BramblePolyesterExt, gpena/Bramble.jl#356, S7.5): the
+                # `Polyester.@batch` counterpart of `_run_bands!`'s `CpuThreaded` arm in
+                # `src/space/operators/vector_calculus.jl`, reached by the divergence, curl
+                # and strain-average engines. Unlike the three S7.2 hooks above it stays
+                # generic over the band function `f` instead of naming one, extended here
+                # rather than called.
+                :_batch_run_bands!,
+                # `_batch_broadcast!` (BramblePolyesterExt, gpena/Bramble.jl#357, S8.2): the
+                # `Polyester.@batch` counterpart of `_threaded_broadcast!`'s `CpuThreaded` arm
+                # in `src/space/vectorelement.jl`, reached by `_polyester_broadcast!`,
+                # extended here rather than called.
+                :_batch_broadcast!,
                 # `BrambleKernelAbstractionsExt` (gpena/Bramble.jl#94, #174): the stencil and
                 # component helpers its `@kernel`s call so the device answer is computed by
                 # the very same quadrature/stencil arithmetic the CPU sweep uses, rather than
@@ -324,6 +373,12 @@ using ExplicitImports
                 :SizeUnknown,
                 :eval,
                 :mightalias,
+                # `instantiate`, `preprocess`, `throwdm` (src/space/vectorelement.jl): Base's
+                # own pre-loop steps the threaded broadcast copyto! repeats before banding
+                # (gpena/Bramble.jl#357).
+                :instantiate,
+                :preprocess,
+                :throwdm,
                 :show,
                 :expand_dimensions,
                 :_metal_backend,

@@ -9,14 +9,12 @@
 # beside its `AbstractMatrix` fallback.
 #
 # `assemble_parallel!` needs no method here. The band-coloured threaded sweep in
-# `bilinear_execution.jl` (`_scatter_point!`, `_sweep_bilinear_colour!`, `_sweep_bilinear!`,
-# `_assemble_blocks_parallel!`, both `_assemble_bilinear_parallel_core!` overloads) is typed
-# `A::SparseMatrixCSC` throughout, not `A::AbstractMatrix`, so it cannot be reused for CSR
-# without widening those signatures -- a file this subplan does not own. A `SparseMatrixCSR`
-# therefore falls through to the existing generic
-# `_assemble_bilinear_parallel_core!(A::AbstractMatrix, ...)` fallback (the ordinary serial
-# record pass, `bilinear_execution.jl`), exactly like every other non-CSC backend today; see
-# the integrator report for the widening this would need.
+# `bilinear_execution.jl` is typed `A::AbstractMatrix` and reaches storage only through
+# `_scatter_position` and `_scatter_add!` (gpena/Bramble.jl#190), so a `SparseMatrixCSR`
+# threads through the two methods below like any other host matrix. A `CpuThreaded` refill
+# replays the form's recorded `nzval` positions through `_scatter_add!` without calling
+# `_scatter_position` (gpena/Bramble.jl#338); the recording itself searches once per matrix
+# object, serially. A `CpuPolyester` fill still searches.
 #
 # `SparseMatrixCSR`'s own `setindex!` throws on an entry outside the sparsity pattern rather
 # than growing it the way `SparseMatrixCSC`'s does (`A[i,i] = one(T)`), so the Dirichlet and

@@ -51,9 +51,10 @@ reduces a `BilinearProduct` to its test factor's reach, since that is the only s
 colouring ever needs, so there is one static answer to "what does this reach" rather than
 a second one re-derived from a sample stencil evaluation.
 
-The colouring is what makes the matrix sweep correct rather than merely fast. `add_to_sparse!`
-searches a column and updates the entry in place, so two threads landing on the same entry
-would race on the value, not just on the structure.
+The colouring is what makes the matrix sweep correct rather than merely fast: whether a
+point's entries are found by `add_to_sparse!` searching a column, or read from a replayed
+recording (below), two threads landing on the same entry would race on the value, not just
+on the structure.
 
 ```@raw html
 <figure>
@@ -142,6 +143,33 @@ would race on the value, not just on the structure.
 </svg>
 </figure>
 ```
+
+### Threaded refill replays the recording
+
+A `CpuThreaded` refill (`assemble!` on a `Parallel()` form, and `assemble_parallel!` from any
+policy) used to search every tap's slot through `_scatter_position` on every call. It now
+shares the same recording a serial fill builds ("One setup walk per term", below): the first
+fill against a new matrix records, and every fill after it, threaded or serial, sweeps the
+same band colours but reads each entry's position from the recording instead of searching for
+it. `ReplaySink` addresses a point through `point_ptr[lin_idx]`, not a running counter, so one
+recording serves any visit order and any thread — the colouring above still keeps two
+concurrently-swept points off the same entry, but nothing else about the sweep needs to
+change.
+
+`_replay_unit!`/`_replay_pair_unit!` (`bilinear_execution.jl`) take a `_ReplayMode` argument,
+`_SerialReplay` or `_ThreadedReplay`, so the walk that matches a recording's units to its
+`Segment`s is the same code for both; only the leaf-level replay differs. A pair term
+`⟨Au, Bv⟩ + ⟨Bu, Av⟩` writes each entry twice, at `(row, col)` and at its transpose, so its
+colouring takes the union of both terms' row reach rather than one term's alone. In 1D, a difference
+term's interior has a constant per-tap stride, so its diagonal segment replays through its own
+target (`_DiagonalReplayTarget`) instead of a positions vector; from 2D up no interior stride
+is constant, so every segment there is the general, position-list kind.
+
+Whether a unit replays or searches is decided per unit, from the leaf its sweep walks
+(`_leaf_replays`): a host matrix and a host leaf, under an effective policy whose sweeps can
+replay (`CpuThreaded` in `src/`; `CpuPolyester` once `BramblePolyesterExt` fills its own replay
+batch functions). A device matrix, a device leaf, or a policy with no replay hook keeps
+searching that unit, beside other units of the same form that do replay.
 
 ## Algebraic simplification of the `+`/`*` layer
 

@@ -443,12 +443,16 @@ end
 #
 # No separate `CpuPolyester` override is needed here: `inner₊(uₕ, vₕ, Val(S))` calls the
 # policy-dispatched `_dot`/`_dot_masked(policy, u, v, w[, mask])` (S7.1,
-# `src/utils/linear_algebra.jl`), whose `CpuSerial`/`CpuThreaded` methods fall through to
-# the plain three/four-argument methods below -- where ordinary dispatch on the weight
-# argument's runtime type reaches this specialization -- while its `CpuPolyester` method calls
-# `_batch_dot`/`_batch_dot_masked` directly, before the weight's type is ever consulted, so
-# a `CpuPolyester` policy reaches S7.1's Polyester hook (or its "not loaded" error) regardless
-# of whether the weight is dense or a `SeparableWeights`, never this loop.
+# `src/utils/linear_algebra.jl`), whose `CpuSerial` method falls through to the plain
+# three/four-argument methods below -- where ordinary dispatch on the weight argument's
+# runtime type reaches this specialization -- and whose `CpuThreaded` method likewise falls
+# through to `_threaded_dot`/`_threaded_dot_masked`, reaching the `CpuThreaded`
+# specializations of those two names declared further below (gpena/Bramble.jl#301 S2.2)
+# rather than the dense `_threaded_dot`/`_threaded_dot_masked` in `src/utils/linear_algebra.jl`.
+# Its `CpuPolyester` method calls `_batch_dot`/`_batch_dot_masked` directly, before the
+# weight's type is ever consulted, so a `CpuPolyester` policy reaches S7.1's Polyester hook
+# (or its "not loaded" error) regardless of whether the weight is dense or a
+# `SeparableWeights`, never this loop.
 @inline function _dot(
         u::AbstractVector, w::SeparableWeights{D, <:Any, VT}, v::AbstractVector
 ) where {D, VT}
@@ -503,6 +507,173 @@ end
     cart = CartesianIndices(w.dims)
     @inbounds for i in mask
         s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
+    end
+    return s
+end
+
+# `CpuThreaded` specializations of the three serial methods above (gpena/Bramble.jl#301 S2.2,
+# #288). `_dot`/`_dot_masked(policy, u, w, v[, mask])` (S7.1, `src/utils/linear_algebra.jl`)
+# dispatch `CpuThreaded` to `_threaded_dot`/`_threaded_dot_masked`, and ordinary dispatch on
+# the weight argument's runtime type reaches these rather than the dense
+# `_threaded_dot(u::AbstractVector, v::AbstractVector, w::AbstractVector)` in
+# `src/utils/linear_algebra.jl` -- exactly as `CpuSerial` reaches the serial specializations
+# above instead of the dense kernel there. Without these, a `SeparableWeights` under
+# `CpuThreaded` fell through to that dense method, which reads `w` through its linear `Int`
+# `getindex` -- an `O(D)` `divrem` per point (gpena/Bramble.jl#288) -- once per grid point
+# rather than once per line. `CpuPolyester` is unaffected: it reaches
+# `_batch_dot`/`_batch_dot_masked` directly, before the weight's type is ever consulted (see
+# the comment above the serial methods).
+#
+# The dense method splits `CartesianIndices(Base.tail(w.dims))` along its last axis into
+# `Threads.nthreads()` static bands via `_last_axis_chunks` (`src/utils/linear_algebra.jl`,
+# already used by `_threaded_axis_for!` to split the same way), each band's task
+# walking its lines with the exact serial line-sum structure -- the trailing-factor product
+# `c` and the `@inbounds @simd` line over axis 1 -- and landing one partial sum in a fixed
+# `Threads.nthreads()`-length buffer, summed serially at the end (the same shape
+# `_threaded_dot` in `src/utils/linear_algebra.jl` uses). A line's offset into `u`/`v` is
+# `(LinearIndices(tail_dims)[J] - 1) * n₁`, computed directly from `J` rather than
+# accumulated across iterations as the serial loop does, since bands are visited out of
+# order. `D == 1` has no tail axis to split -- `Base.tail((n₁,))` is `()` -- so that case
+# instead splits the single line itself (`1:n₁`) into bands via `_band_range`, with the
+# trailing product `c` fixed at `one(T)`.
+#
+# The masked methods split the mask's 64-bit words into bands exactly as
+# `_threaded_dot_masked` (`src/utils/linear_algebra.jl`) does, and read `w` through a
+# `CartesianIndex` (`w[cart[i]]`), never the linear `Int` `getindex` this specialization
+# exists to avoid.
+@noinline function _threaded_dot(
+        u::AbstractVector, w::SeparableWeights{D, <:Any, VT}, v::AbstractVector
+) where {D, VT}
+    # The factors are indexed directly below, so repeat `getindex`'s device guard (#310).
+    locality(VT) isa DeviceLocality && _throw_device_scalar_weights()
+    n = length(w)
+    (length(u) == n == length(v)) || _throw_dot_dim_error(length(u), n, length(v))
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    n₁ = first(w.dims)
+    nchunks = Threads.nthreads()
+    partials = zeros(T, nchunks)
+
+    if D == 1
+        _static_or_serial(_static_partials!, _serial_partials!, partials, nchunks,
+            _separable_line_band, u, w, v, 1:n₁, nchunks)
+    else
+        tail_dims = Base.tail(w.dims)
+        lin = LinearIndices(tail_dims)
+        blocks = _last_axis_chunks(CartesianIndices(tail_dims), nchunks)
+        _static_or_serial(_static_partials!, _serial_partials!, partials, length(blocks),
+            _separable_block_band, u, w, v, lin, blocks)
+    end
+    return sum(partials)
+end
+
+# The per-band partial sums of the dense `SeparableWeights` `_threaded_dot` above: one band
+# of the single line when `D == 1`, one block of lines otherwise. Each is one compiled body
+# shared by the threaded loop and the serial one `_static_or_serial`
+# (src/utils/linear_algebra.jl) falls back to, so both return the same partial sums bitwise.
+@noinline function _separable_line_band(u, w::SeparableWeights, v, ax, nchunks::Int, b::Int)
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    f₁ = first(w.factors)
+    rng = _band_range(ax, nchunks, b)
+    s = zero(T)
+    @inbounds @simd for i₁ in rng
+        s = muladd(T(u[i₁]) * T(v[i₁]), T(f₁[i₁]), s)
+    end
+    return s
+end
+
+@noinline function _separable_block_band(
+        u, w::SeparableWeights{D}, v, lin, blocks, b::Int
+) where {D}
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    block = blocks[b]
+    f₁ = first(w.factors)
+    n₁ = first(w.dims)
+    s = zero(T)
+    @inbounds for J in block
+        c = one(T)
+        for d in 2:D
+            c *= T(w.factors[d][J[d - 1]])
+        end
+        offset = (lin[J] - 1) * n₁
+        line_sum = zero(T)
+        @simd for i₁ in 1:n₁
+            k = offset + i₁
+            line_sum = muladd(T(u[k]) * T(v[k]), T(f₁[i₁]), line_sum)
+        end
+        s = muladd(c, line_sum, s)
+    end
+    return s
+end
+
+@noinline function _threaded_dot_masked(
+        u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector, mask::BitVector
+) where {D}
+    n = length(w)
+    (length(u) == n == length(v) == length(mask)) ||
+        _throw_dot_dim_error(length(u), n, length(v), length(mask))
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    cart = CartesianIndices(w.dims)
+    nwords = length(mask.chunks)
+    nchunks = Threads.nthreads()
+    partials = zeros(T, nchunks)
+    ax = 1:nwords
+    _static_or_serial(_static_partials!, _serial_partials!, partials, nchunks,
+        _separable_masked_band, u, w, v, cart, mask, ax, nchunks)
+    return sum(partials)
+end
+
+@noinline function _threaded_dot_masked(
+        u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector, mask::MarkedIndicesUnion
+) where {D}
+    n = length(w)
+    (length(u) == n == length(v) == mask.len) ||
+        _throw_dot_dim_error(length(u), n, length(v), mask.len)
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    cart = CartesianIndices(w.dims)
+    nwords = length(mask.chunks[1])
+    nchunks = Threads.nthreads()
+    partials = zeros(T, nchunks)
+    ax = 1:nwords
+    _static_or_serial(_static_partials!, _serial_partials!, partials, nchunks,
+        _separable_masked_band, u, w, v, cart, mask, ax, nchunks)
+    return sum(partials)
+end
+
+# The per-band partial sums of the two masked `SeparableWeights` `_threaded_dot_masked`
+# methods above, shared by their threaded and serial loops as the dense ones are.
+@noinline function _separable_masked_band(
+        u, w::SeparableWeights, v, cart, mask::BitVector, ax, nchunks::Int, b::Int
+)
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    chunks = mask.chunks
+    rng = _band_range(ax, nchunks, b)
+    s = zero(T)
+    @inbounds for widx in rng
+        word = chunks[widx]
+        base = (widx - 1) * 64
+        while word != zero(UInt64)
+            i = base + trailing_zeros(word) + 1
+            s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
+            word &= word - 1
+        end
+    end
+    return s
+end
+
+@noinline function _separable_masked_band(
+        u, w::SeparableWeights, v, cart, mask::MarkedIndicesUnion, ax, nchunks::Int, b::Int
+)
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    rng = _band_range(ax, nchunks, b)
+    s = zero(T)
+    @inbounds for widx in rng
+        word = _reduce_or_chunk(mask.chunks, widx)
+        base = (widx - 1) * 64
+        while word != zero(UInt64)
+            i = base + trailing_zeros(word) + 1
+            s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
+            word &= word - 1
+        end
     end
     return s
 end
