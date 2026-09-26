@@ -80,6 +80,8 @@ benchmark/*
 !benchmark/kronecker_device.jl
 # v3.8.0 time-to-first-call harness (gpena/Bramble.jl#283 #284)
 !benchmark/ttfx.jl
+# v3.13.0 portable per-machine policy-crossover benchmark
+!benchmark/policy_crossover.jl
 !benchmark/baselines/
 !benchmark/baselines/*.json
 research/
