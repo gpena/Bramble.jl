@@ -313,17 +313,23 @@ resolve_ast(ops::NTuple{N, Any}) where {N} = map(resolve_ast, ops)
 # The two scaling wrappers' half of `_bind_interp_spaces` (ast/operators/interpolation.jl),
 # beside their `resolve_ast` because they are the same walk. `GridFunctionScale`'s thunk
 # form has already been evaluated by `resolve_ast` when binding runs, so one method covers
-# both: the scale itself is carried across untouched.
+# both. An `OperatorScale`'s scalar is carried across untouched.
 function _bind_interp_spaces(op::OperatorScale{D}, trial_leaf, test_leaf) where {D}
     inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
     return OperatorScale{D, typeof(op.scalar), typeof(inner)}(op.scalar, inner)
 end
 
-function _bind_interp_spaces(
-        op::GridFunctionScale{D, VType}, trial_leaf, test_leaf
-) where {D, VType}
+# A coefficient in device storage is read one point at a time by `local_stencil`, which the
+# device refuses, so binding swaps it for a host copy (`_host_array`, `linear.jl`;
+# gpena/Bramble.jl#364). Every walk of every fill binds its term afresh (the same sites take
+# the walked leaf's `host_weights`), so the copy is new each time and `assemble!` sees a
+# coefficient changed on the device since the last call; it is never cached in the form, and
+# a device fill allocates it per call. A host coefficient is returned as it is, so the host
+# path neither copies nor changes type.
+function _bind_interp_spaces(op::GridFunctionScale{D}, trial_leaf, test_leaf) where {D}
+    gf = _host_array(op.grid_function)
     inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
-    return GridFunctionScale{D, VType, typeof(inner)}(op.grid_function, inner)
+    return GridFunctionScale{D, typeof(gf), typeof(inner)}(gf, inner)
 end
 # The catch-all every node above without its own method falls through to: TrialFunction,
 # TestFunction, IndexedTrialFunction, IndexedTestFunction, SourceFunction, SourceVector,

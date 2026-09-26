@@ -286,6 +286,58 @@ else
             end
         end
     end
+
+    # A grid-function coefficient on a device space (gpena/Bramble.jl#364): each fill binds
+    # a fresh host copy of it, so the first `assemble` matches the host and a refill after
+    # the coefficient changes on the device sees the new values. Scalar and composite
+    # bilinear forms, a linear source, and a coefficient scaling the test function under an
+    # average and a difference, on mirrored non-uniform meshes.
+    @testset "Metal grid-function coefficients (gpena/Bramble.jl#364)" begin
+        for npts in ((13,), (13, 11))
+            Wc, Wg = _matched_spaces(npts)
+            cc, cg = Rₕ(Wc, _g), Rₕ(Wg, _g)
+            cases = (
+                ("scalar", Wc, Wg,
+                    c -> ((u, v) -> innerₕ(c * u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)))),
+                ("composite", Wc × Wc, Wg × Wg,
+                    c -> ((U, V) -> innerₕ(c * U[1], V[1]) + innerₕ(U[2], V[2]) +
+                                    innerₕ(c * U[2], V[1])))
+            )
+            for (label, sc, sg, a) in cases
+                @testset "$(length(npts))D $label bilinear" begin
+                    Fg = form(sg, sg, a(cg))
+                    Ag = assemble(Fg)
+                    @test nameof(typeof(Ag)) === :MetalSparseMatrixCSR
+                    @test _relerr(Ag, assemble(form(sc, sc, a(cc)))) < _RTOL
+                    parent(cg) .*= 3.0f0
+                    parent(cc) .*= 3.0f0
+                    assemble!(Ag, Fg)
+                    @test _relerr(Ag, assemble(form(sc, sc, a(cc)))) < _RTOL
+                    parent(cg) ./= 3.0f0
+                    parent(cc) ./= 3.0f0
+                end
+            end
+            @testset "$(length(npts))D linear source" begin
+                lg = form(Wg, v -> innerₕ(cg, v))
+                bg = assemble(lg)
+                @test _vrelerr(bg, assemble(form(Wc, v -> innerₕ(cc, v)))) < _RTOL
+                parent(cg) .*= 2.0f0
+                parent(cc) .*= 2.0f0
+                assemble!(bg, lg)
+                @test _vrelerr(bg, assemble(form(Wc, v -> innerₕ(cc, v)))) < _RTOL
+                parent(cg) ./= 2.0f0
+                parent(cc) ./= 2.0f0
+            end
+            for (label, l) in (("Mₓ(c * v)", c -> (v -> innerₕ(1.0f0, Bramble.Mₓ(c * v)))),
+                ("D₋ₓ(c * v)", c -> (v -> innerₕ(1.0f0, D₋ₓ(c * v)))))
+                @testset "$(length(npts))D linear $label" begin
+                    bg = assemble(form(Wg, l(cg)))
+                    @test bg isa Metal.MtlVector{Float32}
+                    @test _vrelerr(bg, assemble(form(Wc, l(cc)))) < _RTOL
+                end
+            end
+        end
+    end
 end
 
 end # module

@@ -904,9 +904,10 @@ end
 # `GridFunctionScale`'s coefficient (`u * v`, where `u` is a `VectorElement` whose own type
 # says nothing about where its storage lives, so its `parent` decides; the copy is a plain
 # `Vector`, which `_grid_function_value` indexes the same way). The walk covers the nodes a
-# source reaches through (`_lower_sources`'s own set plus `RegionRestriction`); a node
-# outside it is returned as it is, and device data left inside one fails loudly at its first
-# scalar read rather than assembling wrong numbers.
+# source reaches through (`_lower_sources`'s own set plus `RegionRestriction`) and every
+# `@node_family` node, so a coefficient under `Mₓ(u * v)` or `D₋ₓ(u * v)` is reached too
+# (gpena/Bramble.jl#364); a node outside it is returned as it is, and device data left inside
+# one fails loudly at its first scalar read rather than assembling wrong numbers.
 @inline _host_sources(op) = op
 
 # The same, keyed on where the space lives: a host space's AST is returned untouched.
@@ -917,7 +918,10 @@ end
 @inline _host_array(v::AbstractArray) = _host_array(locality(typeof(v)), v)
 @inline _host_array(::HostLocality, v::AbstractArray) = v
 @inline _host_array(::DeviceLocality, v::AbstractArray) = Array(v)
-@inline _host_array(v::VectorElement) = _host_array(parent(v))
+# A host `VectorElement` stays itself, so a bilinear walk binding it (`stencil_eval.jl`)
+# keeps its type and copies nothing; only device storage is copied, to a plain `Vector`.
+@inline _host_array(v::VectorElement) = _host_array(locality(typeof(parent(v))), v)
+@inline _host_array(::DeviceLocality, v::VectorElement) = Array(parent(v))
 
 function _host_sources(op::SourceVector{D}) where {D}
     vec = _host_array(op.vec)
@@ -955,6 +959,16 @@ end
 function _host_sources(op::RegionRestriction{D, R}) where {D, R}
     inner = _host_sources(op.inner_op)
     return RegionRestriction{D, R, typeof(inner)}(op.region, inner)
+end
+
+# The `@node_family` nodes (`ast/operators/node_family.jl`): one `inner_op` each, rebuilt
+# around the walked operand as their generated `_bind_interp_spaces` is.
+for N in (:BackwardDifference, :ForwardDifference, :CenteredDifference, :StarDifference,
+    :CrossWeightedDifference, :BackwardAverage, :ForwardAverage, :CenteredAverage, :JumpNode)
+    @eval function _host_sources(op::$N{D, Dim}) where {D, Dim}
+        inner = _host_sources(op.inner_op)
+        return $N{D, Dim, typeof(inner)}(inner)
+    end
 end
 
 """
