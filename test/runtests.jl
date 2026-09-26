@@ -129,6 +129,7 @@ if __bramble_with_unit_tests
             include("space/dimensional_dispatch.jl")
             include("space/inplace_operators.jl")
             include("space/threaded_stencils.jl")
+            include("space/threaded_vector_calculus.jl")
             include("space/operators.jl")
             include("space/operator_docstrings.jl")
             include("space/inner_product.jl")
