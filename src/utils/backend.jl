@@ -514,8 +514,8 @@ See also: [`CpuPolicy`](@ref), [`Backend`](@ref), [`metal_backend`](@ref), [`exe
 """
 struct GpuOffload{I <: CpuPolicy, DB <: Backend} <: CpuPolicy end
 
-@inline GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) =
-    GpuOffload{typeof(inner), typeof(device_backend)}()
+@inline GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) = GpuOffload{
+    typeof(inner), typeof(device_backend)}()
 
 # `GpuOffload`'s half of the `execution_policy` contract: a `Backend` configured with a
 # `GpuOffload` policy hands every concrete-policy dispatch site the wrapped inner policy

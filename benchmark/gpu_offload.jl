@@ -174,9 +174,9 @@ end
 function _offload_1d_space(n::Int)
     gridspace(
         mesh(
-            domain(interval(0.0f0, 1.0f0)), n, true;
-            backend = backend(Float32; policy = GpuOffload(metal_backend(), CpuThreaded()))
-        )
+        domain(interval(0.0f0, 1.0f0)), n, true;
+        backend = backend(Float32; policy = GpuOffload(metal_backend(), CpuThreaded()))
+    )
     )
 end
 function _offload_2d_space(dims::NTuple{2, Int})

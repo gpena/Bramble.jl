@@ -342,7 +342,8 @@ index list as in [`_device_project!`](@ref).
     if Ωₕ isa AbstractMeshType{1}
         _launch_cell_average_scatter!(raws, _on_device(raws[1], half_points(Ωₕ)), nodes, wts, rule.f, dev, sel)
     else
-        _launch_cell_average_scatter_nd!(raws, _on_device(raws[1], half_points(Ωₕ)), indices(Ωₕ), nodes, wts, rule.f, dev, sel)
+        _launch_cell_average_scatter_nd!(
+            raws, _on_device(raws[1], half_points(Ωₕ)), indices(Ωₕ), nodes, wts, rule.f, dev, sel)
     end
     return true
 end
