@@ -21,6 +21,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("interpolation.jl")
     include("bilinear.jl")
     include("assemble_add.jl")
+    # The threaded refill replays the recorded nzval positions (gpena/Bramble.jl#338).
+    include("threaded_replay.jl")
     include("zero_form.jl")
     include("coordinate_walk.jl")
     include("cross_mesh_blocks.jl")

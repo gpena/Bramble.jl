@@ -11,8 +11,8 @@
 # `point_ptr[lin_idx]:point_ptr[lin_idx + 1] - 1` is the slice of `positions` holding the
 # positions for grid point `lin_idx`'s own (guard-passing, non-deduplicated) stencil entries,
 # in the same order a scatter walk visits them -- addressed per point rather than by a shared
-# running counter so a future caller could read it without a race even if the walk over grid
-# points were threaded (today's cached path is serial-only; see below).
+# running counter, so the threaded refill reads it from every band at once without a race
+# (gpena/Bramble.jl#338).
 """
     NzvalSegment = Tuple{Vector{Int},Vector{Int}}
 
@@ -418,7 +418,9 @@ function _assemble_bilinear!(
             A, form.trial_space, form.test_space, ast, form.cache
         )
     else
-        _assemble_bilinear_parallel_core!(A, form.trial_space, form.test_space, ast)
+        _assemble_bilinear_parallel_cached!(
+            A, form.trial_space, form.test_space, ast, form.cache
+        )
     end
 
     apply_dirichlet_labels!(A, form, dirichlet_labels, dirichlet_components)
@@ -437,12 +439,21 @@ Colouring on the test side ensures thread safety when updating stored matrix val
 The band-coloured sweep runs for every matrix type: it reaches storage only through the
 matrix-type seam (`_scatter_position`/`_scatter_add!`), so a dense, banded or CSR backend
 colours exactly as `SparseMatrixCSC` does (gpena/Bramble.jl#12, #190).
+
+Shares [`assemble!`](@ref)'s record/replay cache (gpena/Bramble.jl#338): once the form has
+recorded where each entry of `A` lives -- `A` came from [`assemble`](@ref) or
+[`allocate_system_matrix`](@ref) on a serial form, or an earlier fill into this same `A`
+recorded it -- every sweep writes through those positions instead of searching for them.
+The first fill into any other matrix object records once, serially, then replays across
+threads. A device-resident matrix still searches.
 """
 function assemble_parallel!(A::AbstractMatrix, form::BilinearForm, ast = nothing)
     resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)
     _zero_stored!(A)
 
-    _assemble_bilinear_parallel_core!(A, form.trial_space, form.test_space, resolved_ast)
+    _assemble_bilinear_parallel_cached!(
+        A, form.trial_space, form.test_space, resolved_ast, form.cache
+    )
 
     return A
 end
