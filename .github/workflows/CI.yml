@@ -8,16 +8,15 @@ name: CI
 permissions:
   contents: read
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
-# No `tags:` trigger, deliberately. A release tag points at the merge commit of the release
-# PR, which this same workflow tested as the PR's merge result and again on the push to
-# `main` -- so tagging used to re-run an identical matrix over an identical checkout. The
-# release procedure (`.claude/skills/bramble-release`) guarantees the tag is an ancestor of
-# `main` and already green before it exists.
+# No `push` or `tags:` trigger, deliberately. `main` moves only by merging a PR, and branch
+# protection requires the branch to be up to date first, so the PR's merge-result run has
+# already tested the exact tree the merge commit lands; a push run would repeat it. A release
+# tag points at that same merge commit. The release procedure
+# (`.claude/skills/bramble-release`) guarantees the tag is an ancestor of `main` and already
+# green before it exists.
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
