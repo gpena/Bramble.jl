@@ -74,7 +74,7 @@ using Bramble: _dot, _dot_masked, _threaded_dot, _threaded_dot_masked, MarkedInd
     )
 
     @testset "MarkedIndicesUnion (two markers), length $n" for n in (
-        0, 1, max(1, nthreads - 1), 37, 5000,
+        0, 1, max(1, nthreads - 1), 37, 5000
     )
         u, v, w = _u(n), _v(n), _w(n)
         mask1 = falses(n)
@@ -188,7 +188,7 @@ end
         (2, (23, 17)),
         (2, (23, max(1, nthreads - 1))),  # last axis shorter than nthreads
         (3, (9, 7, 6)),
-        (3, (9, 7, max(1, nthreads - 1))),  # last axis shorter than nthreads
+        (3, (9, 7, max(1, nthreads - 1)))  # last axis shorter than nthreads
     )
 
     @testset "D=$D, dims=$dims" for (D, dims) in grids
