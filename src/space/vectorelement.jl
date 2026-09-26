@@ -471,13 +471,45 @@ _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep search
 # over `dest.data` from the compiler. Unwrapping every `VectorElement` leaf down to its own
 # `parent` before delegating lets `copyto!` run directly against the backend's own storage
 # instead -- the plain `Vector` broadcast loop for the default backend, whatever loop a
-# GPU backend's own array type provides otherwise (gpena/Bramble.jl#181).
+# GPU backend's own array type provides otherwise (gpena/Bramble.jl#181). Under
+# `CpuThreaded` a host destination instead runs that same loop in static bands, one per
+# thread (gpena/Bramble.jl#357).
 @inline function Base.copyto!(
         dest::VectorElement, bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}
 )
     _check_broadcast_space(space(dest), bc)
-    copyto!(parent(dest), _unwrap_broadcast(bc))
+    v = parent(dest)
+    _broadcast_copyto!(locality(typeof(v)), execution_policy(space(dest)), v, _unwrap_broadcast(bc))
     return dest
+end
+
+# Only a host destination under `CpuThreaded` is banded; every other pairing (`CpuSerial`,
+# `CpuPolyester` for now, a device array) keeps the backend's own `copyto!`.
+@inline _broadcast_copyto!(::HostLocality, ::CpuThreaded, v, bc) = _threaded_broadcast!(v, bc)
+@inline function _broadcast_copyto!(::Locality, ::ExecutionPolicy, v, bc)
+    copyto!(v, bc)
+    return nothing
+end
+
+# Base's `copyto!(dest, bc)` loop, split over `Threads.nthreads()` static bands of the
+# destination's indices through `_static_or_serial`, so a call from inside a user's own
+# threaded region runs the bands in turn. `preprocess` does what Base does before its loop:
+# an operand that might alias `dest` without being `dest` itself is copied first, while
+# `dest` on the right-hand side (`uₕ .= uₕ .+ vₕ`) is read in place, each point written
+# only after it is read. Every point runs the same body as Base's loop, so the result
+# equals the serial one bitwise.
+@noinline function _threaded_broadcast!(v::AbstractVector, bc::Broadcast.Broadcasted)
+    bc′ = Broadcast.preprocess(v, Broadcast.instantiate(bc))
+    axes(v) == axes(bc′) || Broadcast.throwdm(axes(v), axes(bc′))
+    return _static_or_serial(
+        _static_bands!, _serial_bands!, _broadcast_band!, Threads.nthreads(), v, bc′, axes(v, 1))
+end
+
+@noinline function _broadcast_band!(v, bc, ax, nbands::Int, b::Int)
+    @inbounds @simd for i in _band_range(ax, nbands, b)
+        v[i] = bc[i]
+    end
+    return nothing
 end
 
 # Rebuild the same expression tree over each `VectorElement` leaf's own storage. The
