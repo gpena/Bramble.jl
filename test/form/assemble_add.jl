@@ -3,6 +3,7 @@ module FormAssembleAddTests
 using Test
 using Bramble
 using SparseArrays
+using Random
 using Bramble: Serial, Parallel, backend, execution_policy, allocate_system_matrix
 
 # `assemble_add!` (gpena/Bramble.jl#231) accumulates a form's contribution into an already
@@ -166,6 +167,111 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         end
         @test all(R -> R ≈ Aref, results)
         @test all(R -> R == results[1], results)  # bit-for-bit repeat-run agreement
+    end
+
+    # S3.4 (gpena/Bramble.jl#338): a warmed Parallel() `assemble_add!` replays the recorded
+    # positions instead of searching -- checked here against non-uniform 1D/2D/3D meshes (the
+    # searching sweep and the replay must agree on a mesh whose stencils are not all the same
+    # width), against the same accumulation run serially, at rtol 1e-12 (bramble-verification:
+    # never checked against another call to the code under test alone -- the Serial forms are
+    # an independently-executed reference, not a repeat of the Parallel path).
+    @testset "Bilinear: Parallel() replay matches Serial, non-uniform 1D/2D/3D (#338)" begin
+        cases = (
+            (
+                "1D",
+                domain(interval(0.0, 1.0)),
+                9,
+                false
+            ),
+            (
+                "2D",
+                domain(
+                    interval(0.0, 1.0) × interval(0.0, 1.0),
+                    :walls => boundary_symbols(interval(0.0, 1.0) × interval(0.0, 1.0))
+                ),
+                (9, 8),
+                (false, false)
+            ),
+            (
+                "3D",
+                domain(
+                    box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)),
+                    :walls => boundary_symbols(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+                ),
+                (7, 6, 5),
+                (false, false, false)
+            )
+        )
+        for (lbl, Ω, npts, unif) in cases
+            @testset "$lbl" begin
+                # Non-uniform point placement is drawn from the default RNG (mesh1d.jl):
+                # reseed identically before each of the two otherwise-independent `mesh`
+                # calls so the Serial and Parallel meshes share the same points, and only
+                # the execution policy differs.
+                Random.seed!(3384)
+                Ωₕ = mesh(Ω, npts, unif)
+                Random.seed!(3384)
+                Ω_par = mesh(Ω, npts, unif; backend = backend(policy = Parallel()))
+                Wₕ = gridspace(Ωₕ)
+                W_par = gridspace(Ω_par)
+                @test execution_policy(W_par) isa Parallel
+
+                m_ser = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
+                k_ser = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+                wide_ser = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+                m_par = form(W_par, W_par, (u, v) -> innerₕ(u, v))
+                k_par = form(W_par, W_par, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+                wide_par = form(
+                    W_par, W_par, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
+                )
+
+                @testset "θ = Float64" begin
+                    θ = 2.5
+                    A_ser = allocate_system_matrix(wide_ser)
+                    A_par = allocate_system_matrix(wide_par)
+                    for _ in 1:3  # repeated refills: cold record, then warm replays
+                        fill!(nonzeros(A_ser), 0.0)
+                        assemble_add!(A_ser, m_ser)
+                        assemble_add!(A_ser, k_ser, θ)
+                        fill!(nonzeros(A_par), 0.0)
+                        assemble_add!(A_par, m_par)
+                        assemble_add!(A_par, k_par, θ)
+                        @test Matrix(A_par) ≈ Matrix(A_ser) rtol = 1e-12
+                    end
+                end
+
+                @testset "θ = Ref" begin
+                    θ_ser = Ref(1.0)
+                    θ_par = Ref(1.0)
+                    A_ser = allocate_system_matrix(wide_ser)
+                    A_par = allocate_system_matrix(wide_par)
+                    for scale in (1.0, 0.3, 4.0)  # repeated refills, changing θ between them
+                        θ_ser[] = scale
+                        θ_par[] = scale
+                        fill!(nonzeros(A_ser), 0.0)
+                        assemble_add!(A_ser, m_ser)
+                        assemble_add!(A_ser, k_ser, θ_ser)
+                        fill!(nonzeros(A_par), 0.0)
+                        assemble_add!(A_par, m_par)
+                        assemble_add!(A_par, k_par, θ_par)
+                        @test Matrix(A_par) ≈ Matrix(A_ser) rtol = 1e-12
+                    end
+                end
+
+                @testset "assemble_add! after assemble! of another form on the same A" begin
+                    A_ser = allocate_system_matrix(wide_ser)
+                    A_par = allocate_system_matrix(wide_par)
+                    assemble!(A_ser, wide_ser)
+                    assemble!(A_par, wide_par)
+                    assemble_add!(A_ser, m_ser, 0.5)
+                    assemble_add!(A_par, m_par, 0.5)
+
+                    Aref = Matrix(assemble(wide_ser)) .+ 0.5 .* Matrix(assemble(m_ser))
+                    @test Matrix(A_par) ≈ Aref rtol = 1e-12
+                    @test Matrix(A_par) ≈ Matrix(A_ser) rtol = 1e-12
+                end
+            end
+        end
     end
 
     @testset "Linear: unscaled and scaled accumulation, 1D/2D" begin
