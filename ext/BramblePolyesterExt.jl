@@ -83,8 +83,8 @@ end
 
 # --- _batch_dot/_batch_dot_masked (src/utils/linear_algebra.jl) -------------------- #
 #
-# `CpuThreaded`'s own `_dot`/`_dot_masked` (linear_algebra.jl) fall through to the plain
-# serial reduction -- there never was a threaded reduction to match, only this Polyester one.
+# `CpuThreaded` now has its own threaded `_dot`/`_dot_masked` (linear_algebra.jl); this is the
+# Polyester counterpart to that reduction.
 # `@batch reduction=((+, s),)` keeps the running sum as a scalar the macro reduces itself
 # (Polyester's own README: "does not incur any additional allocations"), rather than a
 # per-task buffer this file would have to allocate and reduce by hand.

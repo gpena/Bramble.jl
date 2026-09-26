@@ -39,7 +39,7 @@ where the parallel arm beat serial twice running (commit `4b76d62b`, closing
 | Policy | Crossover vs. `CpuSerial` | Recommended for | Avoid when |
 |---|---|---|---|
 | [`CpuSerial`](@ref) / `Serial()` (default) | -- | Anything below the crossovers to the right; the safe default, no threading overhead. | Never wrong as a default -- only ever worth leaving once a workload is provably above a measured crossover. |
-| [`CpuThreaded`](@ref) / `Parallel()` (`Base.Threads.@threads`, unconditional) | `Rₕ!` unmasked: 64-96 pts/axis. `Rₕ!` masked: 256. `avgₕ!` (`nq = 3`): 24-32. `innerₕ`/`_dot`: no real parallel arm. | Grids at or above these sizes, when Polyester isn't an option. | `innerₕ`/`normₕ` -- `_dot(::CpuThreaded, ...)` forwards to the identical serial reduction ([gpena/Bramble.jl#112](https://github.com/gpena/Bramble.jl/issues/112), closed, superseded by #190), so this policy buys nothing there; a speed ratio for that column would just be the same code timed twice. |
+| [`CpuThreaded`](@ref) / `Parallel()` (`Base.Threads.@threads`, unconditional) | `Rₕ!` unmasked: 64-96 pts/axis. `Rₕ!` masked: 256. `avgₕ!` (`nq = 3`): 24-32. `innerₕ`/`_dot`: 100,000-300,000 elements. | Grids at or above these sizes, when Polyester isn't an option. | Below its own crossover, where `CpuSerial` still wins -- `innerₕ`/`_dot`'s crossover here falls one to two orders of magnitude above [`CpuPolyester`](@ref)'s ([gpena/Bramble.jl#301](https://github.com/gpena/Bramble.jl/issues/301)). |
 | [`CpuPolyester`](@ref) (Polyester `@batch`, requires `using Polyester`) | `Rₕ!` unmasked: 8-24. `Rₕ!` masked: 16. `avgₕ!` (`nq = 3`): 8. `innerₕ`/`_dot`: 1,000 elements. | Beats `CpuThreaded` at every crossover measured, by 4x-16x in grid size -- the default choice once Polyester is loaded. | Below its own crossover, where `CpuSerial` still wins; requires the `BramblePolyesterExt` extension (`using Polyester`) loaded, or the call errors naming the package. |
 
 ### Direct and iterative solvers
@@ -82,7 +82,7 @@ flowchart TD
     H -->|"No"| I{"Is Polyester.jl loaded?<br/>using Polyester"}
     I -->|"Yes"| I1["CpuPolyester<br/>beats CpuThreaded at every<br/>measured crossover, 4x to 16x smaller grid"]
     I -->|"No"| J{"Above the CpuThreaded crossover?<br/>64 to 96 unmasked Rₕ!, 256 masked,<br/>24 to 32 avgₕ!"}
-    J -->|"Yes"| J1["CpuThreaded<br/>note: innerₕ and _dot gain nothing here,<br/>see issue 112"]
+    J -->|"Yes"| J1["CpuThreaded<br/>innerₕ and _dot crossover:<br/>100,000-300,000 elements"]
     J -->|"No"| H1
 </pre>
 <script>
