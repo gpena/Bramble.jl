@@ -363,6 +363,12 @@ using ExplicitImports
                 :SizeUnknown,
                 :eval,
                 :mightalias,
+                # `instantiate`, `preprocess`, `throwdm` (src/space/vectorelement.jl): Base's
+                # own pre-loop steps the threaded broadcast copyto! repeats before banding
+                # (gpena/Bramble.jl#357).
+                :instantiate,
+                :preprocess,
+                :throwdm,
                 :show,
                 :expand_dimensions,
                 :_metal_backend,
