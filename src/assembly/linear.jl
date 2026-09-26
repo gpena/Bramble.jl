@@ -309,13 +309,16 @@ end
 # Every leaf, scalar or routed from a composite, bottoms out here, so one swap covers both.
 # `sp` is typed `::ScalarGridSpace` for the reason `_pattern_size_hint` gives
 # (`bilinear_pattern.jl`): an untyped `sp` lets JET reach `host_weights(::SeparableWeights)`.
+#
+# The term's device-resident source values come along the same way (`_host_sources`, below).
 function _probed_eltype(term, sp::ScalarGridSpace, T)
     hp = host_weights(sp)
+    hterm = _host_sources(locality(backend(sp)), term)
     Ωₕ = mesh(hp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     I = grid_inds[length(grid_inds) ÷ 2 + 1]
-    st = local_stencil(term, hp, I, markers(Ωₕ), lin_indices[I])
+    st = local_stencil(hterm, hp, I, markers(Ωₕ), lin_indices[I])
     isempty(st) && return T
     return promote_type(T, typeof(last(first(st))))
 end
@@ -780,6 +783,11 @@ end
 
 Refill `b` with the assembled `form` and return it with zero allocations (**0 bytes**).
 
+On a test space whose backend lives on a device (a Metal space, say), `b` is filled on the
+host and uploaded in one `copyto!`, as system matrices are (gpena/Bramble.jl#361): that path
+allocates a host buffer and host mirrors of the space on every call, so the zero-allocation
+guarantee is the host path's alone.
+
 `assemble!` uses the pre-resolved `form.ast` stored directly inside the form.
 
 ## Live coefficients
@@ -813,9 +821,27 @@ end
 
 # The shared core behind `assemble!` and `assemble`: takes its `ast` positionally, already
 # resolved and already past the deprecation check, so neither public entry point warns twice
-# calling into the other.
-function _assemble_linear!(
+# calling into the other. Split on where the test space lives, a type-level choice the
+# compiler folds away: a host space sweeps `b` directly, a device one goes through a host
+# buffer (`_assemble_linear_device!`, below).
+@inline function _assemble_linear!(
         b::AbstractVector, form::LinearForm, ast, dirichlet, dirichlet_components
+)
+    return _assemble_linear!(
+        locality(backend(form.test_space)), b, form, ast, dirichlet, dirichlet_components
+    )
+end
+
+@inline function _assemble_linear!(
+        ::DeviceLocality, b::AbstractVector, form::LinearForm, ast, dirichlet,
+        dirichlet_components
+)
+    return _assemble_linear_device!(b, form, ast, dirichlet, dirichlet_components)
+end
+
+function _assemble_linear!(
+        ::HostLocality, b::AbstractVector, form::LinearForm, ast, dirichlet,
+        dirichlet_components
 )
     dirichlet_labels, dirichlet_conditions = _normalize_dirichlet(dirichlet)
     fill!(b, zero(eltype(b)))
@@ -843,6 +869,92 @@ function _assemble_linear!(
         b, form, dirichlet_conditions, dirichlet_labels, dirichlet_components
     )
     return b
+end
+
+# --- Device test spaces: host fill, one upload (gpena/Bramble.jl#361) ---------------- #
+#
+# The sweep reads weights, spacings and source values one grid point at a time, which a
+# device-backed space refuses. So a device test space is assembled the way #317 settled for
+# matrices: the whole sweep, Dirichlet values included, runs on a host mirror of the space
+# (`host_weights` per leaf) into a host buffer, and `b` receives it in one `copyto!`. Not a
+# device scatter kernel, and not scalar writes under `allowscalar`, which would be correct
+# and silently slow. The buffer and the mirrors are rebuilt on every call, so unlike the
+# host path this one allocates; a mirror is a snapshot, which is also what keeps live
+# coefficients live: a `SourceVector` over device storage is copied fresh each time.
+function _assemble_linear_device!(
+        b::AbstractVector, form::LinearForm{D}, ast, dirichlet, dirichlet_components
+) where {D}
+    hspace = _host_mirror_space(form.test_space)
+    hast = _host_sources(DeviceLocality(), ast)
+    hform = LinearForm{D, typeof(hspace), typeof(hast)}(hspace, hast)
+    hb = Vector{eltype(b)}(undef, length(b))
+    _assemble_linear!(HostLocality(), hb, hform, hast, dirichlet, dirichlet_components)
+    copyto!(b, hb)
+    return b
+end
+
+# Leaf by leaf, so a composite mirror keeps the leaf order (and so the offsets) the lowered
+# sources were sampled against.
+@inline _host_mirror_space(Wₕ::ScalarGridSpace) = host_weights(Wₕ)
+@inline _host_mirror_space(Wₕ::CompositeGridSpace) = CompositeGridSpace(
+    map(_host_mirror_space, Wₕ.spaces))
+
+# Host copies of the per-point data a linear form's AST carries: `SourceVector` storage (a
+# lowered `f(x)` sampled on the device space, or a `VectorElement` source) and a
+# `GridFunctionScale`'s coefficient (`u * v`, where `u` is a `VectorElement` whose own type
+# says nothing about where its storage lives, so its `parent` decides; the copy is a plain
+# `Vector`, which `_grid_function_value` indexes the same way). The walk covers the nodes a
+# source reaches through (`_lower_sources`'s own set plus `RegionRestriction`); a node
+# outside it is returned as it is, and device data left inside one fails loudly at its first
+# scalar read rather than assembling wrong numbers.
+@inline _host_sources(op) = op
+
+# The same, keyed on where the space lives: a host space's AST is returned untouched.
+@inline _host_sources(::HostLocality, op) = op
+@inline _host_sources(::DeviceLocality, op) = _host_sources(op)
+
+@inline _host_array(x) = x
+@inline _host_array(v::AbstractArray) = _host_array(locality(typeof(v)), v)
+@inline _host_array(::HostLocality, v::AbstractArray) = v
+@inline _host_array(::DeviceLocality, v::AbstractArray) = Array(v)
+@inline _host_array(v::VectorElement) = _host_array(parent(v))
+
+function _host_sources(op::SourceVector{D}) where {D}
+    vec = _host_array(op.vec)
+    return SourceVector{D, typeof(vec)}(vec)
+end
+
+function _host_sources(op::OperatorScale{D}) where {D}
+    inner = _host_sources(op.inner_op)
+    return OperatorScale{D, typeof(op.scalar), typeof(inner)}(op.scalar, inner)
+end
+
+function _host_sources(op::GridFunctionScale{D}) where {D}
+    gf = _host_array(op.grid_function)
+    inner = _host_sources(op.inner_op)
+    return GridFunctionScale{D, typeof(gf), typeof(inner)}(gf, inner)
+end
+
+function _host_sources(op::OperatorAdd{D}) where {D}
+    left = _host_sources(op.left_op)
+    right = _host_sources(op.right_op)
+    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
+end
+
+function _host_sources(op::LinearProduct{D, W}) where {D, W}
+    left = _host_sources(op.left_op)
+    right = _host_sources(op.right_op)
+    return LinearProduct{D, W, typeof(left), typeof(right)}(left, right)
+end
+
+function _host_sources(op::ShiftNode{D, Dim}) where {D, Dim}
+    inner = _host_sources(op.inner_op)
+    return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
+end
+
+function _host_sources(op::RegionRestriction{D, R}) where {D, R}
+    inner = _host_sources(op.inner_op)
+    return RegionRestriction{D, R, typeof(inner)}(op.region, inner)
 end
 
 """

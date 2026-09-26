@@ -2,7 +2,7 @@ module ExtMetalFormAssemblyTests
 
 using Test
 using Bramble
-using Bramble: D₋ᵧ, D₋ₓ, change_points!, innerₕ
+using Bramble: D₋ᵧ, D₋ₓ, change_points!, innerₕ, Rₕ
 using Metal
 using SparseArrays
 using ..TestUtils: _run_gpu_tests
@@ -33,7 +33,7 @@ else
         return (raw .- raw[1]) ./ (raw[end] - raw[1])
     end
 
-    function _matched_composites(npts::NTuple{D, Int}) where {D}
+    function _matched_spaces(npts::NTuple{D, Int}) where {D}
         Ω = domain(D == 1 ? interval(0.0f0, 1.0f0) :
                    interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0))
         unif = D == 1 ? false : ntuple(_ -> false, Val(D))
@@ -45,11 +45,16 @@ else
             change_points!(D == 1 ? Ωc : Ωc(d), copy(pts))
             change_points!(D == 1 ? Ωg : Ωg(d), Metal.MtlVector(pts))
         end
-        Wc, Wg = gridspace(Ωc), gridspace(Ωg)
+        return gridspace(Ωc), gridspace(Ωg)
+    end
+
+    function _matched_composites(npts)
+        Wc, Wg = _matched_spaces(npts)
         return Wc × Wc, Wg × Wg
     end
 
     _relerr(Ag, Ac) = maximum(abs, Array(Ag) .- Float32.(Matrix(Ac))) / maximum(abs, Ac)
+    _vrelerr(bg, bc) = maximum(abs, Array(bg) .- bc) / maximum(abs, bc)
 
     # Runs `refill!()` `nrefills` times with `A.mirror.colval` scrubbed, restoring it after.
     function _refills_without_search!(refill!, A, nrefills::Int)
@@ -79,6 +84,84 @@ else
         @test any(!iszero, Array(Ag)[(n + 1):end, 1:n])
         _refills_without_search!(() -> assemble!(Ag, Fg), Ag, 5)
         @test _relerr(Ag, Ac) < _RTOL
+    end
+
+    # A linear form on a device test space is swept on a host mirror and uploaded once
+    # (gpena/Bramble.jl#361). `assemble` must return device storage matching the host
+    # vector, and `assemble!` must refill a zeroed device vector to the same values, with
+    # and without a Dirichlet condition written into it.
+    function _check_linear(l, sc, sg; kwargs...)
+        bc = assemble(form(sc, l); kwargs...)
+        lg = form(sg, l)
+        bg = assemble(lg; kwargs...)
+        @test bg isa Metal.MtlVector{Float32}
+        @test length(bg) == length(bc)
+        @test _vrelerr(bg, bc) < _RTOL
+        fill!(bg, 0.0f0)
+        assemble!(bg, lg; kwargs...)
+        @test _vrelerr(bg, bc) < _RTOL
+        return bc
+    end
+
+    _f(x) = sin(3.0f0 * x[1]) + 1.0f0
+    _g(x) = 2.0f0 + x[1]
+
+    @testset "Metal linear form assembly (gpena/Bramble.jl#361)" begin
+        for npts in ((33,), (17, 23))
+            @testset "$(length(npts))D non-uniform" begin
+                Wc, Wg = _matched_spaces(npts)
+                Xc, Xg = Wc × Wc, Wg × Wg
+                composite = V -> innerₕ(_f, V[1]) + innerₕ(2.0f0, V[2])
+
+                @testset "scalar, constant source" begin
+                    _check_linear(v -> innerₕ(one(Float32), v), Wc, Wg)
+                end
+                @testset "scalar, function source (lowered through Rₕ on the device)" begin
+                    _check_linear(v -> innerₕ(_f, v), Wc, Wg)
+                end
+                @testset "scalar, source under a difference of the test function" begin
+                    _check_linear(v -> innerₕ(_f, D₋ₓ(v)), Wc, Wg)
+                end
+                @testset "composite" begin
+                    bc = _check_linear(composite, Xc, Xg)
+                    n = ndofs(Wc)
+                    @test any(!iszero, bc[1:n]) && any(!iszero, bc[(n + 1):end])
+                end
+                @testset "scalar, Dirichlet on the vector" begin
+                    bc = _check_linear(
+                        v -> innerₕ(_f, v), Wc, Wg; dirichlet = :boundary => _g)
+                    @test any(==(2.0f0), bc)   # the condition was written, not only swept
+                end
+                @testset "composite, Dirichlet on one component" begin
+                    _check_linear(composite, Xc, Xg; dirichlet = :boundary => _g,
+                        dirichlet_components = 1)
+                end
+                @testset "device grid-function scale on the test side stays live" begin
+                    uc, ug = Rₕ(Wc, _g), Rₕ(Wg, _g)
+                    for l in (u -> (v -> innerₕ(_f, u * v)),
+                        u -> (v -> innerₕ(_f, u * D₋ₓ(v))))
+                        lg = form(Wg, l(ug))
+                        bg = assemble(lg)
+                        @test bg isa Metal.MtlVector{Float32}
+                        @test _vrelerr(bg, assemble(form(Wc, l(uc)))) < _RTOL
+                        parent(ug) .*= 3.0f0
+                        parent(uc) .*= 3.0f0
+                        fill!(bg, 0.0f0)
+                        assemble!(bg, lg)
+                        @test _vrelerr(bg, assemble(form(Wc, l(uc)))) < _RTOL
+                    end
+                end
+                @testset "device grid-function source stays live across assemble!" begin
+                    uc, ug = Rₕ(Wc, _f), Rₕ(Wg, _f)
+                    lg = form(Wg, v -> innerₕ(ug, v))
+                    bg = assemble(lg)
+                    parent(ug) .*= 3.0f0
+                    parent(uc) .*= 3.0f0
+                    assemble!(bg, lg)
+                    @test _vrelerr(bg, assemble(form(Wc, v -> innerₕ(uc, v)))) < _RTOL
+                end
+            end
+        end
     end
 
     @testset "Metal composite form assembly (gpena/Bramble.jl#361)" begin
