@@ -65,6 +65,7 @@ function _results(n::NTuple{D, Int}, policy) where {D}
     end
 
     for name in _DIVERGENCES, (label, field) in (("tuple", tup), ("composite", comp))
+
         name in _CENTERED && !centered_ok && continue
         v = fresh()
         @test _op(name)(v, field) === v
@@ -73,6 +74,7 @@ function _results(n::NTuple{D, Int}, policy) where {D}
 
     if D >= 2
         for name in _CURLS, (label, field) in (("tuple", tup), ("composite", comp))
+
             name in _CENTERED && !centered_ok && continue
             dest = D == 2 ? fresh() : ntuple(_ -> fresh(), 3)
             @test _op(name)(dest, field) === dest
@@ -81,6 +83,7 @@ function _results(n::NTuple{D, Int}, policy) where {D}
     end
 
     for name in _STRAINS, (label, field) in (("tuple", tup), ("composite", comp))
+
         name in _CENTERED && !centered_ok && continue
         dest = ntuple(_ -> ntuple(_ -> fresh(), D), D)
         @test _op(name)(dest, field) === dest

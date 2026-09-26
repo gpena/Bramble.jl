@@ -558,10 +558,18 @@ function _bc357_results(n, policy)
     fresh() = (v = similar(uₕ); parent(v) .= NaN; v)
     out = Dict{String, Vector{Float64}}()
 
-    v = fresh(); v .= 2.0 .* uₕ .+ wₕ; out["axpy"] = copy(parent(v))
-    v = fresh(); v .= uₕ .* plain .- r[] .* wₕ .+ 1; out["mixed"] = copy(parent(v))
-    v = fresh(); v .= α .* sin.(uₕ) ./ (1 .+ wₕ .^ 2); out["nested"] = copy(parent(v))
-    a = copy(uₕ); a .= a .+ 0.5 .* wₕ; out["self"] = copy(parent(a))
+    v = fresh()
+    v .= 2.0 .* uₕ .+ wₕ
+    out["axpy"] = copy(parent(v))
+    v = fresh()
+    v .= uₕ .* plain .- r[] .* wₕ .+ 1
+    out["mixed"] = copy(parent(v))
+    v = fresh()
+    v .= α .* sin.(uₕ) ./ (1 .+ wₕ .^ 2)
+    out["nested"] = copy(parent(v))
+    a = copy(uₕ)
+    a .= a .+ 0.5 .* wₕ
+    out["self"] = copy(parent(a))
     return out
 end
 

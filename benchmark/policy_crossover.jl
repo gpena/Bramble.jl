@@ -157,9 +157,7 @@ function _power_state()
         try
             base = "/sys/class/power_supply"
             isdir(base) || return (on_battery = false, raw = "no $base", readable = false)
-            online_files = [
-                joinpath(base, d, "online") for d in readdir(base) if isfile(joinpath(base, d, "online"))
-            ]
+            online_files = [joinpath(base, d, "online") for d in readdir(base) if isfile(joinpath(base, d, "online"))]
             isempty(online_files) &&
                 return (on_battery = false, raw = "no */online file under $base", readable = false)
             online = any(strip(read(f, String)) == "1" for f in online_files)
@@ -756,11 +754,13 @@ function main()
 
     recs = []
     for label in cheap_labels, D in 1:3
+
         rows = filter(r -> r.workload == label && r.D == D, cheap_rows)
         _print_workload_table(label, D, rows)
         push!(recs, _print_crossover(label, D, rows))
     end
     for label in assemble_labels, D in 1:3
+
         rows = filter(r -> r.workload == label && r.D == D, assemble_rows)
         _print_workload_table(label, D, rows)
         push!(recs, _print_crossover(label, D, rows))
