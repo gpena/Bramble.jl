@@ -6,4 +6,5 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("macros.jl")
     include("backends.jl")
     include("linear_algebra.jl")
+    include("threaded_dot.jl")
 end

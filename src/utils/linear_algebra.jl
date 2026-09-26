@@ -611,33 +611,154 @@ end
     return s
 end
 
-# --- Execution-policy-dispatched reduction entries (gpena/Bramble.jl#190, S7.1) ---------- #
+# --- Execution-policy-dispatched reduction entries (gpena/Bramble.jl#190, S7.1, #301 S2.1) #
 #
 # `inner₊` (`src/space/inner_product.jl`) does pass a policy into `_dot`/`_dot_masked`.
-# `CpuSerial`/`CpuThreaded` both fall through to today's single (already vectorised)
-# implementation -- there is no separate threaded reduction to pick between, only a
-# `CpuPolyester` one, which the `_batch_dot`/`_batch_dot_masked` hooks below supply once
-# `BramblePolyesterExt` is loaded, and a `GpuPolicy` one, below the CpuPolyester hooks.
+# `CpuSerial` falls through to today's single (already vectorised) serial implementation.
+# `CpuThreaded` now reduces over `Threads.nthreads()` static chunks of its own
+# (`_threaded_dot`/`_threaded_dot_masked` below), each chunk's partial sum landing in a
+# fixed-size buffer summed serially once every task has returned -- the buffer's size
+# depends only on the thread count, never on vector length (gpena/Bramble.jl#301 Departures).
+# `CpuPolyester` reaches the `_batch_dot`/`_batch_dot_masked` hooks below, which
+# `BramblePolyesterExt` supplies once loaded, and `GpuPolicy` reaches the device methods
+# further down.
 
 """
     _dot(policy::ExecutionPolicy, u, v, w) -> Real
 
-Policy-dispatched [`_dot`](@ref): [`CpuSerial`](@ref) and [`CpuThreaded`](@ref) fall
-through to the plain three-vector method; [`CpuPolyester`](@ref) reaches [`_batch_dot`](@ref).
+Policy-dispatched [`_dot`](@ref): [`CpuSerial`](@ref) falls through to the plain
+three-vector method; [`CpuThreaded`](@ref) reaches [`_threaded_dot`](@ref);
+[`CpuPolyester`](@ref) reaches [`_batch_dot`](@ref).
 """
 @inline _dot(::CpuSerial, u, v, w) = _dot(u, v, w)
-@inline _dot(::CpuThreaded, u, v, w) = _dot(u, v, w)
+@inline _dot(::CpuThreaded, u, v, w) = _threaded_dot(u, v, w)
 @noinline _dot(::CpuPolyester, u, v, w) = _batch_dot(u, v, w)
 
 """
     _dot_masked(policy::ExecutionPolicy, u, v, w, mask) -> Real
 
-Policy-dispatched [`_dot_masked`](@ref): [`CpuSerial`](@ref) and [`CpuThreaded`](@ref) fall
-through to the plain masked method; [`CpuPolyester`](@ref) reaches [`_batch_dot_masked`](@ref).
+Policy-dispatched [`_dot_masked`](@ref): [`CpuSerial`](@ref) falls through to the plain
+masked method; [`CpuThreaded`](@ref) reaches [`_threaded_dot_masked`](@ref);
+[`CpuPolyester`](@ref) reaches [`_batch_dot_masked`](@ref).
 """
 @inline _dot_masked(::CpuSerial, u, v, w, mask) = _dot_masked(u, v, w, mask)
-@inline _dot_masked(::CpuThreaded, u, v, w, mask) = _dot_masked(u, v, w, mask)
+@inline _dot_masked(::CpuThreaded, u, v, w, mask) = _threaded_dot_masked(u, v, w, mask)
 @noinline _dot_masked(::CpuPolyester, u, v, w, mask) = _batch_dot_masked(u, v, w, mask)
+
+"""
+    _threaded_dot(u::AbstractVector, v::AbstractVector, w::AbstractVector) -> Real
+
+[`CpuThreaded`](@ref)'s own counterpart of [`_dot`](@ref): partitions `1:length(u)` into
+`Threads.nthreads()` static bands via [`_band_range`](@ref), each `Threads.@threads :static`
+task accumulating its own `muladd`/`@simd` partial sum, landed in a fixed
+`Threads.nthreads()`-length buffer and summed serially once every task has returned.
+
+The buffer's size depends only on the thread count, never on `length(u)`, so allocation is
+independent of vector length rather than zero (gpena/Bramble.jl#301 Departures) -- no size
+threshold falls back to the serial kernel below a cutoff, and no new dependency is pulled in
+to avoid the buffer.
+
+Kept in an isolated function, the same reason [`_threaded_for!`](@ref) is, to keep
+`Threads.@threads` from boxing a closure over `u`/`v`/`w` on paths that execute serially.
+
+# Throws
+- `DimensionMismatch`: If `length(u)`, `length(v)`, and `length(w)` do not match.
+"""
+@noinline function _threaded_dot(u::AbstractVector, v::AbstractVector, w::AbstractVector)
+    (length(u) == length(v) == length(w)) ||
+        _throw_dot_dim_error(length(u), length(v), length(w))
+    T = promote_type(eltype(u), eltype(v), eltype(w))
+    n = length(u)
+    nchunks = Threads.nthreads()
+    partials = zeros(T, nchunks)
+    ax = 1:n
+    Threads.@threads :static for k in 1:nchunks
+        rng = _band_range(ax, nchunks, k)
+        s = zero(T)
+        @inbounds @simd for i in rng
+            s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+        end
+        @inbounds partials[k] = s
+    end
+    return sum(partials)
+end
+
+"""
+    _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector) -> Real
+    _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::MarkedIndicesUnion) -> Real
+
+[`CpuThreaded`](@ref)'s own counterpart of [`_dot_masked`](@ref): partitions the mask's
+64-bit *words* (not `1:length(u)`) into `Threads.nthreads()` static bands, so the work stays
+proportional to the number of set bits rather than to `length(u)` -- masks here are typically
+a mesh marker such as `:boundary`, `O(perimeter)` set bits inside an `O(n^D)` index range, and
+walking every index (as an earlier version of this function did) turned that sparsity into a
+slowdown under `CpuThreaded` relative to plain `CpuSerial`.
+
+Each task loads its band's words once (`mask.chunks[w]` for a `BitVector`, joined across
+markers via [`_reduce_or_chunk`](@ref) for a [`MarkedIndicesUnion`](@ref)), skips whole zero
+words, and walks a nonzero word's set bits with `trailing_zeros`/`word & (word - 1)`, the same
+walk [`MarkedIndices`](@ref)/[`MarkedIndicesUnion`](@ref) use. No bounds guard against
+`length(u)` is needed for the padding bits of the final word, for the same reason
+[`MarkedIndices`](@ref) needs none: a `BitVector`'s own invariant guarantees they are zero,
+and a [`MarkedIndicesUnion`](@ref) ORs only `BitVector`s of that same length together.
+
+# Throws
+- `DimensionMismatch`: If vector or mask lengths do not match.
+"""
+@noinline function _threaded_dot_masked(
+        u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector
+)
+    (length(u) == length(v) == length(w) == length(mask)) ||
+        _throw_dot_dim_error(length(u), length(v), length(w), length(mask))
+    T = promote_type(eltype(u), eltype(v), eltype(w))
+    chunks = mask.chunks
+    nwords = length(chunks)
+    nchunks = Threads.nthreads()
+    partials = zeros(T, nchunks)
+    ax = 1:nwords
+    Threads.@threads :static for k in 1:nchunks
+        rng = _band_range(ax, nchunks, k)
+        s = zero(T)
+        @inbounds for widx in rng
+            word = chunks[widx]
+            base = (widx - 1) * 64
+            while word != zero(UInt64)
+                i = base + trailing_zeros(word) + 1
+                s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+                word &= word - 1
+            end
+        end
+        @inbounds partials[k] = s
+    end
+    return sum(partials)
+end
+
+@noinline function _threaded_dot_masked(
+        u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::MarkedIndicesUnion
+)
+    (length(u) == length(v) == length(w) == mask.len) ||
+        _throw_dot_dim_error(length(u), length(v), length(w), mask.len)
+    T = promote_type(eltype(u), eltype(v), eltype(w))
+    nwords = length(mask.chunks[1])
+    nchunks = Threads.nthreads()
+    partials = zeros(T, nchunks)
+    ax = 1:nwords
+    Threads.@threads :static for k in 1:nchunks
+        rng = _band_range(ax, nchunks, k)
+        s = zero(T)
+        @inbounds for widx in rng
+            word = _reduce_or_chunk(mask.chunks, widx)
+            base = (widx - 1) * 64
+            while word != zero(UInt64)
+                i = base + trailing_zeros(word) + 1
+                s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+                word &= word - 1
+            end
+        end
+        @inbounds partials[k] = s
+    end
+    return sum(partials)
+end
 
 """
     _batch_dot(u, v, w) -> Real
@@ -686,16 +807,18 @@ end
 
 # Completes the `(Locality, ExecutionPolicy)` dispatch the two lines above open, the same
 # shape `_sweep_for!` already uses: a `HostLocality` destination reaches straight back to the
-# concrete-policy methods above (no behaviour change on CPU), the `DeviceLocality`/`GpuPolicy`
-# methods below are the device side, and the catch-all at the end of this file throws via
-# `_throw_locality_mismatch` for the two mismatched pairings. Without these, `report_package`
-# only sees the `(DeviceLocality, GpuPolicy)` case and flags the rest as unreachable dispatch.
+# concrete-policy methods above (identical CPU behaviour to calling those methods directly --
+# `CpuThreaded` included, now that it reduces over its own chunks rather than falling through
+# to the serial kernel), the `DeviceLocality`/`GpuPolicy` methods below are the device side,
+# and the catch-all at the end of this file throws via `_throw_locality_mismatch` for the two
+# mismatched pairings. Without these, `report_package` only sees the `(DeviceLocality,
+# GpuPolicy)` case and flags the rest as unreachable dispatch.
 @inline _dot(::HostLocality, ::CpuSerial, u, v, w) = _dot(u, v, w)
-@inline _dot(::HostLocality, ::CpuThreaded, u, v, w) = _dot(u, v, w)
+@inline _dot(::HostLocality, ::CpuThreaded, u, v, w) = _threaded_dot(u, v, w)
 @noinline _dot(::HostLocality, ::CpuPolyester, u, v, w) = _batch_dot(u, v, w)
 
 @inline _dot_masked(::HostLocality, ::CpuSerial, u, v, w, mask) = _dot_masked(u, v, w, mask)
-@inline _dot_masked(::HostLocality, ::CpuThreaded, u, v, w, mask) = _dot_masked(u, v, w, mask)
+@inline _dot_masked(::HostLocality, ::CpuThreaded, u, v, w, mask) = _threaded_dot_masked(u, v, w, mask)
 @noinline _dot_masked(::HostLocality, ::CpuPolyester, u, v, w, mask) = _batch_dot_masked(u, v, w, mask)
 
 """
