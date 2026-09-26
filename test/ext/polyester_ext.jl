@@ -520,6 +520,90 @@ if Threads.nthreads() >= 2
     end
 end
 
+# --- Broadcast under CpuPolyester (S8.2, #357) ------------------------------------------ #
+#
+# `_broadcast_copyto!`'s `CpuPolyester` arm (`_polyester_broadcast!`/`_batch_broadcast!`,
+# ext/BramblePolyesterExt.jl) runs `dest .= expr` in the same bands `_threaded_broadcast!`
+# runs under `CpuThreaded`, one per `Polyester.@batch` task instead of one per
+# `Threads.@threads` thread -- mirroring test/space/threaded_broadcast.jl's own `CpuThreaded`
+# check. Every point runs the very loop body the serial broadcast runs, so the answer must
+# equal `Serial()` exactly, not merely to a tolerance; the meshes are non-uniform for the
+# same reason those are.
+
+function _bc357_domain(D)
+    D == 1 ? domain(interval(0.0, 1.0)) :
+    D == 2 ? domain(interval(0.0, 1.0) × interval(0.0, 2.0)) :
+    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+end
+
+# The same non-uniform mesh under the given policy: the seed fixes the random points.
+function _bc357_space(n::NTuple{D, Int}, policy; seed = 357) where {D}
+    Random.seed!(seed)
+    npts = D == 1 ? n[1] : n
+    unif = D == 1 ? false : ntuple(_ -> false, D)
+    return gridspace(mesh(_bc357_domain(D), npts, unif; backend = backend(policy = policy)))
+end
+
+const _BC357_SIZES = ((1,), (2,), (7,), (1001,), (5, 3), (40, 37), (4, 3, 5), (13, 11, 9))
+
+# A handful of broadcast shapes, each writing into a fresh `NaN` destination (or updating a
+# copy in place, aliasing `dest` on its own right-hand side).
+function _bc357_results(n, policy)
+    Wₕ = _bc357_space(n, policy)
+    uₕ = Rₕ(Wₕ, x -> sin(3sum(x)) + prod(x))
+    wₕ = Rₕ(Wₕ, x -> exp(first(x)) * last(x))
+    plain = [cos(0.3i) for i in eachindex(parent(uₕ))]
+    r = Ref(0.25)
+    α = 1.5
+    fresh() = (v = similar(uₕ); parent(v) .= NaN; v)
+    out = Dict{String, Vector{Float64}}()
+
+    v = fresh(); v .= 2.0 .* uₕ .+ wₕ; out["axpy"] = copy(parent(v))
+    v = fresh(); v .= uₕ .* plain .- r[] .* wₕ .+ 1; out["mixed"] = copy(parent(v))
+    v = fresh(); v .= α .* sin.(uₕ) ./ (1 .+ wₕ .^ 2); out["nested"] = copy(parent(v))
+    a = copy(uₕ); a .= a .+ 0.5 .* wₕ; out["self"] = copy(parent(a))
+    return out
+end
+
+function _bc357_check_equal(n)
+    s, p = _bc357_results(n, Serial()), _bc357_results(n, CpuPolyester())
+    for key in keys(s)
+        @test p[key] == s[key]
+    end
+end
+
+# Records which threads read it, to see the bands spread -- its own spy type rather than
+# reusing `_V356Spy` above, since that one is scoped to the divergence/curl/strain testset.
+const _BC357_SEEN = Threads.Atomic{UInt64}(0)
+struct _BC357Spy{T} <: AbstractVector{T}
+    x::Vector{T}
+end
+Base.size(s::_BC357Spy) = size(s.x)
+Base.IndexStyle(::Type{<:_BC357Spy}) = IndexLinear()
+Base.@propagate_inbounds function Base.getindex(s::_BC357Spy, i::Int)
+    Threads.atomic_or!(_BC357_SEEN, UInt64(1) << ((Threads.threadid() - 1) % 64))
+    return s.x[i]
+end
+
+@testset "Broadcast equal to Serial under CpuPolyester, n=$n" for n in _BC357_SIZES
+    _bc357_check_equal(n)
+end
+
+# Silent on a single thread: there is nothing to band across.
+if Threads.nthreads() >= 2
+    @testset "Broadcast runs on several threads under CpuPolyester, $(D)D" for D in 1:3
+        n = D == 1 ? (200_000,) : D == 2 ? (400, 400) : (60, 60, 60)
+        Wₕ = _bc357_space(n, CpuPolyester())
+        uₕ, wₕ = Rₕ(Wₕ, x -> sin(sum(x))), Rₕ(Wₕ, x -> prod(x))
+        spy = Bramble.VectorElement(_BC357Spy(copy(parent(uₕ))), Wₕ)
+        v = similar(uₕ)
+        _BC357_SEEN[] = 0
+        v .= 2.0 .* spy .+ wₕ
+        @test count_ones(_BC357_SEEN[]) >= 2
+        @test parent(v) == 2.0 .* parent(uₕ) .+ parent(wₕ)
+    end
+end
+
 # The Polyester-gated mixed-policy testset of test/form/threaded_replay.jl ("Mixed leaf
 # policies: CpuThreaded beside CpuPolyester") only runs where `BramblePolyesterExt` is already
 # loaded; the `unit` group deliberately never loads Polyester, so that testset never runs in

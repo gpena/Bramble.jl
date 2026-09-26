@@ -114,6 +114,11 @@ using ExplicitImports
                 :_difference_band!,
                 :_average_band!,
                 :_centered_average_band!,
+                # `_broadcast_band!` (BramblePolyesterExt, gpena/Bramble.jl#357, S8.2): the
+                # per-band broadcast loop body `_batch_broadcast!` below runs under `@batch`,
+                # the same body `_threaded_broadcast!` already runs under `Threads.@threads`
+                # (src/space/vectorelement.jl). Neither exported nor public.
+                :_broadcast_band!,
                 # `TrackedArray` (BrambleReverseDiffExt, commit c5ae771f): the argument type of the
                 # `mul!` method that resolves the ambiguity with `KroneckerLinearOperator`
                 # (gpena/Bramble.jl#295). ReverseDiff exports no public name for it.
@@ -333,6 +338,11 @@ using ExplicitImports
                 # generic over the band function `f` instead of naming one, extended here
                 # rather than called.
                 :_batch_run_bands!,
+                # `_batch_broadcast!` (BramblePolyesterExt, gpena/Bramble.jl#357, S8.2): the
+                # `Polyester.@batch` counterpart of `_threaded_broadcast!`'s `CpuThreaded` arm
+                # in `src/space/vectorelement.jl`, reached by `_polyester_broadcast!`,
+                # extended here rather than called.
+                :_batch_broadcast!,
                 # `BrambleKernelAbstractionsExt` (gpena/Bramble.jl#94, #174): the stencil and
                 # component helpers its `@kernel`s call so the device answer is computed by
                 # the very same quadrature/stencil arithmetic the CPU sweep uses, rather than

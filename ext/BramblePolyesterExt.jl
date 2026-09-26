@@ -46,7 +46,7 @@ using Bramble
 using Bramble: MarkedIndicesUnion, SeparableWeights, _reduce_or_chunk, _throw_dot_dim_error,
                _write_components!, _band_range, _scatter_point!, _scatter_linear_point!,
                CpuPolyester, _ReplayTarget, _replay_point!, _difference_band!, _average_band!,
-               _centered_average_band!
+               _centered_average_band!, _broadcast_band!
 using Polyester: Polyester, @batch
 
 # --- _batch_for!/_batch_axis_for! (src/utils/linear_algebra.jl) -------------------- #
@@ -375,6 +375,36 @@ end
 function Bramble._batch_run_bands!(f::F, nbands::Int, out::AbstractVector, rest::Vararg{Any, N}) where {F, N}
     @batch for b in 1:nbands
         f(out, rest..., nbands, b)
+    end
+    return nothing
+end
+
+# --- _batch_broadcast! (src/space/vectorelement.jl) --------------------------------- #
+#
+# `CpuPolyester`'s counterpart of `_threaded_broadcast!`: one `_broadcast_band!` per band
+# under `@batch`, exactly the shape of the engine hooks above. `v::AbstractVector` (matching
+# the `CpuThreaded` reference body), the same reasoning as those hooks, so this is a genuine
+# specialisation of the `src/` stub rather than a redefinition of its fully unconstrained
+# signature.
+#
+# `bc` is boxed in a `Ref` before the loop rather than closed over directly: `@batch`
+# gc-preserves every free variable through `StrideArraysCore.object_and_preserve`, which has
+# a `Broadcast.Broadcasted`-specific method that rebuilds the tree through the 3-argument
+# `Broadcasted(f, args, axes)` constructor whenever `bc.f` and `bc.axes` are both `isbits` --
+# true of every broadcast this reaches (`bc.f` a plain function, `bc.axes` a tuple of
+# `OneTo`s). That rebuild recomputes the style via `combine_styles` over the *unpacked*,
+# already-`preprocess`ed args, including each `Broadcast.Extruded` leaf -- and `Extruded` has
+# no `BroadcastStyle` of its own, so combining throws (`MethodError: no method matching
+# ndims(::Type{Extruded{...}})`) before a single band ever runs, for any `bc` this reaches,
+# not only a `VectorElement`-specific shape. A `Base.RefValue` wrapping `bc` has no such
+# specialised `object_and_preserve` method, so it takes the plain, non-reconstructing
+# fallback instead; `bcref[]` inside the loop hands `_broadcast_band!` the same `bc` either
+# way.
+function Bramble._batch_broadcast!(v::AbstractVector, bc, ax)
+    n = Threads.nthreads()
+    bcref = Ref(bc)
+    @batch for b in 1:n
+        _broadcast_band!(v, bcref[], ax, n, b)
     end
     return nothing
 end

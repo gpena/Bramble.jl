@@ -473,7 +473,8 @@ _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep search
 # instead -- the plain `Vector` broadcast loop for the default backend, whatever loop a
 # GPU backend's own array type provides otherwise (gpena/Bramble.jl#181). Under
 # `CpuThreaded` a host destination instead runs that same loop in static bands, one per
-# thread (gpena/Bramble.jl#357).
+# thread, and under `CpuPolyester` in bands run under `Polyester.@batch`
+# (gpena/Bramble.jl#357).
 @inline function Base.copyto!(
         dest::VectorElement, bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}}
 )
@@ -483,24 +484,31 @@ _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep search
     return dest
 end
 
-# Only a host destination under `CpuThreaded` is banded; every other pairing (`CpuSerial`,
-# `CpuPolyester` for now, a device array) keeps the backend's own `copyto!`.
+# A host destination is banded under `CpuThreaded` and `CpuPolyester`; every other pairing
+# (`CpuSerial`, a device array) keeps the backend's own `copyto!`.
 @inline _broadcast_copyto!(::HostLocality, ::CpuThreaded, v, bc) = _threaded_broadcast!(v, bc)
+@inline _broadcast_copyto!(::HostLocality, ::CpuPolyester, v, bc) = _polyester_broadcast!(v, bc)
 @inline function _broadcast_copyto!(::Locality, ::ExecutionPolicy, v, bc)
     copyto!(v, bc)
     return nothing
 end
 
-# Base's `copyto!(dest, bc)` loop, split over `Threads.nthreads()` static bands of the
-# destination's indices through `_static_or_serial`, so a call from inside a user's own
-# threaded region runs the bands in turn. `preprocess` does what Base does before its loop:
-# an operand that might alias `dest` without being `dest` itself is copied first, while
-# `dest` on the right-hand side (`uₕ .= uₕ .+ vₕ`) is read in place, each point written
-# only after it is read. Every point runs the same body as Base's loop, so the result
-# equals the serial one bitwise.
-@noinline function _threaded_broadcast!(v::AbstractVector, bc::Broadcast.Broadcasted)
+# What Base does before its own `copyto!(dest, bc)` loop: an operand that might alias `dest`
+# without being `dest` itself is copied first, while `dest` on the right-hand side
+# (`uₕ .= uₕ .+ vₕ`) is read in place, each point written only after it is read. Shared by
+# both the `CpuThreaded` and `CpuPolyester` arms below so neither repeats it.
+@inline function _prepared_broadcast(v, bc)
     bc′ = Broadcast.preprocess(v, Broadcast.instantiate(bc))
     axes(v) == axes(bc′) || Broadcast.throwdm(axes(v), axes(bc′))
+    return bc′
+end
+
+# Split over `Threads.nthreads()` static bands of the destination's indices through
+# `_static_or_serial`, so a call from inside a user's own threaded region runs the bands in
+# turn. Every point runs the same body as Base's loop, so the result equals the serial one
+# bitwise.
+@noinline function _threaded_broadcast!(v::AbstractVector, bc::Broadcast.Broadcasted)
+    bc′ = _prepared_broadcast(v, bc)
     return _static_or_serial(
         _static_bands!, _serial_bands!, _broadcast_band!, Threads.nthreads(), v, bc′, axes(v, 1))
 end
@@ -510,6 +518,24 @@ end
         v[i] = bc[i]
     end
     return nothing
+end
+
+# `CpuPolyester`'s counterpart of `_threaded_broadcast!`: the same `_broadcast_band!` per
+# band, run under `Polyester.@batch` by `_batch_broadcast!` instead of `_static_or_serial`.
+@noinline function _polyester_broadcast!(v::AbstractVector, bc::Broadcast.Broadcasted)
+    bc′ = _prepared_broadcast(v, bc)
+    return _batch_broadcast!(v, bc′, axes(v, 1))
+end
+
+"""
+    _batch_broadcast!(v, bc, ax) -> Nothing
+
+[`CpuPolyester`](@ref)'s `_polyester_broadcast!`, filled by `BramblePolyesterExt` (one
+[`_broadcast_band!`](@ref) per band under `Polyester.@batch`). The only `src/` method here
+that errors naming Polyester.
+"""
+@noinline function _batch_broadcast!(v, bc, ax)
+    return _throw_cpubatch_without_polyester(:_batch_broadcast!)
 end
 
 # Rebuild the same expression tree over each `VectorElement` leaf's own storage. The
