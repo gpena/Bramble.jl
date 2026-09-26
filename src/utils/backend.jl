@@ -173,6 +173,16 @@ four runs -- the "twice running" confirmation rule held in each run, but the exa
 point moved within that range from one run to the next (300k, 300k, 100k, 100k), the same
 run-to-run jitter the other workloads above show near their own crossing point.
 
+`D₋ₓ!` (in-place stencil) and the warmed broadcast axpy `vₕ .= a .* uₕ .+ wₕ` into a
+`VectorElement` now thread under this policy too (gpena/Bramble.jl#356, #357, commits
+af19afea, 96e93c02, f7a8798f, 90f262e2): the crossover against `CpuSerial` was measured the
+same way (`benchmark/policy_crossover.jl`, commit 90f262e2, same Apple M2 host, `--threads=4`,
+AC power) across two runs. `D₋ₓ!`'s crossover held in both runs at 300,000 DOFs in 1D, 300,304
+in 2D, and 300,763 in 3D. Broadcast axpy's crossover held in both runs at 300,304 DOFs in 2D
+and 300,763 in 3D, but in 1D it moved between the two runs (100,000 and 300,000 DOFs), the same
+run-to-run jitter `innerₕ` shows above. Below these sizes `CpuSerial` is faster for both
+workloads.
+
 See also: [`CpuSerial`](@ref), [`CpuPolyester`](@ref), [`ExecutionPolicy`](@ref).
 """
 struct CpuThreaded <: CpuPolicy end
@@ -204,6 +214,16 @@ elements for `innerₕ`/`_dot`. Every one of these crossovers falls one to two o
 magnitude below [`CpuThreaded`](@ref)'s own crossover for the same workload (gpena/Bramble.jl#301
 measured [`CpuThreaded`](@ref)'s `_dot` crossover at 100,000-300,000 elements), and this policy
 beats [`CpuThreaded`](@ref) at every crossover measured.
+
+`D₋ₓ!` and the warmed broadcast axpy `vₕ .= a .* uₕ .+ wₕ` also thread under this policy
+(gpena/Bramble.jl#356, #357, commits af19afea, 96e93c02, f7a8798f, 90f262e2), measured the
+same way (`benchmark/policy_crossover.jl`, commit 90f262e2, same Apple M2 host, `--threads=4`,
+AC power) across two runs: `D₋ₓ!`'s crossover against `CpuSerial` held at 3,000 DOFs in 1D and
+10,648 in 3D in both runs, and moved between 1,024 and 10,000 DOFs in 2D from one run to the
+next. Broadcast axpy's crossover held at 10,000 DOFs in 1D, 300,304 in 2D, and 97,336 in 3D in
+both runs. Against [`CpuThreaded`](@ref) directly, this policy beats it from 100 DOFs in 1D/2D
+and 125 in 3D for both workloads in both runs, again one to two orders of magnitude below
+[`CpuThreaded`](@ref)'s own crossover against `CpuSerial` for the same workload.
 
 See also: [`CpuThreaded`](@ref), [`CpuSerial`](@ref), [`ExecutionPolicy`](@ref).
 """
