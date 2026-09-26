@@ -421,7 +421,7 @@ reaches only its own point cannot collide at all, and then `bidx` is every band 
         offset::Int,
         α = true
 ) where {TERM}
-    Threads.@threads for k in bidx
+    Threads.@threads :static for k in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
             _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
         end
@@ -469,7 +469,7 @@ end
 @noinline function _sweep_colour!(
         ::CpuThreaded, b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int, α = true
 ) where {TERM}
-    Threads.@threads for I in idxs
+    Threads.@threads :static for I in idxs
         _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
     end
     return nothing

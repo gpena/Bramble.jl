@@ -529,7 +529,7 @@ end
         col_offset::Int,
         α
 ) where {TERM}
-    Threads.@threads for I in idxs
+    Threads.@threads :static for I in idxs
         _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
     end
     return nothing
@@ -592,7 +592,7 @@ once.
         col_offset::Int,
         α
 ) where {TERM}
-    Threads.@threads for b in bidx
+    Threads.@threads :static for b in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
             _scatter_point!(
                 A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
