@@ -42,6 +42,7 @@
 # AMG, not after.
 
 using Bramble
+using LinearAlgebra: isposdef, issymmetric
 using LinearSolve
 using AlgebraicMultigrid
 

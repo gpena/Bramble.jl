@@ -40,6 +40,7 @@
 # problem writes it, so the steady state of the system below solves ``A u_h = F``:
 
 using Bramble
+using Bramble: allocate_system_matrix, mass_matrix
 
 uexact(x, t) = exp(-t) * sinpi(x[1])
 source(x, t) = (pi^2 - 1) * exp(-t) * sinpi(x[1])

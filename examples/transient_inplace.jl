@@ -27,6 +27,7 @@
 # ```
 
 using Bramble
+using Bramble: allocate_system_matrix, sparse_factorize
 using SuiteSparse
 using SparseArrays: nonzeros
 using LinearAlgebra: mul!, ldiv!

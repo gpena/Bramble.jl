@@ -95,6 +95,7 @@
 # `2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₕ(u), divₕ(v))`.
 
 using Bramble
+using Bramble: half_spacing
 using ForwardDiff
 using Random
 
@@ -108,8 +109,8 @@ elasticity_form(Vₕ, μ, λ) = form(
 # through different arithmetic -- this one from `SpaceWeights` directly, the hand-expanded one    #src
 # from a separately computed ratio -- so the last bit or two of a handful of entries can differ,   #src
 # and `atol = 1e-12` is the bound `vector_calculus.jl` found necessary for exactly that reason.    #src
-const _Dm = (D₋ₓ, D₋ᵧ, D₋₂)                                                                       #src
-const _Mm = (Mₓ, Mᵧ, M₂)                                                                          #src
+const _Dm = Tuple(∇ₕ)                                                                             #src
+const _Mm = Tuple(Mₕ)                                                                             #src
 function _hand_stagger_ratio(Wₕ, S, scale)                                                        #src
     Ωₕ = mesh(Wₕ)                                                                                 #src
     npts = npoints(Ωₕ, Tuple)                                                                     #src
@@ -256,7 +257,7 @@ for n in ((17, 5, 5), (25, 7, 5), (33, 9, 7))
 end
 round.(tips ./ (-δ_eb), digits = 3)
 
-# Converging on beam theory from below. Write the shear terms with `Dₕ` and `innerₕ` instead of
+# Converging on beam theory from below. Write the shear terms with `∇̽ₕ` and `innerₕ` instead of
 # `εₕ`/`divₕ`'s staggered placements — collocating everything at the nodes rather than the
 # face/edge/cell centres the discrete strain and divergence actually live on — and the same beam
 # on these same three grids gives `+0.00011`, `-0.00005` and `+0.00009`: three to four orders of
@@ -272,11 +273,11 @@ round.(tips ./ (-δ_eb), digits = 3)
 
 # ## The deformed solid
 #
-# The stress to colour it by is recovered at the nodes with [`Dₕₓ`](@ref) and its siblings
-# rather than the staggered differences the form uses: `Dₕ` collapses to a one-sided difference
+# The stress to colour it by is recovered at the nodes with [`D̽ₓ`](@ref) and its siblings
+# rather than the staggered differences the form uses: `∇̽ₕ` collapses to a one-sided difference
 # at the boundary instead of truncating to zero, and the boundary is the part being drawn.
 
-const Dh = (Dₕₓ, Dₕᵧ, Dₕ₂)
+const Dh = Tuple(∇̽ₕ)
 
 function von_mises(uₕ, μ, λ)
     u = components(uₕ)
