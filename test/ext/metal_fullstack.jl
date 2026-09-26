@@ -291,6 +291,71 @@ else
             @test all(c -> all(iszero, Array(parent(c))), components(Rₕ(V2, fv; markers = (:interior,))))
         end
 
+        # A host space whose backend carries a `GpuOffload` policy: `Rₕ!`/`avgₕ!` fill through
+        # the wrapped Metal backend and land in host storage, every other operator runs as it
+        # does under the inner policy alone (issue #324).
+        @testset "Rₕ!/avgₕ! on a GpuOffload space fill through the device (issue #324)" begin
+            Metal.allowscalar(false)
+            hb = backend(Float32; policy = Bramble.CpuThreaded())
+            ob = backend(Float32; policy = Bramble.GpuOffload(metal_backend(), Bramble.CpuThreaded()))
+            fs(x) = sin(3.0f0 * sum(x))
+            fv(x) = (sin(x[1]), cos(x[end]))
+            function offload_pair(n, D)
+                Ω = D == 1 ? domain(interval(0.0f0, 1.0f0)) :
+                    domain(reduce(×, ntuple(_ -> interval(0.0f0, 1.0f0), D)))
+                npts = D == 1 ? n : ntuple(_ -> n, D)
+                unif = D == 1 ? true : ntuple(_ -> true, D)
+                Ωh, Ωo = mesh(Ω, npts, unif; backend = hb), mesh(Ω, npts, unif; backend = ob)
+                for d in 1:D
+                    pts = _stretch_points(n)
+                    change_points!(Ωh(d), copy(pts))
+                    change_points!(Ωo(d), copy(pts))
+                end
+                return Ωh, Ωo
+            end
+            for D in 1:3, op in (Rₕ, avgₕ)
+
+                n = D == 1 ? 33 : (D == 2 ? 17 : 9)
+                Ωh, Ωo = offload_pair(n, D)
+                Wh, Wo = gridspace(Ωh), gridspace(Ωo)
+                for mk in ((), (:boundary,), (:interior,), (:boundary, :interior))
+                    uo = op(Wo, fs; markers = mk)
+                    @test parent(uo) isa Vector{Float32}
+                    @test _close(parent(uo), parent(op(Wh, fs; markers = mk)))
+                end
+                # In place, over a destination holding stale values: every entry is rewritten.
+                u = element(Wo, 7.0f0)
+                op === Rₕ ? Rₕ!(u, fs; markers = (:boundary,)) : avgₕ!(u, fs; markers = (:boundary,))
+                @test _close(parent(u), parent(op(Wh, fs; markers = (:boundary,))))
+
+                Vh, Vo = gridspace(Ωh, Val(2)), gridspace(Ωo, Val(2))
+                for mk in ((), (:boundary,))
+                    co = components(op(Vo, fv; markers = mk))
+                    ch = components(op(Vh, fv; markers = mk))
+                    @test all(k -> parent(parent(co[k])) isa Vector{Float32}, 1:2)
+                    @test all(k -> _close(parent(co[k]), parent(ch[k])), 1:2)
+                end
+            end
+
+            Ωh, Ωo = offload_pair(33, 1)
+            Wh, Wo = gridspace(Ωh), gridspace(Ωo)
+            # The positive control: a closure over a host `Vector` is not GPU-compilable, so
+            # this throws only because the fill really reached the device.
+            c = [2.0f0]
+            @test_throws Exception Rₕ(Wo, x -> c[1] * x)
+            @test_throws Exception avgₕ(Wo, x -> c[1] * x)
+            # A marker holding no point: nothing is launched and the result is all zero.
+            W2 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 2, true; backend = ob))
+            @test all(iszero, parent(Rₕ(W2, fs; markers = (:interior,))))
+            # Every other operator sees only the inner policy.
+            a = (U, V) -> innerₕ(D₋ₓ(U), D₋ₓ(V))
+            @test assemble(form(Wo, Wo, a)) == assemble(form(Wh, Wh, a))
+            uh = Rₕ(Wh, fs)
+            uo = element(Wo)
+            copyto!(parent(uo), parent(uh))
+            @test parent(D₋ₓ(uo)) == parent(D₋ₓ(uh))
+        end
+
         @testset "difference / jump / average operators match CPU" begin
             uc1 = Rₕ(Wc1, f1)
             ug1 = Rₕ(Wg1, f1)

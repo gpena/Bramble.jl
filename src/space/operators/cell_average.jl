@@ -309,8 +309,8 @@ those linear indices, leaving the rest untouched.
 )
     Ωₕ = mesh(sp)
     nodes, wts = _gauss_rule(rule.nq, eltype(Ωₕ))
-    dev = ka_device(backend(sp))
-    _launch_cell_average!(raw, half_points(Ωₕ), nodes, wts, rule.f, dev, sel)
+    dev = ka_device(_device_backend(backend(sp)))
+    _launch_cell_average!(raw, _on_device(raw, half_points(Ωₕ)), nodes, wts, rule.f, dev, sel)
     return true
 end
 
@@ -319,8 +319,8 @@ end
 ) where {D}
     Ωₕ = mesh(sp)
     nodes, wts = _gauss_rule(rule.nq, eltype(Ωₕ))
-    dev = ka_device(backend(sp))
-    _launch_cell_average_nd!(raw, half_points(Ωₕ), indices(Ωₕ), nodes, wts, rule.f, dev, sel)
+    dev = ka_device(_device_backend(backend(sp)))
+    _launch_cell_average_nd!(raw, _on_device(raw, half_points(Ωₕ)), indices(Ωₕ), nodes, wts, rule.f, dev, sel)
     return true
 end
 
@@ -338,11 +338,11 @@ index list as in [`_device_project!`](@ref).
 ) where {NC}
     Ωₕ = mesh(sp)
     nodes, wts = _gauss_rule(rule.nq, eltype(Ωₕ))
-    dev = ka_device(backend(sp))
+    dev = ka_device(_device_backend(backend(sp)))
     if Ωₕ isa AbstractMeshType{1}
-        _launch_cell_average_scatter!(raws, half_points(Ωₕ), nodes, wts, rule.f, dev, sel)
+        _launch_cell_average_scatter!(raws, _on_device(raws[1], half_points(Ωₕ)), nodes, wts, rule.f, dev, sel)
     else
-        _launch_cell_average_scatter_nd!(raws, half_points(Ωₕ), indices(Ωₕ), nodes, wts, rule.f, dev, sel)
+        _launch_cell_average_scatter_nd!(raws, _on_device(raws[1], half_points(Ωₕ)), indices(Ωₕ), nodes, wts, rule.f, dev, sel)
     end
     return true
 end

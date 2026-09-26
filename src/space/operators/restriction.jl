@@ -196,8 +196,8 @@ for what that requires of it. A device index vector `sel` (a masked call, see
         ::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{1}, sel = nothing
 )
     Ωₕ = mesh(sp)
-    dev = ka_device(backend(sp))
-    _launch_restriction!(raw, points(Ωₕ), rule.f, dev, sel)
+    dev = ka_device(_device_backend(backend(sp)))
+    _launch_restriction!(raw, _on_device(raw, points(Ωₕ)), rule.f, dev, sel)
     return true
 end
 
@@ -205,8 +205,8 @@ end
         ::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{D}, sel = nothing
 ) where {D}
     Ωₕ = mesh(sp)
-    dev = ka_device(backend(sp))
-    _launch_restriction_nd!(raw, points(Ωₕ), indices(Ωₕ), rule.f, dev, sel)
+    dev = ka_device(_device_backend(backend(sp)))
+    _launch_restriction_nd!(raw, _on_device(raw, points(Ωₕ)), indices(Ωₕ), rule.f, dev, sel)
     return true
 end
 
@@ -226,11 +226,11 @@ index list as in [`_device_project!`](@ref).
         ::DeviceLocality, rule::PointValue, raws::Tuple, sp, ::Val{NC}, sel = nothing
 ) where {NC}
     Ωₕ = mesh(sp)
-    dev = ka_device(backend(sp))
+    dev = ka_device(_device_backend(backend(sp)))
     if Ωₕ isa AbstractMeshType{1}
-        _launch_restriction_scatter!(raws, points(Ωₕ), rule.f, dev, sel)
+        _launch_restriction_scatter!(raws, _on_device(raws[1], points(Ωₕ)), rule.f, dev, sel)
     else
-        _launch_restriction_scatter_nd!(raws, points(Ωₕ), indices(Ωₕ), rule.f, dev, sel)
+        _launch_restriction_scatter_nd!(raws, _on_device(raws[1], points(Ωₕ)), indices(Ωₕ), rule.f, dev, sel)
     end
     return true
 end

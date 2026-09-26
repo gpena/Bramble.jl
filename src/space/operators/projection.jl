@@ -197,6 +197,77 @@ function _device_masked_project!(loc::DeviceLocality, rule, raws, sp, markers, n
     return _device_scatter_project!(loc, rule, raws, sp, nc, sel)
 end
 
+# --- the offloaded path (gpena/Bramble.jl#324) ------------------------------------- #
+#
+# A space whose backend carries a `GpuOffload` policy keeps host storage and a host mesh, so
+# `raw` answers `HostLocality` and the dispatch above never reaches a device kernel. Instead,
+# `project!` fills a device buffer allocated per call through the wrapped device backend,
+# with the same `_device_project!`/`_device_masked_project!` machinery a device-resident
+# space uses, then copies the result back into the host destination and drops the buffer.
+# The rules' device methods upload the mesh axes they need with `_on_device` (a no-op for a
+# device-resident mesh) and launch on `_device_backend`'s device. Nothing is cached on the
+# space, the mesh or the policy: a persistent device copy would go stale under a mesh or
+# marker change, the hazard #313 removed.
+
+"""
+    _offload_backend(backend::Backend) -> Union{Backend, Nothing}
+
+The device backend a [`GpuOffload`](@ref) policy wraps, or `nothing` for any other policy,
+so [`project!`](@ref) knows whether to fill through the device.
+"""
+@inline _offload_backend(::Backend{VT, MT, EP}) where {VT, MT, EP} = _offload_backend(EP)
+@inline _offload_backend(::Type{<:ExecutionPolicy}) = nothing
+@inline _offload_backend(::Type{GpuOffload{I, DB}}) where {I, DB} = DB()
+
+"""
+    _device_backend(backend::Backend) -> Backend
+
+The backend whose device a projection kernel launches on: the wrapped device backend for a
+[`GpuOffload`](@ref) policy, otherwise `backend` itself.
+"""
+@inline _device_backend(be::Backend) = something(_offload_backend(be), be)
+
+"""
+    _on_device(like, x) -> AbstractVector or Tuple
+
+`x` (a mesh coordinate vector, or a tuple of them) as device arrays allocated like `like`:
+returned as is when already device-resident, otherwise copied into a new device array.
+"""
+@inline _on_device(like, x::Tuple) = map(a -> _on_device(like, a), x)
+@inline _on_device(like, x::AbstractVector) = _on_device(locality(typeof(x)), like, x)
+@inline _on_device(::DeviceLocality, like, x) = x
+@inline _on_device(::HostLocality, like, x) = copyto!(similar(like, eltype(x), length(x)), x)
+
+"""
+    _offload_project!(db, rule, raw, sp, markers) -> Bool
+    _offload_project!(db, rule, raws::Tuple, sp, markers, ::Val{NC}) -> Bool
+
+Fill the host destination(s) through device backend `db`: allocate a device buffer per
+destination, run the rule's device kernel on it (masked when `markers` is non-empty) and
+copy it back. `false`, with the destination untouched, when the rule has no device kernel.
+"""
+function _offload_project!(db::Backend, rule, raw, sp, markers::NTuple{N, Symbol}) where {N}
+    draw = vector(db, length(raw))
+    loc = locality(typeof(draw))
+    done = N == 0 ? _device_project!(loc, rule, draw, sp) : _device_masked_project!(loc, rule, draw, sp, markers)
+    done && _copy_back!(raw, draw)
+    return done
+end
+
+function _offload_project!(db::Backend, rule, raws::Tuple, sp, markers::NTuple{N, Symbol}, nc::Val) where {N}
+    draws = map(r -> vector(db, length(r)), raws)
+    loc = locality(typeof(draws[1]))
+    done = N == 0 ? _device_scatter_project!(loc, rule, draws, sp, nc) :
+           _device_masked_project!(loc, rule, draws, sp, markers, nc)
+    done && foreach(_copy_back!, raws, draws)
+    return done
+end
+
+# A composite's leaves are views into one shared host vector, which a device array cannot
+# `copyto!` into without scalar indexing, so those go through a host copy first.
+@inline _copy_back!(dst::Array, src) = copyto!(dst, src)
+@inline _copy_back!(dst, src) = copyto!(dst, Array(src))
+
 # --- masking, as a property of the kernel rather than of the sweep ----------------- #
 
 # The marker masks, as a tuple whose length is a type parameter so the `||` chain below
@@ -242,6 +313,10 @@ function project! end
     Ωₕ = mesh(sp)
     raw = parent(uₕ)
     policy = execution_policy(sp)
+    db = _offload_backend(backend(sp))
+    if db !== nothing && _offload_project!(db, rule, raw, sp, markers)
+        return uₕ
+    end
     loc = locality(typeof(raw))
     if N == 0 ? _device_project!(loc, rule, raw, sp) : _device_masked_project!(loc, rule, raw, sp, markers)
         return uₕ
@@ -266,6 +341,10 @@ end
         raws = map(parent, comps)
         NC = length(comps)
         policy = execution_policy(sp)
+        db = _offload_backend(backend(sp))
+        if db !== nothing && _offload_project!(db, rule, raws, sp, markers, Val(NC))
+            return uₕ
+        end
         loc = locality(typeof(raws[1]))
         if N == 0 ? _device_scatter_project!(loc, rule, raws, sp, Val(NC)) :
            _device_masked_project!(loc, rule, raws, sp, markers, Val(NC))
