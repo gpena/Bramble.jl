@@ -291,7 +291,7 @@ end
 # reaches it because `_assemble_bilinear!` (`bilinear.jl`) sends anything that is not
 # `CpuSerial` down the same forced-parallel path. The band-coloured sweep itself is already
 # matrix-type generic (`_sweep_bilinear_colour!`/`_sweep_band_colour!`, `bilinear_execution.jl`
-# -- both dispatch on `CpuThreaded`/`CpuBatch` and reach storage only through
+# -- both dispatch on `CpuThreaded`/`CpuPolyester` and reach storage only through
 # `_scatter_position`/`_scatter_add!` above), so a `GpuPolicy` backend can run the exact same
 # `Threads.@threads` sweep as any CPU one: coloring already keeps two concurrently-swept
 # points from writing the same row, which is the only safety property either side of this

@@ -93,7 +93,7 @@ using ExplicitImports
                 # Val(S))` returns for `length(S) >= 2` (src/space/scalar_gridspace.jl) --
                 # `_batch_dot`/`_batch_dot_masked` are specialised on it
                 # (ext/BramblePolyesterExt.jl:25) the same way the `CpuSerial`/`CpuThreaded`
-                # methods in `space/inner_product.jl` already are, so a `CpuBatch` inner
+                # methods in `space/inner_product.jl` already are, so a `CpuPolyester` inner
                 # product avoids the same per-point `CartesianIndex` conversion cost. Not
                 # exported or public.
                 :SeparableWeights,
@@ -130,7 +130,45 @@ using ExplicitImports
                 :get_sol!,
                 :set_cntl!,
                 :set_icntl!,
-                :suppress_display!
+                :suppress_display!,
+                # v3.12.0 (#339) narrowed the export/public surface; the names below are
+                # Bramble's own extension hooks and internals, private since that release,
+                # reached only from the extension that implements or specialises them.
+                :AbstractMeshType,
+                :ka_device,
+                :ka_synchronize,
+                :_launch_uniform_mesh1d_init!,
+                :_launch_half_points!,
+                :_launch_spacing!,
+                :_launch_half_spacing!,
+                :_launch_nonuniform_mesh1d_metrics!,
+                :_launch_refine_indices!,
+                :_gpu_for!,
+                :_gpu_scatter_for!,
+                :_launch_restriction!,
+                :_launch_restriction_scatter!,
+                :_launch_restriction_nd!,
+                :_launch_restriction_scatter_nd!,
+                :_launch_cell_average!,
+                :_launch_cell_average_scatter!,
+                :_launch_cell_average_nd!,
+                :_launch_cell_average_scatter_nd!,
+                :_launch_difference_onesided!,
+                :_launch_difference_centered!,
+                :_launch_average_engine!,
+                :_launch_spmv_csr!,
+                :_launch_spmm_csr!,
+                :_launch_kron_fused!,
+                :_launch_fused_divergence!,
+                :_launch_fused_curl2d!,
+                :_launch_fused_curl3d!,
+                :_launch_fused_laplacian!,
+                :_launch_fused_strain_offdiag!,
+                :suitesparse_solve,
+                :suitesparse_refactor!,
+                :sparspak_factorize,
+                :sparspak_solve,
+                :sparspak_refactor!
             )
         ) === nothing
     end
@@ -223,6 +261,39 @@ using ExplicitImports
                 :_dirichlet_bc_indices!,
                 :_each_marked,
                 :_kron_coeff,
+                # `_allocate_from_pattern` (BrambleMetalExt, BrambleSparseMatricesCSRExt): the
+                # system-matrix allocation hook a storage backend specialises on its own sparse
+                # type, same shape as `_csr_backend` above.
+                :_allocate_from_pattern,
+                # `ka_device`, `_launch_spmv_csr!`, `_launch_spmm_csr!` (BrambleMetalExt): the
+                # device-kernel substrate seam and the device SpMV/SpMM launch hooks it
+                # specialises, each also reached as `Bramble.name(...)` alongside the
+                # `import Bramble: ...` above -- both forms need declaring.
+                :ka_device,
+                :_launch_spmv_csr!,
+                :_launch_spmm_csr!,
+                # `_scatter_position`, `_scatter_add!`, `_zero_stored!`
+                # (BrambleSparseMatricesCSRExt): the row-major CSR counterparts of the CSC
+                # scatter/zero primitives `bilinear_traversal.jl`/`bilinear.jl` already reach.
+                :_scatter_position,
+                :_scatter_add!,
+                :_zero_stored!,
+                # `_batch_for!`, `_batch_axis_for!`, `_batch_scatter_for!`, `_batch_dot`,
+                # `_batch_dot_masked`, `_batch_bilinear_colour_sweep!`,
+                # `_batch_bilinear_band_sweep!`, `_batch_linear_colour_sweep!`,
+                # `_batch_linear_band_sweep!` (BramblePolyesterExt, gpena/Bramble.jl#190): the
+                # `Polyester.@batch` counterparts of the `CpuThreaded` sweeps and reductions in
+                # `src/utils/linear_algebra.jl`, `src/assembly/bilinear_execution.jl` and
+                # `src/assembly/linear.jl`, extended here rather than called.
+                :_batch_for!,
+                :_batch_axis_for!,
+                :_batch_scatter_for!,
+                :_batch_dot,
+                :_batch_dot_masked,
+                :_batch_bilinear_colour_sweep!,
+                :_batch_bilinear_band_sweep!,
+                :_batch_linear_colour_sweep!,
+                :_batch_linear_band_sweep!,
                 # `BrambleKernelAbstractionsExt` (gpena/Bramble.jl#94, #174): the stencil and
                 # component helpers its `@kernel`s call so the device answer is computed by
                 # the very same quadrature/stencil arithmetic the CPU sweep uses, rather than
@@ -335,10 +406,10 @@ using ExplicitImports
                 # the extension's method signatures. Plain internals, not a launch hook.
                 :_KronDeviceDiagonal,
                 :_KronDeviceSparse,
-                # `SparseArrays.getcolptr` (src/form/kronecker.jl, commit ece71258): copies a
+                # `SparseArrays.getcolptr` (src/assembly/kronecker.jl, commit ece71258): copies a
                 # factor's column pointers to the device; no public accessor exists.
                 :getcolptr,
-                # `Base.inferencebarrier` (src/form/bilinear_execution.jl): the fallback for a
+                # `Base.inferencebarrier` (src/assembly/bilinear_execution.jl): the fallback for a
                 # transposed pair whose two block tuples differ in length, a case the types
                 # already rule out, so the barrier keeps it from being inferred at all.
                 :inferencebarrier,

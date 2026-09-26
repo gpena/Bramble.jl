@@ -37,7 +37,12 @@ using Bramble:
                LinearProduct,
                shift_op,
                jumpₓ,
-               resolve_form_ast
+               resolve_form_ast,
+               D₋ₓ,
+               Mₓ,
+               indices,
+               inner₊ₓ,
+               interpolation_matrix
 using ..TestUtils: alloc_test, @test_allocs
 
 # The interpolation operator: `πₕ(u)` over a trial function, as opposed to

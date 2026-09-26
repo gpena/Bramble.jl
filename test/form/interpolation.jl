@@ -13,7 +13,14 @@ using Bramble:
                resolve_form_ast,
                _is_source_only,
                Innerh,
-               OperatorAdd
+               OperatorAdd,
+               D₋ᵧ,
+               D₋ₓ,
+               Mₓ,
+               assemble_parallel!,
+               inner₊ᵧ,
+               inner₊ₓ,
+               weights
 
 # πₕ(uₕ) wraps a grid function's interpolant as a genuine LazyOp source (SourceFunction), so
 # it composes with the same operators (D₋ₓ, Mₓ, ...) any other source does. The one thing

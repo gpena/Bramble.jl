@@ -17,7 +17,9 @@ generate_benchmarks_markdown()
 # markdown Documenter renders is generated from them here, so the page a reader sees and the
 # file the suite runs are the same file. Lines marked `#src` -- the assertions that make the
 # rendered numbers load-bearing -- are stripped on the way to markdown and kept when
-# test/examples/pages.jl runs them. The generated `.md` files are gitignored.
+# test/examples/pages.jl runs them. The generated `.md` files are gitignored. `postprocess`
+# gives every generated page the `CurrentModule = Bramble` the comment above `allpages` asks
+# of each page, so a script's `[`name`](@ref)` resolves public-but-unexported names too.
 const LITERATE_EXAMPLES = [
     "poisson_linear.jl",
     "poisson_nonlinear.jl",
@@ -51,6 +53,7 @@ let dir = joinpath(@__DIR__, "src", "examples")
             joinpath(dir, file), dir;
             documenter = true,
             credit = false,
+            postprocess = s -> "```@meta\nCurrentModule = Bramble\n```\n\n" * s,
             repo_root_url = "https://github.com/gpena/Bramble.jl/blob/main"
         )
     end
@@ -112,6 +115,13 @@ internals = "Internals" => [
 ]
 documentation = "Documentation" => ["api.md", "api_sciml.md", internals]
 
+# Every new page needs `CurrentModule = Bramble` in its `@meta` block, or its page-level
+# `@ref`s resolve against `Main` and fail even when the docstring is included
+# (docs/src/internals/gpu.md hit this, gpena/Bramble.jl#314). Against `Main`, only exported
+# names resolve: a name that is `public` but not exported fails there.
+#     ```@meta
+#     CurrentModule = Bramble
+#     ```
 allpages = [home, getting_started, foundations, forms, scientific,
     visualization, examples, benchmarks, documentation]
 

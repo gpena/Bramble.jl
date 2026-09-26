@@ -2,6 +2,7 @@ module TestMUMPSExt
 
 using Test
 using Bramble
+using Bramble: MUMPSFactorization, mumps_factorize, mumps_refactor!, mumps_solve, refactor!
 using LinearAlgebra
 using SparseArrays
 using MUMPS

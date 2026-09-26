@@ -1,5 +1,6 @@
 ```@meta
 CollapsedDocStrings = false
+CurrentModule = Bramble
 ```
 
 # Geometry
@@ -9,6 +10,7 @@ CollapsedDocStrings = false
 ```@autodocs
 Modules = [Bramble]
 Public = false
+Filter = x -> x !== Base.extrema
 Pages = ["geometry/set.jl"]
 ```
 

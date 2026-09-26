@@ -41,6 +41,7 @@ calling this function.
 # Examples
 
 ```julia
+using Bramble: mumps_factorize
 using MUMPS
 
 A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0, symmetrize = true)
@@ -83,6 +84,7 @@ calling this function.
 # Examples
 
 ```julia
+using Bramble: mumps_solve
 using MUMPS
 
 A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)

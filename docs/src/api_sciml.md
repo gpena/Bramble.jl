@@ -444,6 +444,7 @@ reach `suitesparse_factorize`/`sparse_factorize` **today, with no new extension 
 
 ```julia
 using Metis
+import Bramble: suitesparse_factorize
 perm, _ = Metis.permutation(A)
 fact = suitesparse_factorize(A; sym = :spd, perm = Int.(perm))
 ```

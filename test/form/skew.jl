@@ -4,7 +4,7 @@ using Test
 using Bramble
 using LinearAlgebra: Diagonal, dot, norm
 using Random
-using Bramble: weights, Innerh
+using Bramble: weights, Innerh, Dcₓ, skew_symmetric
 using ..TestUtils: @test_allocs
 
 # Skew-symmetric split forms (gpena/Bramble.jl#165).

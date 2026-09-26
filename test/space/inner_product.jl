@@ -2,6 +2,9 @@ module SpaceInnerProductTests
 
 using Test
 using Bramble
+using Bramble: norm₊
+using Bramble: D₋ᵧ, D₋ₓ, cell_measure, indices, inner₊ᵧ, inner₊₂, inner₊ₓ, norminf
+using Bramble: set_points!, weights
 using LinearAlgebra: norm
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS, @test_allocs
@@ -261,13 +264,13 @@ end
         @test_allocs inner₊(u, v, Val((3,)))
     end
 
-    @testset "CpuBatch reaches the Polyester hook, never the Cartesian loop (#190)" begin
+    @testset "CpuPolyester reaches the Polyester hook, never the Cartesian loop (#190)" begin
         # `inner₊(uₕ, vₕ, Val(S))` passes `execution_policy(space(uₕ))` through to the
         # policy-dispatched `_dot`/`_dot_masked` (S7.1, `src/utils/linear_algebra.jl`):
         # `CpuSerial`/`CpuThreaded` fall through to the plain methods (positive control
-        # below); `CpuBatch` must reach S7.1's `_batch_dot`/`_batch_dot_masked` hook and
+        # below); `CpuPolyester` must reach S7.1's `_batch_dot`/`_batch_dot_masked` hook and
         # its "Polyester not loaded" error, for a dense weight and for a `SeparableWeights`
-        # alike, without ever running this file's Cartesian loop. A `CpuBatch` grid space
+        # alike, without ever running this file's Cartesian loop. A `CpuPolyester` grid space
         # cannot be built at all without Polyester (`space_weights` itself needs the
         # policy-dispatched sweep), so this calls `_dot`/`_dot_masked` directly rather than
         # constructing one.
@@ -284,7 +287,7 @@ end
             @test Bramble._dot(Bramble.CpuSerial(), u, w, v) == expected
             @test Bramble._dot(Bramble.CpuThreaded(), u, w, v) == expected
             err = try
-                Bramble._dot(Bramble.CpuBatch(), u, w, v)
+                Bramble._dot(Bramble.CpuPolyester(), u, w, v)
                 nothing
             catch e
                 e
@@ -296,7 +299,7 @@ end
             @test Bramble._dot_masked(Bramble.CpuSerial(), u, w, v, mask) == expected_m
             @test Bramble._dot_masked(Bramble.CpuThreaded(), u, w, v, mask) == expected_m
             err_m = try
-                Bramble._dot_masked(Bramble.CpuBatch(), u, w, v, mask)
+                Bramble._dot_masked(Bramble.CpuPolyester(), u, w, v, mask)
                 nothing
             catch e
                 e
@@ -304,6 +307,68 @@ end
             @test err_m isa ArgumentError
             @test occursin("Polyester", err_m.msg)
         end
+    end
+end
+
+@testset "inner₊ direction selector and destructuring (#341)" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    u = Rₕ(Wₕ, x -> x[1]^2 + 0.5x[2])
+    v = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
+
+    @testset "Numeric selector agrees with the coordinate aliases" begin
+        @test inner₊(u, v, :x) == inner₊ₓ(u, v)
+        @test inner₊(u, v, 1) == inner₊ₓ(u, v)
+        @test inner₊(u, v, :y) == inner₊ᵧ(u, v)
+        @test inner₊(u, v, 2) == inner₊ᵧ(u, v)
+
+        # `markers` still threads through the selector spelling.
+        S = interval(0.0, 1.0) × interval(0.0, 2.0)
+        Ωm = mesh(domain(S, :bottom => :bottom), (6, 6), (true, true))
+        Wm = gridspace(Ωm)
+        um = Rₕ(Wm, x -> 1.0)
+        vm = Rₕ(Wm, x -> 1.0)
+        @test inner₊(um, vm, :x; markers = (:bottom,)) ≈
+              inner₊ₓ(um, vm; markers = (:bottom,))
+    end
+
+    @testset "Numeric selector errors" begin
+        @test_throws BoundsError inner₊(u, v, 0)
+        @test_throws BoundsError inner₊(u, v, 4)
+        @test_throws ArgumentError inner₊(u, v, :w)
+    end
+
+    @testset "Symbolic selector agrees with the coordinate aliases, in a form" begin
+        a1 = assemble(form(Wₕ, Wₕ, (uu, vv) -> inner₊(D₋ₓ(uu), D₋ₓ(vv), :x)))
+        a2 = assemble(form(Wₕ, Wₕ, (uu, vv) -> inner₊ₓ(D₋ₓ(uu), D₋ₓ(vv))))
+        @test a1 == a2
+
+        b1 = assemble(form(Wₕ, Wₕ, (uu, vv) -> inner₊(D₋ᵧ(uu), D₋ᵧ(vv), 2)))
+        b2 = assemble(form(Wₕ, Wₕ, (uu, vv) -> inner₊ᵧ(D₋ᵧ(uu), D₋ᵧ(vv))))
+        @test b1 == b2
+    end
+
+    @testset "Symbolic selector errors" begin
+        @test_throws BoundsError form(Wₕ, Wₕ, (uu, vv) -> inner₊(D₋ₓ(uu), D₋ₓ(vv), 0))
+        @test_throws ArgumentError form(Wₕ, Wₕ, (uu, vv) -> inner₊(D₋ₓ(uu), D₋ₓ(vv), :w))
+    end
+
+    @testset "Destructuring and indexing, following the vectorial aliases (#340)" begin
+        ix, iy, iz = inner₊
+        @test (ix, iy, iz) === (inner₊ₓ, inner₊ᵧ, inner₊₂)
+        @test inner₊[1] === inner₊ₓ && inner₊[2] === inner₊ᵧ && inner₊[3] === inner₊₂
+        @test inner₊[:x] === inner₊ₓ && inner₊[:y] === inner₊ᵧ && inner₊[:z] === inner₊₂
+        @test length(inner₊) == 3
+        @test firstindex(inner₊) == 1 && lastindex(inner₊) == 3
+        @test collect(inner₊) == [inner₊ₓ, inner₊ᵧ, inner₊₂]
+
+        @test_throws BoundsError inner₊[4]
+        @test_throws ArgumentError inner₊[:w]
+
+        second(V) = V[2]
+        @test only(Base.return_types(second, (typeof(inner₊),))) === typeof(inner₊ᵧ)
+        second(inner₊)
+        @test (@allocated second(inner₊)) == 0
     end
 end
 
@@ -587,31 +652,36 @@ end
         # the answer is exactly 1.0 and does not depend on the number of points.
         Ω1 = mesh(domain(interval(0.0, 1.0)), 11, true)
         W1 = gridspace(Ω1)
-        @test norminf_h(Rₕ(W1, x -> x[1])) ≈ 1.0
-        @test norm∞ₕ(Rₕ(W1, x -> x[1])) ≈ 1.0
+        @test norminf(Rₕ(W1, x -> x[1])) ≈ 1.0
+        @test norm(Rₕ(W1, x -> x[1]), "∞") == norminf(Rₕ(W1, x -> x[1]))
+        u1 = Rₕ(W1, x -> sin(3x[1]))
+        @test norm(u1, "h") == normₕ(u1)
+        @test norm(u1, "1h") == norm₁ₕ(u1)
+        @test norm(u1) == norm(parent(u1))   # one argument stays LinearAlgebra's Euclidean norm
+        @test_throws ArgumentError norm(u1, "L2")
 
         # the absolute value is taken before the maximum: a field that is everywhere
         # negative has a positive norm
-        @test norminf_h(Rₕ(W1, x -> -2.0 - x[1])) ≈ 3.0
+        @test norminf(Rₕ(W1, x -> -2.0 - x[1])) ≈ 3.0
 
         # the zero element is the only one with zero norm
-        @test norminf_h(Rₕ(W1, x -> 0.0)) == 0.0
+        @test norminf(Rₕ(W1, x -> 0.0)) == 0.0
 
         Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 9), (true, true))
         W2 = gridspace(Ω2)
-        @test norminf_h(Rₕ(W2, x -> x[1] + x[2])) ≈ 3.0        # attained at (1, 2)
-        @test norminf_h(Rₕ(W2, x -> -x[2])) ≈ 2.0
+        @test norminf(Rₕ(W2, x -> x[1] + x[2])) ≈ 3.0        # attained at (1, 2)
+        @test norminf(Rₕ(W2, x -> -x[2])) ≈ 2.0
 
         Ω3 = mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 3.0)),
             (5, 5, 6), (true, true, true))
         W3 = gridspace(Ω3)
-        @test norminf_h(Rₕ(W3, x -> x[3])) ≈ 3.0
+        @test norminf(Rₕ(W3, x -> x[3])) ≈ 3.0
 
         # a single spike dominates everything else, wherever it sits
         uₕ = Rₕ(W3, x -> 0.1)
         parent(uₕ)[7] = -42.0
-        @test norminf_h(uₕ) ≈ 42.0
+        @test norminf(uₕ) ≈ 42.0
     end
 
     @testset "Non-uniform meshes do not change it" begin
@@ -619,8 +689,8 @@ end
         # of a restricted function fixed once the extremum sits on a grid point
         Ωa = mesh(domain(interval(0.0, 1.0)), 9, true)
         Ωb = mesh(domain(interval(0.0, 1.0)), 33, false)
-        @test norminf_h(Rₕ(gridspace(Ωa), x -> x[1])) ≈
-              norminf_h(Rₕ(gridspace(Ωb), x -> x[1]))
+        @test norminf(Rₕ(gridspace(Ωa), x -> x[1])) ≈
+              norminf(Rₕ(gridspace(Ωb), x -> x[1]))
     end
 
     @testset "Composite spaces take the maximum across components" begin
@@ -629,13 +699,13 @@ end
         Vc = gridspace(Ωc, Val(3))
         uv = Rₕ(Vc, (x -> 2.0 * x[1], x -> -5.0 * x[2], x -> 0.25))
 
-        @test norminf_h(uv) ≈ 5.0
-        @test norminf_h(uv) ≈ maximum(norminf_h, Bramble.components(uv))
+        @test norminf(uv) ≈ 5.0
+        @test norminf(uv) ≈ maximum(norminf, Bramble.components(uv))
         # per component, so the 5.0 above is demonstrably the second one's
         comps = Bramble.components(uv)
-        @test norminf_h(comps[1]) ≈ 2.0
-        @test norminf_h(comps[2]) ≈ 5.0
-        @test norminf_h(comps[3]) ≈ 0.25
+        @test norminf(comps[1]) ≈ 2.0
+        @test norminf(comps[2]) ≈ 5.0
+        @test norminf(comps[3]) ≈ 0.25
     end
 
     @testset "Tuples of grid functions" begin
@@ -644,8 +714,8 @@ end
         W2 = gridspace(Ω2)
         aₕ = Rₕ(W2, x -> 1.5)
         bₕ = Rₕ(W2, x -> -4.0)
-        @test norminf_h((aₕ, bₕ)) ≈ 4.0
-        @test norminf_h((aₕ,)) ≈ norminf_h(aₕ)
+        @test norminf((aₕ, bₕ)) ≈ 4.0
+        @test norminf((aₕ,)) ≈ norminf(aₕ)
     end
 
     @testset "The element type comes from the data" begin
@@ -653,8 +723,8 @@ end
         # test/space/element_type.jl, where the backend actually carries that element type.
         Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)
         uₕ = Rₕ(gridspace(Ω1), x -> x[1])
-        @test norminf_h(uₕ) isa Float64
-        @test @inferred(norminf_h(uₕ)) isa Float64
+        @test norminf(uₕ) isa Float64
+        @test @inferred(norminf(uₕ)) isa Float64
     end
 end
 

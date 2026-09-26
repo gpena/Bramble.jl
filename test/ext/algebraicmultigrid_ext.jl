@@ -5,7 +5,7 @@ using Bramble
 using AlgebraicMultigrid: AlgebraicMultigrid, aspreconditioner
 using SciMLBase: LinearProblem, solve
 using LinearSolve: KrylovJL_CG
-using LinearAlgebra: norm, issymmetric
+using LinearAlgebra: norm, issymmetric, ldiv!
 
 # BrambleAlgebraicMultigridExt: `amg_preconditioner` builds the AMG hierarchy
 # (solvers/amg_preconditioner.jl explains the underscored-fallback idiom), and

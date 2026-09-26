@@ -7,6 +7,7 @@ using ReverseDiff
 using DifferentiationInterface
 using SparseArrays
 using LinearAlgebra: issymmetric, norm
+using Bramble: D₋ₓ, inner₊ₓ
 using ..TestUtils: _tri, _matches_fd
 
 # Differentiating through the constrained linear system.

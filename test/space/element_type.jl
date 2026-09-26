@@ -2,6 +2,9 @@ module SpaceElementTypeTests
 
 using Test
 using Bramble
+using Bramble: Dcₕ, D̃ₕ, D̽ₕ, vector_type, matrix_type, norm₊
+using Bramble: Dcᵧ, Dcₓ, D̃ₓ, D̽ᵧ, D̽ₓ, D₋ᵧ, D₋ₓ, Mᵧ, Mₓ, inner₊ᵧ, inner₊ₓ, jumpₓ
+using Bramble: norminf, spacings
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: diff₋ₓ, diff₊ₓ, D₊ₓ, ∇₊ₕ, M₊ₓ, M₊ᵧ
 using SparseArrays
@@ -64,11 +67,11 @@ const F32_BACKEND = backend(;
         @test eltype(parent(avgₕ(Wₕ, x -> sin(x[1]) * x[2]))) === Float32
 
         for op in (
-            diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, Mₓ, M₊ₓ, D̽ₓ, Dcₓ, Dₕₓ, D₋ᵧ, M₊ᵧ, Dcᵧ, Dₕᵧ
+            diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, Mₓ, M₊ₓ, D̃ₓ, Dcₓ, D̽ₓ, D₋ᵧ, M₊ᵧ, Dcᵧ, D̽ᵧ
         )
             @test eltype(parent(op(uₕ))) === Float32
         end
-        for op in (∇ₕ, ∇₊ₕ, D̽ₕ, Dcₕ, Dₕ, Mₕ, jumpₕ)
+        for op in (∇ₕ, ∇₊ₕ, D̃ₕ, Dcₕ, D̽ₕ, Mₕ, jumpₕ)
             @test all(g -> eltype(parent(g)) === Float32, op(uₕ))
         end
     end
@@ -106,8 +109,8 @@ const F32_BACKEND = backend(;
         @test inner₊(uₕ, uₕ) isa Float32
         @test inner₊(gₕ, gₕ) isa Float32
         @test norm₊(gₕ) isa Float32
-        @test norminf_h(uₕ) isa Float32
-        @test norminf_h(gₕ) isa Float32
+        @test norminf(uₕ) isa Float32
+        @test norminf(gₕ) isa Float32
         @test inner₊ₓ(uₕ, uₕ) isa Float32
         @test inner₊ᵧ(uₕ, uₕ) isa Float32
     end

@@ -2,6 +2,7 @@ module FormDifferenceAstTests
 
 using Test
 using Bramble
+using Bramble: D₋
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, ∇₊ₕ
 using Bramble:
@@ -16,7 +17,9 @@ using Bramble:
                is_symbolic,
                resolve_ast,
                trial_component_or_nothing,
-               test_component_or_nothing
+               test_component_or_nothing,
+               D₋ᵧ,
+               D₋ₓ
 
 # The two one-sided difference nodes of the symbolic layer.
 #
@@ -62,7 +65,7 @@ using Bramble:
 
         # Two exceptions, and both are the same exception. `inner₊` is the documented one:
         # the modified inner product is defined against backward differences and has no
-        # forward counterpart. `_separable_axis` (`src/form/kronecker.jl`, gpena/Bramble.jl#162)
+        # forward counterpart. `_separable_axis` (`src/assembly/kronecker.jl`, gpena/Bramble.jl#162)
         # inherits it rather than introducing a second asymmetry -- it matches
         # `BilinearProduct{D, InnerPlus{Dim}, ...}`, so it can only ever see the operand
         # `inner₊` itself admits. A form written with forward differences is simply not
@@ -84,7 +87,7 @@ using Bramble:
         for T in (FD, typeof(D₊ᵧ(id)))
             m = which(inner₊, Tuple{IndexedTrialFunction{2}, T})
             @test !occursin("ForwardDifference", string(m.sig))
-            @test occursin("form/operators/inner.jl", replace(string(m.file), "\\" => "/"))
+            @test occursin("ast/operators/inner.jl", replace(string(m.file), "\\" => "/"))
         end
 
         u2, v2 = TrialFunction{2}(), TestFunction{2}()

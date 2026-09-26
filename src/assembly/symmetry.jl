@@ -110,7 +110,7 @@ _same_operator_shape(a, b) = false
 # ==============================================================================
 # The assembly-level consumer: skip half the multiplications `multiply_stencils_bilinear`
 # does when the two sides are known (by `_same_operator_shape`, in
-# `local_stencil(::BilinearProduct, …)`, form/operators/inner.jl) to produce the same stencil.
+# `local_stencil(::BilinearProduct, …)`, ast/operators/inner.jl) to produce the same stencil.
 # ==============================================================================
 
 # For `i <= j`, `stencil[i][2]*stencil[j][2]*vol` is computed once and bound to a local; for
@@ -320,6 +320,8 @@ produced.
 
 # Examples
 ```julia
+using Bramble: D₋ₓ, D₋ᵧ, inner₊ₓ
+using LinearAlgebra: issymmetric
 a = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
 issymmetric(a)  # true: the same D₋ₓ on both sides
 
@@ -366,7 +368,7 @@ end
 # AST type -- every operator node and its parameters -- ahead of the spaces, which are
 # what a caller actually wants to check. The detailed `show` below reports the spaces first,
 # then an `Expression` row rendered via `expression(form)`. That rendering logic itself
-# lives in `src/form/expression.jl`, with the per-node-type methods colocated with each
+# lives in `src/ast/expression.jl`, with the per-node-type methods colocated with each
 # node's struct.
 #
 # Lives in this file rather than `linear.jl`/`bilinear.jl` because `issymmetric` below is

@@ -10,7 +10,10 @@ module TestSparseMatricesCSRExt
 
 using Test
 using Bramble
-using Bramble: matrix, backend_eye, backend_zeros
+using Bramble: vector_type, matrix_type, execution_policy
+using Bramble: matrix, backend_eye, backend_zeros, allocate_system_matrix,
+               assemble_parallel!, refactor!, sparse_factorize, sparse_refactor!,
+               SuiteSparseFactorization
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 using Bramble: D₊ₓ, D₊ᵧ
 using SparseArrays

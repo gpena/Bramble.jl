@@ -15,7 +15,14 @@ using Bramble:
                trial_component_or_nothing,
                test_component_or_nothing,
                block_of,
-               restrict_to
+               restrict_to,
+               Dcₓ,
+               D̃ₓ,
+               D̽ₓ,
+               D₋ᵧ,
+               D₋ₓ,
+               Mₓ,
+               jumpₓ
 
 # Reading which block of a coupled form a term belongs to.
 #
@@ -32,7 +39,7 @@ using Bramble:
         # silent, and produced a wrong answer that summed to something plausible.
         u, v = IndexedTrialFunction{2}(3), IndexedTestFunction{2}(2)
 
-        for D in (D₋ₓ, D₊ₓ, D₋ᵧ, D₊ᵧ, Mₓ, M₊ₓ, jumpₓ, Dcₓ, D̽ₓ, Dₕₓ)
+        for D in (D₋ₓ, D₊ₓ, D₋ᵧ, D₊ᵧ, Mₓ, M₊ₓ, jumpₓ, Dcₓ, D̃ₓ, D̽ₓ)
             @test trial_component_or_nothing(D(u)) == 3
             @test test_component_or_nothing(D(v)) == 2
         end
@@ -58,7 +65,7 @@ using Bramble:
         sf = Bramble.SourceFunction{2, typeof(sin)}(sin)
 
         # every member of the union, wrapped once, for the two component queries
-        for wrap in (D₋ₓ, D₊ₓ, Dcₓ, D̽ₓ, Dₕₓ, jumpₓ, Mₓ, M₊ₓ)
+        for wrap in (D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, jumpₓ, Mₓ, M₊ₓ)
             @test test_component_or_nothing(wrap(iv)) == 2
             @test trial_component_or_nothing(wrap(iu)) == 1
             @test test_component_or_nothing(wrap(v)) === nothing

@@ -21,6 +21,7 @@ coordinate type `T`.
 
 ```@example geometry
 using Bramble
+import Bramble: point, center, projection, topo_dim
 
 I = interval(0.0, 1.0)
 I_int = interval(0, 2)   # integer bounds are converted to Float64

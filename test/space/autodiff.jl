@@ -2,6 +2,8 @@ module SpaceAutodiffTests
 
 using Test
 using Bramble
+using Bramble: Dcₕ, D̃ₕ, D̽ₕ, norm₊
+using Bramble: Dcₓ, D̃ₓ, D̽ₓ, D₋ₓ, Mₓ, inner₊ᵧ, inner₊ₓ, jumpₓ, spacings
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: diff₋ₓ, diff₊ₓ, D₊ₓ, ∇₊ₕ, M₊ₓ
 using ForwardDiff
@@ -131,9 +133,9 @@ end
             ("jumpₓ", jumpₓ),
             ("Mₓ", Mₓ),
             ("M₊ₓ", M₊ₓ),
-            ("D̽ₓ", D̽ₓ),
+            ("D̃ₓ", D̃ₓ),
             ("Dcₓ", Dcₓ),
-            ("Dₕₓ", Dₕₓ)
+            ("D̽ₓ", D̽ₓ)
         )
             @testset "$nm" begin
                 @test _matches_fd(
@@ -147,8 +149,8 @@ end
             ("∇ₕ", ∇ₕ),
             ("∇₊ₕ", ∇₊ₕ),
             ("Dcₕ", Dcₕ),
-            ("Dₕ", Dₕ),
             ("D̽ₕ", D̽ₕ),
+            ("D̃ₕ", D̃ₕ),
             ("Mₕ", Mₕ),
             ("jumpₕ", jumpₕ)
         )

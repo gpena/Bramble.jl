@@ -2,6 +2,7 @@ module ExtMetalExtTests
 
 using Test
 using Bramble
+using Bramble: execution_policy, KroneckerLinearOperator, normal_vector
 using Metal
 # BrambleMetalExt's trigger is now the pair `["Metal", "GPUArrays"]` (gpena/Bramble.jl#321),
 # not `Metal` alone -- both must be `using`'d here for the extension to load at all.
@@ -10,7 +11,9 @@ using SparseArrays
 using Kronecker: Kronecker  # loads BrambleKroneckerExt, which owns `fdm_solve`
 using LinearAlgebra: I, mul!
 using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros, metal_sparse_csr,
-               metal_sparse_csc, host_points, host_weights, half_spacings
+               metal_sparse_csc, host_points, host_weights, half_spacings, CpuSerial,
+               CpuThreaded, GpuKernel, half_points, index_in_marker, is_uniform,
+               locate_cell, set_points!, spacings, stepsize, weights
 using ..TestUtils: _run_gpu_tests
 
 # BrambleMetalExt's backend allocation primitives
@@ -65,8 +68,8 @@ using ..TestUtils: _run_gpu_tests
             @test metal_backend() isa Backend
             # a GPU is massively parallel and cannot execute serially, so the default says
             # so (gpena/Bramble.jl#191); it used to be Serial()
-            @test execution_policy(metal_backend()) === GpuAsync()
-            @test execution_policy(metal_backend(Float16)) === GpuAsync()
+            @test execution_policy(metal_backend()) === GpuKernel()
+            @test execution_policy(metal_backend(Float16)) === GpuKernel()
             @test metal_backend(Float32) isa Backend
             @test metal_backend(Float16) isa Backend
             # Float64 is unsupported on Apple Silicon GPUs. The Metal-loaded method only

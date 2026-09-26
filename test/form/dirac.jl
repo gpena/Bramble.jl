@@ -25,7 +25,8 @@ using Bramble:
                points,
                Innerh,
                weights,
-               VectorGridSpace
+               VectorGridSpace,
+               stepsize
 
 @testset "Dirac Point Sources (#226)" begin
     @testset "1D Single Point Source (Uniform and Non-Uniform)" begin

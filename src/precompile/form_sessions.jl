@@ -1,5 +1,5 @@
 # precompile/form_sessions.jl: the symbolic form layer, assembly, Jacobian sparsity and
-# per-type assembly caching (src/form/).
+# per-type assembly caching (src/ast/, src/assembly/).
 #
 # The symbolic layer is not reachable from the mesh/space/operator sessions: a `LazyOp`
 # tree is built from `IdentityOperator` and the trial/test leaves rather than from a grid
@@ -46,7 +46,7 @@ function _pc_form_ast(Wₕ, ::Val{D}) where {D}
     _pc_form_ast_interp(Wₕ, u)
 
     # the one-sided families, the averages, the shift and the restriction
-    for op in (D₋ₓ(id), D₊ₓ(id), Mₓ(id), M₊ₓ(id), jumpₓ(id), Dcₓ(id), D̽ₓ(id), Dₕₓ(id))
+    for op in (D₋ₓ(id), D₊ₓ(id), Mₓ(id), M₊ₓ(id), jumpₓ(id), Dcₓ(id), D̃ₓ(id), D̽ₓ(id))
         is_symbolic(op)
         resolve_ast(op)
         stencil_offsets(op)
@@ -62,10 +62,10 @@ function _pc_form_ast(Wₕ, ::Val{D}) where {D}
     stencil_offsets(summed)
     ∇ₕ(id)
     ∇₊ₕ(id)
-    Dₕ(id)
+    D̽ₕ(id)
     jumpₕ(id)
     Dcₕ(id)
-    D̽ₕ(id)
+    D̃ₕ(id)
     Mₕ(id)
     M₊ₕ(id)
 
@@ -103,8 +103,8 @@ function _pc_form_stencils(
         Mₓ(id),
         jumpₓ(id),
         Dcₓ(id),
+        D̃ₓ(id),
         D̽ₓ(id),
-        Dₕₓ(id),
         shift_op(id, 1, 1),
         3 * D₋ₓ(id),
         D₋ₓ(id) + D₊ₓ(id),
@@ -381,7 +381,7 @@ end
 # is its own entry point over a real `BilinearForm`/`LinearForm`/`VectorElement`, not reached
 # by the bare AST/stencil construction above or by any `assemble`/`assemble!` shape already
 # warmed -- `assemble_add!` takes its own cached-record path with an explicit scale
-# (`_assemble_bilinear_core_cached!`/`_assemble_linear_core!` in src/form/assemble_add.jl),
+# (`_assemble_bilinear_core_cached!`/`_assemble_linear_core!` in src/assembly/assemble_add.jl),
 # `bandwidths`/`blockbandwidths` read the resolved AST without assembling, and `reaction`/
 # `reaction_density` walk the unconstrained residual through `leaf_spaces_offsets`
 # (gpena/Bramble.jl#283).

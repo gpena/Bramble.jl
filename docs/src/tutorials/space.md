@@ -1,3 +1,7 @@
+```@meta
+CurrentModule = Bramble
+```
+
 # Grid spaces and discrete functions
 
 A grid space is the discrete function space over a mesh: it fixes how many degrees of
@@ -12,12 +16,22 @@ is a function in that space. Every block below runs when this page is built.
 
 ```@example space
 using Bramble
+import Bramble: component_range, component_ranges, weights
 
 Ω = domain(box((0.0, 0.0), (1.0, 1.0)))
 Ωₕ = mesh(Ω, (5, 5), (true, true))    # uniform spacing along both axes
 Wₕ = gridspace(Ωₕ)
 
 ndofs(Wₕ), ndofs(Wₕ, Tuple)
+```
+
+`points(Wₕ)` (equal to `points(Ωₕ)`) answers to the same destructuring as the vectorial
+operators: `x, y = points(Wₕ)` gives the two coordinate vectors directly, one array per
+axis:
+
+```@example space
+x, y = points(Wₕ);
+length(x), length(y)
 ```
 
 `ndofs` counts the grid points; with `Tuple` it gives the grid's shape.
@@ -392,14 +406,14 @@ normₕ(u_vec)^2 ≈ normₕ(u_vec(1))^2 + normₕ(u_vec(2))^2
 ```
 
 `inner₊` is the staggered counterpart: it weights by the half-spacings, the interface
-quantities a difference or a gradient lands on, and `inner₊ₓ`, `inner₊ᵧ`, `inner₊₂` pick a
-single direction. That pairing is what makes summation by parts exact; the
+quantities a difference or a gradient lands on, and a trailing `:x`/`:y`/`:z` (or `1`/`2`/`3`)
+argument picks a single direction. That pairing is what makes summation by parts exact; the
 [operators tutorial](operators.md) derives it.
 
 ```@example space
-D = D₋ₓ(s)
+D = ∇ₕ(s)
 
-inner₊ₓ(D, D) ≈ snorm₁ₕ(s)^2
+inner₊(D, D, :x) ≈ snorm₁ₕ(s)^2
 ```
 
 Next: [difference operators](operators.md), which act on the elements built here.

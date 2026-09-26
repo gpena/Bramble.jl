@@ -20,6 +20,7 @@ The space framework uses Julia's type system and multiple dispatch to:
 ## Usage
 
 ```julia
+using Bramble: Mᵧ
 # Create a space from a mesh
 Wₕ = gridspace(Ωₕ)
 
@@ -118,6 +119,7 @@ appearing in discrete energy estimates for difference operators.
 # Usage
 
 ```julia
+using Bramble: inner₊ₓ
 # Compute standard L² inner product
 result = innerₕ(uₕ, vₕ)  # Uses Innerh() internally
 
@@ -153,6 +155,7 @@ For a 2D grid in the x-direction:
 # Examples
 
 ```julia
+using Bramble: inner₊ₓ, inner₊ᵧ
 # These functions use Innerplus internally
 result_x = inner₊ₓ(uₕ, vₕ)  # Modified inner product, x-direction
 result_y = inner₊ᵧ(uₕ, vₕ)  # Modified inner product, y-direction
@@ -215,6 +218,27 @@ Returns the function space `Wₕ` itself.
 Returns the underlying mesh object associated with the function space `Wₕ`.
 """
 function mesh end
+
+"""
+    points(Wₕ::AbstractSpaceType) -> Union{Vector, NTuple}
+
+Forwards to [`points`](@ref)`(mesh(Wₕ))`: the coordinates of the mesh points underlying `Wₕ`.
+
+```julia
+x, y = points(Wₕ)
+```
+
+See also: [`half_points`](@ref).
+"""
+@inline points(Wₕ::AbstractSpaceType) = points(mesh(Wₕ))
+
+"""
+    half_points(Wₕ::AbstractSpaceType)
+
+Forwards to [`half_points`](@ref)`(mesh(Wₕ))`: the precomputed cell centers (half-points) of
+the mesh underlying `Wₕ`.
+"""
+@inline half_points(Wₕ::AbstractSpaceType) = half_points(mesh(Wₕ))
 
 """
     mesh_type(Wₕ::AbstractSpaceType) -> Type{<:AbstractMeshType}

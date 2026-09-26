@@ -2,6 +2,10 @@ module ExtSciMlExtTests
 
 using Test
 using Bramble
+using Bramble: ode_function
+using Bramble: SecondOrderSemidiscretization, block_mass_matrix, damping_matrix,
+               jacobian_prototype, mass_matrix, operator_matrix, semidiscretize_rhs,
+               stiffness_matrix
 using SparseArrays
 using LinearAlgebra: mul!, I as Identity
 using SciMLBase: SciMLBase, ODEProblem, LinearProblem, NonlinearProblem, solve
@@ -303,7 +307,7 @@ end
         _check_eoc(n -> solve_to(n, Rodas5P(); tgrad = exact_tgrad), (11, 21, 41))
     end
 
-    # `semidiscretize(build, l; ...)` (src/form/semidiscrete.jl) is the other half of #107:
+    # `semidiscretize(build, l; ...)` (src/problems/semidiscrete.jl) is the other half of #107:
     # an operator that genuinely depends on `t` -- not just the source -- built fresh per
     # element type instead of one fixed `Float64`-typed matrix. This is what lets `Rodas5P`'s
     # *default* `autodiff` differentiate through `t` at all: the classic `BilinearForm` path

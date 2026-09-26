@@ -81,6 +81,7 @@ constrain once, last.
 # Examples
 
 ```julia
+using Bramble: allocate_system_matrix
 # M/Δt + θK, without ever assembling M or K into a temporary and adding it in.
 Δt = 0.01
 θ = Ref(1.0)

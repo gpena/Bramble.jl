@@ -12,6 +12,8 @@ module TestAppleAccelerateExt
 
 using Test
 using Bramble
+using Bramble: AccelerateFactorization, accelerate_factorize, accelerate_refactor!,
+               accelerate_solve
 using LinearAlgebra
 using SparseArrays
 using Random

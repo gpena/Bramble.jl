@@ -1,14 +1,14 @@
 # ext/BrambleKroneckerExt.jl: `Kronecker.jl` interop and fast diagonalisation for a
 # separable `BilinearForm` (S5.2, gpena/Bramble.jl#259, .agents/plans/v3-3-0-memory-
 # scaling.md), layered on top of the dependency-free `KroneckerLinearOperator` S5.1 built in
-# `src/form/kronecker.jl`.
+# `src/assembly/kronecker.jl`.
 #
 # Two independent pieces, both read `KroneckerLinearOperator`'s own `terms` (each a
-# `KroneckerTerm{D}` of `scales` and `factors`, `src/form/kronecker.jl`) rather than
+# `KroneckerTerm{D}` of `scales` and `factors`, `src/assembly/kronecker.jl`) rather than
 # re-walking the form's AST:
 #
 #   1. `Kronecker.kronecker(K)`: the same object as `SparseMatrixCSC(K)`
-#      (`src/form/kronecker.jl`), built from `Kronecker.jl`'s own `⊗` instead of `kron` --
+#      (`src/assembly/kronecker.jl`), built from `Kronecker.jl`'s own `⊗` instead of `kron` --
 #      for a single term this stays the lazy `KroneckerProduct` `Kronecker.jl` itself
 #      returns from `⊗`; summing more than one term falls back to `Kronecker.jl`'s own
 #      `AbstractMatrix` `+`, which materialises (verified directly: `A ⊗ B` agrees with
@@ -55,7 +55,7 @@ using PrecompileTools: @setup_workload, @compile_workload
 # --- 1. Conversion to a Kronecker.jl object ------------------------------------------ #
 
 # One term's coefficient times its Kronecker product, last axis leftmost -- the same
-# convention `SparseMatrixCSC(K)` uses (`src/form/kronecker.jl`), with `⊗` standing in for
+# convention `SparseMatrixCSC(K)` uses (`src/assembly/kronecker.jl`), with `⊗` standing in for
 # `kron` (they agree, module docstring above).
 @inline function _kron_jl_term(term)
     c = Bramble._kron_coeff(term.scales)
@@ -74,7 +74,7 @@ same thing calling `+` on two `Kronecker.jl` objects of unrelated shape does any
 not a limitation specific to this method.
 
 `collect(Kronecker.kronecker(K))` and `Matrix(Kronecker.kronecker(K))` agree with
-`SparseMatrixCSC(K)` (`src/form/kronecker.jl`) -- both are the same sum of Kronecker
+`SparseMatrixCSC(K)` (`src/assembly/kronecker.jl`) -- both are the same sum of Kronecker
 products, read off the same `K.terms`.
 
 # Examples
@@ -101,7 +101,7 @@ end
 #
 # Derivation.
 #
-# `kronecker_operator` (`src/form/kronecker.jl`) recognises exactly two term shapes, so a
+# `kronecker_operator` (`src/assembly/kronecker.jl`) recognises exactly two term shapes, so a
 # separable `a`'s assembled matrix is always
 #
 #     Σ_d c_d * (H_D ⊗ ... ⊗ A_d ⊗ ... ⊗ H_1)   +   c_m * (H_D ⊗ ... ⊗ H_1)
@@ -181,12 +181,12 @@ end
 # summed directional coefficient, and the summed mass-only coefficient. Reuses
 # `KroneckerLinearOperator`'s own factors (built once by `kronecker_operator`,
 # gpena/Bramble.jl#162) rather than re-walking the form's AST: `_separable_axis`
-# (`src/form/kronecker.jl`) already guarantees a mass term's factor is `Diagonal` on every
+# (`src/assembly/kronecker.jl`) already guarantees a mass term's factor is `Diagonal` on every
 # axis and a directional term's is `Diagonal` on every axis but the one it differentiates,
 # so which factor is which is read off its type alone.
 #
 # A device-backed `K` (gpena/Bramble.jl#323) holds `_KronDeviceDiagonal`/`_KronDeviceSparse`
-# factors (`src/form/kronecker.jl`); `_fdm_host_factor` brings each back to the host as a
+# factors (`src/assembly/kronecker.jl`); `_fdm_host_factor` brings each back to the host as a
 # `Diagonal`/`SparseMatrixCSC` first. They are the 1D factors, O(n_d) per axis, and the
 # eigendecomposition below is a host LAPACK call anyway, so this copy is negligible.
 _fdm_host_factor(F) = F

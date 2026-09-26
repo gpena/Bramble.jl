@@ -210,7 +210,7 @@ function resolve_ast(op::ShiftNode{D, Dim}) where {D, Dim}
 end
 
 # `ShiftNode` carries a second field, so it writes its own binder rather than taking the one
-# `@node_family` generates (form/operators/interpolation.jl explains the pass).
+# `@node_family` generates (ast/operators/interpolation.jl explains the pass).
 function _bind_interp_spaces(
         op::ShiftNode{D, Dim}, trial_leaf, test_leaf
 ) where {D, Dim}

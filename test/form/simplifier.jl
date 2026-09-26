@@ -5,6 +5,7 @@ using Bramble
 using LinearAlgebra: Diagonal, issymmetric, isposdef
 using SparseArrays: nnz
 using Bramble:
+               D₋ᵧ,
                IdentityOperator,
                ZeroOperator,
                OperatorAdd,
@@ -25,7 +26,12 @@ using Bramble:
                form,
                assemble,
                Innerh,
-               Innerplus
+               Innerplus,
+               D₋₂,
+               D₋ₓ,
+               inner₊ᵧ,
+               inner₊ₓ,
+               weights
 
 # `simplify_ast` rewrites only the algebraic layer (`OperatorAdd`, `OperatorScale`,
 # `GridFunctionScale`) that `ast.jl`'s `+`/`*`/`/` overloads build, into a tree that routes
@@ -609,7 +615,7 @@ end
 
 # --- Shared inner-product arguments ------------------------------------------------- #
 
-using Bramble: D₊ₓ, D₋ᵧ, D₊ᵧ, Dcₓ
+using Bramble: D₊ₓ, D₊ᵧ, Dcₓ
 
 function _nprod(x, T)
     (x isa T ? 1 : 0) +

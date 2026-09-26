@@ -65,7 +65,7 @@ using Bramble
 const B = Bramble
 B.locality(Vector{Float64}) === B.HostLocality() &&
     B.locality(B.CpuSerial()) === B.HostLocality() &&
-    B.locality(B.GpuAsync()) === B.DeviceLocality()
+    B.locality(B.GpuKernel()) === B.DeviceLocality()
 
 # output
 true
@@ -85,7 +85,6 @@ function locality end
 # specific than the `AbstractArray` fallback above but strictly less specific than
 # `BrambleMetalExt`'s own `MtlVector`/`MtlMatrix`/sparse-matrix methods, which Julia still
 # dispatches to and which this change does not touch.
-import GPUArraysCore
 
 @inline locality(::Type{<:GPUArraysCore.AbstractGPUArray}) = DeviceLocality()
 
@@ -128,7 +127,7 @@ This is the default execution policy.
 Spelled `Serial()` as often as not: `const Serial = CpuSerial`, kept because it is what every
 call site, every test and every benchmark key in this repository already says.
 
-The grid sizes at which [`CpuThreaded`](@ref) and [`CpuBatch`](@ref) start beating this policy
+The grid sizes at which [`CpuThreaded`](@ref) and [`CpuPolyester`](@ref) start beating this policy
 were measured per workload rather than assumed -- see their own docstrings for the numbers.
 
 See also: [`CpuThreaded`](@ref), [`ExecutionPolicy`](@ref).
@@ -147,7 +146,7 @@ by small, frequently repeated calls, use [`CpuSerial`](@ref).
 Spelled `Parallel()` as often as not: `const Parallel = CpuThreaded`.
 
 `Base.Threads.@threads` is the primitive, and naming it that way leaves room for the others
-that are not this one -- Polyester's `@batch` (gpena/Bramble.jl#190) and MPI. [`CpuBatch`](@ref)
+that are not this one -- Polyester's `@batch` (gpena/Bramble.jl#190) and MPI. [`CpuPolyester`](@ref)
 is that Polyester-backed sibling: the policy type ships here, but the sweeps it selects live
 in the `BramblePolyesterExt` package extension, and requesting one without `using Polyester`
 errors the way [`metal_backend`](@ref) does without `using Metal`.
@@ -164,14 +163,19 @@ all: `_dot(::CpuThreaded, ...)` (`src/utils/linear_algebra.jl`) forwards to the 
 serial reduction, so switching to this policy leaves an inner product exactly as fast, or slow,
 as [`CpuSerial`](@ref) (gpena/Bramble.jl#112, closed, superseded by #190).
 
-See also: [`CpuSerial`](@ref), [`CpuBatch`](@ref), [`ExecutionPolicy`](@ref).
+See also: [`CpuSerial`](@ref), [`CpuPolyester`](@ref), [`ExecutionPolicy`](@ref).
 """
 struct CpuThreaded <: CpuPolicy end
 
 """
-    CpuBatch() <: CpuPolicy
+    CpuPolyester() <: CpuPolicy
 
 Polyester-batched execution policy.
+
+Named for the provider, matching [`CpuSerial`](@ref) and [`CpuThreaded`](@ref): the name makes
+the `using Polyester` requirement self-evident, where the previous name (`CpuBatch`, now a
+deprecated alias) named the `Polyester.@batch` primitive instead and gave no hint that a weak
+dependency was involved (gpena/Bramble.jl#300).
 
 Directs grid operations and form assembly through `Polyester.jl`'s `@batch`, a primitive
 whose per-call overhead is low enough to pay off on grids where [`CpuThreaded`](@ref)'s
@@ -193,12 +197,12 @@ the same workload, and this policy beats [`CpuThreaded`](@ref) at every crossove
 
 See also: [`CpuThreaded`](@ref), [`CpuSerial`](@ref), [`ExecutionPolicy`](@ref).
 """
-struct CpuBatch <: CpuPolicy end
+struct CpuPolyester <: CpuPolicy end
 
 """
     GpuPolicy <: ExecutionPolicy
 
-Abstract supertype for the policies a device executes, currently [`GpuAsync`](@ref).
+Abstract supertype for the policies a device executes, currently [`GpuKernel`](@ref).
 
 See also: [`CpuPolicy`](@ref), [`ExecutionPolicy`](@ref).
 """
@@ -209,7 +213,7 @@ abstract type GpuPolicy <: ExecutionPolicy end
 @inline locality(::GpuPolicy) = DeviceLocality()
 
 """
-    GpuAsync() <: GpuPolicy
+    GpuKernel() <: GpuPolicy
 
 Device execution policy: work is dispatched to the accelerator rather than to a host loop.
 
@@ -217,22 +221,21 @@ What [`metal_backend`](@ref) carries by default. A GPU is massively parallel and
 serially, so the old default of `Serial()` was not a conservative choice but a false statement
 about the hardware, and it sent CPU assembly loops at device arrays.
 
-**Despite the name, a call under this policy does not return before the device has finished.**
+The name states the launch mechanism only: work is dispatched to a device kernel. It replaces
+the previous name, `GpuAsync` (now a deprecated alias), which claimed a scheduling property the
+API does not have. **A call under this policy does not return before the device has finished.**
 Every kernel launched from `BrambleKernelAbstractionsExt` is followed by a
 `KernelAbstractions.synchronize`, so the launch is asynchronous but the Bramble-level call that
 issued it is not: `Rₕ!`, `avgₕ!` and the difference and average operators have all completed on
 the device by the time they return. Nothing in the package currently exposes a way to queue work
-and synchronise later.
-
-The name therefore describes the launch, not the call, and that is a wart rather than a design:
-`Async` states a property of the API that the API does not have. Renaming it is breaking and
-needs a deprecation cycle, so it is scheduled after the locality work rather than as part of it.
-That work is gpena/Bramble.jl#298, which separates the memory locality this policy also encodes
--- already implied by the backend's array types -- from the execution strategy it selects.
+and synchronise later. `Async` stated exactly the property this synchronize-after-launch
+behaviour rules out, which is why it was replaced rather than kept (gpena/Bramble.jl#300); the
+memory locality the old name also carried now lives in the `Locality` trait (gpena/Bramble.jl#298),
+which this policy claims through [`locality`](@ref) instead.
 
 See also: [`GpuPolicy`](@ref), [`ExecutionPolicy`](@ref).
 """
-struct GpuAsync <: GpuPolicy end
+struct GpuKernel <: GpuPolicy end
 
 """
     Serial
@@ -249,6 +252,30 @@ Alias for [`CpuThreaded`](@ref). The spelling this package used before the CPU/G
 (gpena/Bramble.jl#191).
 """
 const Parallel = CpuThreaded
+
+"""
+    CpuBatch
+
+Deprecated alias for [`CpuPolyester`](@ref). Will be removed in the next major release.
+
+The old name spelled the `Polyester.@batch` primitive rather than the provider, unlike
+`CpuSerial` and `CpuThreaded`, and gave no hint that `using Polyester` is required before a
+sweep under this policy runs (gpena/Bramble.jl#300).
+"""
+const CpuBatch = CpuPolyester
+
+"""
+    GpuAsync
+
+Deprecated alias for [`GpuKernel`](@ref). Will be removed in the next major release.
+
+The old name claimed a scheduling property the API does not have: every kernel launch in
+`BrambleKernelAbstractionsExt` is followed by `KernelAbstractions.synchronize`, so a
+Bramble-level call under this policy has already completed on the device by the time it
+returns, and nothing about it is asynchronous from the caller's point of view
+(gpena/Bramble.jl#300).
+"""
+const GpuAsync = GpuKernel
 
 # The one message a Backend gives when its storage locality and its policy locality disagree
 # (gpena/Bramble.jl#298, #296): device storage under a CpuPolicy is memory a CPU loop cannot
@@ -293,7 +320,7 @@ Compile-time descriptor specifying vector type `VT`, matrix type `MT`, and execu
 # Type parameters
 - `VT<:DenseVector`: Concrete dense vector type (for CPU or GPU).
 - `MT<:AbstractMatrix`: Concrete matrix type (e.g. `SparseMatrixCSC{Float64, Int}` or `Matrix{Float64}`).
-- `EP<:ExecutionPolicy`: Execution policy ([`Serial`](@ref), [`Parallel`](@ref), or [`CpuBatch`](@ref)).
+- `EP<:ExecutionPolicy`: Execution policy ([`Serial`](@ref), [`Parallel`](@ref), or [`CpuPolyester`](@ref)).
 
 All three parameters must agree on [`locality`](@ref): a backend is meant to be wholly host --
 a `Vector` alongside a CPU sparse or dense matrix, run under a [`CpuPolicy`](@ref) -- or wholly
@@ -399,6 +426,7 @@ Allows meshes to inherit their scalar coordinate type from the underlying geomet
 # Examples
 ```jldoctest
 using Bramble, SparseArrays
+using Bramble: vector_type, matrix_type
 b = backend(Float32)
 vector_type(b) === Vector{Float32} && matrix_type(b) === SparseMatrixCSC{Float32, Int}
 
@@ -581,7 +609,7 @@ function Base.show(io::IO, be::Backend{VT, MT, EP}) where {VT, MT, EP}
 end
 
 """
-    metal_backend(::Type{T} = Float32; policy::ExecutionPolicy = GpuAsync()) -> Backend
+    metal_backend(::Type{T} = Float32; policy::ExecutionPolicy = GpuKernel()) -> Backend
 
 Construct a Metal GPU [`Backend`](@ref) backed by `Metal.jl` arrays.
 
@@ -600,7 +628,7 @@ not, and fails at compile time with a dynamic-invocation error rather than at th
 - `T`: Floating-point element type (`Float32` or `Float16`, default: `Float32`).
 
 # Keywords
-- `policy`: Execution policy instance (default: [`GpuAsync`](@ref)). A [`CpuPolicy`](@ref) is
+- `policy`: Execution policy instance (default: [`GpuKernel`](@ref)). A [`CpuPolicy`](@ref) is
   rejected at construction, not accepted and left to fail on first use: Metal's device arrays
   answer [`DeviceLocality`](@ref) to [`locality`](@ref), a `CpuPolicy` answers
   [`HostLocality`](@ref), and [`Backend`](@ref)'s inner constructor requires the two to agree
@@ -610,7 +638,7 @@ not, and fails at compile time with a dynamic-invocation error rather than at th
 - `ErrorException`: If `Metal.jl` is not loaded.
 - `ArgumentError`: If `policy` is a [`CpuPolicy`](@ref) (locality mismatch).
 """
-function metal_backend(T::Type = Float32; policy::ExecutionPolicy = GpuAsync())
+function metal_backend(T::Type = Float32; policy::ExecutionPolicy = GpuKernel())
     return _metal_backend(T, policy)
 end
 function _metal_backend(::Type, ::ExecutionPolicy)
@@ -689,7 +717,7 @@ function _gpu_functional(::Val)
 end
 
 """
-    gpu_backend(::Type{T} = Float32; policy::ExecutionPolicy = GpuAsync()) -> Backend
+    gpu_backend(::Type{T} = Float32; policy::ExecutionPolicy = GpuKernel()) -> Backend
 
 Construct a GPU [`Backend`](@ref) for whichever accelerator extension is loaded **and**
 has a functional device.
@@ -703,7 +731,7 @@ CUDA or AMDGPU extension joins this dispatch once it exists (gpena/Bramble.jl#11
 - `T`: Floating-point element type (default: `Float32`).
 
 # Keywords
-- `policy`: Execution policy instance (default: [`GpuAsync`](@ref)).
+- `policy`: Execution policy instance (default: [`GpuKernel`](@ref)).
 
 # Throws
 - `ErrorException`: two distinct diagnoses, deliberately not sharing a message. If no GPU
@@ -716,7 +744,7 @@ CUDA or AMDGPU extension joins this dispatch once it exists (gpena/Bramble.jl#11
 
 See also: [`metal_backend`](@ref), [`backend`](@ref).
 """
-function gpu_backend(T::Type = Float32; policy::ExecutionPolicy = GpuAsync())
+function gpu_backend(T::Type = Float32; policy::ExecutionPolicy = GpuKernel())
     if Base.get_extension(Bramble, :BrambleMetalExt) !== nothing
         _gpu_functional(Val(:metal)) || return _throw_metal_not_functional()
         return metal_backend(T; policy)

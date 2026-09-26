@@ -573,7 +573,7 @@ end
 # which are not the mesh's own cached `spacings` field).
 #
 # Applied to the two families #302/#306 actually measured as bottlenecks (`D₋ₓ`/`D₊ₓ`, the
-# one-sided finite differences, and `Dcₓ`, `Centered`): `CrossWeighted` (`Dₕ`) reads two
+# one-sided finite differences, and `Dcₓ`, `Centered`): `CrossWeighted` (`D̽`) reads two
 # distinct raw spacings and combines them in a weighted average that is not a single
 # reciprocal multiply, so its interior branch keeps calling `_compute_difference` unchanged
 # (still a division, functionally identical to before this file) -- it still gets the
@@ -705,7 +705,7 @@ end
 # (`star_spacings`, resolved before this launch): one multiply by `invh[i] / 2` replaces it.
 @inline _centered_interior(dir::Bramble.Centered, back, cur, fwd, h, invh::AbstractVector, i) = (fwd - back) *
                                                                                                 (@inbounds invh[i]) / 2
-# `CrossWeighted` (`Dₕ`) reads two distinct raw spacings and combines them in a weighted
+# `CrossWeighted` (`D̽`) reads two distinct raw spacings and combines them in a weighted
 # average that is not a single reciprocal multiply (see the file-level note above); kept on
 # `_compute_difference`, unchanged.
 @inline _centered_interior(dir::Bramble.CrossWeighted, back, cur, fwd, h, invh, i) = Bramble._compute_difference(
@@ -783,7 +783,7 @@ function _launch_spmv_csr!(y::AbstractVector, rowPtr, colVal, nzVal, x::Abstract
 end
 
 # `KroneckerLinearOperator` `mul!` as one fused kernel (gpena/Bramble.jl#323,
-# `src/form/kronecker.jl`). One work item per entry `g` of `y`: it recovers its grid index
+# `src/assembly/kronecker.jl`). One work item per entry `g` of `y`: it recovers its grid index
 # from `dims`/`strides`, then sums every term's contribution -- the product of the term's
 # diagonal entries at that index times, for its one sparse factor (if any) on axis `e`, the
 # factor's row `i_e` against `x` along axis `e`, or `x[g]` itself for the mass term. Every
@@ -1183,7 +1183,7 @@ end
 #
 # Through S10, every launcher above called `synchronize(dev)` right after launching, so
 # each device kernel paid a host round-trip before the next one could even be enqueued --
-# exactly what `GpuAsync` (`src/utils/backend.jl`) claims not to do. S11 removes that call
+# exactly what `GpuKernel` (`src/utils/backend.jl`) claims not to do. S11 removes that call
 # from every launcher in this file: a kernel launch now only enqueues onto the device's own
 # command queue and returns, so a chain of them (`D₋ₓ` into `D₋ᵧ` into a sum, say) pipelines
 # instead of blocking after each step. Kernels enqueued on the same queue still run in that
@@ -1191,7 +1191,7 @@ end
 # chaining operators) needs no synchronisation between them -- only code that leaves the
 # queue and touches the array some other way needs a barrier first.
 #
-# `GpuAsync` is the only `GpuPolicy` that exists today, and no `_launch_*!` here is ever
+# `GpuKernel` is the only `GpuPolicy` that exists today, and no `_launch_*!` here is ever
 # reached under anything else, so there is deliberately no policy argument threaded through
 # to branch on: adding one now would be conditional logic with nothing to condition on.
 # `ka_synchronize` below is that barrier, kept for the two kinds of caller that still need
@@ -1203,7 +1203,7 @@ end
 #   - a write that reaches device memory through something other than a `@kernel` launch on
 #     that queue -- a plain `copyto!`, which queues a transfer exactly like a kernel launch
 #     does but is not itself one of the launches this file just stopped synchronising.
-#     `_flush_device_scatter!` and `_zero_stored!` (`src/form/bilinear_traversal.jl`) are
+#     `_flush_device_scatter!` and `_zero_stored!` (`src/assembly/bilinear_traversal.jl`) are
 #     this second kind: `_flush_device_scatter!` ends a device-resident matrix's assembly
 #     with `copyto!(A.nzVal, mirror.nzval)` and calls `ka_synchronize` right after, exactly
 #     as it already did before S11 -- that call was never one of the ones removed above, and

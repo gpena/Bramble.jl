@@ -104,6 +104,7 @@ divides it away. Also requires `mass_matrix(sd)` to actually be diagonal: the de
 # Examples
 
 ```julia
+using Bramble: semidiscretize_rhs
 sd = semidiscretize(a, l)  # no `dirichlet` keyword: NoConstraints
 rhs = semidiscretize_rhs(sd)
 prob = ODEProblem(rhs, parent(u₀), (0.0, 1.0))  # no mass_matrix to factorise

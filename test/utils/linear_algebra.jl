@@ -14,7 +14,7 @@ using Bramble:
                Parallel,
                CpuSerial,
                CpuThreaded,
-               GpuAsync
+               GpuKernel
 using LinearAlgebra: dot
 using StaticArrays
 using ..TestUtils: alloc_test, @test_allocs
@@ -32,19 +32,19 @@ using ..TestUtils: alloc_test, @test_allocs
     # 4. The alias spellings still select the same two CPU methods they always did.
     @testset "Sweep guard refuses locality mismatches" begin
         v = zeros(4)
-        @test_throws ArgumentError _sweep_for!(GpuAsync(), v, 1:4, identity)
+        @test_throws ArgumentError _sweep_for!(GpuKernel(), v, 1:4, identity)
         @test_throws ArgumentError _sweep_scatter_for!(
-            GpuAsync(), (v,), 1:4, i -> (float(i),)
+            GpuKernel(), (v,), 1:4, i -> (float(i),)
         )
         err = try
-            _sweep_for!(GpuAsync(), v, 1:4, identity)
+            _sweep_for!(GpuKernel(), v, 1:4, identity)
         catch e
             e
         end
         msg = sprint(showerror, err)
         @test occursin("destination array has host locality", msg)
         @test occursin("claims device locality", msg)
-        @test occursin("GpuAsync", msg)
+        @test occursin("GpuKernel", msg)
 
         _sweep_for!(Serial(), v, 1:4, i -> 2.0 * i)
         @test v == [2.0, 4.0, 6.0, 8.0]

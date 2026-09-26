@@ -2,9 +2,11 @@ module SpaceVectorElementsTests
 
 using Test
 using Bramble
+using Bramble: vector_type, matrix_type
+using Bramble: CompositeGridSpace, Dcₓ, D₋ₓ, component_range, component_ranges, set_points!
 import Bramble:
                 VectorElement, spacing, points, half_points, space, ndofs, half_spacings, indices, point
-using LinearAlgebra: norm, lu
+using LinearAlgebra: norm, lu, ldiv!
 using SparseArrays
 using Random
 using Supposition

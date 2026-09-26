@@ -42,8 +42,10 @@
 
 using BenchmarkTools
 using Bramble
+using Bramble: divₕ!, curlₕ!, Δₕ!
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: M₊ₓ, M₊ᵧ, M₊₂
+using Bramble: Dcₓ, D₋, D₋ₓ, D₋ᵧ, D₋₂, Mₓ, jump, jumpₓ, jumpᵧ, jump₂
 using DoubleFloats: Double64
 using SparseArrays: nonzeros
 
@@ -151,7 +153,7 @@ let Wₕ = gridspace(_mesh2()), uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
     g["Dcₓ"] = @benchmarkable Dcₓ($uₕ)
 
     # The vector calculus operators (gpena/Bramble.jl#158). `Δₕ!` is the entry that matters:
-    # it is one traversal per direction against the two a `D̽(D₋(u))` composition walks, and
+    # it is one traversal per direction against the two a `D̃(D₋(u))` composition walks, and
     # it carries no scratch grid function, so the bound below is 0 and stays 0.
     let vₕ = similar(uₕ), gₕ = ∇ₕ(uₕ)
         g["Δₕ"] = @benchmarkable Δₕ($uₕ)
@@ -243,7 +245,7 @@ let jl = Base.julia_cmd(), cmd_load = `$jl --project=. --startup-file=no -e "usi
     cmd_mesh = `$jl --project=. --startup-file=no -e "using Bramble; m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (10, 10), (true, true))"`,
     cmd_projection = `$jl --project=. --startup-file=no -e "using Bramble; m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (10, 10), (true, true)); W = gridspace(m); u = Rₕ(W, x -> sin(x[1]) * x[2])"`,
     cmd_assembly = `$jl --project=. --startup-file=no -e "using Bramble; m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (10, 10), (true, true)); W = gridspace(m); u = Rₕ(W, x -> sin(x[1]) * x[2]); l = Bramble.form(W, v -> innerₕ(u, v)); b = Bramble.assemble(l)"`,
-    cmd_ttfx = `$jl --project=. --startup-file=no -e "using Bramble; m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (10, 10), (true, true)); W = gridspace(m); u = element(W); D₋ₓ(u)"`
+    cmd_ttfx = `$jl --project=. --startup-file=no -e "using Bramble; m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (10, 10), (true, true)); W = gridspace(m); u = element(W); Bramble.D₋ₓ(u)"`
 
     g = SUITE["startup & latency"] = BenchmarkGroup()
     g["using Bramble"] = @benchmarkable run($cmd_load) samples=3 evals=1

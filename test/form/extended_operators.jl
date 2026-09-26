@@ -2,6 +2,7 @@ module FormExtendedOperatorsTests
 
 using Test
 using Bramble
+using Bramble: Dcₕ, D̃ₕ, D̽ₕ
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, M₊ₓ
 using Random
@@ -22,10 +23,26 @@ using Bramble:
                trial_component_or_nothing,
                test_component_or_nothing,
                indices,
-               restrict_to
+               restrict_to,
+               Dcᵧ,
+               Dc₂,
+               Dcₓ,
+               D̃ᵧ,
+               D̃₂,
+               D̃ₓ,
+               D̽ᵧ,
+               D̽₂,
+               D̽ₓ,
+               D₋ₓ,
+               Mᵧ,
+               Mₓ,
+               jumpᵧ,
+               jump₂,
+               jumpₓ
 
 # The four remaining operator families, as symbolic nodes: the jump, the centered
-# difference, the starred forward difference and the cross-weighted centered difference.
+# difference, the averaged-spacing forward difference and the cross-weighted centered
+# difference.
 #
 # The space layer had all four on grid functions; the form layer had none of them, so a
 # form could only be written from one-sided differences and averages. Three of the four
@@ -80,8 +97,8 @@ end
                 for (node, op) in (
                     (jumpₓ(id), jumpₓ),
                     (Dcₓ(id), Dcₓ),
+                    (D̃ₓ(id), D̃ₓ),
                     (D̽ₓ(id), D̽ₓ),
-                    (Dₕₓ(id), Dₕₓ),
                     (D₋ₓ(id), D₋ₓ),
                     (D₊ₓ(id), D₊ₓ),
                     (Mₓ(id), Mₓ),
@@ -106,10 +123,10 @@ end
                 (jumpᵧ(id), jumpᵧ),
                 (Dcₓ(id), Dcₓ),
                 (Dcᵧ(id), Dcᵧ),
+                (D̃ₓ(id), D̃ₓ),
+                (D̃ᵧ(id), D̃ᵧ),
                 (D̽ₓ(id), D̽ₓ),
-                (D̽ᵧ(id), D̽ᵧ),
-                (Dₕₓ(id), Dₕₓ),
-                (Dₕᵧ(id), Dₕᵧ)
+                (D̽ᵧ(id), D̽ᵧ)
             )
                 got, escaped = apply_stencil(node, Wₕ, uₕ)
                 @test got ≈ parent(op(uₕ)) rtol=1e-12
@@ -126,7 +143,7 @@ end
             Wₕ = gridspace(Ωₕ)
             id = IdentityOperator(Wₕ)
             uₕ = Rₕ(Wₕ, x -> x[1]^2 + 2x[2] + sin(x[3]) + 1)
-            for (node, op) in ((jump₂(id), jump₂), (Dc₂(id), Dc₂), (D̽₂(id), D̽₂), (Dₕ₂(id), Dₕ₂))
+            for (node, op) in ((jump₂(id), jump₂), (Dc₂(id), Dc₂), (D̃₂(id), D̃₂), (D̽₂(id), D̽₂))
                 got, escaped = apply_stencil(node, Wₕ, uₕ)
                 @test got ≈ parent(op(uₕ)) rtol=1e-12
                 @test escaped == 0
@@ -153,22 +170,23 @@ end
         @test Matrix(jumpₓ(Ωₕ))[n, n] == -1.0            # and the matrix agrees
 
         # the scaled differences do truncate, at whichever ends they need a neighbour
-        @test all(iszero, coeffs(D̽ₓ(id), at_end, n))
+        @test all(iszero, coeffs(D̃ₓ(id), at_end, n))
         @test all(iszero, coeffs(Dcₓ(id), at_end, n))
         @test all(iszero, coeffs(Dcₓ(id), at_start, 1))
 
-        # a starred difference is fine at the first point (it only reaches forward)
-        @test any(!iszero, coeffs(D̽ₓ(id), at_start, 1))
+        # an averaged-spacing forward difference is fine at the first point (it only
+        # reaches forward)
+        @test any(!iszero, coeffs(D̃ₓ(id), at_start, 1))
 
-        # Dₕ has no truncated-boundary convention of its own: with no far neighbour it
+        # D̽ₕ has no truncated-boundary convention of its own: with no far neighbour it
         # collapses to the one-sided difference the near side still gives, D₊ at the
         # first point and D₋ at the last (gpena/Bramble.jl#183)
-        start_st = local_stencil(Dₕₓ(id), Wₕ, at_start, nothing, 1)
+        start_st = local_stencil(D̽ₓ(id), Wₕ, at_start, nothing, 1)
         @test sum(c for (o, c) in start_st if o == (1,)) == 1 / spacing(Ωₕ, 1)
         @test sum(c for (o, c) in start_st if o == (0,)) == -1 / spacing(Ωₕ, 1)
         @test all(iszero(c) for (o, c) in start_st if o == (-1,))
 
-        end_st = local_stencil(Dₕₓ(id), Wₕ, at_end, nothing, n)
+        end_st = local_stencil(D̽ₓ(id), Wₕ, at_end, nothing, n)
         @test sum(c for (o, c) in end_st if o == (0,)) == 1 / spacing(Ωₕ, n)
         @test sum(c for (o, c) in end_st if o == (-1,)) == -1 / spacing(Ωₕ, n)
         @test all(iszero(c) for (o, c) in end_st if o == (1,))
@@ -182,13 +200,13 @@ end
         offsets(node) = sort(collect(Set(first.(local_stencil(node, Wₕ, I, nothing, 4)))))
 
         @test offsets(jumpₓ(id)) == [(0,), (1,)]          # two point, forward
-        @test offsets(D̽ₓ(id)) == [(0,), (1,)]        # two point, forward
+        @test offsets(D̃ₓ(id)) == [(0,), (1,)]        # two point, forward
         @test offsets(Dcₓ(id)) == [(-1,), (1,)]           # two point, skipping the centre
-        @test offsets(Dₕₓ(id)) == [(-1,), (0,), (1,)]     # three point
+        @test offsets(D̽ₓ(id)) == [(-1,), (0,), (1,)]     # three point
 
         # a constant differences to zero under all four, and the jump too
         cₕ = Rₕ(Wₕ, x -> 3.0)
-        for node in (Dcₓ(id), D̽ₓ(id), Dₕₓ(id), jumpₓ(id))
+        for node in (Dcₓ(id), D̃ₓ(id), D̽ₓ(id), jumpₓ(id))
             got, _ = apply_stencil(node, Wₕ, cₕ)
             # the jump keeps -uₙ at the far end, so only the interior is zero there
             @test all(≈(0.0; atol = 1e-11), got[1:(end - 1)])
@@ -212,8 +230,8 @@ end
         @test got2 ≈ parent(jumpᵧ(D₋ₓ(uₕ))) rtol=1e-12
 
         # and scaling passes straight through
-        got3, _ = apply_stencil(3 * Dₕₓ(id), Wₕ, uₕ)
-        @test got3 ≈ 3 .* parent(Dₕₓ(uₕ)) rtol=1e-12
+        got3, _ = apply_stencil(3 * D̽ₓ(id), Wₕ, uₕ)
+        @test got3 ≈ 3 .* parent(D̽ₓ(uₕ)) rtol=1e-12
     end
 
     @testset "Vector forms" begin
@@ -223,22 +241,22 @@ end
 
         @test jumpₕ(id) isa NTuple{2, JumpNode}
         @test Dcₕ(id) isa NTuple{2, CenteredDifference}
-        @test D̽ₕ(id) isa NTuple{2, StarDifference}
-        @test Dₕ(id) isa NTuple{2, CrossWeightedDifference}
+        @test D̃ₕ(id) isa NTuple{2, StarDifference}
+        @test D̽ₕ(id) isa NTuple{2, CrossWeightedDifference}
 
         @test jumpₕ(id)[1] === jumpₓ(id)
         @test jumpₕ(id)[2] === jumpᵧ(id)
         @test Dcₕ(id)[2] === Dcᵧ(id)
-        @test Dₕ(id)[1] === Dₕₓ(id)
+        @test D̽ₕ(id)[1] === D̽ₓ(id)
 
         # in one dimension the node itself, not a one-element tuple, as ∇ₕ already does
         Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)
         id1 = IdentityOperator(gridspace(Ω1))
-        for f in (jumpₕ, Dcₕ, D̽ₕ, Dₕ)
+        for f in (jumpₕ, Dcₕ, D̃ₕ, D̽ₕ)
             @test !(f(id1) isa Tuple)
         end
         @test jumpₕ(id1) === jumpₓ(id1)
-        @test Dₕ(id1) === Dₕₓ(id1)
+        @test D̽ₕ(id1) === D̽ₓ(id1)
     end
 
     @testset "Trait responses" begin
@@ -252,10 +270,10 @@ end
             (jumpᵧ, JumpNode),
             (Dcₓ, CenteredDifference),
             (Dcᵧ, CenteredDifference),
-            (D̽ₓ, StarDifference),
-            (D̽₂, StarDifference),
-            (Dₕₓ, CrossWeightedDifference),
-            (Dₕᵧ, CrossWeightedDifference)
+            (D̃ₓ, StarDifference),
+            (D̃₂, StarDifference),
+            (D̽ₓ, CrossWeightedDifference),
+            (D̽ᵧ, CrossWeightedDifference)
         )
             node = f(id)
             @test node isa T
@@ -268,13 +286,13 @@ end
         # the three without a matrix form are grouped, so anything reading only the
         # direction covers all of them
         @test Dcₓ(id) isa ExtendedDifferenceNode
-        @test D̽ᵧ(id) isa ExtendedDifferenceNode
-        @test Dₕₓ(id) isa ExtendedDifferenceNode
+        @test D̃ᵧ(id) isa ExtendedDifferenceNode
+        @test D̽ₓ(id) isa ExtendedDifferenceNode
         @test !(jumpₓ(id) isa ExtendedDifferenceNode)   # the jump has a matrix
 
         # and the block walk reaches its leaf through every one of them
         p, q = IndexedTrialFunction{2}(2), IndexedTestFunction{2}(3)
-        for f in (jumpₓ, Dcₓ, D̽ₓ, Dₕₓ)
+        for f in (jumpₓ, Dcₓ, D̃ₓ, D̽ₓ)
             @test trial_component_or_nothing(f(p)) == 2
             @test test_component_or_nothing(f(q)) == 3
             @test trial_component_or_nothing(restrict_to(:interior, f(p))) == 2
@@ -288,18 +306,18 @@ end
         idv = IdentityOperator(Vₕ)
         id = IdentityOperator(Wₕ)
 
-        for f in (jumpₓ, jumpᵧ, Dcₓ, Dcᵧ, D̽ₓ, Dₕₓ, Dₕᵧ)
+        for f in (jumpₓ, jumpᵧ, Dcₓ, Dcᵧ, D̃ₓ, D̽ₓ, D̽ᵧ)
             @test f(idv) isa LazyOp{2}
             @test resolve_ast(f(idv)) isa LazyOp{2}
         end
-        @test Dₕ(idv) isa NTuple{2, CrossWeightedDifference}
+        @test D̽ₕ(idv) isa NTuple{2, CrossWeightedDifference}
         @test jumpₕ(idv) isa NTuple{2, JumpNode}
 
         # the offsets are grid coordinates, which the components share, so the stencil is
         # the same one the scalar space gives
         lin = LinearIndices(indices(mesh(Vₕ)))
         I = CartesianIndex(3, 3)
-        for f in (jumpₓ, Dcₓ, D̽ᵧ, Dₕₓ)
+        for f in (jumpₓ, Dcₓ, D̃ᵧ, D̽ₓ)
             @test local_stencil(f(idv), Vₕ, I, nothing, lin[I]) ==
                   local_stencil(f(id), Wₕ, I, nothing, lin[I])
         end

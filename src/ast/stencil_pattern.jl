@@ -270,6 +270,10 @@ corresponding row's offset, over every term of the sum.
   an interpolation operator (`πₕ`); or the trial and test spaces couple two leaves that
   share neither a mesh nor an interpolation between them.
 
+This is internal: it is not exported, and has had no active consumer since the banded
+backends were dropped in v3.3.0. Reach it as `Bramble.bandwidths` or with
+`using Bramble: bandwidths`.
+
 See also: [`blockbandwidths`](@ref), [`stencil_offsets`](@ref).
 """
 function bandwidths(a)
@@ -307,6 +311,10 @@ pair, just restricted to their own axes.
 
 # Throws
 - `ArgumentError`: same conditions as [`bandwidths`](@ref).
+
+This is internal: it is not exported, and has had no active consumer since the banded
+backends were dropped in v3.3.0. Reach it as `Bramble.blockbandwidths` or with
+`using Bramble: blockbandwidths`.
 
 See also: [`bandwidths`](@ref).
 """

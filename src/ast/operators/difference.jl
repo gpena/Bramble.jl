@@ -132,10 +132,10 @@ end
 """
     StarDifference{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
 
-An AST node for the starred forward difference along `Dim`,
+An AST node for the forward difference over the averaged spacing along `Dim`,
 
 ```math
-D^{*}_{+}(u)_i = \\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}
+\\tilde{D}_{+}(u)_i = \\frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}
 ```
 
 The forward difference over the *averaged* spacing rather than the forward one, which is
@@ -151,13 +151,15 @@ end
 An AST node for the cross-weighted centered difference along `Dim`,
 
 ```math
-D_h(u)_i = \\frac{h_i}{h_i + h_{i+1}} D_{-}(u)_{i+1}
+\\overset{\\times}{D}_h(u)_i = \\frac{h_i}{h_i + h_{i+1}} D_{-}(u)_{i+1}
          + \\frac{h_{i+1}}{h_i + h_{i+1}} D_{-}(u)_i
 ```
 
 The same two one-sided differences the centered difference combines, weighted by the
 *opposite* spacings. That swap is what makes it second order on a non-uniform grid where
-`Dc` is first, and the two coincide when the spacing is constant. Truncated at both ends.
+`Dc` is first, and the two coincide when the spacing is constant. Neither end is truncated:
+each collapses to the one-sided difference its near side still defines, `D₊` at the first
+point and `D₋` at the last.
 """
 struct CrossWeightedDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
     inner_op::OpType
@@ -165,12 +167,13 @@ end
 
 # The three extended families, as `@node_family` calls like the one-sided pair above. Their
 # prose is thinner than the space layer's: the boundary conventions and the order-of-accuracy
-# comparisons that `Dcₓ` and `Dₕₓ` carry there describe arithmetic, and the arithmetic of
+# comparisons that `Dcₓ` and `D̽ₓ` carry there describe arithmetic, and the arithmetic of
 # these nodes is `_stencil_weights` below, which documents itself.
 #
-# `Dₕ` is the one family whose stem and tuple-valued alias are the same name, so `Dₕ(op)`
-# gives the `D`-tuple and `Dₕ(op, Val(2))` the `y` node. They coexist by arity, which is the
-# decision gpena/Bramble.jl#140 asked to be made on purpose rather than by merge.
+# `D̽ₕ` is the one family whose dispatch alias and tuple-valued alias are the same name
+# (gpena/Bramble.jl#349: the family formerly called `Dₕ`), so `D̽ₕ(op)` gives the `D`-tuple
+# and `D̽ₕ(op, Val(2))` the `y` node. They coexist by arity, which is the decision
+# gpena/Bramble.jl#140 asked to be made on purpose rather than by merge.
 
 @node_family(node=CenteredDifference,
     stem=Dc,
@@ -178,14 +181,15 @@ end
     vectorial_alias=Dcₕ)
 
 @node_family(node=StarDifference,
-    stem=D̽,
-    what="starred forward difference",
-    vectorial_alias=D̽ₕ)
+    stem=D̃,
+    what="averaged-spacing forward difference",
+    vectorial_alias=D̃ₕ)
 
 @node_family(node=CrossWeightedDifference,
-    stem=Dₕ,
+    stem=D̽,
     what="cross-weighted centered difference",
-    vectorial_alias=Dₕ)
+    dispatch_alias=D̽ₕ,
+    vectorial_alias=D̽ₕ)
 
 # --- Stencils --------------------------------------------------------------------- #
 
@@ -207,7 +211,7 @@ end
 ) where {D, Dim}
     m = mesh(space)
     mask = I[Dim] == npoints(m, Tuple)[Dim] ? 0 : 1
-    # the averaged spacing, which is what the starred difference divides by
+    # the averaged spacing, which is what D̃ divides by
     c = 2 * mask / (spacing(m, I, Dim) + forward_spacing(m, I, Dim))
     return (c, -c)
 end
@@ -227,7 +231,7 @@ end
     m = mesh(space)
 
     if I[Dim] == 1
-        # No point behind the first one: Dₕ has no truncated-boundary convention of its
+        # No point behind the first one: D̽ₕ has no truncated-boundary convention of its
         # own, so it collapses to the one-sided difference the near side still gives,
         # D₊(u)_1 = (u_2 - u_1)/h_1 (gpena/Bramble.jl#183).
         a = inv(spacing(m, I, Dim))
@@ -522,16 +526,19 @@ end
 """
     Bramble._CenteredStrainTensor{D}
 
-Builder-only container for [`εcₕ`](@ref)'s `D × D` entries, each held as its additive
-pieces. Consumed only by [`innerₕ`](@ref) on two of these, never part of an assembled AST.
+Builder-only container for [`εcₕ`](@ref)'s and [`ε̽ₕ`](@ref)'s `D × D` entries, each held
+as its additive pieces. Consumed only by [`innerₕ`](@ref) on two of these, never part of an
+assembled AST.
 """
 struct _CenteredStrainTensor{D, T}
     entries::T
 end
 
-@inline function _centered_strain_pieces(u, i::Int, j::Int)
-    i == j && return (_vc_centered(u(i), i),)
-    return (0.5 * _vc_centered(u(i), j), 0.5 * _vc_centered(u(j), i))
+# `diff(op, d)` is the family's difference along `d`: `_vc_centered` for `εcₕ`,
+# `_vc_cross_weighted` for `ε̽ₕ`.
+@inline function _centered_strain_pieces(diff::F, u, i::Int, j::Int) where {F}
+    i == j && return (diff(u(i), i),)
+    return ((1 // 2) * diff(u(i), j), (1 // 2) * diff(u(j), i))
 end
 
 """
@@ -553,21 +560,23 @@ See also: [`divcₕ`](@ref), [`εₕ`](@ref).
 """
 function εcₕ(u::LazyOp{D}) where {D}
     entries = ntuple(Val(D)) do i
-        ntuple(j -> _centered_strain_pieces(u, i, j), Val(D))
+        ntuple(j -> _centered_strain_pieces(_vc_centered, u, i, j), Val(D))
     end
     return _CenteredStrainTensor{D, typeof(entries)}(entries)
 end
 
 # The upper triangle only: `ε^{ij} = ε^{ji}`, so each off-diagonal pair enters once, doubled
-# (27 terms in 3D become 15). The diagonal's `1.0` is not a no-op for the compiler: a
-# `Float64` scale is kept (`_wrap_scale`), so a diagonal `Dcₓ(u(1)) Dcₓ(v(1))` term shares
+# (27 terms in 3D become 15). The diagonal's `1 // 1` is not a no-op for the compiler: a
+# non-`Integer` scale is kept (`_wrap_scale`), so a diagonal `Dcₓ(u(1)) Dcₓ(v(1))` term shares
 # its type with the off-diagonal `Dcₓ(u(2)) Dcₓ(v(2))` one, and 12 distinct term types become
-# 9 (first assemble in 3D: 15.2–17.6 s without it, 13.0–13.5 s with).
+# 9 (first assemble in 3D: 15.2–17.6 s without it, 13.0–13.5 s with, measured with `1.0`).
+# The scales here and in `_centered_strain_pieces` are `Rational`, not `Float64`: a rational
+# times a `Float32` weight stays `Float32`, so the form keeps the mesh's element type.
 @inline function _centered_strain_products(left, right, i::Int, j::Int)
     products = _flatten_tuples(
         map(a -> map(b -> innerₕ(a, b), right.entries[i][j]), left.entries[i][j])
     )
-    return map(p -> (i == j ? 1.0 : 2.0) * p, products)
+    return map(p -> (i == j ? 1 // 1 : 2 // 1) * p, products)
 end
 
 @inline function innerₕ(left::_CenteredStrainTensor{D}, right::_CenteredStrainTensor{D}) where {D}
@@ -581,6 +590,65 @@ end
     return foldl(+, terms)
 end
 
+# --- div̽ₕ, ε̽ₕ: cross-weighted divergence and strain over composite functions (#349) ------ #
+#
+# The cross-weighted difference is co-located too, so these are `divcₕ`/`εcₕ` with `D̽` in
+# place of `Dc`: an ordinary operator sum, and a `_CenteredStrainTensor` consumed by the same
+# `innerₕ` method. No form curl, matching the centered family. The same `LazyOp{D}` versus
+# untyped split keeps them apart from the runtime `div̽ₕ(uₕ)`/`ε̽ₕ(uₕ)`.
+
+@inline function _vc_cross_weighted(op, d::Int)
+    d == 1 && return D̽ₕ(op, Val(1))
+    d == 2 && return D̽ₕ(op, Val(2))
+    return D̽ₕ(op, Val(3))
+end
+
+"""
+    div̽ₕ(u::LazyOp{D}) -> LazyOp
+
+The symbolic cross-weighted divergence of a trial or test function `u` with one component
+per spatial dimension,
+
+```math
+\\overset{\\times}{\\textrm{div}}_h(u) = \\sum_{i=1}^{D} \\overset{\\times}{\\textrm{D}}_{x_i}(u_i).
+```
+
+Every term is co-located at the grid point, so the result is a plain operator sum usable
+wherever an operator is, e.g. `innerₕ(p, div̽ₕ(v))`. Shares its name with the runtime
+[`div̽ₕ`](@ref) over grid functions (`space/operators/vector_calculus.jl`).
+
+See also: [`ε̽ₕ`](@ref), [`divcₕ`](@ref).
+"""
+function div̽ₕ(u::LazyOp{D}) where {D}
+    return foldl(+, ntuple(i -> D̽ₕ(u(i), Val(i)), Val(D)))
+end
+
+"""
+    ε̽ₕ(u::LazyOp{D}) -> Bramble._CenteredStrainTensor
+
+The symbolic cross-weighted small-strain tensor of a composite trial or test function `u`,
+
+```math
+\\overset{\\times}{\\varepsilon}^{ii}_h(u) = \\overset{\\times}{\\textrm{D}}_{x_i}(u_i), \\qquad
+\\overset{\\times}{\\varepsilon}^{ij}_h(u) = \\tfrac{1}{2}\\left(
+    \\overset{\\times}{\\textrm{D}}_{x_j}(u_i) + \\overset{\\times}{\\textrm{D}}_{x_i}(u_j)\\right),
+    \\quad i \\neq j.
+```
+
+The only supported use is `innerₕ(ε̽ₕ(u), ε̽ₕ(v))`, which expands to
+``\\sum_{i,j} (\\overset{\\times}{\\varepsilon}^{ij}_h(u),
+\\overset{\\times}{\\varepsilon}^{ij}_h(v))_h``. Shares its name with the runtime
+[`ε̽ₕ`](@ref) over grid functions.
+
+See also: [`div̽ₕ`](@ref), [`εcₕ`](@ref).
+"""
+function ε̽ₕ(u::LazyOp{D}) where {D}
+    entries = ntuple(Val(D)) do i
+        ntuple(j -> _centered_strain_pieces(_vc_cross_weighted, u, i, j), Val(D))
+    end
+    return _CenteredStrainTensor{D, typeof(entries)}(entries)
+end
+
 # ==============================================================================
 # Expression rendering (gpena/Bramble.jl#274)
 # ==============================================================================
@@ -588,7 +656,7 @@ end
 expression(op::BackwardDifference{D, Dim}) where {D, Dim} = "D₋$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
 expression(op::ForwardDifference{D, Dim}) where {D, Dim} = "D₊$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
 expression(op::CenteredDifference{D, Dim}) where {D, Dim} = "Dc$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
-expression(op::StarDifference{D, Dim}) where {D, Dim} = "D̽$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+expression(op::StarDifference{D, Dim}) where {D, Dim} = "D̃$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
 function expression(op::CrossWeightedDifference{D, Dim}) where {D, Dim}
-    "Dₕ$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+    "D̽$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
 end

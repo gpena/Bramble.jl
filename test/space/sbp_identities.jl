@@ -2,6 +2,8 @@ module SpaceSbpIdentitiesTests
 
 using Test
 using Bramble
+using Bramble: Dcᵧ, Dc₂, Dcₓ, D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, M₂, Mₓ, VectorElement, inner₊ᵧ, inner₊₂
+using Bramble: inner₊ₓ, set_points!
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: M₊ₓ
 using Random
@@ -30,7 +32,7 @@ using ..TestUtils: _nonuniform_points, _zero_boundary!
 # own identity.
 #
 # Componentwise checks of the two identities this one is built out of live with their
-# operators: the starred divergence against the backward gradient in star_difference.jl
+# operators: the D̃ divergence against the backward gradient in star_difference.jl
 # ("Summation by parts"), and the skew-symmetry of Dc in centered_difference.jl.
 
 @testset "Centered divergence integration by parts" begin

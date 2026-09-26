@@ -183,7 +183,7 @@ end
 #=
 Every mesh carries :boundary and :interior, computed from the mesh's own geometry rather
 than from user registrations: every other label depends on a domain(...) call naming it.
-RegionRestriction's local_stencil (form/operators/restriction.jl) reads :interior as
+RegionRestriction's local_stencil (ast/operators/restriction.jl) reads :interior as
 "not :boundary"; ensuring :boundary exists guarantees well-defined complementary indexing.
 
 :boundary is computed via boundary_symbol_to_cartesian (the same face ranges marked by

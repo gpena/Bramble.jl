@@ -25,6 +25,7 @@
 # on the whole boundary, so all of the injected water has to leave through it.
 
 using Bramble
+using Bramble: reaction, reaction_density, weights
 
 Q = 3.0
 x₀ = (0.35, 0.65)

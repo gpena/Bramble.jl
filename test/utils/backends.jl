@@ -2,6 +2,7 @@ module UtilsBackendsTests
 
 using Test
 using Bramble
+using Bramble: vector_type, matrix_type, backend_types, execution_policy
 using Bramble:
                Backend,
                backend,
@@ -14,7 +15,15 @@ using Bramble:
                backend_zeros,
                execution_policy,
                Serial,
-               Parallel
+               Parallel,
+               CpuPolicy,
+               CpuPolyester,
+               CpuSerial,
+               CpuThreaded,
+               ExecutionPolicy,
+               GpuAsync,
+               GpuKernel,
+               GpuPolicy
 using SparseArrays
 using LinearAlgebra: diag, I
 using ..TestUtils: alloc_test, @test_allocs
@@ -55,7 +64,7 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
     #    failure several frames deeper.
     @test CpuSerial <: CpuPolicy <: ExecutionPolicy
     @test CpuThreaded <: CpuPolicy
-    @test GpuAsync <: GpuPolicy <: ExecutionPolicy
+    @test GpuKernel <: GpuPolicy <: ExecutionPolicy
     @test !(GpuPolicy <: CpuPolicy)
     @test !(CpuPolicy <: GpuPolicy)
 
@@ -67,13 +76,13 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
 
     # a policy is still a singleton with nothing in it, so it costs nothing to carry
     @test isbitstype(CpuSerial)
-    @test isbitstype(GpuAsync)
+    @test isbitstype(GpuKernel)
 
-    # CpuBatch ships as a policy type here (gpena/Bramble.jl#190); the sweeps it selects
+    # CpuPolyester ships as a policy type here (gpena/Bramble.jl#190); the sweeps it selects
     # are implemented by the BramblePolyesterExt package extension, not tested in this file.
-    @test CpuBatch <: CpuPolicy <: ExecutionPolicy
-    @test CpuBatch() isa CpuPolicy
-    @test isbitstype(CpuBatch)
+    @test CpuPolyester <: CpuPolicy <: ExecutionPolicy
+    @test CpuPolyester() isa CpuPolicy
+    @test isbitstype(CpuPolyester)
 end
 
 @testset "Backend locality enforcement" begin
@@ -89,8 +98,8 @@ end
 
         @test Bramble.locality(CpuSerial()) === Bramble.HostLocality()
         @test Bramble.locality(CpuThreaded()) === Bramble.HostLocality()
-        @test Bramble.locality(CpuBatch()) === Bramble.HostLocality()
-        @test Bramble.locality(GpuAsync()) === Bramble.DeviceLocality()
+        @test Bramble.locality(CpuPolyester()) === Bramble.HostLocality()
+        @test Bramble.locality(GpuKernel()) === Bramble.DeviceLocality()
 
         @test Bramble.HostLocality() isa Bramble.Locality
         @test Bramble.DeviceLocality() isa Bramble.Locality
@@ -109,7 +118,7 @@ end
 
     @testset "mismatched Backend construction is rejected" begin
         # device VT + a CpuPolicy: a host loop cannot scalar-index device memory.
-        for cpu_policy in (CpuSerial(), CpuThreaded(), CpuBatch())
+        for cpu_policy in (CpuSerial(), CpuThreaded(), CpuPolyester())
             err = try
                 backend(
                     vector_type = MockGPUVector{Float32},
@@ -125,11 +134,11 @@ end
             @test occursin(string(typeof(cpu_policy)), msg)
         end
 
-        # host VT + GpuAsync(): there is no device for the sweep to schedule against.
+        # host VT + GpuKernel(): there is no device for the sweep to schedule against.
         err_host_gpu = try
             backend(
                 vector_type = Vector{Float32}, matrix_type = Matrix{Float32},
-                policy = GpuAsync()
+                policy = GpuKernel()
             )
             nothing
         catch e
@@ -138,13 +147,13 @@ end
         @test err_host_gpu isa ArgumentError
         msg_host_gpu = sprint(showerror, err_host_gpu)
         @test occursin("Vector{Float32}", msg_host_gpu)
-        @test occursin("GpuAsync", msg_host_gpu)
+        @test occursin("GpuKernel", msg_host_gpu)
 
         # device VT + host MT: a backend must be wholly host or wholly device.
         err_mixed = try
             backend(
                 vector_type = MockGPUVector{Float32}, matrix_type = Matrix{Float32},
-                policy = GpuAsync()
+                policy = GpuKernel()
             )
             nothing
         catch e
@@ -159,7 +168,7 @@ end
         # that only checks that things throw.
         be_device = backend(
             vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32},
-            policy = GpuAsync()
+            policy = GpuKernel()
         )
         @test be_device isa Backend
 
@@ -293,10 +302,10 @@ end
     @testset "Mock GPU backend" begin
         # MockGPUVector/MockGPUMatrix now answer DeviceLocality() (gpena/Bramble.jl#298), so
         # the default Serial() policy -- HostLocality() -- no longer agrees with them; a
-        # GpuAsync() policy is required for this Backend to construct at all.
+        # GpuKernel() policy is required for this Backend to construct at all.
         be_gpu = backend(
             vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32},
-            policy = GpuAsync()
+            policy = GpuKernel()
         )
         @test vector_type(be_gpu) === MockGPUVector{Float32}
         @test matrix_type(be_gpu) === MockGPUMatrix{Float32}
@@ -333,10 +342,10 @@ end
                     @testset "Metal GPU backend" begin
                         # MtlVector/MtlMatrix answer DeviceLocality() (gpena/Bramble.jl#298,
                         # ext/BrambleMetalExt.jl), so the default Serial() policy --
-                        # HostLocality() -- no longer agrees with them; GpuAsync() is required.
+                        # HostLocality() -- no longer agrees with them; GpuKernel() is required.
                         be_metal = backend(
                             vector_type = MtlVector{Float32}, matrix_type = MtlMatrix{Float32},
-                            policy = GpuAsync()
+                            policy = GpuKernel()
                         )
                         @test vector_type(be_metal) === MtlVector{Float32}
                         @test matrix_type(be_metal) === MtlMatrix{Float32}
@@ -582,10 +591,10 @@ end
         if isdefined(@__MODULE__, :Metal)
             @test gpu_backend() === metal_backend()
             @test gpu_backend(Float16) === metal_backend(Float16)
-            @test gpu_backend(; policy = GpuAsync()) === metal_backend(; policy = GpuAsync())
+            @test gpu_backend(; policy = GpuKernel()) === metal_backend(; policy = GpuKernel())
             @test_throws ArgumentError gpu_backend(; policy = CpuSerial())
             @test_throws ArgumentError metal_backend(; policy = CpuSerial())
-            @test execution_policy(gpu_backend()) === GpuAsync()
+            @test execution_policy(gpu_backend()) === GpuKernel()
 
             if Metal.functional()
                 v = vector(gpu_backend(), 6)
@@ -689,6 +698,11 @@ end
         @test err_policy isa ErrorException
         @test occursin(pkg, sprint(showerror, err_policy))
     end
+end
+
+@testset "Deprecated policy aliases (#300)" begin
+    @test Bramble.CpuBatch === Bramble.CpuPolyester
+    @test Bramble.GpuAsync === Bramble.GpuKernel
 end
 
 end # module UtilsBackendsTests

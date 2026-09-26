@@ -1,3 +1,7 @@
+```@meta
+CurrentModule = Bramble
+```
+
 # Bramble.jl
 
 This documentation is for `Bramble.jl`, a Julia library implementing discretization methods to solve partial differential equations using finite differences on nonuniform grids.

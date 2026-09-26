@@ -17,7 +17,18 @@ using Bramble:
                trial_component_or_nothing,
                test_component_or_nothing,
                components,
-               restrict_to
+               restrict_to,
+               Dcₓ,
+               D̃ₓ,
+               D̽ₓ,
+               D₋ᵧ,
+               D₋ₓ,
+               Mᵧ,
+               Mₓ,
+               inner₊ᵧ,
+               inner₊₂,
+               inner₊ₓ,
+               jumpₓ
 using ..TestUtils: alloc_test, @test_allocs
 
 # `component(op, i)` (the mechanism behind `u(1)`, `D₋ₓ(v)(2)`, and the composite
@@ -57,7 +68,7 @@ using ..TestUtils: alloc_test, @test_allocs
 
         # the whole directional family generated in difference.jl/average.jl/jump.jl:
         # every one rebuilds around the indexed leaf rather than being left behind
-        for op in (D₋ₓ, D₊ₓ, Dcₓ, D̽ₓ, Dₕₓ, jumpₓ, Mₓ, M₊ₓ)
+        for op in (D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, jumpₓ, Mₓ, M₊ₓ)
             @test test_component_or_nothing(op(v)(3)) == 3
         end
 

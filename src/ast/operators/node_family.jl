@@ -174,7 +174,7 @@ end
 
 Returns the expression defining `_bind_interp_spaces` for one node family.
 
-The interpolation binding pass (`form/operators/interpolation.jl`) walks a term the way
+The interpolation binding pass (`ast/operators/interpolation.jl`) walks a term the way
 `resolve_ast` does, and a directional node's share of that walk is the same line per family
 as its `resolve_ast`: rebuild with the bound operand inside.
 """

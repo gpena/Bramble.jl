@@ -33,6 +33,7 @@ then factored exactly as above.
 # Examples
 
 ```julia
+using Bramble: sparse_factorize
 fact = sparse_factorize(A; solver = :suitesparse, sym = :spd)
 u = fact \\ F
 ```

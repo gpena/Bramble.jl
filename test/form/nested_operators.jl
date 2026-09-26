@@ -5,7 +5,7 @@ using Bramble
 using Random
 using LinearAlgebra: dot
 using ..TestUtils: @test_allocs, TEST_GROUP
-import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D̽ₓ, Dₕₓ, Mₓ, M₊ₓ, Mcₓ, jumpₓ, D₋ᵧ, Mcᵧ, Dₕᵧ, restrict_to
+import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, Mₓ, M₊ₓ, Mcₓ, jumpₓ, D₋ᵧ, Mcᵧ, D̽ᵧ, restrict_to
 
 # A random non-uniform mesh on the unit square (or interval): the relabelling bug this file
 # guards against (gpena/Bramble.jl#287, S7) is invisible on a uniform one.
@@ -17,9 +17,9 @@ end
 
 _random_element(Wₕ) = (uₕ = element(Wₕ); parent(uₕ) .= randn(length(parent(uₕ))); uₕ)
 
-const XOPS = (("D₋ₓ", D₋ₓ), ("D₊ₓ", D₊ₓ), ("Dcₓ", Dcₓ), ("D̽ₓ", D̽ₓ), ("Dₕₓ", Dₕₓ),
+const XOPS = (("D₋ₓ", D₋ₓ), ("D₊ₓ", D₊ₓ), ("Dcₓ", Dcₓ), ("D̃ₓ", D̃ₓ), ("D̽ₓ", D̽ₓ),
     ("Mₓ", Mₓ), ("M₊ₓ", M₊ₓ), ("Mcₓ", Mcₓ), ("jumpₓ", jumpₓ))
-const YOPS = (("D₋ᵧ", D₋ᵧ), ("Mcᵧ", Mcᵧ), ("Dₕᵧ", Dₕᵧ))
+const YOPS = (("D₋ᵧ", D₋ᵧ), ("Mcᵧ", Mcᵧ), ("D̽ᵧ", D̽ᵧ))
 
 # `op1(op2(·))` in a form on each side, against the runtime composition on grid functions.
 # The full XOPS×XOPS (plus, in 2D, XOPS×YOPS and YOPS×XOPS) grid is 81/135 pairs -- 648

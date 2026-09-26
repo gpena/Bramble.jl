@@ -2,7 +2,7 @@
 # gpena/Bramble.jl#214, .agents/plans/v3-3-0-memory-scaling.md).
 #
 # Plugs `SparseMatricesCSR.jl`'s `SparseMatrixCSR{1,T,Int}` (the one-based variant, matching
-# Bramble's own indexing) into the matrix-type seam S1.1 opened in `src/form/`:
+# Bramble's own indexing) into the matrix-type seam S1.1 opened in `src/assembly/`:
 # `_scatter_position`, `_scatter_add!` (bilinear_traversal.jl), `_allocate_from_pattern`
 # (bilinear_pattern.jl) and `_zero_stored!` (bilinear.jl); and into the Dirichlet/symmetrize
 # fast paths `dirichlet_constraints.jl` already carries a `SparseMatrixCSC` specialisation of

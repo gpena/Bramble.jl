@@ -18,6 +18,8 @@
 isdefined(@__MODULE__, :plotlyjs_head) ||
     include(joinpath(@__DIR__, "..", "plotly_common.jl"))
 
+import Bramble: point
+
 struct DeformedPlot
     html::String
 end

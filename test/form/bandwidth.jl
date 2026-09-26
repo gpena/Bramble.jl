@@ -5,6 +5,7 @@ using Bramble
 using SparseArrays
 using Random
 using Bramble: bandwidths, blockbandwidths, inner₊
+using Bramble: Dcₓ, D̽ₓ, D₋ₓ, Mₓ, jumpₓ
 
 # Reading a form's matrix bandwidth off its AST, before assembling anything.
 #
@@ -67,7 +68,7 @@ function _bandwidth_test_forms()
         ("innerₕ(D₋ₓ(u), v)", (u, v) -> innerₕ(D₋ₓ(u), v)),
         ("inner₊(∇ₕ(u), ∇ₕ(v))", (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))),
         ("innerₕ(Dcₓ(u), Dcₓ(v))", (u, v) -> innerₕ(Dcₓ(u), Dcₓ(v))),
-        ("innerₕ(Dₕₓ(u), v)", (u, v) -> innerₕ(Dₕₓ(u), v)),
+        ("innerₕ(D̽ₓ(u), v)", (u, v) -> innerₕ(D̽ₓ(u), v)),
         ("innerₕ(jumpₓ(u), v)", (u, v) -> innerₕ(jumpₓ(u), v)),
         ("innerₕ(Mₓ(u), v)", (u, v) -> innerₕ(Mₓ(u), v))
     )
@@ -114,7 +115,7 @@ end
         # one rather than against a hard-coded number, so the test still means something
         # if the discretisation constants above change.
         a_narrow = form(Wₕ1, Wₕ1, (u, v) -> innerₕ(u, v))
-        a_wide = form(Wₕ1, Wₕ1, (u, v) -> innerₕ(Dₕₓ(D₋ₓ(u)), v))
+        a_wide = form(Wₕ1, Wₕ1, (u, v) -> innerₕ(D̽ₓ(D₋ₓ(u)), v))
         @test bandwidths(a_narrow) != bandwidths(a_wide)
         @test bandwidths(a_narrow) == _true_bandwidths(assemble(a_narrow))
         @test bandwidths(a_wide) == _true_bandwidths(assemble(a_wide))

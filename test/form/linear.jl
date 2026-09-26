@@ -2,6 +2,7 @@ module FormLinearTests
 
 using Test
 using Bramble
+using Bramble: execution_policy
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: M₊ᵧ
 using ForwardDiff
@@ -28,7 +29,16 @@ using Bramble:
                ndofs,
                Innerh,
                Innerplus,
-               evaluate!
+               evaluate!,
+               D̽ₓ,
+               D₋ᵧ,
+               D₋ₓ,
+               Mᵧ,
+               Mₓ,
+               index_in_marker,
+               inner₊ₓ,
+               jumpₓ,
+               weights
 using ..TestUtils: alloc_test, @test_allocs
 
 # Assembling the right-hand side of a system.
@@ -273,13 +283,13 @@ using ..TestUtils: alloc_test, @test_allocs
                 Wf,
                 v -> innerₕ(g1, v + 2 * D₋ₓ(v) - Mₓ(v)) +
                      inner₊ₓ(g2, D₋ᵧ(v) + jumpₓ(v)) +
-                     innerₕ(g3, 3 * M₊ᵧ(v) - Dₕₓ(v))
+                     innerₕ(g3, 3 * M₊ᵧ(v) - D̽ₓ(v))
             ),
             )
 
             reference = innerₕ(g1, w + 2 * D₋ₓ(w) - Mₓ(w)) +
                         inner₊ₓ(g2, D₋ᵧ(w) + jumpₓ(w)) +
-                        innerₕ(g3, 3 * M₊ᵧ(w) - Dₕₓ(w))
+                        innerₕ(g3, 3 * M₊ᵧ(w) - D̽ₓ(w))
 
             @test dot(b, parent(w)) ≈ reference
             @test !iszero(reference)          # the identity is not being met by both sides

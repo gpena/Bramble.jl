@@ -7,6 +7,7 @@ using SparseConnectivityTracer: SparseConnectivityTracer
 using SparseMatrixColorings: SparseMatrixColorings
 using SparseArrays: nnz
 using Random
+using Bramble: Mₓ!, type_cached_assemble!
 using ..TestUtils: alloc_test, @test_allocs
 
 # `type_cached_assemble!` (form/type_cached_assemble.jl, gpena/Bramble.jl#20): caches a

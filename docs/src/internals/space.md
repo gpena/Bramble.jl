@@ -1,5 +1,6 @@
 ```@meta
 CollapsedDocStrings = false
+CurrentModule = Bramble
 ```
 
 # Spaces
@@ -54,7 +55,7 @@ That last sentence was not always true. S6.2, which first wrote this section, ke
 `innerh` and `innerplus` themselves as dense, full-grid vectors on purpose: the two
 places that read a weight in a hot loop -- `_dot`/`_dot_masked`
 (`src/space/inner_product.jl`) for the numeric `innerₕ`/`inner₊`, and `compute_weight`
-(`src/form/operators/inner.jl`) for the symbolic ones inside a form -- belonged to
+(`src/ast/operators/inner.jl`) for the symbolic ones inside a form -- belonged to
 subplans S6.3 and S6.4, outside S6.2's own file ownership, and neither yet had a way to
 read a `SeparableWeights` without paying a division per axis on every point. Keeping
 `innerh`/`innerplus` densely materialised was the only way to guarantee those two hot
@@ -257,7 +258,7 @@ grid-function traversal, symbolic form-AST evaluation, and Kronecker matrix cons
 
 This milestone implements option 2 as `stencil_matrix`
 (`src/space/operators/stencil.jl`), routing every family's public per-axis alias (`D₋`,
-`D₊`, `D̽`, `Dc`, `Dₕ`, `jump`, `M`, `M₊`) through it. Option 3 is delivered separately, as
+`D₊`, `D̃`, `Dc`, `D̽ₕ`, `jump`, `M`, `M₊`) through it. Option 3 is delivered separately, as
 `KroneckerLinearOperator` (gpena/Bramble.jl#162) -- a matrix-free operator built
 for a whole separable bilinear *form*, not a lazy wrapper around one operator's matrix
 call -- rather than as a lazy mode of `D₋ₓ`/`Mᵧ`/etc. themselves. Option 1 was reasoned
@@ -273,7 +274,7 @@ over every family's public alias. gpena/Bramble.jl#185's acceptance criterion is
 agreement between the old and new matrices, and proving that needs two independent
 constructions to compare -- checking `stencil_matrix`'s output against itself would prove
 nothing. `test/space/operators.jl`'s "stencil_matrix agrees with the Kronecker oracle
-(#185)" testset builds both for `D₋`, `D₊`, `D̽`, `Dc`, `Dₕ`, `jump`, `M` and `M₊`, along
+(#185)" testset builds both for `D₋`, `D₊`, `D̃`, `Dc`, `D̽ₕ`, `jump`, `M` and `M₊`, along
 every axis, in 1D/2D/3D, on non-uniform meshes, and asserts entrywise equality (`==`) and
 matching `nnz`.
 
@@ -315,7 +316,7 @@ run.
 `stencil_matrix`'s own `_stencil_taps`/`_stencil_weights` methods
 (`stencil.jl`) are a second, reduced implementation of the same offsets and coefficients
 the form layer already computes under the same names in
-`src/form/operators/{difference,average,jump}.jl`, for the AST node types
+`src/ast/operators/{difference,average,jump}.jl`, for the AST node types
 (`BackwardDifference`, `JumpNode`, and the rest) that back `local_stencil`. They are not
 shared code: `src/space/` cannot depend on form-layer AST nodes without inverting the
 package's own layering (forms are built on top of the space layer's operators, not the
@@ -343,6 +344,7 @@ for the new family in `shift.jl` alongside it.
 ```@autodocs
 Modules = [Bramble]
 Public = false
+Filter = x -> x ∉ (Base.parent, Base.:*, Bramble.ldiv!)
 Pages = [
     "space/gridspace.jl",
     "space/scalar_gridspace.jl",
@@ -353,6 +355,7 @@ Pages = [
     "space/operators/cell_average.jl",
     "space/operators/shift.jl",
     "space/operators/stencil.jl",
+    "space/operators/stencil_matrix.jl",
     "space/operators/difference.jl",
     "space/operators/jump.jl",
     "space/operators/average.jl",

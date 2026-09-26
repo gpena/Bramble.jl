@@ -2,7 +2,8 @@ module GeometrySetsTests
 
 using Test
 using Bramble
-using Bramble: CartesianProduct, set, is_collapsed, point_type
+using Bramble: CartesianProduct, set, is_collapsed, point_type, center, point, projection,
+               topo_dim
 using StaticArrays
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS

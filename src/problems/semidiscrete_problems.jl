@@ -152,6 +152,7 @@ Requires [SciMLBase.jl](https://github.com/SciML/SciMLBase.jl).
 # Examples
 
 ```julia
+using Bramble: semidiscretize_rhs
 sd = semidiscretize(a, l)
 rhs = semidiscretize_rhs(sd)
 prob = ode_problem(rhs, Rₕ(Wₕ, x -> sinpi(x[1])), interval(0.0, 1.0))

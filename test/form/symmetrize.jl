@@ -4,6 +4,7 @@ using Test
 using Bramble
 using SparseArrays
 using LinearAlgebra: issymmetric
+using Bramble: D₋ₓ, index_in_marker, inner₊ₓ, set_points!
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS
 using ..TestUtils: _tri, _nonuniform_points

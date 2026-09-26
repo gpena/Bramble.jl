@@ -3,13 +3,13 @@ module FormReactionFluxTests
 using Test
 using Random
 using Bramble
-using Bramble: reaction, reaction_density
+using Bramble: reaction, reaction_density, weights
 
 # `reaction` (gpena/Bramble.jl#227) extracts the boundary flux a Dirichlet constraint had
 # to supply, from the *unconstrained* operator/load and the already-solved uₕ: r = A uₕ - F
 # is ≈ 0 on interior rows and, on a constrained row, exactly the discrete flux there.
 #
-# Sign/scaling convention (see src/form/reaction.jl): `reaction` returns `-r` summed over
+# Sign/scaling convention (see src/postprocessing/reaction.jl): `reaction` returns `-r` summed over
 # the marker -- positive is flux leaving the domain along the outward normal, so summing
 # over every boundary marker recovers the net source `∫_Ω f` directly, no rescaling.
 #

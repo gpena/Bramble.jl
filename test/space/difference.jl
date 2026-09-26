@@ -2,6 +2,8 @@ module SpaceDifferenceTests
 
 using Test
 using Bramble
+using Bramble: vector_type, matrix_type
+using Bramble: D₋ᵧ, D₋₂, D₋ₓ, GpuKernel, set_points!
 import Bramble: space, eltype, ⊗, _Eye, shift, npoints, spacing, diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff₊₂, D₊ₓ,
                 D₊ᵧ, D₊₂
 using Bramble: backward_difference_dim!, forward_difference_dim!
@@ -79,7 +81,7 @@ end
         @test S_dense isa Matrix{T}
         @test S_dense == Matrix(spdiagm(1 => ones(4)))
 
-        be_generic = backend(vector_type = MockGPUVector{T}, matrix_type = MockGPUMatrix{T}, policy = GpuAsync())
+        be_generic = backend(vector_type = MockGPUVector{T}, matrix_type = MockGPUMatrix{T}, policy = GpuKernel())
         S_generic = _Eye(be_generic, 5, Val(-2))
         @test S_generic isa MockGPUMatrix{T}
         @test S_generic.data == Matrix(spdiagm(-2 => ones(3)))

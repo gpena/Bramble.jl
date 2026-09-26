@@ -41,6 +41,7 @@
 # prescribed separately.
 
 using Bramble
+using Bramble: block_mass_matrix, damping_matrix, mass_matrix, stiffness_matrix
 using SciMLBase
 using OrdinaryDiffEqRosenbrock
 using LinearAlgebra: dot

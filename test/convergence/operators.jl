@@ -3,7 +3,7 @@ module ConvergenceOperatorsTests
 using Test
 using Bramble
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
-import Bramble: D₊ₓ
+import Bramble: D₊ₓ, D₋ₓ, D₋ᵧ
 using Random
 
 # Convergence order of the finite difference operators.

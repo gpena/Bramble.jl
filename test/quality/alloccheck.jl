@@ -2,6 +2,7 @@ module QualityAlloccheckTests
 
 using Test
 using Bramble
+using Bramble: hₘᵢₙ, normal_vector
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: diff₋ₓ!, diff₋ᵧ!, diff₋₂!, diff₊ₓ!, diff₊ᵧ!, diff₊₂!
 using AllocCheck
@@ -25,7 +26,17 @@ using Bramble:
                spacings,
                TrialFunction,
                TestFunction,
-               πₕ!
+               πₕ!,
+               D₋ₓ,
+               D₋ₓ!,
+               Mₓ!,
+               cell_measure,
+               center,
+               half_spacing,
+               inner₊ₓ,
+               point,
+               projection,
+               topo_dim
 
 # Static allocation verification (gpena/Bramble.jl#118).
 #
@@ -48,7 +59,7 @@ using Bramble:
 #         copyto!(uₕ, v)           0 B       3 reports
 #
 #     Each of those is a path the compiled method keeps and the call never enters: for
-#     `assemble!`, the first-assembly recording in `src/form/bilinear_execution.jl`, which
+#     `assemble!`, the first-assembly recording in `src/assembly/bilinear_execution.jl`, which
 #     allocates once by design and is replaced by the replay plan on every call after; for
 #     the others, a `Base` copy or resize branch. They are documented at the end of this
 #     file rather than asserted, since the guarantee they would break is the runtime one,
@@ -157,7 +168,7 @@ end
         )
             @testset "$suffix" begin
                 for stem in (
-                    "D₋", "D₊", "Dc", "D̽", "Dₕ", "M", "M₊", "diff₋", "diff₊", "jump"
+                    "D₋", "D₊", "Dc", "D̃", "D̽", "M", "M₊", "diff₋", "diff₊", "jump"
                 )
                     op = getfield(Bramble, Symbol(stem, suffix, "!"))
                     @test _alloc_report(op, (typeof(dst), typeof(src))) == ""
@@ -218,7 +229,7 @@ end
               ""
 
         # The residual a time integrator calls once per stage, on the matching element type.
-        # `src/form/semidiscrete.jl` documents this as 0 bytes; here it is the stronger
+        # `src/problems/semidiscrete.jl` documents this as 0 bytes; here it is the stronger
         # statement, that no branch of that specialisation can allocate at all.
         sd = semidiscretize(a, l; dirichlet = :boundary)
         u = collect(range(0.25, 1.75; length = ndofs(Wₕ1)))

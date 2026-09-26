@@ -8,7 +8,10 @@ using Bramble:
                assemble,
                assemble!,
                assemble_parallel!,
-               allocate_system_matrix
+               allocate_system_matrix,
+               D₋ₓ,
+               Mₓ,
+               inner₊ₓ
 
 # Coupling two leaves of a composite space whose meshes differ in size.
 #

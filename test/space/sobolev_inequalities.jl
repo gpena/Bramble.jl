@@ -2,6 +2,8 @@ module SpaceSobolevInequalitiesTests
 
 using Test
 using Bramble
+using Bramble: D₋ᵧ, D₋₂, D₋ₓ, index_in_marker, inner₊ᵧ, inner₊₂, inner₊ₓ, norminf
+using Bramble: set_points!
 using Random
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS
@@ -102,7 +104,7 @@ end
             )
                 vₕ = Rₕ(Wₕ, f)
                 parent(vₕ)[1] = parent(vₕ)[end] = 0.0
-                @test holds(norminf_h(vₕ), _dir_gradient_norm(vₕ, Val(1)))
+                @test holds(norminf(vₕ), _dir_gradient_norm(vₕ, Val(1)))
             end
         end
     end
@@ -115,7 +117,7 @@ end
         parent(vₕ)[1] = parent(vₕ)[end] = 0.0
         g = _dir_gradient_norm(vₕ, Val(1))
         @test 0.2 < normₕ(vₕ) / g < 1.0
-        @test 0.2 < norminf_h(vₕ) / g < 1.0
+        @test 0.2 < norminf(vₕ) / g < 1.0
     end
 
     @testset "The L^∞ embedding does not generalise per direction (#187)" begin
@@ -131,7 +133,7 @@ end
         parent(vₕ)[vec(index_in_marker(Ωₕ, :boundary))] .= 0.0
 
         for d in 1:3
-            @test norminf_h(vₕ) > _dir_gradient_norm(vₕ, Val(d))
+            @test norminf(vₕ) > _dir_gradient_norm(vₕ, Val(d))
         end
         # while Poincaré, which is not a line-wise argument, still holds on the same field
         @test holds(normₕ(vₕ), _dir_gradient_norm(vₕ, Val(1)))
@@ -156,7 +158,7 @@ end
                     )
                         vₕ = element(Wₕ, vec(_zero_boundary!(reshape(
                             copy(parent(Rₕ(Wₕ, f))), dims))))
-                        @test holds(norminf_h(vₕ), _mixed_gradient_norm(vₕ, Val(D)))
+                        @test holds(norminf(vₕ), _mixed_gradient_norm(vₕ, Val(D)))
                     end
                 end
             end
@@ -174,9 +176,9 @@ end
             parent(vₕ)[vec(index_in_marker(Ωₕ, :boundary))] .= 0.0
 
             for d in 1:3
-                @test norminf_h(vₕ) > _dir_gradient_norm(vₕ, Val(d))
+                @test norminf(vₕ) > _dir_gradient_norm(vₕ, Val(d))
             end
-            @test holds(norminf_h(vₕ), _mixed_gradient_norm(vₕ, Val(3)))
+            @test holds(norminf(vₕ), _mixed_gradient_norm(vₕ, Val(3)))
         end
     end
 
@@ -201,7 +203,7 @@ end
             Wₕ = gridspace(Ωₕ)
             vₕ = element(Wₕ, _zero_boundary!(copy(v_raw[1:n])))
             g = _dir_gradient_norm(vₕ, Val(1))
-            holds(normₕ(vₕ), g) && holds(norminf_h(vₕ), g)
+            holds(normₕ(vₕ), g) && holds(norminf(vₕ), g)
         end
 
         @check function check_poincare_2d(

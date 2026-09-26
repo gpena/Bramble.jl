@@ -1,5 +1,6 @@
 ```@meta
 CollapsedDocStrings = false
+CurrentModule = Bramble
 ```
 
 # Forms
@@ -145,7 +146,7 @@ would race on the value, not just on the structure.
 ## Algebraic simplification of the `+`/`*` layer
 
 `form(Wₕ, Vₕ, f)`/`form(Wₕ, f)` call [`Bramble.simplify_ast`](@ref) on the resolved expression before
-storing it (`form/simplifier.jl`, [gpena/Bramble.jl#159](https://github.com/gpena/Bramble.jl/issues/159)).
+storing it (`ast/simplifier.jl`, [gpena/Bramble.jl#159](https://github.com/gpena/Bramble.jl/issues/159)).
 Most of it rewrites three node types: `OperatorAdd`, `OperatorScale` and `GridFunctionScale`
 — exactly what `ast.jl`'s `+`, `*` and `/` overloads build. Every other node — differences,
 averages, jumps, restrictions, interpolation, and every leaf — is semantic rather than
@@ -162,7 +163,7 @@ smaller number of sweeps for the same matrix or vector:
 
 | Input | Simplifies to | Effect on routing |
 |:--- |:--- |:--- |
-| `0 * A` | a `ZeroOperator` | a one-point pattern instead of `A`'s full stencil |
+| `0 * A` | a `ZeroOperator` | an empty stencil: no pattern entries instead of `A`'s full stencil |
 | `A + 0`, `0 + A` | `A` | the zero term is not a term at all |
 | `1 * A` | `A` | no wrapper node to route through |
 | `c1 * (c2 * A)`, both static | `(c1 * c2) * A` | unchanged term count, one multiply instead of two |
@@ -178,7 +179,7 @@ consumer of `ZeroOperator` (`local_stencil`, `stencil_offsets`, `component`) rea
 `a.space === b.space`, settles `nothing === nothing` the same way two zero operators over
 the same space would.
 
-"Same `A`" is two predicates, not one. `_ast_equal` (`form/simplifier.jl`) is the *definition*:
+"Same `A`" is two predicates, not one. `_ast_equal` (`ast/simplifier.jl`) is the *definition*:
 a structural equality over `LazyOp` subtrees — the same concrete node type, and every field
 equal, recursively for a field that is itself a `LazyOp`, by `===` otherwise. `===` rather than `==` for a leaf field (a grid
 function, a closure, a component index) is deliberate: two arrays holding equal values right
@@ -351,17 +352,14 @@ default CSC assembly, with and without `dirichlet`/`symmetrize!`, and `assemble!
 
 ## The extension contract
 
-The eight names below are declared `public` in `src/Bramble.jl` rather than exported, because
-an extension has to reach them by name to implement a storage type or a threading policy. That
-makes them a contract rather than an internal, so they are documented here even though the rest
-of this page is private API. The block above filters to private names only, which would
-otherwise drop every one of them -- and with them the cross-references the surrounding
-docstrings make.
+The eight names below are private since gpena/Bramble.jl#339, but an extension still has to
+reach them by their qualified `Bramble.` names to implement a storage type or a threading
+policy. That makes them a contract rather than an internal, so they get a section of their own:
+the block after this one filters them out.
 
 ```@autodocs
 Modules = [Bramble]
-Public = true
-Private = false
+Public = false
 Filter = x -> x in (
     Bramble._allocate_from_pattern, Bramble._scatter_position, Bramble._scatter_add!,
     Bramble._zero_stored!, Bramble._batch_bilinear_colour_sweep!,
@@ -369,38 +367,59 @@ Filter = x -> x in (
     Bramble._batch_linear_band_sweep!
 )
 Pages = [
-    "form/linear.jl",
-    "form/bilinear.jl",
-    "form/bilinear_traversal.jl",
-    "form/bilinear_pattern.jl",
-    "form/bilinear_execution.jl"
+    "assembly/linear.jl",
+    "assembly/bilinear.jl",
+    "assembly/bilinear_traversal.jl",
+    "assembly/bilinear_pattern.jl",
+    "assembly/bilinear_execution.jl"
 ]
 ```
 
 ```@autodocs
 Modules = [Bramble]
 Public = false
-Filter = x -> x !== Bramble.DiracSource
+Filter = x -> x ∉ (
+    Bramble.DiracSource, Bramble.issymmetric, Bramble.isposdef,
+    Bramble._allocate_from_pattern, Bramble._scatter_position, Bramble._scatter_add!,
+    Bramble._zero_stored!, Bramble._batch_bilinear_colour_sweep!,
+    Bramble._batch_bilinear_band_sweep!, Bramble._batch_linear_colour_sweep!,
+    Bramble._batch_linear_band_sweep!
+)
 Pages = [
-    "form/ast.jl",
-    "form/common.jl",
-    "form/stencil_eval.jl",
-    "form/simplifier.jl",
-    "form/component.jl",
-    "form/block_extract.jl",
-    "form/stencil_pattern.jl",
-    "form/symmetry.jl",
-    "form/operators/average.jl",
-    "form/operators/difference.jl",
-    "form/operators/inner.jl",
-    "form/operators/interpolation.jl",
-    "form/operators/jump.jl",
-    "form/operators/restriction.jl",
-    "form/dirichlet_constraints.jl",
-    "form/linear.jl",
-    "form/bilinear.jl",
-    "form/bilinear_traversal.jl",
-    "form/bilinear_pattern.jl",
-    "form/bilinear_execution.jl"
+    "ast/ast.jl",
+    "ast/common.jl",
+    "assembly/stencil_eval.jl",
+    "ast/simplifier.jl",
+    "ast/component.jl",
+    "assembly/block_extract.jl",
+    "ast/stencil_pattern.jl",
+    "assembly/symmetry.jl",
+    "ast/operators/average.jl",
+    "ast/operators/difference.jl",
+    "ast/operators/inner.jl",
+    "ast/operators/interpolation.jl",
+    "ast/operators/jump.jl",
+    "ast/operators/restriction.jl",
+    "assembly/dirichlet_constraints.jl",
+    "assembly/linear.jl",
+    "assembly/bilinear.jl",
+    "assembly/bilinear_traversal.jl",
+    "assembly/bilinear_pattern.jl",
+    "assembly/bilinear_execution.jl"
 ]
+```
+
+### `DiracSource`, bandwidth analysis and structural properties
+
+`DiracSource` is filtered out of the block above since its docstring's `@ref`s point here
+rather than the autodocs entry. `issymmetric(::BilinearForm)`/`isposdef(::BilinearForm)`
+extend `LinearAlgebra`'s generic functions; the block above filters them out so they are
+listed here, beside the other structural properties. `bandwidths`/`blockbandwidths` are
+already picked up by the block above once its `Pages` point at the real
+`ast/stencil_pattern.jl` file.
+
+```@docs
+DiracSource
+issymmetric(::BilinearForm)
+isposdef(::BilinearForm)
 ```

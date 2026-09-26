@@ -18,7 +18,8 @@ using Bramble:
                Dcₓ,
                D₋ᵧ,
                D₊ᵧ,
-               Dcᵧ
+               Dcᵧ,
+               Mₓ
 
 # The coordinate walk (`_form_coordinates`, form/bilinear_pattern.jl) is the one setup walk
 # of every (term, block) unit: its coordinates build the sparsity pattern and, searched in the

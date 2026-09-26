@@ -11,7 +11,6 @@
 # libblastrampoline, so ordinary `LinearAlgebra` calls already run on Accelerate's BLAS/LAPACK
 # once `using AppleAccelerate` has been evaluated. This method only gives dense callers the
 # same name and `sym`/`kind` vocabulary as the sparse methods; see its own docstring.
-import LinearAlgebra: lu, cholesky
 
 """
     AccelerateFactorization{T} <: Factorization{T}
@@ -45,6 +44,7 @@ call `using AppleAccelerate` before calling this function.
 # Examples
 
 ```julia
+using Bramble: accelerate_factorize
 using AppleAccelerate
 
 A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0, symmetrize = true)

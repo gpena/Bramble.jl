@@ -77,15 +77,16 @@ _Avoid_: component (used for the `components` keyword, which *selects* leaves), 
 
 **Backend**:
 Where a space's arrays live and how they are iterated, carrying the execution policy
-(`CpuSerial()`/`Serial()`, `CpuThreaded()`/`Parallel()`, or `GpuAsync()`) as a trait.
+(`CpuSerial()`/`Serial()`, `CpuThreaded()`/`Parallel()`, or `GpuKernel()`) as a trait.
 _Avoid_: device, mode
 
 ### Operators
 
 **Difference operator**:
 A discrete derivative — `D₋ₓ` backward, `Dcₓ` centred, subscript naming the direction.
-The direction can also be passed: `D₋(uₕ, 1)`, `D₋(uₕ, :x)` and `D₋(uₕ, Val(1))` are all
-`D₋ₓ(uₕ)`. The averages pass theirs to `Mₕ`/`M₊ₕ`; there is no bare `M`.
+A direction held in a variable indexes the vectorial operator: `∇ₕ[1] === ∇ₕ[:x] === D₋ₓ`.
+The `public`, unexported stem takes it as an argument: `Bramble.D₋(uₕ, 1)`, `(uₕ, :x)` and
+`(uₕ, Val(1))` are all `D₋ₓ(uₕ)`. The averages pass theirs to `Mₕ`/`M₊ₕ`; there is no bare `M`.
 _Avoid_: derivative (reserve for the continuous object), gradient (that is `∇ₕ`)
 
 **Restriction (`Rₕ`)**:

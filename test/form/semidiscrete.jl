@@ -2,11 +2,23 @@ module FormSemidiscreteTests
 
 using Test
 using Bramble
+using Bramble: matrix_type
 using SparseArrays
 using ForwardDiff: Dual, value
+using Bramble:
+               D₋ₓ,
+               Mₓ,
+               allocate_system_matrix,
+               jacobian_pattern,
+               jacobian_prototype,
+               mass_matrix,
+               operator_matrix,
+               semidiscretize_rhs,
+               set_points!,
+               type_cached_assemble!
 using ..TestUtils: _check_eoc
 
-# `semidiscretize` and the residual it returns (src/form/semidiscrete.jl) need no SciMLBase:
+# `semidiscretize` and the residual it returns (src/problems/semidiscrete.jl) need no SciMLBase:
 # a `Semidiscretization` is a callable with the `(du, u, p, t)` signature plus two matrices.
 # Everything here therefore belongs in the always-run unit group, and only the
 # `ODEFunction`/`ODEProblem`/`LinearProblem` wrapping is left to test/ext/sciml_ext.jl.

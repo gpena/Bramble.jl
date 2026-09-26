@@ -21,6 +21,7 @@ using BenchmarkTools
 using Bramble
 # Internal since gpena/Bramble.jl#185: the retained oracle, not exported.
 import Bramble: kronecker_operator_matrix
+using Bramble: Dcₓ, D₋ₓ, Mₓ
 
 const CASES = (
     ("1000 (1D)", mesh(domain(interval(0.0, 1.0)), 1000, true)),

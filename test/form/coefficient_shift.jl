@@ -9,6 +9,7 @@ import Bramble: D₊ₓ, M₊ₓ, M₊ᵧ
 # S3 (gpena/Bramble.jl#271, O5): the AST accessor and stencil-level entry point needed to
 # assert the point-dependent path infers concretely -- neither is exported.
 import Bramble: local_stencil, resolve_form_ast
+using Bramble: Dcₓ, D₋ᵧ, D₋ₓ, Mᵧ, Mₓ, indices, jumpₓ
 
 # gpena/Bramble.jl#271: a grid-function coefficient inside a shifting node (a difference,
 # average, jump, or `shift_op`) must be read at the point the tap reaches, not at the point
@@ -93,7 +94,7 @@ import Bramble: local_stencil, resolve_form_ast
     end
 
     # gpena/Bramble.jl#271, O5: the fix makes `D₋ₓ(cₕ * u)` take the point-dependent path
-    # (`shifted_inner_stencil` on `GridFunctionScale`, src/form/common.jl) -- it re-evaluates
+    # (`shifted_inner_stencil` on `GridFunctionScale`, src/ast/common.jl) -- it re-evaluates
     # the inner stencil at the shifted point on every tap, rather than relabelling offsets
     # once the way the coefficient-outside form `cₕ * D₋ₓ(u)` does. The acceptance criterion
     # is that this cost is measured and recorded, not assumed.
@@ -117,7 +118,7 @@ import Bramble: local_stencil, resolve_form_ast
         end
 
         @testset "Allocation does not scale with ndofs" begin
-            # `assemble!` refills a preallocated matrix and is documented (src/form/bilinear.jl)
+            # `assemble!` refills a preallocated matrix and is documented (src/assembly/bilinear.jl)
             # to cost 0 bytes; the point-dependent path's extra per-tap re-evaluation must not
             # turn into extra per-tap allocation, at any grid size.
             #

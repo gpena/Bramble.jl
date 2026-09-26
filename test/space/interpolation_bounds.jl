@@ -2,6 +2,7 @@ module SpaceInterpolationBoundsTests
 
 using Test
 using Bramble
+using Bramble: interpolation_matrix, weights
 using ..TestUtils: alloc_test, @test_allocs
 
 # `interpolate_at` used to extrapolate silently past the mesh boundary: `locate_cell`

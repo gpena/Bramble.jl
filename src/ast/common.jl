@@ -99,7 +99,7 @@ stencil algebra in this file relies on, so neither call allocates.
 
 The sum of a stencil's coefficients, ignoring its offsets entirely.
 
-Required by `_contracted_left_stencil` (`form/operators/inner.jl`) for a source-only
+Required by `_contracted_left_stencil` (`ast/operators/inner.jl`) for a source-only
 subtree's own `local_stencil`: not the offsets, which mean nothing for a value that
 contributes no matrix structure, only their total. `false` rather than `0` or `zero(T)` is
 the empty-stencil answer: [`RegionRestriction`](@ref) can legitimately produce `()` for a
@@ -267,9 +267,9 @@ end
 # value at the point: for neither does adding one to an offset produce what the neighbour
 # holds. Such a node has to be re-evaluated at the shifted point instead, which is what this
 # trait selects between. `stencil_shift_trait`'s ladder lives in
-# `form/operators/interpolation.jl`, after every node type it has to answer for exists:
+# `ast/operators/interpolation.jl`, after every node type it has to answer for exists:
 # marking a source point-dependent there is also what a source-only subtree's own
-# contraction (`_contracted_left_stencil`, `form/operators/inner.jl`) reads its values through.
+# contraction (`_contracted_left_stencil`, `ast/operators/inner.jl`) reads its values through.
 #
 # A Holy trait rather than a `Bool` predicate on purpose: the choice is made by dispatch on a
 # singleton, so neither branch is ever compiled into the other's code path.
@@ -413,7 +413,7 @@ end
 # instead, since inlining a fresh evaluation per tap makes the generated code (and so the
 # first-call compile time) grow like taps^depth. Answered by dispatch on the operand's type
 # parameter, so it folds at compile time; the node files add the methods for their own
-# wrappers (form/operators/average.jl, form/operators/restriction.jl).
+# wrappers (ast/operators/average.jl, ast/operators/restriction.jl).
 const _BareLeaf = Union{TrialFunction, TestFunction}
 @inline _wraps_leaf(::Any) = false
 @inline _wraps_leaf(::Union{
@@ -470,7 +470,7 @@ previously the same three-way branch, written out twice.
     end
 end
 
-# `GridFunctionScale` is marked `PointDependentStencil` in form/operators/interpolation.jl,
+# `GridFunctionScale` is marked `PointDependentStencil` in ast/operators/interpolation.jl,
 # but the generic `PointDependentStencil` branch above is wrong for it: discarding `inner`
 # and re-evaluating the whole node at `Ishift` would lose the trial or test column the
 # operand contributes (`GridFunctionScale(c, u)` evaluated fresh at `Ishift` reduces to `c`
@@ -492,7 +492,7 @@ end
 end
 
 # A sum inherits `PointDependentStencil` (`_combine_shift_traits`,
-# form/operators/interpolation.jl) the moment either side does, which now includes any side
+# ast/operators/interpolation.jl) the moment either side does, which now includes any side
 # holding a `GridFunctionScale`. Without this override the generic branch above would
 # re-evaluate *both* summands at `Ishift`, including a translation-invariant one, losing its
 # trial column exactly as the unwrapped `GridFunctionScale` case above would; recursing into
@@ -602,10 +602,33 @@ function _lower_sources(op::OperatorAdd, space)
     return left === op.left_op && right === op.right_op ? op : OperatorAdd(left, right)
 end
 
-# `ShiftNode` (form/operators/average.jl) and `LinearProduct` (form/operators/inner.jl) are
+# `ShiftNode` (ast/operators/average.jl) and `LinearProduct` (ast/operators/inner.jl) are
 # both included after this file, so their `_lower_sources` methods -- naming the type in the
 # signature, unlike everything above -- live in form/linear.jl instead (bramble-performance
 # skill, "include-order rule").
+
+# --- ⋅ and × over a form-side trial/test function (gpena/Bramble.jl#341) ------------------ #
+#
+# `∇ₕ ⋅ u`/`∇ₕ × u` (and the four sibling gradient aliases) contract to `divₕ(u)`/`curlₕ(u)`
+# the same way over a symbolic `u`, but the `dot`/`×` methods narrowed to a `LazyOp` second
+# argument (space/operators/vector_calculus.jl, next to their `_DivCurlOperand`-typed
+# numeric-`uₕ` siblings) live here instead, following the same include-order rule as
+# `_lower_sources` just above: `LazyOp` (ast/ast.jl) is included after
+# space/operators/vector_calculus.jl, so it cannot be named in a signature there.
+@inline dot(::typeof(∇ₕ), uₕ::LazyOp) = divₕ(uₕ)
+@inline ×(::typeof(∇ₕ), uₕ::LazyOp) = curlₕ(uₕ)
+
+@inline dot(::typeof(∇₊ₕ), uₕ::LazyOp) = div₊ₕ(uₕ)
+@inline ×(::typeof(∇₊ₕ), uₕ::LazyOp) = curl₊ₕ(uₕ)
+
+@inline dot(::typeof(∇cₕ), uₕ::LazyOp) = divcₕ(uₕ)
+@inline ×(::typeof(∇cₕ), uₕ::LazyOp) = curlcₕ(uₕ)
+
+@inline dot(::typeof(∇̃ₕ), uₕ::LazyOp) = diṽₕ(uₕ)
+@inline ×(::typeof(∇̃ₕ), uₕ::LazyOp) = curl̃ₕ(uₕ)
+
+@inline dot(::typeof(∇̽ₕ), uₕ::LazyOp) = div̽ₕ(uₕ)
+@inline ×(::typeof(∇̽ₕ), uₕ::LazyOp) = curl̽ₕ(uₕ)
 
 # ==============================================================================
 # 4. Deprecated `ast` keyword (gpena/Bramble.jl#105)
@@ -621,7 +644,7 @@ end
     Base.depwarn(
         "the `ast` keyword measures no benefit over the form's own resolved AST, and its " *
         "only real use -- swapping in another form's AST -- is redundant with assembling " *
-        "that form directly. It will be removed in v3.0.0 without replacement.",
+        "that form directly. It will be removed in v4.0.0 without replacement.",
         funcsym
     )
     return nothing

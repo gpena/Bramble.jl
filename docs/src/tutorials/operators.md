@@ -1,3 +1,7 @@
+```@meta
+CurrentModule = Bramble
+```
+
 # Difference, jump and average operators
 
 Bramble provides the finite difference building blocks that discrete schemes are written
@@ -41,36 +45,57 @@ gradient and has that extra name for it.
 `jump` takes no direction, for the reason given above: it is `jumpₓ`, `jumpᵧ`, `jump₂` and
 `jumpₕ`.
 
-### [1.2 The direction as an argument](@id operators_direction_argument)
+### 1.2 How `D₋`, `Dc`, `D̽` and `D̃` differ
 
-Every family also answers to its stem with the direction passed in, which is what the
-coordinate suffix is spelling:
+Four families combine the same one-sided differences in different ways. Sections 6, 7
+and 8 below derive each one; this table is the summary.
 
-| Written | Same as |
-|:--|:--|
-| `D₋(uₕ, 1)` | `D₋ₓ(uₕ)` |
-| `D₋(uₕ, :y)` | `D₋ᵧ(uₕ)` |
-| `D₋(uₕ, Val(3))` | `D₋₂(uₕ)` |
+| Operator | Stencil | Order, non-uniform | Order, uniform | Boundary |
+|:--|:--|:--|:--|:--|
+| `D₋` | ``\{i-1, i\}`` | 1 | 1 | truncated to `0` at the first point |
+| `Dc` | ``\{i-1, i+1\}``, divided by the full span | 1 | 2 | truncated to `0` at **both** ends |
+| `D̽` | ``\{i-1, i, i+1\}``: `h_i/(h_i+h_{i+1})` times `D₋u` at ``x_{i+1}`` plus `h_{i+1}/(h_i+h_{i+1})` times `D₋u` at ``x_i`` (the ``u_i`` terms cancel only when ``h_i = h_{i+1}``) | 2 | 2 | no convention of its own: falls back to `D₊`/`D₋` |
+| `D̃` | ``\{i, i+1\}``, divided by the **averaged** spacing | 1 (SBP-exact, not truncation-order) | 1 | truncated to `0` at the last point, like `D₊` |
 
-`Dc`, `D̽`, `Dₕ` and `jump` work the same way. The averages use `Mₕ`/`M₊ₕ` for this rather
-than a bare `M`: `M` is what most finite-element code calls its mass matrix, and exporting
-it would take the name away from anyone writing `using Bramble`. So `Mₕ(uₕ)` is the tuple
-over every coordinate and `Mₕ(uₕ, 2)` is the average along ``y`` — the same name, told apart
-by how many arguments it is given. `Dₕ` carries both in the same way.
+On a uniform grid ``h_i = h_{i+1}``: `D̽` and `Dc` collapse to the same value (the mean of
+`D₋` and `D₊`), and `D̃` collapses to `D₊`. They separate only where the spacing varies,
+which is why a uniform-grid benchmark cannot tell them apart.
 
-The point of it is a loop the subscript names cannot express, because the direction is part
-of the name there and cannot come from a variable:
+### [1.3 The direction as an argument](@id operators_direction_argument)
+
+The direction can also come from a variable rather than from the name. Index the
+vectorial operator with it: `∇ₕ[d]` is the coordinate operator itself, so `∇ₕ[1]`,
+`∇ₕ[:x]` and `D₋ₓ` are the same function object, and `dx, dy = ∇ₕ` destructures it. The
+same holds for `∇̃ₕ`, `∇cₕ`, `∇̽ₕ`, `jumpₕ`, `Mₕ` and `Mcₕ`.
+
+That is what makes a loop over directions writable, which the subscript names cannot
+express on their own:
 
 ```julia
 # the discrete H¹ seminorm squared, in any dimension
-sum(innerₕ(D₋(uₕ, d), D₋(uₕ, d)) for d in 1:dim(mesh(space(uₕ))))
+sum(innerₕ(∇ₕ[d](uₕ), ∇ₕ[d](uₕ)) for d in 1:dim(mesh(space(uₕ))))
 ```
 
-This costs nothing over writing the coordinate out. An `Int` or a `Symbol` selects between
-literal `Val`s, one branch per direction the mesh has, so the direction still reaches the
-stencil engine as a compile-time constant; the loop above allocates exactly what the
-spelled-out version does. An out-of-range direction throws an `ArgumentError`, and the bound
-is the mesh's own dimension: `D₋(uₕ, :y)` on a 1D grid is an error, not a silent zero.
+Underneath, every family has a stem that takes the direction as a second argument, and the
+coordinate suffix is spelling it:
+
+| Written | Same as |
+|:--|:--|
+| `Bramble.D₋(uₕ, 1)` | `D₋ₓ(uₕ)` |
+| `Bramble.D₋(uₕ, :y)` | `D₋ᵧ(uₕ)` |
+| `Bramble.D₋(uₕ, Val(3))` | `D₋₂(uₕ)` |
+
+The stems `D₋`, `D₊`, `Dc`, `D̃` and `jump` are declared `public` but not exported, so they
+are written `Bramble.D₋` or imported by name. The `Val` form is the one to reach for when the
+direction must be a compile-time constant, as it must inside a form. The averages use
+`Mₕ`/`M₊ₕ` for this rather than a bare `M`: `M` is what most finite-element code calls its
+mass matrix. So `Mₕ(uₕ)` is the tuple over every coordinate and `Mₕ(uₕ, 2)` is the average
+along ``y`` — the same name, told apart by how many arguments it is given. `∇̽ₕ` carries both
+in the same way.
+
+An `Int` or a `Symbol` selects between literal `Val`s, one branch per direction the mesh
+has. An out-of-range direction throws an `ArgumentError`, and the bound is the mesh's own
+dimension: `Bramble.D₋(uₕ, :y)` on a 1D grid is an error, not a silent zero.
 
 ## 2. Applying an operator
 
@@ -89,7 +114,7 @@ using Bramble
 # Bramble discretises with the backward operator paired with `inner₊`, so the forward ones
 # are the duals you check against rather than the ones you write a form with. They are
 # imported here because this page compares the two families side by side.
-import Bramble: D₊ₓ, ∇₊ₕ, M₊ₓ
+import Bramble: D₊ₓ, ∇₊ₕ, M₊ₓ, Dcₓ, D̽ₓ, D̃ₓ, set_points!, spacings, interpolation_matrix
 Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true);
 Wₕ = gridspace(Ωₕ);
 points(Ωₕ)
@@ -98,21 +123,23 @@ uₕ = Rₕ(Wₕ, x -> x^2);
 parent(uₕ)
 ```
 
-The two backward operators on that grid function:
+The two backward operators on that grid function, reached here through the vectorial
+names (on a one-dimensional mesh `∇ₕ`/`Mₕ` return the single coordinate directly rather
+than a one-tuple, so they agree exactly with `D₋ₓ`/`Mₓ`):
 
 ```@repl operators
-parent(D₋ₓ(uₕ))
-parent(Mₓ(uₕ))
+parent(∇ₕ(uₕ))
+parent(Mₕ(uₕ))
 ```
 
 Reading the second entry of each: the plain difference is ``u_2 - u_1 = 0.0625``, so
-`D₋ₓ` divides that by ``h_2 = 0.25`` to get ``0.25``, and `Mₓ` averages
+`∇ₕ` divides that by ``h_2 = 0.25`` to get ``0.25``, and `Mₕ` averages
 ``(u_1 + u_2)/2 = 0.03125``.
 
 The jump has no backward form; forward, it is that plain difference, undivided:
 
 ```@repl operators
-parent(jumpₓ(uₕ))
+parent(jumpₕ(uₕ))
 ```
 
 ## 3. What happens at the boundary
@@ -178,9 +205,9 @@ one at ``x_5``. The jump instead behaves as if the missing neighbour were zero, 
 what makes it agree with its matrix:
 
 ```@repl operators
-parent(D₋ₓ(uₕ))[1]
+parent(∇ₕ(uₕ))[1]
 parent(D₊ₓ(uₕ))[end]
-parent(jumpₓ(uₕ))[end]   # -u₅, not 0
+parent(jumpₕ(uₕ))[end]   # -u₅, not 0
 ```
 
 Section 9 shows why this matters in practice.
@@ -286,9 +313,9 @@ Passing a mesh or a grid space, rather than a grid function, returns the operato
 as a sparse matrix:
 
 ```@repl operators
-A = D₋ₓ(Wₕ);
+A = ∇ₕ(Wₕ);
 typeof(A)
-A * parent(uₕ) ≈ parent(D₋ₓ(uₕ))
+A * parent(uₕ) ≈ parent(∇ₕ(uₕ))
 ```
 
 Both routes give the same answer. Applying the operator directly to `uₕ` is the fast
@@ -313,27 +340,56 @@ Away from the truncated slices, `g[1]` is `1.0` and `g[2]` is `2.0`, the two par
 derivatives of ``x + 2y``. The same suffix works for the other families as `jumpₕ` and
 `Mₕ`, and all of them accept a mesh, a grid space or a grid function.
 
-These are separate names from the dimensional entry points of [1.2](@ref
+These are separate names from the dimensional entry points of [1.3](@ref
 operators_direction_argument) rather than one name with an extra argument, and deliberately:
-`∇ₕ(uₕ)` returns a tuple where `D₋(uₕ, d)` returns a grid function, so folding them together
-would make the return type depend on whether an argument was passed at all. `Dₕ` and
+`∇ₕ(uₕ)` returns a tuple where `Bramble.D₋(uₕ, d)` returns a grid function, so folding them together
+would make the return type depend on whether an argument was passed at all. `∇̽ₕ` and
 `Mₕ`/`M₊ₕ` are the exception, and they get away with it because the two meanings differ by
 arity rather than by the value of an argument:
 
 ```@repl operators
-Dₕ(vₕ) == (Dₕ(vₕ, 1), Dₕ(vₕ, 2))
+∇̽ₕ(vₕ) == (∇̽ₕ(vₕ, 1), ∇̽ₕ(vₕ, 2))
 Mₕ(vₕ) == (Mₕ(vₕ, :x), Mₕ(vₕ, :y))
 ```
 
-## 6. Summation by parts, and `D̽ₓ`
+### 5.1 Destructuring, indexing and composing the operator itself
+
+`∇ₕ` (and every other `ₕ`-suffixed family) is not only callable on a grid function: it is
+itself a tuple-like object of the per-coordinate operators, so it can be destructured or
+indexed before ever being applied. `dx` below is exactly `D₋ₓ`, reached without importing
+that name:
+
+```@repl operators
+dx, dy = ∇ₕ;
+parent(dx(vₕ)) == parent(∇ₕ(vₕ)[1])
+parent(∇ₕ[:x](vₕ)) == parent(∇ₕ(vₕ)[1])
+parent(∇ₕ[1](vₕ)) == parent(∇ₕ(vₕ)[1])
+```
+
+`∇ₕ` also composes with `LinearAlgebra`'s `⋅` and `×` against a vector grid function,
+contracting to the divergence and curl:
+
+```@repl operators
+using LinearAlgebra: ⋅, ×
+uv = Rₕ(vector_gridspace(Ω₂), x -> (x[1] + 2x[2], 3x[1] - x[2]));
+parent(∇ₕ ⋅ uv) == parent(divₕ(uv))
+parent(∇ₕ × uv) == parent(curlₕ(uv))
+```
+
+`∇cₕ`, `∇̽ₕ`, `∇̃ₕ` and `∇₊ₕ` all answer to the same three spellings (destructuring, `[d]`
+indexing, `⋅`/`×`), each contracting to its own family's `div`/`curl` (`divcₕ`/`curlcₕ`,
+`div̽ₕ`/`curl̽ₕ`, `diṽₕ`/`curl̃ₕ`, `div₊ₕ`/`curl₊ₕ`).
+
+## 6. Summation by parts, and `D̃ₓ`
 
 Continuous integration by parts, ``\int u' v = -\int u v'`` for ``v`` vanishing on the
 boundary, has a discrete counterpart, and which forward difference it holds for is not
-the obvious one. The operator that satisfies it is `D̽ₓ`: the forward difference
-divided by the **averaged** spacing rather than by the forward spacing,
+the obvious one. The operator that satisfies it is `D̃ₓ` (also reached as `∇̃ₕ[1]`, or by
+destructuring `∇̃ₕ`): the forward difference divided by the **averaged** spacing rather
+than by the forward spacing,
 
 ```math
-\overset{\times}{\textrm{D}}_{+x}(u_h)(i) = \frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}
+\tilde{\textrm{D}}_{+x}(u_h)(i) = \frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}
 ```
 
 with the last point truncated to zero, as `D₊ₓ` is. On a uniform grid ``h_i = h_{i+1}``
@@ -344,38 +400,38 @@ and it coincides with `D₊ₓ`; the two differ only where the spacing varies:
 set_points!(Ωₙ, [0.0, 0.1, 0.3, 0.7, 1.0])
 uₙ = Rₕ(gridspace(Ωₙ), x -> x^2);
 parent(D₊ₓ(uₙ))
-parent(D̽ₓ(uₙ))
+parent(D̃ₓ(uₙ))
 ```
 
 The identity is
 
 ```math
-(\overset{\times}{\textrm{D}}_{+x} u_h,\, v_h)_h = -(u_h,\, D_{-x} v_h)_{+x}
+(\tilde{\textrm{D}}_{+x} u_h,\, v_h)_h = -(u_h,\, D_{-x} v_h)_{+x}
 ```
 
 for any `vₕ` that vanishes on the boundary. Note which product sits on each side: the
-left is `innerₕ`, weighted by the cell measures, and the right is `inner₊ₓ`, weighted by
-the staggered ones. Only `vₕ` has to vanish; `uₕ` is unconstrained, since the boundary
-term the identity discards is a product of the two.
+left is `innerₕ`, weighted by the cell measures, and the right is `inner₊(·, ·, :x)`,
+weighted by the staggered ones. Only `vₕ` has to vanish; `uₕ` is unconstrained, since the
+boundary term the identity discards is a product of the two.
 
 ```@repl operators
 Ωᵣ = mesh(domain(interval(0.0, 1.0)), 21, false);   # a random, non-uniform grid
 Wᵣ = gridspace(Ωᵣ);
 aₕ = Rₕ(Wᵣ, x -> cos(x) + 0.7);                     # not zero at the boundary
 bₕ = Rₕ(Wᵣ, x -> sin(pi * x));                      # zero at both ends
-innerₕ(D̽ₓ(aₕ), bₕ)
--inner₊ₓ(aₕ, D₋ₓ(bₕ))                              # equal to machine precision
+innerₕ(D̃ₓ(aₕ), bₕ)
+-inner₊(aₕ, ∇ₕ(bₕ), :x)                            # equal to machine precision
 innerₕ(D₊ₓ(aₕ), bₕ)                                # D₊ₓ does not agree
 ```
 
-It holds per coordinate in two and three dimensions as well, with `D̽ᵧ`, `D̽₂`
-and their inner products. `D̽ₕ` returns all coordinates at once, as `∇₊ₕ` does.
+It holds per coordinate in two and three dimensions as well, with `D̃ᵧ`, `D̃₂`
+and their inner products. `∇̃ₕ` returns all coordinates at once, as `∇₊ₕ` does.
 
 This is why the operator exists. Energy estimates for these schemes are derived by
 moving a difference from one factor to the other, and that step is exact only with this
 pairing: with `D₊ₓ` it leaves a residual that does not vanish under refinement, since it
 is a difference of quadrature weights and not a truncation error. Like the other
-difference families, `D̽` can also be had as a sparse matrix: `D̽ₓ(Wₕ)` is
+difference families, `D̃` can also be had as a sparse matrix: `D̃ₓ(Wₕ)` is
 `diag(2/(hᵢ + hᵢ₊₁))` times the undivided forward difference ``u_{i+1} - u_i``, with an
 empty last row.
 
@@ -393,7 +449,7 @@ It is the only operator here that truncates on **two** slices, since neither the
 nor the last point has a neighbour on both sides.
 
 ```@repl operators
-parent(D₋ₓ(uₙ))
+parent(∇ₕ(uₙ))
 parent(D₊ₓ(uₙ))
 parent(Dcₓ(uₙ))
 ```
@@ -421,23 +477,23 @@ innerₕ(Dcₓ(pₕ), qₕ)
 
 The cancellation is the one from section 6: `innerₕ`'s weight at point ``i`` is exactly half
 the centered denominator, so the weights drop out and shifting the index by one turns what
-is left into minus the right side. Unlike the `D̽ₓ` identity, this one needs both
+is left into minus the right side. Unlike the `D̃ₓ` identity, this one needs both
 functions to vanish at the boundary, since the discarded term is symmetric in the two.
 
 Accuracy follows the usual rule: the centered difference approximates the derivative at
 the midpoint of its stencil, which is ``x_i`` only when the two spacings match. So it is
 second order on a uniform grid and first order otherwise, where the one-sided differences
 are first order on both. Like every other family, `Dcₓ` accepts a mesh or a grid space for
-the matrix and a grid function to apply it; `Dcₕ` gives every coordinate at once. Both end
+the matrix and a grid function to apply it; `∇cₕ` gives every coordinate at once. Both end
 rows of the matrix are empty, which is the truncation.
 
-## 8. Second order on a non-uniform grid, `Dₕₓ`
+## 8. Second order on a non-uniform grid, `D̽ₓ`
 
 `Dcₓ` is second order only on a uniform grid. The fix is to take the same two one-sided
 differences and weight them by the **opposite** spacings:
 
 ```math
-\textrm{D}_{hx}(u_h)(i) = \frac{h_i}{h_i + h_{i+1}}\, D_{-x} u_h(x_{i+1})
+\overset{\times}{\textrm{D}}_{x}(u_h)(i) = \frac{h_i}{h_i + h_{i+1}}\, D_{-x} u_h(x_{i+1})
                         + \frac{h_{i+1}}{h_i + h_{i+1}}\, D_{-x} u_h(x_i)
 ```
 
@@ -451,27 +507,27 @@ denominator cancels:
 
 ```@repl operators
 parent(Dcₓ(uₙ))
-parent(Dₕₓ(uₙ))
-2 .* points(Ωₙ)   # Dₕₓ hits this exactly in the interior
+parent(D̽ₓ(uₙ))
+2 .* points(Ωₙ)   # D̽ₓ hits this exactly in the interior
 ```
 
 That one order of extra exactness is one order of extra accuracy. Differencing ``\sin``
 against ``\cos`` on a random grid, refined by halving every interval so the grids stay
 nested:
 
-| ``n`` | `Dcₓ` error | order | `Dₕₓ` error | order |
+| ``n`` | `Dcₓ` error | order | `D̽ₓ` error | order |
 |--:|--:|--:|--:|--:|
 | 21 | 3.52e-02 | | 2.95e-03 | |
 | 41 | 1.78e-02 | 0.99 | 1.30e-03 | 1.18 |
 | 81 | 8.94e-03 | 0.99 | 3.32e-04 | 1.97 |
 | 161 | 4.48e-03 | 1.00 | 8.36e-05 | 1.99 |
 
-`Dₕₓ` is not skew-symmetric, so `Dcₓ` remains the one to reach for when the scheme needs
-that structure and `Dₕₓ` the one to reach for when it needs the order. Both accept a mesh
-or a grid space for the matrix and a grid function to apply it, and `Dₕ` gives every
-coordinate at once, the centered counterpart of `∇ₕ` and `∇₊ₕ`. They differ at the
-boundary: `Dcₓ` truncates both end rows to zero, while `Dₕₓ` has no truncated-boundary
-convention of its own and falls back to `D₊ₓ`/`D₋ₓ` there instead.
+`D̽ₓ` is not skew-symmetric, so `Dcₓ` remains the one to reach for when the scheme needs
+that structure and `D̽ₓ` the one to reach for when it needs the order. Both accept a mesh
+or a grid space for the matrix and a grid function to apply it, and `∇̽ₕ` gives every
+coordinate at once, the second-order, non-uniform-grid counterpart of `∇ₕ` and `∇₊ₕ`.
+They differ at the boundary: `Dcₓ` truncates both end rows to zero, while `D̽ₓ` has no
+truncated-boundary convention of its own and falls back to `D₊ₓ`/`D₋ₓ` there instead.
 
 ## 9. A convergence study, and the boundary
 
@@ -483,7 +539,7 @@ for n in (11, 101, 1001, 10001)
     Ω = mesh(domain(interval(0.0, 1.0)), n, true)
     W = gridspace(Ω)
     u = Rₕ(W, sin)
-    e = D₋ₓ(u) - Rₕ(W, cos)
+    e = ∇ₕ(u) - Rₕ(W, cos)
     println(n, "  ", normₕ(e))
 end
 ```

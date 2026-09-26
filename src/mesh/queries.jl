@@ -221,6 +221,7 @@ it is built.
 # Examples
 
 ```julia
+using Bramble: locate_cell
 Ωₕ = mesh(domain(interval(0.0, 1.0)), 11)  # h = 0.1
 locate_cell(Ωₕ, 0.35)  # returns 4 (interval [0.3, 0.4])
 locate_cell(Ωₕ, 5.0)   # returns 10 (the last cell) -- no error, x = 5.0 is well outside [0, 1]
@@ -344,7 +345,7 @@ an `h/2` that must not be there.
 The face set is carried as a mask, `NTuple{D, NTuple{2, Bool}}` -- per axis, whether the
 `min` and the `max` face belong to the surface. Its *type* is fixed by `D` alone, so the
 weight is type-stable and allocation-free whether the mask is a runtime value (the numeric
-`inner_Γ`) or a type parameter (the symbolic `InnerGamma`, form/operators/inner.jl).
+`inner_Γ`) or a type parameter (the symbolic `InnerGamma`, ast/operators/inner.jl).
 =#
 
 # Canonical symbols and the legacy viewpoint aliases, per dimension. The 3D aliases are not

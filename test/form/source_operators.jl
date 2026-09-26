@@ -18,7 +18,19 @@ using Bramble:
                resolve_form_ast,
                LinearProduct,
                CompositeGridSpace,
-               components
+               components,
+               Dcᵧ,
+               Dcₓ,
+               D̃ₓ,
+               D̽ₓ,
+               D₋ᵧ,
+               D₋ₓ,
+               Mᵧ,
+               Mₓ,
+               inner₊₂,
+               jumpᵧ,
+               jumpₓ,
+               weights
 
 # An operator wrapped around a *source* in a linear form.
 #
@@ -34,7 +46,7 @@ using Bramble:
 # relabelled copies of f(xᵢ) cancelled) and `innerₕ(Mₓ(f), v)` reproduced `innerₕ(f, v)`
 # (they summed back to f(xᵢ)): the operator silently dropped either way.
 # Now, `_contracted_left_stencil` reads the subtree's own `local_stencil`, correct once a
-# source is marked `PointDependentStencil` (`form/operators/interpolation.jl`).
+# source is marked `PointDependentStencil` (`ast/operators/interpolation.jl`).
 # This file's checks pin the observable behaviour.
 #
 # Every check below is against the NUMERIC operator layer, which is a third, independent
@@ -58,8 +70,8 @@ using Bramble:
             ("M₊ₓ", M₊ₓ),
             ("jumpₓ", jumpₓ),
             ("Dcₓ", Dcₓ),
-            ("D̽ₓ", D̽ₓ),
-            ("Dₕₓ", Dₕₓ)
+            ("D̃ₓ", D̃ₓ),
+            ("D̽ₓ", D̽ₓ)
         )
             b = assemble(form(Wₕ, v -> innerₕ(op(sf), v)))
             @test b ≈ parent(op(fₕ)) .* w                     # the oracle
@@ -88,8 +100,8 @@ using Bramble:
             ("jumpᵧ", jumpᵧ),
             ("Dcₓ", Dcₓ),
             ("Dcᵧ", Dcᵧ),
-            ("D̽ₓ", D̽ₓ),
-            ("Dₕₓ", Dₕₓ)
+            ("D̃ₓ", D̃ₓ),
+            ("D̽ₓ", D̽ₓ)
         )
             b = assemble(form(Wₕ, v -> innerₕ(op(sf), v)))
             @test b ≈ parent(op(fₕ)) .* w

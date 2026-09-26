@@ -48,6 +48,7 @@ one whose symmetric part the split is meant to remove.
 The result is a two-argument function, which is what [`form`](@ref) takes:
 
 ```julia
+using Bramble: skew_symmetric
 a = form(Wₕ, Wₕ, skew_symmetric(wₕ))
 a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + skew_symmetric(wₕ)(u, v))
 ```

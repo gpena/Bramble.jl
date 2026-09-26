@@ -15,7 +15,7 @@ using PrecompileTools: @setup_workload, @compile_workload
 # ---------------------------------------------------------------------------
 
 """
-	metal_backend(T::Type = Float32; policy = GpuAsync())
+	metal_backend(T::Type = Float32; policy = GpuKernel())
 
 Returns a [`Backend`](@ref) that uses Apple Metal GPU arrays via
 [Metal.jl](https://github.com/JuliaGPU/Metal.jl).
@@ -28,7 +28,7 @@ on Apple Silicon GPUs.
 
 ```julia
 using Bramble, Metal
-b   = metal_backend()          # Backend{MtlVector{Float32}, MtlMatrix{Float32}, GpuAsync}
+b   = metal_backend()          # Backend{MtlVector{Float32}, MtlMatrix{Float32}, GpuKernel}
 b32 = metal_backend(Float32)   # same
 b16 = metal_backend(Float16)   # half-precision
 ```
@@ -118,7 +118,7 @@ else
     A sparse matrix in compressed sparse row (CSR) format, stored in Metal device memory as
     `MtlVector` fields `rowPtr`, `colVal`, `nzVal`, plus the matrix `dims`, and its own
     `mirror` field ([`_DeviceSparseMirror`](@ref), gpena/Bramble.jl#313): the host staging
-    copies of `rowPtr`/`colVal`/`nzVal` that `src/form/bilinear_traversal.jl`'s
+    copies of `rowPtr`/`colVal`/`nzVal` that `src/assembly/bilinear_traversal.jl`'s
     `_scatter_position`/`_scatter_add!` search and accumulate into without ever
     scalar-indexing device memory. See `docs/src/internals/gpu.md` for the contract every
     device sparse matrix type carries this field to satisfy.

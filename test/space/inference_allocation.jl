@@ -2,6 +2,9 @@ module SpaceInferenceAllocationTests
 
 using Test
 using Bramble
+using Bramble: Dcₕ, D̃ₕ, D̽ₕ, divₕ!, curlₕ!, Δₕ!, norm₊
+using Bramble: D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, M₂, Mₓ, VectorElement, inner₊ᵧ, inner₊ₓ, jumpᵧ, jump₂
+using Bramble: jumpₓ, norminf
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ, diff₊ₓ, diff₊ᵧ, diff₊₂, diff₊ₕ, D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ, M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 import Bramble: div₊ₕ!
@@ -94,11 +97,11 @@ using ..TestUtils: alloc_test, @test_allocs
                 @test @inferred(normₕ(uₕ)) isa Float64
                 @test @inferred(snorm₁ₕ(uₕ)) isa Float64
                 @test @inferred(norm₁ₕ(uₕ)) isa Float64
-                @test @inferred(norminf_h(uₕ)) isa Float64
+                @test @inferred(norminf(uₕ)) isa Float64
                 g = ∇ₕ(uₕ)
                 @test @inferred(norm₊(g)) isa Float64
                 @test @inferred(inner₊(g, g)) isa Float64
-                @test @inferred(norminf_h(g)) isa Float64
+                @test @inferred(norminf(g)) isa Float64
             end
         end
         @test @inferred(inner₊ₓ(uₕ2, uₕ2)) isa Float64
@@ -132,7 +135,7 @@ using ..TestUtils: alloc_test, @test_allocs
                 @test_allocs normₕ(uₕ)
                 @test_allocs snorm₁ₕ(uₕ)
                 @test_allocs norm₁ₕ(uₕ)
-                @test_allocs norminf_h(uₕ)
+                @test_allocs norminf(uₕ)
             end
         end
         # a component of a composite grid function is a scalar grid function, and the
@@ -141,8 +144,8 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs innerₕ(c, c)
         @test_allocs normₕ(c)
         @test_allocs snorm₁ₕ(c)
-        @test_allocs norminf_h(c)
-        @test_allocs norminf_h(cₕ2)
+        @test_allocs norminf(c)
+        @test_allocs norminf(cₕ2)
         @test_allocs inner_Γ(uₕ2, uₕ2, :ymin)
         @test_allocs inner_Γ(uₕ3, uₕ3, :boundary)
 
@@ -159,14 +162,14 @@ using ..TestUtils: alloc_test, @test_allocs
     end
 
     @testset "Zero dynamic dispatch (vectorial aliases)" begin
-        # gpena/Bramble.jl#146: `∇ₕ`/`∇₊ₕ`/`diff₋ₕ`/`diff₊ₕ`/`Mₕ`/`M₊ₕ`/`D̽ₕ`/`Dcₕ`/`Dₕ`
+        # gpena/Bramble.jl#146: `∇ₕ`/`∇₊ₕ`/`diff₋ₕ`/`diff₊ₕ`/`Mₕ`/`M₊ₕ`/`D̃ₕ`/`Dcₕ`/`D̽ₕ`
         # used to generate their 2D/3D methods from `ntuple(i -> base_op(arg, Val(i)),
         # Val(D))`, which boxes `i` as a runtime Int inside the closure: `Val(i)` can
         # never constant-fold, so every coordinate paid for dynamic dispatch all the way
         # down the difference-engine call stack (2-8 dispatches per call, per JET).
         # `_vectorial_expr` now writes the 2D/3D methods out with literal `Val(1)`,
         # `Val(2)`, `Val(3)` calls instead, so this must report zero.
-        for op in (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M₊ₕ, D̽ₕ, Dcₕ, Dₕ)
+        for op in (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M₊ₕ, D̃ₕ, Dcₕ, D̽ₕ)
             rep2 = JET.report_call(op, (typeof(uₕ2),))
             @test isempty(JET.get_reports(rep2))
             rep3 = JET.report_call(op, (typeof(uₕ3),))

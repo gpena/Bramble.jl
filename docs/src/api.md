@@ -13,6 +13,10 @@ Documentation for `Bramble.jl`'s public API.
 
 ### Linear algebra backends
 
+The backend allocation hooks (`backend_eye`, `backend_zeros`, `ka_device`,
+`supports_undef_construction`) are private; see the
+[utilities internals page](internals/utils.md).
+
 ```@docs
 backend
 Locality
@@ -23,25 +27,31 @@ ExecutionPolicy
 CpuPolicy
 CpuSerial
 CpuThreaded
-CpuBatch
+CpuPolyester
 GpuPolicy
-GpuAsync
+GpuKernel
 Serial
 Parallel
 execution_policy
 vector
 matrix
-supports_undef_construction
 vector_type
 matrix_type
 backend_types
-backend_eye
-backend_zeros
 metal_sparse_csr
-ka_device
+metal_sparse_csc
 gpu_backend
 metal_backend
 csr_backend
+sparse_refactor!
+PRECOMPILE_WORKLOAD
+```
+
+#### Deprecated
+
+```@docs
+CpuBatch
+GpuAsync
 ```
 
 ---
@@ -49,6 +59,9 @@ csr_backend
 ## Geometry
 
 ### Sets and intervals
+
+`is_collapsed`, `point_type` and `set` are private; see the
+[geometry internals page](internals/geometry.md).
 
 ```@docs
 interval
@@ -60,10 +73,7 @@ topo_dim
 Base.extrema(::CartesianProduct, ::Integer)
 center
 projection
-is_collapsed
-point_type
 boundary_symbols
-set
 ```
 
 ### Markers and domains
@@ -80,38 +90,34 @@ labels
 
 ### Mesh types and constructors
 
+`AbstractMeshType`, `MeshMarkers` and `submeshes` are private; see the
+[mesh internals page](internals/mesh.md).
+
 ```@docs
-AbstractMeshType
 Mesh1D
 MeshnD
-MeshMarkers
 mesh
-submeshes
 ```
 
 ### Points and spacings
 
+`host_points`, `host_spacings`, `forward_spacings`, `half_spacings`,
+`host_half_spacings`, `stepsize`, `locate_cell` and `cell_measures` are private; see the
+[mesh internals page](internals/mesh.md).
+
 ```@docs
 npoints
 points
-host_points
 half_points
 half_point
 spacing
 forward_spacing
 half_spacing
 spacings
-host_spacings
-forward_spacings
-half_spacings
-host_half_spacings
 hₘₐₓ
 hₘᵢₙ
-stepsize
-locate_cell
 normal_vector
 cell_measure
-cell_measures
 is_uniform
 ```
 
@@ -142,22 +148,27 @@ set_points!
 ```@docs
 ScalarGridSpace
 CompositeGridSpace
+VectorGridSpace
 gridspace
 vector_gridspace
 ```
 
 ### Space properties and degrees of freedom
 
+`host_weights` is private; see the [mesh internals page](internals/mesh.md).
+
 ```@docs
 ndofs
 weights
-host_weights
 spaces
 space
 ncomponents
 ```
 
 ### Vector elements and grid functions
+
+`ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` is private; see the
+[CSR solvers internals page](internals/csr_solvers.md).
 
 ```@docs
 VectorElement
@@ -168,7 +179,6 @@ components
 component_range
 component_ranges
 Base.:*(::Function, ::VectorElement)
-ldiv!(::VectorElement, ::Factorization, ::AbstractVector)
 ```
 
 ### Restriction and averaging operators
@@ -214,49 +224,32 @@ interpolation_matrix
 The finite difference, the jump and the average, per coordinate and over every coordinate
 at once. See the [operators tutorial](tutorials/operators.md).
 
-Every family also takes the direction as an argument rather than as part of the name:
-`D₋(uₕ, 2)`, `D₋(uₕ, :y)` and `D₋(uₕ, Val(2))` are all `D₋ᵧ(uₕ)`. That is what makes a
-dimension-agnostic expression writable — `sum(innerₕ(D₋(uₕ, d), D₋(uₕ, d)) for d in 1:D)`
-reads the same in 1D, 2D and 3D — and it costs nothing: the `Int` and `Symbol` forms branch
-over literal `Val`s, so the direction still reaches the stencil engine as a compile-time
-constant. The averages put this on `Mₕ`/`M₊ₕ` rather than on a bare `M`, which would take
-the most common local name in finite-element code away from anyone writing `using Bramble`;
-`Mₕ(uₕ)` is still the tuple over every coordinate and `Mₕ(uₕ, 2)` is the `y` average.
+A direction held in a variable indexes the vectorial operator: `∇ₕ[2]`, `∇ₕ[:y]` and
+`D₋ᵧ` are the same function, so `sum(innerₕ(∇ₕ[d](uₕ), ∇ₕ[d](uₕ)) for d in 1:D)` reads the
+same in 1D, 2D and 3D. Underneath, every family has a stem that takes the direction as an
+argument: `Bramble.D₋(uₕ, 2)`, `Bramble.D₋(uₕ, :y)` and `Bramble.D₋(uₕ, Val(2))` are all
+`D₋ᵧ(uₕ)`. The stems `D₋`, `D₊`, `Dc`, `D̃` and `jump` are `public` but not exported. The
+averages put this on `Mₕ`/`M₊ₕ` rather than on a bare `M`, which would take the most common
+local name in finite-element code away from anyone writing `using Bramble`; `Mₕ(uₕ)` is
+still the tuple over every coordinate and `Mₕ(uₕ, 2)` is the `y` average.
 
-The same names carry the symbolic form: `D₋(uₕ, Val(1))` differences a grid function now,
+The same stems carry the symbolic form: `D₋(uₕ, Val(1))` differences a grid function now,
 `D₋(U, Val(1))` builds the AST node that will difference it during assembly. Inside a form
 the direction must be a `Val`, since it is a type parameter of the node.
 
-Three families are documented here but not exported, so `using Bramble` does not bring them
-into scope and they are written `Bramble.D₊ₓ` or imported by name: the unscaled differences
-`diff₋*`/`diff₊*`, the forward differences `D₊*`/`∇₊ₕ`, and the forward averages `M₊*`.
-Bramble discretises with the backward operator paired with [`inner₊`](@ref), so the forward
-ones are what the backward ones are built and checked against rather than what a form is
-written with.
+Three families are not exported, so `using Bramble` does not bring them into scope and they
+are written `Bramble.D₊ₓ` or imported by name: the unscaled differences `diff₋*`/`diff₊*`,
+the forward differences `D₊*`/`∇₊ₕ`, and the forward averages `M₊*`. Bramble discretises with
+the backward operator paired with [`inner₊`](@ref), so the forward ones are what the backward
+ones are built and checked against rather than what a form is written with.
 
 The unscaled differences (`diff₋ₓ` and its siblings) are the plain, undivided differences
 these are built from, and are the one family of the three that is not even declared
 `public`: they have no form-layer node, so they cannot appear inside a bilinear form, and in
 a form the undivided forward difference is spelled [`jumpₓ`](@ref), which says which of the
-two is meant.
+two is meant. `diff₋*`/`diff₊*` are private; see the [forms internals page](internals/form.md).
 
 ```@docs
-diff₋ₓ
-diff₋ₓ!
-diff₋ᵧ
-diff₋ᵧ!
-diff₋₂
-diff₋₂!
-diff₋ₕ
-diff₊ₓ
-diff₊ₓ!
-diff₊ᵧ
-diff₊ᵧ!
-diff₊₂
-diff₊₂!
-diff₊ₕ
-diff₋
-diff₊
 D₋ₓ
 D₋ₓ!
 D₋ᵧ
@@ -277,18 +270,18 @@ D₊
 
 The forward difference over the averaged spacing, which is the one that satisfies
 the discrete summation-by-parts identity
-``(\overset{\times}{\textrm{D}}_{+x} u_h, v_h)_h = -(u_h, D_{-x} v_h)_{+x}`` for grid functions
+``(\tilde{\textrm{D}}_{+x} u_h, v_h)_h = -(u_h, D_{-x} v_h)_{+x}`` for grid functions
 `vₕ` vanishing on the boundary.
 
 ```@docs
-D̽ₓ
-D̽ₓ!
-D̽ᵧ
-D̽ᵧ!
-D̽₂
-D̽₂!
-D̽ₕ
-D̽
+D̃ₓ
+D̃ₓ!
+D̃ᵧ
+D̃ᵧ!
+D̃₂
+D̃₂!
+D̃ₕ
+D̃
 ```
 
 The centered difference, over the span its stencil covers. It reproduces the derivative
@@ -311,13 +304,13 @@ the opposite spacings. It reproduces the derivative of a quadratic exactly on an
 grid, and so is second order on a non-uniform one where `Dcₓ` is first.
 
 ```@docs
-Dₕₓ
-Dₕₓ!
-Dₕᵧ
-Dₕᵧ!
-Dₕ₂
-Dₕ₂!
-Dₕ
+D̽ₓ
+D̽ₓ!
+D̽ᵧ
+D̽ᵧ!
+D̽₂
+D̽₂!
+D̽ₕ
 ```
 
 The vector calculus operators built on those differences: the divergence and the curl of a
@@ -325,33 +318,46 @@ vector field, and the conservative discrete Laplacian of a grid function. The un
 spellings use the backward differences, as [`∇ₕ`](@ref) does; `div₊ₕ` and `curl₊ₕ` are their
 forward twins. [`εₕ`](@ref)/[`εₕ!`](@ref) are the discrete symmetric small-strain tensor,
 over a composite `VectorElement` at runtime or, inside a [`form`](@ref), over a composite
-trial or test function -- the same name spans both, dispatching on what it is given.
+trial or test function -- the same name spans both, dispatching on what it is given. The
+in-place `!` forms write into a preallocated result and are `public` but not exported, as
+are `D̃ₕ`, `Dcₕ` and `D̽ₕ`, which are the same functions as the exported `∇̃ₕ`, `∇cₕ` and
+`∇̽ₕ`.
 
 ```@docs
 divₕ
 divₕ!
 div₊ₕ
+div₊ₕ!
 divcₕ
 divcₕ!
+div̽ₕ
+div̽ₕ!
 curlₕ
 curlₕ!
 curl₊ₕ
+curl₊ₕ!
 curlcₕ
 curlcₕ!
+curl̽ₕ
+curl̽ₕ!
 Δₕ
 Δₕ!
 εₕ
 εₕ!
 εcₕ
 εcₕ!
+ε̽ₕ
+ε̽ₕ!
 ∇cₕ
 ∇cₕ!
 ∇̽ₕ
 ∇̽ₕ!
-div̽ₕ
-div̽ₕ!
-curl̽ₕ
-curl̽ₕ!
+∇̃ₕ
+∇̃ₕ!
+diṽₕ
+diṽₕ!
+curl̃ₕ
+curl̃ₕ!
 ε₊ₕ
 ε₊ₕ!
 ```
@@ -402,7 +408,7 @@ M₊ₕ
 ```@docs
 innerₕ
 inner_Γ
-n
+η
 skew_symmetric
 inner₊
 inner₊ₓ
@@ -412,8 +418,8 @@ normₕ
 norm₁ₕ
 snorm₁ₕ
 norm₊
-norminf_h
-norm∞ₕ
+norminf
+norm(::VectorElement, ::AbstractString)
 ```
 
 ---
@@ -432,9 +438,10 @@ expression
 
 ### Point (Dirac) sources
 
+`DiracSource` is private; see the [forms internals page](internals/form.md).
+
 ```@docs
 dirac
-DiracSource
 ```
 
 
@@ -506,15 +513,8 @@ Accelerate/MUMPS direct solvers, and `type_cached_assemble!`.
 
 ### Bandwidth analysis
 
-`bandwidths`/`blockbandwidths` read a `BilinearForm`'s resolved AST alone, without
-assembling anything, and answer what storage the assembled matrix would need: the plain
-bandwidth in 1D, or the block/sub-block bandwidth pair a `D >= 2` mesh's blocked
-lexicographic layout has ([#175](https://github.com/gpena/Bramble.jl/issues/175)).
-
-```@docs
-bandwidths
-blockbandwidths
-```
+`bandwidths`/`blockbandwidths` are private; see the
+[forms internals page](internals/form.md).
 
 ### Dirichlet conditions
 
@@ -535,21 +535,15 @@ suitable for `export_vtk`.
 
 ```@docs
 reaction
+reaction!
 reaction_density
+reaction_density!
 ```
 
 ### Structural properties
 
-Whether a `BilinearForm` is symmetric, or symmetric positive semi-definite, by construction
-— a cheap, symbolic check on its expression, answered before any matrix is assembled.
-`issymmetric` recognises terms `innerₕ(L(u), L(v))` with the same `L` on both sides, and
-transposed pairs `innerₕ(A(u), B(v)) + innerₕ(B(u), A(v))` anywhere in a sum, the pair's
-coefficients being the same object (or both absent); `isposdef` recognises the first kind only.
-
-```@docs
-issymmetric(::BilinearForm)
-isposdef(::BilinearForm)
-```
+`issymmetric(::BilinearForm)`/`isposdef(::BilinearForm)` are private; see the
+[forms internals page](internals/form.md).
 
 ---
 

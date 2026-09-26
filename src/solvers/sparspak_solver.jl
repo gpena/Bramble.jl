@@ -34,6 +34,7 @@ before calling this function.
 # Examples
 
 ```julia
+using Bramble: sparspak_factorize
 using Sparspak
 
 A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
@@ -70,6 +71,7 @@ before calling this function.
 # Examples
 
 ```julia
+using Bramble: sparspak_solve
 using Sparspak
 
 A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)

@@ -251,7 +251,7 @@ end
 Whether `op` still contains a symbolic placeholder, such as a trial or test function, and
 so cannot be evaluated until one is substituted.
 
-The base cases are here; `src/form/stencil_eval.jl` adds the methods for the concrete AST
+The base cases are here; `src/assembly/stencil_eval.jl` adds the methods for the concrete AST
 nodes, once every node type exists.
 """
 function is_symbolic end

@@ -2,6 +2,8 @@ module ExtADBackendVerificationTests
 
 using Test
 using Bramble
+using Bramble: KroneckerLinearOperator
+using Bramble: jacobian_pattern
 using ADTypes
 using ForwardDiff, ReverseDiff, FiniteDiff, DifferentiationInterface
 using Random
@@ -144,7 +146,7 @@ end
 
 @testset "ReverseDiff/KroneckerLinearOperator mul! disambiguation (gpena/Bramble.jl#295)" begin
     # A small non-uniform 2D separable form -- `is_separable`'s own recognised shape
-    # (`innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))`, see src/form/kronecker.jl). Exercises exactly
+    # (`innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))`, see src/assembly/kronecker.jl). Exercises exactly
     # what `ext/BrambleReverseDiffExt.jl`'s disambiguating `mul!` needs to get right: the
     # extension only loads (and only needs to resolve the ambiguity) once `ReverseDiff` --
     # already `using`'d above -- is loaded alongside Bramble.

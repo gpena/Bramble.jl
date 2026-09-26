@@ -49,7 +49,7 @@ already queued against `x`'s device backend has completed.
 
 Through gpena/Bramble.jl#94's S4.2, every `@kernel` launch in `BrambleKernelAbstractionsExt`
 called this right after launching, unconditionally. gpena/Bramble.jl#302/#306 (S11) removed
-that: under [`GpuAsync`](@ref) -- the only [`GpuPolicy`](@ref) there is -- a kernel launch
+that: under [`GpuKernel`](@ref) -- the only [`GpuPolicy`](@ref) there is -- a kernel launch
 now only enqueues onto the device's own command queue and returns, so a chain of operators
 (`D₋ₓ` into `D₋ᵧ`, say) pipelines instead of paying a host round-trip after each step.
 Kernels enqueued on the same queue still run in that queue's order, so this is *not* needed
@@ -63,7 +63,7 @@ between chained device calls, only at a genuine host boundary:
   - a write that reaches device memory some way other than a `@kernel` launch on that same
     queue -- a plain `copyto!`, which queues asynchronously exactly like a kernel launch
     does, but is not one of the launches above. `_flush_device_scatter!`
-    (`src/form/bilinear_traversal.jl`) is this function's first caller for exactly that
+    (`src/assembly/bilinear_traversal.jl`) is this function's first caller for exactly that
     reason: it ends a device-resident matrix's assembly with
     `copyto!(A.nzVal, mirror.nzval)`, and calling this right after is what keeps
     `assemble`/`assemble!` from returning before that write lands (S4.2's race, found at

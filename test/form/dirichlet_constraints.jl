@@ -16,7 +16,9 @@ import Bramble:
                 label,
                 markers,
                 point,
-                index_in_marker
+                index_in_marker,
+                CompositeGridSpace,
+                indices
 using Bramble: set
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS

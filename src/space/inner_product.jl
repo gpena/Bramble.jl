@@ -20,7 +20,7 @@ form is accepted there.
 
 `inner₊` and `innerₕ` are each spelled twice in this package, and the two meanings do not
 live in the same layer. Here they take grid functions and return a **number**. In
-`src/form/operators/inner.jl` they take operators and return an **AST node** for a form to
+`src/ast/operators/inner.jl` they take operators and return an **AST node** for a form to
 be assembled from. CONTEXT.md draws that line at the domain level: a form is symbolic, a
 grid function is data.
 
@@ -197,7 +197,7 @@ surface is cut at an interior transverse index, and needs the explicit one-sided
 and is refused rather than silently given the factorised weight.
 
 The symbolic twin, for use inside a form, is `inner_Γ(g, v; markers = …)`
-(`form/operators/inner.jl`). It takes its regions as a keyword, to sit beside `innerₕ`; this
+(`ast/operators/inner.jl`). It takes its regions as a keyword, to sit beside `innerₕ`; this
 one keeps the positional labels it has always had.
 
 # Examples
@@ -243,7 +243,7 @@ end
 # grid walk is the one every other inner product here does, and the boundary is a vanishing
 # fraction of the points, so the arithmetic saved by a marked-index walk is not worth a
 # second traversal shape. The same weight is read per point by the symbolic path
-# (`compute_weight(::InnerGamma, …)`, form/operators/inner.jl), so the two layers compute the
+# (`compute_weight(::InnerGamma, …)`, ast/operators/inner.jl), so the two layers compute the
 # same number by construction.
 @inline function _surface_sum(Ωₕ, mask, u, v)
     acc = zero(eltype(u)) * zero(eltype(v)) * zero(eltype(Ωₕ))
@@ -266,7 +266,7 @@ end
 
 @inline _surface_sum(::HostLocality, ::CpuSerial, Ωₕ, mask, u, v) = _surface_sum(Ωₕ, mask, u, v)
 @inline _surface_sum(::HostLocality, ::CpuThreaded, Ωₕ, mask, u, v) = _surface_sum(Ωₕ, mask, u, v)
-@inline _surface_sum(::HostLocality, ::CpuBatch, Ωₕ, mask, u, v) = _surface_sum(Ωₕ, mask, u, v)
+@inline _surface_sum(::HostLocality, ::CpuPolyester, Ωₕ, mask, u, v) = _surface_sum(Ωₕ, mask, u, v)
 
 @noinline _surface_sum(loc::Locality, policy, Ωₕ, mask, u, v) = _throw_locality_mismatch(loc, policy)
 
@@ -374,8 +374,8 @@ the inner product there: the square root of the sum of the components' squared n
 @inline normₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(innerₕ(uₕ, uₕ))
 
 """
-    norminf_h(uₕ::VectorElement) -> Real
-    norminf_h(uₕ::NTuple{D, VectorElement}) -> Real
+    norminf(uₕ::VectorElement) -> Real
+    norminf(uₕ::NTuple{D, VectorElement}) -> Real
 
 Returns the discrete maximum norm of the grid function `uₕ`, defined as
 
@@ -394,19 +394,29 @@ function returns a `Dual`.
 
 See also: [`normₕ`](@ref), [`norm₁ₕ`](@ref)
 """
-@inline function norminf_h(uₕ::VectorElement)
+@inline function norminf(uₕ::VectorElement)
     data = parent(uₕ)
     return mapreduce(abs, max, data; init = abs(zero(eltype(data))))
 end
 
-@inline norminf_h(uₕ::NTuple{<:Any, VectorElement}) = maximum(norminf_h, uₕ)
+@inline norminf(uₕ::NTuple{<:Any, VectorElement}) = maximum(norminf, uₕ)
 
 """
-    norm∞ₕ(uₕ::VectorElement) -> Real
+    norm(uₕ::VectorElement, kind::AbstractString) -> Real
 
-Unicode alias for [`norminf_h`](@ref).
+Returns the discrete norm of `uₕ` that `kind` names: `"h"` is [`normₕ`](@ref), `"1h"` is
+[`norm₁ₕ`](@ref) and `"∞"` is [`norminf`](@ref). Any other `kind` throws an `ArgumentError`.
+
+The one-argument `norm(uₕ)` is unchanged: a [`VectorElement`](@ref) is an `AbstractVector`,
+so it is still `LinearAlgebra`'s Euclidean norm of the values, which carries no quadrature
+weight.
 """
-const norm∞ₕ = norminf_h
+function norm(uₕ::VectorElement, kind::AbstractString)
+    kind == "h" && return normₕ(uₕ)
+    kind == "1h" && return norm₁ₕ(uₕ)
+    kind == "∞" && return norminf(uₕ)
+    throw(ArgumentError("the norm must be \"h\", \"1h\" or \"∞\", got \"$kind\""))
+end
 
 ################################################################################
 #                 Discrete Modified L² Inner Product and Norm                  #
@@ -431,13 +441,13 @@ const norm∞ₕ = norminf_h
 # `CartesianIndex` and read `w` through its `CartesianIndex` `getindex`, which multiplies
 # the per-axis factors directly instead of dividing by each axis length in turn.
 #
-# No separate `CpuBatch` override is needed here: `inner₊(uₕ, vₕ, Val(S))` calls the
+# No separate `CpuPolyester` override is needed here: `inner₊(uₕ, vₕ, Val(S))` calls the
 # policy-dispatched `_dot`/`_dot_masked(policy, u, v, w[, mask])` (S7.1,
 # `src/utils/linear_algebra.jl`), whose `CpuSerial`/`CpuThreaded` methods fall through to
 # the plain three/four-argument methods below -- where ordinary dispatch on the weight
-# argument's runtime type reaches this specialization -- while its `CpuBatch` method calls
+# argument's runtime type reaches this specialization -- while its `CpuPolyester` method calls
 # `_batch_dot`/`_batch_dot_masked` directly, before the weight's type is ever consulted, so
-# a `CpuBatch` policy reaches S7.1's Polyester hook (or its "not loaded" error) regardless
+# a `CpuPolyester` policy reaches S7.1's Polyester hook (or its "not loaded" error) regardless
 # of whether the weight is dense or a `SeparableWeights`, never this loop.
 @inline function _dot(
         u::AbstractVector, w::SeparableWeights{D, <:Any, VT}, v::AbstractVector
@@ -734,6 +744,97 @@ integral).
     vₕ::VectorElement{<:ScalarGridSpace};
     markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {N} = _directional_inner_plus(uₕ, vₕ, Val(3); markers = markers)
+
+@noinline _throw_inner_plus_bounds(d) = throw(BoundsError(inner₊, d))
+
+# Selects between literal `Val`s, one arm per direction -- the same shape as
+# `_dispatch_dim` (stencil.jl): a runtime `Integer` never reaches `Val` directly, since
+# `Val(d)` built from a non-constant `d` boxes it and nothing downstream can constant-fold
+# (gpena/Bramble.jl#146). Always three arms regardless of the mesh a caller eventually
+# applies the result to, exactly as `_vectorial_index_expr`'s `getindex` is -- an out-of-range
+# direction is caught downstream, by the operator the index yields.
+@inline function _inner_plus_val(d::Integer)
+    d == 1 && return Val(1)
+    d == 2 && return Val(2)
+    d == 3 && return Val(3)
+    _throw_inner_plus_bounds(d)
+end
+
+"""
+    inner₊(uₕ::VectorElement, vₕ::VectorElement, d; markers = ()) -> Real
+
+Returns [`inner₊ₓ`](@ref)/[`inner₊ᵧ`](@ref)/[`inner₊₂`](@ref)`(uₕ, vₕ; markers)`, selected by
+`d`: an `Integer` (`1`, `2` or `3`) or a `Symbol` (`:x`, `:y` or `:z`) (gpena/Bramble.jl#341).
+
+This is the preferred spelling: `inner₊(uₕ, vₕ, :x)` over `inner₊ₓ(uₕ, vₕ)`, which stays
+reachable as a plain alias.
+
+An `Integer` outside `1:3` throws a `BoundsError`; a `Symbol` that is not `:x`/`:y`/`:z`
+throws an `ArgumentError`.
+
+`inner₊` also destructures and indexes like the vectorial operator aliases
+(gpena/Bramble.jl#340): `ix, iy, iz = inner₊` binds `inner₊ₓ`, `inner₊ᵧ`, `inner₊₂` (the
+very same function objects, not copies), and `inner₊[1]`/`inner₊[:x]` (through
+`length`/`firstindex`/`lastindex`/`getindex`/iteration) index into that same triple.
+
+# Examples
+
+```jldoctest
+using Bramble
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, true))
+Wₕ = gridspace(Ωₕ)
+uₕ = Rₕ(Wₕ, x -> 1.0)
+inner₊(uₕ, uₕ, :x) == inner₊(uₕ, uₕ, 1)
+
+# output
+true
+```
+
+See also: [`inner₊ₓ`](@ref), [`inner₊ᵧ`](@ref), [`inner₊₂`](@ref).
+"""
+@inline function inner₊(
+        uₕ::VectorElement{<:ScalarGridSpace},
+        vₕ::VectorElement{<:ScalarGridSpace},
+        d::Integer;
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {N}
+    return _directional_inner_plus(uₕ, vₕ, _inner_plus_val(d); markers = markers)
+end
+
+@inline function inner₊(
+        uₕ::VectorElement{<:ScalarGridSpace},
+        vₕ::VectorElement{<:ScalarGridSpace},
+        s::Symbol;
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+) where {N}
+    return inner₊(uₕ, vₕ, _dim_index(s); markers = markers)
+end
+
+# --- Iteration and indexing protocol, following `_vectorial_index_expr` -------------- #
+# (stencil.jl, gpena/Bramble.jl#340): `inner₊ₓ`/`inner₊ᵧ`/`inner₊₂` are spliced in as
+# literals, so `inner₊[2]` is a call to a `@inline` function of a literal `Int` against
+# literal comparisons -- the compiler constant-folds it to the concrete function, same as
+# any vectorial alias in stencil.jl. Written by hand rather than generated, since `inner₊`
+# is not built by `@operator_family`.
+@inline Base.iterate(::typeof(inner₊)) = (inner₊ₓ, 2)
+@inline Base.iterate(::typeof(inner₊), state::Int) = state == 2 ? (inner₊ᵧ, 3) :
+                                                     state == 3 ? (inner₊₂, 4) : nothing
+@inline Base.length(::typeof(inner₊)) = 3
+@inline Base.eltype(::Type{typeof(inner₊)}) = Function
+@inline Base.firstindex(::typeof(inner₊)) = 1
+@inline Base.lastindex(::typeof(inner₊)) = 3
+@inline function Base.getindex(::typeof(inner₊), i::Integer)
+    i == 1 && return inner₊ₓ
+    i == 2 && return inner₊ᵧ
+    i == 3 && return inner₊₂
+    throw(BoundsError(inner₊, i))
+end
+@inline function Base.getindex(::typeof(inner₊), s::Symbol)
+    s === :x && return inner₊ₓ
+    s === :y && return inner₊ᵧ
+    s === :z && return inner₊₂
+    throw(ArgumentError("the coordinate direction must be :x, :y or :z, got :$s"))
+end
 
 get_dimension_from_type(::Type{<:NTuple{D, Any}}) where {D} = D
 get_dimension_from_type(::Type{<:VectorElement{S}}) where {S} = dim(mesh_type(S))
