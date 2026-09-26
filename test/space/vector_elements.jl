@@ -6,22 +6,22 @@ using Bramble: vector_type, matrix_type
 using Bramble: CompositeGridSpace, Dcₓ, D₋ₓ, component_range, component_ranges, set_points!
 import Bramble:
                 VectorElement, spacing, points, half_points, space, ndofs, half_spacings, indices, point
-using LinearAlgebra: norm, lu, ldiv!
+using LinearAlgebra: norm, lu, ldiv!, mul!, dot
 using SparseArrays
 using Random
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS
 using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
 
-_idx_read2(u, i, j) = u[i, j]
-_idx_read2_inb(u, i, j) = @inbounds u[i, j]
-_idx_write2!(u, val, i, j) = (u[i, j] = val; u)
-_idx_write2_inb!(u, val, i, j) = (@inbounds u[i, j] = val; u)
+_idx_read2(u, i, j) = u[CartesianIndex(i, j)]
+_idx_read2_inb(u, i, j) = @inbounds u[CartesianIndex(i, j)]
+_idx_write2!(u, val, i, j) = (u[CartesianIndex(i, j)] = val; u)
+_idx_write2_inb!(u, val, i, j) = (@inbounds u[CartesianIndex(i, j)] = val; u)
 
-_idx_read3(u, i, j, k) = u[i, j, k]
-_idx_read3_inb(u, i, j, k) = @inbounds u[i, j, k]
-_idx_write3!(u, val, i, j, k) = (u[i, j, k] = val; u)
-_idx_write3_inb!(u, val, i, j, k) = (@inbounds u[i, j, k] = val; u)
+_idx_read3(u, i, j, k) = u[CartesianIndex(i, j, k)]
+_idx_read3_inb(u, i, j, k) = @inbounds u[CartesianIndex(i, j, k)]
+_idx_write3!(u, val, i, j, k) = (u[CartesianIndex(i, j, k)] = val; u)
+_idx_write3_inb!(u, val, i, j, k) = (@inbounds u[CartesianIndex(i, j, k)] = val; u)
 
 _idx_read_ci(u, I) = u[I]
 _idx_read_ci_inb(u, I) = @inbounds u[I]
@@ -193,47 +193,55 @@ end
 
         for i in 1:5, j in 1:6
 
-            u_2d[i, j] = 10.0 * i + j
+            u_2d[CartesianIndex(i, j)] = 10.0 * i + j
         end
 
         m_reshaped = reshape(u_2d)
         for i in 1:5, j in 1:6
 
-            @test u_2d[i, j] == 10.0 * i + j
             @test u_2d[CartesianIndex(i, j)] == 10.0 * i + j
             @test m_reshaped[i, j] == 10.0 * i + j
         end
 
         # Mutation via CartesianIndex
         u_2d[CartesianIndex(2, 3)] = 123.0
-        @test u_2d[2, 3] == 123.0
+        @test u_2d[CartesianIndex(2, 3)] == 123.0
         @test m_reshaped[2, 3] == 123.0
 
         # Type inference
-        @test @inferred(u_2d[2, 3]) === 123.0
         @test @inferred(u_2d[CartesianIndex(2, 3)]) === 123.0
 
-        # Bounds checks for 2D
-        @test_throws BoundsError u_2d[0, 1]
-        @test_throws BoundsError u_2d[6, 1]
-        @test_throws BoundsError u_2d[1, 0]
-        @test_throws BoundsError u_2d[1, 7]
-        @test_throws BoundsError (u_2d[6, 1] = 1.0)
+        # Bounds checks for 2D (grid-coordinate access via CartesianIndex)
         @test_throws BoundsError u_2d[CartesianIndex(0, 1)]
         @test_throws BoundsError u_2d[CartesianIndex(6, 1)]
+        @test_throws BoundsError u_2d[CartesianIndex(1, 0)]
         @test_throws BoundsError u_2d[CartesianIndex(1, 7)]
         @test_throws BoundsError (u_2d[CartesianIndex(6, 1)] = 1.0)
         @test_throws BoundsError u_2d[CartesianIndex(1, 2, 3)] # Dimension mismatch
 
         # Verify BoundsError points to VectorElement
         try
-            u_2d[6, 1]
+            u_2d[CartesianIndex(6, 1)]
             @test false
         catch e
             @test e isa BoundsError
             @test e.a === u_2d
-            @test e.i == (6, 1)
+            @test e.i == (CartesianIndex(6, 1),)
         end
+
+        # Integer multi-index is AbstractVector trailing-index access, not grid
+        # coordinates (option 2, gpena/Bramble.jl#348): `uₕ[k, 1] == parent(uₕ)[k]`, and
+        # any non-1 trailing index throws BoundsError.
+        for k in 1:length(u_2d)
+            @test u_2d[k, 1] == parent(u_2d)[k]
+        end
+        @test_throws BoundsError u_2d[1, 2]
+        @test_throws BoundsError u_2d[1, 0]
+        @test_throws BoundsError u_2d[length(u_2d) + 1, 1]
+        @test_throws BoundsError (u_2d[1, 2] = 1.0)
+        u_2d[3, 1] = 321.0
+        @test u_2d[3, 1] == 321.0
+        @test parent(u_2d)[3] == 321.0
 
         # Zero allocations check for 2D
         @test_allocs _idx_read2(u_2d, 2, 3)
@@ -251,31 +259,40 @@ end
         u_3d = element(W_3d, 0.0)
 
         for i in 1:3, j in 1:4, k in 1:5
-            u_3d[i, j, k] = 100.0 * i + 10.0 * j + k
+            u_3d[CartesianIndex(i, j, k)] = 100.0 * i + 10.0 * j + k
         end
 
         m3_reshaped = reshape(u_3d)
         for i in 1:3, j in 1:4, k in 1:5
-            @test u_3d[i, j, k] == 100.0 * i + 10.0 * j + k
             @test u_3d[CartesianIndex(i, j, k)] == 100.0 * i + 10.0 * j + k
             @test m3_reshaped[i, j, k] == 100.0 * i + 10.0 * j + k
         end
 
         u_3d[CartesianIndex(2, 3, 4)] = 999.0
-        @test u_3d[2, 3, 4] == 999.0
+        @test u_3d[CartesianIndex(2, 3, 4)] == 999.0
         @test m3_reshaped[2, 3, 4] == 999.0
 
-        @test @inferred(u_3d[2, 3, 4]) === 999.0
         @test @inferred(u_3d[CartesianIndex(2, 3, 4)]) === 999.0
 
-        # Bounds checks for 3D
-        @test_throws BoundsError u_3d[0, 1, 1]
-        @test_throws BoundsError u_3d[4, 1, 1]
-        @test_throws BoundsError u_3d[1, 5, 1]
-        @test_throws BoundsError u_3d[1, 1, 6]
-        @test_throws BoundsError (u_3d[4, 1, 1] = 1.0)
+        # Bounds checks for 3D (grid-coordinate access via CartesianIndex)
+        @test_throws BoundsError u_3d[CartesianIndex(0, 1, 1)]
         @test_throws BoundsError u_3d[CartesianIndex(4, 1, 1)]
+        @test_throws BoundsError u_3d[CartesianIndex(1, 5, 1)]
         @test_throws BoundsError u_3d[CartesianIndex(1, 1, 6)]
+        @test_throws BoundsError (u_3d[CartesianIndex(4, 1, 1)] = 1.0)
+
+        # Integer multi-index is AbstractVector trailing-index access, not grid
+        # coordinates (option 2, gpena/Bramble.jl#348).
+        for k in 1:length(u_3d)
+            @test u_3d[k, 1] == parent(u_3d)[k]
+        end
+        @test_throws BoundsError u_3d[1, 2]
+        @test_throws BoundsError u_3d[1, 1, 2]
+        @test_throws BoundsError u_3d[length(u_3d) + 1, 1]
+        @test_throws BoundsError (u_3d[1, 2] = 1.0)
+        u_3d[7, 1] = 741.0
+        @test u_3d[7, 1] == 741.0
+        @test parent(u_3d)[7] == 741.0
 
         # Zero allocations check for 3D
         @test_allocs _idx_read3(u_3d, 2, 3, 4)
@@ -289,12 +306,45 @@ end
         u_x = components(u_comp)[1]
         u_y = u_comp(2)
 
-        u_x[2, 3] = 42.0
-        u_y[2, 3] = 84.0
-        @test u_x[2, 3] == 42.0
-        @test u_y[2, 3] == 84.0
+        u_x[CartesianIndex(2, 3)] = 42.0
+        u_y[CartesianIndex(2, 3)] = 84.0
+        @test u_x[CartesianIndex(2, 3)] == 42.0
+        @test u_y[CartesianIndex(2, 3)] == 84.0
         @test reshape(u_comp)[1][2, 3] == 42.0
         @test reshape(u_comp)[2][2, 3] == 84.0
+    end
+
+    @testset "AbstractVector interop (#348)" begin
+        # `VectorElement <: AbstractVector`, so generic AbstractVector/AbstractMatrix code
+        # (matrix-vector products, `dot`) must work on it directly, without going through
+        # `parent`.
+        Ωₕ_2d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6))
+        W_2d = gridspace(Ωₕ_2d)
+        n = ndofs(W_2d)
+        u_2d = element(W_2d, collect(1.0:n))
+
+        A = spdiagm(0 => fill(2.0, n))
+        @test A * u_2d == 2.0 .* parent(u_2d)
+
+        y = similar(parent(u_2d))
+        mul!(y, A, u_2d)
+        @test y == 2.0 .* parent(u_2d)
+
+        @test dot(u_2d, u_2d) ≈ sum(abs2, parent(u_2d))
+
+        Ωₕ_3d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 4, 5))
+        W_3d = gridspace(Ωₕ_3d)
+        m = ndofs(W_3d)
+        u_3d = element(W_3d, collect(1.0:m))
+
+        A3 = spdiagm(0 => fill(3.0, m))
+        @test A3 * u_3d == 3.0 .* parent(u_3d)
+
+        y3 = similar(parent(u_3d))
+        mul!(y3, A3, u_3d)
+        @test y3 == 3.0 .* parent(u_3d)
+
+        @test dot(u_3d, u_3d) ≈ sum(abs2, parent(u_3d))
     end
 
     @testset "similar" begin

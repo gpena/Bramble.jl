@@ -292,19 +292,7 @@ end
     return uₕ
 end
 
-# Multidimensional and Cartesian bounds checks
-@inline function Base.checkbounds(
-        ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{2}}, i, j
-)
-    return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), i, j)
-end
-
-@inline function Base.checkbounds(
-        ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{3}}, i, j, k
-)
-    return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), i, j, k)
-end
-
+# Cartesian bounds checks
 @inline function Base.checkbounds(
         ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}
 ) where {D}
@@ -318,15 +306,20 @@ end
 end
 
 """
-    getindex(uₕ::VectorElement{<:ScalarGridSpace{2}}, i::Integer, j::Integer)
-    getindex(uₕ::VectorElement{<:ScalarGridSpace{3}}, i::Integer, j::Integer, k::Integer)
     getindex(uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}) where {D}
     getindex(uₕ::VectorElement{<:ScalarGridSpace}, I::CartesianIndex)
 
-Access field degrees of freedom by spatial grid coordinates or `CartesianIndex`.
+Access field degrees of freedom by grid coordinates through a `CartesianIndex`.
 
 Translates spatial grid coordinates directly into flat linear coefficient offsets using the
 mesh's `LinearIndices` with zero heap allocations and full `@inbounds` transparency.
+
+`VectorElement` is an `AbstractVector`, so an `Integer` multi-index does **not** address grid
+coordinates: it follows Base's own trailing-index rule for an `AbstractArray` with fewer
+dimensions than indices given (`uₕ[k, 1] == parent(uₕ)[k]`, and any trailing index other than
+`1` throws a `BoundsError`). Grid-coordinate access always goes through `CartesianIndex`
+instead, which is what generic `AbstractVector` code (e.g. `SparseArrays`, which reads
+`u[k, 1]` while building a sparse column) needs `uₕ[i, j]` to *not* mean.
 
 # Examples
 
@@ -335,33 +328,17 @@ mesh's `LinearIndices` with zero heap allocations and full `@inbounds` transpare
 Wₕ = gridspace(Ωₕ)
 uₕ = element(Wₕ, 0.0)
 
-# Set and get via 2D coordinates
-uₕ[2, 3] = 42.0
-uₕ[2, 3] == 42.0
-
-# Access via CartesianIndex
+# Set and get via CartesianIndex grid coordinates
 I = CartesianIndex(2, 3)
+uₕ[I] = 42.0
 uₕ[I] == 42.0
+
+# A bare Integer multi-index is linear (trailing-index) indexing, not grid coordinates
+uₕ[5, 1] == parent(uₕ)[5]
 ```
 
 See also: [`VectorElement`](@ref), [`ScalarGridSpace`](@ref), [`reshape`](@ref)
 """
-@inline Base.@propagate_inbounds function Base.getindex(
-        uₕ::VectorElement{<:ScalarGridSpace{2}}, i::Integer, j::Integer
-)
-    @boundscheck checkbounds(uₕ, i, j)
-    li = LinearIndices(indices(mesh(uₕ)))
-    return @inbounds uₕ.data[li[i, j]]
-end
-
-@inline Base.@propagate_inbounds function Base.getindex(
-        uₕ::VectorElement{<:ScalarGridSpace{3}}, i::Integer, j::Integer, k::Integer
-)
-    @boundscheck checkbounds(uₕ, i, j, k)
-    li = LinearIndices(indices(mesh(uₕ)))
-    return @inbounds uₕ.data[li[i, j, k]]
-end
-
 @inline Base.@propagate_inbounds function Base.getindex(
         uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}
 ) where {D}
@@ -379,36 +356,24 @@ end
 end
 
 """
-    setindex!(uₕ::VectorElement{<:ScalarGridSpace{2}}, val, i::Integer, j::Integer) -> VectorElement
-    setindex!(uₕ::VectorElement{<:ScalarGridSpace{3}}, val, i::Integer, j::Integer, k::Integer) -> VectorElement
     setindex!(uₕ::VectorElement{<:ScalarGridSpace{D}}, val, I::CartesianIndex{D}) where {D} -> VectorElement
     setindex!(uₕ::VectorElement{<:ScalarGridSpace}, val, I::CartesianIndex) -> VectorElement
 
-Mutate field degrees of freedom by spatial grid coordinates or `CartesianIndex` in-place.
+Mutate field degrees of freedom by grid coordinates through a `CartesianIndex`, in-place.
 
 Translates spatial grid coordinates directly into flat linear coefficient offsets using the
 mesh's `LinearIndices` with zero heap allocations and full `@inbounds` transparency.
 
+`VectorElement` is an `AbstractVector`, so an `Integer` multi-index does **not** address grid
+coordinates: it follows Base's own trailing-index rule for an `AbstractArray` with fewer
+dimensions than indices given (`uₕ[k, 1] = v` writes `parent(uₕ)[k]`, and any trailing index
+other than `1` throws a `BoundsError`). Grid-coordinate access always goes through
+`CartesianIndex` instead, which is what generic `AbstractVector` code (e.g. `SparseArrays`,
+which reads and writes `u[k, 1]` while building a sparse column) needs `uₕ[i, j] = val` to
+*not* mean.
+
 Returns `uₕ` matching Base collection conventions.
 """
-@inline Base.@propagate_inbounds function Base.setindex!(
-        uₕ::VectorElement{<:ScalarGridSpace{2}}, val, i::Integer, j::Integer
-)
-    @boundscheck checkbounds(uₕ, i, j)
-    li = LinearIndices(indices(mesh(uₕ)))
-    @inbounds uₕ.data[li[i, j]] = val
-    return uₕ
-end
-
-@inline Base.@propagate_inbounds function Base.setindex!(
-        uₕ::VectorElement{<:ScalarGridSpace{3}}, val, i::Integer, j::Integer, k::Integer
-)
-    @boundscheck checkbounds(uₕ, i, j, k)
-    li = LinearIndices(indices(mesh(uₕ)))
-    @inbounds uₕ.data[li[i, j, k]] = val
-    return uₕ
-end
-
 @inline Base.@propagate_inbounds function Base.setindex!(
         uₕ::VectorElement{<:ScalarGridSpace{D}}, val, I::CartesianIndex{D}
 ) where {D}
