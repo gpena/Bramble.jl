@@ -670,6 +670,29 @@ else
         @test all(==(2.0f0), Array(parent(v)))
     end
 
+    @testset "#336: interpolate_at refuses a device-backed element" begin
+        Ω = mesh(domain(interval(0.0f0, 1.0f0)), 17, true; backend = metal_backend())
+        W = gridspace(Ω)
+        u = Rₕ(W, x -> 2.0f0 * x[1])
+
+        err = try
+            interpolate_at(u, 0.5f0)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("interpolate_at", msg)
+        @test occursin("πₕ!", msg)
+        @test occursin("Array(parent(u))", msg)
+
+        # Host path is unaffected: same source, no device storage in the way.
+        Wh = gridspace(mesh(domain(interval(0.0, 1.0)), 17, true))
+        uh = Rₕ(Wh, x -> 2 * x[1])
+        @test isapprox(interpolate_at(uh, 0.5), 1.0)
+    end
+
     # #336: export_vtk on a device mesh/field routes coordinates and data through
     # `host_points`/`Array` before WriteVTK ever sees them -- otherwise WriteVTK's
     # `unsafe_write` fails on a device pointer. 1D scalar, 2D scalar, and 2D
