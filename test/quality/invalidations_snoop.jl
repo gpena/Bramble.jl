@@ -35,30 +35,25 @@ trees = invalidation_trees(invalidations)
 _owner_module(m::Method) = m.module
 _owner_module(b::Core.Binding) = b.globalref.mod
 
-# On Julia 1.12, `t.method` can also be `nothing`: SnoopCompile's own :unknown-reason
-# trees, built when a root `MethodInstance` surfaces invalidated at the C level with no
-# method that inserted/deleted it to blame (SnoopCompile's `invalidations.jl`, the
-# "unknown nothing" case). Such a tree is only ever pushed when it still carries at
-# least one `InstanceNode` (in `backedges` or `mt_backedges`), so fall back to that
-# instance's own defining method for a module. If somehow neither is present, the tree
-# can't be attributed at all; count it separately instead of guessing.
-function _owner_module(::Nothing, backedges, mt_backedges)
-    node = !isempty(backedges) ? first(backedges) :
-           !isempty(mt_backedges) ? last(first(mt_backedges)) : nothing
-    node === nothing && return nothing
-    def = node.mi.def
-    return def isa Method ? def.module : nothing
-end
+# `t.method` can also be `nothing`: SnoopCompile's own :unknown-reason trees, built when
+# a root `MethodInstance` surfaces invalidated at the C level with no method that
+# inserted/deleted it to blame (SnoopCompile's `invalidations.jl`, the "unknown nothing"
+# case). What such a tree names instead are the *superseded* MethodInstances -- code
+# Bramble itself had cached, now invalidated by something else's load -- not the method
+# that caused the invalidation, so attributing the tree to their module would blame
+# Bramble for its own code being knocked out of the cache rather than for inserting a
+# method that broke someone else's. With no inserting method to blame, such a tree is
+# never package-owned; it only gets logged, under UNATTRIBUTED_COUNT, so it stays
+# visible without failing the gate.
 
 owned = empty(trees)
-n_unattributed = 0
+unattributed = empty(trees)
 for t in trees
-    mod = t.method === nothing ? _owner_module(t.method, t.backedges, t.mt_backedges) :
-          _owner_module(t.method)
-    if mod === nothing
-        global n_unattributed += 1
-    elseif startswith(string(mod), "Bramble")
-        push!(owned, t)
+    if t.method === nothing
+        push!(unattributed, t)
+    else
+        mod = _owner_module(t.method)
+        startswith(string(mod), "Bramble") && push!(owned, t)
     end
 end
 
@@ -66,6 +61,9 @@ println("OWNED_COUNT=", length(owned))
 for t in owned
     println(t)
 end
-println("UNATTRIBUTED_COUNT=", n_unattributed)
+println("UNATTRIBUTED_COUNT=", length(unattributed))
+for t in unattributed
+    println(t)
+end
 
 end # module QualityInvalidationsSnoopTests
