@@ -28,6 +28,11 @@
 # identical, only `_replay_point!` (reads the recording) stands in for `_scatter_point!`
 # (searches).
 #
+# S7.5 (gpena/Bramble.jl#356) left one more in `src/space/operators/vector_calculus.jl`:
+# `_batch_run_bands!`, the `@batch` counterpart of `_run_bands!`'s `CpuThreaded` arm, reached
+# by the divergence, curl and strain-average engines. Unlike the three S7.2 hooks, it stays
+# generic over the band function `f` instead of naming one.
+#
 # `Polyester.@batch` accepts a `CartesianIndices` directly (`closure.jl`'s own `splitloop`
 # already splits it along its last axis, the same trick `_threaded_axis_for!` hand-rolls for
 # `Threads.@threads`), so none of the manual axis-chunking `src/utils/linear_algebra.jl` uses
@@ -354,6 +359,22 @@ function Bramble._batch_centered_average_engine!(out::AbstractVector, in_ref, di
     n = Threads.nthreads()
     @batch for b in 1:n
         _centered_average_band!(out, in_ref, dims, dim_val, n, b)
+    end
+    return nothing
+end
+
+# --- _batch_run_bands! (src/space/operators/vector_calculus.jl) -------------------- #
+#
+# `CpuPolyester`'s `_run_bands!`: unlike the three engine-specific hooks above, `f` here is
+# whichever accumulating engine (`_accumulate_backward!`, `_accumulate_centered!`,
+# `_avg_backward_inplace!`, ...) the caller passed to `_run_bands!` itself, so this stays
+# generic over `f` rather than naming one. `out::AbstractVector` is always the first of
+# `args...` at every `_run_bands!` call site (vector_calculus.jl), the same constraint that
+# makes this a genuine specialisation of the `src/` stub rather than a redefinition of its
+# fully unconstrained signature.
+function Bramble._batch_run_bands!(f::F, nbands::Int, out::AbstractVector, rest::Vararg{Any, N}) where {F, N}
+    @batch for b in 1:nbands
+        f(out, rest..., nbands, b)
     end
     return nothing
 end

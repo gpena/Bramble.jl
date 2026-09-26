@@ -440,6 +440,86 @@ end
     @test _poly_min_bytes(16) == _poly_min_bytes(160)
 end
 
+# --- Divergence, curl and strain-average engines under CpuPolyester (S7.5, #356) --------- #
+#
+# `_run_bands!`'s `CpuPolyester` arm (`_batch_run_bands!`, this extension) is what the
+# accumulating engines behind `divₕ!`/`curlₕ!`/`εₕ!` (space/operators/vector_calculus.jl)
+# reach; before S7.5 they had no `CpuPolyester` hook and ran serially regardless of the
+# policy, so an equality check against `Serial()` alone would pass either way -- serial and
+# `@batch` give the same numbers. The load-bearing assertion is the thread count, checked
+# with the same storage-spy trick `test/space/threaded_vector_calculus.jl` uses for
+# `CpuThreaded`.
+const _V356_SEEN = Threads.Atomic{UInt64}(0)
+struct _V356Spy{T} <: AbstractVector{T}
+    x::Vector{T}
+end
+Base.size(s::_V356Spy) = size(s.x)
+Base.IndexStyle(::Type{<:_V356Spy}) = IndexLinear()
+Base.@propagate_inbounds function Base.getindex(s::_V356Spy, i::Int)
+    Threads.atomic_or!(_V356_SEEN, UInt64(1) << ((Threads.threadid() - 1) % 64))
+    return s.x[i]
+end
+_v356_spy(u) = Bramble.VectorElement(_V356Spy(copy(parent(u))), space(u))
+
+const _V356_GRADIENTS = (:∇̃ₕ!, :∇cₕ!, :∇̽ₕ!)
+const _V356_DIVERGENCES = (:divₕ!, :div₊ₕ!, :divcₕ!, :diṽₕ!, :div̽ₕ!)
+const _V356_CURLS = (:curlₕ!, :curl₊ₕ!, :curlcₕ!, :curl̃ₕ!, :curl̽ₕ!)
+const _V356_STRAINS = (:εₕ!, :ε₊ₕ!, :εcₕ!, :ε̽ₕ!)
+_v356_op(name) = getproperty(Bramble, name)
+
+if Threads.nthreads() >= 2
+    @testset "Divergence, curl and strain-average engines run on several threads and equal Serial ($(D)D)" for D in 2:3
+        n = D == 2 ? (64, 64) : (12, 12, 12)
+        Ωs, Ωb = _poly_mesh_pair(n)
+        Ws, Wb = gridspace(Ωs), gridspace(Ωb)
+        us, ub = Rₕ(Ws, _POLY_F[D]), Rₕ(Wb, _POLY_F[D])
+        fs = ntuple(d -> (x -> _POLY_G[D](x) + d * sum(x)), D)
+        tups_s = ntuple(d -> Rₕ(Ws, fs[d]), D)
+        tups_b = ntuple(d -> Rₕ(Wb, fs[d]), D)
+        spies = map(_v356_spy, tups_b)
+
+        for name in _V356_GRADIENTS
+            dest_s, dest_b = ntuple(_ -> similar(us), D), ntuple(_ -> similar(ub), D)
+            _v356_op(name)(dest_s, us)
+            _V356_SEEN[] = 0
+            _v356_op(name)(dest_b, _v356_spy(ub))
+            @test count_ones(_V356_SEEN[]) >= 2
+            @test all(parent(a) == parent(b) for (a, b) in zip(dest_s, dest_b))
+        end
+
+        for name in _V356_DIVERGENCES
+            vs, vb = similar(us), similar(ub)
+            _v356_op(name)(vs, tups_s)
+            _V356_SEEN[] = 0
+            _v356_op(name)(vb, spies)
+            @test count_ones(_V356_SEEN[]) >= 2
+            @test parent(vs) == parent(vb)
+        end
+
+        for name in _V356_CURLS
+            dest_s = D == 2 ? similar(us) : ntuple(_ -> similar(us), 3)
+            dest_b = D == 2 ? similar(ub) : ntuple(_ -> similar(ub), 3)
+            _v356_op(name)(dest_s, tups_s)
+            _V356_SEEN[] = 0
+            _v356_op(name)(dest_b, spies)
+            @test count_ones(_V356_SEEN[]) >= 2
+            ds = dest_s isa Tuple ? dest_s : (dest_s,)
+            db = dest_b isa Tuple ? dest_b : (dest_b,)
+            @test all(parent(a) == parent(b) for (a, b) in zip(ds, db))
+        end
+
+        for name in _V356_STRAINS
+            dest_s = ntuple(_ -> ntuple(_ -> similar(us), D), D)
+            dest_b = ntuple(_ -> ntuple(_ -> similar(ub), D), D)
+            _v356_op(name)(dest_s, tups_s)
+            _V356_SEEN[] = 0
+            _v356_op(name)(dest_b, spies)
+            @test count_ones(_V356_SEEN[]) >= 2
+            @test all(parent(dest_s[i][j]) == parent(dest_b[i][j]) for i in 1:D for j in 1:D)
+        end
+    end
+end
+
 # The Polyester-gated mixed-policy testset of test/form/threaded_replay.jl ("Mixed leaf
 # policies: CpuThreaded beside CpuPolyester") only runs where `BramblePolyesterExt` is already
 # loaded; the `unit` group deliberately never loads Polyester, so that testset never runs in

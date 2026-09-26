@@ -326,6 +326,13 @@ using ExplicitImports
                 :_batch_difference_engine!,
                 :_batch_average_engine!,
                 :_batch_centered_average_engine!,
+                # `_batch_run_bands!` (BramblePolyesterExt, gpena/Bramble.jl#356, S7.5): the
+                # `Polyester.@batch` counterpart of `_run_bands!`'s `CpuThreaded` arm in
+                # `src/space/operators/vector_calculus.jl`, reached by the divergence, curl
+                # and strain-average engines. Unlike the three S7.2 hooks above it stays
+                # generic over the band function `f` instead of naming one, extended here
+                # rather than called.
+                :_batch_run_bands!,
                 # `BrambleKernelAbstractionsExt` (gpena/Bramble.jl#94, #174): the stencil and
                 # component helpers its `@kernel`s call so the device answer is computed by
                 # the very same quadrature/stencil arithmetic the CPU sweep uses, rather than

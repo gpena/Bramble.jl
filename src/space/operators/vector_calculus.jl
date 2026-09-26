@@ -113,16 +113,30 @@ _launch_fused_strain_offdiag!(out, ui, uj, hi, hj, dims, dim_i, dim_j, dev) = _t
 # `_difference_band!` makes, operators/difference.jl); `1, 1` is the whole grid.
 # `_run_bands!` picks how the bands run from the execution policy (gpena/Bramble.jl#356):
 # `CpuThreaded` runs one band per thread under `Threads.@threads :static` (every band in turn
-# where a `:static` loop cannot start, `_static_or_serial`), every other CPU policy the
-# single band serially. Each engine writes `out[idx]` only at its own point and
+# where a `:static` loop cannot start, `_static_or_serial`), `CpuPolyester` one band per
+# `Polyester.@batch` task (`_batch_run_bands!`, filled by `BramblePolyesterExt`), every other
+# CPU policy the single band serially. Each engine writes `out[idx]` only at its own point and
 # reads `out` nowhere else, so the bands' writes are disjoint whatever the differencing axis,
 # and each point receives the very same sum, in the same order of directions, as serially.
-# `CpuPolyester` has no batched hook for these engines in `BramblePolyesterExt`, so it runs
-# them serially.
 @inline _run_bands!(::CpuPolicy, f::F, args::Vararg{Any, N}) where {F, N} = f(args..., 1, 1)
 
 @noinline function _run_bands!(::CpuThreaded, f::F, args::Vararg{Any, N}) where {F, N}
     return _static_or_serial(_static_bands!, _serial_bands!, f, Threads.nthreads(), args...)
+end
+
+"""
+    _batch_run_bands!(f, nbands::Int, args...) -> Nothing
+
+[`CpuPolyester`](@ref)'s `_run_bands!`, filled by `BramblePolyesterExt` (one `f(args...,
+nbands, b)` per band under `Polyester.@batch`). The only `src/` method errors naming
+Polyester.
+"""
+@noinline function _batch_run_bands!(f, nbands::Int, args::Vararg{Any, N}) where {N}
+    return _throw_cpubatch_without_polyester(:_batch_run_bands!)
+end
+
+@noinline function _run_bands!(::CpuPolyester, f::F, args::Vararg{Any, N}) where {F, N}
+    return _batch_run_bands!(f, Threads.nthreads(), args...)
 end
 
 @inline function _accumulate_backward!(
