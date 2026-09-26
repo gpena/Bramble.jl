@@ -35,11 +35,37 @@ trees = invalidation_trees(invalidations)
 _owner_module(m::Method) = m.module
 _owner_module(b::Core.Binding) = b.globalref.mod
 
-owned = filter(t -> startswith(string(_owner_module(t.method)), "Bramble"), trees)
+# On Julia 1.12, `t.method` can also be `nothing`: SnoopCompile's own :unknown-reason
+# trees, built when a root `MethodInstance` surfaces invalidated at the C level with no
+# method that inserted/deleted it to blame (SnoopCompile's `invalidations.jl`, the
+# "unknown nothing" case). Such a tree is only ever pushed when it still carries at
+# least one `InstanceNode` (in `backedges` or `mt_backedges`), so fall back to that
+# instance's own defining method for a module. If somehow neither is present, the tree
+# can't be attributed at all; count it separately instead of guessing.
+function _owner_module(::Nothing, backedges, mt_backedges)
+    node = !isempty(backedges) ? first(backedges) :
+           !isempty(mt_backedges) ? last(first(mt_backedges)) : nothing
+    node === nothing && return nothing
+    def = node.mi.def
+    return def isa Method ? def.module : nothing
+end
+
+owned = empty(trees)
+n_unattributed = 0
+for t in trees
+    mod = t.method === nothing ? _owner_module(t.method, t.backedges, t.mt_backedges) :
+          _owner_module(t.method)
+    if mod === nothing
+        global n_unattributed += 1
+    elseif startswith(string(mod), "Bramble")
+        push!(owned, t)
+    end
+end
 
 println("OWNED_COUNT=", length(owned))
 for t in owned
     println(t)
 end
+println("UNATTRIBUTED_COUNT=", n_unattributed)
 
 end # module QualityInvalidationsSnoopTests
