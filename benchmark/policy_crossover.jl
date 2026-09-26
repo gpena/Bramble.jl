@@ -26,8 +26,8 @@
 # result is checked against the serial one before its timing is trusted, at
 # every (workload, D, size). Elementwise workloads (`Rₕ!`, `avgₕ!`, `D₋ₓ!`,
 # broadcast axpy) are compared at `rtol = atol = 1e-12` (broadcast axpy at
-# exact `==`, since gpena/Bramble.jl#357 has not threaded it yet -- every
-# policy runs the identical serial broadcast today); the `innerₕ` reductions
+# exact `==`, since the threaded/batched broadcast runs Base's own loop per
+# band, so it equals serial bit for bit); the `innerₕ` reductions
 # at `rtol = atol = 1e-9` (summation order differs across policies); assembled
 # matrices/vectors structurally plus `nzval`/entries at `rtol = atol = 1e-11`.
 # A mismatch prints `MISMATCH: ...`, withholds that arm's timing, and the
@@ -469,8 +469,9 @@ function _run_cheap(D::Int, n::Int)
         sm_b, poly_ihm ? (() -> innerₕ(ihm_fu_b, ihm_gv_b; markers = (:boundary,))) : (() -> nothing)
     )
 
-    # --- D₋ₓ! (in place; serial under every policy today -- #356 threads it) --
-    # independent Polyester operand: known to raise today (S7.2 not landed), and must
+    # --- D₋ₓ! (in place; now threaded under CpuThreaded and batched under
+    # CpuPolyester -- #356) --
+    # independent Polyester operand: kept independent so a failure there must
     # not gate any other workload's Polyester arm.
     dx_s = element(Ws, Float64)
     D₋ₓ!(dx_s, fu_s)
@@ -490,7 +491,7 @@ function _run_cheap(D::Int, n::Int)
         poly_dx ? parent(dx_e) : nothing, poly_dx ? (() -> D₋ₓ!(dx_e, dx_fu_b)) : (() -> nothing)
     )
 
-    # --- broadcast axpy: vₕ .= a .* uₕ .+ wₕ (serial under every policy today, #357) ---
+    # --- broadcast axpy: vₕ .= a .* uₕ .+ wₕ (now threaded/batched, #357) ---
     # independent Polyester operands from every workload above.
     α = 1.7
     ax_s = element(Ws, Float64)
@@ -697,7 +698,7 @@ function _print_crossover(label::AbstractString, D::Int, rows::Vector{Row})
     # A "none" only hints at "raise --max-dofs" when the sweep actually produced usable
     # timings for that arm all the way to the cap and still never found a crossover --
     # not when the arm was never measured at all (Polyester unavailable, or every size
-    # raised, e.g. D₋ₓ! today -- gpena/Bramble.jl#356). Distinguishing those two "none"
+    # raised). Distinguishing those two "none"
     # reasons is exactly why arms must stay independent (S6.1 review #1): a workload with
     # zero valid Polyester timings prints no hint about the cap, since the cap was never
     # the reason.
