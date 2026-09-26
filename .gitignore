@@ -88,6 +88,8 @@ benchmark/*
 !benchmark/scatter_table.jl
 # v3.14.0 GpuOffload vs threaded-host Rₕ!/avgₕ! throughput ratio (gpena/Bramble.jl#324)
 !benchmark/gpu_offload.jl
+# v3.14.0 assembled CSR SpMV vs matrix-free Kronecker apply on Metal (gpena/Bramble.jl#317)
+!benchmark/assembled_vs_matrixfree.jl
 !benchmark/baselines/
 !benchmark/baselines/*.json
 research/
