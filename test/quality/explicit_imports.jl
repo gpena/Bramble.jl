@@ -85,6 +85,12 @@ using ExplicitImports
                 :MarkedIndicesUnion,
                 :_band_range,
                 :_reduce_or_chunk,
+                # `_ReplayTarget`, `_replay_point!` (gpena/Bramble.jl#338): the warmed-refill
+                # replay's target union and per-point step, called from
+                # `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` above the
+                # same way the searching sweep calls `_scatter_point!`. Neither is public.
+                :_ReplayTarget,
+                :_replay_point!,
                 :_scatter_linear_point!,
                 :_scatter_point!,
                 :_throw_dot_dim_error,
@@ -294,6 +300,14 @@ using ExplicitImports
                 :_batch_bilinear_band_sweep!,
                 :_batch_linear_colour_sweep!,
                 :_batch_linear_band_sweep!,
+                # `_threaded_replay_policy`, `_batch_bilinear_band_replay!`,
+                # `_batch_bilinear_colour_replay!` (BramblePolyesterExt, gpena/Bramble.jl#338):
+                # opt `CpuPolyester` into the warmed-refill replay and its `Polyester.@batch`
+                # counterparts of `_batch_bilinear_band_sweep!`/`_batch_bilinear_colour_sweep!`
+                # above, reached instead of them once a unit's leaf can replay.
+                :_threaded_replay_policy,
+                :_batch_bilinear_band_replay!,
+                :_batch_bilinear_colour_replay!,
                 # `BrambleKernelAbstractionsExt` (gpena/Bramble.jl#94, #174): the stencil and
                 # component helpers its `@kernel`s call so the device answer is computed by
                 # the very same quadrature/stencil arithmetic the CPU sweep uses, rather than

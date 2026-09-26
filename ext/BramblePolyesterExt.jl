@@ -12,6 +12,16 @@
 # `assemble_parallel!`, `_assemble_linear!`) are untouched by this file: this only supplies what
 # runs once the caller has already zeroed and dispatched.
 #
+# S3.1 (gpena/Bramble.jl#338) added a warmed refill that replays recorded `nzval` positions
+# instead of searching, gated per unit by `_threaded_replay_policy`: only `CpuThreaded`
+# answered `true` in `src/`, so `CpuPolyester` kept searching even once a recording existed.
+# This file's `_threaded_replay_policy(::CpuPolyester) = true` opts it in, and
+# `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` are the `@batch` counterparts
+# of `_batch_bilinear_band_sweep!`/`_batch_bilinear_colour_sweep!` above, reached instead of
+# them once a unit's leaf can replay (`_leaf_replays`, bilinear_execution.jl): the colouring is
+# identical, only `_replay_point!` (reads the recording) stands in for `_scatter_point!`
+# (searches).
+#
 # `Polyester.@batch` accepts a `CartesianIndices` directly (`closure.jl`'s own `splitloop`
 # already splits it along its last axis, the same trick `_threaded_axis_for!` hand-rolls for
 # `Threads.@threads`), so none of the manual axis-chunking `src/utils/linear_algebra.jl` uses
@@ -23,7 +33,8 @@ module BramblePolyesterExt
 
 using Bramble
 using Bramble: MarkedIndicesUnion, SeparableWeights, _reduce_or_chunk, _throw_dot_dim_error,
-               _write_components!, _band_range, _scatter_point!, _scatter_linear_point!
+               _write_components!, _band_range, _scatter_point!, _scatter_linear_point!,
+               CpuPolyester, _ReplayTarget, _replay_point!
 using Polyester: Polyester, @batch
 
 # --- _batch_for!/_batch_axis_for! (src/utils/linear_algebra.jl) -------------------- #
@@ -245,6 +256,37 @@ function Bramble._batch_bilinear_band_sweep!(
                 A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
             )
         end
+    end
+    return nothing
+end
+
+# --- _threaded_replay_policy/_batch_bilinear_band_replay!/_batch_bilinear_colour_replay! ---- #
+# (src/assembly/bilinear_execution.jl, gpena/Bramble.jl#338)
+#
+# Opts `CpuPolyester` into the warmed-refill replay `CpuThreaded` already gets: without this,
+# `_leaf_replays` never answers `true` for a `CpuPolyester` leaf, so its units keep searching
+# even once a recording exists. `target::_ReplayTarget` -- rather than the stub's unconstrained
+# `target` -- is what makes each of these a genuine specialisation of its `src/` stub, the same
+# `A::AbstractMatrix` reasoning the sweep hooks above give.
+Bramble._threaded_replay_policy(::CpuPolyester) = true
+
+function Bramble._batch_bilinear_band_replay!(
+        target::_ReplayTarget, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers,
+        row_offset, col_offset
+)
+    @batch for b in bidx
+        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
+            _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
+        end
+    end
+    return nothing
+end
+
+function Bramble._batch_bilinear_colour_replay!(
+        target::_ReplayTarget, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset
+)
+    @batch for I in idxs
+        _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
     end
     return nothing
 end

@@ -10,12 +10,14 @@ module TestPolyesterExt
 
 using Test
 using Bramble
-using Bramble: CpuPolyester, execution_policy, test_space, _normalize_dirichlet,
+using Bramble: CpuPolyester, Serial, execution_policy, test_space, _normalize_dirichlet,
                apply_dirichlet_conditions!, allocate_system_matrix, assemble_parallel!,
-               inner₊ₓ
+               inner₊ₓ, D₋ₓ
 using Polyester
 using SparseArrays
+using SparseArrays: getcolptr
 using LinearAlgebra: issymmetric
+using Random
 
 const ZERO_BC = :dir => (x -> 0.0)
 
@@ -278,6 +280,77 @@ end
         d1, d2, d3 = innerₕ(u, v), innerₕ(u, v), innerₕ(u, v)
         @test d1 == d2 == d3
     end
+
+    # A warmed `CpuPolyester` refill replays the form's recorded `nzval` positions instead of
+    # searching (gpena/Bramble.jl#338): `_threaded_replay_policy(::CpuPolyester)` and
+    # `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` above. Checked the same
+    # way `test/form/threaded_replay.jl` checks `CpuThreaded` -- agreement against a serial
+    # `assemble` of the same non-uniform mesh, never against another threaded fill -- since
+    # this extension's own `CpuPolyester` vs `Parallel()` testsets above never re-fill an
+    # already-assembled matrix and so would not tell a replay from a re-search.
+    @testset "Warmed CpuPolyester refill replays the recording (#338)" begin
+        _replay_domains = (
+            domain(interval(0.0, 1.0)),
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0)),
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0))
+        )
+        _replay_mesh(D, n, policy; seed) = begin
+            Random.seed!(seed)
+            mesh(
+                _replay_domains[D], ntuple(_ -> n, D), ntuple(_ -> false, D);
+                backend = backend(policy = policy)
+            )
+        end
+        _scalar(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(D₋ₓ(u), v)
+        _pair(u, v) = innerₕ(D₋ₓ(u), v) + innerₕ(u, D₋ₓ(v)) + innerₕ(u, v)
+        _composite(u, v) = innerₕ(u(1), v(1)) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) +
+                           innerₕ(D₋ₓ(u(1)), v(2))
+        sizes = (41, 13, 7)
+
+        @testset "$(D)D, $(nm)" for D in 1:3,
+            (nm, f, comps) in (
+                ("scalar", _scalar, 1), ("pair", _pair, 1), ("composite", _composite, 2)
+            )
+
+            n = sizes[D]
+            Ωs = _replay_mesh(D, n, Serial(); seed = 338)
+            Ωb = _replay_mesh(D, n, CpuPolyester(); seed = 338)
+            @test points(Ωs) == points(Ωb)
+            space(Ω) = comps == 1 ? gridspace(Ω) : gridspace(Ω, Val(comps))
+            as = form(space(Ωs), space(Ωs), f)
+            ab = form(space(Ωb), space(Ωb), f)
+            R = assemble(as)
+
+            B = assemble(ab)
+            @test getcolptr(B) == getcolptr(R) && rowvals(B) == rowvals(R)
+            @test isapprox(B, R; rtol = 1e-12)
+
+            # A warmed refill (the recording already exists): replays, not re-searches.
+            fill!(nonzeros(B), NaN)
+            assemble!(B, ab)
+            @test getcolptr(B) == getcolptr(R) && rowvals(B) == rowvals(R)
+            @test isapprox(B, R; rtol = 1e-12)
+        end
+
+        @testset "Warmed refill allocation is independent of grid size" begin
+            _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
+            sizes2 = (200, 800)
+            bytes = map(sizes2) do n
+                Ω = _replay_mesh(1, n, CpuPolyester(); seed = 338)
+                a = form(gridspace(Ω), gridspace(Ω), _scalar)
+                A = assemble(a)
+                _alloc(assemble!, A, a)
+            end
+            @test bytes[1] == bytes[2]
+        end
+    end
 end
+
+# The Polyester-gated mixed-policy testset of test/form/threaded_replay.jl ("Mixed leaf
+# policies: CpuThreaded beside CpuPolyester") only runs where `BramblePolyesterExt` is already
+# loaded; the `unit` group deliberately never loads Polyester, so that testset never runs in
+# CI on its own. Included here as a nested module so it runs wherever this file does (the
+# "ext"/"full" groups).
+include(joinpath(@__DIR__, "..", "form", "threaded_replay.jl"))
 
 end # module
