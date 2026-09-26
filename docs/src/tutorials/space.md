@@ -142,14 +142,14 @@ c₁ === uₓ, c₂ === uᵧ
 ## 5. Grid layout
 
 Degrees of freedom are stored flat, but a scalar element also indexes by grid coordinate,
-with a tuple or a `CartesianIndex`, without reshaping:
+with a `CartesianIndex`, without reshaping:
 
 ```@example space
 u_scal = element(Wₕ, 0.0)
-u_scal[2, 3] = 10.0
+u_scal[CartesianIndex(2, 3)] = 10.0
 u_scal[CartesianIndex(4, 1)] = 20.0
 
-u_scal[2, 3], u_scal[4, 1]
+u_scal[CartesianIndex(2, 3)], u_scal[CartesianIndex(4, 1)]
 ```
 
 For matrix operations or plotting, `reshape(uₕ)` returns a `Base.ReshapedArray` view of the
@@ -160,7 +160,7 @@ returns one view per component:
 u_grid = reshape(u_scal)
 u_grid[2, 3] = -1.0
 
-size(u_grid), u_scal[2, 3], size.(reshape(uvec))
+size(u_grid), u_scal[CartesianIndex(2, 3)], size.(reshape(uvec))
 ```
 ```@raw html
 <figure>

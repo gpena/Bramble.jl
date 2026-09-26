@@ -531,7 +531,7 @@ end
     _batch_broadcast!(v, bc, ax) -> Nothing
 
 [`CpuPolyester`](@ref)'s `_polyester_broadcast!`, filled by `BramblePolyesterExt` (one
-[`_broadcast_band!`](@ref) per band under `Polyester.@batch`). The only `src/` method here
+`_broadcast_band!` per band under `Polyester.@batch`). The only `src/` method here
 that errors naming Polyester.
 """
 @noinline function _batch_broadcast!(v, bc, ax)

@@ -825,7 +825,7 @@ walking every index (as an earlier version of this function did) turned that spa
 slowdown under `CpuThreaded` relative to plain `CpuSerial`.
 
 Each task loads its band's words once (`mask.chunks[w]` for a `BitVector`, joined across
-markers via [`_reduce_or_chunk`](@ref) for a [`MarkedIndicesUnion`](@ref)), skips whole zero
+markers via `_reduce_or_chunk` for a [`MarkedIndicesUnion`](@ref)), skips whole zero
 words, and walks a nonzero word's set bits with `trailing_zeros`/`word & (word - 1)`, the same
 walk [`MarkedIndices`](@ref)/[`MarkedIndicesUnion`](@ref) use. No bounds guard against
 `length(u)` is needed for the padding bits of the final word, for the same reason
