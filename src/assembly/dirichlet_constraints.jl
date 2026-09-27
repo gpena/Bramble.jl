@@ -272,7 +272,7 @@ Apply Dirichlet boundary conditions to matrix `A` based on marked regions in the
 For each index `i` associated with the given Dirichlet `labels`, this function:
 
  1. Sets all elements in the `i`-th row of `A` to zero.
- 2. Sets the diagonal element `A[i, i]` to one.
+ 2. Sets the diagonal element `A[i, i]` to one, if `A` has an `i`-th column.
 """
 function dirichlet_bc!(A::AbstractMatrix, Ωₕ::AbstractMeshType, labels::Symbol...)
     isempty(labels) && return A
@@ -404,7 +404,8 @@ function _dirichlet_bc_rows!(::HostLocality, A::AbstractMatrix, entries::Tuple)
         active || continue
         _each_marked(mask, offset) do r
             @views A[r, :] .= zero(T)
-            return A[r, r] = one(T)
+            r <= size(A, 2) && (A[r, r] = one(T))
+            return nothing
         end
     end
     return A
@@ -520,7 +521,9 @@ end
     _dirichlet_bc_indices!(A::AbstractMatrix, index_in_marker::BitVector)
 
 Internal helper to apply Dirichlet boundary conditions to matrix `A` at the indices marked
-in `index_in_marker`: each marked row is zeroed and its diagonal set to one.
+in `index_in_marker`: each marked row is zeroed and its diagonal set to one. A marked row
+with no diagonal column (`A` has fewer columns than rows) is zeroed but gets no identity
+entry, as in the sparse method.
 
 Costs the boundary cardinality, not `ndofs`: the marked indices are walked with
 `_each_marked` rather than scanned for. A matrix in device memory takes
@@ -537,7 +540,8 @@ function _dirichlet_bc_indices!(::HostLocality, A::AbstractMatrix, index_in_mark
     T = eltype(A)
     _each_marked(index_in_marker, 0) do i
         @views A[i, :] .= zero(T)
-        return A[i, i] = one(T)
+        i <= size(A, 2) && (A[i, i] = one(T))
+        return nothing
     end
     return A
 end
@@ -552,11 +556,17 @@ A single sweep of the stored values does both halves of the job: entries in a co
 row are zeroed, and the diagonal of such a row is set to one where the sweep meets it,
 rather than by a second pass afterwards. Explicit zeros are left in place, so the sparsity
 pattern is unchanged and the matrix can be refilled without reallocating its columns.
+
+`index_in_marker` has one entry per row, and `A` may have more columns than rows (a scalar
+test space against a composite trial space), so each lookup is bounds-checked through
+`_row_marked`, as in `_dirichlet_bc_rows!`. A marked row with no diagonal column is zeroed
+but gets no identity entry.
 """
 function _dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
     T = eltype(A)
     rows = rowvals(A)
     vals = nonzeros(A)
+    entries = ((index_in_marker, 0, length(index_in_marker), true),)
 
     # One sweep, not two: the diagonal of a constrained row is a stored entry like any
     # other, so it is written where this sweep meets it rather than searched for afterwards
@@ -566,7 +576,7 @@ function _dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
     # No `@simd`: the branches rule it out, as they already did before the diagonal write
     # moved in here.
     @inbounds for j in axes(A, 2)
-        column_is_constrained = index_in_marker[j]
+        column_is_constrained = _row_marked(entries, j)
         diagonal_found = false
 
         for k in nzrange(A, j)
@@ -574,7 +584,7 @@ function _dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
             if column_is_constrained && row == j
                 vals[k] = one(T)
                 diagonal_found = true
-            elseif index_in_marker[row]
+            elseif _row_marked(entries, row)
                 vals[k] = zero(T)
             end
         end
@@ -600,7 +610,8 @@ end
 # `_flush_device_scatter!` (bilinear_traversal.jl) reads, so no file under `src/` names the
 # concrete device type. A CSR matrix cannot grow a missing diagonal the way
 # `SparseMatrixCSC`'s `A[j, j] = one(T)` fallback does, so a constrained row without a stored
-# diagonal throws, before anything is written.
+# diagonal throws, before anything is written. A constrained row with no diagonal column at
+# all (more rows than columns) is only zeroed, as on the host.
 #
 # Only a matrix type whose extension opts in through `_has_device_csr_mirror` takes this
 # route; any other device matrix (a dense `MtlMatrix`, a device CSC) keeps the generic body,
@@ -629,7 +640,9 @@ function _dirichlet_bc_device!(A::AbstractMatrix, entries::Tuple)
         end
     end
     isempty(rows) && return A
+    ncols = size(A, 2)
     @inbounds for r in rows
+        r <= ncols || continue
         any(==(r), view(colval, rowptr[r]:(rowptr[r + 1] - one(Ti)))) ||
             _throw_dirichlet_missing_diagonal(r)
     end

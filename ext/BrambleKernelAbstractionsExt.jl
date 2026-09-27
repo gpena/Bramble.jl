@@ -803,9 +803,11 @@ end
 
 # Dirichlet rows of a device CSR matrix (gpena/Bramble.jl#361): `_dirichlet_bc_device!`
 # (`src/assembly/dirichlet_constraints.jl`) hands over the raw arrays and the constrained
-# rows, already checked there to store their diagonal. One work item per constrained row;
-# a row's entries are contiguous, so there are no write conflicts. The host `rows` is
-# uploaded once, and the launch is synchronised because that upload reads host memory.
+# rows, already checked there to store their diagonal where they have a diagonal column (a
+# row past the last column matches no `colVal` and is only zeroed). One work item per
+# constrained row; a row's entries are contiguous, so there are no write conflicts. The host
+# `rows` is uploaded once, and the launch is synchronised because that upload reads host
+# memory.
 
 @kernel function _dirichlet_rows_csr_kernel!(nzVal, @Const(rowPtr), @Const(colVal), @Const(rows))
     i = @index(Global)

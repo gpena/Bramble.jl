@@ -154,6 +154,7 @@ using ..TestUtils: WITH_SLOW_TESTS
 end
 
 using SparseArrays
+using Random
 using LinearAlgebra: I as LinearAlgebraI
 
 # Imposing the constraints, on scalar and on composite spaces.
@@ -218,6 +219,56 @@ using LinearAlgebra: I as LinearAlgebraI
             end
         end
         @test nV == 3nW
+    end
+
+    # A scalar test space against a composite trial space gives more columns than rows,
+    # while the mask has one entry per row: the sparse sweep must not read it at a column
+    # index past the last row.
+    @testset "Scalar rows, wider composite trial" begin
+        Random.seed!(20260927)
+        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 9, false))
+        bf = form(W1 × W1, W1, (u, v) -> innerₕ(u(1), v))
+        A0 = assemble(bf)
+        A = assemble(bf; dirichlet = :boundary)
+        @test size(A) == (9, 18)
+        boundary = index_in_marker(mesh(W1), :boundary)
+        @test count(boundary) == 2
+        for i in 1:9
+            if boundary[i]
+                @test A[i, i] == 1.0
+                @test count(!=(0.0), A[i, :]) == 1
+            else
+                @test A[i, :] == A0[i, :]
+            end
+        end
+    end
+
+    # The reverse shape: fewer columns than rows. A marked row past the last column has no
+    # diagonal, so it is zeroed and gets no identity entry; dense and sparse must agree.
+    @testset "Rows past the last column" begin
+        Random.seed!(20260928)
+        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 9, false))
+        W2 = W1 × W1
+        boundary = index_in_marker(mesh(W1), :boundary)
+        for (space, marked, nc) in ((W1, boundary, 5), (W2, vcat(boundary, boundary), 10))
+            nr = length(marked)
+            A0 = rand(nr, nc) .+ 1.0
+            Ad, As = copy(A0), sparse(A0)
+            @test dirichlet_bc!(Ad, space, :boundary) === Ad
+            @test dirichlet_bc!(As, space, :boundary) === As
+            @test Matrix(As) == Ad
+            for r in 1:nr
+                if !marked[r]
+                    @test Ad[r, :] == A0[r, :]
+                elseif r <= nc
+                    @test Ad[r, r] == 1.0
+                    @test count(!=(0.0), Ad[r, :]) == 1
+                else
+                    @test iszero(Ad[r, :])
+                end
+            end
+            @test any(r -> marked[r] && r > nc, 1:nr)
+        end
     end
 
     @testset "Vector values" begin
