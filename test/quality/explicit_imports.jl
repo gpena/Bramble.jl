@@ -179,6 +179,7 @@ using ExplicitImports
                 :_launch_average_engine!,
                 :_launch_spmv_csr!,
                 :_launch_spmm_csr!,
+                :_launch_dirichlet_rows_csr!,
                 :_launch_kron_fused!,
                 :_launch_fused_divergence!,
                 :_launch_fused_curl2d!,
@@ -293,6 +294,9 @@ using ExplicitImports
                 :ka_device,
                 :_launch_spmv_csr!,
                 :_launch_spmm_csr!,
+                # `_has_device_csr_mirror` (BrambleMetalExt, gpena/Bramble.jl#361): the trait
+                # that opts a device CSR matrix into the Dirichlet row kernel.
+                :_has_device_csr_mirror,
                 # `_scatter_position`, `_scatter_add!`, `_zero_stored!`
                 # (BrambleSparseMatricesCSRExt): the row-major CSR counterparts of the CSC
                 # scatter/zero primitives `bilinear_traversal.jl`/`bilinear.jl` already reach.
