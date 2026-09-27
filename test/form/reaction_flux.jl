@@ -2,6 +2,7 @@ module FormReactionFluxTests
 
 using Test
 using Random
+using ForwardDiff
 using Bramble
 using Bramble: reaction, reaction_density, weights
 
@@ -259,6 +260,22 @@ using Bramble: reaction, reaction_density, weights
         @test parent(dens)[1] ≈ reaction(a, l, uₕ; marker = :left) / weights(Wₕ, Bramble.Innerh())[1]
         # zero away from the marker
         @test all(iszero, parent(dens)[2:end])
+    end
+
+    @testset "reaction: Dual load vector" begin
+        # A Dual load against a Float64 matrix must not be rounded to Float64.
+        Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 7, false))
+        A = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))))
+        uₕ = Rₕ(Wₕ, x -> x[1]^2)
+        g(s) = reaction(A, s .* ones(ndofs(Wₕ)), uₕ; marker = :boundary)
+        h(s) = sum(parent(reaction_density(A, s .* ones(ndofs(Wₕ)), uₕ; marker = :boundary)))
+        @test ForwardDiff.derivative(g, 2.0) ≈ g(3.0) - g(2.0)
+        @test ForwardDiff.derivative(h, 2.0) ≈ h(3.0) - h(2.0)
+        gd(s) = reaction(Matrix(A), s .* ones(ndofs(Wₕ)), uₕ; marker = :boundary)
+        @test ForwardDiff.derivative(gd, 2.0) ≈ ForwardDiff.derivative(g, 2.0)
+        @test reaction(A, Matrix(A) * parent(uₕ), uₕ; marker = :boundary) isa Float64
+        @test reaction(Matrix(A), ones(ndofs(Wₕ)), uₕ; marker = :boundary) ≈
+              reaction(A, ones(ndofs(Wₕ)), uₕ; marker = :boundary)
     end
 end
 
