@@ -24,7 +24,8 @@ using RecipesBase
         @test y == parent(uₕ)
     end
 
-    @testset "2D: heatmap recipe, transposed to Plots' (row, col) = (y, x) convention" begin
+    # The heatmap is transposed to Plots' (row, col) = (y, x) convention.
+    @testset "2D: heatmap recipe, transposed" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (5, 7), (true, true))
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> x[1] + 10x[2])
@@ -48,7 +49,7 @@ using RecipesBase
         @test_throws ArgumentError RecipesBase.apply_recipe(Dict{Symbol, Any}(), uₕ)
     end
 
-    @testset "Composite: refused, points to components(...)" begin
+    @testset "composite: refused" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
         Vₕ = gridspace(Ωₕ, Val(2))
         uv = Rₕ(Vₕ, (x -> x, x -> x^2))

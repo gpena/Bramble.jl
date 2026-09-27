@@ -96,8 +96,9 @@ function _composite_residual_problem(n = 5)
     return residual, a_for_pattern, ndofs(Vₕ)
 end
 
-@testset "BrambleSparseADExt/DifferentiationInterface backend verification (gpena/Bramble.jl#122)" begin
-    @testset "jacobian_pattern is a safe superset of the real Jacobian" begin
+# Verifies the BrambleSparseADExt pattern against the DifferentiationInterface backends.
+@testset "sparse AD: DI backend checks (#122)" begin
+    @testset "jacobian_pattern: superset of Jacobian" begin
         Random.seed!(20260914)
 
         @testset "scalar" begin
@@ -119,7 +120,8 @@ end
         end
     end
 
-    @testset "ForwardDiff, ReverseDiff and FiniteDiff agree on the Jacobian" begin
+    # ForwardDiff, ReverseDiff and FiniteDiff must produce the same Jacobian.
+    @testset "AD backends agree on the Jacobian" begin
         Random.seed!(20260914)
 
         @testset "scalar" begin
@@ -144,7 +146,8 @@ end
     end
 end
 
-@testset "ReverseDiff/KroneckerLinearOperator mul! disambiguation (gpena/Bramble.jl#295)" begin
+# A tracked mul! into a KroneckerLinearOperator must not hit a method ambiguity.
+@testset "ReverseDiff: Kronecker mul! (#295)" begin
     # A small non-uniform 2D separable form -- `is_separable`'s own recognised shape
     # (`innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))`, see src/assembly/kronecker.jl). Exercises exactly
     # what `ext/BrambleReverseDiffExt.jl`'s disambiguating `mul!` needs to get right: the

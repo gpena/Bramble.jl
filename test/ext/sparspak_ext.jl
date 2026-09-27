@@ -40,7 +40,8 @@ using ..TestUtils: _fd
         )
     end
 
-    @testset "Factorization reuse and refactoring (sparspak_refactor!)" begin
+    # Exercises factorization reuse and sparspak_refactor!.
+    @testset "factorization reuse, refactor" begin
         p = poisson_system(Val(2), 8; source = x -> 1.0)
 
         refactor_contract(
@@ -57,7 +58,8 @@ using ..TestUtils: _fd
         unsymmetric_refactor_contract(p; atol = 1.0e-10, factorize = sparspak_factorize)
     end
 
-    @testset "Non-Float64 element types (no binary dependency)" begin
+    # Sparspak has no binary dependency, so non-Float64 element types work.
+    @testset "non-Float64 element types" begin
         p = poisson_system(Val(2), 8; source = x -> 1.0)
         Wₕ, l, A, F = p.Wₕ, p.l, p.A, p.F
 

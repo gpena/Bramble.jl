@@ -31,7 +31,7 @@ end
         @test (_viz_silent(S3); true)
     end
 
-    @testset "1D CartesianProduct: no override, asserts" begin
+    @testset "1D CartesianProduct: asserts" begin
         # Only `Mesh1D` gets its own (non-throwing) `@error` method below; a bare 1D
         # `CartesianProduct` falls through to the D >= 2 assertion every other `viz` method
         # shares.

@@ -25,7 +25,7 @@ const KronExt = Base.get_extension(Bramble, :BrambleKroneckerExt)
 const KRON_EXT_SEED = 20260919
 
 @testset "Kronecker extension" begin
-    @testset "Kronecker.jl object equals SparseMatrixCSC(K)" begin
+    @testset "Kronecker.jl object equals CSC" begin
         Random.seed!(KRON_EXT_SEED)
         Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (13, 11), (false, false))
         W2 = gridspace(Ω2)
@@ -56,7 +56,8 @@ const KRON_EXT_SEED = 20260919
         end
     end
 
-    @testset "fdm_solve vs sparse \\, no Dirichlet (2D 25x19, 3D 11x9x8)" begin
+    # fdm_solve against sparse backslash on 2D 25x19 and 3D 11x9x8 meshes, no Dirichlet.
+    @testset "fdm_solve vs \\, no Dirichlet" begin
         Random.seed!(KRON_EXT_SEED + 2)
         Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (25, 19), (false, false))
         W2 = gridspace(Ω2)
@@ -87,7 +88,8 @@ const KRON_EXT_SEED = 20260919
         end
     end
 
-    @testset "fdm_solve vs sparse \\, homogeneous Dirichlet (2D 25x19, 3D 11x9x8)" begin
+    # fdm_solve against sparse backslash on 2D 25x19 and 3D 11x9x8 meshes, homogeneous Dirichlet.
+    @testset "fdm_solve vs \\, zero Dirichlet" begin
         Random.seed!(KRON_EXT_SEED + 4)
         Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (25, 19), (false, false))
         W2 = gridspace(Ω2)
@@ -134,7 +136,8 @@ const KRON_EXT_SEED = 20260919
         @test_throws ArgumentError fdm_solve(a, rand(ndofs(Wₕ)))
     end
 
-    @testset "@allocated of a second fdm_solve call (reported, not asserted zero)" begin
+    # The allocation of a second fdm_solve call is reported, not asserted to be zero.
+    @testset "fdm_solve: second-call allocations" begin
         Random.seed!(KRON_EXT_SEED + 7)
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 13), (false, false))
         Wₕ = gridspace(Ωₕ)

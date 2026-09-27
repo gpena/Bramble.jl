@@ -28,7 +28,8 @@ using ..TestUtils: _fd
 # meshes_ext.jl gives: every ext file is included into the same `Main`.
 
 @testset "BrambleChainRulesExt" begin
-    @testset "rrule: pullback matches finite differences, Ā never densified" begin
+    # The pullback matches finite differences and never densifies Ā.
+    @testset "rrule: pullback matches FD" begin
         n = 6
         A = sparse(Tridiagonal(fill(-1.0, n - 1), fill(2.0, n), fill(-1.0, n - 1)))
         F = collect(1.0:n)
@@ -54,7 +55,8 @@ using ..TestUtils: _fd
         @test Ā isa SparseMatrixCSC
     end
 
-    @testset "rrule: ∂J/∂A matches a central difference on a genuinely varying A(θ)" begin
+    # ∂J/∂A must match a central difference when A(θ) genuinely varies with θ.
+    @testset "rrule: ∂J/∂A on a varying A(θ)" begin
         n = 6
         function build_A(θ)
             d = fill(2.0, n)
@@ -139,7 +141,8 @@ using ..TestUtils: _fd
     # about two different differentiation strategies -- so this is a plain in-test timing
     # sanity check: `nθ` diagonal perturbations to a fixed `A`, one rank-1 direction each, and
     # `@elapsed` after a warm-up call per `bramble-verification`'s measurement discipline.
-    @testset "cost is one solve regardless of parameter count" begin
+    # The gradient costs one solve regardless of the parameter count.
+    @testset "cost: one solve for any #params" begin
         n = 60
         A_base = sparse(Tridiagonal(fill(-1.0, n - 1), fill(4.0, n), fill(-1.0, n - 1)))
         F = collect(1.0:n)

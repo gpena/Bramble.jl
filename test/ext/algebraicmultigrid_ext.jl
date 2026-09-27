@@ -79,7 +79,7 @@ end
     A, F = assemble(a, l; dirichlet = bcs, symmetrize = true)
     @test issymmetric(A)
 
-    @testset "amg_preconditioner: matrix and BilinearForm methods agree" begin
+    @testset "amg: matrix and form methods agree" begin
         ml_matrix = amg_preconditioner(A)
         @test ml_matrix isa AlgebraicMultigrid.MultiLevel
 
@@ -98,7 +98,8 @@ end
         @test_throws ArgumentError amg_preconditioner(A; method = :not_a_method)
     end
 
-    @testset "aspreconditioner(amg_preconditioner(A)) is a valid linear operator with ldiv!" begin
+    # aspreconditioner(amg_preconditioner(A)) must be a valid linear operator with ldiv!.
+    @testset "amg: aspreconditioner supports ldiv!" begin
         P = aspreconditioner(amg_preconditioner(A))
         n = size(A, 1)
 
@@ -125,7 +126,8 @@ end
         @test norm(y) > 0
     end
 
-    @testset "preconditioner = :amg in solve reaches the direct answer" begin
+    # Passing preconditioner = :amg to solve must reach the direct-solver answer.
+    @testset "amg: solve matches direct solve" begin
         expected = A \ F
 
         uₕ = solve(a, l; dirichlet = bcs, symmetrize = true, solver = KrylovJL_CG(), preconditioner = :amg)
@@ -146,7 +148,8 @@ end
         )
     end
 
-    @testset "CG iteration count stays essentially flat under refinement (2D)" begin
+    # The CG iteration count stays essentially flat under mesh refinement.
+    @testset "amg: flat CG iterations (2D)" begin
         # #173's acceptance criterion: bounded iterations (issue asks <= 15) as h -> 0. Both
         # counts are measured on the same three meshes so the contrast is direct: this is not
         # "AMG is fast", it is "AMG stays flat where plain CG does not", on identical systems.
@@ -166,7 +169,8 @@ end
         @test plain_iters[end] > 10 * amg_iters[end]
     end
 
-    @testset "CG iteration count stays essentially flat under refinement (3D)" begin
+    # The CG iteration count stays essentially flat under mesh refinement.
+    @testset "amg: flat CG iterations (3D)" begin
         meshes = [_poisson_3d(n) for n in (8, 16, 24)]
         amg_iters = [_cg_iters(m...; preconditioned = true) for m in meshes]
         plain_iters = [_cg_iters(m...; preconditioned = false) for m in meshes]

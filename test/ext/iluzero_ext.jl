@@ -63,7 +63,7 @@ end
     A, F = assemble(a, l; dirichlet = bcs, symmetrize = false)
     @test !issymmetric(A)
 
-    @testset "ilu_preconditioner: matrix and BilinearForm methods agree" begin
+    @testset "ilu: matrix and form methods agree" begin
         P_matrix = ilu_preconditioner(A)
         @test P_matrix isa ILU0Precon
 
@@ -75,7 +75,7 @@ end
         @test P_form.l_nzval == ilu_preconditioner(A_unsym).l_nzval
     end
 
-    @testset "ilu_preconditioner(A) is a valid preconditioner with ldiv!" begin
+    @testset "ilu: preconditioner supports ldiv!" begin
         P = ilu_preconditioner(A)
         n = size(A, 1)
 
@@ -100,7 +100,8 @@ end
         @test parent(uₕ_pc) ≈ y
     end
 
-    @testset "preconditioner = :ilu0 in solve reaches the direct answer" begin
+    # Passing preconditioner = :ilu0 to solve must reach the direct-solver answer.
+    @testset "ilu: solve matches direct solve" begin
         expected = A \ F
 
         uₕ = solve(a, l; dirichlet = bcs, solver = KrylovJL_GMRES(), preconditioner = :ilu0)
@@ -121,7 +122,8 @@ end
         )
     end
 
-    @testset "GMRES needs far fewer iterations with ILU(0) on a convection-dominated system" begin
+    # On a convection-dominated system GMRES needs far fewer iterations with ILU(0).
+    @testset "ilu: fewer GMRES iterations" begin
         # #255's acceptance criterion: fewer iterations than unpreconditioned GMRES -- an
         # iteration-count assertion, not a timing claim, per bramble-verification.
         a2, l2, bcs2 = _convection_diffusion_2d(60)

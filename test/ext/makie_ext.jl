@@ -13,7 +13,7 @@ using Makie
 # ambiguous (both packages export a function by that name).
 
 @testset "BrambleMakieExt" begin
-    @testset "1D: PointBased convert_arguments and expand_dimensions" begin
+    @testset "1D: PointBased conversion" begin
         Ωₕ = Bramble.mesh(domain(interval(0.0, 1.0)), 9, true)
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, sin)
@@ -32,7 +32,7 @@ using Makie
         @test y == parent(uₕ)
     end
 
-    @testset "2D: CellGrid and VertexGrid convert_arguments" begin
+    @testset "2D: CellGrid and VertexGrid" begin
         Ωₕ = Bramble.mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (5, 7), (true, true)
         )
@@ -57,7 +57,7 @@ using Makie
         @test_throws ArgumentError Makie.convert_arguments(Makie.CellGrid(), uₕ)
     end
 
-    @testset "Composite: refused, points to components(...)" begin
+    @testset "composite: refused" begin
         Ωₕ = Bramble.mesh(domain(interval(0.0, 1.0)), 5, true)
         Vₕ = gridspace(Ωₕ, Val(2))
         uv = Rₕ(Vₕ, (x -> x, x -> x^2))

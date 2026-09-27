@@ -25,7 +25,8 @@ using ..TestUtils: _have
 # this group.
 
 @testset "BrambleSciMLSensitivityExt" begin
-    @testset "a non-ODESolution first argument still reaches the core stub" begin
+    # A non-ODESolution first argument still reaches the core stub.
+    @testset "non-ODESolution reaches core stub" begin
         # This extension's own method restricts its first argument to `ODESolution`, so
         # anything else falls through to `Bramble.adjoint_sensitivities`'s core fallback
         # (`form/semidiscrete.jl`), the one a user actually sees if they call this before
@@ -56,7 +57,8 @@ using ..TestUtils: _have
             return Ωₕ, Wₕ, I, sd
         end
 
-        @testset "parameter gradient matches central differences" begin
+        # The parameter gradient matches central differences.
+        @testset "parameter gradient matches FD" begin
             Ωₕ, Wₕ, I, sd = _ssens_problem(21)
             u₀ = Rₕ(Wₕ, x -> 0.0)
             p₀ = [0.7]
@@ -96,7 +98,7 @@ using ..TestUtils: _have
             @test isapprox(vec(dp)[1], fd; rtol = 1e-5)
         end
 
-        @testset "initial-condition gradient is Mᵀ-corrected" begin
+        @testset "u₀ gradient is Mᵀ-corrected" begin
             # A non-uniform mesh, deliberately: `M`'s diagonal is not a single scalar `h`, so
             # an uncorrected `du0` off by `1/h` and a correctly `Mᵀ`-corrected one are told
             # apart by more than a constant factor -- the same check the composition
