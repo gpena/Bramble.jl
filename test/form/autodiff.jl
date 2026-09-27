@@ -7,7 +7,7 @@ using ReverseDiff
 using DifferentiationInterface
 using SparseArrays
 using LinearAlgebra: issymmetric, norm
-using Bramble: D₋ₓ, inner₊ₓ
+using Bramble: D₋ₓ, inner₊ₓ, restrict_to
 using ..TestUtils: _tri, _matches_fd
 
 # Differentiating through the constrained linear system.
@@ -290,6 +290,122 @@ end
 
     @test norm(Jx[1:n, (n + 1):(2n)]) > 0
     @test norm(Jx[1:n, 1:n]) == 0
+end
+
+# The assembled element type follows every term's coefficients, not one probed point
+# (gpena/Bramble.jl#370). A restricted term writes nothing at most points, and the type was
+# once read off the stencil at one interior point: a `Dual` behind `:boundary` (or any
+# marker missing that point) was never seen, and the assembly met `Float64(::Dual)`. The
+# restricted term enters linearly in `s`, so each derivative must equal that term assembled
+# alone.
+function _restricted_meshes()
+    (mesh(domain(interval(0.0, 1.0)), 11, false),
+        mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, true)))
+end
+
+function _check_restricted_eltype(Wₕ, m)
+    f = x -> 1.0 + 3.0 * x[1]
+    Ar = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, restrict_to(m, v)))))
+    bilinear = s -> Matrix(assemble(form(Wₕ, Wₕ,
+        (u, v) -> innerₕ(u, v) + Ref(s) * innerₕ(u, restrict_to(m, v)))))
+    @test eltype(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) +
+                                                 Ref(ForwardDiff.Dual(2.0, 1.0)) *
+                                                 innerₕ(u, restrict_to(m, v))))) <: ForwardDiff.Dual
+    @test !iszero(Ar)
+    @test ForwardDiff.derivative(bilinear, 2.0) ≈ Ar rtol = 1e-12
+
+    br = assemble(form(Wₕ, v -> innerₕ(f, restrict_to(m, v))))
+    linear = s -> assemble(form(Wₕ, v -> innerₕ(1.0, v) + Ref(s) * innerₕ(f, restrict_to(m, v))))
+    @test !iszero(br)
+    @test ForwardDiff.derivative(linear, 2.0) ≈ br rtol = 1e-12
+    # A Dual inside a function of position, seen only through its value.
+    thunk = s -> assemble(form(Wₕ, v -> innerₕ(1.0, v) + innerₕ(x -> s * f(x), restrict_to(m, v))))
+    @test ForwardDiff.derivative(thunk, 2.0) ≈ br rtol = 1e-12
+end
+
+@testset "AD: restricted-term eltype" begin
+    for Ωₕ in _restricted_meshes(), m in (:boundary, :interior)
+
+        _check_restricted_eltype(gridspace(Ωₕ), m)
+    end
+end
+
+# A custom marker that misses the grid's middle point, where the old probe looked.
+@testset "AD: custom-marker eltype" begin
+    right = x -> x[1] > 0.8
+    for Ω in (domain(interval(0.0, 1.0), :right => right),
+        domain(interval(0.0, 1.0) × interval(0.0, 1.0), :right => right))
+        n, unif = dim(Ω) == 1 ? (11, false) : ((7, 9), (false, true))
+        _check_restricted_eltype(gridspace(mesh(Ω, n, unif)), :right)
+    end
+end
+
+# Routed to the second component of `W × W`: the derivative lands in that block alone.
+@testset "AD: composite restricted eltype" begin
+    for Ωₕ in _restricted_meshes()
+        Wₕ = gridspace(Ωₕ)
+        Vₕ = Wₕ × Wₕ
+        n = ndofs(Wₕ)
+        f = x -> 100.0 + x[1]
+        Ar = Matrix(assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u(2), restrict_to(:boundary, v(2))))))
+        bilinear = s -> Matrix(assemble(form(Vₕ, Vₕ,
+            (u, v) -> innerₕ(u(1), v(1)) + 10000.0 * innerₕ(u(2), v(2)) +
+                      Ref(s) * innerₕ(u(2), restrict_to(:boundary, v(2))))))
+        dA = ForwardDiff.derivative(bilinear, 2.0)
+        @test !iszero(Ar[(n + 1):(2n), (n + 1):(2n)])
+        @test dA ≈ Ar rtol = 1e-12
+        @test iszero(dA[1:n, :]) && iszero(dA[:, 1:n])
+
+        br = assemble(form(Vₕ, v -> innerₕ(f, restrict_to(:boundary, v(2)))))
+        linear = s -> assemble(form(Vₕ,
+            v -> innerₕ(1.0, v(1)) + Ref(s) * innerₕ(f, restrict_to(:boundary, v(2)))))
+        db = ForwardDiff.derivative(linear, 2.0)
+        @test !iszero(br[(n + 1):(2n)])
+        @test db ≈ br rtol = 1e-12
+        @test iszero(db[1:n])
+    end
+end
+
+# A composite's `eltype` is its first leaf's alone: each term takes the type of the leaves
+# it is routed to, on both sides (gpena/Bramble.jl#370). The second leaf's mesh depends on
+# `b`, so its weights sum to `b` and the derivative of the sum is exactly 1.
+@testset "AD: routed composite leaf eltype" begin
+    W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 11, false))
+    W2 = b -> gridspace(mesh(domain(interval(0.0, b)), 11, true))
+    A = b -> sum(assemble(form(W1 × W2(b), W1 × W2(b), (u, v) -> innerₕ(u(2), v(2)))))
+    L = b -> sum(assemble(form(W1 × W2(b), v -> innerₕ(1.0, v(2)))))
+    @test ForwardDiff.derivative(A, 2.0) ≈ 1.0 rtol = 1e-12
+    @test ForwardDiff.derivative(L, 2.0) ≈ 1.0 rtol = 1e-12
+
+    # A Float64 second leaf behind a Float32 first one keeps its exact entries.
+    W32 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 11, false))
+    W64 = gridspace(mesh(domain(interval(0.0, 1.0 / 3)), 11, false))
+    M = assemble(form(W32 × W64, W32 × W64, (u, v) -> innerₕ(u(2), v(2))))
+    b = assemble(form(W32 × W64, v -> innerₕ(1.0f0, v(2))))
+    n = ndofs(W32)
+    @test eltype(M) === Float64 && eltype(b) === Float64
+    @test M[(n + 1):end, (n + 1):end] == assemble(form(W64, W64, (u, v) -> innerₕ(u, v)))
+    @test b[(n + 1):end] == assemble(form(W64, v -> innerₕ(1.0f0, v)))
+end
+
+# An interpolant under a difference stays a function of position, and is sampled for its
+# type at an interior point: at the first point, outside its own mesh, it answers with
+# its fill, whose type is not its values'.
+@testset "AD: nested interpolant eltype" begin
+    Ms = mesh(domain(interval(0.25, 0.75)), 11, false)
+    Ws = gridspace(Ms)
+    Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 21, false))
+    g = s -> begin
+        uₛ = element(Ws, typeof(s))
+        parent(uₛ) .= [s * x^2 for x in points(Ms)]
+        assemble(form(Wₕ, v -> innerₕ(D₋ₓ(πₕ(uₛ; outside = 0.0)), v)))
+    end
+    @test !iszero(g(1.0))
+    @test ForwardDiff.derivative(g, 2.0) ≈ g(1.0) rtol = 1e-12
+
+    W32 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 21, false))
+    u64 = Rₕ(Ws, x -> 1 / 3 + x[1])
+    @test eltype(assemble(form(W32, v -> innerₕ(D₋ₓ(πₕ(u64; outside = 0)), v)))) === Float64
 end
 
 end # module FormAutodiffTests

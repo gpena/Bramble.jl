@@ -233,9 +233,10 @@ end
     # Each product takes its own strength's type, never the first one's: a strengths vector
     # with an abstract eltype (thunks, mixed `Ref`s, `Real[...]`) may hold a `Dual` or a
     # wider float further along, and `acc` must widen to it rather than truncate it. It
-    # widens at every node, not only near that point, because the assembled vector's type
-    # is probed at one interior node (`_probed_eltype`); the widening is a conversion, not
-    # an addition, so a concrete strengths eltype sees the identity and HEAD's exact values.
+    # widens at every node, not only near that point, so every node answers with the one
+    # type the assembled vector is given from every strength (`_folded_eltype`,
+    # gpena/Bramble.jl#370); the widening is a conversion, not an addition, so a concrete
+    # strengths eltype sees the identity and HEAD's exact values.
     acc = zero(_dirac_weight_type(Ωₕ, _point_strength_val(first(op.strengths))))
     for k in eachindex(op.points)
         pt = op.points[k]

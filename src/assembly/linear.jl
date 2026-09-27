@@ -293,35 +293,94 @@ end
 # The element type of the assembled vector is the one the form's own weights have, promoted
 # against the space's (not the space's outright), supporting autodiff types like `ForwardDiff.Dual`.
 function _assembled_eltype(ast, space)
-    return _probed_eltype(ast, space, eltype(space))
+    return _folded_eltype(ast, space, eltype(space))
 end
 
-# Composite: terms naming components are routed and probed on their respective leaf spaces.
+# Composite: terms naming components are routed and folded on their respective leaf spaces.
 function _assembled_eltype(ast, space::CompositeGridSpace)
     return _routed_eltype(ast, leaf_spaces_offsets(space), eltype(space))
 end
 
-# An interior point, so a truncated stencil does not decide the type. A restriction can
-# still answer with nothing, in which case the space's type is used.
+# The type every leaf of `term` can put in an entry, promoted against `T` (gpena/Bramble.jl#370).
 #
-# Probed on `host_weights(sp)` (gpena/Bramble.jl#361): `local_stencil` reads the weights and
-# spacings one point at a time, which a device-backed leaf refuses; a no-op on a host leaf.
-# Every leaf, scalar or routed from a composite, bottoms out here, so one swap covers both.
-# `sp` is typed `::ScalarGridSpace` for the reason `_pattern_size_hint` gives
-# (`bilinear_pattern.jl`): an untyped `sp` lets JET reach `host_weights(::SeparableWeights)`.
+# Read from the node types wherever they carry it (a `Number` or `Ref{T}` scale, an array
+# coefficient or source), and from a value only where nothing else reveals it: a thunk is
+# called once, and so is every strength of a `Vector{Function}` Dirac source. Never from a
+# stencil probed at one point: a restricted term, or a Dirac point far from that point,
+# answers there with nothing, or with a narrower type than it writes elsewhere, and the
+# vector it is assembled into cannot hold what the other points write. Static types keep
+# `@inferred assemble` stable; `assemble!` sizes nothing, so a refill never comes here.
 #
-# The term's device-resident source values come along the same way (`_host_sources`, below).
-function _probed_eltype(term, sp::ScalarGridSpace, T)
-    hp = host_weights(sp)
-    hterm = _host_sources(locality(backend(sp)), term)
-    Ωₕ = mesh(hp)
+# `sp` is the leaf the term is routed to, and its own type is promoted in: a composite's
+# `eltype` is its first leaf's alone, so a Float64 or `Dual` second leaf would otherwise be
+# rounded or refused. `sp` is typed `::ScalarGridSpace` for the reason `_pattern_size_hint`
+# gives (`bilinear_pattern.jl`): an untyped `sp` lets JET reach `host_weights(::SeparableWeights)`.
+@inline _folded_eltype(term, sp::ScalarGridSpace, T) = _leaf_eltype(
+    promote_type(T, eltype(sp)), term, sp)
+
+# A leaf that carries no coefficient: trial and test functions, identity, zero.
+@inline _leaf_eltype(T, op, sp) = T
+
+# One operand, and nothing of its own that is not already in `T` (the space's spacings).
+const _ELTYPE_WRAPPERS = Union{
+    RegionRestriction, ShiftNode, InterpolationNode, BackwardDifference, ForwardDifference,
+    CenteredDifference, StarDifference, CrossWeightedDifference, BackwardAverage,
+    ForwardAverage, CenteredAverage, JumpNode}
+
+@inline _leaf_eltype(T, op::_ELTYPE_WRAPPERS, sp) = _leaf_eltype(T, op.inner_op, sp)
+
+@inline _leaf_eltype(T, op::Union{OperatorAdd, BilinearProduct, LinearProduct}, sp) = _leaf_eltype(
+    _leaf_eltype(T, op.left_op, sp), op.right_op, sp)
+
+@inline _leaf_eltype(T, op::OperatorScale, sp) = _leaf_eltype(
+    _value_eltype(T, op.scalar), op.inner_op, sp)
+@inline _leaf_eltype(T, op::GridFunctionScale, sp) = _leaf_eltype(
+    _value_eltype(T, op.grid_function), op.inner_op, sp)
+
+@inline _leaf_eltype(T, op::SourceVector, sp) = _value_eltype(T, op.vec)
+@inline _leaf_eltype(T, op::SourceConstant, sp) = _value_eltype(T, op.value)
+
+# A function of position reveals its type only through a value: sampled once, at an
+# interior grid point, on the host copy of the mesh (`host_weights`, gpena/Bramble.jl#361).
+# Interior, not the first point: a function defined on a smaller mesh (an interpolant
+# `πₕ(uₕ; outside = fill)` under a difference) answers a boundary point with its fill,
+# whose type need not be its values'.
+@inline function _leaf_eltype(T, op::SourceFunction, sp::ScalarGridSpace)
+    Ωₕ = mesh(host_weights(sp))
     grid_inds = indices(Ωₕ)
-    lin_indices = LinearIndices(grid_inds)
     I = grid_inds[length(grid_inds) ÷ 2 + 1]
-    st = local_stencil(hterm, hp, I, markers(Ωₕ), lin_indices[I])
-    isempty(st) && return T
-    return promote_type(T, typeof(last(first(st))))
+    return promote_type(T, typeof(op.func(point(Ωₕ, I))))
 end
+
+# Each strength's weight type (`_dirac_weight_type`, `stencil_eval.jl`), every one of them.
+@inline _leaf_eltype(T, op::DiracSource, sp) = promote_type(
+    T, eltype(mesh(sp)), _strengths_eltype(op.strengths))
+
+@inline _strengths_eltype(s) = typeof(_point_strength_val(s))
+@inline _strengths_eltype(s::AbstractVector{<:Number}) = _value_eltype(Union{}, s)
+@inline _strengths_eltype(s::AbstractVector{<:Base.RefValue{<:Number}}) = isconcretetype(eltype(s)) ?
+                                                                          eltype(eltype(s)) :
+                                                                          _each_strength_eltype(s)
+@inline _strengths_eltype(s::AbstractVector) = _each_strength_eltype(s)
+
+function _each_strength_eltype(s)
+    R = Union{}
+    for sₖ in s
+        R = promote_type(R, typeof(_point_strength_val(sₖ)))
+    end
+    return R
+end
+
+# The type a coefficient's values have: its own for a number, its element type for a `Ref` or
+# an array, a thunk's result for a thunk. Only an abstract element type is read value by value.
+@inline _value_eltype(T, x::Number) = promote_type(T, typeof(x))
+@inline _value_eltype(T, x::Base.RefValue) = isconcretetype(eltype(x)) ?
+                                             promote_type(T, eltype(x)) : _value_eltype(T, x[])
+@inline _value_eltype(T, x::AbstractArray) = isconcretetype(eltype(x)) ?
+                                             promote_type(T, eltype(x)) :
+                                             mapreduce(typeof, promote_type, x; init = T)
+@inline _value_eltype(T, f::Function) = _value_eltype(T, f())
+@inline _value_eltype(T, x) = promote_type(T, typeof(x))
 
 function _routed_eltype(op::OperatorAdd, leaves, T)
     return promote_type(
@@ -333,7 +392,26 @@ function _routed_eltype(term, leaves, T)
     target = test_component_or_nothing(term)
     _check_component(target, length(leaves))
     sp = target === nothing ? first(first(leaves)) : first(leaves[target])
-    return _probed_eltype(term, sp, T)
+    return _folded_eltype(term, sp, T)
+end
+
+# The trial side's half, for a bilinear form: the leaf each term's trial function is routed
+# to contributes its own type, as the test leaf does in `_folded_eltype`.
+_trial_eltype(ast, space) = eltype(space)
+_trial_eltype(ast, space::CompositeGridSpace) = _trial_routed_eltype(
+    ast, leaf_spaces_offsets(space), eltype(space))
+
+function _trial_routed_eltype(op::OperatorAdd, leaves, T)
+    return promote_type(
+        _trial_routed_eltype(op.left_op, leaves, T), _trial_routed_eltype(op.right_op, leaves, T)
+    )
+end
+
+function _trial_routed_eltype(term, leaves, T)
+    target = trial_component_or_nothing(term)
+    _check_component(target, length(leaves))
+    sp = target === nothing ? first(first(leaves)) : first(leaves[target])
+    return promote_type(T, eltype(sp))
 end
 
 # --- Helper cores for function barrier optimization ------------------------------- #

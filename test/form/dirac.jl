@@ -369,6 +369,32 @@ using Bramble:
             @test mixed[nz] == alone[nz]
         end
     end
+
+    # The vector's type is folded from every strength, not read off one node's stencil
+    # (gpena/Bramble.jl#370). A plain term first: the flattened sum's stencil once decided the
+    # type by its first entry alone, so the Dirac's `Dual`, or its Float64 strength on a
+    # Float32 space, went unseen. The points sit away from the grid's middle node.
+    @testset "dirac: mixed strengths off-probe" begin
+        for D in (1, 2)
+            Ω = domain(D == 1 ? interval(0.0, 1.0) : interval(0.0, 1.0) × interval(0.0, 1.0))
+            n, unif = D == 1 ? (11, false) : ((7, 9), (false, true))
+            Wₕ = gridspace(mesh(Ω, n, unif))
+            pts = D == 1 ? [(0.07,), (0.93,)] : [(0.07, 0.11), (0.93, 0.88)]
+            src = s -> dirac(pts, [() -> 1.0, () -> s])
+            l = s -> assemble(form(Wₕ, v -> innerₕ(1.0, v) + innerₕ(src(s), v)))
+            alone = assemble(form(Wₕ, v -> innerₕ(dirac(pts[2:2], 1.0), v)))
+            @test ForwardDiff.derivative(l, 2.0) ≈ alone rtol = 1e-12
+            @test sum(ForwardDiff.derivative(l, 2.0)) ≈ 1.0 rtol = 1e-12
+
+            Ω32 = domain(D == 1 ? interval(0.0f0, 1.0f0) : interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0))
+            W32 = gridspace(mesh(Ω32, n, unif; backend = backend(Float32)))
+            for strengths in ([() -> 1.0f0, () -> 0.1], Real[1.0f0, 0.1], [Ref(1.0f0), Ref(0.1)])
+                b = assemble(form(W32, v -> innerₕ(1.0f0, v) + innerₕ(dirac(pts, strengths), v)))
+                @test eltype(b) === Float64
+                @test sum(b) ≈ sum(assemble(form(W32, v -> innerₕ(1.0f0, v)))) + 1.1 rtol = 1e-6
+            end
+        end
+    end
 end
 
 end # module
