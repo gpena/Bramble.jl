@@ -45,8 +45,8 @@ module BramblePolyesterExt
 using Bramble
 using Bramble: MarkedIndicesUnion, SeparableWeights, _reduce_or_chunk, _throw_dot_dim_error,
                _write_components!, _band_range, _scatter_point!, _scatter_linear_point!,
-               CpuPolyester, _ReplayTarget, _replay_point!, _difference_band!, _average_band!,
-               _centered_average_band!, _broadcast_band!
+               CpuPolyester, _ReplayTarget, _ActionTarget, _replay_point!, _difference_band!,
+               _average_band!, _centered_average_band!, _broadcast_band!
 using Polyester: Polyester, @batch
 
 # --- _batch_for!/_batch_axis_for! (src/utils/linear_algebra.jl) -------------------- #
@@ -279,12 +279,15 @@ end
 # `_leaf_replays` never answers `true` for a `CpuPolyester` leaf, so its units keep searching
 # even once a recording exists. `target::_ReplayTarget` -- rather than the stub's unconstrained
 # `target` -- is what makes each of these a genuine specialisation of its `src/` stub, the same
-# `A::AbstractMatrix` reasoning the sweep hooks above give.
+# `A::AbstractMatrix` reasoning the sweep hooks above give. A matrix-free product
+# (`MatrixFreeOperator`, src/assembly/matrix_free.jl, gpena/Bramble.jl#326) sweeps through
+# the same two hooks with an `_ActionTarget`, the sink adding `α * w * x[col]` into
+# `y[row]`: the colouring and the per-point step (`_replay_point!`) are the same.
 Bramble._threaded_replay_policy(::CpuPolyester) = true
 
 function Bramble._batch_bilinear_band_replay!(
-        target::_ReplayTarget, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers,
-        row_offset, col_offset
+        target::Union{_ReplayTarget, _ActionTarget}, sp, term, ax, bidx, nbands, rest,
+        lin_indices, mesh_markers, row_offset, col_offset
 )
     @batch for b in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
@@ -295,7 +298,8 @@ function Bramble._batch_bilinear_band_replay!(
 end
 
 function Bramble._batch_bilinear_colour_replay!(
-        target::_ReplayTarget, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset
+        target::Union{_ReplayTarget, _ActionTarget}, sp, term, idxs, lin_indices, mesh_markers,
+        row_offset, col_offset
 )
     @batch for I in idxs
         _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)

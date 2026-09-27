@@ -16,7 +16,7 @@ using Bramble: CpuPolyester, Serial, execution_policy, test_space, _normalize_di
 using Polyester
 using SparseArrays
 using SparseArrays: getcolptr
-using LinearAlgebra: issymmetric
+using LinearAlgebra: issymmetric, mul!
 using Random
 using ..TestUtils: alloc_test
 
@@ -621,6 +621,60 @@ if Threads.nthreads() >= 2
         v .= 2.0 .* spy .+ wₕ
         @test count_ones(_BC357_SEEN[]) >= 2
         @test parent(v) == 2.0 .* parent(uₕ) .+ parent(wₕ)
+    end
+end
+
+# A matrix-free product under `CpuPolyester` sweeps the colour bands through the replay hooks
+# (`_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!`, gpena/Bramble.jl#326), so
+# it must equal the serial product on the same non-uniform mesh on every repeat, and what it
+# allocates is the `@batch` launch cost, whatever the grid size.
+@testset "matrix-free mul! (#326)" begin
+    _mf_space(D, n, policy) = begin
+        Random.seed!(326)
+        doms = (
+            domain(interval(0.0, 1.0)),
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0)),
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0))
+        )
+        gridspace(mesh(doms[D], ntuple(_ -> n, D), ntuple(_ -> false, D); backend = backend(policy = policy)))
+    end
+    _mf_close(a, b) = isapprox(a, b; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(abs, b)))
+    _diff(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
+    _pair(u, v) = innerₕ(D₋ₓ(u), v) + 2.0 * innerₕ(u, D₋ₓ(v))
+    _composite(u, v) = innerₕ(u(1), v(1)) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) + innerₕ(D₋ₓ(u(1)), v(2))
+    sizes = (41, 13, 7)
+    @testset "$(D)D, $(nm)" for D in 1:3,
+        (nm, f, comps, dl) in (
+            ("diffusion", _diff, 1, :boundary), ("pair", _pair, 1, nothing),
+            ("composite", _composite, 2, :boundary)
+        )
+
+        space(W) = comps == 1 ? W : W × W
+        Ws, Wb = space(_mf_space(D, sizes[D], Serial())), space(_mf_space(D, sizes[D], CpuPolyester()))
+        kw = dl === nothing ? (;) : (; dirichlet = dl)
+        ops = matrix_free_operator(form(Ws, Ws, f); kw...)
+        opb = matrix_free_operator(form(Wb, Wb, f); kw...)
+        x = randn(size(ops, 2))
+        ref = ops * x
+        y = similar(ref)
+        @test all(1:20) do _
+            mul!(y, opb, x)
+            return _mf_close(y, ref)
+        end
+        y0 = randn(size(ops, 1))
+        y .= y0
+        mul!(y, opb, x, 0.5, 2.0)
+        @test _mf_close(y, 0.5 * ref + 2.0 * y0)
+    end
+    @testset "mul! allocation: size-free" begin
+        _alloc(y, op, x) = (mul!(y, op, x); @allocated mul!(y, op, x))
+        bytes = map((200, 800)) do n
+            W = _mf_space(1, n, CpuPolyester())
+            op = matrix_free_operator(form(W, W, _diff); dirichlet = :boundary)
+            x = randn(size(op, 2))
+            _alloc(similar(x), op, x)
+        end
+        @test bytes[1] == bytes[2]
     end
 end
 

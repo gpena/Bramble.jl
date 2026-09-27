@@ -77,6 +77,13 @@ coefficient updated in place (`Rₕ!`, a `Ref`) is seen by the next product. Bui
 policy, except on a form with a region restriction (`restrict_to`), whose stencil
 evaluation allocates as it does in `assemble!`.
 
+On a [`CpuThreaded`](@ref) or [`CpuPolyester`](@ref) policy each term is swept across
+threads in the colour bands the threaded [`assemble!`](@ref) uses, so no two threads add
+into the same entry of `y` and the result does not depend on scheduling. Each leaf threads
+with its own mechanism, as in assembly: `Polyester.@batch` on a `CpuPolyester` leaf,
+`Threads.@threads` otherwise. A term with a test-side interpolation runs serially. A threaded
+product allocates its task launches, a fixed cost per term that does not grow with the grid.
+
 Dirichlet rows follow [`dirichlet_bc!`](@ref): a row in Γ_D is the identity row, so
 `(A * x)[i] = x[i]` there and its columns are untouched. A row in Γ_D past the last column
 (a rectangular form) is zero, as in the assembled matrix.
@@ -129,8 +136,9 @@ The linear operator of `a`, applied without assembling its matrix: `op * x` agre
 - `dirichlet_components`: The leaves of a composite test space the labels bind to, as in
   [`dirichlet_bc!`](@ref): an `Int`, a `Tuple` of `Int`s, or `nothing` for every leaf
   (default: `nothing`).
-- `policy`: The [`ExecutionPolicy`](@ref) of `mul!` (default: the trial space's). A CPU
-  policy's product currently runs serially.
+- `policy`: The [`ExecutionPolicy`](@ref) of `mul!` (default: the trial space's).
+  [`CpuSerial`](@ref) walks the form on the calling task; any other CPU policy threads it,
+  with each leaf's own mechanism (see [`MatrixFreeOperator`](@ref)).
 
 # Returns
 - [`MatrixFreeOperator`](@ref): of size `(ndofs(test_space(a)), ndofs(trial_space(a)))` and
@@ -226,7 +234,7 @@ function mul!(
         yd .*= β
     end
     mask = _mf_mask(op)
-    _mf_apply!(ActionSink(yd, xd, α, mask), op.form)
+    _mf_apply!(op.policy, ActionSink(yd, xd, α, mask), op.form)
     _mf_identity_rows!(yd, xd, α, mask)
     return y
 end
@@ -283,46 +291,49 @@ Base.show(io::IO, ::MIME"text/plain", op::MatrixFreeOperator) = show(io, op)
 # The same unit walk as `_replay_bilinear_core!` (bilinear_execution.jl), sink for segment:
 # a scalar form one summand at a time, a composite one block by block, a transposed pair in
 # one walk. Every method `@noinline` for the reason given there: each term's walk stays its
-# own method instance instead of inlining into one grown with the term count.
+# own method instance instead of inlining into one grown with the term count. `policy` is the
+# operator's, and decides only how each unit is walked (`_mf_visit!`, `_mf_visit_pair!`).
 
-function _mf_apply!(s::ActionSink, a::BilinearForm)
+function _mf_apply!(policy, s::ActionSink, a::BilinearForm)
     Wu, Wv, ast = trial_space(a), test_space(a), a.ast
     if _is_block_pair(Wu, Wv)
-        _mf_blocks!(s, ast, leaf_spaces_offsets(Wu), leaf_spaces_offsets(Wv))
+        _mf_blocks!(policy, s, ast, leaf_spaces_offsets(Wu), leaf_spaces_offsets(Wv))
         return nothing
     end
     bound = _bind_interp_spaces(ast, Wu, Wv)
     _check_block_meshes(bound, Wu, Wv)
     sp = host_weights(_walked_leaf(bound, Wu, Wv))
-    _mf_summands!(s, bound, sp)
+    _mf_summands!(policy, s, bound, sp)
     return nothing
 end
 
-@noinline function _mf_summands!(s::ActionSink, op::OperatorAdd, sp)
+@noinline function _mf_summands!(policy, s::ActionSink, op::OperatorAdd, sp)
     _foldl_pairs(
-        (_, t) -> _mf_summands!(s, t, sp),
-        (_, t1, t2) -> _mf_pair!(s, t1, t2, sp),
+        (_, t) -> _mf_summands!(policy, s, t, sp),
+        (_, t1, t2) -> _mf_pair!(policy, s, t1, t2, sp),
         nothing,
         _summands(op)
     )
     return nothing
 end
 
-@noinline function _mf_summands!(s::ActionSink, term::TERM, sp) where {TERM}
-    visit_bilinear_stencil(s, term, sp, 0, 0)
+@noinline function _mf_summands!(policy, s::ActionSink, term::TERM, sp) where {TERM}
+    _mf_visit!(policy, s, term, sp, 0, 0)
     return nothing
 end
 
-@noinline function _mf_pair!(s::ActionSink, t1, t2, sp)
+@noinline function _mf_pair!(policy, s::ActionSink, t1, t2, sp)
     sink = _pair_action_sink(s, s.α * _term_scale(t1), s.α * _term_scale(t2), 0, 0, 0)
-    visit_bilinear_stencil(sink, _bare_product(t1), sp, 0, 0)
+    _mf_visit_pair!(policy, sink, _bare_product(t1), _bare_product(t2), sp, 0, 0)
     return nothing
 end
 
-@noinline function _mf_blocks!(s::ActionSink, op::OperatorAdd, trial_leaves, test_leaves)
+@noinline function _mf_blocks!(
+        policy, s::ActionSink, op::OperatorAdd, trial_leaves, test_leaves
+)
     _foldl_pairs(
-        (_, t) -> _mf_blocks!(s, t, trial_leaves, test_leaves),
-        (_, t1, t2) -> _mf_pair_blocks!(s, t1, t2, trial_leaves, test_leaves),
+        (_, t) -> _mf_blocks!(policy, s, t, trial_leaves, test_leaves),
+        (_, t1, t2) -> _mf_pair_blocks!(policy, s, t1, t2, trial_leaves, test_leaves),
         nothing,
         _summands(op)
     )
@@ -330,13 +341,13 @@ end
 end
 
 @noinline function _mf_blocks!(
-        s::ActionSink, term::TERM, trial_leaves, test_leaves
+        policy, s::ActionSink, term::TERM, trial_leaves, test_leaves
 ) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         sp = host_weights(_walked_leaf(bound, blk.trial_leaf, blk.test_leaf))
-        visit_bilinear_stencil(s, bound, sp, blk.row_offset, blk.col_offset)
+        _mf_visit!(policy, s, bound, sp, blk.row_offset, blk.col_offset)
     end
     return nothing
 end
@@ -344,7 +355,7 @@ end
 # `_replay_pair_blocks!`'s walk: block `k` of the second term holds the transposes of block
 # `k` of the first, walked on one leaf when both blocks share it and once per leaf, one half
 # each, when they do not.
-@noinline function _mf_pair_blocks!(s::ActionSink, t1, t2, trial_leaves, test_leaves)
+@noinline function _mf_pair_blocks!(policy, s::ActionSink, t1, t2, trial_leaves, test_leaves)
     p1 = _bare_product(t1)
     p2 = _bare_product(t2)
     b1 = blocks(p1, trial_leaves, test_leaves)
@@ -360,22 +371,98 @@ end
             dr, dc = _pair_shift(blk, blk2)
             ro, co = blk.row_offset, blk.col_offset
             if sp === blk2.test_leaf
-                visit_bilinear_stencil(
-                    _pair_action_sink(s, α1, α2, dr, dc, 0), bound, host_weights(sp), ro, co
+                _mf_visit_pair!(
+                    policy, _pair_action_sink(s, α1, α2, dr, dc, 0), bound, p2,
+                    host_weights(sp), ro, co
                 )
             else
-                visit_bilinear_stencil(
-                    _pair_action_sink(s, α1, α2, dr, dc, 1), bound, host_weights(sp), ro, co
+                _mf_visit_pair!(
+                    policy, _pair_action_sink(s, α1, α2, dr, dc, 1), bound, p2,
+                    host_weights(sp), ro, co
                 )
-                visit_bilinear_stencil(
-                    _pair_action_sink(s, α1, α2, dr, dc, 2), bound,
+                _mf_visit_pair!(
+                    policy, _pair_action_sink(s, α1, α2, dr, dc, 2), bound, p2,
                     host_weights(blk2.test_leaf), ro, co
                 )
             end
         end
         return nothing
     end
-    Base.inferencebarrier(_mf_blocks!)(s, t1, trial_leaves, test_leaves)
-    Base.inferencebarrier(_mf_blocks!)(s, t2, trial_leaves, test_leaves)
+    Base.inferencebarrier(_mf_blocks!)(policy, s, t1, trial_leaves, test_leaves)
+    Base.inferencebarrier(_mf_blocks!)(policy, s, t2, trial_leaves, test_leaves)
     return nothing
+end
+
+# --- One unit, serial or threaded --------------------------------------------------- #
+#
+# Serially, one unit is one `visit_bilinear_stencil` walk, with its unguarded interior. Under
+# a threaded policy it is the colour-banded sweep the threaded assembly runs
+# (`_sweep_bilinear!`, bilinear_execution.jl), with the action sink in place of a replay
+# target: two points swept at once never add into the same `y[row]`, because each colour
+# keeps them farther apart than their rows reach. `_sweep_bilinear!` takes its mechanism from
+# the walked leaf, as assembly does: `Threads.@threads` for a `CpuSerial` or `CpuThreaded`
+# leaf, the Polyester hooks for a `CpuPolyester` one. A unit whose rows are not a fixed reach
+# from the point (a test-side interpolation, which names rows through `locate_cell`) walks
+# serially, as the threaded assembly's does (`_sweep_bilinear_serial!`).
+#
+# The colours are assembly's own, `_colour_strides(stencil_offsets(term))`, and a pair's take
+# both terms' row reach, since its transposed entries land on the first term's columns.
+# `stencil_offsets` builds small `Vector`s, a fixed cost per unit and product that does not
+# grow with the grid, as the threaded sweep's own task spawns do not.
+
+const _ActionTarget = Union{ActionSink, _PairActionSink}
+
+@inline _mf_visit!(::CpuSerial, s, term, sp, ro::Int, co::Int) = (
+    visit_bilinear_stencil(s, term, sp, ro, co); nothing)
+@inline function _mf_visit!(::CpuPolicy, s, term::TERM, sp, ro::Int, co::Int) where {TERM}
+    if _has_test_interp(term)
+        visit_bilinear_stencil(s, term, sp, ro, co)
+    else
+        _sweep_bilinear!(s, sp, term, _colour_strides(stencil_offsets(term)), ro, co)
+    end
+    return nothing
+end
+
+# A pair's entry writes its transpose too, so the serial fallback also takes an absolute
+# column of `p1` (a trial-side interpolation, which becomes a transposed row), as
+# `_replay_pair_unit!` does.
+@inline _mf_visit_pair!(::CpuSerial, s, p1, _p2, sp, ro::Int, co::Int) = (
+    visit_bilinear_stencil(s, p1, sp, ro, co); nothing)
+@inline function _mf_visit_pair!(
+        ::CpuPolicy, s, p1::P1, p2::P2, sp, ro::Int, co::Int
+) where {P1, P2}
+    if _has_test_interp(p1) || _has_trial_interp(p1) || _has_test_interp(p2)
+        visit_bilinear_stencil(s, p1, sp, ro, co)
+    else
+        rows = sort!(union(stencil_offsets(p1), stencil_offsets(p2)))
+        _sweep_bilinear!(s, sp, p1, _colour_strides(rows), ro, co)
+    end
+    return nothing
+end
+
+# One point of a threaded sweep (`_sweep_point!`, bilinear_execution.jl): the stencil at `I`,
+# through the guarded entry walk. The sink carries its own `α`.
+@inline _sweep_point!(
+    s::_ActionTarget, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, _) = _replay_point!(
+    s, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
+
+# `CpuPolyester`'s bands and colours, through the same hooks the threaded replay uses
+# (`_batch_bilinear_band_replay!`, `_batch_bilinear_colour_replay!`), filled by
+# `BramblePolyesterExt` for an action target too.
+@noinline function _sweep_band_colour!(
+        ::CpuPolyester, s::_ActionTarget, sp, term::TERM, ax, bidx, nbands::Int, rest,
+        lin_indices, mesh_markers, row_offset::Int, col_offset::Int, _
+) where {TERM}
+    return _batch_bilinear_band_replay!(
+        s, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset
+    )
+end
+
+@noinline function _sweep_bilinear_colour!(
+        ::CpuPolyester, s::_ActionTarget, sp, term::TERM, idxs, lin_indices, mesh_markers,
+        row_offset::Int, col_offset::Int, _
+) where {TERM}
+    return _batch_bilinear_colour_replay!(
+        s, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset
+    )
 end

@@ -20,23 +20,27 @@ _mf_alloc3(y, op, x) = (mul!(y, op, x); @allocated mul!(y, op, x))
 _mf_alloc5(y, op, x) = (mul!(y, op, x, 0.5, 2.0); @allocated mul!(y, op, x, 0.5, 2.0))
 _mf_alloc_times(op, x) = (op * x; @allocated op * x)
 
-function _mf_spaces()
+# Seeded on every call, so two backends draw the same non-uniform meshes.
+function _mf_spaces(be = backend())
     Random.seed!(MF_SEED)
     return (
-        gridspace(mesh(domain(interval(0.0, 1.0), :west => :left), 17, false)),
-        gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0), :west => :left), (9, 11), (false, true))),
+        gridspace(mesh(domain(interval(0.0, 1.0), :west => :left), 17, false; backend = be)),
+        gridspace(mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0), :west => :left), (9, 11), (false, true);
+            backend = be)),
         gridspace(mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0), :west => :left), (
-                6, 7, 5), false))
+                6, 7, 5), false; backend = be))
     )
 end
 
 # (name, form, dirichlet): variable diffusion, jump/average/difference, a region restriction,
 # a transposed pair, per dimension; then composite spaces with crossed components, one on a
 # single leaf object and one on two, so both halves of the pair walk run.
-function _mf_cases()
+function _mf_cases(be = backend())
     out = Any[]
-    for W in _mf_spaces()
+    spaces = _mf_spaces(be)
+    for W in spaces
         D = dim(W)
         κ = Rₕ(W, x -> 1 + sum(abs2, x))
         push!(out, ("$(D)D diffusion", form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))), :boundary))
@@ -45,7 +49,7 @@ function _mf_cases()
             "$(D)D restricted", form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(κ * u, restrict_to(:boundary, v))), nothing))
         push!(out, ("$(D)D pair", form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + 2.0 * innerₕ(u, D₋ₓ(v))), (:west,)))
     end
-    W = _mf_spaces()[2]
+    W = spaces[2]
     V = W × W
     push!(out, ("composite",
         form(V, V, (u, v) -> innerₕ(u(1), v(1)) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) + innerₕ(u(1), v(2))), :boundary))
@@ -124,6 +128,59 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
                 @test _mf_alloc5(wₕ, op, uₕ) == 0
             end
         end
+    end
+
+    # Every product under `CpuThreaded` equals the serial one, on every repeat: the colour
+    # bands keep two points swept at once off the same row. Both backends draw the same
+    # meshes (`_mf_spaces` reseeds). Run at `--threads=4` for the race to have a chance.
+    @testset "matrix-free: threaded mul! race-free" begin
+        for ((name, a, dl), (_, at, _)) in zip(cases, _mf_cases(backend(policy = Parallel())))
+            @testset "$name" begin
+                op = _mf_op(a, dl)
+                opt = _mf_op(at, dl)
+                @test Bramble.execution_policy(trial_space(at)) isa Parallel
+                x = randn(size(op, 2))
+                y0 = randn(size(op, 1))
+                ref = op * x
+                y = similar(ref)
+                @test all(1:20) do _
+                    mul!(y, opt, x)
+                    return _mf_agree(y, ref)
+                end
+                @test _mf_agree(opt * x, ref)
+                y = copy(y0)
+                mul!(y, opt, x, 0.5, 2.0)
+                @test _mf_agree(y, 0.5 * ref + 2.0 * y0)
+                uₕ = element(trial_space(at))
+                parent(uₕ) .= x
+                @test _mf_agree(parent(opt * uₕ), ref)
+                wₕ = element(test_space(at))
+                mul!(wₕ, opt, uₕ)
+                @test _mf_agree(parent(wₕ), ref)
+            end
+        end
+        # The operator's own policy threads a serial space's product, and
+        # `dirichlet_components` holds the named leaves' rows as it does serially.
+        W = _mf_spaces()[2]
+        V = W × W
+        a = form(V, V, (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(u(2), v(2)) + innerₕ(D₋ₓ(u(1)), v(2)))
+        x = randn(ndofs(V))
+        for comps in (1, 2, nothing)
+            A = assemble(a; dirichlet = :boundary, dirichlet_components = comps)
+            op = matrix_free_operator(a; dirichlet = :boundary, dirichlet_components = comps, policy = Parallel())
+            @test _mf_agree(op * x, A * x)
+        end
+        # What a threaded product allocates is its task spawns, whatever the grid size.
+        bytes = map((33, 3001)) do n
+            Random.seed!(MF_SEED)
+            Wn = gridspace(mesh(domain(interval(0.0, 1.0)), n, false; backend = backend(policy = Parallel())))
+            κ = Rₕ(Wn, x -> 1 + x^2)
+            op = matrix_free_operator(
+                form(Wn, Wn, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))); dirichlet = :boundary)
+            xn = randn(size(op, 2))
+            return _mf_alloc3(similar(xn), op, xn)
+        end
+        @test bytes[1] == bytes[2]
     end
 
     @testset "entries, Dirichlet rows, live data" begin
