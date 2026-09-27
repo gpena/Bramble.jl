@@ -234,6 +234,78 @@ matrix for a consumer that needs entries, not a performance path. #317 has decid
 fill stays on the host and is not moved to the device ("The device architecture decision",
 below).
 
+**What now assembles on a Metal-backed space.** Composite bilinear forms
+([gpena/Bramble.jl#361](https://github.com/gpena/Bramble.jl/issues/361), S1), every linear
+form -- scalar and composite (gpena/Bramble.jl#361, S2), Dirichlet conditions through
+`assemble`, `assemble!`, `dirichlet_bc!` and the combined `assemble(a, l)` (gpena/Bramble.jl#361,
+S4), `πₕ` across two device meshes and a composite with a cross-mesh block
+([gpena/Bramble.jl#363](https://github.com/gpena/Bramble.jl/issues/363), S5), a
+grid-function coefficient in a bilinear or linear form, live across a device-side mutation
+([gpena/Bramble.jl#364](https://github.com/gpena/Bramble.jl/issues/364), S6),
+`assemble_add!`/`assemble_parallel!` on a linear form, and `dirac` sources (S7, S8) all
+assemble on Metal and match the host. Each fix routed around the same wall the scalar case
+already went around: the element-type probe (`_probed_eltype`, `src/assembly/linear.jl`,
+S1), the linear sweep (S2), the interpolation node's source binding (S5) and the
+grid-function coefficient binding (S6) all read a `host_weights` mirror or a host copy
+rather than scalar-index device storage.
+
+Dirichlet rows are rewritten by one `KernelAbstractions` kernel that reads a constrained
+row's entries directly off the matrix's own `rowPtr`/`colVal`/`nzVal` -- a row's stored
+entries are contiguous, so the kernel zeroes them and sets the stored diagonal to one -- and
+the same rows are rewritten in the host mirror too; the mirror is never flushed over the
+device values, so values a caller changed on the device since the last assembly survive. A
+constrained row with no
+stored diagonal throws an `ArgumentError` naming it, since a device CSR cannot insert an
+entry the way `SparseMatrixCSC` does; the host path still inserts one. `symmetrize!` and
+`symmetrize = true` are refused outright on a device matrix, with a clear `ArgumentError`:
+eliminating a constrained *column* scatters across every row of a CSR, a separate design
+this milestone did not build.
+
+A grid-function coefficient (`GridFunctionScale`) in device storage is bound as a fresh host
+copy at the same site every walk already takes `host_weights` from, on every fill -- never
+cached across calls, so `parent(cₕ) .= ...` or `Rₕ!(cₕ, ...)` on the device shows up in the
+next `assemble!` exactly as it does on the host. This is why the bilinear `assemble!`
+docstring's "0 allocations" claim for live grid-function coefficients holds on the host
+only: on a device space each fill copies the coefficient to the host anew.
+
+**What still doesn't assemble, or doesn't assemble on a device.**
+- **D3: `l(vₕ)`, a linear form contracted against a device element, is out of scope.** It
+  fails because `_contract_linear_core` contracts against device storage point by point, a
+  different code path from the sweep-into-a-host-buffer shape S2 built; nothing above fixes
+  it.
+- **D4: `symmetrize!` on a Metal matrix is out of scope**, refused as stated above rather
+  than silently wrong.
+- **A constrained row with no stored diagonal throws on a device CSR** (S4's designed
+  limit, above), where the host path inserts one.
+
+**Cost.** The device paths above allocate on every call: a host mirror of the space's
+weights (`host_weights`), a host copy of every device-storage coefficient, and one upload,
+none of which the host path pays. S2 measured a 2D `n = 17` linear form at roughly 17 KB per
+call; a 1D Metal `assemble!` at `n = 100,001` measured roughly 2.47 MB per call, almost all
+of it rebuilding `host_weights(W)`, plus roughly 0.4 MB per grid-function coefficient in the
+form.
+
+**`dirac` on a device space.** A Float32 host space now gets a Float32 vector out of
+`dirac` (gpena/Bramble.jl#361, S8; previously always Float64, which then failed to assemble
+on a Float32/Metal space). `dirac`'s default strength, `1.0`, is a Float64 literal, so pass
+a Float32 strength explicitly on a Float32/Metal space (`dirac(x0, 1f0)`) -- the same rule
+as any other Float64 coefficient (`innerₕ(1.0, v)` is refused on Metal too). In 1D, a vector
+of several source points must be written as 1-tuples, `dirac([(0.2f0,), (0.7f0,)], ...)`: a
+plain vector of numbers is read as one multi-dimensional point instead.
+
+**Known open gaps**, each filed as its own issue: a nested grid-function scale
+(`u * (w * v)`) is fused by the simplifier into a new array when the form is built
+(`(u .* w) * v`), so a later in-place change to `u` or `w` never reaches it -- on the host
+too, not only on a device ([#365](https://github.com/gpena/Bramble.jl/issues/365));
+`assemble_add!` on a Metal matrix
+can overwrite device-side changes from a stale mirror
+([#366](https://github.com/gpena/Bramble.jl/issues/366)); a `πₕ` source mesh does not refill
+correctly after `change_points!` ([#367](https://github.com/gpena/Bramble.jl/issues/367));
+`jacobian_pattern` on a mixed composite/scalar form, and on a device space at all, is wrong
+or throws ([#368](https://github.com/gpena/Bramble.jl/issues/368)); and the one-point
+element-type probe some of these fixes lean on has its own gap
+([#370](https://github.com/gpena/Bramble.jl/issues/370)).
+
 ## The device architecture decision
 
 [gpena/Bramble.jl#317](https://github.com/gpena/Bramble.jl/issues/317) asked whether large
@@ -302,12 +374,10 @@ restricts to the interior around it (below).
 **Host assembly plus upload** stays responsible for everything else: every non-separable
 form, every Dirichlet-constrained system (`apply_dirichlet_labels!` runs as its own pass
 after the scatter), every composite space, and every matrix an entries consumer above
-needs, separable or not. It is also the correctness reference for the Kronecker path. One
-limit is worth stating here because it bounds the fallback on Metal: assembling a
-*composite* form on a Metal-backed space fails today, before any scatter, with
-`scalar getindex on a device-backed SeparableWeights is not supported` (checked on this host
-for `W × W` in 1D). That is a separate defect in the element-type probe, not a consequence of
-this decision; a composite system on Metal has no working assembled path until it is fixed.
+needs, separable or not. It is also the correctness reference for the Kronecker path.
+Composite forms, every linear form, and Dirichlet rows now all assemble on a Metal-backed
+space too (gpena/Bramble.jl#361); "Form assembly on a device" above states what works and
+what still doesn't.
 
 ### The evidence
 
