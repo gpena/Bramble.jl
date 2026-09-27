@@ -2,7 +2,7 @@ module SpaceAutodiffBackendsTests
 
 using Test
 using Bramble
-using Bramble: D₋ₓ
+using Bramble: D₋ₓ, M₊ₓ, εₕ
 using ForwardDiff
 using DifferentiationInterface
 using ..TestUtils: _have
@@ -101,6 +101,55 @@ end
     h = 1e-6
     d = @inferred ForwardDiff.derivative(scalar, a0)
     @test isapprox(d, (scalar(a0 + h) - scalar(a0 - h)) / 2h; rtol = 1e-5)
+end
+
+# Differentiating with respect to the mesh itself (gpena/Bramble.jl#343): the parameter is
+# the domain's right endpoint `b`, so the Duals enter through the coordinates and spacings
+# rather than through the grid function's values. An element of a Dual-valued space is
+# Dual-valued, so every allocating operator's `similar(uₕ)` already holds Duals. The meshes
+# are non-uniform; the package-local RNG is reseeded before every build so that `b ± h` and
+# the Dual evaluation all draw the same relative point distribution.
+_ad_total(x::Number) = x
+_ad_total(x::AbstractArray{<:Number}) = sum(abs2, x)
+_ad_total(x::Union{Tuple, AbstractArray}) = sum(_ad_total, x)
+_ad_total(x) = _ad_total(parent(x))
+
+function _ad_seeded(build)
+    Bramble._seed_mesh1d_rng!(343)
+    try
+        return build()
+    finally
+        Bramble._unseed_mesh1d_rng!()
+    end
+end
+
+@testset "AD: mesh coordinates" begin
+    mesh1 = b -> _ad_seeded(() -> mesh(domain(interval(0.0, b)), 9, false))
+    mesh2 = b -> _ad_seeded(
+        () -> mesh(domain(interval(0.0, b) × interval(0.0, 1.0)), (7, 6), (false, false))
+    )
+    f2 = (x -> sin(x[1]) * x[2]^2, x -> x[1]^3 + cos(x[2]))
+
+    cases = (
+        ("D₋ₓ", b -> _ad_total(D₋ₓ(Rₕ(gridspace(mesh1(b)), sin)))),
+        ("M₊ₓ", b -> _ad_total(M₊ₓ(Rₕ(gridspace(mesh1(b)), x -> x^3)))),
+        ("Δₕ", b -> _ad_total(Δₕ(Rₕ(gridspace(mesh2(b)), x -> sin(x[1]) * x[2]^2)))),
+        ("curlₕ", b -> begin
+            Wₕ = gridspace(mesh2(b))
+            return _ad_total(curlₕ((Rₕ(Wₕ, f2[1]), Rₕ(Wₕ, f2[2]))))
+        end),
+        ("εₕ", b -> _ad_total(εₕ(Rₕ(gridspace(mesh2(b), Val(2)), f2))))
+    )
+
+    b0, h = 1.3, 1e-6
+    backend = AutoForwardDiff()
+    for (name, g) in cases
+        @testset "$name" begin
+            d = DifferentiationInterface.derivative(g, backend, b0)
+            @test d isa Float64
+            @test isapprox(d, (g(b0 + h) - g(b0 - h)) / 2h; rtol = 1e-5)
+        end
+    end
 end
 
 end # module SpaceAutodiffBackendsTests
