@@ -3,6 +3,7 @@ module FormDiracSourceTests
 using Test
 using LinearAlgebra
 using Random
+using ForwardDiff
 using Bramble
 using Bramble:
                DiracSource,
@@ -26,7 +27,8 @@ using Bramble:
                Innerh,
                weights,
                VectorGridSpace,
-               stepsize
+               stepsize,
+               backend
 
 @testset "Dirac Point Sources (#226)" begin
     @testset "1D Single Point Source (Uniform and Non-Uniform)" begin
@@ -299,6 +301,69 @@ using Bramble:
         l_2d_h = form(W2, v -> innerₕ(dirac(p0, S), v))
         l_2d_plusx = form(W2, v -> inner₊ₓ(dirac(p0, S), v))
         @test assemble(l_2d_h) ≈ assemble(l_2d_plusx)
+    end
+
+    # The weight's type is the mesh's element type promoted with the strength's
+    # (gpena/Bramble.jl#361). Before, it was promoted with a hardcoded `Float64`, so a Float32
+    # space with a Float32 strength gave a Float64 vector: a behaviour change. A Float64
+    # strength (the default `1.0`) on a Float32 space still promotes, as `innerₕ(1.0, v)`
+    # does; an integer strength takes the space's type. The location keeps Float64 precision.
+    @testset "Weight element type follows the space (gpena/Bramble.jl#361)" begin
+        Random.seed!(20260927)
+        for D in (1, 2)
+            Ω = domain(D == 1 ? interval(0.0f0, 1.0f0) : interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0))
+            n, unif = D == 1 ? (11, false) : ((11, 9), (false, false))
+            W32 = gridspace(mesh(Ω, n, unif; backend = backend(Float32)))
+            p1 = D == 1 ? 0.37f0 : (0.37f0, 0.61f0)
+            pts = D == 1 ? [(0.2f0,), (0.55f0,)] : [(0.2f0, 0.3f0), (0.55f0, 0.7f0)]
+            @testset "$(D)D" begin
+                for (label, src, T) in (("Float32 strength", dirac(p1, 2.0f0), Float32),
+                    ("points", dirac(pts, [1.5f0, -0.5f0]), Float32),
+                    ("Int strength", dirac(p1, 2), Float32),
+                    ("default Float64 strength", dirac(p1), Float64),
+                    ("Float64 points strength", dirac(pts, [1.5, -0.5]), Float64))
+                    l = form(W32, v -> innerₕ(src, v))
+                    b = @inferred assemble(l)
+                    @test eltype(b) === T
+                    total = src.strengths isa AbstractVector ? sum(src.strengths) : src.strengths
+                    @test sum(b) ≈ total rtol = 1.0f-5
+                    assemble!(b, l)
+                    @test (@allocated assemble!(b, l)) == 0
+                end
+                # Float32 weights round the Float64 ones, nothing more.
+                b32 = assemble(form(W32, v -> innerₕ(dirac(p1, 2.0f0), v)))
+                b64 = assemble(form(W32, v -> innerₕ(dirac(p1, 2.0), v)))
+                @test b32 == Float32.(b64)
+            end
+        end
+        # A Float64 space is unchanged: Float64 vector, and AD through the strength works.
+        Ω64 = domain(interval(0.0, 1.0))
+        W64 = gridspace(mesh(Ω64, 11, false))
+        b64 = @inferred assemble(form(W64, v -> innerₕ(dirac(0.37), v)))
+        @test eltype(b64) === Float64
+        @test eltype(assemble(form(W64, v -> innerₕ(dirac(0.37, 2.0f0), v)))) === Float64
+        for src in (s -> dirac(0.37, s), s -> dirac([(0.2,), (0.55,)], [s, 2s]))
+            g = ForwardDiff.derivative(s -> assemble(form(W64, v -> innerₕ(src(s), v))), 2.0)
+            @test g ≈ assemble(form(W64, v -> innerₕ(src(1.0), v))) rtol = 1e-12
+        end
+        # A strengths vector with an abstract eltype: each product keeps its own strength's
+        # type, so a later `Dual` or a wider float is not narrowed to the first one's.
+        pts2 = [(0.2,), (0.45,)]
+        for strengths in (s -> [() -> 1.0, () -> s], s -> Any[1.0, s])
+            g = ForwardDiff.derivative(s -> assemble(form(W64, v -> innerₕ(dirac(pts2, strengths(s)), v))), 2.0)
+            @test g ≈ assemble(form(W64, v -> innerₕ(dirac(pts2[2:2], 1.0), v))) rtol = 1e-12
+        end
+        # On a Float32 space, a Float64 strength after a Float32 one keeps Float64 precision.
+        # The two points sit far apart, so the second's entries are its alone.
+        W32 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 11, false; backend = backend(Float32)))
+        pts3 = [(0.05,), (0.9,)]
+        alone = assemble(form(W32, v -> innerₕ(dirac(pts3[2:2], 0.1), v)))
+        nz = findall(!iszero, alone)
+        for strengths in ([() -> 1.0f0, () -> 0.1], Real[1.0f0, 0.1], [Ref(1.0f0), Ref(0.1)])
+            mixed = assemble(form(W32, v -> innerₕ(dirac(pts3, strengths), v)))
+            @test eltype(mixed) === Float64
+            @test mixed[nz] == alone[nz]
+        end
     end
 end
 

@@ -2,7 +2,7 @@ module ExtMetalFormAssemblyTests
 
 using Test
 using Bramble
-using Bramble: D₋ᵧ, D₋ₓ, change_points!, dirichlet_bc!, innerₕ, Rₕ, πₕ
+using Bramble: D₋ᵧ, D₋ₓ, change_points!, dirac, dirichlet_bc!, innerₕ, Rₕ, πₕ
 using Metal
 using SparseArrays
 using ..TestUtils: _run_gpu_tests
@@ -411,6 +411,35 @@ else
                         Bramble.assemble_parallel!(u, lg)
                         @test _vrelerr(_hostvec(u), bc) < _RTOL
                     end
+                end
+            end
+        end
+    end
+
+    # A `dirac` source assembles on a Metal space: its weight is computed in the mesh's
+    # element type promoted with the strength's, so a Float32 strength on a Float32 space
+    # gives a Float32 vector the device path can upload (a Float64 hardcode made it fail).
+    # The sources hold host points, which the host-mirror sweep reads as they are
+    # (gpena/Bramble.jl#361).
+    @testset "Metal dirac sources (gpena/Bramble.jl#361)" begin
+        for npts in ((13,), (13, 11))
+            Wc, Wg = _matched_spaces(npts)
+            D = length(npts)
+            p1 = D == 1 ? 0.37f0 : (0.37f0, 0.61f0)
+            pts = D == 1 ? [(0.2f0,), (0.55f0,), (0.8f0,)] :
+                  [(0.2f0, 0.3f0), (0.55f0, 0.7f0)]
+            for (label, l) in (("one point", v -> innerₕ(dirac(p1, 2.0f0), v)),
+                ("points", v -> innerₕ(dirac(pts, [1.5f0, -0.5f0, 2.0f0][1:length(pts)]), v)))
+                @testset "$(D)D $label" begin
+                    bc = assemble(form(Wc, l))
+                    @test eltype(bc) === Float32
+                    lg = form(Wg, l)
+                    bg = assemble(lg)
+                    @test bg isa Metal.MtlArray
+                    @test _vrelerr(bg, bc) < _RTOL
+                    fill!(bg, 0.0f0)
+                    assemble!(bg, lg)
+                    @test _vrelerr(bg, bc) < _RTOL
                 end
             end
         end

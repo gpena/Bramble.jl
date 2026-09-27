@@ -202,6 +202,14 @@ end
 
 @inline _is_corner_inbounds(corner::Tuple) = all(c -> 0 <= c <= 1, corner)
 
+# The weight's type is the mesh's element type promoted with the strength's: a Float32
+# space's vector stays Float32 (and so uploads to a Metal space), a `Dual` strength still
+# promotes, and a Float64 strength on a Float32 space promotes the way any Float64
+# coefficient does. The cell search and fraction stay in Float64, the stored points' own
+# precision, so the location is not rounded before the weight is; only the finished product
+# is converted, which on a Float64 space is the identity.
+@inline _dirac_weight_type(Ωₕ, s) = promote_type(eltype(Ωₕ), typeof(s))
+
 @inline function local_stencil(
         op::DiracSource{D, <:NTuple{D, Float64}}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
@@ -209,10 +217,10 @@ end
     idx, ts = _interp_cell_frac_pt(Ωₕ, op.points, Val(D))
     corner = Tuple(I - idx)
     strength_val = _point_strength_val(op.strengths)
-    T = promote_type(Float64, typeof(strength_val))
+    T = _dirac_weight_type(Ωₕ, strength_val)
     if _is_corner_inbounds(corner)
         w = _interp_corner_weight(ts, corner, Val(D))
-        return ((zero_offset(Val(D)), strength_val * w),)
+        return ((zero_offset(Val(D)), convert(T, strength_val * w)),)
     else
         return ((zero_offset(Val(D)), zero(T)),)
     end
@@ -222,17 +230,24 @@ end
         op::DiracSource{D, <:AbstractVector}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     Ωₕ = mesh(space)
-    s_first = _point_strength_val(first(op.strengths))
-    T = promote_type(Float64, typeof(s_first))
-    acc = zero(T)
+    # Each product takes its own strength's type, never the first one's: a strengths vector
+    # with an abstract eltype (thunks, mixed `Ref`s, `Real[...]`) may hold a `Dual` or a
+    # wider float further along, and `acc` must widen to it rather than truncate it. It
+    # widens at every node, not only near that point, because the assembled vector's type
+    # is probed at one interior node (`_probed_eltype`); the widening is a conversion, not
+    # an addition, so a concrete strengths eltype sees the identity and HEAD's exact values.
+    acc = zero(_dirac_weight_type(Ωₕ, _point_strength_val(first(op.strengths))))
     for k in eachindex(op.points)
         pt = op.points[k]
         s = _point_strength_val(op.strengths[k])
+        Tₖ = _dirac_weight_type(Ωₕ, s)
         idx, ts = _interp_cell_frac_pt(Ωₕ, pt, Val(D))
         corner = Tuple(I - idx)
         if _is_corner_inbounds(corner)
             w = _interp_corner_weight(ts, corner, Val(D))
-            acc += s * w
+            acc += convert(Tₖ, s * w)
+        else
+            acc = convert(promote_type(typeof(acc), Tₖ), acc)
         end
     end
     return ((zero_offset(Val(D)), acc),)
