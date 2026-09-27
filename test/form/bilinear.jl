@@ -1157,4 +1157,40 @@ WITH_SLOW_TESTS && @testset "Assembly linearity (Supposition)" begin
     end
 end
 
+@testset "bilinear: restricted sum replay width" begin
+    # gpena/Bramble.jl#370: a restricted term fused into a sum writes a varying number of
+    # entries per point, which the fixed-width diagonal replay must not accept.
+    right = x -> x[1] > 0.8
+    function replay_matches(W)
+        a = form(W, W, (u, v) -> innerₕ(u, v) + Ref(2.0) * innerₕ(u, Bramble.restrict_to(:right, v)))
+        R = assemble(form(W, W, (u, v) -> innerₕ(u, v))) +
+            2.0 * assemble(form(W, W, (u, v) -> innerₕ(u, Bramble.restrict_to(:right, v))))
+        A = assemble(a)
+        ok = Matrix(A) ≈ Matrix(R)
+        assemble!(A, a)
+        assemble!(A, a)
+        ok &= Matrix(A) ≈ Matrix(R)
+        return ok, @allocated(assemble!(A, a))
+    end
+    Random.seed!(1234)
+    Ω₁ = domain(interval(0.0, 1.0), :right => right)
+    for _ in 1:50
+        ok, b = replay_matches(gridspace(mesh(Ω₁, 11, false)))
+        @test ok
+        @test b == 0
+    end
+    Ω₂ = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :right => right)
+    for _ in 1:20
+        ok, b = replay_matches(gridspace(mesh(Ω₂, (7, 9), (false, false))))
+        @test ok
+        @test b == 0
+    end
+
+    # Interior points 2:5 at width 1, except the last, which is one entry wider.
+    grid_inds = CartesianIndices((1:6,))
+    interior = CartesianIndices((2:5,))
+    @test Bramble._uniform_interior_width(grid_inds, interior, [5, 1, 2, 3, 4, 6, 7], 1)
+    @test !Bramble._uniform_interior_width(grid_inds, interior, [6, 1, 2, 3, 4, 7, 8], 1)
+end
+
 end # module FormBilinearTests
