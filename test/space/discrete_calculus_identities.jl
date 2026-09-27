@@ -55,7 +55,7 @@ function _boundary_vanishing(Wₕ, raw, dims)
     return element(Wₕ, vec(_zero_boundary!(a)))
 end
 
-@testset "Discrete calculus identities (Propositions 2.1-2.4)" begin
+@testset "Discrete calculus, Propositions 2.1-2.4" begin
     Random.seed!(20260918)
 
     # Compared with an absolute floor as well as a relative one: on fields that happen not to
@@ -140,7 +140,8 @@ end
         end
     end
 
-    @testset "2.3's gradient inverse inequality needs the staggered weight (#188)" begin
+    # Proposition 2.3's gradient inverse inequality needs the staggered weight.
+    @testset "2.3 gradient inverse inequality (#188)" begin
         # A mesh with one cell three orders of magnitude thinner than its neighbours, and a
         # single spike beside it. `Hₘᵢₙ` barely moves -- a cell measure averages the two
         # spacings around a point, so one thin cell between two fat ones leaves every measure

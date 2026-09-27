@@ -863,7 +863,7 @@ const _BYTES_PER_STORED_ENTRY = 64
 # `@allocated` at `@testset` scope measures the enclosing closure instead.
 _cross_weighted_bytes(Ωₕ) = @allocated cross_weighted_difference(Ωₕ, Val(1))
 
-@testset "Weighted operators store bytes proportional to nnz" begin
+@testset "Weighted operators: storage ∝ nnz" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (100, 100))
     n = npoints(Ωₕ)
     @test n == 10000

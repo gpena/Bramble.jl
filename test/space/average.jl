@@ -151,7 +151,7 @@ end
 # The averaging matrices carry the same weighting as the differences do, and carried the
 # same defect with it: `w .* A` returned a matrix whose storage was sized for the dense
 # case. See the matching testset in `test/space/difference.jl` for the measurement.
-@testset "Weighted averages store bytes proportional to nnz" begin
+@testset "Weighted averages: storage ∝ nnz" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (100, 100))
     n = npoints(Ωₕ)
 

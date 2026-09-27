@@ -165,7 +165,7 @@ _spy(u) = VectorElement(_Spy(copy(parent(u))), space(u))
         end
     end
 
-    @testset "In-place allocation independent of grid size" begin
+    @testset "In-place allocation is size-independent" begin
         function min_bytes(n)
             Ωₕ = _mesh((n, n), Parallel())
             Wₕ = gridspace(Ωₕ)

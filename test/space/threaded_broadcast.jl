@@ -107,7 +107,8 @@ _axpy!(v, u, w) = (v .= 2.0 .* u .+ w)
         _check_equal(n, Parallel())
     end
 
-    @testset "Nested in a user's threaded region, n=$n" for n in ((1001,), (40, 37), (13, 11, 9))
+    # Nested inside a user's own threaded region.
+    @testset "Nested threaded region, n=$n" for n in ((1001,), (40, 37), (13, 11, 9))
         dests, u, w = _nested(n)
         for k in 1:2
             @test dests[k] == k .* u .+ w

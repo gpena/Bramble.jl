@@ -161,7 +161,7 @@ using ..TestUtils: alloc_test, @test_allocs
         end
     end
 
-    @testset "Zero dynamic dispatch (vectorial aliases)" begin
+    @testset "No dynamic dispatch (vectorial aliases)" begin
         # gpena/Bramble.jl#146: `∇ₕ`/`∇₊ₕ`/`diff₋ₕ`/`diff₊ₕ`/`Mₕ`/`M₊ₕ`/`D̃ₕ`/`Dcₕ`/`D̽ₕ`
         # used to generate their 2D/3D methods from `ntuple(i -> base_op(arg, Val(i)),
         # Val(D))`, which boxes `i` as a runtime Int inside the closure: `Val(i)` can

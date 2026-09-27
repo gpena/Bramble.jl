@@ -151,7 +151,7 @@ using ..TestUtils: alloc_test, @test_allocs
     # gpena/Bramble.jl#234 (v3.3.0 plan S6.7): ∇ₕ, εₕ and divₕ over a *vector field* -- a
     # `D`-leaf composite VectorElement on a `D`-dimensional mesh -- rather than the
     # arbitrary-leaf-count multi-field composites the testsets above exercise.
-    @testset "Vector calculus over composites (gpena/Bramble.jl#234 S6.7)" begin
+    @testset "Vector calculus on composites (#234)" begin
         Dm = (D₋ₓ, D₋ᵧ, D₋₂)
         Mm = (Mₓ, Mᵧ, M₂)
 
@@ -187,7 +187,7 @@ using ..TestUtils: alloc_test, @test_allocs
                 # applied to the composite.
                 scalars = ntuple(k -> Rₕ(Wₕ, fs[k]), D)
 
-                @testset "∇ₕ gradient tensor against a scalar D₋ oracle" begin
+                @testset "∇ₕ against a scalar D₋ oracle" begin
                     g = ∇ₕ(uₕ)
                     @test length(g) == D
                     for i in 1:D, j in 1:D
@@ -196,7 +196,7 @@ using ..TestUtils: alloc_test, @test_allocs
                     end
                 end
 
-                @testset "εₕ against a hand-built symmetrised oracle" begin
+                @testset "εₕ against a symmetrised oracle" begin
                     ε = εₕ(uₕ)
                     for i in 1:D
                         @test parent(ε[i][i]) == parent(Dm[i](scalars[i]))
@@ -222,7 +222,8 @@ using ..TestUtils: alloc_test, @test_allocs
                     @test_allocs εₕ!(dest, uₕ)
                 end
 
-                @testset "divₕ already covers the composite vector field (#158)" begin
+                # The existing divₕ already covers the composite vector field.
+                @testset "divₕ on the composite field (#158)" begin
                     # Independent oracle: the plain, unstaggered sum of D₋ᵢ over each
                     # scalar leaf -- exactly what divₕ (#158) already computes, and all
                     # this subplan's goal asks of it. No extension was needed.

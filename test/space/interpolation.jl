@@ -88,7 +88,8 @@ using Bramble: D₋ₓ, Mₓ, interpolation_matrix
         @test all(≈(1), vec(sum(P2, dims = 2)))
     end
 
-    @testset "πₕ! against a precomputed interpolation_matrix (#14)" begin
+    # The matrix is precomputed.
+    @testset "πₕ! with an interpolation_matrix (#14)" begin
         # The whole point of building P once: this must agree with the pointwise path
         # (which re-locates every destination point's cell on every call) to the last bit,
         # not merely approximately -- same reasoning as "Matrix agreement" above, one level
@@ -114,7 +115,8 @@ using Bramble: D₋ₓ, Mₓ, interpolation_matrix
         πₕ!(dest2, P2, src2)
         @test parent(dest2) ≈ parent(πₕ(W2dest, src2))
 
-        @testset "Tracks a live-updated src across repeated calls" begin
+        # Across repeated calls.
+        @testset "Tracks a live-updated src" begin
             for factor in (1.0, 2.5, -1.0)
                 Rₕ!(src2, x -> factor * (x[1] * x[2] + x[1]))
                 πₕ!(dest2, P2, src2)

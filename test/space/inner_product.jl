@@ -164,7 +164,7 @@ end
 # singleton cases, kept as aliases sharing this implementation; every other `S` -- a pair, or
 # the full `1:D` set -- is new with this milestone and reduces against the lazy
 # `SeparableWeights` `weights(Wₕ, Val(S))` returns for it.
-@testset "inner₊(u, v, Val(S)) for every staggered set (#234)" begin
+@testset "inner₊ on every staggered set (#234)" begin
     # A weight for `S`, built directly from `spacing`/`cell_measure` rather than from
     # `weights`/`SpaceWeights`: entry `I` is the product, over every axis `d`, of the
     # backward spacing at `I[d]` (zeroed at `I[d] == 1`, where a backward difference has no
@@ -251,7 +251,7 @@ end
         @test inner₊(u, v, Val((1, 2)); markers = ()) == inner₊(u, v, Val((1, 2)))
     end
 
-    @testset "0-byte allocation, empty set and singletons" begin
+    @testset "Zero allocation, empty and singletons" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
             (6, 5, 4), (true, true, true))
         Wₕ = gridspace(Ωₕ)
@@ -264,7 +264,8 @@ end
         @test_allocs inner₊(u, v, Val((3,)))
     end
 
-    @testset "CpuPolyester reaches the Polyester hook, never the Cartesian loop (#190)" begin
+    # The Polyester hook, never the Cartesian loop.
+    @testset "CpuPolyester takes Polyester hook (#190)" begin
         # `inner₊(uₕ, vₕ, Val(S))` passes `execution_policy(space(uₕ))` through to the
         # policy-dispatched `_dot`/`_dot_masked` (S7.1, `src/utils/linear_algebra.jl`):
         # `CpuSerial`/`CpuThreaded` fall through to the plain methods (positive control
@@ -310,13 +311,13 @@ end
     end
 end
 
-@testset "inner₊ direction selector and destructuring (#341)" begin
+@testset "inner₊ direction selector (#341)" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false))
     Wₕ = gridspace(Ωₕ)
     u = Rₕ(Wₕ, x -> x[1]^2 + 0.5x[2])
     v = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
 
-    @testset "Numeric selector agrees with the coordinate aliases" begin
+    @testset "Numeric selector matches the aliases" begin
         @test inner₊(u, v, :x) == inner₊ₓ(u, v)
         @test inner₊(u, v, 1) == inner₊ₓ(u, v)
         @test inner₊(u, v, :y) == inner₊ᵧ(u, v)
@@ -338,7 +339,8 @@ end
         @test_throws ArgumentError inner₊(u, v, :w)
     end
 
-    @testset "Symbolic selector agrees with the coordinate aliases, in a form" begin
+    # Agrees with the coordinate aliases.
+    @testset "Symbolic selector, in a form" begin
         a1 = assemble(form(Wₕ, Wₕ, (uu, vv) -> inner₊(D₋ₓ(uu), D₋ₓ(vv), :x)))
         a2 = assemble(form(Wₕ, Wₕ, (uu, vv) -> inner₊ₓ(D₋ₓ(uu), D₋ₓ(vv))))
         @test a1 == a2
@@ -353,7 +355,8 @@ end
         @test_throws ArgumentError form(Wₕ, Wₕ, (uu, vv) -> inner₊(D₋ₓ(uu), D₋ₓ(vv), :w))
     end
 
-    @testset "Destructuring and indexing, following the vectorial aliases (#340)" begin
+    # Follows the vectorial aliases' protocol.
+    @testset "Destructuring and indexing (#340)" begin
         ix, iy, iz = inner₊
         @test (ix, iy, iz) === (inner₊ₓ, inner₊ᵧ, inner₊₂)
         @test inner₊[1] === inner₊ₓ && inner₊[2] === inner₊ᵧ && inner₊[3] === inner₊₂
@@ -375,7 +378,7 @@ end
 # The unmasked `_dot` on a `SeparableWeights` walks axis-1 lines with a hoisted product of
 # the other axes' factors, so it sums in a different order from the dense reduction over the
 # collected weights. Checked on non-uniform meshes in every dimension and element type.
-@testset "SeparableWeights _dot against the dense reduction" begin
+@testset "SeparableWeights _dot vs dense" begin
     unit(T) = interval(zero(T), one(T))
     for (T, rtol) in ((Float64, 1e-12), (Float32, 1.0f-5))
         Ωs = (mesh(domain(unit(T)), 37, false),
@@ -402,7 +405,7 @@ end
 # skips the lines with I_d = 1 and scales the undivided line sum by the hoisted
 # `inv(h[I_d])²`. Checked against the dense backward difference weighted by the collected
 # `Innerplus` weights, on non-uniform meshes and on degenerate axes of one or two points.
-@testset "snorm₁ₕ line walk against the dense reduction" begin
+@testset "snorm₁ₕ line walk vs dense" begin
     unit(T) = interval(zero(T), one(T))
     function dense_snorm_sq(u)
         Wₕ = Bramble.space(u)
@@ -693,7 +696,7 @@ end
               norminf(Rₕ(gridspace(Ωb), x -> x[1]))
     end
 
-    @testset "Composite spaces take the maximum across components" begin
+    @testset "Composite: maximum across components" begin
         # distinct values per component, so a wrong component cannot pass
         Ωc = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (12, 12), (true, true))
         Vc = gridspace(Ωc, Val(3))
@@ -794,7 +797,8 @@ end
     # figure here is a closed form -- an edge length, a perimeter, a surface area, a
     # hand-computed corner weight -- never a second call to the code under test.
     @testset "inner_Γ (#157)" begin
-        @testset "2D: edge lengths and the perimeter, on every mesh" begin
+        # On every mesh.
+        @testset "2D: edge lengths and perimeter" begin
             Ω2 = domain(interval(0.0, 2.0) × interval(0.0, 3.0))
             for n in ((5, 5), (9, 9), (17, 16))
                 W = gridspace(mesh(Ω2, n, (true, true)))
@@ -817,7 +821,7 @@ end
             @test inner_Γ(one_h, one_h, :left) ≈ inner_Γ(one_h, one_h, :xmin)
         end
 
-        @testset "The pointwise weight matches the closed 2D form" begin
+        @testset "Pointwise weight: closed 2D form" begin
             # a non-uniform mesh, so a wrong weight cannot hide behind a uniform spacing
             Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (false, false))
             W = gridspace(Ωₕ)
