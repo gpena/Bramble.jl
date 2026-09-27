@@ -74,6 +74,8 @@ function _try_diagonal_segment(
 
     total_interior = n_interior * P
     total_interior > length(positions) && return _flat_segment(Val(D), point_ptr, positions)
+    _uniform_interior_width(grid_inds, interior, point_ptr, P) ||
+        return _flat_segment(Val(D), point_ptr, positions)
 
     base = positions[1:P]
     stride = Vector{Int}(undef, P)
@@ -94,6 +96,34 @@ function _try_diagonal_segment(
     return Segment{D}(
         true, boundary_point_ptr, boundary_positions, base, stride, P, interior, Int[]
     )
+end
+
+# Whether every interior point recorded exactly `P` entries, the fixed width the diagonal
+# replay's stride arithmetic assumes (`DiagonalReplaySink`, `_StrideReplaySink`). The stride
+# check alone does not see this: a restricted term fused into a sum,
+# `innerₕ(u, v) + Ref(s) * innerₕ(u, restrict_to(m, v))`, writes 2 entries per point inside
+# `m` and 1 outside, and with `m` covering only the last interior points the first
+# `n_interior * P` positions still step at a constant stride. The replay then reads past
+# `base`/`stride` there and hands the boundary shell the wrong slice. Read from `point_ptr`:
+# interior point `n` (one-based, in `interior`'s order) must start at `(n - 1) * P + 1`, and
+# the first slice after the interior (the earliest-starting point outside it, or the end
+# sentinel) at `n_interior * P + 1`, which fixes the last interior point's width too.
+function _uniform_interior_width(
+        grid_inds::CartesianIndices, interior::CartesianIndices, point_ptr::Vector{Int}, P::Int
+)
+    lin = LinearIndices(grid_inds)
+    total_interior = length(interior) * P
+    n = 0
+    @inbounds for I in interior
+        point_ptr[lin[I]] == n * P + 1 || return false
+        n += 1
+    end
+    next_start = @inbounds point_ptr[end]
+    @inbounds for I in grid_inds
+        I in interior && continue
+        next_start = min(next_start, point_ptr[lin[I]])
+    end
+    return next_start == total_interior + 1
 end
 
 # One term into one block: the walk, a fresh stencil evaluation (weights may be live -- only
