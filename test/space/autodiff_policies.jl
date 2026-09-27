@@ -258,6 +258,7 @@ end
             rtol = 1e-5, atol = 1e-8
         )
         for name in (:gradient, :assembly), k in 1:2
+
             f = t -> dense_serial[name](setindex!(copy(POINTS[name]), t, k))
             @test isapprox(dense_ref[name][k], _fd(f, POINTS[name][k]); rtol = 1e-5, atol = 1e-8)
         end
