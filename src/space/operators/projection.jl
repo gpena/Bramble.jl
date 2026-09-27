@@ -244,9 +244,11 @@ returned as is when already device-resident, otherwise copied into a new device 
 
 Fill the host destination(s) through device backend `db`: allocate a device buffer per
 destination, run the rule's device kernel on it (masked when `markers` is non-empty) and
-copy it back. `false`, with the destination untouched, when the rule has no device kernel.
+copy it back. `false`, with the destination untouched, when the rule has no device kernel
+or the destination's element type is not the device's (`_offload_representable`).
 """
 function _offload_project!(db::Backend, rule, raw, sp, markers::NTuple{N, Symbol}) where {N}
+    _offload_representable(db, raw) || return false
     draw = vector(db, length(raw))
     loc = locality(typeof(draw))
     done = N == 0 ? _device_project!(loc, rule, draw, sp) : _device_masked_project!(loc, rule, draw, sp, markers)
@@ -255,6 +257,7 @@ function _offload_project!(db::Backend, rule, raw, sp, markers::NTuple{N, Symbol
 end
 
 function _offload_project!(db::Backend, rule, raws::Tuple, sp, markers::NTuple{N, Symbol}, nc::Val) where {N}
+    _offload_representable(db, raws[1]) || return false
     draws = map(r -> vector(db, length(r)), raws)
     loc = locality(typeof(draws[1]))
     done = N == 0 ? _device_scatter_project!(loc, rule, draws, sp, nc) :
@@ -262,6 +265,11 @@ function _offload_project!(db::Backend, rule, raws::Tuple, sp, markers::NTuple{N
     done && foreach(_copy_back!, raws, draws)
     return done
 end
+
+# A destination of another element type than the device buffer (`Rₕ` of a `Float64`-valued
+# function on a `Float32` space) stays on the host: the device buffer would round every value
+# to its own type and the copy back would hand the rounded values over silently.
+@inline _offload_representable(db::Backend, raw) = eltype(vector_type(db)) === eltype(raw)
 
 # A composite's leaves are views into one shared host vector, which a device array cannot
 # `copyto!` into without scalar indexing, so those go through a host copy first.

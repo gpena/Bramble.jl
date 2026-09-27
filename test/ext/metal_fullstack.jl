@@ -354,6 +354,16 @@ else
             uo = element(Wo)
             copyto!(parent(uo), parent(uh))
             @test parent(D₋ₓ(uo)) == parent(D₋ₓ(uh))
+            # A Float64 result on the Float32 space stays on the host rather than round
+            # through the Float32 device buffer: the same values as the host space's.
+            f64(x) = 1.0 + 1.0e-6 * x[1]
+            fv64(x) = (f64(x), 2 * f64(x))
+            Vh1, Vo1 = gridspace(Ωh, Val(2)), gridspace(Ωo, Val(2))
+            for op in (Rₕ, avgₕ)
+                @test parent(op(Wo, f64)) == parent(op(Wh, f64))
+                co, ch = components(op(Vo1, fv64)), components(op(Vh1, fv64))
+                @test all(k -> parent(co[k]) == parent(ch[k]), 1:2)
+            end
         end
 
         @testset "difference / jump / average operators match CPU" begin
