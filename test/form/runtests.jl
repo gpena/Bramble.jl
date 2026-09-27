@@ -58,6 +58,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     # group.
     include("bandwidth.jl")
     include("kronecker.jl")
+    # Matrix-free application of any bilinear form (gpena/Bramble.jl#326).
+    include("matrix_free.jl")
     include("expression.jl")
     # Composite trial/test functions through the symbolic `∇ₕ`/`εₕ`/`divₕ` builders (S6.5).
     # Behind `slow`: its hand-expanded comparison functions (`hand_strain`, in particular)

@@ -451,6 +451,21 @@ else
             end
         end
     end
+
+    # `matrix_free_operator` has no device `mul!` yet: a Metal space's `GpuKernel` policy is
+    # refused at construction, naming the milestone that tracks it (gpena/Bramble.jl#326).
+    @testset "Metal matrix-free refused (#326)" begin
+        _, Wg = _matched_spaces((13,))
+        a = form(Wg, Wg, (u, v) -> innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)))
+        err = try
+            matrix_free_operator(a)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("v4.4.0", sprint(showerror, err))
+    end
 end
 
 end # module

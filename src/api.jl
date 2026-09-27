@@ -93,6 +93,7 @@ export dirichlet_constraints, dirichlet_bc!, symmetrize!
 export form, assemble, assemble!, assemble_add!
 export expression
 export is_separable, kronecker_operator
+export matrix_free_operator
 export pde_solve
 export semidiscretize, semidiscretize_second_order
 export ode_problem, linear_problem, nonlinear_problem
@@ -100,7 +101,7 @@ export second_order_ode_problem
 export amg_preconditioner
 export ilu_preconditioner
 
-public KroneckerLinearOperator, ode_function, second_order_ode_function
+public KroneckerLinearOperator, MatrixFreeOperator, ode_function, second_order_ode_function
 public jacobian!, jacobian_prototype, jacobian_pattern, ast_sparsity_detector
 public reaction, reaction_density, reaction!, reaction_density!
 public allocate_system_matrix, type_cached_assemble!, evaluate!, assemble_parallel!
