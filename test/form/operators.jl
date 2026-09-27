@@ -179,7 +179,8 @@ const _ORIGIN_2D = (0, 0)
             ) == ()
         end
 
-        @testset "Custom :interior marker is honoured, not overridden by !:boundary (#66)" begin
+        # A custom :interior marker is honoured, not overridden by !:boundary.
+        @testset "custom :interior marker kept (#66)" begin
             # `:interior` used to be computed as `!_is_marked(markers, :boundary, ...)`
             # unconditionally, discarding whatever a real marker table's own `:interior`
             # entry said -- even a deliberately redefined one, despite mesh/marker.jl

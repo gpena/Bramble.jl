@@ -292,7 +292,8 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             @test A ≈ transpose(P) * Hh(Wu)
         end
 
-        @testset "An operator outside the interpolation acts on the walked mesh" begin
+        # An operator outside the interpolation acts on the walked mesh.
+        @testset "outer operator: acts on walked mesh" begin
             # `D₋ₓ(πₕ(v))` differences on the trial mesh, the one being integrated over, so
             # the block is `(Dx P)ᵀ H₊ Dx` -- the same reading as the trial-side twin, with
             # the roles exchanged.
@@ -302,7 +303,8 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             @test A ≈ transpose(Dx * P) * Hp(Wu, 1) * Dx
         end
 
-        @testset "It is the transpose of the trial-side form" begin
+        # It is the transpose of the trial-side form.
+        @testset "test side: transpose of trial side" begin
             # a(u, πₕ(v)) and a(πₕ(u), v) over the swapped spaces are the same bilinear form
             # read the other way round, so the matrices are transposes. This is what would
             # break if the rows and the columns disagreed about which mesh they live on.
@@ -327,7 +329,8 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             @test A ≈ Hh(W)
         end
 
-        @testset "Composite blocks, interpolated leaf not the first" begin
+        # Composite blocks, where the interpolated leaf is not the first.
+        @testset "composite: interpolated leaf not first" begin
             # A heterogeneous composite where the interpolated side is leaf 2: binding the
             # wrong leaf would still produce plausible numbers on leaf 1, so the assertion is
             # placed where only the right leaf can pass it.
@@ -364,7 +367,8 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             @test_allocs assemble!(A, a)
         end
 
-        @testset "Serial and parallel agree, and the pattern is exact" begin
+        # Serial and parallel assembly agree, and the pattern is exact.
+        @testset "serial vs parallel: exact pattern" begin
             a = form(Wu, Wv, (u, v) -> innerₕ(u, πₕ(v)) + inner₊ₓ(D₋ₓ(u), D₋ₓ(πₕ(v))))
             As = assemble(a)
 

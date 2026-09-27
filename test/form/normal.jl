@@ -18,7 +18,7 @@ using ..TestUtils: @test_allocs
 @testset "The outward normal" begin
     Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
 
-    @testset "normal_vector on a grid space samples the face" begin
+    @testset "normal_vector: grid-space face sample" begin
         Ωₕ = mesh(Ω, (9, 8), (true, true))
         Wₕ = gridspace(Ωₕ)
 
@@ -110,7 +110,8 @@ using ..TestUtils: @test_allocs
         @test_allocs assemble!(B, a)
     end
 
-    @testset "Only the facet slice is set, 1D to 3D, non-uniform (#333)" begin
+    # Only the facet slice is set, 1D to 3D, on non-uniform meshes.
+    @testset "normal: facet slice only (#333)" begin
         # Independent reference: the face is found from the geometric normal alone.
         function reference(Ωₕ, marker, D)
             ν = normal_vector(Ωₕ, marker)
@@ -146,7 +147,8 @@ using ..TestUtils: @test_allocs
         end
     end
 
-    @testset "Components of η inside inner_Γ, 2D and 3D, non-uniform (#341)" begin
+    # Components of η inside inner_Γ, 2D and 3D, on non-uniform meshes.
+    @testset "normal: η components in inner_Γ (#341)" begin
         # Independent reference: g is affine, so the lumped face weights integrate it exactly,
         # and its integral over a face is the face's area times g at the face's centroid.
         # The component η[d] is ±1 on the two faces normal to axis d and 0 on the others.
@@ -225,7 +227,7 @@ using ..TestUtils: @test_allocs
         end
     end
 
-    @testset "A component refills in place at zero allocations" begin
+    @testset "normal: in-place refill, zero allocs" begin
         Wₕ = gridspace(mesh(Ω, (9, 8), (false, false)))
         ηₓ, ηᵧ = η
         a = form(Wₕ, Wₕ,
@@ -270,7 +272,8 @@ using ..TestUtils: @test_allocs
         end
     end
 
-    @testset "Component terms times the unknown, Ref scales, and dot(F, η) in a sum" begin
+    # Component terms times the unknown, Ref scales, and dot(F, η) inside a sum.
+    @testset "normal: component terms in a sum" begin
         Wₕ = gridspace(mesh(Ω, (9, 7), (false, false)))
         ηₓ, ηᵧ = η
         f = x -> x[1]^2 + 0.5x[2]

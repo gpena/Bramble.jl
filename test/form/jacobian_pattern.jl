@@ -109,7 +109,8 @@ function _coupled_reaction_diffusion(n)
 end
 
 @testset "jacobian_pattern" begin
-    @testset "Safe superset of the AD-traced pattern ($D D)" for (D, n) in ((1, 12), (2, 6), (3, 4))
+    # The native pattern is a safe superset of the AD-traced one.
+    @testset "superset of AD pattern ($D D)" for (D, n) in ((1, 12), (2, 6), (3, 4))
         Ω = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
         Ωₕ = mesh(Ω, ntuple(_ -> n, D), ntuple(_ -> false, D))
         Wₕ, sol, diffusion_form, residual = _nonlinear_poisson_setup(D, Ω, Ωₕ)
@@ -129,7 +130,8 @@ end
         @test nnz(mine) >= nnz(sparse(ground_truth))
     end
 
-    @testset "Newton with the native pattern reaches the right answer" begin
+    # Newton with the native pattern reaches the right answer.
+    @testset "Newton: native pattern converges" begin
         Random.seed!(20260907)
 
         # 1D, a random coarse mesh (not uniform: bramble-verification warns a uniform grid
@@ -203,7 +205,8 @@ end
         @test norm₁ₕ(uₕ2 .- Rₕ(Wₕ2, sol2)) < 1e-1
     end
 
-    @testset "No coefficient dependencies degenerates to A's own pattern" begin
+    # No coefficient dependencies degenerates to A's own pattern.
+    @testset "no coefficient deps: A's pattern" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 10, false)
         Wₕ = gridspace(Ωₕ)
         a = form(Wₕ, Wₕ, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)))
@@ -212,7 +215,8 @@ end
         @test jacobian_pattern(a) == (A .!= 0)
     end
 
-    @testset "Multiple independent nonlinear coefficients" begin
+    # Multiple independent nonlinear coefficients.
+    @testset "independent nonlinear coefficients" begin
         # -(α(Mₕ(u))u')' + β(D₋ₓ(u))u = g: two terms, each nonlinear through a
         # *different* stencil op. Passing both dependencies together must still be a
         # safe superset of the true pattern -- neither term's reach may be dropped just
@@ -263,7 +267,8 @@ end
         # `v_c`); `U -> Mₕ(U)` (no `(k)`) keeps meaning "this block's own trial leaf",
         # exactly like the non-composite case above.
 
-        @testset "coupled reaction-diffusion's own coupling (identity cross-block)" begin
+        # Coupled reaction-diffusion's own coupling (identity cross-block).
+        @testset "reaction-diffusion: identity coupling" begin
             sys = _coupled_reaction_diffusion(10)
             Vₕ, coupled_form, residual = sys.Vₕ, sys.coupled_form, sys.residual
 
@@ -325,7 +330,8 @@ end
             @test nnz(mine) >= nnz(sparse(ground_truth))
         end
 
-        @testset "mixed same-block (stencil op) and cross-block (identity) dependencies" begin
+        # Mixed same-block (stencil op) and cross-block (identity) dependencies.
+        @testset "mixed same- and cross-block deps" begin
             # block(1,1)'s coefficient depends on BOTH Mₕ of its own leaf (same-block,
             # the non-composite mechanism) AND directly on component 2 (cross-block) --
             # neither must shadow the other.
@@ -375,7 +381,8 @@ end
             @test nnz(mine) >= nnz(sparse(ground_truth))
         end
 
-        @testset "cross-block dependency through a stencil op, not just identity" begin
+        # A cross-block dependency through a stencil op, not just identity.
+        @testset "cross-block dep via stencil op" begin
             # block(1,1)'s coefficient depends on Mₕ(component 2) -- averaged through
             # another leaf, not read directly the way coupled_reaction_diffusion.jl's own
             # v_c is.
@@ -424,7 +431,8 @@ end
             @test nnz(mine) >= nnz(sparse(ground_truth))
         end
 
-        @testset "no dependencies is a safe superset of assemble(a)'s own pattern" begin
+        # No dependencies is a safe superset of assemble(a)'s own pattern.
+        @testset "no deps: superset of assemble(a)" begin
             # Not exact equality: `assemble` can preallocate a structurally-reachable
             # entry that happens to assemble to exact zero (`A .!= 0` would then read as
             # narrower than the AST's own true reach), so the right check is the same
@@ -450,7 +458,8 @@ end
             @test all(stored .<= mine)
         end
 
-        @testset "Newton with the native pattern agrees with the traced one" begin
+        # Newton with the native pattern agrees with the traced one.
+        @testset "Newton: native matches traced" begin
             # The functional counterpart to the structural checks above: a safe-but-
             # wrong-shaped pattern could still pass "no missing entries" while breaking
             # Newton's own convergence (e.g. if colouring somehow interacted badly with
