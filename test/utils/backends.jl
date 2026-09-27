@@ -724,6 +724,22 @@ end
         # the matching element type still constructs
         @test backend(Float32; policy = GpuOffload(dev)) isa Backend
     end
+
+    # Invariants tested:
+    # 1. A host-local device backend is refused when GpuOffload is constructed: every
+    #    offloaded call would otherwise fall back to the host without a word.
+    @testset "refuses a host-local device backend" begin
+        err = try
+            GpuOffload(backend(Float32))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("GpuOffload", msg)
+        @test occursin("HostLocality", msg)
+    end
 end
 
 @testset "Extension-backed backend stubs" begin

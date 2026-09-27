@@ -71,10 +71,12 @@ _vtk_axes(Ωₕ::AbstractMeshType) = host_points(Ωₕ)
 # axes imply, so no permutation is needed. A composite space gives a `Tuple` of them:
 # WriteVTK reads `length(data)` off a `Tuple` as the number of vector components, one array
 # per component. Wrapping each with `Array` brings a device-backed field's storage to the
-# host before `WriteVTK` sees it -- a no-op copy when it is already there.
+# host before `WriteVTK` sees it. A plain array passed as field data gets the same copy
+# unless it is already an `Array`.
 _vtk_data(uₕ::VectorElement{<:CompositeGridSpace}) = map(Array ∘ reshape, components(uₕ))
 _vtk_data(uₕ::VectorElement) = Array(reshape(uₕ))
-_vtk_data(a::AbstractArray) = a
+_vtk_data(a::Array) = a
+_vtk_data(a::AbstractArray) = Array(a)
 
 """
     export_vtk(f::Function, filename::AbstractString; append::Bool = false) -> Vector{String}

@@ -26,8 +26,12 @@
 #   excluding JIT compilation from the timed trials).
 # - Cache bytes: `Base.summarysize(form.cache)` -- the recorded scatter-position table
 #   itself (`_AssemblyCache.segments`, plus the small fixed fields alongside it).
-# - Matrix bytes: `Base.summarysize(A)` -- the assembled matrix's own footprint, for
-#   comparison against the cache's.
+# - Matrix bytes: the assembled matrix's own arrays, each sized as
+#   `length(x) * sizeof(eltype(x))` -- `colptr`/`rowval`/`nzval` on the host, and on Metal
+#   the device `rowPtr`/`colVal`/`nzVal` plus the host mirror assembly scatters into.
+#   `Base.summarysize` cannot be used here: it sees only a device array's Julia-side
+#   wrapper, not its buffer (`benchmark/assembled_vs_matrixfree.jl` sizes arrays the same
+#   way for the same reason).
 # - Cache/Matrix: the ratio of the two bytes columns above.
 #
 # A policy where the cache replays should show a refill time roughly independent of the
@@ -221,7 +225,7 @@ function _measure_row(policy_name::String, grid_label::String, Wₕ, power::Abst
     note = ok ? "OK" : "refilled matrix disagrees with a fresh assemble on the same form"
 
     cache_bytes = Base.summarysize(a.cache)
-    matrix_bytes = Base.summarysize(Awarm)
+    matrix_bytes = _matrix_bytes(Awarm)
 
     return Row(
         policy_name, grid_label, ndofs_n, nnz(Awarm), t_first, ok ? t_refill : NaN,
@@ -234,6 +238,13 @@ end
 # (never for the byte-size columns, which use the real object throughout).
 nonzeros_of(A::SparseMatrixCSC) = nonzeros(A)
 nonzeros_of(A) = vec(Array(A))
+
+_arr_bytes(x::AbstractVector) = length(x) * sizeof(eltype(x))
+_matrix_bytes(A::SparseMatrixCSC) = _arr_bytes(A.colptr) + _arr_bytes(A.rowval) + _arr_bytes(A.nzval)
+function _matrix_bytes(A)
+    _arr_bytes(A.rowPtr) + _arr_bytes(A.colVal) + _arr_bytes(A.nzVal) +
+    _arr_bytes(A.mirror.rowptr) + _arr_bytes(A.mirror.colval) + _arr_bytes(A.mirror.nzval)
+end
 
 # --- Driver ----------------------------------------------------------------- #
 

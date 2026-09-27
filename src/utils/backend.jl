@@ -505,6 +505,8 @@ concrete-policy dispatch site sees the inner policy and behaves exactly as it do
 `GpuOffload` in play.
 
 # Throws
+- `ArgumentError`: `GpuOffload(device_backend, ...)` with a `device_backend` whose
+  [`locality`](@ref) is [`HostLocality`](@ref) -- nothing would be offloaded.
 - `ArgumentError`: constructing a `Backend` with a `GpuOffload{I, DB}` policy whose requested
   vector element type cannot be represented by `device_backend`'s own vector element type
   (e.g. `Float64` requested against a Metal `device_backend`, which only supports `Float32`
@@ -514,8 +516,22 @@ See also: [`CpuPolicy`](@ref), [`Backend`](@ref), [`metal_backend`](@ref), [`exe
 """
 struct GpuOffload{I <: CpuPolicy, DB <: Backend} <: CpuPolicy end
 
-@inline GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) = GpuOffload{
-    typeof(inner), typeof(device_backend)}()
+# A host `device_backend` would make every offloaded call fall back to the host silently, so
+# it is refused here, where the backend is named, rather than left to a first call.
+@inline function GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial())
+    locality(device_backend) === DeviceLocality() ||
+        _throw_gpu_offload_host_device_backend(device_backend)
+    return GpuOffload{typeof(inner), typeof(device_backend)}()
+end
+
+@noinline function _throw_gpu_offload_host_device_backend(device_backend)
+    throw(
+        ArgumentError(
+        "GpuOffload needs a device backend to offload to, but $(typeof(device_backend)) " *
+        "has locality $(locality(device_backend)): every offloaded call would run on the host.",
+    ),
+    )
+end
 
 # `GpuOffload`'s half of the `execution_policy` contract: a `Backend` configured with a
 # `GpuOffload` policy hands every concrete-policy dispatch site the wrapped inner policy

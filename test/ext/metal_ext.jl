@@ -715,6 +715,10 @@ else
             "v" => Rₕ(gridspace(Ω2, Val(2)), x -> (x[1], x[2]))
         )
         @test isfile(joinpath(d, "b.vtr"))
+
+        # a plain device array as field data, the other documented field shape
+        export_vtk(joinpath(d, "c"), Ω2, "u" => MtlArray(ones(Float32, 9, 9)))
+        @test isfile(joinpath(d, "c.vtr"))
     end
 
     # #346: `copyto!(dest::VectorElement, src::VectorElement)` had no method of its own, so
