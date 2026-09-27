@@ -5,8 +5,8 @@ using Bramble
 using Bramble: index_in_marker, markers
 using ..TestUtils: @test_allocs
 
-@testset "Marker Predicate and Label Error Diagnostics (#224)" begin
-    @testset "Non-Bool Predicate Validation at Domain Construction" begin
+@testset "Marker predicate/label errors (#224)" begin
+    @testset "Domain rejects non-Bool predicates" begin
         # 1. Float-returning level-set predicate
         err_float = try
             domain(interval(0.0, 1.0) × interval(0.0, 1.0), :empty => x -> x[1] - 42.0)
@@ -51,7 +51,7 @@ using ..TestUtils: @test_allocs
         @test :valid in labels(dom_valid)
     end
 
-    @testset "Misspelled Boundary Symbols in Domain Construction" begin
+    @testset "Domain rejects misspelled boundaries" begin
         # 1. Typo in 1D boundary symbol
         err_1d = try
             domain(interval(0.0, 1.0), :inlet => :lefft)
@@ -81,7 +81,7 @@ using ..TestUtils: @test_allocs
         @test occursin(":top", msg_2d)
     end
 
-    @testset "Informative Label Lookup Error in index_in_marker" begin
+    @testset "index_in_marker: unknown label error" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0), :inlet => :left), 11)
         err = try
             index_in_marker(Ωₕ, :lefft)
@@ -98,7 +98,7 @@ using ..TestUtils: @test_allocs
         @test occursin(":interior", msg)
     end
 
-    @testset "index_in_marker single-probe lookup (#335)" begin
+    @testset "index_in_marker: single probe (#335)" begin
         S = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :inlet => :left, :left => :left)
         Ωₕ = mesh(S, (6, 5), (true, true))
 
@@ -123,7 +123,8 @@ using ..TestUtils: @test_allocs
         @test occursin("Available marker labels on this mesh are:", msg)
     end
 
-    @testset "Informative Diagnostics in dirichlet_bc! and dirichlet_constraints" begin
+    # dirichlet_bc! and dirichlet_constraints.
+    @testset "Dirichlet BC helpers: marker errors" begin
         Ω = domain(interval(0.0, 1.0), :inlet => :left, :outlet => :right)
         Ωₕ = mesh(Ω, 11)
         Wₕ = gridspace(Ωₕ)
@@ -158,7 +159,7 @@ using ..TestUtils: @test_allocs
         @test occursin("outlet", msg_dc)
     end
 
-    @testset "Informative Diagnostics in innerₕ and Form Assembly Markers" begin
+    @testset "innerₕ and form assembly: marker errors" begin
         Ω = domain(interval(0.0, 1.0), :inlet => :left)
         Ωₕ = mesh(Ω, 11)
         Wₕ = gridspace(Ωₕ)

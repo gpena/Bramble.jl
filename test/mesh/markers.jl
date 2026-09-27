@@ -70,7 +70,7 @@ using ..TestUtils: alloc_test, @test_allocs
         @test sum(Bramble.markers(Ωₕ)[:boundary]) == 4   # just the :left face on a 4x4 grid
     end
 
-    @testset "warn_marker_mismatch = false silences a deliberate redefinition" begin
+    @testset "warn_marker_mismatch = false is silent" begin
         # gpena/Bramble.jl#18: the warning has no way to tell "a mistake" from "the caller
         # redefined the label on purpose" — this is that opt-out, checked in both directions
         # so it silences the warning without silently dropping the custom marker too.
@@ -121,7 +121,7 @@ using ..TestUtils: alloc_test, @test_allocs
         @test Bramble.index_in_marker(Ωₕ, :empty) isa BitVector
     end
 
-    @testset "Zero-allocation marker setup (gpena/Bramble.jl#124)" begin
+    @testset "Zero-allocation marker setup (#124)" begin
         # `_ensure_geometric_markers!` and `_set_markers_symbols!` used to route every
         # boundary-facet lookup through `boundary_symbol_to_dict`, allocating a fresh
         # `Dict{Symbol, CartesianIndices}` per call just to iterate or index it once. Both
@@ -170,7 +170,7 @@ using ..TestUtils: alloc_test, @test_allocs
         @test all(Bramble.index_in_marker(Ωₕ, :corners) .<= Bramble.markers(Ωₕ)[:boundary])   # every corner is on the boundary
     end
 
-    @testset "Coordinate-aligned boundary symbols (gpena/Bramble.jl#152)" begin
+    @testset "Coordinate boundary symbols (#152)" begin
         # 1D Domains
         I1 = interval(0.0, 1.0)
         Ωₕ_1d = mesh(domain(I1, :x_lo => :xmin, :x_hi => :xmax, :l => :left, :r => :right), 5, true)

@@ -134,7 +134,7 @@ using Bramble
         end
     end
 
-    @testset "Filename already has a recognised extension" begin
+    @testset "Filename with a recognised extension" begin
         # Every other testset writes to an extension-less path, always taking
         # `_pgf_filename`'s "append .dat" branch; a name that already ends in one of the
         # recognised extensions must come back unchanged instead of doubly-suffixed.
@@ -150,7 +150,8 @@ using Bramble
         end
     end
 
-    @testset "2D field data as a plain array, not a VectorElement" begin
+    # A plain array, not a VectorElement.
+    @testset "2D field data as a plain array" begin
         # Every other 2D testset passes a VectorElement; `_pgf_grid` also accepts a plain
         # matrix (already shaped like the grid) or a plain vector (reshaped to it), each
         # with its own size/length check.

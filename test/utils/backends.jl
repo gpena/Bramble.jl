@@ -117,7 +117,7 @@ end
         @test Bramble.locality(typeof(be_device)) === Bramble.DeviceLocality()
     end
 
-    @testset "mismatched Backend construction is rejected" begin
+    @testset "mismatched Backend is rejected" begin
         # device VT + a CpuPolicy: a host loop cannot scalar-index device memory.
         for cpu_policy in (CpuSerial(), CpuThreaded(), CpuPolyester())
             err = try
@@ -482,7 +482,7 @@ end
     end
 end
 
-@testset "Type-level accessors and fallback construction" begin
+@testset "Type accessors, fallback construction" begin
     # Invariants tested:
     # 1. vector_type and matrix_type resolve directly on Type{Backend{...}} without allocating an instance.
     @testset "Type-level accessors" begin
@@ -606,7 +606,7 @@ end
                 @test_skip "gpu_backend device allocation not exercised: Metal.functional() is false on this host"
             end
 
-            @testset "refuses a loaded but non-functional extension" begin
+            @testset "refuses a non-functional extension" begin
                 # `Bramble` provides `_gpu_functional_override` so tests can simulate a loaded
                 # but non-functional GPU device without dynamically overwriting methods via `@eval`.
                 really_functional = Metal.functional()
@@ -674,7 +674,7 @@ end
     end
 end
 
-@testset "GpuOffload policy (gpena/Bramble.jl#324)" begin
+@testset "GpuOffload policy (#324)" begin
     # A device Backend stands in for a real GPU backend (MockGPUVector/MockGPUMatrix answer
     # DeviceLocality(), see the top of this file), so this testset exercises GpuOffload's own
     # behaviour without requiring Metal.jl.
@@ -688,7 +688,7 @@ end
     # 2. GpuOffload() with no inner policy argument defaults to CpuSerial().
     # 3. execution_policy on a Backend configured with a GpuOffload policy returns the wrapped
     #    inner policy instance, not the GpuOffload itself.
-    @testset "wraps an inner CpuPolicy and a device Backend" begin
+    @testset "wraps CpuPolicy and device Backend" begin
         @test Base.ispublic(Bramble, :GpuOffload)
 
         P_default = GpuOffload(dev)
@@ -709,7 +709,7 @@ end
     # 1. A Backend built over a GpuOffload policy is refused at construction, not left to fail
     #    on first use, when its vector eltype cannot be represented by the wrapped device
     #    backend's own vector eltype.
-    @testset "refuses an unrepresentable device element type" begin
+    @testset "refuses unrepresentable device eltype" begin
         err = try
             backend(Float64; policy = GpuOffload(dev))
             nothing

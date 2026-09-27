@@ -118,7 +118,7 @@ function traced_include(real_include::F, path) where {F}
     # description carries the message is the only way to attach one to a `@test` failure:
     # the `@test` macro itself takes no message argument.
     if MAXRSS_BUDGET_GB !== nothing && maxrss_gb > MAXRSS_BUDGET_GB
-        @testset "maxrss $(round(maxrss_gb; digits = 2)) GB > budget $(MAXRSS_BUDGET_GB) GB after $path" begin
+        @testset "maxrss $(round(maxrss_gb; digits = 2)) GB > $(MAXRSS_BUDGET_GB) GB: $path" begin
             @test false
         end
     end

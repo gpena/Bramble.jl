@@ -36,7 +36,7 @@ using ExplicitImports
     # reach it (the same "reached through a re-export" shape as `MPI`/`Init`/`Initialized`
     # below, from MUMPS's own re-export of its MPI submodule); depending on either deeper
     # package directly, just to import one name past what actually uses it, would be worse.
-    @testset "Imports come from the module that owns them" begin
+    @testset "Imports come from the owning module" begin
         @test check_all_explicit_imports_via_owners(
             Bramble; ignore = (:BrownFullBasicInit,)
         ) === nothing
@@ -263,7 +263,7 @@ using ExplicitImports
     # - `_suitesparse_factorize`, `_suitesparse_refactor!`, `_suitesparse_solve`
     #   (BrambleSuiteSparseExt): the same underscored-fallback idiom again, one entry point
     #   per SuiteSparse-backed `factorize`/`refactor!`/`\` method.
-    @testset "Non-public qualified accesses are the declared ones" begin
+    @testset "Non-public qualified accesses declared" begin
         @test check_all_qualified_accesses_are_public(
             Bramble;
             ignore = (
@@ -492,7 +492,7 @@ using ExplicitImports
     # `@forward VectorElement.data (Base.size, Bramble.show)` and
     # `@forward VectorElement.space (Bramble.mesh,)` name the function they extend in full,
     # which is what the macro takes; unqualified would be a different binding.
-    @testset "Self-qualified accesses are the declared ones" begin
+    @testset "Self-qualified accesses declared" begin
         @test check_no_self_qualified_accesses(Bramble; ignore = (:mesh, :show)) === nothing
     end
 end

@@ -24,7 +24,7 @@ function _dataset_entries(pvd_path::AbstractString)
 end
 
 @testset "VTK time-series collection" begin
-    @testset "do-block: non-uniform times, exact values" begin
+    @testset "do-block: non-uniform times, values" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (true, true))
         Wₕ = gridspace(Ωₕ)
         times = (0.0, 0.1, 0.35, 1.0)  # deliberately non-uniform
@@ -47,7 +47,7 @@ end
         end
     end
 
-    @testset "do-block: composite field and 1D degenerate axis" begin
+    @testset "do-block: composite field, 1D axis" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true))
         Vₕ = gridspace(Ωₕ)^Val(2)
 
@@ -74,7 +74,7 @@ end
         end
     end
 
-    @testset "do-block: exception leaves a valid partial file" begin
+    @testset "do-block: exception keeps valid file" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
         Wₕ = gridspace(Ωₕ)
 
