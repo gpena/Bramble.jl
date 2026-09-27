@@ -204,6 +204,9 @@ if __bramble_with_ad_backends
         # from here too and is now TestUtils'.)
         __bramble_with_unit_tests || include("space/autodiff_backends.jl")
         include("space/autodiff_heavy.jl")
+        # The same backends crossed with the Parallel() and CpuPolyester() policies, dense
+        # and sparse; it reuses nothing from the two files above.
+        include("space/autodiff_policies.jl")
         # pde_solve's rrule (ext/chainrules_ext.jl, "Package extensions" below) composed with
         # a real reverse-mode backend -- Enzyme; Mooncake pinned as currently unsupported.
         # Self-contained, independent of that file's own run.
@@ -235,6 +238,8 @@ if __bramble_with_ext_backends
         include("ext/meshes_ext.jl")
         include("ext/metal_ext.jl")
         include("ext/metal_fullstack.jl")
+        include("ext/metal_assembly_replay.jl")
+        include("ext/metal_form_assembly.jl")
         include("ext/sparse_ad_ext.jl")
         include("ext/ad_backend_verification.jl")
         include("ext/sciml_ext.jl")

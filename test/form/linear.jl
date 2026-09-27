@@ -789,6 +789,36 @@ using ..TestUtils: alloc_test, @test_allocs
         @test sum(assemble(form(Vt, v -> innerₕ(1.0, v(2))))) ≈ 1.0
     end
 
+    @testset "Wrong-length vector refused" begin
+        # The sweep writes with `@inbounds`, so a short vector used to be written out of
+        # bounds and a long one kept a stale tail (gpena/Bramble.jl#361). Every linear entry
+        # point now checks the length before writing anything, so the vector comes back
+        # untouched.
+        for (Ωw, dim) in ((mesh(domain(interval(0.0, 1.0)), 13, false), "1D"),
+            (mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (false, false)),
+            "2D"))
+            Ww = gridspace(Ωw)
+            for (label, sp, l) in (("scalar", Ww, v -> innerₕ(1.0, v)),
+                ("composite", Ww × Ww, V -> innerₕ(1.0, V[1]) + innerₕ(2.0, V[2])))
+                lw = form(sp, l)
+                @test execution_policy(sp) isa Bramble.CpuSerial
+                for m in (ndofs(sp) - 5, ndofs(sp) + 5)
+                    @testset "$dim $label, length $m" begin
+                        b = fill(7.0, m)
+                        @test_throws DimensionMismatch assemble!(b, lw)
+                        @test all(==(7.0), b)
+                        @test_throws DimensionMismatch Bramble.assemble_add!(b, lw)
+                        @test all(==(7.0), b)
+                        @test_throws DimensionMismatch Bramble.assemble_add!(b, lw, 2.0)
+                        @test all(==(7.0), b)
+                        @test_throws DimensionMismatch assemble_parallel!(b, lw)
+                        @test all(==(7.0), b)
+                    end
+                end
+            end
+        end
+    end
+
     @testset "Expression validation" begin
         # The `ast` field stores the pre-resolved tree; the expression itself is not kept
         # since nothing downstream ever calls it again.

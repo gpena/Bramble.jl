@@ -389,8 +389,16 @@ function dirichlet_bc!(
     return A
 end
 
-# Dense: one pass over the marked rows of each leaf, skipping unselected ones.
-function _dirichlet_bc_rows!(A::AbstractMatrix, entries::Tuple)
+# Dense: one pass over the marked rows of each leaf, skipping unselected ones. A matrix in
+# device CSR memory takes `_dirichlet_bc_device!` instead (below); the `locality` branch folds
+# away at compile time, so a host matrix pays nothing for it.
+@inline _dirichlet_bc_rows!(A::AbstractMatrix, entries::Tuple) = _dirichlet_bc_rows!(locality(typeof(A)), A, entries)
+@inline function _dirichlet_bc_rows!(::DeviceLocality, A::AbstractMatrix, entries::Tuple)
+    _has_device_csr_mirror(typeof(A)) || return _dirichlet_bc_rows!(HostLocality(), A, entries)
+    return _dirichlet_bc_device!(A, entries)
+end
+
+function _dirichlet_bc_rows!(::HostLocality, A::AbstractMatrix, entries::Tuple)
     T = eltype(A)
     for (mask, offset, _, active) in entries
         active || continue
@@ -515,9 +523,17 @@ Internal helper to apply Dirichlet boundary conditions to matrix `A` at the indi
 in `index_in_marker`: each marked row is zeroed and its diagonal set to one.
 
 Costs the boundary cardinality, not `ndofs`: the marked indices are walked with
-`_each_marked` rather than scanned for.
+`_each_marked` rather than scanned for. A matrix in device memory takes
+`_dirichlet_bc_device!` instead.
 """
-function _dirichlet_bc_indices!(A::AbstractMatrix, index_in_marker::BitVector)
+@inline _dirichlet_bc_indices!(A::AbstractMatrix, index_in_marker::BitVector) = _dirichlet_bc_indices!(
+    locality(typeof(A)), A, index_in_marker)
+@inline function _dirichlet_bc_indices!(::DeviceLocality, A::AbstractMatrix, index_in_marker::BitVector)
+    _has_device_csr_mirror(typeof(A)) || return _dirichlet_bc_indices!(HostLocality(), A, index_in_marker)
+    return _dirichlet_bc_device!(A, ((index_in_marker, 0, length(index_in_marker), true),))
+end
+
+function _dirichlet_bc_indices!(::HostLocality, A::AbstractMatrix, index_in_marker::BitVector)
     T = eltype(A)
     _each_marked(index_in_marker, 0) do i
         @views A[i, :] .= zero(T)
@@ -568,6 +584,90 @@ function _dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
         column_is_constrained && !diagonal_found && (A[j, j] = one(T))
     end
     return A
+end
+
+# Device CSR matrix (gpena/Bramble.jl#361): a device array has no scalar `setindex!`, so the
+# marked rows are gathered on the host, checked against the host mirror's pattern, and handed
+# to one `KernelAbstractions` kernel that rewrites them in place on the device's own
+# `rowPtr`/`colVal`/`nzVal` -- row `r`'s entries are contiguous in CSR, so each work item owns
+# one row and there are no write conflicts. The same rows are rewritten in `A.mirror.nzval`
+# too, so an `assemble_add!` that accumulates into the mirror and flushes it stays
+# consistent. Only the constrained rows are touched on either side: re-flushing a patched
+# mirror instead would overwrite every row with the values of the last assembly, losing any
+# change made on the device since (gpena/Bramble.jl#313's staleness hazard).
+#
+# `A` is duck-typed on `rowPtr`/`colVal`/`nzVal`/`mirror`, the same contract
+# `_flush_device_scatter!` (bilinear_traversal.jl) reads, so no file under `src/` names the
+# concrete device type. A CSR matrix cannot grow a missing diagonal the way
+# `SparseMatrixCSC`'s `A[j, j] = one(T)` fallback does, so a constrained row without a stored
+# diagonal throws, before anything is written.
+#
+# Only a matrix type whose extension opts in through `_has_device_csr_mirror` takes this
+# route; any other device matrix (a dense `MtlMatrix`, a device CSC) keeps the generic body,
+# which works under `@allowscalar` for a dense one.
+"""
+    _has_device_csr_mirror(::Type{<:AbstractMatrix}) -> Bool
+
+Whether a device matrix type stores CSR arrays `rowPtr`/`colVal`/`nzVal` plus a host
+`mirror` ([`_DeviceSparseMirror`](@ref)), so Dirichlet rows can be rewritten by a device
+kernel. `false` unless an extension (`BrambleMetalExt` for `MetalSparseMatrixCSR`) says so.
+"""
+@inline _has_device_csr_mirror(::Type{<:AbstractMatrix}) = false
+
+function _dirichlet_bc_device!(A::AbstractMatrix, entries::Tuple)
+    mirror = A.mirror
+    rowptr = mirror.rowptr
+    colval = mirror.colval
+    nzval = mirror.nzval
+    Ti = eltype(colval)
+    T = eltype(nzval)
+    rows = Ti[]
+    for (mask, offset, _, active) in entries
+        active || continue
+        _each_marked(mask, offset) do r
+            push!(rows, Ti(r))
+        end
+    end
+    isempty(rows) && return A
+    @inbounds for r in rows
+        any(==(r), view(colval, rowptr[r]:(rowptr[r + 1] - one(Ti)))) ||
+            _throw_dirichlet_missing_diagonal(r)
+    end
+    @inbounds for r in rows
+        for k in rowptr[r]:(rowptr[r + 1] - one(Ti))
+            nzval[k] = colval[k] == r ? one(T) : zero(T)
+        end
+    end
+    _launch_dirichlet_rows_csr!(A.rowPtr, A.colVal, A.nzVal, rows)
+    return A
+end
+
+@noinline function _throw_dirichlet_missing_diagonal(r)
+    throw(ArgumentError(
+        "dirichlet_bc!: constrained row $r of a device sparse matrix has no stored diagonal " *
+        "entry, and a device CSR matrix cannot insert one. Assemble the matrix with a " *
+        "pattern that stores the diagonal of every constrained row.",
+    ))
+end
+
+"""
+    _launch_dirichlet_rows_csr!(rowPtr, colVal, nzVal, rows::Vector) -> Nothing
+
+Zero each row `r in rows` of the device CSR matrix stored as `rowPtr`, `colVal`, `nzVal` and
+set its stored diagonal to one, one work item per row. `rows` is a host vector, uploaded
+once; the call blocks until the kernel has run, since the upload reads from `rows`.
+
+Requires `using KernelAbstractions`; the real method is supplied by
+`BrambleKernelAbstractionsExt`.
+
+# Throws
+- `ErrorException`: if `KernelAbstractions` is not loaded.
+"""
+function _launch_dirichlet_rows_csr!(rowPtr, colVal, nzVal, rows)
+    return error(
+        "_launch_dirichlet_rows_csr! has no method loaded. Add `using KernelAbstractions` " *
+        "before applying Dirichlet conditions to a device sparse matrix.",
+    )
 end
 
 @inline function _dirichlet_bc_indices!(

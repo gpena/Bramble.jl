@@ -7,6 +7,7 @@ using Metal
 # BrambleMetalExt's trigger is now the pair `["Metal", "GPUArrays"]` (gpena/Bramble.jl#321),
 # not `Metal` alone -- both must be `using`'d here for the extension to load at all.
 using GPUArrays
+using WriteVTK
 using SparseArrays
 using Kronecker: Kronecker  # loads BrambleKroneckerExt, which owns `fdm_solve`
 using LinearAlgebra: I, mul!
@@ -653,6 +654,86 @@ else
             @test xb isa MtlArray
             @test isapprox(Array(xb), fdm_solve(ah, Fb; dirichlet = :boundary); rtol = 1.0f-5)
         end
+    end
+
+    @testset "#336: fill! and broadcast scalar assignment on a device VectorElement" begin
+        Ω = mesh(domain(interval(0.0f0, 1.0f0)), 17, true; backend = metal_backend())
+        W = gridspace(Ω)
+
+        u = element(W, 0.0f0)
+        r = fill!(u, 3.0f0)
+        @test r === u
+        @test all(==(3.0f0), Array(parent(u)))
+
+        v = element(W, 0.0f0)
+        v .= 2.0f0
+        @test all(==(2.0f0), Array(parent(v)))
+    end
+
+    @testset "#336: interpolate_at refuses a device-backed element" begin
+        Ω = mesh(domain(interval(0.0f0, 1.0f0)), 17, true; backend = metal_backend())
+        W = gridspace(Ω)
+        u = Rₕ(W, x -> 2.0f0 * x[1])
+
+        err = try
+            interpolate_at(u, 0.5f0)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("interpolate_at", msg)
+        @test occursin("πₕ!", msg)
+        @test occursin("Array(parent(u))", msg)
+
+        # Host path is unaffected: same source, no device storage in the way.
+        Wh = gridspace(mesh(domain(interval(0.0, 1.0)), 17, true))
+        uh = Rₕ(Wh, x -> 2 * x[1])
+        @test isapprox(interpolate_at(uh, 0.5), 1.0)
+    end
+
+    # #336: export_vtk on a device mesh/field routes coordinates and data through
+    # `host_points`/`Array` before WriteVTK ever sees them -- otherwise WriteVTK's
+    # `unsafe_write` fails on a device pointer. 1D scalar, 2D scalar, and 2D
+    # vector/composite, matching the issue's own repro.
+    @testset "#336: export_vtk writes .vtr files from device meshes and fields" begin
+        b = metal_backend()
+        d = mktempdir()
+
+        Ω1 = mesh(domain(interval(0.0f0, 1.0f0)), 9, true; backend = b)
+        export_vtk(joinpath(d, "a"), Ω1, "u" => Rₕ(gridspace(Ω1), x -> x[1]))
+        @test isfile(joinpath(d, "a.vtr"))
+
+        Ω2 = mesh(
+            domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (9, 9),
+            (true, true); backend = b
+        )
+        export_vtk(
+            joinpath(d, "b"), Ω2,
+            "u" => Rₕ(gridspace(Ω2), x -> x[1] + x[2]),
+            "v" => Rₕ(gridspace(Ω2, Val(2)), x -> (x[1], x[2]))
+        )
+        @test isfile(joinpath(d, "b.vtr"))
+
+        # a plain device array as field data, the other documented field shape
+        export_vtk(joinpath(d, "c"), Ω2, "u" => MtlArray(ones(Float32, 9, 9)))
+        @test isfile(joinpath(d, "c.vtr"))
+    end
+
+    # #346: `copyto!(dest::VectorElement, src::VectorElement)` had no method of its own, so
+    # it fell to Base's generic `AbstractArray` `copyto!` -- scalar `getindex`/`setindex!`,
+    # which `GPUArrays` refuses on device storage. Device-to-device must now round-trip
+    # through the same `_broadcast_copyto!` seam as `dest .= src` instead.
+    @testset "#346: copyto! between device-backed VectorElements" begin
+        Ω = mesh(domain(interval(0.0f0, 1.0f0)), 17, true; backend = metal_backend())
+        W = gridspace(Ω)
+
+        u = Rₕ(W, x -> x[1])
+        v = element(W, 0.0f0)
+        r = copyto!(v, u)
+        @test r === v
+        @test Array(parent(v)) == Array(parent(u))
     end
 end
 

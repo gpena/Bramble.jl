@@ -20,7 +20,7 @@ using ADTypes: AutoFiniteDiff, AutoForwardDiff
 # picks `AutoPolyesterForwardDiff` whenever PolyesterForwardDiff is loaded (the `full`
 # group loads it), and Polyester's closure path fails on the macOS CI runners with
 # "closures are not supported on this platform" -- two errors in every Weekly macOS leg
-# since v3.4.0, from a choice that depends on which packages happen to be loaded.
+# since v3.4.0, from a choice that depends on which packages happen to be loaded (gpena/Bramble.jl#325).
 const _NEWTON = NewtonRaphson(; autodiff = AutoForwardDiff())
 using LinearSolve: KrylovJL_GMRES
 

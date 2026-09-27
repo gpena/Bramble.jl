@@ -202,6 +202,14 @@ end
 
 @inline _is_corner_inbounds(corner::Tuple) = all(c -> 0 <= c <= 1, corner)
 
+# The weight's type is the mesh's element type promoted with the strength's: a Float32
+# space's vector stays Float32 (and so uploads to a Metal space), a `Dual` strength still
+# promotes, and a Float64 strength on a Float32 space promotes the way any Float64
+# coefficient does. The cell search and fraction stay in Float64, the stored points' own
+# precision, so the location is not rounded before the weight is; only the finished product
+# is converted, which on a Float64 space is the identity.
+@inline _dirac_weight_type(Ωₕ, s) = promote_type(eltype(Ωₕ), typeof(s))
+
 @inline function local_stencil(
         op::DiracSource{D, <:NTuple{D, Float64}}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
@@ -209,10 +217,10 @@ end
     idx, ts = _interp_cell_frac_pt(Ωₕ, op.points, Val(D))
     corner = Tuple(I - idx)
     strength_val = _point_strength_val(op.strengths)
-    T = promote_type(Float64, typeof(strength_val))
+    T = _dirac_weight_type(Ωₕ, strength_val)
     if _is_corner_inbounds(corner)
         w = _interp_corner_weight(ts, corner, Val(D))
-        return ((zero_offset(Val(D)), strength_val * w),)
+        return ((zero_offset(Val(D)), convert(T, strength_val * w)),)
     else
         return ((zero_offset(Val(D)), zero(T)),)
     end
@@ -222,17 +230,24 @@ end
         op::DiracSource{D, <:AbstractVector}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     Ωₕ = mesh(space)
-    s_first = _point_strength_val(first(op.strengths))
-    T = promote_type(Float64, typeof(s_first))
-    acc = zero(T)
+    # Each product takes its own strength's type, never the first one's: a strengths vector
+    # with an abstract eltype (thunks, mixed `Ref`s, `Real[...]`) may hold a `Dual` or a
+    # wider float further along, and `acc` must widen to it rather than truncate it. It
+    # widens at every node, not only near that point, because the assembled vector's type
+    # is probed at one interior node (`_probed_eltype`); the widening is a conversion, not
+    # an addition, so a concrete strengths eltype sees the identity and HEAD's exact values.
+    acc = zero(_dirac_weight_type(Ωₕ, _point_strength_val(first(op.strengths))))
     for k in eachindex(op.points)
         pt = op.points[k]
         s = _point_strength_val(op.strengths[k])
+        Tₖ = _dirac_weight_type(Ωₕ, s)
         idx, ts = _interp_cell_frac_pt(Ωₕ, pt, Val(D))
         corner = Tuple(I - idx)
         if _is_corner_inbounds(corner)
             w = _interp_corner_weight(ts, corner, Val(D))
-            acc += s * w
+            acc += convert(Tₖ, s * w)
+        else
+            acc = convert(promote_type(typeof(acc), Tₖ), acc)
         end
     end
     return ((zero_offset(Val(D)), acc),)
@@ -313,17 +328,23 @@ resolve_ast(ops::NTuple{N, Any}) where {N} = map(resolve_ast, ops)
 # The two scaling wrappers' half of `_bind_interp_spaces` (ast/operators/interpolation.jl),
 # beside their `resolve_ast` because they are the same walk. `GridFunctionScale`'s thunk
 # form has already been evaluated by `resolve_ast` when binding runs, so one method covers
-# both: the scale itself is carried across untouched.
+# both. An `OperatorScale`'s scalar is carried across untouched.
 function _bind_interp_spaces(op::OperatorScale{D}, trial_leaf, test_leaf) where {D}
     inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
     return OperatorScale{D, typeof(op.scalar), typeof(inner)}(op.scalar, inner)
 end
 
-function _bind_interp_spaces(
-        op::GridFunctionScale{D, VType}, trial_leaf, test_leaf
-) where {D, VType}
+# A coefficient in device storage is read one point at a time by `local_stencil`, which the
+# device refuses, so binding swaps it for a host copy (`_host_array`, `linear.jl`;
+# gpena/Bramble.jl#364). Every walk of every fill binds its term afresh (the same sites take
+# the walked leaf's `host_weights`), so the copy is new each time and `assemble!` sees a
+# coefficient changed on the device since the last call; it is never cached in the form, and
+# a device fill allocates it per call. A host coefficient is returned as it is, so the host
+# path neither copies nor changes type.
+function _bind_interp_spaces(op::GridFunctionScale{D}, trial_leaf, test_leaf) where {D}
+    gf = _host_array(op.grid_function)
     inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
-    return GridFunctionScale{D, VType, typeof(inner)}(op.grid_function, inner)
+    return GridFunctionScale{D, typeof(gf), typeof(inner)}(gf, inner)
 end
 # The catch-all every node above without its own method falls through to: TrialFunction,
 # TestFunction, IndexedTrialFunction, IndexedTestFunction, SourceFunction, SourceVector,

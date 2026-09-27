@@ -14,9 +14,9 @@ and the traps that machinery sprang while it was being built
 [#174](https://github.com/gpena/Bramble.jl/issues/174),
 [#250](https://github.com/gpena/Bramble.jl/issues/250)).
 
-**No performance claim is made anywhere on this page.** No benchmark in this milestone
-measured the Metal backend against the CPU backend, so nothing here should be read as a
-speedup.
+**No general performance claim is made on this page.** Every figure below is a specific
+measurement, cited beside the script, sizes and machine state it came from, on one Apple M2
+host; none should be read as a speedup beyond those conditions.
 
 ## Storage decides locality; nothing declares it
 
@@ -230,82 +230,265 @@ process): device `assemble`/`assemble!` are 2-8x slower than the host path, in 1
 never does anything the host wasn't already going to do. Full detail and the table:
 [gpena/Bramble.jl#317](https://github.com/gpena/Bramble.jl/issues/317#issuecomment-5764380143).
 Treat this path as a correctness fallback -- something that produces *a* device-resident
-matrix for a consumer that needs entries, not a performance path -- until and unless #317
-decides the fill itself should move to the device (the atomic-scatter architecture below).
+matrix for a consumer that needs entries, not a performance path. #317 has decided that the
+fill stays on the host and is not moved to the device ("The device architecture decision",
+below).
 
-## A target architecture, not yet built
+**What now assembles on a Metal-backed space.** Composite bilinear forms
+([gpena/Bramble.jl#361](https://github.com/gpena/Bramble.jl/issues/361), S1), every linear
+form -- scalar and composite (gpena/Bramble.jl#361, S2), Dirichlet conditions through
+`assemble`, `assemble!`, `dirichlet_bc!` and the combined `assemble(a, l)` (gpena/Bramble.jl#361,
+S4), `πₕ` across two device meshes and a composite with a cross-mesh block
+([gpena/Bramble.jl#363](https://github.com/gpena/Bramble.jl/issues/363), S5), a
+grid-function coefficient in a bilinear or linear form, live across a device-side mutation
+([gpena/Bramble.jl#364](https://github.com/gpena/Bramble.jl/issues/364), S6),
+`assemble_add!`/`assemble_parallel!` on a linear form, and `dirac` sources (S7, S8) all
+assemble on Metal and match the host. Each fix routed around the same wall the scalar case
+already went around: the element-type probe (`_probed_eltype`, `src/assembly/linear.jl`,
+S1), the linear sweep (S2), the interpolation node's source binding (S5) and the
+grid-function coefficient binding (S6) all read a `host_weights` mirror or a host copy
+rather than scalar-index device storage.
 
-Recorded in [gpena/Bramble.jl#317](https://github.com/gpena/Bramble.jl/issues/317) (the
-comment "Stated target architecture for the GPU path", 2026-09-21), so the decision does
-not have to be rederived later. Everything above this section describes what exists
-today: a host-discovered sparsity pattern, a `mirror` that scatter accumulates into, and
-one bulk `copyto!` per assembly. What follows is a *target* -- where the device path is
-headed if #317 decides a form still needs to assemble a full matrix on the device at all.
-None of it is built, and nothing above should be read as already following it.
+Dirichlet rows are rewritten by one `KernelAbstractions` kernel that reads a constrained
+row's entries directly off the matrix's own `rowPtr`/`colVal`/`nzVal` -- a row's stored
+entries are contiguous, so the kernel zeroes them and sets the stored diagonal to one -- and
+the same rows are rewritten in the host mirror too; the mirror is never flushed over the
+device values, so values a caller changed on the device since the last assembly survive. A
+constrained row with no
+stored diagonal throws an `ArgumentError` naming it, since a device CSR cannot insert an
+entry the way `SparseMatrixCSC` does; the host path still inserts one. `symmetrize!` and
+`symmetrize = true` are refused outright on a device matrix, with a clear `ArgumentError`:
+eliminating a constrained *column* scatters across every row of a CSR, a separate design
+this milestone did not build.
 
-Across Metal, CUDA and ROCm, the target follows the architecture
-[cuda-dolfinx](https://github.com/bpachev/cuda-dolfinx) uses for DOLFINx:
+A grid-function coefficient (`GridFunctionScale`) in device storage is bound as a fresh host
+copy at the same site every walk already takes `host_weights` from, on every fill -- never
+cached across calls, so `parent(cₕ) .= ...` or `Rₕ!(cₕ, ...)` on the device shows up in the
+next `assemble!` exactly as it does on the host. This is why the bilinear `assemble!`
+docstring's "0 allocations" claim for live grid-function coefficients holds on the host
+only: on a device space each fill copies the coefficient to the host anew.
 
-1. Mesh geometry, coefficients, constraint markers and the CSR structure would live
-   entirely on the device once uploaded; the host would never read or write matrix values
-   during assembly. That is what a design meant to work off unified memory needs, and it
-   is precisely what the current mirror path (above) does not do -- the mirror
-   deliberately keeps that structure host-readable.
-2. Scatter positions would be precomputed into a table instead of searched on every
-   assembly: a setup pass records the CSR position of every contribution once, and each
-   later assembly indexes that scatter position table rather than calling
-   `_scatter_position`. This is [gpena/Bramble.jl#318](https://github.com/gpena/Bramble.jl/issues/318),
-   the first piece of the architecture and the one that pays off under either outcome of
-   #317 -- it speeds up the host-side search that exists today exactly as much as it would
-   a future device scatter.
-3. Constrained entries would be carried in that table as a negative sentinel, so the
-   scatter kernel has no boundary-condition branch -- it skips whenever the position it
-   reads is negative.
-4. Accumulation would be atomic rather than colour-scheduled. `src/assembly/` colours
-   contributions into non-conflicting bands so CPU threads can scatter without a race; on
-   a device, an atomic add is meant to be cheaper than reproducing that colouring.
+**What still doesn't assemble, or doesn't assemble on a device.**
+- **D3: `l(vₕ)`, a linear form contracted against a device element, is out of scope.** It
+  fails because `_contract_linear_core` contracts against device storage point by point, a
+  different code path from the sweep-into-a-host-buffer shape S2 built; nothing above fixes
+  it.
+- **D4: `symmetrize!` on a Metal matrix is out of scope**, refused as stated above rather
+  than silently wrong.
+- **A constrained row with no stored diagonal throws on a device CSR** (S4's designed
+  limit, above), where the host path inserts one.
 
-Four qualifications travel with the decision, each one a defect if the architecture were
-copied without it:
+**Cost.** The device paths above allocate on every call: a host mirror of the space's
+weights (`host_weights`), a host copy of every device-storage coefficient, and one upload,
+none of which the host path pays. S2 measured a 2D `n = 17` linear form at roughly 17 KB per
+call; a 1D Metal `assemble!` at `n = 100,001` measured roughly 2.47 MB per call, almost all
+of it rebuilding `host_weights(W)`, plus roughly 0.4 MB per grid-function coefficient in the
+form.
 
-- **The table's interleave stride is a backend property, not the literal `32`.**
-  cuda-dolfinx hardcodes `warpSize` to keep the table's accesses coalesced. Apple
-  SIMD-groups and NVIDIA warps are both 32 wide, but AMD wavefronts are 64 on CDNA and 32
-  on RDNA -- hardcoding 32 would silently lose the coalescing on exactly the backend most
-  likely to need it.
-- **Metal's `Float32` atomic support has to be verified before any design leans on it.**
-  The scatter above rests entirely on a `Float32` atomic add; CUDA and ROCm have had it
-  for years, but what Metal.jl and Atomix expose through KernelAbstractions for Metal is
-  narrower and arrived later. If it turns out to be missing or slow, the design does not
-  degrade gracefully on its own -- the fallback is cuda-dolfinx's own rowwise variant,
-  which inverts the map so each thread owns a row and gathers its contributions by
-  recomputing them, avoiding atomics entirely.
-- **The runtime source generation cuda-dolfinx relies on is a workaround for its own
-  toolchain, and must not be copied.** cuda-dolfinx templates CUDA C into strings and
-  compiles them with NVRTC because FFCx hands it C kernels to wrap. Bramble does not have
-  that problem: one `@kernel` written against `KernelAbstractions.Backend` already covers
-  every device ("Where the kernels live, and where they do not", above) -- the thing
-  cuda-dolfinx's code generation works hardest for, this package already has for free.
-- **The diagonal/off-diagonal block split waits for v3.6.0.** It exists in cuda-dolfinx
-  only because PETSc matrices are MPI-distributed; Bramble has no MPI-distributed matrix
-  yet, so there is nothing for that split to do until one lands.
+**`dirac` on a device space.** A Float32 host space now gets a Float32 vector out of
+`dirac` (gpena/Bramble.jl#361, S8; previously always Float64, which then failed to assemble
+on a Float32/Metal space). `dirac`'s default strength, `1.0`, is a Float64 literal, so pass
+a Float32 strength explicitly on a Float32/Metal space (`dirac(x0, 1f0)`) -- the same rule
+as any other Float64 coefficient (`innerₕ(1.0, v)` is refused on Metal too). In 1D, a vector
+of several source points must be written as 1-tuples, `dirac([(0.2f0,), (0.7f0,)], ...)`: a
+plain vector of numbers is read as one multi-dimensional point instead.
 
-None of this is settled. #317 has not yet decided how much of it a matrix-free operator
-apply would make unnecessary -- if the apply belongs matrix-free and only a coarser
-preconditioner operator stays assembled, the device-resident path above may never be
-worth building. [gpena/Bramble.jl#316](https://github.com/gpena/Bramble.jl/issues/316)
-(Metal shared storage) is blocked on that same decision.
-[gpena/Bramble.jl#323](https://github.com/gpena/Bramble.jl/issues/323) is the first concrete
-step toward matrix-free-on-device, for the narrow separable/Kronecker case; a broader
-version -- `assemble` on a device-backed form returning a matrix-free operator for any form
-the already-fused device kernels can express, rather than a matrix -- is recorded on #317
-but not yet scoped as its own issue.
+**Known open gaps**, each filed as its own issue: a nested grid-function scale
+(`u * (w * v)`) is fused by the simplifier into a new array when the form is built
+(`(u .* w) * v`), so a later in-place change to `u` or `w` never reaches it -- on the host
+too, not only on a device ([#365](https://github.com/gpena/Bramble.jl/issues/365));
+`assemble_add!` on a Metal matrix
+can overwrite device-side changes from a stale mirror
+([#366](https://github.com/gpena/Bramble.jl/issues/366)); a `πₕ` source mesh does not refill
+correctly after `change_points!` ([#367](https://github.com/gpena/Bramble.jl/issues/367));
+`jacobian_pattern` on a mixed composite/scalar form, and on a device space at all, is wrong
+or throws ([#368](https://github.com/gpena/Bramble.jl/issues/368)); and the one-point
+element-type probe some of these fixes lean on has its own gap
+([#370](https://github.com/gpena/Bramble.jl/issues/370)).
+
+## The device architecture decision
+
+[gpena/Bramble.jl#317](https://github.com/gpena/Bramble.jl/issues/317) asked whether large
+problems on a device should get full device assembly (a form's stencil traversal compiled to
+a device kernel, filling the matrix in device memory) or matrix-free operators. Its second
+amendment reframed the question for a second-order finite-difference package: a five-point
+apply and the assembled SpMV do about the same arithmetic on about the same data, so there
+is no high-order sum-factorisation gain to collect, and matrix-free buys memory rather than
+flops. The question is therefore a memory question: at what grid size does storing the
+matrix stop being affordable, what still needs matrix entries, and does the assembled path
+need any device-assembly machinery below that size?
+
+**Decision.** Host assembly plus one upload stays the path for everything that needs
+matrix entries. Matrix-free [`KroneckerLinearOperator`](@ref) covers the operator applies it
+can express (the separable forms below). Full device assembly -- the atomic-scatter,
+warp-interleaved-table architecture recorded on #317 -- is **not built**. The rule was fixed
+before the numbers came in: if the assembled matrix fits device memory at every size the
+measurement reaches, and a consumer of entries assembles at most once per nonlinear solve,
+this is the direction; otherwise the decision would name the size where the matrix stops
+fitting and select a device scatter instead. The matrix fitted at every size measured, so
+the first branch holds. The evidence follows.
+
+### What needs matrix entries rather than an operator's action
+
+Four kinds of Bramble algorithm read the entries of a matrix instead of applying an
+operator:
+
+- **AlgebraicMultigrid** ([`amg_preconditioner`](@ref), `BrambleAlgebraicMultigridExt`):
+  the hierarchy's setup coarsens from the graph and values of `A`. The `BilinearForm`
+  method assembles the full form it is given; the `AbstractMatrix` method accepts any matrix,
+  so a coarser or lower-order proxy could be passed in, but Bramble builds no such proxy
+  today and none has been measured.
+- **ILUZero** ([`ilu_preconditioner`](@ref), `BrambleILUZeroExt`): ILU(0) factors reuse
+  `A`'s own sparsity pattern, so it needs that pattern and its values. The same two methods
+  as for AMG, the same absence of a proxy.
+- **The sparse direct solvers** (`sparse_factorize`, `pde_solve`, `refactor!`): SuiteSparse,
+  MUMPS, Sparspak and Apple Accelerate, which is `pde_solve`'s macOS default for a symmetric
+  system once `AppleAccelerate.jl` is loaded (`_default_wants_accelerate`,
+  `src/solvers/pde_solve.jl`). A direct factorisation needs the exact operator being solved,
+  so no proxy applies, and it has no matrix-free fallback at all. MUMPS, Accelerate and
+  Sparspak are pinned to a host `SparseMatrixCSC` ([CSR in the solvers](csr_solvers.md)), so
+  every one of them consumes a host matrix whichever backend the form was built on.
+- **Eigenvalue work.** Bramble has no eigenvalue solver of its own. The one eigensolve in the
+  package is [`fdm_solve`](@ref)'s per-axis `LAPACK` call on the 1D Kronecker factors
+  (below), which needs only those small factors, never the assembled matrix. An eigenvalue
+  computation a user runs on an assembled matrix is an entries consumer like the others.
+
+All four build their object -- a hierarchy, incomplete factors, a factorisation -- once at
+setup and then apply it many times. That is the assembly frequency the decision rule asks
+about: the entries path runs when a preconditioner or factorisation is (re)built, not on
+every operator apply.
+
+### What each design covers, and what the host path stays responsible for
+
+**Matrix-free Kronecker** (`src/assembly/kronecker.jl`) covers exactly what
+[`is_separable`](@ref) accepts: a non-composite [`ScalarGridSpace`](@ref) on a mesh of
+dimension `D >= 2`, trial and test sharing one mesh, and a sum of mass terms `innerₕ(u, v)`
+and one-axis backward-difference stiffness terms `inner₊(D₋ₓ(u), D₋ₓ(v))` (what
+`inner₊(∇ₕ(u), ∇ₕ(v))` expands to), each under at most a constant or `Ref` scalar. Everything
+else is refused rather than approximated: grid-function coefficients, region restrictions
+(so Dirichlet rows), interpolation across meshes, surface (`InnerGamma`) weights, composite
+spaces, 1D meshes, and every other difference, average or jump family. The operator has no
+boundary constraint of its own; [`fdm_solve`](@ref)'s `dirichlet = :boundary` branch
+restricts to the interior around it (below).
+
+**Host assembly plus upload** stays responsible for everything else: every non-separable
+form, every Dirichlet-constrained system (`apply_dirichlet_labels!` runs as its own pass
+after the scatter), every composite space, and every matrix an entries consumer above
+needs, separable or not. It is also the correctness reference for the Kronecker path.
+Composite forms, every linear form, and Dirichlet rows now all assemble on a Metal-backed
+space too (gpena/Bramble.jl#361); "Form assembly on a device" above states what works and
+what still doesn't.
+
+### The evidence
+
+**Memory and throughput: assembled CSR against Kronecker on Metal.**
+`benchmark/assembled_vs_matrixfree.jl --full` (S6.1 of the v3.14.0 plan, commit `9051ac58`)
+compared, for the same separable operator `innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))`, a host
+`assemble` uploaded once with `metal_sparse_csr` against a Metal-backed
+`kronecker_operator`, both `Float32`, after checking host-against-device agreement for both
+at every size. Apple M2, recommended working set 12.71 GB, AC power, load 2.42-3.28 against a
+threshold of 4.0, `--threads=4`:
+
+| Case | N (dofs) | CSR bytes | Kronecker bytes | CSR/Kron | CSR share of working set | SpMV (ms) | Kron apply (ms) | SpMV/Kron |
+|---|---|---|---|---|---|---|---|---|
+| 2D 500² | 250,000 | 16,976,008 | 35,976 | 471.87 | 0.13% | 0.6747 | 0.6507 | 1.037 |
+| 2D 1500² | 2,250,000 | 152,928,008 | 107,976 | 1416.31 | 1.20% | 2.0782 | 1.3717 | 1.515 |
+| 2D 3000² | 9,000,000 | 611,856,008 | 215,976 | 2832.98 | 4.81% | 7.645 | 4.7157 | 1.621 |
+| 3D 60³ | 216,000 | 19,612,808 | 7,164 | 2737.69 | 0.15% | 0.9352 | 0.6802 | 1.375 |
+| 3D 120³ | 1,728,000 | 157,939,208 | 14,364 | 10995.5 | 1.24% | 2.1991 | 1.8521 | 1.187 |
+| 3D 200³ | 8,000,000 | 733,120,008 | 23,964 | 30592.6 | 5.77% | 9.5458 | 7.7066 | 1.239 |
+
+- **There is no memory crossover in the measured range.** The assembled matrix never
+  exceeds 5.77% of the device's recommended working set, at the largest size measured (3D
+  200³, 8,000,000 dofs). The device CSR's own bytes are what the table counts; the host
+  mirror that the fill path accumulates into holds roughly a second copy in the same unified
+  DRAM (#316's own description), which at most doubles the 5.77% figure -- still a small
+  fraction of the working set. Kronecker factors are 472x to 30,593x smaller than the matrix.
+- **Matrix-free costs no throughput.** The second amendment kept the throughput
+  measurement only as the check that matrix-free does not cost throughput at low order. The
+  Kronecker apply was faster than the assembled SpMV at every size: 1.04-1.62x in 2D, growing
+  with size, and 1.19-1.38x in 3D, where the margin does not grow monotonically.
+
+**Assembly frequency: assemble once against re-assemble every step.** The same run timed
+both regimes over 100 steps, computed from one measured build and one measured apply per
+arm (`build + 100 * apply`, and `100 * (build + apply)`):
+
+| Case | CSR build (ms) | Kron build (ms) | Once + 100 applies, CSR/Kron | Re-assemble every step, CSR/Kron |
+|---|---|---|---|---|
+| 2D 500² | 30.85 | 3.05 | 1.443 | 8.528 |
+| 2D 1500² | 290.22 | 3.12 | 3.550 | 65.098 |
+| 2D 3000² | 1735.69 | 3.60 | 5.262 | 209.681 |
+| 3D 60³ | 40.25 | 4.16 | 1.853 | 8.513 |
+| 3D 120³ | 362.77 | 4.62 | 3.069 | 56.426 |
+| 3D 200³ | 3035.24 | 4.19 | 5.149 | 255.844 |
+
+The CSR build grows with the problem (31 ms to 1736 ms in 2D, 40 ms to 3035 ms in 3D) while
+the Kronecker build stays at 3-5 ms, so re-assembling every step is where an assembled
+operator hurts most, and for a separable operator the Kronecker path removes that cost
+outright. The CSR "build" here is a full `assemble` plus upload, not a refill: an
+`assemble!` into an existing matrix replays recorded positions (below) and costs a small
+fraction of a first assembly, so the re-assemble column is an upper bound on the CSR side.
+
+**The scatter-position table.**
+[gpena/Bramble.jl#318](https://github.com/gpena/Bramble.jl/issues/318) asked for scatter
+positions to be recorded once and indexed on every refill instead of searched. That is now
+true on every backend, as a host-side record/replay rather than a device table:
+`CpuSerial`/`CpuThreaded` since gpena/Bramble.jl#338, `CpuPolyester` since commit
+`d47d3376`, and Metal since commit `208b23de`, where the first `assemble` searches the
+mirror's CSR layout once and every later `assemble!` (and `assemble_add!`) replays the
+recorded positions into the mirror before the single bulk flush -- no device scatter
+kernel. `benchmark/scatter_table.jl` (S5.1, commit `fb839b94`; AC power, load 3.01,
+`--threads=4`, every row agreeing with a fresh assemble) measured the refill at the minimum of
+40 `assemble!` calls; at 1D `n = 2049` CpuSerial took 0.00621 ms, CpuThreaded 0.05117 ms,
+CpuPolyester 0.01196 ms and Metal 1.29733 ms, and on a non-uniform 2D `129 × 97` grid
+0.07325, 0.14017, 0.06304 and 2.53271 ms respectively, against first assemblies of 0.0859 ms
+(1D, CpuSerial) and 6.298 ms (2D, CpuSerial). The recorded positions cost 16,984 bytes
+against a 114,880-byte matrix at 1D `n = 2049` (ratio 0.148 for CpuSerial; 0.086 for the
+threaded policies, whose matrix measures 196,792 bytes) and 996,280 bytes against 1,094,080 on the 2D grid
+(ratio 0.91 for CpuSerial, 0.42 threaded). The Metal rows in that run predate commit
+`208b23de` and searched on every refill; their 64-byte cache figure is the absence of a
+table, not its cost. Commit `208b23de`'s own review measured the Metal replay on a
+four-term 2D `257²` form at 2.94-3.0 ms against 5.0-6.7 ms for the search it replaced.
+
+This is a host-side refill speedup, largely orthogonal to the device-assembly question: it
+makes the entries path cheaper to re-run, which is the path this decision keeps. Two parts of
+#318 were not built. The negative sentinel for constrained entries has nothing to remove:
+Dirichlet conditions already run as a separate pass after the scatter
+(`apply_dirichlet_labels!`), so no scatter carries a boundary branch. And the measurement of
+atomic accumulation against a colour-partitioned scatter asked for in #318's comment
+compares two *device* scatter kernels, neither of which exists or is being built.
+
+### Shared Metal storage is abandoned
+
+[gpena/Bramble.jl#316](https://github.com/gpena/Bramble.jl/issues/316) proposed allocating
+`MetalSparseMatrixCSR`'s buffers in `Metal.SharedStorage` so the host scatter writes device
+values in place and the mirror disappears. It is abandoned. The step it removes, the one bulk
+upload at the end of a fill, is about 33 µs against a 2,040 µs gap between Metal and serial
+`assemble!` at 1D `N = 200,001` -- roughly 1.6% of the measured gap, because every
+scatter-add already runs on the CPU whatever the storage mode. Its memory argument (one copy
+of the values instead of two) is weaker too: #317's own reframing, and this decision, leave
+the assembled device matrix as a setup-time object for an entries consumer, and the
+measurements above show it fitting with a wide margin. #316 stays open until its owner
+decides whether to close it as not planned.
+
+### If the direction needs revisiting
+
+Two measured facts would change this decision: a workload whose assembled matrix stops
+fitting device memory at a size beyond those above, or one that needs a large
+device-resident matrix held continuously and rebuilt often (the scenario #316's own
+abandonment names as the one where its memory argument returns). Either should be recorded
+as a fresh issue with its own numbers, rather than by reopening #317. A broader matrix-free path
+is also recorded on #317 without being scoped: `assemble` on a device-backed form returning
+a matrix-free operator for any form the already-fused device kernels can express, not only
+the separable ones, with host assembly plus upload as the fallback for the rest. The architecture that
+would then be weighed is kept below, in "Appendix: device assembly, if this decision is ever
+revisited".
 
 ## Matrix-free Kronecker operators on a device
 
 [gpena/Bramble.jl#323](https://github.com/gpena/Bramble.jl/issues/323) is the first
-concrete step toward the matrix-free-on-device direction the previous section leaves
-undecided: a [`KroneckerLinearOperator`](@ref) built from a device-backed form, and
+concrete step toward the matrix-free-on-device direction the previous section selects for
+separable applies: a [`KroneckerLinearOperator`](@ref) built from a device-backed form, and
 [`fdm_solve`](@ref) on top of it, both apply on the device with no host round trip once
 built. The split below is decided and built, not a target.
 
@@ -421,15 +604,63 @@ claimed.
   whatever else touches the same buffer, or remove the second writer, and do not trust a
   small, single-run `CHECK` to have exercised the timing at all.
 
-## Current limits
+## Masked projection
 
-A masked [`Rₕ!`](@ref)/`avgₕ!` call (`markers` non-empty) on a `GpuPolicy` backend raises
-rather than running, on either processor -- there is no device kernel for it yet
-([gpena/Bramble.jl#297](https://github.com/gpena/Bramble.jl/issues/297), planned for
-v3.5.0). A masked reduction (`innerₕ`/`normₕ` with a mask) does run on a device today; a
-masked *projection* does not, and those are different mechanisms -- the mask folds into a
-reduction in the first case, but would need folding into a per-point projection kernel in
-the second.
+A masked [`Rₕ!`](@ref)/`avgₕ!` call (`markers` non-empty) on a device backend runs the same
+projection kernel as the unmasked call, launched over an index list rather than the whole
+grid ([gpena/Bramble.jl#297](https://github.com/gpena/Bramble.jl/issues/297)). The host
+path folds the mask into its kernel, but that kernel closes over the mesh's `BitVector`s,
+and a struct nesting an array is not a kernel argument (see above). So each call gathers
+the marked linear indices on the host from the mesh's own masks (the union, for several
+markers), uploads them one way as an `Int32` vector, and passes that vector to the kernel as
+a top-level argument of its own: thread `j` fills grid index `sel[j]`. The destination is
+zeroed on the device first, so off-region entries end up zero, as on the host. A marker
+holding no point launches nothing.
+
+Nothing is cached on the device. A persistent device copy of the markers would need
+invalidating in `set_markers!`: the staleness hazard gpena/Bramble.jl#313 removed along
+with the mirror cache. Launching over the list rather than over every point with a
+predicate is also the cheaper choice for the usual case, a `:boundary` marker, which covers
+a vanishing fraction of the grid.
+
+## `GpuOffload`: per-call device routing without a device-typed space
+
+[`GpuOffload`](@ref) ([gpena/Bramble.jl#324](https://github.com/gpena/Bramble.jl/issues/324))
+is a different shape from everything above: a [`CpuPolicy`](@ref) -- `locality` answers
+[`HostLocality`](@ref) for it, and the `Backend` it configures keeps host storage -- that
+wraps an inner `CpuPolicy` alongside a device `Backend`. It routes only `Rₕ!`/`avgₕ!`'s fill
+step through that device backend (`_offload_project!`,
+`src/space/operators/projection.jl`); every other operation on the space runs under the
+wrapped inner policy exactly as it would without `GpuOffload` in play, since
+[`execution_policy`](@ref) on a `GpuOffload`-configured `Backend` returns the inner policy
+instance, not the wrapper. There is deliberately no persistent device state: each call
+uploads the mesh axis it needs and copies the result back, with nothing cached between
+calls (see "Masked projection" above for why a persistent device copy of anything
+mesh-derived is a staleness hazard this package has already removed once, #313).
+
+**Measured, honestly: three wins and one loss, not a universal speedup.**
+`benchmark/gpu_offload.jl` (commit `2c7217e6`) re-measured the issue's own exploratory table
+back to back, `CpuThreaded()` against `GpuOffload(metal_backend(), CpuThreaded())`, on the
+same four rows, correctness gated before timing (`rtol = atol = 1f-5`, `Float64` host vs
+`Float32` device). Apple M2, AC power, load 3.09/4.0, `--threads=4`:
+
+| Case | Host (`CpuThreaded`) | `GpuOffload` | Ratio |
+|---|---|---|---|
+| `Rₕ!` 1D, n=10,000,000 | faster | slower | **0.86x -- offload loses** |
+| `Rₕ!` 2D, 3000x3000 | -- | -- | 1.79x |
+| `avgₕ!` 1D, n=10,000,000 | -- | -- | 3.27x |
+| `avgₕ!` 2D, 3000x3000 | -- | -- | 10.86x |
+
+Three of the four rows win clearly, close to the issue's own exploratory figures
+(1.98x/9.87x/20.52x for the same three rows) -- but `Rₕ!` 1D at ten million points *loses*,
+0.86x, host wins. The reason is the same no-hidden-cache design named above: `Rₕ!` is one
+cheap function evaluation per point, already fast on four CPU threads, and does not
+amortise the per-call mesh-axis upload plus full result copy-back that `GpuOffload` pays on
+every call with nothing cached. `avgₕ!`'s per-cell quadrature is expensive enough on the
+host that the same round trip is dwarfed instead, which is why its two rows show the
+largest wins in the table. Read this policy as a win for expensive per-point/per-cell work
+on a large grid, not as something to reach for by default -- measure the specific call
+before choosing it over the wrapped inner policy alone.
 
 ## A device kernel launch perturbs the global RNG stream
 
@@ -497,3 +728,59 @@ that actually launches kernels. A seeded cross-backend comparison written agains
 Bramble's public API -- or against any other package that launches device kernels -- needs
 its own isolated RNG (seeded independently of `Random.default_rng()`) for any `rand()` call
 whose result must not depend on what kernel launches happened to run first.
+
+## Appendix: device assembly, if this decision is ever revisited
+
+**Nothing in this appendix is being acted on.** "The device architecture decision" above
+selects host assembly plus upload and does not build device assembly. What follows is the
+architecture recorded on [gpena/Bramble.jl#317](https://github.com/gpena/Bramble.jl/issues/317)
+(the comment "Stated target architecture for the GPU path", 2026-09-21), kept because the
+engineering knowledge in it would still apply if a fresh issue ever reopened the question.
+
+Across Metal, CUDA and ROCm, device assembly would follow the architecture
+[cuda-dolfinx](https://github.com/bpachev/cuda-dolfinx) uses for DOLFINx:
+
+1. Mesh geometry, coefficients, constraint markers and the CSR structure would live
+   entirely on the device once uploaded; the host would never read or write matrix values
+   during assembly. The current mirror path deliberately keeps that structure
+   host-readable instead.
+2. Scatter positions would be precomputed into a table and indexed by a device scatter
+   kernel. The host-side half of this exists already as the record/replay described under
+   "The scatter-position table" above; a device version would lay the table out
+   warp-interleaved, as cuda-dolfinx does, to keep its accesses coalesced.
+3. Constrained entries would be carried in that table as a negative sentinel, so the
+   scatter kernel has no boundary-condition branch. Bramble's Dirichlet pass already runs
+   after the scatter, so this would only matter to a device scatter that folded the
+   constraint in.
+4. Accumulation would be atomic, or colour-partitioned -- which one is a measurement
+   #318's comment asks for, since on a tensor-product grid with a fixed-width stencil the
+   colouring is a small strided partition fixed at compile time, not a graph algorithm.
+
+Four qualifications travel with the architecture, each one a defect if it were copied
+without them:
+
+- **The table's interleave stride is a backend property, not the literal `32`.**
+  cuda-dolfinx hardcodes `warpSize` to keep the table's accesses coalesced. Apple
+  SIMD-groups and NVIDIA warps are both 32 wide, but AMD wavefronts are 64 on CDNA and 32
+  on RDNA -- hardcoding 32 would silently lose the coalescing on exactly the backend most
+  likely to need it.
+- **Metal's `Float32` atomic support has to be verified before any design leans on it.**
+  The atomic scatter rests entirely on a `Float32` atomic add; CUDA and ROCm have had it
+  for years, but what Metal.jl and Atomix expose through KernelAbstractions for Metal is
+  narrower and arrived later. If it turns out to be missing or slow, the design does not
+  degrade gracefully on its own -- the fallback is cuda-dolfinx's own rowwise variant,
+  which inverts the map so each thread owns a row and gathers its contributions by
+  recomputing them, avoiding atomics entirely.
+- **The runtime source generation cuda-dolfinx relies on is a workaround for its own
+  toolchain, and must not be copied.** cuda-dolfinx templates CUDA C into strings and
+  compiles them with NVRTC because FFCx hands it C kernels to wrap. Bramble does not have
+  that problem: one `@kernel` written against `KernelAbstractions.Backend` already covers
+  every device ("Where the kernels live, and where they do not", above) -- the thing
+  cuda-dolfinx's code generation works hardest for, this package already has for free.
+- **The diagonal/off-diagonal block split waits for v3.6.0.** It exists in cuda-dolfinx
+  only because PETSc matrices are MPI-distributed; Bramble has no MPI-distributed matrix
+  yet, so there is nothing for that split to do until one lands.
+
+Following this end to end would also mean compiling a form's AST, user coefficient
+functions included, to device code -- the largest single piece of the work, and the reason
+#317 asked for the measurement before building any of it.

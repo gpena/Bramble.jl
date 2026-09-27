@@ -72,6 +72,22 @@ end
     )
 end
 
+# `interpolate_at` fetches the 2^D corner values around a single query point one scalar
+# read at a time -- fine on the host, but a device transfer hidden inside a scalar call on
+# a device-backed element, and one this package refuses rather than perform silently
+# (gpena/Bramble.jl#336). Named after `_throw_no_scalar_point` (mesh/mesh1d.jl), guarding
+# before any corner is read rather than mid-blend.
+@noinline function _throw_no_scalar_interpolate_at()
+    throw(
+        ArgumentError(
+        "interpolate_at scalar-indexes a device-backed element's corner values one at a " *
+        "time, which its own scalar-indexing guard refuses. Use πₕ!/πₕ to interpolate " *
+        "onto another grid space's points in bulk, or bring the element to the host first " *
+        "with Array(parent(u)) and call interpolate_at on that.",
+    ),
+    )
+end
+
 @noinline function _throw_outside_domain_linear(outside)
     throw(
         ArgumentError(
@@ -160,6 +176,7 @@ and `:extrapolate` -- a fill value cannot be represented as a linear map (see th
 this file).
 """
 function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{1}}, x; outside = :error)
+    locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_interpolate_at()
     _validate_outside(outside)
     Ωₕ = mesh(space(uₕ))
     frac = _interp_cell_frac(Ωₕ, x, outside)
@@ -169,6 +186,7 @@ function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{1}}, x; outside = 
 end
 
 function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{D}}, x; outside = :error) where {D}
+    locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_interpolate_at()
     _validate_outside(outside)
     Ωₕ = mesh(space(uₕ))
     frac = _interp_cell_frac(Ωₕ, x, outside)

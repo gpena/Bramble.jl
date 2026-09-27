@@ -373,6 +373,22 @@ end
         vec_data = fill(5.5, 4)
         copyto!(z, vec_data)
         @test parent(z) == vec_data
+
+        # `copyto!(dest::VectorElement, src::VectorElement)` must route through the
+        # broadcast `_broadcast_copyto!` seam rather than Base's generic `AbstractArray`
+        # fallback, so a `CpuThreaded` destination gets its own threaded copy
+        # (gpena/Bramble.jl#346).
+        Wt = gridspace(mesh(domain(box(0, 1)), 4, true; backend = backend(policy = Parallel())))
+        ut = element(Wt, 1.0:4.0)
+        zt = element(Wt) # Uninitialized
+        copyto!(zt, ut)
+        @test parent(zt) == parent(ut)
+        @test which(copyto!, Tuple{typeof(zt), typeof(ut)}).module === Bramble
+
+        # Mismatched sizes must raise `DimensionMismatch`, not silently truncate.
+        W_short = gridspace(mesh(domain(box(0, 1)), 2, true))
+        u_short = element(W_short, 1.0:2.0)
+        @test_throws DimensionMismatch copyto!(u_short, u)
     end
 
     @testset "Broadcasting" begin

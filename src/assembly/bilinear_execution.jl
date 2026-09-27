@@ -186,7 +186,10 @@ function _replay_bilinear_core!(
     end
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
-    sp = _walked_leaf(bound, trial_space, test_space)
+    # `host_weights` once per fill for every summand, never once per unit: on a device leaf
+    # it rebuilds a host mesh and weights, which per unit made a multi-term refill slower than
+    # the search it replaces (gpena/Bramble.jl#318). A no-op on a host leaf.
+    sp = host_weights(_walked_leaf(bound, trial_space, test_space))
     _replay_summands!(mode, A, bound, sp, segments, 0, α)
     return nothing
 end
@@ -327,7 +330,8 @@ end
     for blk in blocks(term, trial_leaves, test_leaves)
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
-        sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
+        # `host_weights` per block, as the searching sweep's `_assemble_blocks_parallel!` does.
+        sp = host_weights(_walked_leaf(bound, blk.trial_leaf, blk.test_leaf))
         next += 1
         _replay_unit!(
             mode, A, bound, sp, blk.row_offset, blk.col_offset, segments[next], α
@@ -446,18 +450,22 @@ end
             sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
             ro, co = blk.row_offset, blk.col_offset
             off2 = (blk2.row_offset, blk2.col_offset)
+            # The identity test on the leaves themselves, as `_foreach_pair_block_unit`
+            # records it; only the walk takes `host_weights`.
             if sp === blk2.test_leaf
                 next += 1
                 _replay_pair_unit!(
-                    mode, A, bound, p2, sp, ro, co, off2, segments[next], α1, α2, 0
+                    mode, A, bound, p2, host_weights(sp), ro, co, off2, segments[next],
+                    α1, α2, 0
                 )
             else
                 _replay_pair_unit!(
-                    mode, A, bound, p2, sp, ro, co, off2, segments[next + 1], α1, α2, 1
+                    mode, A, bound, p2, host_weights(sp), ro, co, off2,
+                    segments[next + 1], α1, α2, 1
                 )
                 _replay_pair_unit!(
-                    mode, A, bound, p2, blk2.test_leaf, ro, co, off2, segments[next + 2],
-                    α1, α2, 2
+                    mode, A, bound, p2, host_weights(blk2.test_leaf), ro, co, off2,
+                    segments[next + 2], α1, α2, 2
                 )
                 next += 2
             end
@@ -542,9 +550,8 @@ end
 # two by the target's type, so the band and colour logic is written once for both.
 
 # One grid point's stencil, scattered into the matrix by searching each entry's position.
-# The fallback of the threaded path: a device matrix, a form none of whose leaves can replay
-# (`_threaded_replays`), one unit whose own walked leaf cannot (`_leaf_replays`), and
-# `assemble_add!`, which carries no cache.
+# The fallback of the threaded path: a form none of whose leaves can replay
+# (`_threaded_replays`), and one unit whose own walked leaf cannot (`_leaf_replays`).
 #
 # No device-specific parameter here (gpena/Bramble.jl#313): `add_to_sparse!` reads a device
 # matrix's own `mirror` field off `A` directly, so this function -- and every sweep function
@@ -686,31 +693,32 @@ end
     t::_ReplayTarget, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, _) = _replay_point!(
     t, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
 
-# Whether one unit, walked over leaf `sp`, replays: a host matrix and a host leaf (a device
-# matrix stages through its `mirror` and a device leaf needs `host_weights`, which only the
-# searching sweep applies), under an effective policy whose sweeps can replay. Only
-# `CpuThreaded` does in `src/`; `CpuPolyester` searches until `BramblePolyesterExt` fills
-# `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` and adds its own method
-# of `_threaded_replay_policy`. Decided per unit, from the leaf the sweep itself takes its
+# Whether one unit, walked over leaf `sp`, replays: under an effective policy whose sweeps
+# can replay, on either locality of matrix and leaf (gpena/Bramble.jl#318). A device matrix
+# replays positions recorded against its own `mirror` (`_scatter_position` searches the
+# mirror's CSR layout when the recording runs, and `_scatter_add!` writes `mirror.nzval`), and
+# a device leaf replays over `host_weights(sp)`, as the searching sweep walks it. A
+# `GpuPolicy` leaf's effective policy is `CpuThreaded` (`_coerce_serial_to_threaded`), so it
+# replays. `CpuThreaded` replays directly in `src/`; `CpuPolyester` replays too, via
+# `_threaded_replay_policy(::CpuPolyester) = true` and
+# `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` in `ext/BramblePolyesterExt.jl`
+# (gpena/Bramble.jl#318). Decided per unit, from the leaf the sweep itself takes its
 # policy from (`_sweep_bilinear!`), never from the form's trial space: a composite's leaves,
 # or a cross-mesh form's two meshes, can each carry a different backend. Decided from types
 # alone, so the branch folds away.
 @inline _threaded_replay_policy(::CpuThreaded) = true
 @inline _threaded_replay_policy(::Any) = false
-@inline _leaf_replays(A, sp) = locality(typeof(A)) isa HostLocality &&
-                               locality(execution_policy(sp)) isa HostLocality &&
-                               _threaded_replay_policy(_effective_parallel_policy(sp))
+@inline _leaf_replays(_A, sp) = _threaded_replay_policy(_effective_parallel_policy(sp))
 
-# Whether a form's threaded refill uses the recording at all: a host matrix, and at least
-# one leaf on either side that replays. A form none of whose leaves can replay keeps the
+# Whether a form's threaded refill uses the recording at all: at least one leaf on either
+# side that replays. A form none of whose leaves can replay keeps the
 # searching sweep whole, exactly as before the recording was threaded, rather than record
 # for nothing and then search unit by unit.
 @inline _space_replays(A, sp) = _leaf_replays(A, sp)
 @inline _space_replays(A, sp::CompositeGridSpace) = any(
     l -> _leaf_replays(A, first(l)), leaf_spaces_offsets(sp))
-@inline _threaded_replays(A, trial_space, test_space) = locality(typeof(A)) isa HostLocality &&
-                                                        (_space_replays(A, trial_space) ||
-                                                         _space_replays(A, test_space))
+@inline _threaded_replays(A, trial_space, test_space) = _space_replays(A, trial_space) ||
+                                                        _space_replays(A, test_space)
 
 # The threaded leaves: one unit swept band by band (`_sweep_bilinear!`), coloured by the
 # unit's own row reach. A unit whose rows are not a fixed reach from its point (a test-side
@@ -718,13 +726,15 @@ end
 # (`_sweep_bilinear_serial!`). A diagonal segment needs its own target type, so it gets its
 # own sweep instance; that branch exists in 1D only (`_diagonal_replay`). A unit whose leaf
 # cannot replay (`_leaf_replays`) searches instead, on the matrix, as the whole form did
-# before; the recording's other units still replay.
+# before; the recording's other units still replay. `sp` is already a host-weights leaf
+# (`host_weights`, taken once per leaf by the unit walk), since a device leaf's weights
+# cannot be read point by point.
 @noinline function _replay_unit!(
         ::_ThreadedReplay, A::AbstractMatrix, term::TERM, sp, row_offset::Int,
         col_offset::Int, segment::Segment{D}, α
 ) where {TERM, D}
     if !_leaf_replays(A, sp)
-        _sweep_unit!(A, host_weights(sp), term, row_offset, col_offset, α)
+        _sweep_unit!(A, sp, term, row_offset, col_offset, α)
     elseif _diagonal_replay(Val(D)) && segment.is_diagonal
         _sweep_unit!(_DiagonalReplayTarget(A, segment, α), sp, term, row_offset, col_offset)
     else
@@ -767,9 +777,8 @@ end
         col_offset::Int, offsets2::Tuple{Int, Int}, segment::Segment, α1, α2, half::Int
 ) where {P1, P2}
     if !_leaf_replays(A, sp)
-        hsp = host_weights(sp)
-        half != 2 && _sweep_unit!(A, hsp, p1, row_offset, col_offset, α1)
-        half != 1 && _sweep_unit!(A, hsp, p2, offsets2[1], offsets2[2], α2)
+        half != 2 && _sweep_unit!(A, sp, p1, row_offset, col_offset, α1)
+        half != 1 && _sweep_unit!(A, sp, p2, offsets2[1], offsets2[2], α2)
         return nothing
     end
     target = _PairReplaySink(
@@ -1211,9 +1220,12 @@ end
 # The threaded refill's entry point (`assemble!` under a non-serial policy,
 # `assemble_parallel!` from any policy). Replays the form's recording across threads,
 # recording first when `cache` does not hold one for this exact `A` and `ast` (the recording
-# is serial; its own first fill already replays threaded). A device matrix, or a form none
-# of whose leaves can replay (`_threaded_replays`), keeps the searching sweep; otherwise each
-# unit decides for itself from its own leaf (`_leaf_replays`).
+# is serial; its own first fill already replays threaded). A form none of whose leaves can
+# replay (`_threaded_replays`) keeps the searching sweep; otherwise each unit decides for
+# itself from its own leaf (`_leaf_replays`). A device matrix replays too
+# (gpena/Bramble.jl#318): its recording holds positions in its own `mirror`'s CSR layout, so
+# only the recording fill searches the mirror, and each fill ends in one bulk flush of the
+# mirror to the device, as the searching sweep's does.
 function _assemble_bilinear_parallel_cached!(
         A::AbstractMatrix, trial_space, test_space, ast, cache::_AssemblyCache, α = true
 )
@@ -1221,6 +1233,7 @@ function _assemble_bilinear_parallel_cached!(
         _assemble_bilinear_core_cached!(
             _ThreadedReplay(), A, trial_space, test_space, ast, cache, α
         )
+        _flush_device_scatter!(A)
     else
         _assemble_bilinear_parallel_core!(A, trial_space, test_space, ast, α)
     end

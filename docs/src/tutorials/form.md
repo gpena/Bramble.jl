@@ -410,11 +410,11 @@ Vh = CompositeGridSpace((Wbig, Wsmall))
 uv = Rₕ(Vh, (x -> 0.0, x -> x[1] + x[2]))   # only the small leaf (2) carries data
 
 lh = form(Vh, v -> innerₕ(πₕ(uv(2)), v(1)) + innerₕ(∇ₕ[:x](πₕ(uv(2))), ∇ₕ[:x](v(1))))
-b = assemble(lh)
+bh = assemble(lh)
 
 # the differenced term is not a no-op: dropping it changes the answer
 b_plain = assemble(form(Vh, v -> innerₕ(πₕ(uv(2)), v(1))))
-maximum(abs, b .- b_plain)
+maximum(abs, bh .- b_plain)
 ```
 
 The two terms land in the same block (leaf 1, `Wbig`) even though the source they read
@@ -423,7 +423,7 @@ expression rather than a size mismatch. This is exactly what makes a heterogeneo
 composite space useful for more than indexing: leaf 2 can represent one field at a
 resolution the problem calls for, and a term over leaf 1 can still read it.
 
-That last line is the check worth keeping, not `length(b) == ndofs(Vh)`: a differenced
+That last line is the check worth keeping, not `length(bh) == ndofs(Vh)`: a differenced
 source whose offsets are discarded assembles to exactly zero, and a zero vector has the
 right length and is perfectly finite.
 

@@ -422,6 +422,38 @@ on a GPU backend, where every allocation is also a round trip through the device
 memory allocator. The [internals page on the GPU substrate](../internals/gpu.md) covers
 the kernel side of this in more depth.
 
+### `GpuOffload`: offloading just `Rₕ!`/`avgₕ!` from a host backend
+
+[`GpuOffload`](@ref) is a [`CpuPolicy`](@ref), not a `GpuPolicy`: the `Backend` it
+configures keeps host storage (`Vector`/`SparseMatrixCSC`), and every operation except
+`Rₕ!`/`avgₕ!` runs under whatever inner policy it wraps, exactly as if `GpuOffload` were not
+there. Only `Rₕ!`/`avgₕ!`'s fill step is routed through the device backend it also carries:
+
+```julia
+using Bramble, Metal
+
+be = backend(Float32; policy = Bramble.GpuOffload(metal_backend(), Bramble.CpuThreaded()))
+Ωₕ = mesh(domain(interval(0.0f0, 1.0f0)), 10_000_001; backend = be)
+Wₕ = gridspace(Ωₕ)
+uₕ = Rₕ(Wₕ, sin)          # fills through Metal, copies the result back to a host Vector
+Bramble.execution_policy(Wₕ)     # Bramble.CpuThreaded() -- GpuOffload itself is invisible past construction
+```
+
+`uₕ` is an ordinary host-storage `VectorElement`; nothing about calling `Rₕ!`/`avgₕ!`
+changes at the call site, and every other operator on `Wₕ` (`D₋ₓ`, `assemble`, ...) threads
+on the host exactly as it would under `CpuThreaded()` alone.
+
+There is no persistent device state -- each `Rₕ!`/`avgₕ!` call uploads the mesh axis it
+needs and copies the result back, with nothing cached between calls -- so this is not a
+universal speedup. Measured back to back against plain `CpuThreaded()`
+(`benchmark/gpu_offload.jl`, commit `2c7217e6`, Apple M2, AC power, `--threads=4`): `avgₕ!`
+wins clearly (3.27x at 1D n=10,000,000, 10.86x at 2D 3000x3000) and `Rₕ!` wins at 2D
+3000x3000 (1.79x), but `Rₕ!` at 1D n=10,000,000 *loses*, 0.86x -- one cheap function
+evaluation per point is already fast on four CPU threads, and does not amortise the
+per-call upload and copy-back this policy pays every time. Measure the specific call and
+grid size before reaching for `GpuOffload` over the wrapped inner policy alone; see the
+[internals page on the GPU substrate](../internals/gpu.md) for the full table.
+
 ## 9. Introspection
 
 - [`vector_type`](@ref)`(be)`, [`matrix_type`](@ref)`(be)`: the two type parameters.

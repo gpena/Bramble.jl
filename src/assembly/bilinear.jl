@@ -391,8 +391,8 @@ ignoring the backend's policy.
 `assemble!` uses the pre-resolved `form.ast` stored directly inside the form.
 
 ## Live coefficients
-- Grid functions: the stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(cₕ, ...)` or `parent(cₕ) .= ...`) between steps automatically updates the matrix entries with 0 allocations.
-- Dynamic scalars: plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `β = Ref(1.0); a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))`). Mutating `β[] = new_val` evaluates live during assembly with 0 allocations.
+- Grid functions: the stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(cₕ, ...)` or `parent(cₕ) .= ...`) between steps automatically updates the matrix entries. On the host this costs 0 allocations; on a device-backed space each fill copies the coefficient to the host anew, so it stays live but is not allocation-free there (see [GPU acceleration](@ref)).
+- Dynamic scalars: plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `β = Ref(1.0); a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))`). Mutating `β[] = new_val` evaluates live during assembly with 0 allocations on the host; the `Ref` itself adds nothing, but a device-backed space's call still allocates regardless of the scalar (see [GPU acceleration](@ref)).
 """
 function assemble!(
         A::AbstractMatrix,
@@ -446,7 +446,8 @@ recorded where each entry of `A` lives -- `A` came from [`assemble`](@ref) or
 [`allocate_system_matrix`](@ref) on a serial form, or an earlier fill into this same `A`
 recorded it -- every sweep writes through those positions instead of searching for them.
 The first fill into any other matrix object records once, serially, then replays across
-threads. A device-resident matrix still searches.
+threads. A device-resident matrix replays too, through positions recorded against its
+host mirror, so only its recording fill searches (gpena/Bramble.jl#318).
 """
 function assemble_parallel!(A::AbstractMatrix, form::BilinearForm, ast = nothing)
     resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)
@@ -493,6 +494,8 @@ function assemble(
     if symmetrize
         dirichlet_labels, _ = _normalize_dirichlet(dirichlet)
         dirichlet_labels === nothing && _throw_symmetrize_without_dirichlet()
+        locality(typeof(A)) isa DeviceLocality &&
+            throw(ArgumentError("symmetrize = true is not supported for a matrix in device memory."))
         symmetrize!(
             A, F, test_space(a), dirichlet_labels...; components = dirichlet_components
         )
