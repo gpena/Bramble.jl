@@ -44,8 +44,6 @@ routing at all) or a documented dead end (a hidden scalar defeating symmetry det
     for like terms), both products must name no component, and each coefficient moves onto
     its own unshared argument, so no coefficient is compared. Fewer products is fewer
     compiled terms: see `_factor`.
-  - `u_h * (v_h * A) -> (u_h .* v_h) * A`, precomputing the elementwise product once rather
-    than evaluating both scalings at every grid point of every assembly.
   - `Shift₀(u) -> u`, and two nested shifts along the *same* dimension combine their amounts,
     `Shift_a(Shift_b(u)) -> Shift_{a+b}(u)` (so `Shift_k(Shift_{-k}(u)) -> Shift₀(u) -> u`).
 
@@ -310,14 +308,10 @@ function simplify_ast(op::GridFunctionScale)
         )
     end
 
-    # Fuse nested grid-function scalings into one precomputed array: `u_h * (v_h * A) ->
-    # (u_h .* v_h) * A`. Paid once, here, rather than as two scalings at every grid point of
-    # every assembly -- both `op.grid_function` and `inner.grid_function` are concrete
-    # arrays by this point (`resolve_ast` has already called any thunk), so this is an
-    # ordinary elementwise multiply, not a deferred one.
-    inner isa GridFunctionScale &&
-        return GridFunctionScale(op.grid_function .* inner.grid_function, inner.inner_op)
-
+    # Nested scalings `u_h * (v_h * A)` are left as two `GridFunctionScale`s, each reading
+    # its own array at evaluation time, so in-place changes to either coefficient reach the
+    # next `assemble!` (gpena/Bramble.jl#365). Fusing them into one `u_h .* v_h` array would
+    # save a multiply per point but snapshot both coefficients at `form` time.
     return inner === op.inner_op ? op : GridFunctionScale(op.grid_function, inner)
 end
 

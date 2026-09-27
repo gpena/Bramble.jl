@@ -256,7 +256,7 @@ end
 end
 
 # Rules 4-7: scalar lifting out of an inner product, component distribution on a
-# component-mixing sum inside one, grid-function fusion, and shift idempotence. Each reaches
+# component-mixing sum inside one, nested grid-function scales, and shift idempotence. Each reaches
 # one layer deeper than rules 1-3 (into `BilinearProduct`/`LinearProduct`/`ShiftNode`), so
 # every one gets its own structural check plus a numeric check against an independent
 # reference, exactly as rules 1-3 did above.
@@ -349,20 +349,40 @@ end
     end
 end
 
-@testset "Grid function fusion" begin
-    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, true))
-    Wₕ = gridspace(Ωₕ)
-    vₕ = Rₕ(Wₕ, x -> x[1] + 1.0)
-    wₕ = Rₕ(Wₕ, x -> x[2] + 2.0)
+# Nested grid-function scales are not fused into one precomputed array: each keeps reading
+# its own coefficient at evaluation time, so an in-place change to either one reaches the next
+# `assemble!` (gpena/Bramble.jl#365). The reference is a freshly built form, and the diagonal
+# of the bilinear case is checked against the hand-built product.
+@testset "simplifier: nested scales stay live" begin
+    for Ωₕ in (mesh(domain(interval(0.0, 1.0)), 9, true),
+               mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (false, true)))
+        Wₕ = gridspace(Ωₕ)
+        uₕ = Rₕ(Wₕ, x -> x[1] + 1.0)
+        wₕ = Rₕ(Wₕ, x -> x[end] + 2.0)
+        H = Matrix(Diagonal(collect(weights(Wₕ, Innerh()))))
 
-    a = form(Wₕ, Wₕ, (u, v) -> vₕ * (wₕ * innerₕ(u, v)))
-    ast = resolve_form_ast(a)
-    @test ast isa GridFunctionScale
-    @test ast.grid_function ≈ parent(vₕ) .* parent(wₕ)
-    @test ast.inner_op isa BilinearProduct
+        a = form(Wₕ, Wₕ, (U, V) -> innerₕ(uₕ * (wₕ * U), V))
+        ast = resolve_form_ast(a)
+        @test ast isa BilinearProduct
+        @test ast.left_op isa GridFunctionScale
+        @test ast.left_op.inner_op isa GridFunctionScale
 
-    H = Matrix(Diagonal(collect(weights(Wₕ, Innerh()))))
-    @test Matrix(assemble(a)) ≈ Diagonal(parent(vₕ) .* parent(wₕ)) * H
+        linear = (() -> form(Wₕ, v -> innerₕ(1.0, uₕ * (uₕ * v))),
+                  () -> form(Wₕ, v -> innerₕ(1.0, uₕ * (wₕ * v))))
+        ls = map(mk -> mk(), linear)
+        bs = map(assemble, ls)
+        A = assemble(a)
+        @test Matrix(A) ≈ Diagonal(parent(uₕ) .* parent(wₕ)) * H
+
+        parent(uₕ) .*= 3
+        parent(wₕ) .+= 1
+        for k in eachindex(ls)
+            assemble!(bs[k], ls[k])
+            @test bs[k] ≈ assemble(linear[k]())
+        end
+        assemble!(A, a)
+        @test Matrix(A) ≈ Diagonal(parent(uₕ) .* parent(wₕ)) * H
+    end
 end
 
 @testset "Shift idempotence" begin
