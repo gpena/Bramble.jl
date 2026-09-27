@@ -16,7 +16,7 @@ using Bramble:
                semidiscretize_rhs,
                set_points!,
                type_cached_assemble!
-using ..TestUtils: _check_eoc
+using ..TestUtils: _check_eoc, WITH_AD_TESTS
 
 # `semidiscretize` and the residual it returns (src/problems/semidiscrete.jl) need no SciMLBase:
 # a `Semidiscretization` is a callable with the `(du, u, p, t)` signature plus two matrices.
@@ -269,26 +269,28 @@ end
         @test operator_matrix(sd) ≈ 4 .* A₀      # α(3.0) = 1 + 3 = 4
         @test build_calls[] == 1                 # same element type: no rebuild, only refill
 
-        # A `ForwardDiff.Dual` `t` -- the same thing a Rosenbrock stepper's `tgrad` reaches
-        # for -- rebuilds once at that new element type, and never throws `InexactError`
-        # trying to write a `Dual` into the `Float64` matrix the classic `BilinearForm` path
-        # would have kept.
-        t_dual = Dual(3.0, 1.0)
-        u_dual = Dual.(zeros(n), 0.0)
-        du_dual = similar(u_dual)
-        sd(du_dual, u_dual, nothing, t_dual)
-        @test build_calls[] == 2
-        @test all(isfinite, value.(du_dual))
+        if WITH_AD_TESTS
+            # A `ForwardDiff.Dual` `t` -- the same thing a Rosenbrock stepper's `tgrad` reaches
+            # for -- rebuilds once at that new element type, and never throws `InexactError`
+            # trying to write a `Dual` into the `Float64` matrix the classic `BilinearForm` path
+            # would have kept.
+            t_dual = Dual(3.0, 1.0)
+            u_dual = Dual.(zeros(n), 0.0)
+            du_dual = similar(u_dual)
+            sd(du_dual, u_dual, nothing, t_dual)
+            @test build_calls[] == 2
+            @test all(isfinite, value.(du_dual))
 
-        # Calling again at the already-seen `Dual` type refills without rebuilding.
-        sd(du_dual, u_dual, nothing, t_dual)
-        @test build_calls[] == 2
+            # Calling again at the already-seen `Dual` type refills without rebuilding.
+            sd(du_dual, u_dual, nothing, t_dual)
+            @test build_calls[] == 2
 
-        # The `Float64` path stays exactly as before, unaffected by the Dual excursion in
-        # between: same cached entry, refilled at its own `t` rather than rebuilt.
-        sd(zeros(n), zeros(n), nothing, 1.0)
-        @test operator_matrix(sd) ≈ 2 .* A₀      # α(1.0) = 1 + 1 = 2
-        @test build_calls[] == 2
+            # The `Float64` path stays exactly as before, unaffected by the Dual excursion in
+            # between: same cached entry, refilled at its own `t` rather than rebuilt.
+            sd(zeros(n), zeros(n), nothing, 1.0)
+            @test operator_matrix(sd) ≈ 2 .* A₀      # α(1.0) = 1 + 1 = 2
+            @test build_calls[] == 2
+        end
     end
 
     @testset "consistent initial conditions" begin

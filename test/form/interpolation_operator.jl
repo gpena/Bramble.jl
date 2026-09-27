@@ -43,7 +43,7 @@ using Bramble:
                indices,
                inner₊ₓ,
                interpolation_matrix
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
 
 # The interpolation operator: `πₕ(u)` over a trial function, as opposed to
 # `πₕ(uₕ)` over a grid function whose values are known (test/form/interpolation.jl).
@@ -629,7 +629,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         end
     end
 
-    @testset "Differentiation" begin
+    WITH_AD_TESTS && @testset "Differentiation" begin
         # A coefficient in the integrand, differentiated through the assembly: the block is
         # `H·diag(c)·P`, so `d sum(A) / d cᵢ` is `Hᵢᵢ` times row `i` of `P` summed. Checked
         # against that, not against itself, so a gradient of the wrong thing cannot pass.

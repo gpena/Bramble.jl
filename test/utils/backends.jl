@@ -27,7 +27,7 @@ using Bramble:
                GpuPolicy
 using SparseArrays
 using LinearAlgebra: diag, I
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, @test_allocs, WITH_GPU_TESTS
 
 # Minimal DenseArray mock simulating vendor GPU array types (such as MtlArray or CuArray)
 # to verify generic backend dispatch without requiring GPU hardware or optional dependencies.
@@ -333,8 +333,9 @@ end
         @test eye_gpu[3, 3] == 1.0f0
     end
 
-    # Conditional validation for Metal.jl arrays when running on macOS with functional GPU runtime
-    if Sys.isapple()
+    # Conditional validation for Metal.jl arrays when running on macOS with functional GPU
+    # runtime, and only with GPU tests switched on (TestUtils.WITH_GPU_TESTS).
+    if WITH_GPU_TESTS && Sys.isapple()
         metal_pkg = Base.find_package("Metal")
         if metal_pkg !== nothing
             try

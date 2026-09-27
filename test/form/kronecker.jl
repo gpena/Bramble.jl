@@ -8,6 +8,7 @@ using SparseArrays: SparseMatrixCSC
 using Random
 using LinearSolve: LinearProblem, solve, KrylovJL_CG
 using ForwardDiff
+using ..TestUtils: WITH_AD_TESTS
 
 # `is_separable`/`kronecker_operator` (gpena/Bramble.jl#162): a bilinear form whose
 # resolved AST is a sum of `innerₕ(u, v)`/`inner₊(∇ₕ(u), ∇ₕ(v))`-shaped terms over a
@@ -117,10 +118,12 @@ _kron_alloc_no_scratch(y, K, x) = @allocated mul!(y, K, x)
             end
             @test all(isapprox(ys[i], A * xs[i]; rtol = 1e-12, atol = 1e-12) for i in 1:32)
 
-            # ForwardDiff Duals flow through the promoted scratch.
-            x0, v = rand(n), rand(n)
-            dK = ForwardDiff.derivative(t -> K * (x0 .+ t .* v), 0.0)
-            @test isapprox(dK, A * v; rtol = 1e-12, atol = 1e-12)
+            if WITH_AD_TESTS
+                # ForwardDiff Duals flow through the promoted scratch.
+                x0, v = rand(n), rand(n)
+                dK = ForwardDiff.derivative(t -> K * (x0 .+ t .* v), 0.0)
+                @test isapprox(dK, A * v; rtol = 1e-12, atol = 1e-12)
+            end
 
             # Five-argument `mul!`: `y = α * K * x + β * y`, Int/Bool/Float α and β.
             M = Matrix(A)

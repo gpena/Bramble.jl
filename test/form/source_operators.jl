@@ -2,6 +2,7 @@ module FormSourceOperatorsTests
 
 using Test
 using Bramble
+using ..TestUtils: WITH_AD_TESTS
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, M₊ₓ, M₊ᵧ
 using ForwardDiff
@@ -341,7 +342,7 @@ using Bramble:
         end
     end
 
-    @testset "Source differentiation" begin
+    WITH_AD_TESTS && @testset "Source differentiation" begin
         # the element type comes from the data, so a Dual-valued source stays Dual through
         # the value path exactly as it does through the stencil path
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)
@@ -474,7 +475,7 @@ using Bramble:
             @test c2 ≈ 2 .* c1
         end
 
-        @testset "lowered source: Dual propagates" begin
+        WITH_AD_TESTS && @testset "lowered source: Dual propagates" begin
             # Distinct from "Source differentiation" above, which wraps its source in
             # D₋ₓ and so never reaches the lowering path this checks.
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)

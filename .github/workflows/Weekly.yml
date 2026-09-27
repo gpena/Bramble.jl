@@ -5,33 +5,21 @@ name: Weekly
 # Not the quality group, though -- Aqua, JET, explicit-imports, exports and invalidations run
 # daily in nightly.yml, and `full` used to drag them in here as well, four times over on this
 # matrix. `full` no longer implies `quality` (see test/runtests.jl); this job is the unit
-# suite across both Julia versions and both platforms, plus the expensive AD backends, the
-# package extensions and coverage.
+# suite across both Julia versions and both platforms, plus the package extensions and
+# coverage.
 #
 # Each version/OS pair runs as two jobs, `part: suite` (the `slow` group: unit plus the slow
-# blocks) and `part: backends` (the `backends` group: the expensive AD backends and the
-# package extensions), which together cover what `full` does except the manual snippets,
-# which only run locally anyway. One `full` job per pair took 99 minutes on Julia 1.12
-# macOS at v3.11.1, where 1.12 compiles `form/` (870 s) and `ext/chainrules_enzyme_ext.jl`
-# (879 s) far more slowly than 1.13; the two halves each fit well inside the limit.
+# blocks) and `part: backends` (the `backends` group: the package extensions), which
+# together cover what `full` does except the manual snippets, which only run locally anyway.
 #
-# Enzyme and Mooncake are the reason this exists. They spend 58 seconds compiling on first
-# call between them, against 1.1 s for ReverseDiff and PolyesterForwardDiff, which run on
-# every push instead. What the expensive pair establishes changes when a *backend* changes
-# rather than when Bramble does, so paying it per push would be paying it for nothing almost
-# every time. `SciMLSensitivity` (gpena/Bramble.jl#239's adjoint entry point) joined this
-# list for the same reason and at a comparable cost -- it pulls in Zygote, Tracker,
-# ReverseDiff and NNlib, none of which anything else here needs.
+# AD and GPU tests are switched off in every group until v4.3.0 and v4.4.0 respectively
+# (test/TestUtils.jl, `WITH_AD_TESTS` and `WITH_GPU_TESTS`). The step that installed
+# Enzyme, Mooncake, PolyesterForwardDiff and SciMLSensitivity for the `backends` half is
+# gone with them; v4.3.0 restores it from git history together with the AD tests.
 #
-# So this is a canary rather than a gate: it is not required for a merge, and a failure here
+# This is a canary rather than a gate: it is not required for a merge, and a failure here
 # most often means an upstream release moved rather than that Bramble regressed. Read it
 # that way before hunting in `src/`.
-#
-# The backends are added at run time rather than declared in `test/Project.toml`, which
-# keeps Enzyme out of the dependency graph of every ordinary test run. `autodiff_backends.jl`
-# skips any backend it cannot find, and `test/ext/sciml_sensitivity_ext.jl`/`test/examples/
-# transient_inverse_problem.jl` skip the same way when `SciMLSensitivity` is absent, so the
-# group is harmless without any of them.
 
 on:
   schedule:
@@ -74,9 +62,9 @@ jobs:
         # 1.12 floor gets its only test-suite coverage: nightly.yml runs Julia nightly only
         # (see its header comment), so this matrix is the sole place a 1.12-only break is
         # caught. Julia nightly is deliberately not here: what this workflow tests is how
-        # the differentiation backends behave under a Julia version change, and `nightly`
-        # itself moves daily for reasons unrelated to Bramble or to Enzyme/Mooncake, which
-        # would make a red leg here noise rather than signal.
+        # the suite and the package extensions behave under a Julia version change, and
+        # `nightly` itself moves daily for reasons unrelated to Bramble, which would make a
+        # red leg here noise rather than signal.
         version: ["1.12", "1.13"]
         os: [ubuntu-latest, macOS-latest]
         part: [suite, backends]
@@ -94,26 +82,6 @@ jobs:
           cache-compiled: "true"
 
       - uses: julia-actions/julia-buildpkg@v1
-
-      # ReverseDiff is declared in test/Project.toml and runs on every push. These three
-      # are installed here so an ordinary test run never resolves them: Mooncake and Enzyme
-      # because they are slow to compile, PolyesterForwardDiff because it adds nothing
-      # ForwardDiff does not cover and nests threading inside kernels that already thread. Failing to add one is not fatal: the test file skips a backend it cannot
-      # load, and the run still reports on the others.
-      # Only the `backends` half needs them; the `suite` half's autodiff_backends.jl skips
-      # them, and the `backends` half runs that file again with them installed.
-      - name: Add the expensive differentiation backends and SciMLSensitivity
-        if: matrix.part == 'backends'
-        run: |
-          julia --project=test -e '
-            using Pkg
-            for p in ("PolyesterForwardDiff", "Mooncake", "Enzyme", "SciMLSensitivity")
-                try
-                    Pkg.add(p)
-                catch err
-                    @warn "could not add $p; its checks will be skipped" exception=err
-                end
-            end'
 
       # Coverage is collected on one leg only: Julia 1.12 on ubuntu-latest, moved here from
       # nightly.yml along with the rest of the 1.12 floor. See CI.yml's history for why only

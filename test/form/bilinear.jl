@@ -10,7 +10,7 @@ using LinearAlgebra: Diagonal, I, diag, dot
 using SparseArrays: sparse, nnz, nonzeros, SparseMatrixCSC
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, WITH_AD_TESTS
 using ..TestUtils: _nonuniform_points
 using Bramble:
                BilinearForm,
@@ -469,7 +469,7 @@ using Bramble:
         end
     end
 
-    @testset "Matrix differentiation" begin
+    WITH_AD_TESTS && @testset "Matrix differentiation" begin
         # A coefficient in the integrand: a(u, v) = ∫ c·u·v, so A = H·diag(c) and the
         # derivative of `sum(A)` with respect to `cᵢ` is `Hᵢᵢ`. Checked against that rather
         # than against itself, so a gradient of the wrong thing cannot pass.
@@ -599,7 +599,7 @@ using Bramble:
         @test _loop_bytes(A_stiff, a_stiff) == 0
     end
 
-    @testset "Restricted in-place reassembly (zero allocations)" begin
+    @testset "Restricted in-place reassembly allocs" begin
         # A `RegionRestriction`'s stencil is `()` or a full tuple depending on the point's
         # marker. Inside a sum (`v + restrict_to(:boundary, v)` below, what the simplifier
         # folds the two terms into) that `Union` used to be collected by a `map` over the

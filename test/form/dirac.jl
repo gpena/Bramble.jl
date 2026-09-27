@@ -5,6 +5,7 @@ using LinearAlgebra
 using Random
 using ForwardDiff
 using Bramble
+using ..TestUtils: WITH_AD_TESTS
 using Bramble:
                DiracSource,
                form,
@@ -346,16 +347,20 @@ using Bramble:
         b64 = @inferred assemble(form(W64, v -> innerₕ(dirac(0.37), v)))
         @test eltype(b64) === Float64
         @test eltype(assemble(form(W64, v -> innerₕ(dirac(0.37, 2.0f0), v)))) === Float64
-        for src in (s -> dirac(0.37, s), s -> dirac([(0.2,), (0.55,)], [s, 2s]))
-            g = ForwardDiff.derivative(s -> assemble(form(W64, v -> innerₕ(src(s), v))), 2.0)
-            @test g ≈ assemble(form(W64, v -> innerₕ(src(1.0), v))) rtol = 1e-12
+        if WITH_AD_TESTS
+            for src in (s -> dirac(0.37, s), s -> dirac([(0.2,), (0.55,)], [s, 2s]))
+                g = ForwardDiff.derivative(s -> assemble(form(W64, v -> innerₕ(src(s), v))), 2.0)
+                @test g ≈ assemble(form(W64, v -> innerₕ(src(1.0), v))) rtol = 1e-12
+            end
         end
         # A strengths vector with an abstract eltype: each product keeps its own strength's
         # type, so a later `Dual` or a wider float is not narrowed to the first one's.
         pts2 = [(0.2,), (0.45,)]
-        for strengths in (s -> [() -> 1.0, () -> s], s -> Any[1.0, s])
-            g = ForwardDiff.derivative(s -> assemble(form(W64, v -> innerₕ(dirac(pts2, strengths(s)), v))), 2.0)
-            @test g ≈ assemble(form(W64, v -> innerₕ(dirac(pts2[2:2], 1.0), v))) rtol = 1e-12
+        if WITH_AD_TESTS
+            for strengths in (s -> [() -> 1.0, () -> s], s -> Any[1.0, s])
+                g = ForwardDiff.derivative(s -> assemble(form(W64, v -> innerₕ(dirac(pts2, strengths(s)), v))), 2.0)
+                @test g ≈ assemble(form(W64, v -> innerₕ(dirac(pts2[2:2], 1.0), v))) rtol = 1e-12
+            end
         end
         # On a Float32 space, a Float64 strength after a Float32 one keeps Float64 precision.
         # The two points sit far apart, so the second's entries are its alone.
@@ -383,8 +388,10 @@ using Bramble:
             src = s -> dirac(pts, [() -> 1.0, () -> s])
             l = s -> assemble(form(Wₕ, v -> innerₕ(1.0, v) + innerₕ(src(s), v)))
             alone = assemble(form(Wₕ, v -> innerₕ(dirac(pts[2:2], 1.0), v)))
-            @test ForwardDiff.derivative(l, 2.0) ≈ alone rtol = 1e-12
-            @test sum(ForwardDiff.derivative(l, 2.0)) ≈ 1.0 rtol = 1e-12
+            if WITH_AD_TESTS
+                @test ForwardDiff.derivative(l, 2.0) ≈ alone rtol = 1e-12
+                @test sum(ForwardDiff.derivative(l, 2.0)) ≈ 1.0 rtol = 1e-12
+            end
 
             Ω32 = domain(D == 1 ? interval(0.0f0, 1.0f0) : interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0))
             W32 = gridspace(mesh(Ω32, n, unif; backend = backend(Float32)))

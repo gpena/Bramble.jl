@@ -16,7 +16,7 @@ using ForwardDiff
 using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system,
                             poisson_solve_contract, refactor_contract,
                             unsymmetric_refactor_contract, validation_contract
-using ..TestUtils: _fd
+using ..TestUtils: _fd, WITH_AD_TESTS
 
 @testset "Sparspak extension" begin
     @testset "1D/2D/3D Poisson" begin
@@ -76,15 +76,17 @@ using ..TestUtils: _fd
         # SuiteSparse/MUMPS cannot do (both require `Float64`/`ComplexF64` matrix entries).
         # Sparspak's triangular solve additionally requires the right-hand side to share
         # the matrix's own element type exactly, hence the explicit `eltype(Aθ).(...)`.
-        function g(θ)
-            aθ = form(Wₕ, Wₕ, (u, v) -> (1.0 + θ) * inner₊(∇ₕ(u), ∇ₕ(v)))
-            Aθ, Fθ0 = assemble(aθ, l; dirichlet = ZERO_BC)
-            Fθ = eltype(Aθ).(Fθ0)
-            uθ = sparspak_solve(Aθ, Fθ)
-            return sum(uθ)
+        if WITH_AD_TESTS
+            function g(θ)
+                aθ = form(Wₕ, Wₕ, (u, v) -> (1.0 + θ) * inner₊(∇ₕ(u), ∇ₕ(v)))
+                Aθ, Fθ0 = assemble(aθ, l; dirichlet = ZERO_BC)
+                Fθ = eltype(Aθ).(Fθ0)
+                uθ = sparspak_solve(Aθ, Fθ)
+                return sum(uθ)
+            end
+            d = ForwardDiff.derivative(g, 1.0)
+            @test isapprox(d, _fd(g, 1.0); atol = 1.0e-6, rtol = 1.0e-6)
         end
-        d = ForwardDiff.derivative(g, 1.0)
-        @test isapprox(d, _fd(g, 1.0); atol = 1.0e-6, rtol = 1.0e-6)
     end
 
     @testset "Error handling & validation" begin
