@@ -24,6 +24,7 @@ using Bramble:
                resolve_ast,
                allocate_system_matrix,
                ndofs,
+               restrict_to,
                Innerh,
                Innerplus,
                block_of,
@@ -592,6 +593,31 @@ using Bramble:
             return @allocated assemble!(A, a)
         end
         @test _loop_bytes(A_stiff, a_stiff) == 0
+    end
+
+    @testset "Restricted in-place reassembly (zero allocations)" begin
+        # A `RegionRestriction`'s stencil is `()` or a full tuple depending on the point's
+        # marker. Inside a sum (`v + restrict_to(:boundary, v)` below, what the simplifier
+        # folds the two terms into) that `Union` used to be collected by a `map` over the
+        # summands into a tuple with a non-concrete element, boxed at every grid point: 864 B
+        # on the 1D grid and 6720 B on the 2D one, where the unrestricted form allocated
+        # nothing. The refill must also match the two terms assembled apart.
+        function _loop_bytes(A, a)
+            assemble!(A, a)
+            assemble!(A, a)
+            return @allocated assemble!(A, a)
+        end
+        Ω1d = mesh(domain(interval(0.0, 1.0)), 11, true)
+        Ω2d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, true))
+        for Ω in (Ω1d, Ω2d)
+            W = gridspace(Ω)
+            a = form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(u, restrict_to(:boundary, v)))
+            A = assemble(a)
+            @test _loop_bytes(A, a) == 0
+            parts = assemble(form(W, W, (u, v) -> innerₕ(u, v))) +
+                    assemble(form(W, W, (u, v) -> innerₕ(u, restrict_to(:boundary, v))))
+            @test Matrix(A) ≈ Matrix(parts)
+        end
     end
 
     @testset "Cached nzval positions (#26)" begin

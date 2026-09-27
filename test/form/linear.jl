@@ -27,6 +27,7 @@ using Bramble:
                _colour_strides,
                stencil_offsets,
                ndofs,
+               restrict_to,
                Innerh,
                Innerplus,
                evaluate!,
@@ -1036,6 +1037,31 @@ using ..TestUtils: alloc_test, @test_allocs
         het = min_parallel_bytes(Vhet_alloc, uhet_alloc, uhet_alloc)
         homo = min_parallel_bytes(Vhomo, uhomo, uhomo)
         @test abs(het - homo) <= 256
+    end
+
+    @testset "Restricted refill allocation contract" begin
+        # A `RegionRestriction`'s stencil is `()` or a full tuple depending on the point's
+        # marker, and the scalar path evaluates the whole sum's stencil at every point. The
+        # `map` that used to collect the summands' stencils built a tuple with a
+        # non-concrete element there, boxed per point: 8736 B on the 2D grid, where the
+        # unrestricted form allocated nothing. The refill must also match the two terms
+        # assembled apart.
+        function restricted_bytes(b, lf)
+            assemble!(b, lf)
+            assemble!(b, lf)
+            return @allocated assemble!(b, lf)
+        end
+        Ω1d = mesh(domain(interval(0.0, 1.0)), 11, true)
+        Ω2d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, true))
+        for Ω in (Ω1d, Ω2d)
+            W = gridspace(Ω)
+            lf = form(W, v -> innerₕ(1.0, v) + Ref(2.0) * innerₕ(1.0, restrict_to(:boundary, v)))
+            b = zeros(ndofs(W))
+            @test restricted_bytes(b, lf) == 0
+            parts = assemble(form(W, v -> innerₕ(1.0, v))) +
+                    2 * assemble(form(W, v -> innerₕ(1.0, restrict_to(:boundary, v))))
+            @test b ≈ parts
+        end
     end
 
     @testset "Assembled residual differentiation" begin
