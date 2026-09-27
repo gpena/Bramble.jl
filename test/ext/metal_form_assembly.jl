@@ -256,6 +256,20 @@ else
             @test Array(A) == Matrix(S)
             @test A.mirror.nzval == Array(A.nzVal)
         end
+
+        # A composite test space against a scalar trial space has more rows than columns: a
+        # constrained row past the last column has no diagonal to find, so it is zeroed
+        # rather than rejected, matching the host path.
+        @testset "constrained row past the last column" begin
+            Wc, Wg = _matched_spaces((9,))
+            a = (u, V) -> innerₕ(u, V(1)) + innerₕ(u, V(2))
+            Ac = assemble(form(Wc, Wc × Wc, a); dirichlet = :boundary)
+            Ag = assemble(form(Wg, Wg × Wg, a); dirichlet = :boundary)
+            @test size(Ag) == (18, 9)
+            @test _relerr(Ag, Ac) < _RTOL
+            @test iszero(Array(Ag)[18, :])
+            @test Ag.mirror.nzval == Array(Ag.nzVal)
+        end
     end
 
     # `πₕ` across two device meshes (gpena/Bramble.jl#363): each walk binds the interpolation

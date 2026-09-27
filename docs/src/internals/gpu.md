@@ -256,7 +256,9 @@ the same rows are rewritten in the host mirror too; the mirror is never flushed 
 device values, so values a caller changed on the device since the last assembly survive. A
 constrained row with no
 stored diagonal throws an `ArgumentError` naming it, since a device CSR cannot insert an
-entry the way `SparseMatrixCSC` does; the host path still inserts one. `symmetrize!` and
+entry the way `SparseMatrixCSC` does; the host path still inserts one. A constrained row with
+no diagonal column at all (a matrix with more rows than columns) is zeroed, on the device as
+on the host. `symmetrize!` and
 `symmetrize = true` are refused outright on a device matrix, with a clear `ArgumentError`:
 eliminating a constrained *column* scatters across every row of a CSR, a separate design
 this milestone did not build.

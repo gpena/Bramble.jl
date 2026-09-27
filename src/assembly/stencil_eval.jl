@@ -254,13 +254,29 @@ end
     return ((zero_offset(Val(D)), acc),)
 end
 
-# Every summand's stencil, concatenated once in `_summands` order -- entry for entry what
-# pairwise `concatenate_stencils` down the tree gives, without a left-deep sum building one
-# intermediate tuple type per node.
+# Every summand's stencil, concatenated in `_summands` order -- entry for entry what
+# pairwise `concatenate_stencils` down the tree gives, walking the flat summand tuple rather
+# than the left-deep tree, so no intermediate type carries a whole subtree.
 @inline function local_stencil(
         op::OperatorAdd, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
-    return _flatten_tuples(map(t -> local_stencil(t, space, I, markers, lin_idx), _summands(op)))
+    return _concat_summand_stencils(_summands(op), space, I, markers, lin_idx)
+end
+
+# One call per summand rather than `_flatten_tuples(map(...))` over all of them: a
+# `RegionRestriction` summand's stencil is `()` or a full tuple depending on the point's
+# marker, so its inferred type is a `Union`, and a `map` collecting it beside the other
+# summands' stencils builds a tuple with a non-concrete element, boxed at every grid point
+# (6720 B on a 7x9 grid for `innerₕ(u, v) + innerₕ(u, restrict_to(:boundary, v))`, growing
+# with the grid). Passed straight to `concatenate_stencils` instead, the `Union` is split
+# at that call and each branch builds a concrete tuple. The split has a limit: the stencil
+# has one shape per combination of restricted summands' markers, and past two restricted
+# summands in one sum the compiler stops splitting (four linear `innerₕ` terms, three of
+# them restricted, still box per point).
+@inline _concat_summand_stencils(::Tuple{}, space, I, markers, lin_idx::Int) = ()
+@inline function _concat_summand_stencils(ts::Tuple, space, I, markers, lin_idx::Int)
+    head = local_stencil(first(ts), space, I, markers, lin_idx)
+    return concatenate_stencils(head, _concat_summand_stencils(Base.tail(ts), space, I, markers, lin_idx))
 end
 
 @inline function local_stencil(
