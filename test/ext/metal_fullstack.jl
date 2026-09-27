@@ -191,7 +191,7 @@ else
         # `fill!` stored one point at a time and scalar-indexed the device array.
         # `Metal.allowscalar(false)` is the default, so the call raised
         # "Scalar indexing is disallowed." rather than running slowly.
-        @testset "element(Wₕ, α) fills device storage without scalar indexing" begin
+        @testset "element(Wₕ, α) without scalar indexing" begin
             Metal.allowscalar(false)
             u1 = element(Wg1, 2.0f0)
             @test parent(u1) isa MtlVector{Float32}
@@ -213,7 +213,8 @@ else
             @test all(==(1.0f0), Array(parent(u5)))
         end
 
-        @testset "Rₕ!/avgₕ!: projection and cell average match CPU" begin
+        # Projection and cell average.
+        @testset "Rₕ!/avgₕ! match CPU" begin
             uc1 = element(Wc1)
             ug1 = element(Wg1)
             Rₕ!(uc1, f1)
@@ -244,7 +245,7 @@ else
         # the host path on a matched non-uniform mesh pair, in 1D/2D/3D, for a scalar and a
         # shared-mesh composite space (the scatter kernels), for one marker, a union of two,
         # and a marker holding no point at all.
-        @testset "Rₕ!/avgₕ!: masked call matches CPU (issue #297)" begin
+        @testset "masked Rₕ!/avgₕ! match CPU (#297)" begin
             Metal.allowscalar(false)
             fs(x) = sin(3.0f0 * sum(x))
             fv(x) = (sin(x[1]), cos(x[end]))
@@ -294,7 +295,8 @@ else
         # A host space whose backend carries a `GpuOffload` policy: `Rₕ!`/`avgₕ!` fill through
         # the wrapped Metal backend and land in host storage, every other operator runs as it
         # does under the inner policy alone (issue #324).
-        @testset "Rₕ!/avgₕ! on a GpuOffload space fill through the device (issue #324)" begin
+        # `Rₕ!`/`avgₕ!` on a `GpuOffload` space fill through the device.
+        @testset "GpuOffload Rₕ!/avgₕ! (#324)" begin
             Metal.allowscalar(false)
             hb = backend(Float32; policy = Bramble.CpuThreaded())
             ob = backend(Float32; policy = Bramble.GpuOffload(metal_backend(), Bramble.CpuThreaded()))
@@ -366,7 +368,7 @@ else
             end
         end
 
-        @testset "difference / jump / average operators match CPU" begin
+        @testset "difference/jump/average match CPU" begin
             uc1 = Rₕ(Wc1, f1)
             ug1 = Rₕ(Wg1, f1)
             @test isapprox(Array(parent(D₋ₓ(ug1))), Float32.(parent(D₋ₓ(uc1))); atol = _TOL)
@@ -388,7 +390,8 @@ else
             @test isapprox(Float64(inner₊ₓ(ug1, ug1)), inner₊ₓ(uc1, uc1); rtol = _TOL)
         end
 
-        @testset "operator matrices come back in the backend's matrix type" begin
+        # Operator matrices come back in the backend's matrix type.
+        @testset "operator matrices: backend type" begin
             Ag1 = D₋ₓ(Wg1)
             Ac1 = D₋ₓ(Wc1)
             @test Ag1 isa MtlMatrix
@@ -421,7 +424,7 @@ else
         # from a cache. This testset checks that field is actually there and actually reused,
         # not just that assembly still gives the right answer (the testsets above already
         # cover that).
-        @testset "the device CSR carries its own scatter mirror (issue #313)" begin
+        @testset "device CSR scatter mirror (#313)" begin
             a1(u, v) = inner₊ₓ(D₋ₓ(u), D₋ₓ(v))
             Ag1 = assemble(form(Wg1, Wg1, a1))
             Ac1 = assemble(form(Wc1, Wc1, a1))
@@ -453,7 +456,8 @@ else
         # own CHECK was rewritten to use, so a regression of either race shows up here as a
         # mismatch rather than looking correct forever. No `Metal.synchronize()`: this is exactly
         # the class of bug an explicit synchronise would mask, not fix.
-        @testset "assembled system matrix matches CPU, repeated at a size that can race" begin
+        # The assembled system matrix matches the CPU on every repetition.
+        @testset "system matrix, repeated at race size" begin
             n1r = 513
             Wg1r = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), n1r, true; backend = metal_backend()))
             Wc1r = gridspace(mesh(domain(interval(0.0, 1.0)), n1r, true))
@@ -484,7 +488,7 @@ else
         # built from the same `a`, `n`); non-uniform mirrors the device mesh's own realized
         # coordinates onto the CPU side, never two independently-generated non-uniform
         # meshes (see the file-level note above).
-        @testset "fused mesh kernels match the CPU arrays (#303, #304, #305)" begin
+        @testset "fused mesh kernels (#303, #304, #305)" begin
             # Uniform (#303): points, spacings, half points and half spacings all computed
             # independently on each side, from `a`, `h`, `n` alone.
             for n in (5, 1025)
@@ -539,7 +543,7 @@ else
         # kernel launches (metrics, fused init, ...) had already burned draws from
         # `Random.default_rng()` by the time point generation ran, so the two builds
         # disagreed even under the same `Random.seed!`.
-        @testset "seeded non-uniform mesh matches across host/Metal backends (#320)" begin
+        @testset "seeded mesh: host equals Metal (#320)" begin
             n = 33
             seed = 20260920
 
@@ -572,7 +576,8 @@ else
         # the CPU on EVERY repetition, not just the first -- two real device races in this
         # repository were invisible at one small run and only showed up across 40
         # repetitions at n >= 1025 (bramble-metal §3).
-        @testset "chained asynchronous sequence, 40 reps at n = 1025x1025, matches CPU every time (#302)" begin
+        # 40 repetitions at n = 1025x1025, compared with the CPU every time.
+        @testset "chained async sequence (#302)" begin
             n = 1025
             Ωc, Ωg = _matched_meshes_nd(n, 2, false)
             Wc, Wg = gridspace(Ωc), gridspace(Ωg)
@@ -642,7 +647,8 @@ else
         # #306: the fused vector-calculus operators (divₕ, div₊ₕ, curlₕ, curl₊ₕ, Δₕ, εₕ)
         # match the CPU in 1D, 2D and 3D, on non-uniform meshes -- non-uniform is the case
         # this package exists for, not the degenerate uniform special case.
-        @testset "fused vector-calculus operators match CPU in 1D/2D/3D, non-uniform (#306)" begin
+        # They match the CPU in 1D, 2D and 3D on non-uniform meshes.
+        @testset "fused vector calculus (#306)" begin
             # 1D: curlₕ/εₕ are not defined in 1D (curlₕ raises rather than returning a
             # zero), so only divₕ and Δₕ apply.
             for n in (9, 1025)
@@ -713,7 +719,8 @@ else
         # #174's own remaining criterion: CPU and GPU agree within `Float32` tolerance
         # (`rtol = 1f-5`) for the difference operators and `πₕ` -- not bitwise. Non-uniform,
         # mirrored coefficients, same discipline as the rest of this file.
-        @testset "#174: CPU/GPU agree within Float32 tolerance (rtol = 1f-5), not bitwise" begin
+        # Agreement is within rtol = 1f-5, not bitwise.
+        @testset "CPU/GPU within Float32 rtol (#174)" begin
             n = 129
             Ωc, Ωg = _matched_meshes_nd(n, 2, false)
             Wc, Wg = gridspace(Ωc), gridspace(Ωg)

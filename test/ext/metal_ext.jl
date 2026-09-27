@@ -47,7 +47,7 @@ using ..TestUtils: _run_gpu_tests
     # That means it needs `using Metal` to be loaded (for the `MtlVector` type and the
     # `_metal_backend` method to exist) but not a functional device, so it runs outside the
     # `Metal.functional()` gate below and is exercised on any host with Metal loaded.
-    @testset "metal_backend rejects a CPU policy over device storage" begin
+    @testset "metal_backend: CPU policy refused" begin
         for cpu_policy in (CpuSerial(), CpuThreaded())
             err = try
                 metal_backend(; policy = cpu_policy)
@@ -129,7 +129,8 @@ if !Metal.functional() || !_run_gpu_tests()
     @warn "Skipping Metal sparse CSR/CSC tests: Metal.functional() is false, or GPU tests are skipped in CI"
     @test_skip "Metal sparse CSR/CSC tests not exercised: Metal.functional() is false, or GPU tests are skipped in CI"
 else
-    @testset "metal_sparse_csr / metal_sparse_csc: non-densifying, round-trips" begin
+    # `metal_sparse_csr` and `metal_sparse_csc` round-trip without densifying.
+    @testset "metal_sparse_csr/csc round-trips" begin
         A = sprand(Float32, 100, 60, 0.05)
         @test nnz(A) > 0
 
@@ -142,7 +143,8 @@ else
         @test SparseMatrixCSC(Gc) == A
     end
 
-    @testset "SpMV: mul!(y, A::CSR, x, α, β) matches CPU SparseMatrixCSC * Vector" begin
+    # `mul!(y, A::CSR, x, α, β)` against the CPU `SparseMatrixCSC * Vector`.
+    @testset "CSR SpMV matches CPU" begin
         m, n = 50, 90 # non-square
         A = sprand(Float32, m, n, 0.05)
         x = rand(Float32, n)
@@ -163,7 +165,8 @@ else
         @test isapprox(Array(y), α .* (A * x) .+ β .* y0; atol = 1.0f-5)
     end
 
-    @testset "SpMM: mul!(C, A::CSR, B, α, β) for dense right-hand sides" begin
+    # `mul!(C, A::CSR, B, α, β)`.
+    @testset "CSR SpMM, dense right-hand sides" begin
         m, n, k = 50, 90, 4 # non-square A
         A = sprand(Float32, m, n, 0.05)
         B = rand(Float32, n, k)
@@ -190,7 +193,8 @@ else
         @test isapprox(Array(y), A * x; atol = Float16(1.0e-2))
     end
 
-    @testset "CSC mul! raises ArgumentError naming the CSR conversion" begin
+    # CSC `mul!` raises an `ArgumentError` naming the conversion to CSR.
+    @testset "CSC mul!: error names CSR" begin
         m, n = 20, 20
         A = sprand(Float32, m, n, 0.1)
         Gc = metal_sparse_csc(A)
@@ -227,7 +231,7 @@ else
     # contrived. So this tests the behaviour a user actually gets: refusal at construction,
     # with a message naming both `Float64` and `Float32`, rather than reaching for a way to
     # exercise the deeper, currently-unreachable guard.
-    @testset "Float64 is refused before it ever reaches mul!" begin
+    @testset "Float64 refused before mul!" begin
         A64 = sprand(Float64, 10, 10, 0.3)
         err = try
             metal_sparse_csr(A64)
@@ -255,7 +259,8 @@ if !Metal.functional() || !_run_gpu_tests()
     @warn "Skipping mesh/space device-quirk tests: Metal.functional() is false, or GPU tests are skipped in CI"
     @test_skip "mesh/space device-quirk tests not exercised: Metal.functional() is false, or GPU tests are skipped in CI"
 else
-    @testset "#307: is_uniform, stepsize and show on a device mesh" begin
+    # `is_uniform`, `stepsize` and `show` on a device mesh.
+    @testset "device mesh: is_uniform, show (#307)" begin
         b = metal_backend()
 
         # Uniform Float32 device mesh: the tolerance regression. The old absolute
@@ -285,7 +290,8 @@ else
         @test occursin("Mesh1D", s)
     end
 
-    @testset "#308: host_points and locate_cell on a device mesh" begin
+    # `host_points` and `locate_cell` on a device mesh.
+    @testset "device mesh: locate_cell (#308)" begin
         b = metal_backend()
 
         # host_points is the identical object on a host mesh (===), and a genuine
@@ -325,7 +331,8 @@ else
         end
     end
 
-    @testset "#304: non-uniform device mesh built on the host and copied over" begin
+    # A non-uniform device mesh built on the host and copied over.
+    @testset "host-built device mesh (#304)" begin
         b = metal_backend()
 
         Ω = mesh(domain(interval(0.0f0, 1.0f0)), 16, false; backend = b)
@@ -360,7 +367,8 @@ else
         @test !is_uniform(Ω2(2))
     end
 
-    @testset "#309: condition markers on device meshes match the host" begin
+    # Condition markers on device meshes match the host.
+    @testset "device mesh markers (#309)" begin
         b = metal_backend()
 
         # 1D: a selective, an empty and a total predicate give index sets IDENTICAL to
@@ -407,7 +415,8 @@ else
         end
     end
 
-    @testset "#310: SeparableWeights Array/host_weights on a device space" begin
+    # `Array` and `host_weights` of `SeparableWeights` on a device space.
+    @testset "device SeparableWeights (#310)" begin
         Ω = mesh(
             domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)),
             (5, 5), (true, true); backend = metal_backend()
@@ -433,7 +442,8 @@ else
         @test occursin("host_weights", sprint(showerror, err))
     end
 
-    @testset "#311: inner_Γ and normal_vector on a device space" begin
+    # `inner_Γ` and `normal_vector` on a device space.
+    @testset "device space: inner_Γ, normals (#311)" begin
         b = metal_backend()
         n = 16
         Ω_dev = mesh(
@@ -490,7 +500,8 @@ else
         @test (@allocated normal_vector(W3_dev, :ymax)) < m3^3 * sizeof(Float32) ÷ 4
     end
 
-    @testset "#312: interpolation between device spaces matches the host" begin
+    # Interpolation between device spaces matches the host.
+    @testset "device-space interpolation (#312)" begin
         b = metal_backend()
 
         # Non-linear: a constant or linear source would not exercise the corner
@@ -584,7 +595,8 @@ else
         @test Array(parent(u2_2d_dev)) ≈ parent(u2_2d_host)
     end
 
-    @testset "#323: KroneckerLinearOperator mul! on device matches the host" begin
+    # `KroneckerLinearOperator` `mul!` on the device matches the host.
+    @testset "device Kronecker mul! (#323)" begin
         # Non-uniform meshes draw fresh random points on every `mesh` call, so the host
         # reference is built from the device space's own host mirror (`host_weights`),
         # not from a second, independently drawn host mesh.
@@ -629,7 +641,7 @@ else
         end
     end
 
-    @testset "#323 fdm_solve" begin
+    @testset "fdm_solve (#323)" begin
         # A device-backed form's solve returns a device vector. The reference is built on
         # the device mesh's own host mirror: a separately drawn non-uniform mesh differs.
         I = interval(0.0f0, 1.0f0)
@@ -656,7 +668,8 @@ else
         end
     end
 
-    @testset "#336: fill! and broadcast scalar assignment on a device VectorElement" begin
+    # `fill!` and broadcast scalar assignment on a device `VectorElement`.
+    @testset "device element: fill!, .= (#336)" begin
         Ω = mesh(domain(interval(0.0f0, 1.0f0)), 17, true; backend = metal_backend())
         W = gridspace(Ω)
 
@@ -670,7 +683,7 @@ else
         @test all(==(2.0f0), Array(parent(v)))
     end
 
-    @testset "#336: interpolate_at refuses a device-backed element" begin
+    @testset "device interpolate_at refused (#336)" begin
         Ω = mesh(domain(interval(0.0f0, 1.0f0)), 17, true; backend = metal_backend())
         W = gridspace(Ω)
         u = Rₕ(W, x -> 2.0f0 * x[1])
@@ -697,7 +710,8 @@ else
     # `host_points`/`Array` before WriteVTK ever sees them -- otherwise WriteVTK's
     # `unsafe_write` fails on a device pointer. 1D scalar, 2D scalar, and 2D
     # vector/composite, matching the issue's own repro.
-    @testset "#336: export_vtk writes .vtr files from device meshes and fields" begin
+    # It writes .vtr files from device meshes and fields.
+    @testset "device export_vtk (#336)" begin
         b = metal_backend()
         d = mktempdir()
 
@@ -725,7 +739,7 @@ else
     # it fell to Base's generic `AbstractArray` `copyto!` -- scalar `getindex`/`setindex!`,
     # which `GPUArrays` refuses on device storage. Device-to-device must now round-trip
     # through the same `_broadcast_copyto!` seam as `dest .= src` instead.
-    @testset "#346: copyto! between device-backed VectorElements" begin
+    @testset "device element copyto! (#346)" begin
         Ω = mesh(domain(interval(0.0f0, 1.0f0)), 17, true; backend = metal_backend())
         W = gridspace(Ω)
 
