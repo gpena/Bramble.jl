@@ -7,7 +7,8 @@
 @inline _zeros_of(::Type{T}, n::Int) where {T} = zeros(T, n)
 
 # The element type is the one the form's own weights have, promoted against the trial
-# leaf's each term is routed to (supporting automatic differentiation dual numbers). One place for this rule:
+# leaf each term is routed to, or every diagonal block's leaf for a term naming no component
+# (supporting automatic differentiation dual numbers). One place for this rule:
 # reading it from the space alone instead of promoting against the data broke ForwardDiff in
 # four separate places, each with the same symptom (`MethodError: no method matching
 # Float64(::Dual)`), each time only on the AD path (bramble-verification §4).
@@ -18,7 +19,8 @@
 # so its leaves need no binding first.
 function _matrix_eltype(form::BilinearForm, ast)
     return promote_type(
-        _assembled_eltype(ast, form.test_space), _trial_eltype(ast, form.trial_space))
+        _assembled_eltype(ast, form.test_space, form.trial_space),
+        _trial_eltype(ast, form.trial_space, form.test_space))
 end
 
 """

@@ -388,6 +388,41 @@ end
     @test b[(n + 1):end] == assemble(form(W64, v -> innerₕ(1.0f0, v)))
 end
 
+# A term naming no component is assembled on every diagonal block, so every leaf decides
+# its type, not the first alone; a named term still takes only the leaves it is routed to
+# (gpena/Bramble.jl#370). On `[0, 1] × [0, b]` the unnamed sum is `1 + b`, derivative 1.
+@testset "AD: unnamed composite term eltype" begin
+    W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 11, false))
+    W2 = b -> gridspace(mesh(domain(interval(0.0, b)), 11, true))
+    A = b -> sum(assemble(form(W1 × W2(b), W1 × W2(b), (u, v) -> innerₕ(u, v))))
+    L = b -> sum(assemble(form(W1 × W2(b), v -> innerₕ(1.0, v))))
+    @test ForwardDiff.derivative(A, 2.0) ≈ 1.0 rtol = 1e-12
+    @test ForwardDiff.derivative(L, 2.0) ≈ 1.0 rtol = 1e-12
+
+    # Unnamed beside named: only the unnamed term reaches the Dual leaf.
+    AL = b -> sum(assemble(form(W1 × W2(b), W1 × W2(b),
+        (u, v) -> 100.0 * innerₕ(u(1), v(1)) + innerₕ(u, v))))
+    @test ForwardDiff.derivative(AL, 2.0) ≈ 1.0 rtol = 1e-12
+
+    W32 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 11, false))
+    W64 = gridspace(mesh(domain(interval(0.0, 1.0 / 3)), 11, false))
+    V = W32 × W64
+    n = ndofs(W32)
+    M = assemble(form(V, V, (u, v) -> innerₕ(u, v)))
+    b = assemble(form(V, v -> innerₕ(1.0f0, v)))
+    @test eltype(M) === Float64 && eltype(b) === Float64
+    @test M[(n + 1):end, (n + 1):end] == assemble(form(W64, W64, (u, v) -> innerₕ(u, v)))
+    @test b[(n + 1):end] == assemble(form(W64, v -> innerₕ(1.0f0, v)))
+
+    # A term named on the Float32 leaf alone keeps that leaf's type.
+    @test eltype(assemble(form(V, V, (u, v) -> innerₕ(u(1), v(1))))) === Float32
+    @test eltype(assemble(form(V, v -> innerₕ(1.0f0, v(1))))) === Float32
+
+    # Against a scalar side only block (1, 1) exists: the unpartnered Float64 leaf is idle.
+    @test eltype(assemble(form(V, W32, (u, v) -> innerₕ(u, v)))) === Float32
+    @test eltype(assemble(form(W32, V, (u, v) -> innerₕ(u, v)))) === Float32
+end
+
 # An interpolant under a difference stays a function of position, and is sampled for its
 # type at an interior point: at the first point, outside its own mesh, it answers with
 # its fill, whose type is not its values'.

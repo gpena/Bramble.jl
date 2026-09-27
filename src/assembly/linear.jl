@@ -296,10 +296,32 @@ function _assembled_eltype(ast, space)
     return _folded_eltype(ast, space, eltype(space))
 end
 
-# Composite: terms naming components are routed and folded on their respective leaf spaces.
+# Composite: terms naming components are routed and folded on their respective leaf spaces,
+# and a term naming none on every leaf.
 function _assembled_eltype(ast, space::CompositeGridSpace)
-    return _routed_eltype(ast, leaf_spaces_offsets(space), eltype(space))
+    leaves = leaf_spaces_offsets(space)
+    return _routed_eltype(ast, leaves, leaves, eltype(space))
 end
+
+# The test side of a bilinear form, whose `partner` is the trial space: a term naming no
+# component writes only the diagonal blocks both sides have, so only the first
+# `min(ntest, ntrial)` leaves decide its type (a scalar side counts as one leaf).
+_assembled_eltype(ast, space, partner) = _assembled_eltype(ast, space)
+function _assembled_eltype(ast, space::CompositeGridSpace, partner)
+    leaves = leaf_spaces_offsets(space)
+    return _routed_eltype(ast, leaves, _paired(leaves, _leaves_of(partner)), eltype(space))
+end
+
+# A space's leaves as a tuple, a scalar space being its own one leaf.
+@inline _leaves_of(space::CompositeGridSpace) = leaf_spaces_offsets(space)
+@inline _leaves_of(space) = ((space, 0),)
+
+# The leading entries of `a` that have a partner in `b`: the diagonal blocks. Dispatch on
+# the tuple lengths keeps it static.
+@inline _paired(::Tuple{}, ::Tuple{}) = ()
+@inline _paired(::Tuple{}, ::Tuple) = ()
+@inline _paired(::Tuple, ::Tuple{}) = ()
+@inline _paired(a::Tuple, b::Tuple) = (first(a), _paired(Base.tail(a), Base.tail(b))...)
 
 # The type every leaf of `term` can put in an entry, promoted against `T` (gpena/Bramble.jl#370).
 #
@@ -311,7 +333,8 @@ end
 # vector it is assembled into cannot hold what the other points write. Static types keep
 # `@inferred assemble` stable; `assemble!` sizes nothing, so a refill never comes here.
 #
-# `sp` is the leaf the term is routed to, and its own type is promoted in: a composite's
+# `sp` is the leaf the term is routed to (each leaf in turn for a term naming no component,
+# `_every_leaf_eltype`), and its own type is promoted in: a composite's
 # `eltype` is its first leaf's alone, so a Float64 or `Dual` second leaf would otherwise be
 # rounded or refused. `sp` is typed `::ScalarGridSpace` for the reason `_pattern_size_hint`
 # gives (`bilinear_pattern.jl`): an untyped `sp` lets JET reach `host_weights(::SeparableWeights)`.
@@ -382,37 +405,59 @@ end
 @inline _value_eltype(T, f::Function) = _value_eltype(T, f())
 @inline _value_eltype(T, x) = promote_type(T, typeof(x))
 
-function _routed_eltype(op::OperatorAdd, leaves, T)
+# `diagonal` holds the leaves an unnamed term is assembled on: every leaf for a linear form,
+# those with a trial partner for a bilinear one.
+function _routed_eltype(op::OperatorAdd, leaves, diagonal, T)
     return promote_type(
-        _routed_eltype(op.left_op, leaves, T), _routed_eltype(op.right_op, leaves, T)
+        _routed_eltype(op.left_op, leaves, diagonal, T),
+        _routed_eltype(op.right_op, leaves, diagonal, T)
     )
 end
 
-function _routed_eltype(term, leaves, T)
+function _routed_eltype(term, leaves, diagonal, T)
     target = test_component_or_nothing(term)
     _check_component(target, length(leaves))
-    sp = target === nothing ? first(first(leaves)) : first(leaves[target])
-    return _folded_eltype(term, sp, T)
+    target === nothing && return _every_leaf_eltype(term, diagonal, T)
+    return _folded_eltype(term, first(leaves[target]), T)
 end
 
-# The trial side's half, for a bilinear form: the leaf each term's trial function is routed
-# to contributes its own type, as the test leaf does in `_folded_eltype`.
-_trial_eltype(ast, space) = eltype(space)
-_trial_eltype(ast, space::CompositeGridSpace) = _trial_routed_eltype(
-    ast, leaf_spaces_offsets(space), eltype(space))
+# A term naming no component is assembled on every diagonal block, so each of their leaves
+# decides its type, not the first alone: a wider later leaf (Float64 behind Float32, a
+# `Dual`-coordinate mesh) would otherwise be rounded or refused (gpena/Bramble.jl#370). Tail
+# recursion over the leaf tuple keeps the fold static.
+@inline _every_leaf_eltype(term, leaves::Tuple{Any}, T) = _folded_eltype(
+    term, first(first(leaves)), T)
+@inline _every_leaf_eltype(term, leaves::Tuple, T) = _every_leaf_eltype(
+    term, Base.tail(leaves), _folded_eltype(term, first(first(leaves)), T))
 
-function _trial_routed_eltype(op::OperatorAdd, leaves, T)
+# The trial side's half, for a bilinear form whose test space is `partner`: the leaf (or,
+# unnamed, every diagonal block's leaf) each term's trial function is routed to contributes
+# its own type, as the test leaf does in `_folded_eltype`.
+_trial_eltype(ast, space, partner) = eltype(space)
+function _trial_eltype(ast, space::CompositeGridSpace, partner)
+    leaves = leaf_spaces_offsets(space)
+    return _trial_routed_eltype(
+        ast, leaves, _paired(leaves, _leaves_of(partner)), eltype(space))
+end
+
+function _trial_routed_eltype(op::OperatorAdd, leaves, diagonal, T)
     return promote_type(
-        _trial_routed_eltype(op.left_op, leaves, T), _trial_routed_eltype(op.right_op, leaves, T)
+        _trial_routed_eltype(op.left_op, leaves, diagonal, T),
+        _trial_routed_eltype(op.right_op, leaves, diagonal, T)
     )
 end
 
-function _trial_routed_eltype(term, leaves, T)
+function _trial_routed_eltype(term, leaves, diagonal, T)
     target = trial_component_or_nothing(term)
     _check_component(target, length(leaves))
-    sp = target === nothing ? first(first(leaves)) : first(leaves[target])
-    return promote_type(T, eltype(sp))
+    target === nothing && return _every_leaf_type(diagonal, T)
+    return promote_type(T, eltype(first(leaves[target])))
 end
+
+# An unnamed trial function stands on every diagonal block, so each of their leaves' types
+# counts.
+@inline _every_leaf_type(leaves::Tuple, T) = promote_type(
+    T, map(eltype ∘ first, leaves)...)
 
 # --- Helper cores for function barrier optimization ------------------------------- #
 
