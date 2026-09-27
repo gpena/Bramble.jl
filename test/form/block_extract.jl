@@ -55,7 +55,8 @@ using Bramble:
         @test test_component_or_nothing(innerₕ(u, v)) == 2
     end
 
-    @testset "Each collapsed ladder answers through its operand (#52)" begin
+    # Each collapsed ladder answers through its operand.
+    @testset "Collapsed ladders use the operand (#52)" begin
         # Seven queries used to be registered against all thirteen wrapper types by hand;
         # each is now one method on `UnaryWrapper`. One assertion per query, through a
         # wrapper, so a collapsed method that stopped recursing would fail here rather
@@ -101,7 +102,8 @@ using Bramble:
         @test Bramble._all_trial_interpolated(2.0 * M₊ᵧ(πu))
     end
 
-    @testset "Every single-operand node is in UnaryWrapper (#52)" begin
+    # Every single-operand node is in UnaryWrapper.
+    @testset "Single-operand nodes: UnaryWrapper (#52)" begin
         # The queries that answer for a wrapper whatever they answer for its operand are
         # now one method each, dispatched on `UnaryWrapper`. That only stays correct while
         # the union lists every node with a single operand: a new wrapper left out of it
@@ -136,7 +138,8 @@ using Bramble:
         @test all(T -> !(T <: Bramble.UnaryWrapper), two_operand)
     end
 
-    @testset "_collect_region_labels through wrappers and products (#106)" begin
+    # Through wrappers and products.
+    @testset "_collect_region_labels (#106)" begin
         # The twelve `@eval`-generated methods collapsed onto `UnaryWrapper` (with
         # `RegionRestriction`'s own method still winning on specificity); this checks the
         # collapse changed no answer: a restriction nested behind several wrappers, and one

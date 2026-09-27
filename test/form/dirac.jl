@@ -31,7 +31,7 @@ using Bramble:
                backend
 
 @testset "Dirac Point Sources (#226)" begin
-    @testset "1D Single Point Source (Uniform and Non-Uniform)" begin
+    @testset "1D point source (uniform, non-uniform)" begin
         # 1. On-grid point source (uniform grid)
         Ω_unif = mesh(domain(interval(0.0, 1.0)), 21, true)
         W_unif = gridspace(Ω_unif)
@@ -102,7 +102,8 @@ using Bramble:
         @test allocs == 0
     end
 
-    @testset "2D Single & Multiple Point Sources (Non-Uniform)" begin
+    # On a non-uniform mesh.
+    @testset "2D single and multiple sources" begin
         Random.seed!(20260914)
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (21, 21), (false, false))
         Wₕ = gridspace(Ωₕ)
@@ -156,7 +157,8 @@ using Bramble:
         @test l_3d(phi_h) ≈ S * phi(p0)
     end
 
-    @testset "Poisson Problem with Dirac Delta Source (1D Green Function)" begin
+    # Poisson problem with a Dirac delta source.
+    @testset "Poisson: 1D Green function" begin
         # -u''(x) = S * δ(x - x0), u(0) = u(1) = 0
         # Exact solution is Green's function:
         # G(x, x0) = S * (1 - x0) * x  for x <= x0
@@ -181,7 +183,8 @@ using Bramble:
         @test u_num ≈ u_exact atol = 1e-12
     end
 
-    @testset "2D Poisson Problem with Dirac Delta Source (Green Function)" begin
+    # Poisson problem with a Dirac delta source.
+    @testset "Poisson: 2D Green function" begin
         # -Δu = S δ(x - x0, y - y0) on (0,1)², u = 0 on ∂Ω. Separation of variables gives a
         # sine series in x with a closed-form (sinh) Green's function in y for each mode --
         # exponentially convergent in the number of terms, unlike a raw double sine series:
@@ -230,7 +233,7 @@ using Bramble:
         end
     end
 
-    @testset "Time-Dependent Strength via semidiscretize" begin
+    @testset "Time-dependent strength, semidiscretize" begin
         # A pulsed/moving source: strength read from a live `Ref`, refilled from `t` by
         # `update_coefficients!` before each assembly -- the same discipline
         # test/form/semidiscrete.jl exercises for a scalar coefficient, applied here to a
@@ -278,7 +281,8 @@ using Bramble:
         @test all(iszero, b2)
     end
 
-    @testset "Inner+ and Directional Inner Products with Dirac (Non-Uniform)" begin
+    # On a non-uniform mesh.
+    @testset "inner₊ and directional inner with Dirac" begin
         Random.seed!(20260914)
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, false)
         Wₕ = gridspace(Ωₕ)
@@ -308,7 +312,7 @@ using Bramble:
     # space with a Float32 strength gave a Float64 vector: a behaviour change. A Float64
     # strength (the default `1.0`) on a Float32 space still promotes, as `innerₕ(1.0, v)`
     # does; an integer strength takes the space's type. The location keeps Float64 precision.
-    @testset "Weight element type follows the space (gpena/Bramble.jl#361)" begin
+    @testset "Weight eltype follows the space (#361)" begin
         Random.seed!(20260927)
         for D in (1, 2)
             Ω = domain(D == 1 ? interval(0.0f0, 1.0f0) : interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0))

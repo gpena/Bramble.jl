@@ -440,7 +440,8 @@ end
         @test !occursin("OperatorAdd", detailed)
     end
 
-    @testset "Symmetry is reported from the existing structural check" begin
+    # Symmetry is reported from the existing structural check.
+    @testset "Symmetry from the structural check" begin
         @test occursin("Symmetric: yes", sprint(show, MIME"text/plain"(), sym))
         @test occursin("Symmetric: no", sprint(show, MIME"text/plain"(), asym))
         # Whatever the display says must be what `issymmetric` says.
@@ -450,7 +451,8 @@ end
         end
     end
 
-    @testset "Distinct trial and test spaces are named separately" begin
+    # Distinct trial and test spaces.
+    @testset "Trial and test spaces named separately" begin
         mixed = form(Wₕ, W4, (u, v) -> innerₕ(u, v))
         detailed = sprint(show, MIME"text/plain"(), mixed)
         @test occursin("9 dofs", detailed)

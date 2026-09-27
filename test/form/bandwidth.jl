@@ -110,7 +110,8 @@ end
         end
     end
 
-    @testset "Positive control: different true bandwidths give different answers" begin
+    # Different true bandwidths give different answers.
+    @testset "Positive control: bandwidths differ" begin
         # A wider stencil widens the prediction, checked against the same-shape narrower
         # one rather than against a hard-coded number, so the test still means something
         # if the discretisation constants above change.

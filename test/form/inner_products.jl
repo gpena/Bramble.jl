@@ -249,7 +249,8 @@ end
 # assembly through the lazy `SeparableWeights` `weights(Wₕ, Val(S))` returns for those sets
 # (never a full-grid vector), which this checks is really what gets exercised, not a silent
 # fallback to something dense.
-@testset "inner₊(u, v, Val(S)), the general staggered-set entry point" begin
+# The general staggered-set entry point.
+@testset "inner₊(u, v, Val(S))" begin
     # Independent of `weights`: the mesh's own spacing/half_spacing, hand-multiplied per
     # axis, exactly as test/space/gridspaces.jl's own `weights(Wₕ, Val(S))` testset checks
     # `SpaceWeights` itself.
@@ -278,7 +279,8 @@ end
                   assemble(form(Wₕ2, Wₕ2, (u, v) -> innerₕ(u, v)))
         end
 
-        @testset "a singleton S is inner₊ₓ/inner₊ᵧ's own node" begin
+        # A singleton S is inner₊ₓ/inner₊ᵧ's own node.
+        @testset "Singleton S: inner₊ₓ/inner₊ᵧ's node" begin
             px = inner₊(u2, v2, Val((1,)))
             @test typeof(px).parameters[2] === InnerPlus{1}
             @test assemble(form(Wₕ2, Wₕ2, (u, v) -> inner₊(u, v, Val((1,))))) ==
@@ -290,7 +292,8 @@ end
                   assemble(form(Wₕ2, Wₕ2, (u, v) -> inner₊ᵧ(u, v)))
         end
 
-        @testset "S = (1, 2) is a new InnerPlusSet node, read through SeparableWeights" begin
+        # A new node, read through SeparableWeights.
+        @testset "S = (1, 2): InnerPlusSet node" begin
             S = (1, 2)
             @test weights(Wₕ2, Val(S)) isa SeparableWeights
 
@@ -303,7 +306,8 @@ end
             @test A ≈ Dx' * Diagonal(wS) * Dx
         end
 
-        @testset "S order does not matter: Val((1,2)) and Val((2,1)) build the same node" begin
+        # Val((1,2)) and Val((2,1)) build the same node.
+        @testset "S order does not matter" begin
             p12 = inner₊(u2, v2, Val((1, 2)))
             p21 = inner₊(u2, v2, Val((2, 1)))
             @test typeof(p12) === typeof(p21)
@@ -323,7 +327,8 @@ end
         u3, v3 = TrialFunction{3}(), TestFunction{3}()
         dims3 = npoints(Ωₕ3, Tuple)
 
-        @testset "S = (1, 2, 3), the full set, is InnerPlusSet through SeparableWeights" begin
+        # Read through SeparableWeights.
+        @testset "S = (1, 2, 3): full set, InnerPlusSet" begin
             S = (1, 2, 3)
             @test weights(Wₕ3, Val(S)) isa SeparableWeights
 
@@ -335,7 +340,8 @@ end
             @test A ≈ Diagonal(wS)
         end
 
-        @testset "a genuine pair S = (1, 2) also goes through SeparableWeights" begin
+        # A genuine pair S = (1, 2) also goes through SeparableWeights.
+        @testset "Pair S = (1, 2) uses SeparableWeights" begin
             S = (1, 2)
             @test weights(Wₕ3, Val(S)) isa SeparableWeights
 
@@ -345,7 +351,8 @@ end
         end
     end
 
-    @testset "which(...).file: the new arity stays in this file, not inner_product.jl" begin
+    # which(...).file is this file, not inner_product.jl.
+    @testset "New arity stays in this file" begin
         Wₕ2 = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true)))
         u2, v2 = TrialFunction{2}(), TestFunction{2}()
         method_file(T) = basename(String(which(inner₊, T).file))
@@ -362,7 +369,7 @@ end
 @testset "inner_Γ, the symbolic surface integral" begin
     Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
 
-    @testset "The bilinear term is the surface mass matrix" begin
+    @testset "Bilinear term: surface mass matrix" begin
         Wₕ = gridspace(mesh(Ω, (9, 8), (true, true)))
         A = assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(u, v; markers = (:ymin,))))
 
@@ -384,7 +391,8 @@ end
         @test assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(u, v; markers = :ymin))) ≈ A
     end
 
-    @testset "A coefficient scales it, as anywhere else" begin
+    # As anywhere else.
+    @testset "A coefficient scales it" begin
         Wₕ = gridspace(mesh(Ω, (7, 7), (true, true)))
         β = 1.7
         A = assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(β * u, v; markers = (:ymax,))))
@@ -392,7 +400,7 @@ end
         @test A ≈ β * B
     end
 
-    @testset "The linear term is the Neumann flux vector" begin
+    @testset "Linear term: Neumann flux vector" begin
         Wₕ = gridspace(mesh(Ω, (9, 6), (true, true)))
         g(x) = 2.0 + x[1]
         F = assemble(form(Wₕ, v -> inner_Γ(g, v; markers = (:ymin,))))
@@ -412,7 +420,8 @@ end
         @test diag(A) ≈ [1.0; zeros(ndofs(Wₕ) - 2); 1.0]
     end
 
-    @testset "Refilling in place changes nothing, and allocates nothing" begin
+    # Refilling in place changes nothing, and allocates nothing.
+    @testset "Refill in place: same, no allocation" begin
         Wₕ = gridspace(mesh(Ω, (9, 9), (true, true)))
         a = form(Wₕ, Wₕ,
             (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + inner_Γ(u, v; markers = (:ymin, :ymax)))

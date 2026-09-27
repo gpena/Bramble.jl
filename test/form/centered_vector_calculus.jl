@@ -40,7 +40,7 @@ end
 # The cross-weighted family (gpena/Bramble.jl#349): the same builders with D̽ in place of Dc.
 # The two differ on a non-uniform mesh and at the ends (D̽ is one-sided there, Dc zero), so
 # each form is checked against its own runtime operator and against the centered one.
-@testset "Cross-weighted vector calculus in forms (#349)" begin
+@testset "Cross-weighted vector calculus (#349)" begin
     for D in 2:3
         Wₕ, Vₕ, p, uₕ, vₕ = _setup(D)
 
@@ -64,7 +64,7 @@ end
 # The strain forms scale their shear pieces by one half: that scale must not promote a
 # Float32 form to Float64. The Float64 twin reuses the Float32 mesh's points, so the two
 # matrices describe the same grid and differ only by rounding.
-@testset "Strain forms keep the element type (#349)" begin
+@testset "Strain forms keep eltype (#349)" begin
     Random.seed!(349)
     Ω32 = mesh(domain(box((0.0f0, 0.0f0, 0.0f0), (1.0f0, 1.0f0, 1.0f0))), (6, 5, 7),
         (false, false, false))

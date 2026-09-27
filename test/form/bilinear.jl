@@ -203,7 +203,8 @@ using Bramble:
         end
     end
 
-    @testset "Dirichlet labels pin the TEST space's rows, not the trial space's (#48)" begin
+    # Dirichlet labels pin the test space's rows, not the trial space's.
+    @testset "Dirichlet pins TEST-space rows (#48)" begin
         # `apply_dirichlet_labels!` used to call `dirichlet_bc!(A, trial_space(form), ...)`.
         # Rows are indexed by the test function (see the file header), so that pinned the
         # wrong rows whenever trial_space and test_space disagree on leaf layout. On a
@@ -435,7 +436,8 @@ using Bramble:
         u1 = Bramble.TrialFunction{1}()
         v1 = Bramble.TestFunction{1}()
 
-        @testset "Named block: row from test leaf, column from trial leaf" begin
+        # Row from the test leaf, column from the trial leaf.
+        @testset "Named block: test row, trial column" begin
             bs = blocks(innerₕ(u1(1), v1(2)), trial_leaves, test_leaves)
             @test length(bs) == 1
             blk = only(bs)
@@ -446,7 +448,8 @@ using Bramble:
             @test blk.col_offset == 0           # trial leaf 1's own offset
         end
 
-        @testset "Unrouted term: one Block per diagonal leaf pair" begin
+        # One Block per diagonal leaf pair.
+        @testset "Unrouted: one Block per diagonal pair" begin
             bs = blocks(innerₕ(u1, v1), trial_leaves, test_leaves)
             @test length(bs) == 2
             @test bs[1].trial_leaf === W1 && bs[1].test_leaf === W2
@@ -542,7 +545,8 @@ using Bramble:
         @test Matrix(Ain) ≈ Matrix(Aop)              # and the two agree
     end
 
-    @testset "Composite in-place reassembly (zero allocations)" begin
+    # In-place reassembly.
+    @testset "Composite reassembly allocates nothing" begin
         # `_loop_bytes` above only exercises the scalar core. The block-routing core (going
         # through `blocks` -- see #49) had no equivalent guard, so a routing change could
         # reintroduce an allocation (e.g. from building an intermediate `Block` per term)
@@ -563,7 +567,7 @@ using Bramble:
         @test _loop_bytes(assemble(a_mixed), a_mixed) == 0
     end
 
-    @testset "Diagonal-segment replay (zero allocations)" begin
+    @testset "Diagonal-segment replay: no allocation" begin
         # The third replay shape, alongside the scalar and composite cores above: a term
         # whose recorded positions come out as a constant per-tap stride, which
         # `_try_diagonal_segment` repackages so `DiagonalReplaySink` can walk the interior
@@ -601,7 +605,7 @@ using Bramble:
         # points where they meet (a matrix swap, a changed `ast`), not just a single
         # before/after allocation count.
 
-        @testset "Replay matches search across many repeated calls" begin
+        @testset "Replay matches search, repeated calls" begin
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
             A = assemble(a)                 # record, inside assemble's own call
             reference = copy(A.nzval)
@@ -611,7 +615,7 @@ using Bramble:
             end
         end
 
-        @testset "Live coefficients still update under replay" begin
+        @testset "Live coefficients update under replay" begin
             cₕ = Rₕ(Wₕ, x -> 1.0)
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(cₕ * u, v))
             A = assemble(a)                 # record
@@ -623,7 +627,7 @@ using Bramble:
             end
         end
 
-        @testset "Dirichlet labels still applied after a cached replay" begin
+        @testset "Dirichlet applied after cached replay" begin
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
             A = assemble(a)                             # record, unconstrained
             assemble!(A, a)                             # replay, unconstrained
@@ -636,7 +640,8 @@ using Bramble:
             end
         end
 
-        @testset "Switching matrices rebuilds rather than corrupting" begin
+        # Rebuilds rather than corrupting the replay.
+        @testset "Switching matrices rebuilds the cache" begin
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
             A1 = assemble(a)
             A2 = similar(sparse(A1))
@@ -649,7 +654,8 @@ using Bramble:
             @test A1.nzval ≈ A2.nzval
         end
 
-        @testset "Composite: diagonal, off-diagonal, mixed, and nested all replay correctly" begin
+        # Diagonal, off-diagonal, mixed and nested blocks all replay correctly.
+        @testset "Composite: every block kind replays" begin
             Vₕ = gridspace(Ωₕ, Val(2))
             for g in (
                 (u, v) -> innerₕ(u, v),
@@ -679,7 +685,8 @@ using Bramble:
             end
         end
 
-        @testset "A different form into the same matrix reassembles rather than replaying stale cache" begin
+        # Reassembles rather than replaying the stale cache.
+        @testset "Different form, same matrix: rebuilds" begin
             # Each form keeps its own `_AssemblyCache` (keyed on the exact matrix object it
             # last assembled into), so assembling a second, same-reach form into `a`'s matrix
             # records fresh under *its own* cache rather than touching `a`'s -- `a`'s own
@@ -697,7 +704,8 @@ using Bramble:
         end
     end
 
-    @testset "A pattern that cannot hold the form raises (#50)" begin
+    # A pattern that cannot hold the form raises.
+    @testset "Too-small pattern raises (#50)" begin
         # `add_to_sparse!` used to return quietly when an entry was missing, so a matrix
         # whose pattern was built for a different form assembled to a plausible wrong
         # answer. Both the serial recording pass and the threaded path now say so instead.
@@ -774,7 +782,8 @@ using Bramble:
             end
         end
 
-        @testset "The pattern de-duplicates and the value pass does not" begin
+        # The pattern pass de-duplicates and the value pass does not.
+        @testset "Pattern de-duplicates, values do not" begin
             # Two identical terms name every coordinate twice. The pattern wants each once;
             # the values have to accumulate both, or the matrix comes out halved.
             #
@@ -794,12 +803,13 @@ using Bramble:
                   2 .* Matrix(assemble(form(W, W, (a, b) -> innerₕ(a, b))))
         end
 
-        @testset "Only the pattern sink asks for de-duplication" begin
+        # Only the pattern sink asks for de-duplication.
+        @testset "Only the pattern sink de-duplicates" begin
             @test _sink_dedups(PatternSink(Int[], Int[]))
             @test !_sink_dedups(CollectSink([]))
         end
 
-        @testset "Block offsets shift what a sink is handed" begin
+        @testset "Block offsets shift sink entries" begin
             ast = resolve_form_ast(form(W, W, (a, b) -> innerₕ(a, b)))
             base = visit_bilinear_stencil(CollectSink([]), ast, W, 0, 0).seen
             shifted = visit_bilinear_stencil(CollectSink([]), ast, W, 100, 7).seen
@@ -809,7 +819,7 @@ using Bramble:
             )
         end
 
-        @testset "Entry targets: the guard and the AbsoluteColumn case" begin
+        @testset "Entry targets: guard, AbsoluteColumn" begin
             lin = LinearIndices(indices(Ω))
             I = CartesianIndex(1, 1)
 
@@ -849,7 +859,8 @@ using Bramble:
                        markers,
                        mesh
 
-        @testset "_stencil_margin reads composed reach, not a hardcoded 1" begin
+        # Not a hardcoded 1.
+        @testset "_stencil_margin reads composed reach" begin
             u, v = TrialFunction{2}(), TestFunction{2}()
             @test _stencil_margin(resolve_ast(innerₕ(u, v))) == 0
             @test _stencil_margin(resolve_ast(innerₕ(D₋ₓ(u), v))) == 1
@@ -862,7 +873,8 @@ using Bramble:
             @test _stencil_margin(resolve_ast(innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)))) == 1
         end
 
-        @testset "Interior + boundary slabs partition the grid exactly once" begin
+        # They cover the grid exactly once.
+        @testset "Interior + boundary slabs partition" begin
             for D in (1, 2, 3), margin in (0, 1, 2)
 
                 Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
@@ -890,7 +902,8 @@ using Bramble:
             @test !_peelable(axes(indices(Ω)), 2)
         end
 
-        @testset "Peeled traversal agrees with the guarded fallback, entry for entry" begin
+        # Agrees with the guarded fallback, entry for entry.
+        @testset "Peeled traversal matches fallback" begin
             struct _MarginCollectSink
                 seen::Vector{Tuple{Int, Int, Float64}}
             end
@@ -925,7 +938,8 @@ using Bramble:
             end
         end
 
-        @testset "Nonzero Dirichlet boundary values solve correctly under peeling" begin
+        # Nonzero Dirichlet boundary values solve correctly under peeling.
+        @testset "Peeling: nonzero Dirichlet values" begin
             # The peeled path only ever changes which points skip the bounds guard; every
             # point still gets visited exactly once (see above). This solves an actual
             # manufactured Poisson problem with *nonzero* boundary data through the
@@ -1021,7 +1035,7 @@ using Bramble:
             @test isapprox(Fc, Fd)
         end
 
-        @testset "assemble! refills, CSC stays zero-allocation" begin
+        @testset "assemble! refill: CSC zero-allocation" begin
             Ac2, Ad2 = allocate_system_matrix(f(Wc)), allocate_system_matrix(f(Wd))
             @test Ac2 isa SparseMatrixCSC
             @test Ad2 isa Matrix{Float64}

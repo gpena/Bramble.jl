@@ -17,7 +17,8 @@ using Bramble: Serial, Parallel, backend, execution_policy, allocate_system_matr
 _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
 
 @testset "assemble_add! (#231)" begin
-    @testset "Bilinear: unscaled accumulation matches assemble-then-add, 1D/2D/3D" begin
+    # Matches assemble-then-add, in 1D, 2D and 3D.
+    @testset "Bilinear: unscaled accumulation" begin
         cases = (
             ("1D", mesh(domain(interval(0.0, 1.0)), 21, true)),
             ("2D", mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (true, true))),
@@ -48,7 +49,7 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         end
     end
 
-    @testset "Bilinear: scaled accumulation, Number and RefValue" begin
+    @testset "Bilinear: scaled, Number and RefValue" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (11, 13), (true, true))
         Wₕ = gridspace(Ωₕ)
         m_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
@@ -65,7 +66,8 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
             @test Matrix(A) ≈ (1 / 0.01) .* M .+ 0.75 .* K
         end
 
-        @testset "RefValue, changing between calls, replaying from cache" begin
+        # The scale changes between calls while the pattern replays from cache.
+        @testset "RefValue changed between replays" begin
             θ = Ref(1.0)
             A = allocate_system_matrix(wide)
             fill!(nonzeros(A), 0.0)
@@ -81,7 +83,8 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         end
     end
 
-    @testset "Bilinear: zero allocation on warm replay (unscaled and RefValue-scaled)" begin
+    # Both unscaled and RefValue-scaled.
+    @testset "Bilinear: warm replay allocates nothing" begin
         function _warm_and_measure()
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 31, true)
             Wₕ = gridspace(Ωₕ)
@@ -104,7 +107,8 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         @test allocs_scaled == 0
     end
 
-    @testset "Bilinear: composite space, one contribution per leaf" begin
+    # One contribution per leaf.
+    @testset "Bilinear: composite space, per leaf" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, true)
         Wₕ = gridspace(Ωₕ)
         W = Wₕ × Wₕ
@@ -124,7 +128,8 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         @test Matrix(A) ≈ Aref
     end
 
-    @testset "Bilinear: a pattern too narrow raises, naming the entry" begin
+    # The error names the entry.
+    @testset "Bilinear: too-narrow pattern raises" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, true)
         Wₕ = gridspace(Ωₕ)
         narrow_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))  # diagonal-only pattern
@@ -134,7 +139,8 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         @test_throws ArgumentError assemble_add!(A, wide_form)
     end
 
-    @testset "Bilinear: correct and deterministic under Parallel() execution" begin
+    # Correct and deterministic under Parallel() execution.
+    @testset "Bilinear: Parallel() is deterministic" begin
         S = interval(0.0, 1.0) × interval(0.0, 1.0)
         Ωₕ = mesh(domain(S, :walls => boundary_symbols(S)), (9, 11), (true, true))
         Ω_par = mesh(
@@ -175,7 +181,8 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
     # width), against the same accumulation run serially, at rtol 1e-12 (bramble-verification:
     # never checked against another call to the code under test alone -- the Serial forms are
     # an independently-executed reference, not a repeat of the Parallel path).
-    @testset "Bilinear: Parallel() replay matches Serial, non-uniform 1D/2D/3D (#338)" begin
+    # Parallel() replay matches Serial on non-uniform 1D/2D/3D meshes.
+    @testset "Bilinear: Parallel() replay (#338)" begin
         cases = (
             (
                 "1D",
@@ -258,7 +265,8 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
                     end
                 end
 
-                @testset "assemble_add! after assemble! of another form on the same A" begin
+                # assemble_add! after assemble! of another form on the same A.
+                @testset "After assemble! of another form" begin
                     A_ser = allocate_system_matrix(wide_ser)
                     A_par = allocate_system_matrix(wide_par)
                     assemble!(A_ser, wide_ser)
@@ -274,7 +282,7 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         end
     end
 
-    @testset "Linear: unscaled and scaled accumulation, 1D/2D" begin
+    @testset "Linear: unscaled and scaled, 1D/2D" begin
         for (lbl, Ωₕ) in (
             ("1D", mesh(domain(interval(0.0, 1.0)), 25, true)),
             ("2D", mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (true, true)))
@@ -312,7 +320,8 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         @test allocs_scaled == 0
     end
 
-    @testset "Linear: composite space, one contribution per leaf" begin
+    # One contribution per leaf.
+    @testset "Linear: composite space, per leaf" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, true)
         Wₕ = gridspace(Ωₕ)
         W = Wₕ × Wₕ
@@ -330,7 +339,7 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         @test F ≈ Fref
     end
 
-    @testset "Linear: correct under Parallel() execution" begin
+    @testset "Linear: correct under Parallel()" begin
         Ω_par = mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
             (9, 8),
@@ -357,7 +366,8 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
     # `assemble_add!(F, l, α)` path is inferred and allocates nothing on warm replay, 1D and
     # 2D. `@inferred` reads no global binding here, so it stays in the barrier alongside the
     # warm-up rather than being pulled out to top level.
-    @testset "Bilinear and linear: cached, explicit-scale path is inferred and allocation-free (#283)" begin
+    # Bilinear and linear; the cached path is also allocation-free.
+    @testset "Explicit-scale replay: inferred (#283)" begin
         function _bilinear_scaled_alloc(A, a, α)
             assemble_add!(A, a, α)             # cold: records
             @inferred assemble_add!(A, a, α)
@@ -389,7 +399,8 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         end
     end
 
-    @testset "Dirichlet interaction is left to the caller, not applied here" begin
+    # assemble_add! does not apply it.
+    @testset "Dirichlet is left to the caller" begin
         # assemble_add! never zeros or constrains rows -- accumulating twice doubles
         # every entry, exactly what a raw additive scatter should do; dirichlet_bc! is a
         # separate, explicit step the caller runs once, last (see src/assembly/assemble_add.jl).
