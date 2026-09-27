@@ -243,12 +243,47 @@ Return the test space of the bilinear form.
 """
 test_space(form::BilinearForm) = form.test_space
 
-# `a(uₕ, vₕ) = vᵀ A u`. Assembles a whole matrix per call: intended for testing/convenience.
-# Multiplies by `parent(u)`, the raw storage vector, so the product runs SparseArrays' specialised
-# dense-vector path rather than going through the `VectorElement` wrapper's indexing (a `VectorElement`
-# itself now works fine here since #348; this predates that fix). `parent` of a plain vector is the
-# vector itself.
-@inline (form::BilinearForm)(u, v) = dot(v, assemble(form) * parent(u))
+"""
+    (a::BilinearForm)(u, v) -> Number
+
+The form evaluated at a trial function `u` and a test function `v`: `vᴴ A u` for
+`A = assemble(a)`, without `A`. One walk of the form's stencil, the one
+[`matrix_free_operator`](@ref)'s serial `mul!` makes, adds `conj(v[row]) * weight * u[col]`
+for every entry into a single scalar. No Dirichlet rows are applied, as `assemble(a)`
+applies none.
+
+`u` and `v` are [`VectorElement`](@ref)s or plain vectors, of lengths `ndofs(trial_space(a))`
+and `ndofs(test_space(a))`. The result's type is promoted from the element types of `A`, `u`
+and `v`, so a `ForwardDiff.Dual` in either argument comes through.
+
+On a CPU backend the call allocates only the one cell its sum runs in (a
+`ContractionSink`'s), whatever the grid size, except on a form with a region
+restriction (`restrict_to`), whose stencil evaluation allocates as it does in `assemble!`.
+Each call has its own cell, so tasks may call one form at once. On a GPU backend the matrix
+is assembled and multiplied, as the walk reads its vectors on the host.
+
+# Throws
+- `DimensionMismatch`: `u` or `v` has the wrong length.
+- `ArgumentError`: `u` or `v` is not indexed from 1 (an offset-axes view, say).
+
+# Examples
+```jldoctest
+using Bramble, LinearAlgebra
+Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 11, false))
+a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+uₕ = Rₕ(Wₕ, x -> sin(x[1]))
+vₕ = Rₕ(Wₕ, x -> x[1] + 1)
+a(uₕ, vₕ) ≈ dot(parent(vₕ), assemble(a) * parent(uₕ))
+
+# output
+true
+```
+"""
+function (form::BilinearForm)(u, v)
+    execution_policy(trial_space(form)) isa GpuPolicy &&
+        return dot(v, assemble(form) * _mf_data(u))
+    return _contract(form, _mf_data(u), _mf_data(v))
+end
 
 """
     resolve_form_ast(form::BilinearForm)

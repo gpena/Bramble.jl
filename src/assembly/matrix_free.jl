@@ -64,6 +64,48 @@ end
     s.y, s.x, α1, α2, s.mask, dr, dc, half)
 
 """
+    ContractionSink(v::AbstractVector, u::AbstractVector, acc::Base.RefValue)
+
+The sink of the form call `a(u, v)`: an entry `(row, col, weight)` of the form's stencil adds
+`conj(v[row]) * weight * u[col]` to `acc[]`, so one walk of [`visit_bilinear_stencil`](@ref)
+sums `vᴴ A u` without `A` or `A * u` ever being stored. `acc` is the call's own cell, so
+concurrent calls on one form do not share it.
+"""
+struct ContractionSink{V <: AbstractVector, U <: AbstractVector, T}
+    v::V
+    u::U
+    acc::Base.RefValue{T}
+end
+
+# The form call checked `v` and `u` against the matrix's size, so both reads are in bounds.
+@inline function _sink_entry!(s::ContractionSink, row::Int, col::Int, weight, ::Int)
+    @inbounds s.acc[] += conj(s.v[row]) * weight * s.u[col]
+    return nothing
+end
+
+# `vᴴ A u` for `A = assemble(a)`, through the serial unit walk below, in the element type
+# promoted from `A`'s, `u`'s and `v`'s (`(a::BilinearForm)(u, v)`, bilinear.jl).
+function _contract(a::BilinearForm, ud::AbstractVector, vd::AbstractVector)
+    (length(ud) == ndofs(trial_space(a)) && length(vd) == ndofs(test_space(a))) ||
+        _throw_contraction_dimmismatch(a, ud, vd)
+    Base.require_one_based_indexing(ud, vd)
+    T = promote_type(_matrix_eltype(a, a.ast), eltype(ud), eltype(vd))
+    s = ContractionSink(vd, ud, Ref(zero(T)))
+    _mf_apply!(CpuSerial(), s, a)
+    return s.acc[]
+end
+
+@noinline function _throw_contraction_dimmismatch(a::BilinearForm, ud, vd)
+    throw(
+        DimensionMismatch(
+        "a bilinear form of size $(ndofs(test_space(a)))×$(ndofs(trial_space(a))) " *
+        "cannot contract a trial vector of length $(length(ud)) with a test vector of " *
+        "length $(length(vd))",
+    ),
+    )
+end
+
+"""
     MatrixFreeOperator{T, Form, DLabels, EP} <: AbstractMatrix{T}
 
 A [`BilinearForm`](@ref) as a linear operator: `mul!(y, op, x)` computes `A * x`, and
@@ -228,6 +270,7 @@ function mul!(
         _throw_matrix_free_dimmismatch(op, x, y)
     yd = _mf_data(y)
     xd = _mf_data(x)
+    Base.require_one_based_indexing(yd, xd)
     if iszero(β)
         fill!(yd, zero(eltype(yd)))
     elseif !isone(β)
@@ -293,8 +336,15 @@ Base.show(io::IO, ::MIME"text/plain", op::MatrixFreeOperator) = show(io, op)
 # one walk. Every method `@noinline` for the reason given there: each term's walk stays its
 # own method instance instead of inlining into one grown with the term count. `policy` is the
 # operator's, and decides only how each unit is walked (`_mf_visit!`, `_mf_visit_pair!`).
+#
+# The walk is generic over the sink: any sink with a `_sink_entry!` method (`ActionSink`,
+# `ContractionSink`, `DiagonalSink`) walks the same units. Only an `ActionSink` fuses a
+# transposed pair into one walk (`_PairActionSink`); any other sink walks the pair's two terms
+# one after the other, which gives the same entries. A sink other than `ActionSink` walks
+# under `CpuSerial` only: the threaded sweep (`_sweep_point!` and the Polyester hooks below)
+# has methods for an action target (`_ActionTarget`) alone.
 
-function _mf_apply!(policy, s::ActionSink, a::BilinearForm)
+function _mf_apply!(policy, s, a::BilinearForm)
     Wu, Wv, ast = trial_space(a), test_space(a), a.ast
     if _is_block_pair(Wu, Wv)
         _mf_blocks!(policy, s, ast, leaf_spaces_offsets(Wu), leaf_spaces_offsets(Wv))
@@ -307,7 +357,7 @@ function _mf_apply!(policy, s::ActionSink, a::BilinearForm)
     return nothing
 end
 
-@noinline function _mf_summands!(policy, s::ActionSink, op::OperatorAdd, sp)
+@noinline function _mf_summands!(policy, s, op::OperatorAdd, sp)
     _foldl_pairs(
         (_, t) -> _mf_summands!(policy, s, t, sp),
         (_, t1, t2) -> _mf_pair!(policy, s, t1, t2, sp),
@@ -317,7 +367,7 @@ end
     return nothing
 end
 
-@noinline function _mf_summands!(policy, s::ActionSink, term::TERM, sp) where {TERM}
+@noinline function _mf_summands!(policy, s, term::TERM, sp) where {TERM}
     _mf_visit!(policy, s, term, sp, 0, 0)
     return nothing
 end
@@ -328,8 +378,14 @@ end
     return nothing
 end
 
+@noinline function _mf_pair!(policy, s, t1, t2, sp)
+    _mf_summands!(policy, s, t1, sp)
+    _mf_summands!(policy, s, t2, sp)
+    return nothing
+end
+
 @noinline function _mf_blocks!(
-        policy, s::ActionSink, op::OperatorAdd, trial_leaves, test_leaves
+        policy, s, op::OperatorAdd, trial_leaves, test_leaves
 )
     _foldl_pairs(
         (_, t) -> _mf_blocks!(policy, s, t, trial_leaves, test_leaves),
@@ -341,7 +397,7 @@ end
 end
 
 @noinline function _mf_blocks!(
-        policy, s::ActionSink, term::TERM, trial_leaves, test_leaves
+        policy, s, term::TERM, trial_leaves, test_leaves
 ) where {TERM}
     for blk in blocks(term, trial_leaves, test_leaves)
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
@@ -390,6 +446,12 @@ end
     end
     Base.inferencebarrier(_mf_blocks!)(policy, s, t1, trial_leaves, test_leaves)
     Base.inferencebarrier(_mf_blocks!)(policy, s, t2, trial_leaves, test_leaves)
+    return nothing
+end
+
+@noinline function _mf_pair_blocks!(policy, s, t1, t2, trial_leaves, test_leaves)
+    _mf_blocks!(policy, s, t1, trial_leaves, test_leaves)
+    _mf_blocks!(policy, s, t2, trial_leaves, test_leaves)
     return nothing
 end
 

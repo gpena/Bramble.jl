@@ -1193,4 +1193,76 @@ end
     @test !Bramble._uniform_interior_width(grid_inds, interior, [6, 1, 2, 3, 4, 7, 8], 1)
 end
 
+@testset "bilinear: matrix-free form call" begin
+    # gpena/Bramble.jl#326: `a(u, v)` sums `vᵀ A u` over the stencil walk instead of
+    # assembling `A`, on non-uniform meshes, with a composite space, a transposed pair, a
+    # region restriction and a coefficient.
+    Random.seed!(3263)
+    S = interval(0.0, 1.0) × interval(0.0, 2.0)
+    W = gridspace(mesh(domain(S, :left => x -> x[1] < 0.3), (9, 11), (false, true)))
+    κ = Rₕ(W, x -> 1 + x[1]^2 + x[2])
+    V = W × W
+    cases = (
+        form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))),
+        form(W, W, (u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)) + innerₕ(D₋ᵧ(u), D₋ₓ(v))),
+        form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(κ * u, restrict_to(:left, v))),
+        form(V, V, (u, v) -> innerₕ(u(1), v(1)) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) +
+                              innerₕ(u(1), v(2)))
+    )
+    contract(a, u, v) = (a(u, v); @allocated a(u, v))
+    for (k, a) in enumerate(cases)
+        u = element(trial_space(a), randn(ndofs(trial_space(a))))
+        v = element(test_space(a), randn(ndofs(test_space(a))))
+        ref = dot(parent(v), assemble(a) * parent(u))
+        @test a(u, v) ≈ ref rtol = 1e-12
+        @test a(u, v) ≈ ref rtol = 1e-12        # a second call does not accumulate
+        @test a(parent(u), parent(v)) ≈ ref rtol = 1e-12
+        @test a(u, v) isa Float64
+        k == 3 || @test contract(a, u, v) <= 64   # the call's one accumulator cell
+    end
+
+    # and that cell is all it allocates, at any grid size
+    bytes = map((101, 10001)) do n
+        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), n, false))
+        a1 = form(W1, W1, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        contract(a1, element(W1, randn(n)), element(W1, randn(n)))
+    end
+    @test bytes[1] == bytes[2]
+
+    # element types promote: a `Float32` argument, and a rectangular form
+    a = cases[1]
+    u32 = element(W, randn(Float32, ndofs(W)))
+    v = element(W, randn(ndofs(W)))
+    @test a(u32, v) ≈ dot(parent(v), assemble(a) * parent(u32)) rtol = 1e-12
+    @test a(u32, element(W, Float32.(parent(v)))) isa Float64
+    Wc = gridspace(mesh(domain(interval(0.0, 1.0)), 7, false))
+    Wf = gridspace(mesh(domain(interval(0.0, 1.0)), 13, false))
+    r = form(Wc, Wf, (u, v) -> innerₕ(πₕ(u), v))
+    uc, vf = Rₕ(Wc, x -> sin(3x[1])), Rₕ(Wf, x -> x[1] + 1)
+    @test r(uc, vf) ≈ dot(parent(vf), assemble(r) * parent(uc)) rtol = 1e-12
+
+    # views are read as themselves, not as the array behind them
+    A = assemble(a)
+    nW = ndofs(W)
+    wr = @view randn(nW)[end:-1:1]
+    wo = view(randn(nW + 3), 2:(nW + 1))
+    w = parent(v)
+    @test a(w, wr) ≈ dot(wr, A * w) rtol = 1e-12
+    @test a(wr, w) ≈ dot(w, A * wr) rtol = 1e-12
+    @test a(w, wo) ≈ dot(wo, A * w) rtol = 1e-12
+    @test a(wo, wr) ≈ dot(wr, A * wo) rtol = 1e-12
+
+    # the walk indexes from 1, so other axes are refused rather than misread
+    @test_throws ArgumentError a(w, view(randn(nW + 1), Base.IdentityUnitRange(2:(nW + 1))))
+    @test_throws DimensionMismatch a(zeros(ndofs(W) - 1), v)
+    @test_throws DimensionMismatch a(v, zeros(ndofs(W) + 1))
+
+    WITH_AD_TESTS && @testset "Dual arguments (#326)" begin
+        u = randn(ndofs(W))
+        vv = parent(v)
+        g = ForwardDiff.gradient(w -> a(w, vv), u)
+        @test g ≈ transpose(assemble(a)) * vv rtol = 1e-12
+    end
+end
+
 end # module FormBilinearTests

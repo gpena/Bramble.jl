@@ -1,7 +1,8 @@
 # matrix_free_preconditioners.jl: preconditioners built from a `BilinearForm` without its
 # matrix (gpena/Bramble.jl#327). Jacobi reads the form's diagonal off one walk of
-# `visit_bilinear_stencil` with a `DiagonalSink`, the walk `matrix_free_operator`'s `mul!`
-# takes (matrix_free.jl), so it costs one vector and never assembles `A`.
+# `visit_bilinear_stencil` with a `DiagonalSink`, through the serial unit walk
+# `matrix_free_operator`'s `mul!` takes (`_mf_apply!`, matrix_free.jl), so it costs one vector
+# and never assembles `A`.
 
 """
     AbstractMatrixFreePreconditioner{T}
@@ -104,7 +105,7 @@ function jacobi_preconditioner(op::MatrixFreeOperator{T}) where {T}
     n = op.nrows
     n == op.ncols || _throw_jacobi_nonsquare(op)
     d = zeros(T, n)
-    _diagonal_walk!(DiagonalSink(d), op.form)
+    _mf_apply!(CpuSerial(), DiagonalSink(d), op.form)
     mask = _mf_mask(op)
     if mask !== nothing
         @inbounds for i in eachindex(mask)
@@ -133,6 +134,7 @@ function ldiv!(y::AbstractVector, P::JacobiPreconditioner, x::AbstractVector)
     (length(x) == length(d) && length(y) == length(d)) || _throw_jacobi_dimmismatch(P, x, y)
     yd = _mf_data(y)
     xd = _mf_data(x)
+    Base.require_one_based_indexing(yd, xd)
     @inbounds for i in eachindex(d)
         yd[i] = d[i] * xd[i]
     end
@@ -157,41 +159,5 @@ end
 # `row` lands inside the matrix (the walk's guard) and `d` has its row count.
 @inline function _sink_entry!(s::DiagonalSink, row::Int, col::Int, weight, ::Int)
     row == col && @inbounds(s.d[row] += weight)
-    return nothing
-end
-
-# The unit walk of `_mf_apply!` (matrix_free.jl), serial, with every summand walked alone: a
-# transposed pair's second term is walked as itself instead of as the first's transpose,
-# which gives the same entries. `map` over the summand tuple, as `stencil_eval.jl`'s walks,
-# keeps each term's call concrete without allocating.
-function _diagonal_walk!(s::DiagonalSink, a::BilinearForm)
-    Wu, Wv, ast = trial_space(a), test_space(a), a.ast
-    if _is_block_pair(Wu, Wv)
-        trial_leaves = leaf_spaces_offsets(Wu)
-        test_leaves = leaf_spaces_offsets(Wv)
-        map(t -> _diagonal_blocks!(s, t, trial_leaves, test_leaves), _summands(ast))
-        return nothing
-    end
-    bound = _bind_interp_spaces(ast, Wu, Wv)
-    _check_block_meshes(bound, Wu, Wv)
-    sp = host_weights(_walked_leaf(bound, Wu, Wv))
-    map(t -> _diagonal_summand!(s, t, sp), _summands(bound))
-    return nothing
-end
-
-@noinline function _diagonal_summand!(s::DiagonalSink, term::TERM, sp) where {TERM}
-    visit_bilinear_stencil(s, term, sp, 0, 0)
-    return nothing
-end
-
-@noinline function _diagonal_blocks!(
-        s::DiagonalSink, term::TERM, trial_leaves, test_leaves
-) where {TERM}
-    for blk in blocks(term, trial_leaves, test_leaves)
-        bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
-        _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
-        sp = host_weights(_walked_leaf(bound, blk.trial_leaf, blk.test_leaf))
-        visit_bilinear_stencil(s, bound, sp, blk.row_offset, blk.col_offset)
-    end
     return nothing
 end
