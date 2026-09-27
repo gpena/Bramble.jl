@@ -396,7 +396,7 @@ using Bramble:
             @test b ≈ parent(fₕ) .* w
         end
 
-        @testset "Wrapped source is left unlowered, still correct" begin
+        @testset "wrapped source: unlowered, correct" begin
             # D₋ₓ(sf) builds a node type `_lower_sources` has no method for, so it falls
             # through to the generic leaf fallback -- unchanged, not incorrectly rewritten.
             # A missed optimisation, not a correctness gap: checked against the same oracle
@@ -416,7 +416,7 @@ using Bramble:
             @test b ≈ parent(D₋ₓ(fₕ)) .* w
         end
 
-        @testset "Composite space: component-specific term lowers" begin
+        @testset "composite: per-component term lowers" begin
             Wleaf = gridspace(mesh(domain(interval(0.0, 1.0)), 21, true))
             Vₕ = Wleaf^Val(2)
             f = x -> x[1]^2
@@ -431,7 +431,8 @@ using Bramble:
             @test b[(n + 1):end] ≈ parent(Rₕ(Wleaf, f)) .* w
         end
 
-        @testset "Composite space: term shared across leaves is left unlowered" begin
+        # A term shared across leaves is left unlowered.
+        @testset "composite: shared term stays unlowered" begin
             # A term naming no component goes to every leaf (`_routed_target`); those
             # leaves may have different meshes, so there is no single space to eagerly
             # sample against. Skipped, not incorrectly lowered against one arbitrary leaf.
@@ -450,7 +451,8 @@ using Bramble:
             @test b[(n + 1):end] ≈ expected
         end
 
-        @testset "Dynamic coefficients stay live (non-negotiable)" begin
+        # Non-negotiable: lowering must not freeze a dynamic coefficient.
+        @testset "dynamic coefficients stay live" begin
             # A raw closure loses live re-evaluation once lowered; Ref and VectorElement
             # coefficients must not, since neither is ever wrapped in a SourceFunction.
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
@@ -472,7 +474,7 @@ using Bramble:
             @test c2 ≈ 2 .* c1
         end
 
-        @testset "Dual numbers propagate through a lowered source" begin
+        @testset "lowered source: Dual propagates" begin
             # Distinct from "Source differentiation" above, which wraps its source in
             # D₋ₓ and so never reaches the lowering path this checks.
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)

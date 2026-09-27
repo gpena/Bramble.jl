@@ -200,7 +200,7 @@ end
 
     H = Matrix(Diagonal(collect(weights(Wₕ, Innerh()))))
 
-    @testset "Zero-scaled term elides from the sparsity pattern" begin
+    @testset "zero-scaled term: pattern elided" begin
         a_ref = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
         a_zero = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
 
@@ -221,14 +221,15 @@ end
         @test nnz(A_zero_float) > nnz(A_ref)
     end
 
-    @testset "Combining like terms merges two sweeps into one" begin
+    @testset "like terms: two sweeps merge into one" begin
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + innerₕ(u, v))
         @test resolve_form_ast(a) isa OperatorScale
         @test resolve_form_ast(a).scalar == 2
         @test Matrix(assemble(a)) ≈ 2 .* H
     end
 
-    @testset "Distributive factoring, checked against two independent single-term forms" begin
+    # Checked against two independent single-term forms.
+    @testset "distributive factoring" begin
         Ax = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))))
         Ay = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)))))
 
@@ -242,7 +243,8 @@ end
         @test Matrix(assemble(a)) ≈ 2 .* (Ax + Ay)
     end
 
-    @testset "A RefValue coefficient combined at construction still tracks its updates" begin
+    # The coefficient is combined at construction and must still track its updates.
+    @testset "RefValue coefficient tracks updates" begin
         β = Ref(1.0)
         a = form(Wₕ, Wₕ, (u, v) -> β * innerₕ(u, v) + β * innerₕ(u, v))
         @test resolve_form_ast(a) isa OperatorScale
@@ -280,7 +282,7 @@ end
         @test simplify_ast(innerₕ(A, 0 * B)) isa ZeroOperator
     end
 
-    @testset "Restores structural symmetry/SPD detection" begin
+    @testset "restores symmetry/SPD detection" begin
         # Before this rule, `innerₕ(2 * D₋ₓ(u), D₋ₓ(v))`'s trial side is an `OperatorScale`
         # and its test side a bare `BackwardDifference` -- different top-level types, so
         # `_same_operator_shape` (symmetry.jl) answered `false` even though `2 * ⟨Lu, Lv⟩`
@@ -296,7 +298,8 @@ end
         @test !isposdef(a_neg)
     end
 
-    @testset "A lifted scalar feeds the combine rule (bilinear)" begin
+    # A lifted scalar feeds the combine rule.
+    @testset "lifted scalar: bilinear combine" begin
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(2 * D₋ₓ(u), v) + innerₕ(3 * D₋ₓ(u), v))
         ast = resolve_form_ast(a)
         @test ast isa OperatorScale
@@ -306,7 +309,7 @@ end
               5 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v))))
     end
 
-    @testset "Lifting from a symbolic source (linear form)" begin
+    @testset "lifting: symbolic source, linear" begin
         # `2 * fₕ` for a plain `VectorElement` `fₕ` is an *eager* numeric scaling (the
         # source side is eager, per the forms tutorial) and never builds an `OperatorScale`
         # at all -- there is nothing for this rule to lift there. A `SourceFunction` (as
@@ -320,7 +323,8 @@ end
         @test assemble(l) ≈ 5 .* assemble(form(Wₕ, v -> innerₕ(sf, v)))
     end
 
-    @testset "Lifting and combining a DiracSource (linear form)" begin
+    # Lifting and combining a DiracSource.
+    @testset "lifting: DiracSource, linear" begin
         # `dirac(...)` (a `DiracSource`) is a genuine `LazyOp` source exactly like
         # `source_function` above, so it lifts and combines the same way (#226).
         d = dirac((0.3, 0.4), 1.0)
@@ -381,7 +385,7 @@ end
     @test s2 isa ShiftNode
     @test s2.inner_op isa ShiftNode
 
-    @testset "Numeric agreement with the combined shift" begin
+    @testset "combined shift: numeric agreement" begin
         Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 8, true)
         Wₕ1 = gridspace(Ωₕ1)
         sf = source_function(x -> x^2 + 1, Val(1))
@@ -392,13 +396,14 @@ end
     end
 end
 
-@testset "Component distribution on a mixed sum inside one inner product" begin
+# Component distribution on a mixed sum inside one inner product.
+@testset "mixed sum: component distribution" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
     Wₕ = gridspace(Ωₕ)
     Vₕ = Wₕ^Val(2)
     fₕ = Rₕ(Wₕ, x -> sin(π * x[1]))
 
-    @testset "Linear form: a source coupling to two test equations" begin
+    @testset "linear: source to two test equations" begin
         # `innerₕ(fₕ, v(1) + v(2))` names test components 1 and 2 inside one product --
         # unroutable as a single term (`test_component_or_nothing` throws on it,
         # block_extract.jl) before this rule.
@@ -409,7 +414,8 @@ end
         @test assemble(l) ≈ assemble(l_ref)
     end
 
-    @testset "Bilinear form: one trial component coupling to two test equations" begin
+    # One trial component coupling to two test equations.
+    @testset "bilinear: one trial to two tests" begin
         a = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1) + v(2)))
         @test resolve_form_ast(a) isa OperatorAdd
 
@@ -417,7 +423,7 @@ end
         @test Matrix(assemble(a)) ≈ Matrix(assemble(a_ref))
     end
 
-    @testset "A scaled mixed sum distributes the scale along with it" begin
+    @testset "scaled mixed sum: scale distributes" begin
         # `2 * innerₕ(fₕ, v(1) + v(2))` must not simplify to an `OperatorScale` hiding the
         # distributed `OperatorAdd` from the router -- that would be exactly the
         # unroutable shape this rule exists to avoid, reached through a new path.
@@ -431,7 +437,8 @@ end
         @test assemble(l) ≈ assemble(l_ref)
     end
 
-    @testset "A same-component sum is not distributed (no sweep-count regression)" begin
+    # Distributing it would be a sweep-count regression.
+    @testset "same-component sum: not distributed" begin
         # `v(1) + D₋ₓ(v(1))` names the same component on both sides, so it already routes
         # as one term; distributing it anyway would trade that single sweep for two.
         l = form(Vₕ, v -> innerₕ(fₕ, v(1) + D₋ₓ(v(1))))
@@ -439,7 +446,7 @@ end
     end
 end
 
-@testset "Sums of three or more mixing components do not throw (#235)" begin
+@testset "3+ mixing components: no throw (#235)" begin
     # `_mixes_components` used to reuse `trial_component_or_nothing`/
     # `test_component_or_nothing` (block_extract.jl) directly, which *throw* the moment
     # either side already mixes components -- true of the inner `(A + B)` node on every
@@ -453,7 +460,8 @@ end
     fₕ = Rₕ(Wₕ, x -> sin(π * x[1]))
     cₕ = Rₕ(Wₕ, x -> 1.0 + x[1])
 
-    @testset "Linear form: scalar × sum of 3 and 4 mixing test components" begin
+    # Scalar times a sum of 3 and 4 mixing test components.
+    @testset "linear: scalar × 3- and 4-term sums" begin
         for (V, n) in ((V3, 3), (V4, 4))
             l = form(V, v -> 2.0 * sum(innerₕ(fₕ, v(i)) for i in 1:n))
             @test resolve_form_ast(l) isa OperatorAdd
@@ -463,7 +471,8 @@ end
         end
     end
 
-    @testset "Linear form: a grid-function coefficient distributes the same way" begin
+    # A grid-function coefficient distributes the same way.
+    @testset "linear: grid-function coefficient" begin
         for (V, n) in ((V3, 3), (V4, 4))
             l = form(V, v -> cₕ * sum(innerₕ(fₕ, v(i)) for i in 1:n))
             @test resolve_form_ast(l) isa OperatorAdd
@@ -473,7 +482,8 @@ end
         end
     end
 
-    @testset "Bilinear form: one trial component against a sum of 3 and 4 test components" begin
+    # One trial component against a sum of 3 and 4 test components.
+    @testset "bilinear: one trial, 3- and 4-term sums" begin
         for (V, n) in ((V3, 3), (V4, 4))
             a = form(V, V, (u, v) -> innerₕ(u(1), sum(v(i) for i in 1:n)))
             @test resolve_form_ast(a) isa OperatorAdd
@@ -495,7 +505,8 @@ end
         @test assemble(l_left) ≈ assemble(l_right)
     end
 
-    @testset "innerₕ(divₕ(u), divₕ(v)) in 3D: a three-term mixing sum on both sides" begin
+    # innerₕ(divₕ(u), divₕ(v)): a three-term mixing sum on both sides.
+    @testset "3D innerₕ(divₕ, divₕ): 3-term sums" begin
         # The motivating case: the 3D discrete divergence inner product could not be
         # written at all before this fix (its 2D counterpart, a two-term sum, already
         # worked). Checked against the nine written-out (i, j) single-component products.
@@ -566,7 +577,7 @@ _rt_runtime_int(n::Int, W) = form(W, W, (u, v) -> n * innerₕ(u, v))
 
 _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
 
-@testset "A runtime coefficient leaves `form` type-stable" begin
+@testset "runtime coefficient: form type-stable" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, true))
     Wₕ = gridspace(Ωₕ)
     W = typeof(Wₕ)

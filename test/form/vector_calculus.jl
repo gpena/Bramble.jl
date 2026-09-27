@@ -121,7 +121,8 @@ function check_single_block_leaves(a, D::Int)
 end
 
 @testset "Composite ∇ₕ, εₕ, divₕ (S6.5)" begin
-    @testset "3D elasticity: compact equals hand-expanded" begin
+    # Compact spelling equals the hand-expanded one.
+    @testset "3D elasticity: compact = expanded" begin
         Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 4, 3), (false, true, false))
         Vₕ = gridspace(Ωₕ)^Val(3)
         μ, λ = 1.7, 0.9
@@ -142,7 +143,7 @@ end
         check_single_block_leaves(a_compact, 3)
     end
 
-    @testset "2D elasticity: compact equals hand-expanded" begin
+    @testset "2D elasticity: compact = expanded" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (false, true))
         Vₕ = gridspace(Ωₕ)^Val(2)
         μ, λ = 2.3, 1.1
@@ -159,7 +160,7 @@ end
         check_single_block_leaves(a_compact, 2)
     end
 
-    @testset "inner₊(∇ₕ(u), ∇ₕ(v)) over a composite function" begin
+    @testset "inner₊(∇ₕ(u), ∇ₕ(v)), composite" begin
         for (D, Dm, mk_mesh) in (
             (2, _Dm2, () -> mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, false))),
             (3, _Dm3, () -> mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 3), (true, false, true)))
@@ -188,7 +189,8 @@ const _CONTRACT_FAMILIES = (
     (∇̃ₕ, diṽₕ, curl̃ₕ), (∇₊ₕ, div₊ₕ, curl₊ₕ)
 )
 
-@testset "∇ₕ ⋅ u and ∇ₕ × u contract to div/curl (S5.4, #341)" begin
+# ∇ₕ ⋅ u and ∇ₕ × u contract to div/curl (S5.4).
+@testset "∇ₕ ⋅ u, ∇ₕ × u contract (#341)" begin
     @testset "numeric, 2D non-uniform" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (9, 7), (false, false))
         Wₕ = gridspace(Ωₕ)
@@ -219,7 +221,8 @@ const _CONTRACT_FAMILIES = (
         end
     end
 
-    @testset "composite VectorElement, not just an NTuple" begin
+    # A composite VectorElement, not just an NTuple.
+    @testset "composite VectorElement" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (8, 6), (false, false))
         Vₕ = gridspace(Ωₕ)^Val(2)
         uₕ = Rₕ(Vₕ, (x -> x[1]^2, x -> x[1] * x[2]))
@@ -230,7 +233,8 @@ const _CONTRACT_FAMILIES = (
         end
     end
 
-    @testset "forms: ∇ₕ ⋅ u in a bilinear form on a composite space" begin
+    # ∇ₕ ⋅ u in a bilinear form on a composite space.
+    @testset "forms: ∇ₕ ⋅ u, composite bilinear" begin
         # Only the backward, centered and cross-weighted families have a *symbolic* `div`
         # over a trial/test function (src/ast/operators/difference.jl); `∇̃ₕ`/`∇₊ₕ` have
         # none, so `∇̃ₕ ⋅ u`/`∇₊ₕ ⋅ u` inside a form is out of scope here -- the contraction
@@ -251,7 +255,7 @@ const _CONTRACT_FAMILIES = (
         end
     end
 
-    @testset "in-place divₕ!/curlₕ! stay allocation-free" begin
+    @testset "in-place divₕ!/curlₕ!: no allocs" begin
         # `⋅`/`×` forward to the allocating `divₕ`/`curlₕ`, never the `!` forms; this
         # confirms the in-place paths are untouched by adding those two methods.
         function alloc_counts()

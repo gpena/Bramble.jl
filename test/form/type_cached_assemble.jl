@@ -63,7 +63,8 @@ const _traced_ad = AutoSparse(
         return a, refill!
     end
 
-    @testset "matches the direct (uncached) result, at Float64 and at Dual" begin
+    # Matches the direct (uncached) result, at Float64 and at Dual.
+    @testset "matches direct, Float64 and Dual" begin
         cache = Dict()
         diffusion_matrix_cached(uₕ) = type_cached_assemble!(_build_diffusion, cache, uₕ; dirichlet = :boundary)
 
@@ -103,7 +104,8 @@ const _traced_ad = AutoSparse(
         @test diffusion_matrix_cached(u1) == diffusion_matrix_direct(u1)
     end
 
-    @testset "structural: matches assemble(a)'s own pattern, at every type seen" begin
+    # Matches assemble(a)'s own pattern, at every type seen.
+    @testset "structural: pattern matches assemble(a)" begin
         # SparseConnectivityTracer's own tracer element type: the one case that would
         # crash outright (UndefRefError) if `refill!` ran after allocate_system_matrix
         # instead of before, since a tracer is not `isbits` and starts genuinely
@@ -122,7 +124,9 @@ const _traced_ad = AutoSparse(
         @test nnz(J) > 0
     end
 
-    @testset "repeated calls at an already-seen type cost a small, N-independent overhead, not a rebuild" begin
+    # Repeated calls at an already-seen type cost a small, N-independent overhead, not a
+    # rebuild.
+    @testset "seen type: small N-independent cost" begin
         # `cache::AbstractDict` necessarily stores its `(a, refill!, A)` entries as `Any` --
         # the concrete triple's type differs across every distinct element type `T` a cache
         # can ever be asked about -- so a cache hit still pays a small, fixed dynamic-dispatch
@@ -178,7 +182,8 @@ const _traced_ad = AutoSparse(
         @test cached_bytes_big == cached_bytes
     end
 
-    @testset "drives a full Newton solve to the same answer as the direct approach" begin
+    # Drives a full Newton solve to the same answer as the direct approach.
+    @testset "Newton solve matches direct" begin
         sol(x) = exp(x[1])
         dαdu(u) = -2u / (1 + u^2)^2
         rhs(x) = -dαdu(sol(x)) * sol(x)^2 - α(sol(x)) * sol(x)

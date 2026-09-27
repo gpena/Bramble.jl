@@ -93,7 +93,8 @@ using ..TestUtils: _tri, _nonuniform_points
         @test all(iszero, Av[(n + 1):(2n), 1:n])
     end
 
-    @testset "Composite: multiple labels match sequential (#334)" begin
+    # Multiple labels at once match applying them sequentially.
+    @testset "composite: labels at once (#334)" begin
         # `dirichlet_bc!`/`symmetrize!` on a `CompositeGridSpace` combine every label into
         # one mask per leaf and sweep once, instead of once per label
         # (gpena/Bramble.jl#334). The oracle is that combining changes nothing: applying
@@ -193,7 +194,8 @@ using ..TestUtils: _tri, _nonuniform_points
         @test F0 == Fbefore
     end
 
-    @testset "dirichlet_bc! then symmetrize! preserves stored zeros" begin
+    # dirichlet_bc! then symmetrize! preserves stored zeros.
+    @testset "bc then symmetrize!: stored zeros" begin
         Ae, Fe = _tri(n), collect(1.0:n)
         dirichlet_bc!(Ae, Ωₕ, :bottom)
         symmetrize!(Ae, Fe, Ωₕ, :bottom)
