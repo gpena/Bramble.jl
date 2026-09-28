@@ -359,7 +359,7 @@ end
 # of the bilinear case is checked against the hand-built product.
 @testset "simplifier: nested scales stay live" begin
     for Ωₕ in (mesh(domain(interval(0.0, 1.0)), 9, true),
-               mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (false, true)))
+        mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (false, true)))
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> x[1] + 1.0)
         wₕ = Rₕ(Wₕ, x -> x[end] + 2.0)
@@ -372,7 +372,7 @@ end
         @test ast.left_op.inner_op isa GridFunctionScale
 
         linear = (() -> form(Wₕ, v -> innerₕ(1.0, uₕ * (uₕ * v))),
-                  () -> form(Wₕ, v -> innerₕ(1.0, uₕ * (wₕ * v))))
+            () -> form(Wₕ, v -> innerₕ(1.0, uₕ * (wₕ * v))))
         ls = map(mk -> mk(), linear)
         bs = map(assemble, ls)
         A = assemble(a)

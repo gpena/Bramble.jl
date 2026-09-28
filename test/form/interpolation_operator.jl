@@ -167,10 +167,10 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # same `P` as `interpolation_matrix`, whose own collapsed-axis test pins it to the
         # per-axis Kronecker product.
         for (Ω, nt, ns) in (
-                (domain(interval(0.0, 1.0) × interval(0.5, 0.5)), (9, 1), (5, 1)),
-                (domain(interval(0.5, 0.5) × interval(0.0, 1.0) × interval(0.0, 1.0)),
-                    (1, 7, 5), (1, 4, 3))
-            )
+            (domain(interval(0.0, 1.0) × interval(0.5, 0.5)), (9, 1), (5, 1)),
+            (domain(interval(0.5, 0.5) × interval(0.0, 1.0) × interval(0.0, 1.0)),
+            (1, 7, 5), (1, 4, 3))
+        )
             for unif in (true, false)
                 D = length(nt)
                 Wt = gridspace(mesh(Ω, nt, ntuple(_ -> unif, D)))

@@ -11,8 +11,10 @@ using Bramble: semidiscretize
 using ForwardDiff
 using LinearAlgebra: Diagonal
 
-_smoke_meshes() = (mesh(domain(interval(0.0, 1.0)), 11, false),
-    mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, true)))
+function _smoke_meshes()
+    (mesh(domain(interval(0.0, 1.0)), 11, false),
+        mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, true)))
+end
 
 @testset "ForwardDiff smoke" begin
     for Ωₕ in _smoke_meshes()

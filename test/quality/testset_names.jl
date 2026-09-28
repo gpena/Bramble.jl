@@ -15,8 +15,10 @@ const _TEST_DIR = normpath(joinpath(@__DIR__, ".."))
 const _LIMIT = 40
 const _INTERP_WIDTH = 4
 
-_is_testset(ex) = ex isa Expr && ex.head === :macrocall &&
-                  ex.args[1] in (Symbol("@testset"), GlobalRef(Main, Symbol("@testset")))
+function _is_testset(ex)
+    ex isa Expr && ex.head === :macrocall &&
+        ex.args[1] in (Symbol("@testset"), GlobalRef(Main, Symbol("@testset")))
+end
 
 # The first positional string argument; options (`verbose = true`) are skipped and a
 # non-literal first argument (a custom testset type, a variable) means no measurable name.
@@ -32,7 +34,7 @@ end
 
 _name_width(arg::String) = textwidth(arg)
 _name_width(arg::Expr) = sum(a -> a isa String ? textwidth(a) : _INTERP_WIDTH, arg.args;
-                             init = 0)
+    init = 0)
 
 _name_text(arg::String) = arg
 _name_text(arg::Expr) = join((a isa String ? a : "\$(…)" for a in arg.args))

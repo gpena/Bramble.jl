@@ -1207,7 +1207,7 @@ end
         form(W, W, (u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)) + innerₕ(D₋ᵧ(u), D₋ₓ(v))),
         form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(κ * u, restrict_to(:left, v))),
         form(V, V, (u, v) -> innerₕ(u(1), v(1)) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) +
-                              innerₕ(u(1), v(2)))
+                             innerₕ(u(1), v(2)))
     )
     contract(a, u, v) = (a(u, v); @allocated a(u, v))
     for (k, a) in enumerate(cases)

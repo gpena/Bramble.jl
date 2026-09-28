@@ -33,6 +33,7 @@ function units(f)
         tl, sl = leaf_spaces_offsets(f.trial_space), leaf_spaces_offsets(f.test_space)
         out = Any[]
         for t in _summands(f.ast), blk in blocks(t, tl, sl)
+
             b = _bind_interp_spaces(t, blk.trial_leaf, blk.test_leaf)
             push!(out, (b, _walked_leaf(b, blk.trial_leaf, blk.test_leaf)))
         end
