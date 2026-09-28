@@ -205,10 +205,13 @@ end
 ) where {D}
     idx, ts = _interp_cell_frac(Ωsrc, x, outside)
     li = LinearIndices(indices(Ωsrc))
-    # the `2ᴰ` corners, decoded from the bits of `k - 1` so the tuple length is static
+    # the `2ᴰ` corners, decoded from the bits of `k - 1` so the tuple length is static. A
+    # collapsed axis (one point) has no far corner: its slot is clamped onto the near one,
+    # where `t = 0` makes the far corner's weight exactly zero.
     return ntuple(Val(1 << D)) do k
         corner = CartesianIndex(ntuple(d -> ((k - 1) >> (d - 1)) & 1, Val(D)))
-        (Slot(li[idx + corner]), _interp_corner_weight(ts, corner, Val(D)))
+        slot = CartesianIndex(ntuple(d -> min(corner[d], size(li, d) - 1), Val(D)))
+        (Slot(li[idx + slot]), _interp_corner_weight(ts, corner, Val(D)))
     end
 end
 

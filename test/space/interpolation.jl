@@ -3,6 +3,7 @@ module SpaceInterpolationTests
 using Test
 using Bramble
 using Bramble: D₋ₓ, Mₓ, interpolation_matrix
+using SparseArrays: sparse
 
 # `interpolate_at` is the piecewise (multi)linear interpolant of a grid function, evaluable
 # at any physical point, not only at its own mesh's points. `πₕ!`/`πₕ` are the numeric
@@ -86,6 +87,34 @@ using Bramble: D₋ₓ, Mₓ, interpolation_matrix
         nnz_per_row = vec(sum(!iszero, P2, dims = 2))
         @test all(<=(4), nnz_per_row)
         @test all(≈(1), vec(sum(P2, dims = 2)))
+    end
+
+    @testset "Collapsed axis: per-axis Kronecker" begin
+        # The pointwise and matrix paths match the per-axis Kronecker product.
+        # A collapsed axis (a single point, from a zero-length interval) has no cell to
+        # interpolate across, so it must contribute a 1×1 identity factor. Each pair is
+        # nested by 2: the fine mesh is the coarse one refined once, which leaves the
+        # collapsed axis at one point.
+        axis(d, c) = d == c ? interval(0.5, 0.5) : interval(0.0, 1.0)
+        per_axis(Ωf, Ωc, d) = npoints(Ωf(d)) == 1 ? sparse(ones(1, 1)) :
+                              interpolation_matrix(gridspace(Ωf(d)), gridspace(Ωc(d)))
+
+        for D in (2, 3), c in 1:D, unif in (true, false)
+            Ωc = mesh(domain(reduce(×, ntuple(d -> axis(d, c), D))),
+                ntuple(d -> d == c ? 1 : 3 + d, D), ntuple(_ -> unif, D))
+            Ωf = deepcopy(Ωc)
+            iterative_refinement!(Ωf)
+            @test npoints(Ωf, Tuple) == ntuple(d -> d == c ? 1 : 2 * (3 + d) - 1, D)
+
+            P = interpolation_matrix(gridspace(Ωf), gridspace(Ωc))
+            K = reduce(kron, reverse(ntuple(d -> per_axis(Ωf, Ωc, d), D)))
+            @test size(P) == size(K)
+            @test isapprox(Matrix(P), Matrix(K); rtol = 1e-14, atol = 1e-14)
+
+            # The pointwise interpolant agrees with the matrix on the same pair.
+            src = Rₕ(gridspace(Ωc), x -> sum(x) + prod(x))
+            @test P * parent(src) ≈ parent(πₕ(gridspace(Ωf), src))
+        end
     end
 
     # The matrix is precomputed.
