@@ -3,7 +3,9 @@ module TestFormMultigrid
 using Test
 using Bramble
 using Bramble: GeometricMeshHierarchy, set_markers!, spacings, interpolation_matrix, CpuPolyester
-using LinearAlgebra: dot, norm
+using Bramble: AbstractSmoother, JacobiSmoother, ChebyshevSmoother, RedBlackGaussSeidel, max_eigenvalue_estimate,
+               trial_space, D₋ₓ, D₋ᵧ, M₊ᵧ
+using LinearAlgebra: LinearAlgebra, dot, norm, diag, LowerTriangular
 using SparseArrays: sparse
 using ForwardDiff: ForwardDiff
 using Random
@@ -268,6 +270,186 @@ end
         return (_mg_palloc(xf, H, 2, xc), _mg_calloc(xc, H, 2, xf))
     end
     @test bytes[1] == bytes[2]
+end
+
+# Smoothers (#329): mass plus variable diffusion on non-uniform meshes, with and without
+# Dirichlet rows, against dense references built from `assemble`.
+function _mg_smoother_form(D, n; T = Float64)
+    Random.seed!(MG_SEED)
+    I = interval(T(0), T(1))
+    Ω = D == 1 ? I : D == 2 ? I × interval(T(0), T(2)) : I × I × interval(T(-1), T(1))
+    W = gridspace(mesh(domain(Ω), n, ntuple(_ -> false, D)))
+    κ = Rₕ(W, x -> 1 + sum(abs2, x))
+    return form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v)))
+end
+
+const _MG_SMOOTHER_SHAPES = ((1, 33), (2, (17, 13)), (3, (9, 7, 9)))
+
+# The colour of each unknown: the parity of its zero-based index sum.
+_mg_colours(dims) = [mod(sum(Tuple(I)) - length(dims), 2) for I in CartesianIndices(dims)][:]
+
+# `sweeps` of forward Gauss-Seidel in the red-then-black ordering: the lower triangle of the
+# permuted matrix, solved densely.
+function _mg_rbgs_dense(A, x, b, dims, sweeps)
+    c = _mg_colours(dims)
+    p = [findall(==(0), c); findall(==(1), c)]
+    Ap = A[p, p]
+    xp, bp = x[p], b[p]
+    for _ in 1:sweeps
+        xp += LowerTriangular(Ap) \ (bp - Ap * xp)
+    end
+    y = similar(x)
+    y[p] = xp
+    return y
+end
+
+# The Chebyshev smoother from its error polynomial: x - x⋆ ↦ T_k((θ - D⁻¹A)/δ) / T_k(θ/δ) (x - x⋆).
+function _mg_cheb_dense(A, x, b, λmin, λmax, k)
+    θ, δ = (λmax + λmin) / 2, (λmax - λmin) / 2
+    Id = Matrix{Float64}(LinearAlgebra.I, size(A))
+    t = (θ * Id - A ./ diag(A)) / δ
+    T0, T1 = Id, t
+    for _ in 2:k
+        T0, T1 = T1, 2 * t * T1 - T0
+    end
+    xs = A \ b
+    return xs + (T1 / cosh(k * acosh(θ / δ))) * (x - xs)
+end
+
+# The highest-frequency grid function, (-1)^(sum of indices).
+_mg_checkerboard(dims) = [(-1.0)^sum(Tuple(I)) for I in CartesianIndices(dims)][:]
+
+_mg_salloc(s, x, b) = (smooth!(s, x, b); @allocated smooth!(s, x, b))
+
+@testset "gmg: smoothers damp high frequencies" begin
+    for (D, n) in _MG_SMOOTHER_SHAPES, dl in (nothing, :boundary)
+
+        a = _mg_smoother_form(D, n)
+        W = trial_space(a)
+        dims = npoints(mesh(W), Tuple)
+        kw = dl === nothing ? (;) : (; dirichlet = dl)
+        op = matrix_free_operator(a; kw...)
+        A = Matrix(assemble(a; kw...))
+        Random.seed!(MG_SEED + D)
+        x0, b = randn(ndofs(W)), randn(ndofs(W))
+
+        x = copy(x0)
+        @test smooth!(jacobi_smoother(op; ω = 0.7, sweeps = 2), x, b) === x
+        y = x0 + 0.7 * (b - A * x0) ./ diag(A)
+        @test _mg_agree(x, y + 0.7 * (b - A * y) ./ diag(A))
+        @test _mg_agree(smooth!(jacobi_smoother(a; kw..., ω = 0.7, sweeps = 2), copy(x0), b), x)
+
+        s = chebyshev_smoother(op; degree = 3)
+        @test s.λmax ≈ max_eigenvalue_estimate(op; preconditioner = jacobi_preconditioner(op))
+        @test s.λmin ≈ s.λmax / 4
+        @test _mg_agree(smooth!(s, copy(x0), b), _mg_cheb_dense(A, x0, b, s.λmin, s.λmax, 3))
+
+        for sweeps in (1, 2)
+            x = smooth!(red_black_gauss_seidel(a; kw..., sweeps), copy(x0), b)
+            @test _mg_agree(x, _mg_rbgs_dense(A, x0, b, dims, sweeps))
+            # A Dirichlet row is the identity row, so Gauss-Seidel solves it exactly.
+            if dl !== nothing
+                bnd = findall(i -> A[i, i] == 1 && count(!iszero, A[i, :]) == 1, 1:ndofs(W))
+                @test !isempty(bnd) && _mg_agree(x[bnd], b[bnd])
+            end
+        end
+        # A black half-sweep solves the black equations: their residual vanishes.
+        x = smooth!(red_black_gauss_seidel(op), copy(x0), b)
+        @test norm((b - A * x)[_mg_colours(dims) .== 1], Inf) < 1e-10 * norm(b, Inf)
+
+        # The checkerboard is near the top of the spectrum of D⁻¹A, λ ≈ 2: a Jacobi sweep
+        # multiplies it by about |1 - 2ω|, 1/3 at ω = 2/3 and (2D - 1)/(2D + 1) at the
+        # default; Chebyshev and red-black remove more than half of its residual.
+        hf = _mg_checkerboard(dims)
+        ratio(sm) = norm(A * smooth!(sm, copy(hf), zeros(ndofs(W)))) / norm(A * hf)
+        @test ratio(jacobi_smoother(op; ω = 2 / 3)) < 0.4
+        @test ratio(jacobi_smoother(op)) < (2D - 1) / (2D + 1) + 0.05
+        @test ratio(chebyshev_smoother(op)) < 0.5
+        @test ratio(red_black_gauss_seidel(op)) < 0.5
+        for sm in (jacobi_smoother(op), chebyshev_smoother(op), red_black_gauss_seidel(op))
+            @test _mg_salloc(sm, copy(x0), b) == 0
+            # A `VectorElement` iterate and right-hand side act on their storage.
+            uₕ, bₕ = element(W, copy(x0)), element(W, b)
+            @test smooth!(sm, uₕ, bₕ) === uₕ
+            @test parent(uₕ) == smooth!(sm, copy(x0), b)
+        end
+    end
+
+    # Transposed difference pairs and region restrictions couple neighbours of opposite
+    # colour only, so red-black takes them.
+    W = trial_space(_mg_smoother_form(2, (9, 7)))
+    for a in (form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(D₋ₓ(u), v) + 2.0 * innerₕ(u, D₋ₓ(v))),
+        form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, Bramble.restrict_to(:boundary, v))))
+        x0, b = randn(ndofs(W)), randn(ndofs(W))
+        @test _mg_agree(smooth!(red_black_gauss_seidel(a), copy(x0), b),
+            _mg_rbgs_dense(Matrix(assemble(a)), x0, b, npoints(mesh(W), Tuple), 1))
+    end
+
+    # Float32 stays Float32 and allocation-free.
+    a32 = _mg_smoother_form(2, (17, 13); T = Float32)
+    n32 = ndofs(trial_space(a32))
+    x32, b32 = randn(Float32, n32), zeros(Float32, n32)
+    hf32 = Float32.(_mg_checkerboard((17, 13)))
+    A32 = assemble(a32)
+    for sm in (jacobi_smoother(a32; ω = 2 / 3), chebyshev_smoother(a32), red_black_gauss_seidel(a32))
+        @test eltype(sm) === Float32
+        @test sm.inv_diagonal isa Vector{Float32}
+        @test eltype(smooth!(sm, copy(hf32), b32)) === Float32
+        @test norm(A32 * smooth!(sm, copy(hf32), b32)) < 0.5f0 * norm(A32 * hf32)
+        @test _mg_salloc(sm, x32, b32) == 0
+    end
+
+    # A mixed difference couples diagonal neighbours, which share a colour.
+    W = trial_space(_mg_smoother_form(2, (9, 7)))
+    box = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(D₋ᵧ(D₋ₓ(u)), D₋ᵧ(D₋ₓ(v))))
+    @test_throws ArgumentError red_black_gauss_seidel(box)
+    @test_throws ArgumentError red_black_gauss_seidel(matrix_free_operator(box))
+    @test_throws ArgumentError red_black_gauss_seidel(form(W, W, (u, v) -> innerₕ(D₋ₓ(D₋ₓ(u)), v)))
+    # An average across y of a difference along x couples diagonal neighbours too, but on a
+    # collapsed y axis they do not exist, so the same form is taken there. (A difference
+    # along a collapsed axis divides by its zero spacing, hence the average.)
+    avg(W) = form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(M₊ᵧ(D₋ₓ(u)), M₊ᵧ(D₋ₓ(v))))
+    @test_throws ArgumentError red_black_gauss_seidel(avg(W))
+    Random.seed!(MG_SEED)
+    Wc = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.5, 0.5)), (17, 4), false))
+    @test npoints(mesh(Wc), Tuple) == (17, 1)
+    boxc = avg(Wc)
+    x0, b = randn(17), randn(17)
+    @test _mg_agree(smooth!(red_black_gauss_seidel(boxc), copy(x0), b),
+        _mg_rbgs_dense(Matrix(assemble(boxc)), x0, b, (17, 1), 1))
+    # A composite space is refused; Jacobi and Chebyshev take it.
+    V = W × W
+    c = form(V, V, (u, v) -> innerₕ(u(1), v(1)) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) + innerₕ(u(2), v(2)))
+    @test_throws ArgumentError red_black_gauss_seidel(c)
+    Ac = Matrix(assemble(c))
+    x0, b = randn(ndofs(V)), randn(ndofs(V))
+    @test _mg_agree(smooth!(jacobi_smoother(c), copy(x0), b), x0 + 0.8 * (b - Ac * x0) ./ diag(Ac))
+
+    a = _mg_smoother_form(2, (9, 7))
+    n = ndofs(trial_space(a))
+    for sm in (jacobi_smoother(a), chebyshev_smoother(a; λmax = 2.5), red_black_gauss_seidel(a))
+        @test sm isa AbstractSmoother{Float64}
+        @test size(sm) == (n, n)
+        @test_throws DimensionMismatch smooth!(sm, zeros(n + 1), zeros(n))
+        @test_throws DimensionMismatch smooth!(sm, zeros(n), zeros(n - 1))
+        x = zeros(n)
+        @test_throws ArgumentError smooth!(sm, x, x)
+        buf = zeros(2n)
+        @test_throws ArgumentError smooth!(sm, view(buf, 1:n), view(buf, 2:(n + 1)))
+        @test_throws ArgumentError smooth!(sm, _MgZeroBased(zeros(n)), zeros(n))
+    end
+    @test jacobi_smoother(a) isa JacobiSmoother
+    @test chebyshev_smoother(a) isa ChebyshevSmoother
+    @test red_black_gauss_seidel(a) isa RedBlackGaussSeidel
+    @test_throws ArgumentError jacobi_smoother(a; sweeps = 0)
+    @test_throws ArgumentError jacobi_smoother(a; ω = 0)
+    @test_throws ArgumentError jacobi_smoother(a; ω = Inf)
+    @test_throws ArgumentError chebyshev_smoother(a; degree = 0)
+    @test_throws ArgumentError chebyshev_smoother(a; λmax = -1.0)
+    @test_throws ArgumentError red_black_gauss_seidel(a; sweeps = 0)
+    Wr = gridspace(mesh(domain(interval(0.0, 1.0)), 9, false))
+    rect = form(Wr, trial_space(_mg_smoother_form(1, 5)), (u, v) -> innerₕ(u, v))
+    @test_throws DimensionMismatch jacobi_smoother(rect)
 end
 
 end # module TestFormMultigrid
