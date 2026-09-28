@@ -153,7 +153,7 @@ const CASES = TTFXCase[
         ["SuiteSparse"],
         250.0,
         "A = assemble(a_spd)\nF = assemble(l)",
-        "suitesparse_solve(A, F)"
+        "Bramble.suitesparse_solve(A, F)"
     ),
     TTFXCase(
         "sparspak_solve(A, F)",
@@ -161,7 +161,7 @@ const CASES = TTFXCase[
         ["Sparspak"],
         200.0,
         "A = assemble(a_spd)\nF = assemble(l)",
-        "sparspak_solve(A, F)"
+        "Bramble.sparspak_solve(A, F)"
     ),
     TTFXCase(
         "fdm_solve(a, F)",
