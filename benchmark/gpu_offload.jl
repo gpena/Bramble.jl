@@ -3,7 +3,7 @@
 #
 # `GpuOffload` (a `CpuPolicy` wrapping an inner CPU policy and a device backend,
 # `src/utils/backend.jl`) routes just `Rₕ!`/`avgₕ!`'s fill step through a device
-# (`_offload_project!`, `src/space/operators/projection.jl`) while keeping the space itself
+# (`_offload_project!`, `src/operators/projection.jl`) while keeping the space itself
 # host-storage typed. The issue's own exploratory numbers (`BenchmarkTools`, one warmed
 # process, `--threads=4`, AC power) are the reason this policy exists at all:
 #

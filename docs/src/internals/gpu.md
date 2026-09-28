@@ -65,7 +65,7 @@ method once loaded. This is the same idiom `metal_backend`/`_metal_backend` and
 `export_vtk`/`_export_vtk` already used before this milestone; [`ka_device`](@ref) (listed
 in the [API reference](../api.md)) and [`ka_synchronize`](@ref) below are the two new
 stubs it adds, and `_gpu_for!`/`_gpu_scatter_for!` and the `_launch_*!` family (declared
-throughout `src/space/operators/` and `src/Bramble.jl`) follow the identical pattern for
+throughout `src/operators/` and `src/Bramble.jl`) follow the identical pattern for
 the individual kernels.
 
 ```@autodocs
@@ -632,7 +632,7 @@ is a different shape from everything above: a [`CpuPolicy`](@ref) -- `locality` 
 [`HostLocality`](@ref) for it, and the `Backend` it configures keeps host storage -- that
 wraps an inner `CpuPolicy` alongside a device `Backend`. It routes only `Rₕ!`/`avgₕ!`'s fill
 step through that device backend (`_offload_project!`,
-`src/space/operators/projection.jl`); every other operation on the space runs under the
+`src/operators/projection.jl`); every other operation on the space runs under the
 wrapped inner policy exactly as it would without `GpuOffload` in play, since
 [`execution_policy`](@ref) on a `GpuOffload`-configured `Backend` returns the inner policy
 instance, not the wrapper. There is deliberately no persistent device state: each call
