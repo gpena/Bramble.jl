@@ -90,6 +90,10 @@ using ExplicitImports
                 # `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` above the
                 # same way the searching sweep calls `_scatter_point!`. Neither is public.
                 :_ReplayTarget,
+                # `_ActionTarget` (gpena/Bramble.jl#326): the matrix-free product's sink union,
+                # passed through the same two Polyester replay hooks as `_ReplayTarget`. Not
+                # public.
+                :_ActionTarget,
                 :_replay_point!,
                 :_scatter_linear_point!,
                 :_scatter_point!,
