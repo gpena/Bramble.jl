@@ -481,6 +481,21 @@ KroneckerLinearOperator
 fdm_solve
 ```
 
+### Matrix-free operators
+
+`matrix_free_operator` applies any `BilinearForm` that `assemble` accepts, separable or not,
+without building its matrix: `mul!(y, op, x)` walks the form's stencil and agrees with
+`assemble(a) * x`, Dirichlet rows included, on vectors and `VectorElement`s. Its execution
+policy comes from the trial space, as for assembly. Preconditioners and multigrid built on it
+are in [Scientific computing](api_sciml.md), and the
+[solvers tutorial](tutorials/solvers.md) has measured time and memory against sparse
+matrix-vector products.
+
+```@docs
+matrix_free_operator
+MatrixFreeOperator
+```
+
 ### Additive accumulation
 
 `assemble_add!` adds a form's contribution to a matrix or vector that already holds
