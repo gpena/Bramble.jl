@@ -255,7 +255,7 @@ of its way to avoid.
 | `⟨Au, Bv⟩ + ⟨Au, Cv⟩` (or `⟨Au, Bv⟩ + ⟨Cu, Bv⟩`), shared `A` a singleton node, anywhere in the sum | `⟨Au, (B + C)v⟩` (or `⟨(A + C)u, Bv⟩`) | one product, one compiled term, instead of two |
 | `⟨f, Av⟩ + ⟨f, Bv⟩`, shared source a singleton node | `⟨f, (A + B)v⟩` | as above, for a linear form |
 | `Shift₀(u)` | `u` | a zero shift is the identity |
-| `Shift_a(Shift_b(u))`, same dimension | `Shift_{a+b}(u)` | additive, so `Shift_k(Shift_{-k}(u))` collapses to `u` via the rule above |
+| `Shift_a(Shift_b(u))`, same dimension, `a` and `b` of one sign | `Shift_{a+b}(u)` | additive only then: a shift reads 0 off the grid, so `Shift_k(Shift_{-k}(u))` is not `u` at the boundary and stays nested |
 
 Factoring a shared argument uses the like-term rule's gate: the shared argument must pass
 `_statically_equal`, so whether the rule fires is settled by the argument types, and a

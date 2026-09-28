@@ -36,7 +36,22 @@ using Bramble:
                Mₓ,
                inner₊ᵧ,
                inner₊₂,
-               inner₊ₓ
+               inner₊ₓ,
+               S₊,
+               S₋,
+               S₊ₓ,
+               S₋ₓ,
+               S₊ᵧ,
+               S₋ᵧ,
+               S₊₂,
+               jumpₓ,
+               forward_shift,
+               backward_shift,
+               Dcₓ,
+               D̃ₓ,
+               D̽ₓ,
+               Mcₓ
+using LinearAlgebra: I
 
 # The symbolic operator layer: averages, the shift node, region restriction, and the
 # inner products that turn a pair of operators into a bilinear product.
@@ -322,6 +337,129 @@ const _ORIGIN_2D = (0, 0)
         @test z isa LazyOp{2}
         @test sprint(show, z) == "0"
         @test sprint(show, id) == "I"
+    end
+end
+
+# gpena/Bramble.jl#352: the public index shifts on a symbolic operand build `ShiftNode`s,
+# and a shift composed with another stencil assembles what the grid functions compute. The
+# oracle is the matrix product `H · S · Op` of the space-layer matrices, `H` the `innerₕ`
+# weights. The boundary is where it used to fail: `S₊ₓ(D₋ₓ(u))` re-evaluated `D₋ₓ` at the
+# clamped last point and kept its `-u_n/h` tap there, where the shift reads 0.
+@testset "shift node: composed stencils" begin
+    box(D) = D == 1 ? interval(0.0, 1.0) :
+             D == 2 ? interval(0.0, 1.0) × interval(0.0, 2.0) :
+             interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)
+    mat(W, f) = f === identity ? Matrix(1.0I, ndofs(W), ndofs(W)) : Matrix(f(W))
+
+    @testset "nodes" begin
+        W = gridspace(mesh(domain(box(2)), (5, 6), (false, false)))
+        u = Bramble.trial_function(W)
+        @test @inferred(S₊ₓ(u)) isa ShiftNode{2, 1}
+        @test S₊ₓ(u).shift_amount == 1
+        @test S₋ᵧ(u) isa ShiftNode{2, 2}
+        @test S₋ᵧ(u).shift_amount == -1
+        @test S₊(u, Val(2)) === S₊ᵧ(u) === forward_shift(u, Val(2))
+        @test S₋(u, Val(1)) === S₋ₓ(u) === backward_shift(u, Val(1))
+        @test S₊ₕ(u) === (S₊ₓ(u), S₊ᵧ(u))
+        @test S₋ₕ(u) === (S₋ₓ(u), S₋ᵧ(u))
+        @test S₊ₕ[1](u) === S₊ₓ(u)
+        # the node `shift_op` builds, with the direction a type
+        @test S₊ₓ(D₋ₓ(u)) === shift_op(D₋ₓ(u), 1, 1)
+        u1 = Bramble.trial_function(gridspace(mesh(domain(box(1)), 5, false)))
+        @test S₊ₕ(u1) === S₊ₓ(u1)
+        @test S₋ₕ(u1) === S₋ₓ(u1)
+        # a direction the operand does not have is refused, as on a grid function
+        @test_throws ArgumentError S₊ᵧ(u1)
+        @test_throws ArgumentError S₋(u1, Val(2))
+        @test_throws ArgumentError S₊₂(u)
+        @test_throws ArgumentError S₋(D₋ₓ(u), Val(3))
+    end
+
+    @testset "$(D)D" for D in 1:3
+        n = ntuple(i -> 4 + i, D)
+        W = gridspace(mesh(domain(box(D)), n, ntuple(_ -> false, D)))
+        uh = Rₕ(W, x -> 1 + sum(abs2, x) + prod(x))
+        x = parent(uh)
+        H = Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, v))))
+        inners = D == 1 ? (identity, D₋ₓ, M₊ₓ, jumpₓ) :
+                 (identity, D₋ₓ, M₊ₓ, jumpₓ, D₋ᵧ)
+        @testset "$(S)∘$(op)" for d in 1:D,
+            (S, Sb) in ((S₊ₕ[d], forward_shift), (S₋ₕ[d], backward_shift)),
+            op in inners
+            SO = Matrix(Sb(W, Val(d))) * mat(W, op)
+            a = form(W, W, (u, v) -> innerₕ(S(op(u)), v))
+            A = assemble(a)
+            @test isapprox(Matrix(A), H * SO; atol = 1e-10)
+            # the grid-function computation
+            @test isapprox(A * x, H * parent(S(op(uh))); atol = 1e-10)
+            # the rest compiles a form per case, so it runs on the two taps that reach
+            # back onto the grid: a difference and a jump
+            op in (D₋ₓ, jumpₓ) || continue
+            # the refill and the matrix-free product
+            A.nzval .= 0
+            assemble!(A, a)
+            @test isapprox(Matrix(A), H * SO; atol = 1e-10)
+            @test isapprox(matrix_free_operator(a) * x, A * x; atol = 1e-10)
+            # on the test side of a linear form, the transpose
+            l = assemble(form(W, v -> innerₕ(uh, S(op(v)))))
+            @test isapprox(l, SO' * H * x; atol = 1e-10)
+        end
+    end
+
+    # `shift_op` builds the same node, so it has the same boundary: two points along, the
+    # last two rows read 0 rather than a clamped re-evaluation of `D₋ₓ`
+    @testset "shift_op by two" begin
+        W = gridspace(mesh(domain(box(1)), 7, false))
+        H = Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, v))))
+        A = assemble(form(W, W, (u, v) -> innerₕ(shift_op(D₋ₓ(u), 1, 2), v)))
+        S2 = Matrix(forward_shift(W, Val(1)))^2
+        @test isapprox(Matrix(A), H * S2 * Matrix(D₋ₓ(W)); atol = 1e-10)
+    end
+end
+
+# A tapping node over an operand that carries a grid-function coefficient, `c*u`,
+# `c*D₋ₓ(u)` or `D₋ₓ(c*u)`: every difference, average, jump and shift family, on non-uniform
+# meshes. The last operand is point-dependent (the coefficient varies) without being a
+# `GridFunctionScale` itself, and a tap once re-evaluated it at the neighbour without
+# relabelling its offsets, so `D₊ₓ(D₋ₓ(c*u))` put the neighbour's stencil on the point's own
+# columns (gpena/Bramble.jl#352). The oracle is the grid-function
+# computation, one basis vector per column, so the whole matrix is checked against it.
+@testset "tap over a coefficient operand" begin
+    box(D) = D == 1 ? interval(0.0, 1.0) :
+             D == 2 ? interval(0.0, 1.0) × interval(0.0, 2.0) :
+             interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)
+    taps = (D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, jumpₓ, Mₓ, M₊ₓ, Mcₓ, S₊ₓ, S₋ₓ)
+
+    @testset "$(D)D" for D in 1:3
+        n = ntuple(i -> 4 + i, D)
+        W = gridspace(mesh(domain(box(D)), n, ntuple(_ -> false, D)))
+        c = Rₕ(W, x -> 2 + sum(x) + prod(x))
+        uh = Rₕ(W, x -> 1 + sum(abs2, x))
+        x = parent(uh)
+        H = Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, v))))
+        # each operand as a form operator and as the grid function it computes
+        cu = ("c*u", u -> c * u, z -> element(W, parent(c) .* parent(z)))
+        cdu = ("c*D₋ₓ(u)", u -> c * D₋ₓ(u), z -> element(W, parent(c) .* parent(D₋ₓ(z))))
+        dcu = ("D₋ₓ(c*u)", u -> D₋ₓ(c * u), z -> D₋ₓ(element(W, parent(c) .* parent(z))))
+        cases = Any[(t, o...) for o in (cu, cdu, dcu) for t in taps]
+        D >= 2 && push!(cases, (S₊ᵧ ∘ D₋ᵧ, cu...), (D₊ᵧ ∘ S₋ᵧ, cu...))
+        basis(j) = element(W, [i == j ? 1.0 : 0.0 for i in 1:ndofs(W)])
+        @testset "$(tap)∘$(nm)" for (tap, nm, opd, grid) in cases
+            G = reduce(hcat, [parent(tap(grid(basis(j)))) for j in 1:ndofs(W)])
+            a = form(W, W, (u, v) -> innerₕ(tap(opd(u)), v))
+            A = assemble(a)
+            # `rtol` as well: a double difference on the 3D mesh reaches 10³, and the
+            # threaded sweep sums in another order
+            @test isapprox(Matrix(A), H * G; atol = 1e-9, rtol = 1e-10)
+            @test isapprox(A * x, H * parent(tap(grid(uh))); atol = 1e-9, rtol = 1e-10)
+            A.nzval .= 0
+            assemble!(A, a)
+            @test isapprox(Matrix(A), H * G; atol = 1e-9, rtol = 1e-10)
+            # the matrix-free product compiles its own walk, so only on the operand that
+            # used to fail
+            nm == "D₋ₓ(c*u)" || continue
+            @test isapprox(matrix_free_operator(a) * x, H * G * x; atol = 1e-9, rtol = 1e-10)
+        end
     end
 end
 

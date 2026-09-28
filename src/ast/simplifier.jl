@@ -44,8 +44,10 @@ routing at all) or a documented dead end (a hidden scalar defeating symmetry det
     for like terms), both products must name no component, and each coefficient moves onto
     its own unshared argument, so no coefficient is compared. Fewer products is fewer
     compiled terms: see `_factor`.
-  - `Shift₀(u) -> u`, and two nested shifts along the *same* dimension combine their amounts,
-    `Shift_a(Shift_b(u)) -> Shift_{a+b}(u)` (so `Shift_k(Shift_{-k}(u)) -> Shift₀(u) -> u`).
+  - `Shift₀(u) -> u`, and two nested shifts along the *same* dimension and in the same sense
+    combine their amounts, `Shift_a(Shift_b(u)) -> Shift_{a+b}(u)` for `a` and `b` of one
+    sign. Opposite senses stay nested: a shift reads 0 off the grid, so `Shift_k(Shift_{-k}(u))`
+    is not `u` at the boundary.
 
 What is not attempted: this stops at `BilinearProduct`/`LinearProduct`/`ShiftNode` and does
 not descend into differences, averages, jumps, restrictions or interpolation -- a scalar or
@@ -536,13 +538,14 @@ function simplify_ast(op::ShiftNode{D, Dim}) where {D, Dim}
     inner = simplify_ast(op.inner_op)
     op.shift_amount == 0 && return inner  # Shift₀(u) -> u
 
-    if inner isa ShiftNode{D, Dim}
-        # Shift_a(Shift_b(u)) -> Shift_{a+b}(u), along the *same* dimension only -- a shift
-        # along a different dimension is a different operation and cannot fold into one
-        # node. `a + (-a) = 0` collapses straight to `u`, matching the Shift₀ rule above
-        # rather than building a zero-shift node and relying on a second pass to remove it.
+    if inner isa ShiftNode{D, Dim} && sign(inner.shift_amount) == sign(op.shift_amount)
+        # Shift_a(Shift_b(u)) -> Shift_{a+b}(u), along the *same* dimension and in the same
+        # sense only. A shift along a different dimension is a different operation. Opposite
+        # senses do not cancel at the boundary: a shift reads 0 off the grid, so
+        # `S₊ₓ(S₋ₓ(u))` is `u` in the interior but 0 at the last point, where `S₋ₓ(u)`'s
+        # value there was never read (gpena/Bramble.jl#352). Two reads in the same sense
+        # leave the grid exactly where the merged one does, so that fold is exact.
         total = op.shift_amount + inner.shift_amount
-        total == 0 && return inner.inner_op
         return ShiftNode{D, Dim, typeof(inner.inner_op)}(total, inner.inner_op)
     end
 

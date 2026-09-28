@@ -302,16 +302,20 @@ matrix of `forward_shift` is the transpose of that of [`backward_shift`](@ref).
 
 # Arguments
 - `arg`: A mesh `Ωₕ`, a grid space `Wₕ` or a [`VectorElement`](@ref) `uₕ`, scalar or composite
-  (componentwise on the latter).
-- `dim_val`: The direction, `Val(1)`, `Val(2)` or `Val(3)`.
+  (componentwise on the latter), or a symbolic operand of a form (a `LazyOp` such as the
+  trial function `u` or `D₋ₓ(u)`).
+- `dim_val`: The direction, `Val(1)`, `Val(2)` or `Val(3)`. On a form operand the entry
+  points `S₊`/`S₋` take this `Val` form only; their `Int` and `Symbol` directions are for a
+  mesh, a space or a grid function, since the direction is part of the node's type.
 
 # Returns
 - For a mesh or a grid space: the `npoints(Ωₕ) × npoints(Ωₕ)` matrix `shift(Ωₕ, dim_val,
   Val(1))`, in the backend's `matrix_type`, with ones on the superdiagonal of that direction.
 - For a `VectorElement`: a new `VectorElement` of the same space holding ``u_{i+1}``.
+- For a `LazyOp`: the `ShiftNode` that assembles ``u_{i+1}`` inside a form.
 
 # Throws
-- `ArgumentError`: `dim_val` is not between 1 and the mesh dimension; or `uₕ` is
+- `ArgumentError`: `dim_val` is not between 1 and the mesh (or operand) dimension; or `uₕ` is
   device-backed or its space has a [`GpuPolicy`](@ref) (no device kernel yet, tracked on
   milestone v4.4.0).
 
@@ -349,16 +353,20 @@ that of [`forward_shift`](@ref).
 
 # Arguments
 - `arg`: A mesh `Ωₕ`, a grid space `Wₕ` or a [`VectorElement`](@ref) `uₕ`, scalar or composite
-  (componentwise on the latter).
-- `dim_val`: The direction, `Val(1)`, `Val(2)` or `Val(3)`.
+  (componentwise on the latter), or a symbolic operand of a form (a `LazyOp` such as the
+  trial function `u` or `D₋ₓ(u)`).
+- `dim_val`: The direction, `Val(1)`, `Val(2)` or `Val(3)`. On a form operand the entry
+  points `S₊`/`S₋` take this `Val` form only; their `Int` and `Symbol` directions are for a
+  mesh, a space or a grid function, since the direction is part of the node's type.
 
 # Returns
 - For a mesh or a grid space: the `npoints(Ωₕ) × npoints(Ωₕ)` matrix `shift(Ωₕ, dim_val,
   Val(-1))`, in the backend's `matrix_type`, with ones on the subdiagonal of that direction.
 - For a `VectorElement`: a new `VectorElement` of the same space holding ``u_{i-1}``.
+- For a `LazyOp`: the `ShiftNode` that assembles ``u_{i-1}`` inside a form.
 
 # Throws
-- `ArgumentError`: `dim_val` is not between 1 and the mesh dimension; or `uₕ` is
+- `ArgumentError`: `dim_val` is not between 1 and the mesh (or operand) dimension; or `uₕ` is
   device-backed or its space has a [`GpuPolicy`](@ref) (no device kernel yet, tracked on
   milestone v4.4.0).
 
@@ -422,6 +430,10 @@ See also: [`forward_shift`](@ref), [`S₋ₕ`](@ref).
     ShiftNode{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
 
 An AST node representing a stencil shift operation by `shift_amount` grid points in dimension `Dim`.
+
+Built by `shift_op` and, with `shift_amount` ``\\pm 1``, by the public shifts
+`S₊ₓ(op)`, `S₋ᵧ(op)`, ... on a symbolic operand. A neighbour off the grid reads 0, as for a
+grid function.
 """
 struct ShiftNode{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
     shift_amount::Int
@@ -436,6 +448,31 @@ Shifts the stencil of `op` by `amount` grid points in dimension `dim`.
 function shift_op(op::LazyOp{D}, dim::Int, amount::Int) where {D}
     return ShiftNode{D, dim, typeof(op)}(amount, op)
 end
+
+# The public shifts on a symbolic operand (gpena/Bramble.jl#352): `S₊ₓ(u)` is
+# `forward_shift(u, Val(1))`, the node `shift_op(u, 1, 1)` builds but with the direction read
+# off a `Val`, so the node type is known to the compiler rather than chosen from a runtime
+# `Int`. The entry points `S₊`/`S₋` take the `Val` form only, as every node family's does
+# (`node_family.jl`), and the vectorial `S₊ₕ`/`S₋ₕ` give one node per direction, the node
+# itself in one dimension, as `∇ₕ` does.
+# A direction past `D` is refused here, as `_apply_shifted!` refuses it for a grid function:
+# the node would otherwise assemble as the identity.
+@inline function forward_shift(op::LazyOp{D}, ::Val{Dim}) where {D, Dim}
+    1 <= Dim <= D || _throw_stencil_dim_error(Dim, D)
+    return ShiftNode{D, Dim, typeof(op)}(1, op)
+end
+@inline function backward_shift(op::LazyOp{D}, ::Val{Dim}) where {D, Dim}
+    1 <= Dim <= D || _throw_stencil_dim_error(Dim, D)
+    return ShiftNode{D, Dim, typeof(op)}(-1, op)
+end
+
+@inline S₊(op::LazyOp, dim_val::Val) = forward_shift(op, dim_val)
+@inline S₋(op::LazyOp, dim_val::Val) = backward_shift(op, dim_val)
+
+@inline S₊ₕ(op::LazyOp{1}) = forward_shift(op, Val(1))
+@inline S₊ₕ(op::LazyOp{D}) where {D} = ntuple(d -> forward_shift(op, Val(d)), Val(D))
+@inline S₋ₕ(op::LazyOp{1}) = backward_shift(op, Val(1))
+@inline S₋ₕ(op::LazyOp{D}) where {D} = ntuple(d -> backward_shift(op, Val(d)), Val(D))
 
 @inline function local_stencil(
         op::ShiftNode{D, Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
@@ -457,21 +494,22 @@ end
     op.inner_op, inner, space, I, markers, Val(Dim), op.shift_amount
 )
 
-# `shift_op` has no mask of its own: every other wrapper that reaches a neighbour
+# `ShiftNode` has no mask of its own: every other wrapper that reaches a neighbour
 # (differences, averages, jumps) computes one first and multiplies a clamped boundary read by
 # it, which is what makes `_clamped_shift`'s "clamp now, a zero mask absorbs it" contract safe
-# for them. Nothing here would absorb it for a source: relabelling an offset is safe
-# unclamped, since the caller's own bounds check drops the whole entry when the offset lands
-# out of range, but a source has already been reduced to a value by the time this runs, with
-# no offset left for that check. A source shifted off the grid therefore reads as zero here:
-# an empty stencil, the same "missing neighbour is zero" convention the masked stencils use,
-# mirroring how `RegionRestriction` already spells "contributes nothing here".
+# for them. For an operand with offsets, `_reevaluated_shift` (`ast/common.jl`) supplies that
+# zero itself where the clamp bites. Nothing there would absorb it for a source: a source has
+# already been reduced to a value by the time this runs, with no offset left to relabel. A
+# source shifted off the grid therefore reads as zero here: an empty stencil, the same
+# "missing neighbour is zero" convention the masked stencils use, mirroring how
+# `RegionRestriction` already spells "contributes nothing here".
 #
-# An interpolation is not a source, and clamping is its own correct behaviour: `locate_cell`
-# (`operators/interpolation.jl`) clamps every point it is given, in-grid or not, by
-# design (`πₕ`'s own docstring calls this extrapolation along the boundary cell's slope, not
-# a missing-neighbour convention to override). So only a source-only inner operand gets the
-# in-grid check; anything else falls through to the ordinary clamped re-evaluation.
+# An interpolation is not a source: it is re-evaluated at the clamped point like any other
+# operand, which is harmless inside a masked tap. A shift has no mask, so off the grid it
+# zeroes the re-evaluated stencil itself, keeping the tuple length; the shift then reads 0
+# there over an interpolation too, as it does over a grid function (gpena/Bramble.jl#352).
+# `locate_cell`'s own clamp is a different matter, the interpolant's extrapolation at a
+# point that is on the target grid, and is unchanged.
 @inline function _shift_node_stencil(
         ::PointDependentStencil,
         op::ShiftNode{D, Dim},
@@ -487,8 +525,13 @@ end
             op.inner_op, space, Ishift, markers, LinearIndices(indices(mesh(space)))[Ishift]
         )
     else
-        return shifted_inner_stencil(
-            op.inner_op, inner, space, I, markers, Val(Dim), op.shift_amount
+        Ishift = I + _stencil_step(Val(Dim), Val(D)) * op.shift_amount
+        T = eltype(space)
+        return scale_stencil(
+            shifted_inner_stencil(
+                op.inner_op, inner, space, I, markers, Val(Dim), op.shift_amount
+            ),
+            _in_grid(space, Ishift) ? one(T) : zero(T)
         )
     end
 end

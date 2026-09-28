@@ -42,7 +42,11 @@ using Bramble:
                Mₓ,
                indices,
                inner₊ₓ,
-               interpolation_matrix
+               interpolation_matrix,
+               S₊ₓ,
+               S₋ₓ,
+               forward_shift,
+               backward_shift
 using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
 
 # The interpolation operator: `πₕ(u)` over a trial function, as opposed to
@@ -101,12 +105,12 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # a shift by more than one point, which is the `Int` delta rather than a `Val`
         A = assemble(form(Ws, Wt, (u, v) -> innerₕ(shift_op(πₕ(u), 1, 2), v)))
         Pshift = interpolation_matrix(Wt, Ws)
-        # row I reads the interpolant two points along, clamped at the far end
+        # row I reads the interpolant two points along, and 0 past the far end: a shift reads
+        # 0 off the grid over an interpolation too (gpena/Bramble.jl#352)
         pts = points(mesh(Wt))
         Pexpect = zero(Matrix(P))
         for i in eachindex(pts)
-            j = min(i + 2, length(pts))
-            Pexpect[i, :] .= Matrix(Pshift)[j, :]
+            i + 2 <= length(pts) && (Pexpect[i, :] .= Matrix(Pshift)[i + 2, :])
         end
         @test A ≈ Hh(Wt) * Pexpect
 
@@ -191,6 +195,19 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         Dx = D₋ₓ(Wt)
         A = assemble(form(Ws, Wt, (u, v) -> inner₊ₓ(D₋ₓ(πₕ(u)), D₋ₓ(v))))
         @test A ≈ Dx' * Hp(Wt, 1) * Dx * P
+
+        # a shift over an interpolation reads 0 off the target grid, as the grid function
+        # does, alone and on either side of a difference (gpena/Bramble.jl#352)
+        Sp, Sm = forward_shift(Wt, Val(1)), backward_shift(Wt, Val(1))
+        uₛ = Rₕ(Ws, x -> 1 + x^2)
+        w = collect(weights(Wt, Innerh()))
+        for (op, M) in (
+            (S₊ₓ, Sp), (S₋ₓ, Sm), (S₊ₓ ∘ D₋ₓ, Sp * Dx), (D₋ₓ ∘ S₊ₓ, Dx * Sp)
+        )
+            A = assemble(form(Ws, Wt, (u, v) -> innerₕ(op(πₕ(u)), v)))
+            @test A ≈ Hh(Wt) * M * P
+            @test A * parent(uₛ) ≈ w .* parent(op(πₕ(Wt, uₛ)))
+        end
     end
 
     @testset "Same-mesh interpolation is the identity" begin

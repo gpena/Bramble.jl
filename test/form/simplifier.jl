@@ -31,7 +31,11 @@ using Bramble:
                D₋ₓ,
                inner₊ᵧ,
                inner₊ₓ,
-               weights
+               weights,
+               S₊ₓ,
+               S₋ₓ,
+               forward_shift,
+               backward_shift
 
 # `simplify_ast` rewrites only the algebraic layer (`OperatorAdd`, `OperatorScale`,
 # `GridFunctionScale`) that `ast.jl`'s `+`/`*`/`/` overloads build, into a tree that routes
@@ -397,8 +401,14 @@ end
     @test s.shift_amount == 5
     @test s.inner_op === A
 
-    # a shift and its exact inverse collapse straight to the unshifted operator
-    @test simplify_ast(shift_op(shift_op(A, 1, 2), 1, -2)) === A
+    # a shift and its inverse do not collapse: `S₊ₓ(S₋ₓ(u))` is `u` in the interior but 0 at
+    # the last point, where the inner shift's read has left the grid (gpena/Bramble.jl#352)
+    s0 = simplify_ast(shift_op(shift_op(A, 1, 2), 1, -2))
+    @test s0 isa ShiftNode
+    @test s0.shift_amount == -2
+    @test s0.inner_op isa ShiftNode
+    @test s0.inner_op.shift_amount == 2
+    @test simplify_ast(shift_op(shift_op(A, 1, 3), 1, -1)).inner_op isa ShiftNode
 
     # shifts along different dimensions never combine into one node
     s2 = simplify_ast(shift_op(shift_op(A, 1, 2), 2, 3))
@@ -413,6 +423,28 @@ end
         b_nested = assemble(form(Wₕ1, v -> innerₕ(shift_op(shift_op(sf, 1, 1), 1, 2), v)))
         b_combined = assemble(form(Wₕ1, v -> innerₕ(shift_op(sf, 1, 3), v)))
         @test b_nested ≈ b_combined
+    end
+
+    # the bilinear form of a composed shift against the grid-function computation, on a
+    # non-uniform mesh: same-sign shifts merge exactly, opposite-sign ones keep the
+    # boundary zero of the inner read
+    @testset "composed shifts: grid function" begin
+        W = gridspace(mesh(domain(interval(0.0, 1.0)), 7, false))
+        H = Diagonal(collect(weights(W, Innerh())))
+        uh = Rₕ(W, x -> 1 + x^2)
+        Sp = Matrix(forward_shift(W, Val(1)))
+        Sm = Matrix(backward_shift(W, Val(1)))
+        for f in (S₊ₓ ∘ S₋ₓ, S₋ₓ ∘ S₊ₓ, S₊ₓ ∘ S₊ₓ, S₋ₓ ∘ S₋ₓ)
+            A = assemble(form(W, W, (u, v) -> innerₕ(f(u), v)))
+            @test A * parent(uh) ≈ H * parent(f(uh))
+        end
+        # `shift_op`'s amounts beyond one, against the matrix powers
+        for (f, M) in (
+            (u -> shift_op(shift_op(u, 1, 2), 1, -2), Sm^2 * Sp^2),
+            (u -> shift_op(shift_op(u, 1, 1), 1, 2), Sp^3)
+        )
+            @test Matrix(assemble(form(W, W, (u, v) -> innerₕ(f(u), v)))) ≈ H * M
+        end
     end
 end
 
