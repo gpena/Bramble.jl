@@ -2,7 +2,7 @@ module TestFormMatrixFree
 
 using Test
 using Bramble
-using Bramble: MatrixFreeOperator, VectorElement, trial_space, test_space, restrict_to, πₕ, jumpₓ, M₊ₓ, D₋ₓ, D₋ᵧ
+using Bramble: MatrixFreeOperator, VectorElement, trial_space, test_space, restrict_to, πₕ, jumpₓ, M₊ₓ, D₋ₓ, D₋ᵧ, D₊ᵧ
 using LinearAlgebra: mul!, norm
 using Random
 
@@ -130,9 +130,9 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         end
     end
 
-    # Every product under `CpuThreaded` equals the serial one, on every repeat: the colour
-    # bands keep two points swept at once off the same row. Both backends draw the same
-    # meshes (`_mf_spaces` reseeds). Run at `--threads=4` for the race to have a chance.
+    # Every product under `CpuThreaded` equals the serial one, on every repeat: each task adds
+    # only into the rows of its own band. Both backends draw the same meshes (`_mf_spaces`
+    # reseeds). Run at `--threads=4` for the race to have a chance.
     @testset "matrix-free: threaded mul! race-free" begin
         for ((name, a, dl), (_, at, _)) in zip(cases, _mf_cases(backend(policy = Parallel())))
             @testset "$name" begin
@@ -170,7 +170,8 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
             op = matrix_free_operator(a; dirichlet = :boundary, dirichlet_components = comps, policy = Parallel())
             @test _mf_agree(op * x, A * x)
         end
-        # What a threaded product allocates is its task spawns, whatever the grid size.
+        # What a threaded product allocates is its task spawns, whatever the grid size. One
+        # reading jitters by up to about 1 kB at four threads, so the least of five is compared.
         bytes = map((33, 3001)) do n
             Random.seed!(MF_SEED)
             Wn = gridspace(mesh(domain(interval(0.0, 1.0)), n, false; backend = backend(policy = Parallel())))
@@ -178,7 +179,88 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
             op = matrix_free_operator(
                 form(Wn, Wn, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))); dirichlet = :boundary)
             xn = randn(size(op, 2))
-            return _mf_alloc3(similar(xn), op, xn)
+            y = similar(xn)
+            return minimum(_mf_alloc3(y, op, xn) for _ in 1:5)
+        end
+        @test bytes[1] == bytes[2]
+    end
+
+    # The fused sweep (M1.5): one band per thread along the last axis, every term walked in
+    # each, a band widened by the rows' reach and keeping only the rows it owns, in the serial
+    # order. Its reach is
+    # the union over every term's row offsets, fixed when the operator is built: `D₊ᵧ` and
+    # `D₋ᵧ` on the test side reach one row either way. A short last axis (fewer slices than
+    # threads, bands narrower than the reach) and a test-side interpolation (walked serially
+    # after the bands) must still give the serial product.
+    @testset "matrix-free: fused threaded sweep" begin
+        Random.seed!(MF_SEED)
+        Ωc = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :west => :left), (9, 7), (false, false))
+        Ωf = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (13, 11), (false, false))
+        Ωs = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 3), (false, false))
+        Ω3 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4, 6), false)
+        Wc, Wf, Ws, W3 = gridspace(Ωc), gridspace(Ωf), gridspace(Ωs), gridspace(Ω3)
+        κ = Rₕ(Wc, x -> 1 + sum(abs2, x))
+        V = Wc × Wc
+        cases = (
+            ("union", form(Wc, Wc, (u, v) -> innerₕ(u, D₊ᵧ(v)) + innerₕ(u, D₋ᵧ(v))), nothing, (-1, 1)),
+            ("wide", form(Wc, Wc, (u, v) -> innerₕ(u, D₋ᵧ(D₋ᵧ(v))) + innerₕ(D₊ᵧ(u), v)), :boundary, (-2, 0)),
+            ("pair", form(Wc, Wc, (u, v) -> innerₕ(D₊ᵧ(u), v) + 2.0 * innerₕ(u, D₊ᵧ(v))), (:west,), (0, 1)),
+            ("diffusion", form(Wc, Wc, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))), :boundary, (-1, 0)),
+            ("short axis", form(Ws, Ws, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))), :boundary, (-1, 0)),
+            ("3D", form(W3, W3, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))), :boundary, (-1, 0)),
+            ("pointwise", form(Wc, Wc, (u, v) -> innerₕ(u, v) + innerₕ(κ * u, v)), nothing, (0, 0)),
+            ("composite pair",
+                form(V, V, (u, v) -> innerₕ(D₋ᵧ(u(1)), v(2)) + 3.0 * innerₕ(u(2), D₋ᵧ(v(1))) +
+                                     inner₊(∇ₕ(u(1)), ∇ₕ(v(1)))),
+                :boundary, (-1, 0)),
+            ("test interpolation", form(Wc, Wf, (u, v) -> innerₕ(πₕ(u), v) + innerₕ(u, πₕ(v))), nothing, (0, 0))
+        )
+        for (name, a, dl, reach) in cases
+            @testset "$name" begin
+                op = _mf_op(a, dl)
+                opt = dl === nothing ? matrix_free_operator(a; policy = Parallel()) :
+                      matrix_free_operator(a; dirichlet = dl, policy = Parallel())
+                @test op.plan === nothing
+                @test opt.plan isa Bramble._MFFusedPlan
+                @test (opt.plan.omin, opt.plan.omax) == reach
+                @test opt.plan.interp == (name == "test interpolation")
+                x = randn(size(op, 2))
+                ref = op * x
+                @test _mf_agree(ref, _mf_mat(a, dl) * x)
+                # Each row receives its entries in the serial order: bitwise the serial
+                # product, except where a term runs serially after the bands.
+                same = name == "test interpolation" ? _mf_agree : (==)
+                y = similar(ref)
+                @test all(1:50) do _
+                    mul!(y, opt, x)
+                    return same(y, ref)
+                end
+                # Called from inside a user's threaded loop, each product still is.
+                ys = [similar(ref) for _ in 1:8]
+                Threads.@threads :static for i in 1:8
+                    mul!(ys[i], opt, x)
+                end
+                @test all(yi -> same(yi, ref), ys)
+            end
+        end
+        # Leaves of different sizes share no band cut: the per-unit sweep instead.
+        Vm = Wc × Wf
+        am = form(Vm, Vm, (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(u(2), v(2)))
+        opm = matrix_free_operator(am; policy = Parallel())
+        @test opm.plan === nothing
+        xm = randn(ndofs(Vm))
+        @test _mf_agree(opm * xm, assemble(am) * xm)
+        # One parallel region per product, whatever the grid: the same bytes at two sizes
+        # (the least of five readings, as above).
+        bytes = map((17, 301)) do n
+            Random.seed!(MF_SEED)
+            Wn = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n + 2), (false, false)))
+            κn = Rₕ(Wn, x -> 1 + sum(abs2, x))
+            op = matrix_free_operator(
+                form(Wn, Wn, (u, v) -> innerₕ(u, v) + inner₊(κn * ∇ₕ(u), ∇ₕ(v))); policy = Parallel())
+            xn = randn(size(op, 2))
+            y = similar(xn)
+            return minimum(_mf_alloc3(y, op, xn) for _ in 1:5)
         end
         @test bytes[1] == bytes[2]
     end
