@@ -1488,8 +1488,9 @@ end
 #
 # `∇ₕ ⋅ uₕ` / `∇ₕ × uₕ` read as the textbook notation for `divₕ(uₕ)` / `curlₕ(uₕ)`, and the
 # same for the other four gradient aliases (`∇cₕ`/`∇̽ₕ`/`∇̃ₕ` are `const` aliases of
-# `Dcₕ`/`D̽ₕ`/`D̃ₕ`, operators/difference.jl, so the methods below dispatch on those function
-# types directly). `dot`/`×` are already `import`ed from LinearAlgebra by `src/Bramble.jl`.
+# `Dcₕ`/`D̽ₕ`/`D̃ₕ`, src/operators/difference.jl, so the methods below dispatch on those
+# function types directly). `dot`/`×` are already `import`ed from LinearAlgebra by
+# `src/Bramble.jl`.
 #
 # `uₕ` is narrowed to `_DivCurlOperand` -- exactly what `divₕ`/`curlₕ` and their siblings
 # accept here: an `NTuple{D, VectorElement}` or a composite `VectorElement`, both handled by
@@ -1500,9 +1501,7 @@ end
 # ChainRulesCore singletons resolves the ambiguity without changing what `∇ₕ ⋅ u` computes.
 #
 # The form-side case -- `uₕ` a `LazyOp` trial/test-function expression -- gets its own methods
-# in ast/common.jl instead of here: `LazyOp` (ast/ast.jl) is included after this file (the
-# same include-order rule `_lower_sources` follows just above, ast/common.jl), so it cannot be
-# named in a signature in this file.
+# below.
 const _DivCurlOperand = Union{Tuple{Vararg{VectorElement}}, VectorElement}
 
 @inline dot(::typeof(∇ₕ), uₕ::_DivCurlOperand) = divₕ(uₕ)
@@ -1519,3 +1518,24 @@ const _DivCurlOperand = Union{Tuple{Vararg{VectorElement}}, VectorElement}
 
 @inline dot(::typeof(∇̽ₕ), uₕ::_DivCurlOperand) = div̽ₕ(uₕ)
 @inline ×(::typeof(∇̽ₕ), uₕ::_DivCurlOperand) = curl̽ₕ(uₕ)
+
+# --- ⋅ and × over a form-side trial/test function (gpena/Bramble.jl#341) ------------------ #
+#
+# `∇ₕ ⋅ u`/`∇ₕ × u` (and the four sibling gradient aliases) contract to `divₕ(u)`/`curlₕ(u)`
+# the same way over a symbolic `u`. `LazyOp` (ast/ast.jl) is included before this file, the
+# AST core preceding src/operators/difference.jl (gpena/Bramble.jl#350), so these methods
+# sit beside their `_DivCurlOperand`-typed numeric-`uₕ` siblings above.
+@inline dot(::typeof(∇ₕ), uₕ::LazyOp) = divₕ(uₕ)
+@inline ×(::typeof(∇ₕ), uₕ::LazyOp) = curlₕ(uₕ)
+
+@inline dot(::typeof(∇₊ₕ), uₕ::LazyOp) = div₊ₕ(uₕ)
+@inline ×(::typeof(∇₊ₕ), uₕ::LazyOp) = curl₊ₕ(uₕ)
+
+@inline dot(::typeof(∇cₕ), uₕ::LazyOp) = divcₕ(uₕ)
+@inline ×(::typeof(∇cₕ), uₕ::LazyOp) = curlcₕ(uₕ)
+
+@inline dot(::typeof(∇̃ₕ), uₕ::LazyOp) = diṽₕ(uₕ)
+@inline ×(::typeof(∇̃ₕ), uₕ::LazyOp) = curl̃ₕ(uₕ)
+
+@inline dot(::typeof(∇̽ₕ), uₕ::LazyOp) = div̽ₕ(uₕ)
+@inline ×(::typeof(∇̽ₕ), uₕ::LazyOp) = curl̽ₕ(uₕ)

@@ -454,7 +454,6 @@ Pages = [
     "ast/stencil_pattern.jl",
     "assembly/symmetry.jl",
     "ast/operators/average.jl",
-    "ast/operators/difference.jl",
     "ast/operators/inner.jl",
     "ast/operators/interpolation.jl",
     "ast/operators/jump.jl",

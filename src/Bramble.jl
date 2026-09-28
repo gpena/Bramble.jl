@@ -116,7 +116,16 @@ include("space/operators/cell_average.jl")
 include("space/operators/shift.jl")
 include("space/operators/stencil.jl")
 include("space/operators/stencil_matrix.jl")
-include("space/operators/difference.jl")
+
+# The AST core comes before the first merged operator family (gpena/Bramble.jl#350): a file
+# under src/operators/ defines its stencil and its AST nodes together, and the nodes need
+# `LazyOp` and `@node_family`. The numerical files that consume differences follow it.
+include("ast/ast.jl")
+include("ast/common.jl")
+include("ast/expression.jl")
+include("ast/operators/node_family.jl")
+include("operators/difference.jl")
+
 include("space/operators/jump.jl")
 include("space/operators/average.jl")
 include("space/operators/interpolation.jl")
@@ -124,11 +133,6 @@ include("space/operators/vector_calculus.jl")
 include("space/operators/normal.jl")
 include("space/inner_product.jl")
 
-include("ast/ast.jl")
-include("ast/common.jl")
-include("ast/expression.jl")
-include("ast/operators/node_family.jl")
-include("ast/operators/difference.jl")
 include("ast/operators/jump.jl")
 include("ast/operators/average.jl")
 include("ast/operators/restriction.jl")

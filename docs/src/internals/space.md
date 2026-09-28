@@ -356,7 +356,7 @@ Pages = [
     "space/operators/shift.jl",
     "space/operators/stencil.jl",
     "space/operators/stencil_matrix.jl",
-    "space/operators/difference.jl",
+    "operators/difference.jl",
     "space/operators/jump.jl",
     "space/operators/average.jl",
     "space/operators/interpolation.jl",

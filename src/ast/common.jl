@@ -607,29 +607,6 @@ end
 # signature, unlike everything above -- live in form/linear.jl instead (bramble-performance
 # skill, "include-order rule").
 
-# --- ⋅ and × over a form-side trial/test function (gpena/Bramble.jl#341) ------------------ #
-#
-# `∇ₕ ⋅ u`/`∇ₕ × u` (and the four sibling gradient aliases) contract to `divₕ(u)`/`curlₕ(u)`
-# the same way over a symbolic `u`, but the `dot`/`×` methods narrowed to a `LazyOp` second
-# argument (space/operators/vector_calculus.jl, next to their `_DivCurlOperand`-typed
-# numeric-`uₕ` siblings) live here instead, following the same include-order rule as
-# `_lower_sources` just above: `LazyOp` (ast/ast.jl) is included after
-# space/operators/vector_calculus.jl, so it cannot be named in a signature there.
-@inline dot(::typeof(∇ₕ), uₕ::LazyOp) = divₕ(uₕ)
-@inline ×(::typeof(∇ₕ), uₕ::LazyOp) = curlₕ(uₕ)
-
-@inline dot(::typeof(∇₊ₕ), uₕ::LazyOp) = div₊ₕ(uₕ)
-@inline ×(::typeof(∇₊ₕ), uₕ::LazyOp) = curl₊ₕ(uₕ)
-
-@inline dot(::typeof(∇cₕ), uₕ::LazyOp) = divcₕ(uₕ)
-@inline ×(::typeof(∇cₕ), uₕ::LazyOp) = curlcₕ(uₕ)
-
-@inline dot(::typeof(∇̃ₕ), uₕ::LazyOp) = diṽₕ(uₕ)
-@inline ×(::typeof(∇̃ₕ), uₕ::LazyOp) = curl̃ₕ(uₕ)
-
-@inline dot(::typeof(∇̽ₕ), uₕ::LazyOp) = div̽ₕ(uₕ)
-@inline ×(::typeof(∇̽ₕ), uₕ::LazyOp) = curl̽ₕ(uₕ)
-
 # ==============================================================================
 # 4. Deprecated `ast` keyword (gpena/Bramble.jl#105)
 # ==============================================================================
