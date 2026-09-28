@@ -9,7 +9,6 @@ using Bramble: GMGPreconditioner, AbstractMatrixFreePreconditioner, VectorElemen
                change_points!
 using LinearAlgebra: LinearAlgebra, dot, norm, diag, LowerTriangular, UpperTriangular, ldiv!, Symmetric, eigmin
 using LinearSolve: LinearProblem, KrylovJL_CG, solve
-using SparseArrays: sparse
 using ForwardDiff: ForwardDiff
 using Random
 
@@ -42,20 +41,13 @@ Base.setindex!(v::_MgZeroBased, x, i::Int) = (v.p[i + 1] = x)
 _mg_palloc(xf, H, l, xc) = (prolongate!(xf, H, l, xc); @allocated prolongate!(xf, H, l, xc))
 _mg_calloc(xc, H, l, xf) = (coarsen!(xc, H, l, xf); @allocated coarsen!(xc, H, l, xf))
 
-# The oracle `P`. `interpolation_matrix` does not take a collapsed axis, so there `P` is the
-# Kronecker product of the per-axis matrices, a 1×1 identity on the collapsed axis.
-function _mg_oracle(Ωf, Ωc)
-    all(>(1), npoints(Ωf, Tuple)) || return reduce(
-        kron, reverse(ntuple(
-            d -> npoints(Ωf(d)) == 1 ? sparse(ones(1, 1)) :
-                 interpolation_matrix(gridspace(Ωf(d)), gridspace(Ωc(d))),
-            length(npoints(Ωf, Tuple)))))
-    return interpolation_matrix(gridspace(Ωf), gridspace(Ωc))
-end
+# The oracle `P`.
+_mg_oracle(Ωf, Ωc) = interpolation_matrix(gridspace(Ωf), gridspace(Ωc))
 
 _mg_agree(a, b) = isapprox(a, b; rtol = 1e-13, atol = 1e-13)
 
-# Non-uniform meshes in 1D, 2D and 3D, and two with a collapsed axis, with a level count each.
+# Non-uniform meshes in 1D, 2D and 3D, and two with a collapsed axis (which also cover
+# `interpolation_matrix` on collapsed axes, gpena/Bramble.jl#396), with a level count each.
 function _mg_transfer_meshes(bk = backend())
     Random.seed!(MG_SEED)
     unit(a = 0.0, b = 1.0) = interval(a, b)

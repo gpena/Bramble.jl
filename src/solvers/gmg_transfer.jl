@@ -30,8 +30,7 @@ interpolant of the coarse grid function `xc` at the points of `H[l]`. A fine poi
 coarse point takes its value; one between two coarse points ``x_{j}, x_{j+1}`` along an axis
 takes ``((x_{j+1} - x) u_j + (x - x_{j}) u_{j+1}) / (x_{j+1} - x_{j})``, per axis, from the
 actual (non-uniform) coordinates. `P` equals
-`Bramble.interpolation_matrix(gridspace(H[l]), gridspace(H[l - 1]))` on meshes with no
-collapsed axis; it is never built.
+`Bramble.interpolation_matrix(gridspace(H[l]), gridspace(H[l - 1]))`, which is never built.
 
 The product runs as one sweep per axis, in place in `xf`, under the execution policy of the
 backend of `H[l]`. It allocates nothing on a [`CpuSerial`](@ref) backend; on
