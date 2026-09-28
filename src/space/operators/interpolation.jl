@@ -195,7 +195,8 @@ function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{D}}, x; outside = 
     li = LinearIndices(indices(Ωₕ))
 
     acc = zero(promote_type(eltype(uₕ), typeof(first(ts))))
-    for corner in CartesianIndices(ntuple(_ -> 0:1, Val(D)))
+    # No far corner along a collapsed axis: it has a single point.
+    for corner in CartesianIndices(ntuple(d -> 0:min(1, size(li, d) - 1), Val(D)))
         acc += _interp_corner_weight(ts, corner, Val(D)) * uₕ[li[idx + corner]]
     end
     return acc
@@ -241,8 +242,11 @@ end
         _interp_resolve_coord(x[d], pts[1], pts[end], outside_sym)
     end
     idx = locate_cell(Ωₕ, xc)
+    # A collapsed axis (one point) has no cell: `t = 0` there, and every caller drops or
+    # zero-weights its far corner, so the axis is a 1×1 identity factor.
     ts = ntuple(Val(D)) do d
         pts = points(Ωₕ(d))
+        length(pts) == 1 && return zero(xc[d] - pts[1])
         i = idx[d]
         lo, hi = pts[i], pts[i + 1]
         hi > lo ? (xc[d] - lo) / (hi - lo) : zero(xc[d] - lo)
@@ -434,8 +438,12 @@ end
         _interp_resolve_coord(x[d], pts[1], pts[end], outside)
     end
     idx = locate_cell(Ωsrc, xc)
+    # A collapsed axis (one point) has no cell to read `pts[i + 1]` from: `t = 0` there,
+    # and `_interpolation_triplets!` emits only its near corner, so the axis contributes
+    # a 1×1 identity factor to the per-axis Kronecker product.
     ts = ntuple(Val(D)) do d
         pts = pts_src[d]
+        length(pts) == 1 && return zero(xc[d] - pts[1])
         i = idx[d]
         lo, hi = pts[i], pts[i + 1]
         hi > lo ? (xc[d] - lo) / (hi - lo) : zero(xc[d] - lo)
@@ -466,12 +474,14 @@ function _interpolation_triplets!(
     li_src = LinearIndices(indices(Ωsrc))
     pts_dest = host_points(Ωdest)
     pts_src = host_points(Ωsrc)
+    # No far corner along a collapsed source axis: it has a single point.
+    corners = CartesianIndices(ntuple(d -> 0:min(1, length(pts_src[d]) - 1), Val(D)))
     for I in indices(Ωdest)
         row = li_dest[I]
         x = ntuple(d -> pts_dest[d][I[d]], Val(D))
         idx, ts = _interp_triplet_frac(Ωsrc, pts_src, x, outside)
 
-        for corner in CartesianIndices(ntuple(_ -> 0:1, Val(D)))
+        for corner in corners
             push!(rows, row)
             push!(cols, li_src[idx + corner])
             push!(vals, _interp_corner_weight(ts, corner, Val(D)))
