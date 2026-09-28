@@ -101,9 +101,11 @@ export second_order_ode_problem
 export amg_preconditioner
 export ilu_preconditioner
 export jacobi_preconditioner
+export chebyshev_preconditioner
 
 public KroneckerLinearOperator, MatrixFreeOperator, ode_function, second_order_ode_function
-public AbstractMatrixFreePreconditioner, JacobiPreconditioner
+public AbstractMatrixFreePreconditioner, JacobiPreconditioner, ChebyshevPreconditioner
+public max_eigenvalue_estimate
 public jacobian!, jacobian_prototype, jacobian_pattern, ast_sparsity_detector
 public reaction, reaction_density, reaction!, reaction_density!
 public allocate_system_matrix, type_cached_assemble!, evaluate!, assemble_parallel!
