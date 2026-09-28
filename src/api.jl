@@ -60,8 +60,11 @@ export jumpₕ
 
 export Mₕ, Mcₕ
 
+export S₊ₕ, S₋ₕ
+
 # Dimensional entry points (the direction as an argument; `∇ₕ[d]` is the exported route)
 public D₋, D̃, Dc, jump
+public S₊, S₋, forward_shift, backward_shift
 
 # The `D*ₕ` spellings of the exported gradients (`D̃ₕ === ∇̃ₕ`, `Dcₕ === ∇cₕ`, `D̽ₕ === ∇̽ₕ`)
 public D̃ₕ, Dcₕ, D̽ₕ
@@ -87,6 +90,10 @@ public D₊ₓ!, D₊ᵧ!, D₊₂!
 public div₊ₕ, div₊ₕ!, curl₊ₕ, curl₊ₕ!, ε₊ₕ, ε₊ₕ!
 public M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 public M₊ₓ!, M₊ᵧ!, M₊₂!
+
+# Index shifts (destructure from `S₊ₕ`/`S₋ₕ`; public, unexported)
+public S₊ₓ, S₊ᵧ, S₊₂, S₊ₓ!, S₊ᵧ!, S₊₂!
+public S₋ₓ, S₋ᵧ, S₋₂, S₋ₓ!, S₋ᵧ!, S₋₂!
 
 # --- Forms, Assembly & Problems ---
 export dirichlet_constraints, dirichlet_bc!, symmetrize!

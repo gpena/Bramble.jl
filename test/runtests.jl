@@ -118,6 +118,7 @@ if __bramble_with_unit_tests
             include("space/discrete_calculus_identities.jl")
             include("space/commutation.jl")
             include("space/jump.jl")
+            include("space/shift.jl")
             include("space/average.jl")
             include("space/centered_average.jl")
             include("space/dimensional_dispatch.jl")

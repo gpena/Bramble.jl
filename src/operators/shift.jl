@@ -184,6 +184,235 @@ aliases to the `_kron_*` construction that family kept.
 function kronecker_operator_matrix end
 
 # ==============================================================================
+# The index shifts `S₊` and `S₋` (gpena/Bramble.jl#352)
+# ==============================================================================
+#
+# `S₊ₓ(uₕ)` is `u_{i+1}` and `S₋ₓ(uₕ)` is `u_{i-1}`, one grid point along the direction and
+# no spacing: they relabel values, they do not measure anything. The one boundary slice
+# with no neighbour reads 0, the convention `jump` uses (`D₊` instead writes 0 on that
+# slice), so the grid function agrees with `shift(Ωₕ, Val(dim), Val(±1))`, whose missing
+# diagonal entry is exactly that 0, and `S₊ₓ(uₕ) - uₕ == jumpₓ(uₕ)` holds on every point,
+# the last one included.
+#
+# The traversal is the average engine's (`average.jl`): an interior pass reading the
+# neighbour, a boundary pass writing 0, both banded along the grid's last axis under
+# `CpuThreaded`/`CpuPolyester`. Only the per-point kernel differs. The serial engine is the
+# single band of one, so every policy runs the same loop body and agrees bitwise.
+
+# The neighbour, unchanged. `zero(cur)` on the boundary keeps the grid's element type.
+@inline @propagate_inbounds _compute_shift(::GridDirection, ::Val{false}, cur, other) = other
+@inline @propagate_inbounds _compute_shift(::GridDirection, ::Val{true}, cur) = zero(cur)
+
+"""
+    _shift_band!(out, in_ref, dims::NTuple{D, Int}, dir::GridDirection, dim_val::Val, nbands::Int, b::Int) -> Nothing
+
+Writes the index shift of `in_ref` along `dim_val` in direction `dir` (`Forward` reads
+`u_{i+1}`, `Backward` reads `u_{i-1}`) into `out`, on the `b`-th of `nbands` slabs of the grid
+cut along its last axis, as [`_average_band!`](@ref) does for the average. The slice with no
+neighbour gets 0. `nbands == 1` is the whole grid, which is the serial engine.
+"""
+@inline function _shift_band!(
+        out, in_ref, dims::NTuple{D, Int}, dir::GridDirection, ::Val{DIM}, nbands::Int, b::Int
+) where {D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    band = _band_range(axes(li, D), nbands, b)
+    interior, boundary = _stencil_ranges(axes(li), Val(DIM), dir)
+    interior, boundary = _band_slab(interior, band), _band_slab(boundary, band)
+
+    @inbounds @simd for I in CartesianIndices(interior)
+        idx = li[I]
+        out[idx] = _compute_shift(
+            dir, Val(false), in_ref[idx], in_ref[li[_neighbour(dir, I, step)]]
+        )
+    end
+
+    @inbounds @simd for I in CartesianIndices(boundary)
+        idx = li[I]
+        out[idx] = _compute_shift(dir, Val(true), in_ref[idx])
+    end
+
+    return nothing
+end
+
+@noinline function _throw_no_device_shift()
+    throw(
+        ArgumentError(
+        "the index shifts (S₊ₓ, S₊ᵧ, S₊₂, S₋ₓ, S₋ᵧ, S₋₂, S₊ₕ, S₋ₕ) have no device kernel: " *
+        "one is tracked on milestone v4.4.0. Apply them to a host-backed VectorElement.",
+    ),
+    )
+end
+
+# Every CPU policy goes through `_run_bands!` (`vector_calculus.jl`): the single band
+# serially, one band per thread under `CpuThreaded`, one per `@batch` task under
+# `CpuPolyester` through the generic `_batch_run_bands!` hook `BramblePolyesterExt` already
+# fills, so the shifts need no extension hook of their own.
+@inline _shift_engine!(policy::CpuPolicy, out, in_ref, dims, dir, dim_val) = _run_bands!(
+    policy, _shift_band!, out, in_ref, dims, dir, dim_val)
+@noinline _shift_engine!(::GpuPolicy, out, in_ref, dims, dir, dim_val) = _throw_no_device_shift()
+
+# The applicator `@operator_family` calls. A device-backed element on a host policy is
+# refused here too, before the host loop scalar-indexes it; a `GpuPolicy` space reaches
+# `_shift_engine!`'s refusal. The direction check matters because a `Val` past the mesh
+# dimension would otherwise make `_stencil_ranges` treat every point as both interior and
+# boundary and return all zeros.
+@inline function _apply_shifted!(
+        vₕ::VectorElement{<:ScalarGridSpace},
+        uₕ::VectorElement{<:ScalarGridSpace},
+        dir::GridDirection,
+        ::Val{DIM}
+) where {DIM}
+    _check_no_alias(vₕ, uₕ)
+    (locality(typeof(vₕ.data)) isa DeviceLocality ||
+     locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_shift()
+    dims = _grid_dims(uₕ)
+    1 <= DIM <= length(dims) || _throw_stencil_dim_error(DIM, length(dims))
+    _shift_engine!(execution_policy(space(uₕ)), vₕ.data, uₕ.data, dims, dir, Val(DIM))
+    return vₕ
+end
+
+# Componentwise, re-deriving each leaf's grid, as `_apply_averaged!` does.
+@inline function _apply_shifted!(
+        vₕ::VectorElement{<:CompositeGridSpace},
+        uₕ::VectorElement{<:CompositeGridSpace},
+        dir::GridDirection,
+        dim_val::Val
+)
+    _apply_componentwise!((v, u) -> _apply_shifted!(v, u, dir, dim_val), vₕ, uₕ)
+    return vₕ
+end
+
+@inline function _shift_matrix(Ωₕ::AbstractMeshType, ::Val{DIM}, amount::Val) where {DIM}
+    1 <= DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIM, dim(Ωₕ))
+    return shift(Ωₕ, Val(DIM), amount)
+end
+
+"""
+    forward_shift(arg, dim_val::Val) -> AbstractMatrix or VectorElement
+
+The forward index shift along direction `dim_val`, ``(S_+ u)_i = u_{i+1}``.
+
+It relabels values one grid point along the direction and involves no spacing, so it is the
+same on uniform and non-uniform meshes. The last point along the direction has no forward
+neighbour and reads 0, the convention of [`jumpₓ`](@ref) (unlike [`D₊ₓ`](@ref), which is
+0 at that point); hence
+``S_+ u - u`` is the jump ``u_{i+1} - u_i`` at every point, the last one included, and the
+matrix of `forward_shift` is the transpose of that of [`backward_shift`](@ref).
+
+# Arguments
+- `arg`: A mesh `Ωₕ`, a grid space `Wₕ` or a [`VectorElement`](@ref) `uₕ`, scalar or composite
+  (componentwise on the latter).
+- `dim_val`: The direction, `Val(1)`, `Val(2)` or `Val(3)`.
+
+# Returns
+- For a mesh or a grid space: the `npoints(Ωₕ) × npoints(Ωₕ)` matrix `shift(Ωₕ, dim_val,
+  Val(1))`, in the backend's `matrix_type`, with ones on the superdiagonal of that direction.
+- For a `VectorElement`: a new `VectorElement` of the same space holding ``u_{i+1}``.
+
+# Throws
+- `ArgumentError`: `dim_val` is not between 1 and the mesh dimension; or `uₕ` is
+  device-backed or its space has a [`GpuPolicy`](@ref) (no device kernel yet, tracked on
+  milestone v4.4.0).
+
+# Examples
+```jldoctest
+using Bramble
+using Bramble: forward_shift
+Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 5, true))
+uₕ = Rₕ(Wₕ, x -> 4x)
+parent(forward_shift(uₕ, Val(1)))
+
+# output
+5-element Vector{Float64}:
+ 1.0
+ 2.0
+ 3.0
+ 4.0
+ 0.0
+```
+
+See also: [`backward_shift`](@ref), [`S₊ₕ`](@ref), [`jump`](@ref).
+"""
+@inline forward_shift(Ωₕ::AbstractMeshType, dim_val::Val) = _shift_matrix(Ωₕ, dim_val, Val(1))
+@inline forward_shift(Wₕ::AbstractSpaceType, dim_val::Val) = forward_shift(mesh(Wₕ), dim_val)
+
+"""
+    backward_shift(arg, dim_val::Val) -> AbstractMatrix or VectorElement
+
+The backward index shift along direction `dim_val`, ``(S_- u)_i = u_{i-1}``.
+
+It involves no spacing. The first point along the direction has no backward neighbour and
+reads 0, so ``u - S_- u`` is the unscaled backward difference ``u_i - u_{i-1}`` at every
+point, the first one reading ``u_1``, and the matrix of `backward_shift` is the transpose of
+that of [`forward_shift`](@ref).
+
+# Arguments
+- `arg`: A mesh `Ωₕ`, a grid space `Wₕ` or a [`VectorElement`](@ref) `uₕ`, scalar or composite
+  (componentwise on the latter).
+- `dim_val`: The direction, `Val(1)`, `Val(2)` or `Val(3)`.
+
+# Returns
+- For a mesh or a grid space: the `npoints(Ωₕ) × npoints(Ωₕ)` matrix `shift(Ωₕ, dim_val,
+  Val(-1))`, in the backend's `matrix_type`, with ones on the subdiagonal of that direction.
+- For a `VectorElement`: a new `VectorElement` of the same space holding ``u_{i-1}``.
+
+# Throws
+- `ArgumentError`: `dim_val` is not between 1 and the mesh dimension; or `uₕ` is
+  device-backed or its space has a [`GpuPolicy`](@ref) (no device kernel yet, tracked on
+  milestone v4.4.0).
+
+# Examples
+```jldoctest
+using Bramble
+using Bramble: backward_shift
+Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 5, true))
+uₕ = Rₕ(Wₕ, x -> 4x)
+parent(backward_shift(uₕ, Val(1)))
+
+# output
+5-element Vector{Float64}:
+ 0.0
+ 0.0
+ 1.0
+ 2.0
+ 3.0
+```
+
+See also: [`forward_shift`](@ref), [`S₋ₕ`](@ref).
+"""
+@inline backward_shift(Ωₕ::AbstractMeshType, dim_val::Val) = _shift_matrix(Ωₕ, dim_val, Val(-1))
+@inline backward_shift(Wₕ::AbstractSpaceType, dim_val::Val) = backward_shift(mesh(Wₕ), dim_val)
+
+@operator_family(base=forward_shift,
+    stem=S₊,
+    apply_fn=_apply_shifted!,
+    direction=Forward(),
+    opening_sentence="The forward index shift along the `{direction}` direction, "*
+    "``(S_+ u)_i = u_{i+1}``.",
+    trailing_note="The last point along `{direction}` has no forward neighbour and reads 0, "*
+    "so `S₊{suffix}(uₕ) - uₕ` equals [`jump{suffix}`](@ref)`(uₕ)` everywhere.",
+    bang_opening_sentence="The forward index shift along the `{direction}` direction, "*
+    "``(S_+ u)_i = u_{i+1}``, written into `vₕ`.",
+    vectorial_alias=S₊ₕ,
+    vectorial_dir_string="forward",
+    vectorial_what="index shift")
+
+@operator_family(base=backward_shift,
+    stem=S₋,
+    apply_fn=_apply_shifted!,
+    direction=Backward(),
+    opening_sentence="The backward index shift along the `{direction}` direction, "*
+    "``(S_- u)_i = u_{i-1}``.",
+    trailing_note="The first point along `{direction}` has no backward neighbour and reads "*
+    "0; the matrix is the transpose of [`S₊{suffix}`](@ref)'s.",
+    bang_opening_sentence="The backward index shift along the `{direction}` direction, "*
+    "``(S_- u)_i = u_{i-1}``, written into `vₕ`.",
+    vectorial_alias=S₋ₕ,
+    vectorial_dir_string="backward",
+    vectorial_what="index shift")
+
+# ==============================================================================
 # ==============================================================================
 # The AST nodes: the stencil shift `ShiftNode` and its constructor `shift_op`
 # ==============================================================================
