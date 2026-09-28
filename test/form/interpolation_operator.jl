@@ -158,6 +158,26 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         end
     end
 
+    @testset "Collapsed axis" begin
+        # A one-point source axis has no far corner: both sides of the form assemble to the
+        # same `P` as `interpolation_matrix`, whose own collapsed-axis test pins it to the
+        # per-axis Kronecker product.
+        for (Ω, nt, ns) in (
+                (domain(interval(0.0, 1.0) × interval(0.5, 0.5)), (9, 1), (5, 1)),
+                (domain(interval(0.5, 0.5) × interval(0.0, 1.0) × interval(0.0, 1.0)),
+                    (1, 7, 5), (1, 4, 3))
+            )
+            for unif in (true, false)
+                D = length(nt)
+                Wt = gridspace(mesh(Ω, nt, ntuple(_ -> unif, D)))
+                Ws = gridspace(mesh(Ω, ns, ntuple(_ -> unif, D)))
+                P = interpolation_matrix(Wt, Ws)
+                @test assemble(form(Ws, Wt, (u, v) -> innerₕ(πₕ(u), v))) ≈ Hh(Wt) * P
+                @test assemble(form(Wt, Ws, (u, v) -> innerₕ(u, πₕ(v)))) ≈ transpose(P) * Hh(Wt)
+            end
+        end
+    end
+
     @testset "Non-uniform meshes" begin
         # `_interp_cell_frac` reads the mesh's own point coordinates rather than assuming a
         # step, so a non-uniform pair is not a special case, but it is the case that would
