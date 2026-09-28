@@ -102,6 +102,7 @@ export amg_preconditioner
 export ilu_preconditioner
 export jacobi_preconditioner
 export chebyshev_preconditioner
+export GeometricMeshHierarchy
 
 public KroneckerLinearOperator, MatrixFreeOperator, ode_function, second_order_ode_function
 public AbstractMatrixFreePreconditioner, JacobiPreconditioner, ChebyshevPreconditioner

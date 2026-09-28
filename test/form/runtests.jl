@@ -63,6 +63,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("matrix_free.jl")
     # Preconditioners from a matrix-free diagonal (gpena/Bramble.jl#327).
     include("preconditioners.jl")
+    # Geometric multigrid: nested hierarchies (gpena/Bramble.jl#329).
+    include("multigrid.jl")
     include("expression.jl")
     # Composite trial/test functions through the symbolic `∇ₕ`/`εₕ`/`divₕ` builders (S6.5).
     # Behind `slow`: its hand-expanded comparison functions (`hand_strain`, in particular)
