@@ -105,11 +105,13 @@ export chebyshev_preconditioner
 export GeometricMeshHierarchy
 export prolongate!, coarsen!
 export jacobi_smoother, chebyshev_smoother, red_black_gauss_seidel, smooth!
+export gmg_preconditioner, gmg_solve
 
 public KroneckerLinearOperator, MatrixFreeOperator, ode_function, second_order_ode_function
 public AbstractMatrixFreePreconditioner, JacobiPreconditioner, ChebyshevPreconditioner
 public max_eigenvalue_estimate
 public AbstractSmoother, JacobiSmoother, ChebyshevSmoother, RedBlackGaussSeidel
+public GMGPreconditioner, v_cycle!, w_cycle!, fmg!
 public jacobian!, jacobian_prototype, jacobian_pattern, ast_sparsity_detector
 public reaction, reaction_density, reaction!, reaction_density!
 public allocate_system_matrix, type_cached_assemble!, evaluate!, assemble_parallel!

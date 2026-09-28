@@ -5,7 +5,10 @@ using Bramble
 using Bramble: GeometricMeshHierarchy, set_markers!, spacings, interpolation_matrix, CpuPolyester
 using Bramble: AbstractSmoother, JacobiSmoother, ChebyshevSmoother, RedBlackGaussSeidel, max_eigenvalue_estimate,
                trial_space, D₋ₓ, D₋ᵧ, M₊ᵧ
-using LinearAlgebra: LinearAlgebra, dot, norm, diag, LowerTriangular
+using Bramble: GMGPreconditioner, AbstractMatrixFreePreconditioner, VectorElement, v_cycle!, w_cycle!, fmg!,
+               change_points!
+using LinearAlgebra: LinearAlgebra, dot, norm, diag, LowerTriangular, UpperTriangular, ldiv!, Symmetric, eigmin
+using LinearSolve: LinearProblem, KrylovJL_CG, solve
 using SparseArrays: sparse
 using ForwardDiff: ForwardDiff
 using Random
@@ -450,6 +453,295 @@ _mg_salloc(s, x, b) = (smooth!(s, x, b); @allocated smooth!(s, x, b))
     Wr = gridspace(mesh(domain(interval(0.0, 1.0)), 9, false))
     rect = form(Wr, trial_space(_mg_smoother_form(1, 5)), (u, v) -> innerₕ(u, v))
     @test_throws DimensionMismatch jacobi_smoother(rect)
+end
+
+# Cycles (#329): mass plus variable diffusion with natural boundary conditions, SPD, on
+# non-uniform meshes, against dense references built from `assemble` and
+# `interpolation_matrix`.
+function _mg_box(D)
+    D == 2 ? interval(0.0, 1.0) × interval(0.0, 1.0) :
+    interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)
+end
+
+_mg_spd(W) = (κ = Rₕ(W, x -> 1 + sum(abs2, x)); form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))))
+
+# Uniform points jittered by up to ±0.3h along each axis: non-uniform everywhere, with
+# bounded cell aspect ratio.
+function _mg_jitter_mesh(D, n; bk = backend(), seed = MG_SEED)
+    rng = Random.Xoshiro(seed)
+    Ω = mesh(domain(_mg_box(D)), ntuple(_ -> n, D), ntuple(_ -> true, D); backend = bk)
+    h = 1 / (n - 1)
+    function pts()
+        x = collect(range(0.0, 1.0; length = n)) .+ 0.3h .* (2 .* rand(rng, n) .- 1)
+        x[1], x[end] = 0.0, 1.0
+        return sort!(x)
+    end
+    change_points!(Ω, ntuple(_ -> pts(), D))
+    return Ω
+end
+
+function _mg_cg(op, b, P)
+    sol = solve(LinearProblem(op, b), KrylovJL_CG(); Pl = P, reltol = 1e-8, abstol = 0.0, maxiters = 2000)
+    return sol.iters, norm(op * sol.u - b) / norm(b)
+end
+
+# One cycle with damped Jacobi (`ν₁`, `ν₂` sweeps of weight `ω`) and `γ` coarse cycles per
+# level, from the iterate `x`, on dense level matrices `As` and prolongations `Ps`.
+function _mg_dense_cycle(As, Ps, ω, ν₁, ν₂, γ, l, x, b)
+    l == 1 && return As[1] \ b
+    A = As[l]
+    d = diag(A)
+    for _ in 1:ν₁
+        x = x + ω * (b - A * x) ./ d
+    end
+    bc = Ps[l]' * (b - A * x)
+    xc = zeros(length(bc))
+    for _ in 1:γ
+        xc = _mg_dense_cycle(As, Ps, ω, ν₁, ν₂, γ, l - 1, xc, bc)
+    end
+    x = x + Ps[l] * xc
+    for _ in 1:ν₂
+        x = x + ω * (b - A * x) ./ d
+    end
+    return x
+end
+
+function _mg_dense_fmg(As, Ps, ω, ν₁, ν₂, b)
+    L = length(As)
+    bs = Vector{Vector{Float64}}(undef, L)
+    bs[L] = b
+    for l in L:-1:2
+        bs[l - 1] = Ps[l]' * bs[l]
+    end
+    x = As[1] \ bs[1]
+    for l in 2:L
+        x = _mg_dense_cycle(As, Ps, ω, ν₁, ν₂, 1, l, Ps[l] * x, bs[l])
+    end
+    return x
+end
+
+# `sweeps` of backward Gauss-Seidel in the red-then-black ordering.
+function _mg_rbgs_dense_reverse(A, x, b, dims, sweeps)
+    c = _mg_colours(dims)
+    p = [findall(==(0), c); findall(==(1), c)]
+    Ap = A[p, p]
+    xp, bp = x[p], b[p]
+    for _ in 1:sweeps
+        xp += UpperTriangular(Ap) \ (bp - Ap * xp)
+    end
+    y = similar(x)
+    y[p] = xp
+    return y
+end
+
+# The cycles compose many products on random meshes (level matrices of condition ~300 and
+# more), so they agree with the dense references to about 1e-13 relative, not to the last bit.
+_mg_close(a, b) = isapprox(a, b; rtol = 1e-11)
+
+_mg_ldalloc(y, P, x) = (ldiv!(y, P, x); @allocated ldiv!(y, P, x))
+_mg_cycalloc(f, x, P, b) = (f(x, P, b); @allocated f(x, P, b))
+
+# The matrix of `x ↦ P \ x`.
+_mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) for i in 1:n] for j in 1:n]))
+
+@testset "gmg: mesh-independent CG" begin
+    # The cycles against dense references, on a random non-uniform mesh.
+    Random.seed!(MG_SEED)
+    Ω = mesh(domain(_mg_box(2)), (17, 9), (false, false))
+    As = Any[]
+    Ps = Any[nothing]
+    H = GeometricMeshHierarchy(Ω, 3)
+    for l in 1:3
+        push!(As, Matrix(assemble(_mg_spd(gridspace(H[l])))))
+        l > 1 && push!(Ps, interpolation_matrix(gridspace(H[l]), gridspace(H[l - 1])))
+    end
+    n = npoints(Ω)
+    x0, b = randn(n), randn(n)
+    for (ν₁, ν₂) in ((1, 1), (2, 1), (0, 2))
+        P = gmg_preconditioner(_mg_spd, Ω; ν₁, ν₂, smoother = op -> jacobi_smoother(op; ω = 0.7))
+        @test length(P.hierarchy) == 3 && npoints(P.hierarchy[1], Tuple) == (5, 3)
+        @test _mg_close(v_cycle!(copy(x0), P, b), _mg_dense_cycle(As, Ps, 0.7, ν₁, ν₂, 1, 3, x0, b))
+        @test _mg_close(w_cycle!(copy(x0), P, b), _mg_dense_cycle(As, Ps, 0.7, ν₁, ν₂, 2, 3, x0, b))
+        @test _mg_close(fmg!(copy(x0), P, b), _mg_dense_fmg(As, Ps, 0.7, ν₁, ν₂, b))
+        @test _mg_close(P \ b, v_cycle!(zeros(n), P, b))
+    end
+    for (cyc, γ) in ((:V, 1), (:W, 2))
+        P = gmg_preconditioner(_mg_spd, Ω; cycle = cyc, smoother = op -> jacobi_smoother(op; ω = 0.7))
+        @test _mg_close(P \ b, _mg_dense_cycle(As, Ps, 0.7, 2, 2, γ, 3, zeros(n), b))
+    end
+    P = gmg_preconditioner(_mg_spd, Ω; cycle = :FMG, smoother = op -> jacobi_smoother(op; ω = 0.7))
+    @test _mg_close(P \ b, _mg_dense_fmg(As, Ps, 0.7, 2, 2, b))
+
+    # Reversed red-black is backward Gauss-Seidel; the default order is unchanged.
+    rb = red_black_gauss_seidel(_mg_spd(gridspace(Ω)); sweeps = 2)
+    @test _mg_agree(smooth!(rb, copy(x0), b; reverse = true), _mg_rbgs_dense_reverse(As[3], x0, b, (17, 9), 2))
+    @test _mg_agree(smooth!(rb, copy(x0), b; reverse = false), _mg_rbgs_dense(As[3], x0, b, (17, 9), 2))
+    @test _mg_salloc(rb, copy(x0), b) == 0
+
+    # Post-smoothing is the adjoint of pre-smoothing, so the V- and W-cycles are SPD for
+    # every smoother, red-black included.
+    for sm in (op -> chebyshev_smoother(op), op -> jacobi_smoother(op), op -> red_black_gauss_seidel(op)),
+        cyc in (:V, :W)
+
+        B = _mg_dense_inverse(gmg_preconditioner(_mg_spd, Ω; cycle = cyc, smoother = sm))
+        @test norm(B - B') <= 1e-12 * norm(B)
+        @test eigmin(Symmetric(B)) > 0
+    end
+
+    # CG iterations do not grow with the mesh on meshes of bounded cell aspect ratio.
+    for (D, ns) in ((2, (17, 33, 65)), (3, (9, 17)))
+        its = map(ns) do n
+            Ωf = _mg_jitter_mesh(D, n)
+            P = gmg_preconditioner(_mg_spd, Ωf)
+            @test P isa GMGPreconditioner{Float64} && P isa AbstractMatrixFreePreconditioner{Float64}
+            op = matrix_free_operator(_mg_spd(gridspace(Ωf)))
+            i, r = _mg_cg(op, randn(size(op, 1)), P)
+            @test r < 1e-7
+            return i
+        end
+        @test maximum(its) <= 12 && maximum(its) - minimum(its) <= 3
+    end
+    for cyc in (:W, :FMG)
+        Ωf = _mg_jitter_mesh(2, 33)
+        op = matrix_free_operator(_mg_spd(gridspace(Ωf)))
+        i, r = _mg_cg(op, randn(size(op, 1)), gmg_preconditioner(_mg_spd, Ωf; cycle = cyc))
+        @test r < 1e-7 && i <= 12
+    end
+    # A random base mesh refined by `iterative_refinement!` keeps its stretched cells, where
+    # point smoothers are slower; CG still converges.
+    for (D, n₀, k) in ((2, 5, 3), (3, 5, 2))
+        Random.seed!(MG_SEED + D)
+        Ωf = mesh(domain(_mg_box(D)), ntuple(_ -> n₀, D), ntuple(_ -> false, D))
+        foreach(_ -> iterative_refinement!(Ωf), 1:k)
+        @test npoints(Ωf, Tuple) == ntuple(_ -> (n₀ - 1) * 2^k + 1, D)
+        op = matrix_free_operator(_mg_spd(gridspace(Ωf)))
+        for sm in (op -> chebyshev_smoother(op), op -> red_black_gauss_seidel(op))
+            P = gmg_preconditioner(_mg_spd, Ωf; levels = k + 1, smoother = sm)
+            _, r = _mg_cg(op, randn(size(op, 1)), P)
+            @test r < 1e-7
+        end
+    end
+
+    # Cycles allocate nothing on a serial policy; `VectorElement`s act on their storage.
+    Ωf = _mg_jitter_mesh(2, 33)
+    W = gridspace(Ωf)
+    n = ndofs(W)
+    x0, b = randn(n), randn(n)
+    for cyc in (:V, :W, :FMG), sm in (op -> chebyshev_smoother(op), op -> red_black_gauss_seidel(op))
+
+        P = gmg_preconditioner(_mg_spd, Ωf; cycle = cyc, smoother = sm)
+        @test _mg_ldalloc(zeros(n), P, b) == 0
+        y = P \ b
+        @test ldiv!(P, copy(b)) == y
+        xₕ, bₕ = element(W, 0.0), element(W, b)
+        @test ldiv!(xₕ, P, bₕ) === xₕ && parent(xₕ) == y
+        for f in (v_cycle!, w_cycle!, fmg!)
+            @test _mg_cycalloc(f, copy(x0), P, b) == 0
+            uₕ = element(W, copy(x0))
+            @test f(uₕ, P, bₕ) === uₕ && parent(uₕ) == f(copy(x0), P, b)
+        end
+    end
+    P = gmg_preconditioner(_mg_spd, Ωf)
+    @test sprint(show, P) == "GMGPreconditioner{V(2,2), 5 levels, (3, 3) to (33, 33) pts}"
+    @test size(P) == (n, n) && eltype(P) === Float64
+    @test_throws DimensionMismatch ldiv!(zeros(n + 1), P, zeros(n))
+    @test_throws DimensionMismatch ldiv!(zeros(n), P, zeros(n - 1))
+    @test_throws ArgumentError ldiv!(_MgZeroBased(zeros(n)), P, zeros(n))
+    for f in (v_cycle!, w_cycle!, fmg!)
+        @test_throws DimensionMismatch f(zeros(n + 1), P, zeros(n))
+        x = zeros(n)
+        @test_throws ArgumentError f(x, P, x)
+        @test_throws ArgumentError f(_MgZeroBased(zeros(n)), P, zeros(n))
+    end
+
+    # Default levels coarsen until an axis would drop below three points.
+    for (np, L, nc) in (((33, 33), 5, (3, 3)), ((97, 17), 4, (13, 3)), ((17, 5), 2, (9, 3)))
+        Ωd = mesh(domain(_mg_box(2)), np, (true, true))
+        Pd = gmg_preconditioner(_mg_spd, Ωd)
+        @test length(Pd.hierarchy) == L && npoints(Pd.hierarchy[1], Tuple) == nc
+    end
+    Pd = gmg_preconditioner(_mg_spd, mesh(domain(_mg_box(2)), (97, 97), (true, true)))
+    @test length(Pd.hierarchy) == 6 && npoints(Pd.hierarchy[1], Tuple) == (4, 4)
+
+    # Float32 stays Float32 and allocation-free.
+    Ω32 = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (17, 17), (false, false))
+    P32 = gmg_preconditioner(_mg_spd, Ω32)
+    b32 = randn(Float32, npoints(Ω32))
+    @test eltype(P32) === Float32 && eltype(P32 \ b32) === Float32
+    @test _mg_ldalloc(zeros(Float32, npoints(Ω32)), P32, b32) == 0
+    # The default tolerance √eps(Float32) sits above Float32's rounding floor; one below it
+    # is refused with a message naming the tolerance and the element type.
+    u32 = gmg_solve(_mg_spd, Ω32, b32)
+    @test eltype(parent(u32)) === Float32
+    A32 = assemble(_mg_spd(gridspace(Ω32)))
+    @test norm(A32 * parent(u32) - b32) <= sqrt(eps(Float32)) * norm(b32)
+    err = try
+        gmg_solve(_mg_spd, Ω32, b32; tol = 1e-9, maxiters = 30)
+    catch e
+        e
+    end
+    @test err isa ErrorException && occursin("Float32", err.msg) && occursin("tol = 1.0e-9", err.msg)
+
+    # `gmg_solve` reaches its tolerance and agrees with a direct solve.
+    A = assemble(_mg_spd(W))
+    xs = Matrix(A) \ b
+    for cyc in (:V, :W, :FMG)
+        uₕ = gmg_solve(_mg_spd, Ωf, b; cycle = cyc, tol = 1e-10)
+        @test uₕ isa VectorElement && length(parent(uₕ)) == n
+        @test norm(A * parent(uₕ) - b) <= 1e-10 * norm(b)
+        @test isapprox(parent(uₕ), xs; rtol = 1e-8)
+    end
+    @test parent(gmg_solve(_mg_spd, Ωf, element(W, b); tol = 1e-10)) ≈ parent(gmg_solve(_mg_spd, Ωf, b; tol = 1e-10))
+    @test iszero(parent(gmg_solve(_mg_spd, Ωf, zeros(n))))
+    @test_throws ErrorException gmg_solve(_mg_spd, Ωf, b; tol = 1e-15, maxiters = 1)
+    @test_throws ArgumentError gmg_solve(_mg_spd, Ωf, b; tol = 0)
+    @test_throws ArgumentError gmg_solve(_mg_spd, Ωf, b; maxiters = 0)
+    @test_throws DimensionMismatch gmg_solve(_mg_spd, Ωf, zeros(n + 1))
+
+    # Construction refuses what the cycles cannot run.
+    @test_throws ArgumentError gmg_preconditioner(_mg_spd, Ωf; cycle = :F)
+    @test_throws ArgumentError gmg_preconditioner(_mg_spd, Ωf; ν₁ = -1)
+    @test_throws ArgumentError gmg_preconditioner(_mg_spd, Ωf; ν₁ = 0, ν₂ = 0)
+    @test_throws ArgumentError gmg_preconditioner(_mg_spd, Ωf; levels = 2.5)
+    @test_throws ArgumentError gmg_preconditioner(_mg_spd, Ωf; smoother = op -> jacobi_preconditioner(op))
+    @test_throws ArgumentError gmg_preconditioner(_mg_spd, Ωf; levels = 7)
+    @test_throws ArgumentError gmg_preconditioner(W -> 1.0, Ωf)
+    @test_throws ArgumentError gmg_preconditioner(_ -> _mg_spd(W), Ωf)
+    @test_throws ArgumentError gmg_preconditioner(
+        V -> (
+            C = V × V; form(C, C, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))), Ωf)
+    @test_throws ArgumentError gmg_preconditioner(_mg_spd, mesh(domain(_mg_box(2)), (65, 66), (true, true)))
+    # A 3-point axis allows no coarser level, so the message does not suggest more levels.
+    err = try
+        gmg_preconditioner(_mg_spd, mesh(domain(_mg_box(2)), (2049, 3), (true, true)))
+    catch e
+        e
+    end
+    @test err isa ArgumentError && occursin("if the hierarchy allows them", sprint(showerror, err))
+end
+
+@testset "gmg: threaded cycles agree" begin
+    policies = Any[Parallel()]
+    Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing && push!(policies, CpuPolyester())
+    for policy in policies, (D, n) in ((2, 33), (3, 9))
+
+        Ωs = _mg_jitter_mesh(D, n)
+        Ωt = _mg_jitter_mesh(D, n; bk = backend(; policy))
+        @test points(Ωt) == points(Ωs)
+        b = randn(npoints(Ωs))
+        for cyc in (:V, :W, :FMG)
+            Ps = gmg_preconditioner(_mg_spd, Ωs; cycle = cyc)
+            Pt = gmg_preconditioner(_mg_spd, Ωt; cycle = cyc)
+            @test all(op -> op.policy == policy, Pt.ops)
+            ys = Ps \ b
+            yt = similar(ys)
+            @test all(1:20) do _
+                ldiv!(yt, Pt, b)
+                return isapprox(yt, ys; rtol = 1e-12, atol = 1e-14)
+            end
+        end
+        @test isapprox(parent(gmg_solve(_mg_spd, Ωt, b)), parent(gmg_solve(_mg_spd, Ωs, b)); rtol = 1e-10)
+    end
 end
 
 end # module TestFormMultigrid

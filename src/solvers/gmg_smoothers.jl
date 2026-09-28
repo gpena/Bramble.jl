@@ -9,7 +9,8 @@
 # scatters each stencil entry to its row, so a lexicographic Gauss-Seidel is not available
 # matrix-free; the masked update is exact Gauss-Seidel in the red-then-black ordering when no
 # entry of `A` couples two distinct points of one colour, which the constructor checks on the
-# form's stencil offsets.
+# form's stencil offsets. `smooth!(s, x, b; reverse = true)` runs black then red, the adjoint
+# sweep a symmetric multigrid cycle post-smooths with.
 
 """
     AbstractSmoother{T}
@@ -105,9 +106,10 @@ of `A` couples two distinct points of one colour (checked by
 [`red_black_gauss_seidel`](@ref)), each half-sweep is exact Gauss-Seidel on its colour, and
 a sweep equals forward Gauss-Seidel in the red-then-black ordering. A sweep costs two
 products with `A` and allocates nothing: the residual vector is stored in the smoother, so
-one smoother must not be used from two tasks at once. The order is always red then black, so
-a cycle that pre- and post-smooths with it is not symmetric; the two-grid factors quoted
-below are for that order on both sides.
+one smoother must not be used from two tasks at once. `smooth!(s, x, b; reverse = true)`
+updates the black points first: that sweep is backward Gauss-Seidel in the red-then-black
+ordering, the adjoint of the forward one, and is what a symmetric multigrid cycle
+post-smooths with. The two-grid factors quoted below are for red then black on both sides.
 
 # Type parameters
 - `T`: The element type of `A`.
@@ -439,6 +441,7 @@ end
 
 """
     smooth!(s::AbstractSmoother, x, b) -> x
+    smooth!(s::RedBlackGaussSeidel, x, b; reverse::Bool = false) -> x
 
 Apply the smoother `s` to the iterate `x` for `A x = b`, in place: the sweeps of a
 [`JacobiSmoother`](@ref) or [`RedBlackGaussSeidel`](@ref), the Chebyshev steps of a
@@ -446,11 +449,20 @@ Apply the smoother `s` to the iterate `x` for `A x = b`, in place: the sweeps of
 one, only the task launches of each product with `A`. The work vectors live in `s`, so one
 smoother must not be used from two tasks at once.
 
+The Jacobi and Chebyshev error propagators are polynomials in `D⁻¹A`, self-adjoint in the
+`A` inner product. A red-black sweep is forward Gauss-Seidel in the red-then-black ordering,
+and `reverse = true` runs each sweep black then red, its adjoint (backward Gauss-Seidel in
+the same ordering).
+
 # Arguments
 - `s`: The smoother.
 - `x`: The iterate, overwritten: a vector of length `ndofs`, or a [`VectorElement`](@ref).
 - `b`: The right-hand side, not modified: a vector of length `ndofs`, or a
   [`VectorElement`](@ref). It must not alias `x`.
+
+# Keywords
+- `reverse`: Red-black only: update the black points before the red ones in every sweep
+  (default: `false`).
 
 # Returns
 - `x`, the smoothed iterate.
@@ -495,10 +507,13 @@ function smooth!(s::ChebyshevSmoother, x::AbstractVector, b::AbstractVector)
     return x
 end
 
-function smooth!(s::RedBlackGaussSeidel, x::AbstractVector, b::AbstractVector)
+function smooth!(
+        s::RedBlackGaussSeidel, x::AbstractVector, b::AbstractVector; reverse::Bool = false
+)
     xd, bd = _smoother_data(s, x, b)
     op, dinv, r = s.op, s.inv_diagonal, s.r
-    for _ in 1:(s.sweeps), colour in (0, 1)
+    order = reverse ? (1, 0) : (0, 1)
+    for _ in 1:(s.sweeps), colour in order
 
         _residual!(r, op, xd, bd)
         _rb_update!(xd, dinv, r, s.dims, colour)
