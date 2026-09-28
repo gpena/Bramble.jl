@@ -87,7 +87,7 @@ using Bramble:
         for T in (FD, typeof(D₊ᵧ(id)))
             m = which(inner₊, Tuple{IndexedTrialFunction{2}, T})
             @test !occursin("ForwardDifference", string(m.sig))
-            @test occursin("ast/operators/inner.jl", replace(string(m.file), "\\" => "/"))
+            @test occursin("operators/inner.jl", replace(string(m.file), "\\" => "/"))
         end
 
         u2, v2 = TrialFunction{2}(), TestFunction{2}()

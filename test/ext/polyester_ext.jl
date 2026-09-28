@@ -452,7 +452,7 @@ end
 # --- Divergence, curl and strain-average engines under CpuPolyester (S7.5, #356) --------- #
 #
 # `_run_bands!`'s `CpuPolyester` arm (`_batch_run_bands!`, this extension) is what the
-# accumulating engines behind `divₕ!`/`curlₕ!`/`εₕ!` (space/operators/vector_calculus.jl)
+# accumulating engines behind `divₕ!`/`curlₕ!`/`εₕ!` (operators/vector_calculus.jl)
 # reach; before S7.5 they had no `CpuPolyester` hook and ran serially regardless of the
 # policy, so an equality check against `Serial()` alone would pass either way -- serial and
 # `@batch` give the same numbers. The load-bearing assertion is the thread count, checked

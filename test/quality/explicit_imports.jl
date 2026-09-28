@@ -330,14 +330,14 @@ using ExplicitImports
                 # `_batch_difference_engine!`, `_batch_average_engine!`,
                 # `_batch_centered_average_engine!` (BramblePolyesterExt, gpena/Bramble.jl#356,
                 # S7.2): the `Polyester.@batch` counterparts of the `CpuThreaded` stencil
-                # engines in `src/space/operators/difference.jl` and
-                # `src/space/operators/average.jl`, extended here rather than called.
+                # engines in `src/operators/difference.jl` and
+                # `src/operators/average.jl`, extended here rather than called.
                 :_batch_difference_engine!,
                 :_batch_average_engine!,
                 :_batch_centered_average_engine!,
                 # `_batch_run_bands!` (BramblePolyesterExt, gpena/Bramble.jl#356, S7.5): the
                 # `Polyester.@batch` counterpart of `_run_bands!`'s `CpuThreaded` arm in
-                # `src/space/operators/vector_calculus.jl`, reached by the divergence, curl
+                # `src/operators/vector_calculus.jl`, reached by the divergence, curl
                 # and strain-average engines. Unlike the three S7.2 hooks above it stays
                 # generic over the band function `f` instead of naming one, extended here
                 # rather than called.
@@ -361,8 +361,8 @@ using ExplicitImports
                 :_stencil_boundary_dim,
                 :_write_components!,
                 # The direction/stencil-kind dispatch types the fused vector-calculus and
-                # difference kernels are parametrised over (src/space/operators/stencil.jl,
-                # src/space/operators/difference.jl) -- named in the `@kernel`s' own method
+                # difference kernels are parametrised over (src/operators/stencil.jl,
+                # src/operators/difference.jl) -- named in the `@kernel`s' own method
                 # signatures, the same way `CartesianProduct` below is, and none exported.
                 :GridDirection,
                 :Forward,

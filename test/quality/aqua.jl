@@ -14,7 +14,7 @@ using Aqua
     #   `f(y::NTuple{NQ, T}) where {NQ, T} = 1` reports both `NQ` and `T` as unbound, even
     #   though they plainly are — `NTuple{NQ, T}` desugars to `Tuple{Vararg{T, NQ}}`, and
     #   the check's tree walk does not look inside `Vararg`. `_cell_average`'s
-    #   `nodes::NTuple{NQ, T}`/`wts::NTuple{NQ, T}` signatures (src/space/operators/cell_average.jl)
+    #   `nodes::NTuple{NQ, T}`/`wts::NTuple{NQ, T}` signatures (src/operators/cell_average.jl)
     #   hit exactly this after the StaticArrays → Tuple migration replaced `SVector{NQ, T}`
     #   (which the check handled fine, being an ordinary parametric struct, not a Vararg
     #   tuple) with `NTuple{NQ, T}`.

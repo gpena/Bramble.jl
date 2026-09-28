@@ -503,7 +503,7 @@ end
                 @test @views norm(u_reshaped[interior...] - w[interior...]) < 1e-4
             end
 
-            # Defer ∇ₕ tests until space/operators/difference.jl is enabled
+            # Defer ∇ₕ tests until operators/difference.jl is enabled
         end
     end
 

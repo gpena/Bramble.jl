@@ -1109,7 +1109,7 @@ function _host_sources(op::RegionRestriction{D, R}) where {D, R}
     return RegionRestriction{D, R, typeof(inner)}(op.region, inner)
 end
 
-# The `@node_family` nodes (`ast/operators/node_family.jl`): one `inner_op` each, rebuilt
+# The `@node_family` nodes (`operators/node_family.jl`): one `inner_op` each, rebuilt
 # around the walked operand as their generated `_bind_interp_spaces` is.
 for N in (:BackwardDifference, :ForwardDifference, :CenteredDifference, :StarDifference,
     :CrossWeightedDifference, :BackwardAverage, :ForwardAverage, :CenteredAverage, :JumpNode)

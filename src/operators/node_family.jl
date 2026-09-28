@@ -7,7 +7,7 @@
 #=
 # node_family.jl
 
-The form layer's counterpart of `space/operators/stencil.jl`'s `@operator_family`.
+The form layer's counterpart of `operators/stencil.jl`'s `@operator_family`.
 
 Every directional AST node is the same shape: a `struct Node{D, Dim, OpType}` holding one
 `inner_op`, built by a per-coordinate alias, gathered by a tuple-valued one, and rebuilt by
@@ -174,7 +174,7 @@ end
 
 Returns the expression defining `_bind_interp_spaces` for one node family.
 
-The interpolation binding pass (`ast/operators/interpolation.jl`) walks a term the way
+The interpolation binding pass (`operators/interpolation.jl`) walks a term the way
 `resolve_ast` does, and a directional node's share of that walk is the same line per family
 as its `resolve_ast`: rebuild with the bound operand inside.
 """
@@ -212,7 +212,7 @@ Keywords, all optional except `node`, `stem` and `what`:
 `_bind_interp_spaces` is generated unconditionally: it is the same rebuild as `resolve_ast`,
 and a family that opts out of the latter still has to pass a bound operand through.
 
-The space-layer counterpart is `@operator_family` in `space/operators/stencil.jl`, and the
+The space-layer counterpart is `@operator_family` in `operators/stencil.jl`, and the
 generators it shares -- `_relocate!` for line attribution, and `_BRAMBLE_var2symbol` /
 `_BRAMBLE_var2label` for the coordinate suffixes -- are the same ones used here.
 """

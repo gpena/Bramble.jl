@@ -1,3 +1,10 @@
+# shift.jl
+#
+# The file holds both halves of the shift family: the numerical operators, which act on grid
+# functions and build matrices, and then the AST nodes that the same names build when handed
+# a `LazyOp`. It is included after the AST core (`ast/ast.jl`, `common.jl`,
+# `expression.jl`, `operators/node_family.jl`), which the node half needs.
+
 """
     ⊗(A, B)
 
@@ -175,3 +182,102 @@ family's own implementation (`difference.jl`, `average.jl`, `jump.jl`), mapping 
 aliases to the `_kron_*` construction that family kept.
 """
 function kronecker_operator_matrix end
+
+# ==============================================================================
+# ==============================================================================
+# The AST nodes: the stencil shift `ShiftNode` and its constructor `shift_op`
+# ==============================================================================
+# ==============================================================================
+
+"""
+    ShiftNode{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
+
+An AST node representing a stencil shift operation by `shift_amount` grid points in dimension `Dim`.
+"""
+struct ShiftNode{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+    shift_amount::Int
+    inner_op::OpType
+end
+
+"""
+    shift_op(op::LazyOp{D}, dim::Int, amount::Int) where D
+
+Shifts the stencil of `op` by `amount` grid points in dimension `dim`.
+"""
+function shift_op(op::LazyOp{D}, dim::Int, amount::Int) where {D}
+    return ShiftNode{D, dim, typeof(op)}(amount, op)
+end
+
+@inline function local_stencil(
+        op::ShiftNode{D, Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D, Dim}
+    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
+    return _shift_node_stencil(
+        stencil_shift_trait(op.inner_op), op, inner, space, I, markers
+    )
+end
+
+@inline _shift_node_stencil(
+    ::TranslationInvariantStencil,
+    op::ShiftNode{D, Dim},
+    inner,
+    space,
+    I::CartesianIndex{D},
+    markers
+) where {D, Dim} = shifted_inner_stencil(
+    op.inner_op, inner, space, I, markers, Val(Dim), op.shift_amount
+)
+
+# `shift_op` has no mask of its own: every other wrapper that reaches a neighbour
+# (differences, averages, jumps) computes one first and multiplies a clamped boundary read by
+# it, which is what makes `_clamped_shift`'s "clamp now, a zero mask absorbs it" contract safe
+# for them. Nothing here would absorb it for a source: relabelling an offset is safe
+# unclamped, since the caller's own bounds check drops the whole entry when the offset lands
+# out of range, but a source has already been reduced to a value by the time this runs, with
+# no offset left for that check. A source shifted off the grid therefore reads as zero here:
+# an empty stencil, the same "missing neighbour is zero" convention the masked stencils use,
+# mirroring how `RegionRestriction` already spells "contributes nothing here".
+#
+# An interpolation is not a source, and clamping is its own correct behaviour: `locate_cell`
+# (`operators/interpolation.jl`) clamps every point it is given, in-grid or not, by
+# design (`πₕ`'s own docstring calls this extrapolation along the boundary cell's slope, not
+# a missing-neighbour convention to override). So only a source-only inner operand gets the
+# in-grid check; anything else falls through to the ordinary clamped re-evaluation.
+@inline function _shift_node_stencil(
+        ::PointDependentStencil,
+        op::ShiftNode{D, Dim},
+        inner,
+        space,
+        I::CartesianIndex{D},
+        markers
+) where {D, Dim}
+    if _is_source_only(op.inner_op)
+        Ishift = I + _stencil_step(Val(Dim), Val(D)) * op.shift_amount
+        _in_grid(space, Ishift) || return ()
+        return local_stencil(
+            op.inner_op, space, Ishift, markers, LinearIndices(indices(mesh(space)))[Ishift]
+        )
+    else
+        return shifted_inner_stencil(
+            op.inner_op, inner, space, I, markers, Val(Dim), op.shift_amount
+        )
+    end
+end
+
+function resolve_ast(op::ShiftNode{D, Dim}) where {D, Dim}
+    inner = resolve_ast(op.inner_op)
+    return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
+end
+
+# `ShiftNode` carries a second field, so it writes its own binder rather than taking the one
+# `@node_family` generates (operators/interpolation.jl explains the pass).
+function _bind_interp_spaces(
+        op::ShiftNode{D, Dim}, trial_leaf, test_leaf
+) where {D, Dim}
+    inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
+    return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
+end
+
+function expression(op::ShiftNode{D, Dim}) where {D, Dim}
+    "shift($(expression(op.inner_op)), $(_BRAMBLE_var2symbol[Dim]), $(op.shift_amount))"
+end

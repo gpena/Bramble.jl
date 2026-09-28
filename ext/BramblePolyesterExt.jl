@@ -13,7 +13,7 @@
 # runs once the caller has already zeroed and dispatched.
 #
 # S7.2 (gpena/Bramble.jl#356) left three more of the same shape in
-# `src/space/operators/difference.jl`/`src/space/operators/average.jl`: `_batch_difference_engine!`,
+# `src/operators/difference.jl`/`src/operators/average.jl`: `_batch_difference_engine!`,
 # `_batch_average_engine!` and `_batch_centered_average_engine!`, each the `@batch` counterpart of
 # `_threaded_difference_engine!`/`_threaded_average_engine!`/`_threaded_centered_average_engine!`,
 # running one `_difference_band!`/`_average_band!`/`_centered_average_band!` per band.
@@ -28,7 +28,7 @@
 # identical, only `_replay_point!` (reads the recording) stands in for `_scatter_point!`
 # (searches).
 #
-# S7.5 (gpena/Bramble.jl#356) left one more in `src/space/operators/vector_calculus.jl`:
+# S7.5 (gpena/Bramble.jl#356) left one more in `src/operators/vector_calculus.jl`:
 # `_batch_run_bands!`, the `@batch` counterpart of `_run_bands!`'s `CpuThreaded` arm, reached
 # by the divergence, curl and strain-average engines. Unlike the three S7.2 hooks, it stays
 # generic over the band function `f` instead of naming one.
@@ -85,7 +85,7 @@ end
 
 # `idxs::AbstractRange` specialises this past the stub's fully unconstrained signature
 # (`_batch_scatter_for!(mats::Tuple, idxs, g)`); the only caller (`project!`,
-# space/operators/projection.jl) always passes `1:n`.
+# operators/projection.jl) always passes `1:n`.
 function Bramble._batch_scatter_for!(mats::Tuple, idxs::AbstractRange, g)
     @batch for idx in idxs
         @inbounds _write_components!(mats, g(idx), idx)
@@ -334,7 +334,7 @@ function Bramble._batch_linear_band_sweep!(
 end
 
 # --- _batch_difference_engine!/_batch_average_engine!/_batch_centered_average_engine! ---- #
-# (src/space/operators/difference.jl, src/space/operators/average.jl)
+# (src/operators/difference.jl, src/operators/average.jl)
 #
 # `CpuPolyester`'s counterpart of `_threaded_difference_engine!`/`_threaded_average_engine!`/
 # `_threaded_centered_average_engine!`: one `_difference_band!`/`_average_band!`/
@@ -367,7 +367,7 @@ function Bramble._batch_centered_average_engine!(out::AbstractVector, in_ref, di
     return nothing
 end
 
-# --- _batch_run_bands! (src/space/operators/vector_calculus.jl) -------------------- #
+# --- _batch_run_bands! (src/operators/vector_calculus.jl) -------------------- #
 #
 # `CpuPolyester`'s `_run_bands!`: unlike the three engine-specific hooks above, `f` here is
 # whichever accumulating engine (`_accumulate_backward!`, `_accumulate_centered!`,

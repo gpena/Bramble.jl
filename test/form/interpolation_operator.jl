@@ -209,7 +209,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
 
     @testset "Action on a grid function" begin
         # the assembled matrix applied to a source vector is the weighted interpolant: the
-        # numeric `πₕ` (space/operators/interpolation.jl) computing the same thing by an
+        # numeric `πₕ` (operators/interpolation.jl) computing the same thing by an
         # entirely different route, which is the check that the two layers agree.
         Ω = domain(interval(0.0, 1.0))
         Wt = gridspace(mesh(Ω, 11, true))

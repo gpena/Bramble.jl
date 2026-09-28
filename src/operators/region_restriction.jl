@@ -1,4 +1,4 @@
-# restriction.jl
+# region_restriction.jl
 # RegionRestriction struct and spatial restriction logic for Bramble lazy AST
 
 # --- Struct definition ------------------------------------------------------------- #

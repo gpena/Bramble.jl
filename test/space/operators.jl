@@ -203,9 +203,9 @@ end
 end
 
 # `stencil_matrix` (gpena/Bramble.jl#185): every family's public per-axis alias now
-# routes through the single-pass builder in `src/space/operators/stencil.jl`, rather than
+# routes through the single-pass builder in `src/operators/stencil.jl`, rather than
 # through the Kronecker products of shift matrices `kronecker_operator_matrix` still
-# builds (`src/space/operators/shift.jl`, kept as the retained oracle). Checked entrywise,
+# builds (`src/operators/shift.jl`, kept as the retained oracle). Checked entrywise,
 # `nnz` included, on non-uniform meshes in 1D/2D/3D so a boundary weight that would only
 # coincidentally match on a uniform grid cannot hide a mistake.
 @testset "stencil_matrix vs Kronecker (#185)" begin

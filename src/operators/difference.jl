@@ -46,7 +46,7 @@ end
 
 # The device kernels in `ext/BrambleKernelAbstractionsExt.jl` (S2.4 of
 # .agents/plans/metal-and-apple-silicon-acceleration.md) need, per grid point, exactly the
-# boundary test `_stencil_ranges` (space/operators/stencil.jl) already encodes as index
+# boundary test `_stencil_ranges` (operators/stencil.jl) already encodes as index
 # ranges: a forward stencil has no neighbour at the last point along the direction, a
 # backward one at the first. Read here as a single index comparison instead of re-deriving a
 # `CartesianIndices` split inside the kernel body. Shared by the difference and average
@@ -508,7 +508,7 @@ end
 # `KernelAbstractions.@kernel` that calls the very `_compute_difference` methods above, once
 # per grid point, so the device and host answers stay identical by construction rather than
 # by two implementations agreeing -- the same reasoning `avgₕ!`'s device path
-# (`space/operators/cell_average.jl`) documents. Without that extension loaded, the launcher
+# (`operators/cell_average.jl`) documents. Without that extension loaded, the launcher
 # throws a named diagnostic instead of failing several frames later on a scalar index.
 #------------------------------------------------------------------------------------------#
 
@@ -522,7 +522,7 @@ end
 end
 
 # Deliberately untyped, matching the `_launch_restriction!`/`_launch_half_points!`
-# fallback idiom (`space/operators/restriction.jl`, `src/mesh/mesh1d.jl`): the extension's
+# fallback idiom (`operators/restriction.jl`, `src/mesh/mesh1d.jl`): the extension's
 # methods are typed on `AbstractVector`/`Tuple`, and a fallback with the same signature
 # would overwrite them instead of adding a genuinely more specific dispatch.
 """
@@ -1460,7 +1460,7 @@ end
 # reaches assembly, `local_stencil` or `block_of` directly: the architecture stays "every
 # `LazyOp` is scalar-valued, expansion happens at the builder" (gpena/Bramble.jl#234).
 #
-# `εₕ`/`divₕ` differ from `space/operators/vector_calculus.jl`'s *runtime* `divₕ`
+# `εₕ`/`divₕ` differ from `operators/vector_calculus.jl`'s *runtime* `divₕ`
 # (gpena/Bramble.jl#158) the way every symbolic/numeric pair in this package can (CONTEXT.md):
 # the runtime `divₕ` sums raw backward differences with no cross-axis averaging, read at the
 # mesh's own nodes; placing every one of the `D` terms here at the same shared quadrature
@@ -1587,7 +1587,7 @@ component per spatial dimension, placed at the cell centre every axis shares: te
 ``D_{-,i}(u_i)`` averaged onto that centre by every axis other than `i`.
 
 Shares its name with the *runtime* [`divₕ`](@ref) over grid functions
-(`space/operators/vector_calculus.jl`, gpena/Bramble.jl#158); see this section's header
+(`operators/vector_calculus.jl`, gpena/Bramble.jl#158); see this section's header
 comment for how and why the two differ.
 
 The only supported use is `inner₊(divₕ(u), divₕ(v))`, which expands to
@@ -1640,7 +1640,7 @@ spatial dimension,
 
 Every term is collocated at the grid point, so the result is a plain operator sum usable
 wherever an operator is, e.g. `innerₕ(p, divcₕ(v))`. Shares its name with the runtime
-[`divcₕ`](@ref) over grid functions (`space/operators/vector_calculus.jl`).
+[`divcₕ`](@ref) over grid functions (`operators/vector_calculus.jl`).
 
 See also: [`εcₕ`](@ref), [`divₕ`](@ref).
 """
@@ -1740,7 +1740,7 @@ per spatial dimension,
 
 Every term is co-located at the grid point, so the result is a plain operator sum usable
 wherever an operator is, e.g. `innerₕ(p, div̽ₕ(v))`. Shares its name with the runtime
-[`div̽ₕ`](@ref) over grid functions (`space/operators/vector_calculus.jl`).
+[`div̽ₕ`](@ref) over grid functions (`operators/vector_calculus.jl`).
 
 See also: [`ε̽ₕ`](@ref), [`divcₕ`](@ref).
 """
