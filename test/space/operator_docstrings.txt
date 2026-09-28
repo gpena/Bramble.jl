@@ -1210,6 +1210,192 @@ Alias for `cross_weighted_difference!(vₕ, uₕ, Val(3))`. Accepts a grid funct
 scalar or of a composite grid space, componentwise on the latter.
 
 ### end D̽₂!
+### S₊ₓ
+    S₊ₓ(arg)
+
+The forward index shift along the `x` direction, ``(S_+ u)_i = u_{i+1}``.
+
+Alias for `forward_shift(arg, Val(1))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The last point along `x` has no forward neighbour and reads 0, so `S₊ₓ(uₕ) - uₕ` equals [`jumpₓ`](@ref)`(uₕ)` everywhere.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end S₊ₓ
+### S₊ₓ!
+    S₊ₓ!(vₕ, uₕ)
+
+The forward index shift along the `x` direction, ``(S_+ u)_i = u_{i+1}``, written into `vₕ`.
+
+The in-place form of [`S₊ₓ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(S₊ₓ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_shift!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end S₊ₓ!
+### S₊ᵧ
+    S₊ᵧ(arg)
+
+The forward index shift along the `y` direction, ``(S_+ u)_i = u_{i+1}``.
+
+Alias for `forward_shift(arg, Val(2))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The last point along `y` has no forward neighbour and reads 0, so `S₊ᵧ(uₕ) - uₕ` equals [`jumpᵧ`](@ref)`(uₕ)` everywhere.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end S₊ᵧ
+### S₊ᵧ!
+    S₊ᵧ!(vₕ, uₕ)
+
+The forward index shift along the `y` direction, ``(S_+ u)_i = u_{i+1}``, written into `vₕ`.
+
+The in-place form of [`S₊ᵧ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(S₊ᵧ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_shift!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end S₊ᵧ!
+### S₊₂
+    S₊₂(arg)
+
+The forward index shift along the `z` direction, ``(S_+ u)_i = u_{i+1}``.
+
+Alias for `forward_shift(arg, Val(3))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The last point along `z` has no forward neighbour and reads 0, so `S₊₂(uₕ) - uₕ` equals [`jump₂`](@ref)`(uₕ)` everywhere.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end S₊₂
+### S₊₂!
+    S₊₂!(vₕ, uₕ)
+
+The forward index shift along the `z` direction, ``(S_+ u)_i = u_{i+1}``, written into `vₕ`.
+
+The in-place form of [`S₊₂`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(S₊₂!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `forward_shift!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end S₊₂!
+### S₋ₓ
+    S₋ₓ(arg)
+
+The backward index shift along the `x` direction, ``(S_- u)_i = u_{i-1}``.
+
+Alias for `backward_shift(arg, Val(1))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The first point along `x` has no backward neighbour and reads 0; the matrix is the transpose of [`S₊ₓ`](@ref)'s.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end S₋ₓ
+### S₋ₓ!
+    S₋ₓ!(vₕ, uₕ)
+
+The backward index shift along the `x` direction, ``(S_- u)_i = u_{i-1}``, written into `vₕ`.
+
+The in-place form of [`S₋ₓ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(S₋ₓ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `backward_shift!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end S₋ₓ!
+### S₋ᵧ
+    S₋ᵧ(arg)
+
+The backward index shift along the `y` direction, ``(S_- u)_i = u_{i-1}``.
+
+Alias for `backward_shift(arg, Val(2))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The first point along `y` has no backward neighbour and reads 0; the matrix is the transpose of [`S₊ᵧ`](@ref)'s.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end S₋ᵧ
+### S₋ᵧ!
+    S₋ᵧ!(vₕ, uₕ)
+
+The backward index shift along the `y` direction, ``(S_- u)_i = u_{i-1}``, written into `vₕ`.
+
+The in-place form of [`S₋ᵧ`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(S₋ᵧ!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `backward_shift!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end S₋ᵧ!
+### S₋₂
+    S₋₂(arg)
+
+The backward index shift along the `z` direction, ``(S_- u)_i = u_{i-1}``.
+
+Alias for `backward_shift(arg, Val(3))`. `arg` is a mesh, a grid space
+or a [`VectorElement`](@ref): the first two give the operator as a sparse matrix, the
+third applies it and returns a `VectorElement`. The first point along `z` has no backward neighbour and reads 0; the matrix is the transpose of [`S₊₂`](@ref)'s.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end S₋₂
+### S₋₂!
+    S₋₂!(vₕ, uₕ)
+
+The backward index shift along the `z` direction, ``(S_- u)_i = u_{i-1}``, written into `vₕ`.
+
+The in-place form of [`S₋₂`](@ref): it allocates
+nothing, where the allocating form allocates its result. Returns `vₕ`, so it composes:
+`normₕ(S₋₂!(vₕ, uₕ))`.
+
+`vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
+object, as every stencil reads neighbours of the target coordinate; aliasing them
+would read values that have already been overwritten.
+
+Alias for `backward_shift!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
+scalar or of a composite grid space, componentwise on the latter.
+
+### end S₋₂!
 ### ∇ₕ
     ∇ₕ(arg)
 
@@ -1667,6 +1853,36 @@ dimension there is one direction, so the node itself is returned rather than a
 one-element tuple.
 
 ### end D̽ₕ
+### S₊ₕ
+    S₊ₕ(arg)
+
+The forward index shift of `arg` along every coordinate, as a tuple with one entry per
+spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
+
+For a 2D space, `S₊ₕ(uₕ)` is
+`(forward_shift(uₕ, Val(1)), forward_shift(uₕ, Val(2)))`. `arg` is a mesh, a grid
+space or a [`VectorElement`](@ref), as for `forward_shift`.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on
+the latter: each entry of the tuple is then itself a composite grid function.
+
+### end S₊ₕ
+### S₋ₕ
+    S₋ₕ(arg)
+
+The backward index shift of `arg` along every coordinate, as a tuple with one entry per
+spatial dimension. On a one-dimensional mesh it returns that single entry rather than
+a one-tuple.
+
+For a 2D space, `S₋ₕ(uₕ)` is
+`(backward_shift(uₕ, Val(1)), backward_shift(uₕ, Val(2)))`. `arg` is a mesh, a grid
+space or a [`VectorElement`](@ref), as for `backward_shift`.
+
+Accepts a grid function of a scalar or of a composite grid space, componentwise on
+the latter: each entry of the tuple is then itself a composite grid function.
+
+### end S₋ₕ
 ### diff₋
     diff₋(arg, d)
 
@@ -1892,6 +2108,50 @@ Takes a `Val` and not an `Int`, unlike its space-layer namesake: `Dim` is a type
 parameter of the node, so a runtime direction would make the return type a `Union`.
 
 ### end Dc
+### S₊
+    S₊(arg, d)
+
+The forward index shift along the `d` direction, ``(S_+ u)_i = u_{i+1}``.
+
+`d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
+`Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
+[`S₊ₓ`](@ref) and its siblings forward through; the other two select between
+literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
+stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
+its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
+throws an `ArgumentError`.
+
+Alias for `forward_shift(arg, Val(d))`. `arg` is a mesh, a grid space or a
+[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the third
+applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end S₊
+### S₋
+    S₋(arg, d)
+
+The backward index shift along the `d` direction, ``(S_- u)_i = u_{i-1}``.
+
+`d` names the direction three ways: a `Val` (`Val(1)`), an `Int` (`1`, `2`, `3`) or a
+`Symbol` (`:x`, `:y`, `:z`). The `Val` form is the one
+[`S₋ₓ`](@ref) and its siblings forward through; the other two select between
+literal `Val`s, one arm per direction the mesh has, so the direction still reaches the
+stencil engine as a compile-time constant and a loop over `d` allocates nothing beyond
+its results. An `Int` outside `1:dim(mesh)`, or a `Symbol` that is not `:x`/`:y`/`:z`,
+throws an `ArgumentError`.
+
+Alias for `backward_shift(arg, Val(d))`. `arg` is a mesh, a grid space or a
+[`VectorElement`](@ref): the first two give the operator as a sparse matrix, the third
+applies it and returns a `VectorElement`.
+
+Accepts a grid function of a scalar or of a composite grid space. On a composite one
+the operator is applied to each component in turn, and the result is the composite
+grid function whose components are those results.
+
+### end S₋
 ### backward_difference!
 <no docstring>
 ### end backward_difference!
@@ -1988,3 +2248,9 @@ Forwards to `forward_difference!`, as the allocating form forwards to
 are the same quantity.
 
 ### end jump!
+### forward_shift!
+<no docstring>
+### end forward_shift!
+### backward_shift!
+<no docstring>
+### end backward_shift!

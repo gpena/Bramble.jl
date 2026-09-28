@@ -18,17 +18,17 @@ using Bramble
 #
 # and read the diff before committing it -- a surprise in that diff is the point of the test.
 
-const STEMS = ("diff₋", "diff₊", "D₋", "D₊", "jump", "M", "Mc", "M₊", "D̃", "Dc", "D̽")
+const STEMS = ("diff₋", "diff₊", "D₋", "D₊", "jump", "M", "Mc", "M₊", "D̃", "Dc", "D̽", "S₊", "S₋")
 const SUFFIXES = ("ₓ", "ᵧ", "₂")
 const VECTORIAL = (
     "∇ₕ", "∇₊ₕ", "∇cₕ", "∇̃ₕ", "∇̽ₕ", "diff₋ₕ", "diff₊ₕ", "jumpₕ", "Mₕ", "Mcₕ", "M₊ₕ", "D̃ₕ", "Dcₕ",
-    "D̽ₕ"
+    "D̽ₕ", "S₊ₕ", "S₋ₕ"
 )
 
 # The dimensional entry points (gpena/Bramble.jl#74). `D̽ₕ`, `Mₕ` and `M₊ₕ` are absent here
 # and present above: those three carry both the tuple-valued docstring and the entry
 # point's, and `docstring_of` already renders every docstring a name has.
-const DISPATCH = ("diff₋", "diff₊", "D₋", "D₊", "jump", "D̃", "Dc")
+const DISPATCH = ("diff₋", "diff₊", "D₋", "D₊", "jump", "D̃", "Dc", "S₊", "S₋")
 
 # The scalar `!` method each family applies a grid function through; it carries the family's
 # own docstring for the three centred families and none for the rest, and both cases are
@@ -36,7 +36,8 @@ const DISPATCH = ("diff₋", "diff₊", "D₋", "D₊", "jump", "D̃", "Dc")
 const BASE_BANGS = (
     "backward_difference!", "forward_difference!", "backward_finite_difference!",
     "forward_finite_difference!", "forward_star_difference!", "centered_difference!",
-    "cross_weighted_difference!", "centered_average!", "forward_average!", "backward_average!", "jump!"
+    "cross_weighted_difference!", "centered_average!", "forward_average!", "backward_average!", "jump!",
+    "forward_shift!", "backward_shift!"
 )
 
 const REFERENCE = joinpath(@__DIR__, "operator_docstrings.txt")

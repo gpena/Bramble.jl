@@ -404,6 +404,31 @@ M₊₂!
 M₊ₕ
 ```
 
+Index shifts, ``(S_+ u)_i = u_{i+1}`` and ``(S_- u)_i = u_{i-1}``. A neighbour off the grid
+reads as zero, so the matrix of `S₊` is the transpose of that of `S₋` and `S₊ₓ(uₕ) - uₕ` is
+`jumpₓ(uₕ)` at every point. `S₊ₕ`/`S₋ₕ` are exported; the rest are `public`.
+
+```@docs
+S₊ₓ
+S₊ₓ!
+S₊ᵧ
+S₊ᵧ!
+S₊₂
+S₊₂!
+S₊ₕ
+S₊
+forward_shift
+S₋ₓ
+S₋ₓ!
+S₋ᵧ
+S₋ᵧ!
+S₋₂
+S₋₂!
+S₋ₕ
+S₋
+backward_shift
+```
+
 ## Inner products and norms
 
 ```@docs
