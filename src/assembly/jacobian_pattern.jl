@@ -96,6 +96,9 @@ pattern = jacobian_pattern(a, U -> U(2), U -> U(1))   # block (1,1) reads U(2), 
 function jacobian_pattern(
         form::BilinearForm{D, TrialSpace, TestSpace, AST}, coefficient_dependencies::Function...
 ) where {D, TrialSpace, TestSpace, AST}
+    # A composite space on either side is walked block by block, as `assemble` walks it.
+    _is_block_pair(form.trial_space, form.test_space) &&
+        return _jacobian_pattern_blocks(form, coefficient_dependencies...)
     ast = _bind_interp_spaces(form.ast, form.trial_space, form.test_space)
     _check_block_meshes(ast, form.trial_space, form.test_space)
     space = _walked_leaf(ast, form.trial_space, form.test_space)
@@ -308,9 +311,13 @@ function _pattern_blocks_jacobian!(
     return nothing
 end
 
-function jacobian_pattern(
-        form::BilinearForm{D, TrialSpace, TestSpace, AST}, coefficient_dependencies::Function...
-) where {D, TrialSpace <: CompositeGridSpace, TestSpace <: CompositeGridSpace, AST}
+# Any pair `_is_block_pair` (form/bilinear_execution.jl) accepts: composite on both sides, or
+# on one side with the scalar side as a one-leaf composite (`leaf_spaces_offsets`), the same
+# walk `assemble` makes. The scalar path's `_walked_leaf` would pick one whole space and could
+# not name the component a term reads on the composite side.
+function _jacobian_pattern_blocks(
+        form::BilinearForm{D}, coefficient_dependencies::Function...
+) where {D}
     ast = form.ast
     trial_leaves = leaf_spaces_offsets(form.trial_space)
     test_leaves = leaf_spaces_offsets(form.test_space)
