@@ -264,6 +264,7 @@ end
         ::Val{DIM}
 ) where {DIM}
     _check_no_alias(vₕ, uₕ)
+    _check_same_grid(vₕ, uₕ)
     (locality(typeof(vₕ.data)) isa DeviceLocality ||
      locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_shift()
     dims = _grid_dims(uₕ)

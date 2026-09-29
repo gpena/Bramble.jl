@@ -208,6 +208,8 @@ end
             mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 5, 4), (false, true, false))
         )
         centered = (Bramble.Mcₓ!, Bramble.Mcᵧ!, Bramble.Mc₂!)
+        shifts = (Bramble.S₊ₓ!, Bramble.S₋ₓ!, Bramble.S₊ᵧ!, Bramble.S₋ᵧ!, Bramble.S₊₂!,
+            Bramble.S₋₂!)
         fs = (x -> x^2 + 1, x -> x[1] + 2x[2]^2 + 1, x -> x[1] * x[2] + x[3] + 1)
 
         # A NaN-filled destination of `len` entries, viewed from a longer array so that a
@@ -234,7 +236,7 @@ end
                 uₕ, uv = Rₕ(Wₕ, fs[D]), Rₕ(Vₕ, (fs[D], fs[D]))
                 n, m = ndofs(Wₕ), ndofs(Bₕ)
 
-                for f! in (map(first, _ops(Val(D)))..., centered[1:D]...)
+                for f! in (map(first, _ops(Val(D)))..., centered[1:D]..., shifts[1:(2D)]...)
                     @testset "$f!" begin
                         # smaller: the source's own space over too short a view
                         @test rejects(f!, nan_dest(n - 1, Wₕ), uₕ)
