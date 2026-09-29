@@ -55,6 +55,46 @@ end
 @inline _check_no_alias(vₕ::VectorElement, uₕ::VectorElement) = Base.mightalias(parent(vₕ), parent(uₕ)) &&
                                                                 _throw_alias_error()
 
+# The engines index destination and source under `@inbounds` with the source's grid shape,
+# so a destination of another length was written past its end (on a 4x5 source, `D₋ₓ!`
+# wrote 11 entries beyond a 9-entry view), and one of the same length on a differently
+# shaped grid received every value at the wrong point. `VectorElement` does not tie its
+# data's length to its space, so both vectors' lengths are checked against the grid as well
+# as the two grids' point counts against each other. A handful of integer comparisons,
+# with no allocation.
+@noinline function _throw_grid_mismatch_error(lv::Int, dv, lu::Int, du)
+    throw(
+        ArgumentError(
+        "destination and source must be grid functions of the same space: the destination " *
+        "has $lv entries on a grid of $dv points, the source $lu entries on $du",
+    ),
+    )
+end
+
+@inline function _check_same_grid(
+        vₕ::VectorElement{<:ScalarGridSpace}, uₕ::VectorElement{<:ScalarGridSpace}
+)
+    dv, du = _grid_dims(vₕ), _grid_dims(uₕ)
+    lv, lu = length(parent(vₕ)), length(parent(uₕ))
+    (dv == du && lv == lu == prod(du)) || _throw_grid_mismatch_error(lv, dv, lu, du)
+    return nothing
+end
+
+# A composite's leaves may sit on different meshes, so each leaf is checked by the scalar
+# method as it is applied. What has to be checked here, before `components` slices the
+# parents, is that each parent holds exactly its own space's dofs and that the two agree:
+# slicing a short parent into leaves would throw a `BoundsError` rather than say what is
+# wrong. Equal totals then leave no way for the leaf counts to differ unnoticed, as the
+# leaves are checked pairwise and every leaf holds at least one point.
+@inline function _check_same_grid(
+        vₕ::VectorElement{<:CompositeGridSpace}, uₕ::VectorElement{<:CompositeGridSpace}
+)
+    lv, lu = length(parent(vₕ)), length(parent(uₕ))
+    (lv == lu == ndofs(space(uₕ)) == ndofs(space(vₕ))) ||
+        _throw_grid_mismatch_error(lv, _grid_dims(vₕ), lu, _grid_dims(uₕ))
+    return nothing
+end
+
 # --- Argument handling shared by every operator ------------------------------------- #
 # The operators accept a mesh, a grid space or a grid function, and the vectorial aliases
 # need the spatial dimension of whichever was passed. Going through `space` alone would
@@ -153,6 +193,7 @@ end
 @inline function _apply_componentwise!(
         f!, vₕ::VectorElement{<:CompositeGridSpace}, uₕ::VectorElement{<:CompositeGridSpace}
 )
+    _check_same_grid(vₕ, uₕ)
     map(f!, components(vₕ), components(uₕ))
     return nothing
 end
@@ -322,7 +363,8 @@ function _alias_bang_expr(
 
     `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
     object, as every stencil reads neighbours of the target coordinate; aliasing them
-    would read values that have already been overwritten.
+    would read values that have already been overwritten. Either violation throws an
+    `ArgumentError`.
 
     Alias for `$base_op_name(vₕ, uₕ, Val($direction_index))`. Accepts a grid function of a
     scalar or of a composite grid space, componentwise on the latter.

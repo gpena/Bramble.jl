@@ -23,7 +23,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `backward_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -54,7 +55,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `backward_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -85,7 +87,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `backward_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -116,7 +119,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `forward_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -147,7 +151,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `forward_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -178,7 +183,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `forward_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -216,7 +222,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `backward_finite_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -254,7 +261,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `backward_finite_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -292,7 +300,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `backward_finite_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -330,7 +339,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `forward_finite_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -368,7 +378,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `forward_finite_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -406,7 +417,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `forward_finite_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -444,7 +456,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `jump!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -482,7 +495,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `jump!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -520,7 +534,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `jump!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -558,7 +573,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `backward_average!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -596,7 +612,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `backward_average!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -634,7 +651,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `backward_average!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -672,7 +690,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `centered_average!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -710,7 +729,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `centered_average!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -748,7 +768,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `centered_average!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -786,7 +807,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `forward_average!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -824,7 +846,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `forward_average!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -862,7 +885,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `forward_average!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -900,7 +924,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `forward_star_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -938,7 +963,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `forward_star_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -976,7 +1002,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `forward_star_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -1014,7 +1041,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `centered_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -1052,7 +1080,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `centered_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -1090,7 +1119,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `centered_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -1128,7 +1158,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `cross_weighted_difference!(vₕ, uₕ, Val(1))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -1166,7 +1197,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `cross_weighted_difference!(vₕ, uₕ, Val(2))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.
@@ -1204,7 +1236,8 @@ nothing, where the allocating form allocates its result. Returns `vₕ`, so it c
 
 `vₕ` and `uₕ` must be grid functions of the same space, and must not be the same
 object, as every stencil reads neighbours of the target coordinate; aliasing them
-would read values that have already been overwritten.
+would read values that have already been overwritten. Either violation throws an
+`ArgumentError`.
 
 Alias for `cross_weighted_difference!(vₕ, uₕ, Val(3))`. Accepts a grid function of a
 scalar or of a composite grid space, componentwise on the latter.

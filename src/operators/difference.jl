@@ -225,6 +225,7 @@ end
         dim_val::Val
 )
     _check_no_alias(vₕ, uₕ)
+    _check_same_grid(vₕ, uₕ)
     sp = space(uₕ)
     if execution_policy(sp) isa GpuPolicy
         dev = ka_device(backend(sp))
