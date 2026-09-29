@@ -7,34 +7,21 @@
 @inline _zeros_of(::Type{T}, n::Int) where {T} = zeros(T, n)
 
 # The element type is the one the form's own weights have, promoted against the trial
-# space's (supporting automatic differentiation dual numbers). One place for this rule:
+# leaf each term is routed to, or every diagonal block's leaf for a term naming no component
+# (supporting automatic differentiation dual numbers). One place for this rule:
 # reading it from the space alone instead of promoting against the data broke ForwardDiff in
 # four separate places, each with the same symptom (`MethodError: no method matching
 # Float64(::Dual)`), each time only on the AD path (bramble-verification §4).
 #
-# Probed one summand at a time, never through the whole sum's fused stencil: a fused probe
-# compiles every term's stencil into one method a second time. The interpolation in a term
-# is bound to the first leaves, which every leaf answers the same way for a weight's type.
-#
-# A device-backed space needs no swap here: `_probed_eltype` (`linear.jl`) probes every leaf,
-# scalar or composite, on its `host_weights` (gpena/Bramble.jl#94 S4.0, #361).
+# Folded over every leaf of every term (`_folded_eltype`, `linear.jl`, gpena/Bramble.jl#370),
+# never read from a stencil: no term's stencil is compiled for it, and a term that writes
+# nothing at one point still decides the type. An interpolation node carries no coefficient,
+# so its leaves need no binding first.
 function _matrix_eltype(form::BilinearForm, ast)
-    probe = _bind_interp_spaces(ast, _first_leaf(form.trial_space), _first_leaf(form.test_space))
     return promote_type(
-        _summands_eltype(_summands(probe), form.test_space),
-        eltype(form.trial_space)
-    )
+        _assembled_eltype(ast, form.test_space, form.trial_space),
+        _trial_eltype(ast, form.trial_space, form.test_space))
 end
-
-# Tail recursion, one small method per remaining length, rather than `mapreduce`'s one
-# unrolled fold over the whole summand tuple.
-@inline _summands_eltype(ts::Tuple{Any}, space) = _assembled_eltype(first(ts), space)
-@inline _summands_eltype(ts::Tuple, space) = promote_type(
-    _assembled_eltype(first(ts), space), _summands_eltype(Base.tail(ts), space)
-)
-
-@inline _first_leaf(sp::CompositeGridSpace) = first(first(leaf_spaces_offsets(sp)))
-@inline _first_leaf(sp) = sp
 
 """
     _allocate_from_pattern(::Type{MT}, nrows::Int, ncols::Int, I::Vector{Int}, J::Vector{Int}, V::AbstractVector) -> MT

@@ -47,7 +47,7 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
             @test_throws ArgumentError pde_solve(A, F; solver = :accelerate)
         end
     else
-        @testset "1D/2D/3D Poisson (SPD, sym = :spd)" begin
+        @testset "Poisson 1D/2D/3D (sym = :spd)" begin
             poisson_solve_contract(;
                 atol = 1.0e-12,
                 solver = :accelerate,
@@ -71,7 +71,7 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
             @test isapprox(u_qr, p.u_ref; atol = 1.0e-12)
         end
 
-        @testset "Unsymmetric convection-diffusion (sym = :unsymmetric)" begin
+        @testset "convection-diffusion (:unsymmetric)" begin
             cd = convection_diffusion_system(10)
             @test !issymmetric(cd.A)
             @test isapprox(
@@ -92,7 +92,8 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         # symmetric `sym` hint says so; an explicit `sym = :unsymmetric` is trusted the same
         # way and skips straight to `A \ F` without paying for the check. This testset pins
         # that narrowing so it cannot regress silently.
-        @testset "pde_solve(:default) is narrowed to the symmetric win (#246)" begin
+        # pde_solve(:default) picks Accelerate only for the symmetric case, where it wins.
+        @testset "pde_solve(:default): symmetric (#246)" begin
             p = poisson_system(Val(2), 8; source = x -> 1.0)
             @test issymmetric(p.A)
             @test Bramble._default_wants_accelerate(p.A, :auto)
@@ -121,7 +122,8 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
             )
         end
 
-        @testset "Factorization reuse and refactoring (accelerate_refactor!)" begin
+        # Exercises factorization reuse and accelerate_refactor!.
+        @testset "factorization reuse, refactor" begin
             p = poisson_system(Val(2), 8; source = x -> 1.0)
 
             refactor_contract(

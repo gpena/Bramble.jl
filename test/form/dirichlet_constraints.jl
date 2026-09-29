@@ -78,7 +78,7 @@ using ..TestUtils: WITH_SLOW_TESTS
             @test identifier(function_snapshot)(x_point, t_point) == f_t(x_point, t_point)
         end
 
-        @testset "Time domain rejects space-only conditions" begin
+        @testset "Time domain rejects space-only BCs" begin
             # gpena/Bramble.jl#33: passing a time domain alongside a `func(x)`-only
             # condition used to be silently accepted -- the time domain had no effect at
             # all -- and only broke later, once `bcs(t)` was actually called during
@@ -86,7 +86,8 @@ using ..TestUtils: WITH_SLOW_TESTS
             @test_throws "must accept (x, t)" dirichlet_constraints(Ωd, I, :gamma_1 => f1)
         end
 
-        @testset "Label validation, for every accepted `input` type" begin
+        # For every accepted `input` type.
+        @testset "Label validation, every `input` type" begin
             # A mistyped or nonexistent label used to pass `dirichlet_constraints`
             # silently and only fail (or, on a composite space with `dirichlet_components`,
             # silently do nothing) once `assemble`/`dirichlet_bc!` reached it, far from the
@@ -423,7 +424,8 @@ using LinearAlgebra: I as LinearAlgebraI
         @test count(both) > count(marked)     # :top really adds rows
     end
 
-    @testset "Composite: multiple labels match sequential (#334)" begin
+    # Composite space.
+    @testset "Multiple labels match sequential (#334)" begin
         # Composite `dirichlet_bc!`/`symmetrize!` now combine every label into one mask
         # per leaf and sweep `A` once, instead of once per label (gpena/Bramble.jl#334).
         # The oracle is that combining changes nothing: applying `:bottom, :top` together
@@ -697,7 +699,7 @@ using LinearAlgebra: I as LinearAlgebraI
         @test traversal_bytes(Vt) == 0
     end
 
-    @testset "Zero-allocation marker reads (gpena/Bramble.jl#99)" begin
+    @testset "Marker reads allocate nothing (#99)" begin
         # `DomainMarkers.symbols`/`.tuples` moved from Set to Tuple, so every marker read
         # reached from a Dirichlet constraint -- including `_normalize_dirichlet`, which
         # every `dirichlet =` keyword on `form`/`assemble!` passes through -- is now an

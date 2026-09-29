@@ -10,13 +10,14 @@ Every number below was produced by the code shown.
 
 ## 1. The operator families
 
-There are three families:
+There are four families:
 
 | Family | Meaning | Backward form |
 |:--|:--|:--|
 | finite difference | a difference divided by the spacing, so it approximates ``\partial u / \partial x`` | ``\dfrac{u_i - u_{i-1}}{h_i}`` |
 | jump | the plain difference across an interface, undivided, where the intent is a discontinuity | ``u_{i+1} - u_i`` |
 | average | the mean of a point and its neighbour | ``\dfrac{u_{i-1} + u_i}{2}`` |
+| index shift | the neighbour's value, moved onto the point | ``u_{i-1}`` |
 
 The jump is the one family with no backward form. A jump belongs to the interface
 between two cells rather than to a direction of travel across it, so
@@ -33,6 +34,7 @@ A name is a stem, a direction, and a coordinate:
 | `D` | finite difference |
 | `jump` | jump |
 | `M` | average |
+| `S` | index shift |
 | `₋` | backward: the stencil reaches to ``i-1`` |
 | `₊` | forward: the stencil reaches to ``i+1`` |
 | `ₓ`, `ᵧ`, `₂` | along the first, second or third coordinate |
@@ -44,6 +46,9 @@ gradient and has that extra name for it.
 
 `jump` takes no direction, for the reason given above: it is `jumpₓ`, `jumpᵧ`, `jump₂` and
 `jumpₕ`.
+
+The index shift has a forward and a backward stem, `S₊` and `S₋`: `S₊ₓ` reads the next
+point along ``x``, `S₋ₓ` the previous one, and `S₊ₕ`/`S₋ₕ` shift along every coordinate.
 
 ### 1.2 How `D₋`, `Dc`, `D̽` and `D̃` differ
 
@@ -211,6 +216,22 @@ parent(jumpₕ(uₕ))[end]   # -u₅, not 0
 ```
 
 Section 9 shows why this matters in practice.
+
+The index shifts follow the jump: an off-grid neighbour reads as zero, so `S₊ₕ` is zero at
+the last point and `S₋ₕ` at the first:
+
+```@repl operators
+parent(S₊ₕ(uₕ))          # u₅ has no successor: 0
+parent(S₋ₕ(uₕ))          # u₁ has no predecessor: 0
+parent(S₊ₕ(uₕ)) - parent(uₕ) == parent(jumpₕ(uₕ))
+```
+
+That convention gives three identities that hold at every point, the boundary included:
+the matrix of `S₊` is the transpose of the matrix of `S₋`, `S₊(u) - u` is `jump(u)`, and
+`u - S₋(u)` is the backward difference ``u_i - u_{i-1}``, undivided. `D₊` is the exception
+to keep in mind: it is zero at the last point, so `S₊(u) - u` is not ``h`` times `D₊(u)`
+there. Inside a form the rule is the same, and a shift of a composed operand, such as
+`S₊ₓ(D₋ₓ(u))`, reads zero wherever the shifted stencil leaves the grid.
 
 In two or more dimensions, directional operators apply along the coordinate lines of the tensor grid, and each directional family truncates along its corresponding boundary slice:
 

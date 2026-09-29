@@ -2,9 +2,9 @@
 # stencil_matrix vs. the Kronecker construction (gpena/Bramble.jl#185)
 #
 # `D₋ₓ`, `Dcₓ` and `Mₓ` now build their matrix in one pass over the grid
-# (`Bramble.stencil_matrix`, `src/space/operators/stencil.jl`) instead of composing it out
+# (`Bramble.stencil_matrix`, `src/operators/stencil_matrix.jl`) instead of composing it out
 # of Kronecker products of 1D shift matrices and then scaling by a dense weight vector
-# (`Bramble.kronecker_operator_matrix`, kept in `src/space/operators/shift.jl` as the
+# (`Bramble.kronecker_operator_matrix`, kept in `src/operators/shift.jl` as the
 # oracle `stencil_matrix` is checked against, `test/space/operators.jl`). This script times
 # the two side by side and reports allocations and bytes, not just wall-clock: the
 # Kronecker path's own weighting step (`Vector .* SparseMatrixCSC`) is a measured

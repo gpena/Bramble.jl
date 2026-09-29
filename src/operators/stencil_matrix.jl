@@ -61,7 +61,7 @@ stored zero.
 # candidate type set to *every* concrete type answering the same call shape anywhere in the
 # package, not only the ones related through `AbstractMeshType` -- so this mirror's own
 # `npoints(m, ::Type{Tuple})` matched unrelated `npoints(Ωₕ, Tuple)` calls in
-# `src/mesh/marker.jl`, `src/space/operators/restriction.jl` and `src/space/inner_product.jl`,
+# `src/mesh/marker.jl`, `src/operators/restriction.jl` and `src/space/inner_product.jl`,
 # widened those functions' inferred argument type to include it, and every *other* call on
 # that same variable then flagged it missing too -- a new report in a different file for
 # every fix, each patchable only by adding this mirror to an interface it has no business
@@ -214,7 +214,7 @@ end
 # the coefficients matching those offsets at a grid point.
 #
 # This mirrors, rather than calls, the offsets and arithmetic `local_stencil` uses for the
-# same families in `src/ast/operators/{difference,average,jump}.jl` (their own
+# same families in `src/operators/{difference,average,jump}.jl` (their own
 # `_stencil_taps`/`_stencil_weights`, keyed on AST node types such as `BackwardDifference`
 # and `JumpNode`). Calling those directly would mean constructing a `LazyOp` tree from this
 # file to stand in for the node's `inner_op` field, which `src/space/` has no business

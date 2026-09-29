@@ -83,6 +83,10 @@ benchmark/*
 !benchmark/gpu_offload.jl
 # v3.14.0 assembled CSR SpMV vs matrix-free Kronecker apply on Metal (gpena/Bramble.jl#317)
 !benchmark/assembled_vs_matrixfree.jl
+# v3.18.0 duplicated share of warm evaluation across summands (gpena/Bramble.jl#347)
+!benchmark/shared_suboperators.jl
+# v3.16.0 matrix-free mul! vs assembled SpMV, 1D-3D, memory and crossover (gpena/Bramble.jl#326)
+!benchmark/matrix_free_spmv.jl
 !benchmark/baselines/
 !benchmark/baselines/*.json
 .agents/

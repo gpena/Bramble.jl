@@ -149,6 +149,71 @@ Requires [ILUZero.jl](https://github.com/mohamed82008/ILUZero.jl).
 ilu_preconditioner
 ```
 
+## Matrix-free preconditioners
+
+AMG and ILU(0) need the assembled matrix. The preconditioners here need only a
+[`matrix_free_operator`](@ref): each is a subtype of `Bramble.AbstractMatrixFreePreconditioner`
+with `ldiv!`, so it goes straight to `Pl` in `LinearSolve`. `jacobi_preconditioner` reads the
+diagonal off one walk of the form's stencil. `chebyshev_preconditioner` is a fixed polynomial
+in `D⁻¹A`, Jacobi-scaled, with `D = diag(A)`: unscaled, the top of `A`'s spectrum on a
+non-uniform mesh is a few small-cell outliers, and the polynomial wastes its degree on them.
+Its upper bound comes from `Bramble.max_eigenvalue_estimate`, power iteration on the
+operator. Both need a symmetric positive-definite `A` for conjugate gradients; with
+`dirichlet`, CG needs a right-hand side that vanishes on the Dirichlet rows.
+
+```@docs
+Bramble.AbstractMatrixFreePreconditioner
+jacobi_preconditioner
+Bramble.JacobiPreconditioner
+chebyshev_preconditioner
+Bramble.ChebyshevPreconditioner
+Bramble.max_eigenvalue_estimate
+```
+
+## Geometric multigrid
+
+`gmg_preconditioner(W -> form(...), Ωₕ)` rediscretises the form on every level of a
+`GeometricMeshHierarchy`, which coarsens a non-uniform mesh by 2 through every other point,
+so the levels nest exactly. Levels are joined by multilinear `prolongate!` and its transpose
+`coarsen!`, smoothed by point smoothers, and the coarsest level is solved directly. Every
+grid function in the form must be built from `W` inside the builder. On meshes whose cells
+have bounded aspect ratio, CG preconditioned by a V-cycle took 6 iterations from 2D 33² to
+513² and 7 from 3D 17³ to 129³. Point smoothers stall on stretched cells;
+[`gmg_preconditioner`](@ref) quotes the counts, and line and plane smoothers are planned in
+[gpena/Bramble.jl#394](https://github.com/gpena/Bramble.jl/issues/394).
+
+### Mesh hierarchy and transfers
+
+```@docs
+GeometricMeshHierarchy
+prolongate!
+coarsen!
+```
+
+### Smoothers
+
+```@docs
+Bramble.AbstractSmoother
+Bramble.JacobiSmoother
+Bramble.ChebyshevSmoother
+Bramble.RedBlackGaussSeidel
+jacobi_smoother
+chebyshev_smoother
+red_black_gauss_seidel
+smooth!
+```
+
+### Cycles and solve
+
+```@docs
+gmg_preconditioner
+Bramble.GMGPreconditioner
+gmg_solve
+Bramble.v_cycle!
+Bramble.w_cycle!
+Bramble.fmg!
+```
+
 ## Sparse direct solvers and factorization reuse
 
 Bramble provides dedicated, first-class extensions for high-performance sparse linear solvers:

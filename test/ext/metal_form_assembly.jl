@@ -106,7 +106,7 @@ else
     _f(x) = sin(3.0f0 * x[1]) + 1.0f0
     _g(x) = 2.0f0 + x[1]
 
-    @testset "Metal linear form assembly (gpena/Bramble.jl#361)" begin
+    @testset "Metal linear form assembly (#361)" begin
         for npts in ((33,), (17, 23))
             @testset "$(length(npts))D non-uniform" begin
                 Wc, Wg = _matched_spaces(npts)
@@ -116,10 +116,11 @@ else
                 @testset "scalar, constant source" begin
                     _check_linear(v -> innerₕ(one(Float32), v), Wc, Wg)
                 end
-                @testset "scalar, function source (lowered through Rₕ on the device)" begin
+                # The function source is lowered through `Rₕ` on the device.
+                @testset "scalar, function source" begin
                     _check_linear(v -> innerₕ(_f, v), Wc, Wg)
                 end
-                @testset "scalar, source under a difference of the test function" begin
+                @testset "scalar, source under D₋ₓ(v)" begin
                     _check_linear(v -> innerₕ(_f, D₋ₓ(v)), Wc, Wg)
                 end
                 @testset "composite" begin
@@ -136,7 +137,8 @@ else
                     _check_linear(composite, Xc, Xg; dirichlet = :boundary => _g,
                         dirichlet_components = 1)
                 end
-                @testset "device grid-function scale on the test side stays live" begin
+                # A device grid-function scale on the test side stays live.
+                @testset "live grid-function scale on v" begin
                     uc, ug = Rₕ(Wc, _g), Rₕ(Wg, _g)
                     for l in (u -> (v -> innerₕ(_f, u * v)),
                         u -> (v -> innerₕ(_f, u * D₋ₓ(v))))
@@ -151,7 +153,8 @@ else
                         @test _vrelerr(bg, assemble(form(Wc, l(uc)))) < _RTOL
                     end
                 end
-                @testset "device grid-function source stays live across assemble!" begin
+                # A device grid-function source stays live across `assemble!`.
+                @testset "live grid-function source" begin
                     uc, ug = Rₕ(Wc, _f), Rₕ(Wg, _f)
                     lg = form(Wg, v -> innerₕ(ug, v))
                     bg = assemble(lg)
@@ -164,7 +167,7 @@ else
         end
     end
 
-    @testset "Metal composite form assembly (gpena/Bramble.jl#361)" begin
+    @testset "Metal composite assembly (#361)" begin
         @testset "1D non-uniform, two leaves with coupling" begin
             a(U, V) = innerₕ(U, V) + innerₕ(D₋ₓ(U[1]), D₋ₓ(V[1])) + innerₕ(U[1], V[2])
             _check_composite(a, (33,))
@@ -181,7 +184,7 @@ else
     # are rewritten by one kernel on the device's own arrays, never by scalar `setindex!`, and
     # only those rows are touched -- a value changed on the device since the last assembly
     # must survive `dirichlet_bc!`, which a re-flush of the host mirror would overwrite.
-    @testset "Metal Dirichlet conditions (gpena/Bramble.jl#361)" begin
+    @testset "Metal Dirichlet conditions (#361)" begin
         g = x -> 1.0f0 + x[1]
         f = x -> sin(3.0f0 * x[1]) + 1.0f0
         dir = :boundary => g
@@ -237,7 +240,7 @@ else
             @test Array(Ad) == Ac
         end
 
-        @testset "constrained row without a stored diagonal" begin
+        @testset "constrained row, no stored diagonal" begin
             S = sparse([1, 2, 2, 3], [2, 2, 3, 3], Float32[1, 2, 3, 4], 3, 3)
             A = Bramble.metal_sparse_csr(S)
             copyto!(A.mirror.nzval, Array(A.nzVal))
@@ -272,7 +275,8 @@ else
     # `πₕ` across two device meshes (gpena/Bramble.jl#363): each walk binds the interpolation
     # to its source leaf's `host_weights` mirror, so the cell search reads host points. The
     # source and target meshes differ in size, both non-uniform and mirrored.
-    @testset "Metal interpolation across device meshes (gpena/Bramble.jl#363)" begin
+    # Interpolation across device meshes.
+    @testset "Metal cross-mesh πₕ (#363)" begin
         for (ns, nt) in (((7,), (11,)), ((7, 9), (11, 8)))
             Wsc, Wsg = _matched_spaces(ns)
             Wtc, Wtg = _matched_spaces(nt)
@@ -306,7 +310,7 @@ else
     # the coefficient changes on the device sees the new values. Scalar and composite
     # bilinear forms, a linear source, and a coefficient scaling the test function under an
     # average and a difference, on mirrored non-uniform meshes.
-    @testset "Metal grid-function coefficients (gpena/Bramble.jl#364)" begin
+    @testset "grid-function coefficients (#364)" begin
         for npts in ((13,), (13, 11))
             Wc, Wg = _matched_spaces(npts)
             cc, cg = Rₕ(Wc, _g), Rₕ(Wg, _g)
@@ -359,7 +363,8 @@ else
     # uploaded once. Unscaled and scaled accumulation onto an assembled vector and a threaded
     # refill must match the host, scalar and composite, on mirrored non-uniform meshes. A
     # vector of the wrong length is refused before anything is written, host and device.
-    @testset "Metal linear assemble_add! and assemble_parallel! (gpena/Bramble.jl#361)" begin
+    # Metal linear `assemble_add!` and `assemble_parallel!`.
+    @testset "linear assemble_add!/parallel! (#361)" begin
         for npts in ((13,), (13, 11))
             Wc, Wg = _matched_spaces(npts)
             cases = (("scalar", Wc, Wg, v -> innerₕ(_f, v) + innerₕ(1.0f0, D₋ₓ(v))),
@@ -381,7 +386,8 @@ else
                 end
             end
         end
-        @testset "wrong-length vector refused before any write" begin
+        # A wrong-length vector is refused before any write.
+        @testset "wrong-length vector refused" begin
             Wc, Wg = _matched_spaces((13,))
             for (label, W, zeros_) in (("host", Wc, zeros), ("device", Wg, Metal.zeros))
                 l = form(W, v -> innerₕ(1.0f0, v))
@@ -404,7 +410,8 @@ else
     # storage, not through the wrapper, which would index the device array one scalar at a
     # time (gpena/Bramble.jl#361).
     _hostvec(u) = Array(u isa Bramble.VectorElement ? parent(u) : u)
-    @testset "Metal linear assembly into an element or a strided view (gpena/Bramble.jl#361)" begin
+    # Metal linear assembly into an element or a strided view.
+    @testset "linear assembly into a target (#361)" begin
         for npts in ((13,), (13, 11))
             Wc, Wg = _matched_spaces(npts)
             for (label, sc, sg, l) in (("scalar", Wc, Wg, v -> innerₕ(_f, v)),
@@ -435,7 +442,7 @@ else
     # gives a Float32 vector the device path can upload (a Float64 hardcode made it fail).
     # The sources hold host points, which the host-mirror sweep reads as they are
     # (gpena/Bramble.jl#361).
-    @testset "Metal dirac sources (gpena/Bramble.jl#361)" begin
+    @testset "Metal dirac sources (#361)" begin
         for npts in ((13,), (13, 11))
             Wc, Wg = _matched_spaces(npts)
             D = length(npts)
@@ -457,6 +464,21 @@ else
                 end
             end
         end
+    end
+
+    # `matrix_free_operator` has no device `mul!` yet: a Metal space's `GpuKernel` policy is
+    # refused at construction, naming the milestone that tracks it (gpena/Bramble.jl#326).
+    @testset "Metal matrix-free refused (#326)" begin
+        _, Wg = _matched_spaces((13,))
+        a = form(Wg, Wg, (u, v) -> innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)))
+        err = try
+            matrix_free_operator(a)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("v4.4.0", sprint(showerror, err))
     end
 end
 

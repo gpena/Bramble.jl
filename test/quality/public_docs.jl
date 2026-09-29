@@ -151,7 +151,7 @@ end
 
 const _docsrc = joinpath(@__DIR__, "..", "..", "docs", "src")
 
-@testset "Public names are reachable in the manual (#314)" begin
+@testset "Public names are in the manual (#314)" begin
     missing_names = missing_from_docs(Bramble, _docsrc)
     if !isempty(missing_names)
         @info "public names in no @docs/@autodocs block" missing_names
@@ -164,7 +164,7 @@ public zzz_undoc
 zzz_undoc() = 1
 end
 
-@testset "missing_from_docs positive/negative controls" begin
+@testset "missing_from_docs: controls" begin
     @test :zzz_undoc in missing_from_docs(Fake, _docsrc)
     # `form` is listed in a ```@docs block in docs/src/api.md and must not be reported.
     @test :form ∉ missing_from_docs(Bramble, _docsrc)

@@ -75,6 +75,16 @@ const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 # a property is not vacuously true has no job in a run where the property does not execute.
 const WITH_SLOW_TESTS = TEST_GROUP in ("all", "slow", "full")
 
+# Automatic differentiation and GPU tests are switched off in every group until the
+# milestones that own them: AD until v4.3.0, which decides which backends Bramble keeps, and
+# GPU until v4.4.0, which brings the device path to parity with the CPU. The files stay in
+# the tree, and their packages are not in test/Project.toml: to run them, add the packages
+# and set `BRAMBLE_TEST_AD=true` or `BRAMBLE_TEST_GPU=true`. With AD off, one ForwardDiff
+# smoke test (form/forwarddiff_smoke.jl) still runs in `unit`, so assembly with dual numbers
+# cannot silently regress.
+const WITH_AD_TESTS = get(ENV, "BRAMBLE_TEST_AD", "false") == "true"
+const WITH_GPU_TESTS = get(ENV, "BRAMBLE_TEST_GPU", "false") == "true"
+
 # Per-file trace, active only under CI (which sets `CI=true`) or `BRAMBLE_TEST_TRACE=1`,
 # silent otherwise -- a maintainer's local run stays quiet by default. Exists because macOS
 # CI's unit job was once SIGKILLed by a single test file's compile blowing past the runner's
@@ -118,7 +128,7 @@ function traced_include(real_include::F, path) where {F}
     # description carries the message is the only way to attach one to a `@test` failure:
     # the `@test` macro itself takes no message argument.
     if MAXRSS_BUDGET_GB !== nothing && maxrss_gb > MAXRSS_BUDGET_GB
-        @testset "maxrss $(round(maxrss_gb; digits = 2)) GB > budget $(MAXRSS_BUDGET_GB) GB after $path" begin
+        @testset "maxrss $(round(maxrss_gb; digits = 2)) GB > $(MAXRSS_BUDGET_GB) GB: $path" begin
             @test false
         end
     end

@@ -56,7 +56,7 @@ cross_weighted_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
         end
     end
 
-    @testset "Boundary is one-sided, not truncated (#183)" begin
+    @testset "Boundary one-sided, not truncated (#183)" begin
         # gpena/Bramble.jl#183: D̽ₕ used to truncate both ends to zero; it now falls back
         # to the one-sided difference the near side still defines, so nothing here is
         # zero for a function with no flat point.
@@ -334,7 +334,7 @@ _cw_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
                                        "got 3 components on a 2D mesh.") curl̽ₕ!(similar(u2), (u2, u2, u2))
     end
 
-    @testset "Second-order divergence on a non-uniform grid" begin
+    @testset "Second-order divergence, non-uniform" begin
         # The leading error of D̽ is h_i h_{i+1} u'''/6, second order on any grid, where
         # Dc's is (h_{i+1} - h_i) u''/2, first order on a random one. The end slices are
         # one-sided, so first order, and are left out of the measured error. The rate is a

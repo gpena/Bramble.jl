@@ -18,7 +18,7 @@ using ..TestUtils: @test_allocs
 @testset "Skew-symmetric split forms" begin
     Random.seed!(20260918)
 
-    @testset "The assembled matrix is exactly skew-symmetric" begin
+    @testset "assembled matrix is exactly skew" begin
         @testset "1D" begin
             for (n, unif) in ((21, true), (21, false))
                 Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), n, unif))
@@ -46,7 +46,7 @@ using ..TestUtils: @test_allocs
         end
     end
 
-    @testset "It is the skew part of the advective form" begin
+    @testset "skew part of the advective form" begin
         # ½(N - Nᵀ) for the naive advective N, stated as an identity rather than described:
         # this is what makes the construction *the* split form and not a different operator
         # that happens to be skew.
@@ -59,7 +59,7 @@ using ..TestUtils: @test_allocs
         @test maximum(abs, N + N') > 0.1
     end
 
-    @testset "The operator spelling and the coefficient spelling agree" begin
+    @testset "operator and coefficient spellings agree" begin
         Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 15, true))
         wₕ = Rₕ(Wₕ, x -> 2.0 - x[1])
         @test assemble(form(Wₕ, Wₕ, skew_symmetric(wₕ))) ≈
@@ -86,7 +86,7 @@ using ..TestUtils: @test_allocs
         @test_allocs assemble!(Am, a)
     end
 
-    @testset "Burgers: the semidiscrete energy rate is zero" begin
+    @testset "Burgers: zero semidiscrete energy rate" begin
         # d/dt ‖u‖²_H = -2 uᵀ M u with the mass matrix H, so the statement the scheme rests
         # on is that uᵀMu vanishes for the *current* iterate, which it does exactly. A
         # time-stepped run drifts by the integrator's own error: explicit Euler is first

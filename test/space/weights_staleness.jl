@@ -15,7 +15,8 @@ using ..TestUtils: alloc_test, @test_allocs
 # never against another call to the code under test.
 
 @testset "Grid space weights staleness (#221)" begin
-    @testset "Reproducer: change_points! gives the exact numbers from the issue" begin
+    # change_points! gives the exact numbers from the issue.
+    @testset "Reproducer: issue's exact numbers" begin
         Ω = domain(interval(0.0, 1.0))
         Ωₕ = mesh(Ω, 5, true)
         Wₕ = gridspace(Ωₕ)
@@ -63,7 +64,8 @@ using ..TestUtils: alloc_test, @test_allocs
         end
     end
 
-    @testset "Every guarded entry point throws, not only weights() itself" begin
+    # Not only weights() itself.
+    @testset "Every guarded entry point throws" begin
         Ω = domain(interval(0.0, 1.0))
         Ωₕ = mesh(Ω, 11, true)
         Wₕ = gridspace(Ωₕ)
@@ -80,7 +82,8 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_throws ArgumentError snorm₁ₕ(u)
     end
 
-    @testset "2D (MeshnD): mutating one submesh stales the whole space" begin
+    # 2D: mutating one submesh stales the whole space.
+    @testset "MeshnD: one submesh stales the space" begin
         S = interval(0.0, 1.0) × interval(0.0, 1.0)
         Ωₕ = mesh(domain(S), (7, 7), (true, true))
         Wₕ = gridspace(Ωₕ)
@@ -109,7 +112,8 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_throws ArgumentError weights(Wₕ)
     end
 
-    @testset "CompositeGridSpace: staleness in one leaf is caught, not only the mutated one silently ignored" begin
+    # CompositeGridSpace: staleness in one leaf is caught, never silently ignored.
+    @testset "Composite: stale leaf is caught" begin
         Ω = domain(interval(0.0, 1.0))
         Ωₕ = mesh(Ω, 9, true)
         Wₕ = gridspace(Ωₕ)
@@ -124,7 +128,8 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_throws ArgumentError innerₕ(u, u)
     end
 
-    @testset "A rebuilt space works correctly after mutation, no throw" begin
+    # No throw.
+    @testset "Rebuilt space works after mutation" begin
         Ω = domain(interval(0.0, 1.0))
         Ωₕ = mesh(Ω, 21, true)
         Wₕ = gridspace(Ωₕ)
@@ -138,7 +143,7 @@ using ..TestUtils: alloc_test, @test_allocs
         @test ndofs(Wₕ_fresh) == 2 * n_before - 1
     end
 
-    @testset "Zero allocation on the untouched (fresh) success path" begin
+    @testset "Fresh success path: zero allocation" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 1001, true)
         Wₕ = gridspace(Ωₕ)
         u = Rₕ(Wₕ, x -> x[1]^2)

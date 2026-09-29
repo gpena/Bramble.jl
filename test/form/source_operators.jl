@@ -2,6 +2,7 @@ module FormSourceOperatorsTests
 
 using Test
 using Bramble
+using ..TestUtils: WITH_AD_TESTS
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, M₊ₓ, M₊ᵧ
 using ForwardDiff
@@ -46,7 +47,7 @@ using Bramble:
 # relabelled copies of f(xᵢ) cancelled) and `innerₕ(Mₓ(f), v)` reproduced `innerₕ(f, v)`
 # (they summed back to f(xᵢ)): the operator silently dropped either way.
 # Now, `_contracted_left_stencil` reads the subtree's own `local_stencil`, correct once a
-# source is marked `PointDependentStencil` (`ast/operators/interpolation.jl`).
+# source is marked `PointDependentStencil` (`operators/interpolation.jl`).
 # This file's checks pin the observable behaviour.
 #
 # Every check below is against the NUMERIC operator layer, which is a third, independent
@@ -341,7 +342,7 @@ using Bramble:
         end
     end
 
-    @testset "Source differentiation" begin
+    WITH_AD_TESTS && @testset "Source differentiation" begin
         # the element type comes from the data, so a Dual-valued source stays Dual through
         # the value path exactly as it does through the stencil path
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)
@@ -396,7 +397,7 @@ using Bramble:
             @test b ≈ parent(fₕ) .* w
         end
 
-        @testset "Wrapped source is left unlowered, still correct" begin
+        @testset "wrapped source: unlowered, correct" begin
             # D₋ₓ(sf) builds a node type `_lower_sources` has no method for, so it falls
             # through to the generic leaf fallback -- unchanged, not incorrectly rewritten.
             # A missed optimisation, not a correctness gap: checked against the same oracle
@@ -416,7 +417,7 @@ using Bramble:
             @test b ≈ parent(D₋ₓ(fₕ)) .* w
         end
 
-        @testset "Composite space: component-specific term lowers" begin
+        @testset "composite: per-component term lowers" begin
             Wleaf = gridspace(mesh(domain(interval(0.0, 1.0)), 21, true))
             Vₕ = Wleaf^Val(2)
             f = x -> x[1]^2
@@ -431,7 +432,8 @@ using Bramble:
             @test b[(n + 1):end] ≈ parent(Rₕ(Wleaf, f)) .* w
         end
 
-        @testset "Composite space: term shared across leaves is left unlowered" begin
+        # A term shared across leaves is left unlowered.
+        @testset "composite: shared term stays unlowered" begin
             # A term naming no component goes to every leaf (`_routed_target`); those
             # leaves may have different meshes, so there is no single space to eagerly
             # sample against. Skipped, not incorrectly lowered against one arbitrary leaf.
@@ -450,7 +452,8 @@ using Bramble:
             @test b[(n + 1):end] ≈ expected
         end
 
-        @testset "Dynamic coefficients stay live (non-negotiable)" begin
+        # Non-negotiable: lowering must not freeze a dynamic coefficient.
+        @testset "dynamic coefficients stay live" begin
             # A raw closure loses live re-evaluation once lowered; Ref and VectorElement
             # coefficients must not, since neither is ever wrapped in a SourceFunction.
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
@@ -472,7 +475,7 @@ using Bramble:
             @test c2 ≈ 2 .* c1
         end
 
-        @testset "Dual numbers propagate through a lowered source" begin
+        WITH_AD_TESTS && @testset "lowered source: Dual propagates" begin
             # Distinct from "Source differentiation" above, which wraps its source in
             # D₋ₓ and so never reaches the lowering path this checks.
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)

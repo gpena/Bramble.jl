@@ -237,8 +237,8 @@ end
 # ---------------------------------------------------------------------------
 # S2.3 (gpena/Bramble.jl#94, #174): the `GpuPolicy` device sweep seam
 # (`src/utils/linear_algebra.jl`), and the two operators that evaluate a
-# user-supplied function on the device -- `Rₕ!` (`src/space/operators/restriction.jl`) and
-# `avgₕ!` (`src/space/operators/cell_average.jl`).
+# user-supplied function on the device -- `Rₕ!` (`src/operators/restriction.jl`) and
+# `avgₕ!` (`src/operators/cell_average.jl`).
 #
 # Every kernel below takes its arrays -- the destination(s), the mesh's coordinate vector,
 # a fixed-size `NTuple` of quadrature nodes/weights -- as separate, top-level kernel
@@ -314,7 +314,7 @@ end
 # Every projection kernel below takes one more top-level argument, `sel`: `nothing` for an
 # unmasked call, or a device `Int32` vector holding the linear grid indices of the marked
 # points (gathered on the host from the mesh's own `BitVector`s by `project!`,
-# `src/space/operators/projection.jl`). Thread `j` then writes grid index `sel[j]` instead
+# `src/operators/projection.jl`). Thread `j` then writes grid index `sel[j]` instead
 # of `j`, and the launch covers `length(sel)` threads rather than the whole grid, so the body
 # of each kernel is the unmasked one unchanged. `nothing` is a singleton, so the unmasked
 # specialisation compiles to exactly the kernel it was before. Off-region entries are zeroed
@@ -325,7 +325,7 @@ end
 @inline _launch_range(::Nothing, n) = n
 @inline _launch_range(sel, n) = length(sel)
 
-# --- `Rₕ!` (src/space/operators/restriction.jl is the CPU original) --------------------- #
+# --- `Rₕ!` (src/operators/restriction.jl is the CPU original) --------------------- #
 
 @kernel function _restriction_kernel!(v, @Const(pts), f, sel)
     i = _selected(sel, @index(Global))
@@ -396,7 +396,7 @@ function _launch_restriction_scatter_nd!(mats::Tuple, pts::Tuple, idxs, f, dev, 
     return nothing
 end
 
-# --- `avgₕ!` (src/space/operators/cell_average.jl is the CPU original) ------------------ #
+# --- `avgₕ!` (src/operators/cell_average.jl is the CPU original) ------------------ #
 #
 # `Bramble._cell_average` is the exact quadrature the CPU sweep runs -- called here rather
 # than duplicated, so the device and host answers stay identical by construction, not by
@@ -469,8 +469,8 @@ function _launch_cell_average_scatter_nd!(mats::Tuple, x::Tuple, idxs, nodes, wt
     return nothing
 end
 
-# --- Difference, jump and average operators (src/space/operators/difference.jl and
-# src/space/operators/average.jl are the CPU originals) ---------------------------------- #
+# --- Difference, jump and average operators (src/operators/difference.jl and
+# src/operators/average.jl are the CPU originals) ---------------------------------- #
 #
 # S2.4 (gpena/Bramble.jl#94, #174): `jump.jl` needs nothing of its own here -- `jump_dim!`/
 # `jump!` forward straight into `forward_difference_dim!`/`forward_difference!`, so the
@@ -916,7 +916,7 @@ end
 
 # --- Fused vector-calculus kernels (gpena/Bramble.jl#306, #302, S12 part 4) -------------- #
 #
-# `src/space/operators/vector_calculus.jl`'s CPU engines accumulate one spatial direction
+# `src/operators/vector_calculus.jl`'s CPU engines accumulate one spatial direction
 # (or, for the strain tensor's off-diagonal entries, one difference and the average composed
 # onto it) per pass over the whole grid, scalar-indexing `out[idx] += ...` as they go -- which
 # a device array refuses outright, and which even where it would not throw would round-trip
@@ -1162,7 +1162,7 @@ end
 # --- Strain tensor: εₕ, off-diagonal entries ---------------------------------------------- #
 #
 # `ε_ij = (M₋ᵢ(D₋ⱼ(uᵢ)) + M₋ⱼ(D₋ᵢ(uⱼ))) / 2`, `i != j` (the CPU docstring on `εₕ`,
-# `src/space/operators/vector_calculus.jl`, has the full derivation). Composed directly
+# `src/operators/vector_calculus.jl`, has the full derivation). Composed directly
 # rather than as a difference kernel followed by an average kernel: `D₋ⱼ(uᵢ)` truncates to
 # zero exactly when its own `j`-coordinate is 1 (`mask_j`), and that truncation is shared by
 # both points the backward average at `i`-coordinate reads (shifting along `i` never changes

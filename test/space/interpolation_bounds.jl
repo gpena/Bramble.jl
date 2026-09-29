@@ -12,8 +12,9 @@ using ..TestUtils: alloc_test, @test_allocs
 # reference (a hand-computed value, or a genuinely different code path -- `interpolation_matrix`
 # against pointwise `interpolate_at`), never against another call to the code under test.
 
-@testset "interpolate_at out-of-domain policy (#223)" begin
-    @testset "Default (:error) throws, naming the point and the domain extent" begin
+@testset "interpolate_at outside policy (#223)" begin
+    # The default policy throws, naming the point and the domain extent.
+    @testset "Default :error names point and extent" begin
         @testset "1D" begin
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
             uₕ = Rₕ(gridspace(Ωₕ), x -> x[1]^2)
@@ -38,7 +39,8 @@ using ..TestUtils: alloc_test, @test_allocs
         end
     end
 
-    @testset ":clamp, an explicit fill value, and :extrapolate behave as documented" begin
+    # Each behaves as documented.
+    @testset ":clamp, fill value, :extrapolate" begin
         @testset "1D" begin
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
             uₕ = Rₕ(gridspace(Ωₕ), x -> 3x[1] + 1)   # affine: clamp/extrapolate both checkable exactly
@@ -76,7 +78,8 @@ using ..TestUtils: alloc_test, @test_allocs
         end
     end
 
-    @testset "A floating-point epsilon past the boundary is on the boundary, under every policy" begin
+    # A floating-point epsilon past the boundary is on it, under every policy.
+    @testset "Epsilon past the boundary is inside" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
         uₕ = Rₕ(gridspace(Ωₕ), x -> x[1]^2)
         x_ulp = nextfloat(1.0)   # 1.0, up by one ULP -- not a value a caller chose on purpose
@@ -97,7 +100,8 @@ using ..TestUtils: alloc_test, @test_allocs
         @test all(isfinite, parent(dest))
     end
 
-    @testset "πₕ, πₕ! and interpolation_matrix accept and honour outside" begin
+    # All three accept and honour the `outside` keyword.
+    @testset "πₕ, πₕ!, interpolation_matrix: outside" begin
         Ωdest = mesh(domain(interval(0.0, 1.0)), 6, true)
         Ωsrc = mesh(domain(interval(0.0, 1.0)), 5, true)
         # A destination point genuinely outside Ωsrc, by construction.
@@ -116,7 +120,8 @@ using ..TestUtils: alloc_test, @test_allocs
         πₕ!(dest2, src; outside = :clamp)
         @test parent(dest2) ≈ parent(dest_clamp)
 
-        @testset "interpolation_matrix agrees entry-for-entry with pointwise interpolate_at" begin
+        # interpolation_matrix, entry for entry.
+        @testset "Matrix matches pointwise interpolate_at" begin
             for pol in (:clamp, :extrapolate)
                 P = interpolation_matrix(Wdest_wide, Wsrc; outside = pol)
                 via_matrix = P * parent(src)
@@ -125,7 +130,8 @@ using ..TestUtils: alloc_test, @test_allocs
             end
         end
 
-        @testset "interpolation_matrix under :error throws when any destination point is outside" begin
+        # interpolation_matrix throws when any destination point is outside.
+        @testset "Matrix under :error throws if outside" begin
             @test_throws ArgumentError interpolation_matrix(Wdest_wide, Wsrc)
             # unaffected when destination and source domains actually agree
             P_ok = interpolation_matrix(Wdest, Wsrc)
@@ -133,7 +139,8 @@ using ..TestUtils: alloc_test, @test_allocs
         end
     end
 
-    @testset "interpolation_matrix and the bilinear πₕ(u) refuse a fill value" begin
+    # interpolation_matrix and the bilinear πₕ(u) refuse a fill value.
+    @testset "Matrix and bilinear πₕ refuse fill" begin
         Ωdest = mesh(domain(interval(0.0, 1.0)), 6, true)
         Ωsrc = mesh(domain(interval(0.0, 1.0)), 5, true)
         Wdest, Wsrc = gridspace(Ωdest), gridspace(Ωsrc)
@@ -146,14 +153,16 @@ using ..TestUtils: alloc_test, @test_allocs
         )
     end
 
-    @testset "outside must be :error, :clamp, :extrapolate, or a Number" begin
+    # It must be :error, :clamp, :extrapolate, or a Number.
+    @testset "outside rejects unknown values" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
         uₕ = Rₕ(gridspace(Ωₕ), x -> x[1])
         @test_throws ArgumentError interpolate_at(uₕ, 0.5; outside = :bogus)
         @test_throws ArgumentError interpolate_at(uₕ, 0.5; outside = "clamp")
     end
 
-    @testset "The symbolic form path agrees with the direct path, under every policy" begin
+    # The symbolic form path against the direct path.
+    @testset "Form path matches direct, every policy" begin
         Ωdest = mesh(domain(interval(0.0, 1.0)), 6, true)
         Ωsrc = mesh(domain(interval(0.0, 1.0)), 5, true)
         Wdest, Wsrc = gridspace(Ωdest), gridspace(Ωsrc)
@@ -185,7 +194,7 @@ using ..TestUtils: alloc_test, @test_allocs
         end
     end
 
-    @testset "The in-domain path stays zero allocation and type stable" begin
+    @testset "In-domain path allocates nothing, infers" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 101, true)
         uₕ = Rₕ(gridspace(Ωₕ), x -> x[1]^2)
         x0 = 0.55

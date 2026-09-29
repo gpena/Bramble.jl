@@ -32,7 +32,7 @@ using ..TestUtils: _fd, _have
 # `@import_rrule`: doing so defines a second rule for the same signature.
 
 @testset "BrambleChainRulesExt + Enzyme" begin
-    @testset "Enzyme, through BrambleEnzymeExt's native rule" begin
+    @testset "Enzyme: native BrambleEnzymeExt rule" begin
         if _have(:Enzyme)
             @eval import Enzyme
 
@@ -256,7 +256,7 @@ using ..TestUtils: _fd, _have
         end
     end
 
-    @testset "Mooncake: pinned as currently unsupported" begin
+    @testset "Mooncake: pinned unsupported" begin
         if _have(:Mooncake)
             @eval import Mooncake
 

@@ -9,7 +9,7 @@ using SparseArrays: sparse
 # at any physical point, not only at its own mesh's points. `πₕ!`/`πₕ` are the numeric
 # interpolation operator, exactly `Rₕ!`/`Rₕ` applied to `x -> interpolate_at(src, x)`, named
 # after `Rₕ`/`Rₕ!`'s own convention, sharing the name `πₕ` with the one-argument symbolic
-# wrapper (ast/operators/interpolation.jl), told apart by arity. The checks below verify
+# wrapper (operators/interpolation.jl), told apart by arity. The checks below verify
 # the interpolant's own correctness (exact on affine data, correct on a non-uniform mesh,
 # clamped rather than extrapolated past the boundary) and transfers between distinct meshes
 # (moving a grid function between two leaves of a heterogeneous composite space).
@@ -89,7 +89,8 @@ using SparseArrays: sparse
         @test all(≈(1), vec(sum(P2, dims = 2)))
     end
 
-    @testset "Collapsed axis matches the per-axis Kronecker product" begin
+    @testset "Collapsed axis: per-axis Kronecker" begin
+        # The pointwise and matrix paths match the per-axis Kronecker product.
         # A collapsed axis (a single point, from a zero-length interval) has no cell to
         # interpolate across, so it must contribute a 1×1 identity factor. Each pair is
         # nested by 2: the fine mesh is the coarse one refined once, which leaves the
@@ -116,7 +117,8 @@ using SparseArrays: sparse
         end
     end
 
-    @testset "πₕ! against a precomputed interpolation_matrix (#14)" begin
+    # The matrix is precomputed.
+    @testset "πₕ! with an interpolation_matrix (#14)" begin
         # The whole point of building P once: this must agree with the pointwise path
         # (which re-locates every destination point's cell on every call) to the last bit,
         # not merely approximately -- same reasoning as "Matrix agreement" above, one level
@@ -142,7 +144,8 @@ using SparseArrays: sparse
         πₕ!(dest2, P2, src2)
         @test parent(dest2) ≈ parent(πₕ(W2dest, src2))
 
-        @testset "Tracks a live-updated src across repeated calls" begin
+        # Across repeated calls.
+        @testset "Tracks a live-updated src" begin
             for factor in (1.0, 2.5, -1.0)
                 Rₕ!(src2, x -> factor * (x[1] * x[2] + x[1]))
                 πₕ!(dest2, P2, src2)

@@ -63,7 +63,7 @@ using ..TestUtils: alloc_test, @test_allocs
         @test sf(4) === sf
     end
 
-    @testset "Operators rebuild around the indexed leaf" begin
+    @testset "Operators rebuild around indexed leaf" begin
         v = TestFunction{2}()
 
         # the whole directional family generated in difference.jl/average.jl/jump.jl:
@@ -147,7 +147,7 @@ using ..TestUtils: alloc_test, @test_allocs
         end
     end
 
-    @testset "Bracket indexing and destructuring (gpena/Bramble.jl#153)" begin
+    @testset "Bracket indexing, destructuring (#153)" begin
         p = TrialFunction{2, 2}()
         q = TestFunction{2, 2}()
 

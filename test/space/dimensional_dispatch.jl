@@ -68,7 +68,7 @@ const SYMBOLS = (:x, :y, :z)
         end
     end
 
-    @testset "a mesh and a space give the matrix, as the aliases do" begin
+    @testset "mesh and space give the aliases' matrix" begin
         for (entry, aliases) in FAMILIES, d in 1:2
 
             @test entry(Ωₕ2, d) == aliases[d](Ωₕ2)
@@ -76,7 +76,7 @@ const SYMBOLS = (:x, :y, :z)
         end
     end
 
-    @testset "composite grid functions go through the same dispatch" begin
+    @testset "composite functions share the dispatch" begin
         for (entry, aliases) in FAMILIES, d in 1:2
 
             @test entry(cₕ2, d) == aliases[d](cₕ2)
@@ -86,7 +86,7 @@ const SYMBOLS = (:x, :y, :z)
 
     # `D̽ₕ`, `Mₕ` and `M₊ₕ` carry both arities: the tuple with one argument, one direction
     # with two. They coexist by arity, and this is the test that says so on purpose.
-    @testset "the tuple-valued aliases keep their one-argument meaning" begin
+    @testset "tuple aliases keep one-argument meaning" begin
         @test D̽ₕ(uₕ2) == (D̽ₓ(uₕ2), D̽ᵧ(uₕ2))
         @test Mₕ(uₕ2) == (Mₓ(uₕ2), Mᵧ(uₕ2))
         @test M₊ₕ(uₕ2) == (M₊ₓ(uₕ2), M₊ᵧ(uₕ2))
@@ -110,7 +110,7 @@ const SYMBOLS = (:x, :y, :z)
         @test_throws ArgumentError jump(uₕ2, :nope)
     end
 
-    @testset "Type stability of the Int and Symbol entry points" begin
+    @testset "Type stability: Int and Symbol entries" begin
         for (lbl, uₕ, D) in (("1D", uₕ1, 1), ("2D", uₕ2, 2), ("3D", uₕ3, 3))
             @testset "$lbl" begin
                 for (entry, _) in FAMILIES, d in 1:D
@@ -133,7 +133,7 @@ const SYMBOLS = (:x, :y, :z)
     # then dispatches dynamically down the whole engine call stack; the subscript alias
     # cannot box, so it is the baseline to compare against rather than a bare number that
     # would have to be updated whenever `similar` changes.
-    @testset "a runtime direction costs no more than a literal one" begin
+    @testset "runtime vs literal direction cost" begin
         for (lbl, uₕ, D) in (("1D", uₕ1, 1), ("2D", uₕ2, 2), ("3D", uₕ3, 3))
             @testset "$lbl" begin
                 for (entry, aliases) in FAMILIES, d in 1:D

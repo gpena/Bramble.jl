@@ -243,12 +243,47 @@ Return the test space of the bilinear form.
 """
 test_space(form::BilinearForm) = form.test_space
 
-# `a(uₕ, vₕ) = vᵀ A u`. Assembles a whole matrix per call: intended for testing/convenience.
-# Multiplies by `parent(u)`, the raw storage vector, so the product runs SparseArrays' specialised
-# dense-vector path rather than going through the `VectorElement` wrapper's indexing (a `VectorElement`
-# itself now works fine here since #348; this predates that fix). `parent` of a plain vector is the
-# vector itself.
-@inline (form::BilinearForm)(u, v) = dot(v, assemble(form) * parent(u))
+"""
+    (a::BilinearForm)(u, v) -> Number
+
+The form evaluated at a trial function `u` and a test function `v`: `vᴴ A u` for
+`A = assemble(a)`, without `A`. One walk of the form's stencil, the one
+[`matrix_free_operator`](@ref)'s serial `mul!` makes, adds `conj(v[row]) * weight * u[col]`
+for every entry into a single scalar. No Dirichlet rows are applied, as `assemble(a)`
+applies none.
+
+`u` and `v` are [`VectorElement`](@ref)s or plain vectors, of lengths `ndofs(trial_space(a))`
+and `ndofs(test_space(a))`. The result's type is promoted from the element types of `A`, `u`
+and `v`, so a `ForwardDiff.Dual` in either argument comes through.
+
+On a CPU backend the call allocates only the one cell its sum runs in (a
+`ContractionSink`'s), whatever the grid size, except on a form with a region
+restriction (`restrict_to`), whose stencil evaluation allocates as it does in `assemble!`.
+Each call has its own cell, so tasks may call one form at once. On a GPU backend the matrix
+is assembled and multiplied, as the walk reads its vectors on the host.
+
+# Throws
+- `DimensionMismatch`: `u` or `v` has the wrong length.
+- `ArgumentError`: `u` or `v` is not indexed from 1 (an offset-axes view, say).
+
+# Examples
+```jldoctest
+using Bramble, LinearAlgebra
+Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 11, false))
+a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+uₕ = Rₕ(Wₕ, x -> sin(x[1]))
+vₕ = Rₕ(Wₕ, x -> x[1] + 1)
+a(uₕ, vₕ) ≈ dot(parent(vₕ), assemble(a) * parent(uₕ))
+
+# output
+true
+```
+"""
+function (form::BilinearForm)(u, v)
+    execution_policy(trial_space(form)) isa GpuPolicy &&
+        return dot(v, assemble(form) * _mf_data(u))
+    return _contract(form, _mf_data(u), _mf_data(v))
+end
 
 """
     resolve_form_ast(form::BilinearForm)
@@ -391,7 +426,7 @@ ignoring the backend's policy.
 `assemble!` uses the pre-resolved `form.ast` stored directly inside the form.
 
 ## Live coefficients
-- Grid functions: the stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(cₕ, ...)` or `parent(cₕ) .= ...`) between steps automatically updates the matrix entries. On the host this costs 0 allocations; on a device-backed space each fill copies the coefficient to the host anew, so it stays live but is not allocation-free there (see [GPU acceleration](@ref)).
+- Grid functions: the stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(cₕ, ...)` or `parent(cₕ) .= ...`) between steps automatically updates the matrix entries. Nested scales such as `uₕ * (wₕ * v)` stay live too: each grid function is read at assembly time, never fused into a copy when the form is built. On the host this costs 0 allocations; on a device-backed space each fill copies the coefficient to the host anew, so it stays live but is not allocation-free there (see [GPU acceleration](@ref)).
 - Dynamic scalars: plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `β = Ref(1.0); a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))`). Mutating `β[] = new_val` evaluates live during assembly with 0 allocations on the host; the `Ref` itself adds nothing, but a device-backed space's call still allocates regardless of the scalar (see [GPU acceleration](@ref)).
 """
 function assemble!(

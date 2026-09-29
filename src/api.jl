@@ -60,8 +60,11 @@ export jumpₕ
 
 export Mₕ, Mcₕ
 
+export S₊ₕ, S₋ₕ
+
 # Dimensional entry points (the direction as an argument; `∇ₕ[d]` is the exported route)
 public D₋, D̃, Dc, jump
+public S₊, S₋, forward_shift, backward_shift
 
 # The `D*ₕ` spellings of the exported gradients (`D̃ₕ === ∇̃ₕ`, `Dcₕ === ∇cₕ`, `D̽ₕ === ∇̽ₕ`)
 public D̃ₕ, Dcₕ, D̽ₕ
@@ -88,19 +91,34 @@ public div₊ₕ, div₊ₕ!, curl₊ₕ, curl₊ₕ!, ε₊ₕ, ε₊ₕ!
 public M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 public M₊ₓ!, M₊ᵧ!, M₊₂!
 
+# Index shifts (destructure from `S₊ₕ`/`S₋ₕ`; public, unexported)
+public S₊ₓ, S₊ᵧ, S₊₂, S₊ₓ!, S₊ᵧ!, S₊₂!
+public S₋ₓ, S₋ᵧ, S₋₂, S₋ₓ!, S₋ᵧ!, S₋₂!
+
 # --- Forms, Assembly & Problems ---
 export dirichlet_constraints, dirichlet_bc!, symmetrize!
 export form, assemble, assemble!, assemble_add!
 export expression
 export is_separable, kronecker_operator
+export matrix_free_operator
 export pde_solve
 export semidiscretize, semidiscretize_second_order
 export ode_problem, linear_problem, nonlinear_problem
 export second_order_ode_problem
 export amg_preconditioner
 export ilu_preconditioner
+export jacobi_preconditioner
+export chebyshev_preconditioner
+export GeometricMeshHierarchy
+export prolongate!, coarsen!
+export jacobi_smoother, chebyshev_smoother, red_black_gauss_seidel, smooth!
+export gmg_preconditioner, gmg_solve
 
-public KroneckerLinearOperator, ode_function, second_order_ode_function
+public KroneckerLinearOperator, MatrixFreeOperator, ode_function, second_order_ode_function
+public AbstractMatrixFreePreconditioner, JacobiPreconditioner, ChebyshevPreconditioner
+public max_eigenvalue_estimate
+public AbstractSmoother, JacobiSmoother, ChebyshevSmoother, RedBlackGaussSeidel
+public GMGPreconditioner, v_cycle!, w_cycle!, fmg!
 public jacobian!, jacobian_prototype, jacobian_pattern, ast_sparsity_detector
 public reaction, reaction_density, reaction!, reaction_density!
 public allocate_system_matrix, type_cached_assemble!, evaluate!, assemble_parallel!

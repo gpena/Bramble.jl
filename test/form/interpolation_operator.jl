@@ -42,8 +42,12 @@ using Bramble:
                Mₓ,
                indices,
                inner₊ₓ,
-               interpolation_matrix
-using ..TestUtils: alloc_test, @test_allocs
+               interpolation_matrix,
+               S₊ₓ,
+               S₋ₓ,
+               forward_shift,
+               backward_shift
+using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
 
 # The interpolation operator: `πₕ(u)` over a trial function, as opposed to
 # `πₕ(uₕ)` over a grid function whose values are known (test/form/interpolation.jl).
@@ -101,12 +105,12 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # a shift by more than one point, which is the `Int` delta rather than a `Val`
         A = assemble(form(Ws, Wt, (u, v) -> innerₕ(shift_op(πₕ(u), 1, 2), v)))
         Pshift = interpolation_matrix(Wt, Ws)
-        # row I reads the interpolant two points along, clamped at the far end
+        # row I reads the interpolant two points along, and 0 past the far end: a shift reads
+        # 0 off the grid over an interpolation too (gpena/Bramble.jl#352)
         pts = points(mesh(Wt))
         Pexpect = zero(Matrix(P))
         for i in eachindex(pts)
-            j = min(i + 2, length(pts))
-            Pexpect[i, :] .= Matrix(Pshift)[j, :]
+            i + 2 <= length(pts) && (Pexpect[i, :] .= Matrix(Pshift)[i + 2, :])
         end
         @test A ≈ Hh(Wt) * Pexpect
 
@@ -163,10 +167,10 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # same `P` as `interpolation_matrix`, whose own collapsed-axis test pins it to the
         # per-axis Kronecker product.
         for (Ω, nt, ns) in (
-                (domain(interval(0.0, 1.0) × interval(0.5, 0.5)), (9, 1), (5, 1)),
-                (domain(interval(0.5, 0.5) × interval(0.0, 1.0) × interval(0.0, 1.0)),
-                    (1, 7, 5), (1, 4, 3))
-            )
+            (domain(interval(0.0, 1.0) × interval(0.5, 0.5)), (9, 1), (5, 1)),
+            (domain(interval(0.5, 0.5) × interval(0.0, 1.0) × interval(0.0, 1.0)),
+            (1, 7, 5), (1, 4, 3))
+        )
             for unif in (true, false)
                 D = length(nt)
                 Wt = gridspace(mesh(Ω, nt, ntuple(_ -> unif, D)))
@@ -191,6 +195,19 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         Dx = D₋ₓ(Wt)
         A = assemble(form(Ws, Wt, (u, v) -> inner₊ₓ(D₋ₓ(πₕ(u)), D₋ₓ(v))))
         @test A ≈ Dx' * Hp(Wt, 1) * Dx * P
+
+        # a shift over an interpolation reads 0 off the target grid, as the grid function
+        # does, alone and on either side of a difference (gpena/Bramble.jl#352)
+        Sp, Sm = forward_shift(Wt, Val(1)), backward_shift(Wt, Val(1))
+        uₛ = Rₕ(Ws, x -> 1 + x^2)
+        w = collect(weights(Wt, Innerh()))
+        for (op, M) in (
+            (S₊ₓ, Sp), (S₋ₓ, Sm), (S₊ₓ ∘ D₋ₓ, Sp * Dx), (D₋ₓ ∘ S₊ₓ, Dx * Sp)
+        )
+            A = assemble(form(Ws, Wt, (u, v) -> innerₕ(op(πₕ(u)), v)))
+            @test A ≈ Hh(Wt) * M * P
+            @test A * parent(uₛ) ≈ w .* parent(op(πₕ(Wt, uₛ)))
+        end
     end
 
     @testset "Same-mesh interpolation is the identity" begin
@@ -209,7 +226,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
 
     @testset "Action on a grid function" begin
         # the assembled matrix applied to a source vector is the weighted interpolant: the
-        # numeric `πₕ` (space/operators/interpolation.jl) computing the same thing by an
+        # numeric `πₕ` (operators/interpolation.jl) computing the same thing by an
         # entirely different route, which is the check that the two layers agree.
         Ω = domain(interval(0.0, 1.0))
         Wt = gridspace(mesh(Ω, 11, true))
@@ -312,7 +329,8 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             @test A ≈ transpose(P) * Hh(Wu)
         end
 
-        @testset "An operator outside the interpolation acts on the walked mesh" begin
+        # An operator outside the interpolation acts on the walked mesh.
+        @testset "outer operator: acts on walked mesh" begin
             # `D₋ₓ(πₕ(v))` differences on the trial mesh, the one being integrated over, so
             # the block is `(Dx P)ᵀ H₊ Dx` -- the same reading as the trial-side twin, with
             # the roles exchanged.
@@ -322,7 +340,8 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             @test A ≈ transpose(Dx * P) * Hp(Wu, 1) * Dx
         end
 
-        @testset "It is the transpose of the trial-side form" begin
+        # It is the transpose of the trial-side form.
+        @testset "test side: transpose of trial side" begin
             # a(u, πₕ(v)) and a(πₕ(u), v) over the swapped spaces are the same bilinear form
             # read the other way round, so the matrices are transposes. This is what would
             # break if the rows and the columns disagreed about which mesh they live on.
@@ -347,7 +366,8 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             @test A ≈ Hh(W)
         end
 
-        @testset "Composite blocks, interpolated leaf not the first" begin
+        # Composite blocks, where the interpolated leaf is not the first.
+        @testset "composite: interpolated leaf not first" begin
             # A heterogeneous composite where the interpolated side is leaf 2: binding the
             # wrong leaf would still produce plausible numbers on leaf 1, so the assertion is
             # placed where only the right leaf can pass it.
@@ -384,7 +404,8 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             @test_allocs assemble!(A, a)
         end
 
-        @testset "Serial and parallel agree, and the pattern is exact" begin
+        # Serial and parallel assembly agree, and the pattern is exact.
+        @testset "serial vs parallel: exact pattern" begin
             a = form(Wu, Wv, (u, v) -> innerₕ(u, πₕ(v)) + inner₊ₓ(D₋ₓ(u), D₋ₓ(πₕ(v))))
             As = assemble(a)
 
@@ -645,7 +666,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         end
     end
 
-    @testset "Differentiation" begin
+    WITH_AD_TESTS && @testset "Differentiation" begin
         # A coefficient in the integrand, differentiated through the assembly: the block is
         # `H·diag(c)·P`, so `d sum(A) / d cᵢ` is `Hᵢᵢ` times row `i` of `P` summed. Checked
         # against that, not against itself, so a gradient of the wrong thing cannot pass.

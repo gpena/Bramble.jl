@@ -105,7 +105,7 @@ end
         @test nnz(Z4) == 0
     end
 
-    @testset "1D/2D/3D Poisson: assemble agrees with CSC" begin
+    @testset "Poisson 1D/2D/3D: agrees with CSC" begin
         for (D, n) in ((1, 21), (2, 9), (3, 5))
             p = _poisson_pair(Val(D), n)
 
@@ -123,7 +123,8 @@ end
         end
     end
 
-    @testset "Convection-diffusion (unsymmetric): assemble agrees with CSC" begin
+    # Unsymmetric convection-diffusion assembly agrees with CSC.
+    @testset "convection-diffusion: agrees with CSC" begin
         n = 10
         I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
         Ωd = domain(I2, :dir => boundary_symbols(I2))
@@ -151,7 +152,8 @@ end
         @test isapprox(Ac \ Fc, Ar \ Fr; atol = 1.0e-10)
     end
 
-    @testset "Composite two-field form: assemble, Dirichlet and symmetrize agree with CSC" begin
+    # Assembly, Dirichlet and symmetrize of a composite two-field form agree with CSC.
+    @testset "two-field form: agrees with CSC" begin
         n1, n2 = 9, 7
         I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
         Ωd = domain(I2, :dir => boundary_symbols(I2))
@@ -181,7 +183,8 @@ end
         @test isapprox(Fc, Fr)
     end
 
-    @testset "assemble! is allocation-free after warm-up (Serial)" begin
+    # assemble! is allocation-free after warm-up.
+    @testset "assemble!: allocation-free (Serial)" begin
         # Function barrier (bramble-verification §1): `@allocated` at top level over a
         # loop/testset-local binding can misreport, so the warm-up call and the measured
         # call both happen inside one function.
@@ -214,7 +217,8 @@ end
         end
     end
 
-    @testset "sparse_factorize/pde_solve accept SparseMatrixCSR (CSC-conversion fallback)" begin
+    # sparse_factorize and pde_solve accept SparseMatrixCSR through a CSC-conversion fallback.
+    @testset "factorize/pde_solve accept CSR" begin
         # The unified-dispatcher half of `poisson_solve_contract` (1D/3D `pde_solve`, 2D
         # `sparse_factorize`), against CSR-built systems -- see the module-level comment on
         # why the shared contract itself isn't reusable here.
@@ -231,7 +235,8 @@ end
         end
     end
 
-    @testset "Factorization reuse and refactoring (CSC-conversion fallback)" begin
+    # Factorization reuse and refactoring go through the CSC-conversion fallback.
+    @testset "factorization reuse, refactor" begin
         p = _csr_poisson_system(Val(2), 9)
         refactor_contract(
             p;
@@ -243,7 +248,8 @@ end
         )
     end
 
-    @testset "sparse_factorize/refactor! still reject non-CSR, non-CSC types" begin
+    # sparse_factorize and refactor! still reject non-CSR, non-CSC types.
+    @testset "other matrix types rejected" begin
         # The catch-all's guarantee for a genuinely unsupported type (dense `Matrix`,
         # test/form/sparse_solvers.jl) is unweakened by the CSR fallback: loading this
         # extension only ever widens dispatch for a `SparseMatrixCSR`, never for anything

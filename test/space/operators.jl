@@ -113,7 +113,7 @@ end
         end
     end
 
-    @testset "Δₕ! writes what Δₕ returns, and refuses to alias" begin
+    @testset "Δₕ! matches Δₕ and refuses to alias" begin
         Wₕ = gridspace(mesh(Ω2, (9, 8), (true, true)))
         uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
         vₕ = element(Wₕ)
@@ -203,12 +203,12 @@ end
 end
 
 # `stencil_matrix` (gpena/Bramble.jl#185): every family's public per-axis alias now
-# routes through the single-pass builder in `src/space/operators/stencil.jl`, rather than
+# routes through the single-pass builder in `src/operators/stencil.jl`, rather than
 # through the Kronecker products of shift matrices `kronecker_operator_matrix` still
-# builds (`src/space/operators/shift.jl`, kept as the retained oracle). Checked entrywise,
+# builds (`src/operators/shift.jl`, kept as the retained oracle). Checked entrywise,
 # `nnz` included, on non-uniform meshes in 1D/2D/3D so a boundary weight that would only
 # coincidentally match on a uniform grid cannot hide a mistake.
-@testset "stencil_matrix agrees with the Kronecker oracle (#185)" begin
+@testset "stencil_matrix vs Kronecker (#185)" begin
     meshes = (
         mesh(domain(interval(0.0, 1.0)), 11, false),
         mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (9, 7), false),
@@ -242,10 +242,12 @@ end
 # generated once in `@operator_family` for every family with a `vectorial_alias`. Coordinate
 # names are due to be demoted from `export` to `public` (#340), so this file reaches them
 # through `Bramble.` rather than relying on the bare name staying exported.
-@testset "Vectorial operator aliases destructure and index (#340)" begin
+# They index too.
+@testset "Vectorial aliases destructure (#340)" begin
     Dₓ, Dᵧ, D₂ = Bramble.D₋ₓ, Bramble.D₋ᵧ, Bramble.D₋₂
 
-    @testset "destructuring and indexing agree with the named aliases" begin
+    # Indexing too.
+    @testset "destructuring matches named aliases" begin
         dx, dy = ∇ₕ
         @test dx === Dₓ && dy === Dᵧ
 
@@ -264,7 +266,8 @@ end
         @test_throws ArgumentError ∇ₕ[:w]
     end
 
-    @testset "indexing folds at compile time with zero allocations" begin
+    # Folds at compile time.
+    @testset "indexing folds, zero allocation" begin
         second(V) = V[2]
         @test only(Base.return_types(second, (typeof(∇ₕ),))) === typeof(Dᵧ)
         @test @inferred(second(∇ₕ)) === Dᵧ
@@ -272,7 +275,8 @@ end
         @test (@allocated second(∇ₕ)) == 0
     end
 
-    @testset "every family with a vectorial_alias supports the protocol" begin
+    # Each supports the protocol.
+    @testset "every vectorial_alias family" begin
         families = (
             (∇ₕ, (Bramble.D₋ₓ, Bramble.D₋ᵧ, Bramble.D₋₂)),
             (∇cₕ, (Bramble.Dcₓ, Bramble.Dcᵧ, Bramble.Dc₂)),
@@ -297,14 +301,14 @@ end
     Ω2ₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (9, 8), (false, false))
     W2 = gridspace(Ω2ₕ)
 
-    @testset "a destructured operator works on a VectorElement" begin
+    @testset "destructured operator on VectorElement" begin
         uₕ = Rₕ(W2, x -> x[1]^2 * sin(x[2]))
         dx, dy = ∇ₕ
         @test parent(dx(uₕ)) == parent(Dₓ(uₕ))
         @test parent(dy(uₕ)) == parent(Dᵧ(uₕ))
     end
 
-    @testset "a destructured operator works inside form(...)" begin
+    @testset "destructured operator inside form" begin
         dx, dy = ∇ₕ
         a1 = assemble(form(W2, W2, (u, v) -> innerₕ(dx(u), dx(v)) + innerₕ(dy(u), dy(v))))
         a2 = assemble(form(W2, W2, (u, v) -> innerₕ(Dₓ(u), Dₓ(v)) + innerₕ(Dᵧ(u), Dᵧ(v))))

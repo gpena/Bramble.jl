@@ -57,7 +57,7 @@ Base.@propagate_inbounds function Base.getindex(s::_Spy, i::Int)
     return s.x[i]
 end
 
-@testset "Nested threading: Parallel() inside a user's threaded region" begin
+@testset "Parallel() inside user threaded region" begin
     @testset "_in_threaded_region" begin
         @test !_in_threaded_region()
         @test (@inferred _in_threaded_region()) isa Bool
@@ -65,7 +65,7 @@ end
         @test all(_nested_results(_in_threaded_region))
     end
 
-    @testset "Base's :static error is caught, and only it" begin
+    @testset "Only Base's :static error is caught" begin
         base_err = _nested_results() do
             try
                 Threads.@threads :static for _ in 1:2
@@ -163,7 +163,7 @@ end
         @test ok[] == calls
     end
 
-    @testset "Top-level calls still thread, nested ones stay put" begin
+    @testset "Top-level threads, nested stays serial" begin
         n = 200_000
         x, y, z = rand(n), rand(n), rand(n)
         P = CpuThreaded()

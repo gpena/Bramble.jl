@@ -2,7 +2,9 @@ module FormReactionFluxTests
 
 using Test
 using Random
+using ForwardDiff
 using Bramble
+using ..TestUtils: WITH_AD_TESTS
 using Bramble: reaction, reaction_density, weights
 
 # `reaction` (gpena/Bramble.jl#227) extracts the boundary flux a Dirichlet constraint had
@@ -18,7 +20,8 @@ using Bramble: reaction, reaction_density, weights
 # worked out by hand for each side below, not merely asserted.
 
 @testset "Reaction / boundary flux (#227)" begin
-    @testset "1D: flux at each end, uniform and non-uniform" begin
+    # Flux at each end, on uniform and non-uniform meshes.
+    @testset "1D flux: each end" begin
         # u = sin(πx), f = π² sin(πx). u'(x) = π cos(πx).
         # At x=0 (outward normal -1): ∂u/∂n = -u'(0) = -π, so q·n = -∂u/∂n = π.
         # At x=1 (outward normal +1): ∂u/∂n = u'(1) = -π, so q·n = π.
@@ -78,7 +81,8 @@ using Bramble: reaction, reaction_density, weights
         @test errors_right_nu[end] < 0.15 * errors_right_nu[1]
     end
 
-    @testset "2D: flux on each side, conservation to round-off" begin
+    # Flux on each side; conservation holds to round-off.
+    @testset "2D flux: each side, conservation" begin
         # u = sin(πx)sin(πy), f = 2π² sin(πx)sin(πy). By symmetry every side carries the
         # same outward flux: ∫₀¹ π sin(πy) dy = 2, so each of the 4 sides gives 2, and the
         # full boundary sums to 8 = ∫∫ f = 2π² · (2/π) · (2/π).
@@ -126,7 +130,8 @@ using Bramble: reaction, reaction_density, weights
         @test sum(reaction(a, l, uₕ; marker = s) for s in sides) ≈ total_src atol = 1e-9
     end
 
-    @testset "3D: net flux exists and matches a manufactured solution" begin
+    # The net flux exists and matches a manufactured solution.
+    @testset "3D flux: manufactured solution" begin
         sol(x) = sin(pi * x[1]) * sin(pi * x[2]) * sin(pi * x[3])
         src(x) = 3 * pi^2 * sol(x)
         S = interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)
@@ -236,7 +241,8 @@ using Bramble: reaction, reaction_density, weights
         )
     end
 
-    @testset "reaction_density: pointwise, exported quantity" begin
+    # reaction_density is pointwise and an exported quantity.
+    @testset "reaction_density: pointwise" begin
         sol(x) = sin(pi * x[1])
         src(x) = pi^2 * sin(pi * x[1])
         I = domain(interval(0.0, 1.0), :left => :xmin, :right => :xmax)
@@ -255,6 +261,22 @@ using Bramble: reaction, reaction_density, weights
         @test parent(dens)[1] ≈ reaction(a, l, uₕ; marker = :left) / weights(Wₕ, Bramble.Innerh())[1]
         # zero away from the marker
         @test all(iszero, parent(dens)[2:end])
+    end
+
+    WITH_AD_TESTS && @testset "reaction: Dual load vector" begin
+        # A Dual load against a Float64 matrix must not be rounded to Float64.
+        Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 7, false))
+        A = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))))
+        uₕ = Rₕ(Wₕ, x -> x[1]^2)
+        g(s) = reaction(A, s .* ones(ndofs(Wₕ)), uₕ; marker = :boundary)
+        h(s) = sum(parent(reaction_density(A, s .* ones(ndofs(Wₕ)), uₕ; marker = :boundary)))
+        @test ForwardDiff.derivative(g, 2.0) ≈ g(3.0) - g(2.0)
+        @test ForwardDiff.derivative(h, 2.0) ≈ h(3.0) - h(2.0)
+        gd(s) = reaction(Matrix(A), s .* ones(ndofs(Wₕ)), uₕ; marker = :boundary)
+        @test ForwardDiff.derivative(gd, 2.0) ≈ ForwardDiff.derivative(g, 2.0)
+        @test reaction(A, Matrix(A) * parent(uₕ), uₕ; marker = :boundary) isa Float64
+        @test reaction(Matrix(A), ones(ndofs(Wₕ)), uₕ; marker = :boundary) ≈
+              reaction(A, ones(ndofs(Wₕ)), uₕ; marker = :boundary)
     end
 end
 

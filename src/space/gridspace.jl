@@ -277,7 +277,7 @@ Returns the total number of degrees of freedom (DOFs) in the function space `W�
     that does not know in advance which kind of space it was given should reach for one
     of the two unambiguous forms instead: `npoints(mesh(Wₕ), Tuple)` for the grid shape,
     or `map(ndofs, spaces(Wₕ))` for the per-component counts. Mixing them up is not
-    hypothetical: `src/space/operators/difference.jl`'s `_grid_dims` avoids
+    hypothetical: `src/operators/difference.jl`'s `_grid_dims` avoids
     `ndofs(Wₕ, Tuple)` for exactly this reason, after a 3-component 4×6 space addressed
     13824 slots into 72 and segfaulted under an `@inbounds` engine.
 """

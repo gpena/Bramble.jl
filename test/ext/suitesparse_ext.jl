@@ -16,7 +16,7 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
                             unsymmetric_refactor_contract, validation_contract
 
 @testset "SuiteSparse extension" begin
-    @testset "1D/2D/3D Poisson (SPD, sym = :spd)" begin
+    @testset "Poisson 1D/2D/3D (sym = :spd)" begin
         poisson_solve_contract(;
             atol = 1.0e-12,
             solver = :suitesparse,
@@ -30,7 +30,7 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         )
     end
 
-    @testset "Unsymmetric convection-diffusion (sym = :unsymmetric)" begin
+    @testset "convection-diffusion (:unsymmetric)" begin
         cd = convection_diffusion_system(10)
         @test !issymmetric(cd.A)
         @test isapprox(
@@ -42,7 +42,8 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         @test isapprox(u_auto, cd.u_ref; atol = 1.0e-12)
     end
 
-    @testset "Factorization reuse and refactoring (suitesparse_refactor!)" begin
+    # Exercises factorization reuse and suitesparse_refactor!.
+    @testset "factorization reuse, refactor" begin
         p = poisson_system(Val(2), 8; source = x -> 1.0)
 
         # CHOLMOD, on the symmetrised matrix
@@ -63,7 +64,7 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         )
     end
 
-    @testset "Ordering/pivot control parameters are forwarded" begin
+    @testset "ordering/pivot parameters forwarded" begin
         p = poisson_system(Val(2), 8; source = x -> 1.0)
         A, F, a = p.A, p.F, p.a
         n = size(A, 1)
@@ -82,7 +83,8 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         @test_throws ArgumentError suitesparse_factorize(A_unsym; sym = :unsymmetric, q = [1])
     end
 
-    @testset "SPQR (least-squares / rectangular systems)" begin
+    # SPQR solves least-squares problems on rectangular systems.
+    @testset "SPQR: least squares" begin
         p = poisson_system(Val(2), 8; source = x -> 1.0)
         A, F, u_ref = p.A, p.F, p.u_ref
 

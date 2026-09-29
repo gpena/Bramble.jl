@@ -184,7 +184,10 @@ struct _RestrictedResidual{T, Fv <: AbstractVector}
     F::Fv
 end
 
-@inline Base.eltype(::_RestrictedResidual{T}) where {T} = T
+# `r = A u - F` holds all three, so its element type promotes `F`'s too (a `Dual` load
+# vector against a `Float64` matrix, gpena/Bramble.jl#343) -- `_restricted_matvec` only
+# promotes `A` and `u`.
+@inline Base.eltype(::_RestrictedResidual{T, Fv}) where {T, Fv} = promote_type(T, eltype(Fv))
 @inline function Base.getindex(r::_RestrictedResidual{T}, j::Int) where {T}
     return get(r.acc, j, zero(T)) - @inbounds r.F[j]
 end
@@ -198,7 +201,8 @@ end
 # Any other matrix type (dense, or an unrecognised backend): unchanged full computation --
 # the restricted path above only pays off against `SparseMatrixCSC`'s stored-entry sweep.
 function _reaction_residual(A::AbstractMatrix, F::AbstractVector, u::AbstractVector, ::Tuple)
-    r = A * u
+    r = similar(u, promote_type(eltype(A), eltype(u), eltype(F)), size(A, 1))
+    mul!(r, A, u)
     r .-= F
     return r
 end

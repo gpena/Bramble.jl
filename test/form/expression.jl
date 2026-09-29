@@ -85,7 +85,8 @@ using Bramble: restrict_to, dirac, D₋ᵧ, D₋₂, D₋ₓ, Mₓ, jumpₓ
         @test occursin("2.0", s)
     end
 
-    @testset "Negative scalar (OperatorAdd subtraction)" begin
+    # Through OperatorAdd subtraction.
+    @testset "Negative scalar (subtraction)" begin
         # S1.1's subtraction detection: a negative OperatorScale folded into `OperatorAdd`
         # renders with a literal " - ", not " + -2 * ".
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 5)

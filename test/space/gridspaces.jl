@@ -297,7 +297,8 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
             @test ndofs(SystemSpace) == 3 * ndofs(W)
         end
 
-        @testset "Space product operator (×) and associative flattening (#154)" begin
+        # `×` flattens associatively.
+        @testset "Space product × and flattening (#154)" begin
             using LinearAlgebra: LinearAlgebra
             W1 = gridspace(mesh1d)
             W2 = gridspace(mesh1d)
@@ -594,7 +595,7 @@ end
         @test !occursin("SpaceWeights", detailed)
     end
 
-    @testset "Composite space, identical leaves collapse" begin
+    @testset "Composite, identical leaves collapse" begin
         compact = sprint(show, Vₕ)
         @test compact == "CompositeGridSpace{2 components, 18 dofs}"
         @test !occursin('\n', compact)
@@ -607,7 +608,7 @@ end
         @test !endswith(detailed, '\n')
     end
 
-    @testset "Composite space, differing leaves enumerate" begin
+    @testset "Composite, differing leaves enumerate" begin
         detailed = sprint(show, MIME"text/plain"(), Het)
         @test occursin("1: ScalarGridSpace{2D, Float64, 9 dofs}", detailed)
         @test occursin("2: ScalarGridSpace{2D, Float64, 16 dofs}", detailed)

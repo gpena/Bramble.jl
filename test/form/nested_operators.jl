@@ -86,7 +86,7 @@ end
         @test_allocs assemble!(A, a)
     end
 
-    @testset "refilling a nested form allocates nothing" begin
+    @testset "nested form: refill allocates nothing" begin
         Wₕ = _nonuniform_space(2)
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(Mcₓ(D₋ₓ(u)), D₊ₓ(Mₓ(v))))
         A = assemble(a)

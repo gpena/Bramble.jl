@@ -40,7 +40,7 @@ using Bramble:
                inner₊ₓ,
                jumpₓ,
                weights
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
 
 # Assembling the right-hand side of a system.
 #
@@ -432,7 +432,7 @@ using ..TestUtils: alloc_test, @test_allocs
         assemble_parallel!(br, lfr)
         @test br ≈ first_pass
 
-        @testset "Parallel differentiation" begin
+        WITH_AD_TESTS && @testset "Parallel differentiation" begin
             # The per-thread buffers this path used to carry were `Vector{Float64}`
             # outright, so a Dual-valued assembly could not take it at all. Nothing in the
             # sweep names an element type now, so it can.
@@ -858,34 +858,36 @@ using ..TestUtils: alloc_test, @test_allocs
         @test assemble(form(Wₕ, v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)))) ≈
               Hh * uu + transpose(Dx) * (Hpx * uu)
 
-        # and the Jacobian of a nonlinear residual is the same expression with the
-        # nonlinearity's own derivative on the diagonal. This is the shape a Newton step
-        # needs, so it is worth pinning: differentiating the assembly agrees with assembling
-        # the derivative.
-        resid(g) = w -> begin
-            b = zeros(eltype(w), n)
-            assemble!(b, form(Wₕ, v -> g(element(Wₕ, w .^ 2), v)))
-            b
+        if WITH_AD_TESTS
+            # and the Jacobian of a nonlinear residual is the same expression with the
+            # nonlinearity's own derivative on the diagonal. This is the shape a Newton step
+            # needs, so it is worth pinning: differentiating the assembly agrees with assembling
+            # the derivative.
+            resid(g) = w -> begin
+                b = zeros(eltype(w), n)
+                assemble!(b, form(Wₕ, v -> g(element(Wₕ, w .^ 2), v)))
+                b
+            end
+            w0 = collect(range(0.3, 1.7; length = n))
+            dg = Diagonal(2 .* w0)
+
+            @test ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, v)), w0) ≈ Hh * dg
+            @test ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), w0) ≈
+                  transpose(Dx) * Hh * dg
+            @test ForwardDiff.jacobian(resid((s, v) -> inner₊ₓ(s, D₋ₓ(v))), w0) ≈
+                  transpose(Dx) * Hpx * dg
+
+            # the Jacobian's sparsity is the stencil's, which is what makes a sparse-AD colouring
+            # unnecessary here: the pattern is known from the AST before anything is evaluated
+            Jd = ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, v)), w0)
+            Jw = ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), w0)
+            offs_d = length(stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, v)))))
+            offs_w = length(
+                stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)))))
+            )
+            @test maximum(i -> count(!iszero, Jd[i, :]), 1:n) == offs_d
+            @test maximum(i -> count(!iszero, Jw[i, :]), 1:n) == offs_w
         end
-        w0 = collect(range(0.3, 1.7; length = n))
-        dg = Diagonal(2 .* w0)
-
-        @test ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, v)), w0) ≈ Hh * dg
-        @test ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), w0) ≈
-              transpose(Dx) * Hh * dg
-        @test ForwardDiff.jacobian(resid((s, v) -> inner₊ₓ(s, D₋ₓ(v))), w0) ≈
-              transpose(Dx) * Hpx * dg
-
-        # the Jacobian's sparsity is the stencil's, which is what makes a sparse-AD colouring
-        # unnecessary here: the pattern is known from the AST before anything is evaluated
-        Jd = ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, v)), w0)
-        Jw = ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), w0)
-        offs_d = length(stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, v)))))
-        offs_w = length(
-            stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)))))
-        )
-        @test maximum(i -> count(!iszero, Jd[i, :]), 1:n) == offs_d
-        @test maximum(i -> count(!iszero, Jw[i, :]), 1:n) == offs_w
     end
 
     @testset "Dirichlet conditions" begin
@@ -1064,7 +1066,7 @@ using ..TestUtils: alloc_test, @test_allocs
         end
     end
 
-    @testset "Assembled residual differentiation" begin
+    WITH_AD_TESTS && @testset "Assembled residual differentiation" begin
         # The shape a nonlinear solve has: build the residual of a form, and let the solver
         # differentiate it with respect to the coefficient vector to get a Jacobian.
         #

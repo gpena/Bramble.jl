@@ -115,7 +115,7 @@ end
         end
     end
 
-    @testset "In-place allocation independent of grid size" begin
+    @testset "In-place allocation is size-independent" begin
         function min_bytes(n)
             _, Ωp = _mesh_pair((n, n))
             up = Rₕ(gridspace(Ωp), _F[2])

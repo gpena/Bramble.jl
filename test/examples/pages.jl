@@ -64,7 +64,7 @@ using ..TestUtils: _run_example_page
     # holding the four pages in test/examples/ext_pages.jl behind the `ext` group -- and
     # `LinearSolve`, which this page also uses, is already a test dependency loaded by other
     # pages in this every-push file. It stays here rather than there.
-    @testset "Memory scaling with a matrix-free Kronecker operator" begin
+    @testset "Memory scaling: matrix-free Kronecker" begin
         _run_example_page(:memory_scaling)
     end
 end

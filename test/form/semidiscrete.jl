@@ -16,7 +16,7 @@ using Bramble:
                semidiscretize_rhs,
                set_points!,
                type_cached_assemble!
-using ..TestUtils: _check_eoc
+using ..TestUtils: _check_eoc, WITH_AD_TESTS
 
 # `semidiscretize` and the residual it returns (src/problems/semidiscrete.jl) need no SciMLBase:
 # a `Semidiscretization` is a callable with the `(du, u, p, t)` signature plus two matrices.
@@ -53,7 +53,8 @@ end
     I = Bramble.interval(0.0, 1.0)
     Rₕ!(fₕ, x -> 1.0)
 
-    @testset "constraint carrier is chosen once, by shape and arity" begin
+    # The constraint carrier is chosen once, by shape and arity.
+    @testset "constraint carrier: shape and arity" begin
         @test semidiscretize(a, l).constraints isa Bramble.NoConstraints
         @test semidiscretize(a, l; dirichlet = :boundary).constraints isa Bramble.LabelsOnly
         @test semidiscretize(a, l; dirichlet = :boundary => x -> 0.0).constraints isa
@@ -145,7 +146,8 @@ end
         @test F[n] ≈ 7.0
     end
 
-    @testset "boundary values reach p when given (x, t, p)" begin
+    # Boundary values given as (x, t, p) receive the parameter p.
+    @testset "boundary values: (x, t, p) gets p" begin
         bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t, p) -> p[1] + p[2] * t)
         sd = semidiscretize(a, l; dirichlet = bcs)
         F = zeros(n)
@@ -166,7 +168,8 @@ end
         @test u0[1] ≈ 7.0 && u0[n] ≈ 7.0
     end
 
-    @testset "mixed (x, t) / (x, t, p) arity across labels is rejected" begin
+    # Mixing (x, t) and (x, t, p) arity across labels is rejected.
+    @testset "boundary arity: mixed is rejected" begin
         Ωₕ2 = Bramble.mesh(
             Bramble.domain(Bramble.interval(0.0, 1.0), :left => :left, :right => :right), 11
         )
@@ -175,7 +178,8 @@ end
         )
     end
 
-    @testset "update_coefficients! runs before each assembly" begin
+    # update_coefficients! runs before each assembly.
+    @testset "update_coefficients!: before assembly" begin
         seen = Float64[]
         sd = semidiscretize(
             a, l; (update_coefficients!) = t -> (push!(seen, t); Rₕ!(fₕ, x -> t))
@@ -190,7 +194,8 @@ end
         @test F ≈ 2.5 .* G
     end
 
-    @testset "update_coefficients! reaches p when given (t, p)" begin
+    # update_coefficients! given as (t, p) receives the parameter p.
+    @testset "update_coefficients!: (t, p) gets p" begin
         seen = Tuple{Float64, Float64}[]
         sd = semidiscretize(
             a, l; (update_coefficients!) = (t, p) -> (push!(seen, (t, p)); Rₕ!(fₕ, x -> t * p))
@@ -264,26 +269,28 @@ end
         @test operator_matrix(sd) ≈ 4 .* A₀      # α(3.0) = 1 + 3 = 4
         @test build_calls[] == 1                 # same element type: no rebuild, only refill
 
-        # A `ForwardDiff.Dual` `t` -- the same thing a Rosenbrock stepper's `tgrad` reaches
-        # for -- rebuilds once at that new element type, and never throws `InexactError`
-        # trying to write a `Dual` into the `Float64` matrix the classic `BilinearForm` path
-        # would have kept.
-        t_dual = Dual(3.0, 1.0)
-        u_dual = Dual.(zeros(n), 0.0)
-        du_dual = similar(u_dual)
-        sd(du_dual, u_dual, nothing, t_dual)
-        @test build_calls[] == 2
-        @test all(isfinite, value.(du_dual))
+        if WITH_AD_TESTS
+            # A `ForwardDiff.Dual` `t` -- the same thing a Rosenbrock stepper's `tgrad` reaches
+            # for -- rebuilds once at that new element type, and never throws `InexactError`
+            # trying to write a `Dual` into the `Float64` matrix the classic `BilinearForm` path
+            # would have kept.
+            t_dual = Dual(3.0, 1.0)
+            u_dual = Dual.(zeros(n), 0.0)
+            du_dual = similar(u_dual)
+            sd(du_dual, u_dual, nothing, t_dual)
+            @test build_calls[] == 2
+            @test all(isfinite, value.(du_dual))
 
-        # Calling again at the already-seen `Dual` type refills without rebuilding.
-        sd(du_dual, u_dual, nothing, t_dual)
-        @test build_calls[] == 2
+            # Calling again at the already-seen `Dual` type refills without rebuilding.
+            sd(du_dual, u_dual, nothing, t_dual)
+            @test build_calls[] == 2
 
-        # The `Float64` path stays exactly as before, unaffected by the Dual excursion in
-        # between: same cached entry, refilled at its own `t` rather than rebuilt.
-        sd(zeros(n), zeros(n), nothing, 1.0)
-        @test operator_matrix(sd) ≈ 2 .* A₀      # α(1.0) = 1 + 1 = 2
-        @test build_calls[] == 2
+            # The `Float64` path stays exactly as before, unaffected by the Dual excursion in
+            # between: same cached entry, refilled at its own `t` rather than rebuilt.
+            sd(zeros(n), zeros(n), nothing, 1.0)
+            @test operator_matrix(sd) ≈ 2 .* A₀      # α(1.0) = 1 + 1 = 2
+            @test build_calls[] == 2
+        end
     end
 
     @testset "consistent initial conditions" begin
@@ -377,7 +384,8 @@ end
     sdc = semidiscretize(ac, lc; dirichlet = bcs_c)
     sdd = semidiscretize(ad, ld; dirichlet = bcs_d)
 
-    @testset "operator_matrix and mass_matrix agree with CSC" begin
+    # operator_matrix and mass_matrix agree with the CSC backend.
+    @testset "operator/mass matrix: match CSC" begin
         @test operator_matrix(sdc) isa SparseMatrixCSC
         @test operator_matrix(sdd) isa Matrix{Float64}
         @test isapprox(Matrix(operator_matrix(sdc)), operator_matrix(sdd); atol = 1e-13)
@@ -417,7 +425,8 @@ end
         @test isapprox(Matrix(Bc), Bd; atol = 1e-13)
     end
 
-    @testset "jacobian_pattern keeps the same nonzero count" begin
+    # jacobian_pattern keeps the same nonzero count.
+    @testset "jacobian_pattern: same nnz" begin
         Pc = jacobian_pattern(ac)
         Pd = jacobian_pattern(ad)
         @test Pc isa SparseMatrixCSC
@@ -430,7 +439,7 @@ end
 # calls a time-stepping loop makes every step. Allocation checks go behind a function
 # barrier (bramble-verification §1); `@inferred` reads no global binding here, so it is
 # left in the barrier alongside the warm-up rather than pulled out to top level.
-@testset "sd2 and rhs are inferred and allocation-free (#283)" begin
+@testset "sd2 and rhs: inferred, no allocs (#283)" begin
     function _sd2_alloc(sd2, dv, v, u, t)
         sd2(dv, v, u, nothing, t)             # cold: records
         @inferred sd2(dv, v, u, nothing, t)
@@ -464,7 +473,7 @@ end
             Wₕ, K, l = _sd2_problem(dims)
             n = ndofs(Wₕ)
 
-            @testset "semidiscretize_second_order, dirichlet = $(repr(dirichlet))" for dirichlet in (
+            @testset "second order, dirichlet = $(repr(dirichlet))" for dirichlet in (
                 :boundary, nothing
             )
                 sd2 = semidiscretize_second_order(K, l; dirichlet = dirichlet)
@@ -511,7 +520,8 @@ end
     @test iszero(M[1, 1]) && iszero(M[nleaf, nleaf])
     @test iszero(M[nleaf + 1, nleaf + 1]) && iszero(M[n, n])
 
-    @testset "dirichlet_components binds the labels to one leaf" begin
+    # dirichlet_components binds the labels to one leaf.
+    @testset "dirichlet_components: one leaf" begin
         sd₁ = semidiscretize(a, l; dirichlet = :boundary => x -> 0.0, dirichlet_components = 1)
         M₁ = mass_matrix(sd₁)
         @test iszero(M₁[1, 1]) && iszero(M₁[nleaf, nleaf])
@@ -524,7 +534,7 @@ end
 # and `A` is `eₖ`, so `(M + Δt A) u = M u + Δt F` reduces to `u[i] = g(x_i, t)` and the
 # boundary condition is imposed by the same step that advances the interior. `Δt = h²` keeps
 # the first-order time error at the order being measured.
-@testset "semidiscretize: order of convergence (backward Euler)" begin
+@testset "semidiscretize: backward Euler order" begin
     function step_to(n)
         Ωₕ, Wₕ, fₕ, a, l = _sd_problem(n)
         h = hₘₐₓ(Ωₕ)
@@ -564,7 +574,8 @@ end
 # `weights(Wₕ).innerh`, the space's own independently-computed `L²` weight vector -- not
 # against `mass_matrix(sd)`'s diagonal, which would just check the implementation agrees
 # with itself.
-@testset "semidiscretize_rhs: matrix-free explicit right-hand side" begin
+# semidiscretize_rhs builds a matrix-free explicit right-hand side.
+@testset "semidiscretize_rhs: matrix-free RHS" begin
     Ωₕ, Wₕ, fₕ, a, l = _sd_problem(21)
     Rₕ!(fₕ, x -> 1.0)
     n = ndofs(Wₕ)
@@ -583,7 +594,8 @@ end
     @test du_rhs≈du_sd ./ h atol=1e-12 rtol=1e-12
     @test _sd_rhs_allocs(rhs, du_rhs, u, t) == 0
 
-    @testset "requires NoConstraints: any Dirichlet row makes M singular there" begin
+    # Any Dirichlet row makes M singular there, so NoConstraints is required.
+    @testset "rhs: requires NoConstraints" begin
         sd_static = semidiscretize(a, l; dirichlet = :boundary => x -> 0.0)
         @test_throws ArgumentError semidiscretize_rhs(sd_static)
 
@@ -604,7 +616,8 @@ end
         @test_throws ArgumentError semidiscretize_rhs(sd_coupled)
     end
 
-    @testset "requires an invertible (nonzero) diagonal" begin
+    # The mass diagonal must be invertible (nonzero).
+    @testset "rhs: requires nonzero diagonal" begin
         # Diagonal, but exactly zero at the left boundary point (x = 0) -- no coupling
         # term, so this does not hit the non-diagonal case above; it is its own check.
         cₕ = Rₕ(Wₕ, x -> x[1])

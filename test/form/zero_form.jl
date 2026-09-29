@@ -28,7 +28,8 @@ function _check_zero(a, nrows, ncols)
     return nothing
 end
 
-@testset "A form that simplifies to zero assembles to a zero matrix" begin
+# A form that simplifies to zero assembles to a zero matrix.
+@testset "zero-simplifying form: zero matrix" begin
     cases = (
         (domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6)),
         (domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)), (5, 6, 4))

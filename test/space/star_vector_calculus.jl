@@ -42,7 +42,8 @@ end
 
 _field(u, D) = D == 1 ? u[1] : u
 
-@testset "Averaged-spacing vector calculus (D̃) (#287)" begin
+# Built on the averaged-spacing difference D̃.
+@testset "Averaged-spacing vector calculus (#287)" begin
     Random.seed!(287)
 
     @testset "∇̃ₕ ($(D)D)" for D in 1:3

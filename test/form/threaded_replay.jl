@@ -46,7 +46,8 @@ _block_pair(u, v) = innerₕ(D₋ₓ(u(1)), v(2)) + innerₕ(u(2), D₋ₓ(v(1))
 
 const _SIZES = (41, 13, 7)
 
-@testset "Threaded refill replays the recording (#338)" begin
+# Threaded refill replays the recording.
+@testset "threaded refill replays (#338)" begin
     @testset "$(D)D, $(nm)" for D in 1:3,
         (nm, f, comps) in (
             ("scalar", _scalar, 1), ("pair", _pair, 1),
@@ -189,7 +190,8 @@ const _SIZES = (41, 13, 7)
         end
     end
 
-    @testset "Mixed leaf policies: CpuThreaded beside CpuSerial" begin
+    # Mixed leaf policies: CpuThreaded beside CpuSerial.
+    @testset "mixed policies: Threaded + Serial" begin
         _check_mixed(Serial())
     end
 
@@ -201,12 +203,14 @@ const _SIZES = (41, 13, 7)
     # (test/space/inner_product.jl checks the error without it), so this runs only where the
     # extension is already loaded.
     if Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing
-        @testset "Mixed leaf policies: CpuThreaded beside CpuPolyester" begin
+        # Mixed leaf policies: CpuThreaded beside CpuPolyester.
+        @testset "mixed policies: Threaded + Polyester" begin
             _check_mixed(CpuPolyester())
         end
     end
 
-    @testset "Test-side interpolation replays on one thread" begin
+    # Test-side interpolation replays on one thread.
+    @testset "test-side interpolation: one thread" begin
         Ω = domain(interval(0.0, 1.0))
         Random.seed!(263)
         Wu = gridspace(mesh(Ω, 9, true))
@@ -223,7 +227,7 @@ const _SIZES = (41, 13, 7)
 
     # Threaded tasks allocate per call, so a warmed refill is not 0 B; what it must not do
     # is grow with the grid (the plan's O13).
-    @testset "$(D)D: warmed refill allocation is independent of ndofs" for D in 1:3
+    @testset "$(D)D: refill allocs flat in ndofs" for D in 1:3
         sizes = D == 1 ? (200, 800) : D == 2 ? (24, 64) : (10, 20)
         bytes_par = map(sizes) do n
             Ω = _mesh(D, n, Parallel())

@@ -43,31 +43,25 @@ const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full"
 # platforms daily. TestUtils holds the definition, and the list, with measured costs.
 const __bramble_with_slow_tests = TestUtils.WITH_SLOW_TESTS
 
-# The differentiation backend survey is split by what it costs, measured per backend:
-#
-#   ForwardDiff 0.3 s   ReverseDiff 0.5 s   PolyesterForwardDiff 0.6 s
-#   Mooncake   25.1 s   Enzyme     33.2 s
-#
-# So the three cheap ones run with the unit tests (3.3 s between them, load included)
-# and the two that spend almost a minute compiling on first call live behind this group.
-# What they establish changes when a *backend* changes rather than when Bramble does, so
-# paying that per push would be paying it for nothing almost every time. The weekly
-# workflow runs `full`, which is this plus everything else.
-#
-# Either file skips a backend absent from the environment, so running a group without one
-# installed reports a skip rather than an error.
+# AD and GPU tests are off in every group until v4.3.0 and v4.4.0; TestUtils holds the
+# switches and says how to turn them back on.
+const __bramble_with_ad_tests = TestUtils.WITH_AD_TESTS
+const __bramble_with_gpu_tests = TestUtils.WITH_GPU_TESTS
+
+# The expensive differentiation backends (Enzyme, Mooncake, and the policy crossings), when
+# AD tests are switched on. Their packages are not in test/Project.toml; each file skips a
+# backend absent from the environment, so the group reports a skip rather than an error.
 #
 # `backends` is `ad` plus `ext` with no unit suite: Weekly.yml runs it as one half of the
 # full suite and `slow` as the other, since the Julia 1.12 legs outgrew one 90-minute job.
-const __bramble_with_ad_backends = __bramble_test_group in ("ad", "full", "backends")
+const __bramble_with_ad_backends = __bramble_with_ad_tests &&
+                                   __bramble_test_group in ("ad", "full", "backends")
 
-# The Makie/Meshes/RecipesBase/Metal weak deps: `test/Project.toml` lists them (so
-# `Pkg.instantiate()` always resolves and can precompile them, the same tradeoff already
-# made for the AD backends above), but they are only ever `using`-d, and so only ever pay
-# their compile cost, behind this group -- every push otherwise gets none of that weight.
-# Metal within this group further gates on `Metal.functional()`, since installing and
-# precompiling it succeeds on any platform (it degrades gracefully, the same convention
-# CUDA.jl uses) while only a real Apple Silicon device can actually run anything on it.
+# The Makie/Meshes/RecipesBase weak deps: `test/Project.toml` lists them (so
+# `Pkg.instantiate()` always resolves and can precompile them), but they are only ever
+# `using`-d, and so only ever pay their compile cost, behind this group -- every push
+# otherwise gets none of that weight. The Metal files here run only with GPU tests switched
+# on, and the AD extension files only with AD tests switched on.
 const __bramble_with_ext_backends = __bramble_test_group in ("ext", "full", "backends")
 
 # `manual/test_snippets.jl` checks that the code in the 12-chapter PDF manual still
@@ -124,6 +118,7 @@ if __bramble_with_unit_tests
             include("space/discrete_calculus_identities.jl")
             include("space/commutation.jl")
             include("space/jump.jl")
+            include("space/shift.jl")
             include("space/average.jl")
             include("space/centered_average.jl")
             include("space/dimensional_dispatch.jl")
@@ -142,8 +137,10 @@ if __bramble_with_unit_tests
             include("space/inference_allocation.jl")
             include("convergence/runtests.jl")
             include("space/element_type.jl")
-            include("space/autodiff.jl")
-            include("space/autodiff_backends.jl")
+            if __bramble_with_ad_tests
+                include("space/autodiff.jl")
+                include("space/autodiff_backends.jl")
+            end
         end
 
         include("form/runtests.jl")
@@ -185,6 +182,7 @@ if __bramble_with_quality
         include("quality/public_docs.jl")
         include("quality/explicit_imports.jl")
         include("quality/source_imports.jl")
+        include("quality/testset_names.jl")
         include("quality/jet.jl")
         include("quality/invalidations.jl")
         # Decoupled from docs/make.jl (doctest = false there) so a doctest regression is
@@ -236,19 +234,24 @@ if __bramble_with_ext_backends
         include("ext/plots_ext.jl")
         include("ext/makie_ext.jl")
         include("ext/meshes_ext.jl")
-        include("ext/metal_ext.jl")
-        include("ext/metal_fullstack.jl")
-        include("ext/metal_assembly_replay.jl")
-        include("ext/metal_form_assembly.jl")
-        include("ext/sparse_ad_ext.jl")
-        include("ext/ad_backend_verification.jl")
+        if __bramble_with_gpu_tests
+            include("ext/metal_ext.jl")
+            include("ext/metal_fullstack.jl")
+            include("ext/metal_assembly_replay.jl")
+            include("ext/metal_form_assembly.jl")
+        end
+        if __bramble_with_ad_tests
+            include("ext/sparse_ad_ext.jl")
+            include("ext/ad_backend_verification.jl")
+        end
         include("ext/sciml_ext.jl")
-        include("ext/sciml_sensitivity_ext.jl")
-        # Runs the transient-inverse-problem page itself, whose #src assertions need
-        # `SciMLSensitivity` -- same reasoning as `inverse_diffusion.jl` needing `Enzyme`
-        # behind the "ad" group, one line up (here it is `sciml_sensitivity_ext.jl` above)
-        # rather than in the every-push "Worked examples" group.
-        include("examples/transient_inverse_problem.jl")
+        if __bramble_with_ad_tests
+            include("ext/sciml_sensitivity_ext.jl")
+            # Runs the transient-inverse-problem page itself, whose #src assertions need
+            # `SciMLSensitivity` -- same reasoning as `inverse_diffusion.jl` needing
+            # `Enzyme` behind the "ad" group, rather than in the "Worked examples" group.
+            include("examples/transient_inverse_problem.jl")
+        end
         include("ext/algebraicmultigrid_ext.jl")
         include("ext/iluzero_ext.jl")
         include("ext/suitesparse_ext.jl")
@@ -267,7 +270,7 @@ if __bramble_with_ext_backends
         # differences and by hand -- needs only ChainRulesCore, not Enzyme/Mooncake, so it
         # belongs here rather than behind the "ad" group. Enzyme/Mooncake composition is
         # chainrules_enzyme_ext.jl instead, alongside autodiff_heavy.jl below.
-        include("ext/chainrules_ext.jl")
+        __bramble_with_ad_tests && include("ext/chainrules_ext.jl")
         # The four worked-example pages that belong to this group rather than the
         # every-push one, for what they load rather than what they assert: a stiff solver
         # for the differential-algebraic step, `NonlinearSolve` for the two pages with a

@@ -1,5 +1,5 @@
 # precompile/operator_sessions.jl: difference, jump and average operators, and the inner
-# products and norms (src/space/operators/).
+# products and norms (src/operators/).
 #
 # This is the part of the space interface where precompilation pays in full.
 # Rₕ and avgₕ specialize on the caller's function type, so most of what a

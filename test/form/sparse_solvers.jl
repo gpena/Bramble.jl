@@ -6,7 +6,8 @@ using LinearAlgebra
 using SparseArrays
 using Bramble: refactor!, sparse_factorize, sparse_refactor!
 
-@testset "Sparse solver interface (core fallback & validation)" begin
+# Core fallback and validation.
+@testset "Sparse solver interface" begin
     I1 = interval(0.0, 1.0)
     Ω1 = mesh(domain(I1, :boundary => boundary_symbols(I1)), 10, true)
     W1 = gridspace(Ω1)

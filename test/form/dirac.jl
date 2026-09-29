@@ -5,6 +5,7 @@ using LinearAlgebra
 using Random
 using ForwardDiff
 using Bramble
+using ..TestUtils: WITH_AD_TESTS
 using Bramble:
                DiracSource,
                form,
@@ -31,7 +32,7 @@ using Bramble:
                backend
 
 @testset "Dirac Point Sources (#226)" begin
-    @testset "1D Single Point Source (Uniform and Non-Uniform)" begin
+    @testset "1D point source (uniform, non-uniform)" begin
         # 1. On-grid point source (uniform grid)
         Ω_unif = mesh(domain(interval(0.0, 1.0)), 21, true)
         W_unif = gridspace(Ω_unif)
@@ -102,7 +103,8 @@ using Bramble:
         @test allocs == 0
     end
 
-    @testset "2D Single & Multiple Point Sources (Non-Uniform)" begin
+    # On a non-uniform mesh.
+    @testset "2D single and multiple sources" begin
         Random.seed!(20260914)
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (21, 21), (false, false))
         Wₕ = gridspace(Ωₕ)
@@ -156,7 +158,8 @@ using Bramble:
         @test l_3d(phi_h) ≈ S * phi(p0)
     end
 
-    @testset "Poisson Problem with Dirac Delta Source (1D Green Function)" begin
+    # Poisson problem with a Dirac delta source.
+    @testset "Poisson: 1D Green function" begin
         # -u''(x) = S * δ(x - x0), u(0) = u(1) = 0
         # Exact solution is Green's function:
         # G(x, x0) = S * (1 - x0) * x  for x <= x0
@@ -181,7 +184,8 @@ using Bramble:
         @test u_num ≈ u_exact atol = 1e-12
     end
 
-    @testset "2D Poisson Problem with Dirac Delta Source (Green Function)" begin
+    # Poisson problem with a Dirac delta source.
+    @testset "Poisson: 2D Green function" begin
         # -Δu = S δ(x - x0, y - y0) on (0,1)², u = 0 on ∂Ω. Separation of variables gives a
         # sine series in x with a closed-form (sinh) Green's function in y for each mode --
         # exponentially convergent in the number of terms, unlike a raw double sine series:
@@ -230,7 +234,7 @@ using Bramble:
         end
     end
 
-    @testset "Time-Dependent Strength via semidiscretize" begin
+    @testset "Time-dependent strength, semidiscretize" begin
         # A pulsed/moving source: strength read from a live `Ref`, refilled from `t` by
         # `update_coefficients!` before each assembly -- the same discipline
         # test/form/semidiscrete.jl exercises for a scalar coefficient, applied here to a
@@ -278,7 +282,8 @@ using Bramble:
         @test all(iszero, b2)
     end
 
-    @testset "Inner+ and Directional Inner Products with Dirac (Non-Uniform)" begin
+    # On a non-uniform mesh.
+    @testset "inner₊ and directional inner with Dirac" begin
         Random.seed!(20260914)
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, false)
         Wₕ = gridspace(Ωₕ)
@@ -308,7 +313,7 @@ using Bramble:
     # space with a Float32 strength gave a Float64 vector: a behaviour change. A Float64
     # strength (the default `1.0`) on a Float32 space still promotes, as `innerₕ(1.0, v)`
     # does; an integer strength takes the space's type. The location keeps Float64 precision.
-    @testset "Weight element type follows the space (gpena/Bramble.jl#361)" begin
+    @testset "Weight eltype follows the space (#361)" begin
         Random.seed!(20260927)
         for D in (1, 2)
             Ω = domain(D == 1 ? interval(0.0f0, 1.0f0) : interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0))
@@ -342,16 +347,20 @@ using Bramble:
         b64 = @inferred assemble(form(W64, v -> innerₕ(dirac(0.37), v)))
         @test eltype(b64) === Float64
         @test eltype(assemble(form(W64, v -> innerₕ(dirac(0.37, 2.0f0), v)))) === Float64
-        for src in (s -> dirac(0.37, s), s -> dirac([(0.2,), (0.55,)], [s, 2s]))
-            g = ForwardDiff.derivative(s -> assemble(form(W64, v -> innerₕ(src(s), v))), 2.0)
-            @test g ≈ assemble(form(W64, v -> innerₕ(src(1.0), v))) rtol = 1e-12
+        if WITH_AD_TESTS
+            for src in (s -> dirac(0.37, s), s -> dirac([(0.2,), (0.55,)], [s, 2s]))
+                g = ForwardDiff.derivative(s -> assemble(form(W64, v -> innerₕ(src(s), v))), 2.0)
+                @test g ≈ assemble(form(W64, v -> innerₕ(src(1.0), v))) rtol = 1e-12
+            end
         end
         # A strengths vector with an abstract eltype: each product keeps its own strength's
         # type, so a later `Dual` or a wider float is not narrowed to the first one's.
         pts2 = [(0.2,), (0.45,)]
-        for strengths in (s -> [() -> 1.0, () -> s], s -> Any[1.0, s])
-            g = ForwardDiff.derivative(s -> assemble(form(W64, v -> innerₕ(dirac(pts2, strengths(s)), v))), 2.0)
-            @test g ≈ assemble(form(W64, v -> innerₕ(dirac(pts2[2:2], 1.0), v))) rtol = 1e-12
+        if WITH_AD_TESTS
+            for strengths in (s -> [() -> 1.0, () -> s], s -> Any[1.0, s])
+                g = ForwardDiff.derivative(s -> assemble(form(W64, v -> innerₕ(dirac(pts2, strengths(s)), v))), 2.0)
+                @test g ≈ assemble(form(W64, v -> innerₕ(dirac(pts2[2:2], 1.0), v))) rtol = 1e-12
+            end
         end
         # On a Float32 space, a Float64 strength after a Float32 one keeps Float64 precision.
         # The two points sit far apart, so the second's entries are its alone.
@@ -363,6 +372,34 @@ using Bramble:
             mixed = assemble(form(W32, v -> innerₕ(dirac(pts3, strengths), v)))
             @test eltype(mixed) === Float64
             @test mixed[nz] == alone[nz]
+        end
+    end
+
+    # The vector's type is folded from every strength, not read off one node's stencil
+    # (gpena/Bramble.jl#370). A plain term first: the flattened sum's stencil once decided the
+    # type by its first entry alone, so the Dirac's `Dual`, or its Float64 strength on a
+    # Float32 space, went unseen. The points sit away from the grid's middle node.
+    @testset "dirac: mixed strengths off-probe" begin
+        for D in (1, 2)
+            Ω = domain(D == 1 ? interval(0.0, 1.0) : interval(0.0, 1.0) × interval(0.0, 1.0))
+            n, unif = D == 1 ? (11, false) : ((7, 9), (false, true))
+            Wₕ = gridspace(mesh(Ω, n, unif))
+            pts = D == 1 ? [(0.07,), (0.93,)] : [(0.07, 0.11), (0.93, 0.88)]
+            src = s -> dirac(pts, [() -> 1.0, () -> s])
+            l = s -> assemble(form(Wₕ, v -> innerₕ(1.0, v) + innerₕ(src(s), v)))
+            alone = assemble(form(Wₕ, v -> innerₕ(dirac(pts[2:2], 1.0), v)))
+            if WITH_AD_TESTS
+                @test ForwardDiff.derivative(l, 2.0) ≈ alone rtol = 1e-12
+                @test sum(ForwardDiff.derivative(l, 2.0)) ≈ 1.0 rtol = 1e-12
+            end
+
+            Ω32 = domain(D == 1 ? interval(0.0f0, 1.0f0) : interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0))
+            W32 = gridspace(mesh(Ω32, n, unif; backend = backend(Float32)))
+            for strengths in ([() -> 1.0f0, () -> 0.1], Real[1.0f0, 0.1], [Ref(1.0f0), Ref(0.1)])
+                b = assemble(form(W32, v -> innerₕ(1.0f0, v) + innerₕ(dirac(pts, strengths), v)))
+                @test eltype(b) === Float64
+                @test sum(b) ≈ sum(assemble(form(W32, v -> innerₕ(1.0f0, v)))) + 1.1 rtol = 1e-6
+            end
         end
     end
 end

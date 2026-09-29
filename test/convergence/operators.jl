@@ -161,8 +161,8 @@ end
 # self-consistent whatever weight it carries -- and invisible to a pure Dirichlet problem,
 # which never uses it. What exposes it is the order of the solution: a weight off by a factor
 # of two, or missing its corner share, drops a second-order scheme to first order.
-@testset "Natural boundary conditions converge at order two" begin
-    @testset "2D, mixed Dirichlet-Neumann-Robin, graded mesh" begin
+@testset "Natural BCs: second-order convergence" begin
+    @testset "2D Dirichlet/Neumann/Robin, graded mesh" begin
         u_ex(x) = cos(2.2 * x[1]) * exp(0.7 * x[2])
         ux(x) = -2.2 * sin(2.2 * x[1]) * exp(0.7 * x[2])
         uy(x) = 0.7 * cos(2.2 * x[1]) * exp(0.7 * x[2])
@@ -197,7 +197,7 @@ end
         @test _lsq_order(errs) > 1.95
     end
 
-    @testset "1D Neumann, where the weight is 1 and not half a cell" begin
+    @testset "1D Neumann: point face has weight 1" begin
         # The case a 2D intuition gets wrong: a `(D-1)`-face is a point, of measure 1, so any
         # `h/2` at the endpoint would break exactly this order.
         u_ex(x) = sin(1.3 * x[1]) + 0.4 * x[1]^2

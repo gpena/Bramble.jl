@@ -528,7 +528,7 @@ end
 # Invariants tested:
 # 1. AbstractVector point containment unrolls over Val(D) with zero heap allocations.
 # 2. Closed boundary corners and points on edges evaluate to true.
-@testset "Containment query zero-allocation guarantees" begin
+@testset "Containment queries: zero allocations" begin
     X1 = interval(0.0, 1.0)
     X2 = interval(0.0, 1.0) × interval(0.0, 2.0)
     X3 = box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))

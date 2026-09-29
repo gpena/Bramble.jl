@@ -36,7 +36,7 @@ using ExplicitImports
     # reach it (the same "reached through a re-export" shape as `MPI`/`Init`/`Initialized`
     # below, from MUMPS's own re-export of its MPI submodule); depending on either deeper
     # package directly, just to import one name past what actually uses it, would be worse.
-    @testset "Imports come from the module that owns them" begin
+    @testset "Imports come from the owning module" begin
         @test check_all_explicit_imports_via_owners(
             Bramble; ignore = (:BrownFullBasicInit,)
         ) === nothing
@@ -90,6 +90,10 @@ using ExplicitImports
                 # `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` above the
                 # same way the searching sweep calls `_scatter_point!`. Neither is public.
                 :_ReplayTarget,
+                # `_ActionTarget` (gpena/Bramble.jl#326): the matrix-free product's sink union,
+                # passed through the same two Polyester replay hooks as `_ReplayTarget`. Not
+                # public.
+                :_ActionTarget,
                 :_replay_point!,
                 :_scatter_linear_point!,
                 :_scatter_point!,
@@ -263,7 +267,7 @@ using ExplicitImports
     # - `_suitesparse_factorize`, `_suitesparse_refactor!`, `_suitesparse_solve`
     #   (BrambleSuiteSparseExt): the same underscored-fallback idiom again, one entry point
     #   per SuiteSparse-backed `factorize`/`refactor!`/`\` method.
-    @testset "Non-public qualified accesses are the declared ones" begin
+    @testset "Non-public qualified accesses declared" begin
         @test check_all_qualified_accesses_are_public(
             Bramble;
             ignore = (
@@ -330,14 +334,14 @@ using ExplicitImports
                 # `_batch_difference_engine!`, `_batch_average_engine!`,
                 # `_batch_centered_average_engine!` (BramblePolyesterExt, gpena/Bramble.jl#356,
                 # S7.2): the `Polyester.@batch` counterparts of the `CpuThreaded` stencil
-                # engines in `src/space/operators/difference.jl` and
-                # `src/space/operators/average.jl`, extended here rather than called.
+                # engines in `src/operators/difference.jl` and
+                # `src/operators/average.jl`, extended here rather than called.
                 :_batch_difference_engine!,
                 :_batch_average_engine!,
                 :_batch_centered_average_engine!,
                 # `_batch_run_bands!` (BramblePolyesterExt, gpena/Bramble.jl#356, S7.5): the
                 # `Polyester.@batch` counterpart of `_run_bands!`'s `CpuThreaded` arm in
-                # `src/space/operators/vector_calculus.jl`, reached by the divergence, curl
+                # `src/operators/vector_calculus.jl`, reached by the divergence, curl
                 # and strain-average engines. Unlike the three S7.2 hooks above it stays
                 # generic over the band function `f` instead of naming one, extended here
                 # rather than called.
@@ -361,8 +365,8 @@ using ExplicitImports
                 :_stencil_boundary_dim,
                 :_write_components!,
                 # The direction/stencil-kind dispatch types the fused vector-calculus and
-                # difference kernels are parametrised over (src/space/operators/stencil.jl,
-                # src/space/operators/difference.jl) -- named in the `@kernel`s' own method
+                # difference kernels are parametrised over (src/operators/stencil.jl,
+                # src/operators/difference.jl) -- named in the `@kernel`s' own method
                 # signatures, the same way `CartesianProduct` below is, and none exported.
                 :GridDirection,
                 :Forward,
@@ -492,7 +496,7 @@ using ExplicitImports
     # `@forward VectorElement.data (Base.size, Bramble.show)` and
     # `@forward VectorElement.space (Bramble.mesh,)` name the function they extend in full,
     # which is what the macro takes; unqualified would be a different binding.
-    @testset "Self-qualified accesses are the declared ones" begin
+    @testset "Self-qualified accesses declared" begin
         @test check_no_self_qualified_accesses(Bramble; ignore = (:mesh, :show)) === nothing
     end
 end

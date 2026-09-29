@@ -92,7 +92,7 @@ const UnaryWrapper{D} = Union{
 # types by hand (gpena/Bramble.jl#52).
 #
 # They live here rather than beside their own ladders because `UnaryWrapper` names
-# `InterpolationNode`, which `ast/operators/interpolation.jl` defines -- so the union, and
+# `InterpolationNode`, which `operators/interpolation.jl` defines -- so the union, and
 # anything dispatching on it, has to come after every operator file. The node-specific
 # overrides stay in their own files; `InterpolationNode` deviates from three of these and
 # says so there.
@@ -233,9 +233,10 @@ end
     # Each product takes its own strength's type, never the first one's: a strengths vector
     # with an abstract eltype (thunks, mixed `Ref`s, `Real[...]`) may hold a `Dual` or a
     # wider float further along, and `acc` must widen to it rather than truncate it. It
-    # widens at every node, not only near that point, because the assembled vector's type
-    # is probed at one interior node (`_probed_eltype`); the widening is a conversion, not
-    # an addition, so a concrete strengths eltype sees the identity and HEAD's exact values.
+    # widens at every node, not only near that point, so every node answers with the one
+    # type the assembled vector is given from every strength (`_folded_eltype`,
+    # gpena/Bramble.jl#370); the widening is a conversion, not an addition, so a concrete
+    # strengths eltype sees the identity and HEAD's exact values.
     acc = zero(_dirac_weight_type(Ωₕ, _point_strength_val(first(op.strengths))))
     for k in eachindex(op.points)
         pt = op.points[k]
@@ -341,7 +342,7 @@ end
 
 resolve_ast(ops::NTuple{N, Any}) where {N} = map(resolve_ast, ops)
 
-# The two scaling wrappers' half of `_bind_interp_spaces` (ast/operators/interpolation.jl),
+# The two scaling wrappers' half of `_bind_interp_spaces` (operators/interpolation.jl),
 # beside their `resolve_ast` because they are the same walk. `GridFunctionScale`'s thunk
 # form has already been evaluated by `resolve_ast` when binding runs, so one method covers
 # both. An `OperatorScale`'s scalar is carried across untouched.
@@ -434,9 +435,9 @@ _is_source_only(::LinearProduct) = false
 _is_source_only(::LazyOp) = false
 
 # The value of a source-only subtree at a grid point: `_contracted_left_stencil`
-# (ast/operators/inner.jl) reads it from the subtree's own `local_stencil`, correctly
+# (operators/inner.jl) reads it from the subtree's own `local_stencil`, correctly
 # re-evaluated at every neighbour because a source is `PointDependentStencil`
-# (ast/operators/interpolation.jl).
+# (operators/interpolation.jl).
 
 # ==============================================================================
 # 4. Walking an OperatorAdd tree: shared by every router in linear.jl/bilinear.jl

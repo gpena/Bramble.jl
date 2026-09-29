@@ -69,7 +69,7 @@ jobs:
     # lives on a cadence rather than on the gate: a Linux-only allocation flake in `avgₕ!`
     # (test/space/vector_elements.jl's "allocations do not grow with the grid") that used to
     # redden this gate on unrelated pushes. `_gauss_rule`
-    # (src/space/operators/cell_average.jl) is still `@generated` and is the fold that was
+    # (src/operators/cell_average.jl) is still `@generated` and is the fold that was
     # implicated. gpena/Bramble.jl#69 and #51 rewrote everything around it — the
     # `Val{1}`/`Val{D}` split is gone and `avgₕ!` now runs through `project!` — so the shape
     # that flaked is not the shape running today, but that is a reason to expect less of it,

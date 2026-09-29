@@ -280,7 +280,7 @@ using ..TestUtils: alloc_test, @test_allocs
 
     # Invariant: Querying geometric traits, projections, and boundary symbols
     # on stack-allocated domains infers cleanly and allocates zero heap memory.
-    @testset "Domain type stability and zero allocations" begin
+    @testset "Domain: type stability, zero allocs" begin
         Ω = domain(I2D, :left => :left, :right => :right)
         @inferred set(Ω)
         @inferred dim(Ω)
@@ -489,7 +489,7 @@ using ..TestUtils: alloc_test, @test_allocs
 
     # Invariant: `EvaluatedDomainMarkers` handles static condition fallbacks
     # when evaluating time-dependent marker collections and supports standard iteration.
-    @testset "Evaluated domain marker iteration and traits" begin
+    @testset "Evaluated domain: markers and traits" begin
         using Bramble:
                        EvaluatedDomainMarkers,
                        label_identifiers,
@@ -535,7 +535,7 @@ using ..TestUtils: alloc_test, @test_allocs
     end
 end
 
-@testset "Higher-dimensional domains and collapsed sets" begin
+@testset "Higher-D domains and collapsed sets" begin
     # Invariant: Boundary symbols are defined up to 3D; higher dimensions throw errors.
     @testset "Higher-dimensional domains" begin
         # 4D boxes have no canonical boundary face names; queries throw an ErrorException.

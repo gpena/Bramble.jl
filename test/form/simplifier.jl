@@ -31,7 +31,11 @@ using Bramble:
                D₋ₓ,
                inner₊ᵧ,
                inner₊ₓ,
-               weights
+               weights,
+               S₊ₓ,
+               S₋ₓ,
+               forward_shift,
+               backward_shift
 
 # `simplify_ast` rewrites only the algebraic layer (`OperatorAdd`, `OperatorScale`,
 # `GridFunctionScale`) that `ast.jl`'s `+`/`*`/`/` overloads build, into a tree that routes
@@ -200,7 +204,7 @@ end
 
     H = Matrix(Diagonal(collect(weights(Wₕ, Innerh()))))
 
-    @testset "Zero-scaled term elides from the sparsity pattern" begin
+    @testset "zero-scaled term: pattern elided" begin
         a_ref = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
         a_zero = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
 
@@ -221,14 +225,15 @@ end
         @test nnz(A_zero_float) > nnz(A_ref)
     end
 
-    @testset "Combining like terms merges two sweeps into one" begin
+    @testset "like terms: two sweeps merge into one" begin
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + innerₕ(u, v))
         @test resolve_form_ast(a) isa OperatorScale
         @test resolve_form_ast(a).scalar == 2
         @test Matrix(assemble(a)) ≈ 2 .* H
     end
 
-    @testset "Distributive factoring, checked against two independent single-term forms" begin
+    # Checked against two independent single-term forms.
+    @testset "distributive factoring" begin
         Ax = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))))
         Ay = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)))))
 
@@ -242,7 +247,8 @@ end
         @test Matrix(assemble(a)) ≈ 2 .* (Ax + Ay)
     end
 
-    @testset "A RefValue coefficient combined at construction still tracks its updates" begin
+    # The coefficient is combined at construction and must still track its updates.
+    @testset "RefValue coefficient tracks updates" begin
         β = Ref(1.0)
         a = form(Wₕ, Wₕ, (u, v) -> β * innerₕ(u, v) + β * innerₕ(u, v))
         @test resolve_form_ast(a) isa OperatorScale
@@ -254,7 +260,7 @@ end
 end
 
 # Rules 4-7: scalar lifting out of an inner product, component distribution on a
-# component-mixing sum inside one, grid-function fusion, and shift idempotence. Each reaches
+# component-mixing sum inside one, nested grid-function scales, and shift idempotence. Each reaches
 # one layer deeper than rules 1-3 (into `BilinearProduct`/`LinearProduct`/`ShiftNode`), so
 # every one gets its own structural check plus a numeric check against an independent
 # reference, exactly as rules 1-3 did above.
@@ -280,7 +286,7 @@ end
         @test simplify_ast(innerₕ(A, 0 * B)) isa ZeroOperator
     end
 
-    @testset "Restores structural symmetry/SPD detection" begin
+    @testset "restores symmetry/SPD detection" begin
         # Before this rule, `innerₕ(2 * D₋ₓ(u), D₋ₓ(v))`'s trial side is an `OperatorScale`
         # and its test side a bare `BackwardDifference` -- different top-level types, so
         # `_same_operator_shape` (symmetry.jl) answered `false` even though `2 * ⟨Lu, Lv⟩`
@@ -296,7 +302,8 @@ end
         @test !isposdef(a_neg)
     end
 
-    @testset "A lifted scalar feeds the combine rule (bilinear)" begin
+    # A lifted scalar feeds the combine rule.
+    @testset "lifted scalar: bilinear combine" begin
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(2 * D₋ₓ(u), v) + innerₕ(3 * D₋ₓ(u), v))
         ast = resolve_form_ast(a)
         @test ast isa OperatorScale
@@ -306,7 +313,7 @@ end
               5 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v))))
     end
 
-    @testset "Lifting from a symbolic source (linear form)" begin
+    @testset "lifting: symbolic source, linear" begin
         # `2 * fₕ` for a plain `VectorElement` `fₕ` is an *eager* numeric scaling (the
         # source side is eager, per the forms tutorial) and never builds an `OperatorScale`
         # at all -- there is nothing for this rule to lift there. A `SourceFunction` (as
@@ -320,7 +327,8 @@ end
         @test assemble(l) ≈ 5 .* assemble(form(Wₕ, v -> innerₕ(sf, v)))
     end
 
-    @testset "Lifting and combining a DiracSource (linear form)" begin
+    # Lifting and combining a DiracSource.
+    @testset "lifting: DiracSource, linear" begin
         # `dirac(...)` (a `DiracSource`) is a genuine `LazyOp` source exactly like
         # `source_function` above, so it lifts and combines the same way (#226).
         d = dirac((0.3, 0.4), 1.0)
@@ -345,20 +353,40 @@ end
     end
 end
 
-@testset "Grid function fusion" begin
-    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, true))
-    Wₕ = gridspace(Ωₕ)
-    vₕ = Rₕ(Wₕ, x -> x[1] + 1.0)
-    wₕ = Rₕ(Wₕ, x -> x[2] + 2.0)
+# Nested grid-function scales are not fused into one precomputed array: each keeps reading
+# its own coefficient at evaluation time, so an in-place change to either one reaches the next
+# `assemble!` (gpena/Bramble.jl#365). The reference is a freshly built form, and the diagonal
+# of the bilinear case is checked against the hand-built product.
+@testset "simplifier: nested scales stay live" begin
+    for Ωₕ in (mesh(domain(interval(0.0, 1.0)), 9, true),
+        mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (false, true)))
+        Wₕ = gridspace(Ωₕ)
+        uₕ = Rₕ(Wₕ, x -> x[1] + 1.0)
+        wₕ = Rₕ(Wₕ, x -> x[end] + 2.0)
+        H = Matrix(Diagonal(collect(weights(Wₕ, Innerh()))))
 
-    a = form(Wₕ, Wₕ, (u, v) -> vₕ * (wₕ * innerₕ(u, v)))
-    ast = resolve_form_ast(a)
-    @test ast isa GridFunctionScale
-    @test ast.grid_function ≈ parent(vₕ) .* parent(wₕ)
-    @test ast.inner_op isa BilinearProduct
+        a = form(Wₕ, Wₕ, (U, V) -> innerₕ(uₕ * (wₕ * U), V))
+        ast = resolve_form_ast(a)
+        @test ast isa BilinearProduct
+        @test ast.left_op isa GridFunctionScale
+        @test ast.left_op.inner_op isa GridFunctionScale
 
-    H = Matrix(Diagonal(collect(weights(Wₕ, Innerh()))))
-    @test Matrix(assemble(a)) ≈ Diagonal(parent(vₕ) .* parent(wₕ)) * H
+        linear = (() -> form(Wₕ, v -> innerₕ(1.0, uₕ * (uₕ * v))),
+            () -> form(Wₕ, v -> innerₕ(1.0, uₕ * (wₕ * v))))
+        ls = map(mk -> mk(), linear)
+        bs = map(assemble, ls)
+        A = assemble(a)
+        @test Matrix(A) ≈ Diagonal(parent(uₕ) .* parent(wₕ)) * H
+
+        parent(uₕ) .*= 3
+        parent(wₕ) .+= 1
+        for k in eachindex(ls)
+            assemble!(bs[k], ls[k])
+            @test bs[k] ≈ assemble(linear[k]())
+        end
+        assemble!(A, a)
+        @test Matrix(A) ≈ Diagonal(parent(uₕ) .* parent(wₕ)) * H
+    end
 end
 
 @testset "Shift idempotence" begin
@@ -373,15 +401,21 @@ end
     @test s.shift_amount == 5
     @test s.inner_op === A
 
-    # a shift and its exact inverse collapse straight to the unshifted operator
-    @test simplify_ast(shift_op(shift_op(A, 1, 2), 1, -2)) === A
+    # a shift and its inverse do not collapse: `S₊ₓ(S₋ₓ(u))` is `u` in the interior but 0 at
+    # the last point, where the inner shift's read has left the grid (gpena/Bramble.jl#352)
+    s0 = simplify_ast(shift_op(shift_op(A, 1, 2), 1, -2))
+    @test s0 isa ShiftNode
+    @test s0.shift_amount == -2
+    @test s0.inner_op isa ShiftNode
+    @test s0.inner_op.shift_amount == 2
+    @test simplify_ast(shift_op(shift_op(A, 1, 3), 1, -1)).inner_op isa ShiftNode
 
     # shifts along different dimensions never combine into one node
     s2 = simplify_ast(shift_op(shift_op(A, 1, 2), 2, 3))
     @test s2 isa ShiftNode
     @test s2.inner_op isa ShiftNode
 
-    @testset "Numeric agreement with the combined shift" begin
+    @testset "combined shift: numeric agreement" begin
         Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 8, true)
         Wₕ1 = gridspace(Ωₕ1)
         sf = source_function(x -> x^2 + 1, Val(1))
@@ -390,15 +424,38 @@ end
         b_combined = assemble(form(Wₕ1, v -> innerₕ(shift_op(sf, 1, 3), v)))
         @test b_nested ≈ b_combined
     end
+
+    # the bilinear form of a composed shift against the grid-function computation, on a
+    # non-uniform mesh: same-sign shifts merge exactly, opposite-sign ones keep the
+    # boundary zero of the inner read
+    @testset "composed shifts: grid function" begin
+        W = gridspace(mesh(domain(interval(0.0, 1.0)), 7, false))
+        H = Diagonal(collect(weights(W, Innerh())))
+        uh = Rₕ(W, x -> 1 + x^2)
+        Sp = Matrix(forward_shift(W, Val(1)))
+        Sm = Matrix(backward_shift(W, Val(1)))
+        for f in (S₊ₓ ∘ S₋ₓ, S₋ₓ ∘ S₊ₓ, S₊ₓ ∘ S₊ₓ, S₋ₓ ∘ S₋ₓ)
+            A = assemble(form(W, W, (u, v) -> innerₕ(f(u), v)))
+            @test A * parent(uh) ≈ H * parent(f(uh))
+        end
+        # `shift_op`'s amounts beyond one, against the matrix powers
+        for (f, M) in (
+            (u -> shift_op(shift_op(u, 1, 2), 1, -2), Sm^2 * Sp^2),
+            (u -> shift_op(shift_op(u, 1, 1), 1, 2), Sp^3)
+        )
+            @test Matrix(assemble(form(W, W, (u, v) -> innerₕ(f(u), v)))) ≈ H * M
+        end
+    end
 end
 
-@testset "Component distribution on a mixed sum inside one inner product" begin
+# Component distribution on a mixed sum inside one inner product.
+@testset "mixed sum: component distribution" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
     Wₕ = gridspace(Ωₕ)
     Vₕ = Wₕ^Val(2)
     fₕ = Rₕ(Wₕ, x -> sin(π * x[1]))
 
-    @testset "Linear form: a source coupling to two test equations" begin
+    @testset "linear: source to two test equations" begin
         # `innerₕ(fₕ, v(1) + v(2))` names test components 1 and 2 inside one product --
         # unroutable as a single term (`test_component_or_nothing` throws on it,
         # block_extract.jl) before this rule.
@@ -409,7 +466,8 @@ end
         @test assemble(l) ≈ assemble(l_ref)
     end
 
-    @testset "Bilinear form: one trial component coupling to two test equations" begin
+    # One trial component coupling to two test equations.
+    @testset "bilinear: one trial to two tests" begin
         a = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1) + v(2)))
         @test resolve_form_ast(a) isa OperatorAdd
 
@@ -417,7 +475,7 @@ end
         @test Matrix(assemble(a)) ≈ Matrix(assemble(a_ref))
     end
 
-    @testset "A scaled mixed sum distributes the scale along with it" begin
+    @testset "scaled mixed sum: scale distributes" begin
         # `2 * innerₕ(fₕ, v(1) + v(2))` must not simplify to an `OperatorScale` hiding the
         # distributed `OperatorAdd` from the router -- that would be exactly the
         # unroutable shape this rule exists to avoid, reached through a new path.
@@ -431,7 +489,8 @@ end
         @test assemble(l) ≈ assemble(l_ref)
     end
 
-    @testset "A same-component sum is not distributed (no sweep-count regression)" begin
+    # Distributing it would be a sweep-count regression.
+    @testset "same-component sum: not distributed" begin
         # `v(1) + D₋ₓ(v(1))` names the same component on both sides, so it already routes
         # as one term; distributing it anyway would trade that single sweep for two.
         l = form(Vₕ, v -> innerₕ(fₕ, v(1) + D₋ₓ(v(1))))
@@ -439,7 +498,7 @@ end
     end
 end
 
-@testset "Sums of three or more mixing components do not throw (#235)" begin
+@testset "3+ mixing components: no throw (#235)" begin
     # `_mixes_components` used to reuse `trial_component_or_nothing`/
     # `test_component_or_nothing` (block_extract.jl) directly, which *throw* the moment
     # either side already mixes components -- true of the inner `(A + B)` node on every
@@ -453,7 +512,8 @@ end
     fₕ = Rₕ(Wₕ, x -> sin(π * x[1]))
     cₕ = Rₕ(Wₕ, x -> 1.0 + x[1])
 
-    @testset "Linear form: scalar × sum of 3 and 4 mixing test components" begin
+    # Scalar times a sum of 3 and 4 mixing test components.
+    @testset "linear: scalar × 3- and 4-term sums" begin
         for (V, n) in ((V3, 3), (V4, 4))
             l = form(V, v -> 2.0 * sum(innerₕ(fₕ, v(i)) for i in 1:n))
             @test resolve_form_ast(l) isa OperatorAdd
@@ -463,7 +523,8 @@ end
         end
     end
 
-    @testset "Linear form: a grid-function coefficient distributes the same way" begin
+    # A grid-function coefficient distributes the same way.
+    @testset "linear: grid-function coefficient" begin
         for (V, n) in ((V3, 3), (V4, 4))
             l = form(V, v -> cₕ * sum(innerₕ(fₕ, v(i)) for i in 1:n))
             @test resolve_form_ast(l) isa OperatorAdd
@@ -473,7 +534,8 @@ end
         end
     end
 
-    @testset "Bilinear form: one trial component against a sum of 3 and 4 test components" begin
+    # One trial component against a sum of 3 and 4 test components.
+    @testset "bilinear: one trial, 3- and 4-term sums" begin
         for (V, n) in ((V3, 3), (V4, 4))
             a = form(V, V, (u, v) -> innerₕ(u(1), sum(v(i) for i in 1:n)))
             @test resolve_form_ast(a) isa OperatorAdd
@@ -495,7 +557,8 @@ end
         @test assemble(l_left) ≈ assemble(l_right)
     end
 
-    @testset "innerₕ(divₕ(u), divₕ(v)) in 3D: a three-term mixing sum on both sides" begin
+    # innerₕ(divₕ(u), divₕ(v)): a three-term mixing sum on both sides.
+    @testset "3D innerₕ(divₕ, divₕ): 3-term sums" begin
         # The motivating case: the 3D discrete divergence inner product could not be
         # written at all before this fix (its 2D counterpart, a two-term sum, already
         # worked). Checked against the nine written-out (i, j) single-component products.
@@ -566,7 +629,7 @@ _rt_runtime_int(n::Int, W) = form(W, W, (u, v) -> n * innerₕ(u, v))
 
 _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
 
-@testset "A runtime coefficient leaves `form` type-stable" begin
+@testset "runtime coefficient: form type-stable" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, true))
     Wₕ = gridspace(Ωₕ)
     W = typeof(Wₕ)

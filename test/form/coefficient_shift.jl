@@ -75,7 +75,7 @@ using Bramble: Dcₓ, D₋ᵧ, D₋ₓ, Mᵧ, Mₓ, indices, jumpₓ
         @test !isapprox(base * (C + I), (C + I) * base; atol = 1e-12)
     end
 
-    @testset "2D: Dim is exercised in more than one direction" begin
+    @testset "2D: Dim in more than one direction" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
         Wₕ = gridspace(Ωₕ)
         cₕ = Rₕ(Wₕ, x -> 1 + x[1] + x[2])                  # varies in both directions

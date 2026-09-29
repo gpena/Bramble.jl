@@ -503,7 +503,7 @@ end
                 @test @views norm(u_reshaped[interior...] - w[interior...]) < 1e-4
             end
 
-            # Defer ∇ₕ tests until space/operators/difference.jl is enabled
+            # Defer ∇ₕ tests until operators/difference.jl is enabled
         end
     end
 
@@ -1271,7 +1271,7 @@ end
     @test parent(v_tuple) ≈ parent(avgₕ(Wₕ, sin; quad_points = 3))
 end
 
-@testset "_cell_average, generic-dimension dispatch" begin
+@testset "_cell_average, any-dimension dispatch" begin
     import Bramble: _cell_average, _gauss_rule
     nodes, wts = _gauss_rule(Val(3), Float64)
 

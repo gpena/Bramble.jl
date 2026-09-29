@@ -131,7 +131,7 @@ using Bramble:
         # explicitly (form/symmetry.jl) rather than folded into the same `where`-clause
         # trick used for BackwardDifference et al. Before that field comparison existed,
         # two DIFFERENT shifts read as the same operator, and local_stencil(::BilinearProduct)
-        # (ast/operators/inner.jl:521-532) takes that as license to evaluate one side only
+        # (operators/inner.jl:521-532) takes that as license to evaluate one side only
         # and mirror it — corrupting the assembled matrix itself, not just the `issymmetric`
         # trait.
         m = form(Wₕ, Wₕ, (u, v) -> innerₕ(shift_op(u, 1, 1), shift_op(v, 1, 1)))
@@ -242,7 +242,7 @@ using Bramble:
         @test issymmetric(Matrix(assemble(c)))
     end
 
-    @testset "Transposed pairs assemble as their two terms" begin
+    @testset "transposed pairs: assemble as two terms" begin
         Random.seed!(20260924)
         Ωr = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (false, false))
         Wr = gridspace(Ωr)
@@ -294,7 +294,7 @@ using Bramble:
         A = assemble(f)
         assemble!(A, f)
         @test (@allocated assemble!(A, f)) == 0
-        @testset "pair on distinct leaves allocates nothing" begin
+        @testset "distinct-leaf pair: zero allocations" begin
             S, gs = cases[4]
             f = form(S, S, (u, v) -> foldl(+, map(g -> g(u, v), gs)))
             A = assemble(f)

@@ -8,6 +8,7 @@ using SparseArrays: SparseMatrixCSC
 using Random
 using LinearSolve: LinearProblem, solve, KrylovJL_CG
 using ForwardDiff
+using ..TestUtils: WITH_AD_TESTS
 
 # `is_separable`/`kronecker_operator` (gpena/Bramble.jl#162): a bilinear form whose
 # resolved AST is a sum of `innerₕ(u, v)`/`inner₊(∇ₕ(u), ∇ₕ(v))`-shaped terms over a
@@ -65,7 +66,8 @@ _kron_alloc_no_scratch(y, K, x) = @allocated mul!(y, K, x)
         @test !is_separable(form(W1, W1, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))))
     end
 
-    @testset "mul! agrees with assemble, 2D (31x17) and 3D (9x8x7)" begin
+    # mul! agrees with assemble, 2D (31x17) and 3D (9x8x7).
+    @testset "mul!: matches assemble, 2D and 3D" begin
         Random.seed!(KRON_SEED)
         Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (31, 17), (false, false))
         W2 = gridspace(Ω2)
@@ -116,10 +118,12 @@ _kron_alloc_no_scratch(y, K, x) = @allocated mul!(y, K, x)
             end
             @test all(isapprox(ys[i], A * xs[i]; rtol = 1e-12, atol = 1e-12) for i in 1:32)
 
-            # ForwardDiff Duals flow through the promoted scratch.
-            x0, v = rand(n), rand(n)
-            dK = ForwardDiff.derivative(t -> K * (x0 .+ t .* v), 0.0)
-            @test isapprox(dK, A * v; rtol = 1e-12, atol = 1e-12)
+            if WITH_AD_TESTS
+                # ForwardDiff Duals flow through the promoted scratch.
+                x0, v = rand(n), rand(n)
+                dK = ForwardDiff.derivative(t -> K * (x0 .+ t .* v), 0.0)
+                @test isapprox(dK, A * v; rtol = 1e-12, atol = 1e-12)
+            end
 
             # Five-argument `mul!`: `y = α * K * x + β * y`, Int/Bool/Float α and β.
             M = Matrix(A)
@@ -164,7 +168,8 @@ _kron_alloc_no_scratch(y, K, x) = @allocated mul!(y, K, x)
         end
     end
 
-    @testset "fused mul!: axis-1 factor that is not tridiagonal" begin
+    # Fused mul! with an axis-1 factor that is not tridiagonal.
+    @testset "fused mul!: non-tridiagonal axis 1" begin
         # `kronecker_operator` always stores the axis-1 difference factor in tridiagonal
         # form (`_KronTridiag`); a factor with any other sparsity keeps its CSC matrix and
         # takes the row-gather path. Force that path on the same factors and compare.
@@ -186,7 +191,8 @@ _kron_alloc_no_scratch(y, K, x) = @allocated mul!(y, K, x)
         @test isapprox(Kcsc * x, assemble(a) * x; rtol = 1e-12, atol = 1e-12)
     end
 
-    @testset "LinearSolve agreement (SPD, no Dirichlet)" begin
+    # LinearSolve agreement (SPD, no Dirichlet).
+    @testset "LinearSolve: SPD, no Dirichlet" begin
         Random.seed!(KRON_SEED + 2)
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 13), (false, false))
         Wₕ = gridspace(Ωₕ)
@@ -212,7 +218,8 @@ _kron_alloc_no_scratch(y, K, x) = @allocated mul!(y, K, x)
         @test isapprox(A * sol_K.u, b; rtol = 1e-6, atol = 1e-8)
     end
 
-    @testset "Memory: summarysize(K) << summarysize(assemble(a))" begin
+    # summarysize(K) << summarysize(assemble(a)).
+    @testset "memory: K smaller than assembled" begin
         Ωₕ = mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
             (60, 60, 60), true

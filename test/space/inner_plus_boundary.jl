@@ -19,8 +19,9 @@ using LinearAlgebra: Symmetric, eigvals, isposdef
 # call to the code under test.
 
 @testset "inner₊ transverse boundary weight (#236)" begin
-    @testset "The boundary entries are the half-cell width, not zero" begin
-        @testset "1D is unaffected: inner₊'s one direction has no transverse factor" begin
+    @testset "Boundary entries: half-cell, not zero" begin
+        # In 1D inner₊ has one direction, so there is no transverse factor.
+        @testset "1D unaffected: no transverse factor" begin
             # `_innerplus_mean_weights!` -- the function this fix changes -- is only ever
             # called for D >= 2 (`space_weights(Ωₕ::AbstractMeshType{1})` uses
             # `_innerplus_weights!` alone). `w[1] = 0` in 1D is `main`'s own zero, correct
@@ -52,7 +53,8 @@ using LinearAlgebra: Symmetric, eigvals, isposdef
         @test all(!iszero, wy_grid[:, 2:end])
     end
 
-    @testset "weights(Wₕ, Innerplus(), d) agrees with the documented sum" begin
+    # `weights(Wₕ, Innerplus(), d)` against the documented sum.
+    @testset "Innerplus weights match documented sum" begin
         # inner₊ₓ's own docstring: (u,v)_+x = Σᵢ Σⱼ h_{x,i} h_{y,j+1/2} u v, a sum over
         # *every* j. Check it directly: constant fields make the inner product exactly the
         # total weight, independent of which field values are picked.
@@ -68,7 +70,8 @@ using LinearAlgebra: Symmetric, eigvals, isposdef
         @test total ≈ sum(weights(Wₕ, Bramble.Innerh())) atol = 1e-10
     end
 
-    @testset "The staggered Neumann Laplacian has a 1D kernel and no zero rows" begin
+    # The staggered Neumann Laplacian has a one-dimensional kernel and no zero rows.
+    @testset "Neumann Laplacian kernel and zero rows" begin
         function check(Ωₕ, D)
             Wₕ = gridspace(Ωₕ)
             a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
@@ -101,7 +104,7 @@ using LinearAlgebra: Symmetric, eigvals, isposdef
         end
     end
 
-    @testset "Scalar Neumann Poisson MMS converges at order 2" begin
+    @testset "Neumann Poisson MMS: order 2" begin
         # -Δu = f, natural (unconstrained) traction-free boundary everywhere -- inner₊
         # encodes the Neumann condition without any dirichlet_bc! call. Pure Neumann is
         # singular up to an additive constant, pinned by fixing one dof to the exact value

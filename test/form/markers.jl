@@ -5,7 +5,7 @@ using Bramble
 using Bramble: dot, D₋ᵧ, D₋ₓ, inner₊ᵧ, inner₊ₓ
 
 # A `markers` keyword on the *symbolic* innerₕ/inner₊ family
-# (ast/operators/inner.jl), implemented by wrapping the constructed
+# (operators/inner.jl), implemented by wrapping the constructed
 # BilinearProduct/LinearProduct in RegionRestriction, reusing existing, already
 # block-routing-aware machinery rather than a new AST node. Every case here is
 # checked against either the numeric `markers` keyword or a hand-built

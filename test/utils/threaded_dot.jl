@@ -20,7 +20,7 @@ using Test
 using Bramble
 using Bramble: _dot, _dot_masked, _threaded_dot, _threaded_dot_masked, MarkedIndicesUnion, CpuThreaded, weights
 
-@testset "Threaded _dot/_dot_masked (CpuThreaded chunked reduction)" begin
+@testset "CpuThreaded _dot/_dot_masked" begin
     # Invariants tested:
     # 1. Dense `_threaded_dot` matches the serial `_dot` at rtol=1e-12, across a length that
     #    is empty, length 1, shorter than the thread count, and long enough to give every
@@ -73,7 +73,7 @@ using Bramble: _dot, _dot_masked, _threaded_dot, _threaded_dot_masked, MarkedInd
         [1.0], [1.0, 2.0], [1.0], BitVector([true, false])
     )
 
-    @testset "MarkedIndicesUnion (two markers), length $n" for n in (
+    @testset "Two-marker union, length $n" for n in (
         0, 1, max(1, nthreads - 1), 37, 5000
     )
         u, v, w = _u(n), _v(n), _w(n)
@@ -102,7 +102,8 @@ using Bramble: _dot, _dot_masked, _threaded_dot, _threaded_dot_masked, MarkedInd
     # walk (word range partitioned across threads, whole zero words skipped, set bits of a
     # nonzero word walked via `trailing_zeros`) must still land on the same value the serial
     # kernel's own set-bit walk does.
-    @testset "Sparse mesh markers (:boundary, and a two-marker union) match serial" begin
+    # The :boundary marker, and a two-marker union.
+    @testset "Sparse mesh markers match serial" begin
         S = interval(0.0, 1.0) × interval(0.0, 1.0)
         Ωd = domain(S, :bottom => :bottom, :left => :left)
         n = 201
@@ -162,7 +163,7 @@ using Bramble: _dot, _dot_masked, _threaded_dot, _threaded_dot_masked, MarkedInd
     end
 end
 
-@testset "SeparableWeights (CpuThreaded chunked reduction, gpena/Bramble.jl#288)" begin
+@testset "SeparableWeights, CpuThreaded (#288)" begin
     # S2.2: `_dot`/`_dot_masked(CpuThreaded(), u, w, v[, mask])` must reach the
     # `SeparableWeights` specializations of `_threaded_dot`/`_threaded_dot_masked`
     # (`src/space/inner_product.jl`), not the dense methods above -- which would read `w`

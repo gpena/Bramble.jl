@@ -17,7 +17,7 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
                             unsymmetric_refactor_contract, validation_contract
 
 @testset "MUMPS extension" begin
-    @testset "1D/2D/3D Poisson (SPD, sym = :spd)" begin
+    @testset "Poisson 1D/2D/3D (sym = :spd)" begin
         poisson_solve_contract(;
             atol = 1.0e-12,
             solver = :mumps,
@@ -33,7 +33,8 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         )
     end
 
-    @testset "Symmetric indefinite (Helmholtz / saddle point, sym = :symmetric)" begin
+    # Helmholtz and saddle-point systems are symmetric indefinite.
+    @testset "symmetric indefinite (:symmetric)" begin
         I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
         Ω2 = mesh(domain(I2, :boundary => boundary_symbols(I2)), (10, 10), (true, true))
         W2 = gridspace(Ω2)
@@ -50,7 +51,7 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         @test isapprox(u_mumps, u_ss; atol = 1.0e-12)
     end
 
-    @testset "Unsymmetric (Convection-diffusion, sym = :unsymmetric)" begin
+    @testset "convection-diffusion (:unsymmetric)" begin
         cd = convection_diffusion_system(12; βx = 5.0, βy = 2.0)
         @test !issymmetric(cd.A)
         @test isapprox(
@@ -82,7 +83,8 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         @test isapprox(F3, u2; atol = 1.0e-12)
     end
 
-    @testset "Factorization reuse and refactoring (mumps_refactor!)" begin
+    # Exercises factorization reuse and mumps_refactor!.
+    @testset "factorization reuse, refactor" begin
         p = poisson_system(Val(1), 15; source = x -> 1.0)
 
         refactor_contract(

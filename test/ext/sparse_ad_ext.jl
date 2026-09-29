@@ -70,7 +70,8 @@ end
               jacobian_pattern(a, U -> Mₕ(U))
     end
 
-    @testset "drives Newton to the right answer through AutoSparse" begin
+    # The detector drives Newton to the right answer through AutoSparse.
+    @testset "AutoSparse: Newton converges" begin
         sparse_ad = AutoSparse(
             AutoForwardDiff();
             sparsity_detector = detector,

@@ -357,6 +357,125 @@ between the two evaluation strategies; the byte counts above are a live structur
 not a timing claim, and no crossover mesh size at which one becomes faster than the other has
 been measured for this repository.
 
+## Matrix-free operators, preconditioners and multigrid
+
+[`matrix_free_operator`](@ref) lifts the Kronecker operator's restrictions: it applies any
+form [`assemble`](@ref) accepts (grid-function coefficients, Dirichlet rows, composite spaces)
+by walking the form's stencil on each product, and never stores the matrix. The example is
+mass plus variable diffusion on a smoothly graded, non-uniform mesh:
+
+```@example solvers
+Ω_mf = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+graded(n) = [t + 0.1 * sinpi(2t) for t in range(0.0, 1.0; length = n)]
+function graded_mesh(n)
+    Ωₕ = mesh(Ω_mf, (n, n), (true, true))
+    Bramble.change_points!(Ωₕ, (graded(n), graded(n)))
+    return Ωₕ
+end
+spd_form(W) = form(W, W,
+    (u, v) -> innerₕ(u, v) + inner₊(Rₕ(W, x -> 1 + x[1] * x[2]) * ∇ₕ(u), ∇ₕ(v)))
+
+Ωmf = graded_mesh(65)
+Wmf = gridspace(Ωmf)
+a_mf = spd_form(Wmf)
+op = matrix_free_operator(a_mf)
+size(op)
+```
+
+The operator is the assembled matrix's linear map, applied in place with `mul!` or out of
+place with `*`, on plain vectors and on [`VectorElement`](@ref)s alike:
+
+```@example solvers
+Random.seed!(20260928)
+x_mf = rand(size(op, 2))
+y_mf = similar(x_mf)
+A_mf = assemble(a_mf)
+mul!(y_mf, op, x_mf)                  # in place
+uₕ = element(Wmf, x_mf)
+vₕ = op * uₕ                          # out of place, a VectorElement of Wmf
+(norm(y_mf - A_mf * x_mf) / norm(A_mf * x_mf) < 1e-14, op * x_mf == y_mf, vₕ == y_mf)
+```
+
+### Time and memory against a sparse product
+
+Measured on an Apple M2 on AC power, `--threads=4`, each case alone, with Julia 1.13.1, on
+2026-09-28 (after the threaded product became one parallel region, commit `40b0516d`). The
+form is mass plus variable diffusion on non-uniform meshes, the sparse product is serial CSR,
+and times are the minimum of repeats. A time ratio above 1 means the matrix-free product is
+faster; bytes are `Base.summarysize`.
+
+| Mesh | Unknowns | SpMV / serial matrix-free | SpMV / threaded matrix-free | CSR bytes / matrix-free bytes |
+|---|---|---|---|---|
+| 1D | 10⁴ | 0.57 | 0.92 | 1.0 |
+| 1D | 10⁵ | 0.63 | 3.15 | 1.0 |
+| 1D | 10⁷ | 0.57 | 2.20 | 1.0 |
+| 2D 32² | 1024 | 0.44 | 0.45 | 6.1 |
+| 2D 64² | 4096 | 0.47 | 1.23 | 8.4 |
+| 2D 2048² | 4.2 × 10⁶ | 0.49 | 1.61 | 10.6 |
+| 3D 16³ | 4096 | 0.30 | 0.69 | 11.4 |
+| 3D 32³ | 32768 | 0.36 | 1.13 | 13.7 |
+| 3D 128³ | 2.1 × 10⁶ | 0.36 | 1.16 | 14.4 |
+
+Serial, the matrix-free product is 1.6–3.4× slower than serial SpMV at every size: it
+recomputes each entry from the mesh and the coefficient. Threaded on 4 threads, the crossover
+where it beats serial SpMV is 1D 10⁵ unknowns, 2D 64² and 3D 32³, and it stays ahead above
+them (2.2× at 1D 10⁷, 1.6× at 2D 2048², 1.2× at 3D 128³). In 1D the CSR matrix and the
+operator take the same memory; in 2D and 3D the CSR matrix takes 10.6× and 14.4× the memory
+at the largest sizes. The matrix-free operator is therefore the choice when memory binds or
+threads are available, and assembled SpMV stays faster on one thread.
+
+### Jacobi and Chebyshev preconditioning
+
+A `MatrixFreeOperator` goes directly into a `LinearProblem`, and the matrix-free
+preconditioners go into `Pl`. [`jacobi_preconditioner`](@ref) reads `diag(A)` off one
+stencil walk. [`chebyshev_preconditioner`](@ref) is a fixed degree-4 polynomial in `D⁻¹A`,
+Jacobi-scaled, on a spectrum bound from `Bramble.max_eigenvalue_estimate`:
+
+```@example solvers
+b_mf = op * rand(size(op, 1))
+prob_mf = LinearProblem(op, b_mf)
+cg_iters(; kw...) =
+    solve(prob_mf, KrylovJL_CG(); reltol = 1e-8, abstol = 0.0, maxiters = 5000, kw...).iters
+P_jac = jacobi_preconditioner(op)
+P_cheb = chebyshev_preconditioner(op)
+cg_iters(), cg_iters(Pl = P_jac), cg_iters(Pl = P_cheb)
+```
+
+On this 65² mesh, CG took 499 iterations unpreconditioned, 329 with Jacobi and 93 with
+Chebyshev. Both are built without ever assembling `A`.
+
+### Geometric multigrid
+
+[`gmg_preconditioner`](@ref) takes a builder `W -> form(...)` rather than a form, because a
+form is tied to its space: each level of the [`GeometricMeshHierarchy`](@ref) is
+rediscretised by calling the builder on that level's space. Every grid function in the form,
+here the coefficient `Rₕ(W, κ)`, must be built from `W` inside the builder; one captured from
+the finest space gives a wrong coarse operator.
+
+```@example solvers
+P_gmg = gmg_preconditioner(W -> spd_form(W), Ωmf)
+sol_gmg = solve(prob_mf, KrylovJL_CG(); Pl = P_gmg, reltol = 1e-8, abstol = 0.0)
+P_gmg, sol_gmg.iters, norm(A_mf * sol_gmg.u - b_mf) / norm(b_mf) < 1e-7
+```
+
+Six levels down to 3², and 10 CG iterations against Chebyshev's 93. [`gmg_solve`](@ref) runs
+the cycles as a stationary iteration instead, and [`v_cycle!`](@ref), [`w_cycle!`](@ref) and
+[`fmg!`](@ref) are the cycles themselves.
+
+**Limits.** The smoothers are point smoothers, and they stall on stretched cells. On the
+random meshes of `mesh(…, false)`, whose largest aspect ratio grows with `n` (96 at 33², 52600
+at 513²), CG with the V-cycle took 14–25, 26–37 and 32–116 iterations at 2D 33², 65² and 129²
+over four draws, and 87 at 513². A random base refined with [`iterative_refinement!`](@ref)
+keeps its aspect ratio, but the counts still grow per level: 11 to 26 from 17² to 257² on a
+2D base of 9² (aspect ratio 10.9), 14 to 29 from 9³ to 65³ on a 3D base of 5³ (aspect ratio
+15). The mesh-independent counts, 6 iterations from 2D 33² to 513² and 7 from 3D 17³ to 129³,
+were measured on meshes with bounded aspect ratio (uniform points jittered by up to `±0.3h`).
+Line and plane smoothers for stretched meshes are planned in
+[gpena/Bramble.jl#394](https://github.com/gpena/Bramble.jl/issues/394). With Dirichlet rows
+(`dirichlet` on the operator or preconditioner), CG needs a right-hand side that is zero on
+those rows. Device execution of the operator, the preconditioners and the cycles is tracked
+on milestone [v4.4.0](https://github.com/gpena/Bramble.jl/milestone/38).
+
 ## Steady vs. unsteady problems
 
 Every comparison above solved one linear system. A steady problem only ever needs one; a

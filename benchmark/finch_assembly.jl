@@ -63,7 +63,7 @@
 #===========================================================================#
 
 using Bramble
-# D₊ₓ/D₊ᵧ/D₊₂ are `public`, not `export`ed (src/space/operators/stencil.jl) --
+# D₊ₓ/D₊ᵧ/D₊₂ are `public`, not `export`ed (src/api.jl) --
 # reached the same way test/ext/SolverContracts.jl does.
 import Bramble: D₊ₓ, D₊ᵧ, D₊₂
 using Finch

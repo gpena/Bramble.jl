@@ -404,6 +404,31 @@ M₊₂!
 M₊ₕ
 ```
 
+Index shifts, ``(S_+ u)_i = u_{i+1}`` and ``(S_- u)_i = u_{i-1}``. A neighbour off the grid
+reads as zero, so the matrix of `S₊` is the transpose of that of `S₋` and `S₊ₓ(uₕ) - uₕ` is
+`jumpₓ(uₕ)` at every point. `S₊ₕ`/`S₋ₕ` are exported; the rest are `public`.
+
+```@docs
+S₊ₓ
+S₊ₓ!
+S₊ᵧ
+S₊ᵧ!
+S₊₂
+S₊₂!
+S₊ₕ
+S₊
+forward_shift
+S₋ₓ
+S₋ₓ!
+S₋ᵧ
+S₋ᵧ!
+S₋₂
+S₋₂!
+S₋ₕ
+S₋
+backward_shift
+```
+
 ## Inner products and norms
 
 ```@docs
@@ -479,6 +504,21 @@ is_separable
 kronecker_operator
 KroneckerLinearOperator
 fdm_solve
+```
+
+### Matrix-free operators
+
+`matrix_free_operator` applies any `BilinearForm` that `assemble` accepts, separable or not,
+without building its matrix: `mul!(y, op, x)` walks the form's stencil and agrees with
+`assemble(a) * x`, Dirichlet rows included, on vectors and `VectorElement`s. Its execution
+policy comes from the trial space, as for assembly. Preconditioners and multigrid built on it
+are in [Scientific computing](api_sciml.md), and the
+[solvers tutorial](tutorials/solvers.md) has measured time and memory against sparse
+matrix-vector products.
+
+```@docs
+matrix_free_operator
+MatrixFreeOperator
 ```
 
 ### Additive accumulation

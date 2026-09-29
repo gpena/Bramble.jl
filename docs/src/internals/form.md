@@ -255,7 +255,7 @@ of its way to avoid.
 | `⟨Au, Bv⟩ + ⟨Au, Cv⟩` (or `⟨Au, Bv⟩ + ⟨Cu, Bv⟩`), shared `A` a singleton node, anywhere in the sum | `⟨Au, (B + C)v⟩` (or `⟨(A + C)u, Bv⟩`) | one product, one compiled term, instead of two |
 | `⟨f, Av⟩ + ⟨f, Bv⟩`, shared source a singleton node | `⟨f, (A + B)v⟩` | as above, for a linear form |
 | `Shift₀(u)` | `u` | a zero shift is the identity |
-| `Shift_a(Shift_b(u))`, same dimension | `Shift_{a+b}(u)` | additive, so `Shift_k(Shift_{-k}(u))` collapses to `u` via the rule above |
+| `Shift_a(Shift_b(u))`, same dimension, `a` and `b` of one sign | `Shift_{a+b}(u)` | additive only then: a shift reads 0 off the grid, so `Shift_k(Shift_{-k}(u))` is not `u` at the boundary and stays nested |
 
 Factoring a shared argument uses the like-term rule's gate: the shared argument must pass
 `_statically_equal`, so whether the rule fires is settled by the argument types, and a
@@ -329,6 +329,37 @@ term's entries, on its own leaf) and `half = 2` (the transposed entries, on the 
 term's leaf); the half a unit does not write is neither in the pattern nor searched.
 `test/form/coordinate_walk.jl` checks the coordinates against the assembled matrix for
 scalar, coefficient, restricted, composite, coupled, shift, pair and 1D forms.
+
+## Shared sub-operators across terms
+
+A composite form such as the symmetric gradient ⟨ε(u), ε(v)⟩ over a vector space repeats
+the same operand sub-operators across its summands (gpena/Bramble.jl#347). Could warm
+assembly evaluate each shared operand stencil once per point? `benchmark/shared_suboperators.jl` (three runs, 4
+threads) bounds the saving: in 3D εc, 48–54% of warm evaluation (2.5–4.4 ms, 15 replay
+units) is duplicated; in a 2D scalar form, 28–35% of 0.62–0.76 ms (3 units). A prototype
+grouped consecutive term-outer units that share an operand type (at most 4 per group; 3D εc
+gave three groups of 3 units), checked once per fill that the operands are identical, the
+members write disjoint blocks and share a walked leaf, then evaluated each distinct operand
+stencil and quadrature weight once per point and fed every member's product. It covered
+serial composite replay from 2D up; its matrices were bitwise identical to the unshared
+evaluation and refills allocated 0 B. The rule, set before measuring, was to adopt it iff
+the εc warm ratio is ≤ 0.90, the scalar warm ratio ≤ 1.02 and both first-assemble ratios
+≤ 1.05. Interleaved ratios (after/before, run alone):
+
+| form           | `assemble` (first)          | `assemble!` (warm)            |
+|:-------------- |:--------------------------- |:----------------------------- |
+| εc, 3D         | 1.133 (7.07 s → 8.01 s)     | 0.907 (3.64 ms → 3.30 ms)     |
+| scalar, 2D     | 0.994                       | 0.995                         |
+
+Decision: not adopted.
+
+It fails on εc first assembly (13.3% slower) and, narrowly, on εc warm assembly (9.3%
+faster, short of 10%). Compile cost rose because term-outer units of equal type share one
+compiled kernel, and grouping gives each group
+its own sweep and member preparation, breaking that sharing. The warm gain of about 9% is
+well below the ~50% duplicated share, so most of that share is not recovered by evaluating
+the operand stencils once. The replay stays term-outer, one unit at a time as described in
+[One setup walk per term](@ref), and the prototype was not merged.
 
 ## The matrix-type seam (S1.1)
 
@@ -422,12 +453,8 @@ Pages = [
     "assembly/block_extract.jl",
     "ast/stencil_pattern.jl",
     "assembly/symmetry.jl",
-    "ast/operators/average.jl",
-    "ast/operators/difference.jl",
-    "ast/operators/inner.jl",
-    "ast/operators/interpolation.jl",
-    "ast/operators/jump.jl",
-    "ast/operators/restriction.jl",
+    "operators/inner.jl",
+    "operators/region_restriction.jl",
     "assembly/dirichlet_constraints.jl",
     "assembly/linear.jl",
     "assembly/bilinear.jl",

@@ -58,7 +58,8 @@ end
     Ωₕ, Wₕ, I, a, l, sd = _sciml_setup(21)
     n = ndofs(Wₕ)
 
-    @testset "ode_function carries the mass matrix, Jacobian and sparsity" begin
+    # ode_function carries the mass matrix, Jacobian and sparsity pattern.
+    @testset "ode_function: mass, Jacobian, pattern" begin
         f = ode_function(sd)
         @test f isa SciMLBase.ODEFunction
         @test f.mass_matrix == mass_matrix(sd)
@@ -97,7 +98,8 @@ end
         @test ode_function(a, l; dirichlet = :boundary) isa SciMLBase.ODEFunction
     end
 
-    @testset "ode_problem: time domain, and a copied, consistent u₀" begin
+    # ode_problem keeps the time domain and a copied, consistent u₀.
+    @testset "ode_problem: tspan and copied u₀" begin
         bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 5 + t)
         sd_bc = semidiscretize(a, l; dirichlet = bcs)
 
@@ -120,7 +122,7 @@ end
         @test ode_problem(a, l, u₀, I; dirichlet = bcs).u0[1] ≈ 5.0
     end
 
-    @testset "ode_problem: p reaches a parametric residual" begin
+    @testset "ode_problem: p reaches residual" begin
         # `θ` scales the boundary value and its rate, `(x, t, θ) -> θ[1] + θ[2] * t`, threaded
         # through the residual's own `p` -- gpena/Bramble.jl#239's own gap: nothing before this
         # let a Dirichlet condition see the ODEProblem's parameter at all.
@@ -157,7 +159,8 @@ end
     # to solver tolerance, not literal bit-exactness: the two formulations reach the answer
     # through different floating-point operations (`M \ (F - Au)` inside the stepper vs.
     # `M⁻¹` pre-multiplied), so they need not land on the identical last bit.
-    @testset "semidiscretize_rhs: matrix-free explicit right-hand side reaches solvers ode_problem(sd, ...) cannot" begin
+    # The matrix-free explicit right-hand side reaches solvers ode_problem(sd, ...) cannot.
+    @testset "semidiscretize_rhs: matrix-free" begin
         sd_free = semidiscretize(a, l)
         @test sd_free.constraints isa Bramble.NoConstraints
         rhs = semidiscretize_rhs(sd_free)
@@ -182,7 +185,8 @@ end
         @test sol_rhs.u[end]≈sol_sd.u[end] atol=1e-10 rtol=1e-10
     end
 
-    @testset "linear_problem is the assembled steady system" begin
+    # linear_problem is the assembled steady system.
+    @testset "linear_problem: steady system" begin
         A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
         prob = linear_problem(a, l; dirichlet = :boundary => x -> 0.0)
         @test prob isa LinearProblem
@@ -200,7 +204,7 @@ end
     # `VectorElement`, and `solve(a, l; ...)` does assembly, solve and unwrapping in one call
     # -- the three pieces #156 asks for, all reached through the steady system `prob`/`A`/`F`
     # already agree on above.
-    @testset "solve: VectorElement from a LinearSolution" begin
+    @testset "solve: VectorElement from solution" begin
         A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
         expected = A \ F
 
@@ -232,7 +236,8 @@ end
         @test parent(ws) ≈ As \ Fs
     end
 
-    @testset "nonlinear_problem: residual, jac_prototype, and a copied u0" begin
+    # nonlinear_problem carries the residual and jac_prototype, and copies u0.
+    @testset "nonlinear_problem: fields, copied u0" begin
         A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
 
         residual(u, p) = A * u .- F
@@ -274,7 +279,7 @@ end
     # The heat equation with the manufactured solution `exp(-t) sin(πx)`, stepped to t = 1.
     # The space tolerance is loose and the time tolerance tight, so what is measured is the
     # semidiscretisation's second order rather than the stepper's.
-    @testset "order of convergence through OrdinaryDiffEq" begin
+    @testset "OrdinaryDiffEq: order of convergence" begin
         function solve_to(n, alg; kwargs...)
             _, Wₕ, I, _, _, sd = _sciml_setup(n)
             prob = ode_problem(sd, Rₕ(Wₕ, x -> _sciml_uex(x, 0.0)), I; kwargs...)
@@ -313,7 +318,8 @@ end
     # *default* `autodiff` differentiate through `t` at all: the classic `BilinearForm` path
     # closes over a `Float64` coefficient buffer and throws `InexactError` under that same
     # sweep (the `AutoFiniteDiff`/BDF workarounds above exist because of exactly this).
-    @testset "type-cached operator: default autodiff through a t-dependent A(t)" begin
+    # The type-cached operator supports default autodiff through a t-dependent A(t).
+    @testset "cached operator: autodiff of A(t)" begin
         Ωₕ, Wₕ, I, _, _, _ = _sciml_setup(21)
         α(t) = 1.0 + t   # x-independent: only the value matters for this cross-check
 
@@ -379,7 +385,7 @@ end
     # solution `sin(πx) cos(πt)` satisfies the *homogeneous* 1D wave equation with `c = 1`
     # exactly (both ∂ₜ² and ∂ₓ² give `-π² sin(πx) cos(πt)`), zero at both endpoints for every
     # `t` -- so `l ≡ 0` and the only Dirichlet data needed is the constant `0`.
-    @testset "second-order semidiscretisation (wave equation)" begin
+    @testset "second order: wave equation" begin
         _wave_uex(x, t) = sinpi(x[1]) * cospi(t)
         _wave_duex(x, t) = -pi * sinpi(x[1]) * sinpi(t)
 
@@ -397,7 +403,7 @@ end
         Ωₕ, Wₕ, Iv, K, l, bcs = _wave_setup(21)
         n = ndofs(Wₕ)
 
-        @testset "semidiscretize_second_order: accessors and display" begin
+        @testset "second order: accessors, display" begin
             sd = semidiscretize_second_order(K, l; dirichlet = bcs)
             @test sd isa SecondOrderSemidiscretization
             @test size(stiffness_matrix(sd)) == (n, n)
@@ -423,7 +429,8 @@ end
             @test !isempty(sprint(show, MIME"text/plain"(), sd))
         end
 
-        @testset "second_order_ode_problem: time domain, and a copied, consistent u₀/du₀" begin
+        # second_order_ode_problem keeps the time domain and a copied, consistent u₀/du₀.
+        @testset "second order: tspan, copied u₀/du₀" begin
             u₀ = Rₕ(Wₕ, x -> _wave_uex(x, 0.0))
             du₀ = Rₕ(Wₕ, x -> _wave_duex(x, 0.0))
             before_u = copy(parent(u₀))
@@ -452,7 +459,7 @@ end
         # `innerₕ` mass matrix never is (its boundary rows always carry a half-weight) --
         # documented on `SecondOrderSemidiscretization`. `Rodas5P`, already a test dependency
         # for the first-order suite above, is mass-matrix-aware and used here instead.
-        @testset "order of convergence through OrdinaryDiffEq" begin
+        @testset "OrdinaryDiffEq: order of convergence" begin
             function solve_to(n)
                 _, Wₕ, Iv, K, l, bcs = _wave_setup(n)
                 sd = semidiscretize_second_order(K, l; dirichlet = bcs)
@@ -485,7 +492,8 @@ end
     _traj_rhs_allocs(sd, du, u, t) = @allocated sd(du, u, nothing, t)
     _traj_jac_allocs(J, sd, u, t) = @allocated Bramble.jacobian!(J, sd, u, nothing, t)
 
-    @testset "zero allocations along an integrator's trajectory" begin
+    # The integrator allocates nothing along its trajectory.
+    @testset "integrator: zero allocations" begin
         function _trajectory_allocs(n, alg)
             _, Wₕ, I, _, _, sd = _sciml_setup(n)
             u0 = Rₕ(Wₕ, x -> _sciml_uex(x, 0.0))
@@ -527,7 +535,8 @@ end
     # leaves unverified is the order actually delivered through the SciML entry points, which
     # is what a caller of this extension gets. Elsewhere in this file those wrappers are only
     # checked against `A \ F`'s own answer, which cannot catch an error both paths share.
-    @testset "manufactured solutions through the steady solvers" begin
+    # Manufactured solutions are recovered through the steady solvers.
+    @testset "steady solvers: manufactured" begin
         _poisson_uex(x) = sinpi(x[1])
         _poisson_src(x) = pi^2 * sinpi(x[1])
 

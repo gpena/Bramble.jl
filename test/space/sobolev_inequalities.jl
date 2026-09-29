@@ -60,7 +60,7 @@ function _boundary_vanishing(Wₕ, raw, dims)
     return element(Wₕ, vec(_zero_boundary!(a)))
 end
 
-@testset "Discrete Poincaré and Sobolev inequalities" begin
+@testset "Discrete Poincaré and Sobolev" begin
     # An inequality is asserted with slack that scales with the quantities compared, not with
     # a bare epsilon: on a badly graded mesh both sides can be large, and equality is
     # approached from below.
@@ -109,7 +109,8 @@ end
         end
     end
 
-    @testset "Both inequalities are sharp enough to be worth asserting" begin
+    # Sharp enough to be worth asserting.
+    @testset "Both inequalities are sharp" begin
         # A constant-free inequality says nothing unless the two sides are within an order of
         # magnitude for some field; otherwise any bound would pass.
         Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 65, true))
@@ -120,7 +121,8 @@ end
         @test 0.2 < norminf(vₕ) / g < 1.0
     end
 
-    @testset "The L^∞ embedding does not generalise per direction (#187)" begin
+    # The L^∞ embedding does not generalise per direction.
+    @testset "L^∞ bound fails per direction (#187)" begin
         # The counterexample, kept as a test so the per-direction claim cannot come back: a
         # field concentrated enough that its maximum beats the domain-averaged directional
         # gradient norm. In 3D the plain product bump already comes within 20% of the bound,
@@ -139,7 +141,7 @@ end
         @test holds(normₕ(vₕ), _dir_gradient_norm(vₕ, Val(1)))
     end
 
-    @testset "The mixed-derivative L^∞ embedding (#234)" begin
+    @testset "Mixed-derivative L^∞ embedding (#234)" begin
         # `‖v‖_∞ ≤ ‖∂₁⋯∂_D v‖`, the generalisation that is true (see the module header),
         # weighted by the full-D staggered inner product `inner₊(·, ·, Val((1, …, D)))`.
         for D in 1:3
@@ -167,7 +169,7 @@ end
         # The same concentrated field that defeats the false per-direction claim just
         # above: the *mixed* derivative bound still holds where every per-direction one
         # fails, which is the point of asserting the true generalisation instead.
-        @testset "Holds where the per-direction claim (#187) fails" begin
+        @testset "Holds where per-direction fails (#187)" begin
             Ωₕ = mesh(
                 domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
                 (9, 9, 9), (true, true, true))

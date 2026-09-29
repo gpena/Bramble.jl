@@ -55,7 +55,7 @@ That last sentence was not always true. S6.2, which first wrote this section, ke
 `innerh` and `innerplus` themselves as dense, full-grid vectors on purpose: the two
 places that read a weight in a hot loop -- `_dot`/`_dot_masked`
 (`src/space/inner_product.jl`) for the numeric `innerₕ`/`inner₊`, and `compute_weight`
-(`src/ast/operators/inner.jl`) for the symbolic ones inside a form -- belonged to
+(`src/operators/inner.jl`) for the symbolic ones inside a form -- belonged to
 subplans S6.3 and S6.4, outside S6.2's own file ownership, and neither yet had a way to
 read a `SeparableWeights` without paying a division per axis on every point. Keeping
 `innerh`/`innerplus` densely materialised was the only way to guarantee those two hot
@@ -257,7 +257,7 @@ grid-function traversal, symbolic form-AST evaluation, and Kronecker matrix cons
    demand.
 
 This milestone implements option 2 as `stencil_matrix`
-(`src/space/operators/stencil.jl`), routing every family's public per-axis alias (`D₋`,
+(`src/operators/stencil_matrix.jl`), routing every family's public per-axis alias (`D₋`,
 `D₊`, `D̃`, `Dc`, `D̽ₕ`, `jump`, `M`, `M₊`) through it. Option 3 is delivered separately, as
 `KroneckerLinearOperator` (gpena/Bramble.jl#162) -- a matrix-free operator built
 for a whole separable bilinear *form*, not a lazy wrapper around one operator's matrix
@@ -268,7 +268,7 @@ none of the three, so it had nothing left to win on once option 2 existed.
 
 ### Why the Kronecker construction is kept
 
-`src/space/operators/shift.jl` keeps its Kronecker-product construction, now named
+`src/operators/shift.jl` keeps its Kronecker-product construction, now named
 `kronecker_operator_matrix`, rather than being deleted once `stencil_matrix` took
 over every family's public alias. gpena/Bramble.jl#185's acceptance criterion is exact
 agreement between the old and new matrices, and proving that needs two independent
@@ -314,13 +314,14 @@ run.
 ### What unification was and was not achieved
 
 `stencil_matrix`'s own `_stencil_taps`/`_stencil_weights` methods
-(`stencil.jl`) are a second, reduced implementation of the same offsets and coefficients
-the form layer already computes under the same names in
-`src/ast/operators/{difference,average,jump}.jl`, for the AST node types
+(`stencil_matrix.jl`) are a second, reduced implementation of the same offsets and
+coefficients the form layer already computes under the same names in the AST half of
+`src/operators/{difference,average,jump}.jl`, for the AST node types
 (`BackwardDifference`, `JumpNode`, and the rest) that back `local_stencil`. They are not
-shared code: `src/space/` cannot depend on form-layer AST nodes without inverting the
-package's own layering (forms are built on top of the space layer's operators, not the
-other way around), so calling the form layer's methods from here was never an option.
+shared code: `stencil_matrix.jl` is included before the AST core and cannot depend on
+form-layer AST nodes without inverting the package's own layering (forms are built on top
+of the space layer's operators, not the other way around), so calling the form layer's
+methods from here was never an option.
 The two are held equal only by the equality test above, mesh point by mesh point, not by
 a function either implementation calls.
 
@@ -350,16 +351,16 @@ Pages = [
     "space/scalar_gridspace.jl",
     "space/vector_gridspace.jl",
     "space/vectorelement.jl",
-    "space/operators/projection.jl",
-    "space/operators/restriction.jl",
-    "space/operators/cell_average.jl",
-    "space/operators/shift.jl",
-    "space/operators/stencil.jl",
-    "space/operators/stencil_matrix.jl",
-    "space/operators/difference.jl",
-    "space/operators/jump.jl",
-    "space/operators/average.jl",
-    "space/operators/interpolation.jl",
+    "operators/projection.jl",
+    "operators/restriction.jl",
+    "operators/cell_average.jl",
+    "operators/shift.jl",
+    "operators/stencil.jl",
+    "operators/stencil_matrix.jl",
+    "operators/difference.jl",
+    "operators/jump.jl",
+    "operators/average.jl",
+    "operators/interpolation.jl",
     "space/inner_product.jl",
 ]
 ```

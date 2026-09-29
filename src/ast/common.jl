@@ -99,7 +99,7 @@ stencil algebra in this file relies on, so neither call allocates.
 
 The sum of a stencil's coefficients, ignoring its offsets entirely.
 
-Required by `_contracted_left_stencil` (`ast/operators/inner.jl`) for a source-only
+Required by `_contracted_left_stencil` (`operators/inner.jl`) for a source-only
 subtree's own `local_stencil`: not the offsets, which mean nothing for a value that
 contributes no matrix structure, only their total. `false` rather than `0` or `zero(T)` is
 the empty-stencil answer: [`RegionRestriction`](@ref) can legitimately produce `()` for a
@@ -267,9 +267,9 @@ end
 # value at the point: for neither does adding one to an offset produce what the neighbour
 # holds. Such a node has to be re-evaluated at the shifted point instead, which is what this
 # trait selects between. `stencil_shift_trait`'s ladder lives in
-# `ast/operators/interpolation.jl`, after every node type it has to answer for exists:
+# `operators/interpolation.jl`, after every node type it has to answer for exists:
 # marking a source point-dependent there is also what a source-only subtree's own
-# contraction (`_contracted_left_stencil`, `ast/operators/inner.jl`) reads its values through.
+# contraction (`_contracted_left_stencil`, `operators/inner.jl`) reads its values through.
 #
 # A Holy trait rather than a `Bool` predicate on purpose: the choice is made by dispatch on a
 # singleton, so neither branch is ever compiled into the other's code path.
@@ -311,14 +311,16 @@ struct PointDependentStencil <: StencilShiftTrait end
 # Evaluating without clamping is what is not safe: `point(m, I)` off the grid is out of
 # bounds, where the offsets a translation-invariant shift produces are merely filtered later.
 #
-# `ShiftNode` is the one caller this does not fully cover: it carries no mask of its own
-# (unlike every difference, average and jump), and relies for its offset path on the
-# assembly's own bounds check dropping an out-of-range offset: a fallback with nothing left
-# to check once a `PointDependentStencil` has already reduced the shift to a bare value. For a
-# source specifically, it checks [`_in_grid`](@ref) itself rather than trusting the clamp.
-# An interpolation is the other `PointDependentStencil` node and is unaffected: clamping is
-# its own already-correct behaviour (`locate_cell` extrapolates by design), so `ShiftNode`
-# only takes the `_in_grid` branch when its inner operand is source-only.
+# `ShiftNode` is the one caller with no mask of its own (unlike every difference, average and
+# jump), so the re-evaluating shift below (`_reevaluated_shift`) zeroes a clamped tap itself:
+# relabelling a nested stencil evaluated at the clamped point would otherwise move its
+# backward taps back onto the grid (`shift_op(D₋ₓ(u), 1, 1)` kept `-u_n/h` at the last point,
+# gpena/Bramble.jl#352). For the masked callers that zero is one they already multiply in.
+# A bare leaf needs no zero: relabelling it moves its one offset off the grid, and the
+# assembly's own bounds check drops it. A source has no offset left for that check once a
+# `PointDependentStencil` has reduced the shift to a bare value, so `ShiftNode` checks
+# [`_in_grid`](@ref) itself for one, and zeroes any other point-dependent operand (an
+# interpolation, say) with the same check after re-evaluating it at the clamped point.
 @inline function _clamped_shift(
         m, I::CartesianIndex{D}, ::Val{Dim}, delta::Int
 ) where {D, Dim}
@@ -348,7 +350,9 @@ The one place the "shift by relabelling" assumption is made, so the one place a 
 cannot be relabelled has to be handled. The default dispatches on
 `stencil_shift_trait`: [`TranslationInvariantStencil`](@ref) evaluates `inner_op` at the
 shifted point and relabels its offsets (a bare trial or test leaf relabels `inner` itself);
-[`PointDependentStencil`](@ref) evaluates `inner_op` at the shifted point with no relabelling.
+[`PointDependentStencil`](@ref) evaluates `inner_op` at the shifted point, relabelling its
+offsets only when they are offsets (`_has_relative_offsets`): not for an interpolation's
+absolute columns or a source's value.
 
 Two node types override this default outright rather than answering through the trait alone,
 because the trait's two stock branches cannot express what they need: re-evaluating the
@@ -379,8 +383,9 @@ end
 
 # Re-evaluated at the clamped neighbour, then relabelled by `delta`: the inner stencil's
 # weights (spacings, boundary masks) are the neighbour's, its offsets are made relative to
-# `I`. Where the clamp bites, `Ishift == I` and this is the old relabelling of `inner`, whose
-# out-of-range offsets the assembly's bounds check drops.
+# `I`. Where the clamp bites the neighbour is off the grid and every weight is zeroed, since
+# relabelling the stencil evaluated at the clamped point would put a nested operator's other
+# taps back on the grid (see `_clamped_shift`).
 @inline function _shifted_inner_stencil(
         ::TranslationInvariantStencil,
         inner_op,
@@ -405,7 +410,9 @@ end
     m = mesh(space)
     Ishift = _clamped_shift(m, I, Val(Dim), delta)
     at_shift = local_stencil(inner_op, space, Ishift, markers, LinearIndices(indices(m))[Ishift])
-    return shift_stencil(at_shift, Val(Dim), delta)
+    T = eltype(space)
+    on_grid = Ishift[Dim] == I[Dim] + delta ? one(T) : zero(T)
+    return scale_stencil(shift_stencil(at_shift, Val(Dim), delta), on_grid)
 end
 
 # Whether `op` wraps a bare trial or test leaf directly. Such an operand's re-evaluation is
@@ -413,7 +420,7 @@ end
 # instead, since inlining a fresh evaluation per tap makes the generated code (and so the
 # first-call compile time) grow like taps^depth. Answered by dispatch on the operand's type
 # parameter, so it folds at compile time; the node files add the methods for their own
-# wrappers (ast/operators/average.jl, ast/operators/restriction.jl).
+# wrappers (operators/average.jl, operators/region_restriction.jl).
 const _BareLeaf = Union{TrialFunction, TestFunction}
 @inline _wraps_leaf(::Any) = false
 @inline _wraps_leaf(::Union{
@@ -431,6 +438,14 @@ const _BareLeaf = Union{TrialFunction, TestFunction}
     delta
 ) where {D, Dim} = shift_stencil(inner, Val(Dim), delta)
 
+# A point-dependent operand is re-evaluated at the neighbour. Whether its offsets are then
+# relabelled depends on what its entries name. An interpolation's name absolute columns or
+# rows, and a source's carry a value with no column at all, so neither is relabelled. Every
+# other operand lands here only because a coefficient somewhere inside it varies
+# (`D₋ₓ(c * u)` inherits `GridFunctionScale`'s trait): its entries are offsets from the
+# point it was evaluated at, so they move by `delta` exactly as a translation-invariant
+# operand's do. Without the relabelling, `D₊ₓ(D₋ₓ(c * u))` put the neighbour's stencil on
+# the point's own columns (gpena/Bramble.jl#352).
 @inline function _shifted_inner_stencil(
         ::PointDependentStencil,
         inner_op,
@@ -441,12 +456,21 @@ const _BareLeaf = Union{TrialFunction, TestFunction}
         ::Val{Dim},
         delta
 ) where {D, Dim}
+    _has_relative_offsets(inner_op) && return @noinline _reevaluated_shift(
+        inner_op, space, I, markers, Val(Dim), _shift_delta(delta)
+    )
     m = mesh(space)
     Ishift = _clamped_shift(m, I, Val(Dim), _shift_delta(delta))
     return local_stencil(
         inner_op, space, Ishift, markers, LinearIndices(indices(m))[Ishift]
     )
 end
+
+# Whether `op`'s stencil entries are offsets from the point it is evaluated at: neither a
+# source (a value) nor anything holding an interpolation (absolute columns or rows). Decided
+# by type alone, so the branch above folds away. The predicates live in
+# `operators/interpolation.jl` and `assembly/stencil_eval.jl`, which see every node type.
+@inline _has_relative_offsets(op) = !(_is_source_only(op) || _has_trial_interp(op) || _has_test_interp(op))
 
 """
     _grid_function_value(grid_function, lin_idx::Int)
@@ -470,7 +494,7 @@ previously the same three-way branch, written out twice.
     end
 end
 
-# `GridFunctionScale` is marked `PointDependentStencil` in ast/operators/interpolation.jl,
+# `GridFunctionScale` is marked `PointDependentStencil` in operators/interpolation.jl,
 # but the generic `PointDependentStencil` branch above is wrong for it: discarding `inner`
 # and re-evaluating the whole node at `Ishift` would lose the trial or test column the
 # operand contributes (`GridFunctionScale(c, u)` evaluated fresh at `Ishift` reduces to `c`
@@ -492,7 +516,7 @@ end
 end
 
 # A sum inherits `PointDependentStencil` (`_combine_shift_traits`,
-# ast/operators/interpolation.jl) the moment either side does, which now includes any side
+# operators/interpolation.jl) the moment either side does, which now includes any side
 # holding a `GridFunctionScale`. Without this override the generic branch above would
 # re-evaluate *both* summands at `Ishift`, including a translation-invariant one, losing its
 # trial column exactly as the unwrapped `GridFunctionScale` case above would; recursing into
@@ -602,33 +626,10 @@ function _lower_sources(op::OperatorAdd, space)
     return left === op.left_op && right === op.right_op ? op : OperatorAdd(left, right)
 end
 
-# `ShiftNode` (ast/operators/average.jl) and `LinearProduct` (ast/operators/inner.jl) are
+# `ShiftNode` (operators/shift.jl) and `LinearProduct` (operators/inner.jl) are
 # both included after this file, so their `_lower_sources` methods -- naming the type in the
 # signature, unlike everything above -- live in form/linear.jl instead (bramble-performance
 # skill, "include-order rule").
-
-# --- ⋅ and × over a form-side trial/test function (gpena/Bramble.jl#341) ------------------ #
-#
-# `∇ₕ ⋅ u`/`∇ₕ × u` (and the four sibling gradient aliases) contract to `divₕ(u)`/`curlₕ(u)`
-# the same way over a symbolic `u`, but the `dot`/`×` methods narrowed to a `LazyOp` second
-# argument (space/operators/vector_calculus.jl, next to their `_DivCurlOperand`-typed
-# numeric-`uₕ` siblings) live here instead, following the same include-order rule as
-# `_lower_sources` just above: `LazyOp` (ast/ast.jl) is included after
-# space/operators/vector_calculus.jl, so it cannot be named in a signature there.
-@inline dot(::typeof(∇ₕ), uₕ::LazyOp) = divₕ(uₕ)
-@inline ×(::typeof(∇ₕ), uₕ::LazyOp) = curlₕ(uₕ)
-
-@inline dot(::typeof(∇₊ₕ), uₕ::LazyOp) = div₊ₕ(uₕ)
-@inline ×(::typeof(∇₊ₕ), uₕ::LazyOp) = curl₊ₕ(uₕ)
-
-@inline dot(::typeof(∇cₕ), uₕ::LazyOp) = divcₕ(uₕ)
-@inline ×(::typeof(∇cₕ), uₕ::LazyOp) = curlcₕ(uₕ)
-
-@inline dot(::typeof(∇̃ₕ), uₕ::LazyOp) = diṽₕ(uₕ)
-@inline ×(::typeof(∇̃ₕ), uₕ::LazyOp) = curl̃ₕ(uₕ)
-
-@inline dot(::typeof(∇̽ₕ), uₕ::LazyOp) = div̽ₕ(uₕ)
-@inline ×(::typeof(∇̽ₕ), uₕ::LazyOp) = curl̽ₕ(uₕ)
 
 # ==============================================================================
 # 4. Deprecated `ast` keyword (gpena/Bramble.jl#105)

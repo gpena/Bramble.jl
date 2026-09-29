@@ -68,8 +68,9 @@ else
         return A
     end
 
-    @testset "Metal assembly replay (gpena/Bramble.jl#318)" begin
-        @testset "1D non-uniform: refills replay, match the CPU" begin
+    @testset "Metal assembly replay (#318)" begin
+        # 1D non-uniform mesh: every refill replays and matches the CPU.
+        @testset "1D replayed refills match CPU" begin
             a(u, v) = inner₊ₓ(D₋ₓ(u), D₋ₓ(v))
             for n in (33, 513)
                 Wc, Wg = _matched_spaces((n,))
@@ -82,7 +83,8 @@ else
             end
         end
 
-        @testset "2D non-uniform, two terms: refills replay, match the CPU" begin
+        # 2D non-uniform mesh, a form with two terms.
+        @testset "2D two-term replay matches CPU" begin
             a(u, v) = inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v))
             Wc, Wg = _matched_spaces((17, 23))
             Fg = form(Wg, Wg, a)
@@ -95,7 +97,7 @@ else
 
         # Replay skips only the search: weights are still evaluated on every refill, so a
         # live scalar changed between refills shows up in the replayed matrix.
-        @testset "1D non-uniform: a replayed refill sees a live coefficient" begin
+        @testset "replay: live coefficient in 1D" begin
             β = Ref(1.0f0)
             a(u, v) = inner₊ₓ(β * D₋ₓ(u), D₋ₓ(v))
             Wc, Wg = _matched_spaces((65,))

@@ -16,7 +16,7 @@ using Bramble: CpuPolyester, Serial, execution_policy, test_space, _normalize_di
 using Polyester
 using SparseArrays
 using SparseArrays: getcolptr
-using LinearAlgebra: issymmetric
+using LinearAlgebra: issymmetric, mul!
 using Random
 using ..TestUtils: alloc_test
 
@@ -56,7 +56,8 @@ function _poisson_pair(dim::Val{D}, n::Integer; source = _sine_source(dim)) wher
 end
 
 @testset "Polyester extension (CpuPolyester)" begin
-    @testset "CpuPolyester backend and grid space (needs this extension, S7.1)" begin
+    # Needs this extension to be loaded (S7.1).
+    @testset "CpuPolyester backend and grid space" begin
         be = backend(policy = CpuPolyester())
         @test execution_policy(be) === CpuPolyester()
 
@@ -69,7 +70,8 @@ end
         @test ndofs(Wb) == ndofs(gridspace(mesh(Ω, (8, 7), true)))
     end
 
-    @testset "Rₕ!/avgₕ! agree with Parallel() and Serial(), 1D/2D/3D" begin
+    # Rₕ!/avgₕ! agree with Parallel() and Serial() in 1D, 2D and 3D.
+    @testset "Rₕ!/avgₕ!: agree with Parallel()" begin
         for (D, n) in ((1, 21), (2, 11), (3, 6))
             p = _poisson_pair(Val(D), n)
             src = _sine_source(Val(D))
@@ -86,7 +88,8 @@ end
         end
     end
 
-    @testset "Bilinear assemble/assemble!/assemble_parallel! agree with Parallel(), 1D/2D/3D" begin
+    # Bilinear assemble, assemble! and assemble_parallel! agree with Parallel() in 1D, 2D and 3D.
+    @testset "bilinear assembly agrees" begin
         for (D, n) in ((1, 21), (2, 9), (3, 5))
             p = _poisson_pair(Val(D), n)
 
@@ -134,7 +137,8 @@ end
         end
     end
 
-    @testset "Linear assemble_parallel! agrees with Parallel(); assemble/assemble! (integrator item)" begin
+    # Linear assemble_parallel! agrees with Parallel(); assemble and assemble! cover the integrator item.
+    @testset "linear assembly agrees" begin
         # `assemble_parallel!(b, ::LinearForm)` forces `_assemble_linear_parallel_core!`
         # regardless of the space's own backend policy (`src/assembly/linear.jl`'s own
         # documented contract), and that core computes its *effective* policy the same way
@@ -169,7 +173,8 @@ end
         @test bb ≈ bp
     end
 
-    @testset "innerₕ/inner₊ₓ agree with Parallel(), including masked and multi-marker _dot" begin
+    # Includes the masked and multi-marker _dot paths.
+    @testset "innerₕ/inner₊ₓ agree with Parallel()" begin
         for (D, n) in ((1, 21), (2, 11), (3, 6))
             p = _poisson_pair(Val(D), n)
             src = _sine_source(Val(D))
@@ -201,7 +206,7 @@ end
         )
     end
 
-    @testset "Composite two-field form agrees with Parallel()" begin
+    @testset "two-field form agrees" begin
         n1, n2 = 9, 7
         I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
         Ωd = domain(I2, :dir => boundary_symbols(I2))
@@ -222,7 +227,8 @@ end
         @test isapprox(Matrix(Apd), Matrix(Abd); atol = 1.0e-12)
     end
 
-    @testset "Allocation: CpuPolyester against what test/space/vector_elements.jl's Parallel() accepts" begin
+    # CpuPolyester allocation is held to what test/space/vector_elements.jl accepts for Parallel().
+    @testset "allocation within Parallel() bound" begin
         # Function barriers (bramble-verification §1): the warm-up call and the measured
         # call both happen inside one function, over its own arguments.
         function _avg_allocs(u, f)
@@ -289,7 +295,8 @@ end
     # `assemble` of the same non-uniform mesh, never against another threaded fill -- since
     # this extension's own `CpuPolyester` vs `Parallel()` testsets above never re-fill an
     # already-assembled matrix and so would not tell a replay from a re-search.
-    @testset "Warmed CpuPolyester refill replays the recording (#338)" begin
+    # A warmed CpuPolyester refill replays the recording.
+    @testset "warmed refill replays (#338)" begin
         _replay_domains = (
             domain(interval(0.0, 1.0)),
             domain(interval(0.0, 1.0) × interval(0.0, 2.0)),
@@ -333,7 +340,8 @@ end
             @test isapprox(B, R; rtol = 1e-12)
         end
 
-        @testset "Warmed refill allocation is independent of grid size" begin
+        # Warmed refill allocation is independent of grid size.
+        @testset "refill allocation: size-free" begin
             _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
             sizes2 = (200, 800)
             bytes = map(sizes2) do n
@@ -428,7 +436,8 @@ end
     foreach(_poly_check_all, sizes)
 end
 
-@testset "Stencil engines: warmed in-place allocation independent of grid size" begin
+# Warmed in-place allocation of the stencil engines is independent of grid size.
+@testset "stencil engines: allocation size-free" begin
     function _poly_min_bytes(n)
         _, Ωb = _poly_mesh_pair((n, n))
         ub = Rₕ(gridspace(Ωb), _POLY_F[2])
@@ -443,7 +452,7 @@ end
 # --- Divergence, curl and strain-average engines under CpuPolyester (S7.5, #356) --------- #
 #
 # `_run_bands!`'s `CpuPolyester` arm (`_batch_run_bands!`, this extension) is what the
-# accumulating engines behind `divₕ!`/`curlₕ!`/`εₕ!` (space/operators/vector_calculus.jl)
+# accumulating engines behind `divₕ!`/`curlₕ!`/`εₕ!` (operators/vector_calculus.jl)
 # reach; before S7.5 they had no `CpuPolyester` hook and ran serially regardless of the
 # policy, so an equality check against `Serial()` alone would pass either way -- serial and
 # `@batch` give the same numbers. The load-bearing assertion is the thread count, checked
@@ -468,7 +477,8 @@ const _V356_STRAINS = (:εₕ!, :ε₊ₕ!, :εcₕ!, :ε̽ₕ!)
 _v356_op(name) = getproperty(Bramble, name)
 
 if Threads.nthreads() >= 2
-    @testset "Divergence, curl and strain-average engines run on several threads and equal Serial ($(D)D)" for D in 2:3
+    # Divergence, curl and strain-average engines run on several threads and equal Serial.
+    @testset "div/curl/strain threaded, $(D)D" for D in 2:3
         n = D == 2 ? (64, 64) : (12, 12, 12)
         Ωs, Ωb = _poly_mesh_pair(n)
         Ws, Wb = gridspace(Ωs), gridspace(Ωb)
@@ -593,13 +603,15 @@ Base.@propagate_inbounds function Base.getindex(s::_BC357Spy, i::Int)
     return s.x[i]
 end
 
-@testset "Broadcast equal to Serial under CpuPolyester, n=$n" for n in _BC357_SIZES
+# Broadcast under CpuPolyester equals Serial.
+@testset "broadcast equals Serial, n=$n" for n in _BC357_SIZES
     _bc357_check_equal(n)
 end
 
 # Silent on a single thread: there is nothing to band across.
 if Threads.nthreads() >= 2
-    @testset "Broadcast runs on several threads under CpuPolyester, $(D)D" for D in 1:3
+    # Broadcast runs on several threads under CpuPolyester.
+    @testset "broadcast is threaded, $(D)D" for D in 1:3
         n = D == 1 ? (200_000,) : D == 2 ? (400, 400) : (60, 60, 60)
         Wₕ = _bc357_space(n, CpuPolyester())
         uₕ, wₕ = Rₕ(Wₕ, x -> sin(sum(x))), Rₕ(Wₕ, x -> prod(x))
@@ -609,6 +621,60 @@ if Threads.nthreads() >= 2
         v .= 2.0 .* spy .+ wₕ
         @test count_ones(_BC357_SEEN[]) >= 2
         @test parent(v) == 2.0 .* parent(uₕ) .+ parent(wₕ)
+    end
+end
+
+# A matrix-free product under `CpuPolyester` sweeps the colour bands through the replay hooks
+# (`_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!`, gpena/Bramble.jl#326), so
+# it must equal the serial product on the same non-uniform mesh on every repeat, and what it
+# allocates is the `@batch` launch cost, whatever the grid size.
+@testset "matrix-free mul! (#326)" begin
+    _mf_space(D, n, policy) = begin
+        Random.seed!(326)
+        doms = (
+            domain(interval(0.0, 1.0)),
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0)),
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0))
+        )
+        gridspace(mesh(doms[D], ntuple(_ -> n, D), ntuple(_ -> false, D); backend = backend(policy = policy)))
+    end
+    _mf_close(a, b) = isapprox(a, b; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(abs, b)))
+    _diff(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
+    _pair(u, v) = innerₕ(D₋ₓ(u), v) + 2.0 * innerₕ(u, D₋ₓ(v))
+    _composite(u, v) = innerₕ(u(1), v(1)) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) + innerₕ(D₋ₓ(u(1)), v(2))
+    sizes = (41, 13, 7)
+    @testset "$(D)D, $(nm)" for D in 1:3,
+        (nm, f, comps, dl) in (
+            ("diffusion", _diff, 1, :boundary), ("pair", _pair, 1, nothing),
+            ("composite", _composite, 2, :boundary)
+        )
+
+        space(W) = comps == 1 ? W : W × W
+        Ws, Wb = space(_mf_space(D, sizes[D], Serial())), space(_mf_space(D, sizes[D], CpuPolyester()))
+        kw = dl === nothing ? (;) : (; dirichlet = dl)
+        ops = matrix_free_operator(form(Ws, Ws, f); kw...)
+        opb = matrix_free_operator(form(Wb, Wb, f); kw...)
+        x = randn(size(ops, 2))
+        ref = ops * x
+        y = similar(ref)
+        @test all(1:20) do _
+            mul!(y, opb, x)
+            return _mf_close(y, ref)
+        end
+        y0 = randn(size(ops, 1))
+        y .= y0
+        mul!(y, opb, x, 0.5, 2.0)
+        @test _mf_close(y, 0.5 * ref + 2.0 * y0)
+    end
+    @testset "mul! allocation: size-free" begin
+        _alloc(y, op, x) = (mul!(y, op, x); @allocated mul!(y, op, x))
+        bytes = map((200, 800)) do n
+            W = _mf_space(1, n, CpuPolyester())
+            op = matrix_free_operator(form(W, W, _diff); dirichlet = :boundary)
+            x = randn(size(op, 2))
+            _alloc(similar(x), op, x)
+        end
+        @test bytes[1] == bytes[2]
     end
 end
 
