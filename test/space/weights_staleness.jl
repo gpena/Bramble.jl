@@ -1,6 +1,7 @@
 module SpaceWeightsStalenessTests
 
 using Test
+using ForwardDiff
 using Bramble
 using Bramble: norm₊
 using Bramble: change_points!, set_points!, weights
@@ -187,6 +188,91 @@ using ..TestUtils: alloc_test, @test_allocs
                 stretch!(Ms)
                 @test_throws ArgumentError assemble!(A, F)
             end
+        end
+    end
+
+    # A linear form's `πₕ(uₕ)` source is read at every fill, not sampled once when the form
+    # is built (gpena/Bramble.jl#408): a refill after new values in `uₕ` matches a fresh
+    # form, and one after `uₕ`'s mesh has moved throws instead of interpolating on it, as do
+    # `interpolate_at` and `πₕ!` themselves. The source mesh is only ever read through
+    # `interpolate_at`; the walked mesh is never moved.
+    @testset "Interpolated source mesh moved" begin
+        m1(n) = mesh(domain(interval(0.0, 1.0)), n, true)
+        m2(n) = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n + 1),
+            (true, false))
+        function stretch!(M)
+            dim(M) == 1 &&
+                return change_points!(M, collect(range(0.0, 1.0; length = npoints(M))) .^ 2)
+            n1, n2 = npoints(M, Tuple)
+            return change_points!(M, (collect(range(0.0, 1.0; length = n1)) .^ 2,
+                collect(range(0.0, 1.0; length = n2))))
+        end
+        g(x) = sum(abs2, x) + 1
+        h(x) = 100 * first(x) + 3
+        for (mk, x) in ((m1, 0.3), (m2, (0.3, 0.4))), kind in (:scalar, :component)
+
+            @testset "$kind, $(dim(mk(3)))D" begin
+                Ms, Mt = mk(5), mk(8)
+                Ws, Wt = gridspace(Ms), gridspace(Mt)
+                U = kind === :scalar ? Rₕ(Ws, g) : Rₕ(Ws × Ws, (h, g))
+                uₕ = kind === :scalar ? U : components(U)[2]
+                L = form(Wt, v -> innerₕ(πₕ(uₕ), v))
+                b = assemble(L)
+                @test alloc_test(assemble!, b, L) == 0
+
+                parent(U) .*= 2
+                assemble!(b, L)
+                @test b ≈ assemble(form(Wt, v -> innerₕ(πₕ(uₕ), v)))
+                @test b ≈ assemble(form(Wt, v -> innerₕ(πₕ(Wt, uₕ), v)))
+
+                stretch!(Ms)
+                @test_throws ArgumentError assemble!(b, L)
+                @test_throws ArgumentError assemble(L)
+                @test_throws ArgumentError interpolate_at(uₕ, x)
+                @test_throws ArgumentError πₕ!(element(Wt), uₕ)
+                @test_throws ArgumentError πₕ(Wt, uₕ)
+            end
+        end
+    end
+
+    # Unsampled, the interpolant's element type is read off `uₕ`, the walked mesh and the
+    # fill, never probed at a point: the walked mesh's middle point lies outside `uₕ`'s mesh
+    # here, where a probe would answer with the fill's type.
+    @testset "Interpolated source element type" begin
+        Ms = mesh(domain(interval(0.0, 0.4)), 11, true)
+        Ws = gridspace(Ms)
+        Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 21, true))
+        g = s -> begin
+            uₛ = element(Ws, typeof(s))
+            parent(uₛ) .= [s * x^2 for x in points(Ms)]
+            assemble(form(Wₕ, v -> innerₕ(πₕ(uₛ; outside = 0.0), v)))
+        end
+        @test !iszero(g(1.0))
+        @test ForwardDiff.derivative(g, 2.0) ≈ g(1.0) rtol = 1.0e-12
+
+        W32 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 21, true))
+        u64 = Rₕ(Ws, x -> 1 / 3 + x[1])
+        @test eltype(assemble(form(W32, v -> innerₕ(πₕ(u64; outside = 0.0f0), v)))) ===
+              Float64
+    end
+
+    # A fill of another type than the values (`outside = 0` against `Float64`) is converted
+    # to the blend's type, so the refill evaluating it at every point stays at 0 bytes.
+    @testset "Interpolated source with an integer fill" begin
+        for (Ma, Mb, f) in (
+            (mesh(domain(interval(0.0, 1.0)), 9, true),
+                mesh(domain(interval(0.0, 1.0)), 65, true), x -> sin(x[1])),
+            (mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, true)),
+                mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (33, 33),
+                    (true, true)), x -> x[1] * x[2]))
+
+            Wa, Wb = gridspace(Ma), gridspace(Mb)
+            ua = Rₕ(Wa, f)
+            L = form(Wb, v -> innerₕ(πₕ(ua; outside = 0), v))
+            b = assemble(L)
+            @test eltype(b) === Float64
+            @test b ≈ assemble(form(Wb, v -> innerₕ(πₕ(ua; outside = 0.0), v)))
+            @test alloc_test(assemble!, b, L) == 0
         end
     end
 end

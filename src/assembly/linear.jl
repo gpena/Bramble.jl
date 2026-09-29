@@ -199,6 +199,10 @@ re-evaluated on later assemblies. `VectorElement` and `Ref` coefficients are una
 see the note on `_lower_sources` in `form/common.jl` for why, and for the documented
 alternative (`update_coefficients!`) a source meant to keep varying should use instead.
 
+The one exception is an interpolant [`πₕ`](@ref)`(uₕ)`, which is never sampled: every
+`assemble`/`assemble!` evaluates it on `uₕ`'s current values, and throws an `ArgumentError`
+once `uₕ`'s mesh has moved (gpena/Bramble.jl#408).
+
 # Examples
 
 ```jldoctest
@@ -374,6 +378,12 @@ const _ELTYPE_WRAPPERS = Union{
     I = grid_inds[length(grid_inds) ÷ 2 + 1]
     return promote_type(T, typeof(op.func(point(Ωₕ, I))))
 end
+
+# An interpolant `πₕ(uₕ)` is left unsampled (gpena/Bramble.jl#408), so probing it at a
+# point would answer with the fill's type wherever that point lies outside `uₕ`'s mesh:
+# its type is read off `uₕ`, the walked mesh's coordinates and the fill instead.
+@inline _leaf_eltype(T, op::SourceFunction{D, <:GridInterpolant}, sp::ScalarGridSpace) where {D} =
+    promote_type(T, _interpolant_type(op.func, eltype(sp)))
 
 # Each strength's weight type (`_dirac_weight_type`, `stencil_eval.jl`), every one of them.
 @inline _leaf_eltype(T, op::DiracSource, sp) = promote_type(

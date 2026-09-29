@@ -599,6 +599,12 @@ source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
 # `update_coefficients!`/`VectorElement` pattern (`semidiscretize`'s docstring) instead of a
 # raw closure captured directly in the form.
 #
+# One exception: the interpolant `πₕ(uₕ)`, whose function is a `GridInterpolant`
+# (operators/interpolation.jl, which holds its method), is left unsampled and read at every
+# fill (gpena/Bramble.jl#408). Its values are `uₕ`'s, which a caller changes in place, and
+# only `interpolate_at` at fill time can see `uₕ`'s mesh move and refuse it; its type
+# depends on `uₕ`'s element type only, so it costs no recompilation either.
+#
 # Every node type not named here is a leaf as far as this pass is concerned (it can never
 # contain a `SourceFunction`, or lowering inside it is handled by its own caller -- see
 # `_lower_sources_for_space` in `form/linear.jl` for `LinearProduct`/`OperatorAdd` routing
