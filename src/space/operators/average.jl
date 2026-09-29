@@ -133,6 +133,7 @@ _launch_average_engine!(out, in_ref, dims, dir, dim_val, dev) = _throw_no_ka_ave
         dim_val::Val
 )
     _check_no_alias(vₕ, uₕ)
+    _check_same_grid(vₕ, uₕ)
     sp = space(uₕ)
     if execution_policy(sp) isa GpuPolicy
         dev = ka_device(backend(sp))
@@ -335,6 +336,7 @@ end
         dim_val::Val
 )
     _check_no_alias(vₕ, uₕ)
+    _check_same_grid(vₕ, uₕ)
     sp = space(uₕ)
     (execution_policy(sp) isa GpuPolicy || locality(typeof(vₕ.data)) isa DeviceLocality ||
      locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_centered_average()

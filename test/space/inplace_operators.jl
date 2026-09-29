@@ -184,6 +184,83 @@ end
         end
     end
 
+    @testset "Grid mismatch rejected" begin
+        # The engines index both vectors under `@inbounds` with the source's grid shape, so
+        # a destination of another size was written past its end: on a 4x5 source, `D₋ₓ!`
+        # wrote 11 entries beyond a 9-entry view, which on a plain `Vector` corrupts
+        # memory. A destination of the right length on a differently shaped grid is not a
+        # memory error, but it would still receive the source's values in the wrong
+        # places. Every family has to refuse all three, before writing anything.
+        Ωs = (
+            mesh(domain(interval(0.0, 1.0)), 9, false),
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 5), (true, false)),
+            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 3), (false, true, false))
+        )
+        bigger = (
+            mesh(domain(interval(0.0, 1.0)), 12, true),
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, true)),
+            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 4), (true, true, true))
+        )
+        # the same number of points, arranged differently; a 1D grid has only one shape
+        permuted = (
+            nothing,
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (true, false)),
+            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 5, 4), (false, true, false))
+        )
+        centered = (Bramble.Mcₓ!, Bramble.Mcᵧ!, Bramble.Mc₂!)
+        fs = (x -> x^2 + 1, x -> x[1] + 2x[2]^2 + 1, x -> x[1] * x[2] + x[3] + 1)
+
+        # A NaN-filled destination of `len` entries, viewed from a longer array so that a
+        # write past its end lands somewhere the test can see.
+        nan_dest(len, Wₕ) = VectorElement(view(fill(NaN, len + 31), 1:len), Wₕ)
+
+        # Throws an ArgumentError and leaves the whole backing array as it was.
+        function rejects(f!, vₕ, uₕ)
+            raw = parent(parent(vₕ))
+            before = copy(raw)
+            thrown = try
+                f!(vₕ, uₕ)
+                false
+            catch err
+                err isa ArgumentError
+            end
+            return thrown && isequal(raw, before)
+        end
+
+        for D in 1:3
+            @testset "$(D)D" begin
+                Wₕ, Vₕ = gridspace(Ωs[D]), gridspace(Ωs[D], Val(2))
+                Bₕ, Bᵥ = gridspace(bigger[D]), gridspace(bigger[D], Val(2))
+                uₕ, uv = Rₕ(Wₕ, fs[D]), Rₕ(Vₕ, (fs[D], fs[D]))
+                n, m = ndofs(Wₕ), ndofs(Bₕ)
+
+                for f! in (map(first, _ops(Val(D)))..., centered[1:D]...)
+                    @testset "$f!" begin
+                        # smaller: the source's own space over too short a view
+                        @test rejects(f!, nan_dest(n - 1, Wₕ), uₕ)
+                        @test rejects(f!, nan_dest(2n - 1, Vₕ), uv)
+
+                        # larger: a grid function of a bigger mesh
+                        @test rejects(f!, nan_dest(m, Bₕ), uₕ)
+                        @test rejects(f!, nan_dest(2m, Bᵥ), uv)
+
+                        # equal length, different mesh shape
+                        if permuted[D] !== nothing
+                            Pₕ, Pᵥ = gridspace(permuted[D]), gridspace(permuted[D], Val(2))
+                            @test ndofs(Pₕ) == n
+                            @test rejects(f!, nan_dest(n, Pₕ), uₕ)
+                            @test rejects(f!, nan_dest(2n, Pᵥ), uv)
+                        end
+
+                        # a matching destination is still accepted
+                        @test f!(nan_dest(n, Wₕ), uₕ) isa VectorElement
+                        @test f!(nan_dest(2n, Vₕ), uv) isa VectorElement
+                    end
+                end
+            end
+        end
+    end
+
     @testset "Composite matching" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 7, true)
         Wₕ = gridspace(Ωₕ)
