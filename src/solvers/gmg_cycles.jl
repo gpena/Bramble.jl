@@ -373,7 +373,8 @@ but not symmetric. Allocates nothing on a [`CpuSerial`](@ref) policy.
 - `ArgumentError`: `x` or `b` is not 1-based, or the two may alias.
 
 # Examples
-One full multigrid cycle leaves a smaller residual than one V-cycle from zero.
+On a smooth right-hand side, one full multigrid cycle leaves a residual more than ten times
+smaller than one V-cycle from zero does.
 ```jldoctest
 using Bramble, LinearAlgebra
 using Bramble: v_cycle!, fmg!
@@ -381,8 +382,10 @@ using Bramble: v_cycle!, fmg!
 build(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 P = gmg_preconditioner(build, Ωₕ)
 A = assemble(build(gridspace(Ωₕ)))
-b = A * ones(33^2)
-norm(b - A * fmg!(zeros(33^2), P, b)) < norm(b - A * v_cycle!(zeros(33^2), P, b))
+b = A * vec([sin(3x) * cos(2y) for x in range(0, 1, 33), y in range(0, 1, 33)])
+r_fmg = norm(b - A * fmg!(zeros(33^2), P, b))
+r_v = norm(b - A * v_cycle!(zeros(33^2), P, b))
+r_fmg < r_v / 10
 
 # output
 true
