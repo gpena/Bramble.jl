@@ -977,10 +977,17 @@ _bind_interp_spaces(op::Any, trial_leaf, test_leaf) = op
 # and the mirror numbers the same degrees of freedom. On a host leaf `host_weights` returns the
 # leaf itself, so the host path binds exactly what it bound before. Binding happens once per
 # fill, never at `form` construction, so a mirror never outlives a `change_points!`.
+#
+# The leaf's weights are read through `weights` first, for its staleness check alone: once
+# the source mesh has moved, every fill, refill, matrix-free apply and pattern walk throws
+# here, as it does for a moved walked leaf, instead of locating cells on the new points and
+# scattering into a pattern built for the old ones (gpena/Bramble.jl#367). One integer
+# comparison per fill.
 function _bind_interp_spaces(
         op::InterpolationNode{D, S, OpType, TrialSide}, trial_leaf, test_leaf
 ) where {D, S, OpType}
     inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
+    weights(trial_leaf)
     src = host_weights(trial_leaf)
     return InterpolationNode{D, typeof(src), typeof(inner), TrialSide}(
         src, inner, op.outside
@@ -991,6 +998,7 @@ function _bind_interp_spaces(
         op::InterpolationNode{D, S, OpType, TestSide}, trial_leaf, test_leaf
 ) where {D, S, OpType}
     inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
+    weights(test_leaf)
     src = host_weights(test_leaf)
     return InterpolationNode{D, typeof(src), typeof(inner), TestSide}(
         src, inner, op.outside

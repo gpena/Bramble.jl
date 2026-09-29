@@ -216,6 +216,17 @@ end
     return nothing
 end
 
+# Every destination leaf must be a grid function of the source's grid (gpena/Bramble.jl#402):
+# the engines index each one under `@inbounds` with the source's shape. Checked at each
+# public entry point rather than in the shared engines, so host and device refuse alike and
+# a destination is checked once, not once per direction. `uₕ` is the scalar source or the
+# first field component; the tuple method walks a gradient, 3D curl or strain destination.
+@inline _check_dest_grid(vₕ::VectorElement, uₕ::VectorElement) = _check_same_grid(vₕ, uₕ)
+@inline function _check_dest_grid(vₕ::Tuple, uₕ::VectorElement)
+    map(v -> _check_dest_grid(v, uₕ), vₕ)
+    return nothing
+end
+
 # --- Divergence ---------------------------------------------------------------------- #
 
 """
@@ -263,6 +274,7 @@ function divₕ!(vₕ::VectorElement, uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
     _check_field_arity(comps, Val(D), "divₕ")
+    _check_dest_grid(vₕ, first(comps))
     _divergence!(vₕ, comps, Wₕ, Backward(), Val(D))
     return vₕ
 end
@@ -286,6 +298,7 @@ function div₊ₕ!(vₕ::VectorElement, uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
     _check_field_arity(comps, Val(D), "div₊ₕ")
+    _check_dest_grid(vₕ, first(comps))
     _divergence!(vₕ, comps, Wₕ, Forward(), Val(D))
     return vₕ
 end
@@ -390,10 +403,16 @@ end
 )
 
 @doc (@doc curlₕ)
-@inline curlₕ!(vₕ, uₕ) = _curl!(vₕ, uₕ, Backward(), "curlₕ!")
+function curlₕ!(vₕ, uₕ)
+    _check_dest_grid(vₕ, first(_field_components(uₕ)))
+    return _curl!(vₕ, uₕ, Backward(), "curlₕ!")
+end
 
 @doc (@doc curl₊ₕ)
-@inline curl₊ₕ!(vₕ, uₕ) = _curl!(vₕ, uₕ, Forward(), "curl₊ₕ!")
+function curl₊ₕ!(vₕ, uₕ)
+    _check_dest_grid(vₕ, first(_field_components(uₕ)))
+    return _curl!(vₕ, uₕ, Forward(), "curl₊ₕ!")
+end
 
 function _curl!(vₕ::VectorElement, uₕ, dir, op::String)
     comps = _field_components(uₕ)
@@ -483,9 +502,26 @@ See also: [`divₕ`](@ref), [`∇ₕ`](@ref), [`D̃ₓ`](@ref)
 """
 @inline Δₕ(uₕ::VectorElement) = Δₕ!(similar(uₕ), uₕ)
 
+# The engine walks each parent as one grid, so on composite elements the totals agreeing is
+# not enough: a destination whose leaves sit on a permuted grid has the same length. Each
+# destination leaf is checked against the source leaf it pairs with.
+@inline _check_laplacian_grid(vₕ, uₕ) = _check_same_grid(vₕ, uₕ)
+@inline function _check_laplacian_grid(
+        vₕ::VectorElement{<:CompositeGridSpace}, uₕ::VectorElement{<:CompositeGridSpace}
+)
+    _check_same_grid(vₕ, uₕ)
+    vs, us = components(vₕ), components(uₕ)
+    length(vs) == length(us) || _throw_grid_mismatch_error(
+        length(parent(vₕ)), _grid_dims(vₕ), length(parent(uₕ)), _grid_dims(uₕ)
+    )
+    map(_check_same_grid, vs, us)
+    return nothing
+end
+
 @doc (@doc Δₕ)
 function Δₕ!(vₕ::VectorElement, uₕ::VectorElement)
     _check_no_alias(vₕ, uₕ)
+    _check_laplacian_grid(vₕ, uₕ)
     Ωₕ = mesh(space(uₕ))
     dims = npoints(Ωₕ, Tuple)
     out = parent(vₕ)
@@ -748,6 +784,7 @@ function εₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     ),
     )
     _check_field_arity(comps, Val(D), "εₕ!")
+    _check_dest_grid(dest, first(comps))
     Ωₕ = mesh(Wₕ)
     dims = npoints(Ωₕ, Tuple)
     _strain_rows!(execution_policy(Wₕ), dest, comps, Ωₕ, dims, Val(D), Val(D))
@@ -840,6 +877,7 @@ function ∇cₕ!(dest, uₕ::VectorElement)
     D = dim(Ωₕ)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇cₕ!")
+    _check_dest_grid(dest, uₕ)
     _centered_gradient!(
         execution_policy(space(uₕ)), outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), Centered(), Val(D)
     )
@@ -894,6 +932,7 @@ function divcₕ!(vₕ::VectorElement, uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
     _check_field_arity(comps, Val(D), "divcₕ")
+    _check_dest_grid(vₕ, first(comps))
     _divergence!(vₕ, comps, Wₕ, Centered(), Val(D))
     return vₕ
 end
@@ -929,6 +968,7 @@ end
 @doc (@doc curlcₕ)
 function curlcₕ!(vₕ, uₕ)
     _check_centered_host(vₕ, "curlcₕ!")
+    _check_dest_grid(vₕ, first(_field_components(uₕ)))
     return _curl!(vₕ, uₕ, Centered(), "curlcₕ!")
 end
 
@@ -968,6 +1008,7 @@ function εcₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     Ωₕ = mesh(_field_space(uₕ))
     dim(Ωₕ) == D || throw(DimensionMismatch("εcₕ! destination is $(D)x$D but the mesh is $(dim(Ωₕ))D"))
     _check_field_arity(comps, Val(D), "εcₕ!")
+    _check_dest_grid(dest, first(comps))
     _centered_strain_rows!(
         execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Centered(),
         Val(D), Val(D)
@@ -1076,6 +1117,7 @@ function ∇̃ₕ!(dest, uₕ::VectorElement)
     D = dim(Ωₕ)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇̃ₕ!")
+    _check_dest_grid(dest, uₕ)
     _star_gradient!(execution_policy(space(uₕ)), outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), Val(D))
     return dest
 end
@@ -1125,6 +1167,7 @@ function diṽₕ!(vₕ::VectorElement, uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
     _check_field_arity(comps, Val(D), "diṽₕ")
+    _check_dest_grid(vₕ, first(comps))
     _divergence!(vₕ, comps, Wₕ, StarForward(), Val(D))
     return vₕ
 end
@@ -1161,6 +1204,7 @@ end
 @doc (@doc curl̃ₕ)
 function curl̃ₕ!(vₕ, uₕ)
     _check_star_host(vₕ, "curl̃ₕ!")
+    _check_dest_grid(vₕ, first(_field_components(uₕ)))
     return _curl!(vₕ, uₕ, StarForward(), "curl̃ₕ!")
 end
 
@@ -1263,6 +1307,7 @@ function ε₊ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     Ωₕ = mesh(_field_space(uₕ))
     dim(Ωₕ) == D || throw(DimensionMismatch("ε₊ₕ! destination is $(D)x$D but the mesh is $(dim(Ωₕ))D"))
     _check_field_arity(comps, Val(D), "ε₊ₕ!")
+    _check_dest_grid(dest, first(comps))
     _forward_strain_rows!(
         execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Val(D), Val(D)
     )
@@ -1360,6 +1405,7 @@ function ∇̽ₕ!(dest, uₕ::VectorElement)
     D = dim(Ωₕ)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇̽ₕ!")
+    _check_dest_grid(dest, uₕ)
     _centered_gradient!(
         execution_policy(space(uₕ)), outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), CrossWeighted(), Val(D)
     )
@@ -1401,6 +1447,7 @@ function div̽ₕ!(vₕ::VectorElement, uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
     _check_field_arity(comps, Val(D), "div̽ₕ")
+    _check_dest_grid(vₕ, first(comps))
     _divergence!(vₕ, comps, Wₕ, CrossWeighted(), Val(D))
     return vₕ
 end
@@ -1437,6 +1484,7 @@ end
 @doc (@doc curl̽ₕ)
 function curl̽ₕ!(vₕ, uₕ)
     _check_centered_host(vₕ, "curl̽ₕ!")
+    _check_dest_grid(vₕ, first(_field_components(uₕ)))
     return _curl!(vₕ, uₕ, CrossWeighted(), "curl̽ₕ!")
 end
 
@@ -1477,6 +1525,7 @@ function ε̽ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     Ωₕ = mesh(_field_space(uₕ))
     dim(Ωₕ) == D || throw(DimensionMismatch("ε̽ₕ! destination is $(D)x$D but the mesh is $(dim(Ωₕ))D"))
     _check_field_arity(comps, Val(D), "ε̽ₕ!")
+    _check_dest_grid(dest, first(comps))
     _centered_strain_rows!(
         execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), CrossWeighted(),
         Val(D), Val(D)

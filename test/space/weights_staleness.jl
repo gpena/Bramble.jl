@@ -153,6 +153,42 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs normₕ(u)
         @test_allocs weights(Wₕ)
     end
+
+    # An interpolation's source leaf is read through `weights` when the form binds it, so a
+    # host refill whose source mesh has moved throws instead of returning numbers for the
+    # old mesh (gpena/Bramble.jl#367). The moved mesh is only ever an interpolation source:
+    # no term walks it natively, since a walked stale leaf already throws on its own.
+    @testset "Interpolation source mesh moved" begin
+        m1(n) = mesh(domain(interval(0.0, 1.0)), n, true)
+        m2(n) = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n + 1),
+            (true, false))
+        function stretch!(M)
+            dim(M) == 1 &&
+                return change_points!(M, collect(range(0.0, 1.0; length = npoints(M))) .^ 2)
+            n1, n2 = npoints(M, Tuple)
+            return change_points!(M, (collect(range(0.0, 1.0; length = n1)) .^ 2,
+                collect(range(0.0, 1.0; length = n2))))
+        end
+        cases = (
+            ("trial πₕ scalar", (Ws, Wt) -> (Ws, Wt), (u, v) -> innerₕ(πₕ(u), v)),
+            ("test πₕ scalar", (Ws, Wt) -> (Wt, Ws), (u, v) -> innerₕ(u, πₕ(v))),
+            ("trial πₕ composite", (Ws, Wt) -> (Ws × Wt, Wt × Wt),
+                (U, V) -> innerₕ(πₕ(U(1)), V(1)) + innerₕ(U(2), V(2))),
+            ("test πₕ composite", (Ws, Wt) -> (Wt × Wt, Ws × Wt),
+                (U, V) -> innerₕ(U(1), πₕ(V(1))) + innerₕ(U(2), V(2)))
+        )
+        for (mk, ns, nt) in ((m1, 7, 11), (m2, 4, 6)), (name, spaces, f) in cases
+
+            @testset "$name, $(dim(mk(3)))D" begin
+                Ms, Mt = mk(ns), mk(nt)
+                F = form(spaces(gridspace(Ms), gridspace(Mt))..., f)
+                A = assemble(F)
+                @test alloc_test(assemble!, A, F) == 0
+                stretch!(Ms)
+                @test_throws ArgumentError assemble!(A, F)
+            end
+        end
+    end
 end
 
 end # module

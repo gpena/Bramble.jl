@@ -50,6 +50,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     # package or the simplifier moves rather than when an operator does. Daily on both
     # platforms, and in any run with no group set, including this file's own standalone one.
     TestUtils.WITH_SLOW_TESTS && TestUtils.WITH_AD_TESTS && include("jacobian_pattern.jl")
+    # Mixed composite/scalar pairs (gpena/Bramble.jl#367): dependency-free, so on every push.
+    include("jacobian_pattern_blocks.jl")
     include("type_cached_assemble.jl")
     include("semidiscrete.jl")
     include("sparse_solvers.jl")
