@@ -96,7 +96,7 @@ function _refused_with_bramble_error(a, dep)
     @test err isa ArgumentError && occursin("πₕ", sprint(showerror, err))
 end
 
-@testset "jacobian_pattern: dependencies through πₕ" begin
+@testset "jacobian_pattern: dependencies via πₕ" begin
     # Each case: the form's builder over a coefficient, the dependency, and how the
     # coefficient is computed from the trial values at run time.
     @testset "1D scalar, $name" for (name, dep, build) in (
