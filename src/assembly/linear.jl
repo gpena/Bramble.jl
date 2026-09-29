@@ -382,8 +382,8 @@ end
 # An interpolant `πₕ(uₕ)` is left unsampled (gpena/Bramble.jl#408), so probing it at a
 # point would answer with the fill's type wherever that point lies outside `uₕ`'s mesh:
 # its type is read off `uₕ`, the walked mesh's coordinates and the fill instead.
-@inline _leaf_eltype(T, op::SourceFunction{D, <:GridInterpolant}, sp::ScalarGridSpace) where {D} =
-    promote_type(T, _interpolant_type(op.func, eltype(sp)))
+@inline _leaf_eltype(T, op::SourceFunction{D, <:GridInterpolant}, sp::ScalarGridSpace) where {D} = promote_type(
+    T, _interpolant_type(op.func, eltype(sp)))
 
 # Each strength's weight type (`_dirac_weight_type`, `stencil_eval.jl`), every one of them.
 @inline _leaf_eltype(T, op::DiracSource, sp) = promote_type(

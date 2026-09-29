@@ -261,11 +261,10 @@ using ..TestUtils: alloc_test, @test_allocs
     @testset "Interpolated source with an integer fill" begin
         for (Ma, Mb, f) in (
             (mesh(domain(interval(0.0, 1.0)), 9, true),
-                mesh(domain(interval(0.0, 1.0)), 65, true), x -> sin(x[1])),
+            mesh(domain(interval(0.0, 1.0)), 65, true), x -> sin(x[1])),
             (mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, true)),
-                mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (33, 33),
-                    (true, true)), x -> x[1] * x[2]))
-
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (33, 33),
+                (true, true)), x -> x[1] * x[2]))
             Wa, Wb = gridspace(Ma), gridspace(Mb)
             ua = Rₕ(Wa, f)
             L = form(Wb, v -> innerₕ(πₕ(ua; outside = 0), v))
