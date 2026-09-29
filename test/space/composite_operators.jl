@@ -9,7 +9,7 @@ using Bramble: components, ndofs, _grid_dims, _op_mesh
 using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff₊₂, diff₋ₕ
 # εₕ/εₕ! (gpena/Bramble.jl#234, S6.7): new names, not yet exported -- the integrator adds
 # `export εₕ, εₕ!` to src/Bramble.jl alongside divₕ/curlₕ/Δₕ.
-import Bramble: εₕ, εₕ!
+import Bramble: εₕ, εₕ!, Δₕ!
 using ..TestUtils: alloc_test, @test_allocs
 
 # Operators on composite grid functions.
@@ -245,6 +245,55 @@ using ..TestUtils: alloc_test, @test_allocs
             # a composite whose leaf count (3) differs from the mesh dimension (2)
             wrong_uₕ = Rₕ(V3, (x -> x[1], x -> x[2], x -> x[1] + x[2]))
             @test_throws DimensionMismatch εₕ(wrong_uₕ)
+        end
+    end
+
+    @testset "Composite Laplacian" begin
+        Bs = (
+            domain(interval(0.0, 1.0)),
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+        )
+        Ns = ((9, 6), ((5, 4), (4, 6)), ((4, 5, 3), (3, 4, 4)))
+        Us = (
+            (false, true), ((true, false), (false, true)),
+            ((false, true, false), (true, false, true))
+        )
+        f1 = (x -> x^3 + 1, x -> x[1]^2 * x[2] + 1, x -> x[1]^2 + x[2] * x[3])
+        f2 = (x -> sin(x) + 2, x -> x[1] * x[2]^2, x -> x[1] * x[2] + x[3]^3)
+        for D in 1:3
+            Ω1 = mesh(Bs[D], Ns[D][1], Us[D][1])
+            Ω2 = mesh(Bs[D], Ns[D][2], Us[D][2])
+            for (lbl, W1, W2) in (
+                ("$(D)D one mesh", gridspace(Ω1), gridspace(Ω1)),
+                ("$(D)D two meshes", gridspace(Ω1), gridspace(Ω2))
+            )
+                @testset "$lbl" begin
+                    uₕ = Rₕ(W1 × W2, (f1[D], f2[D]))
+                    refs = (Δₕ(Rₕ(W1, f1[D])), Δₕ(Rₕ(W2, f2[D])))
+                    wₕ = Δₕ(uₕ)
+                    for k in 1:2
+                        @test parent(components(wₕ)[k]) ≈ parent(refs[k])
+                    end
+                    vₕ = similar(uₕ)
+                    @test Δₕ!(vₕ, uₕ) === vₕ
+                    for k in 1:2
+                        @test parent(components(vₕ)[k]) ≈ parent(refs[k])
+                    end
+                    @test_allocs Δₕ!(vₕ, uₕ)
+                    @test (@inferred Δₕ!(vₕ, uₕ)) === vₕ
+                end
+            end
+        end
+
+        @testset "permuted destination is refused" begin
+            Ωa = mesh(Bs[2], (5, 4), (true, false))
+            Ωb = mesh(Bs[2], (4, 6), (false, true))
+            uₕ = Rₕ(gridspace(Ωa) × gridspace(Ωb), (f1[2], f2[2]))
+            vₕ = similar(Rₕ(gridspace(Ωb) × gridspace(Ωa), (f1[2], f2[2])))
+            fill!(parent(vₕ), -12345.0)
+            @test_throws ArgumentError Δₕ!(vₕ, uₕ)
+            @test all(==(-12345.0), parent(vₕ))
         end
     end
 end
