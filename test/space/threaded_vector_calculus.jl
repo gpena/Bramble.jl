@@ -2,9 +2,9 @@ module SpaceThreadedVectorCalculusTests
 
 using Test
 using Bramble
-using Bramble: VectorElement, CpuPolyester
+using Bramble: VectorElement
 using Random
-using ..TestUtils: alloc_test
+using ..TestUtils: alloc_test, WITH_SLOW_TESTS
 
 # Under a `CpuThreaded` (`Parallel()`) backend the in-place vector-calculus operators -- the
 # gradients, divergences, curls and strain tensors of vector_calculus.jl -- reach the banded
@@ -23,6 +23,18 @@ const _STRAINS = (:εₕ!, :ε₊ₕ!, :εcₕ!, :ε̽ₕ!)
 const _CENTERED = (:∇cₕ!, :∇̽ₕ!, :divcₕ!, :div̽ₕ!, :curlcₕ!, :curl̽ₕ!, :εcₕ!, :ε̽ₕ!)
 
 _op(name) = getproperty(Bramble, name)
+
+# `unit` keeps, per group, the first and last operator (the one-sided and the centered
+# engine) in 2D; in 3D, where the operators cost the most to compile, the gradients' pair
+# and the first divergence and curl, the strain tensors being left to 2D. 1D and `slow`
+# keep them all.
+function _ops(D, names)
+    (WITH_SLOW_TESTS || D == 1) && return names
+    D == 2 && return (first(names), last(names))
+    names === _GRADIENTS && return (first(names), last(names))
+    names === _STRAINS && return ()
+    return (first(names),)
+end
 
 function _domain(D)
     D == 1 ? domain(interval(0.0, 1.0)) :
@@ -46,7 +58,7 @@ _field(D) = ntuple(d -> (x -> sum(x) * d + sin(d * x[d]) + x[d]^2), D)
 
 # Everything one policy produces, as a flat list of storage vectors; destinations start at
 # NaN so an unwritten point cannot pass.
-function _results(n::NTuple{D, Int}, policy) where {D}
+function _results(n::NTuple{D, Int}, policy; composite = true) where {D}
     Ωₕ = _mesh(n, policy)
     Wₕ = gridspace(Ωₕ)
     uₕ = Rₕ(Wₕ, _F[D])
@@ -56,15 +68,18 @@ function _results(n::NTuple{D, Int}, policy) where {D}
     fresh() = (v = similar(uₕ); parent(v) .= NaN; v)
     centered_ok = all(>=(3), n)
     out = Dict{String, Vector{Vector{Float64}}}()
+    ops(names) = _ops(D, names)
 
-    for name in _GRADIENTS
+    for name in ops(_GRADIENTS)
         name in _CENTERED && !centered_ok && continue
         dest = D == 1 ? fresh() : ntuple(_ -> fresh(), D)
         @test _op(name)(dest, uₕ) === dest
         out["$name"] = [copy(parent(v)) for v in (dest isa Tuple ? dest : (dest,))]
     end
 
-    for name in _DIVERGENCES, (label, field) in (("tuple", tup), ("composite", comp))
+    fields = composite ? (("tuple", tup), ("composite", comp)) : (("tuple", tup),)
+
+    for name in ops(_DIVERGENCES), (label, field) in fields
 
         name in _CENTERED && !centered_ok && continue
         v = fresh()
@@ -73,7 +88,7 @@ function _results(n::NTuple{D, Int}, policy) where {D}
     end
 
     if D >= 2
-        for name in _CURLS, (label, field) in (("tuple", tup), ("composite", comp))
+        for name in ops(_CURLS), (label, field) in fields
 
             name in _CENTERED && !centered_ok && continue
             dest = D == 2 ? fresh() : ntuple(_ -> fresh(), 3)
@@ -82,7 +97,7 @@ function _results(n::NTuple{D, Int}, policy) where {D}
         end
     end
 
-    for name in _STRAINS, (label, field) in (("tuple", tup), ("composite", comp))
+    for name in ops(_STRAINS), (label, field) in fields
 
         name in _CENTERED && !centered_ok && continue
         dest = ntuple(_ -> ntuple(_ -> fresh(), D), D)
@@ -92,8 +107,9 @@ function _results(n::NTuple{D, Int}, policy) where {D}
     return out
 end
 
-function _check_equal(n, policy)
-    serial, other = _results(n, Serial()), _results(n, policy)
+function _check_equal(n, policy; composite = true)
+    serial = _results(n, Serial(); composite)
+    other = _results(n, policy; composite)
     @test keys(serial) == keys(other)
     for (k, v) in serial
         @testset "$k n=$n" begin
@@ -107,6 +123,11 @@ end
 const _SIZES = (((1,), (2,), (3,), (5,), (401,)),
     ((9, 1), (9, 2), (3, 3), (11, 7), (40, 37)),
     ((5, 4, 1), (5, 4, 2), (4, 3, 3), (9, 8, 13)))
+
+# What `unit` keeps of `_SIZES`: per dimension, the degenerate last axis (2 points, empty
+# bands) and the smallest size the centered operators accept (3 points along every axis,
+# still fewer than the band count). The full sweep runs in `slow`.
+const _UNIT_SIZES = (((2,), (3,)), ((9, 2), (3, 3)), ((5, 4, 2), (4, 3, 3)))
 
 # A storage vector recording which threads read it: proves the banded path ran, rather
 # than trusting the dispatch.
@@ -124,7 +145,11 @@ _spy(u) = VectorElement(_Spy(copy(parent(u))), space(u))
 
 @testset "Threaded vector calculus" begin
     @testset "CpuThreaded equal to Serial, $(D)D" for D in 1:3
-        foreach(n -> _check_equal(n, Parallel()), _SIZES[D])
+        # The composite field dispatches the same banded engines whatever the dimension, so
+        # `unit` runs it in 1D and 2D and `slow` adds 3D, where it costs the most to compile.
+        composite = WITH_SLOW_TESTS || D < 3
+        foreach(n -> _check_equal(n, Parallel(); composite),
+            WITH_SLOW_TESTS ? _SIZES[D] : _UNIT_SIZES[D])
     end
 
     # Silent on a single thread: there is nothing to band across.
@@ -138,24 +163,24 @@ _spy(u) = VectorElement(_Spy(copy(parent(u))), space(u))
                 tup = ntuple(d -> Rₕ(Wₕ, fs[d]), D)
                 spies = map(_spy, tup)
                 uₕ = Rₕ(Wₕ, _F[D])
-                for name in _GRADIENTS
+                for name in _ops(D, _GRADIENTS)
                     dest = ntuple(_ -> similar(uₕ), D)
                     _SEEN[] = 0
                     _op(name)(dest, _spy(uₕ))
                     @test count_ones(_SEEN[]) >= 2
                 end
-                for name in _DIVERGENCES
+                for name in _ops(D, _DIVERGENCES)
                     _SEEN[] = 0
                     _op(name)(similar(uₕ), spies)
                     @test count_ones(_SEEN[]) >= 2
                 end
-                for name in _CURLS
+                for name in _ops(D, _CURLS)
                     dest = D == 2 ? similar(uₕ) : ntuple(_ -> similar(uₕ), 3)
                     _SEEN[] = 0
                     _op(name)(dest, spies)
                     @test count_ones(_SEEN[]) >= 2
                 end
-                for name in _STRAINS
+                for name in _ops(D, _STRAINS)
                     dest = ntuple(_ -> ntuple(_ -> similar(uₕ), D), D)
                     _SEEN[] = 0
                     _op(name)(dest, spies)
@@ -177,14 +202,6 @@ _spy(u) = VectorElement(_Spy(copy(parent(u))), space(u))
                 minimum(alloc_test(_op(:εₕ!), dest, tup) for _ in 1:5))
         end
         @test min_bytes(16) == min_bytes(160)
-    end
-
-    # The Polyester arm runs only when `BramblePolyesterExt` is loaded in this process, and
-    # runs no test otherwise.
-    if Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing
-        @testset "CpuPolyester equal to Serial, $(D)D" for D in 1:3
-            foreach(n -> _check_equal(n, CpuPolyester()), _SIZES[D])
-        end
     end
 end
 

@@ -577,9 +577,21 @@ function _bc357_results(n, policy)
     v = fresh()
     v .= α .* sin.(uₕ) ./ (1 .+ wₕ .^ 2)
     out["nested"] = copy(parent(v))
+    v = fresh()
+    v .= r
+    out["fill"] = copy(parent(v))
+    v = fresh()
+    v .= uₕ
+    out["copy"] = copy(parent(v))
     a = copy(uₕ)
     a .= a .+ 0.5 .* wₕ
     out["self"] = copy(parent(a))
+    a = copy(uₕ)
+    a .= wₕ .- a .* a
+    out["self twice"] = copy(parent(a))
+    a = copy(uₕ)
+    a .*= α
+    out["scale"] = copy(parent(a))
     return out
 end
 
