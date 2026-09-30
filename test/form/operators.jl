@@ -52,6 +52,7 @@ using Bramble:
                D̽ₓ,
                Mcₓ
 using LinearAlgebra: I
+using ..TestUtils: WITH_SLOW_TESTS
 
 # The symbolic operator layer: averages, the shift node, region restriction, and the
 # inner products that turn a pair of operators into a bilinear product.
@@ -428,7 +429,13 @@ end
     box(D) = D == 1 ? interval(0.0, 1.0) :
              D == 2 ? interval(0.0, 1.0) × interval(0.0, 2.0) :
              interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)
-    taps = (D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, jumpₓ, Mₓ, M₊ₓ, Mcₓ, S₊ₓ, S₋ₓ)
+    # Every tap compiles its own form, matrix, refill and product per operand and dimension,
+    # which is what the sweep costs. `unit` keeps one tap per kind (a backward and a forward
+    # difference, a jump, a forward average, a shift) on all three operands in every
+    # dimension; `slow` runs the whole family.
+    taps = WITH_SLOW_TESTS ?
+           (D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, jumpₓ, Mₓ, M₊ₓ, Mcₓ, S₊ₓ, S₋ₓ) :
+           (D₋ₓ, D₊ₓ, jumpₓ, M₊ₓ, S₊ₓ)
 
     @testset "$(D)D" for D in 1:3
         n = ntuple(i -> 4 + i, D)

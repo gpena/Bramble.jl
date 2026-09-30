@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: D₋ₓ!, VectorElement
 using Random
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, @test_allocs, WITH_SLOW_TESTS
 
 # The in-place forms of every directional operator.
 #
@@ -22,9 +22,15 @@ using ..TestUtils: alloc_test, @test_allocs
 const _INPLACE_FAMILIES = (:D₋, :D₊, :diff₋, :diff₊, :M, :M₊, :jump, :Dc, :D̃, :D̽)
 const _DIR_SUFFIXES = ("ₓ", "ᵧ", "₂")
 
-function _ops(::Val{D}) where {D}
+# `unit` runs one family per engine in the grid-mismatch sweep (a backward difference, an
+# average, a centered difference and the one-sided fallback `D̽`, plus the centered average
+# and the x shifts below): every `!` form compiles its own rejection path over a view-backed
+# destination, which is what the sweep costs. `slow` runs every family.
+const _UNIT_FAMILIES = (:D₋, :M, :Dc, :D̽)
+
+function _ops(::Val{D}, families = _INPLACE_FAMILIES) where {D}
     entries = Tuple{Function, Function, String}[]
-    for dim in 1:D, fam in _INPLACE_FAMILIES
+    for dim in 1:D, fam in families
 
         suffix = _DIR_SUFFIXES[dim]
         name = Symbol(fam, suffix)
@@ -229,6 +235,8 @@ end
             return thrown && isequal(raw, before)
         end
 
+        families = WITH_SLOW_TESTS ? _INPLACE_FAMILIES : _UNIT_FAMILIES
+        nshifts(D) = WITH_SLOW_TESTS ? 2D : 2
         for D in 1:3
             @testset "$(D)D" begin
                 Wₕ, Vₕ = gridspace(Ωs[D]), gridspace(Ωs[D], Val(2))
@@ -236,7 +244,7 @@ end
                 uₕ, uv = Rₕ(Wₕ, fs[D]), Rₕ(Vₕ, (fs[D], fs[D]))
                 n, m = ndofs(Wₕ), ndofs(Bₕ)
 
-                for f! in (map(first, _ops(Val(D)))..., centered[1:D]..., shifts[1:(2D)]...)
+                for f! in (map(first, _ops(Val(D), families))..., centered[1:D]..., shifts[1:nshifts(D)]...)
                     @testset "$f!" begin
                         # smaller: the source's own space over too short a view
                         @test rejects(f!, nan_dest(n - 1, Wₕ), uₕ)
@@ -332,7 +340,12 @@ end
             (Bramble.ε₊ₕ!, :strain, :field, 1:3), (Bramble.ε̽ₕ!, :strain, :field, 1:3)
         )
 
+        # `unit` keeps the first form of each kind (divergence, curl, gradient, Laplacian,
+        # strain); every form compiles its own rejection path, so `slow` runs them all.
+        unit_forms = (Bramble.divₕ!, Bramble.curlₕ!, Bramble.∇cₕ!, Bramble.Δₕ!, Bramble.εₕ!)
         for (f!, kind, src, dims) in forms, D in dims
+
+            WITH_SLOW_TESTS || f! in unit_forms || continue
 
             @testset "$f! $(D)D" begin
                 Wₕ = gridspace(Ωs[D])
