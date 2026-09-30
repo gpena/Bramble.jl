@@ -690,11 +690,37 @@ end
     end
 end
 
-# The Polyester-gated mixed-policy testset of test/form/threaded_replay.jl ("Mixed leaf
-# policies: CpuThreaded beside CpuPolyester") only runs where `BramblePolyesterExt` is already
-# loaded; the `unit` group deliberately never loads Polyester, so that testset never runs in
-# CI on its own. Included here as a nested module so it runs wherever this file does (the
-# "ext"/"full" groups).
-include(joinpath(@__DIR__, "..", "form", "threaded_replay.jl"))
+# Mixed leaf policies, CpuThreaded beside CpuPolyester (gpena/Bramble.jl#318, moved here from
+# test/form/threaded_replay.jl, which keeps the Threaded + Serial case): whether a unit replays
+# is decided from the leaf its sweep walks, so a composite's leaves, or a cross-mesh form's two
+# meshes, may carry different policies. Each refill records, then replays, and agrees with the
+# same form on all-serial leaves over the same non-uniform meshes.
+@testset "mixed policies: Threaded + Polyester" begin
+    _rmesh(n, policy, seed) = (Random.seed!(seed);
+        mesh(domain(interval(0.0, 1.0)), n, false; backend = backend(policy = policy)))
+    leaf(policy, seed) = gridspace(_rmesh(33, policy, seed))
+    comp(p1, p2) = Bramble.CompositeGridSpace((leaf(p1, 1), leaf(p2, 2)))
+    f(u, v) = innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(2)), D₋ₓ(v(2))) +
+              innerₕ(D₋ₓ(u(1)), v(2)) + innerₕ(u(2), D₋ₓ(v(1))) +   # pair across leaves
+              innerₕ(D₋ₓ(u(2)), v(2)) + innerₕ(u(2), D₋ₓ(v(2)))     # pair on leaf 2
+    g(u, v) = innerₕ(Bramble.πₕ(u), v)
+    Wu(p) = gridspace(_rmesh(17, p, 3))
+    Wv(p) = gridspace(_rmesh(33, p, 4))
+    P, Ps = Bramble.Parallel(), Serial()
+    cases = (
+        (form(comp(P, CpuPolyester()), comp(P, CpuPolyester()), f),
+            assemble(form(comp(Ps, Ps), comp(Ps, Ps), f))),
+        (form(Wu(P), Wv(CpuPolyester()), g), assemble(form(Wu(Ps), Wv(Ps), g)))
+    )
+    for (a, R) in cases, refill! in (assemble!, assemble_parallel!)
+        A = copy(R)
+        for _ in 1:2   # record, then replay
+            fill!(nonzeros(A), NaN)
+            refill!(A, a)
+            @test getcolptr(A) == getcolptr(R) && rowvals(A) == rowvals(R)
+            @test isapprox(A, R; rtol = 1e-12)
+        end
+    end
+end
 
 end # module

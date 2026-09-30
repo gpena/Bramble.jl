@@ -6,7 +6,8 @@ using Random
 using SparseArrays
 using SparseArrays: getcolptr
 using Bramble: Serial, Parallel, backend, assemble_parallel!, allocate_system_matrix, D₋ₓ,
-               D₊ᵧ, πₕ, inner₊ₓ, CompositeGridSpace, CpuPolyester
+               D₊ᵧ, πₕ, inner₊ₓ, CompositeGridSpace
+using ..TestUtils: WITH_SLOW_TESTS
 
 # The threaded refill replays the form's recording (gpena/Bramble.jl#338): `assemble!` on a
 # `Parallel()` form and `assemble_parallel!` from any policy write through the recorded
@@ -46,13 +47,18 @@ _block_pair(u, v) = innerₕ(D₋ₓ(u(1)), v(2)) + innerₕ(u(2), D₋ₓ(v(1))
 
 const _SIZES = (41, 13, 7)
 
+# Compile time per form and dimension dominates this file, not grid size. `unit` keeps the
+# 2D composite and block-pair forms (the only per-leaf replay tests; their sweeps also walk
+# the scalar kernels) and the mixed-leaf cases; the scalar and pair forms and the 1D/3D
+# sweeps run under `slow`.
+const _DIMS = WITH_SLOW_TESTS ? (1:3) : (2,)
+const _FORMS = (("composite", _composite, 2), ("block pair", _block_pair, 2))
+const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1))..., _FORMS...) :
+                   _FORMS
+
 # Threaded refill replays the recording.
 @testset "threaded refill replays (#338)" begin
-    @testset "$(D)D, $(nm)" for D in 1:3,
-        (nm, f, comps) in (
-            ("scalar", _scalar, 1), ("pair", _pair, 1),
-            ("composite", _composite, 2), ("block pair", _block_pair, 2)
-        )
+    @testset "$(D)D, $(nm)" for D in _DIMS, (nm, f, comps) in _ALL_FORMS
 
         n = _SIZES[D]
         Ωs = _mesh(D, n, Serial())
@@ -95,7 +101,7 @@ const _SIZES = (41, 13, 7)
         @test _agrees(C, R)
     end
 
-    @testset "$(D)D: live coefficient through Rₕ!" for D in 1:3
+    @testset "$(D)D: live coefficient through Rₕ!" for D in _DIMS
         n = _SIZES[D]
         Ωs = _mesh(D, n, Serial())
         Ωp = _mesh(D, n, Parallel())
@@ -195,19 +201,7 @@ const _SIZES = (41, 13, 7)
         _check_mixed(Serial())
     end
 
-    # A `CpuPolyester` leaf replays too now (gpena/Bramble.jl#318): both leaves' units
-    # replay. This testset still exercises mixed-policy composite assembly — it still checks
-    # that leaves under different CPU policies agree, just that "mixed" no longer means "one
-    # replays, one searches". Building a
-    # `CpuPolyester` space needs Polyester, which the `unit` group deliberately does not load
-    # (test/space/inner_product.jl checks the error without it), so this runs only where the
-    # extension is already loaded.
-    if Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing
-        # Mixed leaf policies: CpuThreaded beside CpuPolyester.
-        @testset "mixed policies: Threaded + Polyester" begin
-            _check_mixed(CpuPolyester())
-        end
-    end
+    # The Threaded + Polyester mixed case lives in test/ext/polyester_ext.jl.
 
     # Test-side interpolation replays on one thread.
     @testset "test-side interpolation: one thread" begin
@@ -227,7 +221,7 @@ const _SIZES = (41, 13, 7)
 
     # Threaded tasks allocate per call, so a warmed refill is not 0 B; what it must not do
     # is grow with the grid (the plan's O13).
-    @testset "$(D)D: refill allocs flat in ndofs" for D in 1:3
+    @testset "$(D)D: refill allocs flat in ndofs" for D in _DIMS
         sizes = D == 1 ? (200, 800) : D == 2 ? (24, 64) : (10, 20)
         bytes_par = map(sizes) do n
             Ω = _mesh(D, n, Parallel())
