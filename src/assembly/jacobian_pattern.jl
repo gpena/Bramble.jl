@@ -129,6 +129,7 @@ then adds, to every row the term reaches there, the source-mesh columns that com
 reads: the corners of the cell the point falls in, and for an operator applied outside
 `πₕ` the corners at each neighbour that operator reaches. A dependency naming a leaf on
 another mesh without `πₕ` (`U -> Mₕ(U)`) is refused with an `ArgumentError`.
+So is one naming a component the trial space does not have (`U -> U(3)` on `W × W`).
 
 ```julia
 using Bramble: jacobian_pattern
@@ -187,11 +188,10 @@ function _scalar_jacobian_walk!(
             off_u, off_v, _ = stencil[k]
             _offsets_seen_before(stencil, k, off_u, off_v) && continue
 
-            Iv = I + CartesianIndex(off_v)
-            checkbounds(Bool, lin_indices, Iv) || continue
+            row = _test_row(lin_indices, I, off_v)
             col = _trial_column(lin_indices, I, off_u)
-            col == 0 && continue
-            push!(I_vec, lin_indices[Iv])
+            (row == 0 || col == 0) && continue
+            push!(I_vec, row)
             push!(J_vec, col)
         end
 
@@ -204,9 +204,8 @@ function _scalar_jacobian_walk!(
             off_u, off_v, _ = stencil[k]
             _row_offset_seen_before(stencil, k, off_v) && continue
 
-            Iv = I + CartesianIndex(off_v)
-            checkbounds(Bool, lin_indices, Iv) || continue
-            row = lin_indices[Iv]
+            row = _test_row(lin_indices, I, off_v)
+            row == 0 && continue
 
             for δ in coeff_offsets
                 Ic = I + CartesianIndex(δ)
@@ -267,6 +266,23 @@ end
     return nothing
 end
 
+@noinline function _throw_dependency_component(target::Int, ncomponents::Int)
+    throw(
+        ArgumentError(
+        "a coefficient dependency named component $target of the trial space, which has " *
+        "$ncomponents components.",
+    ),
+    )
+end
+
+# The trial leaf and column offset of component `target`, refused with an `ArgumentError`
+# when the trial space has no such component.
+@inline function _dependency_component(trial_leaves, target::Int)
+    1 <= target <= length(trial_leaves) ||
+        _throw_dependency_component(target, length(trial_leaves))
+    return trial_leaves[target]
+end
+
 # `nothing` -> the block's own trial leaf. An explicit component -> that leaf, looked up
 # from `trial_leaves`. Either way the leaf must share the walked mesh `Ωₕ`: the offsets are
 # taken from the walked point.
@@ -274,7 +290,7 @@ function _dependency_leaf(
         target::Union{Int, Nothing}, trial_leaves, own_leaf, own_col_offset, Ωₕ
 )
     leaf_space, leaf_col_offset = target === nothing ? (own_leaf, own_col_offset) :
-                                  trial_leaves[target]
+                                  _dependency_component(trial_leaves, target)
     _same_mesh_or_throw(target, leaf_space, Ωₕ)
     return (LinearIndices(indices(mesh(leaf_space))), leaf_col_offset)
 end
@@ -382,7 +398,7 @@ function _pattern_term_jacobian!(
     point_deps = map(point_nodes) do op
         target = trial_component_or_nothing(op)
         leaf, leaf_col_offset = target === nothing ? (trial_leaf, col_offset) :
-                                trial_leaves[target]
+                                _dependency_component(trial_leaves, target)
         return _bind_point_dependency(op, target, leaf, leaf_col_offset, Ωₕ)
     end
 
