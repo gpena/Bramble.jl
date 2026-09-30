@@ -54,7 +54,6 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("jacobian_pattern_blocks.jl")
     include("type_cached_assemble.jl")
     include("semidiscrete.jl")
-    include("sparse_solvers.jl")
     # v3.3.0 plan (memory scaling): `bandwidths`/`blockbandwidths` read from the AST alone
     # (S4.1) and the dependency-free Kronecker operator (S5.1). Neither needs a weak
     # dependency, so both run with the rest of this subsystem rather than behind the `ext`
@@ -63,10 +62,6 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("kronecker.jl")
     # Matrix-free application of any bilinear form (gpena/Bramble.jl#326).
     include("matrix_free.jl")
-    # Preconditioners from a matrix-free diagonal (gpena/Bramble.jl#327).
-    include("preconditioners.jl")
-    # Geometric multigrid: nested hierarchies (gpena/Bramble.jl#329).
-    include("multigrid.jl")
     include("expression.jl")
     # Composite trial/test functions through the symbolic `∇ₕ`/`εₕ`/`divₕ` builders (S6.5).
     # Behind `slow`: its hand-expanded comparison functions (`hand_strain`, in particular)

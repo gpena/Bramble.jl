@@ -144,6 +144,7 @@ if __bramble_with_unit_tests
         end
 
         include("form/runtests.jl")
+        include("solvers/runtests.jl")
         include("exporters/runtests.jl")
 
         # The worked-example pages themselves, run rather than mirrored: each is a

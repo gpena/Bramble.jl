@@ -1,4 +1,4 @@
-module TestSparseSolversInterface
+module SolversSparseSolversTests
 
 using Test
 using Bramble

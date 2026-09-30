@@ -1,4 +1,4 @@
-module TestFormMultigrid
+module SolversMultigridTests
 
 using Test
 using Bramble
@@ -736,4 +736,4 @@ end
     end
 end
 
-end # module TestFormMultigrid
+end # module SolversMultigridTests

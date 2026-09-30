@@ -1,4 +1,4 @@
-module TestFormPreconditioners
+module SolversPreconditionersTests
 
 using Test
 using Bramble
