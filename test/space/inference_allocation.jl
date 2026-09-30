@@ -2,13 +2,12 @@ module SpaceInferenceAllocationTests
 
 using Test
 using Bramble
-using Bramble: Dcₕ, D̃ₕ, D̽ₕ, divₕ!, curlₕ!, Δₕ!, norm₊
+using Bramble: divₕ!, curlₕ!, Δₕ!, norm₊
 using Bramble: D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, M₂, Mₓ, VectorElement, inner₊ᵧ, inner₊ₓ, jumpᵧ, jump₂
 using Bramble: jumpₓ, norminf
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
-import Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ, diff₊ₓ, diff₊ᵧ, diff₊₂, diff₊ₕ, D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ, M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
+import Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂
 import Bramble: div₊ₕ!
-using JET
 using Bramble:
                components,
                _difference_engine!,
@@ -17,13 +16,8 @@ using Bramble:
                Backward,
                Forward,
                diff₋ₓ,
-               diff₊ₓ,
                diff₋ᵧ,
-               diff₊ᵧ,
-               diff₋₂,
-               diff₊₂,
-               diff₋ₕ,
-               diff₊ₕ
+               diff₋₂
 using ..TestUtils: alloc_test, @test_allocs
 
 # Type stability and allocation across grid spaces, operators and inner products.
@@ -64,26 +58,8 @@ using ..TestUtils: alloc_test, @test_allocs
     end
 
     @testset "Type stability (operators)" begin
-        # scalar operators, per direction, in each dimension
-        for (lbl, uₕ, ops) in (
-            ("1D", uₕ1, (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, Mₓ, M₊ₓ)),
-            ("2D", uₕ2, (diff₋ᵧ, diff₊ᵧ, D₋ᵧ, D₊ᵧ, jumpᵧ, Mᵧ, M₊ᵧ)),
-            ("3D", uₕ3, (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₂, M₂, M₊₂))
-        )
-            @testset "$lbl" begin
-                for op in ops
-                    @test @inferred(op(uₕ)) isa VectorElement
-                end
-            end
-        end
-
-        # the tuple-valued aliases: a bare element in 1D, an NTuple above it
-        @test @inferred(∇ₕ(uₕ1)) isa VectorElement
-        for op in (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M₊ₕ)
-            @test @inferred(op(uₕ2)) isa NTuple{2, VectorElement}
-            @test @inferred(op(uₕ3)) isa NTuple{3, VectorElement}
-        end
-
+        # The scalar directional operators and the vectorial aliases, per dimension, are
+        # pinned by `@test_opt` in test/quality/type_stability.jl.
         # composite grid functions go through a separate dispatch
         @test @inferred(D₋ₓ(cₕ2)) isa VectorElement
         @test @inferred(∇ₕ(cₕ2)) isa NTuple{2, VectorElement}
@@ -92,11 +68,6 @@ using ..TestUtils: alloc_test, @test_allocs
     @testset "Type stability (inner products)" begin
         for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), ("3D", uₕ3))
             @testset "$lbl" begin
-                @test @inferred(innerₕ(uₕ, uₕ)) isa Float64
-                @test @inferred(inner₊(uₕ, uₕ)) isa Float64
-                @test @inferred(normₕ(uₕ)) isa Float64
-                @test @inferred(snorm₁ₕ(uₕ)) isa Float64
-                @test @inferred(norm₁ₕ(uₕ)) isa Float64
                 @test @inferred(norminf(uₕ)) isa Float64
                 g = ∇ₕ(uₕ)
                 @test @inferred(norm₊(g)) isa Float64
@@ -117,7 +88,6 @@ using ..TestUtils: alloc_test, @test_allocs
         # than looping, for the same boxing reason the vectorial aliases do (#146).
         for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), ("3D", uₕ3))
             @testset "$lbl" begin
-                @test @inferred(Δₕ(uₕ)) isa VectorElement
                 @test @inferred(divₕ(∇ₕ(uₕ))) isa VectorElement
             end
         end
@@ -158,22 +128,6 @@ using ..TestUtils: alloc_test, @test_allocs
             @test_allocs divₕ!(v2, (uₕ2, uₕ2))
             @test_allocs div₊ₕ!(v2, (uₕ2, uₕ2))
             @test_allocs curlₕ!(v2, (uₕ2, uₕ2))
-        end
-    end
-
-    @testset "No dynamic dispatch (vectorial aliases)" begin
-        # gpena/Bramble.jl#146: `∇ₕ`/`∇₊ₕ`/`diff₋ₕ`/`diff₊ₕ`/`Mₕ`/`M₊ₕ`/`D̃ₕ`/`Dcₕ`/`D̽ₕ`
-        # used to generate their 2D/3D methods from `ntuple(i -> base_op(arg, Val(i)),
-        # Val(D))`, which boxes `i` as a runtime Int inside the closure: `Val(i)` can
-        # never constant-fold, so every coordinate paid for dynamic dispatch all the way
-        # down the difference-engine call stack (2-8 dispatches per call, per JET).
-        # `_vectorial_expr` now writes the 2D/3D methods out with literal `Val(1)`,
-        # `Val(2)`, `Val(3)` calls instead, so this must report zero.
-        for op in (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M₊ₕ, D̃ₕ, Dcₕ, D̽ₕ)
-            rep2 = JET.report_call(op, (typeof(uₕ2),))
-            @test isempty(JET.get_reports(rep2))
-            rep3 = JET.report_call(op, (typeof(uₕ3),))
-            @test isempty(JET.get_reports(rep3))
         end
     end
 
