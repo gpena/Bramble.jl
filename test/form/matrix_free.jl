@@ -5,6 +5,7 @@ using Bramble
 using Bramble: MatrixFreeOperator, VectorElement, trial_space, test_space, restrict_to, πₕ, jumpₓ, M₊ₓ, D₋ₓ, D₋ᵧ, D₊ᵧ
 using LinearAlgebra: mul!, norm
 using Random
+using ..TestUtils: WITH_SLOW_TESTS
 
 # `matrix_free_operator` (gpena/Bramble.jl#326) applies a bilinear form through the walk the
 # assembly replays, so every check compares it against `assemble(a; dirichlet)` on the same
@@ -134,7 +135,12 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
     # only into the rows of its own band. Both backends draw the same meshes (`_mf_spaces`
     # reseeds). Run at `--threads=4` for the race to have a chance.
     @testset "matrix-free: threaded mul! race-free" begin
-        for ((name, a, dl), (_, at, _)) in zip(cases, _mf_cases(backend(policy = Parallel())))
+        # `unit` keeps one case per plan that differs under `Parallel`: Dirichlet rows on a
+        # single leaf, a composite on one leaf object, and one on two leaves (the fused sweep
+        # below covers 3D and the other composite). `slow` runs all of them.
+        pcases = _mf_cases(backend(policy = Parallel()))
+        for ((name, a, dl), (_, at, _)) in zip(cases, pcases)
+            (WITH_SLOW_TESTS || name in ("2D diffusion", "composite", "two-leaf pair")) || continue
             @testset "$name" begin
                 op = _mf_op(a, dl)
                 opt = _mf_op(at, dl)
