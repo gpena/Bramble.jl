@@ -164,7 +164,22 @@ sort!(rows; by = r -> r[4], rev = true)
 
 # Every nested testset counts, the tops included. Passes are only a counter on their set;
 # failures, errors and broken tests are stored as results.
+# Other testset types (Supposition's report) may lack either field: they hold no nested
+# sets, and their tests are what `Test.get_test_counts` reports, else their results, else one.
+function foreign_tests(ts)
+    try
+        c = Test.get_test_counts(ts)
+        n = c.passes + c.fails + c.errors + c.broken
+        n > 0 && return n
+    catch
+    end
+    hasproperty(ts, :results) && ts.results isa AbstractVector && !isempty(ts.results) &&
+        return length(ts.results)
+    return 1
+end
+
 function count_tree(ts)
+    (hasproperty(ts, :n_passed) && hasproperty(ts, :results)) || return 0, foreign_tests(ts)
     nsets, ntests = 0, ts.n_passed
     for r in ts.results
         if r isa Test.AbstractTestSet
@@ -180,8 +195,18 @@ end
 n_testsets, n_tests = count_tree(root)
 
 # The root never finishes, so a failing testset does not throw at the end of the suite.
-has_failures(ts) = any(r -> r isa Test.AbstractTestSet ? has_failures(r) :
-                            r isa Union{Test.Fail, Test.Error}, ts.results)
+function has_failures(ts)
+    if !(hasproperty(ts, :n_passed) && hasproperty(ts, :results))
+        return try
+            c = Test.get_test_counts(ts)
+            c.fails + c.errors > 0
+        catch
+            false
+        end
+    end
+    return any(r -> r isa Test.AbstractTestSet ? has_failures(r) :
+                    r isa Union{Test.Fail, Test.Error}, ts.results)
+end
 has_failures(root) && @warn "Suite finished with errors"
 
 commit = try
