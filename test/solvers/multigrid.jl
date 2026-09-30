@@ -234,7 +234,7 @@ end
 
 # The threaded and Polyester sweeps write every point once, so they equal the serial ones
 # bitwise, on every repeat. Run at `--threads=4` for a race to have a chance. `CpuPolyester`
-# is test/ext/polyester_ext.jl's.
+# is owned by test/ext/polyester_ext.jl's "Multigrid under CpuPolyester".
 @testset "gmg: threaded transfers agree" begin
     policies = (Parallel(),)
     for policy in policies

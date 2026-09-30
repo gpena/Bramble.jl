@@ -114,7 +114,8 @@ end
 end
 
 # Every point is computed by the same loop body under every policy, so the answers must be
-# equal, not merely close. `CpuPolyester` needs `BramblePolyesterExt`: test/ext/polyester_ext.jl's.
+# equal, not merely close. `CpuPolyester` needs `BramblePolyesterExt`:
+# test/ext/polyester_ext.jl's "Shift engines under CpuPolyester" owns it.
 @testset "shift: engines agree" begin
     policies = (Parallel(),)
     for D in 1:3, policy in policies
