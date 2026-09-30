@@ -713,6 +713,7 @@ end
         (form(Wu(P), Wv(CpuPolyester()), g), assemble(form(Wu(Ps), Wv(Ps), g)))
     )
     for (a, R) in cases, refill! in (assemble!, assemble_parallel!)
+
         A = copy(R)
         for _ in 1:2   # record, then replay
             fill!(nonzeros(A), NaN)

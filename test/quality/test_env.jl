@@ -64,6 +64,7 @@ end
 function _loaded_packages(roots)
     out = Set{String}()
     for root in roots, file in _jl_files(root)
+
         _loaded!(out, Meta.parseall(read(file, String); filename = file))
     end
     return out

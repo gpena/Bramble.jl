@@ -27,9 +27,11 @@ using ..TestUtils: _fd, _have, _run_gpu_tests, _check_eoc, _tri, _nonuniform_poi
 
 const TM = (Bramble,)
 
-_meshes() = (mesh(domain(interval(0.0, 1.0)), 17, false),
-    mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 9), (false, true)),
-    mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6), false))
+function _meshes()
+    (mesh(domain(interval(0.0, 1.0)), 17, false),
+        mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 9), (false, true)),
+        mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6), false))
+end
 
 _diffusion(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 _load(W) = form(W, v -> innerₕ(1.0, v))
@@ -85,14 +87,17 @@ end
         end
         # The scalar operators, one direction per dimension.
         for (uₕ, ops) in ((uₕ1, (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, Mₓ, M₊ₓ)),
-            (uₕ2, (diff₋ᵧ, diff₊ᵧ, D₋ᵧ, D₊ᵧ, jumpᵧ, Mᵧ, M₊ᵧ)),
-            (uₕ3, (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₂, M₂, M₊₂))), op in ops
+                (uₕ2, (diff₋ᵧ, diff₊ᵧ, D₋ᵧ, D₊ᵧ, jumpᵧ, Mᵧ, M₊ᵧ)),
+                (uₕ3, (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₂, M₂, M₊₂))),
+            op in ops
+
             @test_opt target_modules = TM op(uₕ)
         end
         # Moved from test/space/inference_allocation.jl (gpena/Bramble.jl#146): the 2D/3D
         # vectorial aliases once built their methods from `ntuple(i -> op(u, Val(i)))`,
         # boxing `i` and dispatching dynamically down the difference engine.
         for op in (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M₊ₕ, D̃ₕ, Dcₕ, D̽ₕ), vₕ in (uₕ2, uₕ3)
+
             @test_opt target_modules = TM op(vₕ)
         end
     end
