@@ -200,4 +200,37 @@ end
     end
 end
 
+# A scalar form whose test side reads πₕ: its stencil names absolute test rows on the other
+# mesh, not offsets from the walked point, and the pattern must still contain the one
+# `assemble` stores, with a dependency or without.
+@testset "jacobian_pattern: πₕ on the test side" begin
+    @testset "$(dim(mk_mesh(3)))D, $name" for (mk_mesh, na, nb) in ((_n1, 9, 6), (_n2, 5, 3)),
+        (name, deps) in (("no dependency", ()), ("Mₕ(U)", (U -> Mₕ(U),)))
+
+        Wa, Wb = gridspace(mk_mesh(na)), gridspace(mk_mesh(nb))
+        c = element(Wa, 1.0)
+        a = form(Wa, Wb, (u, v) -> innerₕ(c * u, πₕ(v)))
+        P = jacobian_pattern(a, deps...)
+        @test size(P) == size(assemble(a))
+        @test issubset(_pattern(assemble(a)), _pattern(P))
+    end
+end
+
+# A dependency naming a component the trial space does not have is refused by name.
+@testset "jacobian_pattern: missing component" begin
+    @testset "$name" for (name, dep) in (("πₕ(U(3))", U -> πₕ(U(3))), ("U(3)", U -> U(3)))
+        Wa, Wb = gridspace(_n1(9)), gridspace(_n1(6))
+        a = form(Wb × Wb, Wa, (U, v) -> innerₕ(element(Wa, 1.0) * πₕ(U(1)), v))
+        err = try
+            jacobian_pattern(a, dep)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        msg = err isa ArgumentError ? sprint(showerror, err) : ""
+        @test occursin("component 3", msg) && occursin("2 components", msg)
+    end
+end
+
 end # module
