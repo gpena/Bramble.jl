@@ -39,7 +39,7 @@ end
 # a transposed pair, per dimension; then composite spaces with crossed components, one on a
 # single leaf object and one on two, so both halves of the pair walk run.
 function _mf_cases(be = backend())
-    out = Any[]
+    out = Tuple{String, Bramble.BilinearForm, Union{Nothing, Symbol, Tuple{Vararg{Symbol}}}}[]
     spaces = _mf_spaces(be)
     for W in spaces
         D = dim(W)

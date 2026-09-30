@@ -448,7 +448,7 @@ end
         cu = ("c*u", u -> c * u, z -> element(W, parent(c) .* parent(z)))
         cdu = ("c*D₋ₓ(u)", u -> c * D₋ₓ(u), z -> element(W, parent(c) .* parent(D₋ₓ(z))))
         dcu = ("D₋ₓ(c*u)", u -> D₋ₓ(c * u), z -> D₋ₓ(element(W, parent(c) .* parent(z))))
-        cases = Any[(t, o...) for o in (cu, cdu, dcu) for t in taps]
+        cases = Any[(t, o...) for o in (cu, cdu, dcu) for t in taps]  # Any: every tap and operand is its own closure type
         D >= 2 && push!(cases, (S₊ᵧ ∘ D₋ᵧ, cu...), (D₊ᵧ ∘ S₋ᵧ, cu...))
         basis(j) = element(W, [i == j ? 1.0 : 0.0 for i in 1:ndofs(W)])
         @testset "$(tap)∘$(nm)" for (tap, nm, opd, grid) in cases

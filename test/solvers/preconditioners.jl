@@ -35,7 +35,7 @@ end
 # (name, form, dirichlet): variable diffusion, a transposed difference pair, a region
 # restriction per dimension, then a composite form with a crossed block.
 function _pc_cases()
-    out = Any[]
+    out = Tuple{String, Bramble.BilinearForm, Union{Nothing, Symbol, Tuple{Vararg{Symbol}}}}[]
     for W in _pc_spaces()
         D = dim(W)
         κ = Rₕ(W, x -> 1 + sum(abs2, x))

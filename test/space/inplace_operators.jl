@@ -353,7 +353,8 @@ end
                      Rₕ(gridspace(Ωs[D], Val(D)), ntuple(_ -> fs[D], D))
                 n = ndofs(Wₕ)
                 good() = nan_dest(n, Wₕ)
-                wrongs = Any[(n - 1, Wₕ), (ndofs(gridspace(bigger[D])), gridspace(bigger[D]))]
+                wrongs = Tuple{Int, Bramble.AbstractSpaceType}[
+                    (n - 1, Wₕ), (ndofs(gridspace(bigger[D])), gridspace(bigger[D]))]
                 if permuted[D] !== nothing
                     Pₕ = gridspace(permuted[D])
                     @test ndofs(Pₕ) == n

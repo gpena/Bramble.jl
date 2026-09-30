@@ -39,7 +39,7 @@ _mesh(n, policy) = mesh(_D2, (n, n), (false, false); backend = backend(policy = 
 
 # Run `f` once per iteration of a user-level `Threads.@threads` loop and return every result.
 function _nested_results(f)
-    out = Vector{Any}(undef, 2 * Threads.nthreads())
+    out = Vector{Any}(undef, 2 * Threads.nthreads())  # Any: `f` is an arbitrary closure, its result type is the caller's
     Threads.@threads for i in eachindex(out)
         out[i] = f()
     end

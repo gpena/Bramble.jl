@@ -65,7 +65,7 @@ const _traced_ad = AutoSparse(
 
     # Matches the direct (uncached) result, at Float64 and at Dual.
     WITH_AD_TESTS && @testset "matches direct, Float64 and Dual" begin
-        cache = Dict()
+        cache = Dict{DataType, Any}()
         diffusion_matrix_cached(uₕ) = type_cached_assemble!(_build_diffusion, cache, uₕ; dirichlet = :boundary)
 
         u0 = element(Wₕ, 0.0)
@@ -110,7 +110,7 @@ const _traced_ad = AutoSparse(
         # crash outright (UndefRefError) if `refill!` ran after allocate_system_matrix
         # instead of before, since a tracer is not `isbits` and starts genuinely
         # unassigned rather than merely holding arbitrary bits.
-        cache = Dict()
+        cache = Dict{DataType, Any}()
         diffusion_matrix_cached(uₕ) = type_cached_assemble!(_build_diffusion, cache, uₕ; dirichlet = :boundary)
         function residual_cached(u_vec::AbstractVector{T}) where {T}
             uₕ = element(Wₕ, T)
@@ -134,7 +134,7 @@ const _traced_ad = AutoSparse(
         # property that actually matters holds: unlike `diffusion_matrix_direct`, whose
         # allocation grows with `ndofs` because it rebuilds the whole sparsity pattern every
         # call, a cache hit's cost does not grow with the mesh at all.
-        diffusion_matrix_cached = let cache = Dict()
+        diffusion_matrix_cached = let cache = Dict{DataType, Any}()
             uₕ -> type_cached_assemble!(_build_diffusion, cache, uₕ; dirichlet = :boundary)
         end
 
@@ -167,7 +167,7 @@ const _traced_ad = AutoSparse(
             a = form(Wₕ_big, Wₕ_big, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
             return assemble(a; dirichlet = :boundary)
         end
-        diffusion_matrix_cached_big = let cache_big = Dict()
+        diffusion_matrix_cached_big = let cache_big = Dict{DataType, Any}()
             uₕ -> type_cached_assemble!(
                 _build_diffusion_big, cache_big, uₕ; dirichlet = :boundary
             )
@@ -194,7 +194,7 @@ const _traced_ad = AutoSparse(
         l_sol = form(Wₕ, v -> innerₕ(gₕ_sol, v))
         F_sol = assemble(l_sol; dirichlet = bcs_sol)
 
-        cache = Dict()
+        cache = Dict{DataType, Any}()
         diffusion_matrix_cached(uₕ) = type_cached_assemble!(_build_diffusion, cache, uₕ; dirichlet = :boundary)
         function residual_cached(u_vec::AbstractVector{T}) where {T}
             uₕ = element(Wₕ, T)

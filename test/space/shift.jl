@@ -114,12 +114,9 @@ end
 end
 
 # Every point is computed by the same loop body under every policy, so the answers must be
-# equal, not merely close. `CpuPolyester` needs `BramblePolyesterExt`; it is checked when
-# Polyester is loaded (the `ext` group), and skipped otherwise.
+# equal, not merely close. `CpuPolyester` needs `BramblePolyesterExt`: test/ext/polyester_ext.jl's.
 @testset "shift: engines agree" begin
-    policies = Any[Parallel()]
-    Base.get_extension(Bramble, :BramblePolyesterExt) === nothing ||
-        push!(policies, Bramble.CpuPolyester())
+    policies = (Parallel(),)
     for D in 1:3, policy in policies
 
         us = Rₕ(gridspace(_mesh(D)), _f)

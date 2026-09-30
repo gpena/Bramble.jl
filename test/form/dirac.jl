@@ -357,7 +357,7 @@ using Bramble:
         # type, so a later `Dual` or a wider float is not narrowed to the first one's.
         pts2 = [(0.2,), (0.45,)]
         if WITH_AD_TESTS
-            for strengths in (s -> [() -> 1.0, () -> s], s -> Any[1.0, s])
+            for strengths in (s -> [() -> 1.0, () -> s], s -> Any[1.0, s])  # Any: the abstract-eltype strengths vector is the input under test
                 g = ForwardDiff.derivative(s -> assemble(form(W64, v -> innerₕ(dirac(pts2, strengths(s)), v))), 2.0)
                 @test g ≈ assemble(form(W64, v -> innerₕ(dirac(pts2[2:2], 1.0), v))) rtol = 1e-12
             end

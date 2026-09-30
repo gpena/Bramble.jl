@@ -2,7 +2,7 @@ module SolversMultigridTests
 
 using Test
 using Bramble
-using Bramble: GeometricMeshHierarchy, set_markers!, spacings, interpolation_matrix, CpuPolyester
+using Bramble: GeometricMeshHierarchy, set_markers!, spacings, interpolation_matrix
 using Bramble: AbstractSmoother, JacobiSmoother, ChebyshevSmoother, RedBlackGaussSeidel, max_eigenvalue_estimate,
                trial_space, D₋ₓ, D₋ᵧ, M₊ᵧ
 using Bramble: GMGPreconditioner, AbstractMatrixFreePreconditioner, VectorElement, v_cycle!, w_cycle!, fmg!,
@@ -234,10 +234,9 @@ end
 
 # The threaded and Polyester sweeps write every point once, so they equal the serial ones
 # bitwise, on every repeat. Run at `--threads=4` for a race to have a chance. `CpuPolyester`
-# needs Polyester, which the `unit` group does not load.
+# is test/ext/polyester_ext.jl's.
 @testset "gmg: threaded transfers agree" begin
-    policies = Any[Parallel()]
-    Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing && push!(policies, CpuPolyester())
+    policies = (Parallel(),)
     for policy in policies
         for ((Ωs, L), (Ωt, _)) in zip(_mg_transfer_meshes(), _mg_transfer_meshes(backend(; policy)))
             @test Bramble.execution_policy(Ωt) == policy
@@ -540,8 +539,8 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
     # The cycles against dense references, on a random non-uniform mesh.
     Random.seed!(MG_SEED)
     Ω = mesh(domain(_mg_box(2)), (17, 9), (false, false))
-    As = Any[]
-    Ps = Any[nothing]
+    As = Matrix{Float64}[]
+    Ps = Union{Nothing, AbstractMatrix{Float64}}[nothing]
     H = GeometricMeshHierarchy(Ω, 3)
     for l in 1:3
         push!(As, Matrix(assemble(_mg_spd(gridspace(H[l])))))
@@ -713,8 +712,7 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
 end
 
 @testset "gmg: threaded cycles agree" begin
-    policies = Any[Parallel()]
-    Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing && push!(policies, CpuPolyester())
+    policies = (Parallel(),)
     for policy in policies, (D, n) in ((2, 33), (3, 9))
 
         Ωs = _mg_jitter_mesh(D, n)

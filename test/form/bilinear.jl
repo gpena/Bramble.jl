@@ -942,7 +942,7 @@ using Bramble:
                 W = gridspace(Ω)
                 u, v = TrialFunction{D}(), TestFunction{D}()
 
-                terms = Any[resolve_ast(innerₕ(u, v)), resolve_ast(innerₕ(D₋ₓ(u), D₋ₓ(v)))]
+                terms = Any[resolve_ast(innerₕ(u, v)), resolve_ast(innerₕ(D₋ₓ(u), D₋ₓ(v)))]  # Any: each AST is its own node type
                 D >= 2 && push!(terms, resolve_ast(inner₊(∇ₕ(u), ∇ₕ(v))))
                 # margin 2: a composed difference and a multi-cell shift, neither a
                 # single tap -- exactly the case a hardcoded 1-cell rim would get wrong.
