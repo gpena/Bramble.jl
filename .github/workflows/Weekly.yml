@@ -101,6 +101,59 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           use_oidc: true
           fail_ci_if_error: false
+      # Kept for the `coverage-floor` job below: each half sees only its own files.
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.version == '1.12' && matrix.os == 'ubuntu-latest'
+        with:
+          name: lcov-${{ matrix.part }}
+          path: lcov.info
+          if-no-files-found: warn
+
+  # Per-file coverage floor over the two coverage halves merged (#371). A separate job
+  # because each `full` leg sees only its half. Reports to the job summary; no `--fail`
+  # until the gaps are closed.
+  coverage-floor:
+    name: Per-file coverage floor
+    needs: full
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+
+      # A leg that died before processing coverage uploads nothing; report on what exists.
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: lcov-*
+          path: lcov
+
+      - name: Report the per-file coverage floor
+        run: |
+          files=$(find lcov -name lcov.info 2>/dev/null | sort)
+          if [ -z "$files" ]; then
+            echo "::warning::No lcov artifacts found; skipping the coverage floor."
+            echo "No lcov artifacts from the coverage legs; floor not computed." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          julia .github/scripts/coverage_floor.jl --floor 90 \
+            --exempt .github/coverage_exemptions.toml $files > floor.txt
+          {
+            echo "## Per-file coverage floor (90%)"
+            echo
+            echo "Inputs: $(echo $files | tr '\n' ' ')"
+            echo
+            echo '```'
+            cat floor.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat floor.txt
 
   # Dependency vulnerability audit against the OSV database, which ingests Julia's own
   # JLSEC advisories from JuliaLang/SecurityAdvisories.jl alongside the CVE feeds. Weekly
