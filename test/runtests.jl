@@ -22,10 +22,11 @@ include("TestUtils.jl")
 # group the same way this does.
 const __bramble_test_group = TestUtils.TEST_GROUP
 
-# `full` deliberately does *not* imply `quality`. `full` has exactly one caller, `Weekly.yml`,
-# and Aqua/JET/explicit-imports/exports/invalidations already run daily in `nightly.yml`'s
-# own `quality` job -- weekly was re-deriving them on a 2x2 matrix, four times over, to learn
-# nothing the daily run had not already reported. `full` now means "everything the daily
+# `full` deliberately does *not* imply `quality`. No workflow runs `full`: Weekly.yml splits
+# it into its `slow` and `backends` halves, and a local `.claude/scripts/test.sh full` is its
+# only caller. Aqua/JET/explicit-imports/exports/invalidations already run daily in
+# `nightly.yml`'s own `quality` job, so repeating them under `full` would learn nothing the
+# daily run had not already reported. `full` now means "everything the daily
 # workflows do not already cover": the unit suite across both Julia versions, the expensive
 # AD backends, the package extensions and the manual snippets.
 #

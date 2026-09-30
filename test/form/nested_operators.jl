@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Random
 using LinearAlgebra: dot
-using ..TestUtils: @test_allocs, TEST_GROUP
+using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
 import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, Mₓ, M₊ₓ, Mcₓ, jumpₓ, D₋ᵧ, Mcᵧ, D̽ᵧ, restrict_to
 
 # A random non-uniform mesh on the unit square (or interval): the relabelling bug this file
@@ -27,11 +27,11 @@ const YOPS = (("D₋ᵧ", D₋ᵧ), ("Mcᵧ", Mcᵧ), ("D̽ᵧ", D̽ᵧ))
 # the Forms group's time, and the largest addition when the macOS CI unit job began being
 # killed. The default grid below is a *cover*, not a sample: a cyclic walk (op i with op
 # i+1 and op i+3, wrapping) puts every operator through as outer twice and as inner twice,
-# at a fraction of the cost. The full grid still runs, in the weekly `full` group
-# (Weekly.yml), via `group == "full"` below.
-function _pairs(D, group)
+# at a fraction of the cost, and runs in `unit`. The full grid runs behind `slow`
+# (TestUtils.WITH_SLOW_TESTS), daily in nightly.yml, via `full_grid` below.
+function _pairs(D, full_grid)
     ops = D == 1 ? XOPS : (XOPS..., YOPS...)
-    if group == "full"
+    if full_grid
         p = [(a, b) for a in XOPS for b in XOPS]
         D == 2 && append!(p, [(a, b) for a in XOPS for b in YOPS],
             [(a, b) for a in YOPS for b in XOPS])
@@ -61,7 +61,7 @@ end
     for D in (1, 2)
         Wₕ = _nonuniform_space(D)
         u, w, f = _random_element(Wₕ), _random_element(Wₕ), _random_element(Wₕ)
-        pairs = _pairs(D, TEST_GROUP)
+        pairs = _pairs(D, WITH_SLOW_TESTS)
         @testset "$(D)D" begin
             for ((n1, o1), (n2, o2)) in pairs
                 @testset "$n1($n2(u))" begin

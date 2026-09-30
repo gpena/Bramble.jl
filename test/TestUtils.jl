@@ -24,8 +24,8 @@ const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 
 # `slow` is the every-push gate's overflow: the unit suite plus the files whose cost is out
 # of proportion to what a *push* learns from them. CI.yml (macOS, per push) runs `unit` and
-# so skips them; nightly.yml runs `slow` on both platforms once a day, and Weekly.yml's
-# `full` includes them as well. A run with no group set gets `all`, which includes them --
+# so skips them; nightly.yml runs `slow` on both platforms once a day, and Weekly.yml
+# runs `slow` as the suite half of its matrix. A run with no group set gets `all`, which includes them --
 # so `.claude/scripts/test.sh` and a bare `Pkg.test` are unaffected.
 #
 # What is behind it, and why, with the measured cost of each on Julia 1.13, macOS, 4
@@ -43,6 +43,11 @@ const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 #                                        use it. The expensive half is a cross-check against
 #                                        another package, and it moves when that package or
 #                                        the simplifier moves, not when an operator does.
+#                                        Also behind WITH_AD_TESTS (below), so it is off
+#                                        in every group until that switch comes back on.
+#   form/nested_operators.jl             the full operator-pair grid (81/135 pairs, ~309s
+#                                        locally). The cyclic cover of the same pairs
+#                                        stays in `unit`.
 #   form/vector_calculus.jl     ~159s   composite ∇ₕ/εₕ/divₕ checked against a hand-expanded
 #                                        form (S6.5). The cost is 100% compile: the
 #                                        hand-expanded helpers branch on `i == j` to return
@@ -194,7 +199,7 @@ _have(mod::Symbol) = Base.identify_package(String(mod)) !== nothing
 # metal_fullstack.jl used to gate solely on `Metal.functional()`, on the assumption that a
 # CI runner has no working device -- true for a nested VM, but not for GitHub's hosted
 # macOS runners, which are real Apple Silicon hardware and expose a functional Metal device
-# for headless compute. Weekly.yml's `full` group therefore risks actually executing GPU
+# for headless compute. Weekly.yml's `backends` group therefore risks actually executing GPU
 # kernels, unattended, on a shared CI runner. `_run_gpu_tests()` adds an explicit opt-out on
 # top of `Metal.functional()`: `BRAMBLE_SKIP_GPU_TESTS=true` (set by intent) or `CI=true`
 # (GitHub Actions sets this on every runner) forces a skip regardless of what the host

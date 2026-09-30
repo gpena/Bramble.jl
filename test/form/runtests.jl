@@ -49,6 +49,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     # 1D, 2D and 3D. That is a cross-check against another package, so it moves when that
     # package or the simplifier moves rather than when an operator does. Daily on both
     # platforms, and in any run with no group set, including this file's own standalone one.
+    # It is also behind the AD switch (TestUtils.WITH_AD_TESTS), which is off in every group
+    # until v4.3.0, so for now it runs nowhere.
     TestUtils.WITH_SLOW_TESTS && TestUtils.WITH_AD_TESTS && include("jacobian_pattern.jl")
     # Mixed composite/scalar pairs (gpena/Bramble.jl#367): dependency-free, so on every push.
     include("jacobian_pattern_blocks.jl")

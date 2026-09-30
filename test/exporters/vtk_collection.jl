@@ -3,7 +3,6 @@ module ExportersVtkCollectionTests
 using Test
 using Bramble
 using WriteVTK
-using SciMLBase
 using LightXML
 
 # `.pvd` XML: real parsing this time (see test/exporters/vtk_export.jl for the plain-text
@@ -112,56 +111,9 @@ end
         end
     end
 
-    # A `SciMLBase.AbstractODESolution` without actually integrating anything: the same
-    # `build_solution` construction `BrambleVTKSciMLExt`'s own precompile workload uses,
-    # since no solver package (`OrdinaryDiffEq` and the rest) is a dependency of that
-    # extension either.
-    @testset "One-call SciMLBase solution export" begin
-        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true))
-        Wₕ = gridspace(Ωₕ)
-
-        u0 = collect(parent(Rₕ(Wₕ, x -> x[1])))
-        u1 = collect(parent(Rₕ(Wₕ, x -> x[1] + x[2])))
-        u2 = collect(parent(Rₕ(Wₕ, x -> 2 * (x[1] + x[2]))))
-        ts = [0.0, 0.4, 1.0]  # non-uniform, on purpose
-
-        prob = ODEProblem((du, u, p, t) -> nothing, u0, (0.0, 1.0))
-        sol = SciMLBase.build_solution(prob, nothing, ts, [u0, u1, u2])
-
-        @testset "every saved step" begin
-            mktempdir() do dir
-                pvd_path = joinpath(dir, "sol")
-                files = export_vtk(pvd_path, Wₕ, sol)
-                @test length(files) == length(ts) + 1
-
-                entries = _dataset_entries(pvd_path * ".pvd")
-                @test [e.timestep for e in entries] == ts
-                @test all(e -> isfile(joinpath(dir, e.file)), entries)
-
-                xml = read(joinpath(dir, entries[1].file), String)
-                @test occursin("Name=\"u\" NumberOfComponents=\"1\"", xml)
-            end
-        end
-
-        @testset "interpolated times, custom field name" begin
-            mktempdir() do dir
-                pvd_path = joinpath(dir, "sol_interp")
-                interp_times = range(0.0, 1.0; length = 5)
-                export_vtk(pvd_path, Wₕ, sol; name = "temperature", times = interp_times)
-
-                entries = _dataset_entries(pvd_path * ".pvd")
-                @test length(entries) == length(interp_times)
-                @test [e.timestep for e in entries] ≈ collect(interp_times)
-
-                xml = read(joinpath(dir, entries[1].file), String)
-                @test occursin("Name=\"temperature\" NumberOfComponents=\"1\"", xml)
-            end
-        end
-    end
-
     @testset "Fallback stubs, called directly" begin
         @test_throws "export_vtk requires WriteVTK.jl" Bramble._export_vtk_collection(identity, 42)
-        @test_throws("export_vtk for a solution object requires WriteVTK.jl and SciMLBase.jl",
+        @test_throws("export_vtk for a solution object requires WriteVTK.jl",
             Bramble._export_vtk_solution("x", gridspace(mesh(domain(interval(0.0, 1.0)), 3, true)), 42))
     end
 end
