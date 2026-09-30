@@ -176,6 +176,8 @@ function _pc_operator_session(uₕ, cₕ, dim_val::Val)
     # Float64 only: the Float32 2D session below would otherwise rebuild the same
     # Float64 mesh a second time for no extra coverage.
     dim_val isa Val{2} && eltype(uₕ) === Float64 && _pc_strain_tensor_session()
+    eltype(uₕ) === Float64 && _pc_grid_shifts(uₕ, cₕ, kₕ, dim_val)
+    eltype(uₕ) === Float64 && _pc_shift_form_session(dim_val)
     return nothing
 end
 
@@ -192,3 +194,48 @@ function _pc_strain_tensor_session()
     εₕ!(E, cₕ)
     return nothing
 end
+
+# The index shifts on a grid function (gpena/Bramble.jl#391), Float64 only as the tests call
+# them, rather than in the shared tuples above, which would also run them on the Float32
+# and composite in-place operands: out of place on the scalar, composite and component-view
+# operands, in place on the scalar one, and the vectorial aliases.
+const _PC_SHIFTS = (S₊ₓ, S₋ₓ, S₊ᵧ, S₋ᵧ, S₊₂, S₋₂)
+const _PC_SHIFTS_INPLACE = (S₊ₓ!, S₋ₓ!, S₊ᵧ!, S₋ᵧ!, S₊₂!, S₋₂!)
+
+function _pc_grid_shifts(uₕ, cₕ, kₕ, ::Val{D}) where {D}
+    shifts = ntuple(k -> _PC_SHIFTS[k], Val(2D))
+    _pc_apply_each(shifts, uₕ)
+    _pc_apply_each(shifts, cₕ)
+    _pc_apply_each(shifts, kₕ)
+    _pc_apply_each_inplace(ntuple(k -> _PC_SHIFTS_INPLACE[k], Val(2D)), similar(uₕ), uₕ)
+    _pc_apply_each((S₊ₕ, S₋ₕ), uₕ)
+    return nothing
+end
+
+# The index shifts inside a form (gpena/Bramble.jl#391): the grid-function shifts above
+# build no `ShiftNode`, and the form session reaches only `shift_op(id, 1, 1)` as a stencil
+# that is never assembled. On a non-uniform mesh of each dimension, along each direction:
+# the neighbour sum written with the exported vectorial aliases, `S₊ₕ(u)[d] + S₋ₕ(u)[d]`
+# (in 1D, `[1]` takes a component of the single node rather than a direction, a node of its
+# own), and, per shift, the shifted unknown alone, `innerₕ(S(u), v)`, as its own form:
+# assembly specializes on the whole form, so the sum does not cache the single term.
+# Compositions (`S(D₋ₓ(u))`, `S(jumpₓ(u))`, ...) are left to first use: each is a form type
+# of its own, and caching one would be picking the tests' cases. Float64 only, as the tests
+# and the solvers assemble.
+function _pc_shift_form_session(::Val{D}) where {D}
+    X, n = D == 1 ? (interval(0.0, 1.0), 6) :
+           D == 2 ? (interval(0.0, 1.0) × interval(0.0, 1.0), (5, 4)) :
+           (box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)), (4, 3, 3))
+    Wₕ = gridspace(mesh(domain(X), n, map(_ -> false, n)))
+    # `map` over the tuples rather than a loop: each direction and each shift is its own
+    # type, and `map` hands each one on with that type known
+    map(dim_val -> _pc_neighbour_sum(Wₕ, dim_val), ntuple(Val, Val(D)))
+    map(S -> _pc_shift_form(Wₕ, S), ntuple(k -> _PC_SHIFTS[k], Val(2D)))
+    return nothing
+end
+
+function _pc_neighbour_sum(Wₕ, ::Val{d}) where {d}
+    return assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(S₊ₕ(u)[d], v) + innerₕ(S₋ₕ(u)[d], v)))
+end
+
+_pc_shift_form(Wₕ, S) = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(S(u), v)))
