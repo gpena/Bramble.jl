@@ -170,6 +170,13 @@ treated as exactly on the boundary, regardless of `outside` -- this is what keep
 between two meshes over the same nominal domain from tripping over floating-point endpoint
 noise at the rim.
 
+`uₕ`'s mesh is read as it is now, so once an in-place mutator (`set_points!`,
+`change_points!`, `iterative_refinement!`) has moved it, this throws an `ArgumentError`
+(the one [`weights`](@ref) throws) rather than locating `x` on a mesh `uₕ`'s values were
+never computed on; call [`gridspace`](@ref) again and rebuild `uₕ` on it
+(gpena/Bramble.jl#408). The same check covers [`πₕ!`](@ref), `πₕ(Wₕ, src)` and the symbolic
+source `πₕ(uₕ)`, which all evaluate through here.
+
 This is the building block both `πₕ!`/`πₕ` (below, the numeric operator) and the
 one-argument, symbolic `πₕ` use: `x -> interpolate_at(uₕ, x)` is itself a valid source
 function, usable anywhere one is accepted, including directly as [`Rₕ`](@ref)'s own argument:
@@ -185,6 +192,7 @@ this file).
 function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{1}}, x; outside = :error)
     locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_interpolate_at()
     _validate_outside(outside)
+    weights(space(uₕ))   # throws once uₕ's mesh has moved (gpena/Bramble.jl#408)
     Ωₕ = mesh(space(uₕ))
     frac = _interp_cell_frac(Ωₕ, x, outside)
     frac === nothing && return outside
@@ -195,6 +203,7 @@ end
 function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{D}}, x; outside = :error) where {D}
     locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_interpolate_at()
     _validate_outside(outside)
+    weights(space(uₕ))   # throws once uₕ's mesh has moved (gpena/Bramble.jl#408)
     Ωₕ = mesh(space(uₕ))
     frac = _interp_cell_frac(Ωₕ, x, outside)
     frac === nothing && return outside
@@ -314,6 +323,7 @@ end
 # mul!-based method below rather than launching a host closure inside a device kernel.
 function _πₕ!(dest_loc, src_loc, dest, src, outside)
     _validate_outside_linear(outside)
+    weights(space(src))   # the host path checks inside interpolate_at (gpena/Bramble.jl#408)
     P = interpolation_matrix(space(dest), space(src); outside)
     return πₕ!(dest, P, src)
 end
@@ -560,7 +570,7 @@ the same way `D₋ₓ` differentiates any other source, `innerₕ(Mₓ(πₕ(u�
 and so on. This enables a coupled form to evaluate a leaf's grid function on a different
 leaf's mesh.
 
-Built as `source_function(x -> interpolate_at(uₕ, x; outside), Val(D))`: a
+Built as a `SourceFunction` whose function evaluates `interpolate_at(uₕ, x; outside)`: a
 `SourceFunction`'s own `local_stencil` evaluates its function at the current point of
 whichever mesh is being walked, so `uₕ` can originate from another leaf without special
 handling; the interpolation occurs once per point inside `interpolate_at`, where ordinary
@@ -568,11 +578,47 @@ source function calls occur. `outside` (gpena/Bramble.jl#223) is forwarded to
 [`interpolate_at`](@ref) unchanged, fill values included -- this is a source (a function of
 `uₕ`'s values), not a linear map, so unlike the operator [`πₕ`](@ref)`(op)` below it
 carries no such restriction.
+
+Unlike a plain function source, a [`form`](@ref) does not sample this one once when it is
+built (gpena/Bramble.jl#408): every `assemble`/`assemble!` reads `uₕ`'s current values, and
+throws an `ArgumentError` once `uₕ`'s mesh has moved (see [`interpolate_at`](@ref)).
 """
 function πₕ(uₕ::VectorElement{<:ScalarGridSpace{D}}; outside = :error) where {D}
     _validate_outside(outside)
-    return source_function(x -> interpolate_at(uₕ, x; outside), Val(D))
+    return source_function(GridInterpolant(uₕ, outside), Val(D))
 end
+
+# The function inside `πₕ(uₕ)`'s `SourceFunction`: a named callable rather than a closure,
+# so `form` can tell it apart from a plain function source and leave it unsampled
+# (`_lower_sources` below). Its type depends on `uₕ`'s and `outside`'s types only, as the
+# closure's did, so a new `πₕ(uₕ)` recompiles nothing (gpena/Bramble.jl#197).
+struct GridInterpolant{E <: VectorElement, O} <: Function
+    uₕ::E
+    outside::O
+end
+
+# Converted to the one value type a point `x` of element type `X` can blend to, fill included:
+# a fill of another type (`outside = 0` against `Float64` values) would otherwise make the
+# call return a `Union`, evaluated at every point of every fill, which allocates there.
+@inline function (f::GridInterpolant)(x)
+    R = _interpolant_type(f, eltype(x))
+    return convert(R, interpolate_at(f.uₕ, x; outside = f.outside))::R
+end
+
+# The blend is `eltype(uₕ)` weighted by fractions of `x` against `uₕ`'s mesh; a `Number`
+# fill joins it. Read without evaluating, so it holds wherever the walked point falls
+# (`_leaf_eltype`, assembly/linear.jl, asks it for a form's element type).
+@inline _interpolant_type(f::GridInterpolant, ::Type{X}) where {X} = promote_type(
+    eltype(f.uₕ), float(promote_type(X, eltype(space(f.uₕ)))), _fill_type(f.outside))
+@inline _fill_type(outside::Number) = typeof(outside)
+@inline _fill_type(::Symbol) = Union{}
+
+# Read at every fill instead of sampled once into a `SourceVector` (gpena/Bramble.jl#408):
+# sampling would keep `uₕ`'s old values after `uₕ .= ...`, and never see its mesh move.
+@inline _lower_sources(op::SourceFunction{D, <:GridInterpolant}, space) where {D} = op
+
+# The display a closure gave before: the compiler-generated name falls back to "f".
+expression(::SourceFunction{D, <:GridInterpolant}) where {D} = "f"
 
 #===========================================================================#
 # The interpolation operator: πₕ over a trial function.

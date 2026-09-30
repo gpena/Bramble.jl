@@ -3,7 +3,7 @@ module FormJacobianPatternBlocksTests
 using Test
 using Bramble
 using SparseArrays: sparse, findnz, dropzeros
-using Bramble: D₋ₓ, jacobian_pattern
+using Bramble: D₋ₓ, Mₕ, jacobian_pattern
 
 # `jacobian_pattern` on a pair with a composite space on one side and a scalar space on the
 # other (gpena/Bramble.jl#367). `assemble` walks such a pair block by block, the scalar side
@@ -49,6 +49,154 @@ const _CASES = (
             # match either the stored entries or the live ones.
             @test _pattern(P) == _pattern(A) || _pattern(P) == _live_pattern(A)
         end
+    end
+end
+
+# A coefficient computed on the walked mesh from a trial function on another mesh
+# (gpena/Bramble.jl#409): the dependency names that computation through `πₕ`, and the
+# pattern widens every row the term reaches into the columns `πₕ` reads there. The oracle
+# is a dense finite-difference Jacobian of the Newton residual `A(c(u)) u`, `c` rebuilt at
+# run time from the same composition the dependency names. Non-uniform meshes throughout.
+_n1(n) = mesh(domain(interval(0.0, 1.0)), n, false)
+_n2(n) = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n + 1), (false, true))
+_α(x) = 1 + x^2
+_filled(W, x) = (u = element(W); u .= x; u)
+
+function _fd_pattern(R, n)
+    x = 0.5 .+ sin.(1:n) .^ 2
+    r0 = R(x)
+    S = Set{Tuple{Int, Int}}()
+    for j in 1:n
+        y = copy(x)
+        y[j] += 1e-6
+        d = (R(y) - r0) / 1e-6
+        for i in eachindex(d)
+            abs(d[i]) > 1e-8 && push!(S, (i, j))
+        end
+    end
+    return S
+end
+
+function _check_against_oracle(a, dep, R, ntrial)
+    E = _fd_pattern(R, ntrial)
+    P = _pattern(jacobian_pattern(a, dep))
+    @test issubset(E, P)
+    @test all(((i, j),) -> 1 <= j <= ntrial, P)
+    @test length(P) <= 2length(E)
+end
+
+function _refused_with_bramble_error(a, dep)
+    err = try
+        jacobian_pattern(a, dep)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test err isa ArgumentError && occursin("πₕ", sprint(showerror, err))
+end
+
+@testset "jacobian_pattern: dependencies via πₕ" begin
+    # Each case: the form's builder over a coefficient, the dependency, and how the
+    # coefficient is computed from the trial values at run time.
+    @testset "1D scalar, $name" for (name, dep, build) in (
+        ("πₕ(U)", U -> πₕ(U), ia -> ia), ("Mₕ(πₕ(U))", U -> Mₕ(πₕ(U)), ia -> Mₕ(ia)))
+        Wa, Wb = gridspace(_n1(9)), gridspace(_n1(6))
+        mk(c) = form(Wb, Wa, (u, v) -> inner₊(c * ∇ₕ(πₕ(u)), ∇ₕ(v)))
+        R(x) = (c = element(Wa); c .= _α.(build(πₕ(Wa, _filled(Wb, x)))); assemble(mk(c)) * x)
+        _check_against_oracle(mk(element(Wa, 1.0)), dep, R, ndofs(Wb))
+    end
+
+    @testset "2D scalar, πₕ(U)" begin
+        Wa, Wb = gridspace(_n2(5)), gridspace(_n2(3))
+        mk(c) = form(Wb, Wa, (u, v) -> innerₕ(c * πₕ(u), v))
+        R(x) = (c = element(Wa); c .= _α.(πₕ(Wa, _filled(Wb, x))); assemble(mk(c)) * x)
+        _check_against_oracle(mk(element(Wa, 1.0)), U -> πₕ(U), R, ndofs(Wb))
+    end
+
+    # Block (1) reads πₕ(U(1)); the coefficient is built from component 2.
+    @testset "$(dim(mk_mesh(3)))D composite, $name" for (mk_mesh, na, nb, name, dep, build) in (
+        (_n1, 9, 6, "πₕ(U(2))", U -> πₕ(U(2)), ia -> ia),
+        (_n1, 9, 6, "Mₕ(πₕ(U(2)))", U -> Mₕ(πₕ(U(2))), ia -> Mₕ(ia)),
+        (_n2, 5, 3, "πₕ(U(2))", U -> πₕ(U(2)), ia -> ia))
+        Wa, Wb = gridspace(mk_mesh(na)), gridspace(mk_mesh(nb))
+        n = ndofs(Wb)
+        mk(c) = form(Wb × Wb, Wa, (U, v) -> innerₕ(c * πₕ(U(1)), v))
+        R(x) = (c = element(Wa);
+            c .= _α.(build(πₕ(Wa, _filled(Wb, x[(n + 1):end]))));
+            assemble(mk(c)) * x)
+        _check_against_oracle(mk(element(Wa, 1.0)), dep, R, 2n)
+    end
+
+    # Without πₕ a cross-mesh dependency has no anchor on the walked mesh.
+    @testset "refused without πₕ, $(dim(mk_mesh(3)))D" for (mk_mesh, na, nb) in (
+        (_n1, 9, 6), (_n2, 5, 3))
+        Wa, Wb = gridspace(mk_mesh(na)), gridspace(mk_mesh(nb))
+        _refused_with_bramble_error(form(Wb, Wa, (u, v) -> innerₕ(πₕ(u), v)), U -> Mₕ(U))
+        _refused_with_bramble_error(
+            form(Wb × Wb, Wa, (U, v) -> innerₕ(πₕ(U(1)), v)), U -> U(2))
+    end
+
+    # Equal point counts are not the same mesh: a leaf with as many points over another
+    # extent, or over the same extent at other points, is still refused without πₕ.
+    @testset "refused without πₕ, same npoints, $name" for (name, Wx) in (
+        ("other extent", gridspace(mesh(domain(interval(0.3, 0.7)), 9, false))),
+        ("other points", gridspace(mesh(domain(interval(0.0, 1.0)), 9, true))))
+        Wa = gridspace(_n1(9))
+        _refused_with_bramble_error(
+            form(Wx, Wa, (u, v) -> innerₕ(πₕ(u; outside = :clamp), v)), U -> Mₕ(U))
+    end
+
+    # A walked point on a source node: the corners `locate_cell` names with weight zero add
+    # no column, so the pattern stays within twice the oracle.
+    @testset "same mesh through πₕ, $(dim(mk_mesh(3)))D, $name" for mk_mesh in (_n1, _n2),
+        (name, dep, build) in (("πₕ(U)", U -> πₕ(U), (W, u) -> πₕ(W, u)),
+            ("πₕ(U) + U", U -> πₕ(U) + U, (W, u) -> πₕ(W, u) .+ u))
+
+        W = gridspace(mk_mesh(4))
+        mk(c) = form(W, W, (u, v) -> innerₕ(c * u, v))
+        R(x) = (c = element(W); c .= _α.(build(W, _filled(W, x))); assemble(mk(c)) * x)
+        _check_against_oracle(mk(element(W, 1.0)), dep, R, ndofs(W))
+    end
+
+    # A data coefficient inside the dependency that is zero when the pattern is built and
+    # set later: its zero weights are values, not geometry, so no column is dropped.
+    @testset "data coefficient zero at build, $(dim(mk_mesh(3)))D" for (mk_mesh, na, nb) in (
+        (_n1, 9, 6), (_n2, 5, 3))
+        Wa, Wb = gridspace(mk_mesh(na)), gridspace(mk_mesh(nb))
+        _sum(m) = m isa Tuple ? sum(m) : m
+        mk(c) = form(Wb, Wa, (u, v) -> innerₕ(c * πₕ(u), v))
+        g = element(Wa, 0.0)
+        P = _pattern(jacobian_pattern(mk(element(Wa, 1.0)), U -> _sum(Mₕ(g * πₕ(U)))))
+        g .= 1.0
+        mm(z) = (m = Mₕ(z); m isa Tuple ? m[1] .+ m[2] : m)
+        R(x) = (c = element(Wa);
+            c .= _α.(mm(g .* πₕ(Wa, _filled(Wb, x))));
+            assemble(mk(c)) * x)
+        @test issubset(_fd_pattern(R, ndofs(Wb)), P)
+    end
+
+    # The scalar path walks behind a function barrier: allocations do not grow with the
+    # number of walked points.
+    @testset "scalar path allocations" begin
+        function allocs(n)
+            Wa, Wb = gridspace(_n2(n)), gridspace(_n2(n ÷ 2 + 1))
+            a = form(Wb, Wa, (u, v) -> inner₊(element(Wa, 1.0) * ∇ₕ(πₕ(u)), ∇ₕ(v)))
+            dep = U -> Mₕ(πₕ(U))
+            jacobian_pattern(a, dep)
+            return @allocations jacobian_pattern(a, dep)
+        end
+        @test abs(allocs(16) - allocs(8)) <= 16
+    end
+
+    # Same-mesh widening is unchanged: still a strict superset of assemble's pattern.
+    @testset "same-mesh control, $name" for (name, spaces, f) in (
+        ("scalar", W -> (W, W), (u, v) -> innerₕ(u, v)),
+        ("mixed", W -> (W × W, W), (U, v) -> innerₕ(U(1), v) + innerₕ(U(2), v)))
+        a = form(spaces(gridspace(_n1(9)))..., f)
+        P = _pattern(jacobian_pattern(a, U -> Mₕ(U)))
+        @test issubset(_pattern(assemble(a)), P)
+        @test length(P) > length(_pattern(assemble(a)))
     end
 end
 

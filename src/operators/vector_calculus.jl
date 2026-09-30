@@ -498,6 +498,8 @@ Evaluated in a single traversal per direction rather than as two nested operator
 `Δₕ!` needs no scratch grid function and allocates nothing. It agrees with the composition
 `D̃ₓ(D₋ₓ(uₕ))` entry for entry, truncation at the two ends of each axis included.
 
+On a composite element `Δₕ` is the Laplacian of each component, each on its own mesh.
+
 See also: [`divₕ`](@ref), [`∇ₕ`](@ref), [`D̃ₓ`](@ref)
 """
 @inline Δₕ(uₕ::VectorElement) = Δₕ!(similar(uₕ), uₕ)
@@ -535,6 +537,17 @@ function Δₕ!(vₕ::VectorElement, uₕ::VectorElement)
         fill!(out, zero(eltype(out)))
         _laplacian_direction!(out, parent(uₕ), Ωₕ, dims, Val(dim(Ωₕ)), Val(dim(Ωₕ)))
     end
+    return vₕ
+end
+
+# Component-wise vector Laplacian: each leaf pair goes through the scalar method, so each leaf
+# keeps its own mesh, spacings and device branch.
+function Δₕ!(
+        vₕ::VectorElement{<:CompositeGridSpace}, uₕ::VectorElement{<:CompositeGridSpace}
+)
+    _check_no_alias(vₕ, uₕ)
+    _check_laplacian_grid(vₕ, uₕ)
+    map(Δₕ!, components(vₕ), components(uₕ))
     return vₕ
 end
 
