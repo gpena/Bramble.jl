@@ -41,5 +41,32 @@ function _pc_solver_session()
     )
     precompile(suitesparse_qr_factorize, (typeof(A),))
     precompile(suitesparse_qr_solve, (typeof(A), typeof(F)))
+
+    # The matrix-free path (gpena/Bramble.jl#391), which nothing above reaches: the
+    # operator's apply and the Jacobi and Chebyshev preconditioners in 1D, 2D and 3D on
+    # non-uniform meshes, and a GMG V-cycle on the uniform 2D mesh it supports.
+    for (X, n) in (
+        (interval(0.0, 1.0), 6),
+        (interval(0.0, 1.0) × interval(0.0, 1.0), (5, 4)),
+        (box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)), (4, 3, 3))
+    )
+        _pc_matrix_free_session(gridspace(mesh(domain(X), n, map(_ -> false, n))))
+    end
+    Ω₂ₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
+    P = gmg_preconditioner(_pc_mass_stiffness, Ω₂ₕ)
+    P \ ones(npoints(Ω₂ₕ))
     return nothing
+end
+
+_pc_mass_stiffness(Wₕ) = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+
+function _pc_matrix_free_session(Wₕ)
+    a = _pc_mass_stiffness(Wₕ)
+    x = ones(ndofs(Wₕ))
+    y = similar(x)
+    mul!(y, matrix_free_operator(a; dirichlet = :boundary), x)
+    jacobi_preconditioner(a; dirichlet = :boundary) \ x
+    chebyshev_preconditioner(a; degree = 2) \ x
+    chebyshev_preconditioner(a; dirichlet = :boundary, degree = 2) \ x
+    return y
 end
