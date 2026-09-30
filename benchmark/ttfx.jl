@@ -170,6 +170,71 @@ const CASES = TTFXCase[
         500.0,
         "F = assemble(l)",
         "fdm_solve(a_spd, F)"
+    ),
+    # gpena/Bramble.jl#391: paths the precompile workload did not reach. Thresholds are
+    # placeholders (0.0): the gain is what the workload sessions are judged on, not a gate here.
+    # Every case runs on the non-uniform 2D FIXTURE mesh, except GMG (uniform, what it supports).
+    TTFXCase(
+        "matrix_free_apply",
+        :core,
+        String[],
+        0.0,
+        "using LinearAlgebra\nop = matrix_free_operator(a_spd; dirichlet = :boundary)\n" *
+        "x = rand(size(op, 2))\ny = similar(x)",
+        "mul!(y, op, x)"
+    ),
+    TTFXCase(
+        "jacobi",
+        :core,
+        String[],
+        0.0,
+        "",
+        "jacobi_preconditioner(a_spd; dirichlet = :boundary)"
+    ),
+    TTFXCase(
+        "chebyshev",
+        :core,
+        String[],
+        0.0,
+        "",
+        "chebyshev_preconditioner(a_spd; dirichlet = :boundary)"
+    ),
+    TTFXCase(
+        "gmg_vcycle",
+        :core,
+        String[],
+        0.0,
+        "Ωg = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 17), (true, true))\n" *
+        "build(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))\n" *
+        "P = gmg_preconditioner(build, Ωg)\nb = rand(17^2)\nx = zeros(17^2)",
+        "Bramble.v_cycle!(x, P, b)"
+    ),
+    TTFXCase(
+        "shift_gridfunction",
+        :core,
+        String[],
+        0.0,
+        "uₕ = Rₕ(Wₕ, x -> 1 + x[1] * x[2])",
+        "S₊ₕ[1](uₕ)"
+    ),
+    TTFXCase(
+        "shift_form",
+        :core,
+        String[],
+        0.0,
+        "",
+        "assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(S₊ₕ[1](u), v)))"
+    ),
+    TTFXCase(
+        "polyester_matrix_free",
+        :test,
+        ["Polyester", "LinearAlgebra"],
+        0.0,
+        "Ωp = mesh(Ω, (8, 8), (false, false); backend = backend(policy = Bramble.CpuPolyester()))\n" *
+        "Wp = gridspace(Ωp)\n" *
+        "ap = form(Wp, Wp, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))\n" *
+        "op = matrix_free_operator(ap; dirichlet = :boundary)\nx = rand(size(op, 2))\ny = similar(x)",
+        "mul!(y, op, x)"
     )
 ]
 
@@ -230,7 +295,7 @@ _core_precompile_cmd(
 ) = `julia --startup-file=no --threads=$threads --project=$tree -e "using Bramble"`
 function _ext_precompile_cmd(tree, threads)
     test_project = joinpath(tree, "test")
-    `julia --startup-file=no --threads=$threads --project=$test_project -e "using Bramble, SuiteSparse, Sparspak, Kronecker, SparseMatricesCSR"`
+    `julia --startup-file=no --threads=$threads --project=$test_project -e "using Bramble, SuiteSparse, Sparspak, Kronecker, SparseMatricesCSR, Polyester"`
 end
 function _case_cmd(tree, case::TTFXCase, threads, script)
     project = _project_for(tree, case)
