@@ -31,12 +31,9 @@ const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 # What is behind it, and why, with the measured cost of each on Julia 1.13, macOS, 4
 # threads, against a 6m06s `unit` run:
 #
-#   examples/pages.jl           1m03.8s  the six worked-example pages, run for the `#src`
-#                                        assertions that pin the numbers the docs render.
-#                                        Nothing here is a code path that drivers/ and
-#                                        form/ do not already cover; what it uniquely
-#                                        catches is a *published number* going stale, which
-#                                        is a same-day concern, not a same-push one.
+# (The worked-example pages, 1m03.8s, used to sit here; they are the `examples` group now,
+# which the documentation workflow runs and no other group does.)
+#
 #   form/jacobian_pattern.jl      ~46s   the AST-derived sparsity pattern checked against
 #                                        SparseConnectivityTracer's AD-traced pattern as
 #                                        ground truth in 1D/2D/3D, plus Newton solves that
@@ -83,10 +80,42 @@ const WITH_SLOW_TESTS = TEST_GROUP in ("all", "slow", "full")
 # Automatic differentiation and GPU tests are switched off in every group until the
 # milestones that own them: AD until v4.3.0, which decides which backends Bramble keeps, and
 # GPU until v4.4.0, which brings the device path to parity with the CPU. The files stay in
-# the tree, and their packages are not in test/Project.toml: to run them, add the packages
-# and set `BRAMBLE_TEST_AD=true` or `BRAMBLE_TEST_GPU=true`. With AD off, one ForwardDiff
+# the tree, and their packages are not in test/Project.toml. With AD off, one ForwardDiff
 # smoke test (form/forwarddiff_smoke.jl) still runs in `unit`, so assembly with dual numbers
 # cannot silently regress.
+#
+# Switched off until v4.3.0 (AD). To turn back on: add Enzyme, Mooncake,
+# SparseConnectivityTracer, SparseMatrixColorings, DifferentiationInterface,
+# SciMLSensitivity and ChainRulesCore (whichever the file loads) to test/Project.toml and set
+# `BRAMBLE_TEST_AD=true`; then remove this switch once v4.3.0 settles the backends.
+#   whole files, `unit` (and slow/full/all):
+#     space/autodiff.jl, space/autodiff_backends.jl   test/runtests.jl
+#     form/autodiff.jl                                test/form/runtests.jl
+#     form/jacobian_pattern.jl (also needs `slow`)    test/form/runtests.jl
+#   whole files, groups `ad`, `full`, `backends` ("AD backends (expensive)" in runtests.jl):
+#     space/autodiff_heavy.jl, space/autodiff_policies.jl, ext/chainrules_enzyme_ext.jl,
+#     examples/inverse_diffusion.jl, ext/sparse_ad_ext.jl, ext/ad_backend_verification.jl,
+#     ext/sciml_sensitivity_ext.jl, examples/transient_inverse_problem.jl,
+#     ext/chainrules_ext.jl
+#   inline blocks, gated with `WITH_AD_TESTS` at the site:
+#     form/bilinear.jl "Matrix differentiation", "Dual arguments (#326)";
+#     form/linear.jl "Parallel differentiation", the nonlinear residual Jacobian `if`,
+#     "Assembled residual differentiation"; form/dirac.jl three `if`s (ForwardDiff through
+#     Dirac strengths); form/kronecker.jl `if` (Duals through the Kronecker scratch);
+#     form/interpolation_operator.jl "Differentiation"; form/type_cached_assemble.jl
+#     "matches direct, Float64 and Dual", "structural: pattern matches assemble(a)",
+#     "Newton solve matches direct"; form/semidiscrete.jl `if` (Dual `t` rebuild);
+#     form/source_operators.jl "Source differentiation", "lowered source: Dual
+#     propagates"; form/reaction_flux.jl "reaction: Dual load vector";
+#     ext/sparspak_ext.jl `if` (generic-eltype AD through Sparspak).
+#
+# Switched off until v4.4.0 (GPU). To turn back on: add Metal, GPUArrays and
+# KernelAbstractions to test/Project.toml, set `BRAMBLE_TEST_GPU=true` and run the `gpu`
+# group on an Apple Silicon Mac (outside CI, or with `CI` unset: `_run_gpu_tests()` below
+# skips device kernels on a CI runner); then remove this switch once v4.4.0 lands.
+#   whole files, group `gpu`: ext/metal_ext.jl (which now also holds the "Metal GPU
+#     backend" testset that used to sit inline in utils/backends.jl),
+#     ext/metal_fullstack.jl, ext/metal_assembly_replay.jl, ext/metal_form_assembly.jl.
 const WITH_AD_TESTS = get(ENV, "BRAMBLE_TEST_AD", "false") == "true"
 const WITH_GPU_TESTS = get(ENV, "BRAMBLE_TEST_GPU", "false") == "true"
 

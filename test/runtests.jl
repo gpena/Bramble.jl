@@ -41,8 +41,8 @@ const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full"
 
 # `slow` is `unit` plus the blocks whose cost is out of proportion to what a *push*
 # learns from them -- CI.yml runs `unit` and skips them, nightly.yml runs `slow` on both
-# platforms daily. TestUtils holds the definition, and the list, with measured costs.
-const __bramble_with_slow_tests = TestUtils.WITH_SLOW_TESTS
+# platforms daily. TestUtils holds the definition (WITH_SLOW_TESTS, read by the subsystem
+# runtests.jl files and test files), and the list, with measured costs.
 
 # AD and GPU tests are off in every group until v4.3.0 and v4.4.0; TestUtils holds the
 # switches and says how to turn them back on.
@@ -53,6 +53,10 @@ const __bramble_with_gpu_tests = TestUtils.WITH_GPU_TESTS
 # AD tests are switched on. Their packages are not in test/Project.toml; each file skips a
 # backend absent from the environment, so the group reports a skip rather than an error.
 #
+# The AD extension files (sparse AD, the AD backend verification, SciMLSensitivity, the
+# pde_solve rrule and the transient-inverse-problem page) run here too, not under `ext`, so
+# that `ext` is CPU extensions only.
+#
 # `backends` is `ad` plus `ext` with no unit suite: Weekly.yml runs it as one half of the
 # full suite and `slow` as the other, since the Julia 1.12 legs outgrew one 90-minute job.
 const __bramble_with_ad_backends = __bramble_with_ad_tests &&
@@ -61,9 +65,21 @@ const __bramble_with_ad_backends = __bramble_with_ad_tests &&
 # The Makie/Meshes/RecipesBase weak deps: `test/Project.toml` lists them (so
 # `Pkg.instantiate()` always resolves and can precompile them), but they are only ever
 # `using`-d, and so only ever pay their compile cost, behind this group -- every push
-# otherwise gets none of that weight. The Metal files here run only with GPU tests switched
-# on, and the AD extension files only with AD tests switched on.
+# otherwise gets none of that weight. CPU extensions only: the AD extension files run in
+# `ad`, the Metal files in `gpu` and the extension-dependent example pages in `examples`.
 const __bramble_with_ext_backends = __bramble_test_group in ("ext", "full", "backends")
+
+# The four Metal files, in their own group and only with GPU tests switched on (TestUtils
+# says how). Each also skips its device kernels on a CI runner (`_run_gpu_tests()`).
+const __bramble_with_gpu_group = __bramble_with_gpu_tests && __bramble_test_group == "gpu"
+
+# The worked-example pages themselves, run rather than mirrored: each is a Literate script
+# whose `#src` assertions pin the numbers it renders (#117). What they uniquely catch is a
+# number the documentation *publishes* going stale, which is the documentation build's
+# concern, so they form their own group and no other group runs them: `pages.jl` (the
+# pages that need only the test environment) and `ext_pages.jl` (the pages that load a
+# stiff solver, `NonlinearSolve`, `LinearSolve` or `AlgebraicMultigrid`).
+const __bramble_with_examples = __bramble_test_group == "examples"
 
 # `manual/test_snippets.jl` checks that the code in the 12-chapter PDF manual still
 # compiles and gives the answers it claims. Kept out of the every-push groups because it
@@ -148,22 +164,8 @@ if __bramble_with_unit_tests
         include("solvers/runtests.jl")
         include("exporters/runtests.jl")
 
-        # The worked-example pages themselves, run rather than mirrored: each is a
-        # Literate script whose `#src` assertions pin the numbers it renders (#117). It
-        # covers assemble, the Dirichlet path, and the sparse-AD Newton loop as pipelines
-        # rather than operator by operator -- but so, more cheaply, does `drivers/` below,
-        # on a variable-coefficient path no page reaches. What these pages uniquely catch is
-        # a number the documentation *publishes* going stale, and at 1m03.8s of a 6m06.5s
-        # run they were the largest single block on the every-push gate. So they sit behind
-        # `slow` now: daily on both platforms, not per push. See TestUtils.WITH_SLOW_TESTS.
-        if __bramble_with_slow_tests
-            @testset "Worked examples" begin
-                include("examples/pages.jl")
-            end
-        end
-
         # Independent full-pipeline tests (mesh -> space -> assemble -> solve) for a path no
-        # docs page reaches, as opposed to "Worked examples" above, which mirrors a page.
+        # docs page reaches, as opposed to the `examples` group below, which runs the pages.
         include("drivers/runtests.jl")
 
         # Static allocation verification (#118). Lives under `quality/` because that is what
@@ -214,6 +216,17 @@ if __bramble_with_ad_backends
         # The boundary-condition-recovery worked example needs Enzyme, unlike every other
         # example page -- run here rather than in "Worked examples"/"Package extensions".
         include("examples/inverse_diffusion.jl")
+        # The AD extension files, moved here from "Package extensions" so `ext` is CPU only.
+        include("ext/sparse_ad_ext.jl")
+        include("ext/ad_backend_verification.jl")
+        include("ext/sciml_sensitivity_ext.jl")
+        # Runs the transient-inverse-problem page itself, whose #src assertions need
+        # `SciMLSensitivity`, same as `inverse_diffusion.jl` needing `Enzyme` above.
+        include("examples/transient_inverse_problem.jl")
+        # BrambleChainRulesExt: the pde_solve rrule's own math, checked against finite
+        # differences and by hand -- needs only ChainRulesCore. Enzyme/Mooncake composition
+        # is chainrules_enzyme_ext.jl above.
+        include("ext/chainrules_ext.jl")
     end
 end
 
@@ -236,24 +249,7 @@ if __bramble_with_ext_backends
         include("ext/plots_ext.jl")
         include("ext/makie_ext.jl")
         include("ext/meshes_ext.jl")
-        if __bramble_with_gpu_tests
-            include("ext/metal_ext.jl")
-            include("ext/metal_fullstack.jl")
-            include("ext/metal_assembly_replay.jl")
-            include("ext/metal_form_assembly.jl")
-        end
-        if __bramble_with_ad_tests
-            include("ext/sparse_ad_ext.jl")
-            include("ext/ad_backend_verification.jl")
-        end
         include("ext/sciml_ext.jl")
-        if __bramble_with_ad_tests
-            include("ext/sciml_sensitivity_ext.jl")
-            # Runs the transient-inverse-problem page itself, whose #src assertions need
-            # `SciMLSensitivity` -- same reasoning as `inverse_diffusion.jl` needing
-            # `Enzyme` behind the "ad" group, rather than in the "Worked examples" group.
-            include("examples/transient_inverse_problem.jl")
-        end
         include("ext/algebraicmultigrid_ext.jl")
         include("ext/iluzero_ext.jl")
         include("ext/suitesparse_ext.jl")
@@ -268,17 +264,21 @@ if __bramble_with_ext_backends
         include("ext/sparse_csr_ext.jl")
         include("ext/kronecker_ext.jl")
         include("ext/polyester_ext.jl")
-        # BrambleChainRulesExt: the pde_solve rrule's own math, checked against finite
-        # differences and by hand -- needs only ChainRulesCore, not Enzyme/Mooncake, so it
-        # belongs here rather than behind the "ad" group. Enzyme/Mooncake composition is
-        # chainrules_enzyme_ext.jl instead, alongside autodiff_heavy.jl below.
-        __bramble_with_ad_tests && include("ext/chainrules_ext.jl")
-        # The four worked-example pages that belong to this group rather than the
-        # every-push one, for what they load rather than what they assert: a stiff solver
-        # for the differential-algebraic step, `NonlinearSolve` for the two pages with a
-        # `nonlinear_problem` section (#119), and `LinearSolve`/`AlgebraicMultigrid` for
-        # the preconditioning comparison. Last, so the ext tests above have already paid
-        # those load costs.
+    end
+end
+
+if __bramble_with_gpu_group
+    @testset verbose=true "GPU (Metal)" begin
+        include("ext/metal_ext.jl")
+        include("ext/metal_fullstack.jl")
+        include("ext/metal_assembly_replay.jl")
+        include("ext/metal_form_assembly.jl")
+    end
+end
+
+if __bramble_with_examples
+    @testset verbose=true "Worked examples" begin
+        include("examples/pages.jl")
         include("examples/ext_pages.jl")
     end
 end
