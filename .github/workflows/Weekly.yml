@@ -32,6 +32,9 @@ on:
     - cron: "0 4 * * 1"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
@@ -40,8 +43,30 @@ env:
   JULIA_NUM_THREADS: auto
 
 jobs:
+  # As in nightly.yml: a scheduled run on the same `main` commit as the last successful
+  # scheduled run would repeat its eight `full` legs exactly, so they stop here. A manual
+  # dispatch always runs. The security audit does not wait on this: advisories are published
+  # whether or not `main` moved.
+  changed:
+    name: New commits since the last green weekly
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          last=$(gh api "repos/${{ github.repository }}/actions/workflows/Weekly.yml/runs?branch=main&event=schedule&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // ""')
+          if [ "$last" = "${{ github.sha }}" ]; then echo "run=false" >> "$GITHUB_OUTPUT"; else echo "run=true" >> "$GITHUB_OUTPUT"; fi
+
   full:
     name: Full suite, ${{ matrix.part }} (Julia ${{ matrix.version }}, ${{ matrix.os }})
+    needs: changed
+    if: ${{ needs.changed.outputs.run == 'true' }}
     runs-on: ${{ matrix.os }}
     # 120, not 90: on the v3.11.0 tag both Julia 1.12 legs were cancelled at 90 minutes
     # inside the last file (examples/ext_pages.jl, since moved to the `examples` group); 1.12 compiles the Enzyme and form files
@@ -73,9 +98,7 @@ jobs:
         os: [ubuntu-latest, macOS-latest]
         part: [suite, backends]
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v5
 
       - uses: julia-actions/setup-julia@v2
         with:
@@ -127,13 +150,14 @@ jobs:
   coverage-floor:
     name: Per-file coverage floor
     needs: full
-    if: always()
+    # Not when `full` was skipped for an unchanged `main`: there is nothing to report on.
+    if: ${{ always() && needs.full.result != 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: julia-actions/setup-julia@v2
         with:
@@ -207,7 +231,7 @@ jobs:
       OSV_SCANNER_VERSION: v2.5.1
       OSV_SCANNER_SHA256: f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # The current stable release, not the 1.12 floor the test matrix also covers: the
       # question is what an install done today resolves to, and the stdlib JLL versions a

@@ -98,9 +98,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest]
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v5
 
       - uses: julia-actions/setup-julia@v2
         with:
@@ -165,9 +163,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest]
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v5
 
       - uses: julia-actions/setup-julia@v2
         with:
@@ -210,7 +206,7 @@ jobs:
         # is a quality regression found six days late.
         version: ["1.12", "1.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: julia-actions/setup-julia@v2
         with:
@@ -234,7 +230,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: julia-actions/setup-julia@v2
         with:
@@ -245,7 +241,9 @@ jobs:
           julia --color=yes -e '
             using Pkg
             Pkg.activate(mktempdir())
-            Pkg.add("JuliaFormatter")
+            # Pinned: a formatter release can reformat untouched code. Keep in step with
+            # .claude/scripts/format.sh.
+            Pkg.add(name = "JuliaFormatter", version = "2.14.0")
             using JuliaFormatter
             format(["src", "test", "docs", "ext", "benchmark"]; overwrite = false) && exit(0)
             @error "Source is not SciMLStyle formatted. Run JuliaFormatter over src, test, docs, ext and benchmark."

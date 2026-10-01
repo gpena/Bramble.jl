@@ -32,7 +32,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -75,6 +75,9 @@ jobs:
     # that flaked is not the shape running today, but that is a reason to expect less of it,
     # not a fix. If a Linux-only allocation assertion fails in nightly, that fold is where to
     # look first.
+    # 60, as nightly.yml's `slow` has: a cold run takes 30 to 38 minutes, and without a limit
+    # a hung run would hold the runner for GitHub's default of six hours.
+    timeout-minutes: 60
     permissions:
       contents: read
     strategy:
@@ -87,9 +90,7 @@ jobs:
         version: ["1.13"]
         os: [macOS-latest]
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v5
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
@@ -112,9 +113,8 @@ jobs:
       # `--optimize=1` because the run is more than 95% compile: on the plain
       # `test/runtests.jl` run, -O1 cuts 661 s to 461 s with all 14952 tests passing, the
       # static allocation checks included. `-O0` is faster (231 s) but breaks the Float32 GMG
-      # allocation test in test/solvers/multigrid.jl, so it is not used. Only this group is
-      # measured at -O1, which is why no other workflow gets the flag (the quality group runs
-      # JET and stays at the default level).
+      # allocation test in test/solvers/multigrid.jl, so it is not used. Every other workflow
+      # runs its groups at -O1 too; their comments give the per-group measurements.
       #
       # The call restates what the action passed: `coverage=true` (its default) and
       # `--check-bounds=yes`, plus `--depwarn=yes` and `--inline=yes` on the outer process.
