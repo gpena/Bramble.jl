@@ -176,7 +176,6 @@ function _pc_operator_session(uₕ, cₕ, dim_val::Val)
     # Float64 only: the Float32 2D session below would otherwise rebuild the same
     # Float64 mesh a second time for no extra coverage.
     dim_val isa Val{2} && eltype(uₕ) === Float64 && _pc_strain_tensor_session()
-    eltype(uₕ) === Float64 && _pc_grid_shifts(uₕ, cₕ, kₕ, dim_val)
     eltype(uₕ) === Float64 && _pc_shift_form_session(dim_val)
     return nothing
 end
@@ -195,27 +194,15 @@ function _pc_strain_tensor_session()
     return nothing
 end
 
-# The index shifts on a grid function (gpena/Bramble.jl#391), Float64 only as the tests call
-# them, rather than in the shared tuples above, which would also run them on the Float32
-# and composite in-place operands: out of place on the scalar, composite and component-view
-# operands, in place on the scalar one, and the vectorial aliases.
+# The index shifts (gpena/Bramble.jl#391). Only the form session below is cached: a first
+# call of a shift on a grid function costs about 7 ms, too little to pay for its share of the
+# package build (measured in the test-suite plan, S6.5), so the grid-function shifts are left
+# to first use.
 const _PC_SHIFTS = (S₊ₓ, S₋ₓ, S₊ᵧ, S₋ᵧ, S₊₂, S₋₂)
-const _PC_SHIFTS_INPLACE = (S₊ₓ!, S₋ₓ!, S₊ᵧ!, S₋ᵧ!, S₊₂!, S₋₂!)
 
-function _pc_grid_shifts(uₕ, cₕ, kₕ, ::Val{D}) where {D}
-    shifts = ntuple(k -> _PC_SHIFTS[k], Val(2D))
-    _pc_apply_each(shifts, uₕ)
-    _pc_apply_each(shifts, cₕ)
-    _pc_apply_each(shifts, kₕ)
-    _pc_apply_each_inplace(ntuple(k -> _PC_SHIFTS_INPLACE[k], Val(2D)), similar(uₕ), uₕ)
-    _pc_apply_each((S₊ₕ, S₋ₕ), uₕ)
-    return nothing
-end
-
-# The index shifts inside a form (gpena/Bramble.jl#391): the grid-function shifts above
-# build no `ShiftNode`, and the form session reaches only `shift_op(id, 1, 1)` as a stencil
-# that is never assembled. On a non-uniform mesh of each dimension, along each direction:
-# the neighbour sum written with the exported vectorial aliases, `S₊ₕ(u)[d] + S₋ₕ(u)[d]`
+# The index shifts inside a form: the form session reaches no `ShiftNode` otherwise, only
+# `shift_op(id, 1, 1)` as a stencil that is never assembled. On a non-uniform mesh of each
+# dimension, along each direction: the neighbour sum written with the exported vectorial aliases, `S₊ₕ(u)[d] + S₋ₕ(u)[d]`
 # (in 1D, `[1]` takes a component of the single node rather than a direction, a node of its
 # own), and, per shift, the shifted unknown alone, `innerₕ(S(u), v)`, as its own form:
 # assembly specializes on the whole form, so the sum does not cache the single term.
