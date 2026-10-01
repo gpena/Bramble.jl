@@ -12,7 +12,12 @@ name: Nightly
 # architecture-dependent `@generated` fold, documented there, not a real regression each time
 # it fires) rather than a break. That same job runs the `slow` group, which is `unit` plus
 # the blocks whose cost is out of proportion to what a *push* learns from them; see
-# test/TestUtils.jl's `WITH_SLOW_TESTS` for the list and the measurement. Julia nightly
+# test/TestUtils.jl's `WITH_SLOW_TESTS` for the list and the measurement. The worked-example
+# pages are not in `slow` any more: they are the `examples` group, which docs-on-demand.yml
+# runs before every docs build. AD and GPU tests are off in every group until v4.3.0 and
+# v4.4.0 respectively (test/TestUtils.jl, `WITH_AD_TESTS` and `WITH_GPU_TESTS`); each comes
+# back by setting `BRAMBLE_TEST_AD` or `BRAMBLE_TEST_GPU` in a job's env here and adding its
+# packages. Julia nightly
 # changes underneath every push regardless of what Bramble does, so gating on it meant the
 # same kind of unrelated red gate. Formatting and quality (Aqua & JET) are
 # not canaries in that sense, but moving them off every push trades same-push feedback for a
@@ -131,10 +136,10 @@ jobs:
     # here, and it should not turn the whole nightly run red.
     #
     # It runs `slow`, not `unit`. `unit` is what a push runs, and it is now deliberately the
-    # cheap core: the worked-example pages, form/jacobian_pattern.jl and the Supposition
-    # properties moved out of it (test/TestUtils.jl's `WITH_SLOW_TESTS`). Those are exactly
-    # the blocks most likely to notice a compiler change -- the pages pin per-step
-    # allocations, jacobian_pattern cross-checks an AD-traced sparsity pattern, and the
+    # cheap core: form/jacobian_pattern.jl and the Supposition properties moved out of it
+    # (test/TestUtils.jl's `WITH_SLOW_TESTS`; the worked-example pages are the `examples`
+    # group now, run by docs-on-demand.yml). Those are exactly the blocks most likely to
+    # notice a compiler change -- jacobian_pattern cross-checks an AD-traced sparsity pattern, and the
     # properties search their input space -- so running `unit` here would have narrowed the
     # early warning this job exists to give, as a side effect of trimming the push gate.
     continue-on-error: true

@@ -19,6 +19,11 @@ name: Docs
 #
 # Julia 1.13, the same release every other job builds on -- keep the two in step when
 # either moves.
+#
+# Before building, the job runs the test suite's `examples` group (test/examples/pages.jl
+# and ext_pages.jl: the worked-example pages with their `#src` assertions) on the same Julia
+# and OS the build uses. It gates -- no `continue-on-error` -- so a page whose assertions
+# fail is never deployed. No other workflow runs this group.
 
 permissions:
   contents: read
@@ -54,6 +59,18 @@ jobs:
           version: "1.13"
 
       - uses: julia-actions/cache@v2
+        with:
+          cache-compiled: "true"
+
+      - uses: julia-actions/julia-buildpkg@v1
+
+      - name: Run the worked examples
+        uses: julia-actions/julia-runtest@v1
+        with:
+          coverage: false
+        env:
+          BRAMBLE_TEST_GROUP: examples
+          JULIA_NUM_THREADS: auto
 
       - name: Install dependencies
         run: |

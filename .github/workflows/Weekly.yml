@@ -11,11 +11,15 @@ name: Weekly
 # Each version/OS pair runs as two jobs, `part: suite` (the `slow` group: unit plus the slow
 # blocks) and `part: backends` (the `backends` group: the package extensions), which
 # together cover what `full` does except the manual snippets, which only run locally anyway.
+# The worked-example pages are in neither half: they are the `examples` group, which
+# docs-on-demand.yml runs before every docs build.
 #
 # AD and GPU tests are switched off in every group until v4.3.0 and v4.4.0 respectively
-# (test/TestUtils.jl, `WITH_AD_TESTS` and `WITH_GPU_TESTS`). The step that installed
-# Enzyme, Mooncake, PolyesterForwardDiff and SciMLSensitivity for the `backends` half is
-# gone with them; v4.3.0 restores it from git history together with the AD tests.
+# (test/TestUtils.jl, `WITH_AD_TESTS` and `WITH_GPU_TESTS`, and the `ad` and `gpu` groups).
+# Each comes back by setting `BRAMBLE_TEST_AD` or `BRAMBLE_TEST_GPU` in this workflow's env
+# and adding its packages: the step that installed Enzyme, Mooncake, PolyesterForwardDiff
+# and SciMLSensitivity for the `backends` half is gone, and v4.3.0 restores it from git
+# history together with the AD tests.
 #
 # This is a canary rather than a gate: it is not required for a merge, and a failure here
 # most often means an upstream release moved rather than that Bramble regressed. Read it
@@ -40,7 +44,7 @@ jobs:
     name: Full suite, ${{ matrix.part }} (Julia ${{ matrix.version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     # 120, not 90: on the v3.11.0 tag both Julia 1.12 legs were cancelled at 90 minutes
-    # inside the last file (examples/ext_pages.jl); 1.12 compiles the Enzyme and form files
+    # inside the last file (examples/ext_pages.jl, since moved to the `examples` group); 1.12 compiles the Enzyme and form files
     # far more slowly than 1.13 (ext/chainrules_enzyme_ext.jl alone took 879 s on macOS),
     # while the 1.13 legs finish in about 69.
     timeout-minutes: 120
