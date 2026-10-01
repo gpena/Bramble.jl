@@ -35,6 +35,20 @@ function _mf_spaces(be = backend())
     )
 end
 
+# One space's four cases. A function of its own so each call is compiled for one concrete
+# space type: looping over the 1D/2D/3D tuple inline makes inference pair a trial function of
+# one dimension with a test function of another, which never happens.
+function _mf_push_dim_cases!(out, W)
+    D = dim(W)
+    κ = Rₕ(W, x -> 1 + sum(abs2, x))
+    push!(out, ("$(D)D diffusion", form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))), :boundary))
+    push!(out, ("$(D)D jump-avg", form(W, W, (u, v) -> innerₕ(jumpₓ(u), M₊ₓ(v)) + innerₕ(D₋ₓ(u), v)), nothing))
+    push!(out, (
+        "$(D)D restricted", form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(κ * u, restrict_to(:boundary, v))), nothing))
+    push!(out, ("$(D)D pair", form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + 2.0 * innerₕ(u, D₋ₓ(v))), (:west,)))
+    return out
+end
+
 # (name, form, dirichlet): variable diffusion, jump/average/difference, a region restriction,
 # a transposed pair, per dimension; then composite spaces with crossed components, one on a
 # single leaf object and one on two, so both halves of the pair walk run.
@@ -42,13 +56,7 @@ function _mf_cases(be = backend())
     out = Tuple{String, Bramble.BilinearForm, Union{Nothing, Symbol, Tuple{Vararg{Symbol}}}}[]
     spaces = _mf_spaces(be)
     for W in spaces
-        D = dim(W)
-        κ = Rₕ(W, x -> 1 + sum(abs2, x))
-        push!(out, ("$(D)D diffusion", form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))), :boundary))
-        push!(out, ("$(D)D jump-avg", form(W, W, (u, v) -> innerₕ(jumpₓ(u), M₊ₓ(v)) + innerₕ(D₋ₓ(u), v)), nothing))
-        push!(out, (
-            "$(D)D restricted", form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(κ * u, restrict_to(:boundary, v))), nothing))
-        push!(out, ("$(D)D pair", form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + 2.0 * innerₕ(u, D₋ₓ(v))), (:west,)))
+        _mf_push_dim_cases!(out, W)
     end
     W = spaces[2]
     V = W × W

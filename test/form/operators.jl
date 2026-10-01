@@ -301,7 +301,9 @@ const _ORIGIN_2D = (0, 0)
 
             # There is deliberately no innerₕ over gradient tuples: InnerH carries a single
             # weight, so the sum has nothing to infer and is written out at the call site.
-            @test_throws MethodError innerₕ(∇ₕ(u2), ∇ₕ(v2))
+            # `invokelatest` keeps JET from proving the call always throws and reporting it
+            # at the enclosing testset: the missing method is what this line asserts.
+            @test_throws MethodError Base.invokelatest(innerₕ, ∇ₕ(u2), ∇ₕ(v2))
             @test innerₕ(∇ₕ(u2)[1], ∇ₕ(v2)[1]) + innerₕ(∇ₕ(u2)[2], ∇ₕ(v2)[2]) isa
                   Bramble.OperatorAdd
         end

@@ -607,7 +607,7 @@ end
 # which the `unit` group that runs exporters/ must not pay for.
 function _dataset_entries(pvd_path::AbstractString)
     xdoc = parse_file(pvd_path)
-    collection = find_element(root(xdoc), "Collection")
+    collection = something(find_element(root(xdoc), "Collection"))
     entries = [(
                    timestep = parse(Float64, attribute(c, "timestep")),
                    file = attribute(c, "file")

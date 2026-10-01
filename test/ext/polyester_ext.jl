@@ -56,6 +56,14 @@ function _poisson_pair(dim::Val{D}, n::Integer; source = _sine_source(dim)) wher
     return (; Wp = Wp, Wb = Wb, Ws = Ws, ap = ap, lp = lp, ab = ab, lb = lb, as = as, ls = ls)
 end
 
+# `assemble` and `allocate_system_matrix` infer a union that includes a dense `Matrix`, which
+# has no `nonzeros`; the matrices filled here are always `SparseMatrixCSC`, so the assertion
+# narrows the type for JET.
+function _fillnz!(A, v)
+    @assert A isa SparseMatrixCSC
+    return fill!(nonzeros(A), v)
+end
+
 @testset "Polyester extension (CpuPolyester)" begin
     # Needs this extension to be loaded (S7.1).
     @testset "CpuPolyester backend and grid space" begin
@@ -104,12 +112,12 @@ end
             # real entries instead of replacing them -- exactly the trap gpena/Bramble.jl#190
             # records from a previous attempt.
             Ab2 = allocate_system_matrix(p.ab)
-            fill!(nonzeros(Ab2), 999.0)
+            _fillnz!(Ab2, 999.0)
             assemble!(Ab2, p.ab)
             @test isapprox(Matrix(Ap), Matrix(Ab2); atol = 1.0e-12)
 
             Ab3 = allocate_system_matrix(p.ab)
-            fill!(nonzeros(Ab3), -777.0)
+            _fillnz!(Ab3, -777.0)
             assemble_parallel!(Ab3, p.ab)
             @test isapprox(Matrix(Ap), Matrix(Ab3); atol = 1.0e-12)
 
@@ -335,7 +343,7 @@ end
             @test isapprox(B, R; rtol = 1e-12)
 
             # A warmed refill (the recording already exists): replays, not re-searches.
-            fill!(nonzeros(B), NaN)
+            _fillnz!(B, NaN)
             assemble!(B, ab)
             @test getcolptr(B) == getcolptr(R) && rowvals(B) == rowvals(R)
             @test isapprox(B, R; rtol = 1e-12)
@@ -717,7 +725,7 @@ end
 
         A = copy(R)
         for _ in 1:2   # record, then replay
-            fill!(nonzeros(A), NaN)
+            _fillnz!(A, NaN)
             refill!(A, a)
             @test getcolptr(A) == getcolptr(R) && rowvals(A) == rowvals(R)
             @test isapprox(A, R; rtol = 1e-12)

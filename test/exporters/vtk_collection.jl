@@ -13,7 +13,7 @@ using LightXML
 function _dataset_entries(pvd_path::AbstractString)
     xdoc = parse_file(pvd_path)
     xroot = root(xdoc)
-    collection = find_element(xroot, "Collection")
+    collection = something(find_element(xroot, "Collection"))
     entries = [(
                    timestep = parse(Float64, attribute(c, "timestep")),
                    file = attribute(c, "file")

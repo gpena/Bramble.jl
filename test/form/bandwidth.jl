@@ -95,7 +95,7 @@ end
                 for (nm, fbuild) in _bandwidth_test_forms()
                     @testset "$nm" begin
                         a = form(Wₕ, Wₕ, fbuild)
-                        A = assemble(a)
+                        A = assemble(a)::SparseMatrixCSC
                         @test bandwidths(a) == _true_bandwidths(A)
 
                         if D == 1
@@ -118,8 +118,8 @@ end
         a_narrow = form(Wₕ1, Wₕ1, (u, v) -> innerₕ(u, v))
         a_wide = form(Wₕ1, Wₕ1, (u, v) -> innerₕ(D̽ₓ(D₋ₓ(u)), v))
         @test bandwidths(a_narrow) != bandwidths(a_wide)
-        @test bandwidths(a_narrow) == _true_bandwidths(assemble(a_narrow))
-        @test bandwidths(a_wide) == _true_bandwidths(assemble(a_wide))
+        @test bandwidths(a_narrow) == _true_bandwidths(assemble(a_narrow)::SparseMatrixCSC)
+        @test bandwidths(a_wide) == _true_bandwidths(assemble(a_wide)::SparseMatrixCSC)
 
         a2_narrow = form(Wₕ2, Wₕ2, (u, v) -> innerₕ(u, v))
         a2_wide = form(Wₕ2, Wₕ2, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))

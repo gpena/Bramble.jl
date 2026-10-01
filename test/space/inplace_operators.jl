@@ -46,6 +46,33 @@ function _ops(::Val{D}, families = _INPLACE_FAMILIES) where {D}
     return Tuple(entries)
 end
 
+# One dimension of "Allocating agreement", a function of its own so the dimension, mesh and
+# test function are concrete types. Indexing the three-mesh tuple with a loop counter infers
+# a union of the three meshes, which JET follows into pairs that never occur (a 1D mesh
+# with a 3D function).
+function _agreement_case(::Val{D}, Ωₕ, fun) where {D}
+    @testset "$(D)D" begin
+        Wₕ = gridspace(Ωₕ)
+        Vₕ = gridspace(Ωₕ, Val(2))
+        uₕ = Rₕ(Wₕ, fun)
+        uv = Rₕ(Vₕ, (fun, fun))
+
+        for (f!, f, nm) in _ops(Val(D))
+            @testset "$nm" begin
+                vₕ = similar(uₕ)
+                returned = f!(vₕ, uₕ)
+                @test parent(vₕ) == parent(f(uₕ))
+                @test returned === vₕ          # single destination returns it
+
+                # and componentwise over a composite space
+                vv = similar(uv)
+                @test f!(vv, uv) === vv
+                @test parent(vv) == parent(f(uv))
+            end
+        end
+    end
+end
+
 @testset "In-place operators" begin
     @testset "Allocating agreement" begin
         Random.seed!(20260831)
@@ -64,29 +91,9 @@ end
             x -> x[1]^2 + 2x[2] + sin(x[3]) + 1
         )
 
-        for D in 1:3
-            @testset "$(D)D" begin
-                Ωₕ = Ωs[D]
-                Wₕ = gridspace(Ωₕ)
-                Vₕ = gridspace(Ωₕ, Val(2))
-                uₕ = Rₕ(Wₕ, fs[D])
-                uv = Rₕ(Vₕ, (fs[D], fs[D]))
-
-                for (f!, f, nm) in _ops(Val(D))
-                    @testset "$nm" begin
-                        vₕ = similar(uₕ)
-                        returned = f!(vₕ, uₕ)
-                        @test parent(vₕ) == parent(f(uₕ))
-                        @test returned === vₕ          # single destination returns it
-
-                        # and componentwise over a composite space
-                        vv = similar(uv)
-                        @test f!(vv, uv) === vv
-                        @test parent(vv) == parent(f(uv))
-                    end
-                end
-            end
-        end
+        _agreement_case(Val(1), Ωs[1], fs[1])
+        _agreement_case(Val(2), Ωs[2], fs[2])
+        _agreement_case(Val(3), Ωs[3], fs[3])
     end
 
     @testset "Destination overwrite" begin
@@ -255,8 +262,10 @@ end
                         @test rejects(f!, nan_dest(2m, Bᵥ), uv)
 
                         # equal length, different mesh shape
-                        if permuted[D] !== nothing
-                            Pₕ, Pᵥ = gridspace(permuted[D]), gridspace(permuted[D], Val(2))
+                        # (bound to a name so the `nothing` test narrows it for JET)
+                        Ωp = permuted[D]
+                        if Ωp !== nothing
+                            Pₕ, Pᵥ = gridspace(Ωp), gridspace(Ωp, Val(2))
                             @test ndofs(Pₕ) == n
                             @test rejects(f!, nan_dest(n, Pₕ), uₕ)
                             @test rejects(f!, nan_dest(2n, Pᵥ), uv)
@@ -355,8 +364,9 @@ end
                 good() = nan_dest(n, Wₕ)
                 wrongs = Tuple{Int, Bramble.AbstractSpaceType}[
                     (n - 1, Wₕ), (ndofs(gridspace(bigger[D])), gridspace(bigger[D]))]
-                if permuted[D] !== nothing
-                    Pₕ = gridspace(permuted[D])
+                Ωp = permuted[D]  # bound to a name so the `nothing` test narrows it for JET
+                if Ωp !== nothing
+                    Pₕ = gridspace(Ωp)
                     @test ndofs(Pₕ) == n
                     push!(wrongs, (n, Pₕ))
                 end

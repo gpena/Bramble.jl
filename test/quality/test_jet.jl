@@ -121,23 +121,10 @@ function _filtered(r, path, throws_lines)
     false
 end
 
-# Known findings: file (relative to test/) => [(JET message fragment, reason)]. Each one is
-# a real report the integrator plans a fix for (S8.3.x subplans); it is listed here so this
-# file stays green meanwhile.
+# Known findings JET cannot avoid: file (relative to test/) => [(JET message fragment, reason)].
+# A package missing from the test environment or gated off, or a limit of JET itself. A
+# finding in working test code is fixed in the test, not listed here.
 const EXCEPTIONS = Dict{String, Vector{Tuple{String, String}}}(
-    "TestUtils.jl" => [
-        ("isless(::Nothing, ::Float64)",
-        "164: `maxrss_gb > MAXRSS_BUDGET_GB` reads a `Union{Nothing, Float64}` const; " *
-        "guarded by `MAXRSS_BUDGET_GB === nothing` above but not narrowed for inference"),
-    ],
-    "exporters/vtk_collection.jl" => [
-        ("child_elements(::Nothing)",
-        "17: LightXML `root(...)` may return `nothing`; not narrowed before use"),
-    ],
-    "ext/sciml_ext.jl" => [
-        ("child_elements(::Nothing)",
-        "611: LightXML `root(...)` may return `nothing`; not narrowed before use"),
-    ],
     "ext/ad_backend_verification.jl" => [
         ("Package ReverseDiff not found",
         "8: `using ReverseDiff` at toplevel, but ReverseDiff is not in test/Project.toml"),
@@ -168,59 +155,10 @@ const EXCEPTIONS = Dict{String, Vector{Tuple{String, String}}}(
         ("Package Metal not found", "8: Metal is out of the test env since 2026-09-27"),
         ("`Metal` not defined", "27: follows from the missing Metal package")
     ],
-    "ext/polyester_ext.jl" => [
-        ("nonzeros(::Matrix)", "59: matrix inferred as `Union{Matrix, SparseMatrixCSC}`"),
-    ],
-    "ext/sparse_csr_ext.jl" => [
-        ("nnz(::Matrix)", "76: matrix inferred as a union including `Matrix`"),
-    ],
-    "form/assemble_add.jl" => [
-        ("nonzeros(::Matrix)", "19: matrix inferred as a union including `Matrix`"),
-    ],
-    "form/threaded_replay.jl" => [
-        ("nonzeros(::Matrix)", "60: matrix inferred as a union including `Matrix`"),
-    ],
-    "form/bandwidth.jl" => [
-        ("_true_bandwidths(::Matrix)",
-            "77: helper has no method for the `Matrix`/CSR members of the inferred union"),
-        ("_true_blockbandwidths(::Matrix, ::Any)", "77: as above")
-    ],
-    "form/matrix_free.jl" => [
-        ("no matching method found `innerₕ(",
-        "48, 51: loop over spaces of different dimension infers mixed-dimension " *
-        "trial/test pairs that never occur at runtime"),
-    ],
-    "form/operators.jl" => [
-        ("no matching method found `innerₕ(::Tuple{",
-        "76: `innerₕ` called on a tuple of gradients; no method for that argument type"),
-    ],
-    "solvers/preconditioners.jl" => [
-        ("no matching method found `innerₕ(",
-        "44: loop over spaces of different dimension infers mixed-dimension pairs"),
-    ],
-    "form/vector_calculus.jl" => [
-        ("parent(::Tuple{Bramble.VectorElement",
-        "193: `parent` on a tuple of vector elements in one branch of a union"),
-    ],
-    "quality/exports.jl" => [
-        ("strip(::Nothing)", "27: `match(...)` capture may be `nothing`; not narrowed"),
-    ],
-    "quality/invalidations.jl" => [
-        ("parse(::Type{Int64}, ::Nothing)",
-        "16: `match(...)` capture may be `nothing`; not narrowed"),
-    ],
-    "quality/invalidations_snoop.jl" => [
-        ("invalidations` may be undefined",
-        "23: `invalidations` is bound by `@snoop_invalidations` in a branch JET " *
-        "cannot see as always taken"),
-    ],
     "space/autodiff_heavy.jl" => [
         ("Enzyme` is not defined",
         "20 (reported at the testset): `Enzyme` is bound by `@eval import Enzyme` at " *
         "line 47 only when `_have(:Enzyme)`"),
-    ],
-    "space/inplace_operators.jl" => [
-        ("gridspace(::Nothing", "49: argument inferred as possibly `nothing`"),
     ],
     "utils/macros.jl" => [
         ("Syntax: @forward T.x f",

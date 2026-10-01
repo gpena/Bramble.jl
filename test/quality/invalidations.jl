@@ -30,7 +30,7 @@ using Test
             m = match(r"OWNED_COUNT=(\d+)", out)
             @test m !== nothing
             if m !== nothing
-                n_owned = parse(Int, m.captures[1])
+                n_owned = parse(Int, something(m.captures[1]))
                 @test n_owned == 0
                 if n_owned > 0
                     @info "Package-owned invalidations found (using Bramble):\n$out"

@@ -73,6 +73,13 @@ function _csr_poisson_system(dim::Val{D}, n::Integer; source = _sine_source(dim)
     return (; Wₕ = pair.Wr, a = pair.ar, l = pair.lr, A = A, F = F, u_ref = A \ F)
 end
 
+# `assemble` infers a union that includes a dense `Matrix`, which has no `nnz`; the matrices
+# counted here are always CSC or CSR, so the assertion narrows the type for JET.
+function _nnz(A)
+    @assert A isa Union{SparseMatrixCSC, SparseMatrixCSR}
+    return nnz(A)
+end
+
 @testset "SparseMatricesCSR extension" begin
     @testset "csr_backend() types" begin
         be = csr_backend()
@@ -94,7 +101,7 @@ end
         A = matrix(be, 4, 4)
         @test A isa SparseMatrixCSR{1, Float64, Int}
         @test size(A) == (4, 4)
-        @test nnz(A) == 0
+        @test _nnz(A) == 0
 
         I4 = backend_eye(be, 4)
         @test I4 isa SparseMatrixCSR{1, Float64, Int}
@@ -102,7 +109,7 @@ end
 
         Z4 = backend_zeros(be, 4)
         @test Z4 isa SparseMatrixCSR{1, Float64, Int}
-        @test nnz(Z4) == 0
+        @test _nnz(Z4) == 0
     end
 
     @testset "Poisson 1D/2D/3D: agrees with CSC" begin
@@ -112,7 +119,7 @@ end
             Ac, Ar = assemble(p.ac), assemble(p.ar)
             @test Ar isa SparseMatrixCSR
             @test isapprox(Matrix(Ac), Matrix(Ar); atol = 1.0e-12)
-            @test nnz(Ac) == nnz(Ar)
+            @test _nnz(Ac) == _nnz(Ar)
 
             Acd, Fc = assemble(p.ac, p.lc; dirichlet = ZERO_BC, symmetrize = true)
             Ard, Fr = assemble(p.ar, p.lr; dirichlet = ZERO_BC, symmetrize = true)

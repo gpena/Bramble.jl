@@ -34,6 +34,14 @@ function _mesh(D, n, policy; seed = 338)
     )
 end
 
+# `assemble` and `allocate_system_matrix` infer a union that includes a dense `Matrix`
+# (their element-type promotion is not inferable here), which has no `nonzeros`; the matrices
+# these tests fill are always `SparseMatrixCSC`, so the assertion narrows the type for JET.
+function _fillnz!(A, v)
+    @assert A isa SparseMatrixCSC
+    return fill!(nonzeros(A), v)
+end
+
 _same_structure(A, B) = getcolptr(A) == getcolptr(B) && rowvals(A) == rowvals(B)
 _agrees(A, R) = _same_structure(A, R) && isapprox(A, R; rtol = 1e-12)
 
@@ -73,30 +81,30 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
         P = assemble(ap)
         @test _agrees(P, R)
         @test ap.cache.valid && ap.cache.A_id == objectid(P)
-        fill!(nonzeros(P), NaN)
+        _fillnz!(P, NaN)
         assemble!(P, ap)
         @test _agrees(P, R)
 
         # `assemble_parallel!` from a serial form: `assemble` already recorded this matrix,
         # so even its first threaded fill replays.
         B = assemble(as)
-        fill!(nonzeros(B), NaN)
+        _fillnz!(B, NaN)
         assemble_parallel!(B, as)
         @test _agrees(B, R)
         @test as.cache.A_id == objectid(B)
 
         # ... and against a matrix it has never seen: records once, then replays.
         C = copy(R)
-        fill!(nonzeros(C), NaN)
+        _fillnz!(C, NaN)
         assemble_parallel!(C, as)
         @test _agrees(C, R)
         @test as.cache.A_id == objectid(C)
-        fill!(nonzeros(C), NaN)
+        _fillnz!(C, NaN)
         assemble_parallel!(C, as)
         @test _agrees(C, R)
 
         # The serial path reads the recording the threaded one made, and the other way round.
-        fill!(nonzeros(C), NaN)
+        _fillnz!(C, NaN)
         assemble!(C, as)
         @test _agrees(C, R)
     end
@@ -134,17 +142,17 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
 
         P1 = assemble(ap)
         P2 = copy(P1)
-        fill!(nonzeros(P2), NaN)
+        _fillnz!(P2, NaN)
         assemble!(P2, ap)
         @test ap.cache.A_id == objectid(P2)
         @test _agrees(P2, R)
 
         # Back to the first: its recording was replaced, so it records again, correctly.
-        fill!(nonzeros(P1), NaN)
+        _fillnz!(P1, NaN)
         assemble!(P1, ap)
         @test ap.cache.A_id == objectid(P1)
         @test _agrees(P1, R)
-        fill!(nonzeros(P1), NaN)
+        _fillnz!(P1, NaN)
         assemble!(P1, ap)
         @test _agrees(P1, R)
     end
@@ -157,7 +165,7 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
         R = assemble(form(gridspace(Ωs), gridspace(Ωs), g))
         P = assemble(ap)
         @test length(ap.cache.segments) == 1
-        fill!(nonzeros(P), NaN)
+        _fillnz!(P, NaN)
         assemble!(P, ap)
         @test _agrees(P, R)
     end
@@ -189,7 +197,7 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
 
             A = copy(R)
             for _ in 1:2   # record, then replay
-                fill!(nonzeros(A), NaN)
+                _fillnz!(A, NaN)
                 refill!(A, a)
                 @test _agrees(A, R)
             end
@@ -214,7 +222,7 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
         A = allocate_system_matrix(a)
         assemble_parallel!(A, a)
         @test _agrees(A, R)
-        fill!(nonzeros(A), NaN)
+        _fillnz!(A, NaN)
         assemble_parallel!(A, a)
         @test _agrees(A, R)
     end
