@@ -72,12 +72,13 @@ using ..TestUtils: alloc_test, @test_allocs
         @test @inferred(cell_measure(Ωₕ1, 3)) isa Float64
         @test @inferred(spacings(Ωₕ1)) isa AbstractVector
 
-        # the per-axis vectors, which every nD mesh answers as an NTuple of vectors
+        # the per-axis vectors, which every nD mesh answers as an NTuple of vectors; their
+        # inference is pinned by `@test_opt` in test/quality/type_stability.jl
         for (Ωₕ, D) in ((Ωₕ2, 2), (Ωₕ3, 3))
-            @test @inferred(spacings(Ωₕ)) isa NTuple{D, Vector{Float64}}
-            @test @inferred(half_spacings(Ωₕ)) isa NTuple{D, Vector{Float64}}
-            @test @inferred(cell_measures(Ωₕ)) isa NTuple{D, Vector{Float64}}
-            @test @inferred(points(Ωₕ)) isa NTuple{D, Vector{Float64}}
+            @test spacings(Ωₕ) isa NTuple{D, Vector{Float64}}
+            @test half_spacings(Ωₕ) isa NTuple{D, Vector{Float64}}
+            @test cell_measures(Ωₕ) isa NTuple{D, Vector{Float64}}
+            @test points(Ωₕ) isa NTuple{D, Vector{Float64}}
             # the same shape as its siblings, and the entries `spacing` reports
             @test map(length, spacings(Ωₕ)) == map(length, half_spacings(Ωₕ))
             @test all(

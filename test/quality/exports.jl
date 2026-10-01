@@ -24,7 +24,7 @@ function _has_docstring(name::Symbol)
     b = Docs.Binding(Bramble, name)
     haskey(_DOC_META, b) || return false
     m = _DOC_META[b]
-    return !isempty(m.order) && !isempty(strip(join(m.docs[first(m.order)].text, "")))
+    return !isempty(m.order) && !isempty(strip(join(m.docs[first(m.order)].text, "")::String))
 end
 
 # Names re-exported from Base or another package are documented there, not here.

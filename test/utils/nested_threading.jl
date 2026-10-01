@@ -32,13 +32,14 @@ using Bramble: CpuThreaded, _dot, _in_threaded_region, _is_static_nesting_error,
                _static_or_serial, _serial_for!, _threaded_for!, assemble_add!,
                assemble_parallel!, D₋ₓ!, Mₓ!, divₕ!, εₕ!, εcₕ!, curlₕ!, ∇̃ₕ!
 using SparseArrays: nonzeros
+using ..TestUtils: WITH_SLOW_TESTS
 
 const _D2 = domain(interval(0.0, 1.0) × interval(0.0, 2.0))
 _mesh(n, policy) = mesh(_D2, (n, n), (false, false); backend = backend(policy = policy))
 
 # Run `f` once per iteration of a user-level `Threads.@threads` loop and return every result.
 function _nested_results(f)
-    out = Vector{Any}(undef, 2 * Threads.nthreads())
+    out = Vector{Any}(undef, 2 * Threads.nthreads())  # Any: `f` is an arbitrary closure, its result type is the caller's
     Threads.@threads for i in eachindex(out)
         out[i] = f()
     end
@@ -128,6 +129,13 @@ end
         ("εcₕ!", () -> (o = tensor(); εcₕ!(o, comps); map(r -> parent.(r), o)))
     ]
 
+    # Each case compiles its own operation, so `unit` runs one per kind of sweep (a pointwise
+    # fill, a masked reduction, a staggered reduction, a threaded refill from a serial form, a
+    # linear assembly, a stencil engine, a vector-calculus operator); `slow` runs them all.
+    unit_cases = ("Rₕ!", "innerₕ masked", "inner₊ two markers", "assemble_parallel! from Serial()",
+        "assemble linear", "D₋ₓ!", "divₕ!")
+    WITH_SLOW_TESTS || filter!(c -> first(c) in unit_cases, cases)
+
     @testset "$name: nested == top level" for (name, f) in cases
         ref = f()
         @test all(==(ref), _nested_results(f))
@@ -137,8 +145,10 @@ end
 
     @testset "Concurrent spawned calls never throw" begin
         # The critic's scenario (a task-parallel sweep, no threaded region anywhere): a small
-        # Float32 space so each call is short and the calls overlap as often as possible.
-        M = mesh(_D2, (23, 17), (false, false); backend = backend(Float32; policy = Parallel()))
+        # space so each call is short and the calls overlap as often as possible. `slow` uses
+        # Float32; `unit` stays on Float64, which reuses the operations compiled above.
+        T = WITH_SLOW_TESTS ? Float32 : Float64
+        M = mesh(_D2, (23, 17), (false, false); backend = backend(T; policy = Parallel()))
         W32 = gridspace(M)
         u32 = Rₕ(W32, x -> sin(sum(x)))
         l32 = form(W32, q -> innerₕ(u32, q))
@@ -148,7 +158,8 @@ end
         ok = Threads.Atomic{Int}(0)
         threw = Threads.Atomic{Int}(0)
         calls = 0
-        deadline = time() + 3.0
+        # `slow` races for longer; `unit` still overlaps dozens of calls.
+        deadline = time() + (WITH_SLOW_TESTS ? 3.0 : 1.0)
         while time() < deadline
             calls += 6
             @sync for _ in 1:6

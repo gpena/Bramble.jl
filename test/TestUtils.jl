@@ -24,25 +24,27 @@ const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 
 # `slow` is the every-push gate's overflow: the unit suite plus the files whose cost is out
 # of proportion to what a *push* learns from them. CI.yml (macOS, per push) runs `unit` and
-# so skips them; nightly.yml runs `slow` on both platforms once a day, and Weekly.yml's
-# `full` includes them as well. A run with no group set gets `all`, which includes them --
+# so skips them; nightly.yml runs `slow` on both platforms once a day, and Weekly.yml
+# runs `slow` as the suite half of its matrix. A run with no group set gets `all`, which includes them --
 # so `.claude/scripts/test.sh` and a bare `Pkg.test` are unaffected.
 #
 # What is behind it, and why, with the measured cost of each on Julia 1.13, macOS, 4
 # threads, against a 6m06s `unit` run:
 #
-#   examples/pages.jl           1m03.8s  the six worked-example pages, run for the `#src`
-#                                        assertions that pin the numbers the docs render.
-#                                        Nothing here is a code path that drivers/ and
-#                                        form/ do not already cover; what it uniquely
-#                                        catches is a *published number* going stale, which
-#                                        is a same-day concern, not a same-push one.
+# (The worked-example pages, 1m03.8s, used to sit here; they are the `examples` group now,
+# which the documentation workflow runs and no other group does.)
+#
 #   form/jacobian_pattern.jl      ~46s   the AST-derived sparsity pattern checked against
 #                                        SparseConnectivityTracer's AD-traced pattern as
 #                                        ground truth in 1D/2D/3D, plus Newton solves that
 #                                        use it. The expensive half is a cross-check against
 #                                        another package, and it moves when that package or
 #                                        the simplifier moves, not when an operator does.
+#                                        Also behind WITH_AD_TESTS (below), so it is off
+#                                        in every group until that switch comes back on.
+#   form/nested_operators.jl             the full operator-pair grid (81/135 pairs, ~309s
+#                                        locally). The cyclic cover of the same pairs
+#                                        stays in `unit`.
 #   form/vector_calculus.jl     ~159s   composite ∇ₕ/εₕ/divₕ checked against a hand-expanded
 #                                        form (S6.5). The cost is 100% compile: the
 #                                        hand-expanded helpers branch on `i == j` to return
@@ -78,10 +80,42 @@ const WITH_SLOW_TESTS = TEST_GROUP in ("all", "slow", "full")
 # Automatic differentiation and GPU tests are switched off in every group until the
 # milestones that own them: AD until v4.3.0, which decides which backends Bramble keeps, and
 # GPU until v4.4.0, which brings the device path to parity with the CPU. The files stay in
-# the tree, and their packages are not in test/Project.toml: to run them, add the packages
-# and set `BRAMBLE_TEST_AD=true` or `BRAMBLE_TEST_GPU=true`. With AD off, one ForwardDiff
+# the tree, and their packages are not in test/Project.toml. With AD off, one ForwardDiff
 # smoke test (form/forwarddiff_smoke.jl) still runs in `unit`, so assembly with dual numbers
 # cannot silently regress.
+#
+# Switched off until v4.3.0 (AD). To turn back on: add Enzyme, Mooncake,
+# SparseConnectivityTracer, SparseMatrixColorings, DifferentiationInterface,
+# SciMLSensitivity and ChainRulesCore (whichever the file loads) to test/Project.toml and set
+# `BRAMBLE_TEST_AD=true`; then remove this switch once v4.3.0 settles the backends.
+#   whole files, `unit` (and slow/full/all):
+#     space/autodiff.jl, space/autodiff_backends.jl   test/runtests.jl
+#     form/autodiff.jl                                test/form/runtests.jl
+#     form/jacobian_pattern.jl (also needs `slow`)    test/form/runtests.jl
+#   whole files, groups `ad`, `full`, `backends` ("AD backends (expensive)" in runtests.jl):
+#     space/autodiff_heavy.jl, space/autodiff_policies.jl, ext/chainrules_enzyme_ext.jl,
+#     examples/inverse_diffusion.jl, ext/sparse_ad_ext.jl, ext/ad_backend_verification.jl,
+#     ext/sciml_sensitivity_ext.jl, examples/transient_inverse_problem.jl,
+#     ext/chainrules_ext.jl
+#   inline blocks, gated with `WITH_AD_TESTS` at the site:
+#     form/bilinear.jl "Matrix differentiation", "Dual arguments (#326)";
+#     form/linear.jl "Parallel differentiation", the nonlinear residual Jacobian `if`,
+#     "Assembled residual differentiation"; form/dirac.jl three `if`s (ForwardDiff through
+#     Dirac strengths); form/kronecker.jl `if` (Duals through the Kronecker scratch);
+#     form/interpolation_operator.jl "Differentiation"; form/type_cached_assemble.jl
+#     "matches direct, Float64 and Dual", "structural: pattern matches assemble(a)",
+#     "Newton solve matches direct"; form/semidiscrete.jl `if` (Dual `t` rebuild);
+#     form/source_operators.jl "Source differentiation", "lowered source: Dual
+#     propagates"; form/reaction_flux.jl "reaction: Dual load vector";
+#     ext/sparspak_ext.jl `if` (generic-eltype AD through Sparspak).
+#
+# Switched off until v4.4.0 (GPU). To turn back on: add Metal, GPUArrays and
+# KernelAbstractions to test/Project.toml, set `BRAMBLE_TEST_GPU=true` and run the `gpu`
+# group on an Apple Silicon Mac (outside CI, or with `CI` unset: `_run_gpu_tests()` below
+# skips device kernels on a CI runner); then remove this switch once v4.4.0 lands.
+#   whole files, group `gpu`: ext/metal_ext.jl (which now also holds the "Metal GPU
+#     backend" testset that used to sit inline in utils/backends.jl),
+#     ext/metal_fullstack.jl, ext/metal_assembly_replay.jl, ext/metal_form_assembly.jl.
 const WITH_AD_TESTS = get(ENV, "BRAMBLE_TEST_AD", "false") == "true"
 const WITH_GPU_TESTS = get(ENV, "BRAMBLE_TEST_GPU", "false") == "true"
 
@@ -194,7 +228,7 @@ _have(mod::Symbol) = Base.identify_package(String(mod)) !== nothing
 # metal_fullstack.jl used to gate solely on `Metal.functional()`, on the assumption that a
 # CI runner has no working device -- true for a nested VM, but not for GitHub's hosted
 # macOS runners, which are real Apple Silicon hardware and expose a functional Metal device
-# for headless compute. Weekly.yml's `full` group therefore risks actually executing GPU
+# for headless compute. Weekly.yml's `backends` group therefore risks actually executing GPU
 # kernels, unattended, on a shared CI runner. `_run_gpu_tests()` adds an explicit opt-out on
 # top of `Metal.functional()`: `BRAMBLE_SKIP_GPU_TESTS=true` (set by intent) or `CI=true`
 # (GitHub Actions sets this on every runner) forces a skip regardless of what the host

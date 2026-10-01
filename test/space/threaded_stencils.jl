@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: VectorElement
 using Random
-using ..TestUtils: alloc_test
+using ..TestUtils: alloc_test, WITH_SLOW_TESTS
 
 # Under a `CpuThreaded` (`Parallel()`) backend every CPU stencil engine -- the one-sided and
 # centered difference engines and both average engines -- runs banded along the grid's
@@ -16,6 +16,9 @@ using ..TestUtils: alloc_test
 # Every family reaching `_apply_stencil!` or `_apply_averaged!`, spelled from the
 # operator's base name so no Unicode is retyped here.
 const _FAMILIES = (:D₋, :D₊, :diff₋, :diff₊, :jump, :Dc, :D̃, :D̽, :M, :M₊, :Mc)
+# What `unit` runs of them: one per engine (one-sided difference, jump, centered difference,
+# average, centered average); `slow` runs them all.
+const _UNIT_FAMILIES = (:D₋, :diff₊, :jump, :Dc, :M₊, :Mc)
 const _CENTERED = (:Dc, :D̽, :Mc)            # need three points along their direction
 const _SUFFIXES = ("ₓ", "ᵧ", "₂")
 
@@ -53,7 +56,7 @@ function _check_all(n::NTuple{D, Int}) where {D}
     us, up = Rₕ(Ws, _F[D]), Rₕ(Wp, _F[D])
     vs, vp = Rₕ(Vs, (_F[D], _G[D])), Rₕ(Vp, (_F[D], _G[D]))
     @test parent(us) == parent(up)
-    for d in 1:D, fam in _FAMILIES
+    for d in 1:D, fam in (WITH_SLOW_TESTS ? _FAMILIES : _UNIT_FAMILIES)
 
         fam in _CENTERED && n[d] < 3 && continue
         f, f! = _op(fam, d), _op!(fam, d)
@@ -65,11 +68,15 @@ function _check_all(n::NTuple{D, Int}) where {D}
             @test parent(wp) == parent(ws)
             @test parent(f(up)) == parent(f(us))
 
-            ws2, wp2 = similar(vs), similar(vp)
-            f!(ws2, vs)
-            f!(wp2, vp)
-            @test parent(wp2) == parent(ws2)
-            @test parent(f(vp)) == parent(f(vs))
+            # The composite dispatches the same banded engines whatever the dimension:
+            # `unit` runs it in 1D and 2D, `slow` adds 3D, the costliest to compile.
+            if WITH_SLOW_TESTS || D < 3
+                ws2, wp2 = similar(vs), similar(vp)
+                f!(ws2, vs)
+                f!(wp2, vp)
+                @test parent(wp2) == parent(ws2)
+                @test parent(f(vp)) == parent(f(vs))
+            end
         end
     end
 end
@@ -89,9 +96,15 @@ end
 
 @testset "Threaded stencil engines" begin
     @testset "Equal to Serial, $(D)D" for D in 1:3
-        sizes = D == 1 ? ((1,), (2,), (3,), (5,), (1001,)) :
-                D == 2 ? ((9, 1), (9, 2), (3, 3), (11, 7), (40, 37)) :
-                ((5, 4, 1), (5, 4, 2), (4, 3, 5), (9, 8, 13))
+        # `unit` keeps, per dimension, the degenerate last axis (2 points, empty bands) and
+        # the smallest size the centered families accept; `slow` runs the full sweep.
+        sizes = if WITH_SLOW_TESTS
+            D == 1 ? ((1,), (2,), (3,), (5,), (1001,)) :
+            D == 2 ? ((9, 1), (9, 2), (3, 3), (11, 7), (40, 37)) :
+            ((5, 4, 1), (5, 4, 2), (4, 3, 5), (9, 8, 13))
+        else
+            D == 1 ? ((2,), (3,)) : D == 2 ? ((9, 2), (3, 3)) : ((5, 4, 2), (4, 3, 3))
+        end
         # Banded axes shorter than the thread count, down to a single point, leave some
         # bands empty; the operator must not notice.
         foreach(_check_all, sizes)
@@ -127,7 +140,7 @@ end
         @test min_bytes(16) == min_bytes(160)
     end
 
-    @testset "CpuPolyester stubs name Polyester" begin
+    @testset "Batch engine stubs name Polyester" begin
         # Untyped arguments reach the `src/` stub even when `BramblePolyesterExt` is loaded.
         @test_throws ArgumentError Bramble._batch_difference_engine!(
             nothing, nothing, nothing, nothing, nothing, nothing

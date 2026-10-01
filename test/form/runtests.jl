@@ -49,12 +49,13 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     # 1D, 2D and 3D. That is a cross-check against another package, so it moves when that
     # package or the simplifier moves rather than when an operator does. Daily on both
     # platforms, and in any run with no group set, including this file's own standalone one.
+    # It is also behind the AD switch (TestUtils.WITH_AD_TESTS), which is off in every group
+    # until v4.3.0, so for now it runs nowhere.
     TestUtils.WITH_SLOW_TESTS && TestUtils.WITH_AD_TESTS && include("jacobian_pattern.jl")
     # Mixed composite/scalar pairs (gpena/Bramble.jl#367): dependency-free, so on every push.
     include("jacobian_pattern_blocks.jl")
     include("type_cached_assemble.jl")
     include("semidiscrete.jl")
-    include("sparse_solvers.jl")
     # v3.3.0 plan (memory scaling): `bandwidths`/`blockbandwidths` read from the AST alone
     # (S4.1) and the dependency-free Kronecker operator (S5.1). Neither needs a weak
     # dependency, so both run with the rest of this subsystem rather than behind the `ext`
@@ -63,10 +64,6 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("kronecker.jl")
     # Matrix-free application of any bilinear form (gpena/Bramble.jl#326).
     include("matrix_free.jl")
-    # Preconditioners from a matrix-free diagonal (gpena/Bramble.jl#327).
-    include("preconditioners.jl")
-    # Geometric multigrid: nested hierarchies (gpena/Bramble.jl#329).
-    include("multigrid.jl")
     include("expression.jl")
     # Composite trial/test functions through the symbolic `∇ₕ`/`εₕ`/`divₕ` builders (S6.5).
     # Behind `slow`: its hand-expanded comparison functions (`hand_strain`, in particular)

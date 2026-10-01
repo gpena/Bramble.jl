@@ -751,4 +751,34 @@ else
     end
 end
 
+# The Backend constructor over Metal arrays, moved here from test/utils/backends.jl so that
+# every Metal test lives in the `gpu` group's files.
+@testset "Metal GPU backend" begin
+    if !Metal.functional() || !_run_gpu_tests()
+        @test_skip "Metal GPU backend tests skipped: Metal.functional() is false, or GPU tests are skipped in CI"
+    else
+        # MtlVector/MtlMatrix answer DeviceLocality() (gpena/Bramble.jl#298,
+        # ext/BrambleMetalExt.jl), so the default Serial() policy -- HostLocality() -- no
+        # longer agrees with them; GpuKernel() is required.
+        be_metal = backend(
+            vector_type = MtlVector{Float32}, matrix_type = MtlMatrix{Float32},
+            policy = GpuKernel()
+        )
+        @test Bramble.vector_type(be_metal) === MtlVector{Float32}
+        @test Bramble.matrix_type(be_metal) === MtlMatrix{Float32}
+
+        v = vector(be_metal, 10)
+        @test v isa MtlVector{Float32}
+        @test length(v) == 10
+
+        m = matrix(be_metal, 5, 5)
+        @test m isa MtlMatrix{Float32}
+        @test size(m) == (5, 5)
+
+        z = Bramble.backend_zeros(be_metal, 4)
+        @test z isa MtlMatrix{Float32}
+        @test size(z) == (4, 4)
+    end
+end
+
 end # module ExtMetalExtTests

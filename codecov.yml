@@ -5,10 +5,14 @@
 # produce. Coverage.jl reports a file with no data as fully uncovered, which
 # counts several hundred lines of workload against the total even though the
 # workload is exercised on every single build. Excluding them measures the
-# library rather than the build step.
+# library rather than the build step. The per-area session files in
+# src/precompile/ (the *_sessions.jl files) are workloads too, and have their
+# own pattern rather than a broad src/precompile/** so that a non-workload file
+# added to that directory later is still measured.
 ignore:
   - "src/precompile.jl"
   - "src/**/precompile.jl"
+  - "src/precompile/*_sessions.jl"
   - "ext"
   - "ext/**/*"
 

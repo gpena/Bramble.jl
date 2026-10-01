@@ -469,11 +469,35 @@ end
 @inline _gmg_post_smooth!(s::AbstractSmoother, x, b) = smooth!(s, x, b)
 @inline _gmg_post_smooth!(s::RedBlackGaussSeidel, x, b) = smooth!(s, x, b; reverse = true)
 
+# `x = F⁻¹ x` in place for a dense `F = lu(A)`: LAPACK's row swaps in order, then the unit lower
+# and the upper triangular solves. `ldiv!(F, x)` calls LAPACK's `getrs!`, which boxes six
+# `Ref`s per call that Julia 1.12 keeps at `--optimize=1`, so the cycles would allocate there;
+# the coarsest level is small by construction (`_GMG_MAX_COARSE_DOFS`), so the loops cost nothing.
+function _gmg_lu_ldiv!(F, x::AbstractVector)
+    A, ipiv = F.factors, F.ipiv
+    n = length(x)
+    for i in 1:n
+        j = ipiv[i]
+        j == i || ((x[i], x[j]) = (x[j], x[i]))
+    end
+    for j in 1:n, i in (j + 1):n
+
+        x[i] -= A[i, j] * x[j]
+    end
+    for j in n:-1:1
+        x[j] /= A[j, j]
+        for i in 1:(j - 1)
+            x[i] -= A[i, j] * x[j]
+        end
+    end
+    return x
+end
+
 # `x = A₁⁻¹ b` on the coarsest level, through the dense factorisation, solved in `P.x[1]`.
 @inline function _gmg_coarse_solve!(P::GMGPreconditioner, x, b)
     x₁ = P.x[1]
     copyto!(x₁, b)
-    ldiv!(P.coarse, x₁)
+    _gmg_lu_ldiv!(P.coarse, x₁)
     x === x₁ || copyto!(x, x₁)
     return x
 end

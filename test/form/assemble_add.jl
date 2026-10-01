@@ -16,6 +16,14 @@ using Bramble: Serial, Parallel, backend, execution_policy, allocate_system_matr
 # that have nothing to do with the kernel under test.
 _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
 
+# `assemble` and `allocate_system_matrix` infer a union that includes a dense `Matrix`
+# (their element-type promotion is not inferable here), which has no `nonzeros`; the matrices
+# these tests fill are always `SparseMatrixCSC`, so the assertion narrows the type for JET.
+function _fillnz!(A, v)
+    @assert A isa SparseMatrixCSC
+    return fill!(nonzeros(A), v)
+end
+
 @testset "assemble_add! (#231)" begin
     # Matches assemble-then-add, in 1D, 2D and 3D.
     @testset "Bilinear: unscaled accumulation" begin
@@ -39,7 +47,7 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
                 wide = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 
                 A = allocate_system_matrix(wide)
-                fill!(nonzeros(A), 0.0)
+                _fillnz!(A, 0.0)
                 assemble_add!(A, m_form)
                 assemble_add!(A, k_form)
 
@@ -60,7 +68,7 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
 
         @testset "plain Number" begin
             A = allocate_system_matrix(wide)
-            fill!(nonzeros(A), 0.0)
+            _fillnz!(A, 0.0)
             assemble_add!(A, m_form, 1 / 0.01)
             assemble_add!(A, k_form, 0.75)
             @test Matrix(A) ≈ (1 / 0.01) .* M .+ 0.75 .* K
@@ -70,13 +78,13 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         @testset "RefValue changed between replays" begin
             θ = Ref(1.0)
             A = allocate_system_matrix(wide)
-            fill!(nonzeros(A), 0.0)
+            _fillnz!(A, 0.0)
             assemble_add!(A, m_form)
             assemble_add!(A, k_form, θ)
             @test Matrix(A) ≈ M .+ 1.0 .* K
 
             θ[] = 3.5
-            fill!(nonzeros(A), 0.0)
+            _fillnz!(A, 0.0)
             assemble_add!(A, m_form)
             assemble_add!(A, k_form, θ)
             @test Matrix(A) ≈ M .+ 3.5 .* K
@@ -94,7 +102,7 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
             A = allocate_system_matrix(wide)
             θ = Ref(2.0)
 
-            fill!(nonzeros(A), 0.0)
+            _fillnz!(A, 0.0)
             assemble_add!(A, m_form)      # cold: records
             assemble_add!(A, k_form, θ)   # cold: records
 
@@ -120,7 +128,7 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         )
 
         A = allocate_system_matrix(wide)
-        fill!(nonzeros(A), 0.0)
+        _fillnz!(A, 0.0)
         assemble_add!(A, a1)
         assemble_add!(A, a2, 2.0)
 
@@ -166,7 +174,7 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         results = Matrix{Float64}[]
         for _ in 1:3  # repeat-run determinism
             A = allocate_system_matrix(wide_par)
-            fill!(nonzeros(A), 0.0)
+            _fillnz!(A, 0.0)
             assemble_add!(A, m_par)
             assemble_add!(A, k_par, 2.0)
             push!(results, Matrix(A))
@@ -237,10 +245,10 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
                     A_ser = allocate_system_matrix(wide_ser)
                     A_par = allocate_system_matrix(wide_par)
                     for _ in 1:3  # repeated refills: cold record, then warm replays
-                        fill!(nonzeros(A_ser), 0.0)
+                        _fillnz!(A_ser, 0.0)
                         assemble_add!(A_ser, m_ser)
                         assemble_add!(A_ser, k_ser, θ)
-                        fill!(nonzeros(A_par), 0.0)
+                        _fillnz!(A_par, 0.0)
                         assemble_add!(A_par, m_par)
                         assemble_add!(A_par, k_par, θ)
                         @test Matrix(A_par) ≈ Matrix(A_ser) rtol = 1e-12
@@ -255,10 +263,10 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
                     for scale in (1.0, 0.3, 4.0)  # repeated refills, changing θ between them
                         θ_ser[] = scale
                         θ_par[] = scale
-                        fill!(nonzeros(A_ser), 0.0)
+                        _fillnz!(A_ser, 0.0)
                         assemble_add!(A_ser, m_ser)
                         assemble_add!(A_ser, k_ser, θ_ser)
-                        fill!(nonzeros(A_par), 0.0)
+                        _fillnz!(A_par, 0.0)
                         assemble_add!(A_par, m_par)
                         assemble_add!(A_par, k_par, θ_par)
                         @test Matrix(A_par) ≈ Matrix(A_ser) rtol = 1e-12
@@ -388,7 +396,7 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
                 Wₕ = gridspace(Ωₕ)
                 m_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
                 A = allocate_system_matrix(m_form)
-                fill!(nonzeros(A), 0.0)
+                _fillnz!(A, 0.0)
                 @test _bilinear_scaled_alloc(A, m_form, 0.5) == 0
 
                 fₕ = Rₕ(Wₕ, x -> 1.0)
@@ -408,7 +416,7 @@ _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
         Wₕ = gridspace(Ωₕ)
         m_form = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
         A = allocate_system_matrix(m_form)
-        fill!(nonzeros(A), 0.0)
+        _fillnz!(A, 0.0)
         assemble_add!(A, m_form)
         assemble_add!(A, m_form)
         @test Matrix(A) ≈ 2 .* Matrix(assemble(m_form))

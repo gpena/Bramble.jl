@@ -6,7 +6,8 @@ using Random
 using SparseArrays
 using SparseArrays: getcolptr
 using Bramble: Serial, Parallel, backend, assemble_parallel!, allocate_system_matrix, D₋ₓ,
-               D₊ᵧ, πₕ, inner₊ₓ, CompositeGridSpace, CpuPolyester
+               D₊ᵧ, πₕ, inner₊ₓ, CompositeGridSpace
+using ..TestUtils: WITH_SLOW_TESTS
 
 # The threaded refill replays the form's recording (gpena/Bramble.jl#338): `assemble!` on a
 # `Parallel()` form and `assemble_parallel!` from any policy write through the recorded
@@ -33,6 +34,14 @@ function _mesh(D, n, policy; seed = 338)
     )
 end
 
+# `assemble` and `allocate_system_matrix` infer a union that includes a dense `Matrix`
+# (their element-type promotion is not inferable here), which has no `nonzeros`; the matrices
+# these tests fill are always `SparseMatrixCSC`, so the assertion narrows the type for JET.
+function _fillnz!(A, v)
+    @assert A isa SparseMatrixCSC
+    return fill!(nonzeros(A), v)
+end
+
 _same_structure(A, B) = getcolptr(A) == getcolptr(B) && rowvals(A) == rowvals(B)
 _agrees(A, R) = _same_structure(A, R) && isapprox(A, R; rtol = 1e-12)
 
@@ -46,13 +55,18 @@ _block_pair(u, v) = innerₕ(D₋ₓ(u(1)), v(2)) + innerₕ(u(2), D₋ₓ(v(1))
 
 const _SIZES = (41, 13, 7)
 
+# Compile time per form and dimension dominates this file, not grid size. `unit` keeps the
+# 2D composite and block-pair forms (the only per-leaf replay tests; their sweeps also walk
+# the scalar kernels) and the mixed-leaf cases; the scalar and pair forms and the 1D/3D
+# sweeps run under `slow`.
+const _DIMS = WITH_SLOW_TESTS ? (1:3) : (2,)
+const _FORMS = (("composite", _composite, 2), ("block pair", _block_pair, 2))
+const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1))..., _FORMS...) :
+                   _FORMS
+
 # Threaded refill replays the recording.
 @testset "threaded refill replays (#338)" begin
-    @testset "$(D)D, $(nm)" for D in 1:3,
-        (nm, f, comps) in (
-            ("scalar", _scalar, 1), ("pair", _pair, 1),
-            ("composite", _composite, 2), ("block pair", _block_pair, 2)
-        )
+    @testset "$(D)D, $(nm)" for D in _DIMS, (nm, f, comps) in _ALL_FORMS
 
         n = _SIZES[D]
         Ωs = _mesh(D, n, Serial())
@@ -67,35 +81,35 @@ const _SIZES = (41, 13, 7)
         P = assemble(ap)
         @test _agrees(P, R)
         @test ap.cache.valid && ap.cache.A_id == objectid(P)
-        fill!(nonzeros(P), NaN)
+        _fillnz!(P, NaN)
         assemble!(P, ap)
         @test _agrees(P, R)
 
         # `assemble_parallel!` from a serial form: `assemble` already recorded this matrix,
         # so even its first threaded fill replays.
         B = assemble(as)
-        fill!(nonzeros(B), NaN)
+        _fillnz!(B, NaN)
         assemble_parallel!(B, as)
         @test _agrees(B, R)
         @test as.cache.A_id == objectid(B)
 
         # ... and against a matrix it has never seen: records once, then replays.
         C = copy(R)
-        fill!(nonzeros(C), NaN)
+        _fillnz!(C, NaN)
         assemble_parallel!(C, as)
         @test _agrees(C, R)
         @test as.cache.A_id == objectid(C)
-        fill!(nonzeros(C), NaN)
+        _fillnz!(C, NaN)
         assemble_parallel!(C, as)
         @test _agrees(C, R)
 
         # The serial path reads the recording the threaded one made, and the other way round.
-        fill!(nonzeros(C), NaN)
+        _fillnz!(C, NaN)
         assemble!(C, as)
         @test _agrees(C, R)
     end
 
-    @testset "$(D)D: live coefficient through Rₕ!" for D in 1:3
+    @testset "$(D)D: live coefficient through Rₕ!" for D in _DIMS
         n = _SIZES[D]
         Ωs = _mesh(D, n, Serial())
         Ωp = _mesh(D, n, Parallel())
@@ -128,17 +142,17 @@ const _SIZES = (41, 13, 7)
 
         P1 = assemble(ap)
         P2 = copy(P1)
-        fill!(nonzeros(P2), NaN)
+        _fillnz!(P2, NaN)
         assemble!(P2, ap)
         @test ap.cache.A_id == objectid(P2)
         @test _agrees(P2, R)
 
         # Back to the first: its recording was replaced, so it records again, correctly.
-        fill!(nonzeros(P1), NaN)
+        _fillnz!(P1, NaN)
         assemble!(P1, ap)
         @test ap.cache.A_id == objectid(P1)
         @test _agrees(P1, R)
-        fill!(nonzeros(P1), NaN)
+        _fillnz!(P1, NaN)
         assemble!(P1, ap)
         @test _agrees(P1, R)
     end
@@ -151,7 +165,7 @@ const _SIZES = (41, 13, 7)
         R = assemble(form(gridspace(Ωs), gridspace(Ωs), g))
         P = assemble(ap)
         @test length(ap.cache.segments) == 1
-        fill!(nonzeros(P), NaN)
+        _fillnz!(P, NaN)
         assemble!(P, ap)
         @test _agrees(P, R)
     end
@@ -183,7 +197,7 @@ const _SIZES = (41, 13, 7)
 
             A = copy(R)
             for _ in 1:2   # record, then replay
-                fill!(nonzeros(A), NaN)
+                _fillnz!(A, NaN)
                 refill!(A, a)
                 @test _agrees(A, R)
             end
@@ -195,19 +209,7 @@ const _SIZES = (41, 13, 7)
         _check_mixed(Serial())
     end
 
-    # A `CpuPolyester` leaf replays too now (gpena/Bramble.jl#318): both leaves' units
-    # replay. This testset still exercises mixed-policy composite assembly — it still checks
-    # that leaves under different CPU policies agree, just that "mixed" no longer means "one
-    # replays, one searches". Building a
-    # `CpuPolyester` space needs Polyester, which the `unit` group deliberately does not load
-    # (test/space/inner_product.jl checks the error without it), so this runs only where the
-    # extension is already loaded.
-    if Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing
-        # Mixed leaf policies: CpuThreaded beside CpuPolyester.
-        @testset "mixed policies: Threaded + Polyester" begin
-            _check_mixed(CpuPolyester())
-        end
-    end
+    # The Threaded + Polyester mixed case lives in test/ext/polyester_ext.jl.
 
     # Test-side interpolation replays on one thread.
     @testset "test-side interpolation: one thread" begin
@@ -220,14 +222,14 @@ const _SIZES = (41, 13, 7)
         A = allocate_system_matrix(a)
         assemble_parallel!(A, a)
         @test _agrees(A, R)
-        fill!(nonzeros(A), NaN)
+        _fillnz!(A, NaN)
         assemble_parallel!(A, a)
         @test _agrees(A, R)
     end
 
     # Threaded tasks allocate per call, so a warmed refill is not 0 B; what it must not do
     # is grow with the grid (the plan's O13).
-    @testset "$(D)D: refill allocs flat in ndofs" for D in 1:3
+    @testset "$(D)D: refill allocs flat in ndofs" for D in _DIMS
         sizes = D == 1 ? (200, 800) : D == 2 ? (24, 64) : (10, 20)
         bytes_par = map(sizes) do n
             Ω = _mesh(D, n, Parallel())

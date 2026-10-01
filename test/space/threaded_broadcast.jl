@@ -2,7 +2,7 @@ module SpaceThreadedBroadcastTests
 
 using Test
 using Bramble
-using Bramble: VectorElement, CpuPolyester
+using Bramble: VectorElement
 using Random
 using ..TestUtils: alloc_test
 
@@ -142,14 +142,6 @@ _axpy!(v, u, w) = (v .= 2.0 .* u .+ w)
         u, w, v = Rₕ(Wₕ, x -> sum(x)), Rₕ(Wₕ, x -> prod(x)), similar(Rₕ(Wₕ, x -> 0.0))
         @test (@inferred _axpy!(v, u, w)) === v
         @test minimum(alloc_test(_axpy!, v, u, w) for _ in 1:5) == 0
-    end
-
-    # The Polyester arm runs only when `BramblePolyesterExt` is loaded in this process;
-    # the broadcast still runs serially there until it gets its own batched loop.
-    if Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing
-        @testset "CpuPolyester equal to Serial, n=$n" for n in _SIZES
-            _check_equal(n, CpuPolyester())
-        end
     end
 end
 

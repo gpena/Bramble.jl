@@ -189,6 +189,14 @@ const _CONTRACT_FAMILIES = (
     (∇̃ₕ, diṽₕ, curl̃ₕ), (∇₊ₕ, div₊ₕ, curl₊ₕ)
 )
 
+# `⋅`, `×`, `Dv` and `Cu` infer as a union of a `VectorElement` and a tuple of three of them
+# (what the three-component forms return); the results compared below are always one
+# `VectorElement`, so the assertion narrows the type for JET.
+function _parent_ve(x)
+    @assert x isa Bramble.VectorElement
+    return parent(x)
+end
+
 # ∇ₕ ⋅ u and ∇ₕ × u contract to div/curl (S5.4).
 @testset "∇ₕ ⋅ u, ∇ₕ × u contract (#341)" begin
     @testset "numeric, 2D non-uniform" begin
@@ -214,7 +222,7 @@ const _CONTRACT_FAMILIES = (
         c = Rₕ(W3, x -> sin(x[2]))
 
         for (G, Dv, Cu) in _CONTRACT_FAMILIES
-            @test parent(G ⋅ (a, b, c)) == parent(Dv((a, b, c)))
+            @test _parent_ve(G ⋅ (a, b, c)) == _parent_ve(Dv((a, b, c)))
             cu1 = G × (a, b, c)
             cu2 = Cu((a, b, c))
             @test all(i -> parent(cu1[i]) == parent(cu2[i]), 1:3)
@@ -228,8 +236,8 @@ const _CONTRACT_FAMILIES = (
         uₕ = Rₕ(Vₕ, (x -> x[1]^2, x -> x[1] * x[2]))
 
         for (G, Dv, Cu) in _CONTRACT_FAMILIES
-            @test parent(G ⋅ uₕ) == parent(Dv(uₕ))
-            @test parent(G × uₕ) == parent(Cu(uₕ))
+            @test _parent_ve(G ⋅ uₕ) == _parent_ve(Dv(uₕ))
+            @test _parent_ve(G × uₕ) == _parent_ve(Cu(uₕ))
         end
     end
 

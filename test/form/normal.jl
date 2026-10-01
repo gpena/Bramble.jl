@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: normal_vector
 using LinearAlgebra: dot
-using ..TestUtils: @test_allocs
+using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
 
 # The outward normal, as a discrete grid function and as a symbol inside a form
 # (gpena/Bramble.jl#213).
@@ -246,7 +246,11 @@ using ..TestUtils: @test_allocs
     @testset "Component scales keep the element type" begin
         # An integer scale, a negation and a difference promote against the space's element
         # type, as `A - B` does, and never widen a Float32 form to Float64.
+        # `unit` runs the full term sweep in Float64 per dimension and one Float32 lin and bil
+        # per dimension; `slow` runs the whole cross product.
         @testset "$T, $(D)D" for T in (Float32, Float64), D in (2, 3)
+
+            full = WITH_SLOW_TESTS || T === Float64
 
             S = D == 2 ? domain(interval(zero(T), one(T)) × interval(zero(T), T(2))) :
                 domain(interval(zero(T), one(T)) × interval(zero(T), T(2)) ×
@@ -257,6 +261,12 @@ using ..TestUtils: @test_allocs
             m = (:boundary,)
             lin(t) = assemble(form(Wₕ, v -> inner_Γ(t, v; markers = m)))
             bil(h) = assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(h(u), v; markers = m)))
+            if !full
+                # one Float32 lin and bil per dimension: a scaled product and a difference
+                @test eltype(lin(2 * (g * ηₓ))) === T
+                @test eltype(bil(u -> u * ηₓ - u * ηᵧ)) === T
+                continue
+            end
             for t in (2 * (g * ηₓ), (g * ηₓ) * 2, -(g * ηₓ), g * ηₓ - g * ηᵧ, -ηₓ, ηₓ,
                 Ref(T(2)) * (g * ηₓ), Ref(T(2)) * ηₓ, dot((g, g, g)[1:D], η) + g * ηₓ)
                 @test eltype(lin(t)) === T

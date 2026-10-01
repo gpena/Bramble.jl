@@ -27,7 +27,7 @@ using Bramble:
                GpuPolicy
 using SparseArrays
 using LinearAlgebra: diag, I
-using ..TestUtils: alloc_test, @test_allocs, WITH_GPU_TESTS
+using ..TestUtils: alloc_test, @test_allocs
 
 # Minimal DenseArray mock simulating vendor GPU array types (such as MtlArray or CuArray)
 # to verify generic backend dispatch without requiring GPU hardware or optional dependencies.
@@ -333,50 +333,6 @@ end
         @test eye_gpu[3, 3] == 1.0f0
     end
 
-    # Conditional validation for Metal.jl arrays when running on macOS with functional GPU
-    # runtime, and only with GPU tests switched on (TestUtils.WITH_GPU_TESTS).
-    if WITH_GPU_TESTS && Sys.isapple()
-        metal_pkg = Base.find_package("Metal")
-        if metal_pkg !== nothing
-            try
-                @eval using Metal
-                if isdefined(@__MODULE__, :Metal) && Metal.functional()
-                    @testset "Metal GPU backend" begin
-                        # MtlVector/MtlMatrix answer DeviceLocality() (gpena/Bramble.jl#298,
-                        # ext/BrambleMetalExt.jl), so the default Serial() policy --
-                        # HostLocality() -- no longer agrees with them; GpuKernel() is required.
-                        be_metal = backend(
-                            vector_type = MtlVector{Float32}, matrix_type = MtlMatrix{Float32},
-                            policy = GpuKernel()
-                        )
-                        @test vector_type(be_metal) === MtlVector{Float32}
-                        @test matrix_type(be_metal) === MtlMatrix{Float32}
-
-                        v = vector(be_metal, 10)
-                        @test v isa MtlVector{Float32}
-                        @test length(v) == 10
-
-                        m = matrix(be_metal, 5, 5)
-                        @test m isa MtlMatrix{Float32}
-                        @test size(m) == (5, 5)
-
-                        z = backend_zeros(be_metal, 4)
-                        @test z isa MtlMatrix{Float32}
-                        @test size(z) == (4, 4)
-                    end
-                else
-                    # gpena/Bramble.jl#84's failure mode: leaving this branch empty would
-                    # make the testset "pass" while running nothing, on precisely the hosts
-                    # (e.g. a macOS CI runner without real GPU access) this matters most for.
-                    @warn "Metal GPU backend tests skipped: Metal.jl loaded but Metal.functional() is false on this host"
-                    @test_skip "Metal GPU backend tests skipped: Metal.functional() is false on this host"
-                end
-            catch e
-                @info "Metal is installed but initialization skipped in this environment" exception=e
-            end
-        end
-    end
-
     # Invariants tested:
     # 1. backend_types returns (eltype(VT), VT, MT, Backend{VT, MT, EP}).
     # 2. Calling on instance and calling on type produce identical type tuples.
@@ -573,8 +529,8 @@ end
     #    which is gpena/Bramble.jl#84's failure mode: a test that "passes" while running
     #    nothing.
     # 3. The no-extension diagnostic names the package this host's architecture needs.
-    #    `using Metal`, once it happens (in the "Metal GPU backend" testset above, on this
-    #    host), cannot be undone within this process, so gpu_backend()'s own no-extension
+    #    `using Metal`, once it happens (in an earlier test file of the same process, on
+    #    this host), cannot be undone within this process, so gpu_backend()'s own no-extension
     #    branch cannot be driven for real here. test/ext/metal_ext.jl hits the identical
     #    wall testing metal_backend's Float64 stub and works around it by reaching the
     #    *same* fallback through a route that does not require unloading Metal; no

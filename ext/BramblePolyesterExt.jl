@@ -48,6 +48,8 @@ using Bramble: MarkedIndicesUnion, SeparableWeights, _reduce_or_chunk, _throw_do
                CpuPolyester, _ReplayTarget, _ActionTarget, _replay_point!, _difference_band!,
                _average_band!, _centered_average_band!, _broadcast_band!
 using Polyester: Polyester, @batch
+using LinearAlgebra: mul!
+using PrecompileTools: @setup_workload, @compile_workload
 
 # --- _batch_for!/_batch_axis_for! (src/utils/linear_algebra.jl) -------------------- #
 #
@@ -411,6 +413,34 @@ function Bramble._batch_broadcast!(v::AbstractVector, bc, ax)
         _broadcast_band!(v, bcref[], ax, n, b)
     end
     return nothing
+end
+
+# The threaded matrix-free apply (gpena/Bramble.jl#391): `matrix_free_operator` under
+# `CpuPolyester` in 1D-3D on non-uniform meshes, in the forms the tests and users reach --
+# the policy passed to the operator or carried by the mesh backend, with and without
+# `dirichlet = :boundary`, and the 3- and 5-argument `mul!`.
+if Bramble.PRECOMPILE_WORKLOAD
+    @setup_workload begin
+        _pw_form(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        @compile_workload begin
+            for (X, n) in (
+                (interval(0.0, 1.0), 6),
+                (interval(0.0, 1.0) × interval(0.0, 1.0), (5, 4)),
+                (box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)), (4, 3, 3))
+            )
+                nu = map(_ -> false, n)
+                W = gridspace(mesh(domain(X), n, nu))
+                Wp = gridspace(mesh(domain(X), n, nu; backend = backend(policy = CpuPolyester())))
+                x = ones(ndofs(W))
+                y = similar(x)
+                mul!(y, matrix_free_operator(_pw_form(W); policy = CpuPolyester()), x)
+                mul!(y, matrix_free_operator(_pw_form(Wp)), x)
+                op = matrix_free_operator(_pw_form(Wp); dirichlet = :boundary)
+                mul!(y, op, x)
+                mul!(y, op, x, 0.5, 2.0)
+            end
+        end
+    end
 end
 
 end # module BramblePolyesterExt

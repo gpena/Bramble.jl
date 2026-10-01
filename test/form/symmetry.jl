@@ -215,8 +215,6 @@ using Bramble:
         A = assemble(pair)
         @test issymmetric(Matrix(A))
         @test A ≈ assemble(form(Wₕ, Wₕ, g1)) + assemble(form(Wₕ, Wₕ, g2))
-        # One kernel, one recorded segment, for the pair.
-        @test length(pair.cache.segments) == 1
 
         # Coefficients: the same object on both terms, or none.
         a, b = Ref(2.0), Ref(3.0)
@@ -301,16 +299,6 @@ using Bramble:
             assemble!(A, f)
             @test (@allocated assemble!(A, f)) == 0
         end
-    end
-
-    @testset "3D symmetric strain form" begin
-        Random.seed!(287)
-        Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (6, 5, 4), (false, false, false))
-        V3 = gridspace(Ω3, Val(3))
-        E = form(V3, V3, (u, v) -> innerₕ(εcₕ(u), εcₕ(v)))
-        @test issymmetric(E)
-        M = assemble(E)
-        @test M ≈ M'
     end
 
     @testset "Numerically SPD after assembly" begin

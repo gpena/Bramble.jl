@@ -52,6 +52,7 @@ using Bramble:
                D̽ₓ,
                Mcₓ
 using LinearAlgebra: I
+using ..TestUtils: WITH_SLOW_TESTS
 
 # The symbolic operator layer: averages, the shift node, region restriction, and the
 # inner products that turn a pair of operators into a bilinear product.
@@ -300,7 +301,9 @@ const _ORIGIN_2D = (0, 0)
 
             # There is deliberately no innerₕ over gradient tuples: InnerH carries a single
             # weight, so the sum has nothing to infer and is written out at the call site.
-            @test_throws MethodError innerₕ(∇ₕ(u2), ∇ₕ(v2))
+            # `invokelatest` keeps JET from proving the call always throws and reporting it
+            # at the enclosing testset: the missing method is what this line asserts.
+            @test_throws MethodError Base.invokelatest(innerₕ, ∇ₕ(u2), ∇ₕ(v2))
             @test innerₕ(∇ₕ(u2)[1], ∇ₕ(v2)[1]) + innerₕ(∇ₕ(u2)[2], ∇ₕ(v2)[2]) isa
                   Bramble.OperatorAdd
         end
@@ -428,7 +431,13 @@ end
     box(D) = D == 1 ? interval(0.0, 1.0) :
              D == 2 ? interval(0.0, 1.0) × interval(0.0, 2.0) :
              interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)
-    taps = (D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, jumpₓ, Mₓ, M₊ₓ, Mcₓ, S₊ₓ, S₋ₓ)
+    # Every tap compiles its own form, matrix, refill and product per operand and dimension,
+    # which is what the sweep costs. `unit` keeps one tap per kind (a backward and a forward
+    # difference, a jump, a forward average, a shift) on all three operands in every
+    # dimension; `slow` runs the whole family.
+    taps = WITH_SLOW_TESTS ?
+           (D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, jumpₓ, Mₓ, M₊ₓ, Mcₓ, S₊ₓ, S₋ₓ) :
+           (D₋ₓ, D₊ₓ, jumpₓ, M₊ₓ, S₊ₓ)
 
     @testset "$(D)D" for D in 1:3
         n = ntuple(i -> 4 + i, D)
@@ -441,7 +450,7 @@ end
         cu = ("c*u", u -> c * u, z -> element(W, parent(c) .* parent(z)))
         cdu = ("c*D₋ₓ(u)", u -> c * D₋ₓ(u), z -> element(W, parent(c) .* parent(D₋ₓ(z))))
         dcu = ("D₋ₓ(c*u)", u -> D₋ₓ(c * u), z -> D₋ₓ(element(W, parent(c) .* parent(z))))
-        cases = Any[(t, o...) for o in (cu, cdu, dcu) for t in taps]
+        cases = Any[(t, o...) for o in (cu, cdu, dcu) for t in taps]  # Any: every tap and operand is its own closure type
         D >= 2 && push!(cases, (S₊ᵧ ∘ D₋ᵧ, cu...), (D₊ᵧ ∘ S₋ᵧ, cu...))
         basis(j) = element(W, [i == j ? 1.0 : 0.0 for i in 1:ndofs(W)])
         @testset "$(tap)∘$(nm)" for (tap, nm, opd, grid) in cases

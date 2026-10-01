@@ -14,6 +14,9 @@ module QualityInvalidationsSnoopTests
 
 using SnoopCompileCore
 
+# Bound first: `@snoop_invalidations` assigns in a branch JET cannot see is always taken, and
+# it reports the name as possibly undefined.
+invalidations = nothing
 invalidations = @snoop_invalidations begin
     using Bramble
 end

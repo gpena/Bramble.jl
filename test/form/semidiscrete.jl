@@ -418,7 +418,7 @@ end
     end
 
     @testset "type_cached_assemble! agrees with CSC" begin
-        cache_c, cache_d = Dict(), Dict()
+        cache_c, cache_d = Dict{DataType, Any}(), Dict{DataType, Any}()
         build(a) = uₕ -> (a, _ -> nothing)
         Bc = type_cached_assemble!(build(ac), cache_c, Bramble.element(Wc, 0.0))
         Bd = type_cached_assemble!(build(ad), cache_d, Bramble.element(Wd, 0.0))

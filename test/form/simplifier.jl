@@ -4,6 +4,7 @@ using Test
 using Bramble
 using LinearAlgebra: Diagonal, issymmetric, isposdef
 using SparseArrays: nnz
+using ..TestUtils: WITH_SLOW_TESTS
 using Bramble:
                D₋ᵧ,
                IdentityOperator,
@@ -575,13 +576,25 @@ end
         )
         A_div = Matrix(assemble(a_div))
 
-        A_nine = zeros(size(A_div))
-        for i in 1:3, j in 1:3
+        # `unit` checks one diagonal and one off-diagonal (i, j) product against the matching
+        # entries of the sum (the nine products have disjoint supports); `slow` sums all nine.
+        A_ij(i, j) = Matrix(assemble(form(V3d, V3d,
+            (p, q) -> innerₕ(ops[i](p(i)), ops[j](q(j))))))
+        if WITH_SLOW_TESTS
+            A_nine = zeros(size(A_div))
+            for i in 1:3, j in 1:3
 
-            a_ij = form(V3d, V3d, (p, q) -> innerₕ(ops[i](p(i)), ops[j](q(j))))
-            A_nine .+= Matrix(assemble(a_ij))
+                A_nine .+= A_ij(i, j)
+            end
+            @test A_div ≈ A_nine
+        else
+            for (i, j) in ((1, 1), (1, 2))
+                B = A_ij(i, j)
+                mask = B .!= 0
+                @test any(mask)
+                @test B[mask] ≈ A_div[mask]
+            end
         end
-        @test A_div ≈ A_nine
     end
 end
 

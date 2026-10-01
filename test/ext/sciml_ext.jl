@@ -15,6 +15,8 @@ using OrdinaryDiffEqTsit5: Tsit5
 using ..TestUtils: _check_eoc
 using NonlinearSolve: NewtonRaphson
 using ADTypes: AutoFiniteDiff, AutoForwardDiff
+using WriteVTK: WriteVTK
+using LightXML: parse_file, root, find_element, child_elements, attribute, free
 
 # Every `NewtonRaphson` below names its Jacobian backend. Left to choose, NonlinearSolve
 # picks `AutoPolyesterForwardDiff` whenever PolyesterForwardDiff is loaded (the `full`
@@ -595,6 +597,68 @@ end
         for (name, errfn) in (("linear_problem", _linear_error),
             ("nonlinear_problem", _nonlinear_error))
             _check_eoc(errfn, (11, 21, 41))
+        end
+    end
+end
+
+# The `.pvd` collection's `<DataSet>` entries, read with LightXML as
+# test/exporters/vtk_collection.jl does. The solution-export testset below lives here rather
+# than there because it loads SciMLBase, and with it BrambleSciMLExt and BrambleVTKSciMLExt,
+# which the `unit` group that runs exporters/ must not pay for.
+function _dataset_entries(pvd_path::AbstractString)
+    xdoc = parse_file(pvd_path)
+    collection = something(find_element(root(xdoc), "Collection"))
+    entries = [(
+                   timestep = parse(Float64, attribute(c, "timestep")),
+                   file = attribute(c, "file")
+               ) for c in child_elements(collection)]
+    free(xdoc)
+    return entries
+end
+
+# A `SciMLBase.AbstractODESolution` without actually integrating anything: the same
+# `build_solution` construction `BrambleVTKSciMLExt`'s own precompile workload uses,
+# since no solver package (`OrdinaryDiffEq` and the rest) is a dependency of that
+# extension either.
+@testset "One-call SciMLBase solution export" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true))
+    Wₕ = gridspace(Ωₕ)
+
+    u0 = collect(parent(Rₕ(Wₕ, x -> x[1])))
+    u1 = collect(parent(Rₕ(Wₕ, x -> x[1] + x[2])))
+    u2 = collect(parent(Rₕ(Wₕ, x -> 2 * (x[1] + x[2]))))
+    ts = [0.0, 0.4, 1.0]  # non-uniform, on purpose
+
+    prob = ODEProblem((du, u, p, t) -> nothing, u0, (0.0, 1.0))
+    sol = SciMLBase.build_solution(prob, nothing, ts, [u0, u1, u2])
+
+    @testset "every saved step" begin
+        mktempdir() do dir
+            pvd_path = joinpath(dir, "sol")
+            files = export_vtk(pvd_path, Wₕ, sol)
+            @test length(files) == length(ts) + 1
+
+            entries = _dataset_entries(pvd_path * ".pvd")
+            @test [e.timestep for e in entries] == ts
+            @test all(e -> isfile(joinpath(dir, e.file)), entries)
+
+            xml = read(joinpath(dir, entries[1].file), String)
+            @test occursin("Name=\"u\" NumberOfComponents=\"1\"", xml)
+        end
+    end
+
+    @testset "interpolated times, custom field name" begin
+        mktempdir() do dir
+            pvd_path = joinpath(dir, "sol_interp")
+            interp_times = range(0.0, 1.0; length = 5)
+            export_vtk(pvd_path, Wₕ, sol; name = "temperature", times = interp_times)
+
+            entries = _dataset_entries(pvd_path * ".pvd")
+            @test length(entries) == length(interp_times)
+            @test [e.timestep for e in entries] ≈ collect(interp_times)
+
+            xml = read(joinpath(dir, entries[1].file), String)
+            @test occursin("Name=\"temperature\" NumberOfComponents=\"1\"", xml)
         end
     end
 end

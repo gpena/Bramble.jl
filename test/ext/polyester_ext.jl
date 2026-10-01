@@ -12,11 +12,12 @@ using Test
 using Bramble
 using Bramble: CpuPolyester, Serial, execution_policy, test_space, _normalize_dirichlet,
                apply_dirichlet_conditions!, allocate_system_matrix, assemble_parallel!,
-               inner₊ₓ, D₋ₓ
+               inner₊ₓ, D₋ₓ, S₊ₓ!, S₊ᵧ!, S₊₂!, S₋ₓ!, S₋ᵧ!, S₋₂!, GeometricMeshHierarchy,
+               change_points!
 using Polyester
 using SparseArrays
 using SparseArrays: getcolptr
-using LinearAlgebra: issymmetric, mul!
+using LinearAlgebra: issymmetric, mul!, ldiv!
 using Random
 using ..TestUtils: alloc_test
 
@@ -53,6 +54,14 @@ function _poisson_pair(dim::Val{D}, n::Integer; source = _sine_source(dim)) wher
     ab, lb = build(Wb)
     as, ls = build(Ws)
     return (; Wp = Wp, Wb = Wb, Ws = Ws, ap = ap, lp = lp, ab = ab, lb = lb, as = as, ls = ls)
+end
+
+# `assemble` and `allocate_system_matrix` infer a union that includes a dense `Matrix`, which
+# has no `nonzeros`; the matrices filled here are always `SparseMatrixCSC`, so the assertion
+# narrows the type for JET.
+function _fillnz!(A, v)
+    @assert A isa SparseMatrixCSC
+    return fill!(nonzeros(A), v)
 end
 
 @testset "Polyester extension (CpuPolyester)" begin
@@ -103,12 +112,12 @@ end
             # real entries instead of replacing them -- exactly the trap gpena/Bramble.jl#190
             # records from a previous attempt.
             Ab2 = allocate_system_matrix(p.ab)
-            fill!(nonzeros(Ab2), 999.0)
+            _fillnz!(Ab2, 999.0)
             assemble!(Ab2, p.ab)
             @test isapprox(Matrix(Ap), Matrix(Ab2); atol = 1.0e-12)
 
             Ab3 = allocate_system_matrix(p.ab)
-            fill!(nonzeros(Ab3), -777.0)
+            _fillnz!(Ab3, -777.0)
             assemble_parallel!(Ab3, p.ab)
             @test isapprox(Matrix(Ap), Matrix(Ab3); atol = 1.0e-12)
 
@@ -334,7 +343,7 @@ end
             @test isapprox(B, R; rtol = 1e-12)
 
             # A warmed refill (the recording already exists): replays, not re-searches.
-            fill!(nonzeros(B), NaN)
+            _fillnz!(B, NaN)
             assemble!(B, ab)
             @test getcolptr(B) == getcolptr(R) && rowvals(B) == rowvals(R)
             @test isapprox(B, R; rtol = 1e-12)
@@ -577,9 +586,21 @@ function _bc357_results(n, policy)
     v = fresh()
     v .= α .* sin.(uₕ) ./ (1 .+ wₕ .^ 2)
     out["nested"] = copy(parent(v))
+    v = fresh()
+    v .= r
+    out["fill"] = copy(parent(v))
+    v = fresh()
+    v .= uₕ
+    out["copy"] = copy(parent(v))
     a = copy(uₕ)
     a .= a .+ 0.5 .* wₕ
     out["self"] = copy(parent(a))
+    a = copy(uₕ)
+    a .= wₕ .- a .* a
+    out["self twice"] = copy(parent(a))
+    a = copy(uₕ)
+    a .*= α
+    out["scale"] = copy(parent(a))
     return out
 end
 
@@ -678,11 +699,139 @@ end
     end
 end
 
-# The Polyester-gated mixed-policy testset of test/form/threaded_replay.jl ("Mixed leaf
-# policies: CpuThreaded beside CpuPolyester") only runs where `BramblePolyesterExt` is already
-# loaded; the `unit` group deliberately never loads Polyester, so that testset never runs in
-# CI on its own. Included here as a nested module so it runs wherever this file does (the
-# "ext"/"full" groups).
-include(joinpath(@__DIR__, "..", "form", "threaded_replay.jl"))
+# Mixed leaf policies, CpuThreaded beside CpuPolyester (gpena/Bramble.jl#318, moved here from
+# test/form/threaded_replay.jl, which keeps the Threaded + Serial case): whether a unit replays
+# is decided from the leaf its sweep walks, so a composite's leaves, or a cross-mesh form's two
+# meshes, may carry different policies. Each refill records, then replays, and agrees with the
+# same form on all-serial leaves over the same non-uniform meshes.
+@testset "mixed policies: Threaded + Polyester" begin
+    _rmesh(n, policy, seed) = (Random.seed!(seed);
+        mesh(domain(interval(0.0, 1.0)), n, false; backend = backend(policy = policy)))
+    leaf(policy, seed) = gridspace(_rmesh(33, policy, seed))
+    comp(p1, p2) = Bramble.CompositeGridSpace((leaf(p1, 1), leaf(p2, 2)))
+    f(u, v) = innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(2)), D₋ₓ(v(2))) +
+              innerₕ(D₋ₓ(u(1)), v(2)) + innerₕ(u(2), D₋ₓ(v(1))) +   # pair across leaves
+              innerₕ(D₋ₓ(u(2)), v(2)) + innerₕ(u(2), D₋ₓ(v(2)))     # pair on leaf 2
+    g(u, v) = innerₕ(Bramble.πₕ(u), v)
+    Wu(p) = gridspace(_rmesh(17, p, 3))
+    Wv(p) = gridspace(_rmesh(33, p, 4))
+    P, Ps = Bramble.Parallel(), Serial()
+    cases = (
+        (form(comp(P, CpuPolyester()), comp(P, CpuPolyester()), f),
+            assemble(form(comp(Ps, Ps), comp(Ps, Ps), f))),
+        (form(Wu(P), Wv(CpuPolyester()), g), assemble(form(Wu(Ps), Wv(Ps), g)))
+    )
+    for (a, R) in cases, refill! in (assemble!, assemble_parallel!)
+
+        A = copy(R)
+        for _ in 1:2   # record, then replay
+            _fillnz!(A, NaN)
+            refill!(A, a)
+            @test getcolptr(A) == getcolptr(R) && rowvals(A) == rowvals(R)
+            @test isapprox(A, R; rtol = 1e-12)
+        end
+    end
+end
+
+# The shift engines (gpena/Bramble.jl#352) under CpuPolyester: every point is computed by the
+# same loop body under every policy, so the answers equal the Serial ones exactly. The
+# meshes are non-uniform, as in test/space/shift.jl.
+function _shift_mesh(D; policy = Serial())
+    Random.seed!(352)
+    n = D == 1 ? 7 : ntuple(i -> 4 + i, D)
+    unif = D == 1 ? false : ntuple(_ -> false, D)
+    return mesh(_unit_cube(Val(D)), n, unif; backend = backend(policy = policy))
+end
+_shift_f(x) = 1 + sum(abs2, x) + prod(x)
+_shift_g(x) = sin(3 * x[1]) - x[end]
+
+@testset "Shift engines under CpuPolyester" begin
+    policy = CpuPolyester()
+    for D in 1:3
+        us = Rₕ(gridspace(_shift_mesh(D)), _shift_f)
+        up = Rₕ(gridspace(_shift_mesh(D; policy)), _shift_f)
+        @test execution_policy(mesh(space(up))) == policy
+        @test parent(us) == parent(up)
+        vs = Rₕ(gridspace(_shift_mesh(D), Val(2)), (_shift_f, _shift_g))
+        vp = Rₕ(gridspace(_shift_mesh(D; policy), Val(2)), (_shift_f, _shift_g))
+        for d in 1:D, (op, op!) in ((S₊ₕ[d], (S₊ₓ!, S₊ᵧ!, S₊₂!)[d]), (S₋ₕ[d], (S₋ₓ!, S₋ᵧ!, S₋₂!)[d]))
+
+            wp = similar(up)
+            parent(wp) .= NaN               # every point must be written
+            op!(wp, up)
+            @test parent(wp) == parent(op(us))
+            @test parent(op(up)) == parent(op(us))
+            @test parent(op(vp)) == parent(op(vs))
+        end
+    end
+end
+
+# The GMG transfers and cycles (gpena/Bramble.jl#329) under CpuPolyester, against Serial on
+# the same non-uniform meshes as test/solvers/multigrid.jl. The transfers write every point
+# once, so they agree bitwise on every repeat; the cycles agree to rounding.
+function _mg_transfer_meshes(bk = backend())
+    Random.seed!(3291)
+    I(a = 0.0, b = 1.0) = interval(a, b)
+    return (
+        (mesh(domain(I()), 33, false; backend = bk), 4),
+        (mesh(domain(I() × I(0.0, 2.0)), (17, 9), false; backend = bk), 3),
+        (mesh(domain(I() × I(-1.0, 1.0) × I(0.0, 2.0)), (9, 5, 9), false; backend = bk), 3),
+        (mesh(domain(I() × I(0.5, 0.5)), (17, 4), false; backend = bk), 3),
+        (mesh(domain(I() × I(0.5, 0.5) × I()), (9, 4, 5), false; backend = bk), 2)
+    )
+end
+
+function _mg_jitter_mesh(D, n; bk = backend())
+    rng = Random.Xoshiro(3291)
+    Ω = mesh(domain(_unit_cube(Val(D))), ntuple(_ -> n, D), ntuple(_ -> true, D); backend = bk)
+    h = 1 / (n - 1)
+    function pts()
+        x = collect(range(0.0, 1.0; length = n)) .+ 0.3h .* (2 .* rand(rng, n) .- 1)
+        x[1], x[end] = 0.0, 1.0
+        return sort!(x)
+    end
+    change_points!(Ω, ntuple(_ -> pts(), D))
+    return Ω
+end
+
+_mg_spd(W) = (κ = Rₕ(W, x -> 1 + sum(abs2, x)); form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))))
+
+@testset "Multigrid under CpuPolyester" begin
+    policy = CpuPolyester()
+    Random.seed!(3291)
+    for ((Ωs, L), (Ωt, _)) in zip(_mg_transfer_meshes(), _mg_transfer_meshes(backend(; policy)))
+        @test execution_policy(Ωt) == policy
+        @test points(Ωt) == points(Ωs)
+        Hs, Ht = GeometricMeshHierarchy(Ωs, L), GeometricMeshHierarchy(Ωt, L)
+        for l in 2:L
+            xc, yf = randn(npoints(Hs[l - 1])), randn(npoints(Hs[l]))
+            xf, yc = prolongate!(zeros(length(yf)), Hs, l, xc), coarsen!(zeros(length(xc)), Hs, l, yf)
+            xt, yt = similar(xf), similar(yc)
+            @test all(1:20) do _
+                prolongate!(xt, Ht, l, xc)
+                coarsen!(yt, Ht, l, yf)
+                return xt == xf && yt == yc
+            end
+        end
+    end
+    for (D, n) in ((2, 33), (3, 9))
+        Ωs = _mg_jitter_mesh(D, n)
+        Ωt = _mg_jitter_mesh(D, n; bk = backend(; policy))
+        @test points(Ωt) == points(Ωs)
+        b = randn(npoints(Ωs))
+        for cyc in (:V, :W, :FMG)
+            Ps = gmg_preconditioner(_mg_spd, Ωs; cycle = cyc)
+            Pt = gmg_preconditioner(_mg_spd, Ωt; cycle = cyc)
+            @test all(op -> op.policy == policy, Pt.ops)
+            ys = Ps \ b
+            yt = similar(ys)
+            @test all(1:20) do _
+                ldiv!(yt, Pt, b)
+                return isapprox(yt, ys; rtol = 1e-12, atol = 1e-14)
+            end
+        end
+        @test isapprox(parent(gmg_solve(_mg_spd, Ωt, b)), parent(gmg_solve(_mg_spd, Ωs, b)); rtol = 1e-10)
+    end
+end
 
 end # module

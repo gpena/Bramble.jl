@@ -1,8 +1,8 @@
-module TestFormMultigrid
+module SolversMultigridTests
 
 using Test
 using Bramble
-using Bramble: GeometricMeshHierarchy, set_markers!, spacings, interpolation_matrix, CpuPolyester
+using Bramble: GeometricMeshHierarchy, set_markers!, spacings, interpolation_matrix
 using Bramble: AbstractSmoother, JacobiSmoother, ChebyshevSmoother, RedBlackGaussSeidel, max_eigenvalue_estimate,
                trial_space, D₋ₓ, D₋ᵧ, M₊ᵧ
 using Bramble: GMGPreconditioner, AbstractMatrixFreePreconditioner, VectorElement, v_cycle!, w_cycle!, fmg!,
@@ -234,10 +234,9 @@ end
 
 # The threaded and Polyester sweeps write every point once, so they equal the serial ones
 # bitwise, on every repeat. Run at `--threads=4` for a race to have a chance. `CpuPolyester`
-# needs Polyester, which the `unit` group does not load.
+# is owned by test/ext/polyester_ext.jl's "Multigrid under CpuPolyester".
 @testset "gmg: threaded transfers agree" begin
-    policies = Any[Parallel()]
-    Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing && push!(policies, CpuPolyester())
+    policies = (Parallel(),)
     for policy in policies
         for ((Ωs, L), (Ωt, _)) in zip(_mg_transfer_meshes(), _mg_transfer_meshes(backend(; policy)))
             @test Bramble.execution_policy(Ωt) == policy
@@ -540,8 +539,8 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
     # The cycles against dense references, on a random non-uniform mesh.
     Random.seed!(MG_SEED)
     Ω = mesh(domain(_mg_box(2)), (17, 9), (false, false))
-    As = Any[]
-    Ps = Any[nothing]
+    As = Matrix{Float64}[]
+    Ps = Union{Nothing, AbstractMatrix{Float64}}[nothing]
     H = GeometricMeshHierarchy(Ω, 3)
     for l in 1:3
         push!(As, Matrix(assemble(_mg_spd(gridspace(H[l])))))
@@ -655,6 +654,18 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
     Pd = gmg_preconditioner(_mg_spd, mesh(domain(_mg_box(2)), (97, 97), (true, true)))
     @test length(Pd.hierarchy) == 6 && npoints(Pd.hierarchy[1], Tuple) == (4, 4)
 
+    # The coarse solve is LAPACK's `getrs!` written out (swaps, then two triangular solves), so it
+    # needs no LAPACK call that allocates at --optimize=1: it matches `F \ b` on matrices whose
+    # pivoting swaps rows, in both precisions, and allocates nothing.
+    for T in (Float64, Float32)
+        A = T[0 1 2 3; 4 5 6 7; 1 0 3 1; 2 7 1 8] + T(0.5) * LinearAlgebra.I
+        F, c = LinearAlgebra.lu(A), T[1, 2, 3, 4]
+        @test F.p != 1:4
+        y = copy(c)
+        @test Bramble._gmg_lu_ldiv!(F, y) === y && isapprox(y, F \ c; rtol = 100eps(T))
+        @test (@allocated Bramble._gmg_lu_ldiv!(F, y)) == 0
+    end
+
     # Float32 stays Float32 and allocation-free.
     Ω32 = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (17, 17), (false, false))
     P32 = gmg_preconditioner(_mg_spd, Ω32)
@@ -713,8 +724,7 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
 end
 
 @testset "gmg: threaded cycles agree" begin
-    policies = Any[Parallel()]
-    Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing && push!(policies, CpuPolyester())
+    policies = (Parallel(),)
     for policy in policies, (D, n) in ((2, 33), (3, 9))
 
         Ωs = _mg_jitter_mesh(D, n)
@@ -736,4 +746,4 @@ end
     end
 end
 
-end # module TestFormMultigrid
+end # module SolversMultigridTests
