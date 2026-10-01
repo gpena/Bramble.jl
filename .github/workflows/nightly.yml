@@ -112,7 +112,17 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
-      - uses: julia-actions/julia-runtest@v1
+      # A `run:` step instead of julia-actions/julia-runtest, because that action cannot pass Julia
+      # flags: its harness hard-codes `julia_args` to `--check-bounds` alone. Every group of the
+      # suite runs at `--optimize=1`, which on the plain harness cut the slow group from 1051 s to
+      # 664 s, ext from 283 s to 184 s, backends from 274 s to 190 s, quality from 173 s to 160 s
+      # and examples from 206 s to 184 s, with the same tests passing and no allocation,
+      # inference or AD-gated check changing result. The call restates what the action passed:
+      # `coverage=true` (its default), `--check-bounds=yes`, and `--depwarn=yes --inline=yes` on the outer process.
+      # Dropped: `force_latest_compatible_version` (the action sets it to true only for
+      # Dependabot/CompatHelper jobs, which these triggers are not) and `annotate` (off by
+      # default). `JULIA_NUM_THREADS=auto` comes from the workflow-level `env`, so it still reaches the test subprocess.
+      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
           BRAMBLE_TEST_GROUP: slow
           # 5, below the macOS leg's 7 GB runner, so a blow-up fails by name (see
@@ -165,7 +175,7 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
-      - uses: julia-actions/julia-runtest@v1
+      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
           BRAMBLE_TEST_GROUP: slow
           # 5, below the macOS leg's 7 GB runner, so a blow-up fails by name (see
@@ -208,7 +218,7 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
-      - uses: julia-actions/julia-runtest@v1
+      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
           BRAMBLE_TEST_GROUP: quality
   format:
