@@ -9,6 +9,11 @@
 #
 # This is a separate file, rather than more codecov.yml ignores, so that Codecov still shows
 # these files and the list can be reviewed on its own.
+#
+# `[[exempt_function]]` entries (`path`, `functions`, `reason`) exempt single functions rather
+# than files, under the same rule. Each reason starts with a label: `device-only:` (a
+# KernelAbstractions, Metal or AppleAccelerate path; the test environment has none of them),
+# `macro-expansion:` or `load-time:`. A host fallback or error path is never listed.
 
 [[exempt]]
 path = "src/Bramble.jl"
@@ -33,3 +38,73 @@ reason = "Its tests are in the AD group (ext/sparse_ad_ext.jl), switched off unt
 [[exempt]]
 path = "src/assembly/jacobian_pattern.jl"
 reason = "ast_sparsity_detector, its one entry the CI leg no longer reaches, is exercised only through BrambleSparseADExt, whose tests are in the switched-off AD group (v4.3.0). Exempt as a whole file: the exemption list matches files, not lines."
+
+[[exempt_function]]
+path = "src/assembly/bilinear_traversal.jl"
+functions = ["_flush_device_scatter!", "_scatter_position_mirror", "_scatter_add_mirror!"]
+reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/assembly/dirichlet_constraints.jl"
+functions = ["_dirichlet_bc_device!", "_launch_dirichlet_rows_csr!"]
+reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/assembly/kronecker.jl"
+functions = ["_kron_device_vector", "_kron_device_index", "_throw_kron_device_entry", "_launch_kron_fused!"]
+reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/assembly/linear.jl"
+functions = ["_assemble_linear_device!"]
+reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/mesh/mesh1d.jl"
+functions = ["_throw_no_ka_mesh_kernel", "_launch_uniform_mesh1d_init!", "_launch_half_points!", "_launch_spacing!", "_launch_half_spacing!", "_launch_nonuniform_mesh1d_metrics!", "_launch_refine_indices!"]
+reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/average.jl"
+functions = ["_throw_no_ka_average_kernel", "_launch_average_engine!", "_throw_no_device_centered_average", "_device_average_weights!"]
+reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/cell_average.jl"
+functions = ["_launch_cell_average!", "_launch_cell_average_scatter!", "_launch_cell_average_nd!", "_launch_cell_average_scatter_nd!", "_device_project!", "_device_scatter_project!"]
+reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/difference.jl"
+functions = ["_resolve_device_spacing", "_throw_no_ka_stencil_kernel", "_launch_difference_onesided!", "_launch_difference_centered!", "_launch_stencil_engine!"]
+reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/projection.jl"
+functions = ["_device_masked_project!", "_offload_project!"]
+reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/restriction.jl"
+functions = ["_throw_no_ka_projection_kernel", "_launch_restriction!", "_launch_restriction_scatter!", "_launch_restriction_nd!", "_launch_restriction_scatter_nd!", "_device_project!", "_device_scatter_project!"]
+reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/stencil.jl"
+functions = ["_alias_bang_expr", "_alias_expr", "_vectorial_expr", "_vectorial_index_expr", "_dimensional_expr", "_grid_function_forms_expr", "_operator_aliases_expr"]
+reason = "macro-expansion: the _*_expr helpers build code while the stencil macros expand, during load or precompilation, before coverage starts."
+
+[[exempt_function]]
+path = "src/space/inner_product.jl"
+functions = ["_transverse_weight_device", "_seminorm_sq_along_device", "_sum_dirs_device"]
+reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/space/scalar_gridspace.jl"
+functions = ["_host_mirror_mesh"]
+reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/utils/backend.jl"
+functions = ["_throw_metal_not_functional"]
+reason = "device-only: runs only when the Metal extension is loaded but reports no functional GPU; Metal is not in the test environment."
