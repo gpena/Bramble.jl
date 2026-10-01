@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: julia-actions/setup-julia@v2
         with:
@@ -42,7 +42,9 @@ jobs:
           julia --color=yes -e '
             using Pkg
             Pkg.activate(mktempdir())
-            Pkg.add("JuliaFormatter")
+            # Pinned: a formatter release can reformat untouched code. Keep in step with
+            # .claude/scripts/format.sh.
+            Pkg.add(name = "JuliaFormatter", version = "2.14.0")
             using JuliaFormatter
             format(["src", "test", "docs", "ext", "benchmark"]; overwrite = false) && exit(0)
             @error "Source is not SciMLStyle formatted. Run JuliaFormatter over src, test, docs, ext and benchmark."
@@ -63,7 +65,7 @@ jobs:
         # the compiler.
         version: ["1.12", "1.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: julia-actions/setup-julia@v2
         with:
@@ -95,7 +97,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -104,6 +106,8 @@ jobs:
           version: "1.13"
 
       - uses: julia-actions/cache@v2
+        with:
+          cache-compiled: "true"
 
       - name: Install dependencies
         run: |
