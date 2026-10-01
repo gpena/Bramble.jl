@@ -104,9 +104,13 @@ jobs:
         with:
           version: "1.13"
 
+      # Shared with CI.yml's `test` job; see the comment there. Keep this job's Julia
+      # version, `--optimize` level and coverage setting the same as that job's.
       - uses: julia-actions/cache@v2
         with:
           cache-compiled: "true"
+          cache-name: julia-cache;unit-and-slow;julia=1.13
+          include-matrix: "false"
 
       - uses: julia-actions/julia-buildpkg@v1
 

@@ -94,9 +94,18 @@ jobs:
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
+      # Shares one cache with nightly.yml's `slow` job: the same `cache-name`, and
+      # `include-matrix: false` so the two matrices do not split the key (the runner OS is
+      # still in it). CI.yml never runs on `main`, so on its own every PR started cold (about
+      # 35 minutes, 19 of them precompiling dependencies); nightly's macOS leg saves under
+      # `main`, which a PR can restore. A warm run measured 997 s against 2100 s cold. Both
+      # jobs must keep the same Julia version, `--optimize` level and coverage setting, since
+      # whichever saved last is what the next PR restores; change them together.
       - uses: julia-actions/cache@v2
         with:
           cache-compiled: "true"
+          cache-name: julia-cache;unit-and-slow;julia=1.13
+          include-matrix: "false"
       - uses: julia-actions/julia-buildpkg@v1
       # A `run:` step instead of julia-actions/julia-runtest, because that action has no input
       # that reaches the Julia flags: its harness hard-codes `julia_args` to `--check-bounds`
