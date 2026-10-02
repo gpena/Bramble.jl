@@ -7,7 +7,7 @@ using LinearAlgebra: mul!, norm, dot
 using Random
 using ..TestUtils: WITH_SLOW_TESTS
 
-# `matrix_free_operator` (gpena/Bramble.jl#326) applies a bilinear form through the walk the
+# `matrix_free_operator` applies a bilinear form through the walk the
 # assembly replays, so every check compares it against `assemble(a; dirichlet)` on the same
 # vector. Meshes are non-uniform throughout: a uniform mesh hides a spacing read on the wrong
 # side of a point.

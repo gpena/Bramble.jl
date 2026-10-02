@@ -2,7 +2,7 @@ module FormCommonTests
 
 using Test
 using Bramble
-# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+# Internal names: defined and documented, not exported.
 import Bramble: D₊ₓ, M₊ₓ, M₊ᵧ
 using LinearAlgebra: issymmetric, Diagonal, I as Id
 using Bramble:
@@ -494,9 +494,8 @@ end
     end
 end
 
-# Invariants tested (gpena/Bramble.jl#45): both form types fell through to Julia's default
-# `show`, which printed the whole resolved AST type -- every operator node and its
-# parameters -- ahead of the spaces, which are what a caller actually wants to read back.
+# Invariants tested: `show` of both form types prints the spaces a caller wants to read back,
+# not the whole resolved AST type with every operator node and its parameters.
 # The integrand is deliberately not rendered: reconstructing it would need a name for
 # every node type, kept in step with each one added, to restate an expression the caller
 # just wrote.

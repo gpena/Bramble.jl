@@ -8,7 +8,7 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
 import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, Mₓ, M₊ₓ, Mcₓ, jumpₓ, D₋ᵧ, Mcᵧ, D̽ᵧ, restrict_to
 
 # A random non-uniform mesh on the unit square (or interval): the relabelling bug this file
-# guards against (gpena/Bramble.jl#287, S7) is invisible on a uniform one.
+# guards against is invisible on a uniform one.
 function _nonuniform_space(D)
     dom = D == 1 ? domain(interval(0.0, 1.0)) : domain(interval(0.0, 1.0) × interval(0.0, 1.0))
     Ωₕ = D == 1 ? mesh(dom, 11, false) : mesh(dom, (11, 9), (false, false))

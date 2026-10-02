@@ -130,11 +130,10 @@ using Bramble:
     @testset "Shifted operators (#65)" begin
         # `shift_amount` is a field, not a type parameter, so it has to be compared
         # explicitly (form/symmetry.jl) rather than folded into the same `where`-clause
-        # trick used for BackwardDifference et al. Before that field comparison existed,
-        # two DIFFERENT shifts read as the same operator, and local_stencil(::BilinearProduct)
-        # (operators/inner.jl:521-532) takes that as license to evaluate one side only
-        # and mirror it — corrupting the assembled matrix itself, not just the `issymmetric`
-        # trait.
+        # trick used for BackwardDifference et al. Two DIFFERENT shifts must not read as the same
+        # operator, since `local_stencil` on a BilinearProduct (operators/inner.jl:521-532) would take that
+        # as license to evaluate one side only and mirror it, corrupting the assembled
+        # matrix itself, not just the `issymmetric` trait.
         m = form(Wₕ, Wₕ, (u, v) -> innerₕ(shift_op(u, 1, 1), shift_op(v, 1, 1)))
         @test issymmetric(m)
         @test isposdef(m)
@@ -151,10 +150,10 @@ using Bramble:
         # which routes assembly through the always-correct general path regardless of what
         # the fast-path trait would have said. The fast path must agree with it.
         #
-        # A grid-function-of-ones rather than the literal `1.0 *` this used to be: `form`
-        # now runs `simplify_ast` (gpena/Bramble.jl#159), which lifts *any* `OperatorScale`
+        # A grid-function-of-ones rather than a literal `1.0 *`: `form`
+        # runs `simplify_ast`, which lifts *any* `OperatorScale`
         # sitting directly inside an inner product's argument back out to scale the whole
-        # product -- so a literal `1.0 * shift_op(...)` no longer builds the wrapper this
+        # product -- so a literal `1.0 * shift_op(...)` does not build the wrapper this
         # test needs between the product and its argument. `GridFunctionScale` is not
         # something that pass touches inside a product's argument, so it still forces the
         # mismatch.

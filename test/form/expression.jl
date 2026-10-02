@@ -6,7 +6,7 @@ using Bramble: restrict_to, dirac, D₋ᵧ, D₋₂, D₋ₓ, Mₓ, jumpₓ
 using Bramble: TrialFunction, TestFunction, IdentityOperator, ZeroOperator, OperatorScale,
                SourceVector, source_function
 
-# `expression(form)`/`expression(ast::LazyOp)` (src/ast/expression.jl, issue #274) render a
+# `expression(form)`/`expression(ast::LazyOp)` (src/ast/expression.jl) render a
 # resolved form AST in Bramble's own operator notation. Every string asserted below was
 # observed by actually running the corresponding `expression(...)` call in a REPL, not
 # guessed from the rendering conventions alone.

@@ -2,7 +2,7 @@ module FormOperatorsTests
 
 using Test
 using Bramble
-# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+# Internal names: defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, ∇₊ₕ, M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 using Bramble:
                IdentityOperator,
@@ -122,9 +122,9 @@ const _ORIGIN_2D = (0, 0)
         end
 
         @testset "Vector forms" begin
-            # `vectorial_avg_backward`/`vectorial_avg_forward` were `Mₕ`/`M₊ₕ` under
-            # another name until gpena/Bramble.jl#74 generated the families. The direction
-            # argument the same names now also take is the one thing that is new.
+            # `vectorial_avg_backward`/`vectorial_avg_forward` are `Mₕ`/`M₊ₕ` under
+            # another name. The direction argument the same names also take is the one thing
+            # that is new.
             @test Mₕ(id) === (Mₕ(id, Val(1)), Mₕ(id, Val(2)))
             @test M₊ₕ(id) === (M₊ₕ(id, Val(1)), M₊ₕ(id, Val(2)))
             @test Mₕ(id) isa NTuple{2, BackwardAverage}
@@ -176,7 +176,7 @@ const _ORIGIN_2D = (0, 0)
 
         @testset "Absent marker table" begin
             # Every other node takes `markers` and ignores it, so callers with nothing to
-            # restrict by pass `nothing`. This used to be `haskey(::Nothing, ::Symbol)`.
+            # restrict by pass `nothing`, not `haskey(::Nothing, ::Symbol)`.
             # Nothing marked means `:interior` is the whole grid and every named region is
             # empty, the same answer a table simply missing the key already gave.
             @test local_stencil(
@@ -197,18 +197,17 @@ const _ORIGIN_2D = (0, 0)
 
         # A custom :interior marker is honoured, not overridden by !:boundary.
         @testset "custom :interior marker kept (#66)" begin
-            # `:interior` used to be computed as `!_is_marked(markers, :boundary, ...)`
-            # unconditionally, discarding whatever a real marker table's own `:interior`
-            # entry said -- even a deliberately redefined one, despite mesh/marker.jl
-            # warning the caller that a custom definition wins.
+            # `:interior` must not be computed as the complement of `:boundary`
+            # unconditionally, which would discard a real marker table's own `:interior`
+            # entry, even a deliberately redefined one. mesh/marker.jl
+            # warns the caller that a custom definition wins.
             S1 = interval(0.0, 1.0)
             Ωc = domain(S1, :interior => (x -> x[1] > 0.5))
             Ωch = mesh(Ωc, 5, true; warn_marker_mismatch = false)
             custom_interior = markers(Ωch)[:interior]
 
-            # Deliberately not the complement of :boundary, so reading :interior directly
-            # and computing "not :boundary" give different answers -- the only way to tell
-            # the fix from the bug.
+            # Deliberately not the complement of the boundary marker, so reading the interior marker directly
+            # and computing "not boundary" give different answers.
             @test custom_interior != .!markers(Ωch)[:boundary]
 
             Wc = gridspace(Ωch)
@@ -217,11 +216,8 @@ const _ORIGIN_2D = (0, 0)
             n = size(A, 1)
             @test findall(!iszero, [A[i, i] for i in 1:n]) == findall(custom_interior)
 
-            # The default (geometric, unmarked) case must still behave exactly as before:
-            # there, :interior IS defined as !:boundary by construction
-            # (`_ensure_geometric_markers!`), so reading it directly agrees numerically
-            # with the old computation -- this fix changes which entry is read, not what a
-            # mesh with no custom marker computes.
+            # The default (geometric, unmarked) case reads :interior directly and agrees with !:boundary,
+            # which `_ensure_geometric_markers!` defines it as by construction.
             Ωd = mesh(domain(S1), 5, true)
             @test markers(Ωd)[:interior] == .!markers(Ωd)[:boundary]
             Wd = gridspace(Ωd)
@@ -343,11 +339,11 @@ const _ORIGIN_2D = (0, 0)
     end
 end
 
-# gpena/Bramble.jl#352: the public index shifts on a symbolic operand build `ShiftNode`s,
+# The public index shifts on a symbolic operand build `ShiftNode`s,
 # and a shift composed with another stencil assembles what the grid functions compute. The
 # oracle is the matrix product `H · S · Op` of the space-layer matrices, `H` the `innerₕ`
-# weights. The boundary is where it used to fail: `S₊ₓ(D₋ₓ(u))` re-evaluated `D₋ₓ` at the
-# clamped last point and kept its `-u_n/h` tap there, where the shift reads 0.
+# weights. The boundary is the hard case: `S₊ₓ(D₋ₓ(u))` must not keep the `-u_n/h` tap of `D₋ₓ`
+# at the clamped last point, where the shift reads 0.
 @testset "shift node: composed stencils" begin
     box(D) = D == 1 ? interval(0.0, 1.0) :
              D == 2 ? interval(0.0, 1.0) × interval(0.0, 2.0) :
@@ -423,10 +419,9 @@ end
 # A tapping node over an operand that carries a grid-function coefficient, `c*u`,
 # `c*D₋ₓ(u)` or `D₋ₓ(c*u)`: every difference, average, jump and shift family, on non-uniform
 # meshes. The last operand is point-dependent (the coefficient varies) without being a
-# `GridFunctionScale` itself, and a tap once re-evaluated it at the neighbour without
-# relabelling its offsets, so `D₊ₓ(D₋ₓ(c*u))` put the neighbour's stencil on the point's own
-# columns (gpena/Bramble.jl#352). The oracle is the grid-function
-# computation, one basis vector per column, so the whole matrix is checked against it.
+# `GridFunctionScale` itself, and a tap must relabel its offsets when re-evaluating it at the neighbour, or
+# `D₊ₓ(D₋ₓ(c*u))` puts the neighbour's stencil on the point's own columns. The oracle is
+# the grid-function computation, one basis vector per column, so the whole matrix is checked against it.
 @testset "tap over a coefficient operand" begin
     box(D) = D == 1 ? interval(0.0, 1.0) :
              D == 2 ? interval(0.0, 1.0) × interval(0.0, 2.0) :
@@ -474,7 +469,7 @@ end
             assemble!(A, a)
             @test isapprox(Matrix(A), H * G; atol = 1e-9, rtol = 1e-10)
             # the matrix-free product compiles its own walk, so only on the operand that
-            # used to fail; it cancels like `A * x`, so it takes the same rounding bound
+            # cancels like `A * x`, so it takes the same rounding bound
             nm == "D₋ₓ(c*u)" || continue
             @test isapprox(matrix_free_operator(a) * x, H * G * x; atol = 16 * eps() * norm(abs.(A) * abs.(x)), rtol = 1e-10)
         end

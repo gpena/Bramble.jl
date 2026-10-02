@@ -8,7 +8,7 @@ using Bramble: D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, M₂, Mₓ, half_spacing
 using Bramble: ∇₊ₕ, div₊ₕ, curl₊ₕ
 using LinearAlgebra: dot, ⋅, ×
 
-# gpena/Bramble.jl#234 (v3.3.0 plan S6.5): `∇ₕ`/`∇₊ₕ`/`εₕ`/`divₕ` accept a composite trial or
+# `∇ₕ`/`∇₊ₕ`/`εₕ`/`divₕ` accept a composite trial or
 # test function and expand, at the builder, into the same single-block products a user would
 # otherwise write by hand. This file checks that expansion two ways:
 #
@@ -181,7 +181,7 @@ end
     end
 end
 
-# gpena/Bramble.jl#341 (S5.4): `∇ₕ ⋅ u`/`∇ₕ × u` (and the four sibling gradient aliases)
+# `∇ₕ ⋅ u`/`∇ₕ × u` (and the four sibling gradient aliases)
 # contract to `divₕ(u)`/`curlₕ(u)` via `LinearAlgebra.dot`/`×`. Every mesh here is
 # non-uniform in every direction, as elsewhere in the suite.
 const _CONTRACT_FAMILIES = (

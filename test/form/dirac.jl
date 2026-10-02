@@ -239,7 +239,7 @@ using Bramble:
         # `update_coefficients!` before each assembly -- the same discipline
         # test/form/semidiscrete.jl exercises for a scalar coefficient, applied here to a
         # `dirac` strength so a moving or time-modulated point source works under
-        # `semidiscretize` (#226's own acceptance criterion).
+        # `semidiscretize`.
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, false)
         Wₕ = gridspace(Ωₕ)
         n = ndofs(Wₕ)
@@ -309,8 +309,7 @@ using Bramble:
     end
 
     # The weight's type is the mesh's element type promoted with the strength's
-    # (gpena/Bramble.jl#361). Before, it was promoted with a hardcoded `Float64`, so a Float32
-    # space with a Float32 strength gave a Float64 vector: a behaviour change. A Float64
+    # A Float32 space with a Float32 strength gives a Float32 vector. A Float64
     # strength (the default `1.0`) on a Float32 space still promotes, as `innerₕ(1.0, v)`
     # does; an integer strength takes the space's type. The location keeps Float64 precision.
     @testset "Weight eltype follows the space (#361)" begin
@@ -376,9 +375,8 @@ using Bramble:
     end
 
     # The vector's type is folded from every strength, not read off one node's stencil
-    # (gpena/Bramble.jl#370). A plain term first: the flattened sum's stencil once decided the
-    # type by its first entry alone, so the Dirac's `Dual`, or its Float64 strength on a
-    # Float32 space, went unseen. The points sit away from the grid's middle node.
+    # A plain term first: the flattened sum's stencil must not decide the type by its first
+    # entry alone, or the Dirac's `Dual`, or its Float64 strength on a Float32 space, goes unseen. The points sit away from the grid's middle node.
     @testset "dirac: mixed strengths off-probe" begin
         for D in (1, 2)
             Ω = domain(D == 1 ? interval(0.0, 1.0) : interval(0.0, 1.0) × interval(0.0, 1.0))

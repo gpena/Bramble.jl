@@ -6,7 +6,7 @@ using SparseArrays
 using Random
 using Bramble: Serial, Parallel, backend, execution_policy, allocate_system_matrix
 
-# `assemble_add!` (gpena/Bramble.jl#231) accumulates a form's contribution into an already
+# `assemble_add!` accumulates a form's contribution into an already
 # filled matrix/vector, in place, without the `fill!` `assemble!` does first. Every check
 # here goes against an independent reference built from `assemble` alone (never against
 # another call to the code under test), following bramble-verification.
@@ -183,7 +183,7 @@ end
         @test all(R -> R == results[1], results)  # bit-for-bit repeat-run agreement
     end
 
-    # S3.4 (gpena/Bramble.jl#338): a warmed Parallel() `assemble_add!` replays the recorded
+    # A warmed Parallel() `assemble_add!` replays the recorded
     # positions instead of searching -- checked here against non-uniform 1D/2D/3D meshes (the
     # searching sweep and the replay must agree on a mesh whose stencils are not all the same
     # width), against the same accumulation run serially, at rtol 1e-12 (bramble-verification:
@@ -370,7 +370,7 @@ end
         @test F ≈ Fref
     end
 
-    # gpena/Bramble.jl#283: the explicit-scale, cached `assemble_add!(A, a, α)` /
+    # The explicit-scale, cached `assemble_add!(A, a, α)` /
     # `assemble_add!(F, l, α)` path is inferred and allocates nothing on warm replay, 1D and
     # 2D. `@inferred` reads no global binding here, so it stays in the barrier alongside the
     # warm-up rather than being pulled out to top level.

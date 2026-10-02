@@ -3,7 +3,7 @@ module FormBilinearTests
 using Test
 using Bramble
 using Bramble: matrix_type, execution_policy
-# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+# Internal names: defined and documented, not exported.
 import Bramble: M₊ᵧ
 using ForwardDiff
 using LinearAlgebra: Diagonal, I, diag, dot
@@ -220,8 +220,8 @@ using Bramble:
         W1 = gridspace(mesh(domain(interval(0.0, 1.0)), n1, true))   # leaf size n1
         W2 = gridspace(mesh(domain(interval(0.0, 1.0)), n2, true))   # leaf size n2
 
-        trial = W1 × W2   # leaf 1: size n1 (offset 0), leaf 2: size n2 (offset n1)
-        test = W2 × W1   # leaf 1: size n2 (offset 0), leaf 2: size n1 (offset n2)
+        trial = W1 × W2   # leaf 1 has size n1 (offset 0), leaf 2 size n2 (offset n1)
+        test = W2 × W1   # leaf 1 has size n2 (offset 0), leaf 2 size n1 (offset n2)
 
         # Cross terms, so each pairing is same-size (required by `_check_block_meshes`) and
         # lands off the "obvious" diagonal: trial leaf 1 (W1, n1) pairs with test leaf 2
@@ -307,7 +307,7 @@ using Bramble:
         # `≈` above tolerates float summation reordering; the claim here is stronger --
         # bit-for-bit identical `nzval`, which only a genuine absence of a race across the
         # multi-colour scatter can guarantee run after run. Only meaningful with more than
-        # one thread actually available (gpena/Bramble.jl#84): on one thread the colours
+        # one thread actually available: on one thread the colours
         # never run concurrently, so nothing could race in the first place, and CI already
         # runs with JULIA_NUM_THREADS=auto (see the @warn in test/runtests.jl for a local,
         # single-threaded `Pkg.test()`).
@@ -334,10 +334,8 @@ using Bramble:
     end
 
     @testset "Backend policy" begin
-        # assemble!/assemble no longer hardcode parallel (the asymmetry this closed:
-        # assemble(a::BilinearForm) used to call assemble_parallel! unconditionally, the
-        # opposite default from LinearForm's serial-by-default assemble). Both now read
-        # form.trial_space's execution_policy, defaulting to Serial() like the vector form.
+        # assemble!/assemble do not hardcode parallel. Both read form.trial_space's
+        # execution_policy, defaulting to Serial() like the vector form.
         @test execution_policy(Wₕ) isa Serial
         Ω_par = mesh(
             domain(S, :walls => boundary_symbols(S)),
@@ -420,17 +418,16 @@ using Bramble:
     @testset "Block resolution (#49)" begin
         # `blocks(term, trial_leaves, test_leaves)` is the one place the trial/test row/
         # column asymmetry is resolved, and is testable directly against `leaf_spaces_offsets`
-        # without assembling a matrix -- unlike before it existed, when the only way to see
-        # a wrong offset was in an assembled matrix's numbers (which is exactly how #48 was a
-        # live bug for a while). Asymmetric leaf sizes and reversed order, as in the #48 test
+        # without assembling a matrix; the other way to see a wrong offset is in an assembled
+        # matrix's numbers. Asymmetric leaf sizes and reversed order, as in the test
         # above, so a row/column offset mix-up lands on the wrong number rather than the same
         # one by coincidence.
         n1, n2 = 5, 7
         W1 = gridspace(mesh(domain(interval(0.0, 1.0)), n1, true))
         W2 = gridspace(mesh(domain(interval(0.0, 1.0)), n2, true))
 
-        trial = W1 × W2   # leaf 1: W1, offset 0.  leaf 2: W2, offset n1
-        test = W2 × W1    # leaf 1: W2, offset 0.  leaf 2: W1, offset n2
+        trial = W1 × W2   # leaf 1 is W1 at offset 0, leaf 2 is W2 at offset n1
+        test = W2 × W1    # leaf 1 is W2 at offset 0, leaf 2 is W1 at offset n2
 
         trial_leaves = leaf_spaces_offsets(trial)
         test_leaves = leaf_spaces_offsets(test)
@@ -550,9 +547,8 @@ using Bramble:
     # In-place reassembly.
     @testset "Composite reassembly allocates nothing" begin
         # `_loop_bytes` above only exercises the scalar core. The block-routing core (going
-        # through `blocks` -- see #49) had no equivalent guard, so a routing change could
-        # reintroduce an allocation (e.g. from building an intermediate `Block` per term)
-        # with nothing in the suite to catch it.
+        # through `blocks`) needs its own guard, so a routing change cannot
+        # reintroduce an allocation (e.g. from building an intermediate `Block` per term).
         Vₕ = gridspace(Ωₕ, Val(2))
         function _loop_bytes(A, a)
             assemble!(A, a)
@@ -573,8 +569,7 @@ using Bramble:
         # The third replay shape, alongside the scalar and composite cores above: a term
         # whose recorded positions come out as a constant per-tap stride, which
         # `_try_diagonal_segment` repackages so `DiagonalReplaySink` can walk the interior
-        # by arithmetic instead of reading a position list. Nothing pinned its allocations
-        # until #249 touched the entry loops both replay shapes share
+        # by arithmetic instead of reading a position list. The entry loops both replay shapes share
         # (`_visit_entries`/`_visit_entries_unguarded`, form/bilinear_traversal.jl).
         #
         # The assertion on `is_diagonal` is what makes this test about that path rather
@@ -699,7 +694,7 @@ using Bramble:
                 end
             end
 
-            # more than two segments to replay, in order (#64's own nesting shape)
+            # more than two segments to replay, in order (a nesting shape)
             nested = Bramble.CompositeGridSpace((
                 gridspace(Ωₕ, Val(2)), gridspace(Ωₕ, Val(2))
             ))
@@ -717,10 +712,8 @@ using Bramble:
             # Each form keeps its own `_AssemblyCache` (keyed on the exact matrix object it
             # last assembled into), so assembling a second, same-reach form into `a`'s matrix
             # records fresh under *its own* cache rather than touching `a`'s -- `a`'s own
-            # cache is still valid afterwards and replays correctly. This used to be shown
-            # by overriding `a`'s own `ast` keyword with another form's AST (gpena/Bramble.jl#105);
-            # assembling the other form directly demonstrates the same thing without the
-            # now-deprecated keyword, since the two were verified equivalent.
+            # cache is still valid afterwards and replays correctly. Assembling the
+            # other form directly demonstrates this without the deprecated `ast` keyword.
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
             A = assemble(a)                                   # records under a's own cache
             alt = form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v))  # same reach, different form
@@ -745,7 +738,7 @@ using Bramble:
         # Serial: the recording pass searches and reports. `wide` is assembled directly
         # into a matrix built for `narrow`'s (narrower) pattern, rather than overriding
         # `narrow`'s own `ast` keyword -- the two are equivalent, and only the latter is
-        # deprecated (gpena/Bramble.jl#105).
+        # deprecated.
         A = allocate_system_matrix(narrow, resolve_form_ast(narrow))
         @test_throws ArgumentError assemble!(A, wide)
 
@@ -792,8 +785,7 @@ using Bramble:
         u, v = TrialFunction{2}(), TestFunction{2}()
 
         @testset "Every scattered entry is in the pattern" begin
-            # The invariant #50 exists to protect. It used to hold because two independently
-            # written traversals agreed; now both read the same walk, so it can be asserted
+            # Both traversals read the same walk, so the invariant can be asserted
             # directly rather than inferred from a matrix that came out right.
             for ast in (
                 resolve_form_ast(form(W, W, (a, b) -> innerₕ(a, b))),
@@ -814,8 +806,8 @@ using Bramble:
             # Two identical terms name every coordinate twice. The pattern wants each once;
             # the values have to accumulate both, or the matrix comes out halved.
             #
-            # Built with `resolve_ast` directly rather than `form(...)`: `form` now runs
-            # `simplify_ast` (gpena/Bramble.jl#159), which combines two identical terms into
+            # Built with `resolve_ast` directly rather than `form(...)`: `form` runs
+            # `simplify_ast`, which combines two identical terms into
             # one (`innerₕ(a,b) + innerₕ(a,b) -> 2 * innerₕ(a,b)`) precisely to avoid the
             # double sweep this test exists to protect against -- so producing the
             # duplicate-term tree this traversal invariant is about has to bypass it.
@@ -1018,7 +1010,7 @@ using Bramble:
         @test_throws ArgumentError form(Wₕ, Wₕ, (u, v) -> 42)
     end
 
-    # The matrix-type seam (S1.1, gpena/Bramble.jl#12): `allocate_system_matrix`, `assemble`,
+    # The matrix-type seam: `allocate_system_matrix`, `assemble`,
     # `assemble!` and `assemble_parallel!` read the matrix type from
     # `matrix_type(backend(test_space(form)))` rather than hardcoding `SparseMatrixCSC`,
     # reaching storage through `_scatter_position`/`_scatter_add!` (bilinear_traversal.jl),
@@ -1078,7 +1070,7 @@ using Bramble:
     end
 end
 
-# Linearity of assembly (gpena/Bramble.jl#120).
+# Linearity of assembly.
 #
 # A bilinear form is linear in each argument, and the assembled matrix inherits that: the
 # matrix of a sum of terms is the sum of their matrices, and a scalar in front of a term
@@ -1159,7 +1151,7 @@ WITH_SLOW_TESTS && @testset "Assembly linearity (Supposition)" begin
 end
 
 @testset "bilinear: restricted sum replay width" begin
-    # gpena/Bramble.jl#370: a restricted term fused into a sum writes a varying number of
+    # A restricted term fused into a sum writes a varying number of
     # entries per point, which the fixed-width diagonal replay must not accept.
     right = x -> x[1] > 0.8
     function replay_matches(W)
@@ -1195,7 +1187,7 @@ end
 end
 
 @testset "bilinear: matrix-free form call" begin
-    # gpena/Bramble.jl#326: `a(u, v)` sums `vᵀ A u` over the stencil walk instead of
+    # `a(u, v)` sums `vᵀ A u` over the stencil walk instead of
     # assembling `A`, on non-uniform meshes, with a composite space, a transposed pair, a
     # region restriction and a coefficient.
     Random.seed!(3263)

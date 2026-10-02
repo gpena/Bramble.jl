@@ -9,7 +9,7 @@ using Bramble: Serial, Parallel, CpuPolyester, backend, assemble_parallel!,
                allocate_system_matrix, D₋ₓ, D₊ᵧ, πₕ, inner₊ₓ, CompositeGridSpace
 using ..TestUtils: WITH_SLOW_TESTS
 
-# The threaded refill replays the form's recording (gpena/Bramble.jl#338): `assemble!` on a
+# The threaded refill replays the form's recording: `assemble!` on a
 # `Parallel()` form and `assemble_parallel!` from any policy write through the recorded
 # `nzval` positions, band by band, instead of searching for each entry. Every check here
 # goes against a serial `assemble` of the same form on the same (non-uniform) mesh, never

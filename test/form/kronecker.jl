@@ -10,7 +10,7 @@ using LinearSolve: LinearProblem, solve, KrylovJL_CG
 using ForwardDiff
 using ..TestUtils: WITH_AD_TESTS
 
-# `is_separable`/`kronecker_operator` (gpena/Bramble.jl#162): a bilinear form whose
+# `is_separable`/`kronecker_operator`: a bilinear form whose
 # resolved AST is a sum of `innerₕ(u, v)`/`inner₊(∇ₕ(u), ∇ₕ(v))`-shaped terms over a
 # `ScalarGridSpace` on a `MeshnD` factors as a sum of Kronecker products of 1D matrices,
 # `H_D ⊗ ... ⊗ A_d ⊗ ... ⊗ H_1`. `KroneckerLinearOperator` applies that sum by sum
