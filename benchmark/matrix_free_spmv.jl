@@ -19,13 +19,29 @@
 # row index) plus the column pointers. Setting BRAMBLE_MFSPMV_QUICK=1 caps every ladder at its
 # two smallest sizes, for debugging only.
 #
+# `--smoke` runs one small size per dimension and `--save PATH` writes the rows and the crossover
+# lines to a results file (results_io.jl); stdout is the same either way.
+#
 # Run alone, on a quiet machine, on AC power, with four threads:
 #     julia --project=benchmark --startup-file=no --threads=4 benchmark/matrix_free_spmv.jl
 
 using Bramble: CpuSerial, CpuThreaded
 using Bramble, BenchmarkTools, LinearAlgebra, Random, SparseArrays
 
+include(joinpath(@__DIR__, "results_io.jl"))
+
 set_zero_subnormals(true)
+
+const SMOKE = "--smoke" in ARGS
+const SAVE_PATH = let i = findfirst(==("--save"), ARGS)
+    if i === nothing
+        nothing
+    elseif i == length(ARGS)
+        error("--save requires a file path argument")
+    else
+        ARGS[i + 1]
+    end
+end
 
 const QUICK = get(ENV, "BRAMBLE_MFSPMV_QUICK", "0") == "1"
 const MEMORY_BUDGET = 2 * 2^30 # bytes of CSR matrix per size
@@ -72,11 +88,13 @@ function crossover(rows)
 end
 
 function main()
+    table = Dict{String, Any}[]
+    crossovers = Dict{String, Any}[]
     println("Julia $(VERSION), $(Threads.nthreads()) threads, CSR budget ",
-        MEMORY_BUDGET ÷ 2^20, " MiB", QUICK ? ", QUICK ladders" : "")
+        MEMORY_BUDGET ÷ 2^20, " MiB", QUICK ? ", QUICK ladders" : "", SMOKE ? ", SMOKE" : "")
     for (D, ladder) in LADDERS
         results = Dict("serial" => [], "threaded" => [])
-        for n in (QUICK ? ladder[1:2] : ladder)
+        for n in (SMOKE ? ladder[1:1] : QUICK ? ladder[1:2] : ladder)
             N = D == 1 ? n : n^D
             if csr_estimate(D, N) > MEMORY_BUDGET
                 println("$(D)D n=$N skipped: CSR estimate exceeds the memory budget")
@@ -84,6 +102,10 @@ function main()
             end
             for r in measure(D, n)
                 push!(results[r.policy], r)
+                push!(table,
+                    Dict{String, Any}("dim" => D, "ndofs" => r.N, "policy" => r.policy,
+                        "mf_s" => r.t_mf, "spmv_s" => r.t_spmv, "ratio" => r.t_spmv / r.t_mf,
+                        "csr_bytes" => r.csr, "mf_bytes" => r.mfb, "form_bytes" => r.formb))
                 println("$(D)D n=$(r.N) policy=$(r.policy) mf=$(r.t_mf) s spmv=$(r.t_spmv) s ",
                     "ratio=$(round(r.t_spmv / r.t_mf, digits = 3)) csr_bytes=$(r.csr) ",
                     "mf_bytes=$(r.mfb) form_bytes=$(r.formb)")
@@ -92,6 +114,12 @@ function main()
         end
         parts = map(("serial", "threaded")) do p
             c = crossover(results[p])
+            row = Dict{String, Any}("dim" => D, "policy" => p)
+            if c !== nothing
+                row["from_ndofs"] = c.N
+                row["memory_ratio"] = c.csr / c.mfb
+            end
+            push!(crossovers, row)
             c === nothing ? "$p none in range" :
             "$p from n=$(c.N) (memory ratio csr/mf=$(round(c.csr / c.mfb, digits = 1)))"
         end
@@ -99,6 +127,11 @@ function main()
         println("$(D)D crossover: ", join(parts, "; "),
             "; memory ratio at the largest size csr/mf=",
             round(last_r.csr / last_r.mfb, digits = 1))
+    end
+    if SAVE_PATH !== nothing
+        save_results(SAVE_PATH, "matrix_free_spmv.jl",
+            Dict{String, Any}("spmv" => table, "crossover" => crossovers); smoke = SMOKE)
+        println("Results written to $SAVE_PATH")
     end
 end
 

@@ -79,7 +79,19 @@ using Metal
 using BenchmarkTools
 using PrettyTables
 
+include(joinpath(@__DIR__, "results_io.jl"))
+
 const SMOKE = "--smoke" in ARGS
+
+const SAVE_PATH = let i = findfirst(==("--save"), ARGS)
+    if i === nothing
+        nothing
+    elseif i == length(ARGS)
+        error("--save requires a file path argument")
+    else
+        ARGS[i + 1]
+    end
+end
 const REPO_ROOT = normpath(joinpath(@__DIR__, ".."))
 const POWER_SCRIPT = joinpath(REPO_ROOT, ".claude", "scripts", "check_power_load.sh")
 
@@ -281,6 +293,21 @@ function main()
     _out()
     _out("=== GpuOffload vs threaded-host Rₕ!/avgₕ! -- back-to-back ratio ===")
     _print_table(data; column_labels = header, fit_table_in_display_horizontally = false)
+
+    if SAVE_PATH !== nothing
+        # A withheld timing (NaN) is left out as a missing value.
+        table = map(rows) do r
+            d = Dict{String, Any}(
+                "workload" => r.workload, "grid" => r.grid_label, "ndofs" => r.ndofs,
+                "cpu_threaded_ms" => r.t_host_ms, "ok" => r.ok, "note" => r.note,
+                "power" => String(r.power), "load" => String(r.load))
+            r.ok && (d["gpu_offload_ms"] = r.t_offload_ms; d["ratio"] = r.ratio)
+            return d
+        end
+        save_results(SAVE_PATH, "gpu_offload.jl", Dict{String, Any}("offload" => table);
+            smoke = SMOKE)
+        _out("Results written to $SAVE_PATH")
+    end
 
     mismatches = filter(r -> !r.ok, rows)
     regressions = filter(r -> r.ok && r.ratio <= 1, rows)

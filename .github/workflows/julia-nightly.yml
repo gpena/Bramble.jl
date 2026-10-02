@@ -1,0 +1,54 @@
+name: Julia nightly
+
+# On-demand test run against the Julia nightly build, for finding out what a coming Julia
+# release does to Bramble. Nothing triggers it but `workflow_dispatch`, and nothing depends on
+# it: it is not a gate and not part of the release procedure.
+#
+#   gh workflow run julia-nightly.yml -f group=unit -f os=ubuntu-latest
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      group:
+        description: Test group (BRAMBLE_TEST_GROUP)
+        type: choice
+        default: unit
+        options: [unit, slow, quality, ext, examples, all]
+      os:
+        description: Runner
+        type: choice
+        default: ubuntu-latest
+        options: [ubuntu-latest, macos-latest]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Julia nightly - ${{ inputs.group }} - ${{ inputs.os }}
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: nightly
+
+      # Nightly changes daily, and a compiled cache from another build is invalid anyway.
+      - uses: julia-actions/cache@v2
+        with:
+          cache-compiled: "false"
+
+      - uses: julia-actions/julia-buildpkg@v1
+
+      # A `run:` step so the suite gets `--optimize=1`, as in CI.yml; julia-runtest cannot pass it.
+      - name: Run the tests
+        run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=false, julia_args=["--optimize=1", "--check-bounds=yes"])'
+        env:
+          BRAMBLE_TEST_GROUP: ${{ inputs.group }}
+          JULIA_NUM_THREADS: auto
