@@ -894,4 +894,128 @@ end
     end
 end
 
+# The device reductions (`_surface_sum`, `_dot`, `_dot_masked`, `_sum_dirs_device` on
+# `DeviceLocality()`/`GpuKernel()`) are plain broadcasts and `sum`s, so they run on host
+# arrays too; called directly here, on non-uniform meshes, against sums written out by hand
+# from `points` alone. The policy-dispatched `_surface_sum` methods and its locality
+# mismatch are checked on the same data.
+@testset "Device reductions on host storage" begin
+    bw(x, i) = i == 1 ? 0.0 : x[i] - x[i - 1]
+    hh(x, i) = i == 1 ? (x[2] - x[1]) / 2 :
+               i == length(x) ? (x[end] - x[end - 1]) / 2 : (x[i + 1] - x[i - 1]) / 2
+    axes_of(Ωₕ, D) = D == 1 ? (collect(Bramble.points(Ωₕ)),) :
+                     ntuple(d -> collect(Bramble.points(Ωₕ(d))), D)
+    transverse(xs, I, d) = prod((hh(xs[e], I[e]) for e in eachindex(xs) if e != d); init = 1.0)
+
+    function surface_byhand(xs, mask, u, v)
+        n = map(length, xs)
+        lin = LinearIndices(n)
+        s = 0.0
+        for I in CartesianIndices(n), d in eachindex(xs), side in 1:2
+            mask[d][side] || continue
+            I[d] == (side == 1 ? 1 : n[d]) || continue
+            s += transverse(xs, I, d) * u[lin[I]] * v[lin[I]]
+        end
+        return s
+    end
+
+    function snorm_sq_byhand(xs, u)
+        n = map(length, xs)
+        D = length(n)
+        lin = LinearIndices(n)
+        s = 0.0
+        for I in CartesianIndices(n), d in 1:D
+            I[d] == 1 && continue
+            J = I - CartesianIndex(ntuple(k -> k == d ? 1 : 0, D))
+            h = xs[d][I[d]] - xs[d][I[d] - 1]
+            δ = (u[lin[I]] - u[lin[J]]) / h
+            s += h * transverse(xs, I, d) * δ^2
+        end
+        return s
+    end
+
+    dev, gpu = Bramble.DeviceLocality(), Bramble.GpuKernel()
+    sets = Dict(
+        1 => domain(interval(-1.0, 2.0)),
+        2 => domain(interval(0.0, 1.0) × interval(0.0, 2.0)),
+        3 => domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(-1.0, 0.5))
+    )
+    npts = Dict(1 => 9, 2 => (7, 6), 3 => (5, 4, 6))
+    f(x) = sum(x) + prod(sin, x)
+    g(x) = 1.0 + sum(abs2, x)
+
+    for D in 1:3
+        @testset "$(D)D" begin
+            Ωₕ = mesh(sets[D], npts[D], ntuple(_ -> false, D))
+            Wₕ = gridspace(Ωₕ)
+            xs = axes_of(Ωₕ, D)
+            u = parent(Rₕ(Wₕ, f))
+            v = parent(Rₕ(Wₕ, g))
+
+            masks = (ntuple(_ -> (true, true), D),
+                ntuple(d -> d == D ? (false, true) : (d == 1, false), D))
+            for mask in masks
+                byhand = surface_byhand(xs, mask, u, v)
+                @test byhand != 0
+                @test Bramble._surface_sum(dev, gpu, Ωₕ, mask, u, v) ≈ byhand
+                @test Bramble._surface_sum(gpu, Ωₕ, mask, u, v) ≈ byhand
+                for policy in (Bramble.CpuThreaded(), Bramble.CpuPolyester())
+                    @test Bramble._surface_sum(policy, Ωₕ, mask, u, v) ≈ byhand
+                end
+            end
+            mask = first(masks)
+            @test_throws ArgumentError Bramble._surface_sum(
+                Bramble.HostLocality(), gpu, Ωₕ, mask, u, v)
+            @test_throws ArgumentError Bramble._surface_sum(
+                dev, Bramble.CpuSerial(), Ωₕ, mask, u, v)
+
+            # The separable weights of every staggered set, unmasked and masked, the mask
+            # both a `BitVector` and a lazy two-mask `MarkedIndicesUnion`.
+            n = npoints(Ωₕ, Tuple)
+            lin = LinearIndices(n)
+            first_face = BitVector(vec([I[1] == 1 for I in CartesianIndices(n)]))
+            last_face = BitVector(vec([I[D] == n[D] for I in CartesianIndices(n)]))
+            union = Bramble.MarkedIndicesUnion((first_face, last_face))
+            for S in (ntuple(identity, D), (D,), ())
+                w = weights(Wₕ, Val(S))
+                wt(I) = prod(d -> d in S ? bw(xs[d], I[d]) : hh(xs[d], I[d]), 1:D)
+                full = sum(wt(I) * u[lin[I]] * v[lin[I]] for I in CartesianIndices(n))
+                on(I) = I[1] == 1 || I[D] == n[D]
+                part = sum(wt(I) * u[lin[I]] * v[lin[I]] for I in CartesianIndices(n) if on(I))
+                justfirst = sum(wt(I) * u[lin[I]] * v[lin[I]]
+                for I in CartesianIndices(n) if I[1] == 1)
+                if w isa Bramble.SeparableWeights
+                    @test Bramble._dot(dev, gpu, u, w, v) ≈ full
+                    @test Bramble._dot_masked(dev, gpu, u, w, v, first_face) ≈ justfirst
+                    @test Bramble._dot_masked(dev, gpu, u, w, v, union) ≈ part
+                end
+                @test Bramble._dot_masked(u, w, v, union) ≈ part
+            end
+
+            # The device seminorm walks every direction down to its `Val(0)` rung.
+            byhand = snorm_sq_byhand(xs, u)
+            uₕ = Rₕ(Wₕ, f)
+            @test Bramble._sum_dirs_device(u, Wₕ, Ωₕ, n, Val(D), Val(D)) ≈ byhand
+            @test snorm₁ₕ(uₕ)^2 ≈ byhand
+        end
+    end
+end
+
+# The code generator's fallback for a result kind that is neither `:sum` nor `:tuple`:
+# the body it returns throws when run, rather than generating a wrong sum.
+@testset "inner₊ body for an unknown result kind" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (false, false))
+    T = typeof(Rₕ(gridspace(Ωₕ), x -> 1.0))
+    body = Bramble._generate_inner_plus_body(T, T, :neither)
+    err = try
+        eval(body)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("Invalid result kind", err.msg)
+    @test Bramble._generate_inner_plus_body(T, T, :sum) isa Expr
+end
+
 end # module SpaceInnerProductTests
