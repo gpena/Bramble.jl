@@ -2,98 +2,183 @@
 CurrentModule = Bramble
 ```
 
-# Grid spaces and discrete functions
+# [Grid spaces and discrete functions](@id tutorial_space)
 
-A grid space is the discrete function space over a mesh: it fixes how many degrees of
-freedom a field has and which quadrature weight each one carries. A [`VectorElement`](@ref)
-is a function in that space. Every block below runs when this page is built.
+**What you will learn.** How to put a function on a mesh, measure it, and stack copies into a composite space with vector elements.
 
----
+**What you need first.** The [mesh tutorial](mesh.md), for building a mesh; the [geometry tutorial](geometry.md), for the domain it sits on.
 
-## 1. Scalar grid spaces
+**Where next.** [Difference operators](operators.md), which act on the elements built here.
 
-[`gridspace`](@ref) builds a `ScalarGridSpace` over a mesh:
+A grid space is the discrete function space over a mesh. It fixes how many degrees of
+freedom a field has and which quadrature weight each one carries. A
+[`VectorElement`](@ref) is a function in that space. Every block below runs when this page
+is built.
+
+The running problem is small: sample $f(x) = \sin(\pi x)$ on the unit interval and measure
+it, first as one field, then as a pair of fields.
+
+## A grid space over a mesh
+
+[`gridspace`](@ref) builds a grid space over a mesh. `ndofs` counts its degrees of freedom,
+and with `Tuple` it gives the grid shape:
 
 ```@example space
 using Bramble
 import Bramble: component_range, component_ranges, weights
 
-Ω = domain(box((0.0, 0.0), (1.0, 1.0)))
-Ωₕ = mesh(Ω, (5, 5), (true, true))    # uniform spacing along both axes
+Ω = domain(interval(0.0, 1.0))
+Ωₕ = mesh(Ω, 11)
 Wₕ = gridspace(Ωₕ)
 
 ndofs(Wₕ), ndofs(Wₕ, Tuple)
 ```
 
-`points(Wₕ)` (equal to `points(Ωₕ)`) answers to the same destructuring as the vectorial
-operators: `x, y = points(Wₕ)` gives the two coordinate vectors directly, one array per
-axis:
+There is one degree of freedom per mesh point. `points(Wₕ)` is `points(Ωₕ)`, so the space
+and its mesh agree on where the degrees of freedom sit.
+
+## Discrete functions
+
+[`Rₕ`](@ref) restricts a function to the grid: it evaluates it at every point and returns a
+[`VectorElement`](@ref), the discrete function.
 
 ```@example space
-x, y = points(Wₕ);
-length(x), length(y)
-```
+uₕ = Rₕ(Wₕ, x -> sin(π * x))
 
-`ndofs` counts the grid points; with `Tuple` it gives the grid's shape.
-
-Each degree of freedom carries a quadrature weight, the cell measure around its point.
-`weights(Wₕ)` returns the whole `SpaceWeights` bundle, and a weight vector comes from naming
-the inner product it belongs to. `Bramble.Innerh` and `Bramble.Innerplus` are public but not
-exported, hence the prefix:
-
-```@example space
-w = weights(Wₕ, Bramble.Innerh())
-
-length(w), sum(w)      # one weight per point; they tile the unit square
-```
-
----
-
-## 2. Composite spaces
-
-A `CompositeGridSpace` stacks copies of a space for a vector field or a coupled system:
-
-```@example space
-Vₕ = Wₕ^Val(2)
-
-ncomponents(Vₕ), ndofs(Vₕ)
-```
-
-`Wₕ^Val(N)` is the spelling used throughout this manual: it is type stable whatever `N` is,
-while `Wₕ^2` relies on the literal being constant-folded and only reaches `N ≤ 3`.
-[`vector_gridspace`](@ref)`(Ωₕ, 2)` builds the same space straight from a mesh, and
-`CompositeGridSpace((Wₕ, Wₕ))` builds one from spaces that need not be identical.
-
-```@example space
-ndofs(Vₕ, Tuple), spaces(Vₕ) == (Wₕ, Wₕ)
-```
-
-`ndofs(Vₕ, Tuple)` is one entry per component, not a grid shape. `weights` is not defined
-for a composite space at all, since its leaves may live on different meshes: call it on a
-[`components`](@ref) leaf instead.
-
----
-
-## 3. Vector elements
-
-[`element`](@ref) allocates a field, optionally filled with a constant:
-
-```@example space
-uₕ = element(Wₕ)         # uninitialized
-u_zero = element(Wₕ, 0.0)
-
-length(u_zero), u_zero[1]
+length(uₕ), uₕ[6]
 ```
 
 `VectorElement <: AbstractVector`, so indexing, `length` and broadcasting work as usual, and
 broadcasting keeps the parent space:
 
 ```@example space
-vₕ = element(Wₕ, 2.0)
-wₕ = 3.0 .* u_zero .+ vₕ
+wₕ = 3.0 .* uₕ .+ element(Wₕ, 2.0)
 
-space(wₕ) === Wₕ, wₕ[1]
+space(wₕ) === Wₕ, wₕ[6]
 ```
+
+[`element`](@ref) allocates a field, optionally filled with a constant. [`Rₕ!`](@ref)
+writes into an element that already exists, which is what a time loop wants.
+
+## Inner products and norms
+
+Each degree of freedom carries a quadrature weight, the cell measure around its point.
+`innerₕ` weights each point by it, and `normₕ` is the norm it induces:
+
+```math
+(u_h, v_h)_h = \sum_i |\square_i| \, u_h(x_i) v_h(x_i), \qquad
+\|u_h\|_h = \sqrt{(u_h, u_h)_h}.
+```
+
+```@example space
+vₕ = Rₕ(Wₕ, x -> cos(π * x))
+
+innerₕ(uₕ, vₕ), normₕ(uₕ), normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)
+```
+
+The norm of $\sin(\pi x)$ on $[0, 1]$ is $1/\sqrt{2} \approx 0.707$, which `normₕ` reproduces here. The discrete Sobolev norms are built on the backward gradient
+$\nabla_{-h}$:
+
+```math
+|u_h|_{1,h}^2 = \sum_{d=1}^D \|D_{-x_d} u_h\|_h^2, \qquad
+\|u_h\|_{1,h}^2 = \|u_h\|_h^2 + |u_h|_{1,h}^2.
+```
+
+```@example space
+snorm₁ₕ(uₕ), norm₁ₕ(uₕ), norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2
+```
+
+!!! tip "Try this"
+    Build the mesh as `mesh(Ω, 11, false)`, a non-uniform one with the same number of
+    points, and rerun the blocks above. `ndofs` is unchanged, but the weights are no longer
+    all equal, so `normₕ` and `innerₕ` change while still tiling the interval. The
+    [mesh tutorial](mesh.md) builds such meshes on purpose.
+
+## [Composite spaces and vector elements](@id space_composite)
+
+A **composite space** stacks copies of a space for a vector field or a coupled system. Its
+elements are `VectorElement`s too: one flat vector holding every component, one after
+another. `Wₕ^Val(N)` stacks `N` copies:
+
+```@example space
+Vₕ = Wₕ^Val(2)
+
+ncomponents(Vₕ), ndofs(Vₕ), ndofs(Vₕ, Tuple)
+```
+
+`ndofs(Vₕ, Tuple)` is one entry per component, not a grid shape. A **component** is one of
+the stacked fields, and calling a composite element with `i` returns the `i`-th component
+as a view:
+
+```@example space
+uvec = element(Vₕ)
+uₓ = uvec(1)
+uᵧ = uvec(2)
+
+uₓ .= 1.5
+uᵧ .= -2.0
+
+parent(uvec)[[1, 12]]
+```
+
+The component is a zero-copy view, so writing to it writes through to the parent. For a
+scalar space `uₕ(1)` is `uₕ` itself. [`components`](@ref) destructures the lot:
+
+```@example space
+c₁, c₂ = components(uvec)
+
+c₁ === uₓ, c₂ === uᵧ
+```
+
+On a composite space `Rₕ!` takes a tuple of scalar functions, or one function returning a
+tuple, and `innerₕ` sums over components:
+
+```@example space
+Rₕ!(uvec, (x -> sin(π * x), x -> cos(π * x)))
+
+normₕ(uvec)^2 ≈ normₕ(uvec(1))^2 + normₕ(uvec(2))^2
+```
+
+!!! tip "Try this"
+    Replace `Val(2)` with `Val(3)` and add a third function to the tuple. `ncomponents` and
+    `ndofs` follow, and every other line of this section stays the same.
+
+## Reference
+
+### Constructors
+
+`Wₕ^Val(N)` is type stable whatever `N` is, while `Wₕ^2` relies on the literal being
+constant-folded and only reaches `N ≤ 3`. [`vector_gridspace`](@ref)`(Ωₕ, 2)` builds the same
+space straight from a mesh, and `CompositeGridSpace((Wₕ, Wₕ))` builds one from spaces that
+need not be identical:
+
+```@example space
+spaces(Vₕ) == (Wₕ, Wₕ)
+```
+
+### Weights
+
+`weights(Wₕ)` returns the whole `SpaceWeights` bundle, and a weight vector comes from naming
+the inner product it belongs to. `Bramble.Innerh` and `Bramble.Innerplus` are public but not
+exported, hence the prefix. `weights` is not defined for a composite space, since its leaves
+may live on different meshes: call it on a [`components`](@ref) leaf instead.
+
+```@example space
+w = weights(Wₕ, Bramble.Innerh())
+
+length(w), sum(w)      # one weight per point; they tile the unit interval
+```
+
+### Component ranges
+
+[`component_range`](@ref) and `component_ranges` give the degrees of freedom each component
+owns:
+
+```@example space
+component_range(Vₕ, 1), component_ranges(Vₕ)
+```
+
+### Functions as factors
 
 A plain `Function` is not a grid function, so multiplying by one restricts it first
 (`Rₕ(space(uₕ), f)`) and scales pointwise. This is what lets a spatial condition multiply a
@@ -106,46 +191,15 @@ below_half = (x -> x[1] < 0.5) * oneₕ
 sum(below_half)
 ```
 
----
+### Grid layout
 
-## 4. Components
-
-Calling an element returns the `i`-th component as a view:
-
-```@example space
-uvec = element(Vₕ)
-uₓ = uvec(1)
-uᵧ = uvec(2)
-
-uₓ .= 1.5
-uᵧ .= -2.0
-
-parent(uvec)[[1, 26]]
-```
-
-The component is a zero-copy view, so writing to it writes through to the parent. For a
-scalar space `uₕ(1)` is `uₕ` itself. [`component_range`](@ref) and `component_ranges` give
-the degrees of freedom each component owns, and [`components`](@ref) destructures the lot:
+Degrees of freedom are stored flat, but on a two-dimensional space a scalar element also
+indexes by grid coordinate, with a `CartesianIndex`, without reshaping:
 
 ```@example space
-component_range(Vₕ, 1), component_ranges(Vₕ)
-```
-
-```@example space
-c₁, c₂ = components(uvec)
-
-c₁ === uₓ, c₂ === uᵧ
-```
-
----
-
-## 5. Grid layout
-
-Degrees of freedom are stored flat, but a scalar element also indexes by grid coordinate,
-with a `CartesianIndex`, without reshaping:
-
-```@example space
-u_scal = element(Wₕ, 0.0)
+W₂ = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (5, 5), (true, true)))
+V₂ = W₂^Val(2)
+u_scal = element(W₂, 0.0)
 u_scal[CartesianIndex(2, 3)] = 10.0
 u_scal[CartesianIndex(4, 1)] = 20.0
 
@@ -160,7 +214,7 @@ returns one view per component:
 u_grid = reshape(u_scal)
 u_grid[2, 3] = -1.0
 
-size(u_grid), u_scal[CartesianIndex(2, 3)], size.(reshape(uvec))
+size(u_grid), u_scal[CartesianIndex(2, 3)], size.(reshape(element(V₂)))
 ```
 ```@raw html
 <figure>
@@ -241,9 +295,7 @@ size(u_grid), u_scal[CartesianIndex(2, 3)], size.(reshape(uvec))
 </figure>
 ```
 
----
-
-## 6. Restriction and cell averaging
+### Restriction and cell averaging
 
 Two ways to turn a continuous function into a grid function. Nodal restriction $R_h$
 evaluates it at the grid points; cell averaging $\mathrm{avg}_h$ integrates it over the cell
@@ -330,33 +382,12 @@ around each point and divides by the cell measure:
 </figure>
 ```
 
-[`Rₕ`](@ref) allocates, [`Rₕ!`](@ref) writes into an element that already exists, which is
-what a time loop wants:
-
-```@example space
-f(x) = sin(2π * x[1]) * cos(2π * x[2])
-
-u_proj = Rₕ(Wₕ, f)
-Rₕ!(u_proj, f)
-
-u_proj[1]
-```
-
-On a composite space both take a tuple of scalar functions, or one function returning a
-tuple:
-
-```@example space
-Rₕ!(uvec, (x -> x[1], x -> 2 * x[2]))
-Rₕ!(uvec, x -> (sin(x[1]), cos(x[2])))
-
-uvec(1)[1], uvec(2)[1]
-```
-
-[`avgₕ`](@ref) and [`avgₕ!`](@ref) mirror them, using a tensor-product Gauss-Legendre rule
+[`Rₕ`](@ref) allocates and [`Rₕ!`](@ref) writes in place. [`avgₕ`](@ref) and
+[`avgₕ!`](@ref) mirror them, using a tensor-product Gauss-Legendre rule
 (`AVG_QUAD_POINTS = 6`, exact through degree eleven):
 
 ```@example space
-u_avg = avgₕ(Wₕ, x -> exp(-x[1] - x[2]))
+u_avg = avgₕ(W₂, x -> exp(-x[1] - x[2]))
 avgₕ!(u_avg, x -> exp(-x[1] - x[2]))
 
 u_avg[1]
@@ -365,55 +396,15 @@ u_avg[1]
 The difference matters for a source term: `Rₕ` of a rough function inherits its roughness,
 while `avgₕ` integrates it away.
 
----
+### Staggered inner product
 
-## 7. Inner products and norms
-
-`innerₕ` weights each point by its cell measure, and `normₕ` is the norm it induces:
-
-```math
-(u_h, v_h)_h = \sum_i |\square_i| \, u_h(x_i) v_h(x_i), \qquad
-\|u_h\|_h = \sqrt{(u_h, u_h)_h}.
-```
+`inner₊` is the staggered counterpart of `innerₕ`: it weights by the half-spacings, the
+interface quantities a difference or a gradient lands on, and a trailing `:x`/`:y`/`:z` (or
+`1`/`2`/`3`) argument picks a single direction. That pairing is what makes summation by parts
+exact; the [operators tutorial](operators.md) derives it.
 
 ```@example space
-Ω₁ = domain(interval(0.0, 1.0))
-W₁ = gridspace(mesh(Ω₁, 100, true))
-s = Rₕ(W₁, sin)
-c = Rₕ(W₁, cos)
+D = ∇ₕ(uₕ)
 
-innerₕ(s, c), normₕ(s), normₕ(s)^2 ≈ innerₕ(s, s)
+inner₊(D, D, :x) ≈ snorm₁ₕ(uₕ)^2
 ```
-
-The discrete Sobolev norms are built on the backward gradient $\nabla_{-h}$:
-
-```math
-|u_h|_{1,h}^2 = \sum_{d=1}^D \|D_{-x_d} u_h\|_h^2, \qquad
-\|u_h\|_{1,h}^2 = \|u_h\|_h^2 + |u_h|_{1,h}^2.
-```
-
-```@example space
-snorm₁ₕ(s), norm₁ₕ(s), norm₁ₕ(s)^2 ≈ normₕ(s)^2 + snorm₁ₕ(s)^2
-```
-
-On a composite space `innerₕ` sums over components:
-
-```@example space
-V₁ = W₁^Val(2)
-u_vec = Rₕ(V₁, (x -> sin(x[1]), x -> cos(x[1])))
-
-normₕ(u_vec)^2 ≈ normₕ(u_vec(1))^2 + normₕ(u_vec(2))^2
-```
-
-`inner₊` is the staggered counterpart: it weights by the half-spacings, the interface
-quantities a difference or a gradient lands on, and a trailing `:x`/`:y`/`:z` (or `1`/`2`/`3`)
-argument picks a single direction. That pairing is what makes summation by parts exact; the
-[operators tutorial](operators.md) derives it.
-
-```@example space
-D = ∇ₕ(s)
-
-inner₊(D, D, :x) ≈ snorm₁ₕ(s)^2
-```
-
-Next: [difference operators](operators.md), which act on the elements built here.
