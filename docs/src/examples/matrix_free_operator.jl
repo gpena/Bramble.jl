@@ -235,7 +235,7 @@ function route_ratios(table, column; against, of = "kronecker")
     if r["route"] == route && r["dim"] == dim && r["n"] == n)
     sizes = sort!(unique((r["dim"], r["n"]) for r in rows))
     return [(; dim, n, (Symbol(route) => value(of, dim, n) / value(route, dim, n)
-        for route in against)...) for (dim, n) in sizes]
+            for route in against)...) for (dim, n) in sizes]
 end
 
 # The comparisons below use the ratios as computed, and only the display rounds them:
