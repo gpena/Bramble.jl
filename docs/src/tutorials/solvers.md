@@ -32,15 +32,30 @@ freshly for this page.
 
 ### Execution policies
 
-Measured on an Apple M2, AC power, `--threads=4`, three runs each, as the smallest grid size
-where the parallel arm beat serial twice running (commit `4b76d62b`, closing
-[gpena/Bramble.jl#190](https://github.com/gpena/Bramble.jl/issues/190)):
+An execution policy decides how many CPU threads the grid operations and the assembly use.
+The three below give the same answer; only the speed differs, and which one is fastest depends on the size of the problem.
 
-| Policy | Crossover vs. `CpuSerial` | Recommended for | Avoid when |
-|---|---|---|---|
-| [`CpuSerial`](@ref) / `Serial()` (default) | -- | Anything below the crossovers to the right; the safe default, no threading overhead. | Never wrong as a default -- only ever worth leaving once a workload is provably above a measured crossover. |
-| [`CpuThreaded`](@ref) / `Parallel()` (`Base.Threads.@threads`, unconditional) | `Rₕ!` unmasked: 64-96 pts/axis. `Rₕ!` masked: 256. `avgₕ!` (`nq = 3`): 24-32. `innerₕ`/`_dot`: 100,000-300,000 elements. | Grids at or above these sizes, when Polyester isn't an option. | Below its own crossover, where `CpuSerial` still wins -- `innerₕ`/`_dot`'s crossover here falls one to two orders of magnitude above [`CpuPolyester`](@ref)'s ([gpena/Bramble.jl#301](https://github.com/gpena/Bramble.jl/issues/301)). |
-| [`CpuPolyester`](@ref) (Polyester `@batch`, requires `using Polyester`) | `Rₕ!` unmasked: 8-24. `Rₕ!` masked: 16. `avgₕ!` (`nq = 3`): 8. `innerₕ`/`_dot`: 1,000 elements. | Beats `CpuThreaded` at every crossover measured, by 4x-16x in grid size -- the default choice once Polyester is loaded. | Below its own crossover, where `CpuSerial` still wins; requires the `BramblePolyesterExt` extension (`using Polyester`) loaded, or the call errors naming the package. |
+| Policy | Recommended for | Avoid when |
+|---|---|---|
+| [`CpuSerial`](@ref) / `Serial()` (default) | Small problems and operations repeated many times, such as a step inside a time loop. It is the safe default and has no threading overhead. | Never wrong as a default. It is only worth leaving once a workload is clearly above a measured crossover. |
+| [`CpuThreaded`](@ref) / `Parallel()` (`Base.Threads.@threads`, unconditional) | Large grids, when Polyester is not available. | Small grids, where `CpuSerial` still wins. Its crossover for `innerₕ`/`_dot` sits one to two orders of magnitude above [`CpuPolyester`](@ref)'s ([gpena/Bramble.jl#301](https://github.com/gpena/Bramble.jl/issues/301)). |
+| [`CpuPolyester`](@ref) (Polyester `@batch`, requires `using Polyester`) | The default choice once Polyester is loaded: it beats `CpuThreaded` at every crossover measured. | Small grids, where `CpuSerial` still wins. It needs the `BramblePolyesterExt` extension (`using Polyester`), or the call errors naming the package. |
+
+The **crossover** is the smallest problem size at which a parallel policy beats `CpuSerial`
+twice running. Below it, threads cost more to start than they save. Because it
+depends on both the operation and the machine, no single size fits every case. One table,
+[Measured crossovers](backend.md#Measured-crossovers), gives the figure for each operation,
+taken on an Apple M2 with four threads on AC power. To measure your own, run this from a
+checkout of the repository. `N` is the thread count you plan to use:
+
+```bash
+julia --threads=N --project=benchmark benchmark/policy_crossover.jl
+```
+
+The script prints one `CROSSOVER |` line per operation and dimension, in total degrees of
+freedom per dimension. The published table is different: it counts points per axis on a 2D
+grid, from `benchmark/polyester_crossover.jl`. See
+[Measuring your own crossovers](backend.md#Measuring-your-own-crossovers) for the details.
 
 ### Direct and iterative solvers
 
@@ -59,60 +74,108 @@ than leaving the row blank.
 
 ## Decision tree
 
-Backend and solver first, as a function of what the problem itself looks like:
+Choose a backend and a solver first, from what the problem itself looks like. Each leaf of
+the diagram is explained in the table below it.
 
 ```@raw html
-<pre class="mermaid">
+<pre class="mermaid" data-src="">
 flowchart TD
-    Start["Characterize the problem"] --> Q1{"Is the bilinear form separable?<br/>tensor-product mesh, only innerₕ/∇ₕ terms"}
-    Q1 -->|"Yes"| L1["Backend: KroneckerLinearOperator (kronecker_operator)<br/>Solver: KrylovJL_CG, matrix-free mul!<br/>O(n) storage per axis instead of O(n^D)"]
-    Q1 -->|"No"| Q2{"Symmetric positive definite?"}
-    Q2 -->|"Yes"| Q3{"Solved once, or repeatedly<br/>with a fixed sparsity pattern?"}
-    Q3 -->|"Once or a few solves"| L2["Backend: SparseMatrixCSC<br/>Solver: sparse_factorize, sym = spd<br/>SuiteSparse CHOLMOD"]
-    Q3 -->|"Repeated, fixed pattern<br/>e.g. implicit time stepping"| L3["Backend: SparseMatrixCSC<br/>Solver: factorize once, then refactor! each step"]
-    Q3 -->|"Memory bound: 3D,<br/>hundreds of thousands of DOF"| L4["Backend: SparseMatrixCSC<br/>Solver: KrylovJL_CG plus amg_preconditioner<br/>O(1) iterations instead of O(h^-1)"]
-    Q2 -->|"No, unsymmetric"| Q4{"Convection dominated?"}
-    Q4 -->|"Yes"| L5["Backend: SparseMatrixCSC<br/>Solver: KrylovJL_GMRES plus ilu_preconditioner<br/>not amg_preconditioner, see issue 244"]
-    Q4 -->|"No"| L6["Backend: SparseMatrixCSC<br/>Solver: sparse_factorize, sym = unsymmetric<br/>SuiteSparse UMFPACK"]
+    Start(["What does the problem look like?"]) --> Sep{{"Is the form separable?"}}
+    Sep -->|"Yes"| Kron(["Kronecker operator with CG"])
+    Sep -->|"No"| Spd{{"Is it symmetric positive definite?"}}
+    Spd -->|"Yes"| How{{"How many solves are needed?"}}
+    How -->|"One, or a few"| Chol(["Cholesky factorization"])
+    How -->|"Many, same pattern"| Refac(["Factorize once, refactor each step"])
+    How -->|"Too large to factorize"| Amg(["CG with an AMG preconditioner"])
+    Spd -->|"No"| Conv{{"Is convection dominant?"}}
+    Conv -->|"Yes"| Ilu(["GMRES with an ILU preconditioner"])
+    Conv -->|"No"| Lu(["LU factorization"])
 </pre>
-<pre class="mermaid">
+```
+
+| Leaf | Backend and solver | Why |
+|---|---|---|
+| Kronecker operator with CG | [`KroneckerLinearOperator`](@ref) from [`kronecker_operator`](@ref), solved with `KrylovJL_CG` using matrix-free `mul!`. | A separable form (tensor-product mesh, only `innerₕ`/`∇ₕ` terms) needs `O(n)` storage per axis instead of `O(n^D)`. |
+| Cholesky factorization | `SparseMatrixCSC` with `sparse_factorize` and `sym = spd`, which uses SuiteSparse CHOLMOD. | Exact to round-off, with no tolerance to pick. |
+| Factorize once, refactor each step | `SparseMatrixCSC`: factorize once, then call `refactor!` at each step. | The sparsity pattern is fixed, for example in implicit time stepping, so the symbolic analysis is reused. |
+| CG with an AMG preconditioner | `SparseMatrixCSC` with `KrylovJL_CG` and [`amg_preconditioner`](@ref). | In 3D with hundreds of thousands of degrees of freedom, memory is the limit. AMG needs `O(1)` iterations instead of `O(h^-1)`. |
+| GMRES with an ILU preconditioner | `SparseMatrixCSC` with `KrylovJL_GMRES` and [`ilu_preconditioner`](@ref). | Do not use `amg_preconditioner` here: it did not converge on convection-dominated systems (see the solver table above). |
+| LU factorization | `SparseMatrixCSC` with `sparse_factorize` and `sym = unsymmetric`, which uses SuiteSparse UMFPACK. | The general direct solver for unsymmetric systems. |
+
+The second tree picks an execution policy. Its first question uses the
+[crossover defined above](#Execution-policies), and the sizes that answer it are in
+[Measured crossovers](backend.md#Measured-crossovers).
+
+```@raw html
+<pre class="mermaid" data-src="">
 flowchart TD
-    G["Grid size for this workload, points per axis or elements"] --> H{"Below the CpuPolyester crossover?<br/>8 to 24 unmasked Rₕ!, 16 masked,<br/>8 avgₕ!, 1000 elements innerₕ or _dot"}
-    H -->|"Yes"| H1["CpuSerial (default)"]
-    H -->|"No"| I{"Is Polyester.jl loaded?<br/>using Polyester"}
-    I -->|"Yes"| I1["CpuPolyester<br/>beats CpuThreaded at every<br/>measured crossover, 4x to 16x smaller grid"]
-    I -->|"No"| J{"Above the CpuThreaded crossover?<br/>64 to 96 unmasked Rₕ!, 256 masked,<br/>24 to 32 avgₕ!"}
-    J -->|"Yes"| J1["CpuThreaded<br/>innerₕ and _dot crossover:<br/>100,000-300,000 elements"]
-    J -->|"No"| H1
+    Grid(["Which policy for this operation?"]) --> Small{{"Is the grid small for this operation?"}}
+    Small -->|"Yes"| Serial(["CpuSerial"])
+    Small -->|"No"| Poly{{"Is Polyester loaded?"}}
+    Poly -->|"Yes"| Polyester(["CpuPolyester"])
+    Poly -->|"No"| Above{{"Is it above the CpuThreaded crossover?"}}
+    Above -->|"Yes"| Threaded(["CpuThreaded"])
+    Above -->|"No"| Serial
 </pre>
-<script>
-(function () {
-    // Documenter's own page runs a RequireJS/AMD loader (for highlight.js, KaTeX, ...),
-    // whose global `define`/`require` hijack mermaid's UMD bundle into loading as an AMD
-    // module instead of a plain global -- the failure mode is a silent-looking
-    // "Se.default.extend is not a function" deep inside mermaid's own dependency chain,
-    // with every `.mermaid` block left as unrendered text. Hiding `define`/`require` while
-    // the script loads, the standard workaround for embedding a UMD library on a page that
-    // already runs RequireJS, is what makes this the global (non-module) `mermaid.min.js`
-    // build resolves against `window.mermaid`, not the ESM build.
-    var savedDefine = window.define, savedRequire = window.require;
-    window.define = undefined;
-    window.require = undefined;
-    var s = document.createElement("script");
-    s.src = "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js";
-    s.onload = function () {
-        window.define = savedDefine;
-        window.require = savedRequire;
-        window.mermaid.initialize({ startOnLoad: false, theme: "neutral" });
-        window.mermaid.run({ querySelector: "pre.mermaid" });
-    };
-    document.currentScript.parentNode.appendChild(s);
-})();
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+const root = document.documentElement;
+const blocks = [...document.querySelectorAll("pre.mermaid")];
+blocks.forEach((el) => { el.dataset.src = el.textContent; el.style.maxWidth = "46rem"; });
+
+function token(name) {
+  return getComputedStyle(root).getPropertyValue(name).trim();
+}
+
+async function draw() {
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: "base",
+    fontFamily: getComputedStyle(document.body).fontFamily,
+    themeVariables: {
+      primaryColor: token("--md-sys-color-primary-container"),
+      primaryTextColor: token("--md-sys-color-on-primary-container"),
+      primaryBorderColor: token("--md-sys-color-outline"),
+      secondaryColor: token("--md-sys-color-surface-variant"),
+      tertiaryColor: token("--md-sys-color-surface-variant"),
+      lineColor: token("--md-sys-color-outline"),
+      textColor: token("--md-sys-color-on-surface"),
+      edgeLabelBackground: token("--md-sys-color-surface"),
+      background: token("--md-sys-color-surface"),
+      nodeBorder: token("--md-sys-color-outline"),
+      fontSize: "15px",
+    },
+    flowchart: { curve: "basis", useMaxWidth: true, nodeSpacing: 28, rankSpacing: 36, padding: 10 },
+  });
+  for (const el of blocks) {
+    el.removeAttribute("data-processed");
+    el.textContent = el.dataset.src;
+  }
+  await mermaid.run({ nodes: blocks });
+  // Rounded leaves take the surface-variant colour; hexagon decisions keep the primary container.
+  for (const el of blocks) {
+    el.querySelectorAll("g.node rect").forEach((r) => {
+      r.style.fill = token("--md-sys-color-surface-variant");
+    });
+  }
+}
+
+await draw();
+new MutationObserver(() => requestAnimationFrame(draw)).observe(root, {
+  attributes: true,
+  attributeFilter: ["data-theme"],
+});
 </script>
 ```
 
-The two trees compose: pick a (backend, solver) leaf from the first tree, then an execution
-policy from the second -- the policy governs how the grid operations and assembly *feeding*
+| Leaf | When it applies |
+|---|---|
+| `CpuSerial` | The grid is below the crossover for the operation. It is also the answer when Polyester is missing and the grid is below `CpuThreaded`'s higher crossover. |
+| `CpuPolyester` | The grid is above the crossover and `using Polyester` has been run. It crosses over earlier than `CpuThreaded` for every operation measured. |
+| `CpuThreaded` | Polyester is not loaded and the grid is above `CpuThreaded`'s own crossover. |
+
+The two trees compose: pick a backend and solver from the first tree, then an execution
+policy from the second. The policy governs how the grid operations and assembly *feeding*
 that solve are threaded, not which solver is chosen. The macOS Apple Accelerate dispatch is a
 further, orthogonal narrowing of the direct-solve leaves above; it is covered on its own below
 since it only ever applies automatically to `:default` and only on one platform.
