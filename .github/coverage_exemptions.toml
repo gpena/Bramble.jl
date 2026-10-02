@@ -369,3 +369,23 @@ reason = "uncounted: Julia's line table has no counter for the header line of an
 path = "src/operators/projection.jl"
 methods = ["_in_any_marker(::Tuple{}, i) = false"]
 reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; it ends the marker recursion of every host masked projection at an entry outside all markers (test/space/vector_elements.jl, Rₕ! with markers)"
+
+[[exempt_function]]
+path = "src/solvers/accelerate_solver.jl"
+methods = [
+    "_accelerate_factorize(::Any",
+    "_accelerate_solve(::Any, ::Any",
+    "_accelerate_refactor!(::Any, ::Any",
+]
+lines = [
+    { method = "accelerate_factorize(A::SparseMatrixCSC; kwargs...)", text = "return _accelerate_factorize(A; kwargs...)" },
+    { method = "accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; kwargs...)", text = "return _accelerate_solve(A, F; kwargs...)" },
+    { method = "accelerate_factorize(a::BilinearForm", text = "A = assemble(" },
+    { method = "accelerate_factorize(a::BilinearForm", text = "return _accelerate_factorize(A; sym = sym, kind = kind, kwargs...)" },
+    { method = "accelerate_solve(a::BilinearForm", text = "A, F = assemble(" },
+    { method = "accelerate_solve(a::BilinearForm", text = "sym_effective = (sym === :auto && symmetrize) ? :spd : sym" },
+    { method = "accelerate_solve(a::BilinearForm", text = "u = _accelerate_solve(A, F; sym = sym_effective, kind = kind, kwargs...)" },
+    { method = "accelerate_solve(a::BilinearForm", text = "return element(trial_space(a), u)" },
+    { method = "accelerate_refactor!(fact::AccelerateFactorization, A::SparseMatrixCSC)", text = "return _accelerate_refactor!(fact, A)" },
+]
+reason = "os-specific: runs only on macOS (after the Sys.isapple() guard, or when BrambleAppleAccelerateExt is absent on macOS); no coverage leg runs macOS with it"
