@@ -2,6 +2,7 @@
 
 using BenchmarkTools
 using Dates
+using TOML
 
 include(joinpath(@__DIR__, "plotly_common.jl"))
 
@@ -540,8 +541,333 @@ function _comparison_sections(runs, ordered_groups)
     return filter(!isnothing, sections)
 end
 
-# `results_dir` is where the standalone scripts' saved tables live; the release view reads
-# baselines only and takes it for the sections that read those tables.
+# ---- Standalone results ---------------------------------------------------------------
+# The standalone scripts save their tables to `benchmark/results/<script>.toml`
+# (`benchmark/results_io.jl`): a `[meta]` table of the run and `[[tables.<name>]]` arrays of
+# rows. Every figure on the page is read from those files; none is typed here. A row omits a
+# field whose value was missing (TOML has no null), so the readers below take `get`.
+
+# Lines with markers of `series = [(name, xs, ys, hover, color, dash)]` on log axes. The
+# `data-bench` and `data-run` attributes are read by the checks in
+# `.claude/plans/v3-21-0-benchmarks-page-checks/`.
+function _render_xy_chart(kind, meta, series, xtitle, ytitle; height = 420)
+    div_id = _next_bench_div_id()
+    traces = String[]
+    arr(v) = "[" * join((_js_num(x) for x in v), ",") * "]"
+    for (name, xs, ys, hover, color, dash) in series
+        hov = "[" * join((_js_str(h) for h in hover), ",") * "]"
+        push!(
+            traces,
+            "{ type: 'scatter', mode: 'lines+markers', name: $(_js_str(name)), x: $(arr(xs)), y: $(arr(ys)), line: { color: '$color', dash: '$dash' }, marker: { color: '$color', size: 6 }, hovertext: $hov, hoverinfo: 'text' }"
+        )
+    end
+    return """
+    <div id="$div_id" data-bench="$kind" data-run="$(meta["commit"])" style="width:100%; height:$(height)px;"></div>
+    <script>
+    (function () {
+      const theme = window.bramblePlotlyTheme();
+      const data = [$(join(traces, ",\n"))];
+      const layout = {
+        paper_bgcolor: theme.bg,
+        plot_bgcolor: theme.bg,
+        font: { color: theme.text },
+        legend: { orientation: 'h', y: -0.25 },
+        xaxis: {
+          title: { text: $(_js_str(xtitle)), font: { color: theme.text } },
+          type: 'log', color: theme.text, gridcolor: theme.grid,
+        },
+        yaxis: {
+          title: { text: $(_js_str(ytitle)), font: { color: theme.text } },
+          type: 'log', color: theme.text, gridcolor: theme.grid,
+        },
+        margin: { t: 20, l: 70, r: 20, b: 110 },
+      };
+      Plotly.newPlot('$div_id', data, layout, { displayModeBar: false, responsive: true });
+      window.brambleRegisterPlotlyChart('$div_id', function () {
+        const t = window.bramblePlotlyTheme();
+        return {
+          'font.color': t.text,
+          'xaxis.color': t.text, 'xaxis.gridcolor': t.grid, 'xaxis.title.font.color': t.text,
+          'yaxis.color': t.text, 'yaxis.gridcolor': t.grid, 'yaxis.title.font.color': t.text,
+        };
+      });
+    })();
+    </script>
+    """
+end
+
+# What a run states about itself, from its `[meta]`. `load1` is read when the run ends, so it
+# includes the run itself; the scripts refuse to start unless the machine is quiet.
+function _run_statement(meta)
+    power = meta["power"] == "ac" ? "AC" : string(meta["power"])
+    return "Run on $(meta["cpu"]) with $(_threads_phrase(string(meta["threads"]))), power: $power, commit `$(meta["commit"])`, Julia $(meta["julia"]), $(meta["date"]). The script waited for a quiet machine before starting; the load average at the end of the run, which includes the run itself, was $(meta["load1"])."
+end
+
+_standalone_fig(meta, caption, chart) = "$caption\n\n$(_run_statement(meta))\n\n$(_raw_chart(chart))"
+
+# The name and colour of a route in the `operator_routes` charts.
+const _ROUTE_STYLE = Dict(
+    "assembled" => ("assembled", "#3b82f6"),
+    "kronecker" => ("Kronecker", "#f59e0b"),
+    "matrix_free_serial" => ("matrix-free, serial", "#10b981"),
+    "matrix_free_threaded" => ("matrix-free, CpuThreaded()", "#ef4444"),
+    "fdm_solve" => ("fdm_solve (reference)", "#8b5cf6"),
+    "direct" => ("direct (reference)", "#9ca3af")
+)
+const _DIM_DASH = ["solid", "dash", "dot"]
+const _XYSeries = Tuple{String, Vector{Any}, Vector{Any}, Vector{String}, String, String}
+
+# One series per route and dimension of `rows`, `yfn(row)` against `ndofs`, sorted by
+# `ndofs`; `hoverfn(row)` is the text of a point.
+function _route_series(rows, routes, yfn, hoverfn)
+    series = _XYSeries[]
+    dims = sort(unique(r["dim"] for r in rows))
+    for route in routes
+        label, color = get(_ROUTE_STYLE, route, (route, _BENCH_PALETTE[1]))
+        for (i, d) in enumerate(dims)
+            pts = sort(
+                [r for r in rows if r["route"] == route && r["dim"] == d];
+                by = r -> r["ndofs"])
+            isempty(pts) && continue
+            push!(
+                series,
+                (
+                    "$label, $(d)D", Any[r["ndofs"] for r in pts], Any[yfn(r) for r in pts],
+                    [hoverfn(r) for r in pts], color, _DIM_DASH[mod1(i, 3)]
+                )
+            )
+        end
+    end
+    return series
+end
+
+function _route_hover(r, what)
+    "$(get(_ROUTE_STYLE, r["route"], (r["route"], ""))[1]), $(r["dim"])D, n = $(r["n"]) ($(r["ndofs"]) degrees of freedom): $what"
+end
+
+function _operator_routes_section(meta, tables)
+    parts = String[]
+    routes = ["assembled", "kronecker", "matrix_free_serial", "matrix_free_threaded"]
+    if haskey(tables, "construction")
+        rows = tables["construction"]
+        series = _route_series(
+            rows, routes, r -> r["time_s"] * 1.0e3,
+            r -> _route_hover(r, "$(_format_time(r["time_s"] * 1.0e9)), $(Base.format_bytes(r["bytes_alloc"])) allocated"))
+        chart = _render_xy_chart(
+            "standalone-operator_routes-construction", meta, series,
+            "degrees of freedom", "construction time (ms)")
+        push!(
+            parts,
+            "#### Construction\n\n" * _standalone_fig(
+                meta,
+                "Time to build the operator of the separable form `innerₕ(u,v) + inner₊(∇ₕu,∇ₕv)` on a non-uniform mesh, by route. Matrix-free construction takes microseconds or less because the operator's plan is built at construction and no matrix is formed; the assembled and Kronecker routes build their matrices here.",
+                chart))
+    end
+    if haskey(tables, "product")
+        rows = tables["product"]
+        series = _route_series(
+            rows, routes, r -> r["time_s"] * 1.0e3,
+            r -> _route_hover(r, "$(_format_time(r["time_s"] * 1.0e9)) per product, $(Base.format_bytes(r["bytes_held"])) held"))
+        chart = _render_xy_chart(
+            "standalone-operator_routes-product", meta, series,
+            "degrees of freedom", "time of one product (ms)")
+        bseries = _route_series(
+            rows, routes, r -> r["bytes_held"],
+            r -> _route_hover(r, "$(Base.format_bytes(r["bytes_held"])) held"))
+        bchart = _render_xy_chart(
+            "standalone-operator_routes-product-bytes", meta, bseries,
+            "degrees of freedom", "bytes held by the operator")
+        push!(
+            parts,
+            "#### Product\n\n" *
+            _standalone_fig(
+                meta,
+                "Time of one operator-vector product, then the bytes the operator holds. The assembled route's bytes count its matrix only, not the scatter cache the assembled form keeps for refilling it.",
+                chart) * "\n\n" * _raw_chart(bchart))
+    end
+    if haskey(tables, "solve")
+        rows = tables["solve"]
+        series = _route_series(
+            rows, [routes; "fdm_solve"; "direct"], r -> r["time_s"] * 1.0e3,
+            r -> _route_hover(r,
+                "$(_format_time(r["time_s"] * 1.0e9)), $(r["iterations"]) CG iterations, true relative residual $(round(r["rel_residual"]; sigdigits = 3))"))
+        chart = _render_xy_chart(
+            "standalone-operator_routes-solve", meta, series,
+            "degrees of freedom", "solve time (ms)")
+        cg = [r for r in rows if r["route"] in routes]
+        spread, residual = 0.0, cg[argmax([r["rel_residual"] for r in cg])]
+        for key in unique((r["dim"], r["n"]) for r in cg)
+            its = [r["iterations"] for r in cg if (r["dim"], r["n"]) == key]
+            spread = max(spread, (maximum(its) - minimum(its)) / minimum(its))
+        end
+        push!(
+            parts,
+            "#### Solve\n\n" * _standalone_fig(
+                meta,
+                "Time of the solve of the same problem by conjugate gradients on each route, with `fdm_solve` and the sparse direct solve as reference curves. The CG iteration counts agree across routes to within $(round(100 * spread; digits = 2))% at every size. CG stops when its recursively updated residual reaches the tolerance, which is not the true residual: the largest true relative residual among the CG rows is $(round(residual["rel_residual"]; sigdigits = 2)), at $(residual["dim"])D with n = $(residual["n"]).",
+                chart))
+    end
+    return join(parts, "\n\n")
+end
+
+function _matrix_free_spmv_section(meta, tables)
+    haskey(tables, "spmv") || return ""
+    rows = tables["spmv"]
+    dims = sort(unique(r["dim"] for r in rows))
+    pol_style = Dict(
+        "serial" => ("matrix-free, serial", "#10b981"),
+        "threaded" => ("matrix-free, CpuThreaded()", "#ef4444"))
+    tseries, mseries = _XYSeries[], _XYSeries[]
+    for (i, d) in enumerate(dims)
+        dash = _DIM_DASH[mod1(i, 3)]
+        for pol in ("serial", "threaded")
+            pts = sort(
+                [r for r in rows if r["dim"] == d && r["policy"] == pol]; by = r -> r["ndofs"])
+            isempty(pts) && continue
+            label, color = pol_style[pol]
+            xs = Any[r["ndofs"] for r in pts]
+            push!(
+                tseries,
+                (
+                    "$label, $(d)D", xs, Any[r["mf_s"] * 1.0e3 for r in pts],
+                    ["$label, $(d)D, $(r["ndofs"]) degrees of freedom: $(_format_time(r["mf_s"] * 1.0e9)), ×$(round(r["ratio"]; digits = 2)) the SpMV speed"
+                     for r in pts],
+                    color, dash
+                ))
+            push!(
+                mseries,
+                (
+                    "$label, $(d)D", xs, Any[r["mf_bytes"] for r in pts],
+                    ["$label, $(d)D, $(r["ndofs"]) degrees of freedom: $(Base.format_bytes(r["mf_bytes"])) held"
+                     for r in pts],
+                    color, dash
+                ))
+            pol == "serial" || continue
+            push!(
+                tseries,
+                (
+                    "SpMV, $(d)D", xs, Any[r["spmv_s"] * 1.0e3 for r in pts],
+                    ["SpMV, $(d)D, $(r["ndofs"]) degrees of freedom: $(_format_time(r["spmv_s"] * 1.0e9))" for r in pts],
+                    "#3b82f6", dash
+                ))
+            push!(
+                mseries,
+                (
+                    "assembled matrix, $(d)D", xs, Any[r["csr_bytes"] for r in pts],
+                    ["assembled matrix, $(d)D, $(r["ndofs"]) degrees of freedom: $(Base.format_bytes(r["csr_bytes"])) held"
+                     for r in pts],
+                    "#3b82f6", dash
+                ))
+        end
+    end
+    tchart = _render_xy_chart(
+        "standalone-matrix_free_spmv-time", meta, tseries,
+        "degrees of freedom", "time of one product (ms)")
+    mchart = _render_xy_chart(
+        "standalone-matrix_free_spmv-memory", meta, mseries,
+        "degrees of freedom", "bytes held")
+    cross = String[]
+    for r in get(tables, "crossover", [])
+        where_ = haskey(r, "from_ndofs") ?
+                 "from $(r["from_ndofs"]) degrees of freedom, where the assembled matrix holds $(round(r["memory_ratio"]; digits = 1)) times the bytes of the matrix-free operator" :
+                 "no size in the range"
+        push!(cross, "- $(r["dim"])D, $(r["policy"]): $where_")
+    end
+    note = isempty(cross) ? "" :
+           "\n\nThe smallest size from which matrix-free beats the SpMV at every larger size tested:\n\n" *
+           join(cross, "\n")
+    return "#### Time\n\n" *
+           _standalone_fig(
+               meta,
+               "One product `mul!(y, matrix_free_operator(a), x)` against one serial sparse matrix-vector product with the assembled matrix, on non-uniform meshes in 1D, 2D and 3D, by degrees of freedom.",
+               tchart) * "\n\n#### Memory\n\n" *
+           _standalone_fig(
+               meta,
+               "Bytes the assembled matrix holds against the bytes everything the matrix-free operator keeps alive holds, including the form it captures.$note",
+               mchart)
+end
+
+function _policy_crossover_section(meta, tables)
+    haskey(tables, "crossover") || return ""
+    rows = tables["crossover"]
+    labels = ["$(r["workload"]) $(r["dim"])D" for r in rows]
+    keys_ = [
+        ("threads", "CpuThreaded() beats serial"),
+        ("polyester", "CpuPolyester() beats serial"),
+        ("polyester_vs_threads", "CpuPolyester() beats CpuThreaded()")
+    ]
+    series = [(
+                  name, Any[get(r, k, nothing) for r in rows],
+                  [haskey(r, k) ? "$l: $name from $(r[k]) degrees of freedom" :
+                   "$l: no crossover in the sweep" for (r, l) in zip(rows, labels)]
+              ) for (k, name) in keys_ if any(haskey(r, k) for r in rows)]
+    chart = _render_comparison_chart(
+        "standalone-policy_crossover", (commit = meta["commit"],), labels, series,
+        "degrees of freedom of the crossover"; height = 520)
+    return _standalone_fig(
+        meta,
+        "The smallest size, in degrees of freedom, from which each host policy beats the one it is compared with, per workload and dimension, on a non-uniform mesh; a win counts only when the next larger size wins too. A missing bar means the sweep found no crossover, and the crossover depends on the thread count of the run.",
+        chart)
+end
+
+function _gpu_offload_section(meta, tables)
+    haskey(tables, "offload") || return ""
+    rows = tables["offload"]
+    labels = ["$(r["workload"]), $(r["grid"])" for r in rows]
+    series = [(
+        "threaded host time / offload time", Any[r["ratio"] for r in rows],
+        ["$l: $(_format_time(r["cpu_threaded_ms"] * 1.0e6)) threaded, $(_format_time(r["gpu_offload_ms"] * 1.0e6)) offloaded, ×$(round(r["ratio"]; digits = 2))"
+         for (r, l) in zip(rows, labels)]
+    )]
+    chart = _render_comparison_chart(
+        "standalone-gpu_offload", (commit = meta["commit"],), labels, series,
+        "threaded host time / offload time"; ref = 1, logy = false, height = 380)
+    return _standalone_fig(
+        meta,
+        "`CpuThreaded()` against `GpuOffload(metal_backend(), CpuThreaded())` on the same grid; a bar above the dotted line means the offload was faster. The host arm runs in `Float64` and the offload arm in `Float32`, which Metal requires.",
+        chart)
+end
+
+const _STANDALONE_SECTIONS = [
+    ("operator_routes", "Operator routes", _operator_routes_section),
+    ("matrix_free_spmv", "Matrix-free against SpMV", _matrix_free_spmv_section),
+    ("policy_crossover", "Execution-policy crossover", _policy_crossover_section),
+    ("gpu_offload", "Host against device offload", _gpu_offload_section)
+]
+
+# The text of the `## Standalone benchmarks` sections for the files of `results_dir`; a smoke
+# file or a file of a script the page does not draw is skipped with a note.
+function _standalone_sections(results_dir)
+    files = isdir(results_dir) ? sort(filter(endswith(".toml"), readdir(results_dir))) :
+            String[]
+    out = String[]
+    found = Dict{String, Any}()
+    for f in files
+        data = TOML.parsefile(joinpath(results_dir, f))
+        script = first(splitext(f))
+        meta = get(data, "meta", nothing)
+        if meta === nothing || !haskey(meta, "commit")
+            push!(out, "!!! note \"Skipped\"\n    `$f` has no `[meta]` table of a run, so it is skipped.")
+        elseif get(meta, "smoke", false)
+            push!(out,
+                "!!! note \"Skipped\"\n    `$f` is a smoke run, which checks a script's structure and measures nothing, so it is skipped.")
+        elseif !any(s -> s[1] == script, _STANDALONE_SECTIONS)
+            push!(out, "!!! note \"Skipped\"\n    `$f` is the result of a script this page does not draw, so it is skipped.")
+        else
+            found[script] = (meta, get(data, "tables", Dict{String, Any}()))
+        end
+    end
+    for (script, title, f) in _STANDALONE_SECTIONS
+        haskey(found, script) || continue
+        meta, tables = found[script]
+        body = f(meta, tables)
+        isempty(body) && continue
+        push!(out, "### $title (`$script.jl`)\n\n$body")
+    end
+    return out
+end
+
+# `results_dir` is where the standalone scripts' saved tables live.
 function generate_benchmarks_markdown(
         benchmark_dir = normpath(joinpath(@__DIR__, "..", "benchmark", "baselines")),
         output_path = normpath(joinpath(@__DIR__, "src", "benchmarks.md")),
@@ -710,6 +1036,18 @@ function generate_benchmarks_markdown(
         )
     end
     println(io)
+
+    println(io, "## Standalone benchmarks")
+    println(io)
+    println(
+        io,
+        "The scripts in `benchmark/` that compare alternatives outside the regression suite save their tables to `benchmark/results/<script>.toml` with `--save`; every chart below is drawn from those files, and a new full run replaces the file. Each states the machine, thread count, power and commit of its run."
+    )
+    println(io)
+    for section in _standalone_sections(results_dir)
+        println(io, section)
+        println(io)
+    end
 
     println(io, "## How to add new benchmark runs")
     println(io)
