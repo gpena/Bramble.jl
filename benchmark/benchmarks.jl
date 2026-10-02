@@ -598,11 +598,14 @@ end
 # both reduce to a `TrialEstimate`, whose `time`/`memory`/`allocs` are already scalar
 # fields on `Trial` itself (`memory`/`allocs` are never per-sample to begin with).
 #
-# `median`/`minimum`/`maximum` of a 3-element vector `[min, median, max]` return exactly
-# `min`, `median` and `max` back — sorting can't move the middle element, since a set's
-# median always sits between its own min and max — so replacing a trial's full sample
-# vectors with just those three values leaves every statistic these two scripts read
-# byte-identical, while cutting what gets serialized by two to three orders of magnitude.
+# `median`/`minimum`/`maximum` of a 5-element vector `[min, q1, median, q3, max]` return
+# exactly `min`, `median` and `max` back — the middle of five sorted values is the median
+# and the ends are the extremes, since a set's median always sits between its own min and
+# max — so replacing a trial's full sample vectors with those five values leaves every
+# statistic these two scripts read identical, while cutting what gets serialized by two to
+# three orders of magnitude. The quartiles (`Statistics.quantile`) are kept so a chart can
+# draw the spread of a benchmark, not only its centre. A trial with five samples or fewer
+# is saved as it is: its raw samples are the spread.
 # `gctimes` are reduced the same way, independently, since nothing downstream reads
 # `gctime` off a loaded baseline (only `time`/`memory`/`allocs`) — the correspondence
 # between a given `times` and `gctimes` entry does not need to survive the reduction.
@@ -611,15 +614,14 @@ end
 # `BenchmarkTools.Trial`, loadable with the same `BenchmarkTools.load` and readable by
 # every existing `median`/`minimum`/`judge` call already in this file and in
 # `docs/generate_benchmarks.jl`. Old baseline_*.json files (full samples) keep loading
-# unchanged; nothing needs a format-version check.
+# unchanged, as do old 3-value ones; nothing needs a format-version check.
+function _five_numbers(x)
+    return [minimum(x), quantile(x, 0.25), median(x), quantile(x, 0.75), maximum(x)]
+end
 function _reduce_for_save(t::BenchmarkTools.Trial)
-    length(t.times) <= 3 && return t
-    i_min = argmin(t.times)
-    i_max = argmax(t.times)
-    return BenchmarkTools.Trial(t.params,
-        [t.times[i_min], median(t.times), t.times[i_max]],
-        [t.gctimes[i_min], median(t.gctimes), t.gctimes[i_max]],
-        t.memory, t.allocs)
+    length(t.times) <= 5 && return t
+    return BenchmarkTools.Trial(t.params, _five_numbers(t.times),
+        _five_numbers(t.gctimes), t.memory, t.allocs)
 end
 _reduce_for_save(g::BenchmarkGroup) = BenchmarkTools.mapvals(_reduce_for_save, g)
 
@@ -693,7 +695,9 @@ function main(args = ARGS)
     append!(results.tags,
         ["julia:$(VERSION)", "pkgversion:$(pkgversion(Bramble))", "os:$(Sys.KERNEL)",
             "arch:$(Sys.ARCH)", "threads:$(Threads.nthreads())",
-            "power:$(ac ? "ac" : "battery")"])
+            "power:$(ac ? "ac" : "battery")",
+            "load:$(round(Sys.loadavg()[1]; digits = 2))",
+            "cpu:$(Sys.cpu_info()[1].model)"])
 
     println("\ntimings (median)")
     for (gname, group) in sort(collect(results), by = first)
