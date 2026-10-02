@@ -99,29 +99,29 @@ that is what should decide, not a guess.
 
 ### Measured crossovers
 
-Where `CpuThreaded` and [`CpuPolyester`](@ref) (§7 below) start beating `CpuSerial` was
-measured per workload, not assumed, on an Apple M2 host, `--threads=4`, on AC power
-(`benchmark/polyester_crossover.jl`, commit `4b76d62b`): the smallest grid size at which
-each policy beats `CpuSerial` twice running.
+A **crossover** is the smallest problem size at which a parallel policy beats `CpuSerial`
+twice running. Below it, starting threads costs more than the work saved. Each crossover
+below was measured per operation, not assumed, on an Apple M2, four threads (`--threads=4`),
+on AC power, from `benchmark/polyester_crossover.jl` (commit `4b76d62b`). The sizes are
+points per axis on a two-dimensional grid, or elements for the vector reductions.
 
-| Workload | `CpuThreaded` | `CpuPolyester` |
+| Operation | `CpuThreaded` | `CpuPolyester` |
 |---|---|---|
-| `Rₕ!` unmasked | 64-96 points/axis | 8-24 |
-| `Rₕ!` masked | 256 | 16 |
-| `avgₕ!` (nq=3) | 24-32 | 8 |
+| `Rₕ!` unmasked | 64-96 points per axis | 8-24 points per axis |
+| `Rₕ!` masked | 256 points per axis | 16 points per axis |
+| `avgₕ!` (nq=3) | 24-32 points per axis | 8 points per axis |
 | `innerₕ`/`_dot` | 100,000-300,000 elements | 1,000 elements |
 
 `_dot`/`_dot_masked(::CpuThreaded, ...)` (`src/utils/linear_algebra.jl`) are a real threaded
 reduction (static chunks, dependency-free; masked reductions walk set bits per word;
 `SeparableWeights` banded along the last axis), and their crossover against `CpuSerial` was
-measured the same way as the rows above: 100,000-300,000 elements across four runs (Apple M2,
-`--threads=4`, AC power, `benchmark/polyester_crossover.jl`) -- the exact crossing point moved
-within that range from one run to the next, the same jitter the other workloads show near their
-own crossing point.
+measured the same way as the rows above: 100,000-300,000 elements across four runs (commit
+`560e8394`) -- the exact crossing point moved within that range from one run to the next, the
+same jitter the other workloads show near their own crossing point.
 
 The crossover differs by an order of magnitude between workloads, so a figure measured
-for one does not transfer to another -- that is why four rows are published here rather
-than a single number. Where both policies have an entry, `CpuPolyester` beats `CpuThreaded`
+for one does not transfer to another. That is why the table has four rows rather than a
+single number. Where both policies have an entry, `CpuPolyester` beats `CpuThreaded`
 at every crossover measured, falling one to two orders of magnitude below it.
 
 These are one machine's numbers, taken under one power state, not a portable constant:
@@ -138,13 +138,13 @@ julia --threads=N --project=benchmark benchmark/policy_crossover.jl
 
 It sweeps every workload above (plus a few more) in 1D, 2D and 3D, and prints one
 `CROSSOVER | ...` line per workload/dimension pair giving the smallest size at which
-`CpuThreaded` and `CpuPolyester` start beating `CpuSerial`, followed by a summary
-recommendation table. It also prints one assemble+solve context row per dimension,
+`CpuThreaded` and `CpuPolyester` start beating `CpuSerial`. Those lines count total degrees
+of freedom per dimension, whereas the table above gives points per axis on a 2D grid, so
+the two are not directly comparable. A summary recommendation table follows. The script also prints one assemble+solve context row per dimension,
 showing what share of an end-to-end solve the sparse direct solve itself takes -- that
 share does not depend on the execution policy. Pass `--smoke` for a quick check with a
 handful of tiny sizes, or `--max-dofs N` to raise the default 1e6-DOF sweep cap; `--out
-file.md` writes the tables to a Markdown file. By default the run takes about ten
-minutes.
+file.md` writes the tables to a Markdown file.
 
 ### The policy hierarchy
 
