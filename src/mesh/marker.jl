@@ -9,10 +9,10 @@ corresponding `CartesianIndices` on the mesh boundary.
 
 # Returns
 
-A `NamedTuple` with boundary symbols as keys and `CartesianIndices` as values:
-  - 1D: `:xmin`, `:xmax`, `:left`, `:right`
-  - 2D: `:xmin`, `:xmax`, `:ymin`, `:ymax`, `:left`, `:right`, `:bottom`, `:top`
-  - 3D: All six faces: `:xmin`, `:xmax`, `:ymin`, `:ymax`, `:zmin`, `:zmax`, `:back`, `:front`, `:left`, `:right`, `:bottom`, `:top`
+A `NamedTuple` with boundary symbols as keys and `CartesianIndices` as values.
+  - 1D has `:xmin`, `:xmax`, `:left`, `:right`
+  - 2D has `:xmin`, `:xmax`, `:ymin`, `:ymax`, `:left`, `:right`, `:bottom`, `:top`
+  - 3D has all six faces, `:xmin`, `:xmax`, `:ymin`, `:ymax`, `:zmin`, `:zmax`, `:back`, `:front`, `:left`, `:right`, `:bottom`, `:top`
 
 # Examples
 
@@ -134,9 +134,9 @@ end
 Evaluate domain markers onto mesh points, creating `BitVector` indicators for each label.
 
 Supports three classes of domain markers:
-  1. Symbol markers: predefined boundary labels (`:left`, `:right`, etc.).
-  2. Tuple markers: unions of boundary symbols.
-  3. Function markers: level-set boolean predicates `x -> Bool`.
+  1. Symbol markers, the predefined boundary labels (`:left`, `:right`, etc.).
+  2. Tuple markers, the unions of boundary symbols.
+  3. Function markers, the level-set boolean predicates `x -> Bool`.
 
 Also seeds the default geometric markers `:boundary` and `:interior` if not already defined.
 
@@ -181,15 +181,15 @@ function set_markers!(Ωₕ::AbstractMeshType, domain_markers; warn_marker_misma
 end
 
 #=
-Every mesh carries :boundary and :interior, computed from the mesh's own geometry rather
-than from user registrations: every other label depends on a domain(...) call naming it.
-RegionRestriction's local_stencil (operators/region_restriction.jl) reads :interior as
-"not :boundary"; ensuring :boundary exists guarantees well-defined complementary indexing.
+Every mesh carries `:boundary` and `:interior`, computed from the mesh's own geometry rather
+than from user registrations, while every other label depends on a domain(...) call naming it.
+RegionRestriction's local_stencil (operators/region_restriction.jl) reads `:interior` as
+"not `:boundary`", and ensuring `:boundary` exists guarantees well-defined complementary indexing.
 
-:boundary is computed via boundary_symbol_to_cartesian (the same face ranges marked by
-boundary_symbols) rather than is_boundary_index, which excludes degenerate (length-1)
-axes. The face-based definition marks :left and :right consistently even for degenerate sets.
-:interior is defined as the logical complement .!boundary_set.
+`:boundary` is computed via `boundary_symbol_to_cartesian` (the same face ranges marked by
+`boundary_symbols`) rather than `is_boundary_index`, which excludes degenerate (length-1)
+axes. The face-based definition marks `:left` and `:right` consistently even for degenerate sets.
+`:interior` is defined as the logical complement `.!boundary_set`.
 =#
 
 """

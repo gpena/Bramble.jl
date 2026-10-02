@@ -839,12 +839,12 @@ end
     return multiply_stencils_bilinear(left_stencil, right_stencil, vol)
 end
 
-# The left factor of a linear product is contracted to a scalar:
+# The left factor of a linear product is contracted to a scalar.
 # `multiply_stencils_linear` keeps only the *right* operand's offsets and multiplies the
 # coefficients, so the assembly sums the left stencil's coefficients and discards where each
 # one sat. That is exact only when the left stencil is a single entry, at offset zero,
 # carrying the factor's true value at this point: an invariant the code relies on, and which
-# a source under an operator breaks: `D₋ₓ(f)` stencils as the same value at two offsets with
+# a source under an operator breaks, since `D₋ₓ(f)` stencils as the same value at two offsets with
 # opposite signs, so the sum is zero.
 #
 # Fixed by reading the source-only subtree's own `local_stencil` and discarding its offsets

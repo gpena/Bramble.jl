@@ -87,7 +87,7 @@ The transpose of [`prolongate!`](@ref): `xc = Pᵀ xf`, from level `l` of `H` to
 with `P` the prolongation from level `l - 1` to level `l`. There is no scaling: a coarse
 value is the sum of the fine values around it, each weighted by what the coarse point
 contributes to it under interpolation. Bramble's bilinear forms carry the discrete measure,
-so `Pᵀ A_f P` has the scaling of the coarse form's matrix, not that matrix itself: they are
+so `Pᵀ A_f P` has the scaling of the coarse form's matrix, not that matrix itself, and they are
 equal for the 1D stiffness, even on a non-uniform mesh, but in 2D and 3D, or for a mass form,
 they differ entrywise by a quarter to a half. Full weighting (`Pᵀ / 2^D`), the choice for
 strong-form difference equations, would be off by `2^D`.

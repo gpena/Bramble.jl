@@ -6,8 +6,8 @@
 # (`src/exporters/vtk_export.jl:41-52`): a helpful error naming the packages to load, not a
 # bare `MethodError`.
 #
-# Every GPU backend extension (today: `BrambleMetalExt`, `v3.5.0`: a CUDA/ROCm/oneAPI
-# extension) adds its own `ka_device` method for its own array type. That is the whole
+# Every GPU backend extension (today `BrambleMetalExt` from `v3.5.0`, with a CUDA/ROCm/oneAPI
+# extension to follow) adds its own `ka_device` method for its own array type. That is the whole
 # contract: once a backend answers `ka_device`, every `@kernel` written in
 # `BrambleKernelAbstractionsExt` against `KernelAbstractions.Backend` runs on it, with no
 # further wiring.

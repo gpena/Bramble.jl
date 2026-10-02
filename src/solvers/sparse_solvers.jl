@@ -19,10 +19,10 @@ requested solver backend.
 - `:sparspak`: pure-Julia sparse direct LU, zero binary dependencies.
 
 # Symmetry options
-- `:auto`: automatically detect matrix symmetry (and diagonal positivity).
-- `:spd`, `:definite`, or `1`: symmetric positive definite.
-- `:symmetric` or `2`: general symmetric.
-- `:unsymmetric` or `0`: general unsymmetric.
+- `:auto` automatically detects matrix symmetry (and diagonal positivity).
+- `:spd`, `:definite`, or `1` selects symmetric positive definite.
+- `:symmetric` or `2` selects general symmetric.
+- `:unsymmetric` or `0` selects general unsymmetric.
 
 Ignored by `:sparspak`, which always factors as general unsymmetric LU.
 
@@ -110,11 +110,11 @@ end
 # `assemble(a::BilinearForm)` is generic over the backend's matrix type (gpena/Bramble.jl#12)
 # and a dense-backed form assembles into a `Matrix`, not a `SparseMatrixCSC` -- so the call
 # above genuinely can reach here. `sparse_factorize` only ever supported `SparseMatrixCSC`
-# (test/form/sparse_solvers.jl: "Type safety: sparse_factorize only accepts SparseMatrixCSC",
+# (test/form/sparse_solvers.jl, "Type safety: sparse_factorize only accepts SparseMatrixCSC",
 # `@test_throws MethodError`), and this states that as an actual method instead of leaving it
-# an inference-only gap: same exception a plain dispatch failure would raise, just reachable
+# an inference-only gap, raising the same exception a plain dispatch failure would, just reachable
 # from an analysis that has to consider every backend a `BilinearForm` could name. A
-# `SparseMatrixCSR` is the one exception: converted via `_csr_to_csc` and delegated back into
+# `SparseMatrixCSR` is the one exception, converted via `_csr_to_csc` and delegated back into
 # this same dispatcher, so it still ends up at exactly one of the `SparseMatrixCSC` branches
 # above.
 function sparse_factorize(A::AbstractMatrix; kwargs...)
@@ -130,11 +130,11 @@ Recompute the numerical values of `fact` for updated matrix `A` (or assembled bi
 **reusing the existing symbolic factorization** (fill-reducing ordering and elimination tree).
 `A` must have the exact same sparsity pattern as the matrix originally factored.
 
-Dispatches automatically via multiple dispatch to the appropriate backend:
-- [`SuiteSparseFactorization`](@ref): updates CHOLMOD or UMFPACK numeric values.
-- [`AccelerateFactorization`](@ref): updates Apple Accelerate `libSparse` numeric values.
-- [`MUMPSFactorization`](@ref): updates MUMPS multifrontal numerical factorization (`job = 2`).
-- [`SparspakFactorization`](@ref): updates Sparspak's numeric LU values.
+Dispatches automatically via multiple dispatch to the appropriate backend.
+- [`SuiteSparseFactorization`](@ref) updates CHOLMOD or UMFPACK numeric values.
+- [`AccelerateFactorization`](@ref) updates Apple Accelerate `libSparse` numeric values.
+- [`MUMPSFactorization`](@ref) updates MUMPS multifrontal numerical factorization (`job = 2`).
+- [`SparspakFactorization`](@ref) updates Sparspak's numeric LU values.
 
 See also [`sparse_factorize`](@ref), [`pde_solve`](@ref).
 """

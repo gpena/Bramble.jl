@@ -175,10 +175,10 @@ end
     stepsize(Ωₕ::AbstractMeshType) -> Union{Real, NTuple{D, Real}}
     stepsize(Ωₕ::AbstractMeshType, d::Integer) -> Real
 
-Return the constant stepsize for a uniform mesh:
-  - In 1D: returns scalar ``h = x_2 - x_1``.
-  - In nD: returns a tuple ``(h_1, \\dots, h_D)`` of stepsizes along each coordinate axis.
-  - When `d` is specified: returns the stepsize along dimension `d`.
+Return the constant stepsize for a uniform mesh.
+  - In 1D, returns scalar ``h = x_2 - x_1``.
+  - In nD, returns a tuple ``(h_1, \\dots, h_D)`` of stepsizes along each coordinate axis.
+  - When `d` is specified, returns the stepsize along dimension `d`.
 
 Throws an `ArgumentError` if the mesh is not uniform.
 
@@ -201,10 +201,10 @@ end
     locate_cell(Ωₕ::AbstractMeshType{1}, x::Real) -> Int
     locate_cell(Ωₕ::AbstractMeshType{D}, x) -> CartesianIndex{D}
 
-Locate the cell containing continuous coordinate `x`:
-  - For 1D meshes: returns integer index `i \\in 1:N-1` such that ``x_i \\le x \\le x_{i+1}``
+Locate the cell containing continuous coordinate `x`.
+  - For 1D meshes, returns integer index `i \\in 1:N-1` such that ``x_i \\le x \\le x_{i+1}``
     (clamped to the domain boundaries).
-  - For nD meshes: returns a `CartesianIndex{D}` locating the bounding cell along each dimension.
+  - For nD meshes, returns a `CartesianIndex{D}` locating the bounding cell along each dimension.
 
 **`x` outside `[x_1, x_N]` is silently clamped to the boundary cell** -- `locate_cell` never
 throws and never signals that `x` was out of range, so a caller that assumes the returned

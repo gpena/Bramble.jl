@@ -346,10 +346,10 @@ end
     boundary_symbols(X::CartesianProduct) -> Tuple{Vararg{Symbol}}
     boundary_symbols(D::Integer) -> Tuple{Vararg{Symbol}}
 
-Return the canonical coordinate-aligned boundary symbols for dimension `D` or set `X`:
-- 1D ``[x_1, x_2]``: `(:xmin, :xmax)`
-- 2D ``[x_1, x_2] \\times [y_1, y_2]``: `(:xmin, :xmax, :ymin, :ymax)`
-- 3D ``[x_1, x_2] \\times [y_1, y_2] \\times [z_1, z_2]``: `(:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)`
+Return the canonical coordinate-aligned boundary symbols for dimension `D` or set `X`.
+- 1D ``[x_1, x_2]`` gives `(:xmin, :xmax)`
+- 2D ``[x_1, x_2] \\times [y_1, y_2]`` gives `(:xmin, :xmax, :ymin, :ymax)`
+- 3D ``[x_1, x_2] \\times [y_1, y_2] \\times [z_1, z_2]`` gives `(:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)`
 
 Legacy viewpoint symbols (`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`) remain
 supported as backward-compatible aliases across the boundary marker interface.

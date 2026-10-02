@@ -25,7 +25,7 @@
 # note), not the raw closure. A Dirichlet function is never resolved into anything, though:
 # it stays exactly the closure the caller wrote, so warming it here only ever helps a second
 # call to *this file's own* closure, never a user's. `NoConstraints` (no closure at all) and
-# `LabelsOnly` (zero-fill, no closure) have no such barrier, which is the whole gap between
+# `LabelsOnly` (zero-fill, no closure) have no such barrier. That is the whole gap between
 # the two "before" columns above holding up after this session and the other two not moving.
 #
 # Originally proposed as `nothing` and `label => f(x, t)` (gpena/Bramble.jl#141); the second

@@ -18,7 +18,7 @@
 # this number was never revisited after the second one landed. Both are still real,
 # irreducible costs: a second call with the identical closure literal at a *different*
 # source line still pays the full amount, since Julia keys a closure's type by
-# definition site, not text: no workload can warm a closure it does not itself write.
+# definition site, not text, so no workload can warm a closure it does not itself write.
 # A type-erasing wrapper around f would remove even that, but it also blocks
 # inlining into the quadrature loop and costs about 2x at run time, which is
 # the wrong trade for a time-stepping loop. See the note in avgₕ!.

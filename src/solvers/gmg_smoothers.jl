@@ -107,7 +107,7 @@ of `A` couples two distinct points of one colour (checked by
 a sweep equals forward Gauss-Seidel in the red-then-black ordering. A sweep costs two
 products with `A` and allocates nothing: the residual vector is stored in the smoother, so
 one smoother must not be used from two tasks at once. `smooth!(s, x, b; reverse = true)`
-updates the black points first: that sweep is backward Gauss-Seidel in the red-then-black
+updates the black points first, and that sweep is backward Gauss-Seidel in the red-then-black
 ordering, the adjoint of the forward one, and is what a symmetric multigrid cycle
 post-smooths with. The two-grid factors quoted below are for red then black on both sides.
 

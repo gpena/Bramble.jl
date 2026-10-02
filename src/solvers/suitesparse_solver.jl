@@ -22,11 +22,11 @@ Compute the sparse direct factorization of `A` (or the assembled matrix of `a`) 
 SuiteSparse (CHOLMOD for symmetric positive-definite systems, UMFPACK for unsymmetric).
 
 # Symmetry options
-- `:auto` (default): automatically detects symmetry. If `A` is symmetric and positive definite
+- `:auto` (default) automatically detects symmetry. If `A` is symmetric and positive definite
   (or `symmetrize = true`), uses CHOLMOD sparse Cholesky. Otherwise, uses UMFPACK sparse LU.
-- `:spd`, `:definite`, or `1`: symmetric positive definite (CHOLMOD Cholesky).
-- `:symmetric` or `2`: symmetric factorization.
-- `:unsymmetric` or `0`: general unsymmetric (UMFPACK LU).
+- `:spd`, `:definite`, or `1` selects symmetric positive definite (CHOLMOD Cholesky).
+- `:symmetric` or `2` selects symmetric factorization.
+- `:unsymmetric` or `0` selects general unsymmetric (UMFPACK LU).
 
 Requires `SuiteSparse.jl`; call `using SuiteSparse` before calling this function.
 

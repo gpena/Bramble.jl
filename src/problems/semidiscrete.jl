@@ -118,12 +118,12 @@ Write `a` as the steady problem is written: `assemble(a)` is `A`, so the steady 
 returned system solves `A u_h = F`.
 
 # Keywords
-- `mass`: [`BilinearForm`](@ref) defining `M` (default: `innerₕ(u, v)`, the discrete `L²` inner product, which is diagonal).
-- `dirichlet`: constrained labels and, where they carry values, the values -- every form [`assemble`](@ref) accepts, including time-dependent constraints from [`dirichlet_constraints`](@ref)`(Ωₕ, I, :label => (x, t) -> ...)`, or parameter-dependent ones from `(x, t, p) -> ...` for a value reached by the residual's own `p` (default: `nothing`).
-- `dirichlet_components`: leaf components of a composite space the labels bind to (default: `nothing`, all leaves).
-- `state`: [`VectorElement`](@ref) the current `u` is copied into before each assembly, for forms whose coefficients read it (default: `nothing`).
-- `update_coefficients!`: called with the current `t` before each assembly, for coefficients that vary in time -- `t -> Rₕ!(fₕ, x -> f(x, t))` for a time-dependent source, or `t -> (α[] = t)` for a scalar `Ref` (default: `nothing`). A two-argument `(t, p) -> ...` also reaches the residual's own `p`, the same way a three-argument Dirichlet condition does.
-- `reassemble`: refill `A` at every step, for an operator whose coefficients change with `t` or `u` (default: `false`).
+- `mass`: [`BilinearForm`](@ref) defining `M` (default `innerₕ(u, v)`, the discrete `L²` inner product, which is diagonal).
+- `dirichlet`: constrained labels and, where they carry values, the values -- every form [`assemble`](@ref) accepts, including time-dependent constraints from [`dirichlet_constraints`](@ref)`(Ωₕ, I, :label => (x, t) -> ...)`, or parameter-dependent ones from `(x, t, p) -> ...` for a value reached by the residual's own `p` (default `nothing`).
+- `dirichlet_components`: leaf components of a composite space the labels bind to (default `nothing`, all leaves).
+- `state`: [`VectorElement`](@ref) the current `u` is copied into before each assembly, for forms whose coefficients read it (default `nothing`).
+- `update_coefficients!`: called with the current `t` before each assembly, for coefficients that vary in time -- `t -> Rₕ!(fₕ, x -> f(x, t))` for a time-dependent source, or `t -> (α[] = t)` for a scalar `Ref` (default `nothing`). A two-argument `(t, p) -> ...` also reaches the residual's own `p`, the same way a three-argument Dirichlet condition does.
+- `reassemble`: refill `A` at every step, for an operator whose coefficients change with `t` or `u` (default `false`).
 
 Time and parameter dependence of the Dirichlet values is detected by arity, exactly as
 [`dirichlet_constraints`](@ref) validates it: conditions accepting `(x, t, p)` are evaluated

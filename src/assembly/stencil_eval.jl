@@ -407,10 +407,10 @@ never need this: those three types are never anything but a source, so wrapping 
 arrived as a `LazyOp`: `πₕ(uₕ)` ([`interpolate_at`](@ref)) or `D₋ₓ(πₕ(uₕ))` are
 sources too, just already wrapped, and the generic `innerₕ(::LazyOp, ::LazyOp)` used to build
 a `BilinearProduct` regardless, which is the wrong AST shape for a `LinearForm`'s assembly
-walk: a `BilinearProduct`'s stencil carries a pair of offsets (trial and test), where
+walk, since a `BilinearProduct`'s stencil carries a pair of offsets (trial and test), where
 `_scatter_term!` (`form/linear.jl`) expects one.
 
-A missing case defaults to `false` (the fallback `::LazyOp` method below): conservative,
+A missing case defaults to `false` (the fallback `::LazyOp` method below), which is conservative,
 since that is exactly the behavior every node had before this predicate existed (always
 `BilinearProduct`) for anything not explicitly listed as source-only.
 """
