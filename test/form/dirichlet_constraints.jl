@@ -304,8 +304,8 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
     # `components` selects it.
     @testset "Leaf entries, one label" begin
         leaves = Bramble.leaf_spaces_offsets(Vₕ)
-        for (components, active) in
-            ((nothing, (true, true, true)), (2, (false, true, false)), ((1, 3), (true, false, true)))
+        for (components, active) in ((nothing, (true, true, true)), (2, (false, true, false)), (
+            (1, 3), (true, false, true)))
             entries = Bramble._leaf_entries(leaves, :bottom, components)
             @test length(entries) == 3
             for c in 1:3

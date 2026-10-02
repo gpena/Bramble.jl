@@ -905,6 +905,7 @@ using Bramble: kronecker_operator_matrix, stencil_matrix, difference_shift, Back
         backend = backend(matrix_type = Matrix{Float64}))
     families = ((D₋ₓ, D₋ᵧ), (D₊ₓ, D₊ᵧ), (D̃ₓ, D̃ᵧ), (Dcₓ, Dcᵧ), (D̽ₓ, D̽ᵧ))
     for ops in families, d in 1:2
+
         @testset "$(ops[d])" begin
             A = ops[d](Ωd)
             @test A isa Matrix{Float64}
@@ -967,6 +968,7 @@ end
 # stencil, the first for a backward one.
 @testset "Boundary slice: device index agrees with the host ranges" begin
     for dir in (Bramble.Forward(), Bramble.Backward()), n in (2, 7)
+
         _, boundary = Bramble._stencil_ranges((1:n,), Val(1), dir)
         i = Bramble._stencil_boundary_dim(dir, n)
         @test boundary == (i:i,)
@@ -1036,7 +1038,7 @@ end
     # read off the module's docstring table: `Docs.doc` needs the REPL to render
     docs(name) = join(
         (join(string.(d.text))
-         for d in values(Base.Docs.meta(P)[Base.Docs.Binding(P, name)].docs)), "\n")
+        for d in values(Base.Docs.meta(P)[Base.Docs.Binding(P, name)].docs)), "\n")
     doc_y = docs(:Pqᵧ)
     @test occursin(
         "The `backward` probe difference along the `y` direction, ``u_i - u_{i-1}``.", doc_y)

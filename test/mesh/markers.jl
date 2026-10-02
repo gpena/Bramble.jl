@@ -454,6 +454,7 @@ end
         x3, y3, z3 = Bramble.host_points(Ω3)
         mz = Bramble._face_mask(Val(3), (:zmax,))
         for i in 1:4, j in 1:5
+
             @test Bramble._surface_weight(Ω3, mz, CartesianIndex(i, j, 4)) ≈
                   hs(x3, i) * hs(y3, j)
             @test Bramble._surface_weight(Ω3, mz, CartesianIndex(i, j, 2)) == 0.0

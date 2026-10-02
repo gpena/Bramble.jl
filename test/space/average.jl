@@ -174,6 +174,7 @@ using Bramble: kronecker_operator_matrix, centered_average_dim!, Mcₓ, Mcᵧ, w
     Ωd = mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (6, 5), (false, false);
         backend = backend(matrix_type = Matrix{Float64}))
     for ops in ((Mₓ, Mᵧ), (M₊ₓ, M₊ᵧ), (Mcₓ, Mcᵧ)), d in 1:2
+
         @testset "$(ops[d])" begin
             A = ops[d](Ωd)
             @test A isa Matrix{Float64}

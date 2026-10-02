@@ -925,6 +925,7 @@ end
         lin = LinearIndices(n)
         s = 0.0
         for I in CartesianIndices(n), d in 1:D
+
             I[d] == 1 && continue
             J = I - CartesianIndex(ntuple(k -> k == d ? 1 : 0, D))
             h = xs[d][I[d]] - xs[d][I[d] - 1]

@@ -338,17 +338,20 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
             Ωs = (Ω₁, Ω₂)
 
             for components in (nothing, 1, 2, (1, 2)), marker in (:left, (:left, :right))
+
                 ms = marker isa Symbol ? (marker,) : marker
                 sel = components === nothing || components == (1, 2) ? (1, 2) : (components,)
                 idx = Int[]
                 dens_expected = zeros(n₁ + n₂)
                 for k in sel, m in ms
+
                     ik = rows(Ωs[k], m, offs[k])
                     append!(idx, ik)
                 end
                 idx = sort(unique(idx))
                 for k in sel
                     for m in ms, j in rows(Ωs[k], m, offs[k])
+
                         dens_expected[j] = -r[j] / ws[k][j - offs[k]]
                     end
                 end

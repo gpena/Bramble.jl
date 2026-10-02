@@ -264,9 +264,10 @@ using Bramble:
         add = (u, v) -> innerₕ(D₋ₓ(u) + D₋ᵧ(u), D₋ₓ(v) + D₋ᵧ(v))
         @test issymmetric(form(Wr, Wr, add))
         @test isposdef(form(Wr, Wr, add))
-        @test mat(add) ≈ base + mat((u, v) -> innerₕ(D₋ᵧ(u), D₋ₓ(v))) +
-                         mat((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v))) +
-                         mat((u, v) -> innerₕ(D₋ᵧ(u), D₋ᵧ(v)))
+        @test mat(add) ≈
+              base + mat((u, v) -> innerₕ(D₋ᵧ(u), D₋ₓ(v))) +
+              mat((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v))) +
+              mat((u, v) -> innerₕ(D₋ᵧ(u), D₋ᵧ(v)))
         @test psd(mat(add))
 
         nested = (u, v) -> innerₕ(D₋ₓ(u + 2.0 * D₋ᵧ(u)), D₋ₓ(v + 2.0 * D₋ᵧ(v)))
