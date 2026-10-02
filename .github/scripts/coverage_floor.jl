@@ -10,7 +10,14 @@
 # whole files. `[[exempt_function]]` (`path`, `functions`, `reason`) drops the lcov lines of the
 # named functions from one file's total: each name is found in the source (every method: a
 # `function` block through the `end` at its indent, or a one-line `name(args) = expr`) and an
-# absent name is an error. `path` is relative to the working directory. Exits 1 only with `--fail` and a BELOW or DROPPED file.
+# absent name is an error. An entry may instead (or also) carry `methods = [...]`, which names
+# single methods by the text their definition line starts with, after leading macros (`@inline`,
+# `Base.@propagate_inbounds`, ...) and `function `, e.g. `_points!(x::AbstractVector, I::CartesianProduct{1}`.
+# A method spans a `function` block through the `end` at its indent, or a one-line definition
+# through its balanced `([{` (so a `= throw(` whose body continues counts whole; brackets inside
+# plain strings are ignored). A prefix matching no method or two or more is an error naming the
+# path and prefix. `path` is relative to the working directory. Exits 1 only with `--fail` and a
+# BELOW or DROPPED file.
 using TOML
 
 function read_lcov!(lines::Dict{String,Dict{Int,Bool}}, file::AbstractString)
@@ -74,10 +81,42 @@ function function_lines(file::AbstractString, name::AbstractString)
     return found
 end
 
+# Line numbers of the single method of `file` whose definition text starts with `prefix`.
+function method_lines(file::AbstractString, prefix::AbstractString)
+    isfile(file) || error("exempt_function: source file not found: $file")
+    src = readlines(file)
+    spans = UnitRange{Int}[]
+    for (k, line) in enumerate(src)
+        head = replace(strip(line), r"^(?:(?:Base\.)?@\S+\s+)*" => "")
+        isblock = startswith(head, "function ")
+        isblock && (head = head[(length("function ") + 1):end])
+        startswith(head, prefix) || continue
+        if isblock
+            stop = Regex("^" * match(r"^\s*", line).match * "end\\b")
+            last = findnext(l -> occursin(stop, l), src, k + 1)
+            last === nothing && error("exempt_function: no closing `end` for `$prefix` at $file:$k")
+            push!(spans, k:last)
+        else
+            depth = 0
+            last = k
+            while true
+                t = replace(src[last], r"\"[^\"]*\"" => "\"\"")
+                depth += count(c -> c in "([{", t) - count(c -> c in ")]}", t)
+                (depth <= 0 || last >= length(src)) && break
+                last += 1
+            end
+            push!(spans, k:last)
+        end
+    end
+    length(spans) == 1 ||
+        error("exempt_function: method prefix `$prefix` matches $(length(spans)) definitions in $file")
+    return collect(only(spans))
+end
+
 function main(args)
     floor = nothing
     exempt = Regex[]
-    exempt_functions = Tuple{String,Vector{String}}[]
+    exempt_functions = Tuple{String,Vector{String},Vector{String}}[]
     compare = nothing
     fail = false
     inputs = String[]
@@ -92,7 +131,8 @@ function main(args)
                 push!(exempt, glob_regex(e["path"]))
             end
             for e in get(toml, "exempt_function", [])
-                push!(exempt_functions, (e["path"], String.(e["functions"])))
+                push!(exempt_functions, (e["path"], String.(get(e, "functions", String[])),
+                                         String.(get(e, "methods", String[]))))
             end
         elseif a == "--compare"
             compare = args[i += 1]
@@ -108,10 +148,13 @@ function main(args)
 
     lines = Dict{String,Dict{Int,Bool}}()
     foreach(f -> read_lcov!(lines, f), inputs)
-    for (path, names) in exempt_functions
+    for (path, names, methods) in exempt_functions
         drop = Set{Int}()
         for name in names
             union!(drop, function_lines(path, name))
+        end
+        for prefix in methods
+            union!(drop, method_lines(path, prefix))
         end
         for (p, d) in lines
             (p == path || endswith(p, "/" * path)) && foreach(l -> delete!(d, l), drop)
