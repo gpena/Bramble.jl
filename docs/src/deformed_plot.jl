@@ -29,7 +29,7 @@ const _DEFORMED_PLOT_COUNTER = Ref(0)
 _next_deformed_plot_id() = "bramble_dp_$(_DEFORMED_PLOT_COUNTER[] += 1)"
 
 # Two triangles per exposed quad. A face is drawn when the cell behind it is kept and the cell
-# in front of it is not — which for `keep = all` is the outer boundary, and for a cut-away is the
+# in front of it is not, which for `keep = all` is the outer boundary, and for a cut-away is the
 # outer boundary plus the interior planes the removed cells expose. Indices follow the grid's own
 # column-major linear order, 0-based as Plotly's `i`/`j`/`k` want them.
 function _boundary_triangles(nx::Int, ny::Int, nz::Int, keep)
@@ -101,7 +101,7 @@ displacement too small to see at true scale, and should be stated wherever the p
 
 `cut` takes the undeformed coordinates of a cell centre and answers whether that cell is drawn.
 Removing a block of cells exposes the interior planes they bordered, which is how a field that
-varies through the solid — a bending stress, say — becomes visible at all. The cut is applied in
+varies through the solid (a bending stress, say) becomes visible at all. The cut is applied in
 the *undeformed* configuration, so the same cells are removed however far the solid moves.
 """
 function deformed_plot(

@@ -1,21 +1,12 @@
 #===========================================================================#
-# GpuOffload back-to-back throughput ratio -- gpena/Bramble.jl#324, subplan S2.3.
+# GpuOffload back-to-back throughput ratio.
 #
 # `GpuOffload` (a `CpuPolicy` wrapping an inner CPU policy and a device backend,
 # `src/utils/backend.jl`) routes just `Rₕ!`/`avgₕ!`'s fill step through a device
 # (`_offload_project!`, `src/operators/projection.jl`) while keeping the space itself
-# host-storage typed. The issue's own exploratory numbers (`BenchmarkTools`, one warmed
-# process, `--threads=4`, AC power) are the reason this policy exists at all:
-#
-#     | | Serial | Parallel (4t) | GPU-only | GPU+copyto! | vs Parallel |
-#     |---|---|---|---|---|---|
-#     | Rₕ! 1D, 10,000,000     | 29.7 ms   | 12.0 ms | 1.12 ms | 6.43 ms | 1.87x  |
-#     | Rₕ! 2D, 3000x3000      | 62.2 ms   | 18.2 ms | 4.24 ms | 9.19 ms | 1.98x  |
-#     | avgₕ! 1D, 10,000,000   | 190.2 ms  | 74.1 ms | 2.47 ms | 7.51 ms | 9.87x  |
-#     | avgₕ! 2D, 3000x3000    | 2011.5 ms | 576.2 ms| 23.3 ms | 28.1 ms | 20.52x |
-#
-# This script re-measures those same four rows honestly, as of whenever it is run, rather
-# than assuming the numbers above still hold: `CpuThreaded()` (plain threaded host) against
+# host-storage typed. The policy exists only if offloading wins over the threaded host,
+# so this script measures that on four rows, as of whenever it is run:
+# `CpuThreaded()` (plain threaded host) against
 # `GpuOffload(metal_backend(), CpuThreaded())` (the same inner policy, wrapped), back to
 # back on the same grid shape. A lost win must be visible, never tuned away -- see "What
 # fails the run" below.
@@ -29,15 +20,14 @@
 #
 # ## What is measured, per row
 #
-# `Rₕ!` 1D n=10,000,000, `Rₕ!` 2D 3000x3000, `avgₕ!` 1D n=10,000,000, `avgₕ!` 2D 3000x3000 --
-# the issue's own table, nothing else (no assembly, no Kronecker, no masked-projection
+# `Rₕ!` 1D n=10,000,000, `Rₕ!` 2D 3000x3000, `avgₕ!` 1D n=10,000,000, `avgₕ!` 2D 3000x3000,
+# nothing else (no assembly, no Kronecker, no masked-projection
 # timing: this measures `GpuOffload`'s `Rₕ!`/`avgₕ!` win only).
 #
 # For each row: a host space (`backend(Float64; policy = CpuThreaded())`) and a
 # `GpuOffload`-backed space over the identical grid shape (`backend(Float32; policy =
 # GpuOffload(metal_backend(), CpuThreaded()))` -- Metal has no `Float64`, so the offload arm
-# is necessarily `Float32`, exactly like the issue's own "GPU-only"/"GPU+copyto!" columns
-# above). Both arms call the *same* `Rₕ!`/`avgₕ!` on their own space; under `GpuOffload` that
+# is necessarily `Float32`). Both arms call the *same* `Rₕ!`/`avgₕ!` on their own space; under `GpuOffload` that
 # call transparently fills through the device and copies the result back
 # (`_offload_project!`), so this script never touches device buffers directly.
 #
@@ -50,7 +40,7 @@
 #
 # Each row's offload result is compared against its own host result once, before either is
 # timed, to `rtol = atol = 1f-5` -- the Metal tolerance this milestone's own acceptance
-# criteria use elsewhere (gpena/Bramble.jl#174), not bitwise, since the two arms run at
+# criteria use elsewhere, not bitwise, since the two arms run at
 # different element types (`Float64` host vs `Float32` device). A mismatch withholds that
 # row's ratio from the pass/fail gate below and is listed at the end.
 #

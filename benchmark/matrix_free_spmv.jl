@@ -1,4 +1,4 @@
-# Matrix-free apply against assembled SpMV on the host (gpena/Bramble.jl#326).
+# Matrix-free apply against assembled SpMV on the host.
 #
 # For the SPD form innerₕ(u, v) + inner₊(κ∇ₕu, ∇ₕv) with κ = 1 + |x|² on non-uniform meshes
 # of the unit interval, square and cube, each row times one `mul!(y, matrix_free_operator(a), x)`

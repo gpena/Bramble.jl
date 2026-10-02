@@ -1,4 +1,4 @@
-# Shared saved-results format for the standalone benchmark scripts (gpena/Bramble.jl#372).
+# Shared saved-results format for the standalone benchmark scripts.
 #
 # A results file is TOML: a `[meta]` table describing the run and one `[[tables.<name>]]`
 # array of rows (plain scalars) per table. Files live at `benchmark/results/<script>.toml`,

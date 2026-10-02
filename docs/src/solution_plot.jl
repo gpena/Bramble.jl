@@ -1,4 +1,4 @@
-# Solution-field plots via Plotly.js (CDN), no bundler, no assets wiring in make.jl —
+# Solution-field plots via Plotly.js (CDN), no bundler, no assets wiring in make.jl.
 # `@example` blocks across the worked examples `include` this rather than each redefining it.
 # Mirrors `convergence_plot.jl`'s structure exactly; see `plotly_common.jl` for the shared
 # CDN-loading/theming infrastructure.
@@ -23,7 +23,7 @@ _next_solution_plot_id() = "bramble_sp_$(_SOLUTION_PLOT_COUNTER[] += 1)"
     surface_plot(uₕ; title = "", width = 480, height = 420)
 
 A 3D surface plot of a 2D scalar grid function `uₕ`, in physical mesh coordinates (not index
-space), with an orthographic camera looking straight down the `z` axis — reads as a flat
+space), with an orthographic camera looking straight down the `z` axis. It reads as a flat
 colour map at rest, and drags to tilt the field into view as elevation.
 """
 function surface_plot(uₕ; title::AbstractString = "", width::Int = 480, height::Int = 420)
@@ -32,7 +32,7 @@ function surface_plot(uₕ; title::AbstractString = "", width::Int = 480, height
     xs = [point(Ωₕ(1), i) for i in 1:nx]
     ys = [point(Ωₕ(2), j) for j in 1:ny]
 
-    # reshape(uₕ) is (nx, ny) — Plotly's z wants z[row][col] with row = y, col = x, so
+    # reshape(uₕ) is (nx, ny), and Plotly's z wants z[row][col] with row = y, col = x, so
     # transpose rather than reindex by hand.
     M = permutedims(reshape(uₕ))
 
@@ -96,14 +96,14 @@ end
     spacetime_surface_plot(xs, ts, Z; title = "", width = 480, height = 480)
 
 A 3D surface over `(x, t)` for a 1D time-dependent solution, `Z[j, i]` the value at
-`(xs[i], ts[j])` — the whole time evolution in one static surface. A white profile curve
+`(xs[i], ts[j])`, so the whole time evolution sits in one static surface. A white profile curve
 (`u(x, t_k)` at the current `t_k`) loops continuously along it, so the field is legible at
 rest as a surface and legible in motion as a travelling cross-section, without ever
 redrawing the surface itself.
 
 `xs`/`ts` are the coordinates a caller already has (a mesh's `points`, and however many
 times `ts` the solution was sampled at, e.g. `sol.(range(first(I), last(I); length = 60))`
-for a SciML `sol`) — this function only lays them out and does not solve anything itself.
+for a SciML `sol`). This function only lays them out and does not solve anything itself.
 """
 function spacetime_surface_plot(
         xs::AbstractVector, ts::AbstractVector, Z::AbstractMatrix; title::AbstractString = "", width::Int = 480, height::Int = 480
@@ -265,7 +265,7 @@ finite-difference solver, with a solution/error heatmap next to a matrix-sparsit
 mesh-nodes view and a table of discrete errors, degrees of freedom and a condition estimate.
 
 `uₕ` only sets the slider's starting resolution (its mesh's point count, clamped to the
-widget's `[8, 48]` range) — the panel resolves its own problem in JavaScript rather than
+widget's `[8, 48]` range). The panel resolves its own problem in JavaScript rather than
 replaying the Julia solve, since every control on the page needs a solve of its own. Runs in
 a sandboxed `iframe` (`srcdoc`, `allow-scripts` only) so its script and styling stay isolated
 from the surrounding page and every other chart on it.
@@ -307,7 +307,7 @@ cursor, sliders for the reaction coefficients `a`, `b`, coupling `γ` and diffus
 `A_vu` pointwise coupling blocks), and a real-time 1D cross-section profile along `x` or `y`.
 
 Like [`poisson_interactive_widget`](@ref), the panel resolves its own block Gauss-Seidel
-Picard iteration in JavaScript rather than replaying the Julia solve — `uₕ`/`vₕ` only set the
+Picard iteration in JavaScript rather than replaying the Julia solve. `uₕ`/`vₕ` only set the
 slider's starting resolution (clamped to the widget's `[8, 28]` range). This boundary-value
 problem has no closed-form solution, so discretization error is measured against a solve on a
 fixed, much finer uniform reference mesh instead. Runs in a sandboxed `iframe` (`srcdoc`,
@@ -346,7 +346,7 @@ angle, and a centered/upwind stencil switch, drive a matrix-free BiCGSTAB solve 
 JavaScript, with a solution heatmap (a quiver overlay draws the constant advection
 direction) next to a matrix-sparsity or mesh-nodes view, and diagnostics for the cell Péclet
 number, an asymptotic boundary-layer width estimate, a matrix-asymmetry ratio, and the
-discrete ``L^2`` error against a solve on a ``3\\times`` finer grid — no closed-form solution
+discrete ``L^2`` error against a solve on a ``3\\times`` finer grid. No closed-form solution
 exists for this problem (homogeneous equation, ``u = 1`` on the inflow edge and ``u = 0``
 elsewhere on the boundary, chosen so the field itself moves with Pe and the flow angle
 instead of always resolving to the same prescribed answer), so accuracy is measured the
@@ -355,7 +355,7 @@ oscillation once the cell Péclet number passes ``O(1)``; upwind stays first ord
 monotone at every Péclet number.
 
 Like [`poisson_interactive_widget`](@ref), `uₕ` only seeds the slider's starting resolution
-(clamped to the widget's `[8, 48]` range) — the panel resolves its own problem in JavaScript
+(clamped to the widget's `[8, 48]` range). The panel resolves its own problem in JavaScript
 rather than replaying the Julia solve. Runs in a sandboxed `iframe` (`srcdoc`,
 `allow-scripts` only).
 """

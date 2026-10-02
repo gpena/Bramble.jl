@@ -1,5 +1,5 @@
 # Shared Plotly.js loading/theming for every chart on the docs site (benchmark trend/bar
-# charts, convergence plots, solution surface plots). Included once per page that needs it —
+# charts, convergence plots, solution surface plots). Included once per page that needs it:
 # docs/generate_benchmarks.jl for the benchmark page, docs/src/convergence_plot.jl for the
 # worked examples, docs/src/solution_plot.jl for their solution-field plots.
 #
@@ -11,7 +11,7 @@
 # repaints it.
 #
 # `Plotly.newPlot` sizes a chart from its container's dimensions *at chart-creation time*,
-# which runs synchronously as each `<script>` tag executes while the page is still loading —
+# which runs synchronously as each `<script>` tag executes while the page is still loading,
 # before web fonts finish swapping in and before every chart above it has settled the page's
 # final layout. Fixed the same way for every chart at once: resize every registered plot
 # once, after `window.load` and `document.fonts.ready` have both resolved.

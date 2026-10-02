@@ -24,10 +24,9 @@
 # ## Why these six
 #
 #   - Rₕ! and avgₕ! on a Parallel()-backend space, the threaded branch the test
-#     suite otherwise stays off — the default Serial() backend — so its allocation
-#     tests stay exact. Point 22 removed the size threshold these two used to cross
-#     automatically; there is no longer a size to sit "above" at all, so reaching
-#     the threaded branch here means asking for it explicitly.
+#     suite otherwise stays off. The default Serial() backend never threads, so
+#     its allocation tests stay exact and the threaded branch is reached only by
+#     asking for it explicitly.
 #   - D₋ₓ and D₋ᵧ on a large 2D grid: the stencil engine along the contiguous
 #     direction and across it. The 2D case is the one that hid the derivative
 #     weights regression, which 1D did not show.
@@ -37,13 +36,13 @@
 #   - one composite operator, which dispatches per component and so calls the
 #     engine N times with a view rather than once with a vector.
 #   - gridspace construction, which builds the quadrature weights, the path
-#     that rebuilt a vector per axis on every call until recently.
+#     where a vector per axis could be rebuilt on every call.
 #===========================================================================#
 
 using BenchmarkTools
 using Bramble
 using Bramble: divₕ!, curlₕ!, Δₕ!
-# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+# Defined and documented, but not exported.
 import Bramble: M₊ₓ, M₊ᵧ, M₊₂
 using Bramble: Dcₓ, D₋, D₋ₓ, D₋ᵧ, D₋₂, Mₓ, jump, jumpₓ, jumpᵧ, jump₂
 using DoubleFloats: Double64
@@ -53,7 +52,7 @@ using SparseArrays: nonzeros
 using Statistics: median, quantile  # `_five_numbers`; `quantile` is not re-exported by BenchmarkTools
 
 # Group 11 (jacobian sparsity) needs the sparse-AD stack `jacobian_pattern`/
-# `ast_sparsity_detector` (#21, #13) are actually compared against. Brought in the same
+# `ast_sparsity_detector` are actually compared against. Brought in the same
 # scoped way `DoubleFloats: Double64` already is above -- specific names or `import`, never
 # a bare `using X` -- so the including module (PkgBenchmark, AirspeedVelocity) gets nothing
 # beyond what each name below spells out.
@@ -64,8 +63,8 @@ import SparseMatrixColorings
 
 # Nothing else is imported beyond `Bramble` itself. PkgBenchmark and AirspeedVelocity
 # `include` this file, so whatever it brings in lands in the including module, and `using
-# Bramble` already makes `values` ambiguous there against `Base.values` — Bramble exports
-# its own. Nothing below calls `values`, so the benchmarks do not depend on that resolving.
+# Bramble` already makes `values` ambiguous there against `Base.values`, because Bramble
+# exports its own. Nothing below calls `values`, so the benchmarks do not depend on that resolving.
 
 # Battery power means CPU frequency scaling and thermal throttling, so a timing
 # taken on battery is not comparable with one taken on AC, and a baseline saved
@@ -87,7 +86,7 @@ end
 const SUITE = BenchmarkGroup()
 
 # Sizes are chosen to be large enough elsewhere that per-call overhead does not
-# dominate, and — where a group specifically wants the threaded branch — large
+# dominate. Where a group specifically wants the threaded branch, they are large
 # enough that a real per-call cost, not a task-spawn floor, is what gets measured.
 const N1 = 1_000_000                      # 1D, 1e6 points
 const N2 = (1000, 1000)                   # 2D, 1e6 points
@@ -122,11 +121,9 @@ end
 # many points, which `docs/generate_benchmarks.jl` divides by for nanoseconds per point.
 _points_tag(n) = "points:$(n)"
 
-# Point 22 (`Serial()`/`Parallel()` as an execution-policy trait chosen once on the
-# backend) removed the size threshold that used to make the meshes above auto-thread
-# Rₕ!/avgₕ!/gridspace's weight construction. `backend()` now defaults to `Serial()`
-# unconditionally, at any size. The three constructors below ask for `Parallel()`
-# explicitly, so the "restriction" and "construction" groups keep measuring the
+# `backend()` defaults to `Serial()` unconditionally, at any size, so no mesh above
+# threads Rₕ!/avgₕ!/gridspace's weight construction. The three constructors below ask
+# for `Parallel()` explicitly, so the "restriction" and "construction" groups keep measuring the
 # threaded branch they were built to cover. Deliberately not used for form assembly:
 # `assemble!`/`assemble` read `execution_policy(space)` too, but the "forms" group's
 # existing entries measure the plain (serial) default on purpose, and reusing these
@@ -145,12 +142,10 @@ end
 # --- 1. restriction & cell-averaging across 1D, 2D, 3D -------------------- #
 let W1 = gridspace(_mesh1_par()), u1 = element(W1), W2 = gridspace(_mesh2_par()), u2 = element(W2),
     W3 = gridspace(_mesh3_par()), u3 = element(W3),
-    # the plain default backend, which no longer threads at any size (see the note
-    # on _mesh1_par above) — the cost of that default is now real and worth tracking
-    # alongside the Parallel() numbers, not only the allocation-zero guarantee. Only
-    # 1D had a Serial() entry until now; 2D/3D never got one (gpena/Bramble.jl issue
-    # noticed while reading the docs page — the trend charts had no serial line to
-    # compare the parallel one against past 1D).
+    # the plain default backend, which never threads (see the note on _mesh1_par
+    # above). Its cost is worth tracking alongside the Parallel() numbers, not only
+    # the allocation-zero guarantee, and gives the trend charts a serial line to
+    # compare the parallel one against in every dimension.
     W1d = gridspace(_mesh1()), u1d = element(W1d), W2d = gridspace(_mesh2()), u2d = element(W2d),
     W3d = gridspace(_mesh3()), u3d = element(W3d),
     # the CpuPolyester() policy, which needs `using Polyester` (loaded above)
@@ -195,7 +190,7 @@ let g = SUITE["operators 2D"] = BenchmarkGroup([_points_tag(prod(N2))])
         g["Mₓ" * sfx] = @benchmarkable Mₓ($uₕ)
         g["Dcₓ" * sfx] = @benchmarkable Dcₓ($uₕ)
 
-        # The vector calculus operators (gpena/Bramble.jl#158). `Δₕ!` is the entry that matters:
+        # The vector calculus operators. `Δₕ!` is the entry that matters:
         # it is one traversal per direction against the two a `D̃(D₋(u))` composition walks, and
         # it carries no scratch grid function, so the bound below is 0 and stays 0.
         let vₕ = similar(uₕ), gₕ = ∇ₕ(uₕ)
@@ -205,7 +200,7 @@ let g = SUITE["operators 2D"] = BenchmarkGroup([_points_tag(prod(N2))])
             g["curlₕ!" * sfx] = @benchmarkable curlₕ!($vₕ, $gₕ)
         end
 
-        # The dimensional entry point (gpena/Bramble.jl#74), with `d` coming from a loop rather
+        # The dimensional entry point, with `d` coming from a loop rather
         # than written as a literal. This is the entry that would catch a boxed `Val`: the value
         # tests cannot see one, since boxing changes how a result is reached and not what it is,
         # and JET only runs nightly. `ALLOCATION_BOUNDS` gates it at the same 3 allocations the
@@ -246,15 +241,12 @@ end
 
 # --- 6. construction ------------------------------------------------------ #
 # gridspace's weight construction (__innerplus_weights!) reads execution_policy(Ωₕ)
-# too, same reason as group 1 above — Parallel() explicitly, since the plain default
-# no longer threads at any size.
+# too, same reason as group 1 above: Parallel() explicitly, since the plain default
+# never threads.
 #
-# What these two entries measure changed with the last-axis method in
-# utils/linear_algebra.jl. The threaded weight build used to be 1.7x (2D) and 3.1x (3D)
-# *slower* than the serial one, because `Threads.@threads` linearly indexes a
-# `CartesianIndices`; it is now level with serial. Expect a step down here against any
-# baseline recorded before that change — the rows are comparable across it only in the
-# sense that both measure whatever the threaded branch then was.
+# The threaded weight build uses the last-axis method in utils/linear_algebra.jl, which
+# keeps it level with serial. `Threads.@threads` over a `CartesianIndices` would index it
+# linearly and run slower than serial.
 let Ωₕ2 = _mesh2_par(), Ωₕ3 = _mesh3_par()
     g = SUITE["construction"] = BenchmarkGroup()
     g["gridspace 2D"] = @benchmarkable gridspace($Ωₕ2)   # builds the weights
@@ -271,9 +263,9 @@ let uₕ2 = Rₕ(gridspace(_mesh2()), x -> sin(x[1]) * x[2]), uₕ3 = Rₕ(grids
     g["M₊ᵧ 2D"] = @benchmarkable M₊ᵧ($uₕ2)
     g["jump₂ 3D"] = @benchmarkable jump₂($uₕ3)
     g["M₊₂ 3D"] = @benchmarkable M₊₂($uₕ3)
-    # The vectorial alias, added when it stopped building its tuple through a closure
-    # (gpena/Bramble.jl#258): `ntuple(i -> jump(arg, Val(i)), Val(D))` boxed `i` and cost
-    # two allocations per direction on top of the `similar` each direction needs anyway.
+    # The vectorial alias must not build its tuple through a closure:
+    # `ntuple(i -> jump(arg, Val(i)), Val(D))` boxes `i` and costs two allocations per
+    # direction on top of the `similar` each direction needs anyway.
     g["jumpₕ 2D"] = @benchmarkable jumpₕ($uₕ2)
     g["jumpₕ 3D"] = @benchmarkable jumpₕ($uₕ3)
 end
@@ -281,10 +273,10 @@ end
 # --- 8. startup latency & TTFX -------------------------------------------- #
 #
 # Each command is a fresh process: TTFX is first-call latency, and a second
-# call in the same session would be measuring the JIT-warm path instead
-# (#198). The three dedicated entries below are cumulative on purpose — the
-# projection command re-pays mesh construction, the assembly command re-pays
-# both — because that is what "first assembly" actually costs a user who
+# call in the same session would be measuring the JIT-warm path instead.
+# The three dedicated entries below are cumulative on purpose. The
+# projection command re-pays mesh construction and the assembly command re-pays
+# both, because that is what "first assembly" actually costs a user who
 # imports Bramble and goes straight to `assemble`, not the marginal cost of
 # assembly alone on top of a warm session.
 let jl = Base.julia_cmd(), cmd_load = `$jl --project=. --startup-file=no -e "using Bramble"`,
@@ -317,7 +309,7 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
     Wm = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
         (300, 300), (true, true))), am = Bramble.form(Wm, Wm, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))),
     Am = Bramble.assemble(am),
-    # point 22: assemble!/assemble dispatch on execution_policy(space) now, a
+    # assemble!/assemble dispatch on execution_policy(space), a
     # different code path from assemble_parallel! below, which always threads
     # regardless of the backend. W1p/amp exercise that dispatch directly through
     # assemble!/assemble themselves, so a regression that breaks the policy check
@@ -337,8 +329,8 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
 
     g = SUITE["forms"] = BenchmarkGroup()
 
-    # construction, which built the whole AST eagerly until recently: a linear
-    # form cost 48 MB and a bilinear one 9.3 MB, where both are now under 400 KB.
+    # construction, which must not build the whole AST eagerly: both forms stay under
+    # 400 KB.
     #
     # The linear form is an allocation guard, not a timing: a `LinearForm` is three stored
     # fields, built in about 10 ns, a scale at which the in-suite median follows whatever
@@ -346,18 +338,16 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
     # and docs/generate_benchmarks.jl leaves its time off the charts
     # (`_BENCH_ALLOCATION_GUARDS`). Reintroduce eager work and the count stops being zero.
     #
-    # The bilinear one is not zero-allocation any more: gpena/Bramble.jl#26 gave
-    # `BilinearForm` a fourth field, `cache::_AssemblyCache`, a *mutable* struct (so it can
-    # be filled in lazily on the first `assemble!` call without `BilinearForm` itself needing
-    # to be mutable) — and a `mutable struct` is always heap-boxed in Julia, so constructing
-    # one costs exactly one allocation regardless of what it holds. Every fresh form starts
+    # The bilinear one is not zero-allocation. `BilinearForm` has a fourth field,
+    # `cache::_AssemblyCache`, a *mutable* struct (so it can be filled in lazily on the
+    # first `assemble!` call without `BilinearForm` itself needing to be mutable). A
+    # `mutable struct` is always heap-boxed in Julia, so constructing one costs exactly
+    # one allocation regardless of what it holds. Every fresh form starts
     # pointing at a single shared, empty `segments` vector (`_no_segments`, one constant per
     # dimension) rather than allocating its own, which is what keeps this at one allocation
-    # instead of two -- it read 2 until that sharing was restored, having lapsed when the
-    # segment eltype became dimension-parametric (gpena/Bramble.jl#161). Getting
-    # to zero would mean moving the cache out of `BilinearForm` entirely (an external
-    # identity-keyed cache, e.g. a `WeakKeyDict`) — a bigger, separately-justified change,
-    # not something to reach for over one small one-time per-form allocation. `assemble!`
+    # instead of two. Getting to zero would mean moving the cache out of `BilinearForm`
+    # entirely (an external identity-keyed cache, e.g. a `WeakKeyDict`), a bigger change
+    # that one small one-time per-form allocation does not justify. `assemble!`
     # itself, called potentially many times per form, is unaffected: still 0 bytes (see
     # "assemble! 1D"/"assemble! (matrix) 2D" below).
     g["form (linear, 2D)"] = @benchmarkable Bramble.form($W2, v -> innerₕ($f2, v))
@@ -367,8 +357,8 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
     # filling a vector that already exists, which is the time-loop call.
     #
     # None of these pass an `ast`. The keyword (and `assemble_parallel!`'s positional
-    # equivalent) is deprecated — it measured no benefit, gpena/Bramble.jl#105 — and passing
-    # it now routes through `_warn_ast_keyword`, whose `Base.depwarn` costs 272 B in 2
+    # equivalent) is deprecated because it brings no benefit, and passing
+    # it routes through `_warn_ast_keyword`, whose `Base.depwarn` costs 272 B in 2
     # allocations on *every* call, a fixed cost independent of grid size. That is what the
     # `ALLOCATION_BOUNDS` entries below are guarding: a form assembles against its own
     # resolved AST at zero allocations, and passing the deprecated keyword is what breaks it.
@@ -388,7 +378,7 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
     g["assemble! (matrix) 2D (non-uniform)"] = @benchmarkable Bramble.assemble!(
         $Amn, $amn) samples=5 evals=1
 
-    # assemble_add! (gpena/Bramble.jl#231): the saving it exists for is against the
+    # assemble_add!: the saving it exists for is against the
     # workaround a caller reaches for without it -- assemble each piece separately and
     # add, paying for a second matrix's worth of allocation and a full sparse add every
     # call, not just the first. Both entries below do one representative time step:
@@ -424,10 +414,10 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
     # policy dispatch through assemble!/assemble, not assemble_parallel!'s override
     g["assemble! 1D, Parallel() backend"] = @benchmarkable Bramble.assemble!(
         $b1p, $l1p)
-    # BilinearForm.assemble() used to call assemble_parallel! unconditionally; it now
-    # follows the trial space's backend the same way LinearForm.assemble always has.
+    # BilinearForm.assemble() follows the trial space's backend the same way
+    # LinearForm.assemble does.
     # Both allocate a fresh matrix each call (assemble calls allocate_system_matrix
-    # internally), so neither is zero — read by a person, like allocate_system_matrix
+    # internally), so neither is zero. They are read by a person, like allocate_system_matrix
     # itself above.
     g["assemble (BilinearForm) 2D, Serial() backend"] = @benchmarkable Bramble.assemble(
         $am) samples=5 evals=1
@@ -445,11 +435,11 @@ end
 # vector, so timing single precision measured double precision and this
 # comparison could not have meant anything. It can now.
 #
-# 1D and 100,000 points, on the plain default (Serial()) backend deliberately — this
+# 1D and 100,000 points, on the plain default (Serial()) backend deliberately. This
 # section is about precision, not threading, so execution policy is held fixed here.
 # Small enough that Double64, which is software arithmetic and an order slower, does
 # not dominate the suite.
-# `avgₕ!` is the expensive one either way — six quadrature nodes per point — and
+# `avgₕ!` is the expensive one either way, with six quadrature nodes per point, and
 # it is the path where `_gauss_rule` is built per call for an extended type.
 let N = 100_000
     g = SUITE["precision 1D"] = BenchmarkGroup()
@@ -472,7 +462,7 @@ end
 
 # --- 11. jacobian sparsity: AD tracing vs. reading it off the AST --------- #
 #
-# `jacobian_pattern`/`ast_sparsity_detector` (#21, #13) exist to replace
+# `jacobian_pattern`/`ast_sparsity_detector` exist to replace
 # `SparseConnectivityTracer.TracerSparsityDetector()`'s tracing pass with one that reads
 # the pattern directly off a `BilinearForm`'s AST. Compared here on the 1D nonlinear
 # Poisson residual `docs/src/examples/poisson_nonlinear.md` builds, at two sizes to show
@@ -548,7 +538,7 @@ end
 # against is a type instability that silently spills memory on every cell.
 const ALLOCATION_BOUNDS = Dict(
     # the plain default (Serial()) backend guarantees exactly zero, unconditionally
-    # (point 22) — unlike the Parallel()-backend entries in this group, which move
+    # unlike the Parallel()-backend entries in this group, which move
     # with the thread count and are printed rather than gated
     ("restriction", "Rₕ! 1D, Serial() backend (default)") => 0,
     ("restriction", "avgₕ! 1D, Serial() backend (default)") => 0,
@@ -556,17 +546,17 @@ const ALLOCATION_BOUNDS = Dict(
     ("restriction", "avgₕ! 2D, Serial() backend (default)") => 0,
     ("restriction", "Rₕ! 3D, Serial() backend (default)") => 0,
     ("restriction", "avgₕ! 3D, Serial() backend (default)") => 0,
-    # contiguous-direction difference: 3 allocs for similar(::VectorElement)
+    # contiguous-direction difference, 3 allocs for similar(::VectorElement)
     ("operators 2D", "D₋ₓ") => 3,
     ("operators 2D", "D₋ᵧ") => 3,
     ("operators 2D", "Mₓ") => 3,
     ("operators 2D", "Dcₓ") => 3,
     # the loop runs both directions, so 2 x 3 and not a byte more: a `Val` boxed from the
-    # loop variable would show up here as the extra allocation it is (gpena/Bramble.jl#74)
+    # loop variable would show up here as the extra allocation it is
     ("operators 2D", "D₋(uₕ, d) over d") => 6,
     ("operators 3D", "D₋₂") => 3,
     # the allocating Laplacian allocates its result and nothing else; the mutating forms
-    # accumulate in place, so they allocate nothing at all (gpena/Bramble.jl#158)
+    # accumulate in place, so they allocate nothing at all
     ("operators 2D", "Δₕ") => 3,
     ("operators 2D", "Δₕ!") => 0,
     ("operators 2D", "divₕ!") => 0,
@@ -601,8 +591,8 @@ const ALLOCATION_BOUNDS = Dict(
     ("jumps & averages", "M₊ᵧ 2D") => 3,
     ("jumps & averages", "jump₂ 3D") => 3,
     ("jumps & averages", "M₊₂ 3D") => 3,
-    # three per direction, and nothing else: the boxed closure that used to add two more
-    # per direction is gone (10 allocations in 2D and 15 in 3D before gpena/Bramble.jl#258)
+    # three per direction, and nothing else: a boxed closure would add two more
+    # per direction
     ("jumps & averages", "jumpₕ 2D") => 6,
     ("jumps & averages", "jumpₕ 3D") => 9,
     # form assembly. Only the zeros are gated, deliberately: `assemble_parallel!`
@@ -620,7 +610,7 @@ const ALLOCATION_BOUNDS = Dict(
     ("forms", "assemble! 2D") => 0,
     ("forms", "assemble! (matrix) 2D") => 0,
     ("forms", "assemble! (matrix) 2D (non-uniform)") => 0,
-    # assemble_add! (gpena/Bramble.jl#231) replays from the same cache assemble! does,
+    # assemble_add! replays from the same cache assemble! does,
     # against the same warm (A_wide, am_mass)/(A_wide, am) pairs across every sample --
     # zero allocation exactly like "assemble! (matrix) 2D" above. Its point of comparison,
     # "assemble-then-add (matrix) 2D", is deliberately *not* gated: it allocates two fresh
@@ -630,7 +620,7 @@ const ALLOCATION_BOUNDS = Dict(
     ("forms", "evaluate! 1D") => 0,
     ("forms", "l(vₕ) 1D") => 0,
     ("forms", "form (linear, 2D)") => 0,
-    # 1, not 0: BilinearForm's cache field (gpena/Bramble.jl#26) is a mutable struct, always
+    # 1, not 0: BilinearForm's cache field is a mutable struct, always
     # heap-boxed on construction -- see the comment above where this benchmark is defined.
     ("forms", "form (bilinear, 2D)") => 1,
     # the same assembly in three precisions: none of them may allocate, and the
@@ -668,20 +658,20 @@ end
 # `BenchmarkTools.save` serializes a `Trial` in full: every one of its (possibly thousands
 # of) per-sample `times`/`gctimes`, which is why baseline_*.json files run 4+ MB each. Only
 # three numbers per benchmark are ever read back: `docs/generate_benchmarks.jl` calls
-# `median(trial)`, and this file's own `--compare` path (below) calls `minimum(trial)` —
-# both reduce to a `TrialEstimate`, whose `time`/`memory`/`allocs` are already scalar
+# `median(trial)`, and this file's own `--compare` path (below) calls `minimum(trial)`.
+# Both reduce to a `TrialEstimate`, whose `time`/`memory`/`allocs` are already scalar
 # fields on `Trial` itself (`memory`/`allocs` are never per-sample to begin with).
 #
 # `median`/`minimum`/`maximum` of a 5-element vector `[min, q1, median, q3, max]` return
-# exactly `min`, `median` and `max` back — the middle of five sorted values is the median
+# exactly `min`, `median` and `max` back. The middle of five sorted values is the median
 # and the ends are the extremes, since a set's median always sits between its own min and
-# max — so replacing a trial's full sample vectors with those five values leaves every
+# max, so replacing a trial's full sample vectors with those five values leaves every
 # statistic these two scripts read identical, while cutting what gets serialized by two to
 # three orders of magnitude. The quartiles (`Statistics.quantile`) are kept so a chart can
 # draw the spread of a benchmark, not only its centre. A trial with five samples or fewer
 # is saved as it is: its raw samples are the spread.
 # `gctimes` are reduced the same way, independently, since nothing downstream reads
-# `gctime` off a loaded baseline (only `time`/`memory`/`allocs`) — the correspondence
+# `gctime` off a loaded baseline (only `time`/`memory`/`allocs`), so the correspondence
 # between a given `times` and `gctimes` entry does not need to survive the reduction.
 #
 # This is deliberately not a new save format: the reduced object is still a plain
@@ -758,11 +748,10 @@ function main(args = ARGS)
     # The thread count belongs in the tags as much as the Julia version does.
     # Without it, two baselines are indistinguishable while measuring different
     # code: `_parallel_for!` takes its serial branch on one thread and allocates
-    # nothing, and allocates one task set — 22 allocations — on more. Comparing a
+    # nothing, and allocates one task set (22 allocations) on more. Comparing a
     # single-threaded baseline against a four-threaded run therefore reports a
-    # memory regression on every threaded path, which is what
-    # baseline_15f5e3b.json against baseline_5f9b8af.json did: `Rₕ! 1D` moved
-    # from 0 allocations to 22, and nothing had changed but the thread count.
+    # memory regression on every threaded path: `Rₕ! 1D` moves from 0
+    # allocations to 22 with nothing changed but the thread count.
     #
     # Baselines saved before this tag existed carry no thread count. The ones in
     # `baselines/` read 0 allocations for `Rₕ!`, so they were single-threaded.

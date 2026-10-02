@@ -940,7 +940,7 @@ function generate_benchmarks_markdown(
                 threads = replace(string(t), "threads:" => "")
             end
         end
-        # Baselines saved before the `pkgversion:` tag existed carry none — retrace it
+        # Baselines saved before the `pkgversion:` tag existed carry none, so retrace it
         # from Project.toml at that commit instead of leaving it blank.
         pkg_ver === nothing && (pkg_ver = _get_pkg_version(commit))
         push!(
