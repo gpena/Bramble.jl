@@ -12,6 +12,14 @@ using LinearAlgebra
 using LinearSolve: LinearProblem, solve, KrylovJL_CG
 using Test #src
 
+# ## Problem
+#
+# Applying a bilinear form to a vector normally means assembling its `SparseMatrixCSC` first,
+# and that matrix stores one value and one index per nonzero. The problem is to compute the
+# same product `A * x` without storing `A`, for any form `assemble` accepts, including those
+# with a grid-function coefficient, Dirichlet rows or a composite space. The sections below
+# build the operator that does it, measure what it costs, and apply it to such a form.
+#
 # ## What the operator is
 #
 # For a form `a`, `op = matrix_free_operator(a)` stands for the matrix `assemble(a)`:
@@ -328,3 +336,13 @@ fdm_ratios = route_ratios("solve", "time_s"; of = "fdm_solve", against = mf_rout
 # the only route of the three when the form is not separable. When the aim is to solve a
 # separable problem, and not to apply the operator inside another iteration, `fdm_solve`
 # is the faster call at every size in this file.
+
+# ## Where to go next
+#
+#   - [Memory scaling](memory_scaling.md) builds the Kronecker operator that this page
+#     compares against, and the fast-diagonalisation solve that beats both on a separable form.
+#   - [Choosing a solver](@ref tutorial_solvers) shows the preconditioners that work with an
+#     operator, and [Solvers by problem](@ref tutorial_solvers_by_problem) says when to use them.
+#   - [Backend policies](@ref backend_policies) explains the serial and threaded policies that
+#     the product runs under, and the [backend tutorial](@ref tutorial_backend) shows how to
+#     choose one.

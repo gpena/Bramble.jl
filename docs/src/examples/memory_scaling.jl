@@ -2,8 +2,8 @@
 #
 # Every bilinear form assembled so far in this manual becomes one `SparseMatrixCSC`: exact,
 # but its storage grows with the number of nonzeros, which on a Cartesian mesh grows with
-# the number of unknowns. A separable form -- one whose assembled matrix is an exact sum of
-# Kronecker products of one-dimensional factors -- never needs that matrix at all: applying
+# the number of unknowns. A separable form, one whose assembled matrix is an exact sum of
+# Kronecker products of one-dimensional factors, never needs that matrix at all. Applying
 # it is one fused pass over the per-axis factors, so the storage is `O(D \cdot n)` instead
 # of `O(n^D)` stored nonzeros. This page builds that operator, measures what it actually
 # costs against the matrix it replaces, and checks that it still computes the right answer.
@@ -19,7 +19,7 @@
 # ```
 #
 # with manufactured solution ``u_{\text{exact}}(x, y, z) = \cos(\pi x)\cos(\pi y)\cos(\pi z)``,
-# whose normal derivative vanishes on every face of the cube -- exactly the boundary
+# whose normal derivative vanishes on every face of the cube. That is exactly the boundary
 # condition an *unconstrained* assembly imposes, so no `dirichlet` handling is needed here.
 # The mass term keeps the discrete operator well-posed without one.
 #
@@ -40,7 +40,7 @@ Wₕ = gridspace(Ωₕ)
 a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 ndofs(Wₕ)
 
-# `41^3 = 68921` unknowns -- large enough for the memory gap below to be worth looking at,
+# `41^3 = 68921` unknowns, large enough for the memory gap below to be worth looking at,
 # small enough that this page, including both direct solves further down, still runs in
 # seconds.
 #
@@ -326,7 +326,7 @@ is_separable(a)
 
 @test is_separable(a) #src
 
-# A grid-function coefficient breaks the shape match -- it has no tensor structure to factor
+# A grid-function coefficient breaks the shape match, because it has no tensor structure to factor
 # out, so `is_separable` refuses it rather than guessing:
 
 fₕ = Rₕ(Wₕ, x -> 1.0 + x[1])
@@ -336,7 +336,7 @@ is_separable(form(Wₕ, Wₕ, (u, v) -> innerₕ(fₕ * u, v)))
 
 # The same refusal covers a region restriction, an interpolation node, a surface (`InnerGamma`)
 # weight, a composite space, a 1D mesh (nothing to factor), and any difference family other
-# than the plain backward one `∇ₕ` builds -- forward, centered, star, cross-weighted,
+# than the plain backward one `∇ₕ` builds: forward, centered, star, cross-weighted,
 # averages, jumps. Every one of these is a false negative rather than a wrong answer: `a`
 # would still assemble and solve the ordinary way, just without the fast path below.
 #
@@ -361,12 +361,12 @@ bytes_csc = Base.summarysize(A)
 @test bytes_csc > 7_500_000                           #src
 
 # The operator holds three `41`-length one-dimensional factors per term instead of the
-# assembled matrix's stored nonzeros, so it costs a fraction of a percent of `A` here -- and
+# assembled matrix's stored nonzeros, so it costs a fraction of a percent of `A` here, and
 # the gap only widens with `n`, since `bytes_csc` grows like `n^3` while `bytes_kronecker`
 # grows like `n`. Measured separately (not by this page, to keep this one fast): on a
 # uniform `60x60x60` mesh with the same mass-plus-stiffness form, `test/form/kronecker.jl`
 # (gpena/Bramble.jl#162) recorded `19,432` bytes for the operator against `61,948,960` bytes
-# for the equivalent `SparseMatrixCSC` -- about `0.03%`, for a 216,000-unknown problem this
+# for the equivalent `SparseMatrixCSC`, about `0.03%`, for a 216,000-unknown problem this
 # page does not build directly. That matrix figure predates assembly sizing the matrix's
 # arrays exactly to their nonzeros, which on this page's `41x41x41` mesh took `A` from
 # `18,625,640` to `8,109,312` bytes with the same 472,361 nonzeros.
@@ -405,10 +405,10 @@ maximum(abs.(x_fdm .- xref))
 
 @test maximum(abs.(x_fdm .- xref)) < 1.0e-9 #src
 
-# ## Checking the answer
+# ## Error against the manufactured solution
 #
-# Both solves above only proved they agree with the ordinary sparse solve -- not that any of
-# the three actually solved the problem posed at the top of the page. That needs the
+# Both solves above only proved they agree with the ordinary sparse solve. They did not
+# show that any of the three solved the problem posed at the top of the page. That needs the
 # manufactured solution:
 
 uₕ = element(Wₕ)
@@ -421,14 +421,14 @@ normₕ(uₕ .- Rₕ(Wₕ, sol))
 #
 # ## The operator's real limit: no boundary constraint of its own
 #
-# `K` and `kronecker_operator` carry no Dirichlet handling: a `KroneckerLinearOperator` is
+# `K` and `kronecker_operator` carry no Dirichlet handling. A `KroneckerLinearOperator` is
 # built for the whole grid, boundary rows included, because a boundary-restricted term has
 # no tensor structure of its own to factor. The problem above sidesteps this by using an
-# unconstrained (natural) boundary condition instead. `fdm_solve` alone reaches further,
-# through `dirichlet = :boundary`: since a point is interior in the domain iff it is
-# interior along *every* axis, restricting each axis's own factors to its interior
+# unconstrained (natural) boundary condition instead. Only `fdm_solve` reaches further, through
+# the keyword `dirichlet = :boundary`. A point is interior in the domain iff it is
+# interior along *every* axis, so restricting each axis's own factors to its interior
 # (`2:end-1`) and running the same derivation on the restriction gives homogeneous Dirichlet
-# on the whole boundary, still without ever assembling a matrix:
+# on the whole boundary, still without ever assembling a matrix.
 
 sol_d(x) = sinpi(x[1]) * sinpi(x[2]) * sinpi(x[3])   # vanishes on every face
 rhs_d(x) = 3 * pi^2 * sol_d(x)
@@ -457,16 +457,18 @@ normₕ(u_d .- Rₕ(Wₕ, sol_d))
 
 @test 1.0e-5 < normₕ(u_d .- Rₕ(Wₕ, sol_d)) < 1.0e-3 #src
 #
-# There is no matching Dirichlet path for `K` itself -- `LinearSolve`'s `KrylovJL_CG` above
+# There is no matching Dirichlet path for `K` itself, because `LinearSolve`'s `KrylovJL_CG` above
 # only ever ran against the unconstrained problem. A reader reaching for the matrix-free
 # operator on a Dirichlet problem meets this limit directly, not as a caveat in a docstring.
 #
-# ## See also
+# ## Where to go next
 #
 #   - `kronecker_operator` is written as a plain code span throughout this page rather than
 #     a link, along with `is_separable`, `KroneckerLinearOperator` and `fdm_solve`: none of
 #     the four have an `@docs` entry on the [API reference](../api.md) yet.
 #   - [Linear Poisson](poisson_linear.md) assembles the same discrete Laplacian into a
 #     `SparseMatrixCSC` directly, with Dirichlet conditions from the start.
+#   - The [matrix-free operator](matrix_free_operator.md) page applies a form that is not
+#     separable, and compares it with this Kronecker route.
 #   - The [forms tutorial](../tutorials/form.md) introduces `innerₕ`, `inner₊` and `∇ₕ` one
 #     at a time.
