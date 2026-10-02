@@ -47,6 +47,8 @@ using Bramble: divₕ!, curlₕ!, Δₕ!
 import Bramble: M₊ₓ, M₊ᵧ, M₊₂
 using Bramble: Dcₓ, D₋, D₋ₓ, D₋ᵧ, D₋₂, Mₓ, jump, jumpₓ, jumpᵧ, jump₂
 using DoubleFloats: Double64
+# Loading Polyester activates `BramblePolyesterExt`, which the `CpuPolyester()` rows need.
+using Polyester: Polyester
 using SparseArrays: nonzeros
 
 # Group 11 (jacobian sparsity) needs the sparse-AD stack `jacobian_pattern`/
@@ -94,6 +96,31 @@ _mesh1() = mesh(domain(interval(0.0, 1.0)), N1, true)
 _mesh2() = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), N2, (true, true))
 _mesh3() = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), N3, (true, true, true))
 
+# The same meshes on graded axes, for the " (non-uniform)" counterparts. Deterministic and
+# smooth on purpose: a seeded random mesh has spacings down to about 1e-17, which measures a
+# pathological grid and not a non-uniform one (`bramble-verification` §6). `t + 0.1 sinpi(2t)`
+# is the grading the solvers tutorial uses; it keeps the end points and stays increasing.
+_graded(n) = [t + 0.1 * sinpi(2t) for t in range(0.0, 1.0; length = n)]
+function _mesh1n()
+    Ωₕ = _mesh1()
+    Bramble.change_points!(Ωₕ, _graded(N1))
+    return Ωₕ
+end
+function _mesh2n()
+    Ωₕ = _mesh2()
+    Bramble.change_points!(Ωₕ, map(_graded, N2))
+    return Ωₕ
+end
+function _mesh3n()
+    Ωₕ = _mesh3()
+    Bramble.change_points!(Ωₕ, map(_graded, N3))
+    return Ωₕ
+end
+
+# Every benchmark in a group below that carries a `points:<n>` tag runs on a grid of that
+# many points, which `docs/generate_benchmarks.jl` divides by for nanoseconds per point.
+_points_tag(n) = "points:$(n)"
+
 # Point 22 (`Serial()`/`Parallel()` as an execution-policy trait chosen once on the
 # backend) removed the size threshold that used to make the meshes above auto-thread
 # Rₕ!/avgₕ!/gridspace's weight construction. `backend()` now defaults to `Serial()`
@@ -124,9 +151,16 @@ let W1 = gridspace(_mesh1_par()), u1 = element(W1), W2 = gridspace(_mesh2_par())
     # noticed while reading the docs page — the trend charts had no serial line to
     # compare the parallel one against past 1D).
     W1d = gridspace(_mesh1()), u1d = element(W1d), W2d = gridspace(_mesh2()), u2d = element(W2d),
-    W3d = gridspace(_mesh3()), u3d = element(W3d)
+    W3d = gridspace(_mesh3()), u3d = element(W3d),
+    # the CpuPolyester() policy, which needs `using Polyester` (loaded above)
+    _POLY = backend(policy = Bramble.CpuPolyester()),
+    W1y = gridspace(mesh(domain(interval(0.0, 1.0)), N1, true; backend = _POLY)), u1y = element(W1y),
+    W2y = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), N2, (true, true);
+        backend = _POLY)), u2y = element(W2y),
+    W3y = gridspace(mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), N3, (true, true, true);
+        backend = _POLY)), u3y = element(W3y)
 
-    g = SUITE["restriction"] = BenchmarkGroup()
+    g = SUITE["restriction"] = BenchmarkGroup([_points_tag(N1)])
     g["Rₕ! 1D, Parallel() backend"] = @benchmarkable Rₕ!($u1, sin)
     g["avgₕ! 1D, Parallel() backend"] = @benchmarkable avgₕ!($u1, sin)
     g["Rₕ! 2D, Parallel() backend"] = @benchmarkable Rₕ!($u2, x -> sin(x[1]) * x[2])
@@ -142,40 +176,49 @@ let W1 = gridspace(_mesh1_par()), u1 = element(W1), W2 = gridspace(_mesh2_par())
     g["Rₕ! 3D, Serial() backend (default)"] = @benchmarkable Rₕ!($u3d, x -> sin(x[1]) +
                                                                             x[3])
     g["avgₕ! 3D, Serial() backend (default)"] = @benchmarkable avgₕ!($u3d, x->sin(x[1])+x[3]) samples=3 evals=1
+    g["Rₕ! 1D, CpuPolyester() backend"] = @benchmarkable Rₕ!($u1y, sin)
+    g["avgₕ! 1D, CpuPolyester() backend"] = @benchmarkable avgₕ!($u1y, sin)
+    g["Rₕ! 2D, CpuPolyester() backend"] = @benchmarkable Rₕ!($u2y, x -> sin(x[1]) * x[2])
+    g["avgₕ! 2D, CpuPolyester() backend"] = @benchmarkable avgₕ!($u2y, x->sin(x[1])*x[2]) samples=5 evals=1
+    g["Rₕ! 3D, CpuPolyester() backend"] = @benchmarkable Rₕ!($u3y, x -> sin(x[1]) + x[3])
+    g["avgₕ! 3D, CpuPolyester() backend"] = @benchmarkable avgₕ!($u3y, x->sin(x[1])+x[3]) samples=3 evals=1
 end
 
 # --- 2. the stencil engine, both directions ------------------------------- #
-let Wₕ = gridspace(_mesh2()), uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
-    g = SUITE["operators 2D"] = BenchmarkGroup()
-    g["D₋ₓ"] = @benchmarkable D₋ₓ($uₕ)            # along the contiguous direction
-    g["D₋ᵧ"] = @benchmarkable D₋ᵧ($uₕ)            # across it
-    g["Mₓ"] = @benchmarkable Mₓ($uₕ)
-    g["Dcₓ"] = @benchmarkable Dcₓ($uₕ)
+let g = SUITE["operators 2D"] = BenchmarkGroup([_points_tag(prod(N2))])
+    for (mk, sfx) in ((_mesh2, ""), (_mesh2n, " (non-uniform)"))
+        Wₕ = gridspace(mk())
+        uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
+        g["D₋ₓ" * sfx] = @benchmarkable D₋ₓ($uₕ)            # along the contiguous direction
+        g["D₋ᵧ" * sfx] = @benchmarkable D₋ᵧ($uₕ)            # across it
+        g["Mₓ" * sfx] = @benchmarkable Mₓ($uₕ)
+        g["Dcₓ" * sfx] = @benchmarkable Dcₓ($uₕ)
 
-    # The vector calculus operators (gpena/Bramble.jl#158). `Δₕ!` is the entry that matters:
-    # it is one traversal per direction against the two a `D̃(D₋(u))` composition walks, and
-    # it carries no scratch grid function, so the bound below is 0 and stays 0.
-    let vₕ = similar(uₕ), gₕ = ∇ₕ(uₕ)
-        g["Δₕ"] = @benchmarkable Δₕ($uₕ)
-        g["Δₕ!"] = @benchmarkable Δₕ!($vₕ, $uₕ)
-        g["divₕ!"] = @benchmarkable divₕ!($vₕ, $gₕ)
-        g["curlₕ!"] = @benchmarkable curlₕ!($vₕ, $gₕ)
+        # The vector calculus operators (gpena/Bramble.jl#158). `Δₕ!` is the entry that matters:
+        # it is one traversal per direction against the two a `D̃(D₋(u))` composition walks, and
+        # it carries no scratch grid function, so the bound below is 0 and stays 0.
+        let vₕ = similar(uₕ), gₕ = ∇ₕ(uₕ)
+            g["Δₕ" * sfx] = @benchmarkable Δₕ($uₕ)
+            g["Δₕ!" * sfx] = @benchmarkable Δₕ!($vₕ, $uₕ)
+            g["divₕ!" * sfx] = @benchmarkable divₕ!($vₕ, $gₕ)
+            g["curlₕ!" * sfx] = @benchmarkable curlₕ!($vₕ, $gₕ)
+        end
+
+        # The dimensional entry point (gpena/Bramble.jl#74), with `d` coming from a loop rather
+        # than written as a literal. This is the entry that would catch a boxed `Val`: the value
+        # tests cannot see one, since boxing changes how a result is reached and not what it is,
+        # and JET only runs nightly. `ALLOCATION_BOUNDS` gates it at the same 3 allocations the
+        # subscript aliases below cost, once per direction -- boxing would add one per call and
+        # a dynamic dispatch through the whole engine on top.
+        g["D₋(uₕ, d) over d" * sfx] = @benchmarkable(for d in 1:2
+            D₋($uₕ, d)
+        end)
     end
-
-    # The dimensional entry point (gpena/Bramble.jl#74), with `d` coming from a loop rather
-    # than written as a literal. This is the entry that would catch a boxed `Val`: the value
-    # tests cannot see one, since boxing changes how a result is reached and not what it is,
-    # and JET only runs nightly. `ALLOCATION_BOUNDS` gates it at the same 3 allocations the
-    # subscript aliases below cost, once per direction -- boxing would add one per call and
-    # a dynamic dispatch through the whole engine on top.
-    g["D₋(uₕ, d) over d"] = @benchmarkable(for d in 1:2
-        D₋($uₕ, d)
-    end)
 end
 
 # --- 3. reductions -------------------------------------------------------- #
 let uₕ = Rₕ(gridspace(_mesh2()), x -> sin(x[1]) * x[2])
-    g = SUITE["inner products 2D"] = BenchmarkGroup()
+    g = SUITE["inner products 2D"] = BenchmarkGroup([_points_tag(prod(N2))])
     g["innerₕ"] = @benchmarkable innerₕ($uₕ, $uₕ)
     g["normₕ"] = @benchmarkable normₕ($uₕ)
     g["snorm₁ₕ"] = @benchmarkable snorm₁ₕ($uₕ)   # sums over directions
@@ -183,17 +226,19 @@ let uₕ = Rₕ(gridspace(_mesh2()), x -> sin(x[1]) * x[2])
 end
 
 # --- 4. 3D, where the boxing regressions were worst ----------------------- #
-let uₕ = Rₕ(gridspace(_mesh3()), x -> sin(x[1]) + x[3])
-    g = SUITE["operators 3D"] = BenchmarkGroup()
-    g["∇ₕ"] = @benchmarkable ∇ₕ($uₕ)
-    g["D₋₂"] = @benchmarkable D₋₂($uₕ)
-    g["innerₕ"] = @benchmarkable innerₕ($uₕ, $uₕ)
+let g = SUITE["operators 3D"] = BenchmarkGroup([_points_tag(prod(N3))])
+    for (mk, sfx) in ((_mesh3, ""), (_mesh3n, " (non-uniform)"))
+        uₕ = Rₕ(gridspace(mk()), x -> sin(x[1]) + x[3])
+        g["∇ₕ" * sfx] = @benchmarkable ∇ₕ($uₕ)
+        g["D₋₂" * sfx] = @benchmarkable D₋₂($uₕ)
+        g["innerₕ" * sfx] = @benchmarkable innerₕ($uₕ, $uₕ)
+    end
 end
 
 # --- 5. the composite dispatch -------------------------------------------- #
 let Vₕ = gridspace(_mesh2(), Val(3))
     cₕ = Rₕ(Vₕ, (x -> x[1] * x[2], x -> sin(x[1]), x -> x[2]^2))
-    g = SUITE["composite"] = BenchmarkGroup()
+    g = SUITE["composite"] = BenchmarkGroup([_points_tag(prod(N2))])
     g["D₋ₓ (3 components)"] = @benchmarkable D₋ₓ($cₕ)
     g["∇ₕ (3 components)"] = @benchmarkable ∇ₕ($cₕ)
 end
@@ -218,7 +263,7 @@ end
 
 # --- 7. jumps and averages ------------------------------------------------ #
 let uₕ2 = Rₕ(gridspace(_mesh2()), x -> sin(x[1]) * x[2]), uₕ3 = Rₕ(gridspace(_mesh3()), x -> sin(x[1]) + x[3])
-    g = SUITE["jumps & averages"] = BenchmarkGroup()
+    g = SUITE["jumps & averages"] = BenchmarkGroup([_points_tag(prod(N2))])
     g["jumpₓ 2D"] = @benchmarkable jumpₓ($uₕ2)
     g["jumpᵧ 2D"] = @benchmarkable jumpᵧ($uₕ2)
     g["M₊ₓ 2D"] = @benchmarkable M₊ₓ($uₕ2)
@@ -280,7 +325,14 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
     W1p = gridspace(mesh(domain(interval(0.0, 1.0)), N1, true; backend = _PAR)), f1p = Rₕ(W1p, sin),
     l1p = Bramble.form(W1p, v -> innerₕ(f1p, v)), b1p = Bramble.assemble(l1p),
     Wmp = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
-        (300, 300), (true, true); backend = _PAR)), amp = Bramble.form(Wmp, Wmp, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
+        (300, 300), (true, true); backend = _PAR)), amp = Bramble.form(Wmp, Wmp, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))),
+    # the matrix grid again with graded axes, and with the CpuPolyester() policy
+    Ωmn = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (300, 300), (true, true)),
+    _ = Bramble.change_points!(Ωmn, (_graded(300), _graded(300))), Wmn = gridspace(Ωmn),
+    amn = Bramble.form(Wmn, Wmn, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))), Amn = Bramble.assemble(amn),
+    Wmy = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
+        (300, 300), (true, true); backend = backend(policy = Bramble.CpuPolyester()))),
+    amy = Bramble.form(Wmy, Wmy, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
 
     g = SUITE["forms"] = BenchmarkGroup()
 
@@ -332,6 +384,8 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
     g["allocate_system_matrix 2D"] = @benchmarkable Bramble.allocate_system_matrix($am) samples=5 evals=1
     g["assemble! (matrix) 2D"] = @benchmarkable Bramble.assemble!(
         $Am, $am) samples=5 evals=1
+    g["assemble! (matrix) 2D (non-uniform)"] = @benchmarkable Bramble.assemble!(
+        $Amn, $amn) samples=5 evals=1
 
     # assemble_add! (gpena/Bramble.jl#231): the saving it exists for is against the
     # workaround a caller reaches for without it -- assemble each piece separately and
@@ -378,6 +432,10 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
         $am) samples=5 evals=1
     g["assemble (BilinearForm) 2D, Parallel() backend"] = @benchmarkable Bramble.assemble(
         $amp) samples=5 evals=1
+    g["assemble (BilinearForm) 2D, Serial() backend (non-uniform)"] = @benchmarkable Bramble.assemble(
+        $amn) samples=5 evals=1
+    g["assemble (BilinearForm) 2D, CpuPolyester() backend"] = @benchmarkable Bramble.assemble(
+        $amy) samples=5 evals=1
 end
 
 # --- 10. the same work in three precisions -------------------------------- #
@@ -515,6 +573,20 @@ const ALLOCATION_BOUNDS = Dict(
     # one per spatial direction
     ("operators 3D", "∇ₕ") => 15,
     # reductions allocate nothing at all
+    # the graded-mesh twins of the operator entries above, measured: the same counts as the
+    # uniform grid, except `∇ₕ` in 3D, which measures 9 against the uniform 15
+    ("operators 2D", "D₋ₓ (non-uniform)") => 3,
+    ("operators 2D", "D₋ᵧ (non-uniform)") => 3,
+    ("operators 2D", "Mₓ (non-uniform)") => 3,
+    ("operators 2D", "Dcₓ (non-uniform)") => 3,
+    ("operators 2D", "D₋(uₕ, d) over d (non-uniform)") => 6,
+    ("operators 2D", "Δₕ (non-uniform)") => 3,
+    ("operators 2D", "Δₕ! (non-uniform)") => 0,
+    ("operators 2D", "divₕ! (non-uniform)") => 0,
+    ("operators 2D", "curlₕ! (non-uniform)") => 0,
+    ("operators 3D", "D₋₂ (non-uniform)") => 3,
+    ("operators 3D", "∇ₕ (non-uniform)") => 9,
+    ("operators 3D", "innerₕ (non-uniform)") => 0,
     ("inner products 2D", "innerₕ") => 0,
     ("inner products 2D", "normₕ") => 0,
     ("inner products 2D", "snorm₁ₕ") => 0,
@@ -546,6 +618,7 @@ const ALLOCATION_BOUNDS = Dict(
     ("forms", "assemble! 1D") => 0,
     ("forms", "assemble! 2D") => 0,
     ("forms", "assemble! (matrix) 2D") => 0,
+    ("forms", "assemble! (matrix) 2D (non-uniform)") => 0,
     # assemble_add! (gpena/Bramble.jl#231) replays from the same cache assemble! does,
     # against the same warm (A_wide, am_mass)/(A_wide, am) pairs across every sample --
     # zero allocation exactly like "assemble! (matrix) 2D" above. Its point of comparison,

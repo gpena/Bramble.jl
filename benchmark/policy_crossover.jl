@@ -1,7 +1,7 @@
 #===========================================================================#
 # Portable CPU-policy crossover benchmark (user request, 2026-09-26)
 #
-#     julia --threads=N --project=benchmark benchmark/policy_crossover.jl [--smoke] [--out results.md]
+#     julia --threads=N --project=benchmark benchmark/policy_crossover.jl [--smoke] [--out results.md] [--save results.toml]
 #
 # For nine workloads (`Rₕ!` unmasked/masked, `avgₕ!`, `innerₕ` unmasked/masked,
 # `D₋ₓ!`, a warmed broadcast axpy, and three assembly sweeps -- first `assemble`,
@@ -81,6 +81,8 @@ using PrettyTables
 using SparseArrays
 using Random
 
+include(joinpath(@__DIR__, "results_io.jl"))
+
 set_zero_subnormals(true)
 
 # --- CLI ------------------------------------------------------------------- #
@@ -92,6 +94,16 @@ const OUT_PATH = let i = findfirst(==("--out"), ARGS)
         nothing
     elseif i == length(ARGS)
         error("--out requires a file path argument")
+    else
+        ARGS[i + 1]
+    end
+end
+
+const SAVE_PATH = let i = findfirst(==("--save"), ARGS)
+    if i === nothing
+        nothing
+    elseif i == length(ARGS)
+        error("--save requires a file path argument")
     else
         ARGS[i + 1]
     end
@@ -715,6 +727,26 @@ function _print_crossover(label::AbstractString, D::Int, rows::Vector{Row})
     return (workload = label, D = D, threads = threads_x, polyester = poly_x, pvt = pvt_x)
 end
 
+# Rows of the results file: a NaN timing (arm not measured) is left out as a missing value.
+function _result_rows(rows::Vector{Row})
+    return map(rows) do r
+        d = Dict{String, Any}("dofs" => r.dofs, "n" => r.n, "serial_ms" => r.t_serial)
+        isnan(r.t_threads) || (d["threads_ms"] = r.t_threads)
+        isnan(r.t_poly) || (d["polyester_ms"] = r.t_poly)
+        return d
+    end
+end
+
+function _crossover_result_rows(recs)
+    return map(recs) do r
+        d = Dict{String, Any}("workload" => r.workload, "dim" => r.D)
+        r.threads === nothing || (d["threads"] = r.threads)
+        r.polyester === nothing || (d["polyester"] = r.polyester)
+        r.pvt === nothing || (d["polyester_vs_threads"] = r.pvt)
+        return d
+    end
+end
+
 function _print_summary(recs)
     _out()
     _out("=== Summary recommendation (per workload x dimension) ===")
@@ -753,15 +785,18 @@ function main()
     assemble_labels = ("assemble bilinear first", "assemble! bilinear", "assemble! linear")
 
     recs = []
+    tables = Dict{String, Any}()
     for label in cheap_labels, D in 1:3
 
         rows = filter(r -> r.workload == label && r.D == D, cheap_rows)
+        isempty(rows) || (tables["$label $(D)D"] = _result_rows(rows))
         _print_workload_table(label, D, rows)
         push!(recs, _print_crossover(label, D, rows))
     end
     for label in assemble_labels, D in 1:3
 
         rows = filter(r -> r.workload == label && r.D == D, assemble_rows)
+        isempty(rows) || (tables["$label $(D)D"] = _result_rows(rows))
         _print_workload_table(label, D, rows)
         push!(recs, _print_crossover(label, D, rows))
     end
@@ -771,6 +806,7 @@ function main()
     end
 
     _print_summary(recs)
+    isempty(recs) || (tables["crossover"] = _crossover_result_rows(recs))
 
     _out()
     if ALL_OK[]
@@ -784,6 +820,11 @@ function main()
             write(io, String(take!(MD_BUF)))
         end
         _out("Markdown report written to $OUT_PATH")
+    end
+
+    if SAVE_PATH !== nothing
+        save_results(SAVE_PATH, "policy_crossover.jl", tables; smoke = SMOKE)
+        _out("Results written to $SAVE_PATH")
     end
 
     return nothing
