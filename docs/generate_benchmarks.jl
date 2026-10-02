@@ -184,6 +184,362 @@ function _render_release_chart(rows)
     """
 end
 
+# One short sentence per group, saying what the group measures; the comparison sections
+# below list the ones their charts draw on. A group not listed (a later addition to the
+# suite) gets no blurb rather than a made-up one.
+const _BENCH_GROUP_BLURBS = Dict(
+    "operators 2D" => "The finite-difference stencil engine on a 1000×1000 grid: the difference operator along the grid's contiguous storage direction (`D₋ₓ`) versus across it (`D₋ᵧ`), which access memory very differently and so can perform very differently.",
+    "operators 3D" => "The same stencil engine in 3D (`D₋₂`), together with the inner product `innerₕ` and the full gradient `∇ₕ`.",
+    "jumps & averages" => "Jump and average operators across cell interfaces, in 2D and 3D.",
+    "inner products 2D" => "The reduction path — inner products and norms — including the seminorm's sum over directions.",
+    "restriction" => "Point interpolation (`Rₕ!`) and cell-averaging (`avgₕ!`), compared across the `Serial()` (the allocation-free default), `Parallel()` and `CpuPolyester()` backends, split by dimension.",
+    "composite" => "A composite (multi-component) operator, which dispatches per component and calls the engine once per component with a view rather than once with a plain vector.",
+    "construction" => "Mesh and grid-space construction, including the quadrature weights `gridspace` builds internally.",
+    "startup & latency" => "Time to first `using Bramble` and first operator call — compilation latency, not steady-state performance.",
+    "forms" => "Linear and bilinear form assembly, across 1D/2D and the `Serial()`/`Parallel()`/`CpuPolyester()` backends, and the refill and `assemble_add!` paths on a fixed matrix pattern.",
+    "precision 1D" => "The same 1D workload — restriction, assembly, inner product — repeated in `Float32`, `Float64`, and `Double64`; `Double64` (software arithmetic) is an order of magnitude slower."
+)
+
+# The palette of the comparison charts: mid-saturation hues that read on the light and the
+# dark site theme alike.
+const _BENCH_PALETTE = [
+    "#3b82f6", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"
+]
+
+# A JavaScript string literal.
+_js_str(s) = "\"" * replace(string(s), "\\" => "\\\\", "\"" => "\\\"") * "\""
+_js_num(x) = x === nothing ? "null" : string(x)
+
+# The median time in ns of every benchmark of `run`, keyed by (group, benchmark), and each
+# group's `points:<n>` tag (the number of grid points its benchmarks run on).
+function _latest_medians(run)
+    times = Dict{Tuple{String, String}, Float64}()
+    points = Dict{String, Int}()
+    for (g, grp) in run.data
+        for t in grp.tags
+            startswith(string(t), "points:") &&
+                (points[string(g)] = parse(Int, string(t)[(length("points:") + 1):end]))
+        end
+        for (k, trial) in grp.data
+            times[(string(g), string(k))] = time(median(trial))
+        end
+    end
+    return (times = times, points = points)
+end
+
+# A comparison chart: grouped bars (`mode = "bar"`) or lines with markers (`"line"`) of
+# `series = [(name, values, hover)]` over the categories `labels`; `nothing` is a gap. The
+# `data-bench` and `data-run` attributes are read by the checks in
+# `.claude/plans/v3-21-0-benchmarks-page-checks/`.
+function _render_comparison_chart(
+        kind, run, labels, series, ytitle; mode = "bar", ref = nothing, logy = true,
+        height = max(380, 120 + 22 * length(labels) * (mode == "bar" ? 1 : 0)),
+        horizontal = false
+)
+    div_id = _next_bench_div_id()
+    traces = String[]
+    for (i, (name, values, hover)) in enumerate(series)
+        color = _BENCH_PALETTE[mod1(i, length(_BENCH_PALETTE))]
+        vals = "[" * join((_js_num(v) for v in values), ",") * "]"
+        cats = "[" * join((_js_str(l) for l in labels), ",") * "]"
+        hov = "[" * join((_js_str(h) for h in hover), ",") * "]"
+        xs, ys = horizontal ? (vals, cats) : (cats, vals)
+        extra = if mode == "bar"
+            "type: 'bar', $(horizontal ? "orientation: 'h', " : "")marker: { color: '$color' }"
+        else
+            "type: 'scatter', mode: 'lines+markers', connectgaps: true, line: { color: '$color' }, marker: { color: '$color', size: 7 }"
+        end
+        push!(
+            traces,
+            "{ name: $(_js_str(name)), x: $xs, y: $ys, $extra, hovertext: $hov, hoverinfo: 'text' }"
+        )
+    end
+    shapes = ref === nothing ? "[]" :
+             "[{ type: 'line', $(horizontal ? "xref: 'x', yref: 'paper', x0: $ref, x1: $ref, y0: 0, y1: 1" : "xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: $ref, y1: $ref"), line: { color: theme.text, width: 1, dash: 'dot' } }]"
+    valaxis = horizontal ? "xaxis" : "yaxis"
+    cataxis = horizontal ? "yaxis" : "xaxis"
+    return """
+    <div id="$div_id" data-bench="$kind" data-run="$(run.commit)" style="width:100%; height:$(height)px;"></div>
+    <script>
+    (function () {
+      const theme = window.bramblePlotlyTheme();
+      const data = [$(join(traces, ",\n"))];
+      const layout = {
+        paper_bgcolor: theme.bg,
+        plot_bgcolor: theme.bg,
+        font: { color: theme.text },
+        barmode: 'group',
+        legend: { orientation: 'h', y: -0.25 },
+        shapes: $shapes,
+        $valaxis: {
+          title: { text: $(_js_str(ytitle)), font: { color: theme.text } },
+          $(logy ? "type: 'log', " : "")color: theme.text, gridcolor: theme.grid,
+        },
+        $cataxis: { color: theme.text$(horizontal ? ", autorange: 'reversed', tickfont: { size: 10 }" : ", tickangle: -30") },
+        margin: { t: 20, l: $(horizontal ? 260 : 70), r: 20, b: $(horizontal ? 60 : 130) },
+      };
+      Plotly.newPlot('$div_id', data, layout, { displayModeBar: false, responsive: true });
+      window.brambleRegisterPlotlyChart('$div_id', function () {
+        const t = window.bramblePlotlyTheme();
+        return {
+          'font.color': t.text,
+          '$valaxis.color': t.text, '$valaxis.gridcolor': t.grid, '$valaxis.title.font.color': t.text,
+          '$cataxis.color': t.text,
+        };
+      });
+    })();
+    </script>
+    """
+end
+
+# Wraps a chart for Documenter.
+_raw_chart(chart) = "```@raw html\n<div style=\"width:100%; margin:1.2rem 0 2.5rem 0;\">\n$chart</div>\n```"
+
+# The groups a chart draws on, each with its blurb.
+function _group_lines(groups)
+    lines = String[]
+    for g in groups
+        b = get(_BENCH_GROUP_BLURBS, g, "")
+        push!(lines, isempty(b) ? "- `$g`" : "- `$g`: $b")
+    end
+    return join(lines, "\n")
+end
+
+_ms(ns) = ns / 1.0e6
+_ratio_hover(label, ns, ratio, what) = "$label: $(_format_time(ns)), ×$(round(ratio; digits = 2)) $what"
+
+# Each comparison below finds its pairs by name in the latest run alone, and returns
+# `nothing` when the run lacks the keys.
+
+# Speedup of `Parallel()` and `CpuPolyester()` over `Serial()` per operator and dimension.
+function _policy_section(run, med, ordered_groups)
+    rx = r"^(.*), (Serial|Parallel|CpuPolyester)\(\) backend( \(default\))?( \(non-uniform\))?$"
+    labels, rows, groups = String[], Dict{String, Float64}[], String[]
+    for g in ordered_groups
+        fam = Dict{String, Dict{String, Float64}}()
+        order = String[]
+        for k in sort(collect(k for (gg, k) in keys(med.times) if gg == g))
+            m = match(rx, k)
+            m === nothing && continue
+            base = m.captures[1] * (m.captures[4] === nothing ? "" : " (non-uniform)")
+            haskey(fam, base) || (fam[base] = Dict{String, Float64}(); push!(order, base))
+            fam[base][m.captures[2]] = med.times[(g, k)]
+        end
+        for base in order
+            d = fam[base]
+            (haskey(d, "Serial") && length(d) > 1) || continue
+            push!(labels, base)
+            push!(rows, d)
+            g in groups || push!(groups, g)
+        end
+    end
+    isempty(rows) && return nothing
+    series = Tuple{String, Vector{Any}, Vector{String}}[]
+    for pol in ("Parallel", "CpuPolyester")
+        any(haskey(d, pol) for d in rows) || continue
+        vals = Any[haskey(d, pol) ? d["Serial"] / d[pol] : nothing for d in rows]
+        hov = [haskey(d, pol) ?
+               _ratio_hover(l, d[pol], d["Serial"] / d[pol], "faster than Serial()") : l
+               for (l, d) in zip(labels, rows)]
+        push!(series, ("$pol()", vals, hov))
+    end
+    chart = _render_comparison_chart(
+        "policy", run, labels, series, "speedup over Serial()"; ref = 1)
+    text = """
+    ### Execution policy
+
+    Each bar is the median of the `Serial()` run of a benchmark divided by its median under `Parallel()` or, where the run has it, `CpuPolyester()`; a bar above the dotted line is faster than `Serial()`. The benchmarks are paired by name from the latest run alone.
+
+    $(_group_lines(groups))
+
+    $(_raw_chart(chart))
+    """
+    return text
+end
+
+# Cost of `Float32` and `Double64` relative to `Float64`.
+function _precision_section(run, med, ordered_groups)
+    rx = r"^(.*) (Float32|Float64|Double64)$"
+    labels, rows, groups, types = String[], Dict{String, Float64}[], String[], String[]
+    for g in ordered_groups
+        fam = Dict{String, Dict{String, Float64}}()
+        order = String[]
+        for k in sort(collect(k for (gg, k) in keys(med.times) if gg == g))
+            m = match(rx, k)
+            m === nothing && continue
+            base = m.captures[1]
+            haskey(fam, base) || (fam[base] = Dict{String, Float64}(); push!(order, base))
+            fam[base][m.captures[2]] = med.times[(g, k)]
+        end
+        for base in order
+            d = fam[base]
+            (haskey(d, "Float64") && length(d) > 1) || continue
+            push!(labels, base)
+            push!(rows, d)
+            g in groups || push!(groups, g)
+        end
+    end
+    isempty(rows) && return nothing
+    series = Tuple{String, Vector{Any}, Vector{String}}[]
+    for ty in ("Float32", "Double64")
+        any(haskey(d, ty) for d in rows) || continue
+        vals = Any[haskey(d, ty) ? d[ty] / d["Float64"] : nothing for d in rows]
+        hov = [haskey(d, ty) ?
+               _ratio_hover(l, d[ty], d[ty] / d["Float64"], "the Float64 time") : l
+               for (l, d) in zip(labels, rows)]
+        push!(series, (ty, vals, hov))
+    end
+    chart = _render_comparison_chart(
+        "precision", run, labels, series, "median time relative to Float64"; ref = 1)
+    return """
+    ### Precision
+
+    Each bar is the median of a benchmark in `Float32` or `Double64` divided by its median in `Float64`; a bar below the dotted line is cheaper than `Float64`.
+
+    $(_group_lines(groups))
+
+    $(_raw_chart(chart))
+    """
+end
+
+# Time of a pair `(a, b)` of benchmarks of one group, as two bars per pair.
+function _pair_section(
+        kind, run, med, ordered_groups, pairs_of, title, caption, name_a, name_b)
+    labels, ta, tb, groups = String[], Float64[], Float64[], String[]
+    for g in ordered_groups
+        for (label, ka, kb) in pairs_of(g)
+            push!(labels, label)
+            push!(ta, med.times[(g, ka)])
+            push!(tb, med.times[(g, kb)])
+            g in groups || push!(groups, g)
+        end
+    end
+    isempty(labels) && return nothing
+    series = [
+        (name_a, Any[_ms(t) for t in ta], [string(l, ": ", _format_time(t)) for (l, t) in zip(labels, ta)]),
+        (name_b, Any[_ms(t) for t in tb], [string(l, ": ", _format_time(t)) for (l, t) in zip(labels, tb)])
+    ]
+    chart = _render_comparison_chart(
+        kind, run, labels, series, "median time (ms)"; horizontal = true,
+        height = 140 + 46 * length(labels))
+    return """
+    ### $title
+
+    $caption
+
+    $(_group_lines(groups))
+
+    $(_raw_chart(chart))
+    """
+end
+
+function _direction_section(run, med, ordered_groups)
+    pairs_of = g -> [(replace(k, "ₓ" => "ₓ|ᵧ"), k, replace(k, "ₓ" => "ᵧ"))
+                     for k in sort(collect(k for (gg, k) in keys(med.times) if gg == g))
+                     if occursin("ₓ", k) && haskey(med.times, (g, replace(k, "ₓ" => "ᵧ")))]
+    return _pair_section(
+        "direction", run, med, ordered_groups, pairs_of, "Direction",
+        "The same operator along `x` (the contiguous storage direction) and along `y` (across it), paired by swapping `ₓ` for `ᵧ` in the benchmark name.",
+        "along x", "along y")
+end
+
+function _uniformity_section(run, med, ordered_groups)
+    sfx = " (non-uniform)"
+    pairs_of = g -> [(chopsuffix(k, sfx), chopsuffix(k, sfx), k)
+                     for k in sort(collect(k for (gg, k) in keys(med.times) if gg == g))
+                     if endswith(k, sfx) && haskey(med.times, (g, chopsuffix(k, sfx)))]
+    return _pair_section(
+        "uniformity", run, med, ordered_groups, pairs_of, "Uniform and non-uniform grids",
+        "Each benchmark on a uniform mesh and on the same mesh with graded axes (the benchmark of the same name with a ` (non-uniform)` suffix).",
+        "uniform", "non-uniform")
+end
+
+# First assembly, refill and `assemble_add!` of one matrix.
+function _assembly_section(run, med, ordered_groups)
+    g = "forms"
+    first_key = "assemble (BilinearForm) 2D, Serial() backend"
+    keys_ = [
+        (first_key, "first assembly (allocates and fills)"),
+        ("assemble! (matrix) 2D", "refill (pattern reused)"),
+        ("assemble-then-add (matrix) 2D", "assemble the pieces, then add"),
+        ("assemble_add! (matrix) 2D", "assemble_add!")
+    ]
+    present = [(k, l) for (k, l) in keys_ if haskey(med.times, (g, k))]
+    length(present) < 2 && return nothing
+    labels = [l for (_, l) in present]
+    ts = [med.times[(g, k)] for (k, _) in present]
+    series = [(
+        "median time", Any[_ms(t) for t in ts],
+        [string(l, ": ", _format_time(t)) for (l, t) in zip(labels, ts)]
+    )]
+    chart = _render_comparison_chart(
+        "assembly", run, labels, series, "median time (ms)"; horizontal = true,
+        height = 140 + 46 * length(labels))
+    return """
+    ### Assembly
+
+    A bilinear form assembled for the first time, refilled in place, and combined with a second piece. The last two bars are a pair of their own: both build `M/Δt + θK` from a mass-like and a stiffness-like piece, which is a different form from the first two, so they are compared with each other and not with the bars above.
+
+    $(_group_lines([g]))
+
+    $(_raw_chart(chart))
+    """
+end
+
+# Nanoseconds per grid point across dimensions, for the benchmarks of a group tagged with
+# `points:<n>` whose names differ only in a `1D`, `2D` or `3D` token.
+function _dimension_section(run, med, ordered_groups)
+    rx = r"(?<= )([123])D(?=[ ,]|$)"
+    labels = ["1D", "2D", "3D"]
+    series = Tuple{String, Vector{Any}, Vector{String}}[]
+    groups = String[]
+    for g in ordered_groups
+        haskey(med.points, g) || continue
+        fam = Dict{String, Dict{String, Float64}}()
+        order = String[]
+        for k in sort(collect(k for (gg, k) in keys(med.times) if gg == g))
+            m = match(rx, k)
+            m === nothing && continue
+            base = replace(k, rx => "nD")
+            haskey(fam, base) || (fam[base] = Dict{String, Float64}(); push!(order, base))
+            fam[base][m.captures[1] * "D"] = med.times[(g, k)] / med.points[g]
+        end
+        for base in order
+            d = fam[base]
+            length(d) > 1 || continue
+            vals = Any[get(d, l, nothing) for l in labels]
+            hov = [haskey(d, l) ? "$base, $l: $(round(d[l]; sigdigits = 3)) ns per point" : l
+                   for l in labels]
+            push!(series, (base, vals, hov))
+            g in groups || push!(groups, g)
+        end
+    end
+    isempty(series) && return nothing
+    chart = _render_comparison_chart(
+        "dimension", run, labels, series, "median time per grid point (ns)";
+        mode = "line", height = 460)
+    return """
+    ### Dimension
+
+    The median time per grid point, in nanoseconds per point, of benchmarks that differ only in the dimension of their name. The time is divided by the `points:` tag of the group, the number of grid points its benchmarks run on.
+
+    $(_group_lines(groups))
+
+    $(_raw_chart(chart))
+    """
+end
+
+function _comparison_sections(runs, ordered_groups)
+    run = runs[end]
+    med = _latest_medians(run)
+    sections = [f(run, med, ordered_groups)
+                for f in (
+        _policy_section, _precision_section, _direction_section,
+        _assembly_section, _uniformity_section, _dimension_section
+    )]
+    return filter(!isnothing, sections)
+end
+
 # `results_dir` is where the standalone scripts' saved tables live; the release view reads
 # baselines only and takes it for the sections that read those tables.
 function generate_benchmarks_markdown(
@@ -297,6 +653,21 @@ function generate_benchmarks_markdown(
         g in ordered_groups || push!(ordered_groups, g)
     end
 
+    println(io, "```@raw html")
+    println(io, plotlyjs_head())
+    println(io, "```")
+    println(io)
+    println(io, "## Comparisons in the latest baseline")
+    println(io)
+    println(
+        io,
+        "Every chart in this section reads the latest baseline alone (v$(runs[end].version), `$(runs[end].commit)`), recorded with $(_threads_phrase(runs[end].threads)), and finds its pairs by benchmark name; a comparison whose benchmarks the baseline lacks is left out."
+    )
+    println(io)
+    for section in _comparison_sections(runs, ordered_groups)
+        println(io, section)
+    end
+
     println(io, "## Regressions since the previous baseline")
     println(io)
     if length(runs) >= 2
@@ -326,10 +697,6 @@ function generate_benchmarks_markdown(
                 "    The previous baseline was recorded with $(_threads_phrase(runs[end - 1].threads)) and the latest with $(_threads_phrase(runs[end].threads)). Entries on the `Parallel()` backend are not comparable across that change: at one thread the threaded code path runs its serial branch."
             )
         end
-        println(io)
-        println(io, "```@raw html")
-        println(io, plotlyjs_head())
-        println(io, "```")
         println(io)
         println(io, "```@raw html")
         println(io, "<div style=\"width:100%; margin:1.2rem 0 2.5rem 0;\">")
