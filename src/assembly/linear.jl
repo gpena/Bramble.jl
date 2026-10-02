@@ -1068,8 +1068,7 @@ end
 # one fails loudly at its first scalar read rather than assembling wrong numbers.
 @inline _host_sources(op) = op
 
-# The same, keyed on where the space lives: a host space's AST is returned untouched.
-@inline _host_sources(::HostLocality, op) = op
+# The same, keyed on where the space lives: only a device space's AST is walked.
 @inline _host_sources(::DeviceLocality, op) = _host_sources(op)
 
 @inline _host_array(x) = x

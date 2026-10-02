@@ -919,6 +919,13 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         # and a value dirichlet does not know how to normalize is rejected before
         # anything is assembled
         @test_throws ArgumentError assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = 3)
+
+        # `apply_dirichlet_conditions!` takes a lone label `Symbol` as well as a Tuple of
+        # them, from callers that normalised the labels themselves
+        lsym = form(Wₕ, v -> innerₕ(uₕ, v))
+        b_sym = apply_dirichlet_conditions!(copy(plain), lsym, bcs, :bottom)
+        @test b_sym ≈ b
+        @test b_sym[.!marked] ≈ plain[.!marked]
     end
 
     @testset "dirichlet_components restriction" begin
@@ -1183,6 +1190,217 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
             return minimum(ntuple(_ -> @allocated(evaluate!(scratch, lf, v)), 3))
         end
         @test _evaluate_bytes(scratch, lf, uₕ) == 0
+    end
+
+    @testset "Point-coloured sweep on a collapsed axis" begin
+        # `_sweep_parallel!` bands the last axis whenever it can hold two slabs, which every
+        # mesh above can, so its point-coloured fallback never ran. A collapsed last axis (one
+        # point) cannot be banded, and the sweep walks colours instead: one flat colour for a
+        # term reaching only its own point, `prod(strides)` strided colours for a difference.
+        # The x axis is non-uniform. Two oracles: the Serial sweep, and the defining identity
+        # bᵀw = l(w), evaluated through the space layer, which shares nothing with assembly.
+        Ωc = mesh(domain(interval(0.0, 1.0) × interval(0.5, 0.5)), (9, 1), (false, true))
+        Wc = gridspace(Ωc)
+        @test size(Bramble.indices(Ωc)) == (9, 1)
+        uc = Rₕ(Wc, x -> 1 + x[1]^2)
+        wc = Rₕ(Wc, x -> sin(3x[1]) + 2)
+
+        for (nm, g, gw, ncolours) in (
+            ("one colour", v -> innerₕ(uc, v), w -> innerₕ(uc, w), 1),
+            (
+            "strided colours", v -> innerₕ(uc, v + 2 * D₋ₓ(v) - Mₓ(v)),
+            w -> innerₕ(uc, w + 2 * D₋ₓ(w) - Mₓ(w)), 2
+        )
+        )
+            lc = form(Wc, g)
+            @test prod(_colour_strides(stencil_offsets(resolve_form_ast(lc)))) == ncolours
+            bs = assemble(lc)
+            reference = gw(wc)
+            @test dot(bs, parent(wc)) ≈ reference
+            @test !iszero(reference)
+
+            bp = fill(7.0, ndofs(Wc))
+            @test assemble_parallel!(bp, lc) === bp
+            @test bp ≈ bs
+
+            # inside a threaded region a `:static` loop cannot start, so each colour runs
+            # in order on the calling task (`_serial_linear_colour!`), to the same answer
+            bt = fill(7.0, ndofs(Wc))
+            Threads.@threads for _ in 1:1
+                assemble_parallel!(bt, lc)
+            end
+            @test bt ≈ bs
+        end
+
+        # the composite sweep hands each leaf to the same fallback at its offset; values
+        # 1 and 100 apart so a block landing in the wrong place cannot pass
+        Vc2 = gridspace(Ωc, Val(2))
+        uv = Rₕ(Vc2, (x -> 1 + x[1]^2, x -> 100 * (2 - x[1])))
+        lv = form(Vc2, v -> innerₕ(uv(1), v(1) + 2 * D₋ₓ(v(1))) + innerₕ(uv(2), v(2)))
+        bvs = assemble(lv)
+        bvp = similar(bvs)
+        assemble_parallel!(bvp, lv)
+        m = ndofs(Wc)
+        @test bvp[1:m] ≈ bvs[1:m]
+        @test bvp[(m + 1):(2m)] ≈ bvs[(m + 1):(2m)]
+        @test bvs[(m + 1):(2m)] ≈ parent(components(uv)[2]) .* weights(Wc, Innerh())
+    end
+
+    @testset "CpuPolyester colour hooks" begin
+        # `CpuPolyester` sweeps reach the `_batch_*` hooks, never `Threads.@threads`. Without
+        # `BramblePolyesterExt` the hooks raise naming Polyester; with it they fill `b`. A
+        # one-colour form, so the whole grid is one race-free colour.
+        Ωp = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, true))
+        Wp = gridspace(Ωp)
+        up = Rₕ(Wp, x -> 1 + x[1] * x[2])
+        lp = form(Wp, v -> innerₕ(up, v))
+        astp = resolve_form_ast(lp)
+        idxs = Bramble.indices(Ωp)
+        lin = LinearIndices(idxs)
+        mk = Bramble.markers(Ωp)
+        bpol = zeros(ndofs(Wp))
+        if Base.get_extension(Bramble, :BramblePolyesterExt) === nothing
+            err = try
+                Bramble._sweep_colour!(
+                    Bramble.CpuPolyester(), bpol, Wp, astp, idxs, lin, mk, 0, true)
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            @test occursin("Polyester", err.msg)
+            @test all(iszero, bpol)
+        else
+            Bramble._sweep_colour!(
+                Bramble.CpuPolyester(), bpol, Wp, astp, idxs, lin, mk, 0, true)
+            @test bpol ≈ assemble(lp)
+        end
+
+        # Untyped arguments reach the `src/` stubs even when the extension is loaded.
+        for (hook, nargs) in ((Bramble._batch_linear_colour_sweep!, 8),
+            (Bramble._batch_linear_band_sweep!, 11))
+            err = try
+                hook(ntuple(_ -> nothing, nargs)...)
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            @test occursin("Polyester", err.msg)
+        end
+    end
+
+    @testset "Shifted source lowering" begin
+        # `form` samples a `SourceFunction` once, through a `ShiftNode` too: the stored AST
+        # holds a `SourceVector` under the shift, and the assembled entry at a point is the
+        # source one point up in y times the point's weight (zero past the top row).
+        # Non-uniform in both axes, so a shift read off the wrong axis would differ.
+        Ωs = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
+        Ws = gridspace(Ωs)
+        f = x -> 1 + x[1] + 3x[2]^2
+        sf = Bramble.source_function(f, Val(2))
+        ls = form(Ws, v -> innerₕ(Bramble.shift_op(sf, 2, 1), v))
+        asts = resolve_form_ast(ls)
+        @test asts isa LinearProduct
+        @test asts.left_op isa Bramble.ShiftNode
+        @test asts.left_op.inner_op isa Bramble.SourceVector
+
+        F = reshape(parent(Rₕ(Ws, f)), 7, 6)
+        w = reshape(collect(weights(Ws, Innerh())), 7, 6)
+        expected = [j < 6 ? F[i, j + 1] * w[i, j] : 0.0 for i in 1:7, j in 1:6]
+        @test assemble(ls) ≈ vec(expected)
+    end
+
+    @testset "Unnamed function source on a heterogeneous composite" begin
+        # A term naming no component is not lowered on a composite space (its leaves may
+        # have different meshes), so `assemble` sizes its vector by sampling the function
+        # on each leaf. Non-uniform leaves of different sizes; the routed second term adds
+        # 100 to the second block only.
+        Ωa = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (7, 9), (false, false))
+        Ωb = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (5, 4), (false, true))
+        Wa, Wb = gridspace(Ωa), gridspace(Ωb)
+        Vh = Bramble.CompositeGridSpace((Wa, Wb))
+        f = x -> x[1] + 2x[2]
+        lh = form(Vh, v -> innerₕ(f, v) + innerₕ(100.0, v(2)))
+        bh = assemble(lh)
+        na = ndofs(Wa)
+        @test eltype(bh) === Float64
+        @test bh[1:na] ≈ parent(Rₕ(Wa, f)) .* weights(Wa, Innerh())
+        @test bh[(na + 1):end] ≈ (parent(Rₕ(Wb, f)) .+ 100.0) .* weights(Wb, Innerh())
+        # the trapezoidal sums are exact for a bilinear integrand: ∫(x + 2y) = 1.5
+        @test sum(bh[1:na]) ≈ 1.5
+        @test sum(bh[(na + 1):end]) ≈ 101.5
+    end
+
+    @testset "Point sources with Ref strengths" begin
+        # A `Vector` of `Ref` strengths reads its type off the element type, and stays live:
+        # multilinear spreading preserves each point's total, so the vector sums to the sum
+        # of the strengths, before and after one is changed. Non-uniform mesh, off-grid points.
+        Ωd = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 7), (false, false))
+        Wd = gridspace(Ωd)
+        strengths = [Ref(2.0), Ref(3.0)]
+        ld = form(Wd, v -> innerₕ(dirac([(0.31, 0.42), (0.77, 0.18)], strengths), v))
+        bd = assemble(ld)
+        @test eltype(bd) === Float64
+        @test sum(bd) ≈ 5.0
+        @test count(!iszero, bd) == 8         # 4 corners per point, no overlap
+        strengths[1][] = 10.0
+        assemble!(bd, ld)
+        @test sum(bd) ≈ 13.0
+    end
+
+    @testset "Element type helpers" begin
+        # a thunk reveals its type through its value, and anything that is not a number,
+        # `Ref`, array or thunk promotes by its own type
+        @test Bramble._value_eltype(Float32, () -> 2.0) === Float64
+        @test Bramble._value_eltype(Float64, () -> Float32[1, 2]) === Float64
+        @test Bramble._value_eltype(Float32, nothing) === Union{Nothing, Float32}
+
+        # the diagonal blocks of a test side shorter than its trial side are the test
+        # side's own leaves
+        @test Bramble._paired((1, 2), (:a, :b, :c)) == (1, 2)
+        @test Bramble._paired((), (:a,)) == ()
+        V2, V3 = gridspace(Ωₕ, Val(2)), gridspace(Ωₕ, Val(3))
+        @test Bramble._assembled_eltype(
+            resolve_form_ast(form(V2, v -> innerₕ(1.0f0, v))), V2, V3) === Float64
+    end
+
+    @testset "Host mirror helpers" begin
+        # The device paths assemble on a host mirror of the test space, into a host buffer,
+        # and copy it into the storage of `b`. On a host space each helper is the identity
+        # or an equal copy, which is what lets the mirror assemble the same vector.
+        Ωm = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 8), (false, true))
+        Wm = gridspace(Ωm)
+        Vm = Bramble.CompositeGridSpace((Wm, gridspace(Ωₕ)))
+        um = Rₕ(Wm, x -> 1 + x[1] - x[2]^2)
+        for (sp, g) in ((Wm, v -> innerₕ(um, v + D₋ₓ(v))),
+            (Vm, v -> innerₕ(um, v(1) + D₋ₓ(v(1))) + innerₕ(100.0, v(2))))
+            lm = form(sp, g)
+            hs = Bramble._host_mirror_space(sp)
+            @test ndofs(hs) == ndofs(sp)
+            astm = resolve_form_ast(lm)
+            hform = LinearForm{2, typeof(hs), typeof(astm)}(hs, astm)
+            hb = zeros(ndofs(sp))
+            Bramble._assemble_linear!(
+                Bramble.HostLocality(), hb, hform, astm, nothing, nothing)
+            @test hb ≈ assemble(lm)
+        end
+
+        v_plain = zeros(ndofs(Wm))
+        @test Bramble._vector_storage(v_plain) === v_plain
+        @test Bramble._vector_storage(um) === parent(um)
+        @test Bramble._host_array(2.5) === 2.5
+
+        # every `@node_family` node is rebuilt around its walked operand, here the test
+        # function, which the walk returns untouched
+        v = TestFunction{2}()
+        @test Bramble._host_sources(v) === v
+        for N in (:BackwardDifference, :ForwardDifference, :CenteredDifference,
+            :StarDifference, :CrossWeightedDifference, :BackwardAverage, :ForwardAverage,
+            :CenteredAverage, :JumpNode)
+            node = getfield(Bramble, N){2, 1, typeof(v)}(v)
+            @test Bramble._host_sources(node) === node
+        end
     end
 end
 
