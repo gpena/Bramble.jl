@@ -168,7 +168,7 @@ function _render_release_chart(rows)
           title: { text: "latest / previous median", font: { color: theme.text } },
           type: 'log', color: theme.text, gridcolor: theme.grid,
         },
-        yaxis: { color: theme.text, autorange: 'reversed', tickfont: { size: 9 } },
+        yaxis: { color: theme.text, autorange: 'reversed', tickfont: { size: 9 }, automargin: true },
         margin: { t: 20, l: 260, r: 20, b: 50 },
       };
       Plotly.newPlot('$div_id', data, layout, { displayModeBar: false, responsive: true });
@@ -276,7 +276,7 @@ function _render_comparison_chart(
           title: { text: $(_js_str(ytitle)), font: { color: theme.text } },
           $(logy ? "type: 'log', " : "")color: theme.text, gridcolor: theme.grid,
         },
-        $cataxis: { color: theme.text$(horizontal ? ", autorange: 'reversed', tickfont: { size: 10 }" : ", tickangle: -30") },
+        $cataxis: { color: theme.text, automargin: true$(horizontal ? ", autorange: 'reversed', tickfont: { size: 10 }" : ", tickangle: -30") },
         margin: { t: 20, l: $(horizontal ? 260 : 70), r: 20, b: $(horizontal ? 60 : 130) },
       };
       Plotly.newPlot('$div_id', data, layout, { displayModeBar: false, responsive: true });
@@ -567,20 +567,26 @@ function _render_xy_chart(kind, meta, series, xtitle, ytitle; height = 420)
     (function () {
       const theme = window.bramblePlotlyTheme();
       const data = [$(join(traces, ",\n"))];
+      // The legend is anchored to the bottom of the chart; its rows depend on the width, so
+      // the bottom margin and the chart's height grow with the rows it needs.
+      const el = document.getElementById('$div_id');
+      const perRow = Math.max(1, Math.floor((el.clientWidth - 40) / 190));
+      const legendPx = 22 * Math.ceil(data.length / perRow);
+      el.style.height = ($height + legendPx) + 'px';
       const layout = {
         paper_bgcolor: theme.bg,
         plot_bgcolor: theme.bg,
         font: { color: theme.text },
-        legend: { orientation: 'h', y: -0.25 },
+        legend: { orientation: 'h', x: 0, xanchor: 'left', yref: 'container', y: 0, yanchor: 'bottom' },
         xaxis: {
-          title: { text: $(_js_str(xtitle)), font: { color: theme.text } },
-          type: 'log', color: theme.text, gridcolor: theme.grid,
+          title: { text: $(_js_str(xtitle)), font: { color: theme.text }, standoff: 10 },
+          type: 'log', color: theme.text, gridcolor: theme.grid, automargin: true,
         },
         yaxis: {
           title: { text: $(_js_str(ytitle)), font: { color: theme.text } },
-          type: 'log', color: theme.text, gridcolor: theme.grid,
+          type: 'log', color: theme.text, gridcolor: theme.grid, automargin: true,
         },
-        margin: { t: 20, l: 70, r: 20, b: 110 },
+        margin: { t: 20, l: 70, r: 20, b: 70 + legendPx },
       };
       Plotly.newPlot('$div_id', data, layout, { displayModeBar: false, responsive: true });
       window.brambleRegisterPlotlyChart('$div_id', function () {
