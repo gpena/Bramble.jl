@@ -1,21 +1,213 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Writing VTK files · Bramble.jl</title><meta name="title" content="Writing VTK files · Bramble.jl"/><meta property="og:title" content="Writing VTK files · Bramble.jl"/><meta property="twitter:title" content="Writing VTK files · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;family=Source+Sans+3:wght@400;600&amp;display=swap" rel="stylesheet" type="text/css"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="Bramble.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting started</a></li><li><span class="tocitem">Discrete foundations</span><ul><li><a class="tocitem" href="../geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../operators/">Difference, jump and average operators</a></li></ul></li><li><span class="tocitem">Forms and assembly</span><ul><li><a class="tocitem" href="../form/">Linear and bilinear forms</a></li></ul></li><li><span class="tocitem">Solvers and scientific computing</span><ul><li><a class="tocitem" href="../solvers/">Choosing a solver, backend, and execution policy</a></li><li><a class="tocitem" href="../autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../backend/">Backend tutorial</a></li></ul></li><li><span class="tocitem">Visualization and export</span><ul><li><a class="tocitem" href="../plotting/">Plotting directly</a></li><li class="is-active"><a class="tocitem" href>Writing VTK files</a><ul class="internal"><li><a class="tocitem" href="#1.-A-mesh-and-a-named-field"><span>1. A mesh and a named field</span></a></li><li><a class="tocitem" href="#2.-One-field,-without-naming-the-mesh"><span>2. One field, without naming the mesh</span></a></li><li><a class="tocitem" href="#3.-A-composite-element-is-one-vector-field"><span>3. A composite element is one vector field</span></a></li><li><a class="tocitem" href="#4.-One-dimension"><span>4. One dimension</span></a></li><li><a class="tocitem" href="#5.-Time-series-for-ParaView"><span>5. Time series for ParaView</span></a></li><li><a class="tocitem" href="#Where-to-go-next"><span>Where to go next</span></a></li></ul></li><li><a class="tocitem" href="../pgfplots_export/">Writing PGFPlots data files</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../../examples/poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a></li><li><a class="tocitem" href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li><li><a class="tocitem" href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a></li><li><a class="tocitem" href="../../examples/heat_equation/">Heat equation</a></li><li><a class="tocitem" href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a></li><li><a class="tocitem" href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a></li><li><a class="tocitem" href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a></li><li><a class="tocitem" href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a></li><li><a class="tocitem" href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a></li><li><a class="tocitem" href="../../examples/transient_inplace/">A transient loop that allocates nothing</a></li><li><a class="tocitem" href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a></li><li><a class="tocitem" href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><a class="tocitem" href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a></li><li><input class="collapse-toggle" id="menuitem-9-3" type="checkbox"/><label class="tocitem" for="menuitem-9-3"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li><li><a class="tocitem" href="../../internals/exporters/">Exporters</a></li><li><a class="tocitem" href="../../internals/gpu/">GPU acceleration</a></li><li><a class="tocitem" href="../../internals/csr_solvers/"><code>SparseMatrixCSR</code> direct solve</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Visualization and export</a></li><li class="is-active"><a href>Writing VTK files</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Writing VTK files</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/vtk_export.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Writing-VTK-files"><a class="docs-heading-anchor" href="#Writing-VTK-files">Writing VTK files</a><a id="Writing-VTK-files-1"></a><a class="docs-heading-anchor-permalink" href="#Writing-VTK-files" title="Permalink"></a></h1><p>Once a solution exists (the result of the <a href="../form/">forms tutorial</a>, or any grid function), the last step is usually getting it into a viewer. <code>export_vtk</code> writes a mesh and any number of named fields to a <code>.vtr</code> file, readable by ParaView or any other VTK-aware tool. <code>export_vtk</code> needs <a href="https://github.com/JuliaVTK/WriteVTK.jl">WriteVTK.jl</a>, which is a weak dependency: <code>using WriteVTK</code> before calling it, or the call errors with a message that says so rather than a bare <code>MethodError</code>. Every block below runs when this page is built, and writes the files it claims to.</p><h2 id="1.-A-mesh-and-a-named-field"><a class="docs-heading-anchor" href="#1.-A-mesh-and-a-named-field">1. A mesh and a named field</a><a id="1.-A-mesh-and-a-named-field-1"></a><a class="docs-heading-anchor-permalink" href="#1.-A-mesh-and-a-named-field" title="Permalink"></a></h2><p><code>export_vtk</code> takes a filename, a mesh, and any number of <code>name =&gt; data</code> pairs:</p><pre><code class="language-julia hljs">using Bramble, WriteVTK
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Writing VTK files — Bramble.jl</title>
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=d744196a">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <meta name="title" content="Writing VTK files — Bramble.jl">
+  <meta property="og:title" content="Writing VTK files — Bramble.jl">
+  <meta property="twitter:title" content="Writing VTK files — Bramble.jl">
+  <meta name="description" content="Documentation for Bramble.jl.">
+  <meta property="og:description" content="Documentation for Bramble.jl.">
+  <meta property="twitter:description" content="Documentation for Bramble.jl.">
+  <link rel="icon" type="image/x-icon" href="../../assets/favicon.ico">
+  <link rel="stylesheet" href="../../assets/custom.css">
+  <script>
+    (function(){
+      document.documentElement.classList.add('no-transition');
+      var t=localStorage.getItem('md-theme');if(t)document.documentElement.setAttribute('data-theme',t);
+      window.addEventListener('load',function(){setTimeout(function(){document.documentElement.classList.remove('no-transition');},50);});
+    })()
+  </script>
+</head>
+<body data-warn-outdated>
+  <header class="md-navbar">
+    <button id="md-hamburger" class="md-icon-btn md-hamburger" aria-label="Toggle navigation" aria-expanded="false"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></button>
+    <img class="md-navbar-logo md-logo-light" src="../../assets/logo.svg" alt="Bramble.jl logo" height="32">
+    <img class="md-navbar-logo md-logo-dark" src="../../assets/logo-dark.svg" alt="Bramble.jl logo" height="32">
+    <span class="md-navbar-title">Bramble.jl</span>
+    <span class="md-navbar-spacer"></span>
+    <button id="md-search-btn" class="md-search-bar" aria-label="Search documentation" aria-expanded="false">
+      <svg class="md-icon md-search-bar-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <span class="md-search-bar-label">Search docs</span>
+      <kbd class="md-search-bar-kbd">Ctrl K</kbd>
+    </button>
+    <a class="md-icon-btn md-repo-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub" aria-label="View the repository on GitHub" rel="noopener" target="_blank"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 .3a12 12 0 00-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 016 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0012 .3z"/></svg><span class="md-repo-label">GitHub</span></a>
+    <button id="md-theme-toggle" class="md-icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode"><svg class="md-icon md-icon-light" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg><svg class="md-icon md-icon-dark" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg></button>
+  </header>
+  <div class="md-layout">
+    <nav class="md-sidebar">
+      <a href="../../">Home</a>
+      <a href="../../getting_started/">Getting started</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Discrete foundations</span>
+        <a href="../../tutorials/geometry/">Geometry tutorial</a>
+        <a href="../../tutorials/mesh/">Mesh tutorial</a>
+        <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
+        <a href="../../tutorials/operators/">Difference, jump and average operators</a>
+        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
+        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Forms and assembly</span>
+        <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Solvers and scientific computing</span>
+        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
+        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
+        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <a href="../../tutorials/backend/">Backends and execution policies</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Visualization and export</span>
+        <a href="../../tutorials/plotting/">Plotting directly</a>
+        <a href="../../tutorials/vtk_export/" class="md-nav-active">Writing VTK files</a>
+        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Examples</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Stationary problems</span>
+          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
+          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
+          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Time-dependent problems</span>
+          <a href="../../examples/heat_equation/">Heat equation</a>
+          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Inverse problems</span>
+          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
+          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Solvers and performance</span>
+          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
+          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
+          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
+        </div>
+      </div>
+      <a href="../../benchmarks/">Benchmarks</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Documentation</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">API reference</span>
+          <a href="../../api/">API reference</a>
+          <a href="../../api/utilities/">Utilities</a>
+          <a href="../../api/geometry/">Geometry</a>
+          <a href="../../api/meshes/">Meshes</a>
+          <a href="../../api/spaces/">Grid spaces</a>
+          <a href="../../api/operators/">Difference, jump and average operators</a>
+          <a href="../../api/inner_products/">Inner products and norms</a>
+          <a href="../../api/forms/">Forms</a>
+          <a href="../../api/exporters/">Exporters</a>
+        </div>
+        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Internals</span>
+          <a href="../../internals/utils/">Utilities</a>
+          <a href="../../internals/geometry/">Geometry</a>
+          <a href="../../internals/mesh/">Mesh</a>
+          <a href="../../internals/space/">Spaces</a>
+          <a href="../../internals/form/">Forms</a>
+          <a href="../../internals/autodiff/">Automatic differentiation</a>
+          <a href="../../internals/exporters/">Exporters</a>
+          <a href="../../internals/gpu/">GPU acceleration</a>
+          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
+        </div>
+      </div>
+    </nav>
+    <main class="md-content">
+      <article class="md-article">
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/vtk_export.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+<h1 id="Writing-VTK-files" class="md-heading">Writing VTK files<a href="#Writing-VTK-files" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
+<p><strong>What you will learn.</strong> How to write a grid function, or a whole time series, to a file that ParaView opens.</p>
+<p><strong>What you need first.</strong> The <a href="../../tutorials/mesh/#tutorial_mesh">mesh tutorial</a> and the <a href="../../tutorials/space/#tutorial_space">space tutorial</a>, for meshes and grid functions, and the <a href="../../tutorials/form/#tutorial_form">form tutorial</a> if you want to export a solved problem.</p>
+<p><strong>Where next.</strong> The <a href="../../tutorials/pgfplots_export/">PGFPlots export tutorial</a> writes a plain table for a LaTeX figure instead.</p>
+<p>The last step after a solve is usually getting the result into a viewer. <a href="../../api/exporters/#Bramble.export_vtk"><code class="md-code-inline">export_vtk</code></a> writes a mesh and any number of named fields to a <code class="md-code-inline">.vtr</code> file, which ParaView and other VTK tools open.</p>
+<p>It needs <a href="https://github.com/JuliaVTK/WriteVTK.jl">WriteVTK.jl</a>, a weak dependency. Run <code class="md-code-inline">using WriteVTK</code> before calling it; without it the call fails with a message that says so, not a bare <code class="md-code-inline">MethodError</code>. Every block below runs when this page is built and writes the files it claims to.</p>
+<h2 id="1.-A-mesh-and-a-named-field" class="md-heading">1. A mesh and a named field<a href="#1.-A-mesh-and-a-named-field" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><code class="md-code-inline">export_vtk</code> takes a filename, a mesh, and any number of <code class="md-code-inline">name =&gt; data</code> pairs:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble, WriteVTK
 
 Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (20, 20), (true, true))
 Wₕ = gridspace(Ωₕ)
 uₕ = Rₕ(Wₕ, x -&gt; sin(x[1]) * x[2])
 
-files = export_vtk(joinpath(mktempdir(), &quot;solution&quot;), Ωₕ, &quot;u&quot; =&gt; uₕ)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1-element Vector{String}:
- &quot;/tmp/jl_lec2Yd/solution.vtr&quot;</code></pre><p><code>data</code> can be a <a href="../../api/#Bramble.VectorElement"><code>VectorElement</code></a>, which is reshaped to match the grid the same way <code>reshape</code> does, or a plain array already shaped that way. Passing more than one pair writes more than one field into the same file:</p><pre><code class="language-julia hljs">vₕ = Rₕ(Wₕ, x -&gt; x[1] + x[2])
-export_vtk(joinpath(mktempdir(), &quot;two_fields&quot;), Ωₕ, &quot;u&quot; =&gt; uₕ, &quot;v&quot; =&gt; vₕ)</code></pre><h2 id="2.-One-field,-without-naming-the-mesh"><a class="docs-heading-anchor" href="#2.-One-field,-without-naming-the-mesh">2. One field, without naming the mesh</a><a id="2.-One-field,-without-naming-the-mesh-1"></a><a class="docs-heading-anchor-permalink" href="#2.-One-field,-without-naming-the-mesh" title="Permalink"></a></h2><p>A lone <a href="../../api/#Bramble.VectorElement"><code>VectorElement</code></a> already carries its mesh, so the field can be written directly. The field is named <code>&quot;u&quot;</code> unless told otherwise:</p><pre><code class="language-julia hljs">export_vtk(joinpath(mktempdir(), &quot;shorthand&quot;), uₕ)</code></pre><h2 id="3.-A-composite-element-is-one-vector-field"><a class="docs-heading-anchor" href="#3.-A-composite-element-is-one-vector-field">3. A composite element is one vector field</a><a id="3.-A-composite-element-is-one-vector-field-1"></a><a class="docs-heading-anchor-permalink" href="#3.-A-composite-element-is-one-vector-field" title="Permalink"></a></h2><p>An element over a composite space (<code>Wₕ^Val(2)</code> and the rest) writes as a single field with one component per block, rather than as separate scalar fields per component. This is the shape of a Stokes solve&#39;s output: a vector velocity next to a scalar pressure, on the same mesh, in one file.</p><pre><code class="language-julia hljs">Vₕ = Wₕ^Val(2)
+files = export_vtk(joinpath(mktempdir(), &quot;solution&quot;), Ωₕ, &quot;u&quot; =&gt; uₕ)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">1-element Vector{String}:
+ &quot;/tmp/jl_3HnDJJ/solution.vtr&quot;</code></pre>
+</div>
+<div class="md-admonition md-admonition-tip">
+<p class="md-admonition-title">Try this</p>
+<div class="md-admonition-body">
+<p>Change <code class="md-code-inline">(20, 20)</code> to <code class="md-code-inline">(6, 6)</code> and write the file again. Open it in ParaView and the same field shows as coarse cells, so you see the mesh behind the values.</p>
+</div>
+</div>
+<p><code class="md-code-inline">data</code> can be a <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a>, which is reshaped to match the grid the same way <code class="md-code-inline">reshape</code> does, or a plain array already shaped that way. Passing more than one pair writes more than one field into the same file:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">vₕ = Rₕ(Wₕ, x -&gt; x[1] + x[2])
+export_vtk(joinpath(mktempdir(), &quot;two_fields&quot;), Ωₕ, &quot;u&quot; =&gt; uₕ, &quot;v&quot; =&gt; vₕ)</code></pre>
+</div>
+</div>
+<h2 id="2.-One-field,-without-naming-the-mesh" class="md-heading">2. One field, without naming the mesh<a href="#2.-One-field,-without-naming-the-mesh" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A lone <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> already carries its mesh, so the field can be written directly. The field is named <code class="md-code-inline">&quot;u&quot;</code> unless told otherwise:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">export_vtk(joinpath(mktempdir(), &quot;shorthand&quot;), uₕ)</code></pre>
+</div>
+</div>
+<h2 id="3.-A-composite-element-is-one-vector-field" class="md-heading">3. A composite element is one vector field<a href="#3.-A-composite-element-is-one-vector-field" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>An element over a composite space (<code class="md-code-inline">Wₕ^Val(2)</code> and the rest) writes as a single field with one component per block, rather than as separate scalar fields per component. This is the shape of a Stokes solve&#39;s output: a vector velocity next to a scalar pressure, on the same mesh, in one file.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Vₕ = Wₕ^Val(2)
 velocity = Rₕ(Vₕ, x -&gt; (sin(π * x[1]) * cos(π * x[2]), -cos(π * x[1]) * sin(π * x[2])))
 pressure = Rₕ(Wₕ, x -&gt; cos(2π * x[1]) * cos(2π * x[2]))
 
-export_vtk(joinpath(mktempdir(), &quot;stokes&quot;), Ωₕ, &quot;velocity&quot; =&gt; velocity, &quot;pressure&quot; =&gt; pressure)</code></pre><p><code>velocity</code> is the classical divergence-free field <span>$(\sin(\pi x)\cos(\pi y),\, -\cos(\pi x)\sin(\pi y))$</span>, not the result of solving anything: a stand-in to check that <code>export_vtk</code> gives a viewer one two-component <code>velocity</code> vector alongside a one-component <code>pressure</code> scalar, which is what a coupled solve&#39;s fields look like once assembled. Solving the system that produces them is the <a href="../form/">forms tutorial</a>&#39;s subject; this one is only about writing the result out once you have it.</p><h2 id="4.-One-dimension"><a class="docs-heading-anchor" href="#4.-One-dimension">4. One dimension</a><a id="4.-One-dimension-1"></a><a class="docs-heading-anchor-permalink" href="#4.-One-dimension" title="Permalink"></a></h2><p>VTK has no dedicated 1D grid type, so a 1D mesh gets a rectilinear grid one point deep in <code>y</code>, which opens and renders correctly, rather than being refused:</p><pre><code class="language-julia hljs">Ω1 = mesh(domain(interval(0.0, 1.0)), 33, true)
+export_vtk(joinpath(mktempdir(), &quot;stokes&quot;), Ωₕ, &quot;velocity&quot; =&gt; velocity, &quot;pressure&quot; =&gt; pressure)</code></pre>
+</div>
+</div>
+<p><code class="md-code-inline">velocity</code> is the classical divergence-free field <span class="md-math md-math-inline">\((\sin(\pi x)\cos(\pi y),\, -\cos(\pi x)\sin(\pi y))\)</span>, not the result of solving anything: a stand-in to check that <code class="md-code-inline">export_vtk</code> gives a viewer one two-component <code class="md-code-inline">velocity</code> vector alongside a one-component <code class="md-code-inline">pressure</code> scalar, which is what a coupled solve&#39;s fields look like once assembled. Solving the system that produces them is the <a href="../../tutorials/form/#tutorial_form">form tutorial</a>&#39;s subject; this one is only about writing the result out once you have it.</p>
+<h2 id="4.-One-dimension" class="md-heading">4. One dimension<a href="#4.-One-dimension" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>VTK has no dedicated 1D grid type, so a 1D mesh gets a rectilinear grid one point deep in <code class="md-code-inline">y</code>, which opens and renders correctly, rather than being refused:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ω1 = mesh(domain(interval(0.0, 1.0)), 33, true)
 W1 = gridspace(Ω1)
 f1 = Rₕ(W1, sin)
 
-export_vtk(joinpath(mktempdir(), &quot;curve&quot;), f1)</code></pre><h2 id="5.-Time-series-for-ParaView"><a class="docs-heading-anchor" href="#5.-Time-series-for-ParaView">5. Time series for ParaView</a><a id="5.-Time-series-for-ParaView-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Time-series-for-ParaView" title="Permalink"></a></h2><p>A transient solve produces many snapshots, not one. Writing each with <code>export_vtk</code> above gives ParaView a pile of unrelated <code>.vtr</code> files: no time slider, no animation, no correct time axis if the steps are non-uniform. A ParaView collection (<code>.pvd</code>) ties them together.</p><p><code>export_vtk(f, filename)</code> opens the collection, calls <code>f</code> with a handle <code>pvd</code>, and closes it whether <code>f</code> returns normally or throws – an interrupted run still leaves a valid, readable partial animation rather than truncated XML. Assign into <code>pvd</code> with the same <code>(filename, Ωₕ, name =&gt; data, ...)</code> shape <code>export_vtk</code> itself takes, once per time value:</p><pre><code class="language-julia hljs">Ω1 = mesh(domain(interval(0.0, 1.0)), 41, true)
+export_vtk(joinpath(mktempdir(), &quot;curve&quot;), f1)</code></pre>
+</div>
+</div>
+<h2 id="5.-Time-series-for-ParaView" class="md-heading">5. Time series for ParaView<a href="#5.-Time-series-for-ParaView" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A transient solve produces many snapshots, not one. Writing each with <code class="md-code-inline">export_vtk</code> above gives ParaView a pile of unrelated <code class="md-code-inline">.vtr</code> files: no time slider, no animation, no correct time axis if the steps are non-uniform. A ParaView collection (<code class="md-code-inline">.pvd</code>) ties them together.</p>
+<p><code class="md-code-inline">export_vtk(f, filename)</code> opens the collection, calls <code class="md-code-inline">f</code> with a handle <code class="md-code-inline">pvd</code>, and closes it whether <code class="md-code-inline">f</code> returns normally or throws – an interrupted run still leaves a valid, readable partial animation rather than truncated XML. Assign into <code class="md-code-inline">pvd</code> with the same <code class="md-code-inline">(filename, Ωₕ, name =&gt; data, ...)</code> shape <code class="md-code-inline">export_vtk</code> itself takes, once per time value:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ω1 = mesh(domain(interval(0.0, 1.0)), 41, true)
 W1 = gridspace(Ω1)
 dir = mktempdir()
 
@@ -24,7 +216,15 @@ export_vtk(joinpath(dir, &quot;wave&quot;)) do pvd
         uₕ = Rₕ(W1, x -&gt; sin(x[1] - t))
         pvd[t] = (joinpath(dir, &quot;step_$i&quot;), Ω1, &quot;u&quot; =&gt; uₕ)
     end
-end</code></pre><p>Opening <code>wave.pvd</code> in ParaView (<code>File &gt; Open</code>, not the individual <code>.vtr</code> files) loads all four steps as one dataset with a working time slider, each at its own recorded <code>t</code> – <code>0.1</code> and <code>0.3</code> a step apart, <code>0.3</code> and <code>1.0</code> much further, exactly as given. Passing <code>append = true</code> adds further steps to an existing collection instead of overwriting it.</p><p>A <code>SciMLBase</code> solution – what solving an <a href="../../api_sciml/#Bramble.ode_problem"><code>ode_problem</code></a> with <code>OrdinaryDiffEq</code> hands back – has a one-call shorthand instead of a hand-written loop:</p><pre><code class="language-julia hljs">using OrdinaryDiffEqBDF
+end</code></pre>
+</div>
+</div>
+<p>Opening <code class="md-code-inline">wave.pvd</code> in ParaView (<code class="md-code-inline">File &gt; Open</code>, not the individual <code class="md-code-inline">.vtr</code> files) loads all four steps as one dataset with a working time slider, each at its own recorded <code class="md-code-inline">t</code> – <code class="md-code-inline">0.1</code> and <code class="md-code-inline">0.3</code> a step apart, <code class="md-code-inline">0.3</code> and <code class="md-code-inline">1.0</code> much further, exactly as given. Passing <code class="md-code-inline">append = true</code> adds further steps to an existing collection instead of overwriting it.</p>
+<p>A <code class="md-code-inline">SciMLBase</code> solution – what solving an <a href="../../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">ode_problem</code></a> with <code class="md-code-inline">OrdinaryDiffEq</code> hands back – has a one-call shorthand instead of a hand-written loop:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using OrdinaryDiffEqBDF
 
 Ωt = domain(interval(0.0, 1.0), :left =&gt; :left, :right =&gt; :right)
 Ωₕt = mesh(Ωt, 41)
@@ -40,4 +240,43 @@ prob = ode_problem(sd, Rₕ(Wₕt, x -&gt; sinpi(x[1])), interval(0.0, 1.0))
 sol = solve(prob, FBDF())
 
 export_vtk(joinpath(mktempdir(), &quot;solution&quot;), Wₕt, sol)                    # every saved step
-export_vtk(joinpath(mktempdir(), &quot;solution&quot;), Wₕt, sol; times = 0:0.1:1.0) # interpolated</code></pre><p><code>Wₕt</code> (not just the mesh) is what turns each raw solution vector back into a properly shaped field, the same way <a href="../../api/#Bramble.element"><code>element</code></a><code>(Wₕ, ::AbstractVector)</code> does anywhere else. The default writes exactly <code>sol</code>&#39;s own saved times, non-uniform steps included; passing <code>times</code> samples <code>sol</code>&#39;s continuous interpolation at those points instead. See the <a href="../../examples/heat_equation/">heat equation example</a> for this run against a real solve.</p><h2 id="Where-to-go-next"><a class="docs-heading-anchor" href="#Where-to-go-next">Where to go next</a><a id="Where-to-go-next-1"></a><a class="docs-heading-anchor-permalink" href="#Where-to-go-next" title="Permalink"></a></h2><p>A full VTK file is usually more than a single plot going into a LaTeX document needs. For that, the <a href="../pgfplots_export/">PGFPlots export tutorial</a> writes the plain text table <code>pgfplots</code> reads directly, with no external package at all. And for a plot inside the current Julia session, with no file at all, see <a href="../plotting/">Plotting directly</a>.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../plotting/">« Plotting directly</a><a class="docs-footer-nextpage" href="../pgfplots_export/">Writing PGFPlots data files »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 29 September 2026 21:39">Tuesday 29 September 2026</span>. Using Julia version 1.13.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+export_vtk(joinpath(mktempdir(), &quot;solution&quot;), Wₕt, sol; times = 0:0.1:1.0) # interpolated</code></pre>
+</div>
+</div>
+<p><code class="md-code-inline">Wₕt</code> (not just the mesh) is what turns each raw solution vector back into a properly shaped field, the same way <a href="../../api/spaces/#Bramble.element"><code class="md-code-inline">element</code></a><code class="md-code-inline">(Wₕ, ::AbstractVector)</code> does anywhere else. The default writes exactly <code class="md-code-inline">sol</code>&#39;s own saved times, non-uniform steps included; passing <code class="md-code-inline">times</code> samples <code class="md-code-inline">sol</code>&#39;s continuous interpolation at those points instead. See the <a href="../../examples/heat_equation/">heat equation example</a> for this run against a real solve.</p>
+<h2 id="Where-to-go-next" class="md-heading">Where to go next<a href="#Where-to-go-next" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A full VTK file is usually more than a single plot going into a LaTeX document needs. For that, the <a href="../../tutorials/pgfplots_export/">PGFPlots export tutorial</a> writes the plain text table <code class="md-code-inline">pgfplots</code> reads directly, with no external package at all. And for a plot inside the current Julia session, with no file at all, see <a href="../../tutorials/plotting/">Plotting directly</a>.</p>
+      </article>
+      <footer class="md-footer">
+<p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
+      </footer>
+    </main>
+    <aside class="md-toc">
+      <div class="md-toc-inner">
+        <p class="md-toc-title">On this page</p>
+          <a class="md-toc-link md-toc-h2" href="#1.-A-mesh-and-a-named-field">1. A mesh and a named field</a>
+          <a class="md-toc-link md-toc-h2" href="#2.-One-field,-without-naming-the-mesh">2. One field, without naming the mesh</a>
+          <a class="md-toc-link md-toc-h2" href="#3.-A-composite-element-is-one-vector-field">3. A composite element is one vector field</a>
+          <a class="md-toc-link md-toc-h2" href="#4.-One-dimension">4. One dimension</a>
+          <a class="md-toc-link md-toc-h2" href="#5.-Time-series-for-ParaView">5. Time series for ParaView</a>
+          <a class="md-toc-link md-toc-h2" href="#Where-to-go-next">Where to go next</a>
+      </div>
+    </aside>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia-repl.min.js"></script>
+  <script>hljs.highlightAll();</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.js"></script>
+  <script>var MD_KATEX_OPTIONS = {};
+document.querySelectorAll('.md-math').forEach(function (el) {
+  var tex = el.textContent.trim().replace(/^\\[\[(]/, '').replace(/\\[\])]$/, '');
+  katex.render(tex, el, Object.assign({ throwOnError: false }, MD_KATEX_OPTIONS,
+    { displayMode: el.classList.contains('md-math-display') }));
+});</script>
+  <script src="../../siteinfo.js"></script>
+  <script src="../../../versions.js"></script>
+  <script src="../../assets/materialdocs.js?v=d744196a"></script>
+</body>
+</html>

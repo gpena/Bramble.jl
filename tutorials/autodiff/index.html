@@ -1,70 +1,266 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Automatic differentiation tutorial · Bramble.jl</title><meta name="title" content="Automatic differentiation tutorial · Bramble.jl"/><meta property="og:title" content="Automatic differentiation tutorial · Bramble.jl"/><meta property="twitter:title" content="Automatic differentiation tutorial · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;family=Source+Sans+3:wght@400;600&amp;display=swap" rel="stylesheet" type="text/css"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="Bramble.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting started</a></li><li><span class="tocitem">Discrete foundations</span><ul><li><a class="tocitem" href="../geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../operators/">Difference, jump and average operators</a></li></ul></li><li><span class="tocitem">Forms and assembly</span><ul><li><a class="tocitem" href="../form/">Linear and bilinear forms</a></li></ul></li><li><span class="tocitem">Solvers and scientific computing</span><ul><li><a class="tocitem" href="../solvers/">Choosing a solver, backend, and execution policy</a></li><li class="is-active"><a class="tocitem" href>Automatic differentiation tutorial</a><ul class="internal"><li><a class="tocitem" href="#1.-Backends"><span>1. Backends</span></a></li><li><a class="tocitem" href="#2.-Use-case:-scalar-parameter-sensitivity"><span>2. Use case: scalar parameter sensitivity</span></a></li><li><a class="tocitem" href="#3.-Use-case:-multi-parameter-gradient-for-inverse-problems"><span>3. Use case: multi-parameter gradient for inverse problems</span></a></li><li><a class="tocitem" href="#4.-Use-case:-differentiating-through-Dirichlet-constraints-and-linear-solves"><span>4. Use case: differentiating through Dirichlet constraints and linear solves</span></a></li><li><a class="tocitem" href="#5.-Use-case:-sparse-Jacobian-for-nonlinear-PDE-residuals"><span>5. Use case: sparse Jacobian for nonlinear PDE residuals</span></a></li><li><a class="tocitem" href="#6.-Choosing-a-backend"><span>6. Choosing a backend</span></a></li></ul></li><li><a class="tocitem" href="../backend/">Backend tutorial</a></li></ul></li><li><span class="tocitem">Visualization and export</span><ul><li><a class="tocitem" href="../plotting/">Plotting directly</a></li><li><a class="tocitem" href="../vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../pgfplots_export/">Writing PGFPlots data files</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../../examples/poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a></li><li><a class="tocitem" href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li><li><a class="tocitem" href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a></li><li><a class="tocitem" href="../../examples/heat_equation/">Heat equation</a></li><li><a class="tocitem" href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a></li><li><a class="tocitem" href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a></li><li><a class="tocitem" href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a></li><li><a class="tocitem" href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a></li><li><a class="tocitem" href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a></li><li><a class="tocitem" href="../../examples/transient_inplace/">A transient loop that allocates nothing</a></li><li><a class="tocitem" href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a></li><li><a class="tocitem" href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><a class="tocitem" href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a></li><li><input class="collapse-toggle" id="menuitem-9-3" type="checkbox"/><label class="tocitem" for="menuitem-9-3"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li><li><a class="tocitem" href="../../internals/exporters/">Exporters</a></li><li><a class="tocitem" href="../../internals/gpu/">GPU acceleration</a></li><li><a class="tocitem" href="../../internals/csr_solvers/"><code>SparseMatrixCSR</code> direct solve</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Solvers and scientific computing</a></li><li class="is-active"><a href>Automatic differentiation tutorial</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Automatic differentiation tutorial</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/autodiff.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Automatic-differentiation-tutorial"><a class="docs-heading-anchor" href="#Automatic-differentiation-tutorial">Automatic differentiation tutorial</a><a id="Automatic-differentiation-tutorial-1"></a><a class="docs-heading-anchor-permalink" href="#Automatic-differentiation-tutorial" title="Permalink"></a></h1><p>Bramble&#39;s operators, grid functions and form assembly are generic over the scalar type, so a discrete quantity can be differentiated with respect to whatever parameter produced it. Backends reach the code through <a href="https://github.com/JuliaDiff/DifferentiationInterface.jl">DifferentiationInterface.jl</a>, so switching between forward and reverse mode leaves the objective untouched.</p><hr/><h2 id="1.-Backends"><a class="docs-heading-anchor" href="#1.-Backends">1. Backends</a><a id="1.-Backends-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Backends" title="Permalink"></a></h2><p>The stencil kernels write into preallocated arrays, so a backend has to support array mutation. That rules out <code>Zygote.jl</code>; the five below work.</p><table><tr><th style="text-align: left">Backend</th><th style="text-align: left">Mode</th><th style="text-align: left">Reach for it when</th><th style="text-align: left">Construction</th></tr><tr><td style="text-align: left">ForwardDiff</td><td style="text-align: left">forward</td><td style="text-align: left"><span>$\le 20$</span> parameters or Jacobian colours</td><td style="text-align: left"><code>AutoForwardDiff()</code></td></tr><tr><td style="text-align: left">PolyesterForwardDiff</td><td style="text-align: left">forward</td><td style="text-align: left">the same, with chunks spread over threads</td><td style="text-align: left"><code>AutoPolyesterForwardDiff()</code></td></tr><tr><td style="text-align: left">ReverseDiff</td><td style="text-align: left">reverse</td><td style="text-align: left">a scalar loss over many parameters, compiled in under a second</td><td style="text-align: left"><code>AutoReverseDiff()</code></td></tr><tr><td style="text-align: left">Mooncake</td><td style="text-align: left">reverse</td><td style="text-align: left">the same, source-to-source, no tape recorded up front</td><td style="text-align: left"><code>AutoMooncake(; config = nothing)</code></td></tr><tr><td style="text-align: left">Enzyme</td><td style="text-align: left">reverse</td><td style="text-align: left">many parameters and the tightest reverse-mode cost</td><td style="text-align: left">see below</td></tr></table><p>Enzyme needs two annotations whenever the differentiated closure captures a mesh or a grid space, which in this package it almost always does:</p><pre><code class="language-julia hljs">using Bramble, Enzyme, DifferentiationInterface
-import Bramble: ast_sparsity_detector
-
-enzyme_backend = AutoEnzyme(;
-    mode = Enzyme.set_runtime_activity(Enzyme.Reverse),
-    function_annotation = Enzyme.Const)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ADTypes.AutoEnzyme(mode=EnzymeCore.ReverseMode{false, true, false, EnzymeCore.FFIABI, false, false}(), function_annotation=EnzymeCore.Const)</code></pre><p><code>set_runtime_activity</code> lets Enzyme track activity through the captured geometry, and <code>Enzyme.Const</code> declares the function object itself, which holds those references, as not differentiated. <a href="../../api_sciml/#Bramble.pde_solve"><code>pde_solve</code></a> additionally carries its own <code>EnzymeRules</code> adjoint, so differentiating through a linear solve needs nothing beyond <code>using Enzyme</code>.</p><hr/><h2 id="2.-Use-case:-scalar-parameter-sensitivity"><a class="docs-heading-anchor" href="#2.-Use-case:-scalar-parameter-sensitivity">2. Use case: scalar parameter sensitivity</a><a id="2.-Use-case:-scalar-parameter-sensitivity-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Use-case:-scalar-parameter-sensitivity" title="Permalink"></a></h2><p>In this use case, we compute the sensitivity of a discrete energy norm with respect to a scalar scaling factor <span>$a$</span>:</p><p class="math-container">\[\mathcal{J}(a) = \| R_h(a \sin(\pi x)) \|_h^2\]</p><p>Analytically, <span>$\int_0^1 \sin^2(\pi x)\,dx = \frac{1}{2}$</span>, so <span>$\mathcal{J}(a) \approx \frac{1}{2} a^2$</span> and <span>$\frac{d\mathcal{J}}{da} \approx a$</span>.</p><pre><code class="language-julia hljs">using ForwardDiff
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Automatic differentiation — Bramble.jl</title>
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=3f7be4cd">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <meta name="title" content="Automatic differentiation — Bramble.jl">
+  <meta property="og:title" content="Automatic differentiation — Bramble.jl">
+  <meta property="twitter:title" content="Automatic differentiation — Bramble.jl">
+  <meta name="description" content="Documentation for Bramble.jl.">
+  <meta property="og:description" content="Documentation for Bramble.jl.">
+  <meta property="twitter:description" content="Documentation for Bramble.jl.">
+  <link rel="icon" type="image/x-icon" href="../../assets/favicon.ico">
+  <link rel="stylesheet" href="../../assets/custom.css">
+  <script>
+    (function(){
+      document.documentElement.classList.add('no-transition');
+      var t=localStorage.getItem('md-theme');if(t)document.documentElement.setAttribute('data-theme',t);
+      window.addEventListener('load',function(){setTimeout(function(){document.documentElement.classList.remove('no-transition');},50);});
+    })()
+  </script>
+</head>
+<body data-warn-outdated>
+  <header class="md-navbar">
+    <button id="md-hamburger" class="md-icon-btn md-hamburger" aria-label="Toggle navigation" aria-expanded="false"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></button>
+    <img class="md-navbar-logo md-logo-light" src="../../assets/logo.svg" alt="Bramble.jl logo" height="32">
+    <img class="md-navbar-logo md-logo-dark" src="../../assets/logo-dark.svg" alt="Bramble.jl logo" height="32">
+    <span class="md-navbar-title">Bramble.jl</span>
+    <span class="md-navbar-spacer"></span>
+    <button id="md-search-btn" class="md-search-bar" aria-label="Search documentation" aria-expanded="false">
+      <svg class="md-icon md-search-bar-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <span class="md-search-bar-label">Search docs</span>
+      <kbd class="md-search-bar-kbd">Ctrl K</kbd>
+    </button>
+    <a class="md-icon-btn md-repo-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub" aria-label="View the repository on GitHub" rel="noopener" target="_blank"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 .3a12 12 0 00-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 016 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0012 .3z"/></svg><span class="md-repo-label">GitHub</span></a>
+    <button id="md-theme-toggle" class="md-icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode"><svg class="md-icon md-icon-light" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg><svg class="md-icon md-icon-dark" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg></button>
+  </header>
+  <div class="md-layout">
+    <nav class="md-sidebar">
+      <a href="../../">Home</a>
+      <a href="../../getting_started/">Getting started</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Discrete foundations</span>
+        <a href="../../tutorials/geometry/">Geometry tutorial</a>
+        <a href="../../tutorials/mesh/">Mesh tutorial</a>
+        <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
+        <a href="../../tutorials/operators/">Difference, jump and average operators</a>
+        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
+        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Forms and assembly</span>
+        <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Solvers and scientific computing</span>
+        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
+        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
+        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
+        <a href="../../tutorials/autodiff/" class="md-nav-active">Automatic differentiation</a>
+        <a href="../../tutorials/backend/">Backends and execution policies</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Visualization and export</span>
+        <a href="../../tutorials/plotting/">Plotting directly</a>
+        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
+        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Examples</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Stationary problems</span>
+          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
+          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
+          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Time-dependent problems</span>
+          <a href="../../examples/heat_equation/">Heat equation</a>
+          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Inverse problems</span>
+          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
+          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Solvers and performance</span>
+          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
+          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
+          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
+        </div>
+      </div>
+      <a href="../../benchmarks/">Benchmarks</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Documentation</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">API reference</span>
+          <a href="../../api/">API reference</a>
+          <a href="../../api/utilities/">Utilities</a>
+          <a href="../../api/geometry/">Geometry</a>
+          <a href="../../api/meshes/">Meshes</a>
+          <a href="../../api/spaces/">Grid spaces</a>
+          <a href="../../api/operators/">Difference, jump and average operators</a>
+          <a href="../../api/inner_products/">Inner products and norms</a>
+          <a href="../../api/forms/">Forms</a>
+          <a href="../../api/exporters/">Exporters</a>
+        </div>
+        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Internals</span>
+          <a href="../../internals/utils/">Utilities</a>
+          <a href="../../internals/geometry/">Geometry</a>
+          <a href="../../internals/mesh/">Mesh</a>
+          <a href="../../internals/space/">Spaces</a>
+          <a href="../../internals/form/">Forms</a>
+          <a href="../../internals/autodiff/">Automatic differentiation</a>
+          <a href="../../internals/exporters/">Exporters</a>
+          <a href="../../internals/gpu/">GPU acceleration</a>
+          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
+        </div>
+      </div>
+    </nav>
+    <main class="md-content">
+      <article class="md-article">
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/autodiff.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+<h1 id="Automatic-differentiation" class="md-heading">Automatic differentiation<a href="#Automatic-differentiation" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
+<p><strong>What you will learn.</strong> How to differentiate a discrete quantity with respect to a parameter, from a single derivative to the Jacobian of a nonlinear residual, and how to choose an automatic differentiation backend.</p>
+<p><strong>What you need first.</strong> The <a href="../../tutorials/space/#tutorial_space">space tutorial</a>, for grid spaces and discrete functions, the <a href="../../tutorials/operators/#tutorial_operators">operators tutorial</a>, and the <a href="../../tutorials/form/#tutorial_form">form tutorial</a>, for assembling a system with Dirichlet conditions.</p>
+<p><strong>Where next.</strong> The <a href="../../tutorials/solvers/">solvers tutorial</a> covers what to do with the linear system once the Jacobian is large.</p>
+<p>Bramble&#39;s operators, grid functions and form assembly are generic over the scalar type, so a discrete quantity can be differentiated with respect to whatever parameter produced it. The differentiation backends are reached through <a href="https://github.com/JuliaDiff/DifferentiationInterface.jl">DifferentiationInterface.jl</a>, so switching between forward and reverse mode leaves your objective untouched. Every block below runs when this page is built.</p>
+<hr class="md-hr">
+<h2 id="Differentiate-with-respect-to-a-scalar" class="md-heading">Differentiate with respect to a scalar<a href="#Differentiate-with-respect-to-a-scalar" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Take the discrete energy of a scaled sine, as a function of the scale <span class="md-math md-math-inline">\(a\)</span>:</p>
+<div class="md-math md-math-display">
+\[\mathcal{J}(a) = \| R_h(a \sin(\pi x)) \|_h^2 .\]
+</div>
+<p>Analytically <span class="md-math md-math-inline">\(\int_0^1 \sin^2(\pi x)\,dx = \tfrac12\)</span>, so <span class="md-math md-math-inline">\(\mathcal{J}(a) \approx \tfrac12 a^2\)</span> and <span class="md-math md-math-inline">\(d\mathcal{J}/da \approx a\)</span>. Build a small grid space and write the objective as an ordinary function of <span class="md-math md-math-inline">\(a\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble, DifferentiationInterface, ForwardDiff
 
 Ω = domain(interval(0.0, 1.0))
 Ωₕ = mesh(Ω, 32, true)
 Wₕ = gridspace(Ωₕ)
 
-# Scalar objective function
 function energy(a)
     uₕ = Rₕ(Wₕ, x -&gt; a * sin(π * x[1]))
     return normₕ(uₕ)^2
-end
-
-backend = AutoForwardDiff()
+end</code></pre>
+</div>
+</div>
+<p><code class="md-code-inline">energy</code> restricts a function to the grid with <a href="../../api/spaces/#Bramble.Rₕ"><code class="md-code-inline">Rₕ</code></a> and takes its discrete norm. Nothing in it mentions differentiation. Hand it to DifferentiationInterface together with a backend, here forward-mode <code class="md-code-inline">AutoForwardDiff()</code>, and a point:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">ad = AutoForwardDiff()
 a_val = 2.0
-dJ = DifferentiationInterface.derivative(energy, backend, a_val)
-println(&quot;dJ/da at a = $a_val: &quot;, round(dJ, digits = 4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">dJ/da at a = 2.0: 2.0</code></pre><hr/><h2 id="3.-Use-case:-multi-parameter-gradient-for-inverse-problems"><a class="docs-heading-anchor" href="#3.-Use-case:-multi-parameter-gradient-for-inverse-problems">3. Use case: multi-parameter gradient for inverse problems</a><a id="3.-Use-case:-multi-parameter-gradient-for-inverse-problems-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Use-case:-multi-parameter-gradient-for-inverse-problems" title="Permalink"></a></h2><p>When estimating parameters (such as source coefficients or material properties), we compute the gradient of an objective functional with respect to a parameter vector <span>$\mathbf{p}$</span>:</p><p class="math-container">\[\mathcal{J}(\mathbf{p}) = \| u_h(\mathbf{p}) \|_h^2 + | u_h(\mathbf{p}) |_{1,h}^2\]</p><p>where <span>$|\cdot|_{1,h}$</span> is the discrete <span>$H^1$</span> semi-norm computed via <a href="../../api/#Bramble.snorm₁ₕ"><code>snorm₁ₕ</code></a>.</p><pre><code class="language-julia hljs">function loss(p)
+dJ = DifferentiationInterface.derivative(energy, ad, a_val)
+round(dJ, digits = 4)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2.0</code></pre>
+</div>
+<p>The derivative is close to the analytic value <span class="md-math md-math-inline">\(a = 2\)</span>. It works because <code class="md-code-inline">Rₕ</code>, <code class="md-code-inline">normₕ</code> and the grid space accept the dual numbers ForwardDiff passes through them.</p>
+<div class="md-admonition md-admonition-tip">
+<p class="md-admonition-title">Try this</p>
+<div class="md-admonition-body">
+<p>Set <code class="md-code-inline">a_val = 3.0</code>. The derivative follows the analytic <span class="md-math md-math-inline">\(d\mathcal{J}/da \approx a\)</span> and returns about <span class="md-math md-math-inline">\(3\)</span>.</p>
+</div>
+</div>
+<h2 id="Differentiate-with-respect-to-several-parameters" class="md-heading">Differentiate with respect to several parameters<a href="#Differentiate-with-respect-to-several-parameters" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>When fitting parameters, such as source coefficients, you want the gradient of an objective with respect to a vector <span class="md-math md-math-inline">\(\mathbf{p}\)</span>. Use the discrete norm plus the <span class="md-math md-math-inline">\(H^1\)</span> semi-norm <a href="../../api/inner_products/#Bramble.snorm₁ₕ"><code class="md-code-inline">snorm₁ₕ</code></a>:</p>
+<div class="md-math md-math-display">
+\[\mathcal{J}(\mathbf{p}) = \| u_h(\mathbf{p}) \|_h^2 + | u_h(\mathbf{p}) |_{1,h}^2 .\]
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">function loss(p)
     uₕ = Rₕ(Wₕ, x -&gt; p[1] * sin(π * x[1]) + p[2] * x[1] * (1.0 - x[1]))
     return normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2
 end
 
 p0 = [1.0, 2.0]
 g_forward = DifferentiationInterface.gradient(loss, AutoForwardDiff(), p0)
-println(&quot;ForwardDiff gradient: &quot;, round.(g_forward, digits = 4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ForwardDiff gradient: [16.4658, 4.2676]</code></pre><p>For problems with many parameters, swapping <code>AutoForwardDiff()</code> for <code>AutoReverseDiff()</code> or <code>AutoEnzyme(...)</code> uses reverse mode without changing the definition of <code>loss</code>.</p><hr/><h2 id="4.-Use-case:-differentiating-through-Dirichlet-constraints-and-linear-solves"><a class="docs-heading-anchor" href="#4.-Use-case:-differentiating-through-Dirichlet-constraints-and-linear-solves">4. Use case: differentiating through Dirichlet constraints and linear solves</a><a id="4.-Use-case:-differentiating-through-Dirichlet-constraints-and-linear-solves-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Use-case:-differentiating-through-Dirichlet-constraints-and-linear-solves" title="Permalink"></a></h2><p>Parameter sensitivities can also enter boundary conditions and linear form sources.</p><p>When solving <span>$A u = F(p)$</span>:</p><ol><li>Boundary conditions are constructed with <code>dirichlet_constraints</code> using a closure that captures the parameter.</li><li>The vector element for the source term must be allocated with the parameter&#39;s scalar type: <code>element(Wₕ, eltype(p))</code>.</li><li>Standard sparse solvers (UMFPACK) expect <code>Float64</code> entries. For automatic differentiation through the solve with dual numbers, convert the assembled matrix to dense format <code>Matrix(A) \ F</code> or use an iterative solver:</li></ol><pre><code class="language-julia hljs"># Discrete Laplacian on nonuniform grid
-a = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)))
+round.(g_forward, digits = 4)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
+ 16.4658
+  4.2676</code></pre>
+</div>
+<div class="md-admonition md-admonition-tip">
+<p class="md-admonition-title">Try this</p>
+<div class="md-admonition-body">
+<p>With many parameters, swap <code class="md-code-inline">AutoForwardDiff()</code> for a reverse-mode backend such as <code class="md-code-inline">AutoReverseDiff()</code> (after <code class="md-code-inline">using ReverseDiff</code>). The definition of <code class="md-code-inline">loss</code> does not change and the gradient agrees. The <a href="../../tutorials/autodiff/#autodiff_backends">backend table</a> below says when each is worth it.</p>
+</div>
+</div>
+<h2 id="Differentiate-through-a-linear-solve" class="md-heading">Differentiate through a linear solve<a href="#Differentiate-through-a-linear-solve" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A parameter can also enter the boundary data and the source of a linear system <span class="md-math md-math-inline">\(A u = F(p)\)</span>. Three things matter:</p>
+<ol class="md-list-tight">
+<li><p>Build the Dirichlet conditions with <code class="md-code-inline">dirichlet_constraints</code>, using a closure that captures the parameter (see <a href="../../tutorials/form/#form_dirichlet">Dirichlet conditions</a>).</p>
+</li>
+<li><p>Allocate the source with the parameter&#39;s scalar type, <code class="md-code-inline">element(Wₕ, eltype(p))</code>.</p>
+</li>
+<li><p>Sparse direct solvers such as UMFPACK expect <code class="md-code-inline">Float64</code> entries. To differentiate through the solve with dual numbers, convert the matrix to dense with <code class="md-code-inline">Matrix(A) \ F</code>, or use an iterative solver.</p>
+</li>
+</ol>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">a = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)))
 A = assemble(a; dirichlet = :boundary)
 Adense = Matrix(A)
 
 function solve_objective(p)
-    # 1. Parameter-dependent Dirichlet boundary data
-    bcs = dirichlet_constraints(Ω, :boundary =&gt; (x -&gt; p[1]))
+    bcs = dirichlet_constraints(Ω, :boundary =&gt; (x -&gt; p[1]))   # boundary data depends on p
 
-    # 2. Source term allocated with the dual/tracked scalar type
-    gₕ = element(Wₕ, eltype(p))
+    gₕ = element(Wₕ, eltype(p))                                 # source in the tracked scalar type
     avgₕ!(gₕ, x -&gt; p[2] * sin(π * x[1]))
 
-    # 3. Assemble right-hand side with constraints
     l = form(Wₕ, v -&gt; innerₕ(gₕ, v))
     F = assemble(l; dirichlet = bcs)
 
-    # 4. Linear solve and scalar objective
     u = Adense \ F
     return sum(abs2, u)
 end
 
 p_init = [1.0, 2.0]
 grad_solve = DifferentiationInterface.gradient(solve_objective, AutoForwardDiff(), p_init)
-println(&quot;Sensitivity w.r.t. [boundary_val, source_scale]: &quot;, round.(grad_solve, digits = 4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Sensitivity w.r.t. [boundary_val, source_scale]: [71.995, 4.6345]</code></pre><hr/><h2 id="5.-Use-case:-sparse-Jacobian-for-nonlinear-PDE-residuals"><a class="docs-heading-anchor" href="#5.-Use-case:-sparse-Jacobian-for-nonlinear-PDE-residuals">5. Use case: sparse Jacobian for nonlinear PDE residuals</a><a id="5.-Use-case:-sparse-Jacobian-for-nonlinear-PDE-residuals-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Use-case:-sparse-Jacobian-for-nonlinear-PDE-residuals" title="Permalink"></a></h2><p>For nonlinear PDEs, residuals <span>$R(u) = A(u)u - F$</span> have a localized stencil structure. Computing the Jacobian <span>$\partial R / \partial u$</span> entry-by-entry with dense AD is wasteful.</p><p>Using sparse forward-mode AD with <code>SparseConnectivityTracer.jl</code> and <code>SparseMatrixColorings.jl</code>, the sparsity pattern is detected and columns are colored once. The Jacobian is then evaluated in a compressed sweep:</p><pre><code class="language-julia hljs">using SparseArrays
+round.(grad_solve, digits = 4)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
+ 71.995
+  4.6345</code></pre>
+</div>
+<p>The two entries are the sensitivities with respect to the boundary value and the source scale. The matrix <code class="md-code-inline">A</code> does not depend on <span class="md-math md-math-inline">\(p\)</span>, so it is assembled once outside the function.</p>
+<h2 id="Differentiate-a-nonlinear-residual" class="md-heading">Differentiate a nonlinear residual<a href="#Differentiate-a-nonlinear-residual" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>For a nonlinear problem, the residual <span class="md-math md-math-inline">\(R(u) = A(u)u - F\)</span> has a localized stencil, so computing its Jacobian <span class="md-math md-math-inline">\(\partial R / \partial u\)</span> entry by entry with dense differentiation is wasteful. Sparse forward mode detects the sparsity pattern with <code class="md-code-inline">SparseConnectivityTracer.jl</code>, colours the columns once with <code class="md-code-inline">SparseMatrixColorings.jl</code>, and then evaluates the Jacobian in a compressed sweep. Here the diffusion coefficient depends on the state:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using SparseArrays
 import SparseConnectivityTracer, SparseMatrixColorings
 
 const sparse_backend = AutoSparse(AutoForwardDiff();
     sparsity_detector = SparseConnectivityTracer.TracerSparsityDetector(),
     coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
 
-# Nonlinear residual with state-dependent diffusion
 function pde_residual(u_vec)
     T = eltype(u_vec)
     uₕ = element(Wₕ, T)
     uₕ .= u_vec
 
-    # Local diffusion coefficient depending on the state
-    αvals = 1.0 .+ uₕ .^ 2
+    αvals = 1.0 .+ uₕ .^ 2                      # diffusion coefficient depends on the state
     a = form(Wₕ, Wₕ, (U, V) -&gt; inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
     A_sparse = assemble(a; dirichlet = :boundary)
 
@@ -76,9 +272,19 @@ u0 = zeros(ndofs(Wₕ))
 prep = DifferentiationInterface.prepare_jacobian(pde_residual, sparse_backend, u0)
 J = DifferentiationInterface.jacobian(pde_residual, prep, sparse_backend, u0)
 
-println(&quot;Jacobian dimensions: &quot;, size(J))
-println(&quot;Non-zero entries: &quot;, nnz(J))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Jacobian dimensions: (32, 32)
-Non-zero entries: 94</code></pre><p><code>TracerSparsityDetector</code> works this way for <em>any</em> Julia function, which is exactly why it has to run <code>pde_residual</code> once to find out. <code>pde_residual</code> here is not arbitrary, though: its matrix <code>A_sparse</code> comes from a <code>BilinearForm</code>, whose own sparsity is already known directly from its AST: no tracing needed for that part. <a href="../../api/#Bramble.jacobian_pattern"><code>jacobian_pattern</code></a> reads that pattern off the form, widened by the reach of each coefficient&#39;s own dependence on the unknown, named the same way a form term names an operator: a function of the trial placeholder. <code>αvals</code> here is <code>1.0 .+ uₕ.^2</code>, a plain pointwise function of <code>uₕ</code> at the <em>same</em> grid point (no averaging, unlike the staggered <code>Mₕ(u)</code> coefficient in <a href="../../examples/poisson_nonlinear/">the nonlinear Poisson example</a>), so its dependency is just the trial placeholder itself, <code>U -&gt; U</code>. <a href="../../api/#Bramble.ast_sparsity_detector"><code>ast_sparsity_detector</code></a> hands the result straight to <code>AutoSparse</code> in place of the tracer, once <a href="https://github.com/SciML/ADTypes.jl">ADTypes.jl</a> is loaded:</p><pre><code class="language-julia hljs">using ADTypes
+size(J), nnz(J)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((32, 32), 94)</code></pre>
+</div>
+<p>The Jacobian is sparse: only the stencil&#39;s entries are stored, not all of <span class="md-math md-math-inline">\(n^2\)</span>. <code class="md-code-inline">prepare_jacobian</code> does the detection and colouring once, and <code class="md-code-inline">jacobian</code> reuses it at every point.</p>
+<h3 id="Skip-the-tracer" class="md-heading">Skip the tracer<a href="#Skip-the-tracer" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p><code class="md-code-inline">TracerSparsityDetector</code> works for any Julia function, so it has to run <code class="md-code-inline">pde_residual</code> once to find the pattern. Here that is wasted effort. The matrix comes from a <code class="md-code-inline">BilinearForm</code>, and a form&#39;s sparsity is already known from its AST. <a href="../../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a> reads the pattern off the form and widens it by how each coefficient depends on the unknown.</p>
+<p>In this residual <code class="md-code-inline">αvals</code> is a pointwise function of <code class="md-code-inline">uₕ</code> at the same grid point, with no averaging, so its dependency is just the trial placeholder <code class="md-code-inline">U -&gt; U</code>. <a href="../../api/forms/#Bramble.ast_sparsity_detector"><code class="md-code-inline">ast_sparsity_detector</code></a> hands the result to <code class="md-code-inline">AutoSparse</code> in place of the tracer, once <a href="https://github.com/SciML/ADTypes.jl">ADTypes.jl</a> is loaded:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using ADTypes
+import Bramble: ast_sparsity_detector
 
 αvals0 = 1.0 .+ parent(element(Wₕ, 0.0)) .^ 2
 a_for_pattern = form(Wₕ, Wₕ, (U, V) -&gt; inner₊(αvals0 * ∇ₕ(U), ∇ₕ(V)))
@@ -90,4 +296,104 @@ const native_backend = AutoSparse(AutoForwardDiff();
 prep_native = DifferentiationInterface.prepare_jacobian(pde_residual, native_backend, u0)
 J_native = DifferentiationInterface.jacobian(pde_residual, prep_native, native_backend, u0)
 
-J == J_native</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><p><code>a_for_pattern</code> only needs <em>some</em> concrete coefficient to build a <code>BilinearForm</code> from: the pattern is a property of the AST, not of <code>αvals0</code>&#39;s values, so evaluating it at <code>u = 0</code> is as good as evaluating it at any other point. Same Jacobian either way, but no tracing pass paid for it: <code>jacobian_pattern</code> only ever walks the grid once, touching neither <code>ForwardDiff</code> nor the coefficient&#39;s actual values, so <code>prepare_jacobian</code> gets cheaper as the mesh grows rather than scaling with however long one residual call takes to trace. The trade is scope, not correctness: it only applies when the residual&#39;s matrix is assembled from a <code>BilinearForm</code> in the first place (as here) – composite trial/test spaces are supported too (see <a href="../../api/#Bramble.jacobian_pattern"><code>jacobian_pattern</code></a>&#39;s own docstring, and <a href="../../examples/coupled_reaction_diffusion/#Skipping-the-tracer-here-too">the coupled reaction-diffusion example</a>). <code>TracerSparsityDetector</code> above keeps working regardless of how <code>A_sparse</code> was built, which is the case to reach for it.</p><hr/><h2 id="6.-Choosing-a-backend"><a class="docs-heading-anchor" href="#6.-Choosing-a-backend">6. Choosing a backend</a><a id="6.-Choosing-a-backend-1"></a><a class="docs-heading-anchor-permalink" href="#6.-Choosing-a-backend" title="Permalink"></a></h2><p>ForwardDiff for a handful of parameters, a directional derivative, or a colour-compressed sparse Jacobian. ReverseDiff, Mooncake or Enzyme once the parameter count grows past a few dozen and the objective is scalar: one reverse sweep then replaces one forward sweep per parameter. Enzyme is the fastest of the three here and the one with an adjoint rule for <a href="../../api_sciml/#Bramble.pde_solve"><code>pde_solve</code></a>; ReverseDiff compiles fastest.</p><p>Sparse forward mode stays competitive far longer than the parameter count suggests, because the colour count is set by the stencil rather than by the mesh: a Cartesian difference stencil needs the same handful of colours at every resolution. Past the point where storing or factorizing the Jacobian is the binding constraint, the <a href="../solvers/">solvers tutorial</a> covers what to do with the linear system itself.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../solvers/">« Choosing a solver, backend, and execution policy</a><a class="docs-footer-nextpage" href="../backend/">Backend tutorial »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 29 September 2026 21:39">Tuesday 29 September 2026</span>. Using Julia version 1.13.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+J == J_native</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
+</div>
+<p><code class="md-code-inline">a_for_pattern</code> only needs some concrete coefficient to build a <code class="md-code-inline">BilinearForm</code>. The pattern belongs to the AST, not to the values of <code class="md-code-inline">αvals0</code>, so evaluating it at <span class="md-math md-math-inline">\(u = 0\)</span> is as good as anywhere else. The Jacobian is the same, but no tracing pass paid for it, so <code class="md-code-inline">prepare_jacobian</code> gets cheaper relative to tracing as the mesh grows. The trade is scope: it applies only when the residual&#39;s matrix is assembled from a <code class="md-code-inline">BilinearForm</code>, as here. Composite trial and test spaces are supported too (see the <a href="../../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a> docstring and <a href="../../examples/coupled_reaction_diffusion/#Skipping-the-tracer-here-too">the coupled reaction-diffusion example</a>). Keep <code class="md-code-inline">TracerSparsityDetector</code> for the case where the matrix was built some other way.</p>
+<hr class="md-hr">
+<h2 id="autodiff_backends" class="md-heading">Reference: choosing a backend<a href="#autodiff_backends" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>The stencil kernels write into preallocated arrays, so a backend has to support array mutation. That rules out <code class="md-code-inline">Zygote.jl</code>. These five work:</p>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:left">Backend</th>
+<th style="text-align:left">Mode</th>
+<th style="text-align:left">Reach for it when</th>
+<th style="text-align:left">Construction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">ForwardDiff</td>
+<td style="text-align:left">forward</td>
+<td style="text-align:left"><span class="md-math md-math-inline">\(\le 20\)</span> parameters or Jacobian colours</td>
+<td style="text-align:left"><code class="md-code-inline">AutoForwardDiff()</code></td>
+</tr>
+<tr>
+<td style="text-align:left">PolyesterForwardDiff</td>
+<td style="text-align:left">forward</td>
+<td style="text-align:left">the same, with chunks spread over threads</td>
+<td style="text-align:left"><code class="md-code-inline">AutoPolyesterForwardDiff()</code></td>
+</tr>
+<tr>
+<td style="text-align:left">ReverseDiff</td>
+<td style="text-align:left">reverse</td>
+<td style="text-align:left">a scalar loss over many parameters, compiled in under a second</td>
+<td style="text-align:left"><code class="md-code-inline">AutoReverseDiff()</code></td>
+</tr>
+<tr>
+<td style="text-align:left">Mooncake</td>
+<td style="text-align:left">reverse</td>
+<td style="text-align:left">the same, source-to-source, no tape recorded up front</td>
+<td style="text-align:left"><code class="md-code-inline">AutoMooncake(; config = nothing)</code></td>
+</tr>
+<tr>
+<td style="text-align:left">Enzyme</td>
+<td style="text-align:left">reverse</td>
+<td style="text-align:left">many parameters and the tightest reverse-mode cost</td>
+<td style="text-align:left">see below</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Enzyme needs two annotations whenever the differentiated closure captures a mesh or a grid space, which in this package it almost always does:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Enzyme
+
+enzyme_backend = AutoEnzyme(;
+    mode = Enzyme.set_runtime_activity(Enzyme.Reverse),
+    function_annotation = Enzyme.Const)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">ADTypes.AutoEnzyme(mode=EnzymeCore.ReverseMode{false, true, false, EnzymeCore.FFIABI, false, false}(), function_annotation=EnzymeCore.Const)</code></pre>
+</div>
+<p><code class="md-code-inline">set_runtime_activity</code> lets Enzyme track activity through the captured geometry, and <code class="md-code-inline">Enzyme.Const</code> declares the function object itself, which holds those references, as not differentiated. <a href="../../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a> carries its own <code class="md-code-inline">EnzymeRules</code> adjoint, so differentiating through a linear solve needs nothing beyond <code class="md-code-inline">using Enzyme</code>.</p>
+<p>Use ForwardDiff for a handful of parameters, a directional derivative, or a colour-compressed sparse Jacobian. Use ReverseDiff, Mooncake or Enzyme once the parameter count passes a few dozen and the objective is scalar, because one reverse sweep then replaces one forward sweep per parameter. Enzyme is the fastest of the three and the one with an adjoint rule for <code class="md-code-inline">pde_solve</code>. ReverseDiff compiles fastest.</p>
+<p>Sparse forward mode stays competitive far longer than the parameter count suggests, because the colour count is set by the stencil rather than the mesh: a Cartesian difference stencil needs the same handful of colours at every resolution. Once storing or factorizing the Jacobian is the binding constraint, the <a href="../../tutorials/solvers/">solvers tutorial</a> covers the linear system itself.</p>
+      </article>
+      <footer class="md-footer">
+<p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
+      </footer>
+    </main>
+    <aside class="md-toc">
+      <div class="md-toc-inner">
+        <p class="md-toc-title">On this page</p>
+          <a class="md-toc-link md-toc-h2" href="#Differentiate-with-respect-to-a-scalar">Differentiate with respect to a scalar</a>
+          <a class="md-toc-link md-toc-h2" href="#Differentiate-with-respect-to-several-parameters">Differentiate with respect to several parameters</a>
+          <a class="md-toc-link md-toc-h2" href="#Differentiate-through-a-linear-solve">Differentiate through a linear solve</a>
+          <a class="md-toc-link md-toc-h2" href="#Differentiate-a-nonlinear-residual">Differentiate a nonlinear residual</a>
+            <a class="md-toc-link md-toc-h3" href="#Skip-the-tracer">Skip the tracer</a>
+          <a class="md-toc-link md-toc-h2" href="#autodiff_backends">Reference: choosing a backend</a>
+      </div>
+    </aside>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia-repl.min.js"></script>
+  <script>hljs.highlightAll();</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.js"></script>
+  <script>var MD_KATEX_OPTIONS = {};
+document.querySelectorAll('.md-math').forEach(function (el) {
+  var tex = el.textContent.trim().replace(/^\\[\[(]/, '').replace(/\\[\])]$/, '');
+  katex.render(tex, el, Object.assign({ throwOnError: false }, MD_KATEX_OPTIONS,
+    { displayMode: el.classList.contains('md-math-display') }));
+});</script>
+  <script src="../../siteinfo.js"></script>
+  <script src="../../../versions.js"></script>
+  <script src="../../assets/materialdocs.js?v=3f7be4cd"></script>
+</body>
+</html>

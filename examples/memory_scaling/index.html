@@ -1,5 +1,150 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Memory scaling with a matrix-free Kronecker operator · Bramble.jl</title><meta name="title" content="Memory scaling with a matrix-free Kronecker operator · Bramble.jl"/><meta property="og:title" content="Memory scaling with a matrix-free Kronecker operator · Bramble.jl"/><meta property="twitter:title" content="Memory scaling with a matrix-free Kronecker operator · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;family=Source+Sans+3:wght@400;600&amp;display=swap" rel="stylesheet" type="text/css"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="Bramble.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting started</a></li><li><span class="tocitem">Discrete foundations</span><ul><li><a class="tocitem" href="../../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../../tutorials/operators/">Difference, jump and average operators</a></li></ul></li><li><span class="tocitem">Forms and assembly</span><ul><li><a class="tocitem" href="../../tutorials/form/">Linear and bilinear forms</a></li></ul></li><li><span class="tocitem">Solvers and scientific computing</span><ul><li><a class="tocitem" href="../../tutorials/solvers/">Choosing a solver, backend, and execution policy</a></li><li><a class="tocitem" href="../../tutorials/autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../../tutorials/backend/">Backend tutorial</a></li></ul></li><li><span class="tocitem">Visualization and export</span><ul><li><a class="tocitem" href="../../tutorials/plotting/">Plotting directly</a></li><li><a class="tocitem" href="../../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../convection_diffusion_linear/">Convection-diffusion equation</a></li><li><a class="tocitem" href="../coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li><li><a class="tocitem" href="../elasticity_3d/">Linear elasticity in three dimensions</a></li><li><a class="tocitem" href="../heat_equation/">Heat equation</a></li><li><a class="tocitem" href="../amg_preconditioning/">Algebraic multigrid preconditioning</a></li><li><a class="tocitem" href="../inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a></li><li><a class="tocitem" href="../transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a></li><li><a class="tocitem" href="../wave_equation_2d/">Acoustic wave equation in two dimensions</a></li><li><a class="tocitem" href="../point_sources_flux/">Point sources and boundary flux recovery</a></li><li><a class="tocitem" href="../transient_inplace/">A transient loop that allocates nothing</a></li><li><a class="tocitem" href="../boundary_layer_graded/">Graded meshes for a boundary layer</a></li><li class="is-active"><a class="tocitem" href>Memory scaling with a matrix-free Kronecker operator</a><ul class="internal"><li><a class="tocitem" href="#Problem"><span>Problem</span></a></li><li><a class="tocitem" href="#Building-the-mesh-and-the-form"><span>Building the mesh and the form</span></a></li><li><a class="tocitem" href="#Separability"><span>Separability</span></a></li><li><a class="tocitem" href="#The-operator,-and-what-it-costs-against-the-matrix-it-replaces"><span>The operator, and what it costs against the matrix it replaces</span></a></li><li><a class="tocitem" href="#Solving-it:-iteratively,-through-the-operator-itself"><span>Solving it: iteratively, through the operator itself</span></a></li><li><a class="tocitem" href="#Solving-it:-directly,-by-fast-diagonalisation"><span>Solving it: directly, by fast diagonalisation</span></a></li><li><a class="tocitem" href="#Checking-the-answer"><span>Checking the answer</span></a></li><li><a class="tocitem" href="#The-operator&#39;s-real-limit:-no-boundary-constraint-of-its-own"><span>The operator&#39;s real limit: no boundary constraint of its own</span></a></li><li><a class="tocitem" href="#See-also"><span>See also</span></a></li></ul></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><a class="tocitem" href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a></li><li><input class="collapse-toggle" id="menuitem-9-3" type="checkbox"/><label class="tocitem" for="menuitem-9-3"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li><li><a class="tocitem" href="../../internals/exporters/">Exporters</a></li><li><a class="tocitem" href="../../internals/gpu/">GPU acceleration</a></li><li><a class="tocitem" href="../../internals/csr_solvers/"><code>SparseMatrixCSR</code> direct solve</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Memory scaling with a matrix-free Kronecker operator</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Memory scaling with a matrix-free Kronecker operator</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/memory_scaling.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Memory-scaling-with-a-matrix-free-Kronecker-operator"><a class="docs-heading-anchor" href="#Memory-scaling-with-a-matrix-free-Kronecker-operator">Memory scaling with a matrix-free Kronecker operator</a><a id="Memory-scaling-with-a-matrix-free-Kronecker-operator-1"></a><a class="docs-heading-anchor-permalink" href="#Memory-scaling-with-a-matrix-free-Kronecker-operator" title="Permalink"></a></h1><p>Every bilinear form assembled so far in this manual becomes one <code>SparseMatrixCSC</code>: exact, but its storage grows with the number of nonzeros, which on a Cartesian mesh grows with the number of unknowns. A separable form – one whose assembled matrix is an exact sum of Kronecker products of one-dimensional factors – never needs that matrix at all: applying it is one fused pass over the per-axis factors, so the storage is <code>O(D \cdot n)</code> instead of <code>O(n^D)</code> stored nonzeros. This page builds that operator, measures what it actually costs against the matrix it replaces, and checks that it still computes the right answer. Every number below was produced by the code shown.</p><h2 id="Problem"><a class="docs-heading-anchor" href="#Problem">Problem</a><a id="Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Problem" title="Permalink"></a></h2><p>Two related problems on the unit cube, chosen so both the matrix-free operator and the fast-diagonalisation solve introduced below get to run:</p><p class="math-container">\[u - \Delta u = g \text{ in } \Omega = (0,1)^3, \qquad \partial_n u = 0 \text{ on } \partial\Omega,\]</p><p>with manufactured solution <span>$u_{\text{exact}}(x, y, z) = \cos(\pi x)\cos(\pi y)\cos(\pi z)$</span>, whose normal derivative vanishes on every face of the cube – exactly the boundary condition an <em>unconstrained</em> assembly imposes, so no <code>dirichlet</code> handling is needed here. The mass term keeps the discrete operator well-posed without one.</p><h2 id="Building-the-mesh-and-the-form"><a class="docs-heading-anchor" href="#Building-the-mesh-and-the-form">Building the mesh and the form</a><a id="Building-the-mesh-and-the-form-1"></a><a class="docs-heading-anchor-permalink" href="#Building-the-mesh-and-the-form" title="Permalink"></a></h2><pre><code class="language-julia hljs">using Bramble
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Memory scaling with a matrix-free Kronecker operator — Bramble.jl</title>
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e4994b21">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <meta name="title" content="Memory scaling with a matrix-free Kronecker operator — Bramble.jl">
+  <meta property="og:title" content="Memory scaling with a matrix-free Kronecker operator — Bramble.jl">
+  <meta property="twitter:title" content="Memory scaling with a matrix-free Kronecker operator — Bramble.jl">
+  <meta name="description" content="Documentation for Bramble.jl.">
+  <meta property="og:description" content="Documentation for Bramble.jl.">
+  <meta property="twitter:description" content="Documentation for Bramble.jl.">
+  <link rel="icon" type="image/x-icon" href="../../assets/favicon.ico">
+  <link rel="stylesheet" href="../../assets/custom.css">
+  <script>
+    (function(){
+      document.documentElement.classList.add('no-transition');
+      var t=localStorage.getItem('md-theme');if(t)document.documentElement.setAttribute('data-theme',t);
+      window.addEventListener('load',function(){setTimeout(function(){document.documentElement.classList.remove('no-transition');},50);});
+    })()
+  </script>
+</head>
+<body data-warn-outdated>
+  <header class="md-navbar">
+    <button id="md-hamburger" class="md-icon-btn md-hamburger" aria-label="Toggle navigation" aria-expanded="false"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></button>
+    <img class="md-navbar-logo md-logo-light" src="../../assets/logo.svg" alt="Bramble.jl logo" height="32">
+    <img class="md-navbar-logo md-logo-dark" src="../../assets/logo-dark.svg" alt="Bramble.jl logo" height="32">
+    <span class="md-navbar-title">Bramble.jl</span>
+    <span class="md-navbar-spacer"></span>
+    <button id="md-search-btn" class="md-search-bar" aria-label="Search documentation" aria-expanded="false">
+      <svg class="md-icon md-search-bar-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <span class="md-search-bar-label">Search docs</span>
+      <kbd class="md-search-bar-kbd">Ctrl K</kbd>
+    </button>
+    <a class="md-icon-btn md-repo-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub" aria-label="View the repository on GitHub" rel="noopener" target="_blank"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 .3a12 12 0 00-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 016 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0012 .3z"/></svg><span class="md-repo-label">GitHub</span></a>
+    <button id="md-theme-toggle" class="md-icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode"><svg class="md-icon md-icon-light" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg><svg class="md-icon md-icon-dark" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg></button>
+  </header>
+  <div class="md-layout">
+    <nav class="md-sidebar">
+      <a href="../../">Home</a>
+      <a href="../../getting_started/">Getting started</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Discrete foundations</span>
+        <a href="../../tutorials/geometry/">Geometry tutorial</a>
+        <a href="../../tutorials/mesh/">Mesh tutorial</a>
+        <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
+        <a href="../../tutorials/operators/">Difference, jump and average operators</a>
+        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
+        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Forms and assembly</span>
+        <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Solvers and scientific computing</span>
+        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
+        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
+        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <a href="../../tutorials/backend/">Backends and execution policies</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Visualization and export</span>
+        <a href="../../tutorials/plotting/">Plotting directly</a>
+        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
+        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Examples</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Stationary problems</span>
+          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
+          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
+          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Time-dependent problems</span>
+          <a href="../../examples/heat_equation/">Heat equation</a>
+          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Inverse problems</span>
+          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
+          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
+        </div>
+        <div class="md-nav-section">
+          <span class="md-nav-section-title">Solvers and performance</span>
+          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
+          <a href="../../examples/memory_scaling/" class="md-nav-active">Memory scaling with a matrix-free Kronecker operator</a>
+          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
+        </div>
+      </div>
+      <a href="../../benchmarks/">Benchmarks</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Documentation</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">API reference</span>
+          <a href="../../api/">API reference</a>
+          <a href="../../api/utilities/">Utilities</a>
+          <a href="../../api/geometry/">Geometry</a>
+          <a href="../../api/meshes/">Meshes</a>
+          <a href="../../api/spaces/">Grid spaces</a>
+          <a href="../../api/operators/">Difference, jump and average operators</a>
+          <a href="../../api/inner_products/">Inner products and norms</a>
+          <a href="../../api/forms/">Forms</a>
+          <a href="../../api/exporters/">Exporters</a>
+        </div>
+        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Internals</span>
+          <a href="../../internals/utils/">Utilities</a>
+          <a href="../../internals/geometry/">Geometry</a>
+          <a href="../../internals/mesh/">Mesh</a>
+          <a href="../../internals/space/">Spaces</a>
+          <a href="../../internals/form/">Forms</a>
+          <a href="../../internals/autodiff/">Automatic differentiation</a>
+          <a href="../../internals/exporters/">Exporters</a>
+          <a href="../../internals/gpu/">GPU acceleration</a>
+          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
+        </div>
+      </div>
+    </nav>
+    <main class="md-content">
+      <article class="md-article">
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/memory_scaling.jl" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+<h1 id="Memory-scaling-with-a-matrix-free-Kronecker-operator" class="md-heading">Memory scaling with a matrix-free Kronecker operator<a href="#Memory-scaling-with-a-matrix-free-Kronecker-operator" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
+<p>Every bilinear form assembled so far in this manual becomes one <code class="md-code-inline">SparseMatrixCSC</code>: exact, but its storage grows with the number of nonzeros, which on a Cartesian mesh grows with the number of unknowns. A separable form, one whose assembled matrix is an exact sum of Kronecker products of one-dimensional factors, never needs that matrix at all. Applying it is one fused pass over the per-axis factors, so the storage is <code class="md-code-inline">O(D \cdot n)</code> instead of <code class="md-code-inline">O(n^D)</code> stored nonzeros. This page builds that operator, measures what it actually costs against the matrix it replaces, and checks that it still computes the right answer. Every number below was produced by the code shown.</p>
+<h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Two related problems on the unit cube, chosen so both the matrix-free operator and the fast-diagonalisation solve introduced below get to run:</p>
+<div class="md-math md-math-display">
+\[u - \Delta u = g \text{ in } \Omega = (0,1)^3, \qquad \partial_n u = 0 \text{ on } \partial\Omega,\]
+</div>
+<p>with manufactured solution <span class="md-math md-math-inline">\(u_{\text{exact}}(x, y, z) = \cos(\pi x)\cos(\pi y)\cos(\pi z)\)</span>, whose normal derivative vanishes on every face of the cube. That is exactly the boundary condition an <em>unconstrained</em> assembly imposes, so no <code class="md-code-inline">dirichlet</code> handling is needed here. The mass term keeps the discrete operator well-posed without one.</p>
+<h2 id="Building-the-mesh-and-the-form" class="md-heading">Building the mesh and the form<a href="#Building-the-mesh-and-the-form" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble
 using Kronecker
 using LinearSolve: LinearProblem, solve, KrylovJL_CG
 
@@ -12,14 +157,276 @@ n = 41
 Wₕ = gridspace(Ωₕ)
 
 a = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
-ndofs(Wₕ)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">68921</code></pre><p><code>41^3 = 68921</code> unknowns – large enough for the memory gap below to be worth looking at, small enough that this page, including both direct solves further down, still runs in seconds.</p><h2 id="Separability"><a class="docs-heading-anchor" href="#Separability">Separability</a><a id="Separability-1"></a><a class="docs-heading-anchor-permalink" href="#Separability" title="Permalink"></a></h2><p><code>is_separable</code> walks <code>a</code>&#39;s resolved AST and answers whether every term is one of the two shapes a Kronecker product can represent: <code>innerₕ(u, v)</code> (the identity on every axis) or <code>inner₊</code> of a backward difference along one axis (what <code>∇ₕ(u)</code> expands into, one term per axis). <code>a</code> above is exactly that sum:</p><pre><code class="language-julia hljs">is_separable(a)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><p>A grid-function coefficient breaks the shape match – it has no tensor structure to factor out, so <code>is_separable</code> refuses it rather than guessing:</p><pre><code class="language-julia hljs">fₕ = Rₕ(Wₕ, x -&gt; 1.0 + x[1])
-is_separable(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(fₕ * u, v)))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">false</code></pre><p>The same refusal covers a region restriction, an interpolation node, a surface (<code>InnerGamma</code>) weight, a composite space, a 1D mesh (nothing to factor), and any difference family other than the plain backward one <code>∇ₕ</code> builds – forward, centered, star, cross-weighted, averages, jumps. Every one of these is a false negative rather than a wrong answer: <code>a</code> would still assemble and solve the ordinary way, just without the fast path below.</p><h2 id="The-operator,-and-what-it-costs-against-the-matrix-it-replaces"><a class="docs-heading-anchor" href="#The-operator,-and-what-it-costs-against-the-matrix-it-replaces">The operator, and what it costs against the matrix it replaces</a><a id="The-operator,-and-what-it-costs-against-the-matrix-it-replaces-1"></a><a class="docs-heading-anchor-permalink" href="#The-operator,-and-what-it-costs-against-the-matrix-it-replaces" title="Permalink"></a></h2><p><code>kronecker_operator</code> builds the matrix-free operator without ever forming the <code>68921 x 68921</code> matrix; <code>assemble</code> builds that matrix, for comparison:</p><pre><code class="language-julia hljs">K = kronecker_operator(a)
+ndofs(Wₕ)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">68921</code></pre>
+</div>
+<p><code class="md-code-inline">41^3 = 68921</code> unknowns, large enough for the memory gap below to be worth looking at, small enough that this page, including both direct solves further down, still runs in seconds.</p>
+<h2 id="Mathematical-background" class="md-heading">Mathematical background<a href="#Mathematical-background" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>The operator this page builds is a sum of Kronecker products, and <code class="md-code-inline">fdm_solve</code> exploits one property of such sums. Both are shown below on matrices small enough to print, using plain dense matrices and <code class="md-code-inline">kron</code> from <code class="md-code-inline">LinearAlgebra</code>, so that the definition is visible. The lazy type loaded above enters only once the operator itself is built.</p>
+<h3 id="The-Kronecker-product" class="md-heading">The Kronecker product<a href="#The-Kronecker-product" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>For <span class="md-math md-math-inline">\(A \in \mathbb{R}^{m \times n}\)</span> and <span class="md-math md-math-inline">\(B \in \mathbb{R}^{p \times q}\)</span>, the Kronecker product <span class="md-math md-math-inline">\(A \otimes B\)</span> is the block matrix whose <span class="md-math md-math-inline">\((i, j)\)</span> block is the scalar <span class="md-math md-math-inline">\(a_{ij}\)</span> times the whole of <span class="md-math md-math-inline">\(B\)</span>:</p>
+<div class="md-math md-math-display">
+\[A \otimes B =
+\begin{pmatrix}
+a_{11} B &amp; \cdots &amp; a_{1n} B \\
+\vdots &amp; &amp; \vdots \\
+a_{m1} B &amp; \cdots &amp; a_{mn} B
+\end{pmatrix}
+\in \mathbb{R}^{mp \times nq}.\]
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using LinearAlgebra
+
+A₀ = [1 2; 3 4]
+B₀ = [0 5; 6 7]
+kron(A₀, B₀)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4×4 Matrix{Int64}:
+  0   5   0  10
+  6   7  12  14
+  0  15   0  20
+ 18  21  24  28</code></pre>
+</div>
+<p>The top-left <span class="md-math md-math-inline">\(2 \times 2\)</span> block is <span class="md-math md-math-inline">\(1 \cdot B_0\)</span>, the top-right block is <span class="md-math md-math-inline">\(2 \cdot B_0\)</span>, and so on. Two <span class="md-math md-math-inline">\(2 \times 2\)</span> factors give a <span class="md-math md-math-inline">\(4 \times 4\)</span> matrix, as the size <span class="md-math md-math-inline">\(mp \times nq\)</span> predicts.</p>
+<p>Products of Kronecker products factor block by block: <span class="md-math md-math-inline">\((A \otimes B)(C \otimes D) = AC \otimes BD\)</span> whenever the products <span class="md-math md-math-inline">\(AC\)</span> and <span class="md-math md-math-inline">\(BD\)</span> are defined. The two sides agree entry for entry:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">C₀ = [2 0; 1 3]
+D₀ = [1 1; 0 2]
+kron(A₀, B₀) * kron(C₀, D₀) == kron(A₀ * C₀, B₀ * D₀)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
+</div>
+<h3 id="Applying-a-Kronecker-product-without-forming-it" class="md-heading">Applying a Kronecker product without forming it<a href="#Applying-a-Kronecker-product-without-forming-it" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>Stacking the columns of a matrix <span class="md-math md-math-inline">\(X \in \mathbb{R}^{q \times n}\)</span> into one vector gives <span class="md-math md-math-inline">\(\operatorname{vec}(X)\)</span>, which is what <code class="md-code-inline">vec(X)</code> returns. The two factors then act on <span class="md-math md-math-inline">\(X\)</span> separately:</p>
+<div class="md-math md-math-display">
+\[(A \otimes B)\,\operatorname{vec}(X) = \operatorname{vec}(B X A^{\mathsf T}).\]
+</div>
+<p>With <span class="md-math md-math-inline">\(A \in \mathbb{R}^{m \times n}\)</span> and <span class="md-math md-math-inline">\(B \in \mathbb{R}^{p \times q}\)</span>, applying <span class="md-math md-math-inline">\(A \otimes B\)</span> to a vector therefore takes two small products on a reshaped vector, and the <span class="md-math md-math-inline">\(mp \times nq\)</span> matrix is never built:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">X₀ = [1 2; 3 4]
+y_big = kron(A₀, B₀) * vec(X₀)
+y_small = vec(B₀ * X₀ * A₀&#39;)
+(y_big, y_small)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([55, 107, 125, 241], [55, 107, 125, 241])</code></pre>
+</div>
+<p>For square factors of sizes <span class="md-math md-math-inline">\(m\)</span> and <span class="md-math md-math-inline">\(n\)</span> the saving is large. Storing <span class="md-math md-math-inline">\(A\)</span> and <span class="md-math md-math-inline">\(B\)</span> takes <span class="md-math md-math-inline">\(m^2 + n^2\)</span> numbers against <span class="md-math md-math-inline">\(m^2 n^2\)</span> for the product, and applying them costs about <span class="md-math md-math-inline">\(2mn(m + n)\)</span> floating-point operations (one <span class="md-math md-math-inline">\(n \times n\)</span> times <span class="md-math md-math-inline">\(n \times m\)</span> product, one <span class="md-math md-math-inline">\(n \times m\)</span> times <span class="md-math md-math-inline">\(m \times m\)</span> product) against <span class="md-math md-math-inline">\(2m^2 n^2\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">function counts(m, n)
+    (stored_factors = m^2 + n^2, stored_matrix = m^2 * n^2,
+        flops_factors = 2m * n * (m + n), flops_matrix = 2m^2 * n^2)
+end
+counts(41, 41)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(stored_factors = 3362, stored_matrix = 2825761, flops_factors = 275684, flops_matrix = 5651522)</code></pre>
+</div>
+<h3 id="The-Kronecker-sum" class="md-heading">The Kronecker sum<a href="#The-Kronecker-sum" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>The Kronecker sum of square matrices <span class="md-math md-math-inline">\(A \in \mathbb{R}^{m \times m}\)</span> and <span class="md-math md-math-inline">\(B \in \mathbb{R}^{n \times n}\)</span> is</p>
+<div class="md-math md-math-display">
+\[A \oplus B = A \otimes I_n + I_m \otimes B,\]
+</div>
+<p>where <span class="md-math md-math-inline">\(I_n\)</span> is the identity of size <span class="md-math md-math-inline">\(n\)</span>. For eigenpairs <span class="md-math md-math-inline">\(A v = \lambda v\)</span> and <span class="md-math md-math-inline">\(B w = \mu w\)</span>,</p>
+<div class="md-math md-math-display">
+\[(A \oplus B)(v \otimes w) = (\lambda + \mu)(v \otimes w),\]
+</div>
+<p>so the eigenvalues of <span class="md-math md-math-inline">\(A \oplus B\)</span> are all sums <span class="md-math md-math-inline">\(\lambda_i(A) + \mu_j(B)\)</span>, with the products <span class="md-math md-math-inline">\(v_i \otimes w_j\)</span> of the factors&#39; eigenvectors as eigenvectors. A symmetric example:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Aₛ = [2.0 -1.0; -1.0 2.0]
+Bₛ = [1.0 0.0 0.0; 0.0 3.0 1.0; 0.0 1.0 3.0]
+Sₖ = kron(Aₛ, Matrix(1.0I, 3, 3)) + kron(Matrix(1.0I, 2, 2), Bₛ)
+λ = eigvals(Aₛ)
+μ = eigvals(Bₛ)
+(sort(eigvals(Sₖ)), sort(vec(λ .+ μ&#39;)))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([1.9999999999999996, 2.9999999999999982, 3.9999999999999996, 4.999999999999999, 5.0, 6.999999999999999], [2.0, 3.0, 4.0, 5.0, 5.0, 7.0])</code></pre>
+</div>
+<p>The eigenvector claim is checked the same way, on one pair:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Vₐ = eigvecs(Aₛ)
+Wᵦ = eigvecs(Bₛ)
+v₂ = kron(Vₐ[:, 2], Wᵦ[:, 3])
+norm(Sₖ * v₂ - (λ[2] + μ[3]) * v₂)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">8.881784197001252e-16</code></pre>
+</div>
+<p>The factors of the operator below are not abstract matrices: each one is a one-dimensional form that Bramble assembles, and the next subsections build the page&#39;s operator from them.</p>
+<h3 id="The-one-dimensional-factors" class="md-heading">The one-dimensional factors<a href="#The-one-dimensional-factors" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>Take the one-dimensional mass form <code class="md-code-inline">innerₕ(u, v)</code> and stiffness form <code class="md-code-inline">inner₊(∇ₕ(u), ∇ₕ(v))</code> on a small non-uniform mesh, four points at <span class="md-math md-math-inline">\(0, 0.2, 0.6, 1\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωx = mesh(domain(interval(0.0, 1.0)), 4, true)
+Bramble.set_points!(Ωx, [0.0, 0.2, 0.6, 1.0])
+Wx = gridspace(Ωx)
+
+Mx = Matrix(assemble(form(Wx, Wx, (u, v) -&gt; innerₕ(u, v))))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4×4 Matrix{Float64}:
+ 0.1  0.0  0.0  0.0
+ 0.0  0.3  0.0  0.0
+ 0.0  0.0  0.4  0.0
+ 0.0  0.0  0.0  0.2</code></pre>
+</div>
+<p>The mass matrix is diagonal, and its entries are the cell widths <span class="md-math md-math-inline">\(0.1, 0.3, 0.4, 0.2\)</span> of the mesh, which are not equal. The stiffness matrix is tridiagonal, with the inverse spacings of the same mesh as its entries:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Kx = Matrix(assemble(form(Wx, Wx, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)))))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4×4 Matrix{Float64}:
+  5.0  -5.0   0.0   0.0
+ -5.0   7.5  -2.5   0.0
+  0.0  -2.5   5.0  -2.5
+  0.0   0.0  -2.5   2.5</code></pre>
+</div>
+<p>Every row of <span class="md-math md-math-inline">\(K_x\)</span> sums to zero: constants are in its kernel, which is the unconstrained (natural) boundary condition again. Two more meshes, with their own points, give the matching factors on the other axes:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωy = mesh(domain(interval(0.0, 1.0)), 3, true)
+Bramble.set_points!(Ωy, [0.0, 0.5, 1.0])
+Ωz = mesh(domain(interval(0.0, 1.0)), 3, true)
+Bramble.set_points!(Ωz, [0.0, 0.3, 1.0])
+
+function assemble_factors(Ω)
+    (W = gridspace(Ω);
+        (Matrix(assemble(form(W, W, (u, v) -&gt; innerₕ(u, v)))),
+            Matrix(assemble(form(W, W, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)))))))
+end
+My, Ky = assemble_factors(Ωy)
+Mz, Kz = assemble_factors(Ωz)
+(My, Ky)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.25 0.0 0.0; 0.0 0.5 0.0; 0.0 0.0 0.25], [2.0 -2.0 0.0; -2.0 4.0 -2.0; 0.0 -2.0 2.0])</code></pre>
+</div>
+<h3 id="Two-and-three-dimensions" class="md-heading">Two and three dimensions<a href="#Two-and-three-dimensions" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>On the tensor mesh of those axes, a grid function is stored with the first axis varying fastest, so reshaping the vector of values to <span class="md-math md-math-inline">\(n_x \times n_y\)</span> gives a matrix whose column index is <span class="md-math md-math-inline">\(y\)</span>. That is the <code class="md-code-inline">vec</code> convention used above, and it fixes which factor sits where in a Kronecker product: the slowest axis comes first, as the left factor. The form <span class="md-math md-math-inline">\(u v + \nabla u \cdot \nabla v\)</span> then assembles into</p>
+<div class="md-math md-math-display">
+\[A_{2} = M_y \otimes M_x + K_y \otimes M_x + M_y \otimes K_x,\]
+</div>
+<p>one term per summand of the form, with the stiffness matrix of an axis in the term that differentiates along it and the mass matrix of the other axes everywhere else. In three dimensions the same rule gives four terms, with <span class="md-math md-math-inline">\(M_z \otimes M_y \otimes M_x\)</span> for the mass term. Assembling the forms on the tensor meshes and comparing:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ω₂ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 3), true)
+Bramble.change_points!(Ω₂, [points(Ωx), points(Ωy)])
+W₂ = gridspace(Ω₂)
+a₂ = form(W₂, W₂, (u, v) -&gt; innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+A₂ = assemble(a₂)
+
+Ω₃ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 3, 3), true)
+Bramble.change_points!(Ω₃, [points(Ωx), points(Ωy), points(Ωz)])
+W₃ = gridspace(Ω₃)
+a₃ = form(W₃, W₃, (u, v) -&gt; innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+A₃ = assemble(a₃)
+
+kron_2d = kron(My, Mx) + kron(Ky, Mx) + kron(My, Kx)
+kron_3d = kron(Mz, My, Mx) + kron(Kz, My, Mx) + kron(Mz, Ky, Mx) + kron(Mz, My, Kx)
+(norm(Matrix(A₂) - kron_2d), norm(Matrix(A₃) - kron_3d))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(7.691850745534255e-16, 9.878606697409368e-16)</code></pre>
+</div>
+<p>The assembled matrices equal the Kronecker sums of the one-dimensional factors up to rounding, on meshes whose points are unevenly spaced along every axis. This is the structure <code class="md-code-inline">is_separable</code> looks for term by term: each term of the form must split into one factor per axis. A grid-function coefficient does not split, since its values are not a product of one function of <span class="md-math md-math-inline">\(x\)</span> and one of <span class="md-math md-math-inline">\(y\)</span>, and that is why it is refused below.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">is_separable(a₂) &amp;&amp; is_separable(a₃)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
+</div>
+<h3 id="Why-the-storage-is-linear-in-the-points-per-axis" class="md-heading">Why the storage is linear in the points per axis<a href="#Why-the-storage-is-linear-in-the-points-per-axis" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>Each axis contributes only its own two matrices, <span class="md-math md-math-inline">\(M\)</span> and <span class="md-math md-math-inline">\(K\)</span>, whatever the dimension: a diagonal and a tridiagonal one, so a few times <span class="md-math md-math-inline">\(n\)</span> stored numbers per axis, <span class="md-math md-math-inline">\(O(D \cdot n)\)</span> in all. The assembled matrix has a nonzero in every row for each neighbour along each axis, so its nonzeros grow like <span class="md-math md-math-inline">\(n^D\)</span>. On the small meshes above:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">nnz_factors(Ms, Ks) = sum(count.(!iszero, Ms)) + sum(count.(!iszero, Ks))
+(factor_nonzeros = nnz_factors((Mx, My, Mz), (Kx, Ky, Kz)), matrix_nonzeros = count(!iszero, A₃))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(factor_nonzeros = 34, matrix_nonzeros = 186)</code></pre>
+</div>
+<p>Already here the factors hold a fraction of the matrix&#39;s nonzeros, and the gap widens at once as the axes refine: doubling the points per axis doubles <code class="md-code-inline">factor_nonzeros</code> but multiplies <code class="md-code-inline">matrix_nonzeros</code> by <span class="md-math md-math-inline">\(2^D\)</span>. The page measures that gap in bytes on the <code class="md-code-inline">41^3</code> mesh below, as <code class="md-code-inline">bytes_kronecker</code> against <code class="md-code-inline">bytes_csc</code>.</p>
+<h3 id="Fast-diagonalisation" class="md-heading">Fast diagonalisation<a href="#Fast-diagonalisation" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>For a system of the shape above, the Kronecker structure also gives a direct solve. On each axis solve the generalised eigenproblem <span class="md-math md-math-inline">\(K v = \lambda M v\)</span>. Both matrices are symmetric and <span class="md-math md-math-inline">\(M\)</span> is positive definite, so the eigenvectors can be scaled to satisfy <span class="md-math md-math-inline">\(V^{\mathsf T} M V = I\)</span> and <span class="md-math md-math-inline">\(V^{\mathsf T} K V = \Lambda\)</span>, with <span class="md-math md-math-inline">\(\Lambda\)</span> the diagonal matrix of eigenvalues. The two-argument <code class="md-code-inline">eigen</code> returns exactly that:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Fx = eigen(Kx, Mx)
+Fy = eigen(Ky, My)
+(round.(Fx.values; digits = 6), norm(Fx.vectors&#39; * Mx * Fx.vectors - I))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 8.418135, 22.337794, 69.24407], 1.795986741320903e-15)</code></pre>
+</div>
+<p>The smallest eigenvalue is zero up to rounding, the constants again. Write <span class="md-math md-math-inline">\(V = V_y \otimes V_x\)</span>. By the product rule from above, <span class="md-math md-math-inline">\(V^{\mathsf T} (M_y \otimes M_x) V = I\)</span>, <span class="md-math md-math-inline">\(V^{\mathsf T} (K_y \otimes M_x) V = \Lambda_y \otimes I\)</span> and <span class="md-math md-math-inline">\(V^{\mathsf T} (M_y \otimes K_x) V = I \otimes \Lambda_x\)</span>, so</p>
+<div class="md-math md-math-display">
+\[V^{\mathsf T} A_2 V = I + \Lambda_y \otimes I + I \otimes \Lambda_x,\]
+</div>
+<p>which is diagonal, with entries <span class="md-math md-math-inline">\(1 + \lambda^y_j + \lambda^x_i\)</span>. Hence <span class="md-math md-math-inline">\(A_2^{-1} = V (I + \Lambda_y \otimes I + I \otimes \Lambda_x)^{-1} V^{\mathsf T}\)</span>, and solving <span class="md-math md-math-inline">\(A_2 x = b\)</span> is three steps: transform <span class="md-math md-math-inline">\(b\)</span> by <span class="md-math md-math-inline">\(V^{\mathsf T}\)</span>, divide pointwise by the diagonal, transform back by <span class="md-math md-math-inline">\(V\)</span>. With <span class="md-math md-math-inline">\(B\)</span> the vector <span class="md-math md-math-inline">\(b\)</span> reshaped to <span class="md-math md-math-inline">\(n_x \times n_y\)</span>, applying <span class="md-math md-math-inline">\(V_y \otimes V_x\)</span> is two small products as in the vec identity:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">b₂ = collect(1.0:12.0)
+B₂ = reshape(b₂, 4, 3)
+Λ₂ = 1 .+ Fx.values .+ Fy.values&#39;
+X₂ = Fx.vectors * ((Fx.vectors&#39; * B₂ * Fy.vectors) ./ Λ₂) * Fy.vectors&#39;
+norm(vec(X₂) - Matrix(A₂) \ b₂)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4.585065711609581e-13</code></pre>
+</div>
+<p>This agrees with the dense solve to rounding, though only the two small eigenproblems and two small products were used, and no <span class="md-math md-math-inline">\(12 \times 12\)</span> matrix was factorised. On a real grid the saving is the same in kind: <code class="md-code-inline">fdm_solve</code>, used further down, does exactly this with one eigendecomposition per axis and one reshaped product per axis, in any dimension, and without ever assembling the matrix. The derivation needs the form to be a sum of Kronecker products of per-axis factors that share their eigenvectors. That holds for the mass and stiffness terms with constant coefficients, and fails for the grid-function coefficient shown under Separability. A Dirichlet condition is not part of this derivation either: it is handled by restricting each axis to its interior, as described in the section on the operator&#39;s real limit.</p>
+<h2 id="Separability" class="md-heading">Separability<a href="#Separability" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><code class="md-code-inline">is_separable</code> walks <code class="md-code-inline">a</code>&#39;s resolved AST and answers whether every term is one of the two shapes a Kronecker product can represent: <code class="md-code-inline">innerₕ(u, v)</code> (the identity on every axis) or <code class="md-code-inline">inner₊</code> of a backward difference along one axis (what <code class="md-code-inline">∇ₕ(u)</code> expands into, one term per axis). <code class="md-code-inline">a</code> above is exactly that sum:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">is_separable(a)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
+</div>
+<p>A grid-function coefficient breaks the shape match, because it has no tensor structure to factor out, so <code class="md-code-inline">is_separable</code> refuses it rather than guessing:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">fₕ = Rₕ(Wₕ, x -&gt; 1.0 + x[1])
+is_separable(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(fₕ * u, v)))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">false</code></pre>
+</div>
+<p>The same refusal covers a region restriction, an interpolation node, a surface (<code class="md-code-inline">InnerGamma</code>) weight, a composite space, a 1D mesh (nothing to factor), and any difference family other than the plain backward one <code class="md-code-inline">∇ₕ</code> builds: forward, centered, star, cross-weighted, averages, jumps. Every one of these is a false negative rather than a wrong answer: <code class="md-code-inline">a</code> would still assemble and solve the ordinary way, just without the fast path below.</p>
+<h2 id="The-operator,-and-what-it-costs-against-the-matrix-it-replaces" class="md-heading">The operator, and what it costs against the matrix it replaces<a href="#The-operator,-and-what-it-costs-against-the-matrix-it-replaces" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><code class="md-code-inline">kronecker_operator</code> builds the matrix-free operator without ever forming the <code class="md-code-inline">68921 x 68921</code> matrix; <code class="md-code-inline">assemble</code> builds that matrix, for comparison:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">K = kronecker_operator(a)
 A = assemble(a)
 
 bytes_kronecker = Base.summarysize(K)
 bytes_csc = Base.summarysize(A)
 (dofs = ndofs(Wₕ), bytes_kronecker = bytes_kronecker, bytes_csc = bytes_csc,
-    kronecker_over_csc_percent = round(100 * bytes_kronecker / bytes_csc; digits = 4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(dofs = 68921, bytes_kronecker = 9320, bytes_csc = 8109312, kronecker_over_csc_percent = 0.1149)</code></pre><p>The operator holds three <code>41</code>-length one-dimensional factors per term instead of the assembled matrix&#39;s stored nonzeros, so it costs a fraction of a percent of <code>A</code> here – and the gap only widens with <code>n</code>, since <code>bytes_csc</code> grows like <code>n^3</code> while <code>bytes_kronecker</code> grows like <code>n</code>. Measured separately (not by this page, to keep this one fast): on a uniform <code>60x60x60</code> mesh with the same mass-plus-stiffness form, <code>test/form/kronecker.jl</code> (gpena/Bramble.jl#162) recorded <code>19,432</code> bytes for the operator against <code>61,948,960</code> bytes for the equivalent <code>SparseMatrixCSC</code> – about <code>0.03%</code>, for a 216,000-unknown problem this page does not build directly. That matrix figure predates assembly sizing the matrix&#39;s arrays exactly to their nonzeros, which on this page&#39;s <code>41x41x41</code> mesh took <code>A</code> from <code>18,625,640</code> to <code>8,109,312</code> bytes with the same 472,361 nonzeros.</p><h2 id="Solving-it:-iteratively,-through-the-operator-itself"><a class="docs-heading-anchor" href="#Solving-it:-iteratively,-through-the-operator-itself">Solving it: iteratively, through the operator itself</a><a id="Solving-it:-iteratively,-through-the-operator-itself-1"></a><a class="docs-heading-anchor-permalink" href="#Solving-it:-iteratively,-through-the-operator-itself" title="Permalink"></a></h2><p><code>K</code> subtypes <code>AbstractMatrix</code>, so <code>LinearSolve</code>&#39;s <code>KrylovJL_CG</code> runs against it exactly as it would against <code>A</code>, applying <code>K</code> by <code>mul!</code> (one fused pass over the grid) rather than a sparse matrix-vector product:</p><pre><code class="language-julia hljs">gₕ = element(Wₕ)
+    kronecker_over_csc_percent = round(100 * bytes_kronecker / bytes_csc; digits = 4))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(dofs = 68921, bytes_kronecker = 9320, bytes_csc = 8109312, kronecker_over_csc_percent = 0.1149)</code></pre>
+</div>
+<p>The operator holds three <code class="md-code-inline">41</code>-length one-dimensional factors per term instead of the assembled matrix&#39;s stored nonzeros, so it costs a fraction of a percent of <code class="md-code-inline">A</code> here, and the gap only widens with <code class="md-code-inline">n</code>, since <code class="md-code-inline">bytes_csc</code> grows like <code class="md-code-inline">n^3</code> while <code class="md-code-inline">bytes_kronecker</code> grows like <code class="md-code-inline">n</code>. Measured separately (not by this page, to keep this one fast): on a uniform <code class="md-code-inline">60x60x60</code> mesh with the same mass-plus-stiffness form, <code class="md-code-inline">test/form/kronecker.jl</code> (gpena/Bramble.jl#162) recorded <code class="md-code-inline">19,432</code> bytes for the operator against <code class="md-code-inline">61,948,960</code> bytes for the equivalent <code class="md-code-inline">SparseMatrixCSC</code>, about <code class="md-code-inline">0.03%</code>, for a 216,000-unknown problem this page does not build directly. That matrix figure predates assembly sizing the matrix&#39;s arrays exactly to their nonzeros, which on this page&#39;s <code class="md-code-inline">41x41x41</code> mesh took <code class="md-code-inline">A</code> from <code class="md-code-inline">18,625,640</code> to <code class="md-code-inline">8,109,312</code> bytes with the same 472,361 nonzeros.</p>
+<h2 id="Solving-it:-iteratively,-through-the-operator-itself" class="md-heading">Solving it: iteratively, through the operator itself<a href="#Solving-it:-iteratively,-through-the-operator-itself" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><code class="md-code-inline">K</code> subtypes <code class="md-code-inline">AbstractMatrix</code>, so <code class="md-code-inline">LinearSolve</code>&#39;s <code class="md-code-inline">KrylovJL_CG</code> runs against it exactly as it would against <code class="md-code-inline">A</code>, applying <code class="md-code-inline">K</code> by <code class="md-code-inline">mul!</code> (one fused pass over the grid) rather than a sparse matrix-vector product:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">gₕ = element(Wₕ)
 avgₕ!(gₕ, rhs)
 l = form(Wₕ, v -&gt; innerₕ(gₕ, v))
 F = assemble(l)
@@ -28,10 +435,37 @@ xref = A \ F   # the ordinary sparse solve, kept only as the reference the two s
 
 cg_kwargs = (; reltol = 1e-10, abstol = 1e-10, maxiters = 2000)
 sol_cg = solve(LinearProblem(K, F), KrylovJL_CG(); cg_kwargs...)
-maximum(abs.(sol_cg.u .- xref))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1.2134454552281682e-10</code></pre><h2 id="Solving-it:-directly,-by-fast-diagonalisation"><a class="docs-heading-anchor" href="#Solving-it:-directly,-by-fast-diagonalisation">Solving it: directly, by fast diagonalisation</a><a id="Solving-it:-directly,-by-fast-diagonalisation-1"></a><a class="docs-heading-anchor-permalink" href="#Solving-it:-directly,-by-fast-diagonalisation" title="Permalink"></a></h2><p>A separable, constant-coefficient system like this one also admits a direct solve that never factorises a matrix at all: <code>fdm_solve</code> diagonalises each axis&#39;s own generalised eigenproblem once and combines the <code>D</code> small eigendecompositions instead. It lives in the <code>Kronecker.jl</code> extension rather than in <code>Bramble</code> itself, since the fast-diagonalisation solve needs that package&#39;s types. <code>Bramble</code> declares the name and exports it, and the extension attaches its methods to it once <code>using Kronecker</code> has loaded, so it is spelled plainly here.</p><pre><code class="language-julia hljs">x_fdm = fdm_solve(a, F)
-maximum(abs.(x_fdm .- xref))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">9.9253938401489e-14</code></pre><h2 id="Checking-the-answer"><a class="docs-heading-anchor" href="#Checking-the-answer">Checking the answer</a><a id="Checking-the-answer-1"></a><a class="docs-heading-anchor-permalink" href="#Checking-the-answer" title="Permalink"></a></h2><p>Both solves above only proved they agree with the ordinary sparse solve – not that any of the three actually solved the problem posed at the top of the page. That needs the manufactured solution:</p><pre><code class="language-julia hljs">uₕ = element(Wₕ)
+maximum(abs.(sol_cg.u .- xref))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">1.2134526716778282e-10</code></pre>
+</div>
+<h2 id="Solving-it:-directly,-by-fast-diagonalisation" class="md-heading">Solving it: directly, by fast diagonalisation<a href="#Solving-it:-directly,-by-fast-diagonalisation" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A separable, constant-coefficient system like this one also admits a direct solve that never factorises a matrix at all: <code class="md-code-inline">fdm_solve</code> diagonalises each axis&#39;s own generalised eigenproblem once and combines the <code class="md-code-inline">D</code> small eigendecompositions instead. It lives in the <code class="md-code-inline">Kronecker.jl</code> extension rather than in <code class="md-code-inline">Bramble</code> itself, since the fast-diagonalisation solve needs that package&#39;s types. <code class="md-code-inline">Bramble</code> declares the name and exports it, and the extension attaches its methods to it once <code class="md-code-inline">using Kronecker</code> has loaded, so it is spelled plainly here.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">x_fdm = fdm_solve(a, F)
+maximum(abs.(x_fdm .- xref))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">9.936496070395151e-14</code></pre>
+</div>
+<h2 id="Error-against-the-manufactured-solution" class="md-heading">Error against the manufactured solution<a href="#Error-against-the-manufactured-solution" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Both solves above only proved they agree with the ordinary sparse solve. They did not show that any of the three solved the problem posed at the top of the page. That needs the manufactured solution:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">uₕ = element(Wₕ)
 uₕ .= x_fdm
-normₕ(uₕ .- Rₕ(Wₕ, sol))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">9.680137334657838e-5</code></pre><h2 id="The-operator&#39;s-real-limit:-no-boundary-constraint-of-its-own"><a class="docs-heading-anchor" href="#The-operator&#39;s-real-limit:-no-boundary-constraint-of-its-own">The operator&#39;s real limit: no boundary constraint of its own</a><a id="The-operator&#39;s-real-limit:-no-boundary-constraint-of-its-own-1"></a><a class="docs-heading-anchor-permalink" href="#The-operator&#39;s-real-limit:-no-boundary-constraint-of-its-own" title="Permalink"></a></h2><p><code>K</code> and <code>kronecker_operator</code> carry no Dirichlet handling: a <code>KroneckerLinearOperator</code> is built for the whole grid, boundary rows included, because a boundary-restricted term has no tensor structure of its own to factor. The problem above sidesteps this by using an unconstrained (natural) boundary condition instead. <code>fdm_solve</code> alone reaches further, through <code>dirichlet = :boundary</code>: since a point is interior in the domain iff it is interior along <em>every</em> axis, restricting each axis&#39;s own factors to its interior (<code>2:end-1</code>) and running the same derivation on the restriction gives homogeneous Dirichlet on the whole boundary, still without ever assembling a matrix:</p><pre><code class="language-julia hljs">sol_d(x) = sinpi(x[1]) * sinpi(x[2]) * sinpi(x[3])   # vanishes on every face
+normₕ(uₕ .- Rₕ(Wₕ, sol))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">9.680137334658098e-5</code></pre>
+</div>
+<h2 id="The-operator&#39;s-real-limit:-no-boundary-constraint-of-its-own" class="md-heading">The operator&#39;s real limit: no boundary constraint of its own<a href="#The-operator&#39;s-real-limit:-no-boundary-constraint-of-its-own" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><code class="md-code-inline">K</code> and <code class="md-code-inline">kronecker_operator</code> carry no Dirichlet handling. A <code class="md-code-inline">KroneckerLinearOperator</code> is built for the whole grid, boundary rows included, because a boundary-restricted term has no tensor structure of its own to factor. The problem above sidesteps this by using an unconstrained (natural) boundary condition instead. Only <code class="md-code-inline">fdm_solve</code> reaches further, through the keyword <code class="md-code-inline">dirichlet = :boundary</code>. A point is interior in the domain iff it is interior along <em>every</em> axis, so restricting each axis&#39;s own factors to its interior (<code class="md-code-inline">2:end-1</code>) and running the same derivation on the restriction gives homogeneous Dirichlet on the whole boundary, still without ever assembling a matrix.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">sol_d(x) = sinpi(x[1]) * sinpi(x[2]) * sinpi(x[3])   # vanishes on every face
 rhs_d(x) = 3 * pi^2 * sol_d(x)
 
 a_d = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)))
@@ -52,4 +486,64 @@ maximum(abs.(x_fdm_d .- xref_d))
 
 u_d = element(Wₕ)
 u_d .= x_fdm_d
-normₕ(u_d .- Rₕ(Wₕ, sol_d))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">9.086362117242859e-5</code></pre><p>There is no matching Dirichlet path for <code>K</code> itself – <code>LinearSolve</code>&#39;s <code>KrylovJL_CG</code> above only ever ran against the unconstrained problem. A reader reaching for the matrix-free operator on a Dirichlet problem meets this limit directly, not as a caveat in a docstring.</p><h2 id="See-also"><a class="docs-heading-anchor" href="#See-also">See also</a><a id="See-also-1"></a><a class="docs-heading-anchor-permalink" href="#See-also" title="Permalink"></a></h2><ul><li><code>kronecker_operator</code> is written as a plain code span throughout this page rather than a link, along with <code>is_separable</code>, <code>KroneckerLinearOperator</code> and <code>fdm_solve</code>: none of the four have an <code>@docs</code> entry on the <a href="../../api/">API reference</a> yet.</li><li><a href="../poisson_linear/">Linear Poisson</a> assembles the same discrete Laplacian into a <code>SparseMatrixCSC</code> directly, with Dirichlet conditions from the start.</li><li>The <a href="../../tutorials/form/">forms tutorial</a> introduces <code>innerₕ</code>, <code>inner₊</code> and <code>∇ₕ</code> one at a time.</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../boundary_layer_graded/">« Graded meshes for a boundary layer</a><a class="docs-footer-nextpage" href="../../benchmarks/">Benchmarks »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 29 September 2026 21:39">Tuesday 29 September 2026</span>. Using Julia version 1.13.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+normₕ(u_d .- Rₕ(Wₕ, sol_d))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">9.086362117244436e-5</code></pre>
+</div>
+<p>There is no matching Dirichlet path for <code class="md-code-inline">K</code> itself, because <code class="md-code-inline">LinearSolve</code>&#39;s <code class="md-code-inline">KrylovJL_CG</code> above only ever ran against the unconstrained problem. A reader reaching for the matrix-free operator on a Dirichlet problem meets this limit directly, not as a caveat in a docstring.</p>
+<h2 id="Where-to-go-next" class="md-heading">Where to go next<a href="#Where-to-go-next" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">kronecker_operator</code> is written as a plain code span throughout this page rather than a link, along with <code class="md-code-inline">is_separable</code>, <code class="md-code-inline">KroneckerLinearOperator</code> and <code class="md-code-inline">fdm_solve</code>: none of the four have an <code class="md-code-inline">@docs</code> entry on the <a href="../../api/">API reference</a> yet.</p>
+</li>
+<li><p><a href="../../examples/poisson_linear/">Linear Poisson</a> assembles the same discrete Laplacian into a <code class="md-code-inline">SparseMatrixCSC</code> directly, with Dirichlet conditions from the start.</p>
+</li>
+<li><p>The <a href="../../examples/matrix_free_operator/">matrix-free operator</a> page applies a form that is not separable, and compares it with this Kronecker route.</p>
+</li>
+<li><p>The <a href="../../tutorials/form/">forms tutorial</a> introduces <code class="md-code-inline">innerₕ</code>, <code class="md-code-inline">inner₊</code> and <code class="md-code-inline">∇ₕ</code> one at a time.</p>
+</li>
+</ul>
+      </article>
+      <footer class="md-footer">
+<p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
+      </footer>
+    </main>
+    <aside class="md-toc">
+      <div class="md-toc-inner">
+        <p class="md-toc-title">On this page</p>
+          <a class="md-toc-link md-toc-h2" href="#Problem">Problem</a>
+          <a class="md-toc-link md-toc-h2" href="#Building-the-mesh-and-the-form">Building the mesh and the form</a>
+          <a class="md-toc-link md-toc-h2" href="#Mathematical-background">Mathematical background</a>
+            <a class="md-toc-link md-toc-h3" href="#The-Kronecker-product">The Kronecker product</a>
+            <a class="md-toc-link md-toc-h3" href="#Applying-a-Kronecker-product-without-forming-it">Applying a Kronecker product without forming it</a>
+            <a class="md-toc-link md-toc-h3" href="#The-Kronecker-sum">The Kronecker sum</a>
+            <a class="md-toc-link md-toc-h3" href="#The-one-dimensional-factors">The one-dimensional factors</a>
+            <a class="md-toc-link md-toc-h3" href="#Two-and-three-dimensions">Two and three dimensions</a>
+            <a class="md-toc-link md-toc-h3" href="#Why-the-storage-is-linear-in-the-points-per-axis">Why the storage is linear in the points per axis</a>
+            <a class="md-toc-link md-toc-h3" href="#Fast-diagonalisation">Fast diagonalisation</a>
+          <a class="md-toc-link md-toc-h2" href="#Separability">Separability</a>
+          <a class="md-toc-link md-toc-h2" href="#The-operator,-and-what-it-costs-against-the-matrix-it-replaces">The operator, and what it costs against the matrix it replaces</a>
+          <a class="md-toc-link md-toc-h2" href="#Solving-it:-iteratively,-through-the-operator-itself">Solving it: iteratively, through the operator itself</a>
+          <a class="md-toc-link md-toc-h2" href="#Solving-it:-directly,-by-fast-diagonalisation">Solving it: directly, by fast diagonalisation</a>
+          <a class="md-toc-link md-toc-h2" href="#Error-against-the-manufactured-solution">Error against the manufactured solution</a>
+          <a class="md-toc-link md-toc-h2" href="#The-operator&#39;s-real-limit:-no-boundary-constraint-of-its-own">The operator&#39;s real limit: no boundary constraint of its own</a>
+          <a class="md-toc-link md-toc-h2" href="#Where-to-go-next">Where to go next</a>
+      </div>
+    </aside>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia-repl.min.js"></script>
+  <script>hljs.highlightAll();</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.js"></script>
+  <script>var MD_KATEX_OPTIONS = {};
+document.querySelectorAll('.md-math').forEach(function (el) {
+  var tex = el.textContent.trim().replace(/^\\[\[(]/, '').replace(/\\[\])]$/, '');
+  katex.render(tex, el, Object.assign({ throwOnError: false }, MD_KATEX_OPTIONS,
+    { displayMode: el.classList.contains('md-math-display') }));
+});</script>
+  <script src="../../siteinfo.js"></script>
+  <script src="../../../versions.js"></script>
+  <script src="../../assets/materialdocs.js?v=e4994b21"></script>
+</body>
+</html>

@@ -12,7 +12,7 @@
     --accent: #0e7c86;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --bg: #1e1e1e;
       --text: #dcdcd6;
       --muted: #9a9a94;
@@ -20,6 +20,14 @@
       --canvas-bg: #262624;
       --accent: #4fd1c5;
     }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1e1e1e;
+    --text: #dcdcd6;
+    --muted: #9a9a94;
+    --border: #3a3a36;
+    --canvas-bg: #262624;
+    --accent: #4fd1c5;
   }
   * { box-sizing: border-box; }
   body {
@@ -461,6 +469,10 @@
     return x.toExponential(3);
   }
 
+  // The last solve and the inputs it was computed from: a change of colormap, panel or theme
+  // repaints from it instead of solving again.
+  var solved = null, solvedKey = "";
+
   function recompute() {
     var N = parseInt(document.getElementById("nRange").value, 10);
     document.getElementById("nLabel").textContent = N;
@@ -473,22 +485,29 @@
     // Seed depends on N: without it, every resolution would replay the same PRNG prefix
     // (the first draws of one fixed sequence), so scrubbing the slider would just add
     // points to an already-fixed pattern instead of drawing a genuinely different mesh.
-    var X = buildAxis(N, random, 20260916 + N * 7919);
-    var Y = buildAxis(N, random, 20260917 + N * 7919);
-    var problem = assembleProblem(N, X, Y, solKey);
-    var cg = conjugateGradient(problem.dof, problem.matvec, problem.b);
-    var kappa = conditionEstimate(cg.alphas, cg.betas);
+    var key = [N, random, solKey].join("|");
+    if (key !== solvedKey) {
+      var X = buildAxis(N, random, 20260916 + N * 7919);
+      var Y = buildAxis(N, random, 20260917 + N * 7919);
+      var problem = assembleProblem(N, X, Y, solKey);
+      var cg = conjugateGradient(problem.dof, problem.matvec, problem.b);
+      var kappa = conditionEstimate(cg.alphas, cg.betas);
 
-    var m = problem.m;
-    var uGrid = new Float64Array((N + 1) * (N + 1));
-    for (var j = 0; j <= N; j++) {
-      for (var i = 0; i <= N; i++) {
-        var interior = i > 0 && i < N && j > 0 && j < N;
-        uGrid[j * (N + 1) + i] = interior ? cg.x[(j - 1) * m + (i - 1)] : problem.sol.u(X[i], Y[j]);
+      var m = problem.m;
+      var uGrid = new Float64Array((N + 1) * (N + 1));
+      for (var j = 0; j <= N; j++) {
+        for (var i = 0; i <= N; i++) {
+          var interior = i > 0 && i < N && j > 0 && j < N;
+          uGrid[j * (N + 1) + i] = interior ? cg.x[(j - 1) * m + (i - 1)] : problem.sol.u(X[i], Y[j]);
+        }
       }
-    }
 
-    var errors = computeErrors(N, X, Y, uGrid, problem.sol);
+      var errors = computeErrors(N, X, Y, uGrid, problem.sol);
+      solved = { X: X, Y: Y, problem: problem, kappa: kappa, uGrid: uGrid, errors: errors };
+      solvedKey = key;
+    }
+    var X = solved.X, Y = solved.Y, problem = solved.problem, kappa = solved.kappa;
+    var uGrid = solved.uGrid, errors = solved.errors;
     var displayed = fieldView === "solution" ? uGrid : errors.errGrid.map(Math.abs);
 
     document.getElementById("fieldTitle").textContent = fieldView === "solution" ? "u_h(x, y)" : "|u_h - u|(x, y)";
@@ -510,6 +529,15 @@
   });
 
   if (window.__BRAMBLE_INITIAL_N__) document.getElementById("nRange").value = window.__BRAMBLE_INITIAL_N__;
+  // The parent page posts its resolved theme (MaterialDocs' toggle, else the system
+  // scheme): a sandboxed srcdoc frame cannot read the parent's `data-theme` itself.
+  window.addEventListener("message", function (e) {
+    if (e.source !== window.parent || !e.data || !e.data.brambleTheme) return;
+    if (document.documentElement.getAttribute("data-theme") === e.data.brambleTheme) return;
+    document.documentElement.setAttribute("data-theme", e.data.brambleTheme);
+    recompute(); // the solve is cached on its inputs, so this only repaints
+  });
+
   recompute();
 })();
 </script>

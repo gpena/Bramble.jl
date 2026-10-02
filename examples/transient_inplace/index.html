@@ -1,7 +1,154 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>A transient loop that allocates nothing · Bramble.jl</title><meta name="title" content="A transient loop that allocates nothing · Bramble.jl"/><meta property="og:title" content="A transient loop that allocates nothing · Bramble.jl"/><meta property="twitter:title" content="A transient loop that allocates nothing · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;family=Source+Sans+3:wght@400;600&amp;display=swap" rel="stylesheet" type="text/css"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="Bramble.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting started</a></li><li><span class="tocitem">Discrete foundations</span><ul><li><a class="tocitem" href="../../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../../tutorials/operators/">Difference, jump and average operators</a></li></ul></li><li><span class="tocitem">Forms and assembly</span><ul><li><a class="tocitem" href="../../tutorials/form/">Linear and bilinear forms</a></li></ul></li><li><span class="tocitem">Solvers and scientific computing</span><ul><li><a class="tocitem" href="../../tutorials/solvers/">Choosing a solver, backend, and execution policy</a></li><li><a class="tocitem" href="../../tutorials/autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../../tutorials/backend/">Backend tutorial</a></li></ul></li><li><span class="tocitem">Visualization and export</span><ul><li><a class="tocitem" href="../../tutorials/plotting/">Plotting directly</a></li><li><a class="tocitem" href="../../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../convection_diffusion_linear/">Convection-diffusion equation</a></li><li><a class="tocitem" href="../coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li><li><a class="tocitem" href="../elasticity_3d/">Linear elasticity in three dimensions</a></li><li><a class="tocitem" href="../heat_equation/">Heat equation</a></li><li><a class="tocitem" href="../amg_preconditioning/">Algebraic multigrid preconditioning</a></li><li><a class="tocitem" href="../inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a></li><li><a class="tocitem" href="../transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a></li><li><a class="tocitem" href="../wave_equation_2d/">Acoustic wave equation in two dimensions</a></li><li><a class="tocitem" href="../point_sources_flux/">Point sources and boundary flux recovery</a></li><li class="is-active"><a class="tocitem" href>A transient loop that allocates nothing</a><ul class="internal"><li><a class="tocitem" href="#Problem"><span>Problem</span></a></li><li><a class="tocitem" href="#The-two-operators,-built-once"><span>The two operators, built once</span></a></li><li><a class="tocitem" href="#The-source,-without-a-closure-per-step"><span>The source, without a closure per step</span></a></li><li><a class="tocitem" href="#One-step"><span>One step</span></a></li><li><a class="tocitem" href="#Running-it"><span>Running it</span></a></li><li><a class="tocitem" href="#Order-in-time"><span>Order in time</span></a></li><li><a class="tocitem" href="#See-also"><span>See also</span></a></li></ul></li><li><a class="tocitem" href="../boundary_layer_graded/">Graded meshes for a boundary layer</a></li><li><a class="tocitem" href="../memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><a class="tocitem" href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a></li><li><input class="collapse-toggle" id="menuitem-9-3" type="checkbox"/><label class="tocitem" for="menuitem-9-3"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li><li><a class="tocitem" href="../../internals/exporters/">Exporters</a></li><li><a class="tocitem" href="../../internals/gpu/">GPU acceleration</a></li><li><a class="tocitem" href="../../internals/csr_solvers/"><code>SparseMatrixCSR</code> direct solve</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>A transient loop that allocates nothing</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>A transient loop that allocates nothing</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/transient_inplace.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="A-transient-loop-that-allocates-nothing"><a class="docs-heading-anchor" href="#A-transient-loop-that-allocates-nothing">A transient loop that allocates nothing</a><a id="A-transient-loop-that-allocates-nothing-1"></a><a class="docs-heading-anchor-permalink" href="#A-transient-loop-that-allocates-nothing" title="Permalink"></a></h1><p>Two pieces of this are already covered elsewhere. The <a href="../heat_equation/">heat equation</a> builds <code>M/Δt + K(t)</code> into a preallocated pattern with <a href="../../api/#Bramble.allocate_system_matrix"><code>allocate_system_matrix</code></a> and <a href="../../api/#Bramble.assemble_add!"><code>assemble_add!</code></a>, and the <a href="../../tutorials/solvers/">solver tutorial</a> reuses one factorization across steps with <a href="../../api_sciml/#Bramble.refactor!"><code>refactor!</code></a>. This page puts them together and closes the last gap: the backsolve writes into the solution vector that already exists, so a Crank-Nicolson step allocates nothing at all.</p><p>This page is generated from <code>docs/src/examples/transient_inplace.jl</code> by Literate.jl, and the same file runs under <code>test/examples/pages.jl</code>, where the <code>#src</code> assertions execute.</p><h2 id="Problem"><a class="docs-heading-anchor" href="#Problem">Problem</a><a id="Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Problem" title="Permalink"></a></h2><p class="math-container">\[\partial_t u = \partial_{xx} u + f \text{ in } (0,1) \times (0, 1], \qquad
-u(0, t) = u(1, t) = 0, \qquad u(x, 0) = \sin(\pi x)\]</p><p>with the manufactured solution <span>$u_{\text{exact}}(x, t) = e^{-t}\sin(\pi x)$</span>, which forces <span>$f(x, t) = (\pi^2 - 1) e^{-t} \sin(\pi x)$</span>. Crank-Nicolson in time:</p><p class="math-container">\[\Bigl(\frac{M}{\Delta t} + \frac{K}{2}\Bigr) u^{n+1} =
-\Bigl(\frac{M}{\Delta t} - \frac{K}{2}\Bigr) u^{n} + F^{n+1/2}\]</p><pre><code class="language-julia hljs">using Bramble
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A transient loop that allocates nothing — Bramble.jl</title>
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=ed6fe66c">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <meta name="title" content="A transient loop that allocates nothing — Bramble.jl">
+  <meta property="og:title" content="A transient loop that allocates nothing — Bramble.jl">
+  <meta property="twitter:title" content="A transient loop that allocates nothing — Bramble.jl">
+  <meta name="description" content="Documentation for Bramble.jl.">
+  <meta property="og:description" content="Documentation for Bramble.jl.">
+  <meta property="twitter:description" content="Documentation for Bramble.jl.">
+  <link rel="icon" type="image/x-icon" href="../../assets/favicon.ico">
+  <link rel="stylesheet" href="../../assets/custom.css">
+  <script>
+    (function(){
+      document.documentElement.classList.add('no-transition');
+      var t=localStorage.getItem('md-theme');if(t)document.documentElement.setAttribute('data-theme',t);
+      window.addEventListener('load',function(){setTimeout(function(){document.documentElement.classList.remove('no-transition');},50);});
+    })()
+  </script>
+</head>
+<body data-warn-outdated>
+  <header class="md-navbar">
+    <button id="md-hamburger" class="md-icon-btn md-hamburger" aria-label="Toggle navigation" aria-expanded="false"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></button>
+    <img class="md-navbar-logo md-logo-light" src="../../assets/logo.svg" alt="Bramble.jl logo" height="32">
+    <img class="md-navbar-logo md-logo-dark" src="../../assets/logo-dark.svg" alt="Bramble.jl logo" height="32">
+    <span class="md-navbar-title">Bramble.jl</span>
+    <span class="md-navbar-spacer"></span>
+    <button id="md-search-btn" class="md-search-bar" aria-label="Search documentation" aria-expanded="false">
+      <svg class="md-icon md-search-bar-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <span class="md-search-bar-label">Search docs</span>
+      <kbd class="md-search-bar-kbd">Ctrl K</kbd>
+    </button>
+    <a class="md-icon-btn md-repo-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub" aria-label="View the repository on GitHub" rel="noopener" target="_blank"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 .3a12 12 0 00-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 016 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0012 .3z"/></svg><span class="md-repo-label">GitHub</span></a>
+    <button id="md-theme-toggle" class="md-icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode"><svg class="md-icon md-icon-light" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg><svg class="md-icon md-icon-dark" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg></button>
+  </header>
+  <div class="md-layout">
+    <nav class="md-sidebar">
+      <a href="../../">Home</a>
+      <a href="../../getting_started/">Getting started</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Discrete foundations</span>
+        <a href="../../tutorials/geometry/">Geometry tutorial</a>
+        <a href="../../tutorials/mesh/">Mesh tutorial</a>
+        <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
+        <a href="../../tutorials/operators/">Difference, jump and average operators</a>
+        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
+        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Forms and assembly</span>
+        <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Solvers and scientific computing</span>
+        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
+        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
+        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <a href="../../tutorials/backend/">Backends and execution policies</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Visualization and export</span>
+        <a href="../../tutorials/plotting/">Plotting directly</a>
+        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
+        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Examples</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Stationary problems</span>
+          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
+          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
+          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
+        </div>
+        <div class="md-nav-section">
+          <span class="md-nav-section-title">Time-dependent problems</span>
+          <a href="../../examples/heat_equation/">Heat equation</a>
+          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+          <a href="../../examples/transient_inplace/" class="md-nav-active">A transient loop that allocates nothing</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Inverse problems</span>
+          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
+          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Solvers and performance</span>
+          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
+          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
+          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
+        </div>
+      </div>
+      <a href="../../benchmarks/">Benchmarks</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Documentation</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">API reference</span>
+          <a href="../../api/">API reference</a>
+          <a href="../../api/utilities/">Utilities</a>
+          <a href="../../api/geometry/">Geometry</a>
+          <a href="../../api/meshes/">Meshes</a>
+          <a href="../../api/spaces/">Grid spaces</a>
+          <a href="../../api/operators/">Difference, jump and average operators</a>
+          <a href="../../api/inner_products/">Inner products and norms</a>
+          <a href="../../api/forms/">Forms</a>
+          <a href="../../api/exporters/">Exporters</a>
+        </div>
+        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Internals</span>
+          <a href="../../internals/utils/">Utilities</a>
+          <a href="../../internals/geometry/">Geometry</a>
+          <a href="../../internals/mesh/">Mesh</a>
+          <a href="../../internals/space/">Spaces</a>
+          <a href="../../internals/form/">Forms</a>
+          <a href="../../internals/autodiff/">Automatic differentiation</a>
+          <a href="../../internals/exporters/">Exporters</a>
+          <a href="../../internals/gpu/">GPU acceleration</a>
+          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
+        </div>
+      </div>
+    </nav>
+    <main class="md-content">
+      <article class="md-article">
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/transient_inplace.jl" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+<h1 id="A-transient-loop-that-allocates-nothing" class="md-heading">A transient loop that allocates nothing<a href="#A-transient-loop-that-allocates-nothing" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
+<p>Two pieces of this are already covered elsewhere. The <a href="../../examples/heat_equation/">heat equation</a> builds <code class="md-code-inline">M/Δt + K(t)</code> into a preallocated pattern with <a href="../../api/forms/#Bramble.allocate_system_matrix"><code class="md-code-inline">allocate_system_matrix</code></a> and <a href="../../api/forms/#Bramble.assemble_add!"><code class="md-code-inline">assemble_add!</code></a>, and the <a href="../../tutorials/solvers/#tutorial_solvers">solver tutorial</a> reuses one factorization across steps with <a href="../../api_sciml/#Bramble.refactor!"><code class="md-code-inline">refactor!</code></a>; <a href="../../tutorials/time_stepping/#tutorial_time_stepping">Solving at every time step</a> compares the strategies and is not repeated here. This page puts them together and closes the last gap: the backsolve writes into the solution vector that already exists, so a Crank-Nicolson step allocates nothing at all.</p>
+<p>This page is generated from <code class="md-code-inline">docs/src/examples/transient_inplace.jl</code> by Literate.jl, and the same file runs under <code class="md-code-inline">test/examples/pages.jl</code>, where the <code class="md-code-inline">#src</code> assertions execute.</p>
+<h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<div class="md-math md-math-display">
+\[\partial_t u = \partial_{xx} u + f \text{ in } (0,1) \times (0, 1], \qquad
+u(0, t) = u(1, t) = 0, \qquad u(x, 0) = \sin(\pi x)\]
+</div>
+<p>with the manufactured solution <span class="md-math md-math-inline">\(u_{\text{exact}}(x, t) = e^{-t}\sin(\pi x)\)</span>, which forces <span class="md-math md-math-inline">\(f(x, t) = (\pi^2 - 1) e^{-t} \sin(\pi x)\)</span>. Crank-Nicolson in time:</p>
+<div class="md-math md-math-display">
+\[\Bigl(\frac{M}{\Delta t} + \frac{K}{2}\Bigr) u^{n+1} =
+\Bigl(\frac{M}{\Delta t} - \frac{K}{2}\Bigr) u^{n} + F^{n+1/2}\]
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble
 using Bramble: allocate_system_matrix, sparse_factorize
 using SuiteSparse
 using SparseArrays: nonzeros
@@ -14,12 +161,21 @@ uexact(x, t) = exp(-t) * sinpi(x[1])
 Wₕ = gridspace(Ωₕ)
 
 m = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v))
-k = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr36"><span class="sgr1">BilinearForm</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}:
+k = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi"><span class="sgr36"><span class="sgr1">BilinearForm</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}:
   <span class="sgr32">Trial space</span>: <span class="sgr34">ScalarGridSpace{1D, Float64, 201 dofs}</span>
   <span class="sgr32">Test space</span>: <span class="sgr34">ScalarGridSpace{1D, Float64, 201 dofs}  (same as trial)</span>
   <span class="sgr32">Matrix</span>: <span class="sgr34">201 × 201</span>
   <span class="sgr32">Symmetric</span>: <span class="sgr34">yes</span>
-  <span class="sgr32">Expression</span>: <span class="sgr34">inner₊ₓ(D₋ₓ(u), D₋ₓ(v))</span></code></pre><h2 id="The-two-operators,-built-once"><a class="docs-heading-anchor" href="#The-two-operators,-built-once">The two operators, built once</a><a id="The-two-operators,-built-once-1"></a><a class="docs-heading-anchor-permalink" href="#The-two-operators,-built-once" title="Permalink"></a></h2><p>Both sides share a sparsity pattern, so one call to <a href="../../api/#Bramble.allocate_system_matrix"><code>allocate_system_matrix</code></a> on a form carrying both stencils gives a pattern wide enough for either, and <a href="../../api/#Bramble.assemble_add!"><code>assemble_add!</code></a> accumulates the pieces into it with no temporary and no sparse addition. <code>dirichlet_bc!</code> goes last, after everything that writes to those rows.</p><pre><code class="language-julia hljs">Δt = 1 / 200
+  <span class="sgr32">Expression</span>: <span class="sgr34">inner₊ₓ(D₋ₓ(u), D₋ₓ(v))</span></code></pre>
+</div>
+<h2 id="The-two-operators,-built-once" class="md-heading">The two operators, built once<a href="#The-two-operators,-built-once" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Both sides share a sparsity pattern, so one call to <a href="../../api/forms/#Bramble.allocate_system_matrix"><code class="md-code-inline">allocate_system_matrix</code></a> on a form carrying both stencils gives a pattern wide enough for either, and <a href="../../api/forms/#Bramble.assemble_add!"><code class="md-code-inline">assemble_add!</code></a> accumulates the pieces into it with no temporary and no sparse addition. <code class="md-code-inline">dirichlet_bc!</code> goes last, after everything that writes to those rows.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Δt = 1 / 200
 
 pattern = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 A = allocate_system_matrix(pattern)
@@ -34,7 +190,24 @@ fill!(nonzeros(B), 0.0)
 assemble_add!(B, m, 1 / Δt)
 assemble_add!(B, k, -0.5)
 
-size(A), length(nonzeros(A))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">((201, 201), 601)</code></pre><p><code>A</code> does not change from step to step here, so it is factorized once and every step is a pair of triangular solves. When a coefficient does vary with <code>t</code>, refill <code>A</code> the same way and call <a href="../../api_sciml/#Bramble.refactor!"><code>refactor!</code></a><code>(fact, A)</code>, which reuses the symbolic analysis and repeats only the numeric factorization.</p><pre><code class="language-julia hljs">fact = sparse_factorize(A; sym = :unsymmetric)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">BrambleSuiteSparseExt.ConcreteSuiteSparseFactorization{Float64, SparseArrays.UMFPACK.UmfpackLU{Float64, Int64}}(SparseArrays.UMFPACK.UmfpackLU{Float64, Int64}(SparseArrays.UMFPACK.Symbolic{Float64, Int64}(Ptr{Nothing}(0x0000000036c15560)), SparseArrays.UMFPACK.Numeric{Float64, Int64}(Ptr{Nothing}(0x000000003d648950)), 201, 201, [0, 2, 5, 8, 11, 14, 17, 20, 23, 26  …  575, 578, 581, 584, 587, 590, 593, 596, 599, 601], [0, 1, 0, 1, 2, 1, 2, 3, 2, 3  …  197, 198, 197, 198, 199, 198, 199, 200, 199, 200], [1.0, -100.0, 0.0, 201.0, -100.0, -100.0, 201.0, -100.00000000000001, -100.00000000000001, 201.0  …  200.99999999999986, -99.99999999999993, -99.99999999999993, 200.99999999999986, -99.99999999999993, -99.99999999999993, 200.99999999999986, 0.0, -99.99999999999993, 1.0], 0, SparseArrays.UMFPACK.UmfpackWS{Int64}([1, 10, 1, 0, 1, 1, 1, 1, 1, 1  …  0, 1, 0, 0, 1, 0, 0, 0, 0, 0], [6.94710234430267e-310, 6.9471023443264e-310, 6.94710234426275e-310, 6.94710234426275e-310, 6.9471023443501e-310, 6.9471023443738e-310, 6.94710234439753e-310, 6.94710234442124e-310, 6.94710234444496e-310, 6.94710234446867e-310  …  6.94710234878483e-310, 6.94710234880855e-310, 6.94710234883226e-310, 6.947102348856e-310, 6.9471023488797e-310, 6.9471023489034e-310, 6.9471023489271e-310, 6.94710234895084e-310, 6.94710234897455e-310, 6.94710234899827e-310]), [1.0, 0.2, 0.2, 0.1, 32.0, 0.0, 0.7, 0.0, 1.0, 0.3, 1.0, 1.0, 0.9, 0.0, 10.0, 0.001, 1.0, 0.5, 0.0, 1.0], [0.0, 201.0, 601.0, 16.0, 4.0, 8.0, 8.0, 8.0, 0.0, 0.0  …  -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0], ReentrantLock()), :unsymmetric, 201)</code></pre><h2 id="The-source,-without-a-closure-per-step"><a class="docs-heading-anchor" href="#The-source,-without-a-closure-per-step">The source, without a closure per step</a><a id="The-source,-without-a-closure-per-step-1"></a><a class="docs-heading-anchor-permalink" href="#The-source,-without-a-closure-per-step" title="Permalink"></a></h2><p>The source separates as <span>$f(x,t) = e^{-t} s(x)$</span>, so the spatial part is restricted once and the time factor is a <code>Ref</code> the form reads live. Nothing is rebuilt between steps, and no closure is created inside the loop, which is what a per-step allocation would otherwise come from.</p><pre><code class="language-julia hljs">sₕ = Rₕ(Wₕ, x -&gt; (π^2 - 1) * sinpi(x[1]))
+size(A), length(nonzeros(A))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((201, 201), 601)</code></pre>
+</div>
+<p><code class="md-code-inline">A</code> does not change from step to step here, so it is factorized once and every step is a pair of triangular solves. When a coefficient does vary with <code class="md-code-inline">t</code>, refill <code class="md-code-inline">A</code> the same way and call <a href="../../api_sciml/#Bramble.refactor!"><code class="md-code-inline">refactor!</code></a><code class="md-code-inline">(fact, A)</code>, which reuses the symbolic analysis and repeats only the numeric factorization.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">fact = sparse_factorize(A; sym = :unsymmetric)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">BrambleSuiteSparseExt.ConcreteSuiteSparseFactorization{Float64, SparseArrays.UMFPACK.UmfpackLU{Float64, Int64}}(SparseArrays.UMFPACK.UmfpackLU{Float64, Int64}(SparseArrays.UMFPACK.Symbolic{Float64, Int64}(Ptr{Nothing}(0x000000003a8c6f00)), SparseArrays.UMFPACK.Numeric{Float64, Int64}(Ptr{Nothing}(0x000000002f621f30)), 201, 201, [0, 2, 5, 8, 11, 14, 17, 20, 23, 26  …  575, 578, 581, 584, 587, 590, 593, 596, 599, 601], [0, 1, 0, 1, 2, 1, 2, 3, 2, 3  …  197, 198, 197, 198, 199, 198, 199, 200, 199, 200], [1.0, -100.0, 0.0, 201.0, -100.0, -100.0, 201.0, -100.00000000000001, -100.00000000000001, 201.0  …  200.99999999999986, -99.99999999999993, -99.99999999999993, 200.99999999999986, -99.99999999999993, -99.99999999999993, 200.99999999999986, 0.0, -99.99999999999993, 1.0], 0, SparseArrays.UMFPACK.UmfpackWS{Int64}([9223372036854775807, 1, 1, 1, 1, 1, 3, 3, 4, 4  …  139636057584688, 139636057584816, 139635974929664, 139636057584880, 139636057584944, 139635974929664, 139635966182240, 0, 0, 139638786180432], [6.8990680476455e-310, 6.898948028473e-310, 6.89894802847615e-310, 6.89906804773286e-310, 6.8990680476455e-310, 6.8989425176774e-310, 6.89894249846815e-310, 6.89894734203873e-310, 6.89894251768216e-310, 6.8989425176853e-310  …  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]), [1.0, 0.2, 0.2, 0.1, 32.0, 0.0, 0.7, 0.0, 1.0, 0.3, 1.0, 1.0, 0.9, 0.0, 10.0, 0.001, 1.0, 0.5, 0.0, 1.0], [0.0, 201.0, 601.0, 16.0, 4.0, 8.0, 8.0, 8.0, 0.0, 0.0  …  -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0], ReentrantLock()), :unsymmetric, 201)</code></pre>
+</div>
+<h2 id="The-source,-without-a-closure-per-step" class="md-heading">The source, without a closure per step<a href="#The-source,-without-a-closure-per-step" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>The source separates as <span class="md-math md-math-inline">\(f(x,t) = e^{-t} s(x)\)</span>, so the spatial part is restricted once and the time factor is a <code class="md-code-inline">Ref</code> the form reads live. Nothing is rebuilt between steps, and no closure is created inside the loop, which is what a per-step allocation would otherwise come from.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">sₕ = Rₕ(Wₕ, x -&gt; (π^2 - 1) * sinpi(x[1]))
 decay = Ref(1.0)
 
 l = form(Wₕ, v -&gt; decay * innerₕ(sₕ, v))
@@ -43,14 +216,31 @@ bcs = dirichlet_constraints(Ωₕ, :boundary =&gt; x -&gt; 0.0)
 uₕ = Rₕ(Wₕ, x -&gt; uexact(x, 0.0))
 F = zeros(ndofs(Wₕ))
 
-length(F), uₕ[1]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(201, 0.0)</code></pre><h2 id="One-step"><a class="docs-heading-anchor" href="#One-step">One step</a><a id="One-step-1"></a><a class="docs-heading-anchor-permalink" href="#One-step" title="Permalink"></a></h2><p>Five in-place calls: set the time factor, refill the load, add <code>B uⁿ</code> onto it, overwrite the constrained entries, and backsolve into <code>uₕ</code>&#39;s own storage. The last one takes the <a href="../../api/#Bramble.VectorElement"><code>VectorElement</code></a> itself as its destination and writes through to the coefficients behind it, so the solution never moves and nothing is allocated to hold it.</p><pre><code class="language-julia hljs">function step!(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)
+length(F), uₕ[1]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(201, 0.0)</code></pre>
+</div>
+<h2 id="One-step" class="md-heading">One step<a href="#One-step" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Five in-place calls: set the time factor, refill the load, add <code class="md-code-inline">B uⁿ</code> onto it, overwrite the constrained entries, and backsolve into <code class="md-code-inline">uₕ</code>&#39;s own storage. The last one takes the <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> itself as its destination and writes through to the coefficients behind it, so the solution never moves and nothing is allocated to hold it.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">function step!(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)
     decay[] = exp(-t)                            # the form reads this live
     assemble!(F, l)                              # refill, no allocation
     mul!(F, B, parent(uₕ), 1.0, 1.0)             # F += B uⁿ
     dirichlet_bc!(F, Ωₕ, bcs, :boundary)
     ldiv!(uₕ, fact, F)                           # uⁿ⁺¹ into the same storage
     return nothing
-end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">step! (generic function with 1 method)</code></pre><p>The measurement goes through a function of its own, with the buffers passed in as arguments. <code>@allocated</code> written at top level reports the caller&#39;s boxing of the globals it reads rather than the routine&#39;s own work, and that alone shows 32 bytes here.</p><pre><code class="language-julia hljs">function step_allocation(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)
+end</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">step! (generic function with 1 method)</code></pre>
+</div>
+<p>The measurement goes through a function of its own, with the buffers passed in as arguments. <code class="md-code-inline">@allocated</code> written at top level reports the caller&#39;s boxing of the globals it reads rather than the routine&#39;s own work, and that alone shows 32 bytes here.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">function step_allocation(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)
     step!(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)             # warm up: compile first
     return @allocated step!(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t + 0.5)
 end
@@ -58,7 +248,17 @@ end
 allocated = step_allocation(uₕ, F, decay, B, fact, l, Ωₕ, bcs, Δt / 2)
 
 
-allocated</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0</code></pre><p>Nothing. The bound the test asserts is looser on purpose: the usual way to lose this is to build a closure inside the loop, <code>Rₕ!(fₕ, x -&gt; source(x, t))</code>, which costs a few hundred bytes per step, and the check exists to catch a regression of that size rather than to pin an exact number.</p><h2 id="Running-it"><a class="docs-heading-anchor" href="#Running-it">Running it</a><a id="Running-it-1"></a><a class="docs-heading-anchor-permalink" href="#Running-it" title="Permalink"></a></h2><p>Two hundred steps to <code>t = 1</code>, reusing the same five buffers:</p><pre><code class="language-julia hljs">parent(uₕ) .= parent(Rₕ(Wₕ, x -&gt; uexact(x, 0.0)))
+allocated</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0</code></pre>
+</div>
+<p>Nothing. The bound the test asserts is looser on purpose: the usual way to lose this is to build a closure inside the loop, <code class="md-code-inline">Rₕ!(fₕ, x -&gt; source(x, t))</code>, which costs a few hundred bytes per step, and the check exists to catch a regression of that size rather than to pin an exact number.</p>
+<h2 id="Running-it" class="md-heading">Running it<a href="#Running-it" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Two hundred steps to <code class="md-code-inline">t = 1</code>, reusing the same five buffers:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">parent(uₕ) .= parent(Rₕ(Wₕ, x -&gt; uexact(x, 0.0)))
 
 for n in 1:200
     step!(uₕ, F, decay, B, fact, l, Ωₕ, bcs, (n - 0.5) * Δt)
@@ -67,21 +267,23 @@ end
 err = normₕ(uₕ - Rₕ(Wₕ, x -&gt; uexact(x, 1.0)))
 
 
-err</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5.077096546607041e-6</code></pre><script>
-  // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
-  // `window.Plotly` instead of registering as an anonymous AMD module.
-  window.__bramble_amd_define = window.define;
-  window.define = undefined;
-</script>
+err</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">5.077096546480618e-6</code></pre>
+</div>
+<div class="md-multi-output">
+<div class="md-output md-output-html">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script>
-  window.define = window.__bramble_amd_define;
-
-  // Colour tokens read from the page's own theme, not hard-coded — Documenter stamps
-  // `theme--documenter-dark` on <html> when dark mode is active, light mode has no such
-  // class. Recomputed on every call so a caller can re-theme after a toggle.
+  // Colour tokens read from the page's own theme, not hard-coded — MaterialDocs sets
+  // `data-theme="light"|"dark"` on <html>; when the attribute is absent the browser's
+  // `prefers-color-scheme` decides. Recomputed on every call so a caller can re-theme
+  // after a toggle.
   window.bramblePlotlyTheme = function () {
-    const dark = document.documentElement.className.includes('documenter-dark');
+    const attr = document.documentElement.getAttribute('data-theme');
+    const dark = attr
+      ? attr === 'dark'
+      : window.matchMedia('(prefers-color-scheme: dark)').matches;
     return dark
       ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
       : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
@@ -96,15 +298,21 @@ err</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   };
 
   if (!window.__bramble_plotly_theme_observer) {
-    window.__bramble_plotly_theme_observer = new MutationObserver(function () {
+    const repaint = function () {
       for (const { divId, restyle } of window.__bramble_plotly_charts) {
         const layout = restyle();
         Plotly.relayout(divId, layout);
       }
-    });
+    };
+    window.__bramble_plotly_theme_observer = new MutationObserver(repaint);
     window.__bramble_plotly_theme_observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['class'],
+      attributeFilter: ['data-theme'],
+    });
+    // With no saved theme MaterialDocs follows the system scheme in CSS alone and
+    // leaves `data-theme` unset, so a system change must repaint too.
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+      if (!document.documentElement.hasAttribute('data-theme')) repaint();
     });
   }
 
@@ -168,7 +376,15 @@ err</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   });
 })();
 </script>
-<h2 id="Order-in-time"><a class="docs-heading-anchor" href="#Order-in-time">Order in time</a><a id="Order-in-time-1"></a><a class="docs-heading-anchor-permalink" href="#Order-in-time" title="Permalink"></a></h2><p>Crank-Nicolson is second order in <code>Δt</code>. The spatial mesh is held fixed and fine enough that its own error stays below the time error being measured:</p><pre><code class="language-julia hljs">function crank_nicolson_error(nsteps)
+
+</div>
+</div>
+<h2 id="Crank-Nicolson-order-in-time" class="md-heading">Crank-Nicolson order in time<a href="#Crank-Nicolson-order-in-time" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Crank-Nicolson is second order in <code class="md-code-inline">Δt</code>. The spatial mesh is held fixed and fine enough that its own error stays below the time error being measured:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">function crank_nicolson_error(nsteps)
     Δt = 1 / nsteps
     A = allocate_system_matrix(pattern)
     B = similar(A)
@@ -197,4 +413,50 @@ e₁, e₂ = crank_nicolson_error(25), crank_nicolson_error(50)
 order = log2(e₁ / e₂)
 
 
-e₁, e₂, order</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(4.996967873269227e-5, 8.030891075303872e-6, 2.637420965300451)</code></pre><p>Above two, because the spatial error is not negligible at the coarser step and cancels part of the time error rather than adding to it. Refining <code>Δt</code> further would bring the measured order back down onto two and then flatten, as the spatial error takes over.</p><h2 id="See-also"><a class="docs-heading-anchor" href="#See-also">See also</a><a id="See-also-1"></a><a class="docs-heading-anchor-permalink" href="#See-also" title="Permalink"></a></h2><ul><li><a href="../heat_equation/">Heat equation</a>, where <a href="../../api_sciml/#Bramble.semidiscretize"><code>semidiscretize</code></a> hands the same problem to an adaptive stepper instead of a fixed loop.</li><li><a href="../../tutorials/solvers/">Choosing a linear solver</a>, for when factorize-and-reuse beats a warm-started iterative solve.</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../point_sources_flux/">« Point sources and boundary flux recovery</a><a class="docs-footer-nextpage" href="../boundary_layer_graded/">Graded meshes for a boundary layer »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 29 September 2026 21:39">Tuesday 29 September 2026</span>. Using Julia version 1.13.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+e₁, e₂, order</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(4.996967873269227e-5, 8.030891075303872e-6, 2.637420965300451)</code></pre>
+</div>
+<p>Above two, because the spatial error is not negligible at the coarser step and cancels part of the time error rather than adding to it. Refining <code class="md-code-inline">Δt</code> further would bring the measured order back down onto two and then flatten, as the spatial error takes over.</p>
+<h2 id="Where-to-go-next" class="md-heading">Where to go next<a href="#Where-to-go-next" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<ul class="md-list-tight">
+<li><p><a href="../../examples/heat_equation/">Heat equation</a>, where <a href="../../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a> hands the same problem to an adaptive stepper instead of a fixed loop.</p>
+</li>
+<li><p><a href="../../tutorials/solvers/#tutorial_solvers">Choosing a linear solver</a>, for when factorize-and-reuse beats a warm-started iterative solve.</p>
+</li>
+</ul>
+      </article>
+      <footer class="md-footer">
+<p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
+      </footer>
+    </main>
+    <aside class="md-toc">
+      <div class="md-toc-inner">
+        <p class="md-toc-title">On this page</p>
+          <a class="md-toc-link md-toc-h2" href="#Problem">Problem</a>
+          <a class="md-toc-link md-toc-h2" href="#The-two-operators,-built-once">The two operators, built once</a>
+          <a class="md-toc-link md-toc-h2" href="#The-source,-without-a-closure-per-step">The source, without a closure per step</a>
+          <a class="md-toc-link md-toc-h2" href="#One-step">One step</a>
+          <a class="md-toc-link md-toc-h2" href="#Running-it">Running it</a>
+          <a class="md-toc-link md-toc-h2" href="#Crank-Nicolson-order-in-time">Crank-Nicolson order in time</a>
+          <a class="md-toc-link md-toc-h2" href="#Where-to-go-next">Where to go next</a>
+      </div>
+    </aside>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia-repl.min.js"></script>
+  <script>hljs.highlightAll();</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.js"></script>
+  <script>var MD_KATEX_OPTIONS = {};
+document.querySelectorAll('.md-math').forEach(function (el) {
+  var tex = el.textContent.trim().replace(/^\\[\[(]/, '').replace(/\\[\])]$/, '');
+  katex.render(tex, el, Object.assign({ throwOnError: false }, MD_KATEX_OPTIONS,
+    { displayMode: el.classList.contains('md-math-display') }));
+});</script>
+  <script src="../../siteinfo.js"></script>
+  <script src="../../../versions.js"></script>
+  <script src="../../assets/materialdocs.js?v=ed6fe66c"></script>
+</body>
+</html>

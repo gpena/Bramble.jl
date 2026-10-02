@@ -13,7 +13,7 @@
 #
 # Text/grid colours come from `bramblePlotlyTheme()` (`plotly_common.jl`) rather than a fixed
 # palette: a chart's colours are plain JS strings, not CSS `currentColor`, so unlike a plain
-# SVG they do not track Documenter's dark/light toggle by themselves — every chart registers
+# SVG they do not track Documenter's dark/light toggle by themselves, and every chart registers
 # with `brambleRegisterPlotlyChart` so the shared theme-change observer can repaint it after a
 # toggle instead of leaving it in the wrong contrast until the next reload.
 
@@ -34,7 +34,7 @@ _next_convergence_plot_id() = "bramble_cp_$(_CONVERGENCE_PLOT_COUNTER[] += 1)"
 """
     convergence_plot(series; title = "", reference_slope = 2)
 
-`series` is a vector of `(hs, errs, label, color)` tuples, one per curve — e.g. one per
+`series` is a vector of `(hs, errs, label, color)` tuples, one per curve, e.g. one per
 spatial dimension.
 """
 function convergence_plot(
@@ -64,8 +64,8 @@ function convergence_plot(
         )
     end
 
-    # The reference line, anchored through the first series' finest (last) point — the number
-    # printed is the claim; the markers either sit on it or not.
+    # The reference line, anchored through the first series' finest (last) point. The number
+    # printed is the claim, and the markers either sit on it or not.
     hs1, errs1 = series[1][1], series[1][2]
     all_hs = reduce(vcat, (s[1] for s in series))
     hmin, hmax = extrema(all_hs)

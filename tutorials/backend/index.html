@@ -1,44 +1,362 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Backend tutorial · Bramble.jl</title><meta name="title" content="Backend tutorial · Bramble.jl"/><meta property="og:title" content="Backend tutorial · Bramble.jl"/><meta property="twitter:title" content="Backend tutorial · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;family=Source+Sans+3:wght@400;600&amp;display=swap" rel="stylesheet" type="text/css"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="Bramble.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting started</a></li><li><span class="tocitem">Discrete foundations</span><ul><li><a class="tocitem" href="../geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../operators/">Difference, jump and average operators</a></li></ul></li><li><span class="tocitem">Forms and assembly</span><ul><li><a class="tocitem" href="../form/">Linear and bilinear forms</a></li></ul></li><li><span class="tocitem">Solvers and scientific computing</span><ul><li><a class="tocitem" href="../solvers/">Choosing a solver, backend, and execution policy</a></li><li><a class="tocitem" href="../autodiff/">Automatic differentiation tutorial</a></li><li class="is-active"><a class="tocitem" href>Backend tutorial</a><ul class="internal"><li><a class="tocitem" href="#1.-What-a-backend-is"><span>1. What a backend is</span></a></li><li><a class="tocitem" href="#2.-Choosing-element,-vector-and-matrix-types"><span>2. Choosing element, vector and matrix types</span></a></li><li><a class="tocitem" href="#3.-Attaching-a-backend-to-a-mesh"><span>3. Attaching a backend to a mesh</span></a></li><li><a class="tocitem" href="#4.-Serial()-or-Parallel(),-chosen-once"><span>4. <code>Serial()</code> or <code>Parallel()</code>, chosen once</span></a></li><li><a class="tocitem" href="#5.-One-interface,-governed-by-the-backend"><span>5. One interface, governed by the backend</span></a></li><li><a class="tocitem" href="#6.-Backend-storage:-CSC-or-CSR"><span>6. Backend storage: CSC or CSR</span></a></li><li><a class="tocitem" href="#7.-A-Polyester-batched-CPU-policy"><span>7. A Polyester-batched CPU policy</span></a></li><li><a class="tocitem" href="#8.-A-GPU-backend-(Metal),-or-letting-gpu_backend-pick-it"><span>8. A GPU backend (Metal), or letting <code>gpu_backend</code> pick it</span></a></li><li><a class="tocitem" href="#9.-Introspection"><span>9. Introspection</span></a></li><li><a class="tocitem" href="#10.-The-precompilation-workload"><span>10. The precompilation workload</span></a></li></ul></li></ul></li><li><span class="tocitem">Visualization and export</span><ul><li><a class="tocitem" href="../plotting/">Plotting directly</a></li><li><a class="tocitem" href="../vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../pgfplots_export/">Writing PGFPlots data files</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../../examples/poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a></li><li><a class="tocitem" href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li><li><a class="tocitem" href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a></li><li><a class="tocitem" href="../../examples/heat_equation/">Heat equation</a></li><li><a class="tocitem" href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a></li><li><a class="tocitem" href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a></li><li><a class="tocitem" href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a></li><li><a class="tocitem" href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a></li><li><a class="tocitem" href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a></li><li><a class="tocitem" href="../../examples/transient_inplace/">A transient loop that allocates nothing</a></li><li><a class="tocitem" href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a></li><li><a class="tocitem" href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><a class="tocitem" href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a></li><li><input class="collapse-toggle" id="menuitem-9-3" type="checkbox"/><label class="tocitem" for="menuitem-9-3"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li><li><a class="tocitem" href="../../internals/exporters/">Exporters</a></li><li><a class="tocitem" href="../../internals/gpu/">GPU acceleration</a></li><li><a class="tocitem" href="../../internals/csr_solvers/"><code>SparseMatrixCSR</code> direct solve</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Solvers and scientific computing</a></li><li class="is-active"><a href>Backend tutorial</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Backend tutorial</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/backend.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="tutorial_backend"><a class="docs-heading-anchor" href="#tutorial_backend">Backend tutorial</a><a id="tutorial_backend-1"></a><a class="docs-heading-anchor-permalink" href="#tutorial_backend" title="Permalink"></a></h1><p>Every mesh, grid space and form in <code>Bramble.jl</code> carries a <strong>backend</strong>: a compile-time configuration saying which vector and matrix types to allocate, and whether threading-capable operations run serially or in parallel. Chosen once, when a mesh is built, and inherited by everything constructed from it afterwards.</p><hr/><h2 id="1.-What-a-backend-is"><a class="docs-heading-anchor" href="#1.-What-a-backend-is">1. What a backend is</a><a id="1.-What-a-backend-is-1"></a><a class="docs-heading-anchor-permalink" href="#1.-What-a-backend-is" title="Permalink"></a></h2><p>A <a href="../../internals/utils/#Bramble.Backend"><code>Backend</code></a> is <code>Backend{VT, MT, EP}</code>: a vector type, a matrix type, and an <a href="../../api/#Bramble.ExecutionPolicy"><code>ExecutionPolicy</code></a>, carried as type parameters on a struct with no fields at all. Building one costs nothing at runtime: the types alone tell every downstream <code>vector</code>/ <code>matrix</code> allocation and every threading-capable loop what to construct and how to run.</p><pre><code class="language-julia hljs">using Bramble
-import Bramble: CpuSerial, CpuPolyester, GpuKernel, D₋ₓ, D₋ₓ!, D₋ᵧ, D₋ᵧ!
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Backends and execution policies — Bramble.jl</title>
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=73119809">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <meta name="title" content="Backends and execution policies — Bramble.jl">
+  <meta property="og:title" content="Backends and execution policies — Bramble.jl">
+  <meta property="twitter:title" content="Backends and execution policies — Bramble.jl">
+  <meta name="description" content="Documentation for Bramble.jl.">
+  <meta property="og:description" content="Documentation for Bramble.jl.">
+  <meta property="twitter:description" content="Documentation for Bramble.jl.">
+  <link rel="icon" type="image/x-icon" href="../../assets/favicon.ico">
+  <link rel="stylesheet" href="../../assets/custom.css">
+  <script>
+    (function(){
+      document.documentElement.classList.add('no-transition');
+      var t=localStorage.getItem('md-theme');if(t)document.documentElement.setAttribute('data-theme',t);
+      window.addEventListener('load',function(){setTimeout(function(){document.documentElement.classList.remove('no-transition');},50);});
+    })()
+  </script>
+</head>
+<body data-warn-outdated>
+  <header class="md-navbar">
+    <button id="md-hamburger" class="md-icon-btn md-hamburger" aria-label="Toggle navigation" aria-expanded="false"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></button>
+    <img class="md-navbar-logo md-logo-light" src="../../assets/logo.svg" alt="Bramble.jl logo" height="32">
+    <img class="md-navbar-logo md-logo-dark" src="../../assets/logo-dark.svg" alt="Bramble.jl logo" height="32">
+    <span class="md-navbar-title">Bramble.jl</span>
+    <span class="md-navbar-spacer"></span>
+    <button id="md-search-btn" class="md-search-bar" aria-label="Search documentation" aria-expanded="false">
+      <svg class="md-icon md-search-bar-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <span class="md-search-bar-label">Search docs</span>
+      <kbd class="md-search-bar-kbd">Ctrl K</kbd>
+    </button>
+    <a class="md-icon-btn md-repo-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub" aria-label="View the repository on GitHub" rel="noopener" target="_blank"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 .3a12 12 0 00-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 016 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0012 .3z"/></svg><span class="md-repo-label">GitHub</span></a>
+    <button id="md-theme-toggle" class="md-icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode"><svg class="md-icon md-icon-light" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg><svg class="md-icon md-icon-dark" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg></button>
+  </header>
+  <div class="md-layout">
+    <nav class="md-sidebar">
+      <a href="../../">Home</a>
+      <a href="../../getting_started/">Getting started</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Discrete foundations</span>
+        <a href="../../tutorials/geometry/">Geometry tutorial</a>
+        <a href="../../tutorials/mesh/">Mesh tutorial</a>
+        <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
+        <a href="../../tutorials/operators/">Difference, jump and average operators</a>
+        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
+        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Forms and assembly</span>
+        <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Solvers and scientific computing</span>
+        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
+        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
+        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <a href="../../tutorials/backend/" class="md-nav-active">Backends and execution policies</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Visualization and export</span>
+        <a href="../../tutorials/plotting/">Plotting directly</a>
+        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
+        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Examples</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Stationary problems</span>
+          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
+          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
+          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Time-dependent problems</span>
+          <a href="../../examples/heat_equation/">Heat equation</a>
+          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Inverse problems</span>
+          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
+          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Solvers and performance</span>
+          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
+          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
+          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
+        </div>
+      </div>
+      <a href="../../benchmarks/">Benchmarks</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Documentation</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">API reference</span>
+          <a href="../../api/">API reference</a>
+          <a href="../../api/utilities/">Utilities</a>
+          <a href="../../api/geometry/">Geometry</a>
+          <a href="../../api/meshes/">Meshes</a>
+          <a href="../../api/spaces/">Grid spaces</a>
+          <a href="../../api/operators/">Difference, jump and average operators</a>
+          <a href="../../api/inner_products/">Inner products and norms</a>
+          <a href="../../api/forms/">Forms</a>
+          <a href="../../api/exporters/">Exporters</a>
+        </div>
+        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Internals</span>
+          <a href="../../internals/utils/">Utilities</a>
+          <a href="../../internals/geometry/">Geometry</a>
+          <a href="../../internals/mesh/">Mesh</a>
+          <a href="../../internals/space/">Spaces</a>
+          <a href="../../internals/form/">Forms</a>
+          <a href="../../internals/autodiff/">Automatic differentiation</a>
+          <a href="../../internals/exporters/">Exporters</a>
+          <a href="../../internals/gpu/">GPU acceleration</a>
+          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
+        </div>
+      </div>
+    </nav>
+    <main class="md-content">
+      <article class="md-article">
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/backend.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+<h1 id="tutorial_backend" class="md-heading">Backends and execution policies<a href="#tutorial_backend" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
+<p><strong>What you will learn.</strong> What a backend is, how to choose between serial and threaded execution, and how large a problem must be before threading pays off.</p>
+<p><strong>What you need first.</strong> The <a href="../../tutorials/mesh/#tutorial_mesh">mesh tutorial</a> and the <a href="../../tutorials/space/#tutorial_space">space tutorial</a>, for meshes and grid spaces, and the <a href="../../tutorials/form/#tutorial_form">form tutorial</a>, for assembling a system.</p>
+<p><strong>Where next.</strong> The <a href="../../tutorials/solvers/">solvers tutorial</a> shows what to do with the linear system once it is assembled.</p>
+<p>Every block below runs when this page is built, except the ones that need a GPU or an optional package, which are marked as plain code.</p>
+<hr class="md-hr">
+<h2 id="What-a-backend-carries" class="md-heading">What a backend carries<a href="#What-a-backend-carries" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Every mesh, grid space and form carries a <strong>backend</strong>: a compile-time choice of which vector and matrix types to allocate, and whether the operations that can thread do so. It is chosen once, when a mesh is built, and inherited by everything made from that mesh. Ask for the default one:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble
 using Bramble: vector_type, matrix_type, backend_types, execution_policy
 
-be = backend()</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Backend(vector = Vector{Float64}, matrix = SparseArrays.SparseMatrixCSC{Float64, Int64}, policy = Bramble.CpuSerial)</code></pre><pre><code class="language-julia hljs">vector_type(be), matrix_type(be), execution_policy(be)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial())</code></pre><p>The default is dense <code>Vector{Float64}</code>, sparse <code>SparseMatrixCSC{Float64,Int}</code>, and the <a href="../../api/#Bramble.Serial"><code>Serial</code></a> policy: a plain loop, unconditionally, for every operation that could otherwise thread.</p><h2 id="2.-Choosing-element,-vector-and-matrix-types"><a class="docs-heading-anchor" href="#2.-Choosing-element,-vector-and-matrix-types">2. Choosing element, vector and matrix types</a><a id="2.-Choosing-element,-vector-and-matrix-types-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Choosing-element,-vector-and-matrix-types" title="Permalink"></a></h2><p><a href="../../api/#Bramble.backend"><code>backend</code></a> takes <code>vector_type</code>/<code>matrix_type</code> keywords directly, or a single element type as its first argument:</p><pre><code class="language-julia hljs">using SparseArrays
-
-f32 = backend(Float32)                                    # Vector{Float32}, sparse Float32 matrix
-dense_backend = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
-matrix_type(dense_backend)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Matrix{Float64}<span class="sgr90"> (alias for Array{Float64, 2})</span></code></pre><p><code>backend(T)</code> is what <a href="../../api/#Bramble.mesh"><code>mesh</code></a> uses when no backend is given at all: <code>mesh</code> defaults to <code>backend(eltype(Ω))</code>, so a mesh built over <code>Float32</code> points already gets a <code>Float32</code> backend without asking for one explicitly.</p><h2 id="3.-Attaching-a-backend-to-a-mesh"><a class="docs-heading-anchor" href="#3.-Attaching-a-backend-to-a-mesh">3. Attaching a backend to a mesh</a><a id="3.-Attaching-a-backend-to-a-mesh-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Attaching-a-backend-to-a-mesh" title="Permalink"></a></h2><pre><code class="language-julia hljs">Ω = domain(interval(0.0, 1.0))
+be = backend()
+vector_type(be), matrix_type(be), execution_policy(be)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial())</code></pre>
+</div>
+<p>A <a href="../../internals/utils/#Bramble.Backend"><code class="md-code-inline">Backend</code></a> is only three type parameters: a vector type, a matrix type and an <a href="../../api/utilities/#Bramble.ExecutionPolicy"><code class="md-code-inline">ExecutionPolicy</code></a>. It has no fields, so making one costs nothing. The default stores dense <code class="md-code-inline">Vector{Float64}</code> and sparse <code class="md-code-inline">SparseMatrixCSC{Float64,Int}</code>, and runs every operation as a plain loop under the <a href="../../api/utilities/#Bramble.Serial"><code class="md-code-inline">Serial</code></a> policy.</p>
+<p><a href="../../api/utilities/#Bramble.backend"><code class="md-code-inline">backend</code></a> takes a single element type, or the two storage types as keywords:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">f32 = backend(Float32)
+dense = backend(vector_type = Vector{Float64}, matrix_type = Matrix{Float64})
+backend_types(f32), matrix_type(dense)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((Float32, Vector{Float32}, SparseArrays.SparseMatrixCSC{Float32, Int64}, Bramble.Backend{Vector{Float32}, SparseArrays.SparseMatrixCSC{Float32, Int64}, Bramble.CpuSerial}), Matrix{Float64})</code></pre>
+</div>
+<p><a href="../../api/meshes/#Bramble.mesh"><code class="md-code-inline">mesh</code></a> calls <code class="md-code-inline">backend(eltype(Ω))</code> when you give it no backend, so a mesh over <code class="md-code-inline">Float32</code> points already gets a <code class="md-code-inline">Float32</code> backend.</p>
+<h2 id="Attach-a-backend-to-a-mesh" class="md-heading">Attach a backend to a mesh<a href="#Attach-a-backend-to-a-mesh" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Pass the backend when the mesh is built, and every object made from the mesh carries it:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ω = domain(interval(0.0, 1.0))
 Ωₕ = mesh(Ω, 21; backend = backend(Float64))
-backend(Ωₕ) === backend(Float64)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><p>Everything built from <code>Ωₕ</code> afterwards (<a href="../../api/#Bramble.gridspace"><code>gridspace</code></a>, its <code>VectorElement</code>s, and any <a href="../../api/#Bramble.form"><code>form</code></a> over it) carries the same backend, so choosing one at mesh construction is choosing it for the whole computation downstream:</p><pre><code class="language-julia hljs">Wₕ = gridspace(Ωₕ)
-backend(Wₕ) === backend(Ωₕ)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><h2 id="4.-Serial()-or-Parallel(),-chosen-once"><a class="docs-heading-anchor" href="#4.-Serial()-or-Parallel(),-chosen-once">4. <code>Serial()</code> or <code>Parallel()</code>, chosen once</a><a id="4.-Serial()-or-Parallel(),-chosen-once-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Serial()-or-Parallel(),-chosen-once" title="Permalink"></a></h2><p><code>Rₕ!</code>, <code>avgₕ!</code>, a grid space&#39;s own quadrature-weight construction, and form assembly (<code>assemble!</code>/<code>assemble</code>, for both a <code>LinearForm</code> and a <code>BilinearForm</code>) all read <a href="../../api/#Bramble.execution_policy"><code>execution_policy</code></a> off the mesh or space they are given, and take the serial or threaded branch accordingly; nothing else about how you call them changes:</p><pre><code class="language-julia hljs">Ωₕ_par = mesh(Ω, 100_000; backend = backend(policy = Parallel()))
-Wₕ_par = gridspace(Ωₕ_par)
-execution_policy(Wₕ_par)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Bramble.CpuThreaded()</code></pre><p>There is <strong>no automatic size threshold</strong>. A <code>Parallel()</code> backend threads every eligible call, however small, however many times a loop repeats it. That is deliberate: a threshold would have to be tuned per operation (<code>Rₕ!</code>&#39;s crossover is not <code>avgₕ!</code>&#39;s, and neither is assembly&#39;s), tuning the caller cannot see or override. Asking for <code>Parallel()</code> and getting it, every time, is the point.</p><p>So the choice belongs to you, not a heuristic:</p><ul><li><strong><code>Serial()</code></strong> (the default) for small, frequently repeated calls: a per-step operation inside a time loop, where the cost of spawning threads would dwarf the work itself.</li><li><strong><code>Parallel()</code></strong> once a single call is expensive enough on its own that spawning tasks pays for itself: a one-shot restriction or assembly over a large mesh.</li></ul><p>The <a href="../../benchmarks/">benchmarks page</a> carries the actual measurements across sizes; that is what should decide, not a guess.</p><h3 id="Measured-crossovers"><a class="docs-heading-anchor" href="#Measured-crossovers">Measured crossovers</a><a id="Measured-crossovers-1"></a><a class="docs-heading-anchor-permalink" href="#Measured-crossovers" title="Permalink"></a></h3><p>Where <code>CpuThreaded</code> and <a href="../../api/#Bramble.CpuPolyester"><code>CpuPolyester</code></a> (§7 below) start beating <code>CpuSerial</code> was measured per workload, not assumed, on an Apple M2 host, <code>--threads=4</code>, on AC power (<code>benchmark/polyester_crossover.jl</code>, commit <code>4b76d62b</code>): the smallest grid size at which each policy beats <code>CpuSerial</code> twice running.</p><table><tr><th style="text-align: right">Workload</th><th style="text-align: right"><code>CpuThreaded</code></th><th style="text-align: right"><code>CpuPolyester</code></th></tr><tr><td style="text-align: right"><code>Rₕ!</code> unmasked</td><td style="text-align: right">64-96 points/axis</td><td style="text-align: right">8-24</td></tr><tr><td style="text-align: right"><code>Rₕ!</code> masked</td><td style="text-align: right">256</td><td style="text-align: right">16</td></tr><tr><td style="text-align: right"><code>avgₕ!</code> (nq=3)</td><td style="text-align: right">24-32</td><td style="text-align: right">8</td></tr><tr><td style="text-align: right"><code>innerₕ</code>/<code>_dot</code></td><td style="text-align: right">100,000-300,000 elements</td><td style="text-align: right">1,000 elements</td></tr></table><p><code>_dot</code>/<code>_dot_masked(::CpuThreaded, ...)</code> (<code>src/utils/linear_algebra.jl</code>) are a real threaded reduction (static chunks, dependency-free; masked reductions walk set bits per word; <code>SeparableWeights</code> banded along the last axis), and their crossover against <code>CpuSerial</code> was measured the same way as the rows above: 100,000-300,000 elements across four runs (Apple M2, <code>--threads=4</code>, AC power, <code>benchmark/polyester_crossover.jl</code>) – the exact crossing point moved within that range from one run to the next, the same jitter the other workloads show near their own crossing point.</p><p>The crossover differs by an order of magnitude between workloads, so a figure measured for one does not transfer to another – that is why four rows are published here rather than a single number. Where both policies have an entry, <code>CpuPolyester</code> beats <code>CpuThreaded</code> at every crossover measured, falling one to two orders of magnitude below it.</p><p>These are one machine&#39;s numbers, taken under one power state, not a portable constant: re-measure before leaning on them for a different host.</p><h3 id="Measuring-your-own-crossovers"><a class="docs-heading-anchor" href="#Measuring-your-own-crossovers">Measuring your own crossovers</a><a id="Measuring-your-own-crossovers-1"></a><a class="docs-heading-anchor-permalink" href="#Measuring-your-own-crossovers" title="Permalink"></a></h3><p>To get these figures for your own machine, at the thread count you actually plan to use, run the portable crossover script from a checkout of the repository:</p><pre><code class="language-bash hljs">julia --threads=N --project=benchmark benchmark/policy_crossover.jl</code></pre><p>It sweeps every workload above (plus a few more) in 1D, 2D and 3D, and prints one <code>CROSSOVER | ...</code> line per workload/dimension pair giving the smallest size at which <code>CpuThreaded</code> and <code>CpuPolyester</code> start beating <code>CpuSerial</code>, followed by a summary recommendation table. It also prints one assemble+solve context row per dimension, showing what share of an end-to-end solve the sparse direct solve itself takes – that share does not depend on the execution policy. Pass <code>--smoke</code> for a quick check with a handful of tiny sizes, or <code>--max-dofs N</code> to raise the default 1e6-DOF sweep cap; <code>--out file.md</code> writes the tables to a Markdown file. By default the run takes about ten minutes.</p><h3 id="The-policy-hierarchy"><a class="docs-heading-anchor" href="#The-policy-hierarchy">The policy hierarchy</a><a id="The-policy-hierarchy-1"></a><a class="docs-heading-anchor-permalink" href="#The-policy-hierarchy" title="Permalink"></a></h3><p><code>Serial</code> and <code>Parallel</code> are the names above, and they are aliases: <code>Serial === CpuSerial</code> and <code>Parallel === CpuThreaded</code>. The types they alias sit in a hierarchy that splits by which processor a strategy targets, not only how much of the work runs at once:</p><pre><code class="nohighlight hljs">ExecutionPolicy
+Wₕ = gridspace(Ωₕ)
+
+backend(Ωₕ) === backend(Float64), backend(Wₕ) === backend(Ωₕ)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
+</div>
+<hr class="md-hr">
+<h2 id="backend_policies" class="md-heading">Choose a policy<a href="#backend_policies" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>An <strong>execution policy</strong> says whether the operations that can thread, namely <code class="md-code-inline">Rₕ!</code>, <code class="md-code-inline">avgₕ!</code>, the quadrature weights of a grid space and form assembly, run in a plain loop or on several threads. The two names you will use are <code class="md-code-inline">Serial()</code> and <code class="md-code-inline">Parallel()</code>. The same code runs under both; only the backend differs. Build one mesh of each kind:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ω_big = domain(interval(0.0, 1.0))
+Wₛ = gridspace(mesh(Ω_big, 100_000; backend = backend(policy = Serial())))
+Wₚ = gridspace(mesh(Ω_big, 100_000; backend = backend(policy = Parallel())))
+
+execution_policy(Wₛ), execution_policy(Wₚ)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(Bramble.CpuSerial(), Bramble.CpuThreaded())</code></pre>
+</div>
+<p>Now restrict the same function to both and compare:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">uₛ = Rₕ(Wₛ, sin)
+uₚ = Rₕ(Wₚ, sin)
+
+parent(uₛ) == parent(uₚ)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
+</div>
+<p>The two policies give identical values. Only the schedule of the work differs, and you never change the call. Assembly reads the policy the same way:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">l = form(Wₚ, v -&gt; innerₕ(uₚ, v))
+b = assemble(l)      # threads, because Wₚ&#39;s backend says Parallel()</code></pre>
+</div>
+</div>
+<div class="md-admonition md-admonition-tip">
+<p class="md-admonition-title">Try this</p>
+<div class="md-admonition-body">
+<p>Build the same two spaces with 100 points instead of 100,000. The values still agree, but <code class="md-code-inline">Parallel()</code> now starts threads for work that is too small to repay them. The next section puts numbers on that.</p>
+</div>
+</div>
+<p>There is <strong>no automatic size threshold</strong>. A <code class="md-code-inline">Parallel()</code> backend threads every eligible call, however small and however many times a loop repeats it. A threshold would have to be tuned per operation, because <code class="md-code-inline">Rₕ!</code>&#39;s crossover is not <code class="md-code-inline">avgₕ!</code>&#39;s and neither is assembly&#39;s, and the caller could neither see nor override it. So the choice is yours:</p>
+<ul class="md-list-tight">
+<li><p>Use <code class="md-code-inline">Serial()</code>, the default, for small calls that repeat, such as an operator inside a time loop, where starting threads would cost more than the work.</p>
+</li>
+<li><p>Use <code class="md-code-inline">Parallel()</code> once one call is expensive enough to repay the threads, such as a one-shot restriction or assembly over a large mesh.</p>
+</li>
+</ul>
+<p>Do not call <code class="md-code-inline">assemble_parallel!</code> to get parallel behaviour. It threads regardless of the backend, so it is only for a deliberate comparison. Build the backend you want and call the ordinary <code class="md-code-inline">assemble</code>, as the <a href="../../tutorials/form/#tutorial_form">form tutorial</a> does.</p>
+<h3 id="Measured-crossovers" class="md-heading">Measured crossovers<a href="#Measured-crossovers" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>A <strong>crossover</strong> is the smallest problem size at which a parallel policy beats <code class="md-code-inline">CpuSerial</code> twice running. Below it, starting threads costs more than the work saved. Each crossover below was measured per operation, not assumed, on an Apple M2, four threads (<code class="md-code-inline">--threads=4</code>), on AC power, from <code class="md-code-inline">benchmark/polyester_crossover.jl</code> (commit <code class="md-code-inline">4b76d62b</code>). The sizes are points per axis on a two-dimensional grid, or elements for the vector reductions.</p>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:right">Operation</th>
+<th style="text-align:right"><code class="md-code-inline">CpuThreaded</code></th>
+<th style="text-align:right"><code class="md-code-inline">CpuPolyester</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">Rₕ!</code> unmasked</td>
+<td style="text-align:right">64-96 points per axis</td>
+<td style="text-align:right">8-24 points per axis</td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">Rₕ!</code> masked</td>
+<td style="text-align:right">256 points per axis</td>
+<td style="text-align:right">16 points per axis</td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">avgₕ!</code> (nq=3)</td>
+<td style="text-align:right">24-32 points per axis</td>
+<td style="text-align:right">8 points per axis</td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">_dot</code></td>
+<td style="text-align:right">100,000-300,000 elements</td>
+<td style="text-align:right">1,000 elements</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="md-code-inline">_dot</code>/<code class="md-code-inline">_dot_masked(::CpuThreaded, ...)</code> (<code class="md-code-inline">src/utils/linear_algebra.jl</code>) are a real threaded reduction (static chunks, dependency-free; masked reductions walk set bits per word; <code class="md-code-inline">SeparableWeights</code> banded along the last axis), and their crossover against <code class="md-code-inline">CpuSerial</code> was measured the same way as the rows above: 100,000-300,000 elements across four runs (commit <code class="md-code-inline">560e8394</code>) – the exact crossing point moved within that range from one run to the next, the same jitter the other workloads show near their own crossing point.</p>
+<p>The crossover differs by an order of magnitude between workloads, so a figure measured for one does not transfer to another. That is why the table has four rows rather than a single number. Where both policies have an entry, <code class="md-code-inline">CpuPolyester</code> beats <code class="md-code-inline">CpuThreaded</code> at every crossover measured, falling one to two orders of magnitude below it.</p>
+<p>These are one machine&#39;s numbers, taken under one power state, not a portable constant: re-measure before leaning on them for a different host. The <a href="../../benchmarks/">benchmarks page</a> carries the measurements across sizes.</p>
+<h3 id="Measure-your-own-crossovers" class="md-heading">Measure your own crossovers<a href="#Measure-your-own-crossovers" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>To get these figures for your own machine, at the thread count you plan to use, run the crossover script from a checkout of the repository:</p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-bash">julia --threads=N --project=benchmark benchmark/policy_crossover.jl</code></pre>
+</div>
+<p>It sweeps every workload above, and a few more, in 1D, 2D and 3D, and prints one <code class="md-code-inline">CROSSOVER | ...</code> line per workload and dimension. Each line gives the smallest size at which <code class="md-code-inline">CpuThreaded</code> and <code class="md-code-inline">CpuPolyester</code> start beating <code class="md-code-inline">CpuSerial</code>. Those lines count total degrees of freedom per dimension, so they are not directly comparable with the table above, which counts points per axis on a 2D grid. Pass <code class="md-code-inline">--smoke</code> for a quick check with a few tiny sizes, <code class="md-code-inline">--max-dofs N</code> to raise the default cap of 1e6 degrees of freedom, or <code class="md-code-inline">--out file.md</code> to write the tables to a Markdown file.</p>
+<h3 id="The-policy-hierarchy" class="md-heading">The policy hierarchy<a href="#The-policy-hierarchy" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p><code class="md-code-inline">Serial</code> and <code class="md-code-inline">Parallel</code> are aliases: <code class="md-code-inline">Serial === CpuSerial</code> and <code class="md-code-inline">Parallel === CpuThreaded</code>. They sit in a hierarchy that splits by which processor a strategy targets:</p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code>ExecutionPolicy
 ├── CpuPolicy
 │   ├── CpuSerial      (Serial)    -- one CPU thread
 │   ├── CpuThreaded    (Parallel)  -- Base.Threads.@threads
 │   └── CpuPolyester                -- Polyester.jl&#39;s @batch
 └── GpuPolicy
-    └── GpuKernel                   -- launched on the device</code></pre><p>The split exists because &quot;serial or threaded&quot; had no way to say which processor (<a href="https://github.com/gpena/Bramble.jl/issues/191">#191</a>). A GPU backend was constructed with <code>Serial()</code> – a policy meaning one CPU thread walks the array element by element, which is the one thing a device array refuses. <code>metal_backend()</code> now carries <code>GpuKernel()</code> by default, and pairing device storage with a <code>CpuPolicy</code> (or host storage with a <code>GpuPolicy</code>) is rejected outright rather than left to fail on scalar indexing several frames deeper – the next subsection covers why, and what the rejection looks like.</p><p>Both spellings work everywhere; use whichever reads better. <a href="../../api/#Bramble.CpuPolyester"><code>CpuPolyester</code></a> is a third <code>CpuPolicy</code>, a Polyester-backed sibling of <code>CpuThreaded</code> (<a href="https://github.com/gpena/Bramble.jl/issues/190">#190</a>) – §7 below covers what it needs before its first sweep.</p><p>Two of these four names replaced an earlier spelling that named the wrong thing (<a href="https://github.com/gpena/Bramble.jl/issues/300">#300</a>). <code>CpuSerial</code> and <code>CpuThreaded</code> name who does the work – nothing, and <code>Base.Threads</code> – so <code>CpuPolyester</code> follows the same pattern and names its provider, <code>Polyester.jl</code>, making the <code>using Polyester</code> requirement (§7 below) self-evident from the name alone. The name it replaced, <code>CpuBatch</code>, instead named <code>Polyester.@batch</code>, the macro the provider exposes, and gave no hint that a weak dependency was involved. <code>GpuKernel</code> names only the launch mechanism: work is dispatched to a device kernel. The name it replaced, <code>GpuAsync</code>, claimed a scheduling property the API does not have – every kernel launched from <code>BrambleKernelAbstractionsExt</code> is followed by a <code>KernelAbstractions.synchronize</code>, so a Bramble-level call under this policy has always completed on the device by the time it returns; nothing here is asynchronous from the caller&#39;s point of view. <code>CpuBatch</code> and <code>GpuAsync</code> remain as deprecated aliases (<code>const CpuBatch = CpuPolyester</code>, <code>const GpuAsync = GpuKernel</code>) so existing code keeps working, but new code should reach for <code>CpuPolyester</code> and <code>GpuKernel</code>.</p><h3 id="Locality-and-strategy"><a class="docs-heading-anchor" href="#Locality-and-strategy">Locality and strategy</a><a id="Locality-and-strategy-1"></a><a class="docs-heading-anchor-permalink" href="#Locality-and-strategy" title="Permalink"></a></h3><p>The hierarchy above groups policies by which processor they target, but <em>where</em> a backend&#39;s work can legally run is not chosen through the policy at all – it is decided by the array types the backend was built with. That is <a href="../../api/#Bramble.locality"><code>locality</code></a>: <a href="../../api/#Bramble.HostLocality"><code>HostLocality</code></a> for storage a CPU loop can index element by element, <a href="../../api/#Bramble.DeviceLocality"><code>DeviceLocality</code></a> for storage an accelerator schedules against instead. <code>locality</code>, <code>Locality</code>, <code>HostLocality</code> and <code>DeviceLocality</code> are <code>public</code>, not exported, so they are called qualified:</p><pre><code class="language-julia hljs">Bramble.locality(Vector{Float64}), Bramble.locality(CpuSerial()), Bramble.locality(GpuKernel())</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(Bramble.HostLocality(), Bramble.HostLocality(), Bramble.DeviceLocality())</code></pre><p>Locality is derived from the array type, never declared. A <a href="../../api/#Bramble.CpuPolicy"><code>CpuPolicy</code></a> claims <a href="../../api/#Bramble.HostLocality"><code>HostLocality</code></a> and a <a href="../../api/#Bramble.GpuPolicy"><code>GpuPolicy</code></a> claims <a href="../../api/#Bramble.DeviceLocality"><code>DeviceLocality</code></a> – that is what lets a backend check the two against each other. An array type this package has not been taught otherwise about counts as host memory (the fallback method is <code>Bramble.locality(::Type{&lt;:AbstractArray}) = Bramble.HostLocality()</code>), so a custom wrapper array works as a <code>vector_type</code>/<code>matrix_type</code> without registering anything, as long as it genuinely is host-indexable. A GPU package extension adds one method for its own array type to answer <a href="../../api/#Bramble.DeviceLocality"><code>DeviceLocality</code></a> instead: <code>BrambleMetalExt</code> does this for <code>MtlVector</code> and <code>MtlMatrix</code> (and both Metal sparse matrix types).</p><p>Strategy is the genuine choice, and it only exists <em>within</em> one locality: host storage admits <a href="../../api/#Bramble.CpuSerial"><code>CpuSerial</code></a>, <a href="../../api/#Bramble.CpuThreaded"><code>CpuThreaded</code></a> and <a href="../../api/#Bramble.CpuPolyester"><code>CpuPolyester</code></a>; device storage admits the device kernel, <a href="../../api/#Bramble.GpuKernel"><code>GpuKernel</code></a>. A policy whose locality does not match the storage it is paired with cannot execute anything – a CPU loop cannot scalar-index device memory, and a host array has no device to schedule against – so <a href="../../internals/utils/#Bramble.Backend"><code>Backend</code></a>&#39;s inner constructor checks that the vector type and the policy agree on locality (and, since a backend must be wholly host or wholly one GPU&#39;s, that the matrix type agrees with the vector type too) and rejects the combination before it exists:</p><pre><code class="language-julia hljs">using Bramble, Metal
+    └── GpuKernel                   -- launched on the device</code></pre>
+</div>
+<p>Both spellings work everywhere. <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> is a threaded policy with a lower per-call overhead, and the table above shows it crossing over earlier. It needs <code class="md-code-inline">using Polyester</code> before its first sweep, or the call errors and names <code class="md-code-inline">Polyester.jl</code>. <a href="../../api/utilities/#Bramble.GpuKernel"><code class="md-code-inline">GpuKernel</code></a> runs on a device and needs a GPU backend, described in the reference below. The older names <code class="md-code-inline">CpuBatch</code> and <code class="md-code-inline">GpuAsync</code> remain as deprecated aliases of <code class="md-code-inline">CpuPolyester</code> and <code class="md-code-inline">GpuKernel</code>.</p>
+<hr class="md-hr">
+<h2 id="Reference" class="md-heading">Reference<a href="#Reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<h3 id="Locality-and-strategy" class="md-heading">Locality and strategy<a href="#Locality-and-strategy" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p><em>Where</em> a backend&#39;s work can run is decided by its array types, not by its policy. That is <a href="../../api/utilities/#Bramble.locality"><code class="md-code-inline">locality</code></a>: <a href="../../api/utilities/#Bramble.HostLocality"><code class="md-code-inline">HostLocality</code></a> for storage a CPU loop can index element by element, <a href="../../api/utilities/#Bramble.DeviceLocality"><code class="md-code-inline">DeviceLocality</code></a> for storage an accelerator schedules against. The names are <code class="md-code-inline">public</code> but not exported, so call them qualified:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">import Bramble: CpuSerial, GpuKernel
+Bramble.locality(Vector{Float64}), Bramble.locality(CpuSerial()), Bramble.locality(GpuKernel())</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(Bramble.HostLocality(), Bramble.HostLocality(), Bramble.DeviceLocality())</code></pre>
+</div>
+<p>A <a href="../../api/utilities/#Bramble.CpuPolicy"><code class="md-code-inline">CpuPolicy</code></a> claims host locality and a <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a> claims device locality. Any array type the package knows nothing about counts as host memory, so a custom wrapper array works as a <code class="md-code-inline">vector_type</code> without registering anything, as long as it can be indexed on the host. A GPU extension answers device locality for its own array types. The strategy is the genuine choice, and it exists only within one locality: host storage admits <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a>, <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> and <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>, and device storage admits <a href="../../api/utilities/#Bramble.GpuKernel"><code class="md-code-inline">GpuKernel</code></a>. The <a href="../../internals/utils/#Bramble.Backend"><code class="md-code-inline">Backend</code></a> constructor rejects any other pairing, and a matrix type that disagrees with the vector type, before the backend exists:</p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble, Metal
 
 metal_backend(; policy = CpuSerial())
 # ERROR: ArgumentError: Backend vector type MtlVector{Float32} has locality
 # Bramble.DeviceLocality(), but execution policy CpuSerial has locality
 # Bramble.HostLocality(): a Backend&#39;s storage and its execution policy must agree on
-# locality, or the combination cannot execute anything.</code></pre><h2 id="5.-One-interface,-governed-by-the-backend"><a class="docs-heading-anchor" href="#5.-One-interface,-governed-by-the-backend">5. One interface, governed by the backend</a><a id="5.-One-interface,-governed-by-the-backend-1"></a><a class="docs-heading-anchor-permalink" href="#5.-One-interface,-governed-by-the-backend" title="Permalink"></a></h2><p>Call <code>assemble!</code>/<code>assemble</code>, <code>Rₕ!</code>/<code>avgₕ!</code> the same way regardless of which policy the backend carries; that is the entire reason to choose a policy once, on the backend, rather than per call:</p><pre><code class="language-julia hljs">f = Rₕ(Wₕ_par, sin)
-l = form(Wₕ_par, v -&gt; innerₕ(f, v))
-b = assemble(l)      # threads, because Wₕ_par&#39;s backend says Parallel()</code></pre><p>Do not reach for <code>assemble_parallel!</code> (or a hand-picked threaded variant) to get parallel behaviour; that bypasses whatever the backend says and threads regardless, which defeats the point of choosing a policy at all. It still exists, but only as a deliberate, explicit override: a one-off forced comparison, or a benchmark that wants the threaded path irrespective of the ambient backend. Build the backend you want and call the ordinary entry point; see the <a href="../form/">forms tutorial</a> for the full picture of how assembly uses it.</p><h2 id="6.-Backend-storage:-CSC-or-CSR"><a class="docs-heading-anchor" href="#6.-Backend-storage:-CSC-or-CSR">6. Backend storage: CSC or CSR</a><a id="6.-Backend-storage:-CSC-or-CSR-1"></a><a class="docs-heading-anchor-permalink" href="#6.-Backend-storage:-CSC-or-CSR" title="Permalink"></a></h2><p>Every backend above keeps <code>SparseMatrixCSC{Float64,Int}</code>, the default <code>matrix_type</code>. <a href="../../api/#Bramble.csr_backend"><code>csr_backend</code></a> swaps that for <code>SparseMatricesCSR.jl</code>&#39;s <code>SparseMatrixCSR{1,T,Int}</code> instead (the one-based variant, matching Bramble&#39;s own indexing), built the same way as any other backend:</p><pre><code class="language-julia hljs">using Bramble, SparseMatricesCSR
+# locality, or the combination cannot execute anything.</code></pre>
+</div>
+<h3 id="Introspection" class="md-heading">Introspection<a href="#Introspection" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p><a href="../../api/utilities/#Bramble.vector_type"><code class="md-code-inline">vector_type</code></a><code class="md-code-inline">(be)</code> and <a href="../../api/utilities/#Bramble.matrix_type"><code class="md-code-inline">matrix_type</code></a><code class="md-code-inline">(be)</code> give the two storage types, and <a href="../../api/utilities/#Bramble.backend_types"><code class="md-code-inline">backend_types</code></a><code class="md-code-inline">(be)</code> gives <code class="md-code-inline">(eltype, VT, MT, typeof(be))</code> at once. <a href="../../api/utilities/#Bramble.execution_policy"><code class="md-code-inline">execution_policy</code></a><code class="md-code-inline">(x)</code> works on a backend, a mesh or a grid space, and answers what a threading-capable call on it would do.</p>
+<h3 id="CSC-or-CSR-storage" class="md-heading">CSC or CSR storage<a href="#CSC-or-CSR-storage" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p><a href="../../api/utilities/#Bramble.csr_backend"><code class="md-code-inline">csr_backend</code></a> swaps the default <code class="md-code-inline">SparseMatrixCSC{Float64,Int}</code> for the one-based <code class="md-code-inline">SparseMatrixCSR{1,T,Int}</code> of <code class="md-code-inline">SparseMatricesCSR.jl</code>. It needs that package loaded and throws without it.</p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble, SparseMatricesCSR
 
 be = csr_backend()                 # Float64, Serial()
-matrix_type(be)                    # SparseMatrixCSR{1, Float64, Int}</code></pre><p><a href="../../api/#Bramble.csr_backend"><code>csr_backend</code></a> requires <code>SparseMatricesCSR.jl</code> loaded alongside <code>Bramble.jl</code>; without it, it throws, the same way <a href="../../api/#Bramble.metal_backend"><code>metal_backend</code></a> does without <code>using Metal</code>.</p><h3 id="Which-one-to-reach-for"><a class="docs-heading-anchor" href="#Which-one-to-reach-for">Which one to reach for</a><a id="Which-one-to-reach-for-1"></a><a class="docs-heading-anchor-permalink" href="#Which-one-to-reach-for" title="Permalink"></a></h3><p>A finite-difference stencil is assembled row by row, which CSR storage reaches without the column scatter a <code>SparseMatrixCSC</code> assembly needs (<a href="https://github.com/gpena/Bramble.jl/issues/214">#214</a>). Measured on one machine (AC power, 1-minute load 2.13, 4 threads):</p><ul><li><strong>Assembly is a wash between CSC and CSR</strong>: first assembly and <code>assemble!</code> refill both land within about 0.94-1.05x of each other across 1D, 2D and 3D, and neither backend allocates in <code>assemble!</code>.</li><li><strong>CSR stores the same matrix in roughly half the memory</strong>: 5.3 MiB against CSC&#39;s 10.7 MiB in 1D, 24.4 against 59.1 MiB in 3D.</li><li><strong>CSR loses the direct solve</strong>, 2.4x to 4.2x slower than CSC across the sizes measured – <code>A \ F</code> on a <code>SparseMatrixCSR</code> routes through a transpose wrapper around a sparse LU rather than reaching UMFPACK directly the way CSC&#39;s <code>\</code> does.</li></ul><p>So: reach for <a href="../../api/#Bramble.csr_backend"><code>csr_backend</code></a> when memory is the constraint and assembly, not a direct solve, dominates; keep the default CSC backend when <code>A \ F</code> is on the critical path. These are one run on one machine, not a guarantee – re-measure before leaning on them for a specific problem size.</p><h2 id="7.-A-Polyester-batched-CPU-policy"><a class="docs-heading-anchor" href="#7.-A-Polyester-batched-CPU-policy">7. A Polyester-batched CPU policy</a><a id="7.-A-Polyester-batched-CPU-policy-1"></a><a class="docs-heading-anchor-permalink" href="#7.-A-Polyester-batched-CPU-policy" title="Permalink"></a></h2><p><a href="../../api/#Bramble.CpuPolyester"><code>CpuPolyester</code></a> is a third <a href="../../api/#Bramble.CpuPolicy"><code>CpuPolicy</code></a>, alongside <a href="../../api/#Bramble.CpuSerial"><code>CpuSerial</code></a> and <a href="../../api/#Bramble.CpuThreaded"><code>CpuThreaded</code></a>: it directs grid operations and form assembly through <code>Polyester.jl</code>&#39;s <code>@batch</code> instead of <code>Base.Threads.@threads</code>, a primitive whose lower per-call overhead can pay off on grids where <code>CpuThreaded</code>&#39;s threading does not (<a href="https://github.com/gpena/Bramble.jl/issues/190">#190</a>).</p><pre><code class="language-julia hljs">using Bramble, Polyester
+matrix_type(be)                    # SparseMatrixCSR{1, Float64, Int}</code></pre>
+</div>
+<p>A finite-difference stencil is assembled row by row, which CSR storage reaches without the column scatter a CSC assembly needs (<a href="https://github.com/gpena/Bramble.jl/issues/214">#214</a>). Measured on one machine (AC power, 1-minute load 2.13, 4 threads):</p>
+<ul class="md-list-tight">
+<li><p><strong>Assembly is a wash</strong>: first assembly and <code class="md-code-inline">assemble!</code> refill land within about 0.94-1.05x of each other across 1D, 2D and 3D, and neither allocates in <code class="md-code-inline">assemble!</code>.</p>
+</li>
+<li><p><strong>CSR stores the same matrix in roughly half the memory</strong>: 5.3 MiB against 10.7 MiB in 1D, 24.4 against 59.1 MiB in 3D.</p>
+</li>
+<li><p><strong>CSR loses the direct solve</strong>, 2.4x to 4.2x slower across the sizes measured, because <code class="md-code-inline">A \ F</code> on a <code class="md-code-inline">SparseMatrixCSR</code> goes through a transpose wrapper around a sparse LU instead of reaching UMFPACK directly.</p>
+</li>
+</ul>
+<p>Reach for CSR when memory is the constraint and assembly dominates. Keep CSC when <code class="md-code-inline">A \ F</code> is on the critical path. Re-measure before relying on these figures for a specific size.</p>
+<h3 id="A-Polyester-policy" class="md-heading">A Polyester policy<a href="#A-Polyester-policy" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble, Polyester
 
 be = backend(policy = CpuPolyester())
 Ωₕ = mesh(domain(interval(0.0, 1.0)), 100_000; backend = be)
-Wₕ = gridspace(Ωₕ)
-execution_policy(Wₕ)   # CpuPolyester()</code></pre><p>The policy type ships with <code>Bramble.jl</code> itself, but the sweeps it selects live in the <code>BramblePolyesterExt</code> package extension: <code>using Polyester</code> must be loaded before a <code>CpuPolyester</code> backend runs its first sweep, or the call errors, naming <code>Polyester.jl</code> – the same precedent as <a href="../../api/#Bramble.csr_backend"><code>csr_backend</code></a> and <a href="../../api/#Bramble.metal_backend"><code>metal_backend</code></a> without their own package. Call <code>assemble!</code>/<code>assemble</code>, <code>Rₕ!</code>/<code>avgₕ!</code> exactly as with any other backend; choosing <code>CpuPolyester()</code> on the backend is the only thing that changes.</p><h2 id="8.-A-GPU-backend-(Metal),-or-letting-gpu_backend-pick-it"><a class="docs-heading-anchor" href="#8.-A-GPU-backend-(Metal),-or-letting-gpu_backend-pick-it">8. A GPU backend (Metal), or letting <code>gpu_backend</code> pick it</a><a id="8.-A-GPU-backend-(Metal),-or-letting-gpu_backend-pick-it-1"></a><a class="docs-heading-anchor-permalink" href="#8.-A-GPU-backend-(Metal),-or-letting-gpu_backend-pick-it" title="Permalink"></a></h2><pre><code class="language-julia hljs">using Bramble, Metal
+execution_policy(gridspace(Ωₕ))   # CpuPolyester()</code></pre>
+</div>
+<p>The policy type ships with <code class="md-code-inline">Bramble.jl</code>, but its sweeps live in the <code class="md-code-inline">BramblePolyesterExt</code> extension, which loads with <code class="md-code-inline">using Polyester</code>. After that you call <code class="md-code-inline">assemble</code>, <code class="md-code-inline">Rₕ!</code> and <code class="md-code-inline">avgₕ!</code> exactly as before.</p>
+<h3 id="A-GPU-backend" class="md-heading">A GPU backend<a href="#A-GPU-backend" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble, Metal
 
-gpu = metal_backend()                    # Float32, GpuKernel()</code></pre><p><code>Float64</code> is not supported on Apple Silicon GPUs; use <code>Float32</code> or <code>Float16</code>. <a href="../../api/#Bramble.metal_backend"><code>metal_backend</code></a> requires <code>Metal.jl</code> loaded alongside <code>Bramble.jl</code>; without it, it throws. A <a href="../../api/#Bramble.CpuPolicy"><code>CpuPolicy</code></a> is rejected too, at construction: <code>MtlVector</code>/ <code>MtlMatrix</code> storage has device locality, and a CPU loop cannot scalar-index it – see &quot;Locality and strategy&quot; in §4 above for the mismatch and what it looks like.</p><p><a href="../../api/#Bramble.gpu_backend"><code>gpu_backend</code></a> is the entry point to reach for when you do not want to name a device backend by hand:</p><pre><code class="language-julia hljs">using Bramble, Metal
-
-gpu = gpu_backend()                      # resolves to metal_backend(): Float32, GpuKernel()</code></pre><p>It checks which GPU package extension is loaded, with <code>Base.get_extension</code>, and forwards to that backend&#39;s own constructor – currently only <a href="../../api/#Bramble.metal_backend"><code>metal_backend</code></a>, under <code>using Metal</code>. A CUDA or AMDGPU extension joins the same dispatch once one exists (gpena/Bramble.jl#11, v3.5.0).</p><p>The check requires both: the extension <em>loaded</em> and its device <em>functional</em> (<code>Metal.functional()</code>). <code>using Metal</code> succeeds on any platform, degrading gracefully rather than erroring, so loading it alone does not prove a working GPU is present – <code>gpu_backend()</code> on a host where <code>Metal</code> is loaded but <code>Metal.functional()</code> is false refuses immediately, rather than handing back a <code>metal_backend()</code> that would only fail once actually used.</p><p>Two failures give two different diagnostics, deliberately not sharing a message:</p><ul><li><strong>No GPU extension loaded at all</strong>: <code>gpu_backend</code> throws an error naming the package to load, chosen from the host architecture: <code>using Metal</code> on Apple Silicon, <code>using CUDA</code> on Linux or Windows, and a generic message naming no supported hardware otherwise. Fixed by an import.</li><li><strong>An extension is loaded but its device is not functional</strong>: <code>gpu_backend</code> throws a separate error saying so. This points at a driver, hardware or virtualisation problem – not something an import can fix, which is why it reads differently from the first case.</li></ul><h3 id="Asynchronous-execution-and-synchronization-points"><a class="docs-heading-anchor" href="#Asynchronous-execution-and-synchronization-points">Asynchronous execution and synchronization points</a><a id="Asynchronous-execution-and-synchronization-points-1"></a><a class="docs-heading-anchor-permalink" href="#Asynchronous-execution-and-synchronization-points" title="Permalink"></a></h3><p>Every device kernel under <a href="../../api/#Bramble.GpuKernel"><code>GpuKernel</code></a> – the only <a href="../../api/#Bramble.GpuPolicy"><code>GpuPolicy</code></a> there is – only enqueues onto the device&#39;s own command queue and returns; it does not wait for that work to finish. A chain of device operators therefore pipelines instead of paying a host round-trip after each step:</p><pre><code class="language-julia hljs">using Bramble, Metal
+gpu = metal_backend()                    # Float32, GpuKernel()
+gpu = gpu_backend()                      # picks whichever GPU extension is loaded</code></pre>
+</div>
+<p><code class="md-code-inline">Float64</code> is not supported on Apple Silicon GPUs, so use <code class="md-code-inline">Float32</code> or <code class="md-code-inline">Float16</code>. <a href="../../api/utilities/#Bramble.metal_backend"><code class="md-code-inline">metal_backend</code></a> needs <code class="md-code-inline">Metal.jl</code> loaded and throws without it. <a href="../../api/utilities/#Bramble.gpu_backend"><code class="md-code-inline">gpu_backend</code></a> checks which GPU extension is loaded and forwards to its constructor, which today means only <code class="md-code-inline">metal_backend</code>. It needs the extension loaded and its device functional (<code class="md-code-inline">Metal.functional()</code>), and the two failures give different errors. With no extension loaded, it names the package to import: <code class="md-code-inline">Metal</code> on Apple Silicon, <code class="md-code-inline">CUDA</code> on Linux or Windows. With an extension loaded but no working device, it reports a driver, hardware or virtualisation problem that an import cannot fix.</p>
+<p>A kernel under <a href="../../api/utilities/#Bramble.GpuKernel"><code class="md-code-inline">GpuKernel</code></a> only enqueues work on the device&#39;s queue and returns, so a chain of device operators pipelines without a host round trip between steps. Synchronisation happens at a few real boundaries:</p>
+<ul class="md-list-tight">
+<li><p>converting a device array to a host one, with <code class="md-code-inline">Array(...)</code> or <code class="md-code-inline">host_points</code>;</p>
+</li>
+<li><p>a host-side reduction, since <code class="md-code-inline">innerₕ</code>, <code class="md-code-inline">normₕ</code> and <code class="md-code-inline">norm₁ₕ</code> return a host scalar and so wait for the queue;</p>
+</li>
+<li><p>an explicit <a href="../../internals/gpu/#Bramble.ka_synchronize-Tuple{Any}"><code class="md-code-inline">ka_synchronize</code></a>, for timing a device computation alone.</p>
+</li>
+</ul>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble, Metal
+import Bramble: D₋ₓ, D₋ᵧ
 
 Ωₕ = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (1025, 1025), (true, true);
     backend = metal_backend())
@@ -46,18 +364,61 @@ Wₕ = gridspace(Ωₕ)
 uₕ = Rₕ(Wₕ, x -&gt; sin(x[1]) * cos(x[2]))
 
 vₕ = D₋ₓ(uₕ) + D₋ᵧ(uₕ)   # two kernel launches, neither blocks on the other
-s  = normₕ(vₕ)           # the actual wait happens here</code></pre><p>Kernels enqueued on the same queue still run in the order they were launched, so <code>D₋ᵧ(uₕ)</code> reading what <code>D₋ₓ(uₕ)</code> wrote needs nothing beyond that queue ordering – the whole point of chaining several device operators is that nothing here has to wait until <code>s</code> is asked for. Synchronization happens at a handful of genuine boundaries instead of after every call:</p><ul><li><strong>Converting a device array to a host one</strong> – <code>Array(...)</code>, <code>host_points</code>, and every other accessor that copies device memory to the host.</li><li><strong>A host-side reduction or assertion.</strong> <code>innerₕ</code>/<code>normₕ</code>/<code>norm₁ₕ</code> on a device grid function already synchronize by returning a plain host scalar (<code>sum</code> on a <code>GPUArrays</code> array forces every queued kernel to finish before it can hand back a number) – nothing extra to call for this.</li><li><strong>An explicit call.</strong> <a href="../../internals/gpu/#Bramble.ka_synchronize-Tuple{Any}"><code>ka_synchronize</code></a> blocks until everything queued against an array&#39;s device backend has completed; reach for it when timing a device computation in isolation, or when code outside this package&#39;s own operators writes to a device array some way other than a <code>@kernel</code> launch on that same queue.</li></ul><h3 id="Preallocate-and-prefer-the-in-place-forms"><a class="docs-heading-anchor" href="#Preallocate-and-prefer-the-in-place-forms">Preallocate and prefer the in-place forms</a><a id="Preallocate-and-prefer-the-in-place-forms-1"></a><a class="docs-heading-anchor-permalink" href="#Preallocate-and-prefer-the-in-place-forms" title="Permalink"></a></h3><p>Every allocating operator (<code>D₋ₓ</code>, <code>D₋ᵧ</code>, ...) is <code>similar(uₕ)</code> plus a kernel launch. On a GPU backend that <code>similar</code> is a device allocation, and repeating it inside a loop adds a real cost on top of the kernel itself – exactly the situation issue #302 measured. Prefer the in-place forms (<code>D₋ₓ!</code>, <code>D₋ᵧ!</code>, ...) with a buffer allocated once outside the loop:</p><pre><code class="language-julia hljs">tmp = element(Wₕ)
-out = element(Wₕ)
-for _ in 1:steps
-    D₋ₓ!(tmp, uₕ)
-    D₋ᵧ!(out, tmp)
-    # ... advance uₕ from out ...
-end
-normₕ(out)   # the synchronization point for this step</code></pre><p>This is the same preallocation discipline the CPU path already asks for; it matters more on a GPU backend, where every allocation is also a round trip through the device&#39;s own memory allocator. The <a href="../../internals/gpu/">internals page on the GPU substrate</a> covers the kernel side of this in more depth.</p><h3 id="GpuOffload:-offloading-just-Rₕ!/avgₕ!-from-a-host-backend"><a class="docs-heading-anchor" href="#GpuOffload:-offloading-just-Rₕ!/avgₕ!-from-a-host-backend"><code>GpuOffload</code>: offloading just <code>Rₕ!</code>/<code>avgₕ!</code> from a host backend</a><a id="GpuOffload:-offloading-just-Rₕ!/avgₕ!-from-a-host-backend-1"></a><a class="docs-heading-anchor-permalink" href="#GpuOffload:-offloading-just-Rₕ!/avgₕ!-from-a-host-backend" title="Permalink"></a></h3><p><a href="../../api/#Bramble.GpuOffload"><code>GpuOffload</code></a> is a <a href="../../api/#Bramble.CpuPolicy"><code>CpuPolicy</code></a>, not a <code>GpuPolicy</code>: the <code>Backend</code> it configures keeps host storage (<code>Vector</code>/<code>SparseMatrixCSC</code>), and every operation except <code>Rₕ!</code>/<code>avgₕ!</code> runs under whatever inner policy it wraps, exactly as if <code>GpuOffload</code> were not there. Only <code>Rₕ!</code>/<code>avgₕ!</code>&#39;s fill step is routed through the device backend it also carries:</p><pre><code class="language-julia hljs">using Bramble, Metal
+s  = normₕ(vₕ)           # the actual wait happens here</code></pre>
+</div>
+<p>Every allocating operator is <code class="md-code-inline">similar(uₕ)</code> plus a kernel launch, and on a GPU that allocation is a device allocation (issue #302 measured the cost). Inside a loop, prefer the in-place forms <code class="md-code-inline">D₋ₓ!</code> and <code class="md-code-inline">D₋ᵧ!</code> with buffers made once outside it. The <a href="../../internals/gpu/">internals page on the GPU substrate</a> covers the kernel side.</p>
+<h3 id="Offloading-only-the-restriction" class="md-heading">Offloading only the restriction<a href="#Offloading-only-the-restriction" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p><a href="../../api/utilities/#Bramble.GpuOffload"><code class="md-code-inline">GpuOffload</code></a> is a <a href="../../api/utilities/#Bramble.CpuPolicy"><code class="md-code-inline">CpuPolicy</code></a> that keeps host storage and sends only the fill step of <code class="md-code-inline">Rₕ!</code> and <code class="md-code-inline">avgₕ!</code> to a device backend. Every other operation runs under the inner policy it wraps:</p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble, Metal
 
 be = backend(Float32; policy = Bramble.GpuOffload(metal_backend(), Bramble.CpuThreaded()))
 Ωₕ = mesh(domain(interval(0.0f0, 1.0f0)), 10_000_001; backend = be)
 Wₕ = gridspace(Ωₕ)
 uₕ = Rₕ(Wₕ, sin)          # fills through Metal, copies the result back to a host Vector
-Bramble.execution_policy(Wₕ)     # Bramble.CpuThreaded() -- GpuOffload itself is invisible past construction</code></pre><p><code>uₕ</code> is an ordinary host-storage <code>VectorElement</code>; nothing about calling <code>Rₕ!</code>/<code>avgₕ!</code> changes at the call site, and every other operator on <code>Wₕ</code> (<code>D₋ₓ</code>, <code>assemble</code>, ...) threads on the host exactly as it would under <code>CpuThreaded()</code> alone.</p><p>There is no persistent device state – each <code>Rₕ!</code>/<code>avgₕ!</code> call uploads the mesh axis it needs and copies the result back, with nothing cached between calls – so this is not a universal speedup. Measured back to back against plain <code>CpuThreaded()</code> (<code>benchmark/gpu_offload.jl</code>, commit <code>2c7217e6</code>, Apple M2, AC power, <code>--threads=4</code>): <code>avgₕ!</code> wins clearly (3.27x at 1D n=10,000,000, 10.86x at 2D 3000x3000) and <code>Rₕ!</code> wins at 2D 3000x3000 (1.79x), but <code>Rₕ!</code> at 1D n=10,000,000 <em>loses</em>, 0.86x – one cheap function evaluation per point is already fast on four CPU threads, and does not amortise the per-call upload and copy-back this policy pays every time. Measure the specific call and grid size before reaching for <code>GpuOffload</code> over the wrapped inner policy alone; see the <a href="../../internals/gpu/">internals page on the GPU substrate</a> for the full table.</p><h2 id="9.-Introspection"><a class="docs-heading-anchor" href="#9.-Introspection">9. Introspection</a><a id="9.-Introspection-1"></a><a class="docs-heading-anchor-permalink" href="#9.-Introspection" title="Permalink"></a></h2><ul><li><a href="../../api/#Bramble.vector_type"><code>vector_type</code></a><code>(be)</code>, <a href="../../api/#Bramble.matrix_type"><code>matrix_type</code></a><code>(be)</code>: the two type parameters.</li><li><a href="../../api/#Bramble.backend_types"><code>backend_types</code></a><code>(be)</code>: <code>(eltype, VT, MT, typeof(be))</code>, all four at once.</li><li><a href="../../api/#Bramble.execution_policy"><code>execution_policy</code></a><code>(x)</code>: works on a <code>Backend</code>, a mesh, or a grid space, and always answers the same question: what would a threading-capable call on this do.</li></ul><pre><code class="language-julia hljs">backend_types(be)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(Float64, Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial})</code></pre><h2 id="10.-The-precompilation-workload"><a class="docs-heading-anchor" href="#10.-The-precompilation-workload">10. The precompilation workload</a><a id="10.-The-precompilation-workload-1"></a><a class="docs-heading-anchor-permalink" href="#10.-The-precompilation-workload" title="Permalink"></a></h2><p><code>Bramble.jl</code> ships a precompilation workload that exercises 1D, 2D and 3D meshes on load. It costs a few seconds when the package is first built and cuts the time to first result by roughly a factor of four.</p><p>While working on the package itself you may prefer faster rebuilds over faster first use. To skip the workload:</p><pre><code class="language-julia hljs">using Preferences, Bramble
-set_preferences!(Bramble, &quot;precompile_workload&quot; =&gt; false)</code></pre><p>Julia tracks preferences in the precompilation cache, so the change takes effect on the next <code>using Bramble</code> with no manual cache clearing. Restore the default with</p><pre><code class="language-julia hljs">delete_preferences!(Bramble, &quot;precompile_workload&quot;; force = true)</code></pre><p>The setting is written to <code>LocalPreferences.toml</code> next to your active project.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../autodiff/">« Automatic differentiation tutorial</a><a class="docs-footer-nextpage" href="../plotting/">Plotting directly »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 29 September 2026 21:39">Tuesday 29 September 2026</span>. Using Julia version 1.13.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+Bramble.execution_policy(Wₕ)     # Bramble.CpuThreaded()</code></pre>
+</div>
+<p>Nothing is cached on the device between calls, so each call uploads its mesh axis and copies the result back. Measured against plain <code class="md-code-inline">CpuThreaded()</code> (<code class="md-code-inline">benchmark/gpu_offload.jl</code>, commit <code class="md-code-inline">2c7217e6</code>, Apple M2, AC power, <code class="md-code-inline">--threads=4</code>): <code class="md-code-inline">avgₕ!</code> wins clearly (3.27x at 1D n=10,000,000, 10.86x at 2D 3000x3000), <code class="md-code-inline">Rₕ!</code> wins at 2D 3000x3000 (1.79x), and <code class="md-code-inline">Rₕ!</code> at 1D n=10,000,000 loses, at 0.86x. Measure the specific call and grid size before choosing it over the inner policy alone. The internals page has the full table.</p>
+<h3 id="The-precompilation-workload" class="md-heading">The precompilation workload<a href="#The-precompilation-workload" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p><code class="md-code-inline">Bramble.jl</code> precompiles a workload over 1D, 2D and 3D meshes. It costs a few seconds at build time and cuts the time to first result by roughly a factor of four. To skip it while developing the package itself:</p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Preferences, Bramble
+set_preferences!(Bramble, &quot;precompile_workload&quot; =&gt; false)</code></pre>
+</div>
+<p>Julia tracks preferences in the precompilation cache, so the change applies on the next <code class="md-code-inline">using Bramble</code>. Restore the default with <code class="md-code-inline">delete_preferences!(Bramble, &quot;precompile_workload&quot;; force = true)</code>. The setting is written to <code class="md-code-inline">LocalPreferences.toml</code> next to your active project.</p>
+      </article>
+      <footer class="md-footer">
+<p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
+      </footer>
+    </main>
+    <aside class="md-toc">
+      <div class="md-toc-inner">
+        <p class="md-toc-title">On this page</p>
+          <a class="md-toc-link md-toc-h2" href="#What-a-backend-carries">What a backend carries</a>
+          <a class="md-toc-link md-toc-h2" href="#Attach-a-backend-to-a-mesh">Attach a backend to a mesh</a>
+          <a class="md-toc-link md-toc-h2" href="#backend_policies">Choose a policy</a>
+            <a class="md-toc-link md-toc-h3" href="#Measured-crossovers">Measured crossovers</a>
+            <a class="md-toc-link md-toc-h3" href="#Measure-your-own-crossovers">Measure your own crossovers</a>
+            <a class="md-toc-link md-toc-h3" href="#The-policy-hierarchy">The policy hierarchy</a>
+          <a class="md-toc-link md-toc-h2" href="#Reference">Reference</a>
+            <a class="md-toc-link md-toc-h3" href="#Locality-and-strategy">Locality and strategy</a>
+            <a class="md-toc-link md-toc-h3" href="#Introspection">Introspection</a>
+            <a class="md-toc-link md-toc-h3" href="#CSC-or-CSR-storage">CSC or CSR storage</a>
+            <a class="md-toc-link md-toc-h3" href="#A-Polyester-policy">A Polyester policy</a>
+            <a class="md-toc-link md-toc-h3" href="#A-GPU-backend">A GPU backend</a>
+            <a class="md-toc-link md-toc-h3" href="#Offloading-only-the-restriction">Offloading only the restriction</a>
+            <a class="md-toc-link md-toc-h3" href="#The-precompilation-workload">The precompilation workload</a>
+      </div>
+    </aside>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia-repl.min.js"></script>
+  <script>hljs.highlightAll();</script>
+  <script src="../../siteinfo.js"></script>
+  <script src="../../../versions.js"></script>
+  <script src="../../assets/materialdocs.js?v=73119809"></script>
+</body>
+</html>

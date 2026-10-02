@@ -1,5 +1,149 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Mesh tutorial · Bramble.jl</title><meta name="title" content="Mesh tutorial · Bramble.jl"/><meta property="og:title" content="Mesh tutorial · Bramble.jl"/><meta property="twitter:title" content="Mesh tutorial · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;family=Source+Sans+3:wght@400;600&amp;display=swap" rel="stylesheet" type="text/css"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="Bramble.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting started</a></li><li><span class="tocitem">Discrete foundations</span><ul><li><a class="tocitem" href="../geometry/">Geometry tutorial</a></li><li class="is-active"><a class="tocitem" href>Mesh tutorial</a><ul class="internal"><li><a class="tocitem" href="#1.-Constructing-meshes"><span>1. Constructing meshes</span></a></li><li><a class="tocitem" href="#2.-Coordinates-and-metric-properties"><span>2. Coordinates and metric properties</span></a></li><li><a class="tocitem" href="#3.-Boundary-and-interior-indexing"><span>3. Boundary and interior indexing</span></a></li><li><a class="tocitem" href="#4.-Markers-on-meshes"><span>4. Markers on meshes</span></a></li><li><a class="tocitem" href="#5.-Mesh-adaptation"><span>5. Mesh adaptation</span></a></li></ul></li><li><a class="tocitem" href="../space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../operators/">Difference, jump and average operators</a></li></ul></li><li><span class="tocitem">Forms and assembly</span><ul><li><a class="tocitem" href="../form/">Linear and bilinear forms</a></li></ul></li><li><span class="tocitem">Solvers and scientific computing</span><ul><li><a class="tocitem" href="../solvers/">Choosing a solver, backend, and execution policy</a></li><li><a class="tocitem" href="../autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../backend/">Backend tutorial</a></li></ul></li><li><span class="tocitem">Visualization and export</span><ul><li><a class="tocitem" href="../plotting/">Plotting directly</a></li><li><a class="tocitem" href="../vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../pgfplots_export/">Writing PGFPlots data files</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../../examples/poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a></li><li><a class="tocitem" href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li><li><a class="tocitem" href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a></li><li><a class="tocitem" href="../../examples/heat_equation/">Heat equation</a></li><li><a class="tocitem" href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a></li><li><a class="tocitem" href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a></li><li><a class="tocitem" href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a></li><li><a class="tocitem" href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a></li><li><a class="tocitem" href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a></li><li><a class="tocitem" href="../../examples/transient_inplace/">A transient loop that allocates nothing</a></li><li><a class="tocitem" href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a></li><li><a class="tocitem" href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><a class="tocitem" href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a></li><li><input class="collapse-toggle" id="menuitem-9-3" type="checkbox"/><label class="tocitem" for="menuitem-9-3"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li><li><a class="tocitem" href="../../internals/exporters/">Exporters</a></li><li><a class="tocitem" href="../../internals/gpu/">GPU acceleration</a></li><li><a class="tocitem" href="../../internals/csr_solvers/"><code>SparseMatrixCSR</code> direct solve</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Discrete foundations</a></li><li class="is-active"><a href>Mesh tutorial</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Mesh tutorial</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/mesh.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="tutorial_mesh"><a class="docs-heading-anchor" href="#tutorial_mesh">Mesh tutorial</a><a id="tutorial_mesh-1"></a><a class="docs-heading-anchor-permalink" href="#tutorial_mesh" title="Permalink"></a></h1><p>A mesh discretizes a <a href="../../internals/geometry/#Bramble.Domain"><code>Domain</code></a> into points, and carries the metric quantities every difference operator reads: spacings, half points and cell measures. Every block below runs when this page is built.</p><hr/><h2 id="1.-Constructing-meshes"><a class="docs-heading-anchor" href="#1.-Constructing-meshes">1. Constructing meshes</a><a id="1.-Constructing-meshes-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Constructing-meshes" title="Permalink"></a></h2><p><a href="../../api/#Bramble.mesh"><code>mesh</code></a> takes a domain (or a bare geometric set) and a point count. The count is one integer per axis, or a single integer for the same resolution along every axis:</p><pre><code class="language-julia hljs">using Bramble
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mesh tutorial — Bramble.jl</title>
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=1c54b00f">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <meta name="title" content="Mesh tutorial — Bramble.jl">
+  <meta property="og:title" content="Mesh tutorial — Bramble.jl">
+  <meta property="twitter:title" content="Mesh tutorial — Bramble.jl">
+  <meta name="description" content="Documentation for Bramble.jl.">
+  <meta property="og:description" content="Documentation for Bramble.jl.">
+  <meta property="twitter:description" content="Documentation for Bramble.jl.">
+  <link rel="icon" type="image/x-icon" href="../../assets/favicon.ico">
+  <link rel="stylesheet" href="../../assets/custom.css">
+  <script>
+    (function(){
+      document.documentElement.classList.add('no-transition');
+      var t=localStorage.getItem('md-theme');if(t)document.documentElement.setAttribute('data-theme',t);
+      window.addEventListener('load',function(){setTimeout(function(){document.documentElement.classList.remove('no-transition');},50);});
+    })()
+  </script>
+</head>
+<body data-warn-outdated>
+  <header class="md-navbar">
+    <button id="md-hamburger" class="md-icon-btn md-hamburger" aria-label="Toggle navigation" aria-expanded="false"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></button>
+    <img class="md-navbar-logo md-logo-light" src="../../assets/logo.svg" alt="Bramble.jl logo" height="32">
+    <img class="md-navbar-logo md-logo-dark" src="../../assets/logo-dark.svg" alt="Bramble.jl logo" height="32">
+    <span class="md-navbar-title">Bramble.jl</span>
+    <span class="md-navbar-spacer"></span>
+    <button id="md-search-btn" class="md-search-bar" aria-label="Search documentation" aria-expanded="false">
+      <svg class="md-icon md-search-bar-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <span class="md-search-bar-label">Search docs</span>
+      <kbd class="md-search-bar-kbd">Ctrl K</kbd>
+    </button>
+    <a class="md-icon-btn md-repo-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub" aria-label="View the repository on GitHub" rel="noopener" target="_blank"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 .3a12 12 0 00-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 016 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0012 .3z"/></svg><span class="md-repo-label">GitHub</span></a>
+    <button id="md-theme-toggle" class="md-icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode"><svg class="md-icon md-icon-light" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg><svg class="md-icon md-icon-dark" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg></button>
+  </header>
+  <div class="md-layout">
+    <nav class="md-sidebar">
+      <a href="../../">Home</a>
+      <a href="../../getting_started/">Getting started</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Discrete foundations</span>
+        <a href="../../tutorials/geometry/">Geometry tutorial</a>
+        <a href="../../tutorials/mesh/" class="md-nav-active">Mesh tutorial</a>
+        <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
+        <a href="../../tutorials/operators/">Difference, jump and average operators</a>
+        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
+        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Forms and assembly</span>
+        <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Solvers and scientific computing</span>
+        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
+        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
+        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <a href="../../tutorials/backend/">Backends and execution policies</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Visualization and export</span>
+        <a href="../../tutorials/plotting/">Plotting directly</a>
+        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
+        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Examples</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Stationary problems</span>
+          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
+          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
+          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Time-dependent problems</span>
+          <a href="../../examples/heat_equation/">Heat equation</a>
+          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Inverse problems</span>
+          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
+          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Solvers and performance</span>
+          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
+          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
+          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
+        </div>
+      </div>
+      <a href="../../benchmarks/">Benchmarks</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Documentation</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">API reference</span>
+          <a href="../../api/">API reference</a>
+          <a href="../../api/utilities/">Utilities</a>
+          <a href="../../api/geometry/">Geometry</a>
+          <a href="../../api/meshes/">Meshes</a>
+          <a href="../../api/spaces/">Grid spaces</a>
+          <a href="../../api/operators/">Difference, jump and average operators</a>
+          <a href="../../api/inner_products/">Inner products and norms</a>
+          <a href="../../api/forms/">Forms</a>
+          <a href="../../api/exporters/">Exporters</a>
+        </div>
+        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Internals</span>
+          <a href="../../internals/utils/">Utilities</a>
+          <a href="../../internals/geometry/">Geometry</a>
+          <a href="../../internals/mesh/">Mesh</a>
+          <a href="../../internals/space/">Spaces</a>
+          <a href="../../internals/form/">Forms</a>
+          <a href="../../internals/autodiff/">Automatic differentiation</a>
+          <a href="../../internals/exporters/">Exporters</a>
+          <a href="../../internals/gpu/">GPU acceleration</a>
+          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
+        </div>
+      </div>
+    </nav>
+    <main class="md-content">
+      <article class="md-article">
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/mesh.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+<h1 id="tutorial_mesh" class="md-heading">Mesh tutorial<a href="#tutorial_mesh" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
+<p><strong>What you will learn.</strong> How a domain becomes a mesh, how to make the points non-uniform, and what the spacings, half points and cell measures that difference operators read mean.</p>
+<p><strong>What you need first.</strong> The <a href="../../tutorials/geometry/#tutorial_geometry">geometry tutorial</a>, for sets, markers and domains.</p>
+<p><strong>Where next.</strong> The <a href="../../tutorials/space/">space tutorial</a> puts discrete functions on a mesh.</p>
+<p>Every block below runs when this page is built.</p>
+<hr class="md-hr">
+<h2 id="A-first-mesh" class="md-heading">A first mesh<a href="#A-first-mesh" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Take the unit interval and ask for eleven points. <a href="../../api/meshes/#Bramble.mesh"><code class="md-code-inline">mesh</code></a> takes a domain and a point count:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble
 import Bramble: cell_measure, change_points!, half_point, half_points, half_spacing,
     index_in_marker, indices, interior_indices, is_boundary_index, is_uniform, point,
     spacings
@@ -7,7 +151,9 @@ import Bramble: cell_measure, change_points!, half_point, half_points, half_spac
 Ω = domain(interval(0.0, 1.0))
 Ωₕ = mesh(Ω, 11)          # 11 uniformly spaced points
 
-points(Ωₕ)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">11-element Vector{Float64}:
+points(Ωₕ)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">11-element Vector{Float64}:
  0.0
  0.1
  0.2
@@ -18,25 +164,71 @@ points(Ωₕ)</code></pre><pre class="documenter-example-output"><code class="no
  0.7000000000000001
  0.8
  0.9
- 1.0</code></pre><p>The third positional argument, or the <code>uniform</code> keyword, chooses the point distribution per axis. <code>false</code> draws interior points at random and sorts them, which is what the convergence studies elsewhere in this manual use to expose order reduction on non-uniform grids:</p><pre><code class="language-julia hljs">Ωₕ_rand = mesh(Ω, 11, false)
+ 1.0</code></pre>
+</div>
+<p>The points are equally spaced, <span class="md-math md-math-inline">\(h = 0.1\)</span>, and the largest cell measure confirms it:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">hₘₐₓ(Ωₕ), is_uniform(Ωₕ)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.10000000000000009, true)</code></pre>
+</div>
+<p>The mesh carries more than coordinates. Spacings, half points and cell measures, which the difference operators read, are computed from the points and cached.</p>
+<div class="md-admonition md-admonition-tip">
+<p class="md-admonition-title">Try this</p>
+<div class="md-admonition-body">
+<p>Change <code class="md-code-inline">11</code> to <code class="md-code-inline">21</code> and print <code class="md-code-inline">hₘₐₓ(Ωₕ)</code> again. Doubling the number of intervals halves the spacing.</p>
+</div>
+</div>
+<hr class="md-hr">
+<h2 id="Non-uniform-meshes" class="md-heading">Non-uniform meshes<a href="#Non-uniform-meshes" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Real problems rarely want equal spacing: boundary layers and corners need points packed where the solution changes fast. The third positional argument of <code class="md-code-inline">mesh</code>, or the <code class="md-code-inline">uniform</code> keyword, chooses the distribution per axis. <code class="md-code-inline">false</code> draws interior points at random and sorts them, which the convergence studies in this manual use to expose order reduction on non-uniform grids:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ_rand = mesh(Ω, 11, false)
 
-is_uniform(Ωₕ), is_uniform(Ωₕ_rand)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(true, false)</code></pre><p>Above one dimension a mesh is a tensor product of 1D submeshes, stored per axis, so coordinate storage is <span>$O(N_x + N_y + N_z)$</span> while the grid it addresses is the full product. The distribution flag is per axis there: <code>(true, false)</code> would be uniform in <span>$x$</span> and random in <span>$y$</span>.</p><pre><code class="language-julia hljs">Ωₕ_2d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (10, 20), (true, true))
+is_uniform(Ωₕ), is_uniform(Ωₕ_rand)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, false)</code></pre>
+</div>
+<p>To place the points yourself, build any mesh and replace its coordinates. <a href="../../api/meshes/#Bramble.change_points!"><code class="md-code-inline">change_points!</code></a> keeps the point count, so it can grade a mesh toward the left end:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ_graded = mesh(Ω, 11)
+change_points!(Ωₕ_graded, collect(range(0.0, 1.0, length = npoints(Ωₕ_graded)) .^ 2))
 
-npoints(Ωₕ_2d, Tuple), size(Ωₕ_2d)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">((10, 20), (10, 20))</code></pre><p><code>Ωₕ_2d(k)</code> is the submesh along axis <code>k</code>, and everything documented for a 1D mesh applies to it:</p><pre><code class="language-julia hljs">Ωₕ_2d(1)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr36"><span class="sgr1">Mesh1D</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}
-<span class="sgr34">10 points</span>
-<span class="sgr90">Domain: </span>[0.0, 1.0]
-<span class="sgr90">Spacing: </span>uniform • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.111111</span>
-<span class="sgr90">Markers: </span><span class="sgr33">2 labels</span> • <span class="sgr32">:boundary</span> (<span class="sgr34">2</span>), <span class="sgr32">:interior</span> (<span class="sgr34">8</span>)</code></pre><p>A geometric set can be passed directly when no custom labels are needed; <code>:boundary</code> and <code>:interior</code> are provisioned either way:</p><pre><code class="language-julia hljs">X = interval(0.0, 1.0) × interval(0.0, 2.0)
-Ωₕ_direct = mesh(X, 20)      # isotropic: 20 × 20
-
-:boundary in keys(markers(Ωₕ_direct)), :interior in keys(markers(Ωₕ_direct))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(true, true)</code></pre><hr/><h2 id="2.-Coordinates-and-metric-properties"><a class="docs-heading-anchor" href="#2.-Coordinates-and-metric-properties">2. Coordinates and metric properties</a><a id="2.-Coordinates-and-metric-properties-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Coordinates-and-metric-properties" title="Permalink"></a></h2><p>One non-uniform 1D mesh exposes every convention at once:</p><pre><code class="language-julia hljs">Ωₕ_fig = mesh(domain(interval(0.0, 1.0)), 4, true)
+points(Ωₕ_graded), hₘₐₓ(Ωₕ_graded)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.010000000000000002, 0.04000000000000001, 0.09, 0.16000000000000003, 0.25, 0.36, 0.48999999999999994, 0.6400000000000001, 0.81, 1.0], 0.18999999999999995)</code></pre>
+</div>
+<p>Squaring the uniform points packs them near <span class="md-math md-math-inline">\(x = 0\)</span> and stretches the cells near <span class="md-math md-math-inline">\(x = 1\)</span>, so <code class="md-code-inline">hₘₐₓ</code> is no longer <span class="md-math md-math-inline">\(0.1\)</span>. <code class="md-code-inline">Bramble.set_points!</code> is the variant that also accepts a different point count. The <a href="../../examples/boundary_layer_graded/">graded boundary layer example</a> builds such a mesh for a real problem.</p>
+<div class="md-admonition md-admonition-tip">
+<p class="md-admonition-title">Try this</p>
+<div class="md-admonition-body">
+<p>Replace the exponent <code class="md-code-inline">2</code> by <code class="md-code-inline">3</code>. The points crowd closer to <span class="md-math md-math-inline">\(x = 0\)</span> and <code class="md-code-inline">hₘₐₓ</code> grows.</p>
+</div>
+</div>
+<hr class="md-hr">
+<h2 id="Half-points,-spacings-and-cell-measures" class="md-heading">Half points, spacings and cell measures<a href="#Half-points,-spacings-and-cell-measures" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>One small non-uniform mesh exposes every convention at once. Four points at <span class="md-math md-math-inline">\(0, 0.2, 0.6, 1\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ_fig = mesh(domain(interval(0.0, 1.0)), 4, true)
 Bramble.set_points!(Ωₕ_fig, [0.0, 0.2, 0.6, 1.0])
 
-points(Ωₕ_fig)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4-element Vector{Float64}:
+points(Ωₕ_fig)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4-element Vector{Float64}:
  0.0
  0.2
  0.6
- 1.0</code></pre><figure style="margin:1.5em 0;text-align:center">
+ 1.0</code></pre>
+</div>
+<figure style="margin:1.5em 0;text-align:center">
 <svg viewBox="0 0 780 360" width="100%" style="max-width:780px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif" role="img"
      aria-label="One-dimensional staggered mesh showing grid points, half points, cells, spacing and forward spacing.">
   <defs>
@@ -99,7 +291,58 @@ points(Ωₕ_fig)</code></pre><pre class="documenter-example-output"><code class
   <line x1="210" y1="336" x2="450" y2="336" stroke="#10b981" stroke-width="1.6" marker-start="url(#gnr)" marker-end="url(#gn)"/>
   <text x="330" y="355" font-size="13" fill="#10b981" text-anchor="middle">forward_spacing(Ωₕ, 2) = x₃ − x₂ = 0.4</text>
 </svg>
-</figure><p>Four conventions are worth reading off that picture, because they are the ones that surprise:</p><ul><li><strong><code>half_points</code> has <code>N + 1</code> entries.</strong> They are the cell interfaces, and the first and last coincide with <code>x₁</code> and <code>x_N</code> rather than sitting outside the domain.</li><li><strong>The cell around <code>xᵢ</code> spans <code>half_points[i]</code> to <code>half_points[i+1]</code></strong>, with width <code>half_spacing(Ωₕ, i)</code>, which is what <code>cell_measure(Ωₕ, i)</code> returns.</li><li><strong>Boundary cells are half-width</strong>, since <code>x₁</code> and <code>x_N</code> sit on the edge of their own cell rather than at its centre.</li><li><strong><code>spacing</code> looks backward, <code>forward_spacing</code> forward</strong>: <code>spacing(Ωₕ, i) = xᵢ - xᵢ₋₁</code> and <code>forward_spacing(Ωₕ, i) = xᵢ₊₁ - xᵢ</code>, each falling back to its neighbour at the end where the stencil runs out.</li></ul><pre><code class="language-julia hljs">half_points(Ωₕ_fig), [cell_measure(Ωₕ_fig, i) for i in 1:4]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">([0.0, 0.1, 0.4, 0.8, 1.0], [0.1, 0.3, 0.4, 0.2])</code></pre><p>The four cells sum to the domain length, and the two boundary cells are the smallest.</p><h3 id="2.1-Points"><a class="docs-heading-anchor" href="#2.1-Points">2.1 Points</a><a id="2.1-Points-1"></a><a class="docs-heading-anchor-permalink" href="#2.1-Points" title="Permalink"></a></h3><p><code>points</code> returns the coordinate vector, or a tuple of them above 1D. A single coordinate comes from <code>point(Ωₕ, idx)</code> or from indexing, with a linear index, a tuple or a <code>CartesianIndex</code>:</p><pre><code class="language-julia hljs">Ωₕ_fig[3], point(Ωₕ_fig, 3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.6, 0.6)</code></pre><pre><code class="language-julia hljs">Ωₕ_2d[2, 5], point(Ωₕ_2d, CartesianIndex(2, 5))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">((0.1111111111111111, 0.42105263157894735), (0.1111111111111111, 0.42105263157894735))</code></pre><h3 id="2.2-Half-points"><a class="docs-heading-anchor" href="#2.2-Half-points">2.2 Half points</a><a id="2.2-Half-points-1"></a><a class="docs-heading-anchor-permalink" href="#2.2-Half-points" title="Permalink"></a></h3><pre><code class="language-julia hljs">half_points(Ωₕ_fig), half_point(Ωₕ_fig, 3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">([0.0, 0.1, 0.4, 0.8, 1.0], 0.4)</code></pre><h3 id="2.3-Spacings-and-cell-measures"><a class="docs-heading-anchor" href="#2.3-Spacings-and-cell-measures">2.3 Spacings and cell measures</a><a id="2.3-Spacings-and-cell-measures-1"></a><a class="docs-heading-anchor-permalink" href="#2.3-Spacings-and-cell-measures" title="Permalink"></a></h3><table><tr><th style="text-align: right">Function</th><th style="text-align: right">Meaning</th></tr><tr><td style="text-align: right"><code>spacing(Ωₕ, i)</code></td><td style="text-align: right">backward spacing <span>$h_i = x_i - x_{i-1}$</span> (<span>$x_2 - x_1$</span> at <span>$i = 1$</span>)</td></tr><tr><td style="text-align: right"><code>forward_spacing(Ωₕ, i)</code></td><td style="text-align: right">forward spacing <span>$h_{i+1} = x_{i+1} - x_i$</span></td></tr><tr><td style="text-align: right"><code>half_spacing(Ωₕ, i)</code></td><td style="text-align: right">cell width <span>$h_{i+1/2} = (h_i + h_{i+1})/2$</span></td></tr><tr><td style="text-align: right"><code>cell_measure(Ωₕ, idx)</code></td><td style="text-align: right">measure of the control volume at <code>idx</code>: the product of the per-axis cell widths</td></tr><tr><td style="text-align: right"><code>hₘₐₓ(Ωₕ)</code></td><td style="text-align: right">largest cell measure in the mesh</td></tr></table><p>A 1D mesh stores its backward spacings, so <code>spacings</code> hands back the whole vector and the accessors index it. The cache is rebuilt by <code>set_points!</code>, and so by <a href="../../api/#Bramble.iterative_refinement!"><code>iterative_refinement!</code></a> and <a href="../../api/#Bramble.change_points!"><code>change_points!</code></a> as well:</p><pre><code class="language-julia hljs">spacings(Ωₕ_fig), spacings(Ωₕ_fig)[3] == spacing(Ωₕ_fig, 3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">([0.2, 0.2, 0.39999999999999997, 0.4], true)</code></pre><pre><code class="language-julia hljs">hₘₐₓ(Ωₕ_fig), cell_measure(Ωₕ_2d, (3, 4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.4, 0.011695906432748537)</code></pre><figure style="margin:1.5em 0;text-align:center">
+</figure>
+<p>Four conventions are worth reading off that picture, because they are the ones that surprise:</p>
+<ul class="md-list-tight">
+<li><p><strong><code class="md-code-inline">half_points</code> has <code class="md-code-inline">N + 1</code> entries.</strong> They are the cell interfaces, and the first and last coincide with <code class="md-code-inline">x₁</code> and <code class="md-code-inline">x_N</code> rather than sitting outside the domain.</p>
+</li>
+<li><p><strong>The cell around <code class="md-code-inline">xᵢ</code> spans <code class="md-code-inline">half_points[i]</code> to <code class="md-code-inline">half_points[i+1]</code></strong>, with width <code class="md-code-inline">half_spacing(Ωₕ, i)</code>, which is what <code class="md-code-inline">cell_measure(Ωₕ, i)</code> returns.</p>
+</li>
+<li><p><strong>Boundary cells are half-width</strong>, since <code class="md-code-inline">x₁</code> and <code class="md-code-inline">x_N</code> sit on the edge of their own cell rather than at its centre.</p>
+</li>
+<li><p><strong><code class="md-code-inline">spacing</code> looks backward, <code class="md-code-inline">forward_spacing</code> forward</strong>: <code class="md-code-inline">spacing(Ωₕ, i) = xᵢ - xᵢ₋₁</code> and <code class="md-code-inline">forward_spacing(Ωₕ, i) = xᵢ₊₁ - xᵢ</code>, each falling back to its neighbour at the end where the stencil runs out.</p>
+</li>
+</ul>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">half_points(Ωₕ_fig), [cell_measure(Ωₕ_fig, i) for i in 1:4]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.1, 0.4, 0.8, 1.0], [0.1, 0.3, 0.4, 0.2])</code></pre>
+</div>
+<p>The four cells sum to the domain length, and the two boundary cells are the smallest. The <a href="../../tutorials/mesh/#mesh_reference">reference</a> below lists the accessor for each quantity.</p>
+<div class="md-admonition md-admonition-tip">
+<p class="md-admonition-title">Try this</p>
+<div class="md-admonition-body">
+<p>Move the third point with <code class="md-code-inline">Bramble.set_points!(Ωₕ_fig, [0.0, 0.2, 0.8, 1.0])</code> and recompute the cell measures. The cells around <code class="md-code-inline">x₂</code> and <code class="md-code-inline">x₄</code> become 0.4 and 0.1, the cell around <code class="md-code-inline">x₃</code> stays 0.4 because it spans <code class="md-code-inline">(x₄ - x₂)/2</code>, and the sum is still 1.</p>
+</div>
+</div>
+<hr class="md-hr">
+<h2 id="Meshes-in-two-dimensions" class="md-heading">Meshes in two dimensions<a href="#Meshes-in-two-dimensions" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Above one dimension a mesh is a tensor product of 1D submeshes, stored per axis, so coordinate storage is <span class="md-math md-math-inline">\(O(N_x + N_y + N_z)\)</span> while the grid it addresses is the full product. The point count is one integer per axis, or a single integer for the same resolution along every axis. The distribution flag is per axis too: <code class="md-code-inline">(true, false)</code> would be uniform in <span class="md-math md-math-inline">\(x\)</span> and random in <span class="md-math md-math-inline">\(y\)</span>.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ_2d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (10, 20), (true, true))
+
+npoints(Ωₕ_2d, Tuple), size(Ωₕ_2d)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((10, 20), (10, 20))</code></pre>
+</div>
+<p><code class="md-code-inline">Ωₕ_2d(k)</code> is the submesh along axis <code class="md-code-inline">k</code>, and everything said above about a 1D mesh applies to it:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ_2d(1)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi"><span class="sgr36"><span class="sgr1">Mesh1D</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}
+<span class="sgr34">10 points</span>
+<span class="sgr90">Domain: </span>[0.0, 1.0]
+<span class="sgr90">Spacing: </span>uniform • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.111111</span>
+<span class="sgr90">Markers: </span><span class="sgr33">2 labels</span> • <span class="sgr32">:boundary</span> (<span class="sgr34">2</span>), <span class="sgr32">:interior</span> (<span class="sgr34">8</span>)</code></pre>
+</div>
+<p>The cell around <span class="md-math md-math-inline">\((x_i, y_j)\)</span> is the rectangle spanned by the two per-axis intervals, so its measure is the product of the per-axis widths. The picture shows a <span class="md-math md-math-inline">\(4 \times 3\)</span> mesh with non-uniform points on both axes:</p>
+<figure style="margin:1.5em 0;text-align:center">
 <svg viewBox="0 0 700 380" width="100%" style="max-width:700px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif" role="img"
      aria-label="Two-dimensional tensor-product mesh: the cell around a grid point is the product of its per-axis cell widths.">
   <defs>
@@ -151,13 +394,58 @@ points(Ωₕ_fig)</code></pre><pre class="documenter-example-output"><code class
   <text x="622" y="194" font-size="13" fill="#8b5cf6" text-anchor="start">half_spacing(Ωₕ(2), 2)</text>
   <text x="622" y="211" font-size="13" fill="#8b5cf6" text-anchor="start">= 0.5</text>
 </svg>
-</figure><p>The cell around <code>(xᵢ, yⱼ)</code> is the rectangle spanned by the two per-axis intervals, so its measure is the product of the per-axis widths. On the mesh drawn above:</p><pre><code class="language-julia hljs">Ω_prod = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+</figure>
+<p>The cell around <code class="md-code-inline">(x₃, y₂)</code> is highlighted. Its measure is the product of the two widths:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ω_prod = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
 Ωₕ_prod = mesh(Ω_prod, (4, 3), (true, true))
 change_points!(Ωₕ_prod, markers(Ω_prod), ([0.0, 0.2, 0.6, 1.0], [0.0, 0.5, 1.0]))
 
 cell_measure(Ωₕ_prod, CartesianIndex(3, 2)),
-half_spacing(Ωₕ_prod(1), 3) * half_spacing(Ωₕ_prod(2), 2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.2, 0.2)</code></pre><p>The cells tile the domain exactly here too: the twelve measures sum to the area.</p><pre><code class="language-julia hljs">sum(cell_measure(Ωₕ_prod, I) for I in indices(Ωₕ_prod))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.9999999999999999</code></pre><hr/><h2 id="3.-Boundary-and-interior-indexing"><a class="docs-heading-anchor" href="#3.-Boundary-and-interior-indexing">3. Boundary and interior indexing</a><a id="3.-Boundary-and-interior-indexing-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Boundary-and-interior-indexing" title="Permalink"></a></h2><p>Indices are Julia&#39;s own <code>CartesianIndices</code>:</p><pre><code class="language-julia hljs">indices(Ωₕ_prod), interior_indices(Ωₕ_prod)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(CartesianIndices((4, 3)), CartesianIndices((2:3, 2:2)))</code></pre><pre><code class="language-julia hljs">is_boundary_index(Ωₕ_prod, CartesianIndex(1, 2)),
-is_boundary_index(Ωₕ_prod, CartesianIndex(2, 2))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(true, false)</code></pre><p><code>boundary_indices(Ωₕ)</code> gives the facets separately, as a tuple of index sets.</p><hr/><h2 id="4.-Markers-on-meshes"><a class="docs-heading-anchor" href="#4.-Markers-on-meshes">4. Markers on meshes</a><a id="4.-Markers-on-meshes-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Markers-on-meshes" title="Permalink"></a></h2><p>Building a mesh over a labelled domain projects each marker onto the grid points as a <code>BitVector</code>, so membership is one lookup:</p><pre><code class="language-julia hljs">I = interval(0.0, 1.0)
+half_spacing(Ωₕ_prod(1), 3) * half_spacing(Ωₕ_prod(2), 2)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.2, 0.2)</code></pre>
+</div>
+<p>The cells tile the domain exactly: the twelve measures sum to the area.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">sum(cell_measure(Ωₕ_prod, I) for I in indices(Ωₕ_prod))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.9999999999999999</code></pre>
+</div>
+<p>Above 1D, <code class="md-code-inline">change_points!</code> takes the markers alongside the per-axis coordinate vectors, so the labels are re-evaluated at the new positions.</p>
+<div class="md-admonition md-admonition-tip">
+<p class="md-admonition-title">Try this</p>
+<div class="md-admonition-body">
+<p>Rebuild the product mesh with <code class="md-code-inline">(3, 3)</code> points and <code class="md-code-inline">[0.0, 0.5, 1.0]</code> on both axes. The single interior cell has measure <span class="md-math md-math-inline">\(0.25\)</span>, and the corner cells have <span class="md-math md-math-inline">\(0.0625\)</span>.</p>
+</div>
+</div>
+<hr class="md-hr">
+<h2 id="Boundary,-interior-and-markers" class="md-heading">Boundary, interior and markers<a href="#Boundary,-interior-and-markers" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Indices are Julia&#39;s own <code class="md-code-inline">CartesianIndices</code>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">indices(Ωₕ_prod), interior_indices(Ωₕ_prod)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(CartesianIndices((4, 3)), CartesianIndices((2:3, 2:2)))</code></pre>
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">is_boundary_index(Ωₕ_prod, CartesianIndex(1, 2)),
+is_boundary_index(Ωₕ_prod, CartesianIndex(2, 2))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, false)</code></pre>
+</div>
+<p>Building a mesh over a labelled domain projects each marker onto the grid points as a <code class="md-code-inline">BitVector</code>, so membership is one lookup. Here the domain has an inlet, an outlet, walls, and a disc-shaped obstacle given by a predicate:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">I = interval(0.0, 1.0)
 Ω_marked = domain(I × I,
     :left_inlet =&gt; :xmin,
     :right_outlet =&gt; :xmax,
@@ -166,10 +454,20 @@ is_boundary_index(Ωₕ_prod, CartesianIndex(2, 2))</code></pre><pre class="docu
 
 Ωₕ_marked = mesh(Ω_marked, (20, 20))
 
-sum(index_in_marker(Ωₕ_marked, :walls)), sum(index_in_marker(Ωₕ_marked, :obstacle))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(40, 24)</code></pre><hr/><h2 id="5.-Mesh-adaptation"><a class="docs-heading-anchor" href="#5.-Mesh-adaptation">5. Mesh adaptation</a><a id="5.-Mesh-adaptation-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Mesh-adaptation" title="Permalink"></a></h2><h3 id="5.1-In-place-refinement"><a class="docs-heading-anchor" href="#5.1-In-place-refinement">5.1 In-place refinement</a><a id="5.1-In-place-refinement-1"></a><a class="docs-heading-anchor-permalink" href="#5.1-In-place-refinement" title="Permalink"></a></h3><p><a href="../../api/#Bramble.iterative_refinement!"><code>iterative_refinement!</code></a> inserts a point at every cell midpoint, updating indices and reapplying the domain&#39;s markers. Refinement is uniform and dyadic: <code>N</code> points become <code>2N - 1</code> along every axis.</p><p>A mesh carrying custom markers needs the two-argument form: the labels are re-evaluated on the new points, and refining without a domain to re-derive them from is an error rather than a silent loss.</p><pre><code class="language-julia hljs">Ωₕ_ref = mesh(Ω_marked, (20, 20))
-iterative_refinement!(Ωₕ_ref, markers(Ω_marked))
-
-npoints(Ωₕ_ref, Tuple), sum(index_in_marker(Ωₕ_ref, :obstacle))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">((39, 39), 101)</code></pre><figure>
+sum(index_in_marker(Ωₕ_marked, :walls)), sum(index_in_marker(Ωₕ_marked, :obstacle))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(40, 24)</code></pre>
+</div>
+<div class="md-admonition md-admonition-tip">
+<p class="md-admonition-title">Try this</p>
+<div class="md-admonition-body">
+<p>Change the radius <code class="md-code-inline">0.15</code> to <code class="md-code-inline">0.3</code> and rebuild. The obstacle count grows roughly fourfold, with the disc area.</p>
+</div>
+</div>
+<hr class="md-hr">
+<h2 id="Refinement" class="md-heading">Refinement<a href="#Refinement" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a> inserts a point at every cell midpoint, updating indices and reapplying the domain&#39;s markers. Refinement is uniform and dyadic: <code class="md-code-inline">N</code> points become <code class="md-code-inline">2N - 1</code> along every axis.</p>
+<figure>
 <svg viewBox="0 0 740 210" width="100%" style="max-width:740px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
      xmlns="http://www.w3.org/2000/svg" role="img"
      aria-label="Diagram showing dyadic iterative_refinement! on a 1D mesh: coarse mesh with N=5 points splits into 2N-1=9 points by inserting midpoints.">
@@ -237,18 +535,132 @@ npoints(Ωₕ_ref, Tuple), sum(index_in_marker(Ωₕ_ref, :obstacle))</code></pr
   <circle cx="620" cy="28" r="4" fill="#10b981"/>
   <text x="630" y="32" font-size="11" fill="currentColor">new midpoints</text>
 </svg>
-</figure><h3 id="5.2-Relocating-coordinates"><a class="docs-heading-anchor" href="#5.2-Relocating-coordinates">5.2 Relocating coordinates</a><a id="5.2-Relocating-coordinates-1"></a><a class="docs-heading-anchor-permalink" href="#5.2-Relocating-coordinates" title="Permalink"></a></h3><p><a href="../../api/#Bramble.change_points!"><code>change_points!</code></a> replaces the coordinates of an existing mesh, keeping the point count, which is what a moving boundary or a graded grid needs:</p><pre><code class="language-julia hljs">Ωₕ_move = mesh(domain(interval(0.0, 1.0)), 11)
-change_points!(Ωₕ_move, collect(range(0.0, 1.0, length = npoints(Ωₕ_move)) .^ 2))
+</figure>
+<p>A mesh carrying custom markers needs the two-argument form: the labels are re-evaluated on the new points, and refining without a domain to re-derive them from is an error rather than a silent loss.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ_ref = mesh(Ω_marked, (20, 20))
+iterative_refinement!(Ωₕ_ref, markers(Ω_marked))
 
-points(Ωₕ_move)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">11-element Vector{Float64}:
- 0.0
- 0.010000000000000002
- 0.04000000000000001
- 0.09
- 0.16000000000000003
- 0.25
- 0.36
- 0.48999999999999994
- 0.6400000000000001
- 0.81
- 1.0</code></pre><p>Above 1D, pass the markers alongside the per-axis coordinate vectors so the labels are re-evaluated at the new positions, as §2&#39;s product mesh does. <code>Bramble.set_points!</code> is the variant that also accepts a different point count.</p><p>Next: <a href="../space/">grid spaces</a>, which put discrete functions on a mesh.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../geometry/">« Geometry tutorial</a><a class="docs-footer-nextpage" href="../space/">Grid spaces and discrete functions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 29 September 2026 21:39">Tuesday 29 September 2026</span>. Using Julia version 1.13.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+npoints(Ωₕ_ref, Tuple), sum(index_in_marker(Ωₕ_ref, :obstacle))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((39, 39), 101)</code></pre>
+</div>
+<hr class="md-hr">
+<h2 id="mesh_reference" class="md-heading">Reference<a href="#mesh_reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<h3 id="Constructing-from-a-set" class="md-heading">Constructing from a set<a href="#Constructing-from-a-set" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>A geometric set can be passed directly when no custom labels are needed. <code class="md-code-inline">:boundary</code> and <code class="md-code-inline">:interior</code> are provisioned either way:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">X = interval(0.0, 1.0) × interval(0.0, 2.0)
+Ωₕ_direct = mesh(X, 20)      # isotropic: 20 × 20
+
+:boundary in keys(markers(Ωₕ_direct)), :interior in keys(markers(Ωₕ_direct))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
+</div>
+<h3 id="Points-and-half-points" class="md-heading">Points and half points<a href="#Points-and-half-points" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p><code class="md-code-inline">points</code> returns the coordinate vector, or a tuple of them above 1D. A single coordinate comes from <code class="md-code-inline">point(Ωₕ, idx)</code> or from indexing, with a linear index, a tuple or a <code class="md-code-inline">CartesianIndex</code>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ_fig[3], point(Ωₕ_fig, 3), Ωₕ_2d[2, 5], point(Ωₕ_2d, CartesianIndex(2, 5))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6, 0.6, (0.1111111111111111, 0.42105263157894735), (0.1111111111111111, 0.42105263157894735))</code></pre>
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">half_points(Ωₕ_fig), half_point(Ωₕ_fig, 3)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.1, 0.4, 0.8, 1.0], 0.4)</code></pre>
+</div>
+<h3 id="Spacings-and-cell-measures" class="md-heading">Spacings and cell measures<a href="#Spacings-and-cell-measures" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:right">Function</th>
+<th style="text-align:right">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">spacing(Ωₕ, i)</code></td>
+<td style="text-align:right">backward spacing <span class="md-math md-math-inline">\(h_i = x_i - x_{i-1}\)</span> (<span class="md-math md-math-inline">\(x_2 - x_1\)</span> at <span class="md-math md-math-inline">\(i = 1\)</span>)</td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">forward_spacing(Ωₕ, i)</code></td>
+<td style="text-align:right">forward spacing <span class="md-math md-math-inline">\(h_{i+1} = x_{i+1} - x_i\)</span></td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">half_spacing(Ωₕ, i)</code></td>
+<td style="text-align:right">cell width <span class="md-math md-math-inline">\(h_{i+1/2} = (h_i + h_{i+1})/2\)</span></td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">cell_measure(Ωₕ, idx)</code></td>
+<td style="text-align:right">measure of the control volume at <code class="md-code-inline">idx</code>: the product of the per-axis cell widths</td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">hₘₐₓ(Ωₕ)</code></td>
+<td style="text-align:right">largest cell measure in the mesh</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A 1D mesh stores its backward spacings, so <code class="md-code-inline">spacings</code> hands back the whole vector and the accessors index it. The cache is rebuilt by <code class="md-code-inline">set_points!</code>, and so by <a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a> and <a href="../../api/meshes/#Bramble.change_points!"><code class="md-code-inline">change_points!</code></a> as well:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">spacings(Ωₕ_fig), spacings(Ωₕ_fig)[3] == spacing(Ωₕ_fig, 3)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.2, 0.2, 0.39999999999999997, 0.4], true)</code></pre>
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">hₘₐₓ(Ωₕ_fig), cell_measure(Ωₕ_2d, (3, 4))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.4, 0.011695906432748537)</code></pre>
+</div>
+<p><code class="md-code-inline">boundary_indices(Ωₕ)</code> gives the boundary facets separately, as a tuple of index sets.</p>
+      </article>
+      <footer class="md-footer">
+<p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
+      </footer>
+    </main>
+    <aside class="md-toc">
+      <div class="md-toc-inner">
+        <p class="md-toc-title">On this page</p>
+          <a class="md-toc-link md-toc-h2" href="#A-first-mesh">A first mesh</a>
+          <a class="md-toc-link md-toc-h2" href="#Non-uniform-meshes">Non-uniform meshes</a>
+          <a class="md-toc-link md-toc-h2" href="#Half-points,-spacings-and-cell-measures">Half points, spacings and cell measures</a>
+          <a class="md-toc-link md-toc-h2" href="#Meshes-in-two-dimensions">Meshes in two dimensions</a>
+          <a class="md-toc-link md-toc-h2" href="#Boundary,-interior-and-markers">Boundary, interior and markers</a>
+          <a class="md-toc-link md-toc-h2" href="#Refinement">Refinement</a>
+          <a class="md-toc-link md-toc-h2" href="#mesh_reference">Reference</a>
+            <a class="md-toc-link md-toc-h3" href="#Constructing-from-a-set">Constructing from a set</a>
+            <a class="md-toc-link md-toc-h3" href="#Points-and-half-points">Points and half points</a>
+            <a class="md-toc-link md-toc-h3" href="#Spacings-and-cell-measures">Spacings and cell measures</a>
+      </div>
+    </aside>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia-repl.min.js"></script>
+  <script>hljs.highlightAll();</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.js"></script>
+  <script>var MD_KATEX_OPTIONS = {};
+document.querySelectorAll('.md-math').forEach(function (el) {
+  var tex = el.textContent.trim().replace(/^\\[\[(]/, '').replace(/\\[\])]$/, '');
+  katex.render(tex, el, Object.assign({ throwOnError: false }, MD_KATEX_OPTIONS,
+    { displayMode: el.classList.contains('md-math-display') }));
+});</script>
+  <script src="../../siteinfo.js"></script>
+  <script src="../../../versions.js"></script>
+  <script src="../../assets/materialdocs.js?v=1c54b00f"></script>
+</body>
+</html>

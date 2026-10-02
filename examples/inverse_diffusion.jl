@@ -41,7 +41,7 @@
 #     dozen machine words, so any difference operator in 2D or 3D): the single 1D term below
 #     is well inside it.
 #
-# ## Solving it
+# ## Discretisation and the forward solve
 
 using Bramble
 
@@ -116,16 +116,20 @@ end
 # adjoint solve, regardless of how many parameters `κ` were -- a coefficient *field* with one
 # value per grid point would cost the same two solves, where forward-mode differentiation
 # through the same model would cost one solve per parameter. A direct timing comparison against
-# a naive `ForwardDiff`-through-the-solve baseline is not run on this page (that baseline fails
-# outright here for an unrelated reason: UMFPACK's sparse factorisation only accepts
-# `Float64`/`ComplexF64`, so `A \ F` for a `Dual`-valued `F` errors regardless of this scaling
-# question -- `docs/src/tutorials/autodiff.md` §5 documents this and recommends a dense
-# conversion or an iterative solver as the forward-mode workaround) -- see
-# `test/ext/chainrules_ext.jl` for the scaling measurement itself: the adjoint rule's own
-# pullback cost against `nθ` separate forward solves, the per-parameter cost a naive
-# forward-mode scheme pays.
+# a naive `ForwardDiff`-through-the-solve baseline is not run on this page, because that
+# baseline fails outright here for an unrelated reason. UMFPACK's sparse factorisation only
+# accepts `Float64`/`ComplexF64`, so `A \ F` for a `Dual`-valued `F` errors regardless of this
+# scaling question; `docs/src/tutorials/autodiff.md` §5 documents this and recommends a dense
+# conversion or an iterative solver as the forward-mode workaround. See
+# `test/ext/chainrules_ext.jl` for the scaling measurement itself, which compares the adjoint
+# rule's own pullback cost against `nθ` separate forward solves, the per-parameter cost a
+# naive forward-mode scheme pays.
 #
-# ## See also
+# ## Where to go next
 #
 #   - [`pde_solve`](@ref) in the [API reference](../api.md).
 #   - [Linear Poisson](poisson_linear.md) for the forward problem this inverts.
+#   - [Recovering parameters from a trajectory](transient_inverse_problem.md) for the
+#     transient version, with two parameters and a different adjoint.
+#   - [Automatic differentiation](../tutorials/autodiff.md) for the differentiation tools
+#     this page relies on.

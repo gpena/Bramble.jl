@@ -1,20 +1,176 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Graded meshes for a boundary layer · Bramble.jl</title><meta name="title" content="Graded meshes for a boundary layer · Bramble.jl"/><meta property="og:title" content="Graded meshes for a boundary layer · Bramble.jl"/><meta property="twitter:title" content="Graded meshes for a boundary layer · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;family=Source+Sans+3:wght@400;600&amp;display=swap" rel="stylesheet" type="text/css"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="Bramble.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting started</a></li><li><span class="tocitem">Discrete foundations</span><ul><li><a class="tocitem" href="../../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../../tutorials/operators/">Difference, jump and average operators</a></li></ul></li><li><span class="tocitem">Forms and assembly</span><ul><li><a class="tocitem" href="../../tutorials/form/">Linear and bilinear forms</a></li></ul></li><li><span class="tocitem">Solvers and scientific computing</span><ul><li><a class="tocitem" href="../../tutorials/solvers/">Choosing a solver, backend, and execution policy</a></li><li><a class="tocitem" href="../../tutorials/autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../../tutorials/backend/">Backend tutorial</a></li></ul></li><li><span class="tocitem">Visualization and export</span><ul><li><a class="tocitem" href="../../tutorials/plotting/">Plotting directly</a></li><li><a class="tocitem" href="../../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../convection_diffusion_linear/">Convection-diffusion equation</a></li><li><a class="tocitem" href="../coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li><li><a class="tocitem" href="../elasticity_3d/">Linear elasticity in three dimensions</a></li><li><a class="tocitem" href="../heat_equation/">Heat equation</a></li><li><a class="tocitem" href="../amg_preconditioning/">Algebraic multigrid preconditioning</a></li><li><a class="tocitem" href="../inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a></li><li><a class="tocitem" href="../transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a></li><li><a class="tocitem" href="../wave_equation_2d/">Acoustic wave equation in two dimensions</a></li><li><a class="tocitem" href="../point_sources_flux/">Point sources and boundary flux recovery</a></li><li><a class="tocitem" href="../transient_inplace/">A transient loop that allocates nothing</a></li><li class="is-active"><a class="tocitem" href>Graded meshes for a boundary layer</a><ul class="internal"><li><a class="tocitem" href="#Problem"><span>Problem</span></a></li><li><a class="tocitem" href="#Building-a-graded-mesh"><span>Building a graded mesh</span></a></li><li><a class="tocitem" href="#The-comparison"><span>The comparison</span></a></li><li><a class="tocitem" href="#How-far-refinement-gets-you"><span>How far refinement gets you</span></a></li><li><a class="tocitem" href="#Choosing-σ"><span>Choosing σ</span></a></li><li><a class="tocitem" href="#See-also"><span>See also</span></a></li></ul></li><li><a class="tocitem" href="../memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><a class="tocitem" href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a></li><li><input class="collapse-toggle" id="menuitem-9-3" type="checkbox"/><label class="tocitem" for="menuitem-9-3"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li><li><a class="tocitem" href="../../internals/exporters/">Exporters</a></li><li><a class="tocitem" href="../../internals/gpu/">GPU acceleration</a></li><li><a class="tocitem" href="../../internals/csr_solvers/"><code>SparseMatrixCSR</code> direct solve</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Graded meshes for a boundary layer</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Graded meshes for a boundary layer</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/boundary_layer_graded.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Graded-meshes-for-a-boundary-layer"><a class="docs-heading-anchor" href="#Graded-meshes-for-a-boundary-layer">Graded meshes for a boundary layer</a><a id="Graded-meshes-for-a-boundary-layer-1"></a><a class="docs-heading-anchor-permalink" href="#Graded-meshes-for-a-boundary-layer" title="Permalink"></a></h1><p>Bramble&#39;s schemes are built for non-uniform grids, and this is the problem that makes that worth having: a solution with a thin layer, where the points a uniform mesh spends in the smooth region are wasted and the ones it spends in the layer are too few.</p><p>This page is generated from <code>docs/src/examples/boundary_layer_graded.jl</code> by Literate.jl, and the same file runs under <code>test/examples/pages.jl</code>, where the <code>#src</code> assertions execute.</p><h2 id="Problem"><a class="docs-heading-anchor" href="#Problem">Problem</a><a id="Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Problem" title="Permalink"></a></h2><p class="math-container">\[-\varepsilon u&#39;&#39; + u&#39; = 1 \text{ in } (0,1), \qquad u(0) = u(1) = 0,\]</p><p>with <span>$\varepsilon = 10^{-3}$</span>. The exact solution</p><p class="math-container">\[u_{\text{exact}}(x) = x - \frac{e^{(x-1)/\varepsilon} - e^{-1/\varepsilon}}
-                               {1 - e^{-1/\varepsilon}}\]</p><p>rises like <code>x</code> across the domain and then drops to zero inside a layer of width <span>$\mathcal{O}(\varepsilon)$</span> at <code>x = 1</code>. Written this way rather than with <span>$e^{1/\varepsilon}$</span> in a denominator, which overflows at this <span>$\varepsilon$</span>.</p><pre><code class="language-julia hljs">using Bramble
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Graded meshes for a boundary layer — Bramble.jl</title>
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=3295ef38">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <meta name="title" content="Graded meshes for a boundary layer — Bramble.jl">
+  <meta property="og:title" content="Graded meshes for a boundary layer — Bramble.jl">
+  <meta property="twitter:title" content="Graded meshes for a boundary layer — Bramble.jl">
+  <meta name="description" content="Documentation for Bramble.jl.">
+  <meta property="og:description" content="Documentation for Bramble.jl.">
+  <meta property="twitter:description" content="Documentation for Bramble.jl.">
+  <link rel="icon" type="image/x-icon" href="../../assets/favicon.ico">
+  <link rel="stylesheet" href="../../assets/custom.css">
+  <script>
+    (function(){
+      document.documentElement.classList.add('no-transition');
+      var t=localStorage.getItem('md-theme');if(t)document.documentElement.setAttribute('data-theme',t);
+      window.addEventListener('load',function(){setTimeout(function(){document.documentElement.classList.remove('no-transition');},50);});
+    })()
+  </script>
+</head>
+<body data-warn-outdated>
+  <header class="md-navbar">
+    <button id="md-hamburger" class="md-icon-btn md-hamburger" aria-label="Toggle navigation" aria-expanded="false"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></button>
+    <img class="md-navbar-logo md-logo-light" src="../../assets/logo.svg" alt="Bramble.jl logo" height="32">
+    <img class="md-navbar-logo md-logo-dark" src="../../assets/logo-dark.svg" alt="Bramble.jl logo" height="32">
+    <span class="md-navbar-title">Bramble.jl</span>
+    <span class="md-navbar-spacer"></span>
+    <button id="md-search-btn" class="md-search-bar" aria-label="Search documentation" aria-expanded="false">
+      <svg class="md-icon md-search-bar-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <span class="md-search-bar-label">Search docs</span>
+      <kbd class="md-search-bar-kbd">Ctrl K</kbd>
+    </button>
+    <a class="md-icon-btn md-repo-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub" aria-label="View the repository on GitHub" rel="noopener" target="_blank"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 .3a12 12 0 00-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 016 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0012 .3z"/></svg><span class="md-repo-label">GitHub</span></a>
+    <button id="md-theme-toggle" class="md-icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode"><svg class="md-icon md-icon-light" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg><svg class="md-icon md-icon-dark" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg></button>
+  </header>
+  <div class="md-layout">
+    <nav class="md-sidebar">
+      <a href="../../">Home</a>
+      <a href="../../getting_started/">Getting started</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Discrete foundations</span>
+        <a href="../../tutorials/geometry/">Geometry tutorial</a>
+        <a href="../../tutorials/mesh/">Mesh tutorial</a>
+        <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
+        <a href="../../tutorials/operators/">Difference, jump and average operators</a>
+        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
+        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Forms and assembly</span>
+        <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Solvers and scientific computing</span>
+        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
+        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
+        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <a href="../../tutorials/backend/">Backends and execution policies</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Visualization and export</span>
+        <a href="../../tutorials/plotting/">Plotting directly</a>
+        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
+        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Examples</span>
+        <div class="md-nav-section">
+          <span class="md-nav-section-title">Stationary problems</span>
+          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
+          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
+          <a href="../../examples/boundary_layer_graded/" class="md-nav-active">Graded meshes for a boundary layer</a>
+          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Time-dependent problems</span>
+          <a href="../../examples/heat_equation/">Heat equation</a>
+          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Inverse problems</span>
+          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
+          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Solvers and performance</span>
+          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
+          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
+          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
+        </div>
+      </div>
+      <a href="../../benchmarks/">Benchmarks</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Documentation</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">API reference</span>
+          <a href="../../api/">API reference</a>
+          <a href="../../api/utilities/">Utilities</a>
+          <a href="../../api/geometry/">Geometry</a>
+          <a href="../../api/meshes/">Meshes</a>
+          <a href="../../api/spaces/">Grid spaces</a>
+          <a href="../../api/operators/">Difference, jump and average operators</a>
+          <a href="../../api/inner_products/">Inner products and norms</a>
+          <a href="../../api/forms/">Forms</a>
+          <a href="../../api/exporters/">Exporters</a>
+        </div>
+        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Internals</span>
+          <a href="../../internals/utils/">Utilities</a>
+          <a href="../../internals/geometry/">Geometry</a>
+          <a href="../../internals/mesh/">Mesh</a>
+          <a href="../../internals/space/">Spaces</a>
+          <a href="../../internals/form/">Forms</a>
+          <a href="../../internals/autodiff/">Automatic differentiation</a>
+          <a href="../../internals/exporters/">Exporters</a>
+          <a href="../../internals/gpu/">GPU acceleration</a>
+          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
+        </div>
+      </div>
+    </nav>
+    <main class="md-content">
+      <article class="md-article">
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/boundary_layer_graded.jl" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+<h1 id="Graded-meshes-for-a-boundary-layer" class="md-heading">Graded meshes for a boundary layer<a href="#Graded-meshes-for-a-boundary-layer" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
+<p>Bramble&#39;s schemes are built for non-uniform grids, and this is the problem that makes that worth having: a solution with a thin layer, where the points a uniform mesh spends in the smooth region are wasted and the ones it spends in the layer are too few.</p>
+<p>This page is generated from <code class="md-code-inline">docs/src/examples/boundary_layer_graded.jl</code> by Literate.jl, and the same file runs under <code class="md-code-inline">test/examples/pages.jl</code>, where the <code class="md-code-inline">#src</code> assertions execute.</p>
+<h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<div class="md-math md-math-display">
+\[-\varepsilon u&#39;&#39; + u&#39; = 1 \text{ in } (0,1), \qquad u(0) = u(1) = 0,\]
+</div>
+<p>with <span class="md-math md-math-inline">\(\varepsilon = 10^{-3}\)</span>. The exact solution</p>
+<div class="md-math md-math-display">
+\[u_{\text{exact}}(x) = x - \frac{e^{(x-1)/\varepsilon} - e^{-1/\varepsilon}}
+                               {1 - e^{-1/\varepsilon}}\]
+</div>
+<p>rises like <code class="md-code-inline">x</code> across the domain and then drops to zero inside a layer of width <span class="md-math md-math-inline">\(\mathcal{O}(\varepsilon)\)</span> at <code class="md-code-inline">x = 1</code>. Written this way rather than with <span class="md-math md-math-inline">\(e^{1/\varepsilon}\)</span> in a denominator, which overflows at this <span class="md-math md-math-inline">\(\varepsilon\)</span>.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble
 using Bramble: change_points!
 
 const ε = 1.0e-3
 
 uexact(x) = x[1] - (exp((x[1] - 1) / ε) - exp(-1 / ε)) / (1 - exp(-1 / ε))
 
-Ω = domain(interval(0.0, 1.0), :left =&gt; :left, :right =&gt; :right)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr36"><span class="sgr1">Domain</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}:
+Ω = domain(interval(0.0, 1.0), :left =&gt; :left, :right =&gt; :right)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi"><span class="sgr36"><span class="sgr1">Domain</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}:
 
   <span class="sgr94"><span class="sgr1">Set:</span></span>
     <span class="sgr33">Interval</span> [<span class="sgr34">0.0, 1.0</span>]
 
   <span class="sgr94"><span class="sgr1">Markers:</span></span>
     <span class="sgr33">2 markers</span> (2 symbols)
-    <span class="sgr90">Labels: </span><span class="sgr32">:left</span>, <span class="sgr32">:right</span></code></pre><p>The convective term is <code>inner₊(Mₕ(u), ∇ₕ(v))</code>, the same staggered discretisation the <a href="../convection_diffusion_linear/">convection-diffusion example</a> uses. It is the discrete counterpart of <span>$\int u v&#39;$</span>, which integration by parts turns into <span>$-\int u&#39; v$</span>, so a convective term <code>+u&#39;</code> in the equation enters the form with a minus sign.</p><pre><code class="language-julia hljs">function solve_on(pts)
+    <span class="sgr90">Labels: </span><span class="sgr32">:left</span>, <span class="sgr32">:right</span></code></pre>
+</div>
+<p>The convective term is <code class="md-code-inline">inner₊(Mₕ(u), ∇ₕ(v))</code>, the same staggered discretisation the <a href="../../examples/convection_diffusion_linear/">convection-diffusion example</a> uses. It is the discrete counterpart of <span class="md-math md-math-inline">\(\int u v&#39;\)</span>, which integration by parts turns into <span class="md-math md-math-inline">\(-\int u&#39; v\)</span>, so a convective term <code class="md-code-inline">+u&#39;</code> in the equation enters the form with a minus sign.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">function solve_on(pts)
     Ωₕ = mesh(Ω, length(pts))
     change_points!(Ωₕ, collect(pts))
     Wₕ = gridspace(Ωₕ)
@@ -30,39 +186,73 @@ uexact(x) = x[1] - (exp((x[1] - 1) / ε) - exp(-1 / ε)) / (1 - exp(-1 / ε))
     overshoot = maximum(parent(uₕ)) - maximum(parent(exact))
 
     return normₕ(uₕ - exact), overshoot
-end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">solve_on (generic function with 1 method)</code></pre><h2 id="Building-a-graded-mesh"><a class="docs-heading-anchor" href="#Building-a-graded-mesh">Building a graded mesh</a><a id="Building-a-graded-mesh-1"></a><a class="docs-heading-anchor-permalink" href="#Building-a-graded-mesh" title="Permalink"></a></h2><p>Bramble ships no stretching helper, and the <code>uniform = false</code> flag is not one: it draws interior points at random and sorts them, which is what the convergence studies elsewhere use to expose order reduction, not a grading. <a href="../../api/#Bramble.iterative_refinement!"><code>iterative_refinement!</code></a> is not one either: it halves every cell, everywhere.</p><p>A graded mesh is a point vector, written by hand and installed with <a href="../../api/#Bramble.change_points!"><code>change_points!</code></a>. A <code>tanh</code> map clusters points towards <code>x = 1</code>, with <code>σ</code> setting how hard:</p><pre><code class="language-julia hljs">uniform_points(n) = collect(range(0.0, 1.0, length = n))
+end</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">solve_on (generic function with 1 method)</code></pre>
+</div>
+<h2 id="Building-a-graded-mesh" class="md-heading">Building a graded mesh<a href="#Building-a-graded-mesh" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Bramble ships no stretching helper, and the <code class="md-code-inline">uniform = false</code> flag is not one: it draws interior points at random and sorts them, which is what the convergence studies elsewhere use to expose order reduction, not a grading. <a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a> is not one either: it halves every cell, everywhere.</p>
+<p>A graded mesh is a point vector, written by hand and installed with <a href="../../api/meshes/#Bramble.change_points!"><code class="md-code-inline">change_points!</code></a>. A <code class="md-code-inline">tanh</code> map clusters points towards <code class="md-code-inline">x = 1</code>, with <code class="md-code-inline">σ</code> setting how hard:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">uniform_points(n) = collect(range(0.0, 1.0, length = n))
 graded_points(n; σ = 4.0) = [tanh(σ * t) / tanh(σ) for t in range(0.0, 1.0, length = n)]
 
 g = graded_points(41)
-extrema(diff(g)), extrema(diff(uniform_points(41)))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">((0.0001485336906241752, 0.09973488683958324), (0.02499999999999991, 0.025000000000000022))</code></pre><p>The finest cell is about 170 times smaller than the uniform one and the coarsest about four times larger, on the same 41 points. The layer is <code>ε = 10⁻³</code> wide, so the fine end is where it has to be.</p><h2 id="The-comparison"><a class="docs-heading-anchor" href="#The-comparison">The comparison</a><a id="The-comparison-1"></a><a class="docs-heading-anchor-permalink" href="#The-comparison" title="Permalink"></a></h2><p>At equal degrees of freedom:</p><pre><code class="language-julia hljs">err_uniform, over_uniform = solve_on(uniform_points(41))
+extrema(diff(g)), extrema(diff(uniform_points(41)))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((0.0001485336906241752, 0.09973488683958324), (0.02499999999999991, 0.025000000000000022))</code></pre>
+</div>
+<p>The finest cell is about 170 times smaller than the uniform one and the coarsest about four times larger, on the same 41 points. The layer is <code class="md-code-inline">ε = 10⁻³</code> wide, so the fine end is where it has to be.</p>
+<h2 id="The-comparison" class="md-heading">The comparison<a href="#The-comparison" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>At equal degrees of freedom:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">err_uniform, over_uniform = solve_on(uniform_points(41))
 err_graded, over_graded = solve_on(graded_points(41))
 
 
-(err_uniform, over_uniform), (err_graded, over_graded)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">((0.25764812823598154, 0.854891907145086), (0.0001611149587800358, 0.0005226791856358659))</code></pre><p>Three orders of magnitude in the error, and the overshoot tells the same story more physically: the uniform solution rises to nearly 1.9 where the exact solution peaks just below 1, because a cell wider than the layer cannot represent the drop and oscillates instead. The graded solution overshoots by less than a thousandth.</p><p>The oscillation is not a solver problem and no amount of tightening a tolerance removes it. The cell Péclet number <code>h / (2ε)</code> is what decides it, and on a uniform mesh with <code>h = 1/40</code> at <code>ε = 10⁻³</code> that number is twelve.</p><h2 id="How-far-refinement-gets-you"><a class="docs-heading-anchor" href="#How-far-refinement-gets-you">How far refinement gets you</a><a id="How-far-refinement-gets-you-1"></a><a class="docs-heading-anchor-permalink" href="#How-far-refinement-gets-you" title="Permalink"></a></h2><p>Refining the uniform mesh does work, eventually:</p><pre><code class="language-julia hljs">ns = (41, 81, 161, 321, 641)
+(err_uniform, over_uniform), (err_graded, over_graded)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((0.25764812823598154, 0.854891907145086), (0.0001611149587800358, 0.0005226791856358659))</code></pre>
+</div>
+<p>Three orders of magnitude in the error, and the overshoot tells the same story more physically: the uniform solution rises to nearly 1.9 where the exact solution peaks just below 1, because a cell wider than the layer cannot represent the drop and oscillates instead. The graded solution overshoots by less than a thousandth.</p>
+<p>The oscillation is not a solver problem and no amount of tightening a tolerance removes it. The cell Péclet number <code class="md-code-inline">h / (2ε)</code> is what decides it, and on a uniform mesh with <code class="md-code-inline">h = 1/40</code> at <code class="md-code-inline">ε = 10⁻³</code> that number is twelve.</p>
+<h2 id="How-far-refinement-gets-you" class="md-heading">How far refinement gets you<a href="#How-far-refinement-gets-you" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Refining the uniform mesh does work, eventually:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">ns = (41, 81, 161, 321, 641)
 uniform_errors = [solve_on(uniform_points(n))[1] for n in ns]
 graded_errors = [solve_on(graded_points(n))[1] for n in ns]
 
 
-collect(zip(ns, uniform_errors, graded_errors))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5-element Vector{Tuple{Int64, Float64, Float64}}:
+collect(zip(ns, uniform_errors, graded_errors))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">5-element Vector{Tuple{Int64, Float64, Float64}}:
  (41, 0.25764812823598154, 0.0001611149587800358)
  (81, 0.11739385616588645, 3.999066792907774e-5)
  (161, 0.04764718665698222, 9.98002368241192e-6)
  (321, 0.014964991485825349, 2.4939085914694133e-6)
- (641, 0.0036281912058334902, 6.234086532287204e-7)</code></pre><p>The graded mesh at 41 points is already better than the uniform one at 641. That is the whole argument for a non-uniform Cartesian grid: the points go where the solution varies, and the scheme keeps its order on them.</p><script>
-  // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
-  // `window.Plotly` instead of registering as an anonymous AMD module.
-  window.__bramble_amd_define = window.define;
-  window.define = undefined;
-</script>
+ (641, 0.0036281912058334902, 6.234086532287204e-7)</code></pre>
+</div>
+<p>The graded mesh at 41 points is already better than the uniform one at 641. That is the whole argument for a non-uniform Cartesian grid: the points go where the solution varies, and the scheme keeps its order on them.</p>
+<div class="md-multi-output">
+<div class="md-output md-output-html">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script>
-  window.define = window.__bramble_amd_define;
-
-  // Colour tokens read from the page's own theme, not hard-coded — Documenter stamps
-  // `theme--documenter-dark` on <html> when dark mode is active, light mode has no such
-  // class. Recomputed on every call so a caller can re-theme after a toggle.
+  // Colour tokens read from the page's own theme, not hard-coded — MaterialDocs sets
+  // `data-theme="light"|"dark"` on <html>; when the attribute is absent the browser's
+  // `prefers-color-scheme` decides. Recomputed on every call so a caller can re-theme
+  // after a toggle.
   window.bramblePlotlyTheme = function () {
-    const dark = document.documentElement.className.includes('documenter-dark');
+    const attr = document.documentElement.getAttribute('data-theme');
+    const dark = attr
+      ? attr === 'dark'
+      : window.matchMedia('(prefers-color-scheme: dark)').matches;
     return dark
       ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
       : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
@@ -77,15 +267,21 @@ collect(zip(ns, uniform_errors, graded_errors))</code></pre><pre class="document
   };
 
   if (!window.__bramble_plotly_theme_observer) {
-    window.__bramble_plotly_theme_observer = new MutationObserver(function () {
+    const repaint = function () {
       for (const { divId, restyle } of window.__bramble_plotly_charts) {
         const layout = restyle();
         Plotly.relayout(divId, layout);
       }
-    });
+    };
+    window.__bramble_plotly_theme_observer = new MutationObserver(repaint);
     window.__bramble_plotly_theme_observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['class'],
+      attributeFilter: ['data-theme'],
+    });
+    // With no saved theme MaterialDocs follows the system scheme in CSS alone and
+    // leaves `data-theme` unset, so a system change must repaint too.
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+      if (!document.documentElement.hasAttribute('data-theme')) repaint();
     });
   }
 
@@ -162,14 +358,67 @@ collect(zip(ns, uniform_errors, graded_errors))</code></pre><pre class="document
   });
 })();
 </script>
-<h2 id="Choosing-σ"><a class="docs-heading-anchor" href="#Choosing-σ">Choosing σ</a><a id="Choosing-σ-1"></a><a class="docs-heading-anchor-permalink" href="#Choosing-σ" title="Permalink"></a></h2><p>Grading is a parameter, and both extremes are bad: too little leaves the layer unresolved, too much starves the smooth region and the coarse cells there start to oscillate on their own account.</p><pre><code class="language-julia hljs">σs = (1.0, 2.0, 3.0, 4.0, 6.0, 8.0)
+
+</div>
+</div>
+<h2 id="Choosing-σ" class="md-heading">Choosing σ<a href="#Choosing-σ" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Grading is a parameter, and both extremes are bad: too little leaves the layer unresolved, too much starves the smooth region and the coarse cells there start to oscillate on their own account.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">σs = (1.0, 2.0, 3.0, 4.0, 6.0, 8.0)
 errors_by_σ = [solve_on(graded_points(41; σ = σ))[1] for σ in σs]
 
 
-collect(zip(σs, errors_by_σ))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">6-element Vector{Tuple{Float64, Float64}}:
+collect(zip(σs, errors_by_σ))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">6-element Vector{Tuple{Float64, Float64}}:
  (1.0, 0.14540322986965376)
  (2.0, 0.022998289307452416)
  (3.0, 0.0010440184275933278)
  (4.0, 0.0001611149587800358)
  (6.0, 0.0001932098712388316)
- (8.0, 0.00034497330750233804)</code></pre><p>The best value here is around 4, where the finest cells are comparable with <code>ε</code>, and the curve is flat enough on either side that the choice is not delicate. There is nothing sacred about <code>tanh</code>: a geometric or piecewise-linear grading does the same job, and the mesh only ever sees the point vector.</p><h2 id="See-also"><a class="docs-heading-anchor" href="#See-also">See also</a><a id="See-also-1"></a><a class="docs-heading-anchor-permalink" href="#See-also" title="Permalink"></a></h2><ul><li><a href="../convection_diffusion_linear/">Convection-diffusion</a>, the same operator on a smooth solution, where a uniform mesh is fine.</li><li>The <a href="../../tutorials/mesh/">mesh tutorial</a> covers <a href="../../api/#Bramble.change_points!"><code>change_points!</code></a> and <code>Bramble.set_points!</code>, which also accepts a different point count.</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../transient_inplace/">« A transient loop that allocates nothing</a><a class="docs-footer-nextpage" href="../memory_scaling/">Memory scaling with a matrix-free Kronecker operator »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 29 September 2026 21:39">Tuesday 29 September 2026</span>. Using Julia version 1.13.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+ (8.0, 0.00034497330750233804)</code></pre>
+</div>
+<p>The best value here is around 4, where the finest cells are comparable with <code class="md-code-inline">ε</code>, and the curve is flat enough on either side that the choice is not delicate. There is nothing sacred about <code class="md-code-inline">tanh</code>: a geometric or piecewise-linear grading does the same job, and the mesh only ever sees the point vector.</p>
+<h2 id="Where-to-go-next" class="md-heading">Where to go next<a href="#Where-to-go-next" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<ul class="md-list-tight">
+<li><p><a href="../../examples/convection_diffusion_linear/">Convection-diffusion</a>, the same operator on a smooth solution, where a uniform mesh is fine.</p>
+</li>
+<li><p>The <a href="../../tutorials/mesh/#tutorial_mesh">mesh tutorial</a> covers <a href="../../api/meshes/#Bramble.change_points!"><code class="md-code-inline">change_points!</code></a> and <code class="md-code-inline">Bramble.set_points!</code>, which also accepts a different point count.</p>
+</li>
+</ul>
+      </article>
+      <footer class="md-footer">
+<p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
+      </footer>
+    </main>
+    <aside class="md-toc">
+      <div class="md-toc-inner">
+        <p class="md-toc-title">On this page</p>
+          <a class="md-toc-link md-toc-h2" href="#Problem">Problem</a>
+          <a class="md-toc-link md-toc-h2" href="#Building-a-graded-mesh">Building a graded mesh</a>
+          <a class="md-toc-link md-toc-h2" href="#The-comparison">The comparison</a>
+          <a class="md-toc-link md-toc-h2" href="#How-far-refinement-gets-you">How far refinement gets you</a>
+          <a class="md-toc-link md-toc-h2" href="#Choosing-σ">Choosing σ</a>
+          <a class="md-toc-link md-toc-h2" href="#Where-to-go-next">Where to go next</a>
+      </div>
+    </aside>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia-repl.min.js"></script>
+  <script>hljs.highlightAll();</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.js"></script>
+  <script>var MD_KATEX_OPTIONS = {};
+document.querySelectorAll('.md-math').forEach(function (el) {
+  var tex = el.textContent.trim().replace(/^\\[\[(]/, '').replace(/\\[\])]$/, '');
+  katex.render(tex, el, Object.assign({ throwOnError: false }, MD_KATEX_OPTIONS,
+    { displayMode: el.classList.contains('md-math-display') }));
+});</script>
+  <script src="../../siteinfo.js"></script>
+  <script src="../../../versions.js"></script>
+  <script src="../../assets/materialdocs.js?v=3295ef38"></script>
+</body>
+</html>

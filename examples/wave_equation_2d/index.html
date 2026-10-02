@@ -1,6 +1,160 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Acoustic wave equation in two dimensions · Bramble.jl</title><meta name="title" content="Acoustic wave equation in two dimensions · Bramble.jl"/><meta property="og:title" content="Acoustic wave equation in two dimensions · Bramble.jl"/><meta property="twitter:title" content="Acoustic wave equation in two dimensions · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;family=Source+Sans+3:wght@400;600&amp;display=swap" rel="stylesheet" type="text/css"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="Bramble.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting started</a></li><li><span class="tocitem">Discrete foundations</span><ul><li><a class="tocitem" href="../../tutorials/geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../../tutorials/mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../../tutorials/space/">Grid spaces and discrete functions</a></li><li><a class="tocitem" href="../../tutorials/operators/">Difference, jump and average operators</a></li></ul></li><li><span class="tocitem">Forms and assembly</span><ul><li><a class="tocitem" href="../../tutorials/form/">Linear and bilinear forms</a></li></ul></li><li><span class="tocitem">Solvers and scientific computing</span><ul><li><a class="tocitem" href="../../tutorials/solvers/">Choosing a solver, backend, and execution policy</a></li><li><a class="tocitem" href="../../tutorials/autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../../tutorials/backend/">Backend tutorial</a></li></ul></li><li><span class="tocitem">Visualization and export</span><ul><li><a class="tocitem" href="../../tutorials/plotting/">Plotting directly</a></li><li><a class="tocitem" href="../../tutorials/vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../convection_diffusion_linear/">Convection-diffusion equation</a></li><li><a class="tocitem" href="../coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li><li><a class="tocitem" href="../elasticity_3d/">Linear elasticity in three dimensions</a></li><li><a class="tocitem" href="../heat_equation/">Heat equation</a></li><li><a class="tocitem" href="../amg_preconditioning/">Algebraic multigrid preconditioning</a></li><li><a class="tocitem" href="../inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a></li><li><a class="tocitem" href="../transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a></li><li class="is-active"><a class="tocitem" href>Acoustic wave equation in two dimensions</a><ul class="internal"><li><a class="tocitem" href="#Problem"><span>Problem</span></a></li><li><a class="tocitem" href="#Semidiscretising-in-space"><span>Semidiscretising in space</span></a></li><li><a class="tocitem" href="#Stepping-it"><span>Stepping it</span></a></li><li><a class="tocitem" href="#Energy"><span>Energy</span></a></li><li><a class="tocitem" href="#Order-of-convergence"><span>Order of convergence</span></a></li><li><a class="tocitem" href="#See-also"><span>See also</span></a></li></ul></li><li><a class="tocitem" href="../point_sources_flux/">Point sources and boundary flux recovery</a></li><li><a class="tocitem" href="../transient_inplace/">A transient loop that allocates nothing</a></li><li><a class="tocitem" href="../boundary_layer_graded/">Graded meshes for a boundary layer</a></li><li><a class="tocitem" href="../memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><a class="tocitem" href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a></li><li><input class="collapse-toggle" id="menuitem-9-3" type="checkbox"/><label class="tocitem" for="menuitem-9-3"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li><li><a class="tocitem" href="../../internals/exporters/">Exporters</a></li><li><a class="tocitem" href="../../internals/gpu/">GPU acceleration</a></li><li><a class="tocitem" href="../../internals/csr_solvers/"><code>SparseMatrixCSR</code> direct solve</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Acoustic wave equation in two dimensions</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Acoustic wave equation in two dimensions</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/wave_equation_2d.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Acoustic-wave-equation-in-two-dimensions"><a class="docs-heading-anchor" href="#Acoustic-wave-equation-in-two-dimensions">Acoustic wave equation in two dimensions</a><a id="Acoustic-wave-equation-in-two-dimensions-1"></a><a class="docs-heading-anchor-permalink" href="#Acoustic-wave-equation-in-two-dimensions" title="Permalink"></a></h1><p>Every time-dependent page so far has been first order in time: the <a href="../heat_equation/">heat equation</a> hands <code>M u&#39; = F - A u</code> to a stepper. A wave is second order, and Bramble semidiscretises it as such rather than asking the caller to rewrite it as a first-order system by hand.</p><p>This page is generated from <code>docs/src/examples/wave_equation_2d.jl</code> by Literate.jl, and the same file runs under <code>test/examples/wave_equation_2d.jl</code> with the assertions the page renders but does not check. It needs <code>SciMLBase</code> and a stepper, so it runs behind the <code>ext</code>/<code>full</code> test groups rather than on every push.</p><h2 id="Problem"><a class="docs-heading-anchor" href="#Problem">Problem</a><a id="Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Problem" title="Permalink"></a></h2><p class="math-container">\[\partial_{tt} u - c^2 \Delta u = 0 \text{ in } \Omega \times (0, T], \qquad
-u = 0 \text{ on } \partial\Omega, \qquad \Omega = (0,1)^2\]</p><p>with <span>$c = 1$</span> and the standing wave</p><p class="math-container">\[u_{\text{exact}}(x, y, t) = \sin(\pi x)\sin(\pi y)\cos(\sqrt{2}\,\pi c\, t),\]</p><p>an exact solution of the continuous problem, so the error below is measurable rather than merely plausible. It starts at rest in the shape of the first mode and oscillates in place with period <span>$\sqrt{2}$</span>.</p><h2 id="Semidiscretising-in-space"><a class="docs-heading-anchor" href="#Semidiscretising-in-space">Semidiscretising in space</a><a id="Semidiscretising-in-space-1"></a><a class="docs-heading-anchor-permalink" href="#Semidiscretising-in-space" title="Permalink"></a></h2><p><a href="../../api_sciml/#Bramble.semidiscretize_second_order"><code>semidiscretize_second_order</code></a> takes the stiffness form and a source and produces</p><p class="math-container">\[M \ddot{u}_h + C \dot{u}_h + K u_h = F(t),\]</p><p>with no damping form here, so <code>C</code> is absent. Dirichlet conditions constrain the displacement the same way <a href="../../api_sciml/#Bramble.semidiscretize"><code>semidiscretize</code></a> constrains its own state, and the consistent velocity follows from differentiating that constraint rather than being prescribed separately.</p><pre><code class="language-julia hljs">using Bramble
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acoustic wave equation in two dimensions — Bramble.jl</title>
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=44c13a4e">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <meta name="title" content="Acoustic wave equation in two dimensions — Bramble.jl">
+  <meta property="og:title" content="Acoustic wave equation in two dimensions — Bramble.jl">
+  <meta property="twitter:title" content="Acoustic wave equation in two dimensions — Bramble.jl">
+  <meta name="description" content="Documentation for Bramble.jl.">
+  <meta property="og:description" content="Documentation for Bramble.jl.">
+  <meta property="twitter:description" content="Documentation for Bramble.jl.">
+  <link rel="icon" type="image/x-icon" href="../../assets/favicon.ico">
+  <link rel="stylesheet" href="../../assets/custom.css">
+  <script>
+    (function(){
+      document.documentElement.classList.add('no-transition');
+      var t=localStorage.getItem('md-theme');if(t)document.documentElement.setAttribute('data-theme',t);
+      window.addEventListener('load',function(){setTimeout(function(){document.documentElement.classList.remove('no-transition');},50);});
+    })()
+  </script>
+</head>
+<body data-warn-outdated>
+  <header class="md-navbar">
+    <button id="md-hamburger" class="md-icon-btn md-hamburger" aria-label="Toggle navigation" aria-expanded="false"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></button>
+    <img class="md-navbar-logo md-logo-light" src="../../assets/logo.svg" alt="Bramble.jl logo" height="32">
+    <img class="md-navbar-logo md-logo-dark" src="../../assets/logo-dark.svg" alt="Bramble.jl logo" height="32">
+    <span class="md-navbar-title">Bramble.jl</span>
+    <span class="md-navbar-spacer"></span>
+    <button id="md-search-btn" class="md-search-bar" aria-label="Search documentation" aria-expanded="false">
+      <svg class="md-icon md-search-bar-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <span class="md-search-bar-label">Search docs</span>
+      <kbd class="md-search-bar-kbd">Ctrl K</kbd>
+    </button>
+    <a class="md-icon-btn md-repo-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub" aria-label="View the repository on GitHub" rel="noopener" target="_blank"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 .3a12 12 0 00-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 016 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0012 .3z"/></svg><span class="md-repo-label">GitHub</span></a>
+    <button id="md-theme-toggle" class="md-icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode"><svg class="md-icon md-icon-light" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg><svg class="md-icon md-icon-dark" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg></button>
+  </header>
+  <div class="md-layout">
+    <nav class="md-sidebar">
+      <a href="../../">Home</a>
+      <a href="../../getting_started/">Getting started</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Discrete foundations</span>
+        <a href="../../tutorials/geometry/">Geometry tutorial</a>
+        <a href="../../tutorials/mesh/">Mesh tutorial</a>
+        <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
+        <a href="../../tutorials/operators/">Difference, jump and average operators</a>
+        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
+        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Forms and assembly</span>
+        <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Solvers and scientific computing</span>
+        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
+        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
+        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <a href="../../tutorials/backend/">Backends and execution policies</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Visualization and export</span>
+        <a href="../../tutorials/plotting/">Plotting directly</a>
+        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
+        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Examples</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Stationary problems</span>
+          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
+          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
+          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
+        </div>
+        <div class="md-nav-section">
+          <span class="md-nav-section-title">Time-dependent problems</span>
+          <a href="../../examples/heat_equation/">Heat equation</a>
+          <a href="../../examples/wave_equation_2d/" class="md-nav-active">Acoustic wave equation in two dimensions</a>
+          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Inverse problems</span>
+          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
+          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Solvers and performance</span>
+          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
+          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
+          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
+        </div>
+      </div>
+      <a href="../../benchmarks/">Benchmarks</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Documentation</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">API reference</span>
+          <a href="../../api/">API reference</a>
+          <a href="../../api/utilities/">Utilities</a>
+          <a href="../../api/geometry/">Geometry</a>
+          <a href="../../api/meshes/">Meshes</a>
+          <a href="../../api/spaces/">Grid spaces</a>
+          <a href="../../api/operators/">Difference, jump and average operators</a>
+          <a href="../../api/inner_products/">Inner products and norms</a>
+          <a href="../../api/forms/">Forms</a>
+          <a href="../../api/exporters/">Exporters</a>
+        </div>
+        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Internals</span>
+          <a href="../../internals/utils/">Utilities</a>
+          <a href="../../internals/geometry/">Geometry</a>
+          <a href="../../internals/mesh/">Mesh</a>
+          <a href="../../internals/space/">Spaces</a>
+          <a href="../../internals/form/">Forms</a>
+          <a href="../../internals/autodiff/">Automatic differentiation</a>
+          <a href="../../internals/exporters/">Exporters</a>
+          <a href="../../internals/gpu/">GPU acceleration</a>
+          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
+        </div>
+      </div>
+    </nav>
+    <main class="md-content">
+      <article class="md-article">
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/wave_equation_2d.jl" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+<h1 id="Acoustic-wave-equation-in-two-dimensions" class="md-heading">Acoustic wave equation in two dimensions<a href="#Acoustic-wave-equation-in-two-dimensions" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
+<p>Every time-dependent page so far has been first order in time: the <a href="../../examples/heat_equation/">heat equation</a> hands <code class="md-code-inline">M u&#39; = F - A u</code> to a stepper. A wave is second order, and Bramble semidiscretises it as such rather than asking the caller to rewrite it as a first-order system by hand.</p>
+<p>This page is generated from <code class="md-code-inline">docs/src/examples/wave_equation_2d.jl</code> by Literate.jl, and the same file runs under <code class="md-code-inline">test/examples/wave_equation_2d.jl</code> with the assertions the page renders but does not check. It needs <code class="md-code-inline">SciMLBase</code> and a stepper, so it runs behind the <code class="md-code-inline">ext</code>/<code class="md-code-inline">full</code> test groups rather than on every push.</p>
+<h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<div class="md-math md-math-display">
+\[\partial_{tt} u - c^2 \Delta u = 0 \text{ in } \Omega \times (0, T], \qquad
+u = 0 \text{ on } \partial\Omega, \qquad \Omega = (0,1)^2\]
+</div>
+<p>with <span class="md-math md-math-inline">\(c = 1\)</span> and the standing wave</p>
+<div class="md-math md-math-display">
+\[u_{\text{exact}}(x, y, t) = \sin(\pi x)\sin(\pi y)\cos(\sqrt{2}\,\pi c\, t),\]
+</div>
+<p>an exact solution of the continuous problem, so the error below is measurable rather than merely plausible. It starts at rest in the shape of the first mode and oscillates in place with period <span class="md-math md-math-inline">\(\sqrt{2}\)</span>.</p>
+<h2 id="Semidiscretising-in-space" class="md-heading">Semidiscretising in space<a href="#Semidiscretising-in-space" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><a href="../../api_sciml/#Bramble.semidiscretize_second_order"><code class="md-code-inline">semidiscretize_second_order</code></a> takes the stiffness form and a source and produces</p>
+<div class="md-math md-math-display">
+\[M \ddot{u}_h + C \dot{u}_h + K u_h = F(t),\]
+</div>
+<p>with no damping form here, so <code class="md-code-inline">C</code> is absent. Dirichlet conditions constrain the displacement the same way <a href="../../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a> constrains its own state, and the consistent velocity follows from differentiating that constraint rather than being prescribed separately.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble
 using Bramble: block_mass_matrix, damping_matrix, mass_matrix, stiffness_matrix
 using SciMLBase
 using OrdinaryDiffEqRosenbrock
@@ -28,31 +182,52 @@ end
 
 Ωₕ, Wₕ, I, sd = wave_system(25)
 
-size(stiffness_matrix(sd)), damping_matrix(sd), size(block_mass_matrix(sd))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">((625, 625), nothing, (1250, 1250))</code></pre><p>Three matrices are worth naming. <a href="../../api_sciml/#Bramble.stiffness_matrix"><code>stiffness_matrix</code></a> is <code>K</code>, with a constrained row replaced by <code>eₖ</code>; <a href="../../api_sciml/#Bramble.mass_matrix"><code>mass_matrix</code></a> is <code>M</code>, whose constrained rows are zeroed, which is what makes the system differential-algebraic; and <a href="../../api_sciml/#Bramble.block_mass_matrix"><code>block_mass_matrix</code></a> is the <code>2n × 2n</code> matrix the first-order form needs, <code>M</code> above the identity.</p><h2 id="Stepping-it"><a class="docs-heading-anchor" href="#Stepping-it">Stepping it</a><a id="Stepping-it-1"></a><a class="docs-heading-anchor-permalink" href="#Stepping-it" title="Permalink"></a></h2><p><a href="../../api_sciml/#Bramble.second_order_ode_problem"><code>second_order_ode_problem</code></a> hands the whole thing to <code>OrdinaryDiffEq</code> as a <code>SecondOrderODEProblem</code>, with the state ordered velocity first, displacement second.</p><p>A symplectic integrator would be the natural choice for a conservative problem, and it cannot be used here: <code>OrdinaryDiffEqCore</code> refuses an explicit or symplectic method unless the mass matrix is exactly <code>I</code>, and a discrete <code>innerₕ</code> mass matrix never is, since its boundary rows carry a half weight. <code>Rodas5P</code> is mass-matrix aware and is what <a href="../../api_sciml/#Bramble.SecondOrderSemidiscretization"><code>SecondOrderSemidiscretization</code></a>&#39;s own docstring points to.</p><pre><code class="language-julia hljs">u₀ = Rₕ(Wₕ, x -&gt; uexact(x, 0.0))
+size(stiffness_matrix(sd)), damping_matrix(sd), size(block_mass_matrix(sd))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((625, 625), nothing, (1250, 1250))</code></pre>
+</div>
+<p>Three matrices are worth naming. <a href="../../api_sciml/#Bramble.stiffness_matrix"><code class="md-code-inline">stiffness_matrix</code></a> is <code class="md-code-inline">K</code>, with a constrained row replaced by <code class="md-code-inline">eₖ</code>; <a href="../../api_sciml/#Bramble.mass_matrix"><code class="md-code-inline">mass_matrix</code></a> is <code class="md-code-inline">M</code>, whose constrained rows are zeroed, which is what makes the system differential-algebraic; and <a href="../../api_sciml/#Bramble.block_mass_matrix"><code class="md-code-inline">block_mass_matrix</code></a> is the <code class="md-code-inline">2n × 2n</code> matrix the first-order form needs, <code class="md-code-inline">M</code> above the identity.</p>
+<h2 id="Stepping-it" class="md-heading">Stepping it<a href="#Stepping-it" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><a href="../../api_sciml/#Bramble.second_order_ode_problem"><code class="md-code-inline">second_order_ode_problem</code></a> hands the whole thing to <code class="md-code-inline">OrdinaryDiffEq</code> as a <code class="md-code-inline">SecondOrderODEProblem</code>, with the state ordered velocity first, displacement second.</p>
+<p>A symplectic integrator would be the natural choice for a conservative problem, and it cannot be used here: <code class="md-code-inline">OrdinaryDiffEqCore</code> refuses an explicit or symplectic method unless the mass matrix is exactly <code class="md-code-inline">I</code>, and a discrete <code class="md-code-inline">innerₕ</code> mass matrix never is, since its boundary rows carry a half weight. <code class="md-code-inline">Rodas5P</code> is mass-matrix aware and is what <a href="../../api_sciml/#Bramble.SecondOrderSemidiscretization"><code class="md-code-inline">SecondOrderSemidiscretization</code></a>&#39;s own docstring points to.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">u₀ = Rₕ(Wₕ, x -&gt; uexact(x, 0.0))
 du₀ = Rₕ(Wₕ, x -&gt; duexact(x, 0.0))
 
 prob = second_order_ode_problem(sd, du₀, u₀, I)
 sol = solve(prob, Rodas5P(); reltol = 1.0e-8, abstol = 1.0e-10)
 
-SciMLBase.successful_retcode(sol), length(sol.t)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(true, 56)</code></pre><p>The solution at <code>t = 1</code> against the exact standing wave. <code>sol.u[end].x[2]</code> is the displacement half of the state, <code>x[1]</code> the velocity:</p><pre><code class="language-julia hljs">uT = element(Wₕ, sol.u[end].x[2])
+SciMLBase.successful_retcode(sol), length(sol.t)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, 56)</code></pre>
+</div>
+<p>The solution at <code class="md-code-inline">t = 1</code> against the exact standing wave. <code class="md-code-inline">sol.u[end].x[2]</code> is the displacement half of the state, <code class="md-code-inline">x[1]</code> the velocity:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">uT = element(Wₕ, sol.u[end].x[2])
 err = normₕ(uT - Rₕ(Wₕ, x -&gt; uexact(x, 1.0)))
 
 
-err</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.001527741937505401</code></pre><script>
-  // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
-  // `window.Plotly` instead of registering as an anonymous AMD module.
-  window.__bramble_amd_define = window.define;
-  window.define = undefined;
-</script>
+err</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0015277419375025218</code></pre>
+</div>
+<div class="md-multi-output">
+<div class="md-output md-output-html">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script>
-  window.define = window.__bramble_amd_define;
-
-  // Colour tokens read from the page's own theme, not hard-coded — Documenter stamps
-  // `theme--documenter-dark` on <html> when dark mode is active, light mode has no such
-  // class. Recomputed on every call so a caller can re-theme after a toggle.
+  // Colour tokens read from the page's own theme, not hard-coded — MaterialDocs sets
+  // `data-theme="light"|"dark"` on <html>; when the attribute is absent the browser's
+  // `prefers-color-scheme` decides. Recomputed on every call so a caller can re-theme
+  // after a toggle.
   window.bramblePlotlyTheme = function () {
-    const dark = document.documentElement.className.includes('documenter-dark');
+    const attr = document.documentElement.getAttribute('data-theme');
+    const dark = attr
+      ? attr === 'dark'
+      : window.matchMedia('(prefers-color-scheme: dark)').matches;
     return dark
       ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
       : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
@@ -67,15 +242,21 @@ err</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   };
 
   if (!window.__bramble_plotly_theme_observer) {
-    window.__bramble_plotly_theme_observer = new MutationObserver(function () {
+    const repaint = function () {
       for (const { divId, restyle } of window.__bramble_plotly_charts) {
         const layout = restyle();
         Plotly.relayout(divId, layout);
       }
-    });
+    };
+    window.__bramble_plotly_theme_observer = new MutationObserver(repaint);
     window.__bramble_plotly_theme_observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['class'],
+      attributeFilter: ['data-theme'],
+    });
+    // With no saved theme MaterialDocs follows the system scheme in CSS alone and
+    // leaves `data-theme` unset, so a system change must repaint too.
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+      if (!document.documentElement.hasAttribute('data-theme')) repaint();
     });
   }
 
@@ -103,7 +284,7 @@ err</code></pre><pre class="documenter-example-output"><code class="nohighlight 
     type: 'surface',
     x: [0.0,0.041666666666666664,0.08333333333333333,0.125,0.16666666666666666,0.20833333333333331,0.25,0.29166666666666663,0.3333333333333333,0.375,0.41666666666666663,0.4583333333333333,0.5,0.5416666666666666,0.5833333333333333,0.625,0.6666666666666666,0.7083333333333333,0.75,0.7916666666666666,0.8333333333333333,0.875,0.9166666666666666,0.9583333333333333,1.0],
     y: [0.0,0.041666666666666664,0.08333333333333333,0.125,0.16666666666666666,0.20833333333333331,0.25,0.29166666666666663,0.3333333333333333,0.375,0.41666666666666663,0.4583333333333333,0.5,0.5416666666666666,0.5833333333333333,0.625,0.6666666666666666,0.7083333333333333,0.75,0.7916666666666666,0.8333333333333333,0.875,0.9166666666666666,0.9583333333333333,1.0],
-    z: [[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,5.905732766837703e-25,0.0,0.0,-4.0597894133044313e-25,0.0,0.0,-1.6726944798873447e-24,-1.5589275365035774e-25,0.0,-1.0758044907375843e-24,7.617405259926218e-26,0.0,2.0571629545777455e-25,-1.0640715585879216e-25,0.0,4.5117700841870006e-26,0.0],[0.0,-0.004588271932256234,-0.009098037259639393,-0.013452132647064132,-0.01757605831525942,-0.021399252752673542,-0.024856300042492046,-0.02788804914711766,-0.03044262599881207,-0.032476321079377354,-0.03395433730213361,-0.034851385399729845,-0.03515211663050855,-0.03485138539972874,-0.03395433730213454,-0.03247632107937632,-0.03044262599881678,-0.027888049147120286,-0.024856300042490984,-0.021399252752672675,-0.017576058315257957,-0.013452132647063257,-0.009098037259641938,-0.004588271932257453,0.0],[0.0,-0.009098037259641787,-0.018040404579318266,-0.026674095574897222,-0.034851385399735396,-0.04243235835774866,-0.04928730189978613,-0.05529892604129904,-0.06036437022649445,-0.06439696330094433,-0.06732770647909939,-0.06910645393263694,-0.06970277079945245,-0.06910645393263318,-0.06732770647910001,-0.06439696330094172,-0.06036437022649451,-0.05529892604130907,-0.049287301899789526,-0.042432358357746676,-0.03485138539973377,-0.026674095574900785,-0.018040404579319696,-0.009098037259639166,0.0],[0.0,-0.013452132647063552,-0.02667409557489671,-0.03943965733198864,-0.051530395617391006,-0.06273943454684838,-0.07287498435655695,-0.08176362297916413,-0.08925326334343915,-0.09521575562622663,-0.09954907993145143,-0.10217909187882841,-0.10306079123476827,-0.10217909187882988,-0.09954907993144982,-0.09521575562622284,-0.08925326334343676,-0.08176362297916873,-0.07287498435656103,-0.06273943454685409,-0.05153039561738875,-0.03943965733199009,-0.026674095574897166,-0.013452132647056813,0.0],[0.0,-0.017576058315253586,-0.03485138539973213,-0.05153039561738987,-0.06732770647910695,-0.08197302161619942,-0.0952157556262268,-0.10682932165869745,-0.11661500837889667,-0.1244053799739445,-0.1300671410259559,-0.1335034172335833,-0.13465541295820663,-0.1335034172335815,-0.1300671410259513,-0.12440537997394337,-0.11661500837888637,-0.10682932165869122,-0.09521575562622399,-0.08197302161619842,-0.06732770647910491,-0.051530395617386204,-0.03485138539973019,-0.017576058315252992,0.0],[0.0,-0.021399252752669535,-0.042432358357744636,-0.06273943454684913,-0.08197302161620529,-0.0998040275584864,-0.1159273589183382,-0.13006714102596373,-0.1419814382892042,-0.15146639377862545,-0.15835971727607734,-0.16254346210532644,-0.1639460432323926,-0.16254346210531945,-0.15835971727607095,-0.1514663937786139,-0.14198143828919713,-0.13006714102594935,-0.11592735891833239,-0.09980402755847859,-0.08197302161620251,-0.06273943454684765,-0.04243235835774336,-0.021399252752670028,0.0],[0.0,-0.024856300042491706,-0.04928730189978558,-0.0728749843565598,-0.09521575562623127,-0.1159273589183352,-0.13465541295821487,-0.15107947554884849,-0.1649185264256866,-0.1759357755913334,-0.18394271485799826,-0.18880234327489553,-0.19043151125245916,-0.18880234327488796,-0.1839427148579966,-0.1759357755913316,-0.1649185264256819,-0.1510794755488393,-0.13465541295820752,-0.11592735891833371,-0.0952157556262251,-0.07287498435655657,-0.04928730189979008,-0.024856300042496313,0.0],[0.0,-0.02788804914711956,-0.05529892604130733,-0.08176362297916559,-0.10682932165869445,-0.13006714102596054,-0.15107947554884674,-0.16950679835794782,-0.18503381285098022,-0.19739484750506772,-0.20637840159014909,-0.21183076400512216,-0.21365864331738205,-0.2118307640051232,-0.20637840159014698,-0.19739484750505906,-0.18503381285096773,-0.16950679835794238,-0.15107947554883705,-0.13006714102595596,-0.10682932165869531,-0.08176362297916437,-0.05529892604130266,-0.027888049147119152,0.0],[-1.1758357339723347e-26,-0.030442625998815896,-0.060364370226499195,-0.08925326334343718,-0.11661500837889875,-0.1419814382892027,-0.1649185264256922,-0.18503381285098167,-0.2019831194373284,-0.21547643884979623,-0.22528289665218312,-0.23123470163264073,-0.23323001675779667,-0.23123470163264107,-0.2252828966521847,-0.21547643884978804,-0.2019831194373109,-0.18503381285097562,-0.16491852642568433,-0.14198143828920143,-0.11661500837889215,-0.08925326334343937,-0.06036437022649576,-0.030442625998814452,0.0],[0.0,-0.032476321079376536,-0.06439696330094857,-0.09521575562622801,-0.12440537997395011,-0.15146639377862625,-0.17593577559134033,-0.19739484750507072,-0.21547643884979026,-0.22987116858444134,-0.2403327388922854,-0.2466821494048452,-0.24881075994789506,-0.2466821494048594,-0.2403327388922791,-0.22987116858444137,-0.2154764388497926,-0.1973948475050634,-0.17593577559133183,-0.1514663937786242,-0.12440537997395054,-0.09521575562622278,-0.0643969633009487,-0.03247632107937782,0.0],[0.0,-0.033954337302129475,-0.0673277064791035,-0.09954907993145368,-0.13006714102595443,-0.15835971727608714,-0.18394271485800825,-0.20637840159015758,-0.22528289665218992,-0.24033273889228918,-0.25127042133710864,-0.2579087972075398,-0.26013428205191413,-0.2579087972075366,-0.25127042133710525,-0.24033273889228451,-0.225282896652186,-0.2063784015901577,-0.18394271485800306,-0.1583597172760792,-0.1300671410259578,-0.09954907993145341,-0.06732770647910616,-0.03395433730213697,0.0],[2.05426200738047e-25,-0.03485138539972643,-0.06910645393263638,-0.10217909187883299,-0.13350341723358225,-0.1625434621053392,-0.1888023432748971,-0.21183076400512646,-0.2312347016326515,-0.2466821494048562,-0.257908797207543,-0.2647225539841697,-0.2670068344671847,-0.2647225539841674,-0.2579087972075388,-0.24668214940485705,-0.23123470163264195,-0.21183076400513093,-0.18880234327489695,-0.16254346210532986,-0.1335034172335895,-0.10217909187883913,-0.06910645393263756,-0.03485138539972963,0.0],[0.0,-0.0351521166305063,-0.06970277079945801,-0.10306079123477536,-0.13465541295821074,-0.16394604323240486,-0.19043151125245386,-0.21365864331739437,-0.23323001675780117,-0.24881075994790983,-0.2601342820519163,-0.26700683446718065,-0.2693108259164227,-0.26700683446717655,-0.2601342820519235,-0.24881075994789603,-0.23323001675779673,-0.21365864331739878,-0.19043151125245694,-0.16394604323239967,-0.13465541295821154,-0.10306079123477833,-0.0697027707994579,-0.03515211663051107,0.0],[0.0,-0.03485138539972736,-0.06910645393263884,-0.10217909187883917,-0.13350341723358783,-0.16254346210533904,-0.18880234327489742,-0.21183076400513254,-0.23123470163264687,-0.2466821494048573,-0.25790879720754034,-0.26472255398417593,-0.2670068344671855,-0.26472255398416844,-0.2579087972075359,-0.2466821494048564,-0.23123470163264767,-0.21183076400513268,-0.18880234327489334,-0.1625434621053278,-0.13350341723358836,-0.10217909187883614,-0.0691064539326387,-0.034851385399730976,0.0],[-1.7854857075815908e-26,-0.033954337302135304,-0.06732770647910483,-0.09954907993145447,-0.1300671410259579,-0.15835971727609086,-0.18394271485800653,-0.20637840159015425,-0.22528289665218842,-0.24033273889228624,-0.2512704213371107,-0.2579087972075392,-0.26013428205191763,-0.25790879720753784,-0.25127042133711047,-0.24033273889228715,-0.22528289665218434,-0.20637840159015128,-0.1839427148580053,-0.1583597172760841,-0.13006714102595762,-0.09954907993145505,-0.06732770647910329,-0.03395433730213333,0.0],[-5.9256958911030045e-25,-0.03247632107937831,-0.0643969633009474,-0.09521575562622997,-0.12440537997395065,-0.15146639377863527,-0.17593577559134324,-0.1973948475050713,-0.21547643884979675,-0.22987116858444506,-0.24033273889228401,-0.2466821494048581,-0.24881075994789972,-0.24668214940486163,-0.24033273889228046,-0.22987116858443912,-0.21547643884978993,-0.19739484750506517,-0.17593577559133847,-0.15146639377862525,-0.1244053799739462,-0.09521575562622624,-0.06439696330094759,-0.03247632107938003,0.0],[0.0,-0.030442625998817176,-0.06036437022650084,-0.08925326334344409,-0.11661500837890287,-0.1419814382892084,-0.16491852642569527,-0.18503381285098117,-0.2019831194373276,-0.21547643884978865,-0.22528289665218532,-0.23123470163264545,-0.23323001675779315,-0.2312347016326355,-0.22528289665219092,-0.21547643884978843,-0.20198311943731745,-0.18503381285097986,-0.164918526425687,-0.14198143828920068,-0.1166150083788948,-0.08925326334344183,-0.06036437022649532,-0.030442625998810806,0.0],[2.656269905958395e-25,-0.02788804914712079,-0.05529892604130863,-0.08176362297916967,-0.10682932165870006,-0.13006714102596087,-0.15107947554884743,-0.16950679835794125,-0.1850338128509791,-0.19739484750507386,-0.20637840159014972,-0.2118307640051231,-0.21365864331738707,-0.21183076400512582,-0.20637840159014928,-0.1973948475050635,-0.1850338128509725,-0.16950679835793772,-0.15107947554883747,-0.13006714102595698,-0.10682932165869025,-0.08176362297916497,-0.055298926041306554,-0.02788804914712215,0.0],[-9.503571461741557e-26,-0.02485630004249515,-0.04928730189979443,-0.07287498435656284,-0.09521575562622846,-0.11592735891833765,-0.13465541295821332,-0.15107947554883996,-0.1649185264256876,-0.1759357755913363,-0.1839427148580038,-0.1888023432748985,-0.19043151125245283,-0.1888023432748929,-0.18394271485799701,-0.17593577559132956,-0.16491852642567703,-0.15107947554883258,-0.1346554129582065,-0.1159273589183335,-0.09521575562622457,-0.0728749843565577,-0.04928730189979131,-0.024856300042492136,0.0],[0.0,-0.02139925275266974,-0.04243235835774768,-0.0627394345468533,-0.08197302161620354,-0.0998040275584822,-0.11592735891833744,-0.13006714102595843,-0.14198143828921034,-0.1514663937786287,-0.15835971727608603,-0.16254346210533613,-0.16394604323240697,-0.16254346210533252,-0.15835971727608225,-0.15146639377862012,-0.1419814382891959,-0.13006714102595318,-0.11592735891833038,-0.09980402755848153,-0.08197302161620056,-0.06273943454684693,-0.04243235835774508,-0.021399252752668102,0.0],[-1.9316642477118405e-25,-0.017576058315255827,-0.034851385399731184,-0.05153039561738946,-0.06732770647910907,-0.08197302161619885,-0.09521575562622901,-0.10682932165869527,-0.11661500837889462,-0.12440537997394711,-0.13006714102595374,-0.13350341723358536,-0.13465541295820826,-0.13350341723358602,-0.1300671410259563,-0.12440537997394,-0.11661500837889177,-0.10682932165868794,-0.09521575562622236,-0.08197302161619846,-0.06732770647910687,-0.051530395617382825,-0.034851385399724925,-0.017576058315251254,0.0],[-2.1411673730710685e-25,-0.013452132647062819,-0.02667409557490093,-0.03943965733199029,-0.05153039561739158,-0.06273943454685263,-0.0728749843565653,-0.08176362297917043,-0.08925326334344466,-0.0952157556262279,-0.09954907993145018,-0.10217909187883532,-0.10306079123476491,-0.10217909187883277,-0.09954907993144915,-0.09521575562622664,-0.08925326334343622,-0.08176362297916279,-0.07287498435655601,-0.06273943454684637,-0.051530395617386204,-0.039439657331981834,-0.02667409557489128,-0.013452132647056157,0.0],[0.0,-0.009098037259640987,-0.01804040457931692,-0.026674095574894807,-0.03485138539973461,-0.04243235835775298,-0.04928730189979218,-0.05529892604130638,-0.06036437022649988,-0.06439696330094744,-0.06732770647910714,-0.0691064539326379,-0.06970277079945796,-0.06910645393263878,-0.06732770647910075,-0.06439696330094329,-0.06036437022649331,-0.055298926041302994,-0.04928730189978593,-0.04243235835774279,-0.03485138539972835,-0.026674095574897052,-0.018040404579313926,-0.00909803725963474,0.0],[7.262109357718526e-27,-0.0045882719322554695,-0.009098037259640037,-0.013452132647055437,-0.017576058315255216,-0.021399252752675246,-0.024856300042494332,-0.02788804914711681,-0.030442625998811732,-0.032476321079376765,-0.03395433730213353,-0.03485138539973111,-0.035152116630509815,-0.034851385399735785,-0.03395433730213594,-0.03247632107937545,-0.03044262599881288,-0.027888049147119717,-0.02485630004249471,-0.02139925275266995,-0.01757605831525546,-0.013452132647064715,-0.009098037259640923,-0.004588271932254819,0.0],[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]],
+    z: [[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.028301226829366e-24,0.0,0.0,1.2343431376091802e-24,0.0,0.0,-5.120656964649918e-25,-7.137446970464716e-25,0.0,9.111002184992089e-25,5.268427788007731e-25,0.0,6.582925870507878e-27,3.552787913386727e-26,0.0,1.096356093692278e-25,0.0],[0.0,-0.004588271932256908,-0.00909803725964442,-0.013452132647063141,-0.017576058315257753,-0.02139925275267053,-0.024856300042494117,-0.027888049147121657,-0.030442625998811108,-0.032476321079374884,-0.033954337302131446,-0.03485138539973029,-0.03515211663051185,-0.03485138539973099,-0.03395433730213579,-0.032476321079378465,-0.03044262599881865,-0.02788804914712271,-0.024856300042492223,-0.021399252752678365,-0.017576058315263186,-0.013452132647065757,-0.009098037259642823,-0.0045882719322575816,0.0],[0.0,-0.009098037259645437,-0.018040404579321025,-0.026674095574897,-0.03485138539973339,-0.04243235835774767,-0.049287301899791365,-0.055298926041303105,-0.06036437022649498,-0.06439696330094244,-0.06732770647910331,-0.06910645393264009,-0.0697027707994595,-0.06910645393263547,-0.06732770647910298,-0.06439696330094488,-0.06036437022649356,-0.055298926041308365,-0.049287301899789526,-0.042432358357748896,-0.03485138539973814,-0.026674095574902863,-0.018040404579317795,-0.009098037259639976,0.0],[0.0,-0.013452132647066033,-0.026674095574897527,-0.039439657331988315,-0.051530395617386614,-0.06273943454684812,-0.07287498435655737,-0.08176362297916236,-0.08925326334343761,-0.09521575562622389,-0.09954907993145246,-0.10217909187883444,-0.10306079123476951,-0.10217909187882585,-0.0995490799314491,-0.09521575562622012,-0.08925326334343342,-0.08176362297916441,-0.07287498435655862,-0.0627394345468475,-0.05153039561738855,-0.039439657331995066,-0.026674095574898044,-0.013452132647059129,0.0],[0.0,-0.01757605831525095,-0.034851385399729685,-0.051530395617387245,-0.06732770647910193,-0.08197302161619609,-0.09521575562622177,-0.1068293216586883,-0.11661500837889452,-0.12440537997394285,-0.13006714102594663,-0.13350341723358256,-0.13465541295820094,-0.1335034172335851,-0.13006714102594802,-0.12440537997394417,-0.11661500837889117,-0.10682932165869095,-0.09521575562622525,-0.08197302161619911,-0.0673277064791053,-0.051530395617388446,-0.034851385399732614,-0.01757605831525366,0.0],[0.0,-0.02139925275266785,-0.04243235835774513,-0.062739434546851,-0.08197302161619759,-0.09980402755848002,-0.11592735891833025,-0.13006714102595665,-0.14198143828919793,-0.15146639377861965,-0.15835971727607592,-0.1625434621053238,-0.16394604323238882,-0.16254346210532183,-0.15835971727607298,-0.15146639377861662,-0.14198143828919546,-0.13006714102595343,-0.11592735891833325,-0.0998040275584831,-0.08197302161619958,-0.06273943454684862,-0.0424323583577468,-0.02139925275266857,0.0],[0.0,-0.024856300042490172,-0.04928730189978538,-0.07287498435655902,-0.09521575562622779,-0.11592735891833274,-0.1346554129582057,-0.15107947554883333,-0.16491852642567656,-0.17593577559132892,-0.1839427148580042,-0.18880234327488662,-0.19043151125245006,-0.18880234327488638,-0.18394271485799707,-0.17593577559132567,-0.16491852642567964,-0.15107947554883427,-0.13465541295821135,-0.11592735891834013,-0.09521575562622887,-0.07287498435655976,-0.04928730189979233,-0.024856300042493975,0.0],[0.0,-0.027888049147117375,-0.05529892604130288,-0.08176362297916426,-0.10682932165869273,-0.1300671410259563,-0.15107947554884157,-0.16950679835793842,-0.18503381285097012,-0.1973948475050594,-0.20637840159014822,-0.2118307640051157,-0.2136586433173811,-0.2118307640051157,-0.20637840159014076,-0.19739484750505254,-0.18503381285097006,-0.16950679835794197,-0.15107947554884135,-0.13006714102596345,-0.10682932165870482,-0.08176362297916752,-0.0552989260413097,-0.027888049147121827,0.0],[-7.750860872168326e-25,-0.030442625998813918,-0.06036437022649687,-0.08925326334343806,-0.11661500837889463,-0.14198143828920146,-0.1649185264256825,-0.18503381285096682,-0.20198311943731448,-0.21547643884978104,-0.22528289665217577,-0.231234701632632,-0.23323001675778526,-0.2312347016326338,-0.2252828966521789,-0.21547643884978335,-0.2019831194373094,-0.1850338128509753,-0.1649185264256947,-0.14198143828921125,-0.11661500837890673,-0.08925326334344619,-0.06036437022650098,-0.030442625998817054,0.0],[0.0,-0.03247632107937896,-0.06439696330094737,-0.09521575562622292,-0.12440537997394219,-0.15146639377862298,-0.17593577559133064,-0.19739484750505676,-0.21547643884978085,-0.22987116858443055,-0.24033273889227863,-0.24668214940483732,-0.24881075994789165,-0.24668214940485106,-0.2403327388922742,-0.2298711685844358,-0.21547643884979106,-0.19739484750506187,-0.17593577559133516,-0.15146639377863,-0.1244053799739564,-0.0952157556262326,-0.0643969633009502,-0.03247632107938015,0.0],[0.0,-0.03395433730213017,-0.06732770647910012,-0.09954907993144937,-0.13006714102595304,-0.1583597172760773,-0.18394271485799543,-0.20637840159013976,-0.22528289665218126,-0.24033273889227502,-0.2512704213370994,-0.2579087972075289,-0.26013428205191125,-0.2579087972075276,-0.25127042133710586,-0.24033273889227466,-0.2252828966521824,-0.20637840159015644,-0.1839427148580065,-0.15835971727608417,-0.13006714102596342,-0.09954907993146297,-0.06732770647910895,-0.03395433730213837,0.0],[3.678961792790359e-25,-0.03485138539972996,-0.06910645393263337,-0.10217909187883199,-0.13350341723358258,-0.1625434621053315,-0.1888023432748891,-0.2118307640051259,-0.23123470163264487,-0.24668214940485503,-0.2579087972075299,-0.26472255398416217,-0.2670068344671719,-0.2647225539841557,-0.25790879720752863,-0.24668214940484984,-0.23123470163263743,-0.21183076400513146,-0.18880234327489664,-0.16254346210533888,-0.13350341723359532,-0.10217909187884265,-0.06910645393264267,-0.03485138539973156,0.0],[0.0,-0.035152116630499775,-0.0697027707994519,-0.10306079123477113,-0.13465541295821157,-0.16394604323240036,-0.19043151125244803,-0.21365864331739012,-0.23323001675779356,-0.24881075994789492,-0.26013428205190603,-0.26700683446717094,-0.26931082591641453,-0.2670068344671716,-0.26013428205190686,-0.2488107599478884,-0.23323001675778934,-0.21365864331739426,-0.1904315112524643,-0.16394604323240777,-0.13465541295821867,-0.10306079123478573,-0.06970277079946158,-0.0351521166305086,0.0],[0.0,-0.034851385399719534,-0.06910645393263316,-0.10217909187883438,-0.13350341723357814,-0.16254346210533152,-0.18880234327489007,-0.2118307640051277,-0.23123470163264254,-0.24668214940485045,-0.2579087972075334,-0.26472255398416644,-0.26700683446717194,-0.2647225539841615,-0.25790879720752913,-0.2466821494048523,-0.23123470163264048,-0.21183076400512693,-0.18880234327489762,-0.16254346210533913,-0.1335034172335954,-0.10217909187884264,-0.06910645393264321,-0.034851385399730546,0.0],[-2.801318537593083e-25,-0.03395433730213038,-0.0673277064790992,-0.09954907993144771,-0.13006714102595138,-0.1583597172760825,-0.18394271485799632,-0.2063784015901405,-0.22528289665218307,-0.24033273889228163,-0.2512704213371035,-0.2579087972075316,-0.26013428205191214,-0.2579087972075287,-0.2512704213371038,-0.24033273889227594,-0.22528289665218018,-0.2063784015901551,-0.18394271485800914,-0.15835971727608997,-0.13006714102596667,-0.09954907993146066,-0.06732770647910741,-0.033954337302135144,0.0],[-2.872181911264764e-25,-0.032476321079375974,-0.06439696330094516,-0.09521575562622481,-0.12440537997394278,-0.15146639377862164,-0.17593577559133267,-0.19739484750505917,-0.21547643884978612,-0.22987116858443638,-0.2403327388922836,-0.24668214940484903,-0.24881075994789423,-0.24668214940484873,-0.2403327388922794,-0.22987116858443407,-0.21547643884979162,-0.19739484750507047,-0.17593577559134158,-0.15146639377863239,-0.12440537997395384,-0.09521575562623384,-0.06439696330094791,-0.032476321079374974,0.0],[0.0,-0.030442625998816565,-0.06036437022649991,-0.08925326334343654,-0.11661500837889353,-0.1419814382892039,-0.16491852642568489,-0.185033812850972,-0.20198311943731767,-0.2154764388497891,-0.22528289665218088,-0.23123470163264187,-0.23323001675779118,-0.23123470163263118,-0.22528289665218607,-0.2154764388497821,-0.20198311943731034,-0.18503381285097836,-0.16491852642568816,-0.14198143828921217,-0.11661500837890523,-0.08925326334344721,-0.06036437022650169,-0.03044262599881568,0.0],[-4.01112110736998e-25,-0.02788804914712443,-0.05529892604130778,-0.08176362297916531,-0.10682932165869258,-0.13006714102595401,-0.1510794755488427,-0.1695067983579377,-0.18503381285097026,-0.19739484750506026,-0.2063784015901394,-0.21183076400511258,-0.2136586433173789,-0.21183076400511153,-0.20637840159014004,-0.1973948475050581,-0.18503381285097115,-0.16950679835794047,-0.15107947554884163,-0.1300671410259629,-0.10682932165869934,-0.08176362297917417,-0.0552989260413126,-0.02788804914712559,0.0],[-2.7492847790059165e-25,-0.02485630004249407,-0.049287301899787576,-0.07287498435655752,-0.09521575562622799,-0.11592735891833167,-0.13465541295821004,-0.15107947554883622,-0.1649185264256819,-0.17593577559132972,-0.1839427148579998,-0.18880234327488343,-0.1904315112524479,-0.188802343274883,-0.18394271485799113,-0.17593577559132825,-0.1649185264256784,-0.1510794755488348,-0.13465541295820724,-0.11592735891833668,-0.09521575562623118,-0.07287498435656702,-0.0492873018997961,-0.0248563000424957,0.0],[0.0,-0.021399252752675214,-0.042432358357745475,-0.06273943454684502,-0.08197302161620075,-0.09980402755847806,-0.11592735891833185,-0.13006714102595227,-0.14198143828920262,-0.15146639377862248,-0.15835971727608214,-0.1625434621053261,-0.16394604323239872,-0.162543462105322,-0.1583597172760745,-0.15146639377861726,-0.14198143828919407,-0.13006714102595238,-0.1159273589183297,-0.09980402755848365,-0.08197302161620329,-0.06273943454685481,-0.04243235835775068,-0.021399252752668928,0.0],[-1.4581502188234047e-25,-0.017576058315256816,-0.03485138539972974,-0.05153039561738395,-0.06732770647910699,-0.081973021616202,-0.09521575562622567,-0.10682932165868961,-0.1166150083788902,-0.12440537997394649,-0.1300671410259536,-0.13350341723358425,-0.1346554129582095,-0.1335034172335831,-0.13006714102595893,-0.12440537997394226,-0.11661500837889584,-0.10682932165869234,-0.09521575562622615,-0.08197302161620372,-0.06732770647910903,-0.05153039561739254,-0.0348513853997371,-0.01757605831525709,0.0],[-2.6105955124357066e-25,-0.013452132647061403,-0.02667409557489629,-0.03943965733198375,-0.051530395617386024,-0.06273943454684879,-0.07287498435656085,-0.08176362297916659,-0.08925326334343632,-0.0952157556262182,-0.09954907993144596,-0.10217909187883141,-0.10306079123477282,-0.10217909187883117,-0.09954907993145422,-0.09521575562622353,-0.0892532633434387,-0.08176362297916445,-0.07287498435655983,-0.062739434546851,-0.05153039561739325,-0.039439657331991,-0.026674095574900077,-0.013452132647063693,0.0],[0.0,-0.009098037259637627,-0.018040404579316913,-0.026674095574896535,-0.03485138539973122,-0.042432358357746135,-0.049287301899789214,-0.05529892604130737,-0.0603643702264962,-0.0643969633009449,-0.06732770647910435,-0.06910645393263842,-0.06970277079945883,-0.06910645393263859,-0.0673277064791024,-0.06439696330094477,-0.06036437022649465,-0.05529892604130342,-0.04928730189979092,-0.042432358357752345,-0.03485138539973631,-0.02667409557489834,-0.01804040457931781,-0.009098037259640803,0.0],[1.375414486813013e-25,-0.00458827193225428,-0.0090980372596414,-0.013452132647058877,-0.01757605831525358,-0.021399252752671405,-0.024856300042493635,-0.02788804914712318,-0.0304426259988154,-0.03247632107937839,-0.03395433730213396,-0.03485138539973294,-0.03515211663050806,-0.034851385399733016,-0.03395433730213299,-0.03247632107937444,-0.030442625998813793,-0.027888049147121625,-0.02485630004249452,-0.021399252752675086,-0.017576058315260216,-0.013452132647063363,-0.009098037259636548,-0.004588271932251283,0.0],[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]],
     colorscale: 'Viridis',
     showscale: true,
     colorbar: { tickfont: { color: theme.text } },
@@ -139,14 +320,36 @@ err</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   });
 })();
 </script>
-<h2 id="Energy"><a class="docs-heading-anchor" href="#Energy">Energy</a><a id="Energy-1"></a><a class="docs-heading-anchor-permalink" href="#Energy" title="Permalink"></a></h2><p>The continuous problem conserves</p><p class="math-container">\[E(t) = \tfrac{1}{2}\|\dot u\|_M^2 + \tfrac{1}{2} u^{\mathsf T} K u,\]</p><p>and the semidiscrete system conserves its discrete counterpart exactly, up to what the time stepper does to it. <code>Rodas5P</code> is not symplectic and has no conservation property of its own, so the right claim is about the drift, measured rather than assumed:</p><pre><code class="language-julia hljs">M, Kmat = mass_matrix(sd), stiffness_matrix(sd)
+
+</div>
+</div>
+<h2 id="Energy-drift" class="md-heading">Energy drift<a href="#Energy-drift" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>The continuous problem conserves</p>
+<div class="md-math md-math-display">
+\[E(t) = \tfrac{1}{2}\|\dot u\|_M^2 + \tfrac{1}{2} u^{\mathsf T} K u,\]
+</div>
+<p>and the semidiscrete system conserves its discrete counterpart exactly, up to what the time stepper does to it. <code class="md-code-inline">Rodas5P</code> is not symplectic and has no conservation property of its own, so the right claim is about the drift, measured rather than assumed:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">M, Kmat = mass_matrix(sd), stiffness_matrix(sd)
 energy(state) = 0.5 * dot(state.x[1], M * state.x[1]) + 0.5 * dot(state.x[2], Kmat * state.x[2])
 
 E = energy.(sol.u)
 drift = maximum(abs, E .- E[1]) / E[1]
 
 
-E[1], drift</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(2.4638799243425926, 1.140323104303895e-11)</code></pre><p>Eleven digits of the initial energy survive a hundred-odd adaptive steps. That is the integrator&#39;s tolerance showing rather than a conservation theorem: tightening <code>reltol</code> to <code>1e-10</code> takes the drift to around <code>1e-14</code>, and loosening it gives the digits back.</p><h2 id="Order-of-convergence"><a class="docs-heading-anchor" href="#Order-of-convergence">Order of convergence</a><a id="Order-of-convergence-1"></a><a class="docs-heading-anchor-permalink" href="#Order-of-convergence" title="Permalink"></a></h2><p>Refining space, with the time tolerance held fixed and tight enough that the spatial error is what is being measured:</p><pre><code class="language-julia hljs">function wave_error(n)
+E[1], drift</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.4638799243425926, 1.1408457997063135e-11)</code></pre>
+</div>
+<p>Eleven digits of the initial energy survive a hundred-odd adaptive steps. That is the integrator&#39;s tolerance showing rather than a conservation theorem: tightening <code class="md-code-inline">reltol</code> to <code class="md-code-inline">1e-10</code> takes the drift to around <code class="md-code-inline">1e-14</code>, and loosening it gives the digits back.</p>
+<h2 id="Spatial-order-of-the-wave-solution" class="md-heading">Spatial order of the wave solution<a href="#Spatial-order-of-the-wave-solution" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Refining space, with the time tolerance held fixed and tight enough that the spatial error is what is being measured:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">function wave_error(n)
     Ωₕ, Wₕ, I, sd = wave_system(n)
     prob = second_order_ode_problem(
         sd, Rₕ(Wₕ, x -&gt; duexact(x, 0.0)), Rₕ(Wₕ, x -&gt; uexact(x, 0.0)), I)
@@ -159,23 +362,25 @@ hs, errs = zip(wave_error.((13, 25, 41))...)
 orders = [log(errs[i] / errs[i + 1]) / log(hs[i] / hs[i + 1]) for i in 1:(length(hs) - 1)]
 
 
-collect(orders)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{Float64}:
- 1.9971405784500011
- 1.999179967571052</code></pre><script>
-  // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
-  // `window.Plotly` instead of registering as an anonymous AMD module.
-  window.__bramble_amd_define = window.define;
-  window.define = undefined;
-</script>
+collect(orders)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
+ 1.9971405784525902
+ 1.99917996756952</code></pre>
+</div>
+<div class="md-multi-output">
+<div class="md-output md-output-html">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script>
-  window.define = window.__bramble_amd_define;
-
-  // Colour tokens read from the page's own theme, not hard-coded — Documenter stamps
-  // `theme--documenter-dark` on <html> when dark mode is active, light mode has no such
-  // class. Recomputed on every call so a caller can re-theme after a toggle.
+  // Colour tokens read from the page's own theme, not hard-coded — MaterialDocs sets
+  // `data-theme="light"|"dark"` on <html>; when the attribute is absent the browser's
+  // `prefers-color-scheme` decides. Recomputed on every call so a caller can re-theme
+  // after a toggle.
   window.bramblePlotlyTheme = function () {
-    const dark = document.documentElement.className.includes('documenter-dark');
+    const attr = document.documentElement.getAttribute('data-theme');
+    const dark = attr
+      ? attr === 'dark'
+      : window.matchMedia('(prefers-color-scheme: dark)').matches;
     return dark
       ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
       : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
@@ -190,15 +395,21 @@ collect(orders)</code></pre><pre class="documenter-example-output"><code class="
   };
 
   if (!window.__bramble_plotly_theme_observer) {
-    window.__bramble_plotly_theme_observer = new MutationObserver(function () {
+    const repaint = function () {
       for (const { divId, restyle } of window.__bramble_plotly_charts) {
         const layout = restyle();
         Plotly.relayout(divId, layout);
       }
-    });
+    };
+    window.__bramble_plotly_theme_observer = new MutationObserver(repaint);
     window.__bramble_plotly_theme_observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['class'],
+      attributeFilter: ['data-theme'],
+    });
+    // With no saved theme MaterialDocs follows the system scheme in CSS alone and
+    // leaves `data-theme` unset, so a system change must repaint too.
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+      if (!document.documentElement.hasAttribute('data-theme')) repaint();
     });
   }
 
@@ -225,7 +436,7 @@ collect(orders)</code></pre><pre class="documenter-example-output"><code class="
   const data = [{
   name: "2D wave",
   x: [0.11785113019775798,0.058925565098879064,0.03535533905932741],
-  y: [0.006098867807034632,0.001527741937505401,0.0005502175318248933],
+  y: [0.006098867807034083,0.0015277419375025218,0.000550217531824287],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#5B5FC7", size: 8 },
@@ -233,7 +444,7 @@ collect(orders)</code></pre><pre class="documenter-example-output"><code class="
 {
   name: "slope 2",
   x: [0.03535533905932741, 0.11785113019775798],
-  y: [0.0005502175318248933, 0.006113528131387698],
+  y: [0.000550217531824287, 0.00611352813138096],
   mode: 'lines',
   type: 'scatter',
   line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
@@ -267,4 +478,50 @@ collect(orders)</code></pre><pre class="documenter-example-output"><code class="
   });
 })();
 </script>
-<p>Second order, the same rate the steady problems reach, which is the point: the second-order semidiscretisation does not cost the scheme its spatial accuracy.</p><h2 id="See-also"><a class="docs-heading-anchor" href="#See-also">See also</a><a id="See-also-1"></a><a class="docs-heading-anchor-permalink" href="#See-also" title="Permalink"></a></h2><ul><li><a href="../heat_equation/">Heat equation</a>, the first-order counterpart, and where <a href="../../api_sciml/#Bramble.semidiscretize"><code>semidiscretize</code></a> is introduced.</li><li><a href="../../api_sciml/#Bramble.SecondOrderSemidiscretization"><code>SecondOrderSemidiscretization</code></a> for the full accessor list and the solver restriction.</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../transient_inverse_problem/">« Recovering parameters from a trajectory (transient adjoint gradients)</a><a class="docs-footer-nextpage" href="../point_sources_flux/">Point sources and boundary flux recovery »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 29 September 2026 21:39">Tuesday 29 September 2026</span>. Using Julia version 1.13.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+
+</div>
+</div>
+<p>Second order, the same rate the steady problems reach, which is the point: the second-order semidiscretisation does not cost the scheme its spatial accuracy.</p>
+<h2 id="Where-to-go-next" class="md-heading">Where to go next<a href="#Where-to-go-next" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<ul class="md-list-tight">
+<li><p><a href="../../examples/heat_equation/">Heat equation</a>, the first-order counterpart, and where <a href="../../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a> is introduced.</p>
+</li>
+<li><p><a href="../../tutorials/form/#tutorial_form">Linear and bilinear forms</a> for the stiffness form and the <a href="../../tutorials/form/#form_dirichlet">Dirichlet conditions</a> used here.</p>
+</li>
+<li><p><a href="../../api_sciml/#Bramble.SecondOrderSemidiscretization"><code class="md-code-inline">SecondOrderSemidiscretization</code></a> for the full accessor list and the solver restriction.</p>
+</li>
+</ul>
+      </article>
+      <footer class="md-footer">
+<p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
+      </footer>
+    </main>
+    <aside class="md-toc">
+      <div class="md-toc-inner">
+        <p class="md-toc-title">On this page</p>
+          <a class="md-toc-link md-toc-h2" href="#Problem">Problem</a>
+          <a class="md-toc-link md-toc-h2" href="#Semidiscretising-in-space">Semidiscretising in space</a>
+          <a class="md-toc-link md-toc-h2" href="#Stepping-it">Stepping it</a>
+          <a class="md-toc-link md-toc-h2" href="#Energy-drift">Energy drift</a>
+          <a class="md-toc-link md-toc-h2" href="#Spatial-order-of-the-wave-solution">Spatial order of the wave solution</a>
+          <a class="md-toc-link md-toc-h2" href="#Where-to-go-next">Where to go next</a>
+      </div>
+    </aside>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia-repl.min.js"></script>
+  <script>hljs.highlightAll();</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.js"></script>
+  <script>var MD_KATEX_OPTIONS = {};
+document.querySelectorAll('.md-math').forEach(function (el) {
+  var tex = el.textContent.trim().replace(/^\\[\[(]/, '').replace(/\\[\])]$/, '');
+  katex.render(tex, el, Object.assign({ throwOnError: false }, MD_KATEX_OPTIONS,
+    { displayMode: el.classList.contains('md-math-display') }));
+});</script>
+  <script src="../../siteinfo.js"></script>
+  <script src="../../../versions.js"></script>
+  <script src="../../assets/materialdocs.js?v=44c13a4e"></script>
+</body>
+</html>

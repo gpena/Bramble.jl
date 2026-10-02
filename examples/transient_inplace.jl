@@ -3,8 +3,9 @@
 # Two pieces of this are already covered elsewhere. The
 # [heat equation](heat_equation.md) builds `M/Δt + K(t)` into a preallocated pattern with
 # [`allocate_system_matrix`](@ref) and [`assemble_add!`](@ref), and the
-# [solver tutorial](../tutorials/solvers.md) reuses one factorization across steps with
-# [`refactor!`](@ref). This page puts them together and closes the last gap: the backsolve
+# [solver tutorial](@ref tutorial_solvers) reuses one factorization across steps with
+# [`refactor!`](@ref); [Solving at every time step](@ref tutorial_time_stepping) compares the
+# strategies and is not repeated here. This page puts them together and closes the last gap: the backsolve
 # writes into the solution vector that already exists, so a Crank-Nicolson step allocates
 # nothing at all.
 #
@@ -151,7 +152,7 @@ include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 ust = Rₕ(gridspace(Ωst), x -> exp(-x[2]) * sinpi(x[1])) # hide
 surface_plot(ust; title = "u(x, t) = e⁻ᵗ sin(πx), the solution being stepped") # hide
 
-# ## Order in time
+# ## Crank-Nicolson order in time
 #
 # Crank-Nicolson is second order in `Δt`. The spatial mesh is held fixed and fine enough that
 # its own error stays below the time error being measured:
@@ -192,9 +193,9 @@ e₁, e₂, order
 # of the time error rather than adding to it. Refining `Δt` further would bring the measured
 # order back down onto two and then flatten, as the spatial error takes over.
 #
-# ## See also
+# ## Where to go next
 #
 # - [Heat equation](heat_equation.md), where [`semidiscretize`](@ref) hands the same problem
 #   to an adaptive stepper instead of a fixed loop.
-# - [Choosing a linear solver](../tutorials/solvers.md), for when factorize-and-reuse beats a
+# - [Choosing a linear solver](@ref tutorial_solvers), for when factorize-and-reuse beats a
 #   warm-started iterative solve.

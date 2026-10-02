@@ -1,40 +1,224 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Difference, jump and average operators · Bramble.jl</title><meta name="title" content="Difference, jump and average operators · Bramble.jl"/><meta property="og:title" content="Difference, jump and average operators · Bramble.jl"/><meta property="twitter:title" content="Difference, jump and average operators · Bramble.jl"/><meta name="description" content="Documentation for Bramble.jl."/><meta property="og:description" content="Documentation for Bramble.jl."/><meta property="twitter:description" content="Documentation for Bramble.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;family=Source+Sans+3:wght@400;600&amp;display=swap" rel="stylesheet" type="text/css"/><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="Bramble.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="Bramble.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Bramble.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting started</a></li><li><span class="tocitem">Discrete foundations</span><ul><li><a class="tocitem" href="../geometry/">Geometry tutorial</a></li><li><a class="tocitem" href="../mesh/">Mesh tutorial</a></li><li><a class="tocitem" href="../space/">Grid spaces and discrete functions</a></li><li class="is-active"><a class="tocitem" href>Difference, jump and average operators</a><ul class="internal"><li><a class="tocitem" href="#1.-The-operator-families"><span>1. The operator families</span></a></li><li><a class="tocitem" href="#2.-Applying-an-operator"><span>2. Applying an operator</span></a></li><li><a class="tocitem" href="#3.-What-happens-at-the-boundary"><span>3. What happens at the boundary</span></a></li><li><a class="tocitem" href="#4.-Operators-as-matrices"><span>4. Operators as matrices</span></a></li><li><a class="tocitem" href="#5.-Gradients-and-the-other-vectorial-forms"><span>5. Gradients and the other vectorial forms</span></a></li><li><a class="tocitem" href="#6.-Summation-by-parts,-and-Dₓ"><span>6. Summation by parts, and <code>D̃ₓ</code></span></a></li><li><a class="tocitem" href="#7.-The-centered-difference,-Dcₓ"><span>7. The centered difference, <code>Dcₓ</code></span></a></li><li><a class="tocitem" href="#8.-Second-order-on-a-non-uniform-grid,-Dₓ"><span>8. Second order on a non-uniform grid, <code>D̽ₓ</code></span></a></li><li><a class="tocitem" href="#9.-A-convergence-study,-and-the-boundary"><span>9. A convergence study, and the boundary</span></a></li><li><a class="tocitem" href="#10.-Interpolation-between-different-meshes"><span>10. Interpolation between different meshes</span></a></li></ul></li></ul></li><li><span class="tocitem">Forms and assembly</span><ul><li><a class="tocitem" href="../form/">Linear and bilinear forms</a></li></ul></li><li><span class="tocitem">Solvers and scientific computing</span><ul><li><a class="tocitem" href="../solvers/">Choosing a solver, backend, and execution policy</a></li><li><a class="tocitem" href="../autodiff/">Automatic differentiation tutorial</a></li><li><a class="tocitem" href="../backend/">Backend tutorial</a></li></ul></li><li><span class="tocitem">Visualization and export</span><ul><li><a class="tocitem" href="../plotting/">Plotting directly</a></li><li><a class="tocitem" href="../vtk_export/">Writing VTK files</a></li><li><a class="tocitem" href="../pgfplots_export/">Writing PGFPlots data files</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../../examples/poisson_linear/">Linear Poisson equation</a></li><li><a class="tocitem" href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a></li><li><a class="tocitem" href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a></li><li><a class="tocitem" href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a></li><li><a class="tocitem" href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a></li><li><a class="tocitem" href="../../examples/heat_equation/">Heat equation</a></li><li><a class="tocitem" href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a></li><li><a class="tocitem" href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a></li><li><a class="tocitem" href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a></li><li><a class="tocitem" href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a></li><li><a class="tocitem" href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a></li><li><a class="tocitem" href="../../examples/transient_inplace/">A transient loop that allocates nothing</a></li><li><a class="tocitem" href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a></li><li><a class="tocitem" href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a></li></ul></li><li><a class="tocitem" href="../../benchmarks/">Benchmarks</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../api/">API reference</a></li><li><a class="tocitem" href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a></li><li><input class="collapse-toggle" id="menuitem-9-3" type="checkbox"/><label class="tocitem" for="menuitem-9-3"><span class="docs-label">Internals</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../internals/utils/">Utilities</a></li><li><a class="tocitem" href="../../internals/geometry/">Geometry</a></li><li><a class="tocitem" href="../../internals/mesh/">Mesh</a></li><li><a class="tocitem" href="../../internals/space/">Spaces</a></li><li><a class="tocitem" href="../../internals/form/">Forms</a></li><li><a class="tocitem" href="../../internals/autodiff/">Automatic differentiation</a></li><li><a class="tocitem" href="../../internals/exporters/">Exporters</a></li><li><a class="tocitem" href="../../internals/gpu/">GPU acceleration</a></li><li><a class="tocitem" href="../../internals/csr_solvers/"><code>SparseMatrixCSR</code> direct solve</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Discrete foundations</a></li><li class="is-active"><a href>Difference, jump and average operators</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Difference, jump and average operators</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/operators.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Difference,-jump-and-average-operators"><a class="docs-heading-anchor" href="#Difference,-jump-and-average-operators">Difference, jump and average operators</a><a id="Difference,-jump-and-average-operators-1"></a><a class="docs-heading-anchor-permalink" href="#Difference,-jump-and-average-operators" title="Permalink"></a></h1><p>Bramble provides the finite difference building blocks that discrete schemes are written in: differences, jumps, averages, and their algebraic structures. Every number below was produced by the code shown.</p><h2 id="1.-The-operator-families"><a class="docs-heading-anchor" href="#1.-The-operator-families">1. The operator families</a><a id="1.-The-operator-families-1"></a><a class="docs-heading-anchor-permalink" href="#1.-The-operator-families" title="Permalink"></a></h2><p>There are four families:</p><table><tr><th style="text-align: left">Family</th><th style="text-align: left">Meaning</th><th style="text-align: left">Backward form</th></tr><tr><td style="text-align: left">finite difference</td><td style="text-align: left">a difference divided by the spacing, so it approximates <span>$\partial u / \partial x$</span></td><td style="text-align: left"><span>$\dfrac{u_i - u_{i-1}}{h_i}$</span></td></tr><tr><td style="text-align: left">jump</td><td style="text-align: left">the plain difference across an interface, undivided, where the intent is a discontinuity</td><td style="text-align: left"><span>$u_{i+1} - u_i$</span></td></tr><tr><td style="text-align: left">average</td><td style="text-align: left">the mean of a point and its neighbour</td><td style="text-align: left"><span>$\dfrac{u_{i-1} + u_i}{2}$</span></td></tr><tr><td style="text-align: left">index shift</td><td style="text-align: left">the neighbour&#39;s value, moved onto the point</td><td style="text-align: left"><span>$u_{i-1}$</span></td></tr></table><p>The jump is the one family with no backward form. A jump belongs to the interface between two cells rather than to a direction of travel across it, so <span>$\llbracket u \rrbracket = u_{i+1} - u_i$</span> at the interface between <span>$x_i$</span> and <span>$x_{i+1}$</span> is a single quantity; a backward jump would name that same interface from the other side and give the same numbers shifted by one index.</p><h3 id="1.1-How-the-names-are-built"><a class="docs-heading-anchor" href="#1.1-How-the-names-are-built">1.1 How the names are built</a><a id="1.1-How-the-names-are-built-1"></a><a class="docs-heading-anchor-permalink" href="#1.1-How-the-names-are-built" title="Permalink"></a></h3><p>A name is a stem, a direction, and a coordinate:</p><table><tr><th style="text-align: left">Piece</th><th style="text-align: left">Meaning</th></tr><tr><td style="text-align: left"><code>D</code></td><td style="text-align: left">finite difference</td></tr><tr><td style="text-align: left"><code>jump</code></td><td style="text-align: left">jump</td></tr><tr><td style="text-align: left"><code>M</code></td><td style="text-align: left">average</td></tr><tr><td style="text-align: left"><code>S</code></td><td style="text-align: left">index shift</td></tr><tr><td style="text-align: left"><code>₋</code></td><td style="text-align: left">backward: the stencil reaches to <span>$i-1$</span></td></tr><tr><td style="text-align: left"><code>₊</code></td><td style="text-align: left">forward: the stencil reaches to <span>$i+1$</span></td></tr><tr><td style="text-align: left"><code>ₓ</code>, <code>ᵧ</code>, <code>₂</code></td><td style="text-align: left">along the first, second or third coordinate</td></tr><tr><td style="text-align: left"><code>ₕ</code></td><td style="text-align: left">every coordinate at once, returning a tuple</td></tr></table><p>So <code>D₋ₓ</code> is the backward finite difference along <span>$x$</span>, <code>M₊ᵧ</code> the forward average along <span>$y$</span>, and <code>∇ₕ</code> the backward finite difference in every coordinate, which is the discrete gradient and has that extra name for it.</p><p><code>jump</code> takes no direction, for the reason given above: it is <code>jumpₓ</code>, <code>jumpᵧ</code>, <code>jump₂</code> and <code>jumpₕ</code>.</p><p>The index shift has a forward and a backward stem, <code>S₊</code> and <code>S₋</code>: <code>S₊ₓ</code> reads the next point along <span>$x$</span>, <code>S₋ₓ</code> the previous one, and <code>S₊ₕ</code>/<code>S₋ₕ</code> shift along every coordinate.</p><h3 id="1.2-How-D,-Dc,-D-and-D-differ"><a class="docs-heading-anchor" href="#1.2-How-D,-Dc,-D-and-D-differ">1.2 How <code>D₋</code>, <code>Dc</code>, <code>D̽</code> and <code>D̃</code> differ</a><a id="1.2-How-D,-Dc,-D-and-D-differ-1"></a><a class="docs-heading-anchor-permalink" href="#1.2-How-D,-Dc,-D-and-D-differ" title="Permalink"></a></h3><p>Four families combine the same one-sided differences in different ways. Sections 6, 7 and 8 below derive each one; this table is the summary.</p><table><tr><th style="text-align: left">Operator</th><th style="text-align: left">Stencil</th><th style="text-align: left">Order, non-uniform</th><th style="text-align: left">Order, uniform</th><th style="text-align: left">Boundary</th></tr><tr><td style="text-align: left"><code>D₋</code></td><td style="text-align: left"><span>$\{i-1, i\}$</span></td><td style="text-align: left">1</td><td style="text-align: left">1</td><td style="text-align: left">truncated to <code>0</code> at the first point</td></tr><tr><td style="text-align: left"><code>Dc</code></td><td style="text-align: left"><span>$\{i-1, i+1\}$</span>, divided by the full span</td><td style="text-align: left">1</td><td style="text-align: left">2</td><td style="text-align: left">truncated to <code>0</code> at <strong>both</strong> ends</td></tr><tr><td style="text-align: left"><code>D̽</code></td><td style="text-align: left"><span>$\{i-1, i, i+1\}$</span>: <code>h_i/(h_i+h_{i+1})</code> times <code>D₋u</code> at <span>$x_{i+1}$</span> plus <code>h_{i+1}/(h_i+h_{i+1})</code> times <code>D₋u</code> at <span>$x_i$</span> (the <span>$u_i$</span> terms cancel only when <span>$h_i = h_{i+1}$</span>)</td><td style="text-align: left">2</td><td style="text-align: left">2</td><td style="text-align: left">no convention of its own: falls back to <code>D₊</code>/<code>D₋</code></td></tr><tr><td style="text-align: left"><code>D̃</code></td><td style="text-align: left"><span>$\{i, i+1\}$</span>, divided by the <strong>averaged</strong> spacing</td><td style="text-align: left">1 (SBP-exact, not truncation-order)</td><td style="text-align: left">1</td><td style="text-align: left">truncated to <code>0</code> at the last point, like <code>D₊</code></td></tr></table><p>On a uniform grid <span>$h_i = h_{i+1}$</span>: <code>D̽</code> and <code>Dc</code> collapse to the same value (the mean of <code>D₋</code> and <code>D₊</code>), and <code>D̃</code> collapses to <code>D₊</code>. They separate only where the spacing varies, which is why a uniform-grid benchmark cannot tell them apart.</p><h3 id="operators_direction_argument"><a class="docs-heading-anchor" href="#operators_direction_argument">1.3 The direction as an argument</a><a id="operators_direction_argument-1"></a><a class="docs-heading-anchor-permalink" href="#operators_direction_argument" title="Permalink"></a></h3><p>The direction can also come from a variable rather than from the name. Index the vectorial operator with it: <code>∇ₕ[d]</code> is the coordinate operator itself, so <code>∇ₕ[1]</code>, <code>∇ₕ[:x]</code> and <code>D₋ₓ</code> are the same function object, and <code>dx, dy = ∇ₕ</code> destructures it. The same holds for <code>∇̃ₕ</code>, <code>∇cₕ</code>, <code>∇̽ₕ</code>, <code>jumpₕ</code>, <code>Mₕ</code> and <code>Mcₕ</code>.</p><p>That is what makes a loop over directions writable, which the subscript names cannot express on their own:</p><pre><code class="language-julia hljs"># the discrete H¹ seminorm squared, in any dimension
-sum(innerₕ(∇ₕ[d](uₕ), ∇ₕ[d](uₕ)) for d in 1:dim(mesh(space(uₕ))))</code></pre><p>Underneath, every family has a stem that takes the direction as a second argument, and the coordinate suffix is spelling it:</p><table><tr><th style="text-align: left">Written</th><th style="text-align: left">Same as</th></tr><tr><td style="text-align: left"><code>Bramble.D₋(uₕ, 1)</code></td><td style="text-align: left"><code>D₋ₓ(uₕ)</code></td></tr><tr><td style="text-align: left"><code>Bramble.D₋(uₕ, :y)</code></td><td style="text-align: left"><code>D₋ᵧ(uₕ)</code></td></tr><tr><td style="text-align: left"><code>Bramble.D₋(uₕ, Val(3))</code></td><td style="text-align: left"><code>D₋₂(uₕ)</code></td></tr></table><p>The stems <code>D₋</code>, <code>D₊</code>, <code>Dc</code>, <code>D̃</code> and <code>jump</code> are declared <code>public</code> but not exported, so they are written <code>Bramble.D₋</code> or imported by name. The <code>Val</code> form is the one to reach for when the direction must be a compile-time constant, as it must inside a form. The averages use <code>Mₕ</code>/<code>M₊ₕ</code> for this rather than a bare <code>M</code>: <code>M</code> is what most finite-element code calls its mass matrix. So <code>Mₕ(uₕ)</code> is the tuple over every coordinate and <code>Mₕ(uₕ, 2)</code> is the average along <span>$y$</span> — the same name, told apart by how many arguments it is given. <code>∇̽ₕ</code> carries both in the same way.</p><p>An <code>Int</code> or a <code>Symbol</code> selects between literal <code>Val</code>s, one branch per direction the mesh has. An out-of-range direction throws an <code>ArgumentError</code>, and the bound is the mesh&#39;s own dimension: <code>Bramble.D₋(uₕ, :y)</code> on a 1D grid is an error, not a silent zero.</p><h2 id="2.-Applying-an-operator"><a class="docs-heading-anchor" href="#2.-Applying-an-operator">2. Applying an operator</a><a id="2.-Applying-an-operator-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Applying-an-operator" title="Permalink"></a></h2><p>An operator takes a <a href="../../api/#Bramble.VectorElement"><code>VectorElement</code></a> and returns a new one on the same space.</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; using Bramble</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; # The forward difference and the forward average are `public` but not exported in v3.0:
-       # Bramble discretises with the backward operator paired with `inner₊`, so the forward ones
-       # are the duals you check against rather than the ones you write a form with. They are
-       # imported here because this page compares the two families side by side.
-       import Bramble: D₊ₓ, ∇₊ₕ, M₊ₓ, Dcₓ, D̽ₓ, D̃ₓ, set_points!, spacings, interpolation_matrix</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Wₕ = gridspace(Ωₕ);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; points(Ωₕ)</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.0
- 0.25
- 0.5
- 0.75
- 1.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; spacings(Ωₕ)</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.25
- 0.25
- 0.25
- 0.25
- 0.25</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; uₕ = Rₕ(Wₕ, x -&gt; x^2);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(uₕ)</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.0
- 0.0625
- 0.25
- 0.5625
- 1.0</code></pre><p>The two backward operators on that grid function, reached here through the vectorial names (on a one-dimensional mesh <code>∇ₕ</code>/<code>Mₕ</code> return the single coordinate directly rather than a one-tuple, so they agree exactly with <code>D₋ₓ</code>/<code>Mₓ</code>):</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(∇ₕ(uₕ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.0
- 0.25
- 0.75
- 1.25
- 1.75</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(Mₕ(uₕ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.0
- 0.03125
- 0.15625
- 0.40625
- 0.78125</code></pre><p>Reading the second entry of each: the plain difference is <span>$u_2 - u_1 = 0.0625$</span>, so <code>∇ₕ</code> divides that by <span>$h_2 = 0.25$</span> to get <span>$0.25$</span>, and <code>Mₕ</code> averages <span>$(u_1 + u_2)/2 = 0.03125$</span>.</p><p>The jump has no backward form; forward, it is that plain difference, undivided:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(jumpₕ(uₕ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Difference, jump and average operators — Bramble.jl</title>
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=6104133d">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <meta name="title" content="Difference, jump and average operators — Bramble.jl">
+  <meta property="og:title" content="Difference, jump and average operators — Bramble.jl">
+  <meta property="twitter:title" content="Difference, jump and average operators — Bramble.jl">
+  <meta name="description" content="Documentation for Bramble.jl.">
+  <meta property="og:description" content="Documentation for Bramble.jl.">
+  <meta property="twitter:description" content="Documentation for Bramble.jl.">
+  <link rel="icon" type="image/x-icon" href="../../assets/favicon.ico">
+  <link rel="stylesheet" href="../../assets/custom.css">
+  <script>
+    (function(){
+      document.documentElement.classList.add('no-transition');
+      var t=localStorage.getItem('md-theme');if(t)document.documentElement.setAttribute('data-theme',t);
+      window.addEventListener('load',function(){setTimeout(function(){document.documentElement.classList.remove('no-transition');},50);});
+    })()
+  </script>
+</head>
+<body data-warn-outdated>
+  <header class="md-navbar">
+    <button id="md-hamburger" class="md-icon-btn md-hamburger" aria-label="Toggle navigation" aria-expanded="false"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></button>
+    <img class="md-navbar-logo md-logo-light" src="../../assets/logo.svg" alt="Bramble.jl logo" height="32">
+    <img class="md-navbar-logo md-logo-dark" src="../../assets/logo-dark.svg" alt="Bramble.jl logo" height="32">
+    <span class="md-navbar-title">Bramble.jl</span>
+    <span class="md-navbar-spacer"></span>
+    <button id="md-search-btn" class="md-search-bar" aria-label="Search documentation" aria-expanded="false">
+      <svg class="md-icon md-search-bar-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <span class="md-search-bar-label">Search docs</span>
+      <kbd class="md-search-bar-kbd">Ctrl K</kbd>
+    </button>
+    <a class="md-icon-btn md-repo-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub" aria-label="View the repository on GitHub" rel="noopener" target="_blank"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 .3a12 12 0 00-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 016 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0012 .3z"/></svg><span class="md-repo-label">GitHub</span></a>
+    <button id="md-theme-toggle" class="md-icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode"><svg class="md-icon md-icon-light" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg><svg class="md-icon md-icon-dark" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg></button>
+  </header>
+  <div class="md-layout">
+    <nav class="md-sidebar">
+      <a href="../../">Home</a>
+      <a href="../../getting_started/">Getting started</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Discrete foundations</span>
+        <a href="../../tutorials/geometry/">Geometry tutorial</a>
+        <a href="../../tutorials/mesh/">Mesh tutorial</a>
+        <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
+        <a href="../../tutorials/operators/" class="md-nav-active">Difference, jump and average operators</a>
+        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
+        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Forms and assembly</span>
+        <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Solvers and scientific computing</span>
+        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
+        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
+        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <a href="../../tutorials/backend/">Backends and execution policies</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Visualization and export</span>
+        <a href="../../tutorials/plotting/">Plotting directly</a>
+        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
+        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Examples</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Stationary problems</span>
+          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
+          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
+          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Time-dependent problems</span>
+          <a href="../../examples/heat_equation/">Heat equation</a>
+          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Inverse problems</span>
+          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
+          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
+        </div>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Solvers and performance</span>
+          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
+          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
+          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
+        </div>
+      </div>
+      <a href="../../benchmarks/">Benchmarks</a>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Documentation</span>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">API reference</span>
+          <a href="../../api/">API reference</a>
+          <a href="../../api/utilities/">Utilities</a>
+          <a href="../../api/geometry/">Geometry</a>
+          <a href="../../api/meshes/">Meshes</a>
+          <a href="../../api/spaces/">Grid spaces</a>
+          <a href="../../api/operators/">Difference, jump and average operators</a>
+          <a href="../../api/inner_products/">Inner products and norms</a>
+          <a href="../../api/forms/">Forms</a>
+          <a href="../../api/exporters/">Exporters</a>
+        </div>
+        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
+        <div class="md-nav-section md-nav-collapsed">
+          <span class="md-nav-section-title">Internals</span>
+          <a href="../../internals/utils/">Utilities</a>
+          <a href="../../internals/geometry/">Geometry</a>
+          <a href="../../internals/mesh/">Mesh</a>
+          <a href="../../internals/space/">Spaces</a>
+          <a href="../../internals/form/">Forms</a>
+          <a href="../../internals/autodiff/">Automatic differentiation</a>
+          <a href="../../internals/exporters/">Exporters</a>
+          <a href="../../internals/gpu/">GPU acceleration</a>
+          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
+        </div>
+      </div>
+    </nav>
+    <main class="md-content">
+      <article class="md-article">
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/operators.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+<h1 id="tutorial_operators" class="md-heading">Difference, jump and average operators<a href="#tutorial_operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
+<p><strong>What you will learn.</strong> How to apply a difference, a jump or an average to a discrete function, what each does at the edge of the grid, and how to get the same operator as a matrix.</p>
+<p><strong>What you need first.</strong> The <a href="../../tutorials/mesh/#tutorial_mesh">mesh tutorial</a> and the <a href="../../tutorials/space/#tutorial_space">space tutorial</a>, for meshes, grid spaces and discrete functions.</p>
+<p><strong>Where next.</strong> The <a href="../../tutorials/operator_accuracy/">accuracy tutorial</a> measures how well these operators approximate derivatives.</p>
+<p>Every block below runs when this page is built.</p>
+<hr class="md-hr">
+<h2 id="Apply-an-operator" class="md-heading">Apply an operator<a href="#Apply-an-operator" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>The operators are the building blocks that discrete schemes are written in. Start with a small grid of five points and the function <span class="md-math md-math-inline">\(u(x) = x^2\)</span> restricted to it:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0)), 5)
+Wₕ = gridspace(Ωₕ)
+uₕ = Rₕ(Wₕ, x -&gt; x^2)
+
+points(Ωₕ), parent(uₕ)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.25, 0.5, 0.75, 1.0], [0.0, 0.0625, 0.25, 0.5625, 1.0])</code></pre>
+</div>
+<p>An operator takes a <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> such as <code class="md-code-inline">uₕ</code> and returns a new one on the same space. The backward difference <a href="../../api/operators/#Bramble.∇ₕ"><code class="md-code-inline">∇ₕ</code></a> divides <span class="md-math md-math-inline">\(u_i - u_{i-1}\)</span> by the spacing, and the backward average <a href="../../api/operators/#Bramble.Mₕ"><code class="md-code-inline">Mₕ</code></a> takes <span class="md-math md-math-inline">\((u_{i-1} + u_i)/2\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">parent(∇ₕ(uₕ)), parent(Mₕ(uₕ))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.25, 0.75, 1.25, 1.75], [0.0, 0.03125, 0.15625, 0.40625, 0.78125])</code></pre>
+</div>
+<p>Read the second entry of each. The plain difference is <span class="md-math md-math-inline">\(u_2 - u_1 = 0.0625\)</span> and the spacing is <span class="md-math md-math-inline">\(h_2 = 0.25\)</span>, so <code class="md-code-inline">∇ₕ</code> gives <span class="md-math md-math-inline">\(0.25\)</span>. The average is <span class="md-math md-math-inline">\((u_1 + u_2)/2 = 0.03125\)</span>. The first entry of the difference is <span class="md-math md-math-inline">\(0\)</span>, which the next section explains.</p>
+<p>The jump is the plain difference across an interface, with no division:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">parent(jumpₕ(uₕ))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">5-element Vector{Float64}:
   0.0625
   0.1875
   0.3125
   0.4375
- -1.0</code></pre><h2 id="3.-What-happens-at-the-boundary"><a class="docs-heading-anchor" href="#3.-What-happens-at-the-boundary">3. What happens at the boundary</a><a id="3.-What-happens-at-the-boundary-1"></a><a class="docs-heading-anchor-permalink" href="#3.-What-happens-at-the-boundary" title="Permalink"></a></h2><p>Every operator has one slice where its stencil runs off the grid: the first point for a backward operator, the last for a forward one. There is no neighbour there, so the stencil is truncated, and the finite difference and the jump truncate differently.</p><figure>
+ -1.0</code></pre>
+</div>
+<p>Here <code class="md-code-inline">jumpₕ</code> is the forward difference <span class="md-math md-math-inline">\(u_{i+1} - u_i\)</span>, so its first entry is <span class="md-math md-math-inline">\(0.0625\)</span>. The last entry, <span class="md-math md-math-inline">\(-1\)</span>, is explained below.</p>
+<div class="md-admonition md-admonition-tip">
+<p class="md-admonition-title">Try this</p>
+<div class="md-admonition-body">
+<p>Replace <code class="md-code-inline">x^2</code> by <code class="md-code-inline">x</code>. The derivative is <span class="md-math md-math-inline">\(1\)</span>, so <code class="md-code-inline">∇ₕ</code> returns ones everywhere except at the first point, and <code class="md-code-inline">jumpₕ</code> returns the constant <span class="md-math md-math-inline">\(0.25\)</span>, the spacing, except at the last point.</p>
+</div>
+</div>
+<p>The four families are summarised below. Their names are built from a stem and a direction, and the <a href="../../tutorials/operators/#operators_names">reference</a> at the end of this page spells out the scheme.</p>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:left">Family</th>
+<th style="text-align:left">Meaning</th>
+<th style="text-align:left">Backward form</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">finite difference</td>
+<td style="text-align:left">a difference divided by the spacing, so it approximates <span class="md-math md-math-inline">\(\partial u / \partial x\)</span></td>
+<td style="text-align:left"><span class="md-math md-math-inline">\(\dfrac{u_i - u_{i-1}}{h_i}\)</span></td>
+</tr>
+<tr>
+<td style="text-align:left">jump</td>
+<td style="text-align:left">the plain difference across an interface, undivided</td>
+<td style="text-align:left"><span class="md-math md-math-inline">\(u_{i+1} - u_i\)</span></td>
+</tr>
+<tr>
+<td style="text-align:left">average</td>
+<td style="text-align:left">the mean of a point and its neighbour</td>
+<td style="text-align:left"><span class="md-math md-math-inline">\(\dfrac{u_{i-1} + u_i}{2}\)</span></td>
+</tr>
+<tr>
+<td style="text-align:left">index shift</td>
+<td style="text-align:left">the neighbour&#39;s value, moved onto the point</td>
+<td style="text-align:left"><span class="md-math md-math-inline">\(u_{i-1}\)</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The jump is the one family with no backward form. A jump belongs to the interface between two cells rather than to a direction of travel across it, so <span class="md-math md-math-inline">\(\llbracket u \rrbracket = u_{i+1} - u_i\)</span> at the interface between <span class="md-math md-math-inline">\(x_i\)</span> and <span class="md-math md-math-inline">\(x_{i+1}\)</span> is a single quantity. A backward jump would name the same interface from the other side.</p>
+<hr class="md-hr">
+<h2 id="What-happens-at-the-boundary" class="md-heading">What happens at the boundary<a href="#What-happens-at-the-boundary" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Every operator has one slice where its stencil runs off the grid: the first point for a backward operator, the last for a forward one. There is no neighbour there, so the stencil is truncated.</p>
+<figure>
 <svg viewBox="0 0 720 250" width="100%" style="max-width: 720px; height: auto;"
      xmlns="http://www.w3.org/2000/svg" role="img"
      aria-label="A five point grid showing the backward stencil reaching from a point to its left neighbour, the forward stencil reaching right, and the boundary points where each stencil is truncated.">
@@ -81,17 +265,27 @@ sum(innerₕ(∇ₕ[d](uₕ), ∇ₕ[d](uₕ)) for d in 1:dim(mesh(space(uₕ)))
     </marker>
   </defs>
 </svg>
-</figure><p>The finite difference is <strong>zero</strong> on its truncated slice, because there is no one-sided stencil to divide by a spacing: the backward one is truncated at <span>$x_1$</span> and the forward one at <span>$x_5$</span>. The jump instead behaves as if the missing neighbour were zero, which is what makes it agree with its matrix:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(∇ₕ(uₕ))[1]</code><code class="nohighlight hljs ansi" style="display:block;">0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(D₊ₓ(uₕ))[end]</code><code class="nohighlight hljs ansi" style="display:block;">0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(jumpₕ(uₕ))[end]   # -u₅, not 0</code><code class="nohighlight hljs ansi" style="display:block;">-1.0</code></pre><p>Section 9 shows why this matters in practice.</p><p>The index shifts follow the jump: an off-grid neighbour reads as zero, so <code>S₊ₕ</code> is zero at the last point and <code>S₋ₕ</code> at the first:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(S₊ₕ(uₕ))          # u₅ has no successor: 0</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.0625
- 0.25
- 0.5625
- 1.0
- 0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(S₋ₕ(uₕ))          # u₁ has no predecessor: 0</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.0
- 0.0
- 0.0625
- 0.25
- 0.5625</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(S₊ₕ(uₕ)) - parent(uₕ) == parent(jumpₕ(uₕ))</code><code class="nohighlight hljs ansi" style="display:block;">true</code></pre><p>That convention gives three identities that hold at every point, the boundary included: the matrix of <code>S₊</code> is the transpose of the matrix of <code>S₋</code>, <code>S₊(u) - u</code> is <code>jump(u)</code>, and <code>u - S₋(u)</code> is the backward difference <span>$u_i - u_{i-1}$</span>, undivided. <code>D₊</code> is the exception to keep in mind: it is zero at the last point, so <code>S₊(u) - u</code> is not <span>$h$</span> times <code>D₊(u)</code> there. Inside a form the rule is the same, and a shift of a composed operand, such as <code>S₊ₓ(D₋ₓ(u))</code>, reads zero wherever the shifted stencil leaves the grid.</p><p>In two or more dimensions, directional operators apply along the coordinate lines of the tensor grid, and each directional family truncates along its corresponding boundary slice:</p><figure>
+</figure>
+<p>The finite difference is zero on its truncated slice, because there is no one-sided stencil to divide by a spacing. The jump instead behaves as if the missing neighbour were zero. Check both ends:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">parent(∇ₕ(uₕ))[1], parent(D₊ₓ(uₕ))[end], parent(jumpₕ(uₕ))[end]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0, 0.0, -1.0)</code></pre>
+</div>
+<p>The last entry is <span class="md-math md-math-inline">\(-u_5 = -1\)</span>, not <span class="md-math md-math-inline">\(0\)</span>. That is what makes the jump agree with its matrix, as the <a href="../../tutorials/operator_accuracy/#operator_accuracy_convergence">accuracy tutorial</a> shows with a convergence study that the truncated point spoils.</p>
+<p>The index shifts follow the jump: an off-grid neighbour reads as zero, so <code class="md-code-inline">S₊ₕ</code> is zero at the last point and <code class="md-code-inline">S₋ₕ</code> at the first.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">parent(S₊ₕ(uₕ)), parent(S₋ₕ(uₕ)), parent(S₊ₕ(uₕ)) - parent(uₕ) == parent(jumpₕ(uₕ))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0625, 0.25, 0.5625, 1.0, 0.0], [0.0, 0.0, 0.0625, 0.25, 0.5625], true)</code></pre>
+</div>
+<p>That convention gives three identities that hold at every point, the boundary included. The matrix of <code class="md-code-inline">S₊</code> is the transpose of the matrix of <code class="md-code-inline">S₋</code>, <code class="md-code-inline">S₊(u) - u</code> is <code class="md-code-inline">jump(u)</code>, and <code class="md-code-inline">u - S₋(u)</code> is the undivided backward difference. The exception is <code class="md-code-inline">D₊</code>: it is zero at the last point, so <code class="md-code-inline">S₊(u) - u</code> is not <span class="md-math md-math-inline">\(h\)</span> times <code class="md-code-inline">D₊(u)</code> there. Inside a form the rule is the same, and a shift of a composed operand, such as <code class="md-code-inline">S₊ₓ(D₋ₓ(u))</code>, reads zero wherever the shifted stencil leaves the grid.</p>
+<p>In two or more dimensions the directional operators apply along the coordinate lines of the tensor grid, and each directional family truncates along its own boundary slice:</p>
+<figure>
 <svg viewBox="0 0 740 310" width="100%" style="max-width:740px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
      xmlns="http://www.w3.org/2000/svg" role="img"
      aria-label="A 4 by 4 two-dimensional tensor-product grid showing the directional backward stencils D_-x (horizontal) and D_-y (vertical), and the boundary slices where each directional difference is truncated to zero.">
@@ -180,106 +374,241 @@ sum(innerₕ(∇ₕ[d](uₕ), ∇ₕ[d](uₕ)) for d in 1:dim(mesh(space(uₕ)))
     <text x="140" y="178" font-size="11" fill="#10b981" font-weight="bold" text-anchor="middle">∇ₕ(uₕ) = (D₋ₓ(uₕ), D₋ᵧ(uₕ))</text>
   </g>
 </svg>
-</figure><h2 id="4.-Operators-as-matrices"><a class="docs-heading-anchor" href="#4.-Operators-as-matrices">4. Operators as matrices</a><a id="4.-Operators-as-matrices-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Operators-as-matrices" title="Permalink"></a></h2><p>Passing a mesh or a grid space, rather than a grid function, returns the operator itself as a sparse matrix:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; A = ∇ₕ(Wₕ);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; typeof(A)</code><code class="nohighlight hljs ansi" style="display:block;">SparseArrays.SparseMatrixCSC{Float64, Int64}</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; A * parent(uₕ) ≈ parent(∇ₕ(uₕ))</code><code class="nohighlight hljs ansi" style="display:block;">true</code></pre><p>Both routes give the same answer. Applying the operator directly to <code>uₕ</code> is the fast path and is what a time-stepping loop should use; the matrix is what to reach for when assembling a linear system, and it is also how the test suite checks the fast path.</p><h2 id="5.-Gradients-and-the-other-vectorial-forms"><a class="docs-heading-anchor" href="#5.-Gradients-and-the-other-vectorial-forms">5. Gradients and the other vectorial forms</a><a id="5.-Gradients-and-the-other-vectorial-forms-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Gradients-and-the-other-vectorial-forms" title="Permalink"></a></h2><p>The <code>ₕ</code> suffix applies the operator along every coordinate and returns a tuple with one entry per dimension. On a one-dimensional mesh it returns the single element itself rather than a one-tuple.</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ω₂ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true));</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; W₂ = gridspace(Ω₂);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; vₕ = Rₕ(W₂, x -&gt; x[1] + 2x[2]);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; g = ∇ₕ(vₕ);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; length(g)</code><code class="nohighlight hljs ansi" style="display:block;">2</code></pre><p>Away from the truncated slices, <code>g[1]</code> is <code>1.0</code> and <code>g[2]</code> is <code>2.0</code>, the two partial derivatives of <span>$x + 2y$</span>. The same suffix works for the other families as <code>jumpₕ</code> and <code>Mₕ</code>, and all of them accept a mesh, a grid space or a grid function.</p><p>These are separate names from the dimensional entry points of <a href="#operators_direction_argument">1.3</a> rather than one name with an extra argument, and deliberately: <code>∇ₕ(uₕ)</code> returns a tuple where <code>Bramble.D₋(uₕ, d)</code> returns a grid function, so folding them together would make the return type depend on whether an argument was passed at all. <code>∇̽ₕ</code> and <code>Mₕ</code>/<code>M₊ₕ</code> are the exception, and they get away with it because the two meanings differ by arity rather than by the value of an argument:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; ∇̽ₕ(vₕ) == (∇̽ₕ(vₕ, 1), ∇̽ₕ(vₕ, 2))</code><code class="nohighlight hljs ansi" style="display:block;">true</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Mₕ(vₕ) == (Mₕ(vₕ, :x), Mₕ(vₕ, :y))</code><code class="nohighlight hljs ansi" style="display:block;">true</code></pre><h3 id="5.1-Destructuring,-indexing-and-composing-the-operator-itself"><a class="docs-heading-anchor" href="#5.1-Destructuring,-indexing-and-composing-the-operator-itself">5.1 Destructuring, indexing and composing the operator itself</a><a id="5.1-Destructuring,-indexing-and-composing-the-operator-itself-1"></a><a class="docs-heading-anchor-permalink" href="#5.1-Destructuring,-indexing-and-composing-the-operator-itself" title="Permalink"></a></h3><p><code>∇ₕ</code> (and every other <code>ₕ</code>-suffixed family) is not only callable on a grid function: it is itself a tuple-like object of the per-coordinate operators, so it can be destructured or indexed before ever being applied. <code>dx</code> below is exactly <code>D₋ₓ</code>, reached without importing that name:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; dx, dy = ∇ₕ;</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(dx(vₕ)) == parent(∇ₕ(vₕ)[1])</code><code class="nohighlight hljs ansi" style="display:block;">true</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(∇ₕ[:x](vₕ)) == parent(∇ₕ(vₕ)[1])</code><code class="nohighlight hljs ansi" style="display:block;">true</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(∇ₕ[1](vₕ)) == parent(∇ₕ(vₕ)[1])</code><code class="nohighlight hljs ansi" style="display:block;">true</code></pre><p><code>∇ₕ</code> also composes with <code>LinearAlgebra</code>&#39;s <code>⋅</code> and <code>×</code> against a vector grid function, contracting to the divergence and curl:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; using LinearAlgebra: ⋅, ×</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; uv = Rₕ(vector_gridspace(Ω₂), x -&gt; (x[1] + 2x[2], 3x[1] - x[2]));</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(∇ₕ ⋅ uv) == parent(divₕ(uv))</code><code class="nohighlight hljs ansi" style="display:block;">true</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(∇ₕ × uv) == parent(curlₕ(uv))</code><code class="nohighlight hljs ansi" style="display:block;">true</code></pre><p><code>∇cₕ</code>, <code>∇̽ₕ</code>, <code>∇̃ₕ</code> and <code>∇₊ₕ</code> all answer to the same three spellings (destructuring, <code>[d]</code> indexing, <code>⋅</code>/<code>×</code>), each contracting to its own family&#39;s <code>div</code>/<code>curl</code> (<code>divcₕ</code>/<code>curlcₕ</code>, <code>div̽ₕ</code>/<code>curl̽ₕ</code>, <code>diṽₕ</code>/<code>curl̃ₕ</code>, <code>div₊ₕ</code>/<code>curl₊ₕ</code>).</p><h2 id="6.-Summation-by-parts,-and-Dₓ"><a class="docs-heading-anchor" href="#6.-Summation-by-parts,-and-Dₓ">6. Summation by parts, and <code>D̃ₓ</code></a><a id="6.-Summation-by-parts,-and-Dₓ-1"></a><a class="docs-heading-anchor-permalink" href="#6.-Summation-by-parts,-and-Dₓ" title="Permalink"></a></h2><p>Continuous integration by parts, <span>$\int u&#39; v = -\int u v&#39;$</span> for <span>$v$</span> vanishing on the boundary, has a discrete counterpart, and which forward difference it holds for is not the obvious one. The operator that satisfies it is <code>D̃ₓ</code> (also reached as <code>∇̃ₕ[1]</code>, or by destructuring <code>∇̃ₕ</code>): the forward difference divided by the <strong>averaged</strong> spacing rather than by the forward spacing,</p><p class="math-container">\[\tilde{\textrm{D}}_{+x}(u_h)(i) = \frac{u_{i+1} - u_i}{(h_i + h_{i+1})/2}\]</p><p>with the last point truncated to zero, as <code>D₊ₓ</code> is. On a uniform grid <span>$h_i = h_{i+1}$</span> and it coincides with <code>D₊ₓ</code>; the two differ only where the spacing varies:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ωₙ = mesh(domain(interval(0.0, 1.0)), 5, true);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; set_points!(Ωₙ, [0.0, 0.1, 0.3, 0.7, 1.0])</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; uₙ = Rₕ(gridspace(Ωₙ), x -&gt; x^2);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(D₊ₓ(uₙ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.10000000000000002
- 0.39999999999999997
- 0.9999999999999999
- 1.6999999999999997
- 0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(D̃ₓ(uₙ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.10000000000000002
- 0.5333333333333333
- 1.333333333333333
- 1.4571428571428573
- 0.0</code></pre><p>The identity is</p><p class="math-container">\[(\tilde{\textrm{D}}_{+x} u_h,\, v_h)_h = -(u_h,\, D_{-x} v_h)_{+x}\]</p><p>for any <code>vₕ</code> that vanishes on the boundary. Note which product sits on each side: the left is <code>innerₕ</code>, weighted by the cell measures, and the right is <code>inner₊(·, ·, :x)</code>, weighted by the staggered ones. Only <code>vₕ</code> has to vanish; <code>uₕ</code> is unconstrained, since the boundary term the identity discards is a product of the two.</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ωᵣ = mesh(domain(interval(0.0, 1.0)), 21, false);   # a random, non-uniform grid</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Wᵣ = gridspace(Ωᵣ);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; aₕ = Rₕ(Wᵣ, x -&gt; cos(x) + 0.7);                     # not zero at the boundary</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; bₕ = Rₕ(Wᵣ, x -&gt; sin(pi * x));                      # zero at both ends</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; innerₕ(D̃ₓ(aₕ), bₕ)</code><code class="nohighlight hljs ansi" style="display:block;">-0.3224302783078163</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; -inner₊(aₕ, ∇ₕ(bₕ), :x)                            # equal to machine precision</code><code class="nohighlight hljs ansi" style="display:block;">-0.3224302783078166</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; innerₕ(D₊ₓ(aₕ), bₕ)                                # D₊ₓ does not agree</code><code class="nohighlight hljs ansi" style="display:block;">-0.31334878829556</code></pre><p>It holds per coordinate in two and three dimensions as well, with <code>D̃ᵧ</code>, <code>D̃₂</code> and their inner products. <code>∇̃ₕ</code> returns all coordinates at once, as <code>∇₊ₕ</code> does.</p><p>This is why the operator exists. Energy estimates for these schemes are derived by moving a difference from one factor to the other, and that step is exact only with this pairing: with <code>D₊ₓ</code> it leaves a residual that does not vanish under refinement, since it is a difference of quadrature weights and not a truncation error. Like the other difference families, <code>D̃</code> can also be had as a sparse matrix: <code>D̃ₓ(Wₕ)</code> is <code>diag(2/(hᵢ + hᵢ₊₁))</code> times the undivided forward difference <span>$u_{i+1} - u_i$</span>, with an empty last row.</p><h2 id="7.-The-centered-difference,-Dcₓ"><a class="docs-heading-anchor" href="#7.-The-centered-difference,-Dcₓ">7. The centered difference, <code>Dcₓ</code></a><a id="7.-The-centered-difference,-Dcₓ-1"></a><a class="docs-heading-anchor-permalink" href="#7.-The-centered-difference,-Dcₓ" title="Permalink"></a></h2><p>Both one-sided differences reach one point; the centered one reaches both ways, and divides by the whole span its stencil covers:</p><p class="math-container">\[\textrm{Dc}_x(u_h)(i) = \frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}
-    = \frac{u_{i+1} - u_{i-1}}{x_{i+1} - x_{i-1}}\]</p><p>It is the only operator here that truncates on <strong>two</strong> slices, since neither the first nor the last point has a neighbour on both sides.</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(∇ₕ(uₙ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.0
- 0.10000000000000002
- 0.39999999999999997
- 0.9999999999999999
- 1.6999999999999997</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(D₊ₓ(uₙ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.10000000000000002
- 0.39999999999999997
- 0.9999999999999999
- 1.6999999999999997
- 0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(Dcₓ(uₙ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.0
- 0.3
- 0.7999999999999999
- 1.3
- 0.0</code></pre><p>Writing the denominator as <span>$x_{i+1} - x_{i-1}$</span> rather than as a pair of spacings buys two properties that hold on <strong>any</strong> grid, not only a uniform one.</p><p>First, it reproduces an affine function&#39;s derivative exactly, since numerator and denominator are then the same quantity:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(Dcₓ(Rₕ(gridspace(Ωₙ), x -&gt; 3x + 1)))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.0
- 3.0
- 2.9999999999999996
- 3.0000000000000004
- 0.0</code></pre><p>Second, it is skew-symmetric in <code>innerₕ</code> for grid functions vanishing on the boundary:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ωₛ = mesh(domain(interval(0.0, 1.0)), 41, false);   # a random, non-uniform grid</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Wₛ = gridspace(Ωₛ);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; pₕ = Rₕ(Wₛ, x -&gt; sin(pi * x));</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; qₕ = Rₕ(Wₛ, x -&gt; sin(2pi * x) * x * (1 - x));       # both zero at both ends</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; innerₕ(Dcₓ(pₕ), qₕ)</code><code class="nohighlight hljs ansi" style="display:block;">0.21082197004504277</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; -innerₕ(pₕ, Dcₓ(qₕ))                               # equal to machine precision</code><code class="nohighlight hljs ansi" style="display:block;">0.21082197004504272</code></pre><p>The cancellation is the one from section 6: <code>innerₕ</code>&#39;s weight at point <span>$i$</span> is exactly half the centered denominator, so the weights drop out and shifting the index by one turns what is left into minus the right side. Unlike the <code>D̃ₓ</code> identity, this one needs both functions to vanish at the boundary, since the discarded term is symmetric in the two.</p><p>Accuracy follows the usual rule: the centered difference approximates the derivative at the midpoint of its stencil, which is <span>$x_i$</span> only when the two spacings match. So it is second order on a uniform grid and first order otherwise, where the one-sided differences are first order on both. Like every other family, <code>Dcₓ</code> accepts a mesh or a grid space for the matrix and a grid function to apply it; <code>∇cₕ</code> gives every coordinate at once. Both end rows of the matrix are empty, which is the truncation.</p><h2 id="8.-Second-order-on-a-non-uniform-grid,-Dₓ"><a class="docs-heading-anchor" href="#8.-Second-order-on-a-non-uniform-grid,-Dₓ">8. Second order on a non-uniform grid, <code>D̽ₓ</code></a><a id="8.-Second-order-on-a-non-uniform-grid,-Dₓ-1"></a><a class="docs-heading-anchor-permalink" href="#8.-Second-order-on-a-non-uniform-grid,-Dₓ" title="Permalink"></a></h2><p><code>Dcₓ</code> is second order only on a uniform grid. The fix is to take the same two one-sided differences and weight them by the <strong>opposite</strong> spacings:</p><p class="math-container">\[\overset{\times}{\textrm{D}}_{x}(u_h)(i) = \frac{h_i}{h_i + h_{i+1}}\, D_{-x} u_h(x_{i+1})
-                        + \frac{h_{i+1}}{h_i + h_{i+1}}\, D_{-x} u_h(x_i)\]</p><p>Compare that with <code>Dcₓ</code>, which is the same combination with the weights the other way round. When <span>$h_i = h_{i+1}$</span> the two agree, and both reduce to the mean of <span>$D_{-x}$</span> and <span>$D_{+x}$</span>; they part company only where the spacing varies.</p><p>The swap buys exactness on quadratics rather than only on affine functions, on any grid. With <span>$u = x^2$</span> the weighted sum telescopes to <span>$2 x_i (h_i + h_{i+1})$</span>, and the denominator cancels:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(Dcₓ(uₙ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.0
- 0.3
- 0.7999999999999999
- 1.3
- 0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(D̽ₓ(uₙ))</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.10000000000000002
- 0.2
- 0.5999999999999999
- 1.3999999999999997
- 1.6999999999999997</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; 2 .* points(Ωₙ)   # D̽ₓ hits this exactly in the interior</code><code class="nohighlight hljs ansi" style="display:block;">5-element Vector{Float64}:
- 0.0
- 0.2
- 0.6
- 1.4
- 2.0</code></pre><p>That one order of extra exactness is one order of extra accuracy. Differencing <span>$\sin$</span> against <span>$\cos$</span> on a random grid, refined by halving every interval so the grids stay nested:</p><table><tr><th style="text-align: right"><span>$n$</span></th><th style="text-align: right"><code>Dcₓ</code> error</th><th style="text-align: right">order</th><th style="text-align: right"><code>D̽ₓ</code> error</th><th style="text-align: right">order</th></tr><tr><td style="text-align: right">21</td><td style="text-align: right">3.52e-02</td><td style="text-align: right"></td><td style="text-align: right">2.95e-03</td><td style="text-align: right"></td></tr><tr><td style="text-align: right">41</td><td style="text-align: right">1.78e-02</td><td style="text-align: right">0.99</td><td style="text-align: right">1.30e-03</td><td style="text-align: right">1.18</td></tr><tr><td style="text-align: right">81</td><td style="text-align: right">8.94e-03</td><td style="text-align: right">0.99</td><td style="text-align: right">3.32e-04</td><td style="text-align: right">1.97</td></tr><tr><td style="text-align: right">161</td><td style="text-align: right">4.48e-03</td><td style="text-align: right">1.00</td><td style="text-align: right">8.36e-05</td><td style="text-align: right">1.99</td></tr></table><p><code>D̽ₓ</code> is not skew-symmetric, so <code>Dcₓ</code> remains the one to reach for when the scheme needs that structure and <code>D̽ₓ</code> the one to reach for when it needs the order. Both accept a mesh or a grid space for the matrix and a grid function to apply it, and <code>∇̽ₕ</code> gives every coordinate at once, the second-order, non-uniform-grid counterpart of <code>∇ₕ</code> and <code>∇₊ₕ</code>. They differ at the boundary: <code>Dcₓ</code> truncates both end rows to zero, while <code>D̽ₓ</code> has no truncated-boundary convention of its own and falls back to <code>D₊ₓ</code>/<code>D₋ₓ</code> there instead.</p><h2 id="9.-A-convergence-study,-and-the-boundary"><a class="docs-heading-anchor" href="#9.-A-convergence-study,-and-the-boundary">9. A convergence study, and the boundary</a><a id="9.-A-convergence-study,-and-the-boundary-1"></a><a class="docs-heading-anchor-permalink" href="#9.-A-convergence-study,-and-the-boundary" title="Permalink"></a></h2><p><code>D₋ₓ</code> is first order, so the error against a known derivative should fall by a factor of ten each time the grid is refined by ten. Measuring it naively does not show that:</p><pre><code class="language-julia hljs">for n in (11, 101, 1001, 10001)
-    Ω = mesh(domain(interval(0.0, 1.0)), n, true)
-    W = gridspace(Ω)
-    u = Rₕ(W, sin)
-    e = ∇ₕ(u) - Rₕ(W, cos)
-    println(n, &quot;  &quot;, normₕ(e))
-end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">11  0.22500131738444287
-101  0.07075844941899423
-1001  0.022362202707526486
-10001  0.007071116010228156</code></pre><table><tr><th style="text-align: right"><span>$n$</span></th><th style="text-align: right">every point</th><th style="text-align: right">order</th><th style="text-align: right">interior only</th><th style="text-align: right">order</th></tr><tr><td style="text-align: right">11</td><td style="text-align: right">0.317349</td><td style="text-align: right"></td><td style="text-align: right">0.026650</td><td style="text-align: right"></td></tr><tr><td style="text-align: right">101</td><td style="text-align: right">0.100034</td><td style="text-align: right">0.50</td><td style="text-align: right">0.002617</td><td style="text-align: right">1.01</td></tr><tr><td style="text-align: right">1001</td><td style="text-align: right">0.031624</td><td style="text-align: right">0.50</td><td style="text-align: right">0.000261</td><td style="text-align: right">1.00</td></tr><tr><td style="text-align: right">10001</td><td style="text-align: right">0.010000</td><td style="text-align: right">0.50</td><td style="text-align: right">0.000026</td><td style="text-align: right">1.00</td></tr></table><p>Over every point the observed order is one half, not one. The cause is section 3: <code>D₋ₓ(uₙ)[1]</code> is <code>0.0</code> while <span>$\cos(0) = 1$</span>, so that one point contributes an error of <span>$1$</span> no matter how fine the grid is. It carries a weight of about <span>$h/2$</span> in the discrete norm, so it alone contributes about <span>$\sqrt{h/2}$</span>, which is exactly the half order observed.</p><p>Excluding that single truncated point recovers the expected first order. So when measuring convergence, or assembling a scheme, treat the truncated slice explicitly: that is where the boundary condition belongs, and leaving the operator&#39;s truncated value in place silently halves the observed order.</p><h2 id="10.-Interpolation-between-different-meshes"><a class="docs-heading-anchor" href="#10.-Interpolation-between-different-meshes">10. Interpolation between different meshes</a><a id="10.-Interpolation-between-different-meshes-1"></a><a class="docs-heading-anchor-permalink" href="#10.-Interpolation-between-different-meshes" title="Permalink"></a></h2><p>Every operator so far maps a grid space to itself. <a href="../../api/#Bramble.πₕ"><code>πₕ</code></a> is the one that does not: it moves a grid function from one mesh to a genuinely different one, which is what makes a heterogeneous composite space (one whose leaves are built over different meshes) useful for more than indexing. Named after <a href="../../api/#Bramble.Rₕ"><code>Rₕ</code></a>/<a href="../../api/#Bramble.Rₕ!"><code>Rₕ!</code></a>&#39;s own convention: <code>πₕ</code>/<code>πₕ!</code> are the numeric pair here, and the same name <code>πₕ</code> (one argument fewer) is also the symbolic wrapper the next tutorial uses, told apart by argument count.</p><p>The idea is the standard piecewise (multi)linear interpolant: to read a value at a physical point <span>$x$</span>, find the source mesh&#39;s cell containing it (<a href="../../internals/mesh/#Bramble.locate_cell"><code>locate_cell</code></a>) and blend the values at that cell&#39;s corners, weighted by how close <span>$x$</span> is to each one.</p><figure>
-<svg viewBox="0 0 720 330" width="100%" style="max-width:640px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
-     xmlns="http://www.w3.org/2000/svg" role="img"
-     aria-label="A single cell of the source mesh with its four corner values. A destination point inside the cell is blended from the four corners, weighted by its relative position within the cell along each coordinate.">
-  <defs>
-    <marker id="arrowPurple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#8b5cf6"/>
-    </marker>
-  </defs>
+</figure>
+<hr class="md-hr">
+<h2 id="Operators-as-matrices" class="md-heading">Operators as matrices<a href="#Operators-as-matrices" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Pass a mesh or a grid space instead of a grid function and the operator comes back as a sparse matrix:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">A = ∇ₕ(Wₕ)
 
-  <text x="300" y="24" font-size="12" font-weight="bold" fill="currentColor" text-anchor="middle">one cell of Wsrc's mesh</text>
+typeof(A), A * parent(uₕ) ≈ parent(∇ₕ(uₕ))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(SparseArrays.SparseMatrixCSC{Float64, Int64}, true)</code></pre>
+</div>
+<p>Both routes give the same answer. Applying the operator to <code class="md-code-inline">uₕ</code> is the fast path and what a time-stepping loop should use. The matrix is what to reach for when assembling a linear system, and it is how the test suite checks the fast path. The <a href="../../tutorials/backend/#tutorial_backend">backend tutorial</a> covers the storage choices behind the matrix type.</p>
+<hr class="md-hr">
+<h2 id="Gradients-in-two-dimensions" class="md-heading">Gradients in two dimensions<a href="#Gradients-in-two-dimensions" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>The <code class="md-code-inline">ₕ</code> suffix applies an operator along every coordinate and returns a tuple with one entry per dimension. On a one-dimensional mesh it returns the single element itself rather than a one-tuple, which is why <code class="md-code-inline">∇ₕ(uₕ)</code> above was not wrapped.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ω₂ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4))
+W₂ = gridspace(Ω₂)
+vₕ = Rₕ(W₂, x -&gt; x[1] + 2x[2])
+g = ∇ₕ(vₕ)
 
-  <!-- the source cell -->
-  <rect x="150" y="50" width="300" height="200" fill="none" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5"/>
+length(g), round.(reshape(parent(g[1]), 4, 4); digits = 8), round.(reshape(parent(g[2]), 4, 4); digits = 8)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2, [0.0 0.0 0.0 0.0; 1.0 1.0 1.0 1.0; 1.0 1.0 1.0 1.0; 1.0 1.0 1.0 1.0], [0.0 2.0 2.0 2.0; 0.0 2.0 2.0 2.0; 0.0 2.0 2.0 2.0; 0.0 2.0 2.0 2.0])</code></pre>
+</div>
+<p>The rows run along <span class="md-math md-math-inline">\(x\)</span> and the columns along <span class="md-math md-math-inline">\(y\)</span>. Away from the truncated slices <code class="md-code-inline">g[1]</code> is <span class="md-math md-math-inline">\(1\)</span> and <code class="md-code-inline">g[2]</code> is <span class="md-math md-math-inline">\(2\)</span>, the two partial derivatives of <span class="md-math md-math-inline">\(x + 2y\)</span>; <code class="md-code-inline">g[1]</code> is zero on the first row and <code class="md-code-inline">g[2]</code> on the first column. The suffix works for the other families as <code class="md-code-inline">jumpₕ</code> and <code class="md-code-inline">Mₕ</code>, and all of them accept a mesh, a grid space or a grid function.</p>
+<div class="md-admonition md-admonition-tip">
+<p class="md-admonition-title">Try this</p>
+<div class="md-admonition-body">
+<p>Change the function to <code class="md-code-inline">x -&gt; x[1]^2</code> and print both matrices again. <code class="md-code-inline">g[1]</code> now grows down the rows, while <code class="md-code-inline">g[2]</code> is zero everywhere.</p>
+</div>
+</div>
+<p>The vectorial operators of a <a href="../../tutorials/space/#space_composite">composite space</a> contract with <code class="md-code-inline">LinearAlgebra</code>&#39;s <code class="md-code-inline">⋅</code> and <code class="md-code-inline">×</code> to give the divergence and the curl:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using LinearAlgebra: ⋅, ×
+uv = Rₕ(vector_gridspace(Ω₂), x -&gt; (x[1] + 2x[2], 3x[1] - x[2]))
 
-  <!-- corner points -->
-  <circle cx="150" cy="50"  r="5" fill="currentColor"/>
-  <circle cx="450" cy="50"  r="5" fill="currentColor"/>
-  <circle cx="150" cy="250" r="5" fill="currentColor"/>
-  <circle cx="450" cy="250" r="5" fill="currentColor"/>
-  <text x="150" y="35" font-size="12" fill="currentColor" text-anchor="middle">u[i, j+1]</text>
-  <text x="450" y="35" font-size="12" fill="currentColor" text-anchor="middle">u[i+1, j+1]</text>
-  <text x="150" y="272" font-size="12" fill="currentColor" text-anchor="middle">u[i, j]</text>
-  <text x="450" y="272" font-size="12" fill="currentColor" text-anchor="middle">u[i+1, j]</text>
+parent(∇ₕ ⋅ uv) == parent(divₕ(uv)), parent(∇ₕ × uv) == parent(curlₕ(uv))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
+</div>
+<p>The next page, the <a href="../../tutorials/operator_accuracy/">accuracy tutorial</a>, compares the centered and second-order variants of the difference. The <a href="../../tutorials/interpolation/">interpolation tutorial</a> moves a grid function between meshes.</p>
+<hr class="md-hr">
+<h2 id="Reference" class="md-heading">Reference<a href="#Reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<h3 id="operators_names" class="md-heading">How the names are built<a href="#operators_names" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>A name is a stem, a direction, and a coordinate:</p>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:left">Piece</th>
+<th style="text-align:left">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">D</code></td>
+<td style="text-align:left">finite difference</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">jump</code></td>
+<td style="text-align:left">jump</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">M</code></td>
+<td style="text-align:left">average</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">S</code></td>
+<td style="text-align:left">index shift</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">₋</code></td>
+<td style="text-align:left">backward: the stencil reaches to <span class="md-math md-math-inline">\(i-1\)</span></td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">₊</code></td>
+<td style="text-align:left">forward: the stencil reaches to <span class="md-math md-math-inline">\(i+1\)</span></td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">ₓ</code>, <code class="md-code-inline">ᵧ</code>, <code class="md-code-inline">₂</code></td>
+<td style="text-align:left">along the first, second or third coordinate</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">ₕ</code></td>
+<td style="text-align:left">every coordinate at once, returning a tuple</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>So <code class="md-code-inline">D₋ₓ</code> is the backward finite difference along <span class="md-math md-math-inline">\(x\)</span>, <code class="md-code-inline">M₊ᵧ</code> the forward average along <span class="md-math md-math-inline">\(y\)</span>, and <code class="md-code-inline">∇ₕ</code> the backward finite difference in every coordinate, the discrete gradient, which has that extra name. <code class="md-code-inline">jump</code> takes no direction, for the reason given above: it is <code class="md-code-inline">jumpₓ</code>, <code class="md-code-inline">jumpᵧ</code>, <code class="md-code-inline">jump₂</code> and <code class="md-code-inline">jumpₕ</code>. The index shift has a forward and a backward stem: <code class="md-code-inline">S₊ₓ</code> reads the next point along <span class="md-math md-math-inline">\(x\)</span>, <code class="md-code-inline">S₋ₓ</code> the previous one, and <code class="md-code-inline">S₊ₕ</code>/<code class="md-code-inline">S₋ₕ</code> shift along every coordinate.</p>
+<p>The forward difference and the forward average are <code class="md-code-inline">public</code> but not exported. Bramble discretises with the backward operator paired with <code class="md-code-inline">inner₊</code>, so the forward ones are the duals to check against, not the ones to write a form with. This page imports them by name.</p>
+<h3 id="Four-differences-compared" class="md-heading">Four differences compared<a href="#Four-differences-compared" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>Four families combine the same one-sided differences in different ways. The <a href="../../tutorials/operator_accuracy/">accuracy tutorial</a> derives each; this table is the summary.</p>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:left">Operator</th>
+<th style="text-align:left">Stencil</th>
+<th style="text-align:left">Order, non-uniform</th>
+<th style="text-align:left">Order, uniform</th>
+<th style="text-align:left">Boundary</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">D₋</code></td>
+<td style="text-align:left"><span class="md-math md-math-inline">\(\{i-1, i\}\)</span></td>
+<td style="text-align:left">1</td>
+<td style="text-align:left">1</td>
+<td style="text-align:left">truncated to <code class="md-code-inline">0</code> at the first point</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">Dc</code></td>
+<td style="text-align:left"><span class="md-math md-math-inline">\(\{i-1, i+1\}\)</span>, divided by the full span</td>
+<td style="text-align:left">1</td>
+<td style="text-align:left">2</td>
+<td style="text-align:left">truncated to <code class="md-code-inline">0</code> at both ends</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">D̽</code></td>
+<td style="text-align:left"><span class="md-math md-math-inline">\(\{i-1, i, i+1\}\)</span>, a weighted mean of two backward differences</td>
+<td style="text-align:left">2</td>
+<td style="text-align:left">2</td>
+<td style="text-align:left">no convention of its own: falls back to <code class="md-code-inline">D₊</code>/<code class="md-code-inline">D₋</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">D̃</code></td>
+<td style="text-align:left"><span class="md-math md-math-inline">\(\{i, i+1\}\)</span>, divided by the averaged spacing</td>
+<td style="text-align:left">1 (summation by parts holds exactly)</td>
+<td style="text-align:left">1</td>
+<td style="text-align:left">truncated to <code class="md-code-inline">0</code> at the last point, like <code class="md-code-inline">D₊</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>On a uniform grid <span class="md-math md-math-inline">\(h_i = h_{i+1}\)</span>: <code class="md-code-inline">D̽</code> and <code class="md-code-inline">Dc</code> collapse to the mean of <code class="md-code-inline">D₋</code> and <code class="md-code-inline">D₊</code>, and <code class="md-code-inline">D̃</code> collapses to <code class="md-code-inline">D₊</code>. They separate only where the spacing varies, which is why a uniform-grid benchmark cannot tell them apart.</p>
+<h3 id="operators_direction_argument" class="md-heading">The direction as an argument<a href="#operators_direction_argument" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>The direction can also come from a variable rather than from the name. Index the vectorial operator with it: <code class="md-code-inline">∇ₕ[d]</code> is the coordinate operator itself, so <code class="md-code-inline">∇ₕ[1]</code>, <code class="md-code-inline">∇ₕ[:x]</code> and <code class="md-code-inline">D₋ₓ</code> are the same function object, and <code class="md-code-inline">dx, dy = ∇ₕ</code> destructures it. The same holds for <code class="md-code-inline">∇̃ₕ</code>, <code class="md-code-inline">∇cₕ</code>, <code class="md-code-inline">∇̽ₕ</code>, <code class="md-code-inline">jumpₕ</code>, <code class="md-code-inline">Mₕ</code> and <code class="md-code-inline">Mcₕ</code>.</p>
+<p>That makes a loop over directions writable, which the subscript names cannot express on their own. The discrete <span class="md-math md-math-inline">\(H^1\)</span> seminorm squared, in any dimension:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">sum(innerₕ(∇ₕ[d](vₕ), ∇ₕ[d](vₕ)) for d in 1:dim(mesh(space(vₕ))))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4.166666666666667</code></pre>
+</div>
+<p>Underneath, every family has a stem that takes the direction as a second argument, and the coordinate suffix is spelling it:</p>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:left">Written</th>
+<th style="text-align:left">Same as</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">Bramble.D₋(uₕ, 1)</code></td>
+<td style="text-align:left"><code class="md-code-inline">D₋ₓ(uₕ)</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">Bramble.D₋(uₕ, :y)</code></td>
+<td style="text-align:left"><code class="md-code-inline">D₋ᵧ(uₕ)</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">Bramble.D₋(uₕ, Val(3))</code></td>
+<td style="text-align:left"><code class="md-code-inline">D₋₂(uₕ)</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The stems <code class="md-code-inline">D₋</code>, <code class="md-code-inline">D₊</code>, <code class="md-code-inline">Dc</code>, <code class="md-code-inline">D̃</code> and <code class="md-code-inline">jump</code> are <code class="md-code-inline">public</code> but not exported, so they are written <code class="md-code-inline">Bramble.D₋</code> or imported by name. The <code class="md-code-inline">Val</code> form is the one to use when the direction must be a compile-time constant, as it must inside a form. The averages use <code class="md-code-inline">Mₕ</code>/<code class="md-code-inline">M₊ₕ</code> rather than a bare <code class="md-code-inline">M</code>, because <code class="md-code-inline">M</code> is what most finite-element code calls its mass matrix. So <code class="md-code-inline">Mₕ(uₕ)</code> is the tuple over every coordinate and <code class="md-code-inline">Mₕ(uₕ, 2)</code> is the average along <span class="md-math md-math-inline">\(y\)</span>: the same name, told apart by how many arguments it is given. <code class="md-code-inline">∇̽ₕ</code> works the same way:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">∇̽ₕ(vₕ) == (∇̽ₕ(vₕ, 1), ∇̽ₕ(vₕ, 2)), Mₕ(vₕ) == (Mₕ(vₕ, :x), Mₕ(vₕ, :y))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
+</div>
+<p>An <code class="md-code-inline">Int</code> or a <code class="md-code-inline">Symbol</code> selects between literal <code class="md-code-inline">Val</code>s, one branch per direction the mesh has. An out-of-range direction throws an <code class="md-code-inline">ArgumentError</code>, and the bound is the mesh&#39;s own dimension: <code class="md-code-inline">Bramble.D₋(uₕ, :y)</code> on a one-dimensional grid is an error, not a silent zero.</p>
+<p>The dimensional entry points are separate names from the vectorial ones, on purpose. <code class="md-code-inline">∇ₕ(uₕ)</code> returns a tuple where <code class="md-code-inline">Bramble.D₋(uₕ, d)</code> returns a grid function, so folding them together would make the return type depend on whether an argument was passed. <code class="md-code-inline">∇̽ₕ</code> and <code class="md-code-inline">Mₕ</code>/<code class="md-code-inline">M₊ₕ</code> can share a name because the two meanings differ by arity, not by the value of an argument.</p>
+<h3 id="Destructuring-and-composing-the-operator-itself" class="md-heading">Destructuring and composing the operator itself<a href="#Destructuring-and-composing-the-operator-itself" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p><code class="md-code-inline">∇ₕ</code> and every other <code class="md-code-inline">ₕ</code>-suffixed family is a tuple-like object of the per-coordinate operators, so it can be destructured or indexed before it is applied. Here <code class="md-code-inline">dx</code> is exactly <code class="md-code-inline">D₋ₓ</code>, reached without importing that name:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">dx, dy = ∇ₕ
 
-  <!-- weight labels, each beside its own corner -->
-  <text x="150" y="90" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">(1-tₓ)(1-t_y)</text>
-  <text x="450" y="90" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">tₓ(1-t_y)</text>
-  <text x="150" y="235" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">(1-tₓ)t_y</text>
-  <text x="450" y="235" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">tₓ t_y</text>
-
-  <!-- destination point -->
-  <circle cx="330" cy="105" r="6" fill="#10b981" stroke="currentColor" stroke-width="1.2"/>
-  <text x="330" y="90" font-size="12" font-weight="bold" fill="#10b981" text-anchor="middle">x  (a point of Wdest)</text>
-
-  <!-- guide lines to the two edges, showing tx and ty -->
-  <line x1="330" y1="105" x2="330" y2="250" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="4,3"/>
-  <line x1="330" y1="105" x2="150" y2="105" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="4,3"/>
-
-  <path d="M 150 285 L 330 285" stroke="#8b5cf6" stroke-width="2" fill="none" marker-end="url(#arrowPurple)"/>
-  <text x="240" y="303" font-size="12" fill="#8b5cf6" text-anchor="middle">tₓ = (x₁ - u[i]) / (u[i+1] - u[i])</text>
-
-  <path d="M 480 250 L 480 105" stroke="#8b5cf6" stroke-width="2" fill="none" marker-end="url(#arrowPurple)"/>
-  <text x="600" y="180" font-size="12" fill="#8b5cf6" text-anchor="middle">t_y, the same</text>
-  <text x="600" y="196" font-size="12" fill="#8b5cf6" text-anchor="middle">idea along y</text>
-</svg>
-</figure><p>The four weights always sum to <span>$1$</span> (a partition of unity), so the interpolant never overshoots the range of the four corner values. <a href="../../api/#Bramble.interpolate_at"><code>interpolate_at</code></a> computes this directly at one point; <a href="../../api/#Bramble.πₕ"><code>πₕ</code></a>/<a href="../../api/#Bramble.πₕ!"><code>πₕ!</code></a> apply it at every point of a destination space, and are exactly <a href="../../api/#Bramble.Rₕ"><code>Rₕ</code></a>/<a href="../../api/#Bramble.Rₕ!"><code>Rₕ!</code></a> applied to the interpolant as an ordinary function of position: restricting a continuous function and interpolating a discrete one are the same mechanism, <code>πₕ</code> is just the case where that function happens to be another grid function&#39;s own interpolant:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (10, 10), (true, true));</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 4), (true, true));</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; src = Rₕ(Wsmall, x -&gt; x[1] + x[2]);   # affine, so the interpolant is exact</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; dest = πₕ(Wbig, src);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; exact = Rₕ(Wbig, x -&gt; x[1] + x[2]);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; maximum(abs, parent(dest) .- parent(exact))</code><code class="nohighlight hljs ansi" style="display:block;">2.220446049250313e-16</code></pre><p>Once <code>πₕ</code> returns an ordinary <a href="../../api/#Bramble.VectorElement"><code>VectorElement</code></a>, every operator above just applies to it as normal: <code>D₋ₓ(dest)</code>, <code>Mₓ(dest)</code>, a bilinear form, anything.</p><h3 id="As-a-matrix"><a class="docs-heading-anchor" href="#As-a-matrix">As a matrix</a><a id="As-a-matrix-1"></a><a class="docs-heading-anchor-permalink" href="#As-a-matrix" title="Permalink"></a></h3><p>Like <a href="../../api/#Bramble.D₋ₓ"><code>D₋ₓ</code></a><code>(Wₕ)</code> above, the interpolant is also available as a matrix, but between the <em>two</em> spaces rather than one, and rectangular rather than square, since <code>Wdest</code> and <code>Wsrc</code> generally carry a different number of degrees of freedom:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; P = interpolation_matrix(Wbig, Wsmall);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; size(P)</code><code class="nohighlight hljs ansi" style="display:block;">(100, 16)</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; P * parent(src) ≈ parent(dest)</code><code class="nohighlight hljs ansi" style="display:block;">true</code></pre><p>Each row of <code>P</code> has at most <span>$2^D$</span> nonzero entries (one destination point&#39;s corner weights), so it is genuinely sparse, and it is always a <code>SparseMatrixCSC</code> regardless of either space&#39;s own backend <code>matrix_type</code>: unlike the shift-based matrices above, a destination point&#39;s source cell has no regular diagonal structure to exploit, so <code>P</code> is assembled directly from <code>locate_cell</code> rather than composed from <code>shift</code>.</p><p><code>πₕ!(dest, src)</code> re-locates every destination point&#39;s cell on every call, which is wasted work when the same two meshes are interpolated between repeatedly (a time loop moving a coefficient across two composite leaves, say). Build <code>P</code> once and pass it to <code>πₕ!</code> instead: zero allocations, no <code>locate_cell</code> search, just <code>mul!</code> under the hood: the same &quot;build the pattern once&quot; split <a href="../../api/#Bramble.allocate_system_matrix"><code>allocate_system_matrix</code></a>/<a href="../../api/#Bramble.assemble!"><code>assemble!</code></a> already use.</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; dest2 = similar(dest);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; πₕ!(dest2, P, src);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; parent(dest2) ≈ parent(dest)</code><code class="nohighlight hljs ansi" style="display:block;">true</code></pre><h3 id="Composing-symbolically,-inside-a-form"><a class="docs-heading-anchor" href="#Composing-symbolically,-inside-a-form">Composing symbolically, inside a form</a><a id="Composing-symbolically,-inside-a-form-1"></a><a class="docs-heading-anchor-permalink" href="#Composing-symbolically,-inside-a-form" title="Permalink"></a></h3><p><code>πₕ(uₕ)</code>, one argument fewer, is the symbolic counterpart: it wraps the interpolant as an AST source, so it composes with the other operators and can sit inside a <a href="../../api/#Bramble.form"><code>form</code></a>. Dispatch tells the two apart by argument count. The <a href="../form/">forms tutorial</a> works it through against a heterogeneous composite space.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../space/">« Grid spaces and discrete functions</a><a class="docs-footer-nextpage" href="../form/">Linear and bilinear forms »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 29 September 2026 21:39">Tuesday 29 September 2026</span>. Using Julia version 1.13.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+parent(dx(vₕ)) == parent(∇ₕ(vₕ)[1]), parent(∇ₕ[:x](vₕ)) == parent(∇ₕ(vₕ)[1])</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
+</div>
+<p><code class="md-code-inline">∇cₕ</code>, <code class="md-code-inline">∇̽ₕ</code>, <code class="md-code-inline">∇̃ₕ</code> and <code class="md-code-inline">∇₊ₕ</code> answer to the same three spellings (destructuring, <code class="md-code-inline">[d]</code> indexing, <code class="md-code-inline">⋅</code>/<code class="md-code-inline">×</code>), each contracting to its own family&#39;s <code class="md-code-inline">div</code> and <code class="md-code-inline">curl</code>: <code class="md-code-inline">divcₕ</code>/<code class="md-code-inline">curlcₕ</code>, <code class="md-code-inline">div̽ₕ</code>/<code class="md-code-inline">curl̽ₕ</code>, <code class="md-code-inline">diṽₕ</code>/<code class="md-code-inline">curl̃ₕ</code> and <code class="md-code-inline">div₊ₕ</code>/<code class="md-code-inline">curl₊ₕ</code>.</p>
+      </article>
+      <footer class="md-footer">
+<p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
+      </footer>
+    </main>
+    <aside class="md-toc">
+      <div class="md-toc-inner">
+        <p class="md-toc-title">On this page</p>
+          <a class="md-toc-link md-toc-h2" href="#Apply-an-operator">Apply an operator</a>
+          <a class="md-toc-link md-toc-h2" href="#What-happens-at-the-boundary">What happens at the boundary</a>
+          <a class="md-toc-link md-toc-h2" href="#Operators-as-matrices">Operators as matrices</a>
+          <a class="md-toc-link md-toc-h2" href="#Gradients-in-two-dimensions">Gradients in two dimensions</a>
+          <a class="md-toc-link md-toc-h2" href="#Reference">Reference</a>
+            <a class="md-toc-link md-toc-h3" href="#operators_names">How the names are built</a>
+            <a class="md-toc-link md-toc-h3" href="#Four-differences-compared">Four differences compared</a>
+            <a class="md-toc-link md-toc-h3" href="#operators_direction_argument">The direction as an argument</a>
+            <a class="md-toc-link md-toc-h3" href="#Destructuring-and-composing-the-operator-itself">Destructuring and composing the operator itself</a>
+      </div>
+    </aside>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia-repl.min.js"></script>
+  <script>hljs.highlightAll();</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.js"></script>
+  <script>var MD_KATEX_OPTIONS = {};
+document.querySelectorAll('.md-math').forEach(function (el) {
+  var tex = el.textContent.trim().replace(/^\\[\[(]/, '').replace(/\\[\])]$/, '');
+  katex.render(tex, el, Object.assign({ throwOnError: false }, MD_KATEX_OPTIONS,
+    { displayMode: el.classList.contains('md-math-display') }));
+});</script>
+  <script src="../../siteinfo.js"></script>
+  <script src="../../../versions.js"></script>
+  <script src="../../assets/materialdocs.js?v=6104133d"></script>
+</body>
+</html>

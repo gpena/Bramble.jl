@@ -161,9 +161,9 @@ net, reaction(a, l₂, u₂; marker = :left), reaction(a, l₂, u₂; marker = :
 
 surface_plot(u₂; title = "injector at (0.3, 0.5), producer at (0.7, 0.5)") # hide
 
-# ## See also
+# ## Where to go next
 #
-# - The [forms tutorial](../tutorials/form.md) introduces [`dirac`](@ref) on its own, including
+# - The [forms tutorial](@ref tutorial_form) introduces [`dirac`](@ref) on its own, including
 #   off-node placement and a strength that changes inside a time loop.
 # - [`reaction`](@ref)'s docstring has the sign convention in full, and
 #   [`reaction_density`](@ref) is what to hand [`export_vtk`](@ref).
