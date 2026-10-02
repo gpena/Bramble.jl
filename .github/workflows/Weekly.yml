@@ -145,8 +145,9 @@ jobs:
           if-no-files-found: warn
 
   # Per-file coverage floor over the two coverage halves merged (#371). A separate job
-  # because each `full` leg sees only its half. Reports to the job summary; no `--fail`
-  # until the gaps are closed.
+  # because each `full` leg sees only its half. Writes the report to the job summary, then
+  # fails the job when a non-exempt src/ file is below the floor (`--fail --prefix src/`);
+  # ext/ files stay in the report but cannot fail it.
   coverage-floor:
     name: Per-file coverage floor
     needs: full
@@ -178,10 +179,11 @@ jobs:
             echo "No lcov artifacts from the coverage legs; floor not computed." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          julia .github/scripts/coverage_floor.jl --floor 90 \
-            --exempt .github/coverage_exemptions.toml $files > floor.txt
+          # Capture the status so the summary is written before the step fails.
+          julia .github/scripts/coverage_floor.jl --floor 90 --fail --prefix src/ \
+            --exempt .github/coverage_exemptions.toml $files > floor.txt && status=0 || status=$?
           {
-            echo "## Per-file coverage floor (90%)"
+            echo "## Per-file coverage floor (90%, src/)"
             echo
             echo "Inputs: $(echo $files | tr '\n' ' ')"
             echo
@@ -190,6 +192,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           cat floor.txt
+          exit "$status"
 
   # Dependency vulnerability audit against the OSV database, which ingests Julia's own
   # JLSEC advisories from JuliaLang/SecurityAdvisories.jl alongside the CVE feeds. Weekly
