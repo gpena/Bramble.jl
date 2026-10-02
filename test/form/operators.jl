@@ -51,7 +51,7 @@ using Bramble:
                D̃ₓ,
                D̽ₓ,
                Mcₓ
-using LinearAlgebra: I
+using LinearAlgebra: I, norm
 using ..TestUtils: WITH_SLOW_TESTS
 
 # The symbolic operator layer: averages, the shift node, region restriction, and the
@@ -457,17 +457,26 @@ end
             G = reduce(hcat, [parent(tap(grid(basis(j)))) for j in 1:ndofs(W)])
             a = form(W, W, (u, v) -> innerₕ(tap(opd(u)), v))
             A = assemble(a)
-            # `rtol` as well: a double difference on the 3D mesh reaches 10³, and the
-            # threaded sweep sums in another order
+            # `rtol` as well: the mesh is random, and next to a short cell a double
+            # difference's entries grow far past 1
             @test isapprox(Matrix(A), H * G; atol = 1e-9, rtol = 1e-10)
-            @test isapprox(A * x, H * parent(tap(grid(uh))); atol = 1e-9, rtol = 1e-10)
+            g = parent(tap(grid(uh)))
+            Ax = A * x
+            # The product cancels large entries down to O(1), so a fixed `atol` misses by
+            # rounding alone: bound it by eps()·‖|A||x|‖. The miss measured at most 1.6 of
+            # that over 3000 random meshes per dimension and every case here; 16 leaves 10×.
+            @test isapprox(Ax, H * g; atol = 16 * eps() * norm(abs.(A) * abs.(x)), rtol = 1e-10)
+            # Evaluating twice must give the same bits: a miss here is nondeterminism (state
+            # left by earlier tests, or a race), not a tolerance that is too tight.
+            @test parent(tap(grid(uh))) == g
+            @test A * x == Ax
             A.nzval .= 0
             assemble!(A, a)
             @test isapprox(Matrix(A), H * G; atol = 1e-9, rtol = 1e-10)
             # the matrix-free product compiles its own walk, so only on the operand that
-            # used to fail
+            # used to fail; it cancels like `A * x`, so it takes the same rounding bound
             nm == "D₋ₓ(c*u)" || continue
-            @test isapprox(matrix_free_operator(a) * x, H * G * x; atol = 1e-9, rtol = 1e-10)
+            @test isapprox(matrix_free_operator(a) * x, H * G * x; atol = 16 * eps() * norm(abs.(A) * abs.(x)), rtol = 1e-10)
         end
     end
 end
