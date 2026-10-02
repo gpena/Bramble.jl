@@ -6,14 +6,14 @@ using Bramble
 # Properties of the reachable surface: every exported or `public` name carries a docstring,
 # and none shadows a different function of the same name in Base.
 #
-# `names(Bramble)` (default `all = false`) already returns both kinds since Julia 1.11 — a
-# `public` name is documented API, just not brought into scope by a bare `using Bramble`
-# (point 70) — so this file needed no change to start covering it too.
+# `names(Bramble)` (default `all = false`) already returns both kinds since Julia 1.11. A
+# `public` name is documented API, just not brought into scope by a bare `using Bramble`,
+# so this file needed no change to start covering it too.
 #
 # Documenter's `missing_docs` check is the wrong tool for this: it reports every internal
 # helper it cannot find a page for, so turning it into an error would mean adding `@docs`
 # stubs to silence it rather than because they help anyone. The rule worth enforcing is
-# narrower and has no false positives — a name a user can reach should say what it does.
+# narrower and has no false positives: a name a user can reach should say what it does.
 #
 # `Docs.meta` is read directly rather than going through `Base.Docs.doc`, which needs the
 # REPL stdlib loaded to have a method for a function object.
@@ -62,8 +62,8 @@ end
     # package.
     #
     # A name Base defines but does not export is fine too: `using Bramble` would resolve
-    # it to this package's own definition without ambiguity, the same way `tails` (removed
-    # in gpena/Bramble.jl#76) used to share a name with a non-exported Base internal.
+    # it to this package's own definition without ambiguity, the same way a removed `tails` once
+    # shared a name with a non-exported Base internal.
     clashes = Symbol[]
     for n in names(Bramble)
         n === :Bramble && continue

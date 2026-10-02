@@ -21,12 +21,12 @@ using StaticArrays
 using ..TestUtils: alloc_test, @test_allocs
 
 @testset "Linear algebra utilities" begin
-    # Invariants tested (gpena/Bramble.jl#191, #298 defect 2):
+    # Invariants tested (device and host locality):
     # 1. A host destination under a GpuPolicy is refused (message 1), naming both the
     #    destination's locality and the policy's.
     # 2. A device-locality destination under a CpuPolicy is refused too (message 2), naming
     #    both localities, and never advising a CpuPolicy backend rebuild -- that combination
-    #    is itself rejected at construction (gpena/Bramble.jl#296). No GPU is needed to
+    #    is itself rejected at construction. No GPU is needed to
     #    exercise this: the seam reads locality from the destination array's own type.
     # 3. Locality-agreeing pairs (a host destination under CpuSerial/CpuThreaded) still
     #    sweep and produce correct values -- this testset is not throw-only.
@@ -56,7 +56,7 @@ using ..TestUtils: alloc_test, @test_allocs
         _sweep_for!(CpuThreaded(), v, 1:4, i -> 4.0 * i)
         @test v == [4.0, 8.0, 12.0, 16.0]
 
-        # Reverse direction (gpena/Bramble.jl#298 defect 2): a device-locality destination
+        # Reverse direction (device destination): a device-locality destination
         # under a CpuPolicy, with no GPU or KernelAbstractions involved -- a small host-backed
         # array type that claims DeviceLocality() through the trait is enough.
         struct _FakeDeviceVector{T} <: DenseVector{T}
@@ -85,11 +85,11 @@ using ..TestUtils: alloc_test, @test_allocs
     end
 
     # Invariants tested:
-    # 1. Trilinear form evaluation: ∑ u_i * v_i * w_i matches hand-calculated expected values.
-    # 2. Annihilation: any zero vector argument produces a zero result.
-    # 3. Precision preservation: Float32 inputs produce Float32 outputs; mixed types promote correctly.
-    # 4. Dimension checking: mismatched vector lengths throw DimensionMismatch.
-    # 5. Zero-allocation guarantee: static arrays (SVector) execute with zero heap allocations.
+    # 1. Trilinear form evaluation. ∑ u_i * v_i * w_i matches hand-calculated expected values.
+    # 2. Annihilation. Any zero vector argument produces a zero result.
+    # 3. Precision preservation. Float32 inputs produce Float32 outputs; mixed types promote correctly.
+    # 4. Dimension checking. Mismatched vector lengths throw DimensionMismatch.
+    # 5. Zero-allocation guarantee. Static arrays (SVector) execute with zero heap allocations.
     @testset "Weighted trilinear dot product" begin
         u = [1.0, 2.0, 3.0]
         v = [4.0, 5.0, 6.0]
@@ -261,7 +261,7 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs _dot_masked(sv_u, sv_v, sv_w, mask)
     end
 
-    # gpena/Bramble.jl#71: `MarkedIndices` is the one bit-walk `_dot_masked` above and
+    # `MarkedIndices` is the one bit-walk `_dot_masked` above and
     # `_each_marked` (form/dirichlet_constraints.jl) both call, rather than each keeping its
     # own copy. Checked directly here, past a single 64-bit chunk, since the masks above are
     # all short enough to never exercise the chunk-skipping loop or the chunk-boundary

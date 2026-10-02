@@ -3,7 +3,7 @@ module QualityInvalidationsTests
 using Test
 
 #===========================================================================#
-# Zero-tolerance gate on package-owned method invalidations (#198).
+# Zero-tolerance gate on package-owned method invalidations.
 #
 # `using Bramble` has already happened by the time this file is `include`d
 # (test/runtests.jl does it at the top, for everything else in the suite), so

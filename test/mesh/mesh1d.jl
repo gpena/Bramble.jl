@@ -290,7 +290,7 @@ import Base: diff
             npts_initial = 3 # Pts: 0.0, 0.5, 1.0
             npts_refined2 = 2 * npts_initial - 1 # 5
 
-            # gpena/Bramble.jl#19: refining a mesh carrying custom markers (:BC, :Center)
+            # Refining a mesh carrying custom markers (:BC, :Center)
             # without supplying domain markers now refuses outright -- there is no domain
             # here to re-derive them from -- rather than silently dropping them. Left
             # untouched, not partially refined.
@@ -306,9 +306,9 @@ import Base: diff
             @test indices(Ωₕ2) == CartesianIndices((npts_refined2,))
             @test points(Ωₕ2) ≈ [0.0, 0.25, 0.5, 0.75, 1.0]
 
-            # gpena/Bramble.jl#68: the two arities have a genuine (not accidental)
-            # asymmetry on a single-point, non-collapsed mesh — nothing to refine either
-            # way, but the one-argument form must leave existing markers untouched
+            # The two arities have a genuine (not accidental)
+            # asymmetry on a single-point, non-collapsed mesh (nothing to refine either
+            # way), but the one-argument form must leave existing markers untouched
             # (no domain to re-derive them from), while the two-argument form must still
             # (re)apply the domain markers it was given, since `set_markers!` needs no
             # interval to do that. Hoisting both to `AbstractMeshType` in `interface.jl`
@@ -455,7 +455,7 @@ import Base: diff
 
         @testset "Pretty printing" begin
             # Detailed is `MIME"text/plain"`, compact is the two-argument `show`
-            # (gpena/Bramble.jl#45).
+            #.
             buf = IOBuffer()
             show(buf, MIME"text/plain"(), Ωₕ)
             str = String(take!(buf))

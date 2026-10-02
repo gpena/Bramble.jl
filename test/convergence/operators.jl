@@ -48,7 +48,7 @@ end
 
 # Least-squares order across every refinement level, not just the last pair: since each
 # level halves every spacing, err_k ≈ C·h₀^p·2^(-pk), so log2(err_k) is linear in the level
-# index k with slope -p. Fitting the whole series is more robust than the two-point ratio
+# index k with slope -p. Fitting the whole series is steadier than the two-point ratio
 # when an early level (still pre-asymptotic) is noisier than the rest.
 function _lsq_order(errs)
     k = 0:(length(errs) - 1)

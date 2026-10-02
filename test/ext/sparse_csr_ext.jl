@@ -1,5 +1,4 @@
-# test/ext/sparse_csr_ext.jl: the `SparseMatrixCSR` backend extension (S3.1,
-# gpena/Bramble.jl#214, ext/BrambleSparseMatricesCSRExt.jl).
+# test/ext/sparse_csr_ext.jl: the `SparseMatrixCSR` backend extension (ext/BrambleSparseMatricesCSRExt.jl).
 #
 # Gated like every other ext/*.jl file (test/runtests.jl only reaches this group under
 # `BRAMBLE_TEST_GROUP=ext` or `full`). Standalone:
@@ -14,13 +13,13 @@ using Bramble: vector_type, matrix_type, execution_policy
 using Bramble: matrix, backend_eye, backend_zeros, allocate_system_matrix,
                assemble_parallel!, refactor!, sparse_factorize, sparse_refactor!,
                SuiteSparseFactorization
-# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+# Internal since v3.0: defined and documented, not exported.
 using Bramble: D₊ₓ, D₊ᵧ
 using SparseArrays
 using SparseMatricesCSR
 using LinearAlgebra: issymmetric, I
 
-# S3 (gpena/Bramble.jl#275, `docs/src/internals/csr_solvers.md`): the `sparse_factorize`/
+# `docs/src/internals/csr_solvers.md`: the `sparse_factorize`/
 # `pde_solve`/`refactor!` CSC-conversion fallback for `SparseMatrixCSR`. `refactor_contract`
 # is the one shared contract that takes its Poisson system `p` as an argument rather than
 # building it internally (`poisson_system` always uses the default CSC backend), so it is

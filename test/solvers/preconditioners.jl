@@ -8,7 +8,7 @@ using LinearAlgebra: LinearAlgebra, ldiv!, diag, norm, cond, Symmetric, eigmax, 
 using LinearSolve: LinearProblem, KrylovJL_CG, solve
 using Random
 
-# Matrix-free preconditioners (gpena/Bramble.jl#327). Jacobi reads diag(A) off one stencil
+# Matrix-free preconditioners. Jacobi reads diag(A) off one stencil
 # walk, so every check compares it with `diag(assemble(a; dirichlet))`. Meshes are
 # non-uniform throughout, and the coefficient varies in space: a uniform constant-coefficient
 # Laplacian has a constant diagonal, which Jacobi only rescales.
@@ -74,7 +74,7 @@ function _pc_spd_form(n)
     return form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v)))
 end
 
-# Chebyshev (#327): mass plus variable diffusion on a non-uniform mesh in 1D-3D, SPD with no
+# Chebyshev: mass plus variable diffusion on a non-uniform mesh in 1D-3D, SPD with no
 # Dirichlet rows, the problem the preconditioner is built for.
 function _pc_cheb_form(D, n)
     Random.seed!(PC_SEED)

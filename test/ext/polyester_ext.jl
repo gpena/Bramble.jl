@@ -1,5 +1,4 @@
-# test/ext/polyester_ext.jl: the Polyester extension (S7.2, gpena/Bramble.jl#190,
-# ext/BramblePolyesterExt.jl).
+# test/ext/polyester_ext.jl: the Polyester extension (ext/BramblePolyesterExt.jl).
 #
 # Gated like every other ext/*.jl file (test/runtests.jl only reaches this group under
 # BRAMBLE_TEST_GROUP=ext or full). Standalone:
@@ -109,8 +108,8 @@ end
             # `assemble!` into a matrix pre-filled with garbage: if the zeroing
             # `_assemble_bilinear!` does before dispatching to the sweep (`_zero_stored!(A)`)
             # were ever skipped for `CpuPolyester`, this would silently add the garbage into the
-            # real entries instead of replacing them -- exactly the trap gpena/Bramble.jl#190
-            # records from a previous attempt.
+            # real entries instead of replacing them -- exactly the trap a
+            # naive skip would fall into.
             Ab2 = allocate_system_matrix(p.ab)
             _fillnz!(Ab2, 999.0)
             assemble!(Ab2, p.ab)
@@ -169,7 +168,7 @@ end
         # `CpuPolyester`: `_assemble_linear!` fast-failed on the policy before it could reach
         # `_assemble_linear_parallel_core!`, so it fired even with Polyester loaded and every
         # hook implemented, and a linear form could never be assembled under this policy at
-        # all. The integrator removed that branch on 2026-09-19 (gpena/Bramble.jl#190); the
+        # all. The integrator removed that branch on 2026-09-19; the
         # `else` branch dispatches on the effective policy and reaches this extension's
         # hooks, and without Polyester the hook itself still raises, naming the package, one
         # frame deeper. So these now assert agreement rather than the old failure.
@@ -267,8 +266,7 @@ end
 
         # The same guarantee test/space/vector_elements.jl's own "Allocation scaling"
         # testset asserts for `Parallel()`: size-independent (batch-spawn overhead, not
-        # proportional to grid points) and small in absolute terms. gpena/Bramble.jl#190's
-        # own recorded measurement is a naive `@batch` at 64 B/call against `Threads`' 1.6 KB
+        # proportional to grid points) and small in absolute terms. A naive `@batch` at 64 B/call against `Threads`' 1.6 KB
         # at 128^2 -- lower, not higher, so the same threshold applies without loosening it.
         @test batch_large < 4 * batch_small + 1     # +1 guards small == 0
         @test batch_large < 100_000                 # proportional would be tens of MB
@@ -298,7 +296,7 @@ end
     end
 
     # A warmed `CpuPolyester` refill replays the form's recorded `nzval` positions instead of
-    # searching (gpena/Bramble.jl#338): `_threaded_replay_policy(::CpuPolyester)` and
+    # searching: `_threaded_replay_policy(::CpuPolyester)` and
     # `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` above. Checked the same
     # way `test/form/threaded_replay.jl` checks `CpuThreaded` -- agreement against a serial
     # `assemble` of the same non-uniform mesh, never against another threaded fill -- since
@@ -366,7 +364,7 @@ end
 
 # Under `CpuPolyester` every CPU stencil engine (the one-sided and centered difference
 # engines and both average engines) runs banded along the grid's last axis, one band per
-# `@batch` task (gpena/Bramble.jl#356, S7.2, mirroring `test/space/threaded_stencils.jl`'s own
+# `@batch` task (mirroring `test/space/threaded_stencils.jl`'s own
 # `CpuThreaded` check, `Bramble._batch_difference_engine!`/`_batch_average_engine!`/
 # `_batch_centered_average_engine!` in `ext/BramblePolyesterExt.jl`). Every point is still
 # computed by the very loop body the serial engine runs, so the answer must equal `Serial()`
@@ -458,7 +456,7 @@ end
     @test _poly_min_bytes(16) == _poly_min_bytes(160)
 end
 
-# --- Divergence, curl and strain-average engines under CpuPolyester (S7.5, #356) --------- #
+# --- Divergence, curl and strain-average engines under CpuPolyester --------- #
 #
 # `_run_bands!`'s `CpuPolyester` arm (`_batch_run_bands!`, this extension) is what the
 # accumulating engines behind `divₕ!`/`curlₕ!`/`εₕ!` (operators/vector_calculus.jl)
@@ -539,7 +537,7 @@ if Threads.nthreads() >= 2
     end
 end
 
-# --- Broadcast under CpuPolyester (S8.2, #357) ------------------------------------------ #
+# --- Broadcast under CpuPolyester ------------------------------------------ #
 #
 # `_broadcast_copyto!`'s `CpuPolyester` arm (`_polyester_broadcast!`/`_batch_broadcast!`,
 # ext/BramblePolyesterExt.jl) runs `dest .= expr` in the same bands `_threaded_broadcast!`
@@ -646,7 +644,7 @@ if Threads.nthreads() >= 2
 end
 
 # A matrix-free product under `CpuPolyester` sweeps the colour bands through the replay hooks
-# (`_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!`, gpena/Bramble.jl#326), so
+# (`_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!`) so
 # it must equal the serial product on the same non-uniform mesh on every repeat, and what it
 # allocates is the `@batch` launch cost, whatever the grid size.
 @testset "matrix-free mul! (#326)" begin
@@ -721,8 +719,8 @@ end
     @test isapprox(op * x, assemble(form(Vb, Vb, f); dirichlet = :boundary) * x; rtol = 1e-12)
 end
 
-# Mixed leaf policies, CpuThreaded beside CpuPolyester (gpena/Bramble.jl#318, moved here from
-# test/form/threaded_replay.jl, which keeps the Threaded + Serial case): whether a unit replays
+# Mixed leaf policies, CpuThreaded beside CpuPolyester (the Threaded + Serial case
+# lives in test/form/threaded_replay.jl): whether a unit replays
 # is decided from the leaf its sweep walks, so a composite's leaves, or a cross-mesh form's two
 # meshes, may carry different policies. Each refill records, then replays, and agrees with the
 # same form on all-serial leaves over the same non-uniform meshes.
@@ -755,7 +753,7 @@ end
     end
 end
 
-# The shift engines (gpena/Bramble.jl#352) under CpuPolyester: every point is computed by the
+# The shift engines under CpuPolyester: every point is computed by the
 # same loop body under every policy, so the answers equal the Serial ones exactly. The
 # meshes are non-uniform, as in test/space/shift.jl.
 function _shift_mesh(D; policy = Serial())
@@ -788,7 +786,7 @@ _shift_g(x) = sin(3 * x[1]) - x[end]
     end
 end
 
-# The GMG transfers and cycles (gpena/Bramble.jl#329) under CpuPolyester, against Serial on
+# The GMG transfers and cycles under CpuPolyester, against Serial on
 # the same non-uniform meshes as test/solvers/multigrid.jl. The transfers write every point
 # once, so they agree bitwise on every repeat; the cycles agree to rounding.
 function _mg_transfer_meshes(bk = backend())

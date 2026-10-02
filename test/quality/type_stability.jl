@@ -6,7 +6,7 @@ using Bramble
 using Bramble: Dcₕ, D̃ₕ, D̽ₕ, matrix_free_operator, pde_solve
 using Bramble: D₋ₓ, D₋ᵧ, D₋₂, jumpₓ, jumpᵧ, jump₂, Mₓ, Mᵧ, M₂
 using Bramble: spacings, half_spacings, cell_measures, points
-# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+# Internal since v3.0: defined and documented, not exported.
 import Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ, diff₊ₓ, diff₊ᵧ, diff₊₂, diff₊ₕ, D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ,
                 M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
 using ForwardDiff
@@ -93,7 +93,7 @@ end
 
             @test_opt target_modules = TM op(uₕ)
         end
-        # Moved from test/space/inference_allocation.jl (gpena/Bramble.jl#146): the 2D/3D
+        # Moved from test/space/inference_allocation.jl: the 2D/3D
         # vectorial aliases once built their methods from `ntuple(i -> op(u, Val(i)))`,
         # boxing `i` and dispatching dynamically down the difference engine.
         for op in (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M₊ₕ, D̃ₕ, Dcₕ, D̽ₕ), vₕ in (uₕ2, uₕ3)

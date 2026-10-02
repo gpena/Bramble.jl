@@ -46,7 +46,7 @@ Base.setindex!(A::MockGPUArray, v, i::Int...) = setindex!(A.data, v, i...)
 Base.IndexStyle(::Type{<:MockGPUArray}) = IndexLinear()
 Base.fill!(A::MockGPUArray{T}, v) where {T} = (fill!(A.data, v); A)
 
-# Answers `DeviceLocality()` (gpena/Bramble.jl#298) although the storage underneath is a
+# Answers `DeviceLocality()` although the storage underneath is a
 # plain host `Array`: this is what makes the `Backend` constructor's locality rejection
 # testable with no GPU hardware present -- MockGPUArray *claims* device locality the same
 # way a real vendor array would, so pairing it with a CpuPolicy or a host matrix type must
@@ -57,7 +57,7 @@ const MockGPUVector{T} = MockGPUArray{T, 1}
 const MockGPUMatrix{T} = MockGPUArray{T, 2}
 
 @testset "Execution policy hierarchy" begin
-    # Invariants tested (gpena/Bramble.jl#191):
+    # Invariants tested:
     # 1. CPU and GPU policies are separate branches under ExecutionPolicy.
     # 2. Serial and Parallel are aliases, identically, so every existing call site and every
     #    benchmark baseline key still resolves.
@@ -79,7 +79,7 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
     @test isbitstype(CpuSerial)
     @test isbitstype(GpuKernel)
 
-    # CpuPolyester ships as a policy type here (gpena/Bramble.jl#190); the sweeps it selects
+    # CpuPolyester ships as a policy type here; the sweeps it selects
     # are implemented by the BramblePolyesterExt package extension, not tested in this file.
     @test CpuPolyester <: CpuPolicy <: ExecutionPolicy
     @test CpuPolyester() isa CpuPolicy
@@ -87,8 +87,8 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
 end
 
 @testset "Backend locality enforcement" begin
-    # Invariants tested (gpena/Bramble.jl#298, #296, decided Q16 -- O11 "rejection is
-    # testable with no GPU"): MockGPUArray answers DeviceLocality() while remaining
+    # Invariants tested (rejection is
+    # testable with no GPU): MockGPUArray answers DeviceLocality() while remaining
     # host-backed, so every shape a real vendor array (MtlVector, a future CuArray) would
     # trigger is exercised here without any GPU hardware or optional dependency.
     @testset "locality trait" begin
@@ -298,10 +298,10 @@ end
     end
 
     # Invariants tested:
-    # 1. Custom DenseArray subtypes integrate seamlessly with backend factory functions.
-    # 2. backend_zeros and backend_eye populate correct dimensions and values.
+    # 1. Custom DenseArray subtypes work with backend factory functions.
+    # 2. backend_zeros and backend_eye fill correct dimensions and values.
     @testset "Mock GPU backend" begin
-        # MockGPUVector/MockGPUMatrix now answer DeviceLocality() (gpena/Bramble.jl#298), so
+        # MockGPUVector/MockGPUMatrix now answer DeviceLocality(), so
         # the default Serial() policy -- HostLocality() -- no longer agrees with them; a
         # GpuKernel() policy is required for this Backend to construct at all.
         be_gpu = backend(
@@ -459,7 +459,7 @@ end
         SizeConstructibleVec{T}(n::Integer) where {T} = SizeConstructibleVec{T}(zeros(T, n))
         Base.size(v::SizeConstructibleVec) = size(v.data)
         Base.getindex(v::SizeConstructibleVec, i) = v.data[i]
-        # The opt-out (gpena/Bramble.jl#100). Before the trait, this type was found by
+        # The opt-out. Before the trait, this type was found by
         # calling `SizeConstructibleVec{Float64}(undef, n)` and catching the MethodError.
         Bramble.supports_undef_construction(::Type{<:SizeConstructibleVec}) = false
 
@@ -518,15 +518,15 @@ end
         end
     end
 
-    # Invariants tested (gpena/Bramble.jl#192):
+    # Invariants tested:
     # 1. gpu_backend() resolves to metal_backend() once the Metal extension is loaded,
     #    including element-type and policy keyword forwarding.
-    # 1b. A CpuPolicy is refused, not accepted (gpena/Bramble.jl#298, #296): Metal's device
+    # 1b. A CpuPolicy is refused, not accepted: Metal's device
     #     arrays answer DeviceLocality(), a CpuPolicy answers HostLocality(), and the two
     #     disagreeing is a construction error for both metal_backend and gpu_backend.
     # 2. Metal.functional() gates anything that actually touches a device -- a skip here
     #    warns and is recorded (@test_skip), rather than the branch simply being left out,
-    #    which is gpena/Bramble.jl#84's failure mode: a test that "passes" while running
+    #    a failure mode where a test that "passes" while running
     #    nothing.
     # 3. The no-extension diagnostic names the package this host's architecture needs.
     #    `using Metal`, once it happens (in an earlier test file of the same process, on
@@ -538,8 +538,7 @@ end
     #    branch is instead verified end-to-end in a fresh subprocess that never loads
     #    Metal -- the same idiom test/quality/invalidations.jl uses for what a live
     #    process cannot show directly.
-    # 4. gpu_backend() refuses a loaded-but-non-functional extension (gpena/Bramble.jl#192,
-    #    S1.4), with a diagnostic distinct from the no-extension one. This host has a
+    # 4. gpu_backend() refuses a loaded-but-non-functional extension, with a diagnostic distinct from the no-extension one. This host has a
     #    functional Metal device (checked below), so Metal.functional() cannot be made to
     #    answer false for real; `Bramble._gpu_functional_override[]` is set to
     #    `false` for the duration of one call and restored immediately after, in a
@@ -701,7 +700,7 @@ end
 end
 
 @testset "Extension-backed backend stubs" begin
-    # Invariants tested (gpena/Bramble.jl#214): csr_backend follows the metal_backend
+    # Invariants tested: csr_backend follows the metal_backend
     # precedent -- calling it without its package loaded errors, naming the package, rather
     # than a MethodError deeper in. The banded constructors were removed with their backend
     # on 2026-09-19, so there is nothing of theirs left to assert here.

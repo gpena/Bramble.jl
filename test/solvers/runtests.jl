@@ -4,8 +4,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
 
 @testset "Solvers" begin
     include("sparse_solvers.jl")
-    # Preconditioners from a matrix-free diagonal (gpena/Bramble.jl#327).
+    # Preconditioners from a matrix-free diagonal.
     include("preconditioners.jl")
-    # Geometric multigrid: nested hierarchies (gpena/Bramble.jl#329).
+    # Geometric multigrid: nested hierarchies.
     include("multigrid.jl")
 end

@@ -74,7 +74,7 @@ const __bramble_with_ext_backends = __bramble_test_group in ("ext", "full", "bac
 const __bramble_with_gpu_group = __bramble_with_gpu_tests && __bramble_test_group == "gpu"
 
 # The worked-example pages themselves, run rather than mirrored: each is a Literate script
-# whose `#src` assertions pin the numbers it renders (#117). What they uniquely catch is a
+# whose `#src` assertions pin the numbers it renders. What they uniquely catch is a
 # number the documentation *publishes* going stale, which is the documentation build's
 # concern, so they form their own group and no other group runs them: `pages.jl` (the
 # pages that need only the test environment) and `ext_pages.jl` (the pages that load a
@@ -168,7 +168,7 @@ if __bramble_with_unit_tests
         # docs page reaches, as opposed to the `examples` group below, which runs the pages.
         include("drivers/runtests.jl")
 
-        # Static allocation verification (#118). Lives under `quality/` because that is what
+        # Static allocation verification. Lives under `quality/` because that is what
         # it is, but runs with the unit group because it is the one quality gate cheap enough
         # to pay on every push (3 s, against minutes for JET), and an allocation regression
         # is exactly the kind of thing that should not wait for the nightly to surface it.
@@ -197,7 +197,7 @@ if __bramble_with_quality
         include("quality/invalidations.jl")
         # Decoupled from docs/make.jl (doctest = false there) so a doctest regression is
         # caught here, in parallel with the rest of this group, instead of during every docs
-        # build (gpena/Bramble.jl#251).
+        # build.
         include("quality/doctests.jl")
         # Already run above with the unit group; included here so a `quality`-only run
         # (nightly's second job) still covers it, without running it twice for `all`.

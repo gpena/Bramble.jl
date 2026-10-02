@@ -12,7 +12,7 @@ using Aqua
     # - `Test.detect_unbound_args` (which Aqua's check delegates to) has a separate blind
     #   spot, reproduced on stable Julia 1.12 with a minimal, Bramble-unrelated example:
     #   `f(y::NTuple{NQ, T}) where {NQ, T} = 1` reports both `NQ` and `T` as unbound, even
-    #   though they plainly are — `NTuple{NQ, T}` desugars to `Tuple{Vararg{T, NQ}}`, and
+    #   though they plainly are. `NTuple{NQ, T}` desugars to `Tuple{Vararg{T, NQ}}`, and
     #   the check's tree walk does not look inside `Vararg`. `_cell_average`'s
     #   `nodes::NTuple{NQ, T}`/`wts::NTuple{NQ, T}` signatures (src/operators/cell_average.jl)
     #   hit exactly this after the StaticArrays → Tuple migration replaced `SVector{NQ, T}`
@@ -41,7 +41,7 @@ using Aqua
         # wrapper process exiting *after* Bramble has finished loading, and 10 s of it is
         # thin enough on a loaded runner that a run of downstream packages have papered
         # over spurious failures with retries (JuliaTesting/Aqua.jl#315). Upstream raised
-        # the default to 30 in Aqua.jl#389, merged but unreleased as of 0.8.16 — drop this
+        # the default to 30 in Aqua.jl#389, merged but unreleased as of 0.8.16. Drop this
         # argument once a release carries it.
         persistent_tasks = (tmax = 30,)
     )
