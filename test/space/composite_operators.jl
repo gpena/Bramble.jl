@@ -3,27 +3,23 @@ module SpaceCompositeOperatorsTests
 using Test
 using Bramble
 using Bramble: D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, M₂, Mₓ, jumpᵧ, jump₂, jumpₓ
-# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+# Internal: defined and documented, not exported.
 import Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ, diff₊ₓ, diff₊ᵧ, diff₊₂, D₊ₓ, D₊ᵧ, D₊₂, ∇₊ₕ, M₊ₓ, M₊ᵧ, M₊₂
 using Bramble: components, ndofs, _grid_dims, _op_mesh
 using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff₊₂, diff₋ₕ
-# εₕ/εₕ! (gpena/Bramble.jl#234, S6.7): new names, not yet exported -- the integrator adds
-# `export εₕ, εₕ!` to src/Bramble.jl alongside divₕ/curlₕ/Δₕ.
 import Bramble: εₕ, εₕ!, Δₕ!
 using ..TestUtils: alloc_test, @test_allocs
 
 # Operators on composite grid functions.
 #
 # A composite grid function is a stack of scalar ones sharing a mesh, so every operator
-# must give the same answer as applying it to each component on its own. It did not: the
-# applicators took their grid shape from `ndofs(space, Tuple)`, which is the grid shape
-# for a scalar space but the per-component dof counts for a composite one. A 3-component
-# 4x6 space therefore addressed prod((24, 24, 24)) = 13824 slots into a vector holding
-# 72, which the engines write with @inbounds. Under `--check-bounds=yes`, which is how the
-# suite runs, that is a BoundsError; without it, it segfaults.
-#
-# These tests pin the invariant rather than the symptom, so they hold whatever the
-# internals do later.
+# must give the same answer as applying it to each component on its own. Taking the grid
+# shape from `ndofs(space, Tuple)` breaks that. For a scalar space it is the grid shape,
+# but for a composite one it is the per-component dof counts. A 3-component 4x6 space
+# would address prod((24, 24, 24)) = 13824 slots into a vector holding 72, and the
+# engines write with @inbounds. Under `--check-bounds=yes`, which is how the suite runs,
+# that is a BoundsError; without it, a segfault. The tests pin the invariant rather than
+# the symptom, so they hold whatever the internals do.
 
 @testset "Composite operators" begin
     scalar_ops = (
@@ -148,9 +144,8 @@ using ..TestUtils: alloc_test, @test_allocs
         @test parent(uₕ) == before
     end
 
-    # gpena/Bramble.jl#234 (v3.3.0 plan S6.7): ∇ₕ, εₕ and divₕ over a *vector field* -- a
-    # `D`-leaf composite VectorElement on a `D`-dimensional mesh -- rather than the
-    # arbitrary-leaf-count multi-field composites the testsets above exercise.
+    # ∇ₕ, εₕ and divₕ over a *vector field*, a `D`-leaf composite VectorElement on a
+    # `D`-dimensional mesh, rather than the arbitrary-leaf-count multi-field composites the testsets above exercise.
     @testset "Vector calculus on composites (#234)" begin
         Dm = (D₋ₓ, D₋ᵧ, D₋₂)
         Mm = (Mₓ, Mᵧ, M₂)
@@ -225,8 +220,7 @@ using ..TestUtils: alloc_test, @test_allocs
                 # The existing divₕ already covers the composite vector field.
                 @testset "divₕ on the composite field (#158)" begin
                     # Independent oracle: the plain, unstaggered sum of D₋ᵢ over each
-                    # scalar leaf -- exactly what divₕ (#158) already computes, and all
-                    # this subplan's goal asks of it. No extension was needed.
+                    # scalar leaf, which is what divₕ computes on a composite field.
                     oracle = mapreduce(k -> parent(Dm[k](scalars[k])), +, 1:D)
                     @test parent(divₕ(uₕ)) ≈ oracle
                 end

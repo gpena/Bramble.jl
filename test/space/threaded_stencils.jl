@@ -8,7 +8,7 @@ using ..TestUtils: alloc_test, WITH_SLOW_TESTS
 
 # Under a `CpuThreaded` (`Parallel()`) backend every CPU stencil engine -- the one-sided and
 # centered difference engines and both average engines -- runs banded along the grid's
-# last axis, one band per thread (gpena/Bramble.jl#356). Every point is still computed by
+# last axis, one band per thread. Every point is still computed by
 # the very loop body the serial engine runs, so the answer must equal the `Serial()` one
 # exactly, not merely to a tolerance. The meshes are non-uniform: on a uniform mesh a
 # band that picked up the wrong spacing index would still give the right number.

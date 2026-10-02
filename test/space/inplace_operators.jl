@@ -98,7 +98,7 @@ end
 
     @testset "Destination overwrite" begin
         # Most of these truncate a boundary slice to zero (D̽ instead falls back to a
-        # one-sided difference there, gpena/Bramble.jl#183, but still writes a real,
+        # one-sided difference there, but still writes a real,
         # non-sentinel value). If a `!` form skipped those entries instead of writing
         # them, whatever was in the destination would survive (with a fresh `similar`
         # that is uninitialised memory), so the allocating form would look right while
@@ -138,7 +138,7 @@ end
                 push!(inplace, @allocated f!(vₕ, uₕ))
                 push!(allocating, @allocated f(uₕ))
             end
-            # In-place copyto! assignment checks (values!'s replacement, gpena/Bramble.jl#73)
+            # In-place copyto! assignment checks
             copyto!(vₕ, 0.0)
             copyto!(vₕ, parent(uₕ))
             push!(inplace, @allocated copyto!(vₕ, 0.0))
@@ -281,10 +281,10 @@ end
     end
 
     @testset "Vector-calculus grid mismatch rejected" begin
-        # The same failure as above, one layer up (gpena/Bramble.jl#402): every in-place
-        # divergence, curl, gradient, Laplacian and strain form indexed its destinations with
-        # the source's grid shape and never asked whether they were grid functions of that
-        # grid. Each destination leaf has to be refused -- a short view, a bigger mesh, a
+        # The same failure as above, one layer up. Every in-place divergence, curl,
+        # gradient, Laplacian and strain form must check that its destinations are grid
+        # functions of the source's grid before indexing them with its shape. Each
+        # destination leaf has to be refused -- a short view, a bigger mesh, a
         # permuted shape -- before anything is written to any of them, and a matching
         # destination must stay allocation-free.
         Ωs = (

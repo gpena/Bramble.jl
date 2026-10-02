@@ -159,11 +159,10 @@ using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
     end
 end
 
-# Runtime `inner₊(uₕ, vₕ, Val(S))` for every staggered set `S ⊆ 1:D` (gpena/Bramble.jl#115,
-# #234): the existing four (`innerₕ`, `inner₊ₓ`, `inner₊ᵧ`, `inner₊₂`) are the `S = ()` and
-# singleton cases, kept as aliases sharing this implementation; every other `S` -- a pair, or
-# the full `1:D` set -- is new with this milestone and reduces against the lazy
-# `SeparableWeights` `weights(Wₕ, Val(S))` returns for it.
+# Runtime `inner₊(uₕ, vₕ, Val(S))` for every staggered set `S ⊆ 1:D`
+# (`innerₕ`, `inner₊ₓ`, `inner₊ᵧ` and `inner₊₂` are the `S = ()` and singleton cases,
+# aliases sharing this implementation). Every other `S`, a pair or the full `1:D` set,
+# reduces against the lazy `SeparableWeights` that `weights(Wₕ, Val(S))` returns.
 @testset "inner₊ on every staggered set (#234)" begin
     # A weight for `S`, built directly from `spacing`/`cell_measure` rather than from
     # `weights`/`SpaceWeights`: entry `I` is the product, over every axis `d`, of the
@@ -267,9 +266,9 @@ end
     # The Polyester hook, never the Cartesian loop.
     @testset "CpuPolyester takes Polyester hook (#190)" begin
         # `inner₊(uₕ, vₕ, Val(S))` passes `execution_policy(space(uₕ))` through to the
-        # policy-dispatched `_dot`/`_dot_masked` (S7.1, `src/utils/linear_algebra.jl`):
+        # policy-dispatched `_dot`/`_dot_masked` (`src/utils/linear_algebra.jl`):
         # `CpuSerial`/`CpuThreaded` fall through to the plain methods (positive control
-        # below); `CpuPolyester` must reach S7.1's `_batch_dot`/`_batch_dot_masked` hook and
+        # below); `CpuPolyester` must reach the `_batch_dot`/`_batch_dot_masked` hook and
         # its "Polyester not loaded" error, for a dense weight and for a `SeparableWeights`
         # alike, without ever running this file's Cartesian loop. A `CpuPolyester` grid space
         # cannot be built at all without Polyester (`space_weights` itself needs the
@@ -481,9 +480,8 @@ end
     end
 
     @testset "Dimension mismatches" begin
-        # Both of these used to raise UndefVarError: the message was interpolated
-        # inside the quoted expression, so it was evaluated at run time where the
-        # generator's locals no longer exist.
+        # The error message must not be interpolated inside the quoted expression, where
+        # it would be evaluated at run time with the generator's locals gone.
         @test_throws ArgumentError inner₊(1.0, 2.0)
         @test_throws DimensionMismatch inner₊(u1, u2)
 
@@ -599,10 +597,9 @@ end
 
 @testset "One-element tuple inner₊" begin
     # In 1D the one-element tuple and the bare grid function denote the same thing, and
-    # inner₊ accepts both. It used to accept only the second: the generated body read the
-    # element type off `u_type.parameters[2]`, which does not exist for `Tuple{V}`, so a
-    # 1-tuple raised a BoundsError from inside code generation rather than returning a
-    # number.
+    # inner₊ accepts both. The generated body must not read the element type off
+    # `u_type.parameters[2]`, which does not exist for `Tuple{V}`: a 1-tuple would raise a
+    # BoundsError from inside code generation instead of returning a number.
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)
     Wₕ = gridspace(Ωₕ)
     uₕ = Rₕ(Wₕ, sin)
@@ -779,9 +776,9 @@ end
     end
 
     @testset "Refinement scaling" begin
-        # The whole point of point 11's decision: this quantity is O(h) times the boundary
-        # integral it is easily mistaken for, and a decreasing sequence under refinement is
-        # what tells the two apart, not the single 0.125 figure alone.
+        # This quantity is O(h) times the boundary integral it is easily mistaken for, and
+        # a decreasing sequence under refinement is what tells the two apart, not a single
+        # figure alone.
         vals = map((5, 10, 20, 40)) do n
             Ω = mesh(domain(S, :bottom => :bottom), (n, n), (true, true))
             W = gridspace(Ω)
@@ -793,7 +790,7 @@ end
     end
 
     # The genuine surface integral, against which the masked sums above are the *other*
-    # quantity: mesh-independent where those scale like h (gpena/Bramble.jl#157). Every
+    # quantity: mesh-independent where those scale like h. Every
     # figure here is a closed form -- an edge length, a perimeter, a surface area, a
     # hand-computed corner weight -- never a second call to the code under test.
     @testset "inner_Γ (#157)" begin
@@ -810,7 +807,8 @@ end
         end
 
         @testset "Marker unions add, corners included" begin
-            # ω(:ymin) + ω(:xmin) == ω(:ymin, :xmin) pointwise: at the shared corner the two
+            # The weight of the union of two markers is the sum of their weights pointwise. At the
+            # shared corner the two
             # contributions are h₁/2 and k₁/2 and the union's is their sum, so no point is
             # counted twice and none is missed.
             W = gridspace(mesh(domain(interval(0.0, 2.0) × interval(0.0, 3.0)), (7, 6),

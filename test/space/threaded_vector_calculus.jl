@@ -8,7 +8,7 @@ using ..TestUtils: alloc_test, WITH_SLOW_TESTS
 
 # Under a `CpuThreaded` (`Parallel()`) backend the in-place vector-calculus operators -- the
 # gradients, divergences, curls and strain tensors of vector_calculus.jl -- reach the banded
-# stencil engines and the banded accumulating engines (gpena/Bramble.jl#356). Every point is
+# stencil engines and the banded accumulating engines. Every point is
 # still computed by the loop body the serial path runs, summed over the directions in the
 # same order, so the answer must equal the `Serial()` one exactly (`==`), not merely to a
 # tolerance. The meshes are non-uniform: on a uniform mesh a band that picked up the wrong

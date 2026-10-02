@@ -9,10 +9,10 @@ using Bramble: index_in_marker, jumpᵧ, jump₂, jumpₓ
 using SparseArrays: SparseMatrixCSC, nnz
 using LinearAlgebra: Diagonal
 using Bramble: components, restrict_to
-# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+# Internal: defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, D₊₂, D₊, div₊ₕ, curl₊ₕ, forward_star_difference
 # `M₊*` is `public`, not `export`ed (average.jl's own note on why); `kronecker_operator_matrix`
-# is neither, the oracle `stencil_matrix` (gpena/Bramble.jl#185) is checked against.
+# is neither, the oracle `stencil_matrix` is checked against.
 import Bramble: M₊ₓ, M₊ᵧ, M₊₂, kronecker_operator_matrix
 using Bramble:
                IdentityOperator,
@@ -80,7 +80,7 @@ using Bramble:
     end
 end
 
-# The discrete vector calculus operators (gpena/Bramble.jl#158).
+# The discrete vector calculus operators.
 #
 # Each is a contraction of the directional differences, evaluated in one traversal rather
 # than as nested operator calls, so the property that matters is that the fused form is the
@@ -204,10 +204,9 @@ end
     end
 end
 
-# `stencil_matrix` (gpena/Bramble.jl#185): every family's public per-axis alias now
-# routes through the single-pass builder in `src/operators/stencil.jl`, rather than
-# through the Kronecker products of shift matrices `kronecker_operator_matrix` still
-# builds (`src/operators/shift.jl`, kept as the retained oracle). Checked entrywise,
+# `stencil_matrix`: every family's public per-axis alias routes through the single-pass
+# builder in `src/operators/stencil.jl`. The Kronecker products of shift matrices that
+# `kronecker_operator_matrix` builds (`src/operators/shift.jl`) are the oracle. Checked entrywise,
 # `nnz` included, on non-uniform meshes in 1D/2D/3D so a boundary weight that would only
 # coincidentally match on a uniform grid cannot hide a mistake.
 @testset "stencil_matrix vs Kronecker (#185)" begin
@@ -239,11 +238,11 @@ end
 end
 
 # The vectorial aliases (`∇ₕ`, `Mₕ`, `jumpₕ`, ...) destructure and index into the
-# per-coordinate aliases they already apply through (#340): `dx, dy = ∇ₕ` and `∇ₕ[1]`,
+# per-coordinate aliases they already apply through: `dx, dy = ∇ₕ` and `∇ₕ[1]`,
 # `∇ₕ[:x]` are the exact same function object as `D₋ₓ`, not a copy, and the protocol is
-# generated once in `@operator_family` for every family with a `vectorial_alias`. Coordinate
-# names are due to be demoted from `export` to `public` (#340), so this file reaches them
-# through `Bramble.` rather than relying on the bare name staying exported.
+# generated once in `@operator_family` for every family with a `vectorial_alias`. This file
+# reaches the coordinate names through `Bramble.` rather than relying on the bare name
+# staying exported.
 # They index too.
 @testset "Vectorial aliases destructure (#340)" begin
     Dₓ, Dᵧ, D₂ = Bramble.D₋ₓ, Bramble.D₋ᵧ, Bramble.D₋₂
@@ -273,7 +272,7 @@ end
         second(V) = V[2]
         @test only(Base.return_types(second, (typeof(∇ₕ),))) === typeof(Dᵧ)
         @test @inferred(second(∇ₕ)) === Dᵧ
-        second(∇ₕ) # warm up before measuring
+        second(∇ₕ) # warm up first
         @test (@allocated second(∇ₕ)) == 0
     end
 
@@ -331,7 +330,7 @@ end
 end
 
 # A stand-in for a vendor GPU array: host storage that answers `DeviceLocality()`, so the
-# offloaded projection path (`GpuOffload`, gpena/Bramble.jl#324) can be driven with no GPU.
+# offloaded projection path (`GpuOffload`) can be driven with no GPU.
 # The same idea as `MockGPUArray` in test/utils/backends.jl, kept local so this file runs on
 # its own.
 struct MockDeviceArray{T, N} <: DenseArray{T, N}
