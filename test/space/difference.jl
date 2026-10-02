@@ -888,4 +888,251 @@ _cross_weighted_bytes(Ωₕ) = @allocated cross_weighted_difference(Ωₕ, Val(1
     end
 end
 
+using LinearAlgebra: Diagonal
+using Bramble: kronecker_operator_matrix, stencil_matrix, difference_shift, BackwardFiniteDiffOp,
+               D₋, D̃ₓ, D̽ᵧ, D̃ᵧ, D̽ₓ, Dcₓ, Dcᵧ, weights, Innerh, trial_function, test_function,
+               εₕ, εcₕ, ε̽ₕ, divcₕ, div̽ₕ, ∇₊ₕ, Mₓ, Mᵧ, _macro_string, _tuple_args,
+               _relocate!, _subst
+
+# The dense fallback of `stencil_matrix` (a host fill through `_HostAxisSpacings`, handed to
+# the backend's matrix type in one `copyto!`) and the dense branch of `_scale_rows!` (which
+# the Kronecker oracle weights through) are taken only by a dense matrix backend; the
+# sparse default takes neither. Every difference family against the Kronecker construction,
+# entry for entry, on a mesh non-uniform in both directions; the unscaled pair against the
+# difference of two shift matrices, which is its definition.
+@testset "stencil_matrix: dense fallback vs Kronecker" begin
+    Ωd = mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (6, 5), (false, false);
+        backend = backend(matrix_type = Matrix{Float64}))
+    families = ((D₋ₓ, D₋ᵧ), (D₊ₓ, D₊ᵧ), (D̃ₓ, D̃ᵧ), (Dcₓ, Dcᵧ), (D̽ₓ, D̽ᵧ))
+    for ops in families, d in 1:2
+        @testset "$(ops[d])" begin
+            A = ops[d](Ωd)
+            @test A isa Matrix{Float64}
+            @test A == kronecker_operator_matrix(Ωd, ops[d])
+        end
+    end
+    for (op, d) in ((diff₋ₓ, 1), (diff₋ᵧ, 2))
+        @test op(Ωd) isa Matrix{Float64}
+        @test op(Ωd) == difference_shift(Ωd, Val(d), Val(0), Val(-1))
+    end
+    for (op, d) in ((diff₊ₓ, 1), (diff₊ᵧ, 2))
+        @test op(Ωd) == difference_shift(Ωd, Val(d), Val(1), Val(0))
+    end
+    # a grid space is read as its mesh
+    @test stencil_matrix(gridspace(Ωd), BackwardFiniteDiffOp{2}()) ==
+          kronecker_operator_matrix(Ωd, D₋ᵧ)
+end
+
+# A runtime `Int` or `Symbol` direction selects between literal `Val`s, one arm per direction
+# the mesh has (`_dispatch_dim`, `_dim_index`); each arm must give the subscript alias, and a
+# direction the mesh does not have must be refused rather than reach a `Val` no grid serves.
+@testset "Dimensional entry point: Int and Symbol directions" begin
+    W2 = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (6, 5), (false, false)))
+    W3 = gridspace(mesh(domain(box((0.0, 0.0, 0.0), (1.0, 2.0, 1.5))), (4, 5, 3),
+        (false, false, false)))
+    u2 = Rₕ(W2, x -> sin(x[1]) + x[2]^2)
+    u3 = Rₕ(W3, x -> x[1] * x[2] + exp(x[3]))
+
+    @test parent(D₋(u2, 2)) == parent(D₋ᵧ(u2))
+    @test parent(D₋(u2, :x)) == parent(D₋ₓ(u2))
+    @test parent(D₋(u2, :y)) == parent(D₋ᵧ(u2))
+    @test parent(D₋(u3, 3)) == parent(D₋₂(u3))
+    @test parent(D₋(u3, 2)) == parent(D₋ᵧ(u3))
+    @test parent(D₋(u3, :z)) == parent(D₋₂(u3))
+
+    msg(f) =
+        try
+            f()
+            ""
+        catch e
+            e isa ArgumentError ? e.msg : "not an ArgumentError"
+        end
+    @test msg(() -> D₋(u2, 3)) == "the stencil direction must be between 1 and 2, got 3"
+    @test msg(() -> D₋(u3, 4)) == "the stencil direction must be between 1 and 3, got 4"
+    @test msg(() -> D₋(u2, :w)) == "the stencil direction must be :x, :y or :z, got :w"
+end
+
+@testset "In-place difference: size mismatch is a DimensionMismatch" begin
+    err = try
+        backward_difference_dim!(zeros(3), zeros(4), (4,), Val(1))
+    catch e
+        e
+    end
+    @test err isa DimensionMismatch
+    @test err.msg == "out has 3 entries and in has 4, but the grid (4,) has 4"
+end
+
+# The device kernels' boundary index (`_stencil_boundary_dim`) must name the one slice the
+# host traversal (`_stencil_ranges`) treats as the boundary: the last point for a forward
+# stencil, the first for a backward one.
+@testset "Boundary slice: device index agrees with the host ranges" begin
+    for dir in (Bramble.Forward(), Bramble.Backward()), n in (2, 7)
+        _, boundary = Bramble._stencil_ranges((1:n,), Val(1), dir)
+        i = Bramble._stencil_boundary_dim(dir, n)
+        @test boundary == (i:i,)
+    end
+    @test Bramble._stencil_boundary_dim(Bramble.Forward(), 7) == 7
+    @test Bramble._stencil_boundary_dim(Bramble.Backward(), 7) == 1
+end
+
+# `@operator_family` expanded here, at test time, into a family of its own: in `src/` the
+# macro only ever runs while Bramble precompiles. The family is the unscaled backward
+# difference under another name (`_apply_spaced!` with no spacing), so what it computes can
+# be checked by hand, and every keyword path is taken once: an `extra_args` tuple, prose
+# given as a `*` concatenation, a note with `{direction}`/`{suffix}` placeholders, a
+# vectorial keyword given and one left to its default.
+module OperatorFamilyProbe
+using Bramble: Bramble, VectorElement, ScalarGridSpace, CompositeGridSpace, OperatorArgument,
+               Backward, _apply_spaced!, _no_spacing, _no_precheck, _dispatch_dim, _dim_index,
+               _vectorial_apply, _op_mesh, dim
+
+const PROBE_LINE = @__LINE__() + 1
+Bramble.@operator_family(base=probe,
+    stem=Pq,
+    apply_fn=_apply_spaced!,
+    extra_args=(_no_spacing, _no_precheck),
+    direction=Backward(),
+    dir_string="backward",
+    what="probe difference",
+    formula="u_i - u_{i-1}",
+    trailing_note="Probed along `{direction}`, "*"subscript {suffix}.",
+    vectorial_alias=Pqₕ,
+    vectorial_what="probe "*"gradient")
+end
+
+@testset "@operator_family expansion" begin
+    P = OperatorFamilyProbe
+    nx, ny = 6, 5
+    Wₕ = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (nx, ny), (false, false)))
+    uₕ = Rₕ(Wₕ, x -> sin(3x[1]) + x[1] * x[2]^2)
+
+    # the unscaled backward difference, by hand: u_i - u_{i-1}, and u_1 on the first slice
+    U = reshape(copy(parent(uₕ)), nx, ny)
+    ref_x, ref_y = copy(U), copy(U)
+    ref_x[2:end, :] .= U[2:end, :] .- U[1:(end - 1), :]
+    ref_y[:, 2:end] .= U[:, 2:end] .- U[:, 1:(end - 1)]
+
+    @test parent(P.Pqₓ(uₕ)) == vec(ref_x)
+    @test parent(P.Pqᵧ(uₕ)) == vec(ref_y)
+    vₕ = element(Wₕ)
+    @test P.Pqᵧ!(vₕ, uₕ) === vₕ
+    @test parent(vₕ) == vec(ref_y)
+    @test parent(P.Pq(uₕ, Val(1))) == vec(ref_x)
+    @test parent(P.Pq(uₕ, 2)) == vec(ref_y)
+    @test parent(P.Pq(uₕ, :y)) == vec(ref_y)
+    @test map(parent, P.Pqₕ(uₕ)) == (vec(ref_x), vec(ref_y))
+    @test P.Pqₕ[2] === P.Pqᵧ
+    @test P.Pqₕ[:z] === P.Pq₂
+    @test collect(P.Pqₕ) == [P.Pqₓ, P.Pqᵧ, P.Pq₂]
+
+    # every generated method is attributed to the macro call, not to the quote in stencil.jl
+    for f in (P.Pqₓ, P.Pqᵧ!, P.Pqₕ)
+        m = only(methods(f))
+        @test m.line == P.PROBE_LINE
+        @test endswith(String(m.file), "difference.jl")
+    end
+
+    # the prose templates, substituted per direction and folded from their `*` pieces
+    # read off the module's docstring table: `Docs.doc` needs the REPL to render
+    docs(name) = join(
+        (join(string.(d.text))
+         for d in values(Base.Docs.meta(P)[Base.Docs.Binding(P, name)].docs)), "\n")
+    doc_y = docs(:Pqᵧ)
+    @test occursin(
+        "The `backward` probe difference along the `y` direction, ``u_i - u_{i-1}``.", doc_y)
+    @test occursin("Probed along `y`, subscript ᵧ.", doc_y)
+    @test occursin("The backward probe gradient of `arg` along every coordinate",
+        docs(:Pqₕ))
+
+    # the helpers' remaining arms, which no family in `src/` reaches
+    @test _relocate!(:x, LineNumberNode(3, :f)) === :x
+    ex = :(a + b)
+    @test _relocate!(ex, nothing) === ex
+    @test _subst("", "x", "ₓ") == ""
+    # one pass: the text substituted for `{direction}` is not itself substituted again
+    @test _subst("{direction}|{suffix}", "{suffix}", "s") == "{suffix}|s"
+    @test _tuple_args(:f) == Any[:f]
+    @test _tuple_args(:(f(x))) == Any[:(f(x))]
+    @test _macro_string("a") == "a"
+    @test _macro_string(:("a" * "b" * "c")) == "abc"
+    @test_throws ErrorException _macro_string(:(uppercase("a")))
+end
+
+# The form-layer stencils of `D̃` and `D̽`, assembled under the discrete L² product, are the
+# space-layer matrices scaled row by row by the quadrature weights: innerₕ(Op(u), v) = vᵀ H Op u.
+@testset "Form-layer D̃ and D̽ stencils vs the space-layer matrices" begin
+    Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (7, 6), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    H = Diagonal(collect(weights(Wₕ, Innerh())))
+    for (op_form, op_matrix) in ((u -> D̃ₓ(u), D̃ₓ(Ωₕ)), (u -> D̽ᵧ(u), D̽ᵧ(Ωₕ)))
+        A = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(op_form(u), v))))
+        @test maximum(abs, A) > 0.1
+        @test isapprox(A, Matrix(H * op_matrix); atol = 1.0e-12)
+    end
+end
+
+# The builders over composite trial and test functions, against the trees written out from
+# their definitions: εₕ places ε_ii as a bare backward difference and averages each cross
+# difference of ε_ij once onto the shared edge; εcₕ/ε̽ₕ collocate everything, and their inner
+# product keeps the upper triangle with the off-diagonal pairs doubled.
+@testset "Form builders over composite trial and test functions" begin
+    Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (6, 5), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    Vₕ = Wₕ^Val(2)
+    u, v = trial_function(Vₕ), test_function(Vₕ)
+
+    @testset "∇₊ₕ" begin
+        @test ∇₊ₕ(u) === ((D₊ₓ(u(1)), D₊ᵧ(u(1))), (D₊ₓ(u(2)), D₊ᵧ(u(2))))
+        @test ∇₊ₕ(v) === ((D₊ₓ(v(1)), D₊ᵧ(v(1))), (D₊ₓ(v(2)), D₊ᵧ(v(2))))
+        us = trial_function(Wₕ)
+        @test ∇₊ₕ(us) === (D₊ₓ(us), D₊ᵧ(us))
+        u1 = trial_function(gridspace(mesh(domain(interval(0.0, 1.0)), 7, false)))
+        @test ∇₊ₕ(u1) === D₊ₓ(u1)
+    end
+
+    @testset "εₕ and inner₊" begin
+        ε = εₕ(u)
+        @test ε.entries[1][1] === (D₋ₓ(u(1)),)
+        @test ε.entries[1][2] === (0.5 * Mₓ(D₋ᵧ(u(1))), 0.5 * Mᵧ(D₋ₓ(u(2))))
+        @test ε.entries[2][1] === (0.5 * Mᵧ(D₋ₓ(u(2))), 0.5 * Mₓ(D₋ᵧ(u(1))))
+        @test ε.entries[2][2] === (D₋ᵧ(u(2)),)
+
+        a(w) = 0.5 * Mₓ(D₋ᵧ(w(1)))
+        b(w) = 0.5 * Mᵧ(D₋ₓ(w(2)))
+        S = Val((1, 2))
+        hand = inner₊(D₋ₓ(u(1)), D₋ₓ(v(1)), Val((1,))) +
+               inner₊(a(u), a(v), S) + inner₊(a(u), b(v), S) +
+               inner₊(b(u), a(v), S) + inner₊(b(u), b(v), S) +
+               inner₊(b(u), b(v), S) + inner₊(b(u), a(v), S) +
+               inner₊(a(u), b(v), S) + inner₊(a(u), a(v), S) +
+               inner₊(D₋ᵧ(u(2)), D₋ᵧ(v(2)), Val((2,)))
+        @test inner₊(εₕ(u), εₕ(v)) === hand
+    end
+
+    @testset "divcₕ, div̽ₕ" begin
+        @test divcₕ(u) === Dcₓ(u(1)) + Dcᵧ(u(2))
+        @test div̽ₕ(v) === D̽ₓ(v(1)) + D̽ᵧ(v(2))
+    end
+
+    @testset "εcₕ, ε̽ₕ and innerₕ" begin
+        εc = εcₕ(u)
+        @test εc.entries[1][1] === (Dcₓ(u(1)),)
+        @test εc.entries[1][2] === ((1 // 2) * Dcᵧ(u(1)), (1 // 2) * Dcₓ(u(2)))
+        @test εc.entries[2][2] === (Dcᵧ(u(2)),)
+        ε̽ = ε̽ₕ(u)
+        @test ε̽.entries[2][1] === ((1 // 2) * D̽ₓ(u(2)), (1 // 2) * D̽ᵧ(u(1)))
+
+        for (ε, name) in ((εcₕ, "Dc"), (ε̽ₕ, "D̽"))
+            x, y = name * "ₓ", name * "ᵧ"
+            @test Bramble.expression(innerₕ(ε(u), ε(v))) ==
+                  "((((1 * innerₕ($x(u(1)), $x(v(1))) + " *
+                  "2 * innerₕ(1//2 * $y(u(1)), 1//2 * $y(v(1)))) + " *
+                  "2 * innerₕ(1//2 * $y(u(1)), 1//2 * $x(v(2)))) + " *
+                  "2 * innerₕ(1//2 * $x(u(2)), 1//2 * $y(v(1)))) + " *
+                  "2 * innerₕ(1//2 * $x(u(2)), 1//2 * $x(v(2)))) + " *
+                  "1 * innerₕ($y(u(2)), $y(v(2)))"
+        end
+    end
+end
+
 end # module SpaceDifferenceTests
