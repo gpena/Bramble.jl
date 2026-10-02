@@ -699,6 +699,28 @@ end
     end
 end
 
+# Leaves of different sizes share no band cut, so the product sweeps each unit in its own
+# colours through the CpuPolyester hooks: the tall leaf in bands, the short one (three slices,
+# too few to band) point by point. It must equal the same form on serial leaves over the same
+# non-uniform meshes.
+@testset "matrix-free mul!: per-unit sweep, leaves of different sizes" begin
+    _leaf(n, policy, seed) = (Random.seed!(seed);
+        gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), n, (false, false);
+            backend = backend(policy = policy))))
+    f(u, v) = inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) + innerₕ(u(2), v(2))
+    Wt, Wsh = _leaf((9, 33), CpuPolyester(), 1), _leaf((13, 3), CpuPolyester(), 2)
+    Vb = Wt × Wsh
+    Vs = _leaf((9, 33), Serial(), 1) × _leaf((13, 3), Serial(), 2)
+    op = matrix_free_operator(form(Vb, Vb, f); dirichlet = :boundary)
+    @test execution_policy(Wt) isa CpuPolyester && execution_policy(Wsh) isa CpuPolyester
+    @test op.plan === nothing
+    A = assemble(form(Vs, Vs, f); dirichlet = :boundary)
+    x = randn(size(A, 2))
+    @test !iszero(A * x)
+    @test isapprox(op * x, A * x; rtol = 1e-12, atol = 1e-12 * maximum(abs, A * x))
+    @test isapprox(op * x, assemble(form(Vb, Vb, f); dirichlet = :boundary) * x; rtol = 1e-12)
+end
+
 # Mixed leaf policies, CpuThreaded beside CpuPolyester (gpena/Bramble.jl#318, moved here from
 # test/form/threaded_replay.jl, which keeps the Threaded + Serial case): whether a unit replays
 # is decided from the leaf its sweep walks, so a composite's leaves, or a cross-mesh form's two

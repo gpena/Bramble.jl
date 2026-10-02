@@ -3,7 +3,7 @@ module TestFormMatrixFree
 using Test
 using Bramble
 using Bramble: MatrixFreeOperator, VectorElement, trial_space, test_space, restrict_to, πₕ, jumpₓ, M₊ₓ, D₋ₓ, D₋ᵧ, D₊ᵧ
-using LinearAlgebra: mul!, norm
+using LinearAlgebra: mul!, norm, dot
 using Random
 using ..TestUtils: WITH_SLOW_TESTS
 
@@ -221,6 +221,9 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
             ("pair", form(Wc, Wc, (u, v) -> innerₕ(D₊ᵧ(u), v) + 2.0 * innerₕ(u, D₊ᵧ(v))), (:west,), (0, 1)),
             ("diffusion", form(Wc, Wc, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))), :boundary, (-1, 0)),
             ("short axis", form(Ws, Ws, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))), :boundary, (-1, 0)),
+            # Three slices against a reach of two: the wide term's grid has no interior to
+            # peel, so its band walks every point guarded.
+            ("no interior", form(Ws, Ws, (u, v) -> innerₕ(u, D₋ᵧ(D₋ᵧ(v))) + innerₕ(D₊ᵧ(u), v)), :boundary, (-2, 0)),
             ("3D", form(W3, W3, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))), :boundary, (-1, 0)),
             ("pointwise", form(Wc, Wc, (u, v) -> innerₕ(u, v) + innerₕ(κ * u, v)), nothing, (0, 0)),
             ("composite pair",
@@ -264,6 +267,19 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         @test opm.plan === nothing
         xm = randn(ndofs(Vm))
         @test _mf_agree(opm * xm, assemble(am) * xm)
+        # A transposed pair on the larger leaf, swept in the colours of both terms' rows.
+        ap = form(Vm, Vm, (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(D₋ₓ(u(2)), v(2)) +
+                                    2.0 * innerₕ(u(2), D₋ₓ(v(2))))
+        opp = matrix_free_operator(ap; dirichlet = :boundary, policy = Parallel())
+        @test opp.plan === nothing
+        @test _mf_agree(opp * xm, assemble(ap; dirichlet = :boundary) * xm)
+        # A test-side interpolation alone leaves no unit for the bands: walked whole.
+        ai = form(Wc, Wf, (u, v) -> innerₕ(u, πₕ(v)))
+        opi = matrix_free_operator(ai; policy = Parallel())
+        @test opi.plan === nothing
+        xi = randn(ndofs(Wc))
+        @test !iszero(assemble(ai) * xi)
+        @test _mf_agree(opi * xi, assemble(ai) * xi)
         # One parallel region per product, whatever the grid: the same bytes at two sizes
         # (the least of five readings, as above).
         bytes = map((17, 301)) do n
@@ -277,6 +293,26 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
             return minimum(_mf_alloc3(y, op, xn) for _ in 1:5)
         end
         @test bytes[1] == bytes[2]
+    end
+
+    # The form call `a(u, v)` sums `vᴴ A u` through the same walk, storing neither `A` nor
+    # `A * u`. A complex `v` checks the conjugate; the pairs walk their two terms in turn.
+    @testset "form call contracts vᴴAu" begin
+        for (name, a, _) in cases
+            (WITH_SLOW_TESTS || name in ("2D pair", "composite pair", "two-leaf pair")) || continue
+            @testset "$name" begin
+                A = assemble(a)
+                u = randn(size(A, 2))
+                v = randn(ComplexF64, size(A, 1))
+                @test !iszero(A * u)
+                @test isapprox(a(u, v), dot(v, A * u); rtol = 1e-12)
+                uₕ = element(trial_space(a))
+                parent(uₕ) .= u
+                vₕ = element(test_space(a))
+                parent(vₕ) .= real.(v)
+                @test isapprox(a(uₕ, vₕ), dot(real.(v), A * u); rtol = 1e-12)
+            end
+        end
     end
 
     @testset "entries, Dirichlet rows, live data" begin

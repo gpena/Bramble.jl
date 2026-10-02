@@ -629,7 +629,6 @@ const _MF_NO_COLLECT = _MFCollected()
 
 # The plan for `a` under `policy`: `nothing` for a serial policy, or a form the fused sweep
 # cannot take (no fused unit, or units that disagree on the grid or policy).
-_mf_plan(::ExecutionPolicy, ::BilinearForm) = nothing
 _mf_plan(::CpuSerial, ::BilinearForm) = nothing
 function _mf_plan(::CpuPolicy, a::BilinearForm)
     acc = _MFCollected()
