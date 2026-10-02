@@ -358,7 +358,7 @@ reason = "uncounted: Julia's line table has no counter for the header line of an
 [[exempt_function]]
 path = "src/operators/interpolation.jl"
 headers = [
-    "_interp_in_domain(Ωₕ::AbstractMeshType",
+    "_interp_in_domain(Ωₕ::AbstractMeshType{D}",
     "_interp_cell_frac(Ωₕ::AbstractMeshType{D}",
     "_interp_corner_weight(ts::NTuple",
     "(f::GridInterpolant)(x)",
