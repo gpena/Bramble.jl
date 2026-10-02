@@ -26,9 +26,9 @@ using Bramble:
 # it composes with the same operators (D₋ₓ, Mₓ, ...) any other source does. The one thing
 # that is not automatic is `innerₕ`'s own dispatch: its generic LazyOp×LazyOp constructor used
 # to assume "trial × test" unconditionally and build a BilinearProduct, which is the wrong AST
-# shape for a source: `πₕ(uₕ)` (and `D₋ₓ(πₕ(uₕ))`, etc.) never reaches the Function/Number/
+# shape for a source. So `πₕ(uₕ)` (and `D₋ₓ(πₕ(uₕ))`, etc.) never reaches the Function/Number/
 # VectorElement overloads that build a LinearProduct, because it already arrives as a LazyOp.
-# `_is_source_only` is the fix: a recursive predicate that lets innerₕ tell "a source, however
+# `_is_source_only` fixes this. It is a recursive predicate that lets innerₕ tell "a source, however
 # deeply wrapped" from "a trial function" and route to the correct AST node either way.
 
 @testset "_is_source_only" begin

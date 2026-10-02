@@ -233,7 +233,7 @@ using ..TestUtils: alloc_test, @test_allocs
             @test !is_boundary_index(Ωₕ_2d_unif, CartesianIndex(2, 2))
             @test !is_boundary_index(Ωₕ_2d_unif, CartesianIndex(3, 4))
 
-            # Interior indices are (2:N-1, 2:M-1) -> (2:3, 2:4)
+            # Interior indices are (`2:N-1`, `2:M-1`), here (`2:3`, `2:4`)
             @test interior_indices(Ωₕ_2d_unif) == CartesianIndices((2:3, 2:4))
             @test length(int_indices) == (4 - 2) * (5 - 2) == 2 * 3 == 6
             @test CartesianIndex(2, 2) in int_indices
@@ -363,7 +363,7 @@ using ..TestUtils: alloc_test, @test_allocs
             bnd_indices = collect(boundary_indices(Ωₕ_3d_unif))
             int_indices = collect(interior_indices(Ωₕ_3d_unif))
 
-            # Interior indices are (2:N-1, 2:M-1, 2:K-1) -> (2:2, 2:3, 2:1 -> Empty!)
+            # Interior indices are (`2:N-1`, `2:M-1`, `2:K-1`), here (`2:2`, `2:3`, `2:1`), so the last range is empty
             # Let's redefine for a mesh where interior exists
             npts_3d_larger = (4, 5, 4)
             Ω_3d_larger = create_test_nd_domain(((0.0, 3.0), (0.0, 4.0), (0.0, 3.0)))

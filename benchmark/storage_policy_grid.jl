@@ -27,8 +27,8 @@
 #
 # ## Correctness before timing (bramble-verification)
 #
-# Reference arm: CSC + Serial, one per (dim, size). Every other arm's
-# assembled matrix is checked against it before its timing is trusted:
+# Reference arm is CSC + Serial, one per (dim, size). Every other arm's
+# assembled matrix is checked against it before its timing is trusted.
 #   - Same storage (CSC, Threads/Batch): exact structural + near-exact value
 #     match (`colptr`/`rowval` identical, `nzval` to `rtol=atol=1e-11`) --
 #     `polyester_crossover.jl`'s `_matrices_agree`. A same-storage, same-mesh

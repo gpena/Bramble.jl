@@ -5,7 +5,7 @@ using Bramble
 using Random
 import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D₋ᵧ, D₊ᵧ, Dcᵧ, D₋₂, D₊₂, Dc₂
 
-# S3 (gpena/Bramble.jl, this milestone) fixed a compile blow-up in `resolve_ast`: each
+# S3 (gpena/Bramble.jl, this milestone) fixed a compile blow-up in `resolve_ast`. Each
 # summand's AST was being resolved twice per node -- once inside `typeof(resolve_ast(x))`,
 # once more for the value itself -- roughly 2^26 calls for a 27-term 3D form, invisible
 # without coverage because the compiler dead-code-eliminated the duplicate call once
@@ -15,7 +15,7 @@ import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D₋ᵧ, D₊ᵧ, Dcᵧ, D₋₂, D₊�
 # re-measures the scaling directly (model: .agents/plans/checks/nterm-form.jl), so a
 # regression shows up as a test failure rather than a SIGKILLed CI job.
 #
-# Measured wall time of the first `assemble` after a one-term warm-up, 2 threads:
+# Measured wall time of the first `assemble` after a one-term warm-up, 2 threads.
 #   before the fix:  N=9   5.2 s   N=27  44.4 s   (ratio ~8.5, worse than linear)
 #   after the fix:   N=9   3.7 s   N=27  15.1 s   (ratio ~4.1, close to linear)
 # The assertion below allows slack around that ratio (4.5x plus a fixed 1s) rather than

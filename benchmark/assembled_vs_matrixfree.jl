@@ -5,12 +5,12 @@
 # #317 has not yet decided how much of the device-resident assembled-matrix architecture a
 # matrix-free operator apply would make unnecessary (docs/src/internals/gpu.md, "Matrix-free
 # Kronecker operators on a device" and the paragraph just above it). This script is the
-# measurement that decision needs, not the decision itself: a separate subplan (S6.2) reads
+# measurement that decision needs, not the decision itself. A separate subplan (S6.2) reads
 # this script's numbers and writes the decision doc. Scope is deliberately narrow to what
 # `KroneckerLinearOperator` actually covers (`src/assembly/kronecker.jl`): a separable
 # bilinear form -- `innerₕ(u, v)` (mass) and `inner₊` of a backward difference on one axis on
 # both sides (what `∇ₕ(u)`/`∇ₕ(v)` expand into), scalar/`Ref` coefficients, `D >= 2`
-# (`is_separable`, kronecker.jl:130). No GpuOffload, no masked-projection timing, no
+# (`is_separable`, line 130 of kronecker.jl). No GpuOffload, no masked-projection timing, no
 # scatter-table timing -- those are other subplans' territory.
 #
 # Two backends compared at each grid size, both on Metal, both Float32 (Apple Silicon has no
@@ -27,11 +27,11 @@
 #
 # Per size, three things are measured (the WHY's own (a)/(b)/(c)):
 #
-#   (a) Memory: CSR bytes (`nnz*(sizeof(Tv)+sizeof(Ti)) + (n+1)*sizeof(Ti)`, the assembled
+#   (a) Memory. CSR bytes (`nnz*(sizeof(Tv)+sizeof(Ti)) + (n+1)*sizeof(Ti)`, the assembled
 #       matrix's own rowptr/colval/nzval) vs Kronecker bytes (the sum of every term's
 #       per-axis factor arrays, host or device storage as actually built) vs this Mac's
 #       `Metal.current_device().recommendedMaxWorkingSetSize`.
-#   (b) Throughput: one device `mul!` apply per backend. This package is 2nd-order finite
+#   (b) Throughput. One device `mul!` apply per backend. This package is 2nd-order finite
 #       differences, not high-order FEM -- there is no O(p^6) -> O(p^4) sum-factorisation win
 #       to expect here (docs/src/internals/gpu.md's own framing); this measurement exists
 #       only to confirm matrix-free doesn't *cost* throughput at this order, not to claim a
@@ -377,8 +377,8 @@ function main()
     _out("Wall-clock time for this run: $(round(elapsed_min, digits = 2)) min.")
     _out()
 
-    # --- Crossover line: does not classify a row as "matrix-free wins" or "assembled
-    # --- wins" (bramble-benchmarks' own restraint, matching scatter_table.jl: "this script
+    # --- Crossover line. It does not classify a row as "matrix-free wins" or "assembled
+    # --- wins" (bramble-benchmarks' own restraint, matching scatter_table.jl, where "this script
     # --- does not classify a row either way -- it prints the numbers and leaves the
     # --- reading to whoever [...]"). It only flags the one thing this script is positioned
     # --- to flag cheaply: whether the assembled CSR matrix, at any tested size, starts

@@ -21,11 +21,11 @@
 # stencils (inner₊(∇ₕu, ∇ₕv), the D₊ₓ/D₊ᵧ/D₊₂ convection terms, boundary taps)
 # independently inside Finch's index notation, bit-for-bit to 1e-12 across
 # 1D/2D/3D, is its own multi-day undertaking with a large surface for a
-# silently wrong formula (bramble-verification §8: a synthetic proxy standing
+# silently wrong formula (bramble-verification §8, a synthetic proxy standing
 # in for real code misleads, and is not caught by tests or by re-reading the
 # derivation). This script instead reuses the *values* Bramble's own,
 # already-tested assembly produces on a non-uniform mesh with the requested
-# spacings -- `findnz` on the CSC matrix Bramble builds -- and asks: given the
+# spacings -- `findnz` on the CSC matrix Bramble builds -- and asks how, given the
 # identical (row, col, value) triplets, how fast does a genuine
 # `@finch`-compiled loop nest write them into a
 # `Tensor(Dense(SparseList(Element(0.0))))` (Finch's CSC-equivalent format),

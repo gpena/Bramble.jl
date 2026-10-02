@@ -13,13 +13,13 @@
 # storage: `SparseMatrixCSR` (S3.1, `ext/BrambleSparseMatricesCSRExt.jl`),
 # compared against the `backend()` (CSC) baseline.
 #
-# FIXED DEFECT: the script this replaces built `matrix = Matrix(A)` for its
+# Fixed defect. The script this replaces built `matrix = Matrix(A)` for its
 # correctness check. At 300x300 that densifies a 90,000x90,000 matrix (about
 # 64 GB); at 60^3 the 216,000^2 matrix is about 373 GB. The kernel killed the
 # process with signal 9 before it printed a line. This version never
 # densifies. The correctness oracle is two independent, nnz/O(1)-sized checks,
 # neither of which builds an n^2 object, and each is held to the tolerance
-# that matches what it actually measures:
+# that matches what it actually measures.
 #   (a) STORED-ENTRY AGREEMENT ("Matrix |Δ|", gated at the requested 1e-13,
 #       absolute). A `SparseMatrixCSR`'s raw `(rowptr, colval, nzval)`
 #       triplet is converted to a `SparseMatrixCSC` by `_to_csc` below -- an
@@ -27,16 +27,16 @@
 #       densification. The two CSC objects are then subtracted
 #       (`SparseArrays` sparse-sparse subtraction, itself O(nnz)) and the
 #       largest stored magnitude in the difference is the discrepancy. This
-#       can fail: a wrong entry, a missing entry, or a transposed index would
+#       can fail, since a wrong entry, a missing entry, or a transposed index would
 #       all show up as a nonzero difference. Verified separately (ad hoc,
-#       outside this file) to be exactly 0.0 for 1D at n up to 1e5: the two
+#       outside this file) to be exactly 0.0 for 1D at n up to 1e5, so the two
 #       backends' assemblers reach bit-identical stored values here, so a
 #       tight absolute bound is the right instrument for this check.
 #   (b) ACTION AGREEMENT ("Action rel|Δ|", gated at 1e-6, relative). `A * x`
 #       for several random `x` is compared against `Acsc * x`. This exercises
 #       the backend's own `mul!`, not `_to_csc`'s conversion, so a bug in (a)
 #       cannot hide behind a matching (b) and vice versa. Unlike (a) this is
-#       a floating-point *recomputation*, not a stored value: CSC and CSR
+#       a floating-point *recomputation*, not a stored value. CSC and CSR
 #       walk the same nonzeros in a different order (column-major scatter vs.
 #       row-major dot product), and floating-point addition is not
 #       associative, so even two exactly-agreeing matrices produce `A*x`

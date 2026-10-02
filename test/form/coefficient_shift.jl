@@ -140,7 +140,7 @@ using Bramble: Dcₓ, D₋ᵧ, D₋ₓ, Mᵧ, Mₓ, indices, jumpₓ
             @test assemble_bang_bytes(1025) == 0
         end
 
-        # Not asserted here: assembly time is not something a portable, non-flaky @test can
+        # Not asserted here. Assembly time is not something a portable, non-flaky @test can
         # pin (bramble-verification §1-2 -- absolute timings drift across runs/machines, and
         # this repo's own benchmark suite, not the test suite, is where a timing regression
         # gate belongs). Measured instead, same-run and interleaved so clock/power drift hits

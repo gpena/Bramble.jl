@@ -99,7 +99,7 @@ using WriteVTK
         end
     end
 
-    # Not tested via the public `export_vtk`: what it does when WriteVTK has not been
+    # Not tested via the public `export_vtk` is what it does when WriteVTK has not been
     # loaded. Once this file's `using WriteVTK` above runs, the extension is active for the
     # rest of this process: multiple dispatch has already resolved `_export_vtk`'s
     # specialization over its `::Any` fallback for any `AbstractMeshType` argument,
