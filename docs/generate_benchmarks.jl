@@ -47,45 +47,6 @@ function _format_time(t_ns::Real)
     end
 end
 
-function _format_memory(b::Real)
-    if b == 0
-        return "0 B"
-    elseif b < 1024
-        return string(round(Int, b), " B")
-    elseif b < 1024^2
-        return string(round(b / 1024; digits = 1), " KiB")
-    elseif b < 1024^3
-        return string(round(b / (1024^2); digits = 2), " MiB")
-    else
-        return string(round(b / (1024^3); digits = 2), " GiB")
-    end
-end
-
-function _select_unit(max_ns::Real)
-    if max_ns < 1_000
-        return ("ns", 1.0)
-    elseif max_ns < 1_000_000
-        return ("μs", 1_000.0)
-    elseif max_ns < 1_000_000_000
-        return ("ms", 1_000_000.0)
-    else
-        return ("s", 1_000_000_000.0)
-    end
-end
-
-const _BENCH_PALETTE = [
-    "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316"
-]
-
-# Some groups have a natural axis their series cluster along — a dimension, a numeric
-# precision — and read better split along that axis than at an arbitrary midpoint. Listed
-# in the order charts should appear.
-const _BENCH_GROUP_SPLIT_TAGS = Dict(
-    "restriction" => ["1D", "2D", "3D"],
-    "forms" => ["1D", "2D", "3D"],
-    "precision 1D" => ["Float32", "Float64", "Double64"]
-)
-
 # Benchmarks kept in the suite for their allocation count alone (checked against
 # `benchmark/benchmarks.jl`'s `ALLOCATION_BOUNDS`), whose time is not charted. "form
 # (linear, 2D)" constructs a `LinearForm` in about 10 ns: at that scale the in-suite median
@@ -94,122 +55,126 @@ const _BENCH_GROUP_SPLIT_TAGS = Dict(
 # entirely, so the chart read a flat 10 ns cost as a tenfold regression.
 const _BENCH_ALLOCATION_GUARDS = Set([("forms", "form (linear, 2D)")])
 
-function _midpoint_clusters(bnames)
-    return (mid = cld(length(bnames), 2); [bnames[1:mid], bnames[(mid + 1):end]])
+# The first and third quartile of one run's samples of one benchmark, or `nothing` when the
+# baseline recorded no spread. `benchmarks.jl` saves a trial with more than 5 samples as
+# the five values [min, q1, median, q3, max], and a trial with 5 or fewer as its raw
+# samples; baselines from before that saved [min, median, max] (3 values) or raw samples.
+# A five-value list is therefore either a reduced trial or five raw samples, and the two
+# need no telling apart: sorted, both have q1 at index 2 and q3 at index 4, which is also
+# what `_sorted_quantile` returns for five values. So any list of 4 or more values gives its
+# quartiles by `_sorted_quantile` on the sorted list, and 3 or fewer (a saved
+# [min, median, max], or a raw trial too short to have quartiles) gives none.
+function _sorted_quantile(sorted, p)
+    pos = 1 + (length(sorted) - 1) * p
+    lo = floor(Int, pos)
+    hi = min(lo + 1, length(sorted))
+    return sorted[lo] + (pos - lo) * (sorted[hi] - sorted[lo])
 end
 
-# Bucket `bnames` by whichever configured tag each one contains, in tag order, dropping
-# empty buckets. Falls back to a plain midpoint split for a group with no configured tags,
-# or if some name doesn't match any of them (so a future rename can't silently vanish a
-# series into nothing rendered at all).
-function _bench_group_clusters(gname, bnames)
-    tags = get(_BENCH_GROUP_SPLIT_TAGS, gname, nothing)
-    tags === nothing && return _midpoint_clusters(bnames)
-    clusters = [String[] for _ in tags]
-    for bname in bnames
-        idx = findfirst(t -> occursin(t, bname), tags)
-        idx === nothing && return _midpoint_clusters(bnames)
-        push!(clusters[idx], bname)
+function _quartiles(times)
+    length(times) <= 3 && return nothing
+    sorted = sort(collect(Float64, times))
+    return (_sorted_quantile(sorted, 0.25), _sorted_quantile(sorted, 0.75))
+end
+
+_threads_phrase(n) = n == "1" ? "1 thread" : "$n threads"
+
+# `latest` against `previous` for one benchmark: the ratio of medians and whether the two
+# interquartile ranges are disjoint. A pair where either run recorded no spread is never
+# flagged (`spread = false`).
+function _compare_trials(previous, latest)
+    q_prev, q_new = _quartiles(previous.times), _quartiles(latest.times)
+    ratio = time(median(latest)) / time(median(previous))
+    if q_prev === nothing || q_new === nothing
+        return (ratio = ratio, spread = false, flagged = false)
     end
-    return [c for c in clusters if !isempty(c)]
+    flagged = q_new[2] < q_prev[1] || q_prev[2] < q_new[1]
+    return (ratio = ratio, spread = true, flagged = flagged)
 end
 
-# The package version is what a reader tracks progress against release to release; the
-# commit is what pins the measurement exactly, since several baselines can share a
-# version between releases. Show both, version first — except on the trend chart's own
-# x-axis (`_run_xlabel`), which stays version-only: the axis is read as a release
-# timeline, not a commit log, and the exact commit is one hover away (`_run_label`
-# supplies it to every point's tooltip via `customdata`).
-_run_label(r) = "v$(r.version) ($(r.commit))"
-_run_xlabel(r) = "v$(r.version)"
-
-# One short sentence per group, mined from this suite's own "## Why these six" rationale
-# in benchmark/benchmarks.jl — what a reader is actually looking at, not just how to read
-# the chart (that part is explained once, generically, above the whole section). A group
-# not listed here (a future addition to the suite) still gets a plain, data-derived line
-# instead of silently rendering with no introduction at all.
-const _BENCH_GROUP_BLURBS = Dict(
-    "operators 2D" => "The finite-difference stencil engine on a 1000×1000 grid: the difference operator along the grid's contiguous storage direction (`D₋ₓ`) versus across it (`D₋ᵧ`), which access memory very differently and so can perform very differently.",
-    "operators 3D" => "The same stencil engine in 3D (`D₋₂`), together with the inner product `innerₕ` and the full gradient `∇ₕ`.",
-    "jumps & averages" => "Jump and average operators across cell interfaces, in 2D and 3D.",
-    "inner products 2D" => "The reduction path — inner products and norms — including the seminorm's sum over directions.",
-    "restriction" => "Point interpolation (`Rₕ!`) and cell-averaging (`avgₕ!`), compared across the `Serial()` (the allocation-free default) and `Parallel()` backends, split by dimension.",
-    "composite" => "A composite (multi-component) operator, which dispatches per component and calls the engine once per component with a view rather than once with a plain vector.",
-    "construction" => "Mesh and grid-space construction, including the quadrature weights `gridspace` builds internally.",
-    "startup & latency" => "Time to first `using Bramble` and first operator call — compilation latency, not steady-state performance.",
-    "forms" => "Linear and bilinear form assembly, across 1D/2D and the `Serial()`/`Parallel()` backends.",
-    "precision 1D" => "The same 1D workload — restriction, assembly, inner product — repeated in `Float32`, `Float64`, and `Double64`, split by precision since `Double64` (software arithmetic) is an order of magnitude slower."
-)
-
-function _bench_group_blurb(gname, n_series, n_runs)
-    return get(
-        _BENCH_GROUP_BLURBS,
-        gname,
-        "$n_series benchmark$(n_series == 1 ? "" : "s") in this group, across $n_runs recorded releases."
-    )
-end
-
-# Single run: a horizontal bar per benchmark. No trend to show, so no head-script emission
-# here — the caller (generate_benchmarks_markdown) emits plotlyjs_head() once for the page.
-function _render_plotly_barchart_single(
-        gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor
-)
-    r = runs[1]
-    div_id = _next_bench_div_id()
-    height = 60 + length(sorted_bnames) * 34
-
-    labels = String[]
-    values = Float64[]
-    colors = String[]
-    tooltips = String[]
-    for (idx, bname) in enumerate(sorted_bnames)
-        push!(labels, "\"$bname\"")
-        push!(colors, "\"$(_BENCH_PALETTE[mod1(idx, length(_BENCH_PALETTE))])\"")
-        if haskey(r.data, gname) && haskey(r.data[gname], bname)
-            m = median(r.data[gname][bname])
-            t_val = time(m) / unit_divisor
-            push!(values, t_val)
-            push!(tooltips, "\"$(_format_time(time(m)))\"")
-        else
-            push!(values, 0.0)
-            push!(tooltips, "\"—\"")
+# One row per benchmark present in both of the last two runs, in group order, then by name.
+function _release_comparison(runs, ordered_groups)
+    previous, latest = runs[end - 1], runs[end]
+    rows = NamedTuple[]
+    for gname in ordered_groups
+        (haskey(previous.data, gname) && haskey(latest.data, gname)) || continue
+        for bname in sort(string.(collect(keys(latest.data[gname]))))
+            (gname, bname) in _BENCH_ALLOCATION_GUARDS && continue
+            haskey(previous.data[gname], bname) || continue
+            old, new = previous.data[gname][bname], latest.data[gname][bname]
+            c = _compare_trials(old, new)
+            push!(
+                rows,
+                (
+                    group = gname, name = bname, ratio = c.ratio, spread = c.spread,
+                    flagged = c.flagged, old_ns = time(median(old)), new_ns = time(median(new))
+                )
+            )
         end
     end
+    return rows
+end
 
+# A horizontal bar per benchmark at its latest/previous ratio of medians on a log axis,
+# coloured by whether the change is beyond the spread. The `data-bench` and `data-flagged`
+# attributes are read by the checks in `.claude/plans/v3-21-0-benchmarks-page-checks/`.
+function _render_release_chart(rows)
+    div_id = _next_bench_div_id()
+    height = 80 + length(rows) * 16
+    flagged = join(("$(r.group)/$(r.name)" for r in rows if r.flagged), "|")
+    labels = join(("\"$(r.group)/$(r.name)\"" for r in rows), ",")
+    values = join((r.ratio for r in rows), ",")
+    colors = join(
+        (
+            "\"" * (
+                !r.flagged ? "#9ca3af" : (r.ratio > 1 ? "#ef4444" : "#10b981")
+            ) * "\"" for r in rows
+        ),
+        ","
+    )
+    tooltips = join(
+        (
+            "\"$(_format_time(r.old_ns)) → $(_format_time(r.new_ns)), ×$(round(r.ratio; digits = 3))" *
+            (r.spread ? (r.flagged ? " (beyond the spread)" : " (within the spread)") :
+             " (no spread recorded)") * "\"" for r in rows
+        ),
+        ","
+    )
     return """
-    <div id="$div_id" style="width:100%; height:$(height)px;"></div>
+    <div id="$div_id" data-bench="regression" data-flagged="$flagged" style="width:100%; height:$(height)px;"></div>
     <script>
     (function () {
       const theme = window.bramblePlotlyTheme();
       const data = [{
         type: 'bar',
         orientation: 'h',
-        name: "$(_run_label(r)) (Julia $(r.julia))",
-        y: [$(join(labels, ","))],
-        x: [$(join(values, ","))],
-        marker: { color: [$(join(colors, ","))] },
-        hovertext: [$(join(tooltips, ","))],
+        y: [$labels],
+        x: [$values],
+        marker: { color: [$colors] },
+        hovertext: [$tooltips],
         hoverinfo: 'text',
       }];
       const layout = {
         paper_bgcolor: theme.bg,
         plot_bgcolor: theme.bg,
         font: { color: theme.text },
-        showlegend: true,
-        legend: { font: { color: theme.text } },
+        showlegend: false,
+        shapes: [{
+          type: 'line', xref: 'x', yref: 'paper', x0: 1, x1: 1, y0: 0, y1: 1,
+          line: { color: theme.text, width: 1, dash: 'dot' },
+        }],
         xaxis: {
-          title: { text: "$unit_label", font: { color: theme.text } },
-          color: theme.text, gridcolor: theme.grid,
+          title: { text: "latest / previous median", font: { color: theme.text } },
+          type: 'log', color: theme.text, gridcolor: theme.grid,
         },
-        yaxis: { color: theme.text, autorange: 'reversed' },
-        margin: { t: 30, l: 10, r: 20, b: 40 },
+        yaxis: { color: theme.text, autorange: 'reversed', tickfont: { size: 9 } },
+        margin: { t: 20, l: 260, r: 20, b: 50 },
       };
       Plotly.newPlot('$div_id', data, layout, { displayModeBar: false, responsive: true });
       window.brambleRegisterPlotlyChart('$div_id', function () {
         const t = window.bramblePlotlyTheme();
         return {
           'font.color': t.text,
-          'legend.font.color': t.text,
           'xaxis.color': t.text, 'xaxis.gridcolor': t.grid, 'xaxis.title.font.color': t.text,
           'yaxis.color': t.text,
         };
@@ -219,227 +184,12 @@ function _render_plotly_barchart_single(
     """
 end
 
-# One plot's worth of a trend chart, for a fixed subset of a group's benchmark names. Split
-# out of `_render_trend_chart` so a group with more series than the palette has colors for
-# (see there) can render as two of these side by side, each restarting the palette from its
-# own beginning rather than cycling into a color the other chart already used.
-# Where the recorded thread count changes from one release to the next, and what it was
-# either side. A threaded benchmark is not comparable across that line: at one thread
-# `_sweep_for!` takes its serial branch, so a `Parallel() backend` entry measures the
-# threaded code path running serially -- task-spawn overhead and nothing about parallelism.
-# Measured on the reference machine, `Rₕ!` 2D goes 6.53 ms to 1.67 ms from one thread to
-# four, so the step is roughly fourfold and looks exactly like an improvement.
-#
-# Every baseline from v2.0.0 to v2.8.0 was recorded at one thread; `bramble-benchmarks` now
-# fixes four. Rather than re-record the history (those releases had two `Parallel()` entries
-# before v2.4.0, so there is little to recover) the boundary is drawn on the chart.
-_threads_phrase(n) = n == "1" ? "1 thread" : "$n threads"
-
-function _thread_boundaries(runs)
-    bounds = NamedTuple[]
-    for i in 2:length(runs)
-        runs[i].threads == runs[i - 1].threads && continue
-        push!(
-            bounds,
-            (
-                at = _run_xlabel(runs[i]),
-                # Half a category to the left of `runs[i]`, so the rule falls between the
-                # two releases instead of striking through the first one recorded at the
-                # new thread count. A category axis takes numeric x as a 0-based index.
-                x = i - 1.5,
-                from = runs[i - 1].threads,
-                to = runs[i].threads
-            )
-        )
-    end
-    return bounds
-end
-
-# Plotly `shapes`/`annotations` for those boundaries: a dashed rule between the two
-# categories, labelled with the change. Offset by half a category so it sits between the
-# points rather than through one.
-function _thread_boundary_js(runs)
-    bounds = _thread_boundaries(runs)
-    isempty(bounds) && return ("[]", "[]")
-    shapes = ["""{type:'line',xref:'x',yref:'paper',x0:$(b.x),x1:$(b.x),y0:0,y1:1,""" *
-              """layer:'below',line:{color:theme.grid,width:1.5,dash:'dot'}}""" for b in bounds]
-    notes = ["""{xref:'x',yref:'paper',x:$(b.x),y:1.06,text:'$(b.from)→$(b.to) threads',""" *
-             """showarrow:false,font:{color:theme.text,size:9},xanchor:'left'}""" for b in bounds]
-    return ("[" * join(shapes, ",") * "]", "[" * join(notes, ",") * "]")
-end
-
-function _render_one_trend_plot(
-        gname, bnames_subset, runs, use_normalized, unit_label, unit_divisor
-)
-    div_id = _next_bench_div_id()
-    all_labels_js = "[" * join(("\"$(_run_xlabel(r))\"" for r in runs), ",") * "]"
-
-    traces = String[]
-    for (idx, bname) in enumerate(bnames_subset)
-        color = _BENCH_PALETTE[mod1(idx, length(_BENCH_PALETTE))]
-        xs, ys, customdata = String[], String[], String[]
-        t0 = 0.0
-        for r in runs
-            if haskey(r.data, gname) && haskey(r.data[gname], bname)
-                m = median(r.data[gname][bname])
-                t_ns = time(m)
-                t0 == 0.0 && (t0 = t_ns)
-                y_val = use_normalized ? t_ns / t0 : t_ns / unit_divisor
-                delta_str = if use_normalized
-                    "$(_format_time(t_ns)) (" *
-                    (
-                        if t_ns == t0
-                        "baseline"
-                    else
-                        (t_ns < t0 ? "-" : "+") *
-                        "$(round(abs(t_ns / t0 - 1) * 100, digits = 1))%"
-                    end
-                    ) *
-                    ")"
-                else
-                    _format_time(t_ns)
-                end
-                push!(xs, "\"$(_run_xlabel(r))\"")
-                push!(ys, "$y_val")
-                push!(
-                    customdata,
-                    """["$(r.julia)","$delta_str",$(allocs(m)),"$(_format_memory(memory(m)))","$(r.threads)"]"""
-                )
-            end
-            # A run missing this benchmark contributes no point at all, rather than a `null`
-            # placeholder: each point already carries its own `x`, so a category axis needs
-            # no placeholder to stay aligned, and a leading `null` (the commit before a
-            # benchmark existed, e.g. the very first run for a group added later) is exactly
-            # the kind of gap a category axis with an explicit `categoryarray` handles by
-            # skipping straight to the next real point instead of breaking alignment.
-        end
-        push!(
-            traces,
-            """
-  {
-    name: "$bname",
-    x: [$(join(xs, ","))],
-    y: [$(join(ys, ","))],
-    customdata: [$(join(customdata, ","))],
-    mode: 'lines+markers',
-    type: 'scatter',
-    line: { color: "$color", width: 2, shape: 'spline', smoothing: 0.3 },
-    marker: { color: "$color", size: 7 },
-    hovertemplate: '%{x} (Julia %{customdata[0]}, %{customdata[4]} thread(s))<br>$bname: %{customdata[1]} (%{customdata[2]} allocs, %{customdata[3]})<extra></extra>',
-  }"""
-        )
-    end
-
-    # The 1.0x reference line in normalized mode, flat across every commit.
-    if use_normalized
-        ref_xs = join(("\"$(_run_xlabel(r))\"" for r in runs), ",")
-        ref_ys = join(("1" for _ in runs), ",")
-        push!(
-            traces,
-            """
-  {
-    name: "1.0x (ref)",
-    x: [$ref_xs],
-    y: [$ref_ys],
-    mode: 'lines',
-    type: 'scatter',
-    line: { color: 'rgba(128,128,128,0.7)', dash: 'dash', width: 1.5 },
-    hoverinfo: 'skip',
-  }"""
-        )
-    end
-
-    y_title = use_normalized ? "relative to baseline" : unit_label
-
-    thread_shapes, thread_notes = _thread_boundary_js(runs)
-    return """
-    <div id="$div_id" style="width:100%; height:300px;"></div>
-    <script>
-    (function () {
-      const theme = window.bramblePlotlyTheme();
-      const data = [$(join(traces, ",\n"))];
-      const layout = {
-        paper_bgcolor: theme.bg,
-        plot_bgcolor: theme.bg,
-        font: { color: theme.text },
-        shapes: $thread_shapes,
-        annotations: $thread_notes,
-        legend: {
-          orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top',
-          font: { color: theme.text, size: 11 },
-        },
-        xaxis: {
-          type: 'category', categoryorder: 'array', categoryarray: $all_labels_js,
-          tickangle: -45, color: theme.text, gridcolor: theme.grid,
-          tickfont: { family: 'monospace', size: 10 },
-        },
-        yaxis: {
-          title: { text: "$y_title", font: { color: theme.text } },
-          color: theme.text, gridcolor: theme.grid,
-        },
-        margin: { t: 20, l: 60, r: 160, b: 60 },
-      };
-      Plotly.newPlot('$div_id', data, layout, { displayModeBar: false, responsive: true });
-      window.brambleRegisterPlotlyChart('$div_id', function () {
-        const t = window.bramblePlotlyTheme();
-        return {
-          'font.color': t.text,
-          'legend.font.color': t.text,
-          'xaxis.color': t.text, 'xaxis.gridcolor': t.grid,
-          'yaxis.color': t.text, 'yaxis.gridcolor': t.grid, 'yaxis.title.font.color': t.text,
-        };
-      });
-    })();
-    </script>
-    """
-end
-
-function _render_trend_chart(
-        gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor
-)
-    num_runs = length(runs)
-
-    if num_runs == 1
-        return _render_plotly_barchart_single(
-            gname, sorted_bnames, runs, max_time_ns, unit_label, unit_divisor
-        )
-    end
-
-    # If the operations in this group differ by more than 20x (e.g. 150ns vs 1.7ms), plot a
-    # normalized relative scale (T / T_baseline) instead of absolute time, so small operations
-    # are not flattened against a group's largest one.
-    use_normalized = (max_time_ns / max(min_time_ns, 1.0)) > 20.0
-
-    # Beyond one palette's worth of series (7), `_BENCH_PALETTE` repeats colors and two
-    # unrelated lines become visually indistinguishable — "restriction" (9 benchmarks),
-    # "forms" (13) and "precision 1D" (12) all hit this. Split into separate charts instead
-    # of cycling, clustered along whichever axis the group's names carry (dimension,
-    # precision — see `_BENCH_GROUP_SPLIT_TAGS`) rather than an arbitrary midpoint; each
-    # keeps its own distinct palette rather than inheriting where the previous chart left
-    # off. Stacked one per row, each at the full page width, rather than side by side —
-    # squeezed into a fraction of the row, a legend of 4-5 series plus rotated version
-    # labels on the x-axis has no room to lay out cleanly.
-    if length(sorted_bnames) > length(_BENCH_PALETTE)
-        clusters = _bench_group_clusters(gname, sorted_bnames)
-        panels = [_render_one_trend_plot(
-                      gname, names, runs, use_normalized, unit_label, unit_divisor
-                  ) for names in clusters]
-        divs = join(("<div style=\"width:100%;\">$p</div>" for p in panels))
-        return """
-        <div style="display:flex; flex-direction:column; gap:1.5rem; width:100%;">
-          $divs
-        </div>
-        """
-    end
-
-    return _render_one_trend_plot(
-        gname, sorted_bnames, runs, use_normalized, unit_label, unit_divisor
-    )
-end
-
+# `results_dir` is where the standalone scripts' saved tables live; the release view reads
+# baselines only and takes it for the sections that read those tables.
 function generate_benchmarks_markdown(
         benchmark_dir = normpath(joinpath(@__DIR__, "..", "benchmark", "baselines")),
-        output_path = normpath(joinpath(@__DIR__, "src", "benchmarks.md"))
+        output_path = normpath(joinpath(@__DIR__, "src", "benchmarks.md")),
+        results_dir = normpath(joinpath(@__DIR__, "..", "benchmark", "results"))
 )
     json_files = String[]
     for dir in (benchmark_dir, normpath(joinpath(@__DIR__, "..", "benchmark")))
@@ -462,7 +212,7 @@ function generate_benchmarks_markdown(
     )
     println(
         io,
-        "All measurements below are run on **1,000,000 grid points** per dimension setup (e.g. \$1000 \\times 1000\$ in 2D, \$100 \\times 100 \\times 100\$ in 3D)."
+        "Most operator and restriction benchmarks run on about one million grid points per setup (\$1000 \\times 1000\$ in 2D, \$100 \\times 100 \\times 100\$ in 3D); assembly and precision benchmarks use smaller grids, set in `benchmark/benchmarks.jl`."
     )
     println(io)
 
@@ -547,84 +297,52 @@ function generate_benchmarks_markdown(
         g in ordered_groups || push!(ordered_groups, g)
     end
 
-    println(io, "## Comparative timings and allocations")
+    println(io, "## Regressions since the previous baseline")
     println(io)
     if length(runs) >= 2
+        rows = _release_comparison(runs, ordered_groups)
+        n_flagged = count(r -> r.flagged, rows)
+        n_blind = count(r -> !r.spread, rows)
         println(
             io,
-            "Each chart below tracks one benchmark group across all **$(length(runs))** recorded baselines, in chronological release order, against the earliest run (v$(runs[1].version)) as the reference. Where a group's operations span more than a 20× range, the y-axis shows time relative to that reference instead of absolute time, so a cheap operation isn't flattened onto the same line as an expensive one. Hover any point for its exact time, Julia version, thread count, allocation count, and memory."
+            "Each bar is one benchmark's median in the latest baseline (v$(runs[end].version), `$(runs[end].commit)`) divided by its median in the one before (v$(runs[end - 1].version), `$(runs[end - 1].commit)`); a bar to the left of the dotted line is faster. The spread of a run is its interquartile range, from the first to the third quartile of the samples of that one run. A change is flagged, in red when slower and green when faster, only when the two runs' interquartile ranges do not overlap; a grey bar is within the spread. No fixed percentage band is used, because separate launches of the same code can differ by 10 to 30%, which a fixed band would either hide on a quiet benchmark or flag on a loud one."
         )
-        # Guarded on the data: the note disappears once every baseline shares a thread
-        # count, so it cannot outlive the discontinuity it describes.
-        for b in _thread_boundaries(runs)
+        println(io)
+        println(
+            io,
+            "$n_flagged of $(length(rows)) benchmarks are flagged. " *
+            (
+                n_blind == 0 ? "" :
+                "$n_blind have no spread recorded in one of the two runs (baselines saved before the quartiles were recorded keep only the minimum, median and maximum), so they are never flagged. "
+            ) * "Hover a bar for the two medians."
+        )
+        if runs[end].threads != runs[end - 1].threads
             println(io)
             # Documenter admonition (`!!! note` + 4-space body), not GitHub's `> [!NOTE]`
-            # alert syntax, which Documenter renders as a blockquote with a literal
-            # "[NOTE]" in it. This note first rendered with the v2.9.0 baseline -- it is
-            # guarded on a thread boundary existing, so nothing displayed it before.
-            println(io, "!!! note \"Thread count changes at $(b.at)\"")
+            # alert syntax, which Documenter renders as a blockquote with a literal "[NOTE]".
+            println(io, "!!! note \"Thread count differs\"")
             println(
                 io,
-                "    Baselines before $(b.at) were recorded with $(_threads_phrase(b.from)); from $(b.at) onward, $(_threads_phrase(b.to)). Entries on the `Parallel()` backend are not comparable across that line, and the charts mark it with a dotted rule: at one thread the threaded code path runs its serial branch, so those entries measured task-spawn overhead rather than parallelism. Serial entries are unaffected."
+                "    The previous baseline was recorded with $(_threads_phrase(runs[end - 1].threads)) and the latest with $(_threads_phrase(runs[end].threads)). Entries on the `Parallel()` backend are not comparable across that change: at one thread the threaded code path runs its serial branch."
             )
         end
+        println(io)
+        println(io, "```@raw html")
+        println(io, plotlyjs_head())
+        println(io, "```")
+        println(io)
+        println(io, "```@raw html")
+        println(io, "<div style=\"width:100%; margin:1.2rem 0 2.5rem 0;\">")
+        println(io, _render_release_chart(rows))
+        println(io, "</div>")
+        println(io, "```")
     else
         println(
             io,
-            "Each chart below shows one benchmark group's timings and allocations for the single recorded baseline. Hover a bar for its exact time."
+            "Only one baseline is recorded, so there is no previous run to compare with."
         )
     end
     println(io)
-
-    # Loaded once for the whole page — every chart below reuses window.Plotly and the shared
-    # theme/registration helpers (plotly_common.jl) rather than each re-loading the CDN
-    # script.
-    println(io, "```@raw html")
-    println(io, plotlyjs_head())
-    println(io, "```")
-    println(io)
-
-    for gname in ordered_groups
-        bnames = Set{String}()
-        max_time_ns = 0.0
-        min_time_ns = Inf
-        for r in runs
-            if haskey(r.data, gname)
-                for (k, trial) in r.data[gname]
-                    (gname, string(k)) in _BENCH_ALLOCATION_GUARDS && continue
-                    push!(bnames, string(k))
-                    t_ns = time(median(trial))
-                    max_time_ns = max(max_time_ns, t_ns)
-                    min_time_ns = min(min_time_ns, t_ns)
-                end
-            end
-        end
-        sorted_bnames = sort(collect(bnames))
-        isempty(sorted_bnames) && continue
-
-        # Display only — "&" reads better as "and" in a heading, but the underlying group
-        # key (benchmark/benchmarks.jl's `SUITE["jumps & averages"]`) stays as-is: it is also
-        # the key every saved baseline_*.json carries, and renaming it would fragment that
-        # group's trend history across old and new baselines instead. Sentence case
-        # (`uppercasefirst`, not `titlecase`) so a multi-word group name reads as a heading
-        # rather than a title — "Jumps and averages", not "Jumps And Averages".
-        println(io, "### $(uppercasefirst(replace(gname, "&" => "and")))")
-        println(io)
-        println(io, _bench_group_blurb(gname, length(sorted_bnames), length(runs)))
-        println(io)
-
-        unit_label, unit_divisor = _select_unit(max_time_ns)
-        chart_html = _render_trend_chart(
-            gname, sorted_bnames, runs, max_time_ns, min_time_ns, unit_label, unit_divisor
-        )
-
-        println(io, "```@raw html")
-        println(io, "<div style=\"width:100%; margin:1.2rem 0 2.5rem 0;\">")
-        println(io, chart_html)
-        println(io, "</div>")
-        println(io, "```")
-        println(io)
-    end
 
     println(io, "## How to add new benchmark runs")
     println(io)
@@ -639,7 +357,7 @@ function generate_benchmarks_markdown(
     println(io)
     println(
         io,
-        "Rebuilding the documentation (`julia -e 'using Pkg; Pkg.activate(\"docs\"); include(\"docs/make.jl\")'`) will automatically discover all `baseline_*.json` files and append new comparison columns, delta calculations, and charts."
+        "Rebuilding the documentation (`julia -e 'using Pkg; Pkg.activate(\"docs\"); include(\"docs/make.jl\")'`) will automatically discover all `baseline_*.json` files and update the comparison with the previous baseline above."
     )
 
     open(output_path, "w") do f
