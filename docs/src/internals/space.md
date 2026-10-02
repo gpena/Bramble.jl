@@ -144,9 +144,9 @@ plain `AbstractVector`), minimum of 7 back-to-back calls each, warmed up first, 
 
 Both agreed with the dense reduction to `rtol = 1e-12`.
 
-`_dot` itself, called directly rather than through `innerₕ`, minimum of 15 back-to-back
-calls: `SeparableWeights` 0.868-0.892 ms against the dense vector's 0.180-0.182 ms, a
-ratio of 4.81-4.90. `@which` confirmed dispatch reached the `CartesianIndex`-walking
+Calling `_dot` directly rather than through `innerₕ`, the minimum of 15 back-to-back
+calls was 0.868-0.892 ms for `SeparableWeights` against 0.180-0.182 ms for the dense
+vector. The ratio was 4.81-4.90. `@which` confirmed dispatch reached the `CartesianIndex`-walking
 specialization (`src/space/inner_product.jl:333`), not the generic `AbstractVector`
 method (`src/utils/linear_algebra.jl:408`) -- so this was the intended path, not the
 linear-`getindex` fallback. The ratio measured here sat near that fallback's own ≈4.9x
@@ -159,7 +159,7 @@ preferred, per `bramble-verification`.
 **Reconciled for gpena/Bramble.jl#273** (2026-09-22, Julia 1.13.0, this machine,
 `--threads=4`, battery power at 76-77%, load average ~2.2 on 8 cores -- not the quiet
 machine `bramble-verification` asks for, but the same caveat the paragraph above already
-carries): re-running the exact 100³/`weights(Wₕ, Val((1,2)))` case from this page's own
+carries). Re-running the exact 100³/`weights(Wₕ, Val((1,2)))` case from this page's own
 `CHECK` script, `_dot` against that `SeparableWeights` versus the same weights `collect`ed
 to a dense vector, `@belapsed`, four independent process runs gave 2.43-2.49x -- not the
 4.81-4.90x above, but squarely the ≈2.4x the source comment then carried and the ≈2.475x
@@ -259,9 +259,9 @@ grid-function traversal, symbolic form-AST evaluation, and Kronecker matrix cons
 This milestone implements option 2 as `stencil_matrix`
 (`src/operators/stencil_matrix.jl`), routing every family's public per-axis alias (`D₋`,
 `D₊`, `D̃`, `Dc`, `D̽ₕ`, `jump`, `M`, `M₊`) through it. Option 3 is delivered separately, as
-`KroneckerLinearOperator` (gpena/Bramble.jl#162) -- a matrix-free operator built
-for a whole separable bilinear *form*, not a lazy wrapper around one operator's matrix
-call -- rather than as a lazy mode of `D₋ₓ`/`Mᵧ`/etc. themselves. Option 1 was reasoned
+the Kronecker operator of gpena/Bramble.jl#162, which is built for a whole separable
+bilinear *form* and not as a lazy mode of `D₋ₓ`/`Mᵧ`/etc. themselves. The
+[memory scaling](../examples/memory_scaling.md) page explains that operator. Option 1 was reasoned
 through rather than prototyped: it shares `stencil_matrix`'s single sweep over the grid
 in spirit, but adds a form, an assembly, and a sparse solve where `stencil_matrix` needs
 none of the three, so it had nothing left to win on once option 2 existed.

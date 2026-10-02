@@ -9,9 +9,9 @@ CollapsedDocStrings = false
 
 ## Separation of geometry and coefficients
 
-A grid function's coefficients and the coordinates of the underlying mesh are kept distinct:
-- **Geometry**: Mesh coordinates, element spacings, and quadrature nodes remain in their native floating-point type (typically `Float64`).
-- **Coefficients**: Grid functions ([`VectorElement`](@ref)) store values in whatever scalar type a computation requires, including `ForwardDiff.Dual` numbers or tracked values from reverse-mode packages.
+A grid function's coefficients and the coordinates of the underlying mesh are kept distinct.
+- **Geometry** (mesh coordinates, element spacings and quadrature nodes) stays in its native floating-point type, typically `Float64`.
+- **Coefficients** live in grid functions, which store values in whatever scalar type a computation requires, including `ForwardDiff.Dual` numbers or tracked values from reverse-mode packages. The [space tutorial](@ref space_composite) introduces vector elements.
 
 Because differentiation typically targets parameter sensitivities or solution fields rather than grid coordinates, the mesh geometry remains undifferentiated. Arithmetic operations, difference operators, and discrete inner products propagate sensitivities via standard Julia multiple dispatch.
 

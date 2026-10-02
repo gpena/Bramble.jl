@@ -58,7 +58,7 @@ example](examples/transient_inverse_problem.md).
 Bramble.adjoint_sensitivities
 ```
 
-## Second-order (wave) problems
+## Second-order wave problems
 
 `semidiscretize_second_order` is the second-order-in-time counterpart of `semidiscretize`:
 from a stiffness [`BilinearForm`](@ref) and a source [`LinearForm`](@ref), it produces
@@ -122,7 +122,7 @@ Requires [AlgebraicMultigrid.jl](https://github.com/JuliaLinearAlgebra/Algebraic
 amg_preconditioner
 ```
 
-## ILU(0) preconditioning for convection-dominated systems
+## Zero-fill ILU preconditioning for convection-dominated systems
 
 [gpena/Bramble.jl#244](https://github.com/gpena/Bramble.jl/issues/244) measured classical
 algebraic multigrid failing to converge on an unsymmetric, convection-dominated system
@@ -152,7 +152,7 @@ ilu_preconditioner
 ## Matrix-free preconditioners
 
 AMG and ILU(0) need the assembled matrix. The preconditioners here need only a
-[`matrix_free_operator`](@ref): each is a subtype of `Bramble.AbstractMatrixFreePreconditioner`
+[`matrix_free_operator`](@ref), which the [matrix-free operator page](examples/matrix_free_operator.md) explains. Each is a subtype of `Bramble.AbstractMatrixFreePreconditioner`
 with `ldiv!`, so it goes straight to `Pl` in `LinearSolve`. `jacobi_preconditioner` reads the
 diagonal off one walk of the form's stencil. `chebyshev_preconditioner` is a fixed polynomial
 in `D⁻¹A`, Jacobi-scaled, with `D = diag(A)`: unscaled, the top of `A`'s spectrum on a
@@ -174,12 +174,12 @@ Bramble.max_eigenvalue_estimate
 
 `gmg_preconditioner(W -> form(...), Ωₕ)` rediscretises the form on every level of a
 `GeometricMeshHierarchy`, which coarsens a non-uniform mesh by 2 through every other point,
-so the levels nest exactly. Levels are joined by multilinear `prolongate!` and its transpose
-`coarsen!`, smoothed by point smoothers, and the coarsest level is solved directly. Every
+so the levels nest exactly. Multilinear `prolongate!` and its transpose `coarsen!` join the
+levels, point smoothers smooth them, and the coarsest level is solved directly. Every
 grid function in the form must be built from `W` inside the builder. On meshes whose cells
 have bounded aspect ratio, CG preconditioned by a V-cycle took 6 iterations from 2D 33² to
-513² and 7 from 3D 17³ to 129³. Point smoothers stall on stretched cells;
-[`gmg_preconditioner`](@ref) quotes the counts, and line and plane smoothers are planned in
+513² and 7 from 3D 17³ to 129³. Point smoothers stall on stretched cells, which
+[`gmg_preconditioner`](@ref) quotes in counts. Line and plane smoothers are planned in
 [gpena/Bramble.jl#394](https://github.com/gpena/Bramble.jl/issues/394).
 
 ### Mesh hierarchy and transfers
@@ -216,11 +216,11 @@ Bramble.fmg!
 
 ## Sparse direct solvers and factorization reuse
 
-Bramble provides dedicated, first-class extensions for high-performance sparse linear solvers:
-- **SuiteSparse**: CHOLMOD Cholesky for symmetric positive-definite systems and UMFPACK LU for unsymmetric systems via `SuiteSparse.jl`, plus SPQR sparse QR (below) which needs only `SparseArrays`.
-- **Apple Accelerate**: Native macOS `libSparse` Cholesky, $\mathrm{LDL}^T$, and LUTPP via `AppleAccelerate.jl` (on Apple Silicon / darwin).
-- **MUMPS**: Parallel multifrontal direct solver for large 2D/3D systems via `MUMPS.jl`.
-- **Sparspak**: Pure-Julia sparse direct LU (George & Liu's Waterloo package) via `Sparspak.jl` -- zero binary dependency, so it factors matrices whose entries are `Float32`, `BigFloat`, or a `ForwardDiff.Dual`, where the other three backends require `Float64`/`ComplexF64`.
+Bramble provides dedicated, first-class extensions for high-performance sparse linear solvers.
+- **SuiteSparse** gives CHOLMOD Cholesky for symmetric positive-definite systems and UMFPACK LU for unsymmetric systems via `SuiteSparse.jl`, plus SPQR sparse QR (below) which needs only `SparseArrays`.
+- **Apple Accelerate** gives native macOS `libSparse` Cholesky, $\mathrm{LDL}^T$, and LUTPP via `AppleAccelerate.jl` (on Apple Silicon / darwin).
+- **MUMPS** is a parallel multifrontal direct solver for large 2D/3D systems via `MUMPS.jl`.
+- **Sparspak** is a pure-Julia sparse direct LU (George & Liu's Waterloo package) via `Sparspak.jl` -- zero binary dependency, so it factors matrices whose entries are `Float32`, `BigFloat`, or a `ForwardDiff.Dual`, where the other three backends require `Float64`/`ComplexF64`.
 
 All four solvers support non-allocating symbolic reuse via the unified [`refactor!`](@ref) driver for transient PDE time loops and Newton iterations.
 
@@ -256,7 +256,7 @@ suitesparse_qr_factorize
 suitesparse_qr_solve
 ```
 
-### Apple Accelerate solver (macOS)
+### Apple Accelerate solver on macOS
 
 [gpena/Bramble.jl#142](https://github.com/gpena/Bramble.jl/issues/142) asked whether
 `AppleAccelerate.jl` is worth wiring in on macOS. It is, but only for the symmetric
@@ -352,7 +352,7 @@ single run on one machine, not a tracked baseline; treat them as directional.
 
 ### Assembly & storage formats
 
-**`SparseMatricesCOO.jl`: not adopted.** Bramble's own assembly already skips the triplet
+**`SparseMatricesCOO.jl` is not adopted.** Bramble's own assembly already skips the triplet
 stage entirely: `assemble` determines the sparsity pattern once (`PatternSink`, the
 lock-free colouring sweep documented in [Forms](internals/form.md)) and every subsequent call writes
 straight into `nzval` via `add_to_sparse!`, never building `(I, J, V)` at all. Measured on
@@ -407,7 +407,7 @@ cases, the ones the adoption rule is evaluated against:
 | 3 | Poisson | 15.008 | 258.713 | 16.19 | 135.63 | 0.93 | 47.6 | true |
 | 3 | Convection-diffusion | 53.266 | 372.925 | 18.312 | 135.63 | 2.91 | 63.6 | true |
 
-Only one of the six clears the bar: 3D convection-diffusion, a 2.91x refill speedup and a 63.6%
+Only one of the six clears the bar, 3D convection-diffusion, with a 2.91x refill speedup and a 63.6%
 smaller resident tensor. The rule needs at least two qualifying cases out of six, so the table
 alone already falls short. Finch's own compilation cost settles it further: time to first
 execution -- the very first `@finch` call in the process, before any warm-up -- was about 39
@@ -482,7 +482,7 @@ about 11× fewer iterations and 11× less wall time than no preconditioner, and 
 `IncompleteLU.jl`'s drop-tolerance variant, at a fraction of the setup cost either of the
 others carries. Built as [`ilu_preconditioner`](@ref) in
 [gpena/Bramble.jl#255](https://github.com/gpena/Bramble.jl/issues/255), mirroring
-[`amg_preconditioner`](@ref)'s shape -- see "ILU(0) preconditioning for convection-dominated
+[`amg_preconditioner`](@ref)'s shape -- see "Zero-fill ILU preconditioning for convection-dominated
 systems" above.
 
 `Metis.jl`'s graph partitioning was evaluated under reordering, not as a preconditioner,
