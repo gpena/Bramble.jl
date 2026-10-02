@@ -43,8 +43,8 @@ end
 # ignores it, and callers with nothing to restrict by pass `nothing`. Only this node reads
 # it, so only this node determines what an absent table means: no point is marked. The
 # `:interior` region is then the whole grid, and every other region is empty, which matches
-# `haskey` returning `false` for a table that lacks the key.
-@inline _is_marked(::Nothing, ::Symbol, ::Int) = false
+# `haskey` returning `false` for a table that lacks the key. `_in_region` below answers the
+# `nothing` case itself, so `_is_marked` only ever sees a real table.
 @inline _is_marked(markers, region::Symbol, lin_idx::Int) = haskey(markers, region) && markers[region][lin_idx]
 
 # A tuple of regions represents a union, not an intersection: `restrict_to((:bottom, :left), u)`
@@ -60,8 +60,7 @@ end
     # guarantees the key, geometric or user-redefined), so it is read directly like every
     # other region, no exception for `:interior` here. There is exactly one case that still
     # needs one: `markers === nothing`, the "no marker context at all" sentinel above, where
-    # `:interior` is defined as the whole grid rather than as `_is_marked`'s blanket `false`
-    # for every region. Read directly, a real `:interior` used to be silently overridden by
+    # `:interior` is defined as the whole grid and every other region as empty. Read directly, a real `:interior` used to be silently overridden by
     # "not :boundary", which discarded a deliberately redefined `:interior` even though the
     # mesh warns that a custom definition wins (mesh/marker.jl).
     if _in_region(op, markers, lin_idx)
@@ -74,8 +73,6 @@ end
 @inline _in_region(op::RegionRestriction, markers, lin_idx::Int) = markers === nothing ?
                                                                    (op.region === :interior) :
                                                                    _is_marked(markers, op.region, lin_idx)
-
-@inline _wraps_leaf(::RegionRestriction{D, R, <:_BareLeaf}) where {D, R} = true
 
 # A tap reaching `delta` points away re-evaluates the restriction at that neighbour. Doing
 # it through `local_stencil` above would return `()` or a full tuple depending on the

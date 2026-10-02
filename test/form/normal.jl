@@ -297,6 +297,7 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
         @test bil(u -> 2.0 * ηₓ * u) ≈ 2 .* A
         @test bil(u -> u * (2.0 * ηₓ)) ≈ 2 .* A
         @test bil(u -> (2.0 * ηₓ + 3.0 * ηᵧ) * u) ≈ 2 .* A .+ 3 .* bil(u -> u * ηᵧ)
+        @test bil(u -> u * (2.0 * ηₓ + 3.0 * ηᵧ)) ≈ 2 .* A .+ 3 .* bil(u -> u * ηᵧ)
         # a grid-function factor, in the thunk form a `Function` times an unknown takes
         gvec = parent(Rₕ(Wₕ, f))
         @test bil(u -> ((() -> gvec) * ηₓ) * u) ≈ bil(u -> ((() -> gvec) * u) * ηₓ)
@@ -307,6 +308,7 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
         @test lin(Ref(2.0) * ηₓ) ≈ 2 .* lin(ηₓ)
         @test lin(ηₓ * Ref(2.0)) ≈ 2 .* lin(ηₓ)
         @test lin(Ref(2.0) * (f * ηₓ + h * ηᵧ)) ≈ 2 .* lin(dot((f, h), η))
+        @test lin((f * ηₓ + h * ηᵧ) * 2.0) ≈ 2 .* lin(dot((f, h), η))
         @test bil(u -> Ref(2.0) * (u * ηᵧ)) ≈ 2 .* bil(u -> u * ηᵧ)
 
         # `dot(F, η)` joins a sum of components, on either side and in a difference
@@ -315,6 +317,10 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
         @test lin(dot((f, h), η) - h * ηᵧ) ≈ lin(f * ηₓ)
         @test lin(dot((f, h), η) + dot((h, f), η)) ≈ lin(dot((x -> f(x) + h(x), x -> h(x) + f(x)), η))
         @test bil(u -> dot((u, u), η) + u * ηₓ) ≈ 2 .* A .+ bil(u -> u * ηᵧ)
+
+        # each directional term renders with its axis subscript, as `inner₊ₓ` does
+        @test Bramble.expression(form(Wₕ, Wₕ, (u, v) -> inner_Γ(u * ηₓ + u * ηᵧ, v; markers = m))) ==
+              "inner_Γₓ(u, v) + inner_Γᵧ(u, v)"
     end
 
     @testset "Refusals" begin

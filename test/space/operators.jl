@@ -7,6 +7,8 @@ using Bramble: D₋
 using Bramble: Dcᵧ, Dc₂, Dcₓ, D̃ᵧ, D̃₂, D̃ₓ, D̽ᵧ, D̽₂, D̽ₓ, D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, M₂, Mₓ
 using Bramble: index_in_marker, jumpᵧ, jump₂, jumpₓ
 using SparseArrays: SparseMatrixCSC, nnz
+using LinearAlgebra: Diagonal
+using Bramble: components, restrict_to
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, D₊₂, D₊, div₊ₕ, curl₊ₕ, forward_star_difference
 # `M₊*` is `public`, not `export`ed (average.jl's own note on why); `kronecker_operator_matrix`
@@ -326,6 +328,163 @@ end
         @test parent(dy3(u3)) == parent(Dᵧ(u3))
         @test parent(dz3(u3)) == parent(D₂(u3))
     end
+end
+
+# A stand-in for a vendor GPU array: host storage that answers `DeviceLocality()`, so the
+# offloaded projection path (`GpuOffload`, gpena/Bramble.jl#324) can be driven with no GPU.
+# The same idea as `MockGPUArray` in test/utils/backends.jl, kept local so this file runs on
+# its own.
+struct MockDeviceArray{T, N} <: DenseArray{T, N}
+    data::Array{T, N}
+end
+function MockDeviceArray{T, N}(::UndefInitializer, dims::Vararg{Integer, N}) where {T, N}
+    return MockDeviceArray(Array{T, N}(undef, dims...))
+end
+function MockDeviceArray{T, N}(::UndefInitializer, dims::NTuple{N, Integer}) where {T, N}
+    return MockDeviceArray(Array{T, N}(undef, dims))
+end
+Base.size(A::MockDeviceArray) = size(A.data)
+Base.getindex(A::MockDeviceArray, i::Int...) = getindex(A.data, i...)
+Base.setindex!(A::MockDeviceArray, v, i::Int...) = setindex!(A.data, v, i...)
+Base.IndexStyle(::Type{<:MockDeviceArray}) = IndexLinear()
+Base.fill!(A::MockDeviceArray{T}, v) where {T} = (fill!(A.data, v); A)
+Bramble.locality(::Type{<:MockDeviceArray}) = Bramble.DeviceLocality()
+
+# `Rₕ!`/`avgₕ!` share one driver, `project!` (src/operators/projection.jl). These cover the
+# branches the rest of the suite does not reach on a host: the offloaded path, a marked
+# region with no points, the per-leaf rule tuple on a scalar space, the quadrature options
+# and the scattered cell average on a composite space.
+@testset "Projection paths (project!)" begin
+    # Two points along x, so every point is on the boundary and `:interior` is empty.
+    Ω = domain(interval(0.0, 1.0) × interval(0.0, 2.0))
+
+    @testset "an empty marked region writes zeros" begin
+        Ωₕ = mesh(Ω, (2, 5), (false, false))
+        @test !any(index_in_marker(Ωₕ, :interior))
+        Wₕ = gridspace(Ωₕ)
+        # the probe finds no marked point, so it samples `f` at the first grid point
+        r = Rₕ(Wₕ, x -> 1.0 + x[1] * x[2]; markers = (:interior,))
+        @test eltype(parent(r)) === Float64
+        @test length(parent(r)) == ndofs(Wₕ)
+        @test all(iszero, parent(r))
+        Vₕ = gridspace(Ωₕ, Val(2))
+        c = Rₕ(Vₕ, x -> (x[1], x[2]); markers = (:interior,))
+        @test all(k -> all(iszero, parent(components(c)[k])), 1:2)
+    end
+
+    @testset "GpuOffload: host destination, device buffer" begin
+        dev = backend(
+            vector_type = MockDeviceArray{Float32, 1}, matrix_type = MockDeviceArray{Float32, 2},
+            policy = Bramble.GpuKernel()
+        )
+        be = backend(Float32; policy = Bramble.GpuOffload(dev))
+        Ω32 = domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 2.0f0))
+        Ωₕ = mesh(Ω32, (2, 5), (false, false); backend = be)
+        Wₕ = gridspace(Ωₕ)
+        Vₕ = gridspace(Ωₕ, Val(2))
+        @test !any(index_in_marker(Ωₕ, :interior))
+
+        # Masked onto the empty region, the device buffer is zeroed, nothing is launched, and
+        # the zeros are copied back over whatever the destination held.
+        u = element(Wₕ)
+        parent(u) .= 1
+        @test Rₕ!(u, x -> x[1] + x[2]; markers = (:interior,)) === u
+        @test parent(u) == zeros(Float32, ndofs(Wₕ))
+        # the composite's leaves are views into one vector: each is copied back on its own
+        c = element(Vₕ)
+        parent(c) .= 1
+        Rₕ!(c, x -> (x[1], x[2]); markers = (:interior,))
+        @test parent(components(c)[1]) == zeros(Float32, ndofs(Wₕ))
+        @test parent(components(c)[2]) == zeros(Float32, ndofs(Wₕ))
+
+        # A Float64 destination is not the device's element type, so it stays on the host
+        # sweep and gets the exact values; checked against the points read off the mesh.
+        Ω4ₕ = mesh(Ω32, (4, 5), (false, false); backend = be)
+        f = x -> 1.0 + x[1] + 3.0 * x[2]
+        r = Rₕ(gridspace(Ω4ₕ), f; markers = (:interior,))
+        @test eltype(parent(r)) === Float64
+        xs = Bramble.points(Ω4ₕ)
+        mask = index_in_marker(Ω4ₕ, :interior)
+        @test 0 < count(mask) < length(mask)
+        expected = vec([mask[k] ? f((xs[1][I[1]], xs[2][I[2]])) : 0.0
+                        for (k, I) in enumerate(CartesianIndices(npoints(Ω4ₕ, Tuple)))])
+        @test parent(r) == expected
+
+        # An unmasked fill needs the device kernel, which only the KernelAbstractions
+        # extension provides: refused by name, not by a scalar-indexing failure.
+        msg = try
+            Rₕ!(element(Wₕ), x -> x[1])
+            ""
+        catch e
+            sprint(showerror, e)
+        end
+        @test occursin("KernelAbstractions", msg)
+    end
+
+    @testset "avgₕ!: quadrature options and leaves" begin
+        Ωₕ = mesh(Ω, (6, 5), (false, false))
+        Wₕ = gridspace(Ωₕ)
+        x1, x2 = Bramble.half_points(Ωₕ)
+        # Exact cell averages of a quadratic and a bilinear function over [a₁, b₁] × [a₂, b₂],
+        # the cell between consecutive half points; two Gauss points integrate both exactly.
+        f = x -> x[1]^2 + 3.0 * x[2]
+        g = x -> x[1] * x[2]
+        cells = CartesianIndices((6, 5))
+        ref_f = [(x1[I[1] + 1]^3 - x1[I[1]]^3) / (3 * (x1[I[1] + 1] - x1[I[1]])) +
+                 1.5 * (x2[I[2]] + x2[I[2] + 1]) for I in cells][:]
+        ref_g = [(x1[I[1]] + x1[I[1] + 1]) / 2 * (x2[I[2]] + x2[I[2] + 1]) / 2 for I in cells][:]
+
+        u = element(Wₕ)
+        @test parent(avgₕ!(u, f; quad_points = 2)) ≈ ref_f rtol=1e-13
+        @test parent(avgₕ!(u, f; quad_points = Val(2))) ≈ ref_f rtol=1e-13
+        @test_throws ArgumentError avgₕ!(u, f; quad_points = 0)
+        @test_throws ArgumentError avgₕ!(u, f; quad_points = Val(0))
+        # a one-tuple of functions on a scalar space is the function itself
+        fill!(parent(u), 0.0)
+        @test parent(avgₕ!(u, (f,), Val(2))) ≈ ref_f rtol=1e-13
+
+        # one function returning both leaves: averaged once per cell, scattered per leaf
+        c = avgₕ(gridspace(Ωₕ, Val(2)), x -> (f(x), g(x)); quad_points = Val(2))
+        @test parent(components(c)[1]) ≈ ref_f rtol=1e-13
+        @test parent(components(c)[2]) ≈ ref_g rtol=1e-13
+    end
+
+    @testset "Gauss rule at run-time precision" begin
+        # BigFloat is not isbits, so the rule is built per call at the current precision.
+        # Gauss-Legendre on [0, 1]: two points at 1/2 ∓ √3/6 with weight 1/2 each, three at
+        # 1/2 ∓ √15/10 and 1/2 with weights 5/18, 8/18, 5/18.
+        nodes2, wts2 = Bramble._gauss_rule(Val(2), BigFloat)
+        @test nodes2 isa NTuple{2, BigFloat}
+        @test all(isapprox.(nodes2, (0.5 - sqrt(big(3)) / 6, 0.5 + sqrt(big(3)) / 6); atol = 1e-60))
+        @test all(isapprox.(wts2, (big(1) / 2, big(1) / 2); atol = 1e-60))
+        nodes3, wts3 = Bramble._gauss_rule(Val(3), BigFloat)
+        @test all(isapprox.(nodes3, (0.5 - sqrt(big(15)) / 10, big(1) / 2, 0.5 + sqrt(big(15)) / 10);
+            atol = 1e-60))
+        @test all(isapprox.(wts3, (big(5) / 18, big(8) / 18, big(5) / 18); atol = 1e-60))
+    end
+end
+
+# `restrict_to` (src/operators/region_restriction.jl) on a non-uniform mesh, against the
+# matrices it should equal: the mass matrix with the columns outside the region zeroed, and
+# a difference applied after that zeroing.
+@testset "Region restriction" begin
+    Ω = domain(interval(0.0, 1.0) × interval(0.0, 2.0), :bottom => :bottom, :left => :left)
+    Ωₕ = mesh(Ω, (7, 6), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    M = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))
+    keep(mask) = Diagonal(Float64.(mask))
+
+    # a tuple of regions is their union
+    union_mask = index_in_marker(Ωₕ, :bottom) .| index_in_marker(Ωₕ, :left)
+    @test 0 < count(union_mask) < ndofs(Wₕ)
+    A = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(restrict_to((:bottom, :left), u), v)))
+    @test A == M * keep(union_mask)
+
+    # under a difference, each tap reads the region at its own point
+    interior = index_in_marker(Ωₕ, :interior)
+    B = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(restrict_to(:interior, u)), v)))
+    @test B ≈ M * D₋ₓ(Ωₕ) * keep(interior) rtol=1e-14
+    @test B != M * D₋ₓ(Ωₕ)
 end
 
 end # module SpaceOperatorsTests
