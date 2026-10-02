@@ -219,7 +219,7 @@ rel_err(u) = norm(u - x_direct) / norm(x_direct)
 
 using TOML
 
-routes_file = joinpath(@__DIR__, "..", "..", "..", "benchmark", "results", "operator_routes.toml")
+routes_file = joinpath(pkgdir(Bramble), "benchmark", "results", "operator_routes.toml")
 routes = TOML.parsefile(routes_file)
 meta = routes["meta"]
 (cpu = meta["cpu"], threads = meta["threads"], power = meta["power"],
