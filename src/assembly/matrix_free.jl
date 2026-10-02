@@ -529,7 +529,8 @@ end
         ::CpuPolyester, s::_ActionTarget, sp, term::TERM, ax, bidx, nbands::Int, rest,
         lin_indices, mesh_markers, row_offset::Int, col_offset::Int, _
 ) where {TERM}
-    return _batch_bilinear_band_replay!(
+    return _late(
+        _batch_bilinear_band_replay!,
         s, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset
     )
 end
@@ -538,7 +539,8 @@ end
         ::CpuPolyester, s::_ActionTarget, sp, term::TERM, idxs, lin_indices, mesh_markers,
         row_offset::Int, col_offset::Int, _
 ) where {TERM}
-    return _batch_bilinear_colour_replay!(
+    return _late(
+        _batch_bilinear_colour_replay!,
         s, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset
     )
 end

@@ -42,7 +42,7 @@ caller actually uses, deriving `loc` from the destination array itself
 """
 @inline _sweep_for!(::HostLocality, ::CpuSerial, v, idxs, f) = _serial_for!(v, idxs, f)
 @inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs, f) = _threaded_for!(v, idxs, f)
-@noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs, f) = _batch_for!(v, idxs, f)
+@noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs, f) = _late(_batch_for!, v, idxs, f)
 @noinline _sweep_for!(::DeviceLocality, policy::GpuPolicy, v, idxs, f) = _gpu_for!(policy, v, idxs, f)
 @noinline _sweep_for!(loc::Locality, policy, v, idxs, f) = _throw_locality_mismatch(loc, policy)
 
@@ -63,7 +63,7 @@ caller actually uses, deriving `loc` from the destination array itself
 # removed index conversion, which is a penalty in every power state; the parallel gain on
 # top of it is the machine's to give.
 @inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs::CartesianIndices, f) = _threaded_axis_for!(v, idxs, f)
-@noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs::CartesianIndices, f) = _batch_axis_for!(v, idxs, f)
+@noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs::CartesianIndices, f) = _late(_batch_axis_for!, v, idxs, f)
 
 """
     _throw_locality_mismatch(loc::Locality, policy)
@@ -191,6 +191,19 @@ GPU-compilability requirement on `g` as [`_gpu_for!`](@ref).
         "under a CpuPolyester backend.",
     ),
     )
+end
+
+# Every `src/` call into a `_batch_*` hook goes through `_late` (gpena/Bramble.jl#414). The
+# precompile workload infers some `CpuPolyester` branches with abstract argument types, and
+# an abstract call into a hook records a backedge that `BramblePolyesterExt`'s narrower
+# method later fires, invalidating the caller. For abstract, non-Union argument types `_late`
+# hides `f` behind `Base.inferencebarrier`, so no edge is recorded; for concrete ones it emits
+# the plain call, keeping static dispatch and zero allocation. A small Union is split before it
+# gets here, so its concrete arms record edges unprotected; the Polyester invalidation snoop
+# (test/quality/invalidations_polyester_snoop.jl) is what catches such a caller.
+@generated function _late(f, args...)
+    Base.isdispatchtuple(Tuple{f, args...}) && return :(f(args...))
+    return :(Base.inferencebarrier(f)(args...))
 end
 
 """
@@ -507,7 +520,7 @@ so callers pass a policy alone and never compute a locality.
     return nothing
 end
 @inline _sweep_scatter_for!(::HostLocality, ::CpuThreaded, mats::Tuple, idxs, g) = _threaded_scatter_for!(mats, idxs, g)
-@noinline _sweep_scatter_for!(::HostLocality, ::CpuPolyester, mats::Tuple, idxs, g) = _batch_scatter_for!(mats, idxs, g)
+@noinline _sweep_scatter_for!(::HostLocality, ::CpuPolyester, mats::Tuple, idxs, g) = _late(_batch_scatter_for!, mats, idxs, g)
 @noinline _sweep_scatter_for!(::DeviceLocality, policy::GpuPolicy, mats::Tuple, idxs, g) = _gpu_scatter_for!(policy, mats, idxs, g)
 @noinline _sweep_scatter_for!(loc::Locality, policy, mats::Tuple, idxs, g) = _throw_locality_mismatch(loc, policy)
 
@@ -748,7 +761,7 @@ three-vector method; [`CpuThreaded`](@ref) reaches [`_threaded_dot`](@ref);
 """
 @inline _dot(::CpuSerial, u, v, w) = _dot(u, v, w)
 @inline _dot(::CpuThreaded, u, v, w) = _threaded_dot(u, v, w)
-@noinline _dot(::CpuPolyester, u, v, w) = _batch_dot(u, v, w)
+@noinline _dot(::CpuPolyester, u, v, w) = _late(_batch_dot, u, v, w)
 
 """
     _dot_masked(policy::ExecutionPolicy, u, v, w, mask) -> Real
@@ -759,7 +772,7 @@ masked method; [`CpuThreaded`](@ref) reaches [`_threaded_dot_masked`](@ref);
 """
 @inline _dot_masked(::CpuSerial, u, v, w, mask) = _dot_masked(u, v, w, mask)
 @inline _dot_masked(::CpuThreaded, u, v, w, mask) = _threaded_dot_masked(u, v, w, mask)
-@noinline _dot_masked(::CpuPolyester, u, v, w, mask) = _batch_dot_masked(u, v, w, mask)
+@noinline _dot_masked(::CpuPolyester, u, v, w, mask) = _late(_batch_dot_masked, u, v, w, mask)
 
 """
     _threaded_dot(u::AbstractVector, v::AbstractVector, w::AbstractVector) -> Real
@@ -961,11 +974,11 @@ end
 # GpuPolicy)` case and flags the rest as unreachable dispatch.
 @inline _dot(::HostLocality, ::CpuSerial, u, v, w) = _dot(u, v, w)
 @inline _dot(::HostLocality, ::CpuThreaded, u, v, w) = _threaded_dot(u, v, w)
-@noinline _dot(::HostLocality, ::CpuPolyester, u, v, w) = _batch_dot(u, v, w)
+@noinline _dot(::HostLocality, ::CpuPolyester, u, v, w) = _late(_batch_dot, u, v, w)
 
 @inline _dot_masked(::HostLocality, ::CpuSerial, u, v, w, mask) = _dot_masked(u, v, w, mask)
 @inline _dot_masked(::HostLocality, ::CpuThreaded, u, v, w, mask) = _threaded_dot_masked(u, v, w, mask)
-@noinline _dot_masked(::HostLocality, ::CpuPolyester, u, v, w, mask) = _batch_dot_masked(u, v, w, mask)
+@noinline _dot_masked(::HostLocality, ::CpuPolyester, u, v, w, mask) = _late(_batch_dot_masked, u, v, w, mask)
 
 """
     _dot(::DeviceLocality, ::GpuPolicy, u::AbstractVector, v::AbstractVector, w::AbstractVector) -> Real

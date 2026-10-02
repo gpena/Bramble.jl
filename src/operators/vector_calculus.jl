@@ -135,7 +135,7 @@ Polyester.
 end
 
 @noinline function _run_bands!(::CpuPolyester, f::F, args::Vararg{Any, N}) where {F, N}
-    return _batch_run_bands!(f, Threads.nthreads(), args...)
+    return _late(_batch_run_bands!, f, Threads.nthreads(), args...)
 end
 
 @inline function _accumulate_backward!(

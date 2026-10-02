@@ -738,7 +738,7 @@ end
 # alone, so the branch folds away.
 @inline _threaded_replay_policy(::CpuThreaded) = true
 @inline _threaded_replay_policy(::Any) = false
-@inline _leaf_replays(_A, sp) = _threaded_replay_policy(_effective_parallel_policy(sp))
+@inline _leaf_replays(_A, sp) = _late(_threaded_replay_policy, _effective_parallel_policy(sp))
 
 # Whether a form's threaded refill uses the recording at all: at least one leaf on either
 # side that replays. A form none of whose leaves can replay keeps the
@@ -877,7 +877,8 @@ end
         col_offset::Int,
         α
 ) where {TERM}
-    return _batch_bilinear_colour_sweep!(
+    return _late(
+        _batch_bilinear_colour_sweep!,
         A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
     )
 end
@@ -907,7 +908,8 @@ end
         col_offset::Int,
         _
 ) where {TERM}
-    return _batch_bilinear_colour_replay!(
+    return _late(
+        _batch_bilinear_colour_replay!,
         target, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset
     )
 end
@@ -1006,7 +1008,8 @@ end
         col_offset::Int,
         α
 ) where {TERM}
-    return _batch_bilinear_band_sweep!(
+    return _late(
+        _batch_bilinear_band_sweep!,
         A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α
     )
 end
@@ -1039,7 +1042,8 @@ end
         col_offset::Int,
         _
 ) where {TERM}
-    return _batch_bilinear_band_replay!(
+    return _late(
+        _batch_bilinear_band_replay!,
         target, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset,
         col_offset
     )

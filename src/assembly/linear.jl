@@ -606,7 +606,8 @@ end
         offset::Int,
         α = true
 ) where {TERM}
-    return _batch_linear_band_sweep!(
+    return _late(
+        _batch_linear_band_sweep!,
         b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
     )
 end
@@ -659,7 +660,7 @@ end
 @noinline function _sweep_colour!(
         ::CpuPolyester, b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int, α = true
 ) where {TERM}
-    return _batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mesh_markers, offset, α)
+    return _late(_batch_linear_colour_sweep!, b, sp, term, idxs, lin_indices, mesh_markers, offset, α)
 end
 
 """
