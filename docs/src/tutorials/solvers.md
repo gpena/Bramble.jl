@@ -165,6 +165,11 @@ new MutationObserver(() => requestAnimationFrame(draw)).observe(root, {
   attributes: true,
   attributeFilter: ["data-theme"],
 });
+// With no saved theme MaterialDocs follows the system scheme in CSS alone and leaves
+// `data-theme` unset, so a system change must redraw too.
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  if (!root.hasAttribute("data-theme")) requestAnimationFrame(draw);
+});
 </script>
 ```
 

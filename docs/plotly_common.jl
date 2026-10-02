@@ -50,15 +50,21 @@ function plotlyjs_head()
       };
 
       if (!window.__bramble_plotly_theme_observer) {
-        window.__bramble_plotly_theme_observer = new MutationObserver(function () {
+        const repaint = function () {
           for (const { divId, restyle } of window.__bramble_plotly_charts) {
             const layout = restyle();
             Plotly.relayout(divId, layout);
           }
-        });
+        };
+        window.__bramble_plotly_theme_observer = new MutationObserver(repaint);
         window.__bramble_plotly_theme_observer.observe(document.documentElement, {
           attributes: true,
           attributeFilter: ['data-theme'],
+        });
+        // With no saved theme MaterialDocs follows the system scheme in CSS alone and
+        // leaves `data-theme` unset, so a system change must repaint too.
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+          if (!document.documentElement.hasAttribute('data-theme')) repaint();
         });
       }
 

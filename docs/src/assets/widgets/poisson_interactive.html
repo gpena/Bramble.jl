@@ -12,7 +12,7 @@
     --accent: #0e7c86;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --bg: #1e1e1e;
       --text: #dcdcd6;
       --muted: #9a9a94;
@@ -20,6 +20,14 @@
       --canvas-bg: #262624;
       --accent: #4fd1c5;
     }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1e1e1e;
+    --text: #dcdcd6;
+    --muted: #9a9a94;
+    --border: #3a3a36;
+    --canvas-bg: #262624;
+    --accent: #4fd1c5;
   }
   * { box-sizing: border-box; }
   body {
@@ -510,6 +518,14 @@
   });
 
   if (window.__BRAMBLE_INITIAL_N__) document.getElementById("nRange").value = window.__BRAMBLE_INITIAL_N__;
+  // The parent page posts its resolved theme (MaterialDocs' toggle, else the system
+  // scheme): a sandboxed srcdoc frame cannot read the parent's `data-theme` itself.
+  window.addEventListener("message", function (e) {
+    if (e.source !== window.parent || !e.data || !e.data.brambleTheme) return;
+    document.documentElement.setAttribute("data-theme", e.data.brambleTheme);
+    recompute();
+  });
+
   recompute();
 })();
 </script>

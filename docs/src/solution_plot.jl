@@ -234,6 +234,28 @@ function spacetime_surface_plot(
     return SolutionPlot(html)
 end
 
+# A sandboxed `srcdoc` frame cannot read the parent page's `data-theme`, so the page posts its
+# resolved theme into the frame on load, on MaterialDocs' toggle and on a system scheme change.
+function _widget_theme_sync(div_id)
+    return """
+    <script>
+    (function () {
+      const frame = document.getElementById("$div_id");
+      const media = window.matchMedia("(prefers-color-scheme: dark)");
+      const send = function () {
+        const attr = document.documentElement.getAttribute("data-theme");
+        const theme = attr || (media.matches ? "dark" : "light");
+        if (frame.contentWindow) frame.contentWindow.postMessage({ brambleTheme: theme }, "*");
+      };
+      frame.addEventListener("load", send);
+      new MutationObserver(send).observe(document.documentElement,
+        { attributes: true, attributeFilter: ["data-theme"] });
+      media.addEventListener("change", send);
+    })();
+    </script>
+    """
+end
+
 """
     poisson_interactive_widget(uₕ; title = "", width = 720, height = 640) -> SolutionPlot
 
@@ -268,6 +290,7 @@ function poisson_interactive_widget(uₕ; title::AbstractString = "", width::Int
     <iframe id="$div_id" srcdoc="$escaped" width="100%" height="$height"
         style="max-width: $(width)px; border: 1px solid var(--pre-border-color, #d8d8d4); border-radius: 6px;"
         sandbox="allow-scripts" loading="lazy"></iframe>
+    $(_widget_theme_sync(div_id))
     """
     return SolutionPlot(html)
 end
@@ -310,6 +333,7 @@ function coupled_reaction_diffusion_widget(
     <iframe id="$div_id" srcdoc="$escaped" width="100%" height="$height"
         style="max-width: $(width)px; border: 1px solid var(--pre-border-color, #d8d8d4); border-radius: 6px;"
         sandbox="allow-scripts" loading="lazy"></iframe>
+    $(_widget_theme_sync(div_id))
     """
     return SolutionPlot(html)
 end
@@ -355,6 +379,7 @@ function convection_diffusion_interactive_widget(
     <iframe id="$div_id" srcdoc="$escaped" width="100%" height="$height"
         style="max-width: $(width)px; border: 1px solid var(--pre-border-color, #d8d8d4); border-radius: 6px;"
         sandbox="allow-scripts" loading="lazy"></iframe>
+    $(_widget_theme_sync(div_id))
     """
     return SolutionPlot(html)
 end
