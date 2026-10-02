@@ -444,7 +444,7 @@ using ExplicitImports
                 # can force GPU-unavailable behaviour through it too. Neither is public.
                 # `metal_sparse_csr`/`metal_sparse_csc` carry docstrings
                 # on their `src/utils/backend.jl` stubs, but neither is exported nor declared
-                # `public` in `src/Bramble.jl`, nor documented in `docs/src/api.md` -- so today
+                # `public` in `src/Bramble.jl`, nor documented in `docs/src/api/` -- so today
                 # they are unqualified internals too, the same as the extension's other entry
                 # points above. `SparseArrays.sparse!` (gpena/Bramble.jl#94) is that package's
                 # in-place `sparse`, never marked public there, and how `_allocate_from_pattern`

@@ -13,7 +13,7 @@ using Documenter
 #
 # Three of those six doctests (marker.jl's `boundary_symbol_to_cartesian`, geometry/marker.jl's
 # `symbols`/`conditions`, backend.jl's `Backend`) call internal, non-exported names bare. A
-# full `docs/make.jl` build resolves those because `docs/src/api.md` sets `CurrentModule =
+# full `docs/make.jl` build resolves those because `docs/src/api/` pages set `CurrentModule =
 # Bramble`, evaluating API docstrings' doctests as if written inside the module itself --
 # which also means those three were never actually exercised by a full build either, since
 # `boundary_symbol_to_cartesian` (an internal helper with no page of its own, per the

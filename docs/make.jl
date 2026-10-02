@@ -122,7 +122,21 @@ internals = "Internals" => [
     "internals/gpu.md",
     "internals/csr_solvers.md"
 ]
-documentation = "Documentation" => ["api.md", "api_sciml.md", internals]
+documentation = "Documentation" => [
+    "API reference" => [
+        "api.md",
+        "api/utilities.md",
+        "api/geometry.md",
+        "api/meshes.md",
+        "api/spaces.md",
+        "api/operators.md",
+        "api/inner_products.md",
+        "api/forms.md",
+        "api/exporters.md"
+    ],
+    "api_sciml.md",
+    internals
+]
 
 # Every new page needs `CurrentModule = Bramble` in its `@meta` block, or its page-level
 # `@ref`s resolve against `Main` and fail even when the docstring is included
@@ -147,14 +161,9 @@ makedocs(;
         versions = false,
         # Material3 forwards the keywords below to the underlying `Documenter.HTML`.
         prettyurls = get(ENV, "CI", nothing) == "true",
-        # The API reference is one page listing every exported name's docstring, so it grows
-        # with the package and crossed 400 KiB when the surface integral and the normal were
-        # added (gpena/Bramble.jl#157, #213). Raised rather than split: one searchable page
-        # is the point of it, and the threshold exists to catch a page that grew by accident.
-        # MaterialDocs renders the API page about a quarter larger than Documenter.HTML did
-        # (682 KiB against 535 KiB), so the limit sits at 800 KiB; every other page is under
-        # 330 KiB.
-        size_threshold = 800 * 1024,
+        # The API reference is split into one page per section because MaterialDocs rendered
+        # the single page at 682 KiB. The limits stay to catch a page that grows by accident.
+        size_threshold = 600 * 1024,
         size_threshold_warn = 450 * 1024,
         # KaTeX stays the math engine (no `mathengine`): MaterialDocs loads it with plain
         # `<script>` tags and no RequireJS, so there is no load-order race with the page's

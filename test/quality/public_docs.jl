@@ -166,7 +166,7 @@ end
 
 @testset "missing_from_docs: controls" begin
     @test :zzz_undoc in missing_from_docs(Fake, _docsrc)
-    # `form` is listed in a ```@docs block in docs/src/api.md and must not be reported.
+    # `form` is listed in a ```@docs block in docs/src/api/forms.md and must not be reported.
     @test :form ∉ missing_from_docs(Bramble, _docsrc)
 end
 
