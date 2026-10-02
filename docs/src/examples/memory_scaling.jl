@@ -117,8 +117,10 @@ y_small = vec(B₀ * X₀ * A₀')
 # about ``2mn(m + n)`` floating-point operations (one ``n \times n`` times ``n \times m``
 # product, one ``n \times m`` times ``m \times m`` product) against ``2m^2 n^2``:
 
-counts(m, n) = (stored_factors = m^2 + n^2, stored_matrix = m^2 * n^2,
-    flops_factors = 2m * n * (m + n), flops_matrix = 2m^2 * n^2)
+function counts(m, n)
+    (stored_factors = m^2 + n^2, stored_matrix = m^2 * n^2,
+        flops_factors = 2m * n * (m + n), flops_matrix = 2m^2 * n^2)
+end
 counts(41, 41)
 
 @test counts(41, 41).stored_matrix == 41^4 #src
@@ -195,9 +197,11 @@ Bramble.set_points!(Ωy, [0.0, 0.5, 1.0])
 Ωz = mesh(domain(interval(0.0, 1.0)), 3, true)
 Bramble.set_points!(Ωz, [0.0, 0.3, 1.0])
 
-assemble_factors(Ω) = (W = gridspace(Ω);
-(Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, v)))),
-    Matrix(assemble(form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))))))
+function assemble_factors(Ω)
+    (W = gridspace(Ω);
+        (Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, v)))),
+            Matrix(assemble(form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))))))
+end
 My, Ky = assemble_factors(Ωy)
 Mz, Kz = assemble_factors(Ωz)
 (My, Ky)
