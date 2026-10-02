@@ -1,0 +1,1476 @@
+[meta]
+arch = "aarch64"
+commit = "dfd9a2c2"
+cpu = "Apple M2"
+date = "2026-10-02T17:38:56"
+julia = "1.13.1"
+load1 = 8.12
+os = "Darwin"
+power = "ac"
+script = "operator_routes.jl"
+smoke = false
+threads = 4
+
+[[tables.construction]]
+bytes_alloc = 644048
+dim = 2
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "assembled"
+time_s = 0.000100833
+[[tables.construction]]
+bytes_alloc = 26704
+dim = 2
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker"
+time_s = 4.625e-6
+[[tables.construction]]
+bytes_alloc = 720
+dim = 2
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_serial"
+time_s = 4.1e-8
+[[tables.construction]]
+bytes_alloc = 2736
+dim = 2
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_threaded"
+time_s = 1.708e-6
+[[tables.construction]]
+bytes_alloc = 2378704
+dim = 2
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "assembled"
+time_s = 0.000519542
+[[tables.construction]]
+bytes_alloc = 45984
+dim = 2
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker"
+time_s = 9.125e-6
+[[tables.construction]]
+bytes_alloc = 720
+dim = 2
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 4.1e-8
+[[tables.construction]]
+bytes_alloc = 2736
+dim = 2
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 1.667e-6
+[[tables.construction]]
+bytes_alloc = 9259984
+dim = 2
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "assembled"
+time_s = 0.002007833
+[[tables.construction]]
+bytes_alloc = 85152
+dim = 2
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker"
+time_s = 1.8041e-5
+[[tables.construction]]
+bytes_alloc = 720
+dim = 2
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_serial"
+time_s = 4.2e-8
+[[tables.construction]]
+bytes_alloc = 2736
+dim = 2
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_threaded"
+time_s = 1.75e-6
+[[tables.construction]]
+bytes_alloc = 36785104
+dim = 2
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "assembled"
+time_s = 0.007187708
+[[tables.construction]]
+bytes_alloc = 166560
+dim = 2
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker"
+time_s = 3.0708e-5
+[[tables.construction]]
+bytes_alloc = 720
+dim = 2
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_serial"
+time_s = 4.1e-8
+[[tables.construction]]
+bytes_alloc = 2736
+dim = 2
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_threaded"
+time_s = 1.916e-6
+[[tables.construction]]
+bytes_alloc = 161975248
+dim = 2
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "assembled"
+time_s = 0.048486042
+[[tables.construction]]
+bytes_alloc = 326304
+dim = 2
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker"
+time_s = 9.6125e-5
+[[tables.construction]]
+bytes_alloc = 720
+dim = 2
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 8.3e-8
+[[tables.construction]]
+bytes_alloc = 2736
+dim = 2
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 2.625e-6
+[[tables.construction]]
+bytes_alloc = 396256
+dim = 3
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "assembled"
+time_s = 9.1916e-5
+[[tables.construction]]
+bytes_alloc = 16912
+dim = 3
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker"
+time_s = 4.167e-6
+[[tables.construction]]
+bytes_alloc = 1184
+dim = 3
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_serial"
+time_s = 8.4e-8
+[[tables.construction]]
+bytes_alloc = 4256
+dim = 3
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_threaded"
+time_s = 2.542e-6
+[[tables.construction]]
+bytes_alloc = 3265504
+dim = 3
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "assembled"
+time_s = 0.000891792
+[[tables.construction]]
+bytes_alloc = 24720
+dim = 3
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker"
+time_s = 6.25e-6
+[[tables.construction]]
+bytes_alloc = 1184
+dim = 3
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 8.3e-8
+[[tables.construction]]
+bytes_alloc = 4256
+dim = 3
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 2.792e-6
+[[tables.construction]]
+bytes_alloc = 25580512
+dim = 3
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "assembled"
+time_s = 0.0078695
+[[tables.construction]]
+bytes_alloc = 39952
+dim = 3
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker"
+time_s = 1.2208e-5
+[[tables.construction]]
+bytes_alloc = 1184
+dim = 3
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_serial"
+time_s = 1.25e-7
+[[tables.construction]]
+bytes_alloc = 4256
+dim = 3
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_threaded"
+time_s = 4.0e-6
+[[tables.construction]]
+bytes_alloc = 86528992
+dim = 3
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "assembled"
+time_s = 0.031243084
+[[tables.construction]]
+bytes_alloc = 55504
+dim = 3
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker"
+time_s = 1.4334e-5
+[[tables.construction]]
+bytes_alloc = 1184
+dim = 3
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_serial"
+time_s = 1.25e-7
+[[tables.construction]]
+bytes_alloc = 4256
+dim = 3
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_threaded"
+time_s = 3.834e-6
+[[tables.construction]]
+bytes_alloc = 212145120
+dim = 3
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "assembled"
+time_s = 0.079886667
+[[tables.construction]]
+bytes_alloc = 68608
+dim = 3
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker"
+time_s = 2.35e-5
+[[tables.construction]]
+bytes_alloc = 1184
+dim = 3
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 1.67e-7
+[[tables.construction]]
+bytes_alloc = 4256
+dim = 3
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 3.541e-6
+
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.443293447256306e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.188579081896376e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.188579081896376e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 2.650921538881021e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 2.0938099861815598e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 2.0938099861815598e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.619463990775109e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.2667712815641056e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.2667712815641056e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.2470952534639143e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.1517954732942856e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.1517954732942856e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.274881169054533e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.1321593267723965e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.1321593267723965e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.6906535790126164e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.097442148064822e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.097442148064822e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.552390493316867e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.30748598974725e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.30748598974725e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.631127857544581e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.235255774367268e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.235255774367268e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.649582997626935e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.301964828906515e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.301964828906515e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.687437089848227e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.2983802613383186e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.2983802613383186e-16
+route = "matrix_free_threaded"
+
+[[tables.product]]
+bytes_held = 88232
+dim = 2
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "assembled"
+time_s = 3.542e-6
+[[tables.product]]
+bytes_held = 5136
+dim = 2
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker"
+time_s = 1.458e-6
+[[tables.product]]
+bytes_held = 88
+dim = 2
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_serial"
+time_s = 6.916e-6
+[[tables.product]]
+bytes_held = 128
+dim = 2
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_threaded"
+time_s = 1.0208e-5
+[[tables.product]]
+bytes_held = 356520
+dim = 2
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "assembled"
+time_s = 1.5333e-5
+[[tables.product]]
+bytes_held = 9744
+dim = 2
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker"
+time_s = 5.333e-6
+[[tables.product]]
+bytes_held = 88
+dim = 2
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 2.6042e-5
+[[tables.product]]
+bytes_held = 128
+dim = 2
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 1.1167e-5
+[[tables.product]]
+bytes_held = 1433768
+dim = 2
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "assembled"
+time_s = 6.1e-5
+[[tables.product]]
+bytes_held = 18960
+dim = 2
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker"
+time_s = 2.125e-5
+[[tables.product]]
+bytes_held = 88
+dim = 2
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_serial"
+time_s = 0.000106542
+[[tables.product]]
+bytes_held = 128
+dim = 2
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_threaded"
+time_s = 7.8625e-5
+[[tables.product]]
+bytes_held = 5750952
+dim = 2
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "assembled"
+time_s = 0.000289375
+[[tables.product]]
+bytes_held = 37392
+dim = 2
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker"
+time_s = 9.0583e-5
+[[tables.product]]
+bytes_held = 88
+dim = 2
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_serial"
+time_s = 0.000441334
+[[tables.product]]
+bytes_held = 128
+dim = 2
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_threaded"
+time_s = 0.00028
+[[tables.product]]
+bytes_held = 23036072
+dim = 2
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "assembled"
+time_s = 0.001036083
+[[tables.product]]
+bytes_held = 74256
+dim = 2
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker"
+time_s = 0.00065525
+[[tables.product]]
+bytes_held = 88
+dim = 2
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 0.002631167
+[[tables.product]]
+bytes_held = 128
+dim = 2
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 0.001142292
+[[tables.product]]
+bytes_held = 55464
+dim = 3
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "assembled"
+time_s = 2.208e-6
+[[tables.product]]
+bytes_held = 2456
+dim = 3
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker"
+time_s = 2.292e-6
+[[tables.product]]
+bytes_held = 88
+dim = 3
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_serial"
+time_s = 1.3e-5
+[[tables.product]]
+bytes_held = 136
+dim = 3
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_threaded"
+time_s = 6.083e-6
+[[tables.product]]
+bytes_held = 467112
+dim = 3
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "assembled"
+time_s = 2.1625e-5
+[[tables.product]]
+bytes_held = 4120
+dim = 3
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker"
+time_s = 1.475e-5
+[[tables.product]]
+bytes_held = 88
+dim = 3
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 9.5291e-5
+[[tables.product]]
+bytes_held = 136
+dim = 3
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 2.975e-5
+[[tables.product]]
+bytes_held = 3834024
+dim = 3
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "assembled"
+time_s = 0.000231083
+[[tables.product]]
+bytes_held = 7448
+dim = 3
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker"
+time_s = 0.000135583
+[[tables.product]]
+bytes_held = 88
+dim = 3
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_serial"
+time_s = 0.000932417
+[[tables.product]]
+bytes_held = 136
+dim = 3
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_threaded"
+time_s = 0.000398708
+[[tables.product]]
+bytes_held = 13050024
+dim = 3
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "assembled"
+time_s = 0.000786834
+[[tables.product]]
+bytes_held = 10776
+dim = 3
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker"
+time_s = 0.000358166
+[[tables.product]]
+bytes_held = 88
+dim = 3
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_serial"
+time_s = 0.002702625
+[[tables.product]]
+bytes_held = 136
+dim = 3
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_threaded"
+time_s = 0.001092625
+[[tables.product]]
+bytes_held = 31064232
+dim = 3
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "assembled"
+time_s = 0.001869791
+[[tables.product]]
+bytes_held = 14104
+dim = 3
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker"
+time_s = 0.001036333
+[[tables.product]]
+bytes_held = 88
+dim = 3
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 0.00966375
+[[tables.product]]
+bytes_held = 136
+dim = 3
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 0.002592292
+
+[[tables.solve]]
+dim = 2
+iterations = 431
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_residual = 8.240673952037983e-9
+route = "assembled"
+time_s = 0.001904667
+[[tables.solve]]
+dim = 2
+iterations = 431
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_residual = 8.871579088344353e-9
+route = "kronecker"
+time_s = 0.000927625
+[[tables.solve]]
+dim = 2
+iterations = 432
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_residual = 9.389527603720415e-9
+route = "matrix_free_serial"
+time_s = 0.003278208
+[[tables.solve]]
+dim = 2
+iterations = 432
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_residual = 9.389527603720415e-9
+route = "matrix_free_threaded"
+time_s = 0.006614375
+[[tables.solve]]
+dim = 2
+iterations = 0
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_residual = 3.51122484385106e-12
+route = "fdm_solve"
+time_s = 0.000187833
+[[tables.solve]]
+dim = 2
+iterations = 0
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_residual = 1.2593315463363596e-12
+route = "direct"
+time_s = 0.000525375
+[[tables.solve]]
+dim = 2
+iterations = 1251
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_residual = 9.751704552703919e-9
+route = "assembled"
+time_s = 0.025812292
+[[tables.solve]]
+dim = 2
+iterations = 1253
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_residual = 9.30678696966512e-9
+route = "kronecker"
+time_s = 0.011402334
+[[tables.solve]]
+dim = 2
+iterations = 1253
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_residual = 9.086020438578138e-9
+route = "matrix_free_serial"
+time_s = 0.036475333
+[[tables.solve]]
+dim = 2
+iterations = 1253
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_residual = 9.086020438578138e-9
+route = "matrix_free_threaded"
+time_s = 0.049382417
+[[tables.solve]]
+dim = 2
+iterations = 0
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_residual = 2.7871686499909822e-11
+route = "fdm_solve"
+time_s = 0.000796083
+[[tables.solve]]
+dim = 2
+iterations = 0
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_residual = 7.303841226522867e-12
+route = "direct"
+time_s = 0.002594583
+[[tables.solve]]
+dim = 2
+iterations = 3604
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_residual = 9.951914454411401e-9
+route = "assembled"
+time_s = 0.265563833
+[[tables.solve]]
+dim = 2
+iterations = 3614
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_residual = 9.998572970052841e-9
+route = "kronecker"
+time_s = 0.124123375
+[[tables.solve]]
+dim = 2
+iterations = 3601
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_residual = 9.727388521435436e-9
+route = "matrix_free_serial"
+time_s = 0.430608792
+[[tables.solve]]
+dim = 2
+iterations = 3601
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_residual = 9.727388521435436e-9
+route = "matrix_free_threaded"
+time_s = 0.436544708
+[[tables.solve]]
+dim = 2
+iterations = 0
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_residual = 1.8066021568905533e-10
+route = "fdm_solve"
+time_s = 0.003017166
+[[tables.solve]]
+dim = 2
+iterations = 0
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_residual = 2.9159243952153834e-11
+route = "direct"
+time_s = 0.009373083
+[[tables.solve]]
+dim = 2
+iterations = 10646
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_residual = 1.2080956913649667e-8
+route = "assembled"
+time_s = 3.532983125
+[[tables.solve]]
+dim = 2
+iterations = 10634
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_residual = 1.2424195534593387e-8
+route = "kronecker"
+time_s = 1.423980875
+[[tables.solve]]
+dim = 2
+iterations = 10655
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_residual = 1.2348916199062904e-8
+route = "matrix_free_serial"
+time_s = 5.20995875
+[[tables.solve]]
+dim = 2
+iterations = 10655
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_residual = 1.2348916199062904e-8
+route = "matrix_free_threaded"
+time_s = 4.313187208
+[[tables.solve]]
+dim = 2
+iterations = 0
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_residual = 1.475507032375214e-9
+route = "fdm_solve"
+time_s = 0.016691791
+[[tables.solve]]
+dim = 2
+iterations = 0
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_residual = 1.6042545969389015e-10
+route = "direct"
+time_s = 0.046657958
+[[tables.solve]]
+dim = 2
+iterations = 30328
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_residual = 7.187534049121831e-8
+route = "assembled"
+time_s = 69.730788833
+[[tables.solve]]
+dim = 2
+iterations = 30335
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_residual = 7.048656681002804e-8
+route = "kronecker"
+time_s = 25.342180583
+[[tables.solve]]
+dim = 2
+iterations = 30330
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_residual = 7.04969863147642e-8
+route = "matrix_free_serial"
+time_s = 73.385091917
+[[tables.solve]]
+dim = 2
+iterations = 30330
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_residual = 7.04969863147642e-8
+route = "matrix_free_threaded"
+time_s = 54.267684208
+[[tables.solve]]
+dim = 2
+iterations = 0
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_residual = 1.5735016222584023e-8
+route = "fdm_solve"
+time_s = 0.146319875
+[[tables.solve]]
+dim = 2
+iterations = 0
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_residual = 8.962462240083875e-10
+route = "direct"
+time_s = 0.31838625
+[[tables.solve]]
+dim = 3
+iterations = 151
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_residual = 9.32199286565725e-9
+route = "assembled"
+time_s = 0.000400208
+[[tables.solve]]
+dim = 3
+iterations = 151
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_residual = 9.198457829518148e-9
+route = "kronecker"
+time_s = 0.000412875
+[[tables.solve]]
+dim = 3
+iterations = 151
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_residual = 8.867621223076144e-9
+route = "matrix_free_serial"
+time_s = 0.002044709
+[[tables.solve]]
+dim = 3
+iterations = 151
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_residual = 8.867621223076144e-9
+route = "matrix_free_threaded"
+time_s = 0.002509167
+[[tables.solve]]
+dim = 3
+iterations = 0
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_residual = 2.0781281075204373e-13
+route = "fdm_solve"
+time_s = 0.000176708
+[[tables.solve]]
+dim = 3
+iterations = 0
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_residual = 6.545379026797818e-14
+route = "direct"
+time_s = 0.000572167
+[[tables.solve]]
+dim = 3
+iterations = 380
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_residual = 9.509337776266595e-9
+route = "assembled"
+time_s = 0.010250208
+[[tables.solve]]
+dim = 3
+iterations = 380
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_residual = 9.904245911622582e-9
+route = "kronecker"
+time_s = 0.007330333
+[[tables.solve]]
+dim = 3
+iterations = 380
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_residual = 9.880318081591662e-9
+route = "matrix_free_serial"
+time_s = 0.037710125
+[[tables.solve]]
+dim = 3
+iterations = 380
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_residual = 9.880318081591662e-9
+route = "matrix_free_threaded"
+time_s = 0.028429666
+[[tables.solve]]
+dim = 3
+iterations = 0
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_residual = 5.125273743621812e-12
+route = "fdm_solve"
+time_s = 0.000866375
+[[tables.solve]]
+dim = 3
+iterations = 0
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_residual = 3.5370665552852837e-13
+route = "direct"
+time_s = 0.0081815
+[[tables.solve]]
+dim = 3
+iterations = 993
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_residual = 9.77239637975456e-9
+route = "assembled"
+time_s = 0.315664208
+[[tables.solve]]
+dim = 3
+iterations = 993
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_residual = 9.885458680860451e-9
+route = "kronecker"
+time_s = 0.190256958
+[[tables.solve]]
+dim = 3
+iterations = 993
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_residual = 9.999881844607255e-9
+route = "matrix_free_serial"
+time_s = 1.002994542
+[[tables.solve]]
+dim = 3
+iterations = 993
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_residual = 9.999881844607255e-9
+route = "matrix_free_threaded"
+time_s = 0.47882225
+[[tables.solve]]
+dim = 3
+iterations = 0
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_residual = 6.306348048510847e-12
+route = "fdm_solve"
+time_s = 0.004397459
+[[tables.solve]]
+dim = 3
+iterations = 0
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_residual = 1.8282562884501393e-12
+route = "direct"
+time_s = 0.21260075
+[[tables.solve]]
+dim = 3
+iterations = 1796
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_residual = 9.991251575885269e-9
+route = "assembled"
+time_s = 1.688303708
+[[tables.solve]]
+dim = 3
+iterations = 1795
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_residual = 9.971136943191023e-9
+route = "kronecker"
+time_s = 0.865873292
+[[tables.solve]]
+dim = 3
+iterations = 1795
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_residual = 9.942151607758497e-9
+route = "matrix_free_serial"
+time_s = 5.17905775
+[[tables.solve]]
+dim = 3
+iterations = 1795
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_residual = 9.942151607758497e-9
+route = "matrix_free_threaded"
+time_s = 2.646445167
+[[tables.solve]]
+dim = 3
+iterations = 0
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_residual = 2.6775445044992784e-11
+route = "fdm_solve"
+time_s = 0.010509375
+[[tables.solve]]
+dim = 3
+iterations = 0
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_residual = 4.868309746463715e-12
+route = "direct"
+time_s = 2.104413375
+[[tables.solve]]
+dim = 3
+iterations = 2753
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_residual = 1.0001480109605434e-8
+route = "assembled"
+time_s = 7.176103792
+[[tables.solve]]
+dim = 3
+iterations = 2752
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_residual = 1.0000934602351888e-8
+route = "kronecker"
+time_s = 3.537018375
+[[tables.solve]]
+dim = 3
+iterations = 2753
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_residual = 9.89965066004087e-9
+route = "matrix_free_serial"
+time_s = 17.975487166
+[[tables.solve]]
+dim = 3
+iterations = 2753
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_residual = 9.89965066004087e-9
+route = "matrix_free_threaded"
+time_s = 10.033744666
+[[tables.solve]]
+dim = 3
+iterations = 0
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_residual = 5.453738471487181e-11
+route = "fdm_solve"
+time_s = 0.025399541
+[[tables.solve]]
+dim = 3
+iterations = 0
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_residual = 1.0530375304575314e-11
+route = "direct"
+time_s = 13.003549083

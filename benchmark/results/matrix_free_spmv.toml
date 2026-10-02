@@ -1,0 +1,378 @@
+[meta]
+arch = "aarch64"
+commit = "6e77a7be"
+cpu = "Apple M2"
+date = "2026-10-02T17:40:50"
+julia = "1.13.1"
+load1 = 4.02
+os = "Darwin"
+power = "ac"
+script = "matrix_free_spmv.jl"
+smoke = false
+threads = 4
+
+[[tables.crossover]]
+dim = 1
+policy = "serial"
+[[tables.crossover]]
+dim = 1
+from_ndofs = 10000
+memory_ratio = 0.9933602894232816
+policy = "threaded"
+[[tables.crossover]]
+dim = 2
+policy = "serial"
+[[tables.crossover]]
+dim = 2
+from_ndofs = 4096
+memory_ratio = 8.42438563327032
+policy = "threaded"
+[[tables.crossover]]
+dim = 3
+policy = "serial"
+[[tables.crossover]]
+dim = 3
+from_ndofs = 262144
+memory_ratio = 14.276786699119794
+policy = "threaded"
+
+[[tables.spmv]]
+csr_bytes = 56136
+dim = 1
+form_bytes = 57504
+mf_bytes = 57592
+mf_s = 4.667e-6
+ndofs = 1000
+policy = "serial"
+ratio = 0.5446753803299764
+spmv_s = 2.542e-6
+[[tables.spmv]]
+csr_bytes = 56136
+dim = 1
+form_bytes = 57504
+mf_bytes = 57624
+mf_s = 6.291e-6
+ndofs = 1000
+policy = "threaded"
+ratio = 0.404069305356859
+spmv_s = 2.542e-6
+[[tables.spmv]]
+csr_bytes = 560136
+dim = 1
+form_bytes = 563760
+mf_bytes = 563848
+mf_s = 4.8375e-5
+ndofs = 10000
+policy = "serial"
+ratio = 0.56415503875969
+spmv_s = 2.7291e-5
+[[tables.spmv]]
+csr_bytes = 560136
+dim = 1
+form_bytes = 563760
+mf_bytes = 563880
+mf_s = 1.1875e-5
+ndofs = 10000
+policy = "threaded"
+ratio = 2.2981894736842103
+spmv_s = 2.7291e-5
+[[tables.spmv]]
+csr_bytes = 5600136
+dim = 1
+form_bytes = 5626256
+mf_bytes = 5626344
+mf_s = 0.000482583
+ndofs = 100000
+policy = "serial"
+ratio = 0.6335697693453768
+spmv_s = 0.00030575
+[[tables.spmv]]
+csr_bytes = 5600136
+dim = 1
+form_bytes = 5626256
+mf_bytes = 5626376
+mf_s = 9.7459e-5
+ndofs = 100000
+policy = "threaded"
+ratio = 3.137216675730307
+spmv_s = 0.00030575
+[[tables.spmv]]
+csr_bytes = 56000136
+dim = 1
+form_bytes = 56251248
+mf_bytes = 56251336
+mf_s = 0.004905084
+ndofs = 1000000
+policy = "serial"
+ratio = 0.5782944797683384
+spmv_s = 0.002836583
+[[tables.spmv]]
+csr_bytes = 56000136
+dim = 1
+form_bytes = 56251248
+mf_bytes = 56251368
+mf_s = 0.001209667
+ndofs = 1000000
+policy = "threaded"
+ratio = 2.3449288109868256
+spmv_s = 0.002836583
+[[tables.spmv]]
+csr_bytes = 560000136
+dim = 1
+form_bytes = 562501248
+mf_bytes = 562501336
+mf_s = 0.051580875
+ndofs = 10000000
+policy = "serial"
+ratio = 0.5571646855544812
+spmv_s = 0.028739042
+[[tables.spmv]]
+csr_bytes = 560000136
+dim = 1
+form_bytes = 562501248
+mf_bytes = 562501368
+mf_s = 0.013677875
+ndofs = 10000000
+policy = "threaded"
+ratio = 2.1011335459638283
+spmv_s = 0.028739042
+[[tables.spmv]]
+csr_bytes = 88232
+dim = 2
+form_bytes = 14288
+mf_bytes = 14376
+mf_s = 7.958e-6
+ndofs = 1024
+policy = "serial"
+ratio = 0.46594621764262373
+spmv_s = 3.708e-6
+[[tables.spmv]]
+csr_bytes = 88232
+dim = 2
+form_bytes = 14288
+mf_bytes = 14416
+mf_s = 1.1375e-5
+ndofs = 1024
+policy = "threaded"
+ratio = 0.32597802197802195
+spmv_s = 3.708e-6
+[[tables.spmv]]
+csr_bytes = 356520
+dim = 2
+form_bytes = 42192
+mf_bytes = 42280
+mf_s = 3.0875e-5
+ndofs = 4096
+policy = "serial"
+ratio = 0.4696356275303644
+spmv_s = 1.45e-5
+[[tables.spmv]]
+csr_bytes = 356520
+dim = 2
+form_bytes = 42192
+mf_bytes = 42320
+mf_s = 1.1291e-5
+ndofs = 4096
+policy = "threaded"
+ratio = 1.2842086617660082
+spmv_s = 1.45e-5
+[[tables.spmv]]
+csr_bytes = 1433768
+dim = 2
+form_bytes = 148720
+mf_bytes = 148808
+mf_s = 0.000126542
+ndofs = 16384
+policy = "serial"
+ratio = 0.4563702170030504
+spmv_s = 5.775e-5
+[[tables.spmv]]
+csr_bytes = 1433768
+dim = 2
+form_bytes = 148720
+mf_bytes = 148848
+mf_s = 3.9e-5
+ndofs = 16384
+policy = "threaded"
+ratio = 1.4807692307692308
+spmv_s = 5.775e-5
+[[tables.spmv]]
+csr_bytes = 5750952
+dim = 2
+form_bytes = 564528
+mf_bytes = 564616
+mf_s = 0.000488958
+ndofs = 65536
+policy = "serial"
+ratio = 0.5532172497433319
+spmv_s = 0.0002705
+[[tables.spmv]]
+csr_bytes = 5750952
+dim = 2
+form_bytes = 564528
+mf_bytes = 564656
+mf_s = 0.000150333
+ndofs = 65536
+policy = "threaded"
+ratio = 1.7993388011946814
+spmv_s = 0.0002705
+[[tables.spmv]]
+csr_bytes = 23036072
+dim = 2
+form_bytes = 2207152
+mf_bytes = 2207240
+mf_s = 0.0019515
+ndofs = 262144
+policy = "serial"
+ratio = 0.5005334358186011
+spmv_s = 0.000976791
+[[tables.spmv]]
+csr_bytes = 23036072
+dim = 2
+form_bytes = 2207152
+mf_bytes = 2207280
+mf_s = 0.000583125
+ndofs = 262144
+policy = "threaded"
+ratio = 1.675097106109325
+spmv_s = 0.000976791
+[[tables.spmv]]
+csr_bytes = 92209320
+dim = 2
+form_bytes = 8736432
+mf_bytes = 8736520
+mf_s = 0.007940416
+ndofs = 1048576
+policy = "serial"
+ratio = 0.508841980067543
+spmv_s = 0.004040417
+[[tables.spmv]]
+csr_bytes = 92209320
+dim = 2
+form_bytes = 8736432
+mf_bytes = 8736560
+mf_s = 0.002353709
+ndofs = 1048576
+policy = "threaded"
+ratio = 1.7166170499411781
+spmv_s = 0.004040417
+[[tables.spmv]]
+csr_bytes = 368967848
+dim = 2
+form_bytes = 34771120
+mf_bytes = 34771208
+mf_s = 0.032710125
+ndofs = 4194304
+policy = "serial"
+ratio = 0.49082404912851907
+spmv_s = 0.016054916
+[[tables.spmv]]
+csr_bytes = 368967848
+dim = 2
+form_bytes = 34771120
+mf_bytes = 34771248
+mf_s = 0.010059958
+ndofs = 4194304
+policy = "threaded"
+ratio = 1.5959227662779505
+spmv_s = 0.016054916
+[[tables.spmv]]
+csr_bytes = 467112
+dim = 3
+form_bytes = 41064
+mf_bytes = 41152
+mf_s = 6.1458e-5
+ndofs = 4096
+policy = "serial"
+ratio = 0.29560024732337536
+spmv_s = 1.8167e-5
+[[tables.spmv]]
+csr_bytes = 467112
+dim = 3
+form_bytes = 41064
+mf_bytes = 41200
+mf_s = 2.4917e-5
+ndofs = 4096
+policy = "threaded"
+ratio = 0.7291006140386083
+spmv_s = 1.8167e-5
+[[tables.spmv]]
+csr_bytes = 3834024
+dim = 3
+form_bytes = 279528
+mf_bytes = 279616
+mf_s = 0.000417458
+ndofs = 32768
+policy = "serial"
+ratio = 0.3595188018914478
+spmv_s = 0.000150084
+[[tables.spmv]]
+csr_bytes = 3834024
+dim = 3
+form_bytes = 279528
+mf_bytes = 279664
+mf_s = 0.000154375
+ndofs = 32768
+policy = "threaded"
+ratio = 0.972204048582996
+spmv_s = 0.000150084
+[[tables.spmv]]
+csr_bytes = 31064232
+dim = 3
+form_bytes = 2175720
+mf_bytes = 2175808
+mf_s = 0.003059291
+ndofs = 262144
+policy = "serial"
+ratio = 0.3991529409918834
+spmv_s = 0.001221125
+[[tables.spmv]]
+csr_bytes = 31064232
+dim = 3
+form_bytes = 2175720
+mf_bytes = 2175856
+mf_s = 0.001006708
+ndofs = 262144
+policy = "threaded"
+ratio = 1.2129882746536234
+spmv_s = 0.001221125
+[[tables.spmv]]
+csr_bytes = 105283752
+dim = 3
+form_bytes = 7315992
+mf_bytes = 7316080
+mf_s = 0.010349917
+ndofs = 884736
+policy = "serial"
+ratio = 0.39511186418209926
+spmv_s = 0.004089375
+[[tables.spmv]]
+csr_bytes = 105283752
+dim = 3
+form_bytes = 7315992
+mf_bytes = 7316128
+mf_s = 0.00329175
+ndofs = 884736
+policy = "threaded"
+ratio = 1.2423103212576898
+spmv_s = 0.004089375
+[[tables.spmv]]
+csr_bytes = 250085544
+dim = 3
+form_bytes = 17322264
+mf_bytes = 17322352
+mf_s = 0.031731458
+ndofs = 2097152
+policy = "serial"
+ratio = 0.33191695761348256
+spmv_s = 0.010532209
+[[tables.spmv]]
+csr_bytes = 250085544
+dim = 3
+form_bytes = 17322264
+mf_bytes = 17322400
+mf_s = 0.010083917
+ndofs = 2097152
+policy = "threaded"
+ratio = 1.044456137431516
+spmv_s = 0.010532209
