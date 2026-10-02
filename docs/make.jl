@@ -72,13 +72,18 @@ foundations = "Discrete foundations" => [
     "tutorials/geometry.md",
     "tutorials/mesh.md",
     "tutorials/space.md",
-    "tutorials/operators.md"
+    "tutorials/operators.md",
+    "tutorials/operator_accuracy.md",
+    "tutorials/interpolation.md"
 ]
 forms = "Forms and assembly" => [
-    "tutorials/form.md"
+    "tutorials/form.md",
+    "tutorials/coupled_systems.md"
 ]
 scientific = "Solvers and scientific computing" => [
     "tutorials/solvers.md",
+    "tutorials/solvers_by_problem.md",
+    "tutorials/time_stepping.md",
     "tutorials/autodiff.md",
     "tutorials/backend.md"
 ]

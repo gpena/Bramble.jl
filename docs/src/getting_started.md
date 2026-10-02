@@ -134,3 +134,24 @@ Where to go from here:
   assembling it, imposing conditions, and coupled systems.
 - The [worked examples](examples/poisson_linear.md) run the whole chain on real problems,
   from nonlinear Poisson to 3D elasticity, a heat equation and an inverse problem.
+
+## Reading order
+
+Read the tutorials in the order of the sidebar, top to bottom. Each line says what the page teaches.
+
+- [Geometry tutorial](tutorials/geometry.md): Describe where a problem lives: a set, its named boundary pieces and the domain that bundles both.
+- [Mesh tutorial](tutorials/mesh.md): Turn a domain into a mesh, make its points non-uniform, and read the spacings and cell measures.
+- [Grid spaces and discrete functions](tutorials/space.md): Put a function on a mesh, measure it, and stack copies into a composite space.
+- [Difference, jump and average operators](tutorials/operators.md): Apply differences, jumps and averages, see what each does at the grid edge, and get the matrix.
+- [How accurate are the difference operators](tutorials/operator_accuracy.md): Measure the order of a difference operator and choose between the centered, second-order and summation-by-parts forms.
+- [Interpolation between meshes](tutorials/interpolation.md): Move a grid function between meshes, see what error that costs, and get the interpolation as a matrix.
+- [Linear and bilinear forms](tutorials/form.md): Write, assemble and solve a linear or bilinear form, with Dirichlet conditions, for a Poisson problem.
+- [Coupled systems](tutorials/coupled_systems.md): Write a form over several unknowns, constrain one block, and read values across different meshes.
+- [Choosing a solver, backend and execution policy](tutorials/solvers.md): Choose a matrix backend, an execution policy and a linear solver.
+- [Solvers by problem](tutorials/solvers_by_problem.md): Match the solver to the problem: symmetric positive-definite, unsymmetric, coupled or hyperbolic.
+- [Solving at every time step](tutorials/time_stepping.md): Solve the same sparse system at every implicit step by refactoring once or warm-starting.
+- [Automatic differentiation](tutorials/autodiff.md): Differentiate a discrete quantity with respect to a parameter and choose an AD backend.
+- [Backends and execution policies](tutorials/backend.md): Choose serial or threaded execution and find the size where threading pays off.
+- [Plotting directly](tutorials/plotting.md): Plot a grid function inside Julia, as a curve in 1D or a colour map in 2D.
+- [Writing VTK files](tutorials/vtk_export.md): Write a grid function or a time series to a file that ParaView opens.
+- [Writing PGFPlots data files](tutorials/pgfplots_export.md): Write a curve or surface as a table that `pgfplots` plots in LaTeX.
