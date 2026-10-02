@@ -485,7 +485,7 @@ using ..TestUtils: alloc_test, @test_allocs
     #    ArgumentError naming Polyester and the hook.
     # 2. A device destination under GpuKernel() reaches `_gpu_for!`/`_gpu_scatter_for!`, which
     #    without KernelAbstractions stop with the ArgumentError naming the missing sweep.
-    @testset "Hooks without their extensions (child process)" begin
+    @testset "Hooks without extensions (child)" begin
         code = """
         using Bramble
         const B = Bramble

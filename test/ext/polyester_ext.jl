@@ -703,7 +703,7 @@ end
 # colours through the CpuPolyester hooks: the tall leaf in bands, the short one (three slices,
 # too few to band) point by point. It must equal the same form on serial leaves over the same
 # non-uniform meshes.
-@testset "matrix-free mul!: per-unit sweep, leaves of different sizes" begin
+@testset "mul!: per-unit sweep, unequal leaves" begin
     _leaf(n, policy, seed) = (Random.seed!(seed);
         gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), n, (false, false);
             backend = backend(policy = policy))))

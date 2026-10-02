@@ -294,7 +294,7 @@ using Bramble:
             Wr, Wr, (u, v) -> innerₕ(D₋ₓ(ZeroOperator(Wr)), D₋ₓ(ZeroOperator(Wr2)))))
     end
 
-    @testset "Neither a product nor a sum, and a pair of different products" begin
+    @testset "Non-product non-sum; distinct products" begin
         Random.seed!(20261002)
         Ωr = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (false, false))
         Wr = gridspace(Ωr)
@@ -309,7 +309,7 @@ using Bramble:
         @test !issymmetric(Matrix(assemble(form(Wr, Wr, g))))
     end
 
-    @testset "Transposed pair under a Ref scaling: live in assembly" begin
+    @testset "Transposed pair under Ref: in assembly" begin
         Random.seed!(20261002)
         Ωr = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (false, false))
         Wr = gridspace(Ωr)

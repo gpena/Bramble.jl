@@ -189,7 +189,7 @@ end
         @test Bramble._stencil_margin(D₋ₓ(πₕ(u))) == 1
     end
 
-    @testset "Bilinear terms and lexicographic distance" begin
+    @testset "Bilinear terms, lexicographic distance" begin
         # `bandwidths` reads every bilinear term's (trial, test) reach and turns each pair
         # into a distance in the lexicographic order. The terms come through a sum and a
         # scale, and anything that is not a bilinear term contributes none.

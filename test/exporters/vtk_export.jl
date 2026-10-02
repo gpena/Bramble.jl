@@ -82,7 +82,7 @@ using WriteVTK
         end
     end
 
-    @testset "Field data that is an AbstractArray but not an Array" begin
+    @testset "Non-Array AbstractArray field data" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (false, false))
         backing = collect(1.0:40.0)
         field = reshape(view(backing, 1:20), 5, 4)   # a ReshapedArray over a SubArray

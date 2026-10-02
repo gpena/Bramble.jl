@@ -244,7 +244,7 @@ using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunctio
     # `host_points(::Mesh1D)` never returns a 1-tuple, so it is called directly. Oracle: the
     # returned cell brackets `x` and its fraction reproduces `x` as a convex combination of
     # the cell's two (non-uniformly spaced) end points.
-    @testset "1D triplet fraction over a 1-tuple of points" begin
+    @testset "1D triplet fraction, 1-tuple of points" begin
         Ωs = mesh(domain(interval(0.0, 1.0)), 8, false)
         pts = collect(points(Ωs))
         for x in (0.0, 0.2345, 0.71, 1.0)

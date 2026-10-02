@@ -221,7 +221,7 @@ _kron_alloc_no_scratch(y, K, x) = @allocated mul!(y, K, x)
         @test_throws DimensionMismatch mul!(zeros(n + 1), K, rand(n), 1.0, 0.0)
     end
 
-    @testset "kronecker_operator refuses what it cannot factor" begin
+    @testset "kronecker_operator refuses non-factors" begin
         Random.seed!(KRON_SEED + 6)
         Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 5), (false, false))
         W2 = gridspace(Ω2)

@@ -1266,7 +1266,7 @@ end
     end
 end
 
-@testset "bilinear: pair walk with unequal block counts" begin
+@testset "pair walk, unequal block counts" begin
     # `_pair_plan` pairs summands by type, and a transposed pair resolves to as many blocks as
     # its first term, so the fallback that walks each term alone when the counts differ is
     # reached here directly, with two terms of 2 and 1 blocks. Units are visited in the order
@@ -1304,7 +1304,7 @@ end
     @test iszero(blk(1, 2))
 end
 
-@testset "bilinear: zeroing a host sparse matrix that is not CSC" begin
+@testset "zeroing a non-CSC sparse matrix" begin
     # `assemble!` zeroes the stored values of any `AbstractSparseMatrix` before a refill,
     # never `fill!(A, 0)` over every (i, j); a `FixedSparseCSC` is one such host type.
     A = sparse([1, 2, 3, 1], [1, 2, 3, 3], [1.0, 2.0, 3.0, 4.0])
@@ -1316,7 +1316,7 @@ end
     @test rowvals(F) == rowvals(A)
 end
 
-@testset "bilinear: a foreign tree through the deprecated keyword" begin
+@testset "foreign tree via the deprecated keyword" begin
     # `assemble!(A, a; ast = other)` with a tree of another type records and fills, then
     # stores nothing: the cache's AST type is `a.ast`'s, and `a`'s own recording stays valid.
     Random.seed!(105)
@@ -1382,7 +1382,7 @@ struct _PlainSink end
     @test Bramble._is_block_pair(V, V)
 end
 
-@testset "bilinear: symbolic and source-only leaves" begin
+@testset "symbolic and source-only leaves" begin
     u, v = TrialFunction{2}(), TestFunction{2}()
     ui, vi = Bramble.IndexedTrialFunction{2}(1), Bramble.IndexedTestFunction{2}(2)
     sf = Bramble.source_function(x -> x[1], Val(2))
@@ -1409,7 +1409,7 @@ end
         domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 3), (true, true)))))
 end
 
-@testset "bilinear: source stencils on a non-uniform mesh" begin
+@testset "source stencils, non-uniform mesh" begin
     # A point source's strength is a number, a `Ref` or a thunk, read at each fill; its
     # load goes to the two nodes around the point with the linear interpolation weights.
     Random.seed!(226)

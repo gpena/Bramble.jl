@@ -69,7 +69,7 @@ using ..TestUtils: alloc_test, @test_allocs
         @test δ(4) === δ
     end
 
-    @testset "components over a space, of an indexed leaf, and eachindex" begin
+    @testset "Space and indexed-leaf components" begin
         # the component count read off a space: one indexed tree per leaf, in leaf order,
         # however deep the leaf sits in the tree
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 4), (true, false))

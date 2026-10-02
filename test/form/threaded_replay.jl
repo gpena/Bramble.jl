@@ -281,7 +281,7 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
         @test iszero(M[1:9, 1:9]) && iszero(M[10:15, 10:15])
     end
 
-    @testset "no leaf replays: plain units reach the Polyester hooks" begin
+    @testset "no replay: units reach Polyester hooks" begin
         h(u, v) = innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(u, v)
         # 9 points band the grid; 3 are too few for two bands, so the sweep colours points
         for (n, hook) in ((9, "_batch_bilinear_band_sweep!"), (3, "_batch_bilinear_colour_sweep!"))
@@ -325,7 +325,7 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
         end
     end
 
-    @testset "one leaf replays: its units replay, the other's search" begin
+    @testset "one leaf replays, the other searches" begin
         # The form takes the recording because its test leaf replays; the unit walks the
         # trial leaf (a test-side interpolation), which cannot, so that unit searches.
         R = assemble(form(leaf1(9, Serial(), 3), leaf1(6, Serial(), 4), interp))

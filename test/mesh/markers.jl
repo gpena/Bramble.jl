@@ -242,7 +242,7 @@ end
     S1 = interval(0.0, 1.0)
     S2 = interval(0.0, 1.0) × interval(0.0, 2.0)
 
-    @testset "1D predicate that only takes a 1-tuple is accepted" begin
+    @testset "1D predicate on a 1-tuple is accepted" begin
         # The scalar probe throws, the tuple probe succeeds: the fallback is the oracle.
         tuple_only = x -> x isa Tuple ? x[1] > 0.5 : throw(DomainError(x))
         dm = Bramble.markers(S1, :right_half => tuple_only)
@@ -250,7 +250,7 @@ end
         @test Bramble.label(only(Bramble.conditions(dm))) === :right_half
     end
 
-    @testset "1D predicate that takes neither is refused" begin
+    @testset "1D predicate taking neither is refused" begin
         err = try
             Bramble.markers(S1, :broken => x -> error("no"))
             nothing
@@ -263,7 +263,7 @@ end
         @test occursin("1D coordinate (scalar or 1-tuple)", msg)
     end
 
-    @testset "2D predicate with the wrong arity is refused" begin
+    @testset "2D predicate, wrong arity, is refused" begin
         err = try
             Bramble.markers(S2, :broken => x -> x[3] > 0.0)
             nothing
@@ -417,7 +417,7 @@ end
         @test_throws ArgumentError Bramble._face_mask(Val(1), (:ymin,))
     end
 
-    @testset "A surface needs three points on a doubly-faced axis" begin
+    @testset "Surface: 3 points on doubly-faced axis" begin
         thin = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (2, 5), (true, true))
         full = Bramble._face_mask(Val(2), (:boundary,))
         @test_throws "not (D-1)-dimensional" Bramble._check_surface_is_thin(thin, full)
@@ -427,7 +427,7 @@ end
         @test Bramble._check_surface_is_thin(wide, full) === nothing
     end
 
-    @testset "Surface weights against averaged spacings" begin
+    @testset "Surface weights vs averaged spacings" begin
         # 1D: counting measure, 1 on a face point and 0 elsewhere
         Ω1 = mesh(domain(interval(0.0, 1.0)), 7, false)
         m1 = Bramble._face_mask(Val(1), (:boundary,))

@@ -751,7 +751,7 @@ end
     #    the function and Metal. A child process on the root project, where Metal is never
     #    loaded, runs them whatever this process has loaded; `Base.julia_cmd()` carries this
     #    process's coverage flag, so its hits count.
-    @testset "metal_sparse_* without Metal (child process)" begin
+    @testset "metal_sparse_* without Metal (child)" begin
         code = """
         using Bramble, SparseArrays
         S = sparse([1, 2], [1, 2], [1.0f0, 2.0f0])

@@ -900,7 +900,7 @@ using Bramble: kronecker_operator_matrix, stencil_matrix, difference_shift, Back
 # sparse default takes neither. Every difference family against the Kronecker construction,
 # entry for entry, on a mesh non-uniform in both directions; the unscaled pair against the
 # difference of two shift matrices, which is its definition.
-@testset "stencil_matrix: dense fallback vs Kronecker" begin
+@testset "stencil_matrix: dense vs Kronecker" begin
     Ωd = mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (6, 5), (false, false);
         backend = backend(matrix_type = Matrix{Float64}))
     families = ((D₋ₓ, D₋ᵧ), (D₊ₓ, D₊ᵧ), (D̃ₓ, D̃ᵧ), (Dcₓ, Dcᵧ), (D̽ₓ, D̽ᵧ))
@@ -927,7 +927,7 @@ end
 # A runtime `Int` or `Symbol` direction selects between literal `Val`s, one arm per direction
 # the mesh has (`_dispatch_dim`, `_dim_index`); each arm must give the subscript alias, and a
 # direction the mesh does not have must be refused rather than reach a `Val` no grid serves.
-@testset "Dimensional entry point: Int and Symbol directions" begin
+@testset "Int and Symbol direction entry points" begin
     W2 = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (6, 5), (false, false)))
     W3 = gridspace(mesh(domain(box((0.0, 0.0, 0.0), (1.0, 2.0, 1.5))), (4, 5, 3),
         (false, false, false)))
@@ -953,7 +953,7 @@ end
     @test msg(() -> D₋(u2, :w)) == "the stencil direction must be :x, :y or :z, got :w"
 end
 
-@testset "In-place difference: size mismatch is a DimensionMismatch" begin
+@testset "In-place difference: size mismatch" begin
     err = try
         backward_difference_dim!(zeros(3), zeros(4), (4,), Val(1))
     catch e
@@ -966,7 +966,7 @@ end
 # The device kernels' boundary index (`_stencil_boundary_dim`) must name the one slice the
 # host traversal (`_stencil_ranges`) treats as the boundary: the last point for a forward
 # stencil, the first for a backward one.
-@testset "Boundary slice: device index agrees with the host ranges" begin
+@testset "Boundary slice: device index vs host" begin
     for dir in (Bramble.Forward(), Bramble.Backward()), n in (2, 7)
 
         _, boundary = Bramble._stencil_ranges((1:n,), Val(1), dir)
@@ -1062,7 +1062,7 @@ end
 
 # The form-layer stencils of `D̃` and `D̽`, assembled under the discrete L² product, are the
 # space-layer matrices scaled row by row by the quadrature weights: innerₕ(Op(u), v) = vᵀ H Op u.
-@testset "Form-layer D̃ and D̽ stencils vs the space-layer matrices" begin
+@testset "Form D̃ and D̽ stencils vs space matrices" begin
     Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (7, 6), (false, false))
     Wₕ = gridspace(Ωₕ)
     H = Diagonal(collect(weights(Wₕ, Innerh())))
@@ -1077,7 +1077,7 @@ end
 # their definitions: εₕ places ε_ii as a bare backward difference and averages each cross
 # difference of ε_ij once onto the shared edge; εcₕ/ε̽ₕ collocate everything, and their inner
 # product keeps the upper triangle with the off-diagonal pairs doubled.
-@testset "Form builders over composite trial and test functions" begin
+@testset "Form builders, composite trial and test" begin
     Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (6, 5), (false, false))
     Wₕ = gridspace(Ωₕ)
     Vₕ = Wₕ^Val(2)

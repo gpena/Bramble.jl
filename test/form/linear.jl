@@ -1311,7 +1311,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         @test assemble(ls) ≈ vec(expected)
     end
 
-    @testset "Unnamed function source on a heterogeneous composite" begin
+    @testset "Unnamed source, heterogeneous composite" begin
         # A term naming no component is not lowered on a composite space (its leaves may
         # have different meshes), so `assemble` sizes its vector by sampling the function
         # on each leaf. Non-uniform leaves of different sizes; the routed second term adds

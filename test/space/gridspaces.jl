@@ -571,7 +571,7 @@ end
 # (gpena/Bramble.jl#310): the first is the identity, the second the dense tensor product in
 # `CartesianIndices` order. The oracle is built from `points` alone, per axis: the backward
 # spacing (zero at the first node) on a staggered axis, the half-cell width elsewhere.
-@testset "host_weights and Array of SeparableWeights" begin
+@testset "host_weights, SeparableWeights arrays" begin
     bw(x, i) = i == 1 ? 0.0 : x[i] - x[i - 1]
     hh(x, i) = i == 1 ? (x[2] - x[1]) / 2 :
                i == length(x) ? (x[end] - x[end - 1]) / 2 : (x[i + 1] - x[i - 1]) / 2

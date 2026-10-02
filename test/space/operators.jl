@@ -372,7 +372,7 @@ Bramble.locality(::Type{<:MockDeviceArray}) = Bramble.DeviceLocality()
         @test all(k -> all(iszero, parent(components(c)[k])), 1:2)
     end
 
-    @testset "GpuOffload: host destination, device buffer" begin
+    @testset "GpuOffload: host dest, device buffer" begin
         dev = backend(
             vector_type = MockDeviceArray{Float32, 1}, matrix_type = MockDeviceArray{Float32, 2},
             policy = Bramble.GpuKernel()

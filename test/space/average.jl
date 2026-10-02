@@ -211,7 +211,7 @@ end
 
 # The form-layer stencils of the forward and centered averages, assembled under the discrete
 # L² product, are the space-layer matrices scaled row by row by the quadrature weights.
-@testset "Form-layer M₊ and Mc stencils vs the space-layer matrices" begin
+@testset "Form M₊, Mc stencils vs space matrices" begin
     Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (7, 6), (false, false))
     Wₕ = gridspace(Ωₕ)
     H = Diagonal(collect(weights(Wₕ, Innerh())))

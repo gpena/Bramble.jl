@@ -266,7 +266,7 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
     # The in-place variants, the dense fallbacks, several markers and the space validation,
     # all against a residual assembled by hand: dense `Matrix(A) * u - F` summed over the
     # rows the marker masks select (not the code under test), on non-uniform meshes.
-    @testset "In-place variants, dense fallback, validation vs hand residual" begin
+    @testset "In-place, dense fallback, hand residual" begin
         Random.seed!(20261002)
         I = domain(interval(0.0, 1.0), :left => :xmin, :right => :xmax)
         Ω₁ = mesh(I, 9, false)

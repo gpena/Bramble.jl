@@ -175,7 +175,7 @@ end
     end
 end
 
-@testset "SPQR wrappers and pde_solve dispatch on a non-uniform mesh" begin
+@testset "SPQR and pde_solve, non-uniform mesh" begin
     Random.seed!(11)
     I1 = interval(0.0, 1.0)
     W = gridspace(mesh(domain(I1, :boundary => boundary_symbols(I1)), 12, true))
@@ -195,7 +195,7 @@ end
     @test_throws MethodError pde_solve(Matrix(A), F)
 end
 
-@testset "pde_solve default routes to Accelerate when its extension is loaded" begin
+@testset "pde_solve uses Accelerate when loaded" begin
     if Sys.isapple()
         # Slow group only: the child loads the whole test environment (about 90 s).
         if WITH_SLOW_TESTS
