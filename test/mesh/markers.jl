@@ -235,4 +235,230 @@ using ..TestUtils: alloc_test, @test_allocs
     end
 end
 
+# The predicate probes in `markers(space, pairs...)` (src/geometry/marker.jl): a 1D predicate
+# may take the scalar coordinate or a 1-tuple, and one that accepts neither is refused with
+# a message naming the label.
+@testset "Marker predicate probes" begin
+    S1 = interval(0.0, 1.0)
+    S2 = interval(0.0, 1.0) × interval(0.0, 2.0)
+
+    @testset "1D predicate that only takes a 1-tuple is accepted" begin
+        # The scalar probe throws, the tuple probe succeeds: the fallback is the oracle.
+        tuple_only = x -> x isa Tuple ? x[1] > 0.5 : throw(DomainError(x))
+        dm = Bramble.markers(S1, :right_half => tuple_only)
+        @test length(Bramble.conditions(dm)) == 1
+        @test Bramble.label(only(Bramble.conditions(dm))) === :right_half
+    end
+
+    @testset "1D predicate that takes neither is refused" begin
+        err = try
+            Bramble.markers(S1, :broken => x -> error("no"))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("label :broken", msg)
+        @test occursin("1D coordinate (scalar or 1-tuple)", msg)
+    end
+
+    @testset "2D predicate with the wrong arity is refused" begin
+        err = try
+            Bramble.markers(S2, :broken => x -> x[3] > 0.0)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("label :broken", msg)
+        @test occursin("2-element coordinate tuple", msg)
+    end
+
+    @testset "Time-dependent predicates are probed too" begin
+        T = interval(0.0, 1.0)
+        dm = Bramble.markers(S2, T, :moving => (x, t) -> x[1] < t, :still => x -> x[2] < 1.0)
+        @test length(Bramble.conditions(dm)) == 2
+
+        err_call = try
+            Bramble.markers(S2, T, :broken => (x, t) -> x[3] < t)
+            nothing
+        catch e
+            e
+        end
+        @test err_call isa ArgumentError
+        @test occursin("label :broken", sprint(showerror, err_call))
+
+        err_bool = try
+            Bramble.markers(S2, T, :num => (x, t) -> x[1] * t)
+            nothing
+        catch e
+            e
+        end
+        @test err_bool isa ArgumentError
+        @test occursin("label :num", sprint(showerror, err_bool))
+        @test occursin("Float64", sprint(showerror, err_bool))
+    end
+
+    @testset "Marker printing" begin
+        @test sprint(show, Bramble.Marker(:a, :xmin)) == "Marker(:a => :xmin)"
+        @test sprint(show, Bramble.Marker(:b, Set((:xmin,)))) == "Marker(:b => (xmin))"
+        @test sprint(show, Bramble.Marker(:c, x -> true)) == "Marker(:c => <function>)"
+    end
+end
+
+# `(x, t, p)` conditions fixed at a time and a parameter (gpena/Bramble.jl#240). The pairs go
+# straight to `_create_generic_markers`: `markers(space, pairs...)` would probe a three-argument
+# predicate with one argument and refuse it.
+@testset "Parameter-evaluated markers" begin
+    dm = Bramble._create_generic_markers(
+        :l => :xmin, :w => (:xmin, :xmax), :c => (x, t, p) -> x[1] < t * p
+    )
+    edm = dm(0.5, 3.0)
+    @test edm isa Bramble.EvaluatedParametricDomainMarkers
+
+    @test Bramble.symbols(edm) === Bramble.symbols(dm)
+    @test Bramble.tuples(edm) === Bramble.tuples(dm)
+    @test Bramble.labels(edm) == (:l, :w, :c)
+    @test Bramble.label_identifiers(edm) == (:l, :w, :c)
+    @test collect(Bramble.label_symbols(edm)) == [:l]
+    @test collect(Bramble.label_tuples(edm)) == [:w]
+    @test collect(Bramble.label_conditions(edm)) == [:c]
+    @test length(edm) == 3 == length(dm)
+    @test !isempty(edm)
+    @test isempty(Bramble._create_generic_markers()(0.5, 3.0))
+
+    # t * p = 1.5: the condition is `x -> x[1] < 1.5`, not `x[1] < p * t`'s swapped reading
+    c = only(Bramble.conditions(edm))
+    @test Bramble.identifier(c)((1.4,)) === true
+    @test Bramble.identifier(c)((1.6,)) === false
+end
+
+# The mesh queries of src/mesh/queries.jl, on non-uniform meshes. Every expected value is
+# written out from the mesh's own points (`host_points`), never read back from the function
+# under test.
+@testset "Mesh queries" begin
+    hs(x, i) = i == 1 ? (x[2] - x[1]) / 2 :
+               i == length(x) ? (x[end] - x[end - 1]) / 2 : (x[i + 1] - x[i - 1]) / 2
+
+    @testset "1D: first index, iteration, normals" begin
+        Ω1 = mesh(domain(interval(0.0, 1.0)), 7, false)
+        xs = Bramble.host_points(Ω1)
+        @test length(xs) == 7
+        @test !all(≈(xs[2] - xs[1]), diff(xs))     # the mesh is not uniform
+        @test firstindex(Ω1) == 1
+        @test firstindex(Ω1, 1) == 1
+        @test collect(Ω1) == xs
+        @test Bramble.normal_vector(Ω1, :xmin) == (-1.0,)
+        @test Bramble.normal_vector(Ω1, :right) == (1.0,)
+        @test_throws ArgumentError Bramble.normal_vector(Ω1, :top)
+    end
+
+    @testset "2D: first index, iteration, normals" begin
+        Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (5, 4), (false, false))
+        xs, ys = Bramble.host_points(Ω2)
+        @test firstindex(Ω2) == CartesianIndex(1, 1)
+        @test firstindex(Ω2, 1) == 1
+        @test firstindex(Ω2, 2) == 1
+        @test [Tuple(p) for p in Ω2] == [(xs[i], ys[j]) for j in 1:4 for i in 1:5]
+        for (sym, n) in ((:xmin, (-1.0, 0.0)), (:left, (-1.0, 0.0)), (:xmax, (1.0, 0.0)),
+            (:right, (1.0, 0.0)), (:ymin, (0.0, -1.0)), (:bottom, (0.0, -1.0)),
+            (:ymax, (0.0, 1.0)), (:top, (0.0, 1.0)))
+            @test Bramble.normal_vector(Ω2, sym) == n
+        end
+        @test_throws ArgumentError Bramble.normal_vector(Ω2, :zmin)
+    end
+
+    @testset "3D: normals and face symbols" begin
+        Ω3 = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
+            (4, 5, 4), (false, false, false)
+        )
+        for (sym, n) in ((:xmin, (-1.0, 0.0, 0.0)), (:back, (-1.0, 0.0, 0.0)),
+            (:xmax, (1.0, 0.0, 0.0)), (:front, (1.0, 0.0, 0.0)),
+            (:ymin, (0.0, -1.0, 0.0)), (:left, (0.0, -1.0, 0.0)),
+            (:ymax, (0.0, 1.0, 0.0)), (:right, (0.0, 1.0, 0.0)),
+            (:zmin, (0.0, 0.0, -1.0)), (:bottom, (0.0, 0.0, -1.0)),
+            (:zmax, (0.0, 0.0, 1.0)), (:top, (0.0, 0.0, 1.0)))
+            @test Bramble.normal_vector(Ω3, sym) == n
+        end
+        @test_throws ArgumentError Bramble.normal_vector(Ω3, :inlet)
+
+        for (sym, face) in ((:xmin, (1, 1)), (:back, (1, 1)), (:xmax, (1, 2)),
+            (:front, (1, 2)), (:ymin, (2, 1)), (:left, (2, 1)), (:ymax, (2, 2)),
+            (:right, (2, 2)), (:zmin, (3, 1)), (:bottom, (3, 1)), (:zmax, (3, 2)),
+            (:top, (3, 2)))
+            @test Bramble._face_of_symbol(Val(3), sym) == face
+        end
+        @test_throws "does not name one in 3D" Bramble._face_of_symbol(Val(3), :inlet)
+    end
+
+    @testset "Face symbols in 1D and 2D" begin
+        @test Bramble._face_of_symbol(Val(1), :left) == (1, 1)
+        @test Bramble._face_of_symbol(Val(1), :xmax) == (1, 2)
+        @test_throws "does not name one in 1D" Bramble._face_of_symbol(Val(1), :ymin)
+        for (sym, face) in ((:xmin, (1, 1)), (:left, (1, 1)), (:xmax, (1, 2)),
+            (:right, (1, 2)), (:ymin, (2, 1)), (:bottom, (2, 1)), (:ymax, (2, 2)),
+            (:top, (2, 2)))
+            @test Bramble._face_of_symbol(Val(2), sym) == face
+        end
+        @test_throws "does not name one in 2D" Bramble._face_of_symbol(Val(2), :zmin)
+    end
+
+    @testset "Face masks" begin
+        @test Bramble._face_mask(Val(2), (:xmin,)) == ((true, false), (false, false))
+        @test Bramble._face_mask(Val(2), (:xmin, :top)) == ((true, false), (false, true))
+        @test Bramble._face_mask(Val(2), (:left, :xmax)) == ((true, true), (false, false))
+        @test Bramble._face_mask(Val(2), (:boundary,)) == ((true, true), (true, true))
+        @test Bramble._face_mask(Val(3), (:back, :bottom)) ==
+              ((true, false), (false, false), (true, false))
+        @test Bramble._face_mask(Val(1), (:xmax,)) == ((false, true),)
+        @test_throws ArgumentError Bramble._face_mask(Val(1), (:ymin,))
+    end
+
+    @testset "A surface needs three points on a doubly-faced axis" begin
+        thin = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (2, 5), (true, true))
+        full = Bramble._face_mask(Val(2), (:boundary,))
+        @test_throws "not (D-1)-dimensional" Bramble._check_surface_is_thin(thin, full)
+        @test Bramble._check_surface_is_thin(thin, Bramble._face_mask(Val(2), (:ymin,))) ===
+              nothing
+        wide = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 5), (true, true))
+        @test Bramble._check_surface_is_thin(wide, full) === nothing
+    end
+
+    @testset "Surface weights against averaged spacings" begin
+        # 1D: counting measure, 1 on a face point and 0 elsewhere
+        Ω1 = mesh(domain(interval(0.0, 1.0)), 7, false)
+        m1 = Bramble._face_mask(Val(1), (:boundary,))
+        @test [Bramble._surface_weight(Ω1, m1, CartesianIndex(i)) for i in 1:7] ==
+              [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+
+        # 2D: a point on :ymin weighs the half spacing in x; a corner on two faces, the sum
+        Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 5), (false, false))
+        xs, ys = Bramble.host_points(Ω2)
+        mb = Bramble._face_mask(Val(2), (:ymin,))
+        for i in 1:6
+            @test Bramble._surface_weight(Ω2, mb, CartesianIndex(i, 1)) ≈ hs(xs, i)
+            @test Bramble._surface_weight(Ω2, mb, CartesianIndex(i, 3)) == 0.0
+        end
+        mc = Bramble._face_mask(Val(2), (:xmin, :ymin))
+        @test Bramble._surface_weight(Ω2, mc, CartesianIndex(1, 1)) ≈ hs(xs, 1) + hs(ys, 1)
+        @test Bramble._surface_weight(Ω2, mc, CartesianIndex(1, 3)) ≈ hs(ys, 3)
+
+        # 3D: on :zmax the weight is the product of the two transverse half spacings
+        Ω3 = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
+            (4, 5, 4), (false, false, false)
+        )
+        x3, y3, z3 = Bramble.host_points(Ω3)
+        mz = Bramble._face_mask(Val(3), (:zmax,))
+        for i in 1:4, j in 1:5
+            @test Bramble._surface_weight(Ω3, mz, CartesianIndex(i, j, 4)) ≈
+                  hs(x3, i) * hs(y3, j)
+            @test Bramble._surface_weight(Ω3, mz, CartesianIndex(i, j, 2)) == 0.0
+        end
+    end
+end
+
 end # module MeshMarkersTests
