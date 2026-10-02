@@ -206,3 +206,125 @@ rel_err(u) = norm(u - x_direct) / norm(x_direct)
 # here with Dirichlet rows. [`gmg_preconditioner`](@ref) is the third matrix-free
 # preconditioner; the tutorial's multigrid section shows it and states where its point
 # smoothers stop.
+
+# ## Kronecker or matrix-free?
+#
+# For a separable form [`kronecker_operator`](@ref) is a third route beside the assembled
+# matrix and the matrix-free operator above. The script `benchmark/operator_routes.jl`
+# times all three on the same form, on graded non-uniform meshes of the square and the
+# cube, and saves the tables to `benchmark/results/operator_routes.toml`. The
+# [benchmarks page](../benchmarks.md) charts the same file. This page reads it directly, so
+# no figure below is copied by hand. The run's description comes first; the solve ratios
+# below depend on the machine, so read the load and the thread count before the numbers:
+
+using TOML
+
+routes_file = joinpath(@__DIR__, "..", "..", "..", "benchmark", "results", "operator_routes.toml")
+routes = TOML.parsefile(routes_file)
+meta = routes["meta"]
+(cpu = meta["cpu"], threads = meta["threads"], power = meta["power"],
+    load = meta["load1"], commit = meta["commit"])
+
+# Each table below gives, per dimension and size, the Kronecker route's measurement divided
+# by the same measurement of another route. A ratio under `1` means the Kronecker route is
+# cheaper, and one over `1` means it costs more:
+
+function route_ratios(table, column; against, of = "kronecker")
+    rows = routes["tables"][table]
+    value(route, dim, n) = only(r[column] for r in rows
+    if r["route"] == route && r["dim"] == dim && r["n"] == n)
+    sizes = sort!(unique((r["dim"], r["n"]) for r in rows))
+    return [(; dim, n, (Symbol(route) => value(of, dim, n) / value(route, dim, n)
+        for route in against)...) for (dim, n) in sizes]
+end
+
+# The comparisons below use the ratios as computed, and only the display rounds them:
+
+shown(ratios) = [map(x -> x isa Float64 ? round(x; sigdigits = 3) : x, r) for r in ratios]
+
+# `falls` holds when a route's ratio decreases with `n` inside each dimension:
+
+falls(ratios, route) = all(
+    issorted([r[route] for r in ratios if r.dim == d]; rev = true, lt = <=) for d in (2, 3))
+
+below(ratios, route) = all(r[route] < 1 for r in ratios)
+above(ratios, route) = all(r[route] > 1 for r in ratios)
+not_below(ratios, route) = [(r.dim, r.n) for r in ratios if r[route] >= 1]
+
+mf_routes = ["assembled", "matrix_free_serial", "matrix_free_threaded"]
+
+# **Construction.** The time to build the operator from a fresh form:
+
+construction_ratios = route_ratios("construction", "time_s"; against = mf_routes)
+shown(construction_ratios)
+
+# The Kronecker route is built faster than the assembled matrix at every size, and the gap
+# widens with the size. It is built more slowly than either matrix-free operator at every
+# size: a matrix-free operator only wraps the form, while the Kronecker route builds the
+# one-dimensional factor matrices.
+
+@test below(construction_ratios, :assembled) #src
+@test falls(construction_ratios, :assembled) #src
+@test above(construction_ratios, :matrix_free_serial) #src
+@test above(construction_ratios, :matrix_free_threaded) #src
+
+# **Bytes.** The memory the operator holds once built:
+
+bytes_ratios = route_ratios("product", "bytes_held"; against = mf_routes)
+shown(bytes_ratios)
+
+# The Kronecker route holds fewer bytes than the assembled matrix at every size, and the
+# ratio falls as the mesh refines. The matrix-free operators hold fewer still, at every
+# size, so for memory the matrix-free route is the smaller of the two:
+
+@test below(bytes_ratios, :assembled) #src
+@test falls(bytes_ratios, :assembled) #src
+@test above(bytes_ratios, :matrix_free_serial) #src
+@test above(bytes_ratios, :matrix_free_threaded) #src
+
+# **Product.** One five-argument `mul!`:
+
+product_ratios = route_ratios("product", "time_s"; against = mf_routes)
+shown(product_ratios)
+
+# The Kronecker product is faster than both matrix-free products at every size, and faster
+# than the assembled product at every size but the smallest cube, where the two are within
+# a few percent:
+
+@test below(product_ratios, :matrix_free_serial) #src
+@test below(product_ratios, :matrix_free_threaded) #src
+@test not_below(product_ratios, :assembled) == [(3, 8)] #src
+@test only(r.assembled for r in product_ratios if r.dim == 3 && r.n == 8) < 1.1 #src
+
+# **Solve.** Conjugate gradients to the same tolerance with each operator. The table adds
+# the two reference rows, [`fdm_solve`](@ref) on the form and the sparse direct solve of
+# the assembled matrix. Neither is an operator route, so they are compared with the
+# Kronecker CG solve rather than with each other:
+
+solve_ratios = route_ratios("solve", "time_s"; against = [mf_routes; "fdm_solve"; "direct"])
+shown(solve_ratios)
+
+# The Kronecker CG solve is faster than both matrix-free CG solves at every size, and
+# faster than the assembled CG solve at every size but the smallest cube, again within a
+# few percent. Against the references it does not win. `fdm_solve` is faster than any CG
+# route at every size, and the direct solve is faster in the square at every size and
+# slower in the cube:
+
+@test below(solve_ratios, :matrix_free_serial) #src
+@test below(solve_ratios, :matrix_free_threaded) #src
+@test not_below(solve_ratios, :assembled) == [(3, 8)] #src
+@test above([r for r in solve_ratios if r.dim == 2], :direct) #src
+@test below([r for r in solve_ratios if r.dim == 3], :direct) #src
+@test above(solve_ratios, :fdm_solve) #src
+@test only(r.assembled for r in solve_ratios if r.dim == 3 && r.n == 8) < 1.1 #src
+fdm_ratios = route_ratios("solve", "time_s"; of = "fdm_solve", against = mf_routes) #src
+@test all(below(fdm_ratios, route) for route in (:assembled, :matrix_free_serial, :matrix_free_threaded)) #src
+
+# So the Kronecker route is preferred over the assembled matrix whenever the form is
+# separable: it is cheaper to build and to hold at every size, and its product and solve
+# are faster at every size except the smallest cube (3D, n = 8). It is preferred over the matrix-free
+# operator for the product and the CG solve, which it runs faster at every size. The
+# matrix-free operator keeps two advantages, construction time and bytes held, and it is
+# the only route of the three when the form is not separable. When the aim is to solve a
+# separable problem, and not to apply the operator inside another iteration, `fdm_solve`
+# is the faster call at every size in this file.
