@@ -47,7 +47,6 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: write
-      actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
       statuses: write
       pull-requests: write
     steps:
@@ -58,10 +57,6 @@ jobs:
       - uses: julia-actions/setup-julia@v2
         with:
           version: "1.13"
-
-      - uses: julia-actions/cache@v2
-        with:
-          cache-compiled: "true"
 
       - uses: julia-actions/julia-buildpkg@v1
 
