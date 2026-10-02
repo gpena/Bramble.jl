@@ -50,6 +50,7 @@ using DoubleFloats: Double64
 # Loading Polyester activates `BramblePolyesterExt`, which the `CpuPolyester()` rows need.
 using Polyester: Polyester
 using SparseArrays: nonzeros
+using Statistics: median, quantile  # `_five_numbers`; `quantile` is not re-exported by BenchmarkTools
 
 # Group 11 (jacobian sparsity) needs the sparse-AD stack `jacobian_pattern`/
 # `ast_sparsity_detector` (#21, #13) are actually compared against. Brought in the same
