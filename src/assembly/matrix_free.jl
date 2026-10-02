@@ -477,9 +477,10 @@ end
 # target: two points swept at once never add into the same `y[row]`, because each colour
 # keeps them farther apart than their rows reach. `_sweep_bilinear!` takes its mechanism from
 # the walked leaf, as assembly does: `Threads.@threads` for a `CpuSerial` or `CpuThreaded`
-# leaf, the Polyester hooks for a `CpuPolyester` one. A unit whose rows are not a fixed reach
-# from the point (a test-side interpolation, which names rows through `locate_cell`) walks
-# serially, as the threaded assembly's does (`_sweep_bilinear_serial!`).
+# leaf, the Polyester hooks for a `CpuPolyester` one. An operator whose own policy is
+# `CpuPolyester` takes the Polyester hooks for every leaf (`_mf_target`). A unit whose rows
+# are not a fixed reach from the point (a test-side interpolation, which names rows through
+# `locate_cell`) walks serially, as the threaded assembly's does (`_sweep_bilinear_serial!`).
 #
 # The colours are assembly's own, `_colour_strides(stencil_offsets(term))`, and a pair's take
 # both terms' row reach, since its transposed entries land on the first term's columns.
@@ -488,13 +489,39 @@ end
 
 const _ActionTarget = Union{ActionSink, _PairActionSink}
 
+# An action target the sweep walks with the Polyester hooks whatever its leaf's backend:
+# `_sweep_bilinear!` picks the mechanism from the leaf, and the two colour methods below hand
+# the unwrapped target to the `CpuPolyester` ones instead. Built only by `_mf_target`.
+struct _BatchedAction{S <: _ActionTarget}
+    s::S
+end
+
+# The target a unit's threaded sweep writes through under the operator's policy.
+@inline _mf_target(::CpuPolicy, s) = s
+@inline _mf_target(::CpuPolyester, s::_ActionTarget) = _BatchedAction(s)
+
+for P in (CpuThreaded, CpuPolyester)
+    @eval begin
+        @inline _sweep_band_colour!(
+            ::$P, t::_BatchedAction, sp, term, ax, bidx, nbands::Int, rest, lin_indices,
+            mesh_markers, row_offset::Int, col_offset::Int, α) = _sweep_band_colour!(
+            CpuPolyester(), t.s, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers,
+            row_offset, col_offset, α)
+        @inline _sweep_bilinear_colour!(
+            ::$P, t::_BatchedAction, sp, term, idxs, lin_indices, mesh_markers,
+            row_offset::Int, col_offset::Int, α) = _sweep_bilinear_colour!(
+            CpuPolyester(), t.s, sp, term, idxs, lin_indices, mesh_markers, row_offset,
+            col_offset, α)
+    end
+end
+
 @inline _mf_visit!(::CpuSerial, s, term, sp, ro::Int, co::Int) = (
     visit_bilinear_stencil(s, term, sp, ro, co); nothing)
-@inline function _mf_visit!(::CpuPolicy, s, term::TERM, sp, ro::Int, co::Int) where {TERM}
+@inline function _mf_visit!(p::CpuPolicy, s, term::TERM, sp, ro::Int, co::Int) where {TERM}
     if _has_test_interp(term)
         visit_bilinear_stencil(s, term, sp, ro, co)
     else
-        _sweep_bilinear!(s, sp, term, _colour_strides(stencil_offsets(term)), ro, co)
+        _sweep_bilinear!(_mf_target(p, s), sp, term, _colour_strides(stencil_offsets(term)), ro, co)
     end
     return nothing
 end
@@ -505,13 +532,13 @@ end
 @inline _mf_visit_pair!(::CpuSerial, s, p1, _p2, sp, ro::Int, co::Int) = (
     visit_bilinear_stencil(s, p1, sp, ro, co); nothing)
 @inline function _mf_visit_pair!(
-        ::CpuPolicy, s, p1::P1, p2::P2, sp, ro::Int, co::Int
+        p::CpuPolicy, s, p1::P1, p2::P2, sp, ro::Int, co::Int
 ) where {P1, P2}
     if _has_test_interp(p1) || _has_trial_interp(p1) || _has_test_interp(p2)
         visit_bilinear_stencil(s, p1, sp, ro, co)
     else
         rows = sort!(union(stencil_offsets(p1), stencil_offsets(p2)))
-        _sweep_bilinear!(s, sp, p1, _colour_strides(rows), ro, co)
+        _sweep_bilinear!(_mf_target(p, s), sp, p1, _colour_strides(rows), ro, co)
     end
     return nothing
 end
@@ -587,8 +614,8 @@ end
 The fused threaded sweep's plan, fixed when a [`MatrixFreeOperator`](@ref) is built: the
 grid size `dims` every fused unit walks, the least and greatest row offset `omin`, `omax`
 of any fused unit along the last axis, the effective parallel policy `policy` every fused
-unit's leaf carries, and whether some unit walks serially (`interp`, a test-side
-interpolation).
+unit's leaf carries (or the operator's own, when that is [`CpuPolyester`](@ref)), and
+whether some unit walks serially (`interp`, a test-side interpolation).
 """
 struct _MFFusedPlan{D, EP <: CpuPolicy}
     dims::NTuple{D, Int}
@@ -600,15 +627,17 @@ end
 
 # What the build-time walk collects: every fused unit's row offsets, the grid size and
 # effective policy of the first fused unit's leaf, whether every other one agrees, and
-# whether some unit walks serially. Build time only, so untyped.
+# whether some unit walks serially. `forced`, when not `nothing`, is the effective policy of
+# every leaf instead (the operator's `CpuPolyester`). Build time only, so untyped.
 mutable struct _MFCollected
     offsets::Vector{Any}
     dims::Any
     policy::Any
     agree::Bool
     interp::Bool
+    forced::Any
 end
-_MFCollected() = _MFCollected(Any[], nothing, nothing, true, false)
+_MFCollected(forced = nothing) = _MFCollected(Any[], nothing, nothing, true, false, forced)
 
 # The unit walk's `policy` inside the fused sweep: `_mf_apply!` runs its usual recursion, and
 # each unit is collected (`_MF_COLLECT`, build time), walked over one band (`_MF_BAND`: owned
@@ -632,10 +661,12 @@ end
 const _MF_NO_COLLECT = _MFCollected()
 
 # The plan for `a` under `policy`: `nothing` for a serial policy, or a form the fused sweep
-# cannot take (no fused unit, or units that disagree on the grid or policy).
+# cannot take (no fused unit, or units that disagree on the grid or policy). Under
+# `CpuPolyester` every leaf's effective policy is `CpuPolyester`, whatever its backend, so the
+# bands reach `_run_bands!(::CpuPolyester)`; any other policy takes each leaf's own.
 _mf_plan(::CpuSerial, ::BilinearForm) = nothing
-function _mf_plan(::CpuPolicy, a::BilinearForm)
-    acc = _MFCollected()
+function _mf_plan(policy::CpuPolicy, a::BilinearForm)
+    acc = _MFCollected(policy isa CpuPolyester ? policy : nothing)
     T = _matrix_eltype(a, a.ast)
     _mf_apply!(_MFPass(_MF_COLLECT, 1:0, 0, 0, acc), ActionSink(T[], T[], true, nothing), a)
     (acc.agree && acc.dims !== nothing) || return nothing
@@ -654,7 +685,7 @@ function _mf_collect!(acc::_MFCollected, offsets, sp)
     policy = execution_policy(sp)
     # The bands cut `1:dims[D]`, and `_run_bands!` threads a CPU policy.
     if all(r -> first(r) == 1, axes(grid_inds)) && policy isa CpuPolicy
-        policy = _coerce_serial_to_threaded(policy)
+        policy = acc.forced === nothing ? _coerce_serial_to_threaded(policy) : acc.forced
     else
         acc.agree = false
     end
