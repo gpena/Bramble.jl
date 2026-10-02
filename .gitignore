@@ -31,6 +31,7 @@ docs/src/examples/transient_inplace.md
 docs/src/examples/boundary_layer_graded.md
 docs/src/examples/transient_inverse_problem.md
 docs/src/examples/memory_scaling.md
+docs/src/examples/matrix_free_operator.md
 
 # The latexmk configuration itself, at the root as well as inside manual/. It only exists
 # to build the manual, and everything to do with the manual stays out of version control.
