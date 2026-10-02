@@ -158,6 +158,16 @@ using SparseArrays
 using Random
 using LinearAlgebra: I as LinearAlgebraI
 
+# The fields `_dirichlet_bc_device!` reads from a device CSR matrix (`rowPtr`, `colVal`,
+# `nzVal`, and a host `mirror` with `rowptr`/`colval`/`nzval`), on host arrays.
+struct _MockDeviceCSR{M} <: AbstractMatrix{Float64}
+    rowPtr::Vector{Int}
+    colVal::Vector{Int}
+    nzVal::Vector{Float64}
+    mirror::M
+end
+Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
+
 # Imposing the constraints, on scalar and on composite spaces.
 #
 # The composite case is the one worth pinning: it flattens a possibly nested space into
@@ -286,6 +296,45 @@ using LinearAlgebra: I as LinearAlgebraI
             block = view(w, (c * nW + 1):((c + 1) * nW))
             @test block == v          # every component gets the scalar answer
         end
+    end
+
+    # The single-label leaf entries the composite semidiscretisation walks
+    # (`_each_dirichlet_row`, problems/semidiscrete_constraints.jl): one entry per leaf,
+    # each carrying that leaf's own mask, its global offset, its size and whether
+    # `components` selects it.
+    @testset "Leaf entries, one label" begin
+        leaves = Bramble.leaf_spaces_offsets(Vₕ)
+        for (components, active) in ((nothing, (true, true, true)), (2, (false, true, false)), (
+            (1, 3), (true, false, true)))
+            entries = Bramble._leaf_entries(leaves, :bottom, components)
+            @test length(entries) == 3
+            for c in 1:3
+                mask, offset, n, act = entries[c]
+                @test mask == marked
+                @test offset == (c - 1) * nW
+                @test n == nW
+                @test act == active[c]
+            end
+            for row in 1:nV
+                c, i = divrem(row - 1, nW) .+ (1, 1)
+                @test Bramble._row_marked(entries, row) == (active[c] && marked[i])
+            end
+        end
+        @test !Bramble._row_marked((), 1)
+    end
+
+    # A device CSR matrix cannot grow a missing diagonal: a constrained row without one
+    # throws before anything is written. The duck-typed fields stand in for a device type
+    # (no device backend is loaded in the tests); the throw comes before the kernel launch.
+    @testset "Device CSR: missing diagonal refused" begin
+        mirror = (rowptr = [1, 2, 3], colval = [2, 2], nzval = [5.0, 6.0])
+        A = _MockDeviceCSR(mirror.rowptr, mirror.colval, copy(mirror.nzval), mirror)
+        entries = ((BitVector([true, false]), 0, 2, true),)
+        @test_throws "constrained row 1 of a device sparse matrix has no stored diagonal" Bramble._dirichlet_bc_device!(
+            A, entries
+        )
+        @test mirror.nzval == [5.0, 6.0]
+        @test A.nzVal == [5.0, 6.0]
     end
 
     @testset "Component restriction" begin

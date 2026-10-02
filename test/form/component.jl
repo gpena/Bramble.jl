@@ -61,6 +61,36 @@ using ..TestUtils: alloc_test, @test_allocs
 
         sf = source_function(x -> x[1] + x[2], Val(2))
         @test sf(4) === sf
+        sv = Bramble.SourceVector{2, Vector{Float64}}([1.0, 2.0])
+        @test sv(4) === sv
+        sc = Bramble.SourceConstant{2, Float64}(2.5)
+        @test sc(4) === sc
+        δ = Bramble.dirac((0.3, 0.6), 2.0)
+        @test δ(4) === δ
+    end
+
+    @testset "Space and indexed-leaf components" begin
+        # the component count read off a space: one indexed tree per leaf, in leaf order,
+        # however deep the leaf sits in the tree
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 4), (true, false))
+        Vₕ = gridspace(Ωₕ, Val(3))
+        v = TestFunction{2}()
+        cs = components(D₋ₓ(v) + 2 * v, Vₕ)
+        @test length(cs) == 3
+        for c in 1:3
+            @test cs[c] == D₋ₓ(v(c)) + 2 * v(c)
+            @test test_component_or_nothing(cs[c]) == c
+        end
+
+        # an already indexed leaf is its own single component
+        @test components(v(2)) === (v(2),)
+        @test components(TrialFunction{2}()(3)) === (IndexedTrialFunction{2}(3),)
+
+        # the index range of a function with a known component count
+        q = TestFunction{2, 3}()
+        @test eachindex(q) === 1:3
+        @test firstindex(q) === 1
+        @test [test_component_or_nothing(q[i]) for i in eachindex(q)] == [1, 2, 3]
     end
 
     @testset "Operators rebuild around indexed leaf" begin

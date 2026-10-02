@@ -660,6 +660,7 @@ end
             policy = P_threaded)
         @test Bramble.locality(be) === Bramble.HostLocality()
         @test execution_policy(be) === CpuThreaded()
+        @test execution_policy(typeof(be)) === CpuThreaded()
     end
 
     # Invariants tested:
@@ -723,6 +724,88 @@ end
         end
         @test err_policy isa ErrorException
         @test occursin(pkg, sprint(showerror, err_policy))
+    end
+end
+
+@testset "GPU extension stubs" begin
+    # Invariants tested:
+    # 1. `_gpu_functional`'s generic method, which every device name without an extension
+    #    method of its own reaches, answers `false`, or the override hook's value while it is
+    #    set, and `false` again once it is cleared.
+    @testset "_gpu_functional fallback" begin
+        dev = Val(:no_such_device)
+        @test Bramble._gpu_functional(dev) === false
+        try
+            Bramble._gpu_functional_override[] = true
+            @test Bramble._gpu_functional(dev) === true
+            Bramble._gpu_functional_override[] = false
+            @test Bramble._gpu_functional(dev) === false
+        finally
+            Bramble._gpu_functional_override[] = nothing
+        end
+        @test Bramble._gpu_functional(dev) === false
+    end
+
+    # Invariants tested:
+    # 1. `metal_sparse_csr`/`metal_sparse_csc` without Metal.jl throw an ErrorException naming
+    #    the function and Metal. A child process on the root project, where Metal is never
+    #    loaded, runs them whatever this process has loaded; `Base.julia_cmd()` carries this
+    #    process's coverage flag, so its hits count.
+    @testset "metal_sparse_* without Metal (child)" begin
+        code = """
+        using Bramble, SparseArrays
+        S = sparse([1, 2], [1, 2], [1.0f0, 2.0f0])
+        println("METAL_LOADED ", Base.get_extension(Bramble, :BrambleMetalExt) !== nothing)
+        for (name, f) in (("csr", Bramble.metal_sparse_csr), ("csc", Bramble.metal_sparse_csc))
+            try
+                f(S)
+                println(name, " RETURNED")
+            catch e
+                println(name, " ", nameof(typeof(e)), " ", e.msg)
+            end
+        end
+        """
+        root = pkgdir(Bramble)
+        cmd = `$(Base.julia_cmd()) --project=$root --startup-file=no --threads=1 -e $code`
+        out = Dict(
+            (p = split(l, ' '; limit = 2); p[1] => p[2])
+        for l in split(readchomp(pipeline(cmd; stderr = devnull)), '\n')
+        )
+        @test out["METAL_LOADED"] == "false"
+        for name in ("csr", "csc")
+            @test startswith(out[name], "ErrorException metal_sparse_$name requires Metal.jl")
+        end
+    end
+
+    # 2. `ka_device`/`ka_synchronize` without KernelAbstractions throw the exact message
+    #    naming the argument's type and the package to load (same child as above).
+    @testset "ka_* without KA (child)" begin
+        code = """
+        using Bramble
+        println("KA_LOADED\t", Base.get_extension(Bramble, :BrambleKernelAbstractionsExt) !== nothing)
+        for (name, f) in (("device", Bramble.ka_device), ("sync", Bramble.ka_synchronize))
+            try
+                f([1.0])
+                println(name, "\tRETURNED")
+            catch e
+                println(name, "\t", nameof(typeof(e)), " ", e.msg)
+            end
+        end
+        """
+        root = pkgdir(Bramble)
+        cmd = `$(Base.julia_cmd()) --project=$root --startup-file=no --threads=1 -e $code`
+        out = Dict(
+            (p = split(l, '\t'; limit = 2); p[1] => p[2])
+        for l in split(readchomp(pipeline(cmd; stderr = devnull)), '\n')
+        )
+        @test out["KA_LOADED"] == "false"
+        @test out["device"] ==
+              "ErrorException ka_device has no method for Vector{Float64}. Add " *
+              "`using KernelAbstractions` and the package providing this backend's device " *
+              "(e.g. `using Metal`) before calling this function."
+        @test out["sync"] ==
+              "ErrorException ka_synchronize has no method for Vector{Float64}. Add " *
+              "`using KernelAbstractions` before calling this function."
     end
 end
 

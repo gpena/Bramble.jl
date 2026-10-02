@@ -567,6 +567,31 @@ end
 #    block, and neither may end with a newline.
 # 3. A composite whose leaves are all identical collapses to one `N × …` line; a
 #    heterogeneous one enumerates its leaves, since that is when per-leaf detail informs.
+# `host_weights` and `Array` of a bare `SeparableWeights` on host storage
+# (gpena/Bramble.jl#310): the first is the identity, the second the dense tensor product in
+# `CartesianIndices` order. The oracle is built from `points` alone, per axis: the backward
+# spacing (zero at the first node) on a staggered axis, the half-cell width elsewhere.
+@testset "host_weights, SeparableWeights arrays" begin
+    bw(x, i) = i == 1 ? 0.0 : x[i] - x[i - 1]
+    hh(x, i) = i == 1 ? (x[2] - x[1]) / 2 :
+               i == length(x) ? (x[end] - x[end - 1]) / 2 : (x[i + 1] - x[i - 1]) / 2
+
+    Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (0.5, 0.6, 0.7))), (4, 5, 6), (false, false, false))
+    Wₕ = gridspace(Ωₕ)
+    n = npoints(Ωₕ, Tuple)
+    xs = ntuple(d -> collect(Bramble.points(Ωₕ(d))), 3)
+
+    for S in ((), (2,), (1, 3), (1, 2, 3))
+        w = weights(Wₕ, Val(S))
+        @test Bramble.host_weights(w) === w
+        a = Array(w)
+        @test a isa Vector{Float64}
+        expected = vec([prod(d -> d in S ? bw(xs[d], I[d]) : hh(xs[d], I[d]), 1:3)
+                        for I in CartesianIndices(n)])
+        @test a ≈ expected
+    end
+end
+
 @testset "Display" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 3), (true, true))
     Wₕ = gridspace(Ωₕ)

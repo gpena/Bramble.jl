@@ -133,11 +133,6 @@ end
     return _throw_outside_domain(xd, lo, hi)
 end
 
-@inline function _interp_in_domain(Ωₕ::AbstractMeshType{1}, x)
-    pts = points(Ωₕ)
-    return _interp_near_boundary(pts[1], pts[end], x)
-end
-
 @inline function _interp_in_domain(Ωₕ::AbstractMeshType{D}, x) where {D}
     return all(ntuple(Val(D)) do d
         pts = points(Ωₕ(d))

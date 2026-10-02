@@ -82,6 +82,23 @@ using WriteVTK
         end
     end
 
+    @testset "Non-Array AbstractArray field data" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (false, false))
+        backing = collect(1.0:40.0)
+        field = reshape(view(backing, 1:20), 5, 4)   # a ReshapedArray over a SubArray
+        @test !(field isa Array)
+        copied = Bramble._vtk_data(field)
+        @test copied isa Array{Float64, 2}
+        @test copied == [Float64(i + 5 * (j - 1)) for i in 1:5, j in 1:4]
+
+        mktempdir() do dir
+            f = only(export_vtk(joinpath(dir, "v"), Ωₕ, "view" => field))
+            xml = read(f, String)
+            @test occursin("WholeExtent=\"0 4 0 3 0 0\"", xml)
+            @test occursin("Name=\"view\" NumberOfComponents=\"1\"", xml)
+        end
+    end
+
     # Not tested via the public `export_vtk`: what it does when WriteVTK has not been
     # loaded. Once this file's `using WriteVTK` above runs, the extension is active for the
     # rest of this process: multiple dispatch has already resolved `_export_vtk`'s

@@ -6,6 +6,7 @@ using Bramble:
                _dot,
                _dot_masked,
                MarkedIndices,
+               MarkedIndicesUnion,
                _sweep_for!,
                _serial_for!,
                _sweep_scatter_for!,
@@ -337,6 +338,208 @@ using ..TestUtils: alloc_test, @test_allocs
         scatter_targets = (zeros(50), zeros(50))
         g_scatter = i -> (Float64(i), Float64(2i))
         @test_allocs _sweep_scatter_for!(Serial(), scatter_targets, 1:50, g_scatter)
+    end
+
+    # Invariants tested:
+    # 1. `_last_axis_chunks` splits the last axis into contiguous blocks, the remainder on
+    #    the first blocks, a stride kept, and `firstindex`/`lastindex` bracket the blocks.
+    # 2. Walked in order, the blocks visit exactly the points of the whole range.
+    @testset "Last-axis chunks" begin
+        idxs = CartesianIndices((2:4, 1:2:9))
+        c = Bramble._last_axis_chunks(idxs, 3)
+        @test length(c) == 3
+        @test firstindex(c) == 1
+        @test lastindex(c) == 3
+        # five last-axis values over three blocks: sizes 2, 2, 1
+        @test c[firstindex(c)] == CartesianIndices((2:4, 1:2:3))
+        @test c[2] == CartesianIndices((2:4, 5:2:7))
+        @test c[lastindex(c)] == CartesianIndices((2:4, 9:9))
+        @test reduce(vcat, [vec(collect(c[k])) for k in firstindex(c):lastindex(c)]) ==
+              vec(collect(idxs))
+        # more blocks than last-axis values: clamped to one block per value
+        @test lastindex(Bramble._last_axis_chunks(idxs, 50)) == 5
+    end
+
+    # Invariants tested:
+    # 1. A `CpuThreaded` scatter called from inside a user's `Threads.@threads` loop takes
+    #    the serial fallback (`_serial_scatter_for!`) and writes what a hand loop writes, on a
+    #    strided index set, leaving the other entries untouched.
+    @testset "Scatter inside a threaded region" begin
+        idxs = 2:3:20
+        g = i -> (Float64(i)^2, -Float64(i))
+        ref1, ref2 = fill(7.0, 20), fill(7.0, 20)
+        for i in idxs
+            ref1[i] = Float64(i)^2
+            ref2[i] = -Float64(i)
+        end
+        outs = Vector{Any}(undef, 2 * Threads.nthreads())
+        Threads.@threads for k in eachindex(outs)
+            m1, m2 = fill(7.0, 20), fill(7.0, 20)
+            _sweep_scatter_for!(CpuThreaded(), (m1, m2), idxs, g)
+            outs[k] = (m1, m2)
+        end
+        @test all(o -> o == (ref1, ref2), outs)
+    end
+
+    # Invariants tested:
+    # 1. `MarkedIndicesUnion` yields the sorted union of its masks' set bits across 64-bit
+    #    chunk boundaries, each index once, and nothing for empty masks.
+    # 2. It declares an unknown size and `Int` elements.
+    # 3. The masked dot over a union sums exactly the union's entries (hand-written sum), under
+    #    `CpuSerial` and through the policy-dispatched entry, and refuses a length mismatch.
+    @testset "Union of marker masks" begin
+        n = 150
+        m1, m2 = falses(n), falses(n)
+        m1[[1, 64, 65]] .= true
+        m2[[64, 130, 150]] .= true
+        U = MarkedIndicesUnion((m1, m2))
+        @test collect(U) == [1, 64, 65, 130, 150]
+        @test collect(MarkedIndicesUnion((falses(n), falses(n)))) == Int[]
+        @test Base.IteratorSize(typeof(U)) === Base.SizeUnknown()
+        @test eltype(typeof(U)) === Int
+
+        u = [sin(0.1 * i) + 2.0 for i in 1:n]
+        v = [1.0 + 0.01 * i^2 for i in 1:n]
+        w = [0.5 + 0.25 * isodd(i) for i in 1:n]
+        hand = 0.0
+        for i in (1, 64, 65, 130, 150)
+            hand += u[i] * v[i] * w[i]
+        end
+        @test _dot_masked(u, v, w, U) ≈ hand
+        @test _dot_masked(CpuSerial(), u, v, w, U) ≈ hand
+        @test _dot_masked(u, v, w, U) isa Float64
+        err = try
+            _dot_masked(u[1:(n - 1)], v, w, U)
+            nothing
+        catch e
+            e
+        end
+        @test err isa DimensionMismatch
+        @test occursin("($(n - 1), $n, $n, $n)", sprint(showerror, err))
+    end
+
+    # Invariants tested:
+    # 1. The `(Locality, policy)` reduction methods of a host destination give the hand-written
+    #    sums, for `_dot` and for `_dot_masked` with a `BitVector` and a union mask.
+    # 2. A mismatched pairing (a device locality under a CpuPolicy, a host one under a
+    #    GpuPolicy) is refused, naming which half disagreed.
+    # 3. The device reductions (`sum` of a broadcast, the mask copied next to `u`) run on any
+    #    `AbstractVector`, so on host storage they match the hand-written sums too, and refuse
+    #    mismatched lengths.
+    @testset "Locality-keyed reductions" begin
+        H, D = Bramble.HostLocality(), Bramble.DeviceLocality()
+        n = 70
+        u = [1.0 + 0.3 * i for i in 1:n]
+        v = [cos(0.2 * i) for i in 1:n]
+        w = [1.0 / i for i in 1:n]
+        bits = falses(n)
+        bits[[2, 33, 64, 65, 70]] .= true
+        other = falses(n)
+        other[[3, 65]] .= true
+        U = MarkedIndicesUnion((bits, other))
+        full = 0.0
+        for i in 1:n
+            full += u[i] * v[i] * w[i]
+        end
+        masked = 0.0
+        for i in (2, 33, 64, 65, 70)
+            masked += u[i] * v[i] * w[i]
+        end
+        unioned = masked + u[3] * v[3] * w[3]
+
+        for policy in (CpuSerial(), CpuThreaded())
+            @test _dot(H, policy, u, v, w) ≈ full
+            @test _dot_masked(H, policy, u, v, w, bits) ≈ masked
+            @test _dot_masked(H, policy, u, v, w, U) ≈ unioned
+        end
+
+        msg(f) = sprint(showerror, try
+            f()
+            nothing
+        catch e
+            e
+        end)
+        @test occursin("array has device locality", msg(() -> _dot(D, CpuSerial(), u, v, w)))
+        @test occursin("array has host locality", msg(() -> _dot(H, GpuKernel(), u, v, w)))
+        @test occursin("array has device locality", msg(() -> _dot_masked(D, CpuSerial(), u, v, w, bits)))
+        @test occursin("array has host locality", msg(() -> _dot_masked(H, GpuKernel(), u, v, w, bits)))
+        @test_throws ArgumentError _dot(D, CpuSerial(), u, v, w)
+        @test_throws ArgumentError _dot_masked(H, GpuKernel(), u, v, w, bits)
+
+        # GpuKernel() derives DeviceLocality() from itself and reaches the device methods.
+        @test _dot(GpuKernel(), u, v, w) ≈ full
+        @test _dot_masked(GpuKernel(), u, v, w, bits) ≈ masked
+        @test _dot_masked(GpuKernel(), u, v, w, U) ≈ unioned
+        @test_throws DimensionMismatch _dot(D, GpuKernel(), u[1:3], v, w)
+        @test_throws DimensionMismatch _dot_masked(D, GpuKernel(), u, v[1:3], w, bits)
+        @test_throws DimensionMismatch _dot_masked(D, GpuKernel(), u, v, w[1:3], U)
+    end
+
+    # The CpuPolyester and GpuPolicy hooks error, naming what to load, when their extension is
+    # absent. The test environment can load Polyester (test/ext/polyester_ext.jl), and a later
+    # file asserts it is not loaded (test/space/inner_product.jl), so a child process on the
+    # root project, where neither Polyester nor KernelAbstractions is available, runs them.
+    # `Base.julia_cmd()` carries this process's coverage flag, so its hits count.
+    # Invariants tested:
+    # 1. Each CpuPolyester sweep, scatter and reduction stops at its `_batch_*` hook with the
+    #    ArgumentError naming Polyester and the hook.
+    # 2. A device destination under GpuKernel() reaches `_gpu_for!`/`_gpu_scatter_for!`, which
+    #    without KernelAbstractions stop with the ArgumentError naming the missing sweep.
+    @testset "Hooks without extensions (child)" begin
+        code = """
+        using Bramble
+        const B = Bramble
+        struct FakeDev{T} <: DenseVector{T}
+            data::Vector{T}
+        end
+        Base.size(x::FakeDev) = size(x.data)
+        Base.getindex(x::FakeDev, i::Int) = x.data[i]
+        Base.setindex!(x::FakeDev, y, i::Int) = setindex!(x.data, y, i)
+        Base.IndexStyle(::Type{<:FakeDev}) = IndexLinear()
+        B.locality(::Type{<:FakeDev}) = B.DeviceLocality()
+        u = [1.0, 2.0, 3.0]
+        mask = BitVector([true, false, true])
+        calls = (
+            "sweep" => () -> B._sweep_for!(B.CpuPolyester(), zeros(3), 1:3, float),
+            "sweep_cartesian" => () -> B._sweep_for!(B.CpuPolyester(), zeros(2, 3),
+                CartesianIndices((2, 3)), I -> 1.0),
+            "scatter" => () -> B._sweep_scatter_for!(B.CpuPolyester(), (zeros(3),), 1:3,
+                i -> (1.0,)),
+            "dot" => () -> B._dot(B.HostLocality(), B.CpuPolyester(), u, u, u),
+            "dot_masked" => () -> B._dot_masked(B.HostLocality(), B.CpuPolyester(), u, u, u,
+                mask),
+            "gpu_sweep" => () -> B._sweep_for!(B.GpuKernel(), FakeDev(zeros(3)), 1:3, float),
+            "gpu_scatter" => () -> B._sweep_scatter_for!(B.GpuKernel(), (FakeDev(zeros(3)),),
+                1:3, i -> (1.0,)),
+        )
+        println("POLYESTER_LOADED ", Base.get_extension(B, :BramblePolyesterExt) !== nothing)
+        for (name, f) in calls
+            try
+                f()
+                println(name, " RETURNED")
+            catch e
+                println(name, " ", nameof(typeof(e)), " ", replace(e.msg, '\\n' => ' '))
+            end
+        end
+        """
+        root = pkgdir(Bramble)
+        cmd = `$(Base.julia_cmd()) --project=$root --startup-file=no --threads=1 -e $code`
+        out = Dict(
+            (p = split(l, ' '; limit = 2); p[1] => p[2])
+        for l in split(readchomp(pipeline(cmd; stderr = devnull)), '\n')
+        )
+        @test out["POLYESTER_LOADED"] == "false"
+        for (name, hook) in (("sweep", "_batch_for!"), ("sweep_cartesian", "_batch_axis_for!"),
+            ("scatter", "_batch_scatter_for!"), ("dot", "_batch_dot"),
+            ("dot_masked", "_batch_dot_masked"))
+            @test startswith(out[name], "ArgumentError CpuPolyester requires Polyester.jl")
+            @test occursin("before calling $hook under", out[name])
+        end
+        for name in ("gpu_sweep", "gpu_scatter")
+            @test startswith(out[name], "ArgumentError execution policy")
+            @test occursin("GpuKernel is a GpuPolicy", out[name])
+            @test occursin("no device sweep is loaded", out[name])
+        end
     end
 
     # Invariants tested:

@@ -3,8 +3,8 @@ module TestFormKronecker
 using Test
 using Bramble
 using Bramble: is_separable, kronecker_operator, KroneckerLinearOperator
-using LinearAlgebra: issymmetric, mul!
-using SparseArrays: SparseMatrixCSC
+using LinearAlgebra: Diagonal, issymmetric, mul!
+using SparseArrays: SparseMatrixCSC, sparse
 using Random
 using LinearSolve: LinearProblem, solve, KrylovJL_CG
 using ForwardDiff
@@ -189,6 +189,89 @@ _kron_alloc_no_scratch(y, K, x) = @allocated mul!(y, K, x)
         x = rand(size(K, 1))
         @test isapprox(Kcsc * x, K * x; rtol = 1e-12, atol = 1e-12)
         @test isapprox(Kcsc * x, assemble(a) * x; rtol = 1e-12, atol = 1e-12)
+    end
+
+    # `getindex` reads the Kronecker structure entry by entry, without `mul!` or `kron`.
+    @testset "getindex and complex α match assemble" begin
+        Random.seed!(KRON_SEED + 5)
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 5), (false, false))
+        Wₕ = gridspace(Ωₕ)
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)))
+        A = assemble(a)
+        K = kronecker_operator(a)
+        n = ndofs(Wₕ)
+        @test all(
+            isapprox(K[i, j], A[i, j]; rtol = 1e-12, atol = 1e-12) for i in 1:n, j in 1:n
+        )
+        @test count(i -> !iszero(K[i, i + 1]), 1:(n - 1)) > 0  # off-diagonals reached
+        @test_throws BoundsError K[n + 1, 1]
+
+        # A complex `α` keeps `α * c_t` complex (`_kron_scalar`'s generic method) rather
+        # than converting it to the operator's `Float64`.
+        x = rand(n)
+        α = 0.5 + 2.0im
+        y0 = rand(ComplexF64, n)
+        y = copy(y0)
+        mul!(y, K, x, α, 1)
+        @test isapprox(y, α * (A * x) + y0; rtol = 1e-12, atol = 1e-12)
+
+        @test_throws "cannot multiply a vector of length $(n + 1)" mul!(
+            zeros(n), K, rand(n + 1)
+        )
+        @test_throws DimensionMismatch mul!(zeros(n + 1), K, rand(n), 1.0, 0.0)
+    end
+
+    @testset "kronecker_operator refuses non-factors" begin
+        Random.seed!(KRON_SEED + 6)
+        Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 5), (false, false))
+        W2 = gridspace(Ω2)
+        Ω2b = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 5), (false, false))
+        W2b = gridspace(Ω2b)
+        Ω1 = mesh(domain(interval(0.0, 1.0)), 9, false)
+        W1 = gridspace(Ω1)
+        fₕ = Rₕ(W2, x -> 1.0 + x[1])
+
+        @test_throws "got a 1D form" kronecker_operator(
+            form(W1, W1, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        )
+        # Two meshes with the same shape are still two meshes.
+        @test_throws "sharing one mesh" kronecker_operator(form(W2, W2b, (u, v) -> innerₕ(u, v)))
+        @test_throws "is not one of the recognised separable shapes" kronecker_operator(
+            form(W2, W2, (u, v) -> innerₕ(fₕ * u, v))
+        )
+    end
+
+    # Hand-built terms reach what `kronecker_operator` never builds from a valid form: a
+    # one-point axis 1 with a finite difference factor (a collapsed axis has zero spacing,
+    # so the factor it assembles is `NaN`), a plain-vector mass diagonal, and a term with
+    # two non-diagonal factors.
+    @testset "fused mul!: hand-built factors" begin
+        Random.seed!(KRON_SEED + 7)
+        Ωc = mesh(domain(interval(0.5, 0.5) × interval(0.0, 1.0)), (1, 9), (true, false))
+        Wc = gridspace(Ωc)
+        am = form(Wc, Wc, (u, v) -> innerₕ(u, v))
+        Km = kronecker_operator(am)
+        @test Km.dims == (1, 9)
+        x = rand(9)
+        @test isapprox(Km * x, assemble(am) * x; rtol = 1e-12, atol = 1e-12)
+
+        # Axis 1 holds one point: the tridiagonal line has no neighbours.
+        hy = collect(Km.terms[1].factors[2].diag)
+        S1 = sparse([3.0;;])
+        Dy = Diagonal(hy)
+        line = Bramble._kron_line_operator(S1)
+        @test line isa Bramble._KronTridiag
+        factors = (S1, Dy)
+        term = Bramble.KroneckerTerm{2, Tuple{}, typeof(factors), typeof(line)}((), factors, line)
+        K1 = KroneckerLinearOperator{Float64, 2, Tuple{typeof(term)}}((term,), (1, 9), 9)
+        @test isapprox(K1 * x, 3.0 .* hy .* x; rtol = 1e-12, atol = 1e-12)
+
+        # Two sparse factors in one term: refused when applied.
+        S2 = sparse([2.0 -1.0; -1.0 2.0])
+        f3 = (Diagonal([1.0, 2.0]), S2, S2)
+        t3 = Bramble.KroneckerTerm{3, Tuple{}, typeof(f3), Nothing}((), f3, nothing)
+        K3 = KroneckerLinearOperator{Float64, 3, Tuple{typeof(t3)}}((t3,), (2, 2, 2), 8)
+        @test_throws "more than one non-diagonal factor" K3 * ones(8)
     end
 
     # LinearSolve agreement (SPD, no Dirichlet).

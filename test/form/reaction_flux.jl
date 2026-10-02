@@ -5,7 +5,7 @@ using Random
 using ForwardDiff
 using Bramble
 using ..TestUtils: WITH_AD_TESTS
-using Bramble: reaction, reaction_density, weights
+using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
 
 # `reaction` (gpena/Bramble.jl#227) extracts the boundary flux a Dirichlet constraint had
 # to supply, from the *unconstrained* operator/load and the already-solved uₕ: r = A uₕ - F
@@ -261,6 +261,211 @@ using Bramble: reaction, reaction_density, weights
         @test parent(dens)[1] ≈ reaction(a, l, uₕ; marker = :left) / weights(Wₕ, Bramble.Innerh())[1]
         # zero away from the marker
         @test all(iszero, parent(dens)[2:end])
+    end
+
+    # The in-place variants, the dense fallbacks, several markers and the space validation,
+    # all against a residual assembled by hand: dense `Matrix(A) * u - F` summed over the
+    # rows the marker masks select (not the code under test), on non-uniform meshes.
+    @testset "In-place, dense fallback, hand residual" begin
+        Random.seed!(20261002)
+        I = domain(interval(0.0, 1.0), :left => :xmin, :right => :xmax)
+        Ω₁ = mesh(I, 9, false)
+        Ω₂ = mesh(I, 7, false)
+        W₁ = gridspace(Ω₁)
+        W₂ = gridspace(Ω₂)
+        n₁ = ndofs(W₁)
+        n₂ = ndofs(W₂)
+
+        # (marker, leaf, expected rows of the composite space) by hand from the masks
+        rows(Ωₕ, m, off) = off .+ findall(Bramble.index_in_marker(Ωₕ, m))
+
+        @testset "scalar space, one and several markers" begin
+            a = form(W₁, W₁, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+            l = form(W₁, v -> innerₕ(Rₕ(W₁, x -> 1 + x[1]^2), v))
+            A = assemble(a)
+            F = assemble(l)
+            uₕ = element(W₁)
+            uₕ .= randn(n₁)
+            r = Matrix(A) * parent(uₕ) - F
+            w = weights(W₁, Bramble.Innerh())
+
+            for marker in (:left, :right, (:left, :right), (:left, :left))
+                ms = marker isa Symbol ? (marker,) : marker
+                idx = sort(unique(vcat((rows(Ω₁, m, 0) for m in ms)...)))
+                expected = -sum(r[idx])
+                scratch = fill(NaN, n₁)
+                @test reaction!(scratch, A, F, uₕ; marker = marker) ≈ expected
+                # only the marked entries are written
+                @test all(isnan, scratch[setdiff(1:n₁, idx)])
+                @test scratch[idx] ≈ r[idx]
+                # dense matrix: same flux through the full-matvec fallback
+                scratch_d = fill(NaN, n₁)
+                @test reaction!(scratch_d, Matrix(A), F, uₕ; marker = marker) ≈ expected
+                @test all(isnan, scratch_d[setdiff(1:n₁, idx)])
+                @test scratch_d[idx] ≈ r[idx]
+                @test reaction(Matrix(A), F, uₕ; marker = marker) ≈ expected
+
+                dens_expected = zeros(n₁)
+                dens_expected[idx] .= -r[idx] ./ w[idx]
+                dens = zeros(n₁)
+                @test reaction_density!(dens, A, F, uₕ; marker = marker) === dens
+                @test dens ≈ dens_expected
+                dens_d = zeros(n₁)
+                reaction_density!(dens_d, Matrix(A), F, uₕ; marker = marker)
+                @test dens_d ≈ dens_expected
+                @test parent(reaction_density(A, F, uₕ; marker = marker)) ≈ dens_expected
+            end
+        end
+
+        @testset "composite space, components, per-block" begin
+            W = W₁ × W₂
+            a = form(
+                W, W,
+                (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) +
+                          innerₕ(u(1), v(1)) + 2 * innerₕ(u(2), v(2))
+            )
+            l = form(
+                W,
+                v -> innerₕ(Rₕ(W₁, x -> 1 + x[1]), v(1)) + innerₕ(Rₕ(W₂, x -> 2 - x[1]), v(2))
+            )
+            A = assemble(a)
+            F = assemble(l)
+            uₕ = element(W)
+            uₕ .= randn(n₁ + n₂)
+            r = Matrix(A) * parent(uₕ) - F
+            ws = (weights(W₁, Bramble.Innerh()), weights(W₂, Bramble.Innerh()))
+            offs = (0, n₁)
+            Ωs = (Ω₁, Ω₂)
+
+            for components in (nothing, 1, 2, (1, 2)), marker in (:left, (:left, :right))
+
+                ms = marker isa Symbol ? (marker,) : marker
+                sel = components === nothing || components == (1, 2) ? (1, 2) : (components,)
+                idx = Int[]
+                dens_expected = zeros(n₁ + n₂)
+                for k in sel, m in ms
+
+                    ik = rows(Ωs[k], m, offs[k])
+                    append!(idx, ik)
+                end
+                idx = sort(unique(idx))
+                for k in sel
+                    for m in ms, j in rows(Ωs[k], m, offs[k])
+
+                        dens_expected[j] = -r[j] / ws[k][j - offs[k]]
+                    end
+                end
+                expected = -sum(r[idx])
+
+                @test reaction(A, F, uₕ; marker = marker, components = components) ≈ expected
+                scratch = fill(NaN, n₁ + n₂)
+                @test reaction!(
+                    scratch, A, F, uₕ; marker = marker, components = components) ≈ expected
+                @test all(isnan, scratch[setdiff(1:(n₁ + n₂), idx)])
+                scratch_d = fill(NaN, n₁ + n₂)
+                @test reaction!(
+                    scratch_d, Matrix(A), F, uₕ; marker = marker, components = components) ≈
+                      expected
+                dens = zeros(n₁ + n₂)
+                reaction_density!(dens, A, F, uₕ; marker = marker, components = components)
+                @test dens ≈ dens_expected
+                dens_d = zeros(n₁ + n₂)
+                reaction_density!(
+                    dens_d, Matrix(A), F, uₕ; marker = marker, components = components)
+                @test dens_d ≈ dens_expected
+                @test parent(reaction_density(
+                    A, F, uₕ; marker = marker, components = components)) ≈ dens_expected
+            end
+            # per-block: each leaf's own flux separately, and they add up
+            f1 = reaction(A, F, uₕ; marker = :left, components = 1)
+            f2 = reaction(A, F, uₕ; marker = :left, components = 2)
+            @test f1 ≈ -r[rows(Ω₁, :left, 0)[1]]
+            @test f2 ≈ -r[rows(Ω₂, :left, n₁)[1]]
+            @test reaction(A, F, uₕ; marker = :left) ≈ f1 + f2
+            # a bad component index is rejected by the in-place variants too
+            @test_throws ArgumentError reaction!(
+                zeros(n₁ + n₂), A, F, uₕ; marker = :left, components = 3)
+            @test_throws ArgumentError reaction_density!(
+                zeros(n₁ + n₂), A, F, uₕ; marker = :left, components = 3)
+        end
+
+        @testset "in-place variants allocate nothing" begin
+            a = form(W₁, W₁, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+            A = assemble(a)
+            F = ones(n₁)
+            uₕ = element(W₁, 1.0)
+            scratch = zeros(n₁)
+            for marker in (:left, (:left, :right))
+                reaction!(scratch, A, F, uₕ; marker = marker)
+                reaction_density!(scratch, A, F, uₕ; marker = marker)
+                @test (@allocated reaction!(scratch, A, F, uₕ; marker = marker)) == 0
+                @test (@allocated reaction_density!(scratch, A, F, uₕ; marker = marker)) == 0
+            end
+        end
+
+        # The internal walk and residual helpers, called through `invokelatest` so each runs as
+        # its own compiled method (not inlined into a caller), against hand-derived values.
+        @testset "internal helpers vs hand values" begin
+            a = form(W₁, W₁, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+            l = form(W₁, v -> innerₕ(Rₕ(W₁, x -> 1 + x[1]), v))
+            A = assemble(a)
+            F = assemble(l)
+            u = randn(n₁)
+            r = Matrix(A) * u - F
+            idx = sort(vcat(rows(Ω₁, :left, 0), rows(Ω₁, :right, 0)))
+            leaves = Bramble.leaf_spaces_offsets(W₁)
+
+            # the lazy union walk, shifted by the leaf offset
+            m = Bramble._reaction_marked(Ω₁, (:left, :right), 3)
+            @test collect(m) == idx .+ 3
+            @test Base.IteratorSize(typeof(m)) isa Base.SizeUnknown
+            @test eltype(typeof(m)) === Int
+            @test Base.invokelatest(iterate, m) == (idx[1] + 3, Base.invokelatest(iterate, m)[2])
+            st = Base.invokelatest(iterate, m)[2]
+            @test Base.invokelatest(iterate, m, st)[1] == idx[2] + 3
+
+            # per-leaf entries: the union mask, offset, size and selection of each leaf
+            entries = Base.invokelatest(
+                Bramble._reaction_leaf_entries, leaves, (:left, :right), nothing)
+            @test length(entries) == 1
+            @test Base.invokelatest(
+                Bramble._reaction_leaf_entries_impl, leaves, (:left, :right), nothing, 1) ==
+                  entries
+            mask, off, nn, active = entries[1]
+            @test findall(mask) == idx
+            @test (off, nn, active) == (0, n₁, true)
+            entries_b = Base.invokelatest(
+                Bramble._reaction_leaf_entries!, leaves, (:left, :right), nothing)
+            @test findall(entries_b[1][1][1]) == rows(Ω₁, :left, 0)
+            @test findall(entries_b[1][1][2]) == rows(Ω₁, :right, 0)
+            for row in 1:n₁
+                @test Base.invokelatest(Bramble._reaction_row_marked, entries_b, row) ==
+                      (row in idx)
+            end
+            @test !Base.invokelatest(Bramble._reaction_row_marked, (), 1)
+
+            # the restricted residual answers r[j] at the marked rows
+            rr = Base.invokelatest(Bramble._reaction_residual, A, F, u, entries)
+            for j in idx
+                @test Base.invokelatest(getindex, rr, j) ≈ r[j]
+            end
+            @test eltype(rr) === Float64
+        end
+
+        @testset "space validation" begin
+            a₁ = form(W₁, W₁, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+            l₁ = form(W₁, v -> innerₕ(Rₕ(W₁, x -> 1.0), v))
+            a₂ = form(W₂, W₂, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+            l₂ = form(W₂, v -> innerₕ(Rₕ(W₂, x -> 1.0), v))
+            u₁ = element(W₁, 1.0)
+            u₂ = element(W₂, 1.0)
+            # `a` and `l` on different spaces
+            @test_throws ArgumentError reaction(a₁, l₂, u₁; marker = :left)
+            @test_throws ArgumentError reaction_density(a₁, l₂, u₁; marker = :left)
+            # `uₕ` on a different space from `a`/`l`
+            @test_throws ArgumentError reaction(a₁, l₁, u₂; marker = :left)
+            @test_throws ArgumentError reaction_density(a₂, l₂, u₁; marker = :left)
+        end
     end
 
     WITH_AD_TESTS && @testset "reaction: Dual load vector" begin

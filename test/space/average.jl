@@ -163,4 +163,74 @@ end
     end
 end
 
+using LinearAlgebra: Diagonal
+using Bramble: kronecker_operator_matrix, centered_average_dim!, Mcₓ, Mcᵧ, weights, Innerh,
+               D₋ᵧ, trial_function, test_function
+
+# The dense matrix backend takes `stencil_matrix`'s dense fallback and the dense branch of
+# `_scale_rows!` in the Kronecker oracle; every average family against that oracle, entry for
+# entry, on a mesh non-uniform in both directions.
+@testset "Averages: dense fallback vs Kronecker" begin
+    Ωd = mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (6, 5), (false, false);
+        backend = backend(matrix_type = Matrix{Float64}))
+    for ops in ((Mₓ, Mᵧ), (M₊ₓ, M₊ᵧ), (Mcₓ, Mcᵧ)), d in 1:2
+
+        @testset "$(ops[d])" begin
+            A = ops[d](Ωd)
+            @test A isa Matrix{Float64}
+            @test A == kronecker_operator_matrix(Ωd, ops[d])
+        end
+    end
+end
+
+# (u_{i-1} + 2 u_i + u_{i+1}) / 4 along the direction, zero on both end slices, written out
+# by hand; the in-place form also has to survive `out === in`, which it reads from a copy.
+@testset "centered_average_dim!" begin
+    dims = (5, 4)
+    u = Float64[i^2 + 3j for i in 1:5, j in 1:4]
+    ref = (zeros(dims), zeros(dims))
+    ref[1][2:4, :] .= (u[1:3, :] .+ 2 .* u[2:4, :] .+ u[3:5, :]) ./ 4
+    ref[2][:, 2:3] .= (u[:, 1:2] .+ 2 .* u[:, 2:3] .+ u[:, 3:4]) ./ 4
+    for d in 1:2
+        out = zeros(20)
+        centered_average_dim!(out, vec(u), dims, Val(d))
+        @test out == vec(ref[d])
+        same = vec(copy(u))
+        centered_average_dim!(same, same, dims, Val(d))
+        @test same == vec(ref[d])
+    end
+
+    err = try
+        forward_average_dim!(zeros(5), zeros(6), (2, 3), Val(1))
+    catch e
+        e
+    end
+    @test err isa DimensionMismatch
+    @test err.msg == "out has 5 entries and in has 6, but the grid (2, 3) has 6"
+end
+
+# The form-layer stencils of the forward and centered averages, assembled under the discrete
+# L² product, are the space-layer matrices scaled row by row by the quadrature weights.
+@testset "Form M₊, Mc stencils vs space matrices" begin
+    Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (7, 6), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    H = Diagonal(collect(weights(Wₕ, Innerh())))
+    for (op_form, op_matrix) in ((u -> M₊ₓ(u), M₊ₓ(Ωₕ)), (u -> Mcᵧ(u), Mcᵧ(Ωₕ)))
+        A = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(op_form(u), v))))
+        @test maximum(abs, A) > 1.0e-3
+        @test isapprox(A, Matrix(H * op_matrix); atol = 1.0e-14)
+    end
+
+    # composed with a difference, the nested form is the product of the two matrices
+    A = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(M₊ₓ(D₋ᵧ(u)), v))))
+    @test maximum(abs, A) > 1.0e-3
+    @test isapprox(A, Matrix(H * M₊ₓ(Ωₕ) * D₋ᵧ(Ωₕ)); atol = 1.0e-12)
+
+    # `_wraps_leaf`: an average directly over a bare trial or test leaf, and nothing deeper
+    u, v = trial_function(Wₕ), test_function(Wₕ)
+    @test Bramble._wraps_leaf(M₊ₓ(u))
+    @test Bramble._wraps_leaf(Mcᵧ(v))
+    @test !Bramble._wraps_leaf(M₊ₓ(D₋ᵧ(u)))
+end
+
 end # module SpaceAverageTests

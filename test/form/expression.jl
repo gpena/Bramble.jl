@@ -3,6 +3,8 @@ module FormExpressionTests
 using Test
 using Bramble
 using Bramble: restrict_to, dirac, D₋ᵧ, D₋₂, D₋ₓ, Mₓ, jumpₓ
+using Bramble: TrialFunction, TestFunction, IdentityOperator, ZeroOperator, OperatorScale,
+               SourceVector, source_function
 
 # `expression(form)`/`expression(ast::LazyOp)` (src/ast/expression.jl, issue #274) render a
 # resolved form AST in Bramble's own operator notation. Every string asserted below was
@@ -98,6 +100,45 @@ using Bramble: restrict_to, dirac, D₋ᵧ, D₋₂, D₋ₓ, Mₓ, jumpₓ
         @test occursin(" - ", s)
         @test !occursin(" + -2 * ", s)
         @test !occursin("+ -", s)
+    end
+
+    @testset "AST nodes rendered directly" begin
+        # The nodes `form` never leaves in a resolved AST (the simplifier folds or lowers
+        # them), rendered from the tree itself. Each expected string is written from the
+        # notation, not read back from `expression`.
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, false)
+        Wₕ = gridspace(Ωₕ)
+        u, v = TrialFunction{1}(), TestFunction{1}()
+        cₕ = Rₕ(Wₕ, x -> 1 + x)
+
+        # the space leaves and the bare trial and test leaves
+        @test expression(IdentityOperator(Wₕ)) == "I"
+        @test expression(ZeroOperator(Wₕ)) == "0"
+        @test expression(u) == "u"
+        @test expression(v) == "v"
+
+        # sources: a named function keeps its name, a closure and a vector take the
+        # placeholders
+        @test expression(source_function(sin, Val(1))) == "sin"
+        @test expression(source_function(x -> 2x, Val(1))) == "f"
+        @test expression(SourceVector{1, Vector{Float64}}([1.0, 2.0])) == "vec"
+
+        # a scalar on either side, read through a `Ref`, integer-valued or not, `-1` as a
+        # sign, and a coefficient that is not a real number printed as it is
+        @test expression(u * 3) == "3 * u"
+        @test expression(D₋ₓ(u) * Ref(2.5)) == "2.5 * D₋ₓ(u)"
+        @test expression(OperatorScale(Ref(2.0), D₋ₓ(u))) == "2 * D₋ₓ(u)"
+        @test expression(D₋ₓ(u) * Ref(-1.0)) == "-D₋ₓ(u)"
+        @test expression((1 + 2im) * u) == "1 + 2im * u"
+
+        # a grid-function coefficient, a vector or a thunk, from either side
+        @test expression(D₋ₓ(u) * cₕ) == "vₕ * D₋ₓ(u)"
+        @test expression(D₋ₓ(u) * (() -> 2.0)) == "vₕ * D₋ₓ(u)"
+
+        # a sum nested in a scale, or on either side of another sum, is parenthesised
+        @test expression(2 * (u + D₋ₓ(u))) == "2 * (u + D₋ₓ(u))"
+        @test expression((u + D₋ₓ(u)) + Mₓ(u)) == "(u + D₋ₓ(u)) + Mₓ(u)"
+        @test expression(u + (D₋ₓ(u) + Mₓ(u))) == "u + (D₋ₓ(u) + Mₓ(u))"
     end
 
     @testset "Show integration" begin

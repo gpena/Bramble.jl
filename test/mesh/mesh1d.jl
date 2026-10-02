@@ -5,6 +5,7 @@ module MeshMesh1dTests
 # marker propagation, and degenerate single-point interval behaviors.
 
 using Test
+using Random
 using Bramble
 import Bramble:
                 indices,
@@ -347,7 +348,42 @@ import Base: diff
             Ωₕ_copy2 = deepcopy(Ωₕ)
             change_points!(Ωₕ_copy2, dm, new_pts_valid)
             @test points(Ωₕ_copy2) ≈ new_pts_valid
+
+            # A different point count is rejected and leaves the points untouched.
+            Ωₕ_copy3 = deepcopy(Ωₕ)
+            @test_throws DimensionMismatch change_points!(Ωₕ_copy3, new_pts_invalid_len)
+            @test points(Ωₕ_copy3) ≈ [0.0, 0.5, 1.0, 1.5, 2.0]
         end
+    end
+
+    @testset "Package-local RNG for non-uniform points" begin
+        # Oracle: an independent Xoshiro with the same seed, drawn as Float64, sorted and
+        # mapped onto [a, b]; the mesh's spacings and half points follow from those points.
+        a, b, n, seed = -1.0, 3.0, 9, 2024
+        rng = Random.Xoshiro(seed)
+        interior = sort!(rand(rng, Float64, n - 2))
+        expected = a .+ vcat(0.0, interior, 1.0) .* (b - a)
+
+        Bramble._seed_mesh1d_rng!(seed)
+        Ωₕ = try
+            mesh(create_test_domain(a, b), n, false; backend = backend())
+        finally
+            Bramble._unseed_mesh1d_rng!()
+        end
+
+        @test points(Ωₕ) ≈ expected
+        @test collect(spacings(Ωₕ))[2:end] ≈ diff(expected)
+        @test collect(half_points(Ωₕ))[2:n] ≈ (expected[1:(end - 1)] .+ expected[2:end]) ./ 2
+        d = diff(expected)
+        hs = Bramble.host_half_spacings(Ωₕ)
+        @test hs isa Vector{Float64}
+        @test hs ≈ vcat(d[1] / 2, (d[1:(end - 1)] .+ d[2:end]) ./ 2, d[end] / 2)
+
+        # Once disarmed, the global RNG drives the interior points again.
+        Random.seed!(seed)
+        Ωₕ2 = mesh(create_test_domain(a, b), n, false; backend = backend())
+        Random.seed!(seed)
+        @test points(Ωₕ2) ≈ a .+ vcat(0.0, sort!(rand(n - 2)), 1.0) .* (b - a)
     end
 
     @testset "Additional methods" begin

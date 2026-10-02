@@ -628,4 +628,128 @@ end
     end
 end
 
+# The dense-backend paths of the second-order semidiscretisation and of `semidiscretize_rhs`
+# (`_block_diag_with_identity` and `_diagonal_or_throw` on a plain `Matrix`), the compact
+# display, and `(x, t, p)` initial constraints, on a smoothly graded non-uniform mesh. The
+# oracle for the mass block is the space's own `L²` weight vector, not the assembled matrix.
+@testset "second order and rhs on a dense backend" begin
+    I = Bramble.interval(0.0, 1.0)
+    Ωd = Bramble.mesh(
+        Bramble.domain(I), 13, false; backend = backend(matrix_type = Matrix{Float64})
+    )
+    xs = [ξ + 0.1 * sinpi(2ξ) for ξ in range(0.0, 1.0; length = 13)]
+    set_points!(Ωd, xs)
+    Wd = gridspace(Ωd)
+    n = ndofs(Wd)
+    w = Bramble.weights(Wd).innerh
+    @test !all(≈(w[2]), w[2:(n - 1)])   # the mesh really is non-uniform
+
+    fₕ = Rₕ(Wd, x -> 1.0)
+    K = form(Wd, Wd, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+    C = form(Wd, Wd, (u, v) -> innerₕ(u, v))
+    l = form(Wd, v -> innerₕ(fₕ, v))
+    bcs = dirichlet_constraints(Ωd, I, :boundary => (x, t, p) -> p[1] * t + x[1])
+
+    sd2 = semidiscretize_second_order(K, l; damping = C, dirichlet = bcs)
+    @test sd2.constraints isa Bramble.TimeParamDependentConstraints
+
+    @testset "block mass matrix: blockdiag(M, I)" begin
+        B = Bramble.block_mass_matrix(sd2)
+        @test B isa Matrix{Float64}
+        expected = zeros(2n, 2n)
+        for i in 2:(n - 1)
+            expected[i, i] = w[i]
+        end
+        for i in 1:n
+            expected[n + i, n + i] = 1.0
+        end
+        @test B≈expected atol=1e-14
+    end
+
+    @testset "dirichlet_bc!: (x, t, p) gets p" begin
+        u = fill(-1.0, n)
+        @test dirichlet_bc!(u, sd2, 0.5, [3.0]) === u
+        @test u[1] ≈ 1.5 && u[n] ≈ 2.5
+        @test all(==(-1.0), u[2:(n - 1)])
+    end
+
+    @testset "display" begin
+        compact = sprint(show, sd2)
+        @test compact == "SecondOrderSemidiscretization{$n dofs, 1 constrained label}"
+        @test summary(sd2) == compact
+        block = sprint(show, MIME"text/plain"(), sd2)
+        @test occursin("g(x, t, p) on :boundary", block)
+        @test !occursin("Damping: none", block)
+        undamped = semidiscretize_second_order(K, l)
+        @test sprint(show, undamped) ==
+              "SecondOrderSemidiscretization{$n dofs, 0 constrained labels}"
+        @test occursin("Damping: none", sprint(show, MIME"text/plain"(), undamped))
+    end
+
+    @testset "semidiscretize_rhs: dense mass" begin
+        sd = semidiscretize(K, l)
+        @test mass_matrix(sd) isa Matrix{Float64}
+        rhs = semidiscretize_rhs(sd)
+        u = collect(range(0.2, 1.7; length = n))
+        du_rhs, du_sd = zeros(n), zeros(n)
+        rhs(du_rhs, u, nothing, 0.3)
+        sd(du_sd, u, nothing, 0.3)
+        @test du_rhs≈du_sd ./ w atol=1e-12 rtol=1e-12
+
+        mass_coupled = form(Wd, Wd, (u, v) -> innerₕ(D₋ₓ(u), Mₓ(v)))
+        @test_throws ArgumentError semidiscretize_rhs(semidiscretize(K, l; mass = mass_coupled))
+    end
+end
+
+# The SciMLBase/SciMLSensitivity entry points are fallbacks that only run while the
+# extension is not loaded, which the test environment always loads. A child process on the
+# root project (no extension) runs them; `Base.julia_cmd()` carries this process's coverage
+# flag, so its hits count.
+function _sd_child_messages(code)
+    root = pkgdir(Bramble)
+    cmd = `$(Base.julia_cmd()) --project=$root --startup-file=no --threads=1 -e $code`
+    return split(readchomp(pipeline(cmd; stderr = devnull)), '\n')
+end
+
+@testset "SciML entry points without the extension" begin
+    code = """
+    using Bramble
+    Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 5)
+    W = Bramble.gridspace(Ωₕ)
+    a = Bramble.form(W, W, (u, v) -> Bramble.inner₊(Bramble.∇ₕ(u), Bramble.∇ₕ(v)))
+    l = Bramble.form(W, v -> Bramble.innerₕ(Bramble.Rₕ(W, x -> 1.0), v))
+    sd = Bramble.semidiscretize(a, l)
+    sd2 = Bramble.semidiscretize_second_order(a, l)
+    u0 = zeros(Bramble.ndofs(W))
+    calls = (
+        () -> Bramble.ode_function(sd),
+        () -> Bramble.ode_problem(sd, u0, (0.0, 1.0)),
+        () -> Bramble.linear_problem(a, l),
+        () -> Bramble.nonlinear_problem((r, u, p) -> r, u0),
+        () -> Bramble.adjoint_sensitivities(nothing, nothing),
+        () -> Bramble.second_order_ode_function(sd2),
+        () -> Bramble.second_order_ode_function(a, l),
+        () -> Bramble.second_order_ode_problem(sd2, u0, u0, (0.0, 1.0)),
+    )
+    for f in calls
+        try
+            f()
+            println("RETURNED")
+        catch e
+            println(first(split(sprint(showerror, e), '.')))
+        end
+    end
+    """
+    @test _sd_child_messages(code) == [
+        "ode_function requires SciMLBase",
+        "ode_problem requires SciMLBase",
+        "linear_problem requires SciMLBase",
+        "nonlinear_problem requires SciMLBase",
+        "adjoint_sensitivities requires SciMLSensitivity",
+        "second_order_ode_function requires SciMLBase",
+        "second_order_ode_function requires SciMLBase",
+        "second_order_ode_problem requires SciMLBase"
+    ]
+end
+
 end # module FormSemidiscreteTests

@@ -3,7 +3,7 @@ module FormSymmetryTests
 using Test
 using Bramble
 using Random
-using LinearAlgebra: issymmetric, isposdef, cholesky, Symmetric, issuccess
+using LinearAlgebra: issymmetric, isposdef, cholesky, Symmetric, issuccess, eigvals, opnorm
 using SparseArrays: nonzeros
 using Bramble:
                form,
@@ -21,7 +21,8 @@ using Bramble:
                Dcₓ,
                Dcᵧ,
                inner₊ᵧ,
-               inner₊ₓ
+               inner₊ₓ,
+               πₕ
 
 # `issymmetric`/`isposdef` on a `BilinearForm` are a purely structural, symbolic check:
 # every test here has a positive case checked against a real assembled matrix (not just the
@@ -238,6 +239,100 @@ using Bramble:
                       innerₕ(D₋ᵧ(u), D₋ₓ(v)))
         @test issymmetric(c)
         @test issymmetric(Matrix(assemble(c)))
+    end
+
+    # `simplify_ast` leaves a scaling, a sum or a zero inside a difference where it is, so the
+    # trait compares those nodes one by one on both sides. Non-uniform mesh: a positive case
+    # is checked against the assembled matrix, symmetric and positive semi-definite.
+    @testset "Scalings, sums and zeros inside a side" begin
+        Random.seed!(20261002)
+        Ωr = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (false, false))
+        Wr = gridspace(Ωr)
+        mat(g) = Matrix(assemble(form(Wr, Wr, g)))
+        psd(M) = issymmetric(M) && minimum(eigvals(Symmetric(M))) >= -1e-10 * opnorm(M, 1)
+        c = Ref(2.0)
+
+        base = mat((u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
+        for (s, g) in ((2.0, (u, v) -> innerₕ(D₋ₓ(2.0 * u), D₋ₓ(2.0 * v))),
+            (c[], (u, v) -> innerₕ(D₋ₓ(c * u), D₋ₓ(c * v))))
+            a = form(Wr, Wr, g)
+            @test issymmetric(a)
+            @test isposdef(a)
+            @test mat(g) ≈ s^2 * base
+        end
+
+        add = (u, v) -> innerₕ(D₋ₓ(u) + D₋ᵧ(u), D₋ₓ(v) + D₋ᵧ(v))
+        @test issymmetric(form(Wr, Wr, add))
+        @test isposdef(form(Wr, Wr, add))
+        @test mat(add) ≈
+              base + mat((u, v) -> innerₕ(D₋ᵧ(u), D₋ₓ(v))) +
+              mat((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v))) +
+              mat((u, v) -> innerₕ(D₋ᵧ(u), D₋ᵧ(v)))
+        @test psd(mat(add))
+
+        nested = (u, v) -> innerₕ(D₋ₓ(u + 2.0 * D₋ᵧ(u)), D₋ₓ(v + 2.0 * D₋ᵧ(v)))
+        @test issymmetric(form(Wr, Wr, nested))
+        @test isposdef(form(Wr, Wr, nested))
+        @test psd(mat(nested))
+        # A different scalar inside the sum: neither the trait nor the matrix is symmetric.
+        skew = (u, v) -> innerₕ(D₋ₓ(u + 2.0 * D₋ᵧ(u)), D₋ₓ(v + 3.0 * D₋ᵧ(v)))
+        @test !issymmetric(form(Wr, Wr, skew))
+        @test !isposdef(form(Wr, Wr, skew))
+        @test !issymmetric(mat(skew))
+        # A different summand on one side: expanded into four products, two without a
+        # transposed partner.
+        mixed = (u, v) -> innerₕ(D₋ₓ(u) + D₋ᵧ(u), D₋ₓ(v) + D₊ᵧ(v))
+        @test !issymmetric(form(Wr, Wr, mixed))
+        @test !issymmetric(mat(mixed))
+
+        # A zero inside a difference is compared by its space, as `IdentityOperator` is.
+        z = form(Wr, Wr, (u, v) -> innerₕ(D₋ₓ(ZeroOperator(Wr)), D₋ₓ(ZeroOperator(Wr))))
+        @test issymmetric(z)
+        @test isposdef(z)
+        Wr2 = gridspace(Ωr)
+        @test !issymmetric(form(
+            Wr, Wr, (u, v) -> innerₕ(D₋ₓ(ZeroOperator(Wr)), D₋ₓ(ZeroOperator(Wr2)))))
+    end
+
+    @testset "Non-product non-sum; distinct products" begin
+        Random.seed!(20261002)
+        Ωr = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (false, false))
+        Wr = gridspace(Ωr)
+        # A bare trial function is no inner product at all.
+        bare = form(Wr, Wr, (u, v) -> u)
+        @test !issymmetric(bare)
+        @test !isposdef(bare)
+        # Transposed sides but different inner products: no pair, and on a non-uniform mesh
+        # the two weights differ, so the matrix is not symmetric either.
+        g = (u, v) -> innerₕ(D₋ₓ(u), D₊ᵧ(v)) + inner₊(D₊ᵧ(u), D₋ₓ(v))
+        @test !issymmetric(form(Wr, Wr, g))
+        @test !issymmetric(Matrix(assemble(form(Wr, Wr, g))))
+    end
+
+    @testset "Transposed pair under Ref: in assembly" begin
+        Random.seed!(20261002)
+        Ωr = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (false, false))
+        Wr = gridspace(Ωr)
+        c = Ref(2.0)
+        g1 = (u, v) -> innerₕ(D₋ₓ(u), D₊ᵧ(v))
+        g2 = (u, v) -> innerₕ(D₊ᵧ(u), D₋ₓ(v))
+        R = assemble(form(Wr, Wr, g1)) + assemble(form(Wr, Wr, g2))
+        f = form(Wr, Wr, (u, v) -> c * g1(u, v) + c * g2(u, v))
+        @test issymmetric(f)
+        A = assemble(f)
+        @test A ≈ 2.0 * R
+        c[] = 5.0
+        assemble!(A, f)
+        @test A ≈ 5.0 * R
+    end
+
+    @testset "show: one line with the sizes" begin
+        Random.seed!(20261002)
+        Wr = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (false, false)))
+        Wf = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (false, false)))
+        @test repr(form(Wr, Wf, (u, v) -> innerₕ(πₕ(u), v))) ==
+              "BilinearForm{2D, $(ndofs(Wf))×$(ndofs(Wr))}"
+        @test repr(form(Wf, v -> innerₕ(x -> 1.0, v))) == "LinearForm{2D, $(ndofs(Wf))}"
     end
 
     @testset "transposed pairs: assemble as two terms" begin

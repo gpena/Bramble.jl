@@ -420,7 +420,7 @@ end
 # instead, since inlining a fresh evaluation per tap makes the generated code (and so the
 # first-call compile time) grow like taps^depth. Answered by dispatch on the operand's type
 # parameter, so it folds at compile time; the node files add the methods for their own
-# wrappers (operators/average.jl, operators/region_restriction.jl).
+# wrappers (operators/average.jl).
 const _BareLeaf = Union{TrialFunction, TestFunction}
 @inline _wraps_leaf(::Any) = false
 @inline _wraps_leaf(::Union{

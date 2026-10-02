@@ -9,6 +9,11 @@
 #
 # This is a separate file, rather than more codecov.yml ignores, so that Codecov still shows
 # these files and the list can be reviewed on its own.
+#
+# `[[exempt_function]]` entries (`path`, `functions`, `reason`) exempt single functions rather
+# than files, under the same rule. Each reason starts with a label: `device-only:` (a
+# KernelAbstractions, Metal or AppleAccelerate path; the test environment has none of them),
+# `macro-expansion:` or `load-time:`. A host fallback or error path is never listed.
 
 [[exempt]]
 path = "src/Bramble.jl"
@@ -33,3 +38,354 @@ reason = "Its tests are in the AD group (ext/sparse_ad_ext.jl), switched off unt
 [[exempt]]
 path = "src/assembly/jacobian_pattern.jl"
 reason = "ast_sparsity_detector, its one entry the CI leg no longer reaches, is exercised only through BrambleSparseADExt, whose tests are in the switched-off AD group (v4.3.0). Exempt as a whole file: the exemption list matches files, not lines."
+
+[[exempt_function]]
+path = "src/assembly/bilinear_traversal.jl"
+functions = ["_scatter_position_mirror", "_scatter_add_mirror!"]
+reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/assembly/dirichlet_constraints.jl"
+functions = ["_dirichlet_bc_device!", "_launch_dirichlet_rows_csr!"]
+reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/assembly/kronecker.jl"
+functions = ["_kron_device_vector", "_kron_device_index", "_throw_kron_device_entry", "_launch_kron_fused!"]
+reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/assembly/linear.jl"
+functions = ["_assemble_linear_device!"]
+reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/mesh/mesh1d.jl"
+functions = ["_throw_no_ka_mesh_kernel", "_launch_uniform_mesh1d_init!", "_launch_half_points!", "_launch_spacing!", "_launch_half_spacing!", "_launch_nonuniform_mesh1d_metrics!", "_launch_refine_indices!"]
+reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/average.jl"
+functions = ["_throw_no_ka_average_kernel", "_launch_average_engine!", "_throw_no_device_centered_average", "_device_average_weights!"]
+reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/cell_average.jl"
+functions = ["_launch_cell_average!", "_launch_cell_average_scatter!", "_launch_cell_average_nd!", "_launch_cell_average_scatter_nd!", "_device_project!", "_device_scatter_project!"]
+reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/difference.jl"
+functions = ["_resolve_device_spacing", "_throw_no_ka_stencil_kernel", "_launch_difference_onesided!", "_launch_difference_centered!", "_launch_stencil_engine!"]
+reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/projection.jl"
+functions = ["_device_masked_project!", "_offload_project!"]
+reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/restriction.jl"
+functions = ["_throw_no_ka_projection_kernel", "_launch_restriction!", "_launch_restriction_scatter!", "_launch_restriction_nd!", "_launch_restriction_scatter_nd!", "_device_project!", "_device_scatter_project!"]
+reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/stencil.jl"
+functions = ["_alias_bang_expr", "_alias_expr", "_vectorial_expr", "_vectorial_index_expr", "_dimensional_expr", "_grid_function_forms_expr", "_operator_aliases_expr"]
+reason = "macro-expansion: the _*_expr helpers build code while the stencil macros expand, during load or precompilation, before coverage starts."
+
+[[exempt_function]]
+path = "src/space/inner_product.jl"
+functions = ["_transverse_weight_device", "_seminorm_sq_along_device", "_sum_dirs_device"]
+reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/space/scalar_gridspace.jl"
+methods = ["_host_mirror_mesh(::DeviceLocality, Ωₕ::Mesh1D)", "_host_mirror_mesh(::DeviceLocality, Ωₕ::MeshnD{D})"]
+reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/utils/backend.jl"
+functions = ["_throw_metal_not_functional"]
+reason = "device-only: runs only when the Metal extension is loaded but reports no functional GPU; Metal is not in the test environment."
+
+# Device-only METHODS: single methods that share a name with a host method, so a `functions`
+# entry above (by name) cannot take them. Each is named by the text its definition line starts
+# with (see the header of .github/scripts/coverage_floor.jl).
+
+[[exempt_function]]
+path = "src/mesh/mesh1d.jl"
+methods = [
+    "_points!(x::AbstractVector, I::CartesianProduct{1}, unif::Bool, backend)",
+    "half_points!(x::AbstractVector",
+    "spacing!(x::AbstractVector",
+    "half_spacing!(x::AbstractVector",
+    "_nonuniform_mesh1d_metrics!(Ωₕ::Mesh1D",
+    "_refine_indices_fill!(new_points::AbstractVector",
+]
+reason = "device-only: each is the non-Array method a host Array never dispatches to, and each calls ka_device and a _launch_* function; no KernelAbstractions or Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/mesh/mesh1d.jl"
+methods = [
+    "_point(::DeviceLocality",
+    "_host_points(::DeviceLocality",
+    "_host_spacings(::DeviceLocality",
+    "_host_half_spacings(::DeviceLocality",
+    "_throw_no_scalar_point()",
+]
+reason = "device-only: the ::DeviceLocality methods take device-resident storage (the HostLocality method serves every host mesh), and _throw_no_scalar_point is called only by the device _point; no device array is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/interpolation.jl"
+methods = [
+    "_throw_no_scalar_interpolate_at()",
+    "_πₕ!(dest_loc, src_loc, dest, src, outside)",
+    "_πₕ_matrix_at(::DeviceLocality, ::HostLocality",
+    "_πₕ_vector_at(::HostLocality, ::DeviceLocality",
+    "_πₕ_vector_at(::DeviceLocality, ::HostLocality",
+]
+reason = "device-only: reached only when the destination or the source of an interpolation is device-resident (the host-host method takes every host pair), or from the scalar-index guard on a device element; no device array is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/normal.jl"
+methods = ["_fill_normal!(::DeviceLocality"]
+reason = "device-only: the ::DeviceLocality method fills device-resident components by indexed broadcast; every host call dispatches to the HostLocality method."
+
+[[exempt_function]]
+path = "src/operators/projection.jl"
+methods = [
+    "_device_project!(::DeviceLocality",
+    "_device_scatter_project!(::DeviceLocality",
+    "_marker_index_list(like::AbstractArray",
+]
+reason = "device-only: the ::DeviceLocality defaults answer only for device-resident storage, and _marker_index_list is called only by the device masked projection (_device_masked_project!)."
+
+[[exempt_function]]
+path = "src/operators/restriction.jl"
+methods = ["_probe_point_value(pts::AbstractVector"]
+reason = "device-only: the non-Array method of the probe, reached only when points(Ωₕ) is device-resident; a host mesh's Array takes the _probe_point_value(::Array, ...) method."
+
+[[exempt_function]]
+path = "src/assembly/linear.jl"
+methods = [
+    "_host_sources(::DeviceLocality",
+    "_host_array(::DeviceLocality, v::AbstractArray",
+    "_host_array(::DeviceLocality, v::VectorElement",
+    "_assemble_linear_parallel!(::DeviceLocality",
+    "_host_sources(op::SourceVector",
+    "_host_sources(op::OperatorScale",
+    "_host_sources(op::GridFunctionScale",
+    "_host_sources(op::OperatorAdd",
+    "_host_sources(op::LinearProduct",
+    "_host_sources(op::ShiftNode",
+    "_host_sources(op::RegionRestriction",
+]
+reason = "device-only: the ::DeviceLocality methods take device-resident storage, and the _host_sources(op::...) walk is called only from the device assembly paths (_assemble_linear_device!, _assemble_linear_parallel!(::DeviceLocality), _assemble_add_linear!(::DeviceLocality)) to copy device data to the host."
+
+[[exempt_function]]
+path = "src/assembly/assemble_add.jl"
+methods = ["_assemble_add_linear!(::DeviceLocality"]
+reason = "device-only: the ::DeviceLocality method accumulates into a device-resident vector through a host mirror; every host call dispatches to the HostLocality method."
+
+[[exempt_function]]
+path = "src/assembly/kronecker.jl"
+methods = [
+    "_kron_to_storage(::DeviceLocality, be, F::Diagonal",
+    "_kron_to_storage(::DeviceLocality, be, F::SparseMatrixCSC",
+    "_kron_entry(::Union{_KronDeviceDiagonal, _KronDeviceSparse}",
+    "_kron_as_sparse(::Union{_KronDeviceDiagonal, _KronDeviceSparse}",
+    "_kron_raw(F::_KronDeviceDiagonal",
+    "_kron_raw(F::_KronDeviceSparse",
+    "_kron_fused!(::DeviceLocality",
+]
+reason = "device-only: the ::DeviceLocality methods and the methods on the device-resident factor types _KronDeviceDiagonal and _KronDeviceSparse (built only by _kron_to_storage(::DeviceLocality, ...)) are reached only with a device backend; _kron_fused! also calls _launch_kron_fused!."
+
+[[exempt_function]]
+path = "src/assembly/dirichlet_constraints.jl"
+methods = [
+    "_dirichlet_bc_rows!(::DeviceLocality",
+    "_dirichlet_bc_indices!(::DeviceLocality",
+    "_has_device_csr_mirror(::Type{<:AbstractMatrix}) = false",
+]
+reason = "device-only: the ::DeviceLocality methods take a device-resident matrix (a host matrix dispatches to the HostLocality method), and _has_device_csr_mirror is asked only from them."
+
+[[exempt_function]]
+path = "src/assembly/bilinear_traversal.jl"
+methods = [
+    "_scatter_position(::DeviceLocality",
+    "_scatter_add!(::DeviceLocality",
+    "_zero_stored!(::DeviceLocality",
+    "_flush_device_scatter!(::DeviceLocality",
+]
+reason = "device-only: the ::DeviceLocality methods act on the host mirror of a device-resident CSR matrix; a host matrix takes the HostLocality or SparseMatrixCSC method."
+
+[[exempt_function]]
+path = "src/space/scalar_gridspace.jl"
+methods = [
+    "_throw_device_scalar_weights()",
+    "_host_weights(::DeviceLocality, Wₕ::ScalarGridSpace",
+    "_host_weights(::DeviceLocality, w::SeparableWeights",
+    "_host_space_weights(w::SpaceWeights",
+    "_innerh_weights!(u::AbstractVector, Ωₕ::AbstractMeshType{1}",
+    "_innerplus_weights!(u::AbstractVector",
+    "_innerplus_mean_weights!(u::AbstractVector",
+]
+reason = "device-only: the ::DeviceLocality methods copy device-resident weights to the host (_host_space_weights is called only by them), the AbstractVector weight fills are the non-Array counterparts a host Array never dispatches to, and _throw_device_scalar_weights fires only for a device-backed factor."
+
+[[exempt_function]]
+path = "src/space/inner_product.jl"
+methods = [
+    "_surface_sum_dirs(Ωₕ, mask, ur, vr, u, dims, ::Val{0}",
+    "_surface_sum_dirs(Ωₕ, mask, ur, vr, u, dims, ::Val{d}",
+    "_boundary_face_sum(Ωₕ, ur, vr, u, ::Val{d}",
+    "_separable_weights_full(w::SeparableWeights",
+]
+reason = "device-only: called only from the (DeviceLocality, GpuPolicy) _surface_sum, _dot and _dot_masked methods, which reduce device arrays by broadcast."
+
+[[exempt_function]]
+path = "src/utils/linear_algebra.jl"
+methods = [
+    "_sweep_for!(::DeviceLocality, policy::GpuPolicy",
+    "_sweep_scatter_for!(::DeviceLocality, policy::GpuPolicy",
+    "_gpu_for!(policy, v, idxs, f",
+    "_gpu_scatter_for!(policy, mats, idxs, g",
+]
+reason = "device-only: the (DeviceLocality, GpuPolicy) sweep methods hand off to the device sweep, and the _gpu_for! and _gpu_scatter_for! fallbacks throw when no device sweep (KernelAbstractions extension) is loaded; no device array or KernelAbstractions is in the test environment."
+
+[[exempt_function]]
+path = "src/utils/backend.jl"
+methods = ["locality(::Type{<:GPUArraysCore.AbstractGPUArray}"]
+reason = "device-only: the locality of a GPUArrays array type, reached only for a device array; no device array type is in the test environment."
+
+
+# Uncounted lines: `headers` entries drop only the first line of a method (see the header of
+# .github/scripts/coverage_floor.jl); the body of each is covered on the Weekly run. The
+# `methods` entries below are one-line constant methods a test calls but Julia never counts.
+
+[[exempt_function]]
+path = "src/assembly/stencil_eval.jl"
+headers = [
+    "_point_strength_val(s)",
+    "_visit_operator_add2(f::F",
+    "_fold_operator_add(f::F",
+]
+reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
+
+[[exempt_function]]
+path = "src/assembly/stencil_eval.jl"
+methods = [
+    "is_symbolic(::TrialFunction) = true",
+    "is_symbolic(::TestFunction) = true",
+    "is_symbolic(::IndexedTrialFunction) = true",
+    "is_symbolic(::IndexedTestFunction) = true",
+    "is_symbolic(::SourceFunction) = true",
+    "is_symbolic(::SourceVector) = true",
+    "is_symbolic(::SourceConstant) = true",
+    "is_symbolic(::DiracSource) = true",
+    "is_symbolic(op::BilinearProduct) = true",
+    "is_symbolic(op::LinearProduct) = true",
+    "_is_source_only(::TrialFunction) = false",
+    "_is_source_only(::TestFunction) = false",
+    "_is_source_only(::IndexedTrialFunction) = false",
+    "_is_source_only(::IndexedTestFunction) = false",
+    "_is_source_only(::SourceFunction) = true",
+    "_is_source_only(::SourceVector) = true",
+    "_is_source_only(::SourceConstant) = true",
+    "_is_source_only(::DiracSource) = true",
+    "_is_source_only(::BilinearProduct) = false",
+    "_is_source_only(::LinearProduct) = false",
+    "_is_source_only(::LazyOp) = false",
+]
+reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; a test calls each (test/form/bilinear.jl, test/form/common.jl, test/form/interpolation.jl, test/form/semidiscrete.jl)"
+
+[[exempt_function]]
+path = "src/ast/component.jl"
+headers = [
+    "component(::IndexedTrialFunction",
+    "component(::IndexedTestFunction",
+    "component(op::ShiftNode",
+    "component(op::RegionRestriction",
+    "component(op::OperatorScale",
+    "component(op::GridFunctionScale",
+    "component(op::OperatorAdd",
+]
+reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
+
+[[exempt_function]]
+path = "src/operators/skew.jl"
+headers = [
+    "_advection_operator(wₕ::NTuple",
+]
+reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
+
+[[exempt_function]]
+path = "src/problems/semidiscrete_constraints.jl"
+methods = [
+    "_constraint_description(::TimeDependentConstraints)",
+    "_constraint_description(::TimeParamDependentConstraints)",
+]
+reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; a test calls each (test/form/bilinear.jl, test/form/common.jl, test/form/interpolation.jl, test/form/semidiscrete.jl)"
+
+[[exempt_function]]
+path = "src/ast/stencil_pattern.jl"
+headers = [
+    "_collect_bilinear_terms!(terms, op::BilinearProduct)",
+]
+reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
+
+[[exempt_function]]
+path = "src/ast/stencil_pattern.jl"
+methods = [
+    "_stencil_margin(op::TrialFunction)",
+    "_stencil_margin(op::TestFunction)",
+]
+reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; a test calls each (test/form/bilinear.jl, test/form/common.jl, test/form/interpolation.jl, test/form/semidiscrete.jl)"
+
+[[exempt_function]]
+path = "src/operators/normal.jl"
+headers = [
+    "_fill_normal!(::HostLocality",
+    "_normal_mask(::Val{D}",
+    "_normal_terms(terms, right",
+    "_normal_axis(s::Symbol)",
+    "_normal_product(g, ::NormalComponent",
+    "Base.:*(p::NormalComponentProduct{DIM}, u::LazyOp)",
+    "_normal_terms_of(c::NormalContraction",
+]
+reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
+
+[[exempt_function]]
+path = "src/operators/interpolation.jl"
+headers = [
+    "_interp_in_domain(Ωₕ::AbstractMeshType{D}",
+    "_interp_cell_frac(Ωₕ::AbstractMeshType{D}",
+    "_interp_corner_weight(ts::NTuple",
+    "(f::GridInterpolant)(x)",
+]
+reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
+
+[[exempt_function]]
+path = "src/operators/projection.jl"
+methods = ["_in_any_marker(::Tuple{}, i) = false"]
+reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; it ends the marker recursion of every host masked projection at an entry outside all markers (test/space/vector_elements.jl, Rₕ! with markers)"
+
+[[exempt_function]]
+path = "src/solvers/accelerate_solver.jl"
+methods = [
+    "_accelerate_factorize(::Any",
+    "_accelerate_solve(::Any, ::Any",
+    "_accelerate_refactor!(::Any, ::Any",
+]
+lines = [
+    { method = "accelerate_factorize(A::SparseMatrixCSC; kwargs...)", text = "return _accelerate_factorize(A; kwargs...)" },
+    { method = "accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; kwargs...)", text = "return _accelerate_solve(A, F; kwargs...)" },
+    { method = "accelerate_factorize(a::BilinearForm", text = "A = assemble(" },
+    { method = "accelerate_factorize(a::BilinearForm", text = "return _accelerate_factorize(A; sym = sym, kind = kind, kwargs...)" },
+    { method = "accelerate_solve(a::BilinearForm", text = "A, F = assemble(" },
+    { method = "accelerate_solve(a::BilinearForm", text = "sym_effective = (sym === :auto && symmetrize) ? :spd : sym" },
+    { method = "accelerate_solve(a::BilinearForm", text = "u = _accelerate_solve(A, F; sym = sym_effective, kind = kind, kwargs...)" },
+    { method = "accelerate_solve(a::BilinearForm", text = "return element(trial_space(a), u)" },
+    { method = "accelerate_refactor!(fact::AccelerateFactorization, A::SparseMatrixCSC)", text = "return _accelerate_refactor!(fact, A)" },
+]
+reason = "os-specific: runs only on macOS (after the Sys.isapple() guard, or when BrambleAppleAccelerateExt is absent on macOS); no coverage leg runs macOS with it"
