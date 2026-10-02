@@ -440,6 +440,10 @@
     return x.toExponential(3);
   }
 
+  // The last solve and the inputs it was computed from: a change of colormap, panel or theme
+  // repaints from it instead of solving again.
+  var solved = null, solvedKey = "";
+
   function recompute() {
     var N = parseInt(document.getElementById("nRange").value, 10);
     document.getElementById("nLabel").textContent = N;
@@ -454,9 +458,14 @@
     var theta = angleDeg * Math.PI / 180;
     var betaX = Pe * Math.cos(theta), betaY = Pe * Math.sin(theta);
 
-    var solved = solveGrid(N, betaX, betaY, stencil);
+    var key = [N, Pe, angleDeg, stencil].join("|");
+    if (key !== solvedKey) {
+      solved = solveGrid(N, betaX, betaY, stencil);
+      solved.l2Error = errorAgainstFinerGrid(N, solved.problem.h, solved.grid, betaX, betaY, stencil);
+      solvedKey = key;
+    }
     var problem = solved.problem, uGrid = solved.grid, h = problem.h;
-    var l2Error = errorAgainstFinerGrid(N, h, uGrid, betaX, betaY, stencil);
+    var l2Error = solved.l2Error;
 
     drawField(document.getElementById("fieldCanvas"), N, uGrid, cmap, betaX, betaY);
 
@@ -489,8 +498,9 @@
   // scheme): a sandboxed srcdoc frame cannot read the parent's `data-theme` itself.
   window.addEventListener("message", function (e) {
     if (e.source !== window.parent || !e.data || !e.data.brambleTheme) return;
+    if (document.documentElement.getAttribute("data-theme") === e.data.brambleTheme) return;
     document.documentElement.setAttribute("data-theme", e.data.brambleTheme);
-    recompute();
+    recompute(); // the solve is cached on its inputs, so this only repaints
   });
 
   recompute();
