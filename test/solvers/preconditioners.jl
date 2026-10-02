@@ -101,7 +101,13 @@ function _pc_cheb_dense(A, λmin, λmax, k)
     return A \ (d .* (Id - T1 / Tσ) ./ d')
 end
 
-_pc_cheb_matrix(P, n) = reduce(hcat, (P \ [Float64(i == j) for i in 1:n] for j in 1:n))
+function _pc_cheb_matrix(P, n)
+    M = Matrix{Float64}(undef, n, n)
+    for j in 1:n
+        M[:, j] = P \ [Float64(i == j) for i in 1:n]
+    end
+    return M
+end
 
 # A vector indexed from 0, to check that `ldiv!` refuses offset axes.
 struct _PcZeroBased <: AbstractVector{Float64}
