@@ -1567,7 +1567,7 @@ centered difference per direction:
 ```
 
 The same function as [`D̽ₕ`](@ref): the dispatch alias and the tuple-valued alias coincide
-for this family (gpena/Bramble.jl#140), so `∇̽ₕ` is simply another name for it, under the
+for this family, so `∇̽ₕ` is simply another name for it, under the
 `∇` notation the other vectorial gradients share. In 1D it returns the bare grid function,
 above a `D`-tuple. The first and last point along each direction have no truncated-boundary
 convention of their own and fall back to the one-sided difference the near side still
