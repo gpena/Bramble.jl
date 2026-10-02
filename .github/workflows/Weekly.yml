@@ -105,9 +105,15 @@ jobs:
         with:
           version: ${{ matrix.version }}
 
+      # Compiled images are not cached here, on purpose. Eight legs of them are about 5 GB, and
+      # the repository's cache quota is 10 GB: they evicted the `unit-and-slow` entry that CI
+      # restores for every PR and Nightly saves on `main` (CI.yml, nightly.yml). The registry,
+      # the packages and the artifacts are still cached; the compile cost (a warm leg ran about
+      # half as long) is the price of keeping CI, Nightly and the docs warm. Weekly runs once a
+      # week and on demand.
       - uses: julia-actions/cache@v2
         with:
-          cache-compiled: "true"
+          cache-compiled: "false"
 
       - uses: julia-actions/julia-buildpkg@v1
 
