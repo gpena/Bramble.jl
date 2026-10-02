@@ -17,24 +17,24 @@
 #===========================================================================#
 
 #===========================================================================#
-# Out-of-domain policy (gpena/Bramble.jl#223)
+# Out-of-domain policy
 #
 # `locate_cell` clamps which *cell* an outside point is read against to the boundary
-# cell, but never clamped the fraction `x` is weighted by inside it -- so a point beyond
-# the boundary used to interpolate as a silent linear extrapolation along that cell's own
-# slope, with no error, no warning, and blend weights that still summed to one (nothing
-# downstream could tell). `outside` names that choice explicitly instead of making it by
-# accident:
+# cell, but not the fraction `x` is weighted by inside it, so a point beyond the boundary
+# would otherwise interpolate as a silent linear extrapolation along that cell's own slope,
+# with blend weights that still sum to one. `outside` names that choice explicitly.
 #
-#   :error        -- (the default) throw, naming the point and the domain extent
-#   :clamp        -- clamp the point to the domain, then interpolate there
-#   :extrapolate  -- today's original behaviour, now opt-in
-#   a Number      -- return this value outright (e.g. 0.0, NaN), bypassing the blend
+# The accepted values are
+#
+#     :error        -- (the default) throw, naming the point and the domain extent
+#     :clamp        -- clamp the point to the domain, then interpolate there
+#     :extrapolate  -- extend the end cells' linear blend
+#     a Number      -- return this value outright (e.g. 0.0, NaN), bypassing the blend
 #
 # A point outside by no more than a handful of `eps`, relative to the domain extent, is
 # treated as exactly on the boundary under *every* policy, `:error` included: this is what
 # keeps `πₕ` between two meshes over the same nominal domain from tripping over floating-
-# point endpoint noise (gpena/Bramble.jl#223's own acceptance criterion).
+# point endpoint noise (the acceptance criterion of the out-of-domain policy).
 #
 # The fill-value policy is pointwise-only, by mathematical necessity, not by omission:
 # `interpolation_matrix`/`InterpolationNode` (operators/interpolation.jl) represent
@@ -82,7 +82,7 @@ end
 # `interpolate_at` fetches the 2^D corner values around a single query point one scalar
 # read at a time -- fine on the host, but a device transfer hidden inside a scalar call on
 # a device-backed element, and one this package refuses rather than perform silently
-# (gpena/Bramble.jl#336). Named after `_throw_no_scalar_point` (mesh/mesh1d.jl), guarding
+#. Named after `_throw_no_scalar_point` (mesh/mesh1d.jl), guarding
 # before any corner is read rather than mid-blend.
 @noinline function _throw_no_scalar_interpolate_at()
     throw(
@@ -152,7 +152,7 @@ Locates the cell of `mesh(space(uₕ))` containing `x` ([`locate_cell`](@ref)) a
 coordinates and correct on a non-uniform mesh, since it reads the mesh's own point
 coordinates rather than assuming a fixed step.
 
-`outside` (gpena/Bramble.jl#223) names what happens when `x` falls outside the domain:
+`outside` names what happens when `x` falls outside the domain:
 
   - `:error` (the default): throw an `ArgumentError` naming `x` and the domain extent.
   - `:clamp`: clamp `x` to the domain first, then interpolate there.
@@ -168,8 +168,8 @@ noise at the rim.
 `uₕ`'s mesh is read as it is now, so once an in-place mutator (`set_points!`,
 `change_points!`, `iterative_refinement!`) has moved it, this throws an `ArgumentError`
 (the one [`weights`](@ref) throws) rather than locating `x` on a mesh `uₕ`'s values were
-never computed on; call [`gridspace`](@ref) again and rebuild `uₕ` on it
-(gpena/Bramble.jl#408). The same check covers [`πₕ!`](@ref), `πₕ(Wₕ, src)` and the symbolic
+never computed on; call [`gridspace`](@ref) again and rebuild `uₕ` on it.
+The same check covers [`πₕ!`](@ref), `πₕ(Wₕ, src)` and the symbolic
 source `πₕ(uₕ)`, which all evaluate through here.
 
 This is the building block both `πₕ!`/`πₕ` (below, the numeric operator) and the
@@ -187,7 +187,7 @@ this file).
 function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{1}}, x; outside = :error)
     locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_interpolate_at()
     _validate_outside(outside)
-    weights(space(uₕ))   # throws once uₕ's mesh has moved (gpena/Bramble.jl#408)
+    weights(space(uₕ))   # throws once uₕ's mesh has moved
     Ωₕ = mesh(space(uₕ))
     frac = _interp_cell_frac(Ωₕ, x, outside)
     frac === nothing && return outside
@@ -198,7 +198,7 @@ end
 function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{D}}, x; outside = :error) where {D}
     locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_interpolate_at()
     _validate_outside(outside)
-    weights(space(uₕ))   # throws once uₕ's mesh has moved (gpena/Bramble.jl#408)
+    weights(space(uₕ))   # throws once uₕ's mesh has moved
     Ωₕ = mesh(space(uₕ))
     frac = _interp_cell_frac(Ωₕ, x, outside)
     frac === nothing && return outside
@@ -222,7 +222,7 @@ end
 # absolute trial columns. Factored so the three cannot drift.
 #
 # Returns `(i, t)`/`(idx, ts)` as before, or the sentinel `nothing` when `outside isa
-# Number` *and* `x` is genuinely outside the domain -- the one shape change from #223,
+# Number` *and* `x` is genuinely outside the domain -- the one shape change the fill value brings,
 # read by `interpolate_at` alone (the only caller a fill value is meaningful for; the
 # linear callers validate `outside` down to the three symbols before ever reaching here,
 # so `nothing` never arises on those paths).
@@ -288,7 +288,7 @@ not only at `src`'s own grid points), so this is equivalent to `Rₕ!(dest, x ->
 `dest` and `src` may be built over entirely different meshes. `Rₕ!` handles evaluating the interpolant
 at each of `dest`'s grid points, following `dest`'s backend [`execution_policy`](@ref).
 `outside` is forwarded to [`interpolate_at`](@ref) unchanged; see its docstring for the
-policy this decides among (gpena/Bramble.jl#223).
+policy this decides among.
 
 Every call here re-locates, via [`locate_cell`](@ref), which cell of `src`'s mesh each of
 `dest`'s points falls in. Interpolating repeatedly between the same two meshes (a time loop
@@ -297,7 +297,7 @@ see the [`interpolation_matrix`](@ref)-based method below, following the same "b
 pattern once" shape [`allocate_system_matrix`](@ref)/[`assemble!`](@ref) already use.
 
 When `dest` and `src` are both host-backed, this evaluates `interpolate_at` pointwise as
-described above. When either is device-backed (gpena/Bramble.jl#312), the pointwise path
+described above. When either is device-backed, the pointwise path
 would compile a device kernel around the host closure `x -> interpolate_at(src, x)` --
 which cannot compile, since `interpolate_at` dispatches, calls `locate_cell` and reads
 `src`'s own coefficients on the host. Instead, this assembles
@@ -318,7 +318,7 @@ end
 # mul!-based method below rather than launching a host closure inside a device kernel.
 function _πₕ!(dest_loc, src_loc, dest, src, outside)
     _validate_outside_linear(outside)
-    weights(space(src))   # the host path checks inside interpolate_at (gpena/Bramble.jl#408)
+    weights(space(src))   # the host path checks inside interpolate_at
     P = interpolation_matrix(space(dest), space(src); outside)
     return πₕ!(dest, P, src)
 end
@@ -333,7 +333,7 @@ each destination point's cell: `parent(dest) .= P * parent(src)`, computed in pl
 `P` must be `interpolation_matrix(space(dest), space(src))` (or an equal-shape matrix
 built the same way) -- a mismatched size throws the usual `DimensionMismatch` from `mul!`.
 `interpolation_matrix` always returns a host `SparseMatrixCSC`, regardless of `dest`'s own
-backend (gpena/Bramble.jl#312): passing it straight to a device-backed `dest`/`src` would
+backend: passing it straight to a device-backed `dest`/`src` would
 otherwise fall through `SparseArrays`' own generic sparse-times-vector method, which
 scalar-indexes the device vectors one entry at a time. So `P` and `src` are each brought
 to `dest`'s own locality first -- `P` uploaded with [`metal_sparse_csr`](@ref) if `dest` is
@@ -368,7 +368,7 @@ end
 @inline _πₕ_matrix_at(loc, ::T, P) where {T} = P
 
 # `dest` is device-backed and `P` is the host SparseMatrixCSC interpolation_matrix
-# returns: upload it once (gpena/Bramble.jl#250, #313), a bulk sparse-to-sparse transfer,
+# returns: upload it once, a bulk sparse-to-sparse transfer,
 # never a per-entry scalar write into device memory.
 @inline _πₕ_matrix_at(::DeviceLocality, ::HostLocality, P) = metal_sparse_csr(P)
 
@@ -391,8 +391,7 @@ Evaluates `Rₕ(Wₕ, x -> interpolate_at(src, x; outside))`; see [`πₕ!`](@re
 by multiple dispatch from the one-argument symbolic wrapper `πₕ(uₕ)` in
 `operators/interpolation.jl`. The element type is promoted from `Wₕ`'s and `src`'s
 own, so interpolating a `Dual`-valued `src` yields a `Dual`-valued result on an
-undifferentiated `Wₕ`. `outside` is forwarded to [`interpolate_at`](@ref) unchanged
-(gpena/Bramble.jl#223).
+undifferentiated `Wₕ`. `outside` is forwarded to [`interpolate_at`](@ref) unchanged.
 """
 @inline πₕ(Wₕ::ScalarGridSpace, src::VectorElement; outside = :error) = Rₕ(
     Wₕ, x -> interpolate_at(src, x; outside)
@@ -402,16 +401,16 @@ undifferentiated `Wₕ`. `outside` is forwarded to [`interpolate_at`](@ref) unch
 #
 # The same corner-weight arithmetic interpolate_at uses, emitting (row, col, weight)
 # triplets instead of accumulating a value against one src's data, so the two are kept in
-# step by construction. `outside` is already validated down to :error/:clamp/:extrapolate
+# step by construction. `outside` is already validated down to `:error`, `:clamp` or `:extrapolate`
 # by `interpolation_matrix` before this runs (see this file's header note on why a fill
-# value cannot be represented here), so the fraction helpers below never see the fill-value
+# value cannot be represented here). So the fraction helpers below never see the fill-value
 # short-circuit `_interp_cell_frac` carries for `interpolate_at` alone.
 #
 # `point(Ωdest, ·)` and `_interp_cell_frac` both read straight off `points`/`points(Ωₕ(d))`,
-# which throws outright on a device-backed mesh (gpena/Bramble.jl#308) rather than
-# scalar-indexing it one point at a time. `host_points` (#308) is called exactly once per
+# which throws outright on a device-backed mesh rather than
+# scalar-indexing it one point at a time. `host_points` is called exactly once per
 # mesh below -- not once per destination point -- so the whole assembly is a host loop over
-# host arrays regardless of where `Ωdest`/`Ωsrc` actually live; `locate_cell` (also #308) is
+# host arrays regardless of where `Ωdest`/`Ωsrc` actually live; `locate_cell` is
 # the one per-point mesh query left, already safe on a device mesh by construction.
 
 @inline function _interp_triplet_frac(Ωsrc::AbstractMeshType{1}, pts_src, x, outside::Symbol)
@@ -511,7 +510,7 @@ a sparse matrix `P` rather than applied pointwise:
 `Wsrc` are built over different meshes), with at most ``2^D`` nonzero entries per row:
 the corner weights of the source cell [`locate_cell`](@ref) places that destination point in.
 
-`outside` (gpena/Bramble.jl#223) accepts only `:error` (the default), `:clamp`, and
+`outside` accepts only `:error` (the default), `:clamp`, and
 `:extrapolate` -- not a fill value, unlike [`interpolate_at`](@ref): `P` is a linear map,
 and a row that returns a constant regardless of `src` cannot be written as a weighted
 combination of `src`'s own entries unless that constant is exactly zero. Passing a `Number`
@@ -569,13 +568,13 @@ Built as a `SourceFunction` whose function evaluates `interpolate_at(uₕ, x; ou
 `SourceFunction`'s own `local_stencil` evaluates its function at the current point of
 whichever mesh is being walked, so `uₕ` can originate from another leaf without special
 handling; the interpolation occurs once per point inside `interpolate_at`, where ordinary
-source function calls occur. `outside` (gpena/Bramble.jl#223) is forwarded to
+source function calls occur. `outside` is forwarded to
 [`interpolate_at`](@ref) unchanged, fill values included -- this is a source (a function of
 `uₕ`'s values), not a linear map, so unlike the operator [`πₕ`](@ref)`(op)` below it
 carries no such restriction.
 
 Unlike a plain function source, a [`form`](@ref) does not sample this one once when it is
-built (gpena/Bramble.jl#408): every `assemble`/`assemble!` reads `uₕ`'s current values, and
+built: every `assemble`/`assemble!` reads `uₕ`'s current values, and
 throws an `ArgumentError` once `uₕ`'s mesh has moved (see [`interpolate_at`](@ref)).
 """
 function πₕ(uₕ::VectorElement{<:ScalarGridSpace{D}}; outside = :error) where {D}
@@ -586,7 +585,7 @@ end
 # The function inside `πₕ(uₕ)`'s `SourceFunction`: a named callable rather than a closure,
 # so `form` can tell it apart from a plain function source and leave it unsampled
 # (`_lower_sources` below). Its type depends on `uₕ`'s and `outside`'s types only, as the
-# closure's did, so a new `πₕ(uₕ)` recompiles nothing (gpena/Bramble.jl#197).
+# closure's did, so a new `πₕ(uₕ)` recompiles nothing.
 struct GridInterpolant{E <: VectorElement, O} <: Function
     uₕ::E
     outside::O
@@ -608,7 +607,7 @@ end
 @inline _fill_type(outside::Number) = typeof(outside)
 @inline _fill_type(::Symbol) = Union{}
 
-# Read at every fill instead of sampled once into a `SourceVector` (gpena/Bramble.jl#408):
+# Read at every fill instead of sampled once into a `SourceVector`:
 # sampling would keep `uₕ`'s old values after `uₕ .= ...`, and never see its mesh move.
 @inline _lower_sources(op::SourceFunction{D, <:GridInterpolant}, space) where {D} = op
 
@@ -641,7 +640,7 @@ it at points of whatever mesh the assembly is walking.
 `Side` is [`TrialSide`](@ref) or [`TestSide`](@ref), taken from the leaf `πₕ` wrapped. It
 decides which leaf `_bind_interp_spaces` stamps into `src_space`, whether the stencil names
 [`AbsoluteColumn`](@ref)s or [`AbsoluteRow`](@ref)s, and which leaf's grid the sweep walks:
-always the other one, the side that stays native (gpena/Bramble.jl#263).
+always the other one, the side that stays native.
 
 `src_space` is `nothing` until assembly binds it. `πₕ(op)` cannot name the space itself: on a
 composite space the leaf a term interpolates from is only resolved block by block, so
@@ -652,7 +651,7 @@ Distinct from the source wrapper `πₕ(uₕ)`, which carries a grid function's 
 carries no values; it carries the map, and its stencil names degrees of freedom of the space
 it interpolates from.
 
-`outside` (gpena/Bramble.jl#223) is one of `:error`, `:clamp` or `:extrapolate` -- never a
+`outside` is one of `:error`, `:clamp` or `:extrapolate` -- never a
 fill value, since this node's stencil is a *linear* map (weighted trial columns), and a
 constant independent of the trial unknowns cannot be written that way; see
 [`interpolation_matrix`](@ref)'s docstring for the same restriction.
@@ -670,7 +669,7 @@ end
 Which side of a bilinear term an [`InterpolationNode`](@ref) sits on.
 
 A trial-side interpolation names absolute *columns* and leaves the rows to the walked mesh; a
-test-side one names absolute *rows* and leaves the columns to it (gpena/Bramble.jl#263). The
+test-side one names absolute *rows* and leaves the columns to it. The
 side is a type parameter rather than a field so the node stays a singleton the like-term
 simplifier can fold, and so every walk that reads it folds away at compile time.
 
@@ -706,7 +705,7 @@ struct TestSide end
 end
 
 # The side a leaf puts the interpolation on. Both leaf kinds are accepted, plain or indexed
-# (gpena/Bramble.jl#263); anything else is the operator-inside-interpolation refusal above.
+#; anything else is the operator-inside-interpolation refusal above.
 @inline _interp_side_of(::Union{TrialFunction, IndexedTrialFunction}) = TrialSide
 @inline _interp_side_of(::Union{TestFunction, IndexedTestFunction}) = TestSide
 
@@ -730,14 +729,14 @@ Operators wrap it from the outside, acting on the mesh being integrated over:
 `inner₊(D₋ₓ(πₕ(u)), D₋ₓ(v))` is `D_x^⊤ H_+ D_x P`. Writing an operator inside is a different
 operation and is refused, since it would difference on the source mesh instead.
 
-`innerₕ(u, πₕ(w))` is the mirror (gpena/Bramble.jl#263): the test side interpolates, so the
+`innerₕ(u, πₕ(w))` is the mirror: the test side interpolates, so the
 *trial* mesh is the one integrated over and the entries name absolute rows instead of absolute
 columns. The assembled matrix is `Pᵀ · H · (trial factor)`. A single term interpolating both
 sides is refused -- one side has to stay native, since it is the side whose mesh carries the
 quadrature weight.
 
 `op` must be a trial- or test-function leaf, plain or indexed. `outside`
-(gpena/Bramble.jl#223) accepts only `:error` (the default), `:clamp` and `:extrapolate` -- see
+accepts only `:error` (the default), `:clamp` and `:extrapolate` -- see
 [`InterpolationNode`](@ref)'s own docstring for why a fill value is refused here.
 """
 function πₕ(op::LazyOp{D}; outside = :error) where {D}
@@ -780,7 +779,7 @@ end
 
 # `Slot` is `AbsoluteColumn` on the trial side and `AbsoluteRow` on the test side: the
 # blend itself is the same map either way, and only which half of the matrix position it
-# names differs (gpena/Bramble.jl#263).
+# names differs.
 @inline function _interp_stencil(
         Ωsrc::AbstractMeshType{1}, x, ::Val{1}, outside::Symbol, Slot
 )
@@ -832,7 +831,7 @@ end
 stencil_offsets(op::InterpolationNode) = stencil_offsets(op.inner_op)
 
 # Two interpolations are the same shape only when they interpolate from the same space
-# under the same out-of-domain policy (gpena/Bramble.jl#223) -- :clamp and :extrapolate
+# under the same out-of-domain policy, since `:clamp` and `:extrapolate`
 # disagree exactly at the points that matter, so treating them as interchangeable here
 # would let symmetry detection paper over a real difference. The symmetry fast path
 # compares the two sides of a product for structural equality, and an interpolation on one
@@ -869,7 +868,7 @@ stencil_shift_trait(::DiracSource) = PointDependentStencil()
 # this, `UnaryWrapper`'s fallback (`stencil_shift_trait(op.inner_op)`, form/stencil_eval.jl)
 # forwards to whatever the wrapped trial/test function reports -- translation-invariant --
 # and `D₋ₓ(cₕ * u)` reads the coefficient at the point being visited instead of the point
-# the difference's tap reaches (gpena/Bramble.jl#271).
+# the difference's tap reaches.
 #
 # This line alone is not enough, and briefly worse than the bug it targets: the generic
 # `PointDependentStencil` branch (form/common.jl) discards the operand's own stencil and
@@ -902,7 +901,7 @@ end
 # it names -- the trial leaf for a trial-side node, the test leaf for a test-side one. Nothing
 # validates the two against each other any more: the node is given that leaf and has no other
 # space to disagree with, which is what dropping `πₕ`'s space argument bought
-# (gpena/Bramble.jl#10).
+#.
 #
 # Both are decided by the operator's type alone, allowing each rung to fold to a constant.
 
@@ -917,7 +916,7 @@ _all_trial_interpolated(::DiracSource) = true
 _all_trial_interpolated(::TestFunction) = true
 _all_trial_interpolated(::IndexedTestFunction) = true
 
-# The mirror question, for a test-side interpolation (gpena/Bramble.jl#263): whether every
+# The mirror question, for a test-side interpolation: whether every
 # row the term scatters into is named by an interpolation. That is the other way a block may
 # straddle two meshes without the two leaves having to share an index space.
 _all_test_interpolated(::LazyOp) = false
@@ -977,7 +976,7 @@ stencil sees.
 
 The test leaf, as it has always been, unless the term interpolates on the test side: then the
 rows are named absolutely and the trial leaf is the one that stays native, so it supplies the
-grid, the quadrature weight and the columns (gpena/Bramble.jl#263).
+grid, the quadrature weight and the columns.
 """
 @inline function _walked_leaf(term, trial_leaf, test_leaf)
     return _has_test_interp(term) ? trial_leaf : test_leaf
@@ -1009,11 +1008,11 @@ _all_trial_interpolated(op::LinearProduct) = true
 _bind_interp_spaces(op::Any, trial_leaf, test_leaf) = op
 
 # Each node binds to the leaf whose degrees of freedom it names: the trial leaf for a
-# trial-side interpolation, the test leaf for a test-side one (gpena/Bramble.jl#263). Both
+# trial-side interpolation, the test leaf for a test-side one. Both
 # leaves are threaded through the whole walk, so one form may interpolate on either side in
 # different terms.
 #
-# The leaf is stored as its `host_weights` mirror (gpena/Bramble.jl#363): the stencil locates
+# The leaf is stored as its `host_weights` mirror: the stencil locates
 # the cell by reading the source mesh's points one at a time, which a device mesh cannot serve,
 # and the mirror numbers the same degrees of freedom. On a host leaf `host_weights` returns the
 # leaf itself, so the host path binds exactly what it bound before. Binding happens once per
@@ -1022,7 +1021,7 @@ _bind_interp_spaces(op::Any, trial_leaf, test_leaf) = op
 # The leaf's weights are read through `weights` first, for its staleness check alone: once
 # the source mesh has moved, every fill, refill, matrix-free apply and pattern walk throws
 # here, as it does for a moved walked leaf, instead of locating cells on the new points and
-# scattering into a pattern built for the old ones (gpena/Bramble.jl#367). One integer
+# scattering into a pattern built for the old ones. One integer
 # comparison per fill.
 function _bind_interp_spaces(
         op::InterpolationNode{D, S, OpType, TrialSide}, trial_leaf, test_leaf
@@ -1070,7 +1069,7 @@ function _bind_interp_spaces(ops::NTuple{N, Any}, trial_leaf, test_leaf) where {
     )
 end
 
-# --- Expression rendering (gpena/Bramble.jl#274) ----------------------------------- #
+# --- Expression rendering ----------------------------------- #
 
 # Operand only, per the plan's departure from the issue text: `src_space` is `nothing` until
 # assembly binds it (`_bind_interp_spaces`) and carries no name a caller wrote, so rendering

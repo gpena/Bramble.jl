@@ -39,11 +39,11 @@ end
 
 # --- Zero-allocation stencil evaluators -------------------------------------------- #
 
-# `markers` is optional throughout the stencil evaluators: every other node accepts it and
+# `markers` is optional throughout the stencil evaluators. Every other node accepts it and
 # ignores it, and callers with nothing to restrict by pass `nothing`. Only this node reads
-# it, so only this node determines what an absent table means: no point is marked. The
-# `:interior` region is then the whole grid, and every other region is empty, which matches
-# `haskey` returning `false` for a table that lacks the key. `_in_region` below answers the
+# it, so only this node decides what an absent table means: no point is marked. The
+# `:interior` region is then the whole grid and every other region is empty, as `haskey`
+# returning `false` for a table that lacks the key already implies. `_in_region` below answers the
 # `nothing` case itself, so `_is_marked` only ever sees a real table.
 @inline _is_marked(markers, region::Symbol, lin_idx::Int) = haskey(markers, region) && markers[region][lin_idx]
 
@@ -105,7 +105,7 @@ function _bind_interp_spaces(
     return RegionRestriction{D, RegionType, typeof(inner)}(op.region, inner)
 end
 
-# --- Expression rendering (gpena/Bramble.jl#274) ----------------------------------- #
+# --- Expression rendering ----------------------------------- #
 
 # `repr` rather than plain string interpolation: `"$(:boundary)"` prints `boundary`, dropping
 # the leading colon, while `repr(:boundary)` prints `:boundary`, which is what a caller wrote

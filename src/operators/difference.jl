@@ -1396,16 +1396,16 @@ const ExtendedDifferenceNode{D, Dim} = Union{
 #
 # `form(Wₕ, Vₕ, f)` (bilinear.jl) already hands `f` the space's own `TrialFunction{D,N}`/
 # `TestFunction{D,N}`, and that object is already tuple-like: `u(i)` and `components(u)`
-# (form/component.jl) address its `N` immediate subspaces since gpena/Bramble.jl#74, and
+# (form/component.jl) address its `N` immediate subspaces, and
 # `TrialFunction`/`TestFunction` already answer `iterate`/`getindex`/`length`. What is
-# missing is passing `u` itself, unindexed, straight to a vectorial operator: `∇ₕ(u)` on a
-# composite `u` used to hit the generic `∇ₕ(op::LazyOp{D})` method above, differencing the
+# missing is passing `u` itself, unindexed, straight to a vectorial operator. `∇ₕ(u)` on a
+# composite `u` would hit the generic `∇ₕ(op::LazyOp{D})` method above, differencing the
 # whole composite as if it were one scalar function, rather than each of its `N` components
-# in turn (gpena/Bramble.jl#234). The two methods below intercept `TrialFunction{D,N}`/
+# in turn. The two methods below intercept `TrialFunction{D,N}`/
 # `TestFunction{D,N}` ahead of that generic method -- a concrete struct is always more
 # specific than the abstract `LazyOp{D}` it is a subtype of, whatever `N` is -- and, only
 # when `N` is a genuine composite leaf count, forward to `∇ₕ`'s/`∇₊ₕ`'s own `componentwise`
-# tuple method (`@node_family`'s `vectorial_alias`, `node_family.jl`) over `components(u)`:
+# tuple method (`@node_family`'s `vectorial_alias`, `node_family.jl`) over `components(u)`,
 # an `N`-tuple of `D`-tuples, the gradient tensor. A scalar space (`N === nothing` or
 # `N == 1`) has to keep exactly what the generic method already gave it -- reproduced in
 # `_∇ₕ_noncomposite`/`_∇₊ₕ_noncomposite` below, rather than falling through to it, since our
@@ -1692,11 +1692,10 @@ function εcₕ(u::LazyOp{D}) where {D}
 end
 
 # The upper triangle only: `ε^{ij} = ε^{ji}`, so each off-diagonal pair enters once, doubled
-# (27 terms in 3D become 15). The diagonal's `1 // 1` is not a no-op for the compiler: a
+# (27 terms in 3D become 15). The diagonal's `1 // 1` is not a no-op for the compiler. A
 # non-`Integer` scale is kept (`_wrap_scale`), so a diagonal `Dcₓ(u(1)) Dcₓ(v(1))` term shares
 # its type with the off-diagonal `Dcₓ(u(2)) Dcₓ(v(2))` one, and 12 distinct term types become
-# 9 (first assemble in 3D: 15.2–17.6 s without it, 13.0–13.5 s with, measured with `1.0`).
-# The scales here and in `_centered_strain_pieces` are `Rational`, not `Float64`: a rational
+# 9. The scales here and in `_centered_strain_pieces` are `Rational`, not `Float64`, since a rational
 # times a `Float32` weight stays `Float32`, so the form keeps the mesh's element type.
 @inline function _centered_strain_products(left, right, i::Int, j::Int)
     products = _flatten_tuples(

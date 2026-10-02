@@ -199,15 +199,14 @@ end
 
 # --- the offloaded path (gpena/Bramble.jl#324) ------------------------------------- #
 #
-# A space whose backend carries a `GpuOffload` policy keeps host storage and a host mesh, so
-# `raw` answers `HostLocality` and the dispatch above never reaches a device kernel. Instead,
+# A space with a `GpuOffload` policy keeps host storage and a host mesh.
+# `raw` answers `HostLocality`, so the dispatch above never reaches a device kernel.
 # `project!` fills a device buffer allocated per call through the wrapped device backend,
-# with the same `_device_project!`/`_device_masked_project!` machinery a device-resident
-# space uses, then copies the result back into the host destination and drops the buffer.
+# with the `_device_project!`/`_device_masked_project!` machinery a device-resident space
+# uses, then copies the result back into the host destination and drops the buffer.
 # The rules' device methods upload the mesh axes they need with `_on_device` (a no-op for a
-# device-resident mesh) and launch on `_device_backend`'s device. Nothing is cached on the
-# space, the mesh or the policy: a persistent device copy would go stale under a mesh or
-# marker change, the hazard #313 removed.
+# device-resident mesh) and launch on `_device_backend`'s device. Nothing is cached. A
+# persistent device copy would go stale under a mesh or marker change.
 
 """
     _offload_backend(backend::Backend) -> Union{Backend, Nothing}

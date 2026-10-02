@@ -94,38 +94,25 @@ end
 # copies the search and the scatter need. `docs/src/internals/gpu.md` states this contract
 # for a reader without this file open.
 #
-# The mirror is built once, when the matrix itself is (`BrambleMetalExt.metal_sparse_csr`,
-# gpena/Bramble.jl#250): the host CSR arrays it needs are already ordinary `Vector{Ti}`s at
-# that point, on their way to being uploaded with `mtl(...)`, so `rowptr`/`colval` are reused
-# outright -- no conversion, no separate device-to-host transfer, just the one allocation
-# `nzval` itself needs. `nzval` starts at all zeros; `_zero_stored!` (below) resets it the
-# same way before every later `assemble!`, and `A.nzVal` on the device side is never touched
-# until `_flush_device_scatter!` copies `nzval` across in one bulk `copyto!`.
+# The mirror is built once, when the matrix itself is (`BrambleMetalExt.metal_sparse_csr`).
+# The host CSR arrays it needs are already ordinary `Vector{Ti}`s at that point, on their way
+# to being uploaded with `mtl(...)`, so `rowptr`/`colval` are reused outright, with no
+# conversion and no separate device-to-host transfer. Only `nzval` is a new allocation. It
+# starts at all zeros; `_zero_stored!` (below) resets it the same way before every later
+# `assemble!`, and `A.nzVal` on the device side is never touched until
+# `_flush_device_scatter!` copies `nzval` across in one bulk `copyto!`.
 #
 # `visit_bilinear_stencil`'s own sinks (`ReplaySink` and its kin) reduce to exactly
 # `_scatter_position`/`_scatter_add!` too, so they pick up this method for free. A
 # `GpuPolicy` backend's assembly is forced into the threaded path (see
-# `_coerce_serial_to_threaded` below): its recording fill searches the mirror once per matrix
+# `_coerce_serial_to_threaded` below). Its recording fill searches the mirror once per matrix
 # (`_coordinates_to_positions!`), and every later fill replays those mirror positions through
-# the same band-coloured sweep, writing `_scatter_add!` only (gpena/Bramble.jl#318).
+# the same band-coloured sweep, writing `_scatter_add!` only.
 #
-# Reading `A.mirror` straight off the matrix, rather than resolving it from a cache keyed on
-# `A`, is deliberate and has history (gpena/Bramble.jl#313): an earlier version of this file
-# kept the mirror in a module-global `Dict` keyed on `objectid(A)`, guarded by a `WeakRef`
-# identity check and pruned of dead entries on every build, re-looked-up from inside the hot
-# scatter loop on every entry. That per-call, keyed re-lookup was S4.2's actual bug (round 7),
-# found only by an instrumented stress test at `n = 513`/`1025`/`2049` over 40+ repeated
-# assemblies, each compared against the CPU result: a handful of near-boundary entries came
-# out missing their whole contribution, `2/h` off, because the lookup could be rebuilt
-# mid-sweep -- discarding entries already scattered into the discarded instance -- while
-# another thread was still reading it. Neither `GC.@preserve A` around the sweep, nor
-# `ka_synchronize` at several points, nor a `ReentrantLock` around every access, nor swapping
-# the container from `IdDict` to `Dict`, closed it alone; bypassing the lookup during the
-# sweep entirely did, immediately and completely. Moving the mirror onto `A` itself as a field
-# removes the keyed lookup outright: there is nothing to rebuild and nothing to key on,
-# `A.mirror` is simply the one mirror that matrix has, so this class of bug has no cache left
-# to reproduce it in, and the ~430 lines threading a resolved mirror by hand through ten
-# functions down to `add_to_sparse!` are gone with it.
+# `A.mirror` is read straight off the matrix and never resolved from a cache keyed on `A`.
+# A keyed lookup inside the hot scatter loop can be rebuilt mid-sweep while another thread
+# still reads it, which silently drops the entries already scattered into the discarded
+# instance. Holding the mirror as a field of `A` leaves nothing to rebuild or key on.
 """
     _DeviceSparseMirror{Tv, Ti}(rowptr::Vector{Ti}, colval::Vector{Ti}, nzval::Vector{Tv})
 
@@ -802,11 +789,11 @@ only [`DiagonalReplaySink`](@ref) needs this, pairing itself (interior) with an 
 [`ReplaySink`](@ref) (boundary shell), so the one-sink form below is the thin, common case.
 
 # Arguments
-- `sink` (or `interior_sink`/`boundary_sink`): What to do per entry. See [`PatternSink`](@ref),
-  [`ReplaySink`](@ref) and [`DiagonalReplaySink`](@ref), and the
-  contract in [`_sink_entry!`](@ref), [`_sink_point!`](@ref) and [`_sink_dedups`](@ref).
+- `sink` (or `interior_sink`/`boundary_sink`): What to do per entry. The sinks are
+  [`PatternSink`](@ref), [`ReplaySink`](@ref) and [`DiagonalReplaySink`](@ref); the
+  contract is in [`_sink_entry!`](@ref), [`_sink_point!`](@ref) and [`_sink_dedups`](@ref).
 - `term`: The AST node whose stencil is evaluated at each point.
-- `sp`: The test leaf whose grid is walked and whose markers the stencil sees.
+- `sp`: The test leaf. Its grid is walked, and the stencil sees its markers.
 - `row_offset`, `col_offset`: The block's origin in the assembled matrix, `0` for a scalar
   space.
 
