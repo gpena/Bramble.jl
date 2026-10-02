@@ -70,10 +70,9 @@ jobs:
     # (test/space/vector_elements.jl's "allocations do not grow with the grid") that used to
     # redden this gate on unrelated pushes. `_gauss_rule`
     # (src/operators/cell_average.jl) is still `@generated` and is the fold that was
-    # implicated. gpena/Bramble.jl#69 and #51 rewrote everything around it — the
-    # `Val{1}`/`Val{D}` split is gone and `avgₕ!` now runs through `project!` — so the shape
-    # that flaked is not the shape running today, but that is a reason to expect less of it,
-    # not a fix. If a Linux-only allocation assertion fails in nightly, that fold is where to
+    # implicated. The code around it has since been rewritten, so the shape that
+    # flaked is not the shape running today, but that is a reason to expect less of it, not a
+    # fix. If a Linux-only allocation assertion fails in nightly, that fold is where to
     # look first.
     # 60, as nightly.yml's `slow` has: a cold run takes 30 to 38 minutes, and without a limit
     # a hung run would hold the runner for GitHub's default of six hours.

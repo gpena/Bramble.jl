@@ -67,8 +67,7 @@ methods that dispatch tells apart by what they are given rather than by differen
   side of a linear form.
 - `πₕ(u)` over a **trial function** is the **bilinear operator**, contributing matrix columns
   rather than values. For the *unknown* side. It names no source space: that is the trial
-  function's own, and assembly supplies it once the leaf is known
-  ([#10](https://github.com/gpena/Bramble.jl/issues/10)).
+  function's own, and assembly supplies it once the leaf is known.
 
 See the [operators tutorial](../tutorials/operators.md) for the numeric side and the pattern
 this exists for: a heterogeneous composite space whose leaves live on different meshes.

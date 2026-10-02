@@ -10,28 +10,25 @@ at once. See the [operators tutorial](../tutorials/operators.md).
 
 A direction held in a variable indexes the vectorial operator: `∇ₕ[2]`, `∇ₕ[:y]` and
 `D₋ᵧ` are the same function, so `sum(innerₕ(∇ₕ[d](uₕ), ∇ₕ[d](uₕ)) for d in 1:D)` reads the
-same in 1D, 2D and 3D. Underneath, every family has a stem that takes the direction as an
-argument: `Bramble.D₋(uₕ, 2)`, `Bramble.D₋(uₕ, :y)` and `Bramble.D₋(uₕ, Val(2))` are all
-`D₋ᵧ(uₕ)`. The stems `D₋`, `D₊`, `Dc`, `D̃` and `jump` are `public` but not exported. The
-averages put this on `Mₕ`/`M₊ₕ` rather than on a bare `M`, which would take the most common
-local name in finite-element code away from anyone writing `using Bramble`; `Mₕ(uₕ)` is
-still the tuple over every coordinate and `Mₕ(uₕ, 2)` is the `y` average.
+same in 1D, 2D and 3D. Every family has a stem that takes the direction as an argument:
+`Bramble.D₋(uₕ, 2)`, `Bramble.D₋(uₕ, :y)` and `Bramble.D₋(uₕ, Val(2))` are all `D₋ᵧ(uₕ)`.
+The stems `D₋`, `D₊`, `Dc`, `D̃` and `jump` are `public` but not exported. The averages use
+`Mₕ`/`M₊ₕ` rather than a bare `M`; `Mₕ(uₕ)` is the tuple over every coordinate and
+`Mₕ(uₕ, 2)` is the `y` average.
 
 The same stems carry the symbolic form: `D₋(uₕ, Val(1))` differences a grid function now,
 `D₋(U, Val(1))` builds the AST node that will difference it during assembly. Inside a form
 the direction must be a `Val`, since it is a type parameter of the node.
 
-Three families are not exported, so `using Bramble` does not bring them into scope and they
-are written `Bramble.D₊ₓ` or imported by name: the unscaled differences `diff₋*`/`diff₊*`,
-the forward differences `D₊*`/`∇₊ₕ`, and the forward averages `M₊*`. Bramble discretises with
-the backward operator paired with [`inner₊`](@ref), so the forward ones are what the backward
-ones are built and checked against rather than what a form is written with.
+Three families are not exported and are written `Bramble.D₊ₓ` or imported by name: the
+unscaled differences `diff₋*`/`diff₊*`, the forward differences `D₊*`/`∇₊ₕ`, and the forward
+averages `M₊*`. Forms are written with the backward operator paired with
+[`inner₊`](@ref); the forward ones are what it is built and checked against.
 
-The unscaled differences (`diff₋ₓ` and its siblings) are the plain, undivided differences
-these are built from, and are the one family of the three that is not even declared
-`public`: they have no form-layer node, so they cannot appear inside a bilinear form, and in
-a form the undivided forward difference is spelled [`jumpₓ`](@ref), which says which of the
-two is meant. `diff₋*`/`diff₊*` are private; see the [forms internals page](../internals/form.md).
+The unscaled differences are the plain, undivided differences the others are built from.
+They are not declared `public` and have no form-layer node, so they cannot appear inside a
+form; there the undivided forward difference is [`jumpₓ`](@ref). `diff₋*`/`diff₊*` are
+private; see the [forms internals page](../internals/form.md).
 
 ```@docs
 D₋ₓ

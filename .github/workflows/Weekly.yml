@@ -151,7 +151,7 @@ jobs:
           path: lcov.info
           if-no-files-found: warn
 
-  # Per-file coverage floor over the two coverage halves merged (#371). A separate job
+  # Per-file coverage floor over the two coverage halves merged. A separate job
   # because each `full` leg sees only its half. Writes the report to the job summary, then
   # fails the job when a non-exempt src/ file is below the floor (`--fail --prefix src/`);
   # ext/ files stay in the report but cannot fail it.

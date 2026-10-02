@@ -1,4 +1,4 @@
-# Per-file coverage report over one or more lcov files (#371).
+# Per-file coverage report over one or more lcov files.
 #
 #     julia coverage_floor.jl --floor <pct> [--exempt <toml>] [--compare <before.info>] [--prefix <dir/>] [--fail] <lcov>...
 #
