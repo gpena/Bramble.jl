@@ -162,6 +162,158 @@ norm(Sₖ * v₂ - (λ[2] + μ[3]) * v₂)
 
 @test Sₖ * v₂ ≈ (λ[2] + μ[3]) * v₂ #src
 @test Sₖ ≈ kron(Aₛ, Matrix(1.0I, 3, 3)) + kron(Matrix(1.0I, 2, 2), Bₛ) #src
+#
+# The factors of the operator below are not abstract matrices: each one is a one-dimensional
+# form that Bramble assembles, and the next subsections build the page's operator from them.
+#
+# ### The one-dimensional factors
+#
+# Take the one-dimensional mass form `innerₕ(u, v)` and stiffness form
+# `inner₊(∇ₕ(u), ∇ₕ(v))` on a small non-uniform mesh, four points at ``0, 0.2, 0.6, 1``:
+
+Ωx = mesh(domain(interval(0.0, 1.0)), 4, true)
+Bramble.set_points!(Ωx, [0.0, 0.2, 0.6, 1.0])
+Wx = gridspace(Ωx)
+
+Mx = Matrix(assemble(form(Wx, Wx, (u, v) -> innerₕ(u, v))))
+
+# The mass matrix is diagonal, and its entries are the cell widths ``0.1, 0.3, 0.4, 0.2`` of
+# the mesh, which are not equal. The stiffness matrix is tridiagonal, with the inverse
+# spacings of the same mesh as its entries:
+
+Kx = Matrix(assemble(form(Wx, Wx, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))))
+
+@test Mx ≈ Diagonal([0.1, 0.3, 0.4, 0.2]) #src
+@test issymmetric(Kx) && all(iszero, Kx * ones(4)) #src
+
+# Every row of ``K_x`` sums to zero: constants are in its kernel, which is the unconstrained
+# (natural) boundary condition again. Two more meshes, with their own points, give the
+# matching factors on the other axes:
+
+Ωy = mesh(domain(interval(0.0, 1.0)), 3, true)
+Bramble.set_points!(Ωy, [0.0, 0.5, 1.0])
+Ωz = mesh(domain(interval(0.0, 1.0)), 3, true)
+Bramble.set_points!(Ωz, [0.0, 0.3, 1.0])
+
+assemble_factors(Ω) = (W = gridspace(Ω);
+(Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, v)))),
+    Matrix(assemble(form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))))))
+My, Ky = assemble_factors(Ωy)
+Mz, Kz = assemble_factors(Ωz)
+(My, Ky)
+
+# ### Two and three dimensions
+#
+# On the tensor mesh of those axes, a grid function is stored with the first axis varying
+# fastest, so reshaping the vector of values to ``n_x \times n_y`` gives a matrix whose
+# column index is ``y``. That is the `vec` convention used above, and it fixes which factor
+# sits where in a Kronecker product: the slowest axis comes first, as the left factor. The
+# form ``u v + \nabla u \cdot \nabla v`` then assembles into
+#
+# ```math
+# A_{2} = M_y \otimes M_x + K_y \otimes M_x + M_y \otimes K_x,
+# ```
+#
+# one term per summand of the form, with the stiffness matrix of an axis in the term that
+# differentiates along it and the mass matrix of the other axes everywhere else. In three
+# dimensions the same rule gives four terms, with ``M_z \otimes M_y \otimes M_x`` for the
+# mass term. Assembling the forms on the tensor meshes and comparing:
+
+Ω₂ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 3), true)
+Bramble.change_points!(Ω₂, [points(Ωx), points(Ωy)])
+W₂ = gridspace(Ω₂)
+a₂ = form(W₂, W₂, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+A₂ = assemble(a₂)
+
+Ω₃ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 3, 3), true)
+Bramble.change_points!(Ω₃, [points(Ωx), points(Ωy), points(Ωz)])
+W₃ = gridspace(Ω₃)
+a₃ = form(W₃, W₃, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+A₃ = assemble(a₃)
+
+kron_2d = kron(My, Mx) + kron(Ky, Mx) + kron(My, Kx)
+kron_3d = kron(Mz, My, Mx) + kron(Kz, My, Mx) + kron(Mz, Ky, Mx) + kron(Mz, My, Kx)
+(norm(Matrix(A₂) - kron_2d), norm(Matrix(A₃) - kron_3d))
+
+@test Matrix(A₂) ≈ kron(My, Mx) + kron(Ky, Mx) + kron(My, Kx) #src
+@test Matrix(A₃) ≈ kron(Mz, My, Mx) + kron(Kz, My, Mx) + kron(Mz, Ky, Mx) + kron(Mz, My, Kx) #src
+
+# The assembled matrices equal the Kronecker sums of the one-dimensional factors up to
+# rounding, on meshes whose points are unevenly spaced along every axis. This is the
+# structure `is_separable` looks for term by term: each term of the form must split into one
+# factor per axis. A grid-function coefficient does not split, since its values are not a
+# product of one function of ``x`` and one of ``y``, and that is why it is refused below.
+
+is_separable(a₂) && is_separable(a₃)
+
+@test is_separable(a₂) && is_separable(a₃) #src
+
+# ### Why the storage is linear in the points per axis
+#
+# Each axis contributes only its own two matrices, ``M`` and ``K``, whatever the dimension: a
+# diagonal and a tridiagonal one, so a few times ``n`` stored numbers per axis, ``O(D \cdot
+# n)`` in all. The assembled matrix has a nonzero in every row for each neighbour along each
+# axis, so its nonzeros grow like ``n^D``. On the small meshes above:
+
+nnz_factors(Ms, Ks) = sum(count.(!iszero, Ms)) + sum(count.(!iszero, Ks))
+(factor_nonzeros = nnz_factors((Mx, My, Mz), (Kx, Ky, Kz)), matrix_nonzeros = count(!iszero, A₃))
+
+@test nnz_factors((Mx, My, Mz), (Kx, Ky, Kz)) < count(!iszero, A₃) #src
+
+# Already here the factors hold a fraction of the matrix's nonzeros, and the gap widens at
+# once as the axes refine: doubling the points per axis doubles `factor_nonzeros` but
+# multiplies `matrix_nonzeros` by ``2^D``. The page measures that gap in bytes on the
+# `41^3` mesh below, as `bytes_kronecker` against `bytes_csc`.
+#
+# ### Fast diagonalisation
+#
+# For a system of the shape above, the Kronecker structure also gives a direct solve. On
+# each axis solve the generalised eigenproblem ``K v = \lambda M v``. Both matrices are
+# symmetric and ``M`` is positive definite, so the eigenvectors can be scaled to satisfy
+# ``V^{\mathsf T} M V = I`` and ``V^{\mathsf T} K V = \Lambda``, with ``\Lambda`` the
+# diagonal matrix of eigenvalues. The two-argument `eigen` returns exactly that:
+
+Fx = eigen(Kx, Mx)
+Fy = eigen(Ky, My)
+(round.(Fx.values; digits = 6), norm(Fx.vectors' * Mx * Fx.vectors - I))
+
+@test Fx.vectors' * Mx * Fx.vectors ≈ I #src
+@test Mx * Fx.vectors * Diagonal(Fx.values) ≈ Kx * Fx.vectors #src
+
+# The smallest eigenvalue is zero up to rounding, the constants again. Write ``V = V_y
+# \otimes V_x``. By the product rule from above, ``V^{\mathsf T} (M_y \otimes M_x) V = I``,
+# ``V^{\mathsf T} (K_y \otimes M_x) V = \Lambda_y \otimes I`` and ``V^{\mathsf T} (M_y
+# \otimes K_x) V = I \otimes \Lambda_x``, so
+#
+# ```math
+# V^{\mathsf T} A_2 V = I + \Lambda_y \otimes I + I \otimes \Lambda_x,
+# ```
+#
+# which is diagonal, with entries ``1 + \lambda^y_j + \lambda^x_i``. Hence
+# ``A_2^{-1} = V (I + \Lambda_y \otimes I + I \otimes \Lambda_x)^{-1} V^{\mathsf T}``, and
+# solving ``A_2 x = b`` is three steps: transform ``b`` by ``V^{\mathsf T}``, divide pointwise
+# by the diagonal, transform back by ``V``. With ``B`` the vector ``b`` reshaped to
+# ``n_x \times n_y``, applying ``V_y \otimes V_x`` is two small products as in the vec
+# identity:
+
+b₂ = collect(1.0:12.0)
+B₂ = reshape(b₂, 4, 3)
+Λ₂ = 1 .+ Fx.values .+ Fy.values'
+X₂ = Fx.vectors * ((Fx.vectors' * B₂ * Fy.vectors) ./ Λ₂) * Fy.vectors'
+norm(vec(X₂) - Matrix(A₂) \ b₂)
+
+@test vec(X₂) ≈ Matrix(A₂) \ b₂ #src
+
+# This agrees with the dense solve to rounding, though only the two small eigenproblems and
+# two small products were used, and no ``12 \times 12`` matrix was factorised. On a real
+# grid the saving is the same in kind: `fdm_solve`, used further down, does exactly this
+# with one eigendecomposition per axis and one reshaped product per axis, in any dimension,
+# and without ever assembling the matrix. The derivation needs the form to be a sum of
+# Kronecker products of per-axis factors that share their eigenvectors. That holds for the
+# mass and stiffness terms with constant coefficients, and fails for the grid-function
+# coefficient shown under Separability. A Dirichlet condition is not part of this
+# derivation either: it is handled by restricting each axis to its interior, as described
+# in the section on the operator's real limit.
 
 # ## Separability
 #
