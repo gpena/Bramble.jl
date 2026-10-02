@@ -211,7 +211,7 @@ end
             println(join(repr.(pde_solve(A, F)), ' '))
             println(join(repr.(Matrix(A) \ F), ' '))
             """
-            cmd = `$(Base.julia_cmd()) --project=$(dirname(Base.active_project())) --startup-file=no --threads=1 -e $code`
+            cmd = `$(Base.julia_cmd()) --project=$(dirname(something(Base.active_project()))) --startup-file=no --threads=1 -e $code`
             lines = split(read(cmd, String), '\n'; keepempty = false)
             u_acc = parse.(Float64, split(lines[1]))
             u_ref = parse.(Float64, split(lines[2]))    # dense LU: not the Accelerate path

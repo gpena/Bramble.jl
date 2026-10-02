@@ -1002,20 +1002,18 @@ end
     end
 end
 
+# Runs a generated body. A function, not a literal `eval` in the testset: JET's toplevel
+# analysis runs such a call eagerly and reports its error at the `@testset` line.
+_run_generated(ex) = Core.eval(@__MODULE__, ex)
+
 # The code generator's fallback for a result kind that is neither `:sum` nor `:tuple`:
 # the body it returns throws when run, rather than generating a wrong sum.
 @testset "inner₊ body for an unknown result kind" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (false, false))
     T = typeof(Rₕ(gridspace(Ωₕ), x -> 1.0))
     body = Bramble._generate_inner_plus_body(T, T, :neither)
-    err = try
-        eval(body)
-        nothing
-    catch e
-        e
-    end
-    @test err isa ArgumentError
-    @test occursin("Invalid result kind", err.msg)
+    @test_throws ArgumentError _run_generated(body)
+    @test_throws "Invalid result kind" _run_generated(body)
     @test Bramble._generate_inner_plus_body(T, T, :sum) isa Expr
 end
 
