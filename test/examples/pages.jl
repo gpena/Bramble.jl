@@ -15,8 +15,8 @@ using ..TestUtils: _run_example_page
 # step now (gpena/Bramble.jl#117). What those files covered that the pages do not -- a
 # variable-coefficient operator no page uses -- stays in convergence.jl.
 #
-# Four more pages run in the `ext` group instead (test/examples/ext_pages.jl), for what they
-# load rather than what they assert, and two more behind a differentiation backend
+# More pages run from test/examples/ext_pages.jl, in this same `examples` group, for what
+# they load rather than what they assert, and two more behind a differentiation backend
 # (test/examples/inverse_diffusion.jl, test/examples/transient_inverse_problem.jl).
 
 @testset "Worked example pages" begin
@@ -61,9 +61,9 @@ using ..TestUtils: _run_example_page
     # The matrix-free Kronecker operator worked example (v3.3.0 plan S5.3, gpena/Bramble.jl#259).
     # It needs `using Kronecker`, but that is a lightweight, pure-Julia weak dependency --
     # unlike the stiff DAE solver, `NonlinearSolve` and `AlgebraicMultigrid` that justify
-    # holding the four pages in test/examples/ext_pages.jl behind the `ext` group -- and
+    # holding the pages in test/examples/ext_pages.jl in their own file -- and
     # `LinearSolve`, which this page also uses, is already a test dependency loaded by other
-    # pages in this every-push file. It stays here rather than there.
+    # pages in this file. It stays here rather than there.
     @testset "Memory scaling: matrix-free Kronecker" begin
         _run_example_page(:memory_scaling)
     end

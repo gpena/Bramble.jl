@@ -3,18 +3,18 @@ module ExamplesExtPagesTests
 using Test
 using ..TestUtils: _run_example_page
 
-# The four worked-example pages that need more than the every-push test environment, run
-# the same way the others are (test/examples/pages.jl) but from the `ext` group. Each is a
-# Literate script under docs/src/examples/ whose `#src` assertions execute here, so the
-# numbers a reader sees on the page are the numbers checked.
+# The worked-example pages that need more than the every-push test environment, run
+# the same way the others are (test/examples/pages.jl) and in the same `examples` group.
+# Each is a Literate script under docs/src/examples/ whose `#src` assertions execute here,
+# so the numbers a reader sees on the page are the numbers checked.
 #
-# They sit in this group rather than on the push path because of what they load, not
+# They sit in this file rather than in pages.jl because of what they load, not
 # because of what they assert: `OrdinaryDiffEqBDF` for the differential-algebraic step,
 # `NonlinearSolve` for the two pages that grew a `nonlinear_problem` section, and
 # `LinearSolve` with `AlgebraicMultigrid` for the preconditioning comparison. This file is
-# included last in that group, after the ext tests that already pay those costs.
+# included after pages.jl in the `examples` group.
 #
-# The two pages behind the `ad`/`ext` groups for a *backend* rather than a solver --
+# The two pages behind the `ad` group for a *backend* rather than a solver --
 # inverse_diffusion (Enzyme) and transient_inverse_problem (SciMLSensitivity) -- keep their
 # own files: each guards on `_have` and skips rather than runs when the backend is absent.
 
@@ -61,6 +61,16 @@ using ..TestUtils: _run_example_page
     # over three meshes.
     @testset "2D wave equation page" begin
         _run_example_page(:wave_equation_2d)
+    end
+
+    # Loads `LinearSolve` for CG. Pins that `kronecker_operator` refuses its non-separable
+    # form; that the serial and `CpuThreaded()` matrix-free products match `assemble(a) * x`
+    # on a graded non-uniform 2D mesh with Dirichlet rows; that CG through `KrylovJL_CG` with
+    # a matrix-free preconditioner converges to the assembled direct solution in fewer
+    # iterations than unpreconditioned CG; and that a `GpuKernel()` policy throws
+    # `ArgumentError`.
+    @testset "Matrix-free operator page" begin
+        _run_example_page(:matrix_free_operator)
     end
 end
 

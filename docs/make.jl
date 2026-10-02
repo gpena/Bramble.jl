@@ -35,7 +35,8 @@ const LITERATE_EXAMPLES = [
     "point_sources_flux.jl",
     "transient_inplace.jl",
     "boundary_layer_graded.jl",
-    "memory_scaling.jl"
+    "memory_scaling.jl",
+    "matrix_free_operator.jl"
 ]
 
 if Threads.nthreads() == 1
@@ -107,7 +108,8 @@ examples = "Examples" => [
     ],
     "Solvers and performance" => [
         "examples/amg_preconditioning.md",
-        "examples/memory_scaling.md"
+        "examples/memory_scaling.md",
+        "examples/matrix_free_operator.md"
     ]
 ]
 benchmarks = "Benchmarks" => "benchmarks.md"
