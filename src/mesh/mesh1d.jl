@@ -730,15 +730,14 @@ _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_
 end
 
 # Device counterpart of the method above, reached only for the two cases `_mesh` does not
-# route through the fused `_uniform_mesh1d_init!` kernel (gpena/Bramble.jl#303): a
-# single-point mesh, and a non-uniform one. `unif` and `backend` are carried to keep this
-# method's signature distinct from the `Array` one above -- with `unif` dropped, a
-# three-argument device method would be ambiguous with it. Past the single-point guard
-# `unif` is always `false`, so there is no uniform branch here to take. The non-uniform fill
-# generates the coordinates on the host with the same routine the `Array` method above uses,
-# into a scratch `Vector`, and transfers them to `x` in one `copyto!` (gpena/Bramble.jl#304).
-# Device `rand!`/`sort!` exist, but host generation keeps a seeded mesh identical across
-# backends; the cost is a one-time O(n) construction, not a per-iteration one.
+# route through the fused `_uniform_mesh1d_init!` kernel: a single-point mesh and a
+# non-uniform one. `unif` and `backend` are carried to keep this method's signature distinct
+# from the `Array` one above, since with `unif` dropped a three-argument device method would
+# be ambiguous with it. Past the single-point guard `unif` is always `false`. There is no
+# uniform branch to take. The non-uniform fill generates the coordinates on the host with
+# the same routine the `Array` method above uses, into a scratch `Vector`, and transfers
+# them to `x` in one `copyto!`. Device `rand!`/`sort!` exist, but host generation keeps a
+# seeded mesh identical across backends, at a one-time O(n) construction cost.
 function _points!(x::AbstractVector, I::CartesianProduct{1}, unif::Bool, backend)
     npts = length(x)
     T = eltype(I)

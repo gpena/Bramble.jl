@@ -433,7 +433,7 @@ Construct a [`Backend`](@ref) configuration.
 
 # Keywords
 - `vector_type`: Dense vector type (default: `Vector{Float64}`).
-- `matrix_type`: Matrix type (default: `SparseMatrixCSC{Float64, Int}`).
+- `matrix_type`: Matrix type (`SparseMatrixCSC{Float64, Int}` by default).
 - `policy`: Execution policy instance, [`Serial`](@ref) or [`Parallel`](@ref) (default: `Serial()`).
 
 # Returns

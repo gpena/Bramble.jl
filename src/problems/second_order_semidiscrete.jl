@@ -142,8 +142,8 @@ Write `K` as the steady problem is written: `assemble(K)` is the same matrix
 [`semidiscretize`](@ref) calls `A`.
 
 # Keywords
-- `mass`: [`BilinearForm`](@ref) defining `M` (default: `innerₕ(u, v)`, the discrete `L²` inner product, which is diagonal).
-- `damping`: [`BilinearForm`](@ref) defining `C` (default: `nothing`, an undamped system).
+- `mass`: [`BilinearForm`](@ref) defining `M` (`innerₕ(u, v)` by default, the discrete `L²` inner product, which is diagonal).
+- `damping`: [`BilinearForm`](@ref) defining `C` (`nothing` by default, an undamped system).
 - `dirichlet`: constrained labels and, where they carry values, the values -- every form [`assemble`](@ref) accepts, including time-dependent constraints from [`dirichlet_constraints`](@ref)`(Ωₕ, I, :label => (x, t) -> ...)` (default: `nothing`).
 - `dirichlet_components`: leaf components of a composite space the labels bind to (default: `nothing`, all leaves).
 
@@ -293,7 +293,7 @@ Base.summary(sd::SecondOrderSemidiscretization) = sprint(show, sd)
 # --- SciMLBase handoff -------------------------------------------------------------- #
 #
 # Implemented in `BrambleSciMLExt`, mirroring `ode_function`/`ode_problem`'s own
-# underscored-fallback idiom -- see `semidiscrete_problems.jl`'s header comment for why.
+# `_`-prefixed fallback idiom -- see `semidiscrete_problems.jl`'s header comment for why.
 
 """
     second_order_ode_function(sd::SecondOrderSemidiscretization) -> DynamicalODEFunction

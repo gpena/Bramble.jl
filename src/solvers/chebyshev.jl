@@ -59,9 +59,10 @@ Base.size(P::ChebyshevPreconditioner) = size(P.op)
     chebyshev_preconditioner(op::MatrixFreeOperator; degree = 4, λmax = nothing, ratio = 30) -> ChebyshevPreconditioner
 
 The Chebyshev preconditioner of `A = assemble(a; dirichlet, dirichlet_components)`, or of the
-matrix `op` stands for: a fixed polynomial in `D⁻¹A`, with `D = diag(A)`, on the interval
-`[λmax / ratio, λmax]`. It is applied through products with the matrix-free operator, and `D`
-is read off one stencil walk as by [`jacobi_preconditioner`](@ref), so `A` is never built.
+matrix `op` stands for. It is a fixed polynomial in `D⁻¹A`, with `D = diag(A)`, on the
+interval `[λmax / ratio, λmax]`. It is applied through products with the matrix-free
+operator, and `D` is read off one stencil walk as by [`jacobi_preconditioner`](@ref), so `A`
+is never built.
 `A` must be symmetric positive definite, and every eigenvalue of `D⁻¹A` at most `λmax`: one
 above it can make the preconditioner indefinite. With `dirichlet`, use it in conjugate
 gradients only for a right-hand side that vanishes on the Dirichlet rows (see
@@ -80,11 +81,11 @@ allocates three vectors of length `ndofs` and, when `λmax` is not given, the tw
 # Keywords
 - `dirichlet`, `dirichlet_components`, `policy`: As in [`matrix_free_operator`](@ref).
 - `degree`: The number of Chebyshev steps, the degree of the residual polynomial; an
-  application costs `degree - 1` products with `A` (default: `4`).
+  application costs `degree - 1` products with `A` (`4` by default).
 - `λmax`: The top of the interval, an upper bound for the spectrum of `D⁻¹A`, used as given
-  (default: `nothing`, for [`max_eigenvalue_estimate`](@ref)`(op; preconditioner = J)` with
-  `J` the Jacobi preconditioner of `op`, which carries its own safety factor).
-- `ratio`: The ratio of the top of the interval to its bottom (default: `30`).
+  (default: `nothing`, which takes [`max_eigenvalue_estimate`](@ref)`(op; preconditioner = J)`
+  with `J` the Jacobi preconditioner of `op`, carrying its own safety factor).
+- `ratio`: The ratio of the top of the interval to its bottom (`30` by default).
 
 # Returns
 - [`ChebyshevPreconditioner`](@ref): `ldiv!(y, P, x)` gives `p(D⁻¹A) D⁻¹ x`.

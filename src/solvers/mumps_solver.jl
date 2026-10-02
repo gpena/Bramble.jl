@@ -3,7 +3,7 @@
 # `mumps_factorize`/`mumps_solve`: MUMPS (MUltifrontal Massively Parallel sparse direct
 # Solver) parallel multifrontal LU, LDLᵀ, and Cholesky factorizations for the sparse
 # linear systems Bramble discretizes. Implemented in `BrambleMUMPSExt`, same
-# underscored-fallback idiom as `amg_preconditioner` (solvers/amg_preconditioner.jl) and
+# `_`-prefixed fallback idiom as `amg_preconditioner` (solvers/amg_preconditioner.jl) and
 # `linear_problem` (form/semidiscrete_problems.jl).
 
 """
@@ -24,12 +24,13 @@ Compute the sparse direct multifrontal factorization of `A` (or the assembled ma
 using [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl).
 
 # Symmetry options
-- `:auto` (default): automatically detects symmetry. If `A` is symmetric and positive definite
-  (or `symmetrize = true`), uses symmetric positive-definite factorization (`sym = 1`). If
-  symmetric, uses general symmetric ``LDL^T`` (`sym = 2`). Otherwise, uses unsymmetric LU (`sym = 0`).
-- `:spd`, `:definite`, or `1`: symmetric positive definite (Cholesky / ``LL^T``).
-- `:symmetric` or `2`: general symmetric (``LDL^T`` with Bunch-Kaufman pivoting).
-- `:unsymmetric` or `0`: general unsymmetric LU.
+- `:auto`: the default, which detects symmetry automatically. If `A` is symmetric and positive
+  definite (or `symmetrize = true`), it uses symmetric positive-definite factorization
+  (`sym = 1`). If symmetric, it uses general symmetric ``LDL^T`` (`sym = 2`). Otherwise it
+  uses unsymmetric LU (`sym = 0`).
+- `:spd`, `:definite`, `1`: symmetric positive definite (Cholesky / ``LL^T``).
+- `:symmetric`, `2`: general symmetric (``LDL^T`` with Bunch-Kaufman pivoting).
+- `:unsymmetric`, `0`: general unsymmetric LU.
 
 # Control parameters
 - `icntl`: Optional dictionary or collection of pairs of integer control parameters (e.g., `7 => 1` for user/METIS ordering, `14 => 30` for memory relaxation).
@@ -73,10 +74,10 @@ end
 Directly solve `A u = F` (or `assemble(a, l)` system) using MUMPS direct factorization.
 
 # Symmetry options
-- `:auto` (default): automatically detects symmetry.
-- `:spd`, `:definite`, or `1`: symmetric positive definite.
-- `:symmetric` or `2`: general symmetric.
-- `:unsymmetric` or `0`: general unsymmetric.
+- `:auto`: the default, which detects symmetry automatically.
+- `:spd`, `:definite`, `1`: symmetric positive definite.
+- `:symmetric`, `2`: general symmetric.
+- `:unsymmetric`, `0`: general unsymmetric.
 
 Requires [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl); call `using MUMPS` before
 calling this function.

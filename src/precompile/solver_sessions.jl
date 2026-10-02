@@ -6,7 +6,7 @@
 #
 # `suitesparse_factorize`/`suitesparse_solve`/`sparse_factorize`/`refactor!` are out of
 # scope: they dispatch into `BrambleSuiteSparseExt`, only loaded once the caller does `using
-# SuiteSparse`, so the package's own workload cannot reach them (gpena/Bramble.jl#283).
+# SuiteSparse`, so the package's own workload cannot reach them.
 #
 # One tiny 1D mesh: `pde_solve`/`suitesparse_qr_*` only dispatch on
 # `A::SparseMatrixCSC{Float64,Int}`/`F::Vector{Float64}`, not on mesh dimension, so a 2D
@@ -42,7 +42,7 @@ function _pc_solver_session()
     precompile(suitesparse_qr_factorize, (typeof(A),))
     precompile(suitesparse_qr_solve, (typeof(A), typeof(F)))
 
-    # The matrix-free path (gpena/Bramble.jl#391), which nothing above reaches: the
+    # The matrix-free path, which nothing above reaches: the
     # operator's apply and the Jacobi and Chebyshev preconditioners in 1D, 2D and 3D on
     # non-uniform meshes, and a GMG V-cycle on the uniform 2D mesh it supports.
     for (X, n) in (

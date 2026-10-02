@@ -144,13 +144,12 @@ problem was built over, is what turns it back into a properly reshaped field, th
 [`element`](@ref)`(Wₕ, ::AbstractVector)` does anywhere else.
 
 # Keywords
-- `name`: the field name written at every step (default `"u"`). One call writes one field;
-  for several named fields per step (solution, coefficient, error, ...), use
+- `name`: the field name written at every step (default `"u"`). One call writes one field.
+  For several named fields per step (solution, coefficient, error, ...), use
   `export_vtk(f::Function, filename)` directly.
 - `times`: `nothing` (default) writes exactly `sol`'s own saved steps, at their true,
-  possibly non-uniform values -- the common case for an adaptive integrator. Given an
-  iterable of times instead, each is sampled from `sol`'s continuous interpolation
-  (`sol(t)`).
+  possibly non-uniform values -- the common case for an adaptive integrator. With an
+  iterable of times, each is sampled from `sol`'s continuous interpolation (`sol(t)`).
 
 Requires [WriteVTK.jl](https://github.com/JuliaVTK/WriteVTK.jl) and
 [SciMLBase.jl](https://github.com/SciML/SciMLBase.jl) (pulled in by any solver package, e.g.
