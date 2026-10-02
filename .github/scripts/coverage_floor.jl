@@ -11,8 +11,14 @@
 # named functions from one file's total: each name is found in the source (every method: a
 # `function` block through the `end` at its indent, or a one-line `name(args) = expr`) and an
 # absent name is an error. An entry may instead (or also) carry `methods = [...]`, which names
-# single methods by the text their definition line starts with, after leading macros (`@inline`,
+# single methods by the text their definition starts with, after leading macros (`@inline`,
 # `Base.@propagate_inbounds`, ...) and `function `, e.g. `_points!(x::AbstractVector, I::CartesianProduct{1}`.
+# A `function` head is read whole: its lines are joined until the parentheses balance, and the
+# signature and the prefix are compared with whitespace runs collapsed to one space and no space
+# after `(` or before `)`, so `wrap(a::Int` names a `function wrap(` whose next line is `a::Int, b`.
+# Any other line is a definition only when it is a real one-line method: after its balanced
+# parentheses, an optional `where ...` and/or `::T`, comes a `=` (not `==`, not `=>`); docstring
+# signatures (`name(args) -> T`), calls and comments are not definitions.
 # A method spans a `function` block through the `end` at its indent, or a one-line definition
 # through its balanced `([{` (so a `= throw(` whose body continues counts whole; brackets inside
 # plain strings are ignored). A prefix matching no method or two or more is an error naming the
@@ -90,16 +96,61 @@ function function_lines(file::AbstractString, name::AbstractString)
     return found
 end
 
-# Line numbers of the single method of `file` whose definition text starts with `prefix`.
+# Whitespace runs collapsed to one space, none after `(` or before `)`: how a signature and a
+# method prefix are compared.
+normsig(s) = replace(replace(replace(strip(s), r"\s+" => " "), r"\( " => "("), r" \)" => ")")
+
+# Net bracket depth of `t`, plain strings blanked out first.
+function bracket_depth(t::AbstractString, open = "([{", close = ")]}")
+    t = replace(t, r"\"[^\"]*\"" => "\"\"")
+    return count(c -> c in open, t) - count(c -> c in close, t)
+end
+
+# Text from `head` on (the first line, macros stripped) joined with the following lines of `src`
+# after `k` until the parentheses balance.
+function joined_head(src, k, head)
+    text = head
+    j = k
+    while bracket_depth(text, "(", ")") > 0 && j < length(src)
+        j += 1
+        text *= " " * strip(src[j])
+    end
+    return text
+end
+
+# Whether `text` (a candidate starting at a name) is a one-line method: after the balanced
+# parentheses of its signature, an optional `where ...` and/or `::T`, then `=` (not `==`, `=>`).
+function is_oneline_method(text::AbstractString)
+    t = replace(text, r"\"[^\"]*\"" => "\"\"")
+    i = findfirst('(', t)
+    i === nothing && return false
+    depth = 0
+    for (j, c) in pairs(t)
+        j < i && continue
+        depth += (c == '(') - (c == ')')
+        if depth == 0
+            rest = t[nextind(t, j):end]
+            return occursin(r"^\s*(?:::\s*[^=]+?)?(?:\s+where\s+[^=]+?)?(?:\s*::\s*[^=]+?)?\s*=(?![=>])", rest)
+        end
+    end
+    return false
+end
+
+# Line numbers of the single method of `file` whose definition text starts with `prefix`
+# (both compared after `normsig`): a `function` head is read whole (its lines joined until the
+# parentheses balance); any other line counts only as a real one-line method, so docstring
+# signatures (`name(args) -> T`), calls and comments are not definitions.
 function method_lines(file::AbstractString, prefix::AbstractString)
     isfile(file) || error("exempt_function: source file not found: $file")
     src = readlines(file)
+    want = normsig(prefix)
     spans = UnitRange{Int}[]
     for (k, line) in enumerate(src)
         head = replace(strip(line), r"^(?:(?:Base\.)?@\S+\s+)*" => "")
         isblock = startswith(head, "function ")
         isblock && (head = head[(length("function ") + 1):end])
-        startswith(head, prefix) || continue
+        sig = normsig(joined_head(src, k, head))
+        startswith(sig, want) || continue
         if isblock
             stop = Regex("^" * match(r"^\s*", line).match * "end\\b")
             last = findnext(l -> occursin(stop, l), src, k + 1)
@@ -109,11 +160,11 @@ function method_lines(file::AbstractString, prefix::AbstractString)
             depth = 0
             last = k
             while true
-                t = replace(src[last], r"\"[^\"]*\"" => "\"\"")
-                depth += count(c -> c in "([{", t) - count(c -> c in ")]}", t)
+                depth += bracket_depth(src[last])
                 (depth <= 0 || last >= length(src)) && break
                 last += 1
             end
+            is_oneline_method(join(strip.(src[k:last]), " ")) || continue
             push!(spans, k:last)
         end
     end
