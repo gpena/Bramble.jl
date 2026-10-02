@@ -87,20 +87,28 @@ visualization = "Visualization and export" => [
     "tutorials/pgfplots_export.md"
 ]
 examples = "Examples" => [
-    "examples/poisson_linear.md",
-    "examples/poisson_nonlinear.md",
-    "examples/convection_diffusion_linear.md",
-    "examples/coupled_reaction_diffusion.md",
-    "examples/elasticity_3d.md",
-    "examples/heat_equation.md",
-    "examples/amg_preconditioning.md",
-    "examples/inverse_diffusion.md",
-    "examples/transient_inverse_problem.md",
-    "examples/wave_equation_2d.md",
-    "examples/point_sources_flux.md",
-    "examples/transient_inplace.md",
-    "examples/boundary_layer_graded.md",
-    "examples/memory_scaling.md"
+    "Stationary problems" => [
+        "examples/poisson_linear.md",
+        "examples/poisson_nonlinear.md",
+        "examples/convection_diffusion_linear.md",
+        "examples/coupled_reaction_diffusion.md",
+        "examples/point_sources_flux.md",
+        "examples/boundary_layer_graded.md",
+        "examples/elasticity_3d.md"
+    ],
+    "Time-dependent problems" => [
+        "examples/heat_equation.md",
+        "examples/wave_equation_2d.md",
+        "examples/transient_inplace.md"
+    ],
+    "Inverse problems" => [
+        "examples/inverse_diffusion.md",
+        "examples/transient_inverse_problem.md"
+    ],
+    "Solvers and performance" => [
+        "examples/amg_preconditioning.md",
+        "examples/memory_scaling.md"
+    ]
 ]
 benchmarks = "Benchmarks" => "benchmarks.md"
 internals = "Internals" => [

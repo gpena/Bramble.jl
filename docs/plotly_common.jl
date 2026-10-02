@@ -3,16 +3,10 @@
 # docs/generate_benchmarks.jl for the benchmark page, docs/src/convergence_plot.jl for the
 # worked examples, docs/src/solution_plot.jl for their solution-field plots.
 #
-# Three problems every Plotly-on-Documenter page has, solved once here rather than per call
-# site.
-#
-# Documenter ships RequireJS for MathJax, and Plotly's UMD build can detect the global AMD
-# `define` and register as an anonymous module instead of attaching `window.Plotly` — a bare
-# `<script src>` would then fail silently with "Plotly is not defined". Guarded against below
-# (verified live against a built page, not assumed).
+# Two problems every Plotly-on-docs page has, solved once here rather than per call site.
 #
 # A Plotly chart is drawn with JS-supplied colours (paper/plot background, font colour, grid
-# lines), which do not track Documenter's dark/light toggle on their own, so a chart drawn
+# lines), which do not track MaterialDocs' dark/light toggle on their own, so a chart drawn
 # once in light colours turns unreadable text-on-background after a toggle unless something
 # repaints it.
 #
@@ -31,21 +25,17 @@ own `<div>` + `Plotly.newPlot(...)` script.
 """
 function plotlyjs_head()
     return """
-    <script>
-      // See the module note above: hide `define` from Plotly's UMD wrapper so it attaches
-      // `window.Plotly` instead of registering as an anonymous AMD module.
-      window.__bramble_amd_define = window.define;
-      window.define = undefined;
-    </script>
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <script>
-      window.define = window.__bramble_amd_define;
-
-      // Colour tokens read from the page's own theme, not hard-coded — Documenter stamps
-      // `theme--documenter-dark` on <html> when dark mode is active, light mode has no such
-      // class. Recomputed on every call so a caller can re-theme after a toggle.
+      // Colour tokens read from the page's own theme, not hard-coded — MaterialDocs sets
+      // `data-theme="light"|"dark"` on <html>; when the attribute is absent the browser's
+      // `prefers-color-scheme` decides. Recomputed on every call so a caller can re-theme
+      // after a toggle.
       window.bramblePlotlyTheme = function () {
-        const dark = document.documentElement.className.includes('documenter-dark');
+        const attr = document.documentElement.getAttribute('data-theme');
+        const dark = attr
+          ? attr === 'dark'
+          : window.matchMedia('(prefers-color-scheme: dark)').matches;
         return dark
           ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
           : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
@@ -68,7 +58,7 @@ function plotlyjs_head()
         });
         window.__bramble_plotly_theme_observer.observe(document.documentElement, {
           attributes: true,
-          attributeFilter: ['class'],
+          attributeFilter: ['data-theme'],
         });
       }
 
