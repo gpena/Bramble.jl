@@ -1,10 +1,10 @@
 name: Julia nightly
 
-# On-demand test run against the Julia nightly build, for finding out what a coming Julia
-# release does to Bramble. Nothing triggers it but `workflow_dispatch`, and nothing depends on
+# On-demand run of the `unit` test group against the Julia nightly build, for finding out what
+# a coming Julia release does to Bramble. Nothing triggers it but `workflow_dispatch`, and nothing depends on
 # it: it is not a gate and not part of the release procedure.
 #
-#   gh workflow run julia-nightly.yml -f group=unit -f os=ubuntu-latest
+#   gh workflow run julia-nightly.yml -f os=ubuntu-latest
 
 permissions:
   contents: read
@@ -12,11 +12,6 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
-      group:
-        description: Test group (BRAMBLE_TEST_GROUP)
-        type: choice
-        default: unit
-        options: [unit, slow, quality, ext, examples, all]
       os:
         description: Runner
         type: choice
@@ -29,7 +24,7 @@ concurrency:
 
 jobs:
   test:
-    name: Julia nightly - ${{ inputs.group }} - ${{ inputs.os }}
+    name: Julia nightly - unit - ${{ inputs.os }}
     runs-on: ${{ inputs.os }}
     timeout-minutes: 90
     steps:
@@ -50,5 +45,5 @@ jobs:
       - name: Run the tests
         run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=false, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
-          BRAMBLE_TEST_GROUP: ${{ inputs.group }}
+          BRAMBLE_TEST_GROUP: unit
           JULIA_NUM_THREADS: auto
