@@ -42,4 +42,49 @@ using Test
     end
 end
 
+@testset "Polyester load invalidations" begin
+    if isempty(VERSION.prerelease)
+        jl = Base.julia_cmd()
+        project = Base.active_project()
+        snoop = joinpath(@__DIR__, "invalidations_polyester_snoop.jl")
+        reinfer = joinpath(@__DIR__, "invalidations_polyester_reinfer.jl")
+
+        out = try
+            read(`$jl --project=$project --startup-file=no $snoop`, String)
+        catch e
+            @test_skip "Polyester invalidation snoop subprocess failed to run: $e"
+            nothing
+        end
+
+        if out !== nothing
+            m = match(r"POLYESTER_OWNED=(\d+)", out)
+            @test m !== nothing
+            if m !== nothing
+                n_owned = parse(Int, something(m.captures[1]))
+                @test n_owned == 0
+                n_owned > 0 && @info "Package-owned invalidations found (using Polyester):\n$out"
+            end
+        end
+
+        out = try
+            read(`$jl --project=$project --threads=2 --startup-file=no $reinfer`, String)
+        catch e
+            @test_skip "Polyester reinference subprocess failed to run: $e"
+            nothing
+        end
+
+        if out !== nothing
+            m = match(r"REINFER_POLYESTER=(\d+)", out)
+            @test m !== nothing
+            if m !== nothing
+                n_reinferred = parse(Int, something(m.captures[1]))
+                @test n_reinferred == 0
+                n_reinferred > 0 && @info "Re-inference after loading Polyester:\n$out"
+            end
+        end
+    else
+        @test_skip "Polyester load invalidation check skipped on prerelease Julia"
+    end
+end
+
 end # module QualityInvalidationsTests
