@@ -108,3 +108,151 @@ reason = "device-only: runs only on device-resident (Metal) data; no Metal backe
 path = "src/utils/backend.jl"
 functions = ["_throw_metal_not_functional"]
 reason = "device-only: runs only when the Metal extension is loaded but reports no functional GPU; Metal is not in the test environment."
+
+# Device-only METHODS: single methods that share a name with a host method, so a `functions`
+# entry above (by name) cannot take them. Each is named by the text its definition line starts
+# with (see the header of .github/scripts/coverage_floor.jl).
+
+[[exempt_function]]
+path = "src/mesh/mesh1d.jl"
+methods = [
+    "_points!(x::AbstractVector, I::CartesianProduct{1}, unif::Bool, backend)",
+    "half_points!(x::AbstractVector",
+    "spacing!(x::AbstractVector",
+    "half_spacing!(x::AbstractVector",
+    "_nonuniform_mesh1d_metrics!(Ωₕ::Mesh1D",
+    "_refine_indices_fill!(new_points::AbstractVector",
+]
+reason = "device-only: each is the non-Array method a host Array never dispatches to, and each calls ka_device and a _launch_* function; no KernelAbstractions or Metal backend is in the test environment."
+
+[[exempt_function]]
+path = "src/mesh/mesh1d.jl"
+methods = [
+    "_point(::DeviceLocality",
+    "_host_points(::DeviceLocality",
+    "_host_spacings(::DeviceLocality",
+    "_host_half_spacings(::DeviceLocality",
+    "_throw_no_scalar_point()",
+]
+reason = "device-only: the ::DeviceLocality methods take device-resident storage (the HostLocality method serves every host mesh), and _throw_no_scalar_point is called only by the device _point; no device array is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/interpolation.jl"
+methods = [
+    "_throw_no_scalar_interpolate_at()",
+    "_πₕ!(dest_loc, src_loc, dest, src, outside)",
+    "_πₕ_matrix_at(::DeviceLocality, ::HostLocality",
+    "_πₕ_vector_at(::HostLocality, ::DeviceLocality",
+    "_πₕ_vector_at(::DeviceLocality, ::HostLocality",
+]
+reason = "device-only: reached only when the destination or the source of an interpolation is device-resident (the host-host method takes every host pair), or from the scalar-index guard on a device element; no device array is in the test environment."
+
+[[exempt_function]]
+path = "src/operators/normal.jl"
+methods = ["_fill_normal!(::DeviceLocality"]
+reason = "device-only: the ::DeviceLocality method fills device-resident components by indexed broadcast; every host call dispatches to the HostLocality method."
+
+[[exempt_function]]
+path = "src/operators/projection.jl"
+methods = [
+    "_device_project!(::DeviceLocality",
+    "_device_scatter_project!(::DeviceLocality",
+    "_marker_index_list(like::AbstractArray",
+]
+reason = "device-only: the ::DeviceLocality defaults answer only for device-resident storage, and _marker_index_list is called only by the device masked projection (_device_masked_project!)."
+
+[[exempt_function]]
+path = "src/operators/restriction.jl"
+methods = ["_probe_point_value(pts::AbstractVector"]
+reason = "device-only: the non-Array method of the probe, reached only when points(Ωₕ) is device-resident; a host mesh's Array takes the _probe_point_value(::Array, ...) method."
+
+[[exempt_function]]
+path = "src/assembly/linear.jl"
+methods = [
+    "_host_sources(::DeviceLocality",
+    "_host_array(::DeviceLocality, v::AbstractArray",
+    "_host_array(::DeviceLocality, v::VectorElement",
+    "_assemble_linear_parallel!(::DeviceLocality",
+    "_host_sources(op::SourceVector",
+    "_host_sources(op::OperatorScale",
+    "_host_sources(op::GridFunctionScale",
+    "_host_sources(op::OperatorAdd",
+    "_host_sources(op::LinearProduct",
+    "_host_sources(op::ShiftNode",
+    "_host_sources(op::RegionRestriction",
+]
+reason = "device-only: the ::DeviceLocality methods take device-resident storage, and the _host_sources(op::...) walk is called only from the device assembly paths (_assemble_linear_device!, _assemble_linear_parallel!(::DeviceLocality), _assemble_add_linear!(::DeviceLocality)) to copy device data to the host."
+
+[[exempt_function]]
+path = "src/assembly/assemble_add.jl"
+methods = ["_assemble_add_linear!(::DeviceLocality"]
+reason = "device-only: the ::DeviceLocality method accumulates into a device-resident vector through a host mirror; every host call dispatches to the HostLocality method."
+
+[[exempt_function]]
+path = "src/assembly/kronecker.jl"
+methods = [
+    "_kron_to_storage(::DeviceLocality, be, F::Diagonal",
+    "_kron_to_storage(::DeviceLocality, be, F::SparseMatrixCSC",
+    "_kron_entry(::Union{_KronDeviceDiagonal, _KronDeviceSparse}",
+    "_kron_as_sparse(::Union{_KronDeviceDiagonal, _KronDeviceSparse}",
+    "_kron_raw(F::_KronDeviceDiagonal",
+    "_kron_raw(F::_KronDeviceSparse",
+    "_kron_fused!(::DeviceLocality",
+]
+reason = "device-only: the ::DeviceLocality methods and the methods on the device-resident factor types _KronDeviceDiagonal and _KronDeviceSparse (built only by _kron_to_storage(::DeviceLocality, ...)) are reached only with a device backend; _kron_fused! also calls _launch_kron_fused!."
+
+[[exempt_function]]
+path = "src/assembly/dirichlet_constraints.jl"
+methods = [
+    "_dirichlet_bc_rows!(::DeviceLocality",
+    "_dirichlet_bc_indices!(::DeviceLocality",
+    "_has_device_csr_mirror(::Type{<:AbstractMatrix}) = false",
+]
+reason = "device-only: the ::DeviceLocality methods take a device-resident matrix (a host matrix dispatches to the HostLocality method), and _has_device_csr_mirror is asked only from them."
+
+[[exempt_function]]
+path = "src/assembly/bilinear_traversal.jl"
+methods = [
+    "_scatter_position(::DeviceLocality",
+    "_scatter_add!(::DeviceLocality",
+    "_zero_stored!(::DeviceLocality",
+]
+reason = "device-only: the ::DeviceLocality methods act on the host mirror of a device-resident CSR matrix; a host matrix takes the HostLocality or SparseMatrixCSC method."
+
+[[exempt_function]]
+path = "src/space/scalar_gridspace.jl"
+methods = [
+    "_throw_device_scalar_weights()",
+    "_host_weights(::DeviceLocality, Wₕ::ScalarGridSpace",
+    "_host_weights(::DeviceLocality, w::SeparableWeights",
+    "_host_space_weights(w::SpaceWeights",
+    "_innerh_weights!(u::AbstractVector, Ωₕ::AbstractMeshType{1}",
+    "_innerplus_weights!(u::AbstractVector",
+    "_innerplus_mean_weights!(u::AbstractVector",
+]
+reason = "device-only: the ::DeviceLocality methods copy device-resident weights to the host (_host_space_weights is called only by them), the AbstractVector weight fills are the non-Array counterparts a host Array never dispatches to, and _throw_device_scalar_weights fires only for a device-backed factor."
+
+[[exempt_function]]
+path = "src/space/inner_product.jl"
+methods = [
+    "_surface_sum_dirs(Ωₕ, mask, ur, vr, u, dims, ::Val{0}",
+    "_surface_sum_dirs(Ωₕ, mask, ur, vr, u, dims, ::Val{d}",
+    "_boundary_face_sum(Ωₕ, ur, vr, u, ::Val{d}",
+    "_separable_weights_full(w::SeparableWeights",
+]
+reason = "device-only: called only from the (DeviceLocality, GpuPolicy) _surface_sum, _dot and _dot_masked methods, which reduce device arrays by broadcast."
+
+[[exempt_function]]
+path = "src/utils/linear_algebra.jl"
+methods = [
+    "_sweep_for!(::DeviceLocality, policy::GpuPolicy",
+    "_sweep_scatter_for!(::DeviceLocality, policy::GpuPolicy",
+    "_gpu_for!(policy, v, idxs, f",
+    "_gpu_scatter_for!(policy, mats, idxs, g",
+]
+reason = "device-only: the (DeviceLocality, GpuPolicy) sweep methods hand off to the device sweep, and the _gpu_for! and _gpu_scatter_for! fallbacks throw when no device sweep (KernelAbstractions extension) is loaded; no device array or KernelAbstractions is in the test environment."
+
+[[exempt_function]]
+path = "src/utils/backend.jl"
+methods = ["locality(::Type{<:GPUArraysCore.AbstractGPUArray}"]
+reason = "device-only: the locality of a GPUArrays array type, reached only for a device array; no device array type is in the test environment."
