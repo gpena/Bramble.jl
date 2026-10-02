@@ -1,6 +1,6 @@
 # Per-file coverage report over one or more lcov files (#371).
 #
-#     julia coverage_floor.jl --floor <pct> [--exempt <toml>] [--compare <before.info>] [--fail] <lcov>...
+#     julia coverage_floor.jl --floor <pct> [--exempt <toml>] [--compare <before.info>] [--prefix <dir/>] [--fail] <lcov>...
 #
 # A line counts as covered if any input covers it, so split uploads (the Weekly `suite` and
 # `backends` halves) merge. Prints `<pct> <path> [exempt|BELOW|DROPPED]` per file, sorted by
@@ -16,8 +16,13 @@
 # A method spans a `function` block through the `end` at its indent, or a one-line definition
 # through its balanced `([{` (so a `= throw(` whose body continues counts whole; brackets inside
 # plain strings are ignored). A prefix matching no method or two or more is an error naming the
-# path and prefix. `path` is relative to the working directory. Exits 1 only with `--fail` and a
-# BELOW or DROPPED file.
+# path and prefix. An entry may also carry `headers = [...]`: method prefixes matched exactly as
+# `methods` are, but only the FIRST line of the matched method (the `function` line, or the whole
+# of a one-line method) leaves the total; the body stays measured. This is for the header line
+# Julia never counts for an inlined function. `path` is relative to the working directory.
+# `--prefix <dir/>` limits the BELOW and DROPPED flags, the `below=` and `dropped=` counts and
+# `--fail` to files whose path starts with it; every file is still listed. Exits 1 only with
+# `--fail` and a BELOW or DROPPED file.
 using TOML
 
 function read_lcov!(lines::Dict{String,Dict{Int,Bool}}, file::AbstractString)
@@ -116,7 +121,8 @@ end
 function main(args)
     floor = nothing
     exempt = Regex[]
-    exempt_functions = Tuple{String,Vector{String},Vector{String}}[]
+    exempt_functions = Tuple{String,Vector{String},Vector{String},Vector{String}}[]
+    prefix = ""
     compare = nothing
     fail = false
     inputs = String[]
@@ -132,10 +138,13 @@ function main(args)
             end
             for e in get(toml, "exempt_function", [])
                 push!(exempt_functions, (e["path"], String.(get(e, "functions", String[])),
-                                         String.(get(e, "methods", String[]))))
+                                         String.(get(e, "methods", String[])),
+                                         String.(get(e, "headers", String[]))))
             end
         elseif a == "--compare"
             compare = args[i += 1]
+        elseif a == "--prefix"
+            prefix = args[i += 1]
         elseif a == "--fail"
             fail = true
         else
@@ -148,13 +157,16 @@ function main(args)
 
     lines = Dict{String,Dict{Int,Bool}}()
     foreach(f -> read_lcov!(lines, f), inputs)
-    for (path, names, methods) in exempt_functions
+    for (path, names, methods, headers) in exempt_functions
         drop = Set{Int}()
         for name in names
             union!(drop, function_lines(path, name))
         end
         for prefix in methods
             union!(drop, method_lines(path, prefix))
+        end
+        for h in headers
+            push!(drop, first(method_lines(path, h)))
         end
         for (p, d) in lines
             (p == path || endswith(p, "/" * path)) && foreach(l -> delete!(d, l), drop)
@@ -169,7 +181,7 @@ function main(args)
         if any(r -> occursin(r, path), exempt)
             tag = "exempt"
             nexempt += 1
-        else
+        elseif startswith(path, prefix)
             if p < floor
                 tag = "BELOW"
                 nbelow += 1
