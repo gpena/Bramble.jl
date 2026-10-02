@@ -19,7 +19,11 @@
 # path and prefix. An entry may also carry `headers = [...]`: method prefixes matched exactly as
 # `methods` are, but only the FIRST line of the matched method (the `function` line, or the whole
 # of a one-line method) leaves the total; the body stays measured. This is for the header line
-# Julia never counts for an inlined function. `path` is relative to the working directory.
+# Julia never counts for an inlined function. An entry may also carry
+# `lines = [{ method = "<prefix>", text = "<stripped line>" }, ...]`: the method is matched
+# exactly as for `methods`, and the one line of it whose stripped text equals `text` leaves the
+# total, for a line only another OS runs inside a method the others do run. Zero or two such
+# lines is an error naming the path, prefix and text. `path` is relative to the working directory.
 # `--prefix <dir/>` limits the BELOW and DROPPED flags, the `below=` and `dropped=` counts and
 # `--fail` to files whose path starts with it; every file is still listed. Exits 1 only with
 # `--fail` and a BELOW or DROPPED file.
@@ -118,10 +122,19 @@ function method_lines(file::AbstractString, prefix::AbstractString)
     return collect(only(spans))
 end
 
+# Line number of the single line of the method matched by `prefix` whose stripped text is `text`.
+function method_line(file::AbstractString, prefix::AbstractString, text::AbstractString)
+    src = readlines(file)
+    hits = filter(l -> strip(src[l]) == text, method_lines(file, prefix))
+    length(hits) == 1 ||
+        error("exempt_function: method `$prefix` has $(length(hits)) lines with text `$text` in $file")
+    return only(hits)
+end
+
 function main(args)
     floor = nothing
     exempt = Regex[]
-    exempt_functions = Tuple{String,Vector{String},Vector{String},Vector{String}}[]
+    exempt_functions = Tuple{String,Vector{String},Vector{String},Vector{String},Vector{Tuple{String,String}}}[]
     prefix = ""
     compare = nothing
     fail = false
@@ -139,7 +152,9 @@ function main(args)
             for e in get(toml, "exempt_function", [])
                 push!(exempt_functions, (e["path"], String.(get(e, "functions", String[])),
                                          String.(get(e, "methods", String[])),
-                                         String.(get(e, "headers", String[]))))
+                                         String.(get(e, "headers", String[])),
+                                         [(String(d["method"]), String(d["text"]))
+                                          for d in get(e, "lines", [])]))
             end
         elseif a == "--compare"
             compare = args[i += 1]
@@ -157,7 +172,7 @@ function main(args)
 
     lines = Dict{String,Dict{Int,Bool}}()
     foreach(f -> read_lcov!(lines, f), inputs)
-    for (path, names, methods, headers) in exempt_functions
+    for (path, names, methods, headers, exlines) in exempt_functions
         drop = Set{Int}()
         for name in names
             union!(drop, function_lines(path, name))
@@ -167,6 +182,9 @@ function main(args)
         end
         for h in headers
             push!(drop, first(method_lines(path, h)))
+        end
+        for (m, t) in exlines
+            push!(drop, method_line(path, m, t))
         end
         for (p, d) in lines
             (p == path || endswith(p, "/" * path)) && foreach(l -> delete!(d, l), drop)
