@@ -12,6 +12,7 @@ ILUZero = "88f59080-6952-5380-9ea5-54057fb9a43f"
 Kronecker = "2c470bb0-bcc8-11e8-3dad-c9649493f05e"
 LinearSolve = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
 Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
+MaterialDocs = "10bdffc8-969c-4dd4-83f3-742518eccd6b"
 NonlinearSolve = "8913a72c-1f9b-4ce2-8d82-65094dcecaec"
 OrdinaryDiffEqBDF = "6ad6398a-0878-4a85-9266-38940aa047c8"
 OrdinaryDiffEqRosenbrock = "43230ef6-c299-4910-a778-202eb28ce4ce"
@@ -20,6 +21,9 @@ SciMLSensitivity = "1ed8b502-d754-442c-8d5d-10ac956f44a1"
 SparseConnectivityTracer = "9f842d2f-2579-4b1d-911e-f412cf18a3f5"
 SparseMatrixColorings = "0a514795-09f3-496d-8182-132a7b665d35"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
+
+[compat]
+MaterialDocs = "0.2"
 
 [sources]
 Bramble = {path = ".."}
