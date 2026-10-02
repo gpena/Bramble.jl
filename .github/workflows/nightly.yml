@@ -93,6 +93,7 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
+      actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
     strategy:
       fail-fast: false
       matrix:
@@ -157,6 +158,7 @@ jobs:
     continue-on-error: true
     permissions:
       contents: read
+      actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
       id-token: write
     strategy:
       fail-fast: false
@@ -190,6 +192,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
     strategy:
       fail-fast: false
       matrix:

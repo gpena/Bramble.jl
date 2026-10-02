@@ -47,6 +47,7 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: write
+      actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
       statuses: write
       pull-requests: write
     steps:
