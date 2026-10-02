@@ -107,6 +107,11 @@ probe("refactor_suitesparse", () -> refactor!(FakeSS(), A))
 probe("accelerate_factorize", () -> sparse_factorize(A; solver = :accelerate))
 probe("accelerate_solve", () -> pde_solve(A, F; solver = :accelerate))
 probe("refactor_accelerate", () -> refactor!(FakeAcc(), A))
+probe("acc_factorize_direct", () -> Bramble.accelerate_factorize(A))
+probe("acc_factorize_form", () -> Bramble.accelerate_factorize(a; dirichlet = bc))
+probe("acc_solve_direct", () -> Bramble.accelerate_solve(A, F))
+probe("acc_solve_form", () -> Bramble.accelerate_solve(a, l; dirichlet = bc, symmetrize = true))
+probe("acc_refactor_direct", () -> Bramble.accelerate_refactor!(FakeAcc(), A))
 probe("pde_suitesparse", () -> pde_solve(A, F; solver = :suitesparse))
 probe("pde_mumps", () -> pde_solve(A, F; solver = :mumps))
 probe("pde_sparspak", () -> pde_solve(A, F; solver = :sparspak))
@@ -166,7 +171,11 @@ end
     # Off macOS the wrapper rejects the platform first; on macOS the fallback speaks.
     for (k, name) in (
         ("accelerate_factorize", "accelerate_factorize"), ("accelerate_solve", "accelerate_solve"),
-        ("refactor_accelerate", "accelerate_refactor!"))
+        ("refactor_accelerate", "accelerate_refactor!"),
+        ("acc_factorize_direct", "accelerate_factorize"),
+        ("acc_factorize_form", "accelerate_factorize"),
+        ("acc_solve_direct", "accelerate_solve"), ("acc_solve_form", "accelerate_solve"),
+        ("acc_refactor_direct", "accelerate_refactor!"))
         if Sys.isapple()
             @test msg[k] == needs("AppleAccelerate", name)
         else
@@ -220,6 +229,33 @@ end
     else
         @test !Sys.isapple()    # the routing is macOS only; Linux and Windows fall through to `\`
     end
+end
+
+# The dense method is plain LinearAlgebra under the sparse methods' vocabulary, on every OS.
+# Oracle: each factorization solves a nonsymmetric or SPD system to the dense `\` answer,
+# and the two rejected options raise their exact messages.
+@testset "accelerate_factorize, dense" begin
+    Random.seed!(3)
+    B = rand(5, 5)
+    S = B' * B + 5I    # SPD
+    N = S + triu(B, 1)    # nonsymmetric
+    b = rand(5)
+    acc = Bramble.accelerate_factorize
+    @test acc(S; sym = :spd) isa Cholesky
+    @test acc(S; kind = :cholesky) \ b ≈ S \ b rtol = 1e-12
+    @test acc(N; sym = :unsymmetric) isa LU
+    @test acc(N; kind = :lu) \ b ≈ N \ b rtol = 1e-12
+    @test acc(N; kind = :qr) \ b ≈ N \ b rtol = 1e-12
+    @test acc(S) isa Cholesky
+    @test acc(N) isa LU
+    @test acc(N) \ b ≈ N \ b rtol = 1e-12
+    msg_ldlt = "accelerate_factorize does not wrap dense symmetric indefinite factorization; " *
+               "call LinearAlgebra.bunchkaufman(A) directly."
+    @test_throws ArgumentError(msg_ldlt) acc(S; sym = :symmetric)
+    @test_throws ArgumentError(msg_ldlt) acc(S; kind = :ldlt)
+    @test_throws ArgumentError(
+        "Unknown factorization option for accelerate_factorize: sym=auto, kind=bogus."
+    ) acc(S; kind = :bogus)
 end
 
 @testset "_default_wants_accelerate" begin

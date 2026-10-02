@@ -776,6 +776,37 @@ end
             @test startswith(out[name], "ErrorException metal_sparse_$name requires Metal.jl")
         end
     end
+
+    # 2. `ka_device`/`ka_synchronize` without KernelAbstractions throw the exact message
+    #    naming the argument's type and the package to load (same child as above).
+    @testset "ka_* without KA (child)" begin
+        code = """
+        using Bramble
+        println("KA_LOADED\t", Base.get_extension(Bramble, :BrambleKernelAbstractionsExt) !== nothing)
+        for (name, f) in (("device", Bramble.ka_device), ("sync", Bramble.ka_synchronize))
+            try
+                f([1.0])
+                println(name, "\tRETURNED")
+            catch e
+                println(name, "\t", nameof(typeof(e)), " ", e.msg)
+            end
+        end
+        """
+        root = pkgdir(Bramble)
+        cmd = `$(Base.julia_cmd()) --project=$root --startup-file=no --threads=1 -e $code`
+        out = Dict(
+            (p = split(l, '\t'; limit = 2); p[1] => p[2])
+        for l in split(readchomp(pipeline(cmd; stderr = devnull)), '\n')
+        )
+        @test out["KA_LOADED"] == "false"
+        @test out["device"] ==
+              "ErrorException ka_device has no method for Vector{Float64}. Add " *
+              "`using KernelAbstractions` and the package providing this backend's device " *
+              "(e.g. `using Metal`) before calling this function."
+        @test out["sync"] ==
+              "ErrorException ka_synchronize has no method for Vector{Float64}. Add " *
+              "`using KernelAbstractions` before calling this function."
+    end
 end
 
 @testset "Deprecated policy aliases (#300)" begin
