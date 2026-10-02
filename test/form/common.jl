@@ -4,7 +4,7 @@ using Test
 using Bramble
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, M₊ₓ, M₊ᵧ
-using LinearAlgebra: issymmetric
+using LinearAlgebra: issymmetric, Diagonal, I as Id
 using Bramble:
                TrialFunction,
                TestFunction,
@@ -219,6 +219,109 @@ using Bramble:
         @test source_function(sin, Val(1)) isa SourceFunction{1}
         @test IndexedTrialFunction{2}(7).component_idx == 7
         @test IndexedTestFunction{2}(4).component_idx == 4
+
+        # a point source: the vector spelling of one point normalises to the same tuple of
+        # `Float64` coordinates as the tuple spelling, integer coordinates included
+        d = Bramble.dirac([0.3, 0.6], 2.5)
+        @test d isa Bramble.DiracSource{2}
+        @test d.points === (0.3, 0.6)
+        @test d.strengths === 2.5
+        @test Bramble.dirac([0, 1]).points === (0.0, 1.0)
+        @test Bramble.DiracSource{1}((0.5,), 2.0) === Bramble.DiracSource{1, Tuple{Float64}, Float64}((0.5,), 2.0)
+
+        # several points, each normalised by its own spelling: a bare number is a 1D
+        # point, a vector a D-dimensional one
+        many1 = Bramble.dirac(Union{Float64, Tuple{Float64}}[0.2, (0.7,)], [1.0, 2.0])
+        @test many1 isa Bramble.DiracSource{1}
+        @test many1.points == [(0.2,), (0.7,)]
+        @test many1.strengths == [1.0, 2.0]
+        many2 = Bramble.dirac([[0.1, 2], [3, 0.4]])
+        @test many2 isa Bramble.DiracSource{2}
+        @test many2.points == [(0.1, 2.0), (3.0, 0.4)]
+        @test many2.strengths == [1.0, 1.0]
+    end
+
+    @testset "Shifted inner stencils, non-uniform mesh" begin
+        # `shifted_inner_stencil` is how a tapped node (here a difference) evaluates its
+        # operand at a neighbour. Each operand below takes a different branch of it: a
+        # grid-function scale (re-reads the coefficient at the tap), a sum (recurses into
+        # each summand), a nested point-dependent operand (re-evaluated and relabelled), a
+        # scalar times a bare leaf (inlined re-evaluation) and a source (re-evaluated, not
+        # relabelled). The oracle is the product of the operator matrices, built by
+        # `src/operators/stencil_matrix.jl` without any stencil shift, row by row at every
+        # point of the non-uniform mesh, the two boundary points included.
+        n = npoints(Ωₕ1)
+        u = TrialFunction{1}()
+        c = Rₕ(Wₕ1, x -> 1 + x^2)
+        C = Diagonal(parent(c))
+        M₋, M₊ = Matrix(D₋ₓ(Ωₕ1)), Matrix(D₊ₓ(Ωₕ1))
+
+        # sums the stencil's weights per column; a tap off the grid must carry no weight
+        function _row(st, i)
+            r = zeros(n)
+            for (o, w) in st
+                j = i + o[1]
+                if 1 <= j <= n
+                    r[j] += w
+                else
+                    @test iszero(w)
+                end
+            end
+            return r
+        end
+
+        for (nm, op, reference) in (
+            ("D₋ₓ(c u)", D₋ₓ(c * u), M₋ * C),
+            ("D₋ₓ(c u + u)", D₋ₓ(c * u + u), M₋ * (C + Id)),
+            ("D₊ₓ(D₋ₓ(c u))", D₊ₓ(D₋ₓ(c * u)), M₊ * M₋ * C),
+            ("D₋ₓ(2 u)", D₋ₓ(2.0 * u), 2 * M₋)
+        )
+            @testset "$nm" begin
+                for i in 1:n
+                    st = local_stencil(op, Wₕ1, CartesianIndex(i), nothing, i)
+                    @test _row(st, i) ≈ reference[i, :]
+                end
+            end
+        end
+
+        # a source carries a value, not a column: every entry stays at offset zero, and
+        # the weights add up to the difference of the sampled values
+        vals = collect(1.0:Float64(n)) .^ 2
+        sv = SourceVector{1, Vector{Float64}}(vals)
+        for i in 1:n
+            st = local_stencil(D₋ₓ(sv), Wₕ1, CartesianIndex(i), nothing, i)
+            @test all(e -> first(e) == (0,), st)
+            @test sum(last, st) ≈ (M₋ * vals)[i]
+        end
+    end
+
+    @testset "Source lowering" begin
+        # a function of position is sampled once, at every mesh point, into a vector
+        # source, through whatever scaling wraps it; a tree with nothing to sample comes
+        # back as it was
+        f = x -> 1 + x^2
+        sampled = [f(Bramble.point(Ωₕ1, CartesianIndex(i))) for i in 1:npoints(Ωₕ1)]
+        sf = source_function(f, Val(1))
+        cₕ = Rₕ(Wₕ1, x -> 3 - x)
+
+        lowered = Bramble._lower_sources(sf, Wₕ1)
+        @test lowered isa SourceVector{1}
+        @test lowered.vec ≈ sampled
+
+        scaled = Bramble._lower_sources(3 * sf, Wₕ1)
+        @test scaled isa OperatorScale
+        @test scaled.scalar == 3
+        @test scaled.inner_op isa SourceVector{1}
+        @test scaled.inner_op.vec ≈ sampled
+
+        weighted = Bramble._lower_sources(cₕ * sf, Wₕ1)
+        @test weighted isa GridFunctionScale
+        @test weighted.grid_function === cₕ
+        @test weighted.inner_op.vec ≈ sampled
+
+        u1 = TrialFunction{1}()
+        @test Bramble._lower_sources(3 * u1, Wₕ1) === 3 * u1
+        @test Bramble._lower_sources(cₕ * u1, Wₕ1) === cₕ * u1
     end
 
     @testset "Combining nodes" begin
@@ -449,6 +552,14 @@ end
             expected = issymmetric(a) ? "Symmetric: yes" : "Symmetric: no"
             @test occursin(expected, sprint(show, MIME"text/plain"(), a))
         end
+    end
+
+    # The deprecated `ast` keyword assembles the AST it is handed; handing it the form's
+    # own gives what the form assembles without it, and the deprecation is announced
+    # (when `--depwarn` is on; `@test_deprecated` passes the value through otherwise).
+    @testset "Deprecated ast keyword" begin
+        b = @test_deprecated r"`ast` keyword" assemble(l; ast = l.ast)
+        @test b == assemble(l)
     end
 
     # Distinct trial and test spaces.

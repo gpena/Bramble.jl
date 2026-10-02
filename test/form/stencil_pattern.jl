@@ -32,7 +32,8 @@ using Bramble:
                D₋ₓ,
                Mₓ,
                jumpᵧ,
-               jumpₓ
+               jumpₓ,
+               πₕ
 
 # Reading the sparsity pattern off an AST before assembling it.
 #
@@ -140,6 +141,79 @@ end
         end
         @test stencil_offsets(id2) == [(0, 0)]
         @test stencil_offsets(3 * id2) == [(0, 0)]
+        @test stencil_offsets(Bramble.IndexedTestFunction{2}(2)) == [(0, 0)]
+        @test stencil_offsets(Bramble.SourceConstant{2, Float64}(2.5)) == [(0, 0)]
+        @test stencil_offsets(Bramble.dirac((0.3, 0.6), 2.0)) == [(0, 0)]
+    end
+
+    @testset "Interior margin" begin
+        # `_stencil_margin` is how far from every face a point must be for none of a term's
+        # taps to leave the grid: one step per tapped node and `|s|` per shift by `s`, added
+        # up the tree, so never less than the reach `stencil_offsets` predicts (checked
+        # against the matrices above), and equal to it for a leaf, which reaches nothing.
+        u, v = TrialFunction{1}(), TestFunction{1}()
+        uₕ = Rₕ(Wₕ1, x -> x + 1)
+        _reach(op) = maximum(o -> maximum(abs, o), stencil_offsets(op))
+        for op in (
+            u,
+            v,
+            IndexedTrialFunction{1}(1),
+            Bramble.IndexedTestFunction{1}(2),
+            source_function(sin, Val(1)),
+            SourceVector{1, Vector{Float64}}([1.0]),
+            Bramble.SourceConstant{1, Float64}(2.5),
+            Bramble.dirac(0.3, 2.0),
+            id1,
+            ZeroOperator(Wₕ1)
+        )
+            @test Bramble._stencil_margin(op) == _reach(op) == 0
+        end
+
+        for (op, margin) in (
+            (D₋ₓ(D₊ₓ(u)), 2),
+            (shift_op(D₋ₓ(u), 1, 2), 3),
+            (3 * Dcₓ(u), 1),
+            (uₕ * M₊ₓ(u), 1),
+            (restrict_to(:interior, D̽ₓ(u)), 1),
+            (innerₕ(D₋ₓ(u), D₊ₓ(D₊ₓ(v))), 2),
+            (innerₕ(D₋ₓ(D₋ₓ(u)), v), 2),
+            (innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)), 1)
+        )
+            @test Bramble._stencil_margin(op) == margin
+            @test margin >= _reach(op)
+        end
+
+        # an interpolation names columns on another mesh, never a tap on this one, so it
+        # adds no margin; a difference around it adds its own one step
+        @test Bramble._stencil_margin(πₕ(u)) == 0
+        @test Bramble._stencil_margin(D₋ₓ(πₕ(u))) == 1
+    end
+
+    @testset "Bilinear terms and lexicographic distance" begin
+        # `bandwidths` reads every bilinear term's (trial, test) reach and turns each pair
+        # into a distance in the lexicographic order. The terms come through a sum and a
+        # scale, and anything that is not a bilinear term contributes none.
+        u, v = TrialFunction{1}(), TestFunction{1}()
+        terms = Bramble._bilinear_terms(innerₕ(D₊ₓ(u), D₋ₓ(v)) + 3 * innerₕ(u, v) + id1)
+        @test length(terms) == 2
+        @test sort(terms[1][1]) == [(0,), (1,)]
+        @test sort(terms[1][2]) == [(-1,), (0,)]
+        @test terms[2] == ([(0,)], [(0,)])
+        @test isempty(Bramble._bilinear_terms(id1))
+
+        # strides (1, n₁): one step along x is 1, one along y is n₁, and the distance is
+        # column minus row
+        @test Bramble._lex_distance((1, 0), (0, 1), (1, 5)) == 1 - 5
+        @test Bramble._lex_distance((0, 0), (0, 0), (1, 5)) == 0
+        @test Bramble._lex_distance((-1, 2), (1, -1), (1, 7)) == -2 + 3 * 7
+        @test Bramble._lex_distance((2,), (-1,), (1,)) == 3
+
+        # and the bandwidth of a form on the non-uniform 2D mesh is the widest diagonal
+        # the assembled matrix occupies
+        a = form(Wₕ2, Wₕ2, (u, v) -> innerₕ(D₊ₓ(u), D₋ᵧ(v)) + innerₕ(u, v))
+        A = assemble(a)
+        offs = _matrix_offsets(A)
+        @test Bramble.bandwidths(a) == (-minimum(offs), maximum(offs))
     end
 
     @testset "Node reach bounds" begin
