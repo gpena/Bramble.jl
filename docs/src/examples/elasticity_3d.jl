@@ -43,7 +43,7 @@
 # ```
 #
 # whose right-hand side is a vector Laplacian plus a divergence term, each of which is easy to
-# write with the operators the [forms tutorial](../tutorials/form.md) introduces. It holds only
+# write with the operators the [forms tutorial](@ref tutorial_form) introduces. It holds only
 # up to a boundary term. For a fully clamped solid that term vanishes and the two forms are the
 # same operator; on a free surface they are different operators, and the convenient one stiffens
 # this beam by roughly two orders of magnitude. The strain form is the one to discretise.
@@ -87,8 +87,8 @@
 # ([#234](https://github.com/gpena/Bramble.jl/issues/234)); the transverse-factor bug that used to
 # make the singletons wrong on a free surface is fixed too
 # ([#236](https://github.com/gpena/Bramble.jl/issues/236)). [`εₕ`](@ref) and [`divₕ`](@ref) build
-# the placements above directly from a composite trial or test function — one call each, over
-# ``u`` as a whole rather than component by component — placing ``\varepsilon^{ii}_h`` on the face
+# the placements above directly from a composite trial or test function (one call each, over
+# ``u`` as a whole rather than component by component), placing ``\varepsilon^{ii}_h`` on the face
 # centre normal to ``i``, ``\varepsilon^{ij}_h`` on the edge centre the pair ``\{i,j\}`` shares,
 # and ``\mathrm{div}_h\,u_h`` on the cell centre every axis shares, and handing each term to
 # `inner₊` with the ``S`` it needs. The discrete form is exactly `a_h` above, spelled
@@ -160,7 +160,7 @@ nothing # hide
 #
 # Before the beam, the interior stencils on their own. The right-hand side that belongs to a
 # chosen ``u`` is ``f = -\mu\Delta u - (\lambda+\mu)\nabla(\nabla\cdot u)``, and rather than
-# differentiate it by hand it is read off the exact solution with `ForwardDiff` — a wrong
+# differentiate it by hand it is read off the exact solution with `ForwardDiff`: a wrong
 # derivative in a manufactured right-hand side produces a convergence rate that looks like a
 # discretisation bug.
 
@@ -243,9 +243,9 @@ function cantilever(n)
     return Ωₕ, uₕ
 end
 
-# Euler–Bernoulli gives a tip deflection ``\delta = qL^4/(8EI)`` for a uniformly loaded
+# Euler-Bernoulli gives a tip deflection ``\delta = qL^4/(8EI)`` for a uniformly loaded
 # cantilever, with ``q = \rho g W H`` the weight per unit length and ``I = W H^3/12``. It is
-# itself an approximation — it ignores shear and the compliance of the clamped end — so the
+# itself an approximation: it ignores shear and the compliance of the clamped end, so the
 # ratio should approach one, not equal it.
 
 δ_eb = (ρg * W * H) * L^4 / (8 * E * (W * H^3 / 12))
@@ -258,8 +258,8 @@ end
 round.(tips ./ (-δ_eb), digits = 3)
 
 # Converging on beam theory from below. Write the shear terms with `∇̽ₕ` and `innerₕ` instead of
-# `εₕ`/`divₕ`'s staggered placements — collocating everything at the nodes rather than the
-# face/edge/cell centres the discrete strain and divergence actually live on — and the same beam
+# `εₕ`/`divₕ`'s staggered placements (collocating everything at the nodes rather than the
+# face/edge/cell centres the discrete strain and divergence actually live on) and the same beam
 # on these same three grids gives `+0.00011`, `-0.00005` and `+0.00009`: three to four orders of
 # magnitude too small, and on two of the three deflecting *upward* under a downward load. That is
 # not a checkerboard or an accuracy loss but an indefinite stiffness matrix, and where it comes
@@ -310,7 +310,7 @@ round(maximum(vm) / σ_beam, digits = 3)
 @test 0.7 < maximum(vm) / σ_beam < 1.2                                                      #src
 
 # Nothing here was ever solved on a deformed domain. Linear elasticity is posed on the
-# *reference* configuration — the undeformed box, which is what `mesh` discretises — and the
+# *reference* configuration (the undeformed box, which is what `mesh` discretises), and the
 # unknown is a displacement field over it, three scalar grid functions at the same nodes. Moving
 # each node by `u(x)` happens only in the plot below. That identification of the reference and
 # deformed configurations is exactly the small-strain assumption, legitimate while
@@ -343,5 +343,15 @@ deformed_plot(uₕ, vm; label = "von Mises σ", scale = 1.0,
 # The wireframe is the undeformed box. The beam sags about 6% of its length; on the cut face the
 # stress runs from a maximum along the top and bottom fibres to a minimum on the neutral axis
 # halfway between them, and along the length it falls from the clamped end to nearly nothing at
-# the free one. That is what a cantilever does, and none of it was put in by hand — the clamped
+# the free one. That is what a cantilever does, and none of it was put in by hand: the clamped
 # face is the only boundary condition this problem names.
+#
+# ## Where to go next
+#
+#   - [Linear Poisson](poisson_linear.md) for the scalar problem whose random-grid convergence
+#     check this page reuses.
+#   - The [coupled systems tutorial](@ref tutorial_coupled) and the
+#     [space tutorial](@ref space_composite) for the composite space that carries the three
+#     displacement components.
+#   - [`εₕ`](@ref) and [`divₕ`](@ref) in the [API reference](../api.md) for the staggered
+#     strain and divergence used here.

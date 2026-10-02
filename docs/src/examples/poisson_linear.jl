@@ -1,6 +1,6 @@
 # # Linear Poisson equation
 #
-# A worked problem, built from pieces the [forms tutorial](../tutorials/form.md) introduces one
+# A worked problem, built from pieces the [forms tutorial](@ref tutorial_form) introduces one
 # at a time. Every number and every plot below was produced by the code shown.
 #
 # ## Problem
@@ -11,10 +11,10 @@
 # ```
 #
 # with the manufactured solution ``u_{\text{exact}}(x, y) = e^{x+y}``, so ``g = -2 u_{\text{exact}}``.
-# A manufactured solution is what makes the error checkable at all — without one there is
+# A manufactured solution is what makes the error checkable at all. Without one there is
 # nothing to compare the discrete solution against.
 #
-# ## Solving it
+# ## Assembling and solving on a random grid
 
 using Bramble
 using Random
@@ -27,7 +27,7 @@ Random.seed!(20260903)
 Ωₕ = mesh(Ω, (24, 24), (false, false))
 Wₕ = gridspace(Ωₕ)
 
-# `(false, false)` builds a non-uniform, randomly-perturbed grid in both directions —
+# `(false, false)` builds a non-uniform, randomly-perturbed grid in both directions,
 # deliberately, not the default: a uniform grid happens to make this particular manufactured
 # solution nearly exact for this scheme regardless of mesh size, which would make the
 # convergence check below pass on a broken implementation just as readily as a correct one.
@@ -37,8 +37,7 @@ Wₕ = gridspace(Ωₕ)
 # would differ from build to build, and the suite could not assert what the page prints.
 #
 # The bilinear form is the discrete Laplacian, the same `inner₊(∇ₕ(u), ∇ₕ(v))` the
-# [forms tutorial](../tutorials/form.md#5.-Dirichlet-conditions,-and-a-Poisson-problem) builds
-# in one dimension:
+# [forms tutorial](@ref form_dirichlet) builds in one dimension:
 
 bcs = dirichlet_constraints(Ω, :boundary => sol)
 
@@ -59,7 +58,7 @@ nothing # hide
 # solution had been reproduced by construction rather than solved for.                      #src
 @test 1.0e-4 < norm₁ₕ(uₕ .- Rₕ(Wₕ, sol)) < 1.0e-1                                           #src
 
-# ## Visualizing the solution
+# ## Browsing the solution
 #
 # An interactive panel, seeded from the resolution of `uₕ` above but solving its own problem
 # in the browser: drag the resolution slider, switch between a uniform and a fully random
@@ -69,9 +68,9 @@ nothing # hide
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 poisson_interactive_widget(uₕ; title = "Linear Poisson, 2D") # hide
 
-# ## Checking the answer
+# ## Convergence in one, two and three dimensions
 #
-# Not just that it ran — that it converges at the rate the scheme promises, on genuinely random
+# The check is not that it ran but that it converges at the rate the scheme promises, on genuinely random
 # grids, in 1D, 2D and 3D: one random coarse mesh per dimension, refined in place with
 # [`iterative_refinement!`](@ref) so every finer level is the *same* random mesh, dyadically
 # split, rather than a fresh independent draw that would add its own noise to the measured rate.
@@ -111,7 +110,7 @@ hs1, errs1 = poisson_series(1; n0 = 6, levels = 7)  # 6 up to 321 points
 Random.seed!(20260903)
 hs2, errs2 = poisson_series(2; levels = 6)   # 5² up to 129² points
 Random.seed!(20260903)
-hs3, errs3 = poisson_series(3; levels = 4)   # 5³ up to 33³ points — 3D is expensive per level
+hs3, errs3 = poisson_series(3; levels = 4)   # 5³ up to 33³ points; 3D is expensive per level
 
 order1 = log(errs1[end - 1] / errs1[end]) / log(hs1[end - 1] / hs1[end])
 order2 = log(errs2[end - 1] / errs2[end]) / log(hs2[end - 1] / hs2[end])
@@ -136,8 +135,17 @@ convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), 
     title = "Linear Poisson, ‖·‖₁ₕ") # hide
 
 # Second order in every dimension, on grids chosen specifically not to make that trivially
-# true — every curve's markers sit along the same reference slope. 3D uses fewer refinement
+# true: every curve's markers sit along the same reference slope. 3D uses fewer refinement
 # levels than 2D, and 2D fewer than 1D: the same dyadic split costs ``8\times`` the points per
 # level in 3D against ``4\times`` in 2D and ``2\times`` in 1D, so matching level counts across
 # all three would make the higher dimensions by far the most expensive part of this page for no
 # extra information.
+#
+# ## Where to go next
+#
+#   - [Nonlinear Poisson](poisson_nonlinear.md) for the same problem with a coefficient that
+#     depends on the solution, solved by Picard and by Newton.
+#   - [Convection-diffusion](convection_diffusion_linear.md) for a non-symmetric operator on
+#     the same grids.
+#   - The [forms tutorial](@ref tutorial_form) for the pieces this page assembles, and
+#     [Choosing a solver](@ref tutorial_solvers) for other ways to solve `A \ F`.
