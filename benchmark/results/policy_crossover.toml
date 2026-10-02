@@ -1,0 +1,1618 @@
+[meta]
+arch = "aarch64"
+commit = "a6e862d4"
+cpu = "Apple M2"
+date = "2026-10-02T17:42:22"
+julia = "1.13.1"
+load1 = 5.03
+os = "Darwin"
+power = "ac"
+script = "policy_crossover.jl"
+smoke = false
+threads = 4
+
+[[tables."D₋ₓ! 1D"]]
+dofs = 100
+n = 100
+polyester_ms = 0.000125
+serial_ms = 0.0
+threads_ms = 0.006166
+[[tables."D₋ₓ! 1D"]]
+dofs = 300
+n = 300
+polyester_ms = 0.000166
+serial_ms = 4.1e-5
+threads_ms = 0.006375
+[[tables."D₋ₓ! 1D"]]
+dofs = 1000
+n = 1000
+polyester_ms = 0.00020800000000000001
+serial_ms = 0.000125
+threads_ms = 0.00625
+[[tables."D₋ₓ! 1D"]]
+dofs = 3000
+n = 3000
+polyester_ms = 0.00029099999999999997
+serial_ms = 0.000583
+threads_ms = 0.007584
+[[tables."D₋ₓ! 1D"]]
+dofs = 10000
+n = 10000
+polyester_ms = 0.0006670000000000001
+serial_ms = 0.0026249999999999997
+threads_ms = 0.011
+[[tables."D₋ₓ! 1D"]]
+dofs = 30000
+n = 30000
+polyester_ms = 0.002041
+serial_ms = 0.007875
+threads_ms = 0.0275
+[[tables."D₋ₓ! 1D"]]
+dofs = 100000
+n = 100000
+polyester_ms = 0.008791
+serial_ms = 0.026250000000000002
+threads_ms = 0.027542
+[[tables."D₋ₓ! 1D"]]
+dofs = 300000
+n = 300000
+polyester_ms = 0.065542
+serial_ms = 0.1575
+threads_ms = 0.051875
+[[tables."D₋ₓ! 1D"]]
+dofs = 1000000
+n = 1000000
+polyester_ms = 0.151625
+serial_ms = 0.264667
+threads_ms = 0.177125
+
+[[tables."D₋ₓ! 2D"]]
+dofs = 100
+n = 10
+polyester_ms = 0.000125
+serial_ms = 0.0
+threads_ms = 0.006208
+[[tables."D₋ₓ! 2D"]]
+dofs = 289
+n = 17
+polyester_ms = 0.000125
+serial_ms = 4.1e-5
+threads_ms = 0.00625
+[[tables."D₋ₓ! 2D"]]
+dofs = 1024
+n = 32
+polyester_ms = 0.000166
+serial_ms = 0.00020800000000000001
+threads_ms = 0.006041
+[[tables."D₋ₓ! 2D"]]
+dofs = 3025
+n = 55
+polyester_ms = 0.00033299999999999996
+serial_ms = 0.000583
+threads_ms = 0.007208
+[[tables."D₋ₓ! 2D"]]
+dofs = 10000
+n = 100
+polyester_ms = 0.00075
+serial_ms = 0.002291
+threads_ms = 0.016708
+[[tables."D₋ₓ! 2D"]]
+dofs = 29929
+n = 173
+polyester_ms = 0.002
+serial_ms = 0.006417
+threads_ms = 0.025542
+[[tables."D₋ₓ! 2D"]]
+dofs = 99856
+n = 316
+polyester_ms = 0.007625
+serial_ms = 0.021291
+threads_ms = 0.027959
+[[tables."D₋ₓ! 2D"]]
+dofs = 300304
+n = 548
+polyester_ms = 0.064584
+serial_ms = 0.155708
+threads_ms = 0.041041
+[[tables."D₋ₓ! 2D"]]
+dofs = 1000000
+n = 1000
+polyester_ms = 0.095041
+serial_ms = 0.201292
+threads_ms = 0.12275
+
+[[tables."D₋ₓ! 3D"]]
+dofs = 125
+n = 5
+polyester_ms = 0.000125
+serial_ms = 4.1e-5
+threads_ms = 0.006458
+[[tables."D₋ₓ! 3D"]]
+dofs = 343
+n = 7
+polyester_ms = 0.000166
+serial_ms = 0.000125
+threads_ms = 0.006458
+[[tables."D₋ₓ! 3D"]]
+dofs = 1000
+n = 10
+polyester_ms = 0.00020800000000000001
+serial_ms = 0.00025
+threads_ms = 0.006334
+[[tables."D₋ₓ! 3D"]]
+dofs = 2744
+n = 14
+polyester_ms = 0.00033299999999999996
+serial_ms = 0.000791
+threads_ms = 0.006792
+[[tables."D₋ₓ! 3D"]]
+dofs = 10648
+n = 22
+polyester_ms = 0.001166
+serial_ms = 0.003791
+threads_ms = 0.022334
+[[tables."D₋ₓ! 3D"]]
+dofs = 29791
+n = 31
+polyester_ms = 0.002458
+serial_ms = 0.008624999999999999
+threads_ms = 0.020417
+[[tables."D₋ₓ! 3D"]]
+dofs = 97336
+n = 46
+polyester_ms = 0.008792
+serial_ms = 0.024292
+threads_ms = 0.027916
+[[tables."D₋ₓ! 3D"]]
+dofs = 300763
+n = 67
+polyester_ms = 0.0435
+serial_ms = 0.067458
+threads_ms = 0.037916
+[[tables."D₋ₓ! 3D"]]
+dofs = 1000000
+n = 100
+polyester_ms = 0.071875
+serial_ms = 0.223625
+threads_ms = 0.08779200000000001
+
+[[tables."Rₕ! masked 1D"]]
+dofs = 100
+n = 100
+polyester_ms = 0.000166
+serial_ms = 8.3e-5
+threads_ms = 0.0065
+[[tables."Rₕ! masked 1D"]]
+dofs = 300
+n = 300
+polyester_ms = 0.00020800000000000001
+serial_ms = 0.00025
+threads_ms = 0.006666
+[[tables."Rₕ! masked 1D"]]
+dofs = 1000
+n = 1000
+polyester_ms = 0.000292
+serial_ms = 0.000583
+threads_ms = 0.006833
+[[tables."Rₕ! masked 1D"]]
+dofs = 3000
+n = 3000
+polyester_ms = 0.000583
+serial_ms = 0.001666
+threads_ms = 0.018167
+[[tables."Rₕ! masked 1D"]]
+dofs = 10000
+n = 10000
+polyester_ms = 0.001625
+serial_ms = 0.005541
+threads_ms = 0.028458
+[[tables."Rₕ! masked 1D"]]
+dofs = 30000
+n = 30000
+polyester_ms = 0.004583
+serial_ms = 0.016416999999999998
+threads_ms = 0.027125
+[[tables."Rₕ! masked 1D"]]
+dofs = 100000
+n = 100000
+polyester_ms = 0.014833
+serial_ms = 0.051458000000000004
+threads_ms = 0.035750000000000004
+[[tables."Rₕ! masked 1D"]]
+dofs = 300000
+n = 300000
+polyester_ms = 0.04825
+serial_ms = 0.154291
+threads_ms = 0.074
+[[tables."Rₕ! masked 1D"]]
+dofs = 1000000
+n = 1000000
+polyester_ms = 0.160833
+serial_ms = 0.5231250000000001
+threads_ms = 0.211167
+
+[[tables."Rₕ! masked 2D"]]
+dofs = 100
+n = 10
+polyester_ms = 0.00025
+serial_ms = 0.00041600000000000003
+threads_ms = 0.006667
+[[tables."Rₕ! masked 2D"]]
+dofs = 289
+n = 17
+polyester_ms = 0.000417
+serial_ms = 0.000792
+threads_ms = 0.007083
+[[tables."Rₕ! masked 2D"]]
+dofs = 1024
+n = 32
+polyester_ms = 0.000833
+serial_ms = 0.0018750000000000001
+threads_ms = 0.00675
+[[tables."Rₕ! masked 2D"]]
+dofs = 3025
+n = 55
+polyester_ms = 0.0015
+serial_ms = 0.003917
+threads_ms = 0.028249999999999997
+[[tables."Rₕ! masked 2D"]]
+dofs = 10000
+n = 100
+polyester_ms = 0.003458
+serial_ms = 0.009458
+threads_ms = 0.026666
+[[tables."Rₕ! masked 2D"]]
+dofs = 29929
+n = 173
+polyester_ms = 0.007791
+serial_ms = 0.024708
+threads_ms = 0.031334
+[[tables."Rₕ! masked 2D"]]
+dofs = 99856
+n = 316
+polyester_ms = 0.022042
+serial_ms = 0.063666
+threads_ms = 0.043833
+[[tables."Rₕ! masked 2D"]]
+dofs = 300304
+n = 548
+polyester_ms = 0.056541
+serial_ms = 0.181292
+threads_ms = 0.083875
+[[tables."Rₕ! masked 2D"]]
+dofs = 1000000
+n = 1000
+polyester_ms = 0.1665
+serial_ms = 0.5706249999999999
+threads_ms = 0.206083
+
+[[tables."Rₕ! masked 3D"]]
+dofs = 125
+n = 5
+polyester_ms = 0.000625
+serial_ms = 0.0012920000000000002
+threads_ms = 0.007
+[[tables."Rₕ! masked 3D"]]
+dofs = 343
+n = 7
+polyester_ms = 0.001166
+serial_ms = 0.003125
+threads_ms = 0.01875
+[[tables."Rₕ! masked 3D"]]
+dofs = 1000
+n = 10
+polyester_ms = 0.002791
+serial_ms = 0.007666000000000001
+threads_ms = 0.026334
+[[tables."Rₕ! masked 3D"]]
+dofs = 2744
+n = 14
+polyester_ms = 0.005833
+serial_ms = 0.016458
+threads_ms = 0.026167
+[[tables."Rₕ! masked 3D"]]
+dofs = 10648
+n = 22
+polyester_ms = 0.016291
+serial_ms = 0.044
+threads_ms = 0.031708
+[[tables."Rₕ! masked 3D"]]
+dofs = 29791
+n = 31
+polyester_ms = 0.034041
+serial_ms = 0.093125
+threads_ms = 0.039417
+[[tables."Rₕ! masked 3D"]]
+dofs = 97336
+n = 46
+polyester_ms = 0.081833
+serial_ms = 0.224708
+threads_ms = 0.089792
+[[tables."Rₕ! masked 3D"]]
+dofs = 300763
+n = 67
+polyester_ms = 0.197416
+serial_ms = 0.589125
+threads_ms = 0.211
+[[tables."Rₕ! masked 3D"]]
+dofs = 1000000
+n = 100
+polyester_ms = 0.5116670000000001
+serial_ms = 1.464084
+threads_ms = 0.516791
+
+[[tables."Rₕ! unmasked 1D"]]
+dofs = 100
+n = 100
+polyester_ms = 0.00025
+serial_ms = 0.000458
+threads_ms = 0.006458
+[[tables."Rₕ! unmasked 1D"]]
+dofs = 300
+n = 300
+polyester_ms = 0.000541
+serial_ms = 0.0014169999999999999
+threads_ms = 0.019125
+[[tables."Rₕ! unmasked 1D"]]
+dofs = 1000
+n = 1000
+polyester_ms = 0.001375
+serial_ms = 0.004625
+threads_ms = 0.027583
+[[tables."Rₕ! unmasked 1D"]]
+dofs = 3000
+n = 3000
+polyester_ms = 0.003958
+serial_ms = 0.013708
+threads_ms = 0.026625
+[[tables."Rₕ! unmasked 1D"]]
+dofs = 10000
+n = 10000
+polyester_ms = 0.013040999999999999
+serial_ms = 0.043083
+threads_ms = 0.032083
+[[tables."Rₕ! unmasked 1D"]]
+dofs = 30000
+n = 30000
+polyester_ms = 0.039
+serial_ms = 0.12929200000000002
+threads_ms = 0.052958
+[[tables."Rₕ! unmasked 1D"]]
+dofs = 100000
+n = 100000
+polyester_ms = 0.129875
+serial_ms = 0.431959
+threads_ms = 0.13425
+[[tables."Rₕ! unmasked 1D"]]
+dofs = 300000
+n = 300000
+polyester_ms = 0.38949999999999996
+serial_ms = 1.3313750000000002
+threads_ms = 0.40466599999999997
+[[tables."Rₕ! unmasked 1D"]]
+dofs = 1000000
+n = 1000000
+polyester_ms = 1.300208
+serial_ms = 4.330083999999999
+threads_ms = 1.331208
+
+[[tables."Rₕ! unmasked 2D"]]
+dofs = 100
+n = 10
+polyester_ms = 0.000375
+serial_ms = 0.000917
+threads_ms = 0.008208
+[[tables."Rₕ! unmasked 2D"]]
+dofs = 289
+n = 17
+polyester_ms = 0.000834
+serial_ms = 0.002833
+threads_ms = 0.018125
+[[tables."Rₕ! unmasked 2D"]]
+dofs = 1024
+n = 32
+polyester_ms = 0.003
+serial_ms = 0.011083
+threads_ms = 0.028959
+[[tables."Rₕ! unmasked 2D"]]
+dofs = 3025
+n = 55
+polyester_ms = 0.008334
+serial_ms = 0.031958
+threads_ms = 0.031375
+[[tables."Rₕ! unmasked 2D"]]
+dofs = 10000
+n = 100
+polyester_ms = 0.026958
+serial_ms = 0.098792
+threads_ms = 0.045125
+[[tables."Rₕ! unmasked 2D"]]
+dofs = 29929
+n = 173
+polyester_ms = 0.07975
+serial_ms = 0.291292
+threads_ms = 0.093333
+[[tables."Rₕ! unmasked 2D"]]
+dofs = 99856
+n = 316
+polyester_ms = 0.261833
+serial_ms = 0.961291
+threads_ms = 0.268292
+[[tables."Rₕ! unmasked 2D"]]
+dofs = 300304
+n = 548
+polyester_ms = 0.7745
+serial_ms = 3.0264580000000003
+threads_ms = 0.7849579999999999
+[[tables."Rₕ! unmasked 2D"]]
+dofs = 1000000
+n = 1000
+polyester_ms = 2.563375
+serial_ms = 10.315375
+threads_ms = 2.685625
+
+[[tables."Rₕ! unmasked 3D"]]
+dofs = 125
+n = 5
+polyester_ms = 0.000542
+serial_ms = 0.001542
+threads_ms = 0.018708000000000002
+[[tables."Rₕ! unmasked 3D"]]
+dofs = 343
+n = 7
+polyester_ms = 0.001375
+serial_ms = 0.004666
+threads_ms = 0.019416
+[[tables."Rₕ! unmasked 3D"]]
+dofs = 1000
+n = 10
+polyester_ms = 0.004042
+serial_ms = 0.014792
+threads_ms = 0.02775
+[[tables."Rₕ! unmasked 3D"]]
+dofs = 2744
+n = 14
+polyester_ms = 0.010916
+serial_ms = 0.038792
+threads_ms = 0.032167
+[[tables."Rₕ! unmasked 3D"]]
+dofs = 10648
+n = 22
+polyester_ms = 0.043875000000000004
+serial_ms = 0.16
+threads_ms = 0.0605
+[[tables."Rₕ! unmasked 3D"]]
+dofs = 29791
+n = 31
+polyester_ms = 0.119417
+serial_ms = 0.433959
+threads_ms = 0.134916
+[[tables."Rₕ! unmasked 3D"]]
+dofs = 97336
+n = 46
+polyester_ms = 0.38316700000000004
+serial_ms = 1.4029159999999998
+threads_ms = 0.398167
+[[tables."Rₕ! unmasked 3D"]]
+dofs = 300763
+n = 67
+polyester_ms = 1.234
+serial_ms = 4.629958
+threads_ms = 1.2173340000000001
+[[tables."Rₕ! unmasked 3D"]]
+dofs = 1000000
+n = 100
+polyester_ms = 4.050583
+serial_ms = 15.023625000000001
+threads_ms = 3.964083
+
+[[tables."assemble bilinear first 1D"]]
+dofs = 100
+n = 100
+polyester_ms = 0.0055
+serial_ms = 0.004417
+threads_ms = 0.050541
+[[tables."assemble bilinear first 1D"]]
+dofs = 1000
+n = 1000
+polyester_ms = 0.037541
+serial_ms = 0.035750000000000004
+threads_ms = 0.089292
+[[tables."assemble bilinear first 1D"]]
+dofs = 10000
+n = 10000
+polyester_ms = 0.36408399999999996
+serial_ms = 0.34520900000000004
+threads_ms = 0.421667
+[[tables."assemble bilinear first 1D"]]
+dofs = 100000
+n = 100000
+polyester_ms = 3.8145840000000004
+serial_ms = 3.703042
+threads_ms = 3.770041
+[[tables."assemble bilinear first 1D"]]
+dofs = 1000000
+n = 1000000
+polyester_ms = 44.29541699999999
+serial_ms = 45.002833
+threads_ms = 36.205625
+
+[[tables."assemble bilinear first 2D"]]
+dofs = 100
+n = 10
+polyester_ms = 0.010750000000000001
+serial_ms = 0.009541000000000001
+threads_ms = 0.111833
+[[tables."assemble bilinear first 2D"]]
+dofs = 1024
+n = 32
+polyester_ms = 0.089583
+serial_ms = 0.0815
+threads_ms = 0.19162500000000002
+[[tables."assemble bilinear first 2D"]]
+dofs = 10000
+n = 100
+polyester_ms = 0.837333
+serial_ms = 0.766458
+threads_ms = 0.935791
+[[tables."assemble bilinear first 2D"]]
+dofs = 99856
+n = 316
+polyester_ms = 8.862209
+serial_ms = 8.363667
+threads_ms = 8.679041999999999
+[[tables."assemble bilinear first 2D"]]
+dofs = 1000000
+n = 1000
+polyester_ms = 94.58175
+serial_ms = 90.53762499999999
+threads_ms = 102.743584
+
+[[tables."assemble bilinear first 3D"]]
+dofs = 125
+n = 5
+polyester_ms = 0.020999999999999998
+serial_ms = 0.018042000000000002
+threads_ms = 0.19404200000000002
+[[tables."assemble bilinear first 3D"]]
+dofs = 1000
+n = 10
+polyester_ms = 0.15729200000000002
+serial_ms = 0.13245800000000002
+threads_ms = 0.33925
+[[tables."assemble bilinear first 3D"]]
+dofs = 10648
+n = 22
+polyester_ms = 1.686666
+serial_ms = 1.423542
+threads_ms = 1.793625
+[[tables."assemble bilinear first 3D"]]
+dofs = 97336
+n = 46
+polyester_ms = 15.797167000000002
+serial_ms = 15.594
+threads_ms = 16.155292000000003
+[[tables."assemble bilinear first 3D"]]
+dofs = 1000000
+n = 100
+polyester_ms = 182.615583
+serial_ms = 173.572167
+threads_ms = 167.396292
+
+[[tables."assemble! bilinear 1D"]]
+dofs = 100
+n = 100
+polyester_ms = 0.0006659999999999999
+serial_ms = 0.00029099999999999997
+threads_ms = 0.0285
+[[tables."assemble! bilinear 1D"]]
+dofs = 1000
+n = 1000
+polyester_ms = 0.002208
+serial_ms = 0.003083
+threads_ms = 0.045875
+[[tables."assemble! bilinear 1D"]]
+dofs = 10000
+n = 10000
+polyester_ms = 0.018916
+serial_ms = 0.032417
+threads_ms = 0.072708
+[[tables."assemble! bilinear 1D"]]
+dofs = 100000
+n = 100000
+polyester_ms = 0.168541
+serial_ms = 0.303083
+threads_ms = 0.22008299999999997
+[[tables."assemble! bilinear 1D"]]
+dofs = 1000000
+n = 1000000
+polyester_ms = 1.735458
+serial_ms = 3.0612920000000003
+threads_ms = 1.8370000000000002
+
+[[tables."assemble! bilinear 2D"]]
+dofs = 100
+n = 10
+polyester_ms = 0.001083
+serial_ms = 0.000833
+threads_ms = 0.088167
+[[tables."assemble! bilinear 2D"]]
+dofs = 1024
+n = 32
+polyester_ms = 0.002541
+serial_ms = 0.006667
+threads_ms = 0.104708
+[[tables."assemble! bilinear 2D"]]
+dofs = 10000
+n = 100
+polyester_ms = 0.023
+serial_ms = 0.058625000000000003
+threads_ms = 0.138375
+[[tables."assemble! bilinear 2D"]]
+dofs = 99856
+n = 316
+polyester_ms = 0.195334
+serial_ms = 0.575583
+threads_ms = 0.319458
+[[tables."assemble! bilinear 2D"]]
+dofs = 1000000
+n = 1000
+polyester_ms = 3.402791
+serial_ms = 6.519667
+threads_ms = 3.5685830000000003
+
+[[tables."assemble! bilinear 3D"]]
+dofs = 125
+n = 5
+polyester_ms = 0.001666
+serial_ms = 0.0022500000000000003
+threads_ms = 0.157417
+[[tables."assemble! bilinear 3D"]]
+dofs = 1000
+n = 10
+polyester_ms = 0.006084
+serial_ms = 0.015792
+threads_ms = 0.174458
+[[tables."assemble! bilinear 3D"]]
+dofs = 10648
+n = 22
+polyester_ms = 0.039833
+serial_ms = 0.1295
+threads_ms = 0.21475
+[[tables."assemble! bilinear 3D"]]
+dofs = 97336
+n = 46
+polyester_ms = 0.332042
+serial_ms = 1.097666
+threads_ms = 0.52075
+[[tables."assemble! bilinear 3D"]]
+dofs = 1000000
+n = 100
+polyester_ms = 6.380249999999999
+serial_ms = 12.788208000000001
+threads_ms = 6.586875
+
+[[tables."assemble! linear 1D"]]
+dofs = 100
+n = 100
+polyester_ms = 0.00020800000000000001
+serial_ms = 4.1e-5
+threads_ms = 0.006792
+[[tables."assemble! linear 1D"]]
+dofs = 1000
+n = 1000
+polyester_ms = 0.000541
+serial_ms = 0.00075
+threads_ms = 0.008916
+[[tables."assemble! linear 1D"]]
+dofs = 10000
+n = 10000
+polyester_ms = 0.005667
+serial_ms = 0.009000000000000001
+threads_ms = 0.023917
+[[tables."assemble! linear 1D"]]
+dofs = 100000
+n = 100000
+polyester_ms = 0.031583
+serial_ms = 0.088
+threads_ms = 0.058832999999999996
+[[tables."assemble! linear 1D"]]
+dofs = 1000000
+n = 1000000
+polyester_ms = 0.399084
+serial_ms = 1.0302499999999999
+threads_ms = 0.464791
+
+[[tables."assemble! linear 2D"]]
+dofs = 100
+n = 10
+polyester_ms = 0.00025
+serial_ms = 0.000125
+threads_ms = 0.006917
+[[tables."assemble! linear 2D"]]
+dofs = 1024
+n = 32
+polyester_ms = 0.0006659999999999999
+serial_ms = 0.0012079999999999999
+threads_ms = 0.010875
+[[tables."assemble! linear 2D"]]
+dofs = 10000
+n = 100
+polyester_ms = 0.005125
+serial_ms = 0.012291
+threads_ms = 0.0265
+[[tables."assemble! linear 2D"]]
+dofs = 99856
+n = 316
+polyester_ms = 0.044208000000000004
+serial_ms = 0.118125
+threads_ms = 0.060084000000000005
+[[tables."assemble! linear 2D"]]
+dofs = 1000000
+n = 1000
+polyester_ms = 0.442708
+serial_ms = 1.138042
+threads_ms = 0.40108299999999997
+
+[[tables."assemble! linear 3D"]]
+dofs = 125
+n = 5
+polyester_ms = 0.00029099999999999997
+serial_ms = 0.000209
+threads_ms = 0.007208
+[[tables."assemble! linear 3D"]]
+dofs = 1000
+n = 10
+polyester_ms = 0.0012079999999999999
+serial_ms = 0.0020829999999999998
+threads_ms = 0.019083
+[[tables."assemble! linear 3D"]]
+dofs = 10648
+n = 22
+polyester_ms = 0.00725
+serial_ms = 0.02325
+threads_ms = 0.027833
+[[tables."assemble! linear 3D"]]
+dofs = 97336
+n = 46
+polyester_ms = 0.060125
+serial_ms = 0.202917
+threads_ms = 0.07370800000000001
+[[tables."assemble! linear 3D"]]
+dofs = 1000000
+n = 100
+polyester_ms = 0.633083
+serial_ms = 2.1715
+threads_ms = 0.6776669999999999
+
+[[tables."avgₕ! 1D"]]
+dofs = 100
+n = 100
+polyester_ms = 0.000958
+serial_ms = 0.0029579999999999997
+threads_ms = 0.018458
+[[tables."avgₕ! 1D"]]
+dofs = 300
+n = 300
+polyester_ms = 0.002666
+serial_ms = 0.009541000000000001
+threads_ms = 0.025625
+[[tables."avgₕ! 1D"]]
+dofs = 1000
+n = 1000
+polyester_ms = 0.0085
+serial_ms = 0.031
+threads_ms = 0.029249999999999998
+[[tables."avgₕ! 1D"]]
+dofs = 3000
+n = 3000
+polyester_ms = 0.025208
+serial_ms = 0.087042
+threads_ms = 0.039583
+[[tables."avgₕ! 1D"]]
+dofs = 10000
+n = 10000
+polyester_ms = 0.083791
+serial_ms = 0.290334
+threads_ms = 0.095208
+[[tables."avgₕ! 1D"]]
+dofs = 30000
+n = 30000
+polyester_ms = 0.251125
+serial_ms = 0.869291
+threads_ms = 0.255625
+[[tables."avgₕ! 1D"]]
+dofs = 100000
+n = 100000
+polyester_ms = 0.842959
+serial_ms = 2.937541
+threads_ms = 0.8580420000000001
+[[tables."avgₕ! 1D"]]
+dofs = 300000
+n = 300000
+polyester_ms = 2.5157909999999997
+serial_ms = 8.807208000000001
+threads_ms = 2.543
+[[tables."avgₕ! 1D"]]
+dofs = 1000000
+n = 1000000
+polyester_ms = 8.446375000000002
+serial_ms = 29.479583
+threads_ms = 8.505708
+
+[[tables."avgₕ! 2D"]]
+dofs = 100
+n = 10
+polyester_ms = 0.008457999999999999
+serial_ms = 0.029875000000000002
+threads_ms = 0.030209000000000003
+[[tables."avgₕ! 2D"]]
+dofs = 289
+n = 17
+polyester_ms = 0.024083
+serial_ms = 0.08791700000000001
+threads_ms = 0.039916
+[[tables."avgₕ! 2D"]]
+dofs = 1024
+n = 32
+polyester_ms = 0.08679100000000001
+serial_ms = 0.309958
+threads_ms = 0.098459
+[[tables."avgₕ! 2D"]]
+dofs = 3025
+n = 55
+polyester_ms = 0.256417
+serial_ms = 0.925458
+threads_ms = 0.259208
+[[tables."avgₕ! 2D"]]
+dofs = 10000
+n = 100
+polyester_ms = 0.849375
+serial_ms = 3.078792
+threads_ms = 0.8523750000000001
+[[tables."avgₕ! 2D"]]
+dofs = 29929
+n = 173
+polyester_ms = 2.547625
+serial_ms = 9.228250000000001
+threads_ms = 2.560958
+[[tables."avgₕ! 2D"]]
+dofs = 99856
+n = 316
+polyester_ms = 8.539125
+serial_ms = 31.024791999999998
+threads_ms = 8.550375
+[[tables."avgₕ! 2D"]]
+dofs = 300304
+n = 548
+polyester_ms = 25.428042
+serial_ms = 92.863458
+threads_ms = 25.453833
+[[tables."avgₕ! 2D"]]
+dofs = 1000000
+n = 1000
+polyester_ms = 88.466958
+serial_ms = 307.02299999999997
+threads_ms = 84.735
+
+[[tables."avgₕ! 3D"]]
+dofs = 125
+n = 5
+polyester_ms = 0.08325
+serial_ms = 0.283208
+threads_ms = 0.086375
+[[tables."avgₕ! 3D"]]
+dofs = 343
+n = 7
+polyester_ms = 0.228875
+serial_ms = 0.817666
+threads_ms = 0.236708
+[[tables."avgₕ! 3D"]]
+dofs = 1000
+n = 10
+polyester_ms = 0.724542
+serial_ms = 2.605375
+threads_ms = 0.735333
+[[tables."avgₕ! 3D"]]
+dofs = 2744
+n = 14
+polyester_ms = 1.9562080000000002
+serial_ms = 7.103333
+threads_ms = 1.971166
+[[tables."avgₕ! 3D"]]
+dofs = 10648
+n = 22
+polyester_ms = 7.677292
+serial_ms = 28.122041
+threads_ms = 7.680000000000001
+[[tables."avgₕ! 3D"]]
+dofs = 29791
+n = 31
+polyester_ms = 22.146959000000003
+serial_ms = 78.801958
+threads_ms = 21.446458
+[[tables."avgₕ! 3D"]]
+dofs = 97336
+n = 46
+polyester_ms = 75.615584
+serial_ms = 257.465667
+threads_ms = 70.492125
+[[tables."avgₕ! 3D"]]
+dofs = 300763
+n = 67
+polyester_ms = 243.88816699999998
+serial_ms = 797.510209
+threads_ms = 230.980209
+[[tables."avgₕ! 3D"]]
+dofs = 1000000
+n = 100
+polyester_ms = 838.6972499999999
+serial_ms = 2654.255083
+threads_ms = 808.226
+
+[[tables."broadcast axpy 1D"]]
+dofs = 100
+n = 100
+polyester_ms = 0.00020800000000000001
+serial_ms = 0.0
+threads_ms = 0.006333
+[[tables."broadcast axpy 1D"]]
+dofs = 300
+n = 300
+polyester_ms = 0.00020800000000000001
+serial_ms = 4.1e-5
+threads_ms = 0.006375
+[[tables."broadcast axpy 1D"]]
+dofs = 1000
+n = 1000
+polyester_ms = 0.00029099999999999997
+serial_ms = 0.000125
+threads_ms = 0.0065
+[[tables."broadcast axpy 1D"]]
+dofs = 3000
+n = 3000
+polyester_ms = 0.0005
+serial_ms = 0.00033299999999999996
+threads_ms = 0.0065
+[[tables."broadcast axpy 1D"]]
+dofs = 10000
+n = 10000
+polyester_ms = 0.001083
+serial_ms = 0.0022500000000000003
+threads_ms = 0.009459
+[[tables."broadcast axpy 1D"]]
+dofs = 30000
+n = 30000
+polyester_ms = 0.003125
+serial_ms = 0.007416
+threads_ms = 0.026833
+[[tables."broadcast axpy 1D"]]
+dofs = 100000
+n = 100000
+polyester_ms = 0.011458
+serial_ms = 0.024708
+threads_ms = 0.027917
+[[tables."broadcast axpy 1D"]]
+dofs = 300000
+n = 300000
+polyester_ms = 0.037625
+serial_ms = 0.069541
+threads_ms = 0.044917
+[[tables."broadcast axpy 1D"]]
+dofs = 1000000
+n = 1000000
+polyester_ms = 0.16916699999999998
+serial_ms = 0.24320799999999998
+threads_ms = 0.173041
+
+[[tables."broadcast axpy 2D"]]
+dofs = 100
+n = 10
+polyester_ms = 0.00025
+serial_ms = 0.0
+threads_ms = 0.00625
+[[tables."broadcast axpy 2D"]]
+dofs = 289
+n = 17
+polyester_ms = 0.00025
+serial_ms = 4.1e-5
+threads_ms = 0.0065
+[[tables."broadcast axpy 2D"]]
+dofs = 1024
+n = 32
+polyester_ms = 0.00033299999999999996
+serial_ms = 0.000125
+threads_ms = 0.006333
+[[tables."broadcast axpy 2D"]]
+dofs = 3025
+n = 55
+polyester_ms = 0.000541
+serial_ms = 0.000375
+threads_ms = 0.00625
+[[tables."broadcast axpy 2D"]]
+dofs = 10000
+n = 100
+polyester_ms = 0.001166
+serial_ms = 0.002208
+threads_ms = 0.007875
+[[tables."broadcast axpy 2D"]]
+dofs = 29929
+n = 173
+polyester_ms = 0.00325
+serial_ms = 0.007375
+threads_ms = 0.027708
+[[tables."broadcast axpy 2D"]]
+dofs = 99856
+n = 316
+polyester_ms = 0.012291
+serial_ms = 0.024666
+threads_ms = 0.027625
+[[tables."broadcast axpy 2D"]]
+dofs = 300304
+n = 548
+polyester_ms = 0.034375
+serial_ms = 0.069708
+threads_ms = 0.046875
+[[tables."broadcast axpy 2D"]]
+dofs = 1000000
+n = 1000
+polyester_ms = 0.165458
+serial_ms = 0.248875
+threads_ms = 0.176709
+
+[[tables."broadcast axpy 3D"]]
+dofs = 125
+n = 5
+polyester_ms = 0.00029099999999999997
+serial_ms = 0.0
+threads_ms = 0.006458
+[[tables."broadcast axpy 3D"]]
+dofs = 343
+n = 7
+polyester_ms = 0.00033299999999999996
+serial_ms = 4.1e-5
+threads_ms = 0.006208
+[[tables."broadcast axpy 3D"]]
+dofs = 1000
+n = 10
+polyester_ms = 0.000375
+serial_ms = 0.000125
+threads_ms = 0.006625
+[[tables."broadcast axpy 3D"]]
+dofs = 2744
+n = 14
+polyester_ms = 0.000541
+serial_ms = 0.00033299999999999996
+threads_ms = 0.006333
+[[tables."broadcast axpy 3D"]]
+dofs = 10648
+n = 22
+polyester_ms = 0.00125
+serial_ms = 0.0025
+threads_ms = 0.009875
+[[tables."broadcast axpy 3D"]]
+dofs = 29791
+n = 31
+polyester_ms = 0.003291
+serial_ms = 0.007333
+threads_ms = 0.019166
+[[tables."broadcast axpy 3D"]]
+dofs = 97336
+n = 46
+polyester_ms = 0.012208
+serial_ms = 0.02425
+threads_ms = 0.026875
+[[tables."broadcast axpy 3D"]]
+dofs = 300763
+n = 67
+polyester_ms = 0.035375
+serial_ms = 0.074209
+threads_ms = 0.046416
+[[tables."broadcast axpy 3D"]]
+dofs = 1000000
+n = 100
+polyester_ms = 0.172292
+serial_ms = 0.265542
+threads_ms = 0.177959
+
+[[tables.crossover]]
+dim = 1
+polyester = 100
+polyester_vs_threads = 100
+threads = 10000
+workload = "Rₕ! unmasked"
+[[tables.crossover]]
+dim = 2
+polyester = 100
+polyester_vs_threads = 100
+threads = 3025
+workload = "Rₕ! unmasked"
+[[tables.crossover]]
+dim = 3
+polyester = 125
+polyester_vs_threads = 125
+threads = 2744
+workload = "Rₕ! unmasked"
+[[tables.crossover]]
+dim = 1
+polyester = 300
+polyester_vs_threads = 100
+threads = 100000
+workload = "Rₕ! masked"
+[[tables.crossover]]
+dim = 2
+polyester = 100
+polyester_vs_threads = 100
+threads = 99856
+workload = "Rₕ! masked"
+[[tables.crossover]]
+dim = 3
+polyester = 125
+polyester_vs_threads = 125
+threads = 10648
+workload = "Rₕ! masked"
+[[tables.crossover]]
+dim = 1
+polyester = 100
+polyester_vs_threads = 100
+threads = 1000
+workload = "avgₕ!"
+[[tables.crossover]]
+dim = 2
+polyester = 100
+polyester_vs_threads = 100
+threads = 289
+workload = "avgₕ!"
+[[tables.crossover]]
+dim = 3
+polyester = 125
+polyester_vs_threads = 125
+threads = 125
+workload = "avgₕ!"
+[[tables.crossover]]
+dim = 1
+polyester_vs_threads = 100
+workload = "innerₕ"
+[[tables.crossover]]
+dim = 2
+polyester = 10000
+polyester_vs_threads = 100
+threads = 300304
+workload = "innerₕ"
+[[tables.crossover]]
+dim = 3
+polyester = 10648
+polyester_vs_threads = 125
+threads = 300763
+workload = "innerₕ"
+[[tables.crossover]]
+dim = 1
+polyester_vs_threads = 100
+workload = "innerₕ masked"
+[[tables.crossover]]
+dim = 2
+polyester_vs_threads = 100
+workload = "innerₕ masked"
+[[tables.crossover]]
+dim = 3
+polyester = 343
+polyester_vs_threads = 125
+threads = 300763
+workload = "innerₕ masked"
+[[tables.crossover]]
+dim = 1
+polyester = 3000
+polyester_vs_threads = 100
+threads = 300000
+workload = "D₋ₓ!"
+[[tables.crossover]]
+dim = 2
+polyester = 1024
+polyester_vs_threads = 100
+threads = 300304
+workload = "D₋ₓ!"
+[[tables.crossover]]
+dim = 3
+polyester = 1000
+polyester_vs_threads = 125
+threads = 300763
+workload = "D₋ₓ!"
+[[tables.crossover]]
+dim = 1
+polyester = 10000
+polyester_vs_threads = 100
+threads = 300000
+workload = "broadcast axpy"
+[[tables.crossover]]
+dim = 2
+polyester = 10000
+polyester_vs_threads = 100
+threads = 300304
+workload = "broadcast axpy"
+[[tables.crossover]]
+dim = 3
+polyester = 10648
+polyester_vs_threads = 125
+threads = 300763
+workload = "broadcast axpy"
+[[tables.crossover]]
+dim = 1
+polyester = 1000000
+polyester_vs_threads = 100
+threads = 1000000
+workload = "assemble bilinear first"
+[[tables.crossover]]
+dim = 2
+polyester_vs_threads = 100
+workload = "assemble bilinear first"
+[[tables.crossover]]
+dim = 3
+polyester_vs_threads = 125
+threads = 1000000
+workload = "assemble bilinear first"
+[[tables.crossover]]
+dim = 1
+polyester = 1000
+polyester_vs_threads = 100
+threads = 100000
+workload = "assemble! bilinear"
+[[tables.crossover]]
+dim = 2
+polyester = 1024
+polyester_vs_threads = 100
+threads = 99856
+workload = "assemble! bilinear"
+[[tables.crossover]]
+dim = 3
+polyester = 125
+polyester_vs_threads = 125
+threads = 97336
+workload = "assemble! bilinear"
+[[tables.crossover]]
+dim = 1
+polyester = 1000
+polyester_vs_threads = 100
+threads = 100000
+workload = "assemble! linear"
+[[tables.crossover]]
+dim = 2
+polyester = 1024
+polyester_vs_threads = 100
+threads = 99856
+workload = "assemble! linear"
+[[tables.crossover]]
+dim = 3
+polyester = 1000
+polyester_vs_threads = 125
+threads = 97336
+workload = "assemble! linear"
+
+[[tables."innerₕ 1D"]]
+dofs = 100
+n = 100
+polyester_ms = 0.000125
+serial_ms = 0.0
+threads_ms = 0.006333
+[[tables."innerₕ 1D"]]
+dofs = 300
+n = 300
+polyester_ms = 0.000166
+serial_ms = 0.0
+threads_ms = 0.006666
+[[tables."innerₕ 1D"]]
+dofs = 1000
+n = 1000
+polyester_ms = 0.00033299999999999996
+serial_ms = 0.0
+threads_ms = 0.0065
+[[tables."innerₕ 1D"]]
+dofs = 3000
+n = 3000
+polyester_ms = 0.000792
+serial_ms = 0.0
+threads_ms = 0.007541
+[[tables."innerₕ 1D"]]
+dofs = 10000
+n = 10000
+polyester_ms = 0.002458
+serial_ms = 0.0
+threads_ms = 0.019625
+[[tables."innerₕ 1D"]]
+dofs = 30000
+n = 30000
+polyester_ms = 0.007166
+serial_ms = 0.0
+threads_ms = 0.029
+[[tables."innerₕ 1D"]]
+dofs = 100000
+n = 100000
+polyester_ms = 0.023541
+serial_ms = 0.0
+threads_ms = 0.027541
+[[tables."innerₕ 1D"]]
+dofs = 300000
+n = 300000
+polyester_ms = 0.07037500000000001
+serial_ms = 0.0
+threads_ms = 0.044334
+[[tables."innerₕ 1D"]]
+dofs = 1000000
+n = 1000000
+polyester_ms = 0.347334
+serial_ms = 0.0
+threads_ms = 0.345667
+
+[[tables."innerₕ 2D"]]
+dofs = 100
+n = 10
+polyester_ms = 0.000125
+serial_ms = 0.0
+threads_ms = 0.006375
+[[tables."innerₕ 2D"]]
+dofs = 289
+n = 17
+polyester_ms = 0.000166
+serial_ms = 4.1e-5
+threads_ms = 0.006416
+[[tables."innerₕ 2D"]]
+dofs = 1024
+n = 32
+polyester_ms = 0.00033299999999999996
+serial_ms = 0.000125
+threads_ms = 0.008166
+[[tables."innerₕ 2D"]]
+dofs = 3025
+n = 55
+polyester_ms = 0.000833
+serial_ms = 0.000583
+threads_ms = 0.008375
+[[tables."innerₕ 2D"]]
+dofs = 10000
+n = 100
+polyester_ms = 0.002458
+serial_ms = 0.0025
+threads_ms = 0.01875
+[[tables."innerₕ 2D"]]
+dofs = 29929
+n = 173
+polyester_ms = 0.007208
+serial_ms = 0.007542
+threads_ms = 0.031042
+[[tables."innerₕ 2D"]]
+dofs = 99856
+n = 316
+polyester_ms = 0.0235
+serial_ms = 0.024624999999999998
+threads_ms = 0.033042
+[[tables."innerₕ 2D"]]
+dofs = 300304
+n = 548
+polyester_ms = 0.07041599999999999
+serial_ms = 0.07025
+threads_ms = 0.037458
+[[tables."innerₕ 2D"]]
+dofs = 1000000
+n = 1000
+polyester_ms = 0.234541
+serial_ms = 0.238375
+threads_ms = 0.091833
+
+[[tables."innerₕ 3D"]]
+dofs = 125
+n = 5
+polyester_ms = 0.000166
+serial_ms = 4.1e-5
+threads_ms = 0.006375
+[[tables."innerₕ 3D"]]
+dofs = 343
+n = 7
+polyester_ms = 0.00020800000000000001
+serial_ms = 0.000166
+threads_ms = 0.008042
+[[tables."innerₕ 3D"]]
+dofs = 1000
+n = 10
+polyester_ms = 0.000375
+serial_ms = 0.00025
+threads_ms = 0.008457999999999999
+[[tables."innerₕ 3D"]]
+dofs = 2744
+n = 14
+polyester_ms = 0.000833
+serial_ms = 0.00075
+threads_ms = 0.008584
+[[tables."innerₕ 3D"]]
+dofs = 10648
+n = 22
+polyester_ms = 0.002791
+serial_ms = 0.003166
+threads_ms = 0.020791
+[[tables."innerₕ 3D"]]
+dofs = 29791
+n = 31
+polyester_ms = 0.007292
+serial_ms = 0.0085
+threads_ms = 0.019834
+[[tables."innerₕ 3D"]]
+dofs = 97336
+n = 46
+polyester_ms = 0.023875
+serial_ms = 0.026125000000000002
+threads_ms = 0.026708
+[[tables."innerₕ 3D"]]
+dofs = 300763
+n = 67
+polyester_ms = 0.071542
+serial_ms = 0.074875
+threads_ms = 0.037917000000000006
+[[tables."innerₕ 3D"]]
+dofs = 1000000
+n = 100
+polyester_ms = 0.234416
+serial_ms = 0.255875
+threads_ms = 0.099875
+
+[[tables."innerₕ masked 1D"]]
+dofs = 100
+n = 100
+polyester_ms = 0.000125
+serial_ms = 0.0
+threads_ms = 0.006625
+[[tables."innerₕ masked 1D"]]
+dofs = 300
+n = 300
+polyester_ms = 0.000166
+serial_ms = 0.0
+threads_ms = 0.006542
+[[tables."innerₕ masked 1D"]]
+dofs = 1000
+n = 1000
+polyester_ms = 0.00025
+serial_ms = 0.0
+threads_ms = 0.006417
+[[tables."innerₕ masked 1D"]]
+dofs = 3000
+n = 3000
+polyester_ms = 0.0005
+serial_ms = 0.0
+threads_ms = 0.006583
+[[tables."innerₕ masked 1D"]]
+dofs = 10000
+n = 10000
+polyester_ms = 0.001583
+serial_ms = 4.1e-5
+threads_ms = 0.006458
+[[tables."innerₕ masked 1D"]]
+dofs = 30000
+n = 30000
+polyester_ms = 0.0045000000000000005
+serial_ms = 0.000166
+threads_ms = 0.006542
+[[tables."innerₕ masked 1D"]]
+dofs = 100000
+n = 100000
+polyester_ms = 0.01475
+serial_ms = 0.000458
+threads_ms = 0.006459
+[[tables."innerₕ masked 1D"]]
+dofs = 300000
+n = 300000
+polyester_ms = 0.044083
+serial_ms = 0.001458
+threads_ms = 0.008417
+[[tables."innerₕ masked 1D"]]
+dofs = 1000000
+n = 1000000
+polyester_ms = 0.146583
+serial_ms = 0.004875
+threads_ms = 0.021124999999999998
+
+[[tables."innerₕ masked 2D"]]
+dofs = 100
+n = 10
+polyester_ms = 0.000125
+serial_ms = 0.0
+threads_ms = 0.00625
+[[tables."innerₕ masked 2D"]]
+dofs = 289
+n = 17
+polyester_ms = 0.000166
+serial_ms = 4.1e-5
+threads_ms = 0.006792
+[[tables."innerₕ masked 2D"]]
+dofs = 1024
+n = 32
+polyester_ms = 0.00029099999999999997
+serial_ms = 0.000125
+threads_ms = 0.0067079999999999996
+[[tables."innerₕ masked 2D"]]
+dofs = 3025
+n = 55
+polyester_ms = 0.000625
+serial_ms = 0.00025
+threads_ms = 0.007458
+[[tables."innerₕ masked 2D"]]
+dofs = 10000
+n = 100
+polyester_ms = 0.001667
+serial_ms = 0.000458
+threads_ms = 0.0067079999999999996
+[[tables."innerₕ masked 2D"]]
+dofs = 29929
+n = 173
+polyester_ms = 0.004791
+serial_ms = 0.000916
+threads_ms = 0.007584
+[[tables."innerₕ masked 2D"]]
+dofs = 99856
+n = 316
+polyester_ms = 0.015291999999999998
+serial_ms = 0.001916
+threads_ms = 0.0185
+[[tables."innerₕ masked 2D"]]
+dofs = 300304
+n = 548
+polyester_ms = 0.045084
+serial_ms = 0.004042
+threads_ms = 0.019458
+[[tables."innerₕ masked 2D"]]
+dofs = 1000000
+n = 1000
+polyester_ms = 0.147792
+serial_ms = 0.009917
+threads_ms = 0.026250000000000002
+
+[[tables."innerₕ masked 3D"]]
+dofs = 125
+n = 5
+polyester_ms = 0.000125
+serial_ms = 8.3e-5
+threads_ms = 0.0065
+[[tables."innerₕ masked 3D"]]
+dofs = 343
+n = 7
+polyester_ms = 0.00020800000000000001
+serial_ms = 0.00025
+threads_ms = 0.006375
+[[tables."innerₕ masked 3D"]]
+dofs = 1000
+n = 10
+polyester_ms = 0.00033299999999999996
+serial_ms = 0.000583
+threads_ms = 0.007791
+[[tables."innerₕ masked 3D"]]
+dofs = 2744
+n = 14
+polyester_ms = 0.00075
+serial_ms = 0.001291
+threads_ms = 0.019167
+[[tables."innerₕ masked 3D"]]
+dofs = 10648
+n = 22
+polyester_ms = 0.002166
+serial_ms = 0.003416
+threads_ms = 0.023083
+[[tables."innerₕ masked 3D"]]
+dofs = 29791
+n = 31
+polyester_ms = 0.006166
+serial_ms = 0.007209
+threads_ms = 0.020333999999999998
+[[tables."innerₕ masked 3D"]]
+dofs = 97336
+n = 46
+polyester_ms = 0.017417
+serial_ms = 0.017374999999999998
+threads_ms = 0.025125
+[[tables."innerₕ masked 3D"]]
+dofs = 300763
+n = 67
+polyester_ms = 0.052834000000000006
+serial_ms = 0.036375000000000005
+threads_ms = 0.028458
+[[tables."innerₕ masked 3D"]]
+dofs = 1000000
+n = 100
+polyester_ms = 0.171625
+serial_ms = 0.078833
+threads_ms = 0.036000000000000004
