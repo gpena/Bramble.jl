@@ -7,7 +7,8 @@ using Bramble: matrix_type, execution_policy
 import Bramble: M₊ᵧ
 using ForwardDiff
 using LinearAlgebra: Diagonal, I, diag, dot
-using SparseArrays: sparse, nnz, nonzeros, SparseMatrixCSC
+import SparseArrays
+using SparseArrays: sparse, nnz, nonzeros, rowvals, SparseMatrixCSC
 using Random
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS, WITH_AD_TESTS
@@ -1263,6 +1264,180 @@ end
         g = ForwardDiff.gradient(w -> a(w, vv), u)
         @test g ≈ transpose(assemble(a)) * vv rtol = 1e-12
     end
+end
+
+@testset "bilinear: pair walk with unequal block counts" begin
+    # `_pair_plan` pairs summands by type, and a transposed pair resolves to as many blocks as
+    # its first term, so the fallback that walks each term alone when the counts differ is
+    # reached here directly, with two terms of 2 and 1 blocks. Units are visited in the order
+    # the form's own recording stores them: the first term's blocks, then the second's.
+    Random.seed!(5150)
+    Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 7), (false, false))
+    W = gridspace(Ω)
+    n = ndofs(W)
+    V = gridspace(Ω, Val(2))
+    a = form(V, V, (u, v) -> innerₕ(u, v) + 100 * innerₕ(u(1), v(2)))
+    t1, t2 = Bramble._summands(a.ast)
+    leaves = leaf_spaces_offsets(V)
+    @test length(blocks(Bramble._bare_product(t1), leaves, leaves)) == 2
+    @test length(blocks(Bramble._bare_product(t2), leaves, leaves)) == 1
+
+    calls = Tuple{Int, Int, Int, Int, Int}[]
+    Bramble._foreach_pair_block_unit(
+        (_, _, ro, co, dr, dc, half) -> (push!(calls, (ro, co, dr, dc, half)); nothing),
+        t1, t2, leaves, leaves)
+    # (row_offset, col_offset): the two diagonal blocks, then test leaf 2 against trial leaf 1
+    @test calls == [(0, 0, 0, 0, -1), (n, n, 0, 0, -1), (n, 0, 0, 0, -1)]
+
+    A = assemble(a)                   # the serial fill records one segment per unit
+    @test length(a.cache.segments) == 3
+    fill!(nonzeros(A), 0.0)
+    next = Bramble._replay_pair_blocks!(
+        Bramble._SerialReplay(), A, t1, t2, leaves, leaves, a.cache.segments, 0, true)
+    @test next == 3
+    H = Matrix(Diagonal(collect(weights(W, Innerh()))))
+    M = Matrix(A)
+    blk(i, j) = M[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
+    @test blk(1, 1) ≈ H
+    @test blk(2, 2) ≈ H
+    @test blk(2, 1) ≈ 100 * H
+    @test iszero(blk(1, 2))
+end
+
+@testset "bilinear: zeroing a host sparse matrix that is not CSC" begin
+    # `assemble!` zeroes the stored values of any `AbstractSparseMatrix` before a refill,
+    # never `fill!(A, 0)` over every (i, j); a `FixedSparseCSC` is one such host type.
+    A = sparse([1, 2, 3, 1], [1, 2, 3, 3], [1.0, 2.0, 3.0, 4.0])
+    F = SparseArrays.FixedSparseCSC(A)
+    @test !(F isa SparseMatrixCSC)
+    @test Bramble._zero_stored!(F) === F
+    @test nnz(F) == 4
+    @test all(iszero, nonzeros(F))
+    @test rowvals(F) == rowvals(A)
+end
+
+@testset "bilinear: a foreign tree through the deprecated keyword" begin
+    # `assemble!(A, a; ast = other)` with a tree of another type records and fills, then
+    # stores nothing: the cache's AST type is `a.ast`'s, and `a`'s own recording stays valid.
+    Random.seed!(105)
+    W = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false)))
+    H = Matrix(Diagonal(collect(weights(W, Innerh()))))
+    a = form(W, W, (u, v) -> innerₕ(u, v))
+    alt = form(W, W, (u, v) -> 2.0 * innerₕ(u, v))
+    @test typeof(alt.ast) != typeof(a.ast)
+    A = assemble(a)
+    B = copy(A)
+    @test_deprecated r"`ast` keyword" assemble!(B, a; ast = alt.ast)
+    @test Matrix(B) ≈ 2 * H
+    @test a.cache.valid && a.cache.A_id == objectid(A) && a.cache.ast === a.ast
+    fill!(nonzeros(A), NaN)
+    assemble!(A, a)
+    @test Matrix(A) ≈ H
+end
+
+struct _PlainSink end
+
+@testset "bilinear: traversal and policy traits" begin
+    Random.seed!(7)
+    W = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (false, false)))
+    A = assemble(form(W, W, (u, v) -> innerₕ(u, v)))
+    lin = LinearIndices(indices(mesh(W)))
+    I = CartesianIndex(1, 1)
+
+    # an absolute slot is in bounds wherever it points; an offset slot is checked
+    @test Bramble._trial_inbounds(lin, I, AbsoluteColumn(10_000))
+    @test Bramble._test_inbounds(lin, I, Bramble.AbsoluteRow(10_000))
+    @test !Bramble._trial_inbounds(lin, I, (-1, 0))
+    @test !Bramble._test_inbounds(lin, I, (0, -1))
+
+    # replay sinks read positions, not coordinates; any other sink is given coordinates,
+    # its slot is 0, and it keeps duplicates
+    @test Bramble._sink_needs_coordinates(_PlainSink())
+    @test Bramble._sink_point!(_PlainSink(), 3, I) == 0
+    @test !_sink_dedups(_PlainSink())
+    @test _sink_dedups(PatternSink(Int[], Int[]))
+    @test !Bramble._sink_needs_coordinates(Bramble.ReplaySink(A, Int[], Int[], 1.0))
+    @test !Bramble._sink_needs_coordinates(
+        Bramble._PairReplaySink(A, Int[], Int[], Int[], 1.0, 1.0, 0))
+    @test !Bramble._sink_needs_coordinates(
+        Bramble.DiagonalReplaySink(A, CartesianIndices((1:0,)), Int[], Int[], 1, 1.0))
+    @test !Bramble._sink_needs_coordinates(Bramble._StrideReplaySink(A, Int[], Int[], 0, 1.0))
+    # a pattern sink records each coordinate pair it is handed
+    ps = PatternSink(Int[], Int[])
+    _sink_entry!(ps, 4, 2, 1.0, 0)
+    @test (ps.I_vec, ps.J_vec) == ([4], [2])
+
+    # the policy a forced-threaded sweep runs under, and which policies replay
+    @test Bramble._coerce_serial_to_threaded(Bramble.GpuKernel()) === Bramble.CpuThreaded()
+    @test Bramble._threaded_replay_policy(Bramble.CpuThreaded())
+    @test Bramble._threaded_replay_policy(Bramble.CpuSerial()) == false
+    # only 1D records diagonal segments
+    @test Bramble._diagonal_replay(Val(1))
+    @test !Bramble._diagonal_replay(Val(2))
+    # a composite on either side assembles block by block
+    V = gridspace(mesh(W), Val(2))
+    @test !Bramble._is_block_pair(W, W)
+    @test Bramble._is_block_pair(V, W)
+    @test Bramble._is_block_pair(W, V)
+    @test Bramble._is_block_pair(V, V)
+end
+
+@testset "bilinear: symbolic and source-only leaves" begin
+    u, v = TrialFunction{2}(), TestFunction{2}()
+    ui, vi = Bramble.IndexedTrialFunction{2}(1), Bramble.IndexedTestFunction{2}(2)
+    sf = Bramble.source_function(x -> x[1], Val(2))
+    sv = Bramble.SourceVector{2, Vector{Float64}}([1.0])
+    sc = Bramble.SourceConstant{2, Float64}(2.0)
+    δ = Bramble.dirac((0.5, 0.5))
+    # every leaf is symbolic; only the sources are source-only
+    for (op, src) in ((u, false), (v, false), (ui, false), (vi, false), (sf, true),
+        (sv, true), (sc, true), (δ, true))
+        @test Bramble.is_symbolic(op)
+        @test Bramble._is_source_only(op) == src
+    end
+    # a product is symbolic and never a bare source, whichever kind it is
+    bp = innerₕ(u, v)
+    lp = innerₕ(sf, v)
+    @test bp isa Bramble.BilinearProduct && lp isa Bramble.LinearProduct
+    for p in (bp, lp)
+        @test Bramble.is_symbolic(p)
+        @test !Bramble._is_source_only(p)
+    end
+    @test Bramble._is_source_only(sf + sv)
+    @test !Bramble._is_source_only(sf + u)
+    @test !Bramble._is_source_only(Bramble.IdentityOperator(gridspace(mesh(
+        domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 3), (true, true)))))
+end
+
+@testset "bilinear: source stencils on a non-uniform mesh" begin
+    # A point source's strength is a number, a `Ref` or a thunk, read at each fill; its
+    # load goes to the two nodes around the point with the linear interpolation weights.
+    Random.seed!(226)
+    W = gridspace(mesh(domain(interval(0.0, 1.0)), 11, false))
+    x = points(mesh(W))
+    x0 = (x[4] + 2 * x[5]) / 3
+    expected = zeros(ndofs(W))
+    expected[4] = 2.5 * (x[5] - x0) / (x[5] - x[4])
+    expected[5] = 2.5 * (x0 - x[4]) / (x[5] - x[4])
+    for strength in (2.5, Ref(2.5), () -> 2.5)
+        @test assemble(form(W, v -> innerₕ(dirac(x0, strength), v))) ≈ expected
+    end
+    # several points with strengths of mixed kinds
+    x1 = (3 * x[8] + x[9]) / 4
+    b = assemble(form(W, v -> innerₕ(dirac([(x0,), (x1,)], Any[Ref(2.5), () -> 4.0]), v)))
+    @test b[1:7] ≈ expected[1:7]
+    @test b[8] ≈ 4.0 * (x[9] - x1) / (x[9] - x[8])
+    @test b[9] ≈ 4.0 * (x1 - x[8]) / (x[9] - x[8])
+    @test sum(b) ≈ 6.5
+
+    # a composite linear form contracts summand by summand, each on its own block; the
+    # oracle is the nodal values times the inner-product weights
+    V = gridspace(mesh(W), Val(2))
+    l = form(V, v -> innerₕ(y -> 1 + y[1], v(1)) + innerₕ(y -> 100.0, v(2)))
+    w = collect(weights(W, Innerh()))
+    vh = Rₕ(V, (y -> sin(3 * y[1]), y -> 1 + y[1]^2))
+    v1, v2 = parent(components(vh)[1]), parent(components(vh)[2])
+    @test l(vh) ≈ sum(w .* (1 .+ x) .* v1) + sum(w .* 100.0 .* v2)
 end
 
 end # module FormBilinearTests

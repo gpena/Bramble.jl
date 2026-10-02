@@ -5,8 +5,8 @@ using Bramble
 using Random
 using SparseArrays
 using SparseArrays: getcolptr
-using Bramble: Serial, Parallel, backend, assemble_parallel!, allocate_system_matrix, D₋ₓ,
-               D₊ᵧ, πₕ, inner₊ₓ, CompositeGridSpace
+using Bramble: Serial, Parallel, CpuPolyester, backend, assemble_parallel!,
+               allocate_system_matrix, D₋ₓ, D₊ᵧ, πₕ, inner₊ₓ, CompositeGridSpace
 using ..TestUtils: WITH_SLOW_TESTS
 
 # The threaded refill replays the form's recording (gpena/Bramble.jl#338): `assemble!` on a
@@ -44,6 +44,8 @@ end
 
 _same_structure(A, B) = getcolptr(A) == getcolptr(B) && rowvals(A) == rowvals(B)
 _agrees(A, R) = _same_structure(A, R) && isapprox(A, R; rtol = 1e-12)
+# `s .* R` may drop stored zeros, which `_agrees` would read as a different structure.
+_scaled(R, s) = (S = copy(R); _fillnz!(S, 0.0); nonzeros(S) .= s .* nonzeros(R); S)
 
 # Scalar sums, a transposed pair ⟨Au, Bv⟩ + ⟨Bu, Av⟩ (one recorded unit, written twice per
 # entry), and their composite counterparts, off-diagonal blocks and a block pair included.
@@ -225,6 +227,176 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
         _fillnz!(A, NaN)
         assemble_parallel!(A, a)
         @test _agrees(A, R)
+    end
+
+    # A leaf whose policy does not replay is searched point by point (`_scatter_point!`).
+    # Without `BramblePolyesterExt`, `CpuPolyester` is such a policy, and the only sweeps it
+    # can run are the one-thread fallbacks of a test-side interpolation; every other unit
+    # stops at a `_batch_*` hook naming Polyester. With the extension it replays instead,
+    # and every fill below must still agree with the serial one.
+    has_polyester = Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing
+    function leaf1(n, policy, seed)
+        Random.seed!(seed)
+        return gridspace(
+            mesh(domain(interval(0.0, 1.0)), n, false; backend = backend(policy = policy))
+        )
+    end
+    interp(u, v) = innerₕ(u, πₕ(v)) + inner₊ₓ(D₋ₓ(u), D₋ₓ(πₕ(v)))
+    function polyester_error(f, args...)
+        try
+            f(args...)
+            return nothing
+        catch e
+            return e
+        end
+    end
+
+    @testset "no leaf replays: the searching sweep" begin
+        R = assemble(form(leaf1(9, Serial(), 3), leaf1(6, Serial(), 4), interp))
+        a = form(leaf1(9, CpuPolyester(), 3), leaf1(6, CpuPolyester(), 4), interp)
+        for refill! in (assemble!, assemble_parallel!)
+            A = copy(R)
+            _fillnz!(A, NaN)
+            refill!(A, a)
+            @test _agrees(A, R)
+        end
+        # searched, so nothing was recorded (the extension's replay records)
+        @test a.cache.valid == has_polyester
+
+        # composite: each block searched at its own offsets, against the scalar cross-mesh
+        # forms; 1 and 100 so that a block landing in the wrong place cannot pass
+        f(u, v) = innerₕ(u(1), πₕ(v(2))) + 100 * innerₕ(u(2), πₕ(v(1)))
+        comp(p) = CompositeGridSpace((leaf1(9, p, 5), leaf1(6, p, 6)))
+        Rc = assemble(form(comp(Serial()), comp(Serial()), f))
+        C = copy(Rc)
+        _fillnz!(C, NaN)
+        assemble_parallel!(C, form(comp(CpuPolyester()), comp(CpuPolyester()), f))
+        @test _agrees(C, Rc)
+        g(u, v) = innerₕ(u, πₕ(v))
+        B21 = Matrix(assemble(form(leaf1(9, Serial(), 5), leaf1(6, Serial(), 6), g)))
+        B12 = Matrix(assemble(form(leaf1(6, Serial(), 6), leaf1(9, Serial(), 5), g)))
+        M = Matrix(C)
+        @test M[10:15, 1:9] ≈ B21
+        @test M[1:9, 10:15] ≈ 100 * B12
+        @test iszero(M[1:9, 1:9]) && iszero(M[10:15, 10:15])
+    end
+
+    @testset "no leaf replays: plain units reach the Polyester hooks" begin
+        h(u, v) = innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(u, v)
+        # 9 points band the grid; 3 are too few for two bands, so the sweep colours points
+        for (n, hook) in ((9, "_batch_bilinear_band_sweep!"), (3, "_batch_bilinear_colour_sweep!"))
+            R = assemble(form(leaf1(n, Serial(), 7), leaf1(n, Serial(), 7), h))
+            a = form(leaf1(n, CpuPolyester(), 7), leaf1(n, CpuPolyester(), 7), h)
+            A = copy(R)
+            _fillnz!(A, NaN)
+            if has_polyester
+                assemble_parallel!(A, a)
+                @test _agrees(A, R)
+            else
+                err = polyester_error(assemble_parallel!, A, a)
+                @test err isa ArgumentError
+                @test occursin(hook, err.msg)
+            end
+        end
+        # a composite's plain block the same way
+        comp(p) = CompositeGridSpace((leaf1(9, p, 5), leaf1(6, p, 6)))
+        k(u, v) = innerₕ(u, v)
+        Rc = assemble(form(comp(Serial()), comp(Serial()), k))
+        ac = form(comp(CpuPolyester()), comp(CpuPolyester()), k)
+        C = copy(Rc)
+        _fillnz!(C, NaN)
+        if has_polyester
+            assemble_parallel!(C, ac)
+            @test _agrees(C, Rc)
+        else
+            err = polyester_error(assemble_parallel!, C, ac)
+            @test err isa ArgumentError
+            @test occursin("_batch_bilinear_band_sweep!", err.msg)
+        end
+        # the replay hooks are reached only once the extension opts the policy in; their
+        # `src/` methods still answer an untyped call naming Polyester
+        for (hook, nargs) in ((Bramble._batch_bilinear_colour_replay!, 8),
+            (Bramble._batch_bilinear_band_replay!, 11),
+            (Bramble._batch_bilinear_colour_sweep!, 9),
+            (Bramble._batch_bilinear_band_sweep!, 12))
+            err = polyester_error(hook, ntuple(_ -> nothing, nargs)...)
+            @test err isa ArgumentError
+            @test occursin(string(nameof(hook)), err.msg)
+        end
+    end
+
+    @testset "one leaf replays: its units replay, the other's search" begin
+        # The form takes the recording because its test leaf replays; the unit walks the
+        # trial leaf (a test-side interpolation), which cannot, so that unit searches.
+        R = assemble(form(leaf1(9, Serial(), 3), leaf1(6, Serial(), 4), interp))
+        a = form(leaf1(9, CpuPolyester(), 3), leaf1(6, Parallel(), 4), interp)
+        A = copy(R)
+        for _ in 1:2   # record, then replay
+            _fillnz!(A, NaN)
+            assemble!(A, a)
+            @test _agrees(A, R)
+        end
+        @test a.cache.valid && a.cache.A_id == objectid(A)
+    end
+
+    @testset "pair leaf fallbacks, called directly" begin
+        # A transposed pair never carries an interpolation (`_pairable_type`), so the
+        # threaded pair leaf's one-thread branches are reached here by calling it with an
+        # interpolating term as both halves. Its recorded segment is the term's own, which
+        # the first half (`half = 1`) reads exactly as a `ReplaySink` would.
+        tr(u, v) = innerₕ(πₕ(u), v)
+        Rt = assemble(form(leaf1(9, Serial(), 3), leaf1(6, Serial(), 4), tr))
+        Wu, Wv = leaf1(9, Parallel(), 3), leaf1(6, Parallel(), 4)
+        at = form(Wu, Wv, tr)
+        P = assemble(at)
+        seg = only(at.cache.segments)
+        @test !seg.is_diagonal
+        bound = Bramble._bind_interp_spaces(at.ast, Wu, Wv)
+        sp = Bramble._walked_leaf(bound, Wu, Wv)
+        _fillnz!(P, 0.0)
+        Bramble._replay_pair_unit!(
+            Bramble._ThreadedReplay(), P, bound, bound, sp, 0, 0, (0, 0), seg, 2.0, 0.0, 1)
+        @test _agrees(P, _scaled(Rt, 2.0))
+
+        # a leaf that cannot replay searches the pair as its two terms, each at its own
+        # offsets and with its own scaling (`seg` is not read there)
+        g(u, v) = innerₕ(u, πₕ(v))
+        if !has_polyester
+            Rg = assemble(form(leaf1(9, Serial(), 3), leaf1(6, Serial(), 4), g))
+            Wpu, Wpv = leaf1(9, CpuPolyester(), 3), leaf1(6, CpuPolyester(), 4)
+            ag = form(Wpu, Wpv, g)
+            bg = Bramble._bind_interp_spaces(ag.ast, Wpu, Wpv)
+            spg = Bramble._walked_leaf(bg, Wpu, Wpv)
+            A = copy(Rg)
+            _fillnz!(A, 0.0)
+            Bramble._replay_pair_unit!(
+                Bramble._ThreadedReplay(), A, bg, bg, spg, 0, 0, (0, 0), seg, 2.0, 3.0, 0)
+            @test _agrees(A, _scaled(Rg, 5.0))
+        end
+    end
+
+    @testset "inside a threaded region" begin
+        # A `:static` loop cannot start inside another threaded region, so every colour
+        # and band runs in order on the calling task, to the same answer. One point is a
+        # single colour of the whole grid (no difference: its spacing is 0), 3 points are
+        # too few to band, 33 band.
+        m(u, v) = innerₕ(u, v)
+        h(u, v) = innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v))
+        for (n, g) in ((1, m), (3, h), (33, h))
+            R = assemble(form(leaf1(n, Serial(), 11), leaf1(n, Serial(), 11), g))
+            as = form(leaf1(n, Serial(), 11), leaf1(n, Serial(), 11), g)
+            ap = form(leaf1(n, Parallel(), 11), leaf1(n, Parallel(), 11), g)
+            P = assemble(ap)
+            B = assemble(as)
+            _fillnz!(P, NaN)
+            _fillnz!(B, NaN)
+            Threads.@threads for _ in 1:1
+                assemble!(P, ap)
+                assemble_parallel!(B, as)
+            end
+            @test _agrees(P, R)
+            @test _agrees(B, R)
+        end
     end
 
     # Threaded tasks allocate per call, so a warmed refill is not 0 B; what it must not do
