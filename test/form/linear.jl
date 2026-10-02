@@ -1336,7 +1336,14 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         # A `Vector` of `Ref` strengths reads its type off the element type, and stays live:
         # multilinear spreading preserves each point's total, so the vector sums to the sum
         # of the strengths, before and after one is changed. Non-uniform mesh, off-grid points.
-        Ωd = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 7), (false, false))
+        # The interior points are random, so the mesh is seeded: an unseeded draw can put both
+        # points in one cell, or in cells sharing corners, and the 8-entry count fails.
+        Bramble._seed_mesh1d_rng!(1)
+        Ωd = try
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 7), (false, false))
+        finally
+            Bramble._unseed_mesh1d_rng!()
+        end
         Wd = gridspace(Ωd)
         strengths = [Ref(2.0), Ref(3.0)]
         ld = form(Wd, v -> innerₕ(dirac([(0.31, 0.42), (0.77, 0.18)], strengths), v))
