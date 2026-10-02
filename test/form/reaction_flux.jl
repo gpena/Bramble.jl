@@ -7,7 +7,7 @@ using Bramble
 using ..TestUtils: WITH_AD_TESTS
 using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
 
-# `reaction` (gpena/Bramble.jl#227) extracts the boundary flux a Dirichlet constraint had
+# `reaction` extracts the boundary flux a Dirichlet constraint had
 # to supply, from the *unconstrained* operator/load and the already-solved uₕ: r = A uₕ - F
 # is ≈ 0 on interior rows and, on a constrained row, exactly the discrete flux there.
 #
@@ -22,10 +22,10 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
 @testset "Reaction / boundary flux (#227)" begin
     # Flux at each end, on uniform and non-uniform meshes.
     @testset "1D flux: each end" begin
-        # u = sin(πx), f = π² sin(πx). u'(x) = π cos(πx).
-        # At x=0 (outward normal -1): ∂u/∂n = -u'(0) = -π, so q·n = -∂u/∂n = π.
-        # At x=1 (outward normal +1): ∂u/∂n = u'(1) = -π, so q·n = π.
-        # Both ends: heat generated in the interior leaves through both ends, by symmetry.
+        # u = sin(πx), f = π² sin(πx), u'(x) = π cos(πx).
+        # At x=0 the outward normal is -1, so ∂u/∂n = -u'(0) = -π and q·n = -∂u/∂n = π.
+        # At x=1 the outward normal is +1, so ∂u/∂n = u'(1) = -π and q·n = π.
+        # Heat generated in the interior leaves through both ends, by symmetry.
         sol(x) = sin(pi * x[1])
         src(x) = pi^2 * sin(pi * x[1])
         S = interval(0.0, 1.0)
@@ -229,8 +229,9 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
         @test reaction(a, l, uₕ; marker = :left, dirichlet_components = 1) ≈ pi atol = 1e-2
         @test reaction(a, l, uₕ; marker = :right, dirichlet_components = 1) ≈ pi atol = 1e-2
 
-        # Component 2: u = x(1-x), u'(x) = 1-2x. At x=0, outward normal -1: ∂u/∂n = -1,
-        # q·n = 1. At x=1, outward normal +1: ∂u/∂n = -1, q·n = 1. Sum = 2 = ∫₀¹ 2 dx.
+        # Component 2 has u = x(1-x) and u'(x) = 1-2x. At x=0 the outward normal is -1, so
+        # ∂u/∂n = -1 and q·n = 1. At x=1 the outward normal is +1, so ∂u/∂n = -1 and q·n = 1.
+        # The sum is 2 = ∫₀¹ 2 dx.
         @test reaction(a, l, uₕ; marker = :left, dirichlet_components = 2) ≈ 1.0 atol = 1e-9
         @test reaction(a, l, uₕ; marker = :right, dirichlet_components = 2) ≈ 1.0 atol = 1e-9
 

@@ -4,106 +4,141 @@ CurrentModule = Bramble
 
 # [Geometry tutorial](@id tutorial_geometry)
 
-Every Bramble problem starts here: a set, the labels naming its boundary pieces, and the
-domain that carries both into [`mesh`](@ref). Every block below runs when this page is
-built, so the printed values are the ones the code produces.
+**What you will learn.** How to describe where a problem lives: a set, the names of its boundary pieces, and the domain that bundles both.
+
+**What you need first.** Only a working install, see [Getting started](../getting_started.md).
+
+**Where next.** The [mesh tutorial](@ref tutorial_mesh) turns a domain into a grid of points.
+
+Every block below runs when this page is built, so the printed values are the ones the code produces.
 
 ---
 
-## 1. Sets and intervals
+## A first domain: a rod
 
-`CartesianProduct{D, T}` is a product of $D$ closed intervals in $\mathbb{R}^D$ with
-coordinate type `T`.
+Take a rod of length 10, held at a fixed temperature at its left end and insulated at the right end. The geometry is an interval, and the two ends need names so that a condition can later be attached to each:
 
-### 1.1 Creating 1D intervals
-
-[`interval`](@ref) builds a closed interval $[a, b] \subset \mathbb{R}$:
+![1D Rod Domain](../assets/geometry_example1_1d_rod.svg)
 
 ```@example geometry
 using Bramble
 import Bramble: point, center, projection, topo_dim
 
-I = interval(0.0, 1.0)
-I_int = interval(0, 2)   # integer bounds are converted to Float64
-P = point(0.5)           # the degenerate interval [0.5, 0.5]
-B = box(1.5, 0.2)        # bounds are sorted
+rod = domain(interval(0.0, 10.0), :dirichlet => :left, :neumann => :right)
+
+dim(rod), center(rod), collect(labels(rod))
 ```
 
-### 1.2 Multi-dimensional sets with `×`
+[`interval`](@ref) builds the closed interval ``[0, 10]``. Each `label => side` pair is a **marker**: a name for a piece of the boundary. [`domain`](@ref) bundles the set with its markers, and a [`Domain`](@ref) is what [`mesh`](@ref) takes. `dim` is the dimension of the space the rod lives in, and `center` its midpoint.
 
-The tensor product operator `×` (`\times<tab>`) builds hyper-rectangles:
+Without markers, `domain(interval(0.0, 10.0))` labels the whole external boundary `:boundary`.
 
-```@example geometry
-Ω_2d = interval(0.0, 1.0) × interval(0.0, 1.0)
-Ω_3d = interval(-1.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 0.5)
-```
+!!! tip "Try this"
+    Replace the interval by `interval(0.0, 10.0) × interval(0.0, 1.0)` and keep the two markers. `dim` becomes 2, and `:left` and `:right` now name the two short sides of a strip: the same words mean the same faces in every dimension.
 
 ---
 
-## 2. Querying geometric properties
+## Sets in more than one dimension
+
+The tensor product operator `×` (`\times<tab>`) builds hyper-rectangles from intervals:
+
+```@example geometry
+I = interval(0.0, 1.0)
+Ω_2d = I × I
+Ω_3d = interval(-1.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 0.5)
+```
+
+A set answers geometric questions. `∈` accepts a number in 1D, and a tuple, `SVector` or `Vector` above it:
 
 ```@example geometry
 X = interval(0.0, 2.0) × interval(-1.0, 1.0)
 
-dim(X), topo_dim(X)
+dim(X), extrema(X), extrema(X, 1), center(X)
 ```
-
-`dim` is the embedding dimension and `topo_dim` the topological one; they differ only for a
-collapsed set (§3). Bounds, center and per-axis projection:
-
-```@example geometry
-extrema(X), extrema(X, 1), center(X)
-```
-
-```@example geometry
-projection(X, 1)
-```
-
-### Point containment
-
-`∈` accepts a number in 1D, and a tuple, `SVector` or `Vector` above it:
 
 ```@example geometry
 0.5 ∈ I, 1.5 ∈ I, (0.5, 0.5) ∈ Ω_2d, (1.2, 0.3) ∈ Ω_2d
 ```
 
----
+`extrema(X, 1)` is the range along the first axis, and `projection(X, 1)` is that axis as an interval.
 
-## 3. Collapsed and lower-dimensional geometries
-
-A dimension is **collapsed** when its interval is degenerate ($a = b$), which is how a
-surface or interface embedded in a higher-dimensional space is written:
-
-```@example geometry
-line_in_2d = interval(0.0, 1.0) × point(0.0)
-
-dim(line_in_2d), topo_dim(line_in_2d)
-```
-
-[`Bramble.is_collapsed`](@ref) answers per axis. It is public but not exported, hence the
-`Bramble.` prefix:
-
-```@example geometry
-Bramble.is_collapsed(line_in_2d, 1), Bramble.is_collapsed(line_in_2d, 2)
-```
+!!! tip "Try this"
+    Evaluate `(1.2, 0.3) ∈ X` and `(1.2, 1.3) ∈ X`. The second point leaves the box through the top.
 
 ---
 
-## 4. Boundary markers
+## Naming boundary pieces
 
-A marker names a piece of the boundary so a condition can later be attached to that name.
+A marker is a `:label => identifier` pair. The identifier is one boundary symbol, a tuple of them, or a predicate. Boundary symbols are coordinate-aligned (`:xmin`, `:xmax`, `:ymin`, `:ymax`, and so on, with aliases such as `:left` and `:top`), and the [reference](@ref geometry_reference) below lists them all.
 
-### 4.1 Boundary symbol conventions
+A channel with inflow on the left, outflow on the right and no-slip walls on top and bottom:
 
-Boundary symbols are coordinate-aligned, so the same name means the same face in every
-dimension:
+![2D Channel Flow Domain](../assets/geometry_example2_2d_channel.svg)
+
+```@example geometry
+geom = interval(0.0, 5.0) × interval(0.0, 1.0)
+
+channel = domain(
+    geom,
+    :inflow => :left,
+    :outflow => :right,
+    :wall => (:top, :bottom)
+)
+
+dim(channel), center(channel), collect(labels(channel))
+```
+
+The tuple `(:top, :bottom)` gives one name to two faces. Markers are only names at this stage: no boundary condition is attached until a problem is posed on the mesh built from the domain, see the [form tutorial](form.md).
+
+!!! tip "Try this"
+    Change `:wall => (:top, :bottom)` to `:top_wall => :top, :bottom_wall => :bottom`, and print `collect(labels(channel))` again. Two names let a later problem treat the two walls differently.
+
+---
+
+## A domain in three dimensions
+
+The same two ideas, a set and named faces, carry over unchanged. A heat sink, heated below, cooled above and insulated on its four sides:
+
+![3D Heat Sink Domain](../assets/geometry_example3_3d_heatsink.svg)
+
+```@example geometry
+sink = domain(
+    interval(0.0, 2.0) × interval(0.0, 2.0) × interval(0.0, 1.0),
+    :heat_source => :zmin,
+    :convection => :zmax,
+    :insulated => (:xmin, :xmax, :ymin, :ymax)
+)
+
+center(sink), collect(labels(sink))
+```
+
+A `Domain` forwards the geometric queries of the previous sections to its set:
+
+```@example geometry
+Ω = domain(
+    I × I,
+    :dirichlet => (:left, :right),
+    :neumann => (:top, :bottom)
+)
+
+dim(Ω), center(Ω), (0.5, 0.5) ∈ Ω, Bramble.is_collapsed(Ω)
+```
+
+[`Bramble.set`](@ref) returns the underlying set. Next, the [mesh tutorial](@ref tutorial_mesh) discretizes a domain into points.
+
+---
+
+## [Reference](@id geometry_reference)
+
+### Boundary symbols
+
+Boundary symbols are coordinate-aligned, so the same name means the same face in every dimension:
 
 - **1D**: `:xmin` (`:left`), `:xmax` (`:right`)
 - **2D**: `:xmin` (`:left`), `:xmax` (`:right`), `:ymin` (`:bottom`), `:ymax` (`:top`)
 - **3D**: `:xmin` (`:back`), `:xmax` (`:front`), `:ymin` (`:left`), `:ymax` (`:right`), `:zmin` (`:bottom`), `:zmax` (`:top`)
 
-The viewpoint-dependent names in parentheses are aliases and keep working.
-[`boundary_symbols`](@ref) lists the canonical set for a given dimension:
+The viewpoint-dependent names in parentheses are aliases. [`boundary_symbols`](@ref) lists the canonical set for a given dimension:
 
 ```@example geometry
 boundary_symbols(2)
@@ -175,31 +210,22 @@ boundary_symbols(2)
 </figure>
 ```
 
-### 4.2 Creating markers
+### Collapsed sets
 
-A marker is a `:label => identifier` pair, where the identifier is one boundary symbol, a
-tuple of them, or a predicate:
+A dimension is **collapsed** when its interval is degenerate (``a = b``), which is how a surface or interface embedded in a higher-dimensional space is written. `dim` is the embedding dimension and `topo_dim` the topological one; they differ only for a collapsed set. [`Bramble.is_collapsed`](@ref) answers per axis; it is public but not exported, hence the prefix:
 
 ```@example geometry
-geom = interval(0.0, 5.0) × interval(0.0, 1.0)
+line_in_2d = interval(0.0, 1.0) × point(0.0)
 
-m1 = markers(
-    geom,
-    :inflow => :left,
-    :outflow => :right,
-    :wall => (:top, :bottom)
-)
-
-collect(labels(m1))
+dim(line_in_2d), topo_dim(line_in_2d),
+Bramble.is_collapsed(line_in_2d, 1), Bramble.is_collapsed(line_in_2d, 2)
 ```
 
-`labels` flattens the three marker kinds through `Iterators.flatten`. Inside a loop that
-must not allocate, iterate `label_symbols`, `label_tuples` or `label_conditions` instead.
+Related constructors: `interval(0, 2)` converts integer bounds to `Float64`, `point(0.5)` is the degenerate interval ``[0.5, 0.5]``, and `box(1.5, 0.2)` sorts its bounds.
 
-### 4.3 Predicate and time-dependent markers
+### Predicate and time-dependent markers
 
-A predicate marks any subset, not only a face, and a marker set built over a time interval
-takes `(p, t)` predicates:
+A predicate marks any subset, not only a face. A marker set built over a time interval takes `(p, t)` predicates:
 
 ```@example geometry
 using LinearAlgebra
@@ -216,81 +242,7 @@ m_time = markers(
     :moving_source => ((p, t) -> norm(p .- [t, 0.5]) < 0.2)
 )
 
-m_time(1.5)      # the marker set frozen at t = 1.5
+collect(labels(m_cond)), m_time(1.5)      # the second is the marker set frozen at t = 1.5
 ```
 
----
-
-## 5. Computational domains
-
-A [`Domain`](@ref) is a set together with its markers, and it is what [`mesh`](@ref) takes:
-
-```@example geometry
-Ω = domain(
-    interval(0.0, 1.0) × interval(0.0, 1.0),
-    :dirichlet => (:left, :right),
-    :neumann => (:top, :bottom)
-)
-
-collect(labels(Ω))
-```
-
-`domain(geom)` alone marks the whole external boundary `:boundary`.
-
-### 5.1 Domain traits
-
-A `Domain` forwards the geometric queries of §2 to its set:
-
-```@example geometry
-dim(Ω), center(Ω), (0.5, 0.5) ∈ Ω, Bramble.is_collapsed(Ω)
-```
-
-```@example geometry
-Bramble.set(Ω)
-```
-
----
-
-## 6. Three domains, three dimensions
-
-The same two lines in 1D, 2D and 3D. A rod held at one end and insulated at the other:
-
-![1D Rod Domain](../assets/geometry_example1_1d_rod.svg)
-
-```@example geometry
-rod = domain(interval(0.0, 10.0), :dirichlet => :left, :neumann => :right)
-
-dim(rod), center(rod), collect(labels(rod))
-```
-
-A channel with inflow, outflow and no-slip walls:
-
-![2D Channel Flow Domain](../assets/geometry_example2_2d_channel.svg)
-
-```@example geometry
-channel = domain(
-    interval(0.0, 5.0) × interval(0.0, 1.0),
-    :inflow => :left,
-    :outflow => :right,
-    :wall => (:top, :bottom)
-)
-
-dim(channel), center(channel)
-```
-
-A heat sink, heated below, cooled above, insulated on its four sides:
-
-![3D Heat Sink Domain](../assets/geometry_example3_3d_heatsink.svg)
-
-```@example geometry
-sink = domain(
-    interval(0.0, 2.0) × interval(0.0, 2.0) × interval(0.0, 1.0),
-    :heat_source => :zmin,
-    :convection => :zmax,
-    :insulated => (:xmin, :xmax, :ymin, :ymax)
-)
-
-center(sink), collect(labels(sink))
-```
-
-Next: [meshes](mesh.md), which discretize a domain into points.
+`labels` flattens the three marker kinds through `Iterators.flatten`. Inside a loop that must not allocate, iterate `label_symbols`, `label_tuples` or `label_conditions` instead.

@@ -1,7 +1,7 @@
 # jacobian_pattern.jl
 #
 # Sparsity pattern of a Newton residual's Jacobian, read off a BilinearForm's AST -- no AD
-# tracing (see gpena/Bramble.jl#21).
+# tracing.
 #
 # The residual in the nonlinear worked examples (docs/src/examples/poisson_nonlinear.jl,
 # coupled_reaction_diffusion.jl) has the shape `A(u) * u - F`, where `a` (the `BilinearForm`
@@ -15,7 +15,7 @@
 # widened by whatever stencil op the coefficient was itself built from (e.g. Mₕ's `{0,-1}`),
 # at every row the term reaches from `I`. That composition is what this file adds.
 #
-# Left out of the matrix-type seam (S1.2, gpena/Bramble.jl#12): both methods below always
+# Left out of the matrix-type seam: both methods below always
 # return a `SparseMatrixCSC{Bool}`, regardless of `a`'s own backend. A Jacobian sparsity
 # pattern for `ADTypes.AbstractSparsityDetector` is a sparsity pattern, not a system matrix
 # the backend controls, and neither method here ever reads `matrix_type(backend(...))` --

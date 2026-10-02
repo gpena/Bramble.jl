@@ -4,13 +4,15 @@ CurrentModule = Bramble
 
 # Writing VTK files
 
-Once a solution exists (the result of the [forms tutorial](form.md), or any grid function),
-the last step is usually getting it into a viewer. `export_vtk` writes a mesh and any
-number of named fields to a `.vtr` file, readable by ParaView or any other VTK-aware tool.
-`export_vtk` needs [WriteVTK.jl](https://github.com/JuliaVTK/WriteVTK.jl), which is a weak
-dependency: `using WriteVTK` before calling it, or the call errors with a message that says
-so rather than a bare `MethodError`. Every block below runs when this page is built, and
-writes the files it claims to.
+**What you will learn.** How to write a grid function, or a whole time series, to a file that ParaView opens.
+
+**What you need first.** The [mesh tutorial](@ref tutorial_mesh) and the [space tutorial](@ref tutorial_space), for meshes and grid functions, and the [form tutorial](@ref tutorial_form) if you want to export a solved problem.
+
+**Where next.** The [PGFPlots export tutorial](pgfplots_export.md) writes a plain table for a LaTeX figure instead.
+
+The last step after a solve is usually getting the result into a viewer. [`export_vtk`](@ref) writes a mesh and any number of named fields to a `.vtr` file, which ParaView and other VTK tools open.
+
+It needs [WriteVTK.jl](https://github.com/JuliaVTK/WriteVTK.jl), a weak dependency. Run `using WriteVTK` before calling it; without it the call fails with a message that says so, not a bare `MethodError`. Every block below runs when this page is built and writes the files it claims to.
 
 ## 1. A mesh and a named field
 
@@ -25,6 +27,9 @@ uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
 
 files = export_vtk(joinpath(mktempdir(), "solution"), Ωₕ, "u" => uₕ)
 ```
+
+!!! tip "Try this"
+    Change `(20, 20)` to `(6, 6)` and write the file again. Open it in ParaView and the same field shows as coarse cells, so you see the mesh behind the values.
 
 `data` can be a [`VectorElement`](@ref), which is reshaped to match the grid the same way
 `reshape` does, or a plain array already shaped that way. Passing more than one
@@ -67,7 +72,7 @@ nothing # hide
 anything: a stand-in to check that `export_vtk` gives a viewer one two-component
 `velocity` vector alongside a one-component `pressure` scalar, which is what a coupled
 solve's fields look like once assembled. Solving the system that produces them is the
-[forms tutorial](form.md)'s subject; this one is only about writing the result out once you
+[form tutorial](@ref tutorial_form)'s subject; this one is only about writing the result out once you
 have it.
 
 ## 4. One dimension

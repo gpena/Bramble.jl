@@ -7,7 +7,7 @@ using Bramble: S₊ₓ, S₊ᵧ, S₊₂, S₋ₓ, S₋ᵧ, S₋₂, S₊ₓ!, S
 using Random
 using SparseArrays
 
-# The index shifts (gpena/Bramble.jl#352): `S₊(u)ᵢ = u_{i+1}`, `S₋(u)ᵢ = u_{i-1}`, one grid
+# The index shifts: `S₊(u)ᵢ = u_{i+1}`, `S₋(u)ᵢ = u_{i-1}`, one grid
 # point along a direction, with 0 where the neighbour is off the grid. The reference below
 # is that definition written directly on the reshaped grid values, so it depends on none of
 # the machinery under test. The meshes are non-uniform: a shift involves no spacing, and a
@@ -153,7 +153,7 @@ end
     end
 end
 
-# GPU testing is off (v4.4.0), so the refusal is checked in core: through the `GpuKernel()`
+# GPU testing is off, so the refusal is checked in core: through the `GpuKernel()`
 # policy the shift engine dispatches on, and through a host space carrying device-backed
 # data, which `_MockDevice` fakes by answering `DeviceLocality()`.
 struct _MockDevice{T} <: DenseVector{T}

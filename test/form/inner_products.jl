@@ -162,11 +162,9 @@ using Bramble:
 
     @testset "Symbolic and numeric families stay apart" begin
         # `inner₊` names two different things. Given grid functions it computes a number
-        # (`src/space/inner_product.jl`); given operators it builds an AST node
-        # (`src/operators/inner.jl`). Neither file says so from where a reader of it
-        # is standing, and what keeps the two families from colliding is the
-        # `NTuple{N,<:Tuple}` restriction on the symbolic tuple overload — recorded until
-        # now only in a comment inside one of the two files (gpena/Bramble.jl#60).
+        # (`src/space/inner_product.jl`), and given operators it builds an AST node
+        # (`src/operators/inner.jl`). What keeps the two families from colliding is the
+        # `NTuple{N,<:Tuple}` restriction on the symbolic tuple overload.
         #
         # These assert the *resolution* rather than the result, so widening either
         # signature fails here instead of silently returning the wrong kind of thing.

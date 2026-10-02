@@ -7,7 +7,7 @@ using SparseArrays
 using LinearAlgebra: Tridiagonal
 using ..TestUtils: _fd
 
-# BrambleChainRulesExt: the `ChainRulesCore.rrule` for `pde_solve` (src/solvers/pde_solve.jl
+# BrambleChainRulesExt covers the `ChainRulesCore.rrule` for `pde_solve` (src/solvers/pde_solve.jl
 # explains why this one function is the entire adjoint story -- `assemble`/`dirichlet_bc!`
 # are already reverse-mode-differentiable on their own). What is checked here needs no
 # reverse-mode AD package at all, only `ChainRulesCore` itself: the rrule's raw pullback
@@ -132,7 +132,7 @@ using ..TestUtils: _fd
         @test d_manual≈d_fd rtol=1e-5
     end
 
-    # Issue #228's own acceptance criterion: the adjoint rule costs one extra solve
+    # Issue #228's own acceptance criterion is that the adjoint rule costs one extra solve
     # *regardless* of the number of parameters, against a naive scheme -- pushing a
     # perturbation through the solve once per parameter, the cost forward-mode AD through
     # `pde_solve` would pay if it could run at all (it cannot, for a sparse `A`: see the

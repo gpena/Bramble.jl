@@ -1,6 +1,6 @@
 # # Convection-diffusion equation
 #
-# One more linear operator, built the same way as the [Poisson example](poisson_linear.md) —
+# One more linear operator, built the same way as the [Poisson example](poisson_linear.md):
 # diffusion plus a constant convective term, in 1D, 2D and 3D. Every number and every plot
 # below was produced by the code shown.
 #
@@ -12,9 +12,11 @@
 # ```
 #
 # with a constant diffusion coefficient ``\epsilon`` and a constant convective speed ``b`` along
-# every coordinate direction at once — the vector field ``b(1,\dots,1)``. The manufactured
+# every coordinate direction at once: the vector field ``b(1,\dots,1)``. The manufactured
 # solution is the same as the other two examples, ``u_{\text{exact}}(x) = e^{\sum_i x_i}``, so
 # ``g = -D\,(b+\epsilon)\,u_{\text{exact}}``.
+#
+# ## Adding the convective term
 
 using Bramble
 using Random
@@ -34,7 +36,7 @@ Wₕ = gridspace(Ωₕ)
 #
 # `inner₊(Mₕ(u), ∇ₕ(v))` is the convective term: `Mₕ` averages the trial function onto the
 # same staggered points `∇ₕ` differences on, one pair per direction, and `inner₊`'s own
-# gradient-tuple overload sums them — the identical spelling whether `D` is 1 or 3, since
+# gradient-tuple overload sums them, which gives the identical spelling whether `D` is 1 or 3, since
 # `Mₕ`/`∇ₕ` collapse to a bare node instead of a one-element tuple in 1D and `inner₊` has a
 # method for both:
 
@@ -54,7 +56,7 @@ nothing # hide
 
 @test 1.0e-4 < norm₁ₕ(uₕ .- Rₕ(Wₕ, sol)) < 1.0e-1                                           #src
 
-# ## Exploring Péclet number and flow direction
+# ## Péclet number and flow direction
 #
 # A different problem from the one just solved, not a plot of `uₕ` above: constant-coefficient
 # convection-diffusion again, but on a domain-independent, boundary-driven flow rather than a
@@ -70,15 +72,15 @@ nothing # hide
 # Péclet slider sets the advection speed directly. An interactive panel, seeded only from the
 # resolution of `uₕ` above but solving this boundary-driven problem itself in the browser: drag
 # the Péclet number slider past the point where the cell Péclet number `Pe_h` crosses `1` with
-# the centered stencil selected, and the classic grid-scale oscillation appears — switch to
+# the centered stencil selected, and the classic grid-scale oscillation appears. Switch to
 # upwind to see it damp back out, at the cost of accuracy.
 
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 convection_diffusion_interactive_widget(uₕ; title = "Convection-diffusion, 2D") # hide
 
-# ## Checking the answer
+# ## Convergence with a convective term
 #
-# The same pattern as the other two examples — one random coarse mesh per dimension, refined
+# The same pattern as the other two examples: one random coarse mesh per dimension, refined
 # in place with [`iterative_refinement!`](@ref):
 
 function convdiff_series(D::Int; n0::Int = 5, levels::Int)
@@ -135,7 +137,15 @@ include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
 convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), (hs3, errs3, "3D", "#B26A00")]; # hide
     title = "Convection-diffusion, ‖·‖₁ₕ") # hide
 
-# Second order in every dimension. The convective term does not change the rate — it changes
+# Second order in every dimension. The convective term does not change the rate. It changes
 # the matrix from symmetric to non-symmetric (`inner₊(Mₕ(u), ∇ₕ(v)) ≠ inner₊(Mₕ(v), ∇ₕ(u))`
 # in general), which is why this example does not also check `issymmetric`, unlike the
-# [forms tutorial](../tutorials/form.md)'s pure-diffusion Poisson problem.
+# [forms tutorial](@ref tutorial_form)'s pure-diffusion Poisson problem.
+#
+# ## Where to go next
+#
+#   - [Linear Poisson](poisson_linear.md) for the pure-diffusion case this one extends.
+#   - [Graded meshes for a boundary layer](boundary_layer_graded.md) for the convection-dominated
+#     regime, where the cell Péclet number is large and a uniform mesh oscillates.
+#   - The [operator accuracy tutorial](@ref tutorial_operator_accuracy) for how accurate the
+#     staggered averages and differences used here are on non-uniform meshes.

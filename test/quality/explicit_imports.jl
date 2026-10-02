@@ -78,19 +78,19 @@ using ExplicitImports
         @test check_all_explicit_imports_are_public(
             Bramble;
             ignore = (
-                # BramblePolyesterExt (gpena/Bramble.jl#190) reimplements the `CpuThreaded`
+                # BramblePolyesterExt reimplements the `CpuThreaded`
                 # sweeps with `Polyester.@batch`, so it needs the same internals those sweeps
                 # are built from: the colour/band geometry, the scatter primitives and the
                 # masked-index iterator. None is public, and none should be.
                 :MarkedIndicesUnion,
                 :_band_range,
                 :_reduce_or_chunk,
-                # `_ReplayTarget`, `_replay_point!` (gpena/Bramble.jl#338): the warmed-refill
+                # `_ReplayTarget`, `_replay_point!`: the warmed-refill
                 # replay's target union and per-point step, called from
                 # `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` above the
                 # same way the searching sweep calls `_scatter_point!`. Neither is public.
                 :_ReplayTarget,
-                # `_ActionTarget` (gpena/Bramble.jl#326): the matrix-free product's sink union,
+                # `_ActionTarget`: the matrix-free product's sink union,
                 # passed through the same two Polyester replay hooks as `_ReplayTarget`. Not
                 # public.
                 :_ActionTarget,
@@ -109,7 +109,7 @@ using ExplicitImports
                 :SeparableWeights,
                 :sparse!,
                 # `_difference_band!`, `_average_band!`, `_centered_average_band!`
-                # (gpena/Bramble.jl#356, S7.2): the per-band loop bodies
+                #: the per-band loop bodies
                 # `_batch_difference_engine!`/`_batch_average_engine!`/
                 # `_batch_centered_average_engine!` below run under `@batch`, the same bodies
                 # `_threaded_difference_engine!`/`_threaded_average_engine!`/
@@ -118,14 +118,14 @@ using ExplicitImports
                 :_difference_band!,
                 :_average_band!,
                 :_centered_average_band!,
-                # `_broadcast_band!` (BramblePolyesterExt, gpena/Bramble.jl#357, S8.2): the
+                # `_broadcast_band!`: the
                 # per-band broadcast loop body `_batch_broadcast!` below runs under `@batch`,
                 # the same body `_threaded_broadcast!` already runs under `Threads.@threads`
                 # (src/space/vectorelement.jl). Neither exported nor public.
                 :_broadcast_band!,
                 # `TrackedArray` (BrambleReverseDiffExt, commit c5ae771f): the argument type of the
                 # `mul!` method that resolves the ambiguity with `KroneckerLinearOperator`
-                # (gpena/Bramble.jl#295). ReverseDiff exports no public name for it.
+                #. ReverseDiff exports no public name for it.
                 :TrackedArray,
                 :Backend,
                 :_backend_eye,
@@ -133,7 +133,7 @@ using ExplicitImports
                 :BilinearForm,
                 :LinearForm,
                 :CartesianProduct,
-                # `_DeviceSparseMirror` (BrambleMetalExt, gpena/Bramble.jl#313): the host
+                # `_DeviceSparseMirror`: the host
                 # staging buffer type named in `MetalSparseMatrixCSR`'s own `mirror` field,
                 # the same "internal type in a field signature" shape as `BilinearForm` above.
                 :_DeviceSparseMirror,
@@ -156,7 +156,7 @@ using ExplicitImports
                 :set_cntl!,
                 :set_icntl!,
                 :suppress_display!,
-                # v3.12.0 (#339) narrowed the export/public surface; the names below are
+                # v3.12.0 narrowed the export/public surface; the names below are
                 # Bramble's own extension hooks and internals, private since that release,
                 # reached only from the extension that implements or specialises them.
                 :AbstractMeshType,
@@ -223,16 +223,16 @@ using ExplicitImports
     #   alongside it did, once `SciMLSensitivity` (BrambleSciMLSensitivityExt) joined the
     #   "ext" group's set.
     # - `adjoint_sensitivities` (BrambleSciMLSensitivityExt): the one entry point not
-    #   underscored -- `Bramble.adjoint_sensitivities` is meant to be called, just not
+    #   `_`-prefixed -- `Bramble.adjoint_sensitivities` is meant to be called, just not
     #   exported, since `SciMLSensitivity` exports a function of the exact same name and
     #   `using Bramble, SciMLSensitivity` together would collide on the bare name regardless
     #   of what Bramble does (the stub's own docstring, `form/semidiscrete_problems.jl`, has the
-    #   reasoning). Its core fallback still gives the same helpful error the underscored ones
+    #   reasoning). Its core fallback still gives the same helpful error the `_`-prefixed ones
     #   below do.
     # - `_ast_sparsity_detector` (BrambleSparseADExt), `_ode_function`/`_ode_problem`/
     #   `_linear_problem`/`_nonlinear_problem`/`_second_order_ode_function`/
     #   `_second_order_ode_problem` (BrambleSciMLExt), `_export_vtk` (BrambleVTKExt): the
-    #   underscored-fallback idiom every weak-dependency entry point uses (`ast_sparsity_
+    #   `_`-prefixed fallback idiom every weak-dependency entry point uses (`ast_sparsity_
     #   detector`, `ode_function`, `export_vtk`, ...): a helpful error by default in
     #   `Bramble`, overridden by a strict specialisation in the extension so loading it never
     #   tries to replace a method during precompilation.
@@ -243,9 +243,9 @@ using ExplicitImports
     #   reach.
     # - `_amg_preconditioner` (BrambleAlgebraicMultigridExt), `_ilu_preconditioner`
     #   (BrambleILUZeroExt): the public `amg_preconditioner`/`ilu_preconditioner` functions'
-    #   own underscored fallbacks.
+    #   own `_`-prefixed fallbacks.
     # - `_export_vtk_collection` (BrambleVTKExt), `_export_vtk_solution`
-    #   (BrambleVTKSciMLExt): the same underscored-fallback idiom as `_export_vtk` above, one
+    #   (BrambleVTKSciMLExt): the same `_`-prefixed fallback idiom as `_export_vtk` above, one
     #   entry point per `export_vtk` method that needs a weak dependency.
     # - `apply_recipe` (BramblePlotsExt): the function `@recipe` generates methods on;
     #   warmed by name in the precompile workload rather than through a plotting call, which
@@ -253,19 +253,19 @@ using ExplicitImports
     #   before.
     # - `_sparspak_factorize`, `_sparspak_refactor!`, `_sparspak_solve` (BrambleSparspakExt):
     #   the preconditioner-building hooks its `factorize`/`refactor!`/`\` methods reach,
-    #   the same underscored-fallback idiom as `_amg_operator` above.
+    #   the same `_`-prefixed fallback idiom as `_amg_operator` above.
     # - `_accelerate_factorize`, `_accelerate_refactor!`, `_accelerate_solve`
-    #   (BrambleAppleAccelerateExt): the same underscored-fallback idiom, one entry point
+    #   (BrambleAppleAccelerateExt): the same `_`-prefixed fallback idiom, one entry point
     #   per AppleAccelerate-backed `factorize`/`refactor!`/`\` method.
     # - `_mumps_factorize`, `_mumps_refactor!`, `_mumps_solve` (BrambleMUMPSExt): the same
-    #   underscored-fallback idiom again, one entry point per MUMPS-backed
+    #   `_`-prefixed fallback idiom again, one entry point per MUMPS-backed
     #   `factorize`/`refactor!`/`\` method.
     # - `MPI`, `Init`, `Initialized` (BrambleMUMPSExt): MUMPS's own re-export of its MPI
     #   submodule, reached once to initialise MPI lazily on first use.
     # - `FACTOR`, `SOLVE`, `invoke_mumps!` (BrambleMUMPSExt): MUMPS's job-type constants and
     #   the low-level driver call its `ldiv!`/`refactor!` methods issue directly.
     # - `_suitesparse_factorize`, `_suitesparse_refactor!`, `_suitesparse_solve`
-    #   (BrambleSuiteSparseExt): the same underscored-fallback idiom again, one entry point
+    #   (BrambleSuiteSparseExt): the same `_`-prefixed fallback idiom again, one entry point
     #   per SuiteSparse-backed `factorize`/`refactor!`/`\` method.
     @testset "Non-public qualified accesses declared" begin
         @test check_all_qualified_accesses_are_public(
@@ -273,11 +273,11 @@ using ExplicitImports
             ignore = (
                 # Internals this milestone's extensions reach into, the same way
                 # `_metal_backend` below already is. `_csr_backend` is the stub
-                # BrambleSparseMatricesCSRExt fills (gpena/Bramble.jl#214), exactly
+                # BrambleSparseMatricesCSRExt fills, exactly
                 # `_metal_backend`'s shape; `_backend_eye`/`_backend_zeros`,
                 # `_dirichlet_bc_rows!`/`_dirichlet_bc_indices!` and `_each_marked` are the
                 # allocation and constraint internals a storage backend has to specialise;
-                # `_kron_coeff` (BrambleKroneckerExt, gpena/Bramble.jl#259) is the scale a
+                # `_kron_coeff` is the scale a
                 # separable term carries, read when the extension rebuilds that sum as a
                 # `Kronecker.jl` object. None is something a user calls.
                 :_csr_backend,
@@ -298,7 +298,7 @@ using ExplicitImports
                 :ka_device,
                 :_launch_spmv_csr!,
                 :_launch_spmm_csr!,
-                # `_has_device_csr_mirror` (BrambleMetalExt, gpena/Bramble.jl#361): the trait
+                # `_has_device_csr_mirror`: the trait
                 # that opts a device CSR matrix into the Dirichlet row kernel.
                 :_has_device_csr_mirror,
                 # `_scatter_position`, `_scatter_add!`, `_zero_stored!`
@@ -310,7 +310,7 @@ using ExplicitImports
                 # `_batch_for!`, `_batch_axis_for!`, `_batch_scatter_for!`, `_batch_dot`,
                 # `_batch_dot_masked`, `_batch_bilinear_colour_sweep!`,
                 # `_batch_bilinear_band_sweep!`, `_batch_linear_colour_sweep!`,
-                # `_batch_linear_band_sweep!` (BramblePolyesterExt, gpena/Bramble.jl#190): the
+                # `_batch_linear_band_sweep!`: the
                 # `Polyester.@batch` counterparts of the `CpuThreaded` sweeps and reductions in
                 # `src/utils/linear_algebra.jl`, `src/assembly/bilinear_execution.jl` and
                 # `src/assembly/linear.jl`, extended here rather than called.
@@ -324,7 +324,7 @@ using ExplicitImports
                 :_batch_linear_colour_sweep!,
                 :_batch_linear_band_sweep!,
                 # `_threaded_replay_policy`, `_batch_bilinear_band_replay!`,
-                # `_batch_bilinear_colour_replay!` (BramblePolyesterExt, gpena/Bramble.jl#338):
+                # `_batch_bilinear_colour_replay!`:
                 # opt `CpuPolyester` into the warmed-refill replay and its `Polyester.@batch`
                 # counterparts of `_batch_bilinear_band_sweep!`/`_batch_bilinear_colour_sweep!`
                 # above, reached instead of them once a unit's leaf can replay.
@@ -332,26 +332,25 @@ using ExplicitImports
                 :_batch_bilinear_band_replay!,
                 :_batch_bilinear_colour_replay!,
                 # `_batch_difference_engine!`, `_batch_average_engine!`,
-                # `_batch_centered_average_engine!` (BramblePolyesterExt, gpena/Bramble.jl#356,
-                # S7.2): the `Polyester.@batch` counterparts of the `CpuThreaded` stencil
+                # `_batch_centered_average_engine!` (BramblePolyesterExt): the `Polyester.@batch` counterparts of the `CpuThreaded` stencil
                 # engines in `src/operators/difference.jl` and
                 # `src/operators/average.jl`, extended here rather than called.
                 :_batch_difference_engine!,
                 :_batch_average_engine!,
                 :_batch_centered_average_engine!,
-                # `_batch_run_bands!` (BramblePolyesterExt, gpena/Bramble.jl#356, S7.5): the
+                # `_batch_run_bands!`: the
                 # `Polyester.@batch` counterpart of `_run_bands!`'s `CpuThreaded` arm in
                 # `src/operators/vector_calculus.jl`, reached by the divergence, curl
                 # and strain-average engines. Unlike the three S7.2 hooks above it stays
                 # generic over the band function `f` instead of naming one, extended here
                 # rather than called.
                 :_batch_run_bands!,
-                # `_batch_broadcast!` (BramblePolyesterExt, gpena/Bramble.jl#357, S8.2): the
+                # `_batch_broadcast!`: the
                 # `Polyester.@batch` counterpart of `_threaded_broadcast!`'s `CpuThreaded` arm
                 # in `src/space/vectorelement.jl`, reached by `_polyester_broadcast!`,
                 # extended here rather than called.
                 :_batch_broadcast!,
-                # `BrambleKernelAbstractionsExt` (gpena/Bramble.jl#94, #174): the stencil and
+                # `BrambleKernelAbstractionsExt`: the stencil and
                 # component helpers its `@kernel`s call so the device answer is computed by
                 # the very same quadrature/stencil arithmetic the CPU sweep uses, rather than
                 # a second implementation kept in sync by hand. None is a launch hook an
@@ -382,11 +381,11 @@ using ExplicitImports
                 :eval,
                 :mightalias,
                 # `broadcasted` (src/space/vectorelement.jl:510): the customization hook for
-                # `copyto!(dest::VectorElement, src::VectorElement)` (gpena/Bramble.jl#346).
+                # `copyto!(dest::VectorElement, src::VectorElement)`.
                 :broadcasted,
                 # `instantiate`, `preprocess`, `throwdm` (src/space/vectorelement.jl): Base's
                 # own pre-loop steps the threaded broadcast copyto! repeats before banding
-                # (gpena/Bramble.jl#357).
+                #.
                 :instantiate,
                 :preprocess,
                 :throwdm,
@@ -435,10 +434,10 @@ using ExplicitImports
                 :_suitesparse_factorize,
                 :_suitesparse_refactor!,
                 :_suitesparse_solve,
-                # BrambleMetalExt reaching into Bramble's own internals (gpena/Bramble.jl#192,
-                # #250): `_gpu_functional` is the loaded-and-functional predicate `gpu_backend`
+                # BrambleMetalExt reaching into Bramble's own internals:
+                # `_gpu_functional` is the loaded-and-functional predicate `gpu_backend`
                 # dispatches on by `Val`, more specific than the stub in `src/utils/backend.jl`
-                # and not itself public. `_gpu_functional_override` (commit 9698755b) is the
+                # and not itself public. `_gpu_functional_override` is the
                 # `Ref` test hook `_gpu_functional` reads to fake device (un)availability
                 # without redefining the method; the extension reads the same `Ref` so a test
                 # can force GPU-unavailable behaviour through it too. Neither is public.
@@ -446,7 +445,7 @@ using ExplicitImports
                 # on their `src/utils/backend.jl` stubs, but neither is exported nor declared
                 # `public` in `src/Bramble.jl`, nor documented in `docs/src/api/` -- so today
                 # they are unqualified internals too, the same as the extension's other entry
-                # points above. `SparseArrays.sparse!` (gpena/Bramble.jl#94) is that package's
+                # points above. `SparseArrays.sparse!` is that package's
                 # in-place `sparse`, never marked public there, and how `_allocate_from_pattern`
                 # builds the host-side CSR arrays it hands to `metal_sparse_csr` -- the same
                 # combiner `SparseMatrixCSC`'s own method already reaches for by the same name.
@@ -455,7 +454,7 @@ using ExplicitImports
                 :metal_sparse_csr,
                 :metal_sparse_csc,
                 Symbol("sparse!"),
-                # BrambleMetalExt's device sparse placeholder types (gpena/Bramble.jl#250)
+                # BrambleMetalExt's device sparse placeholder types
                 # subtype `Metal.GPUArrays`'s own `AbstractGPUSparseMatrixCSR`/
                 # `AbstractGPUSparseMatrixCSC` until tagged Metal.jl ships the real
                 # `MtlSparseMatrixCSR`/`MtlSparseMatrixCSC` -- upstream internals that neither
@@ -479,10 +478,10 @@ using ExplicitImports
                 # transposed pair whose two block tuples differ in length, a case the types
                 # already rule out, so the barrier keeps it from being inferred at all.
                 :inferencebarrier,
-                # `ReverseDiff.record_mul!` (BrambleReverseDiffExt, #295): records the tape entry
+                # `ReverseDiff.record_mul!`: records the tape entry
                 # for that `mul!`; ReverseDiff has no public equivalent.
                 :record_mul!,
-                # `Core.kwcall` (gpena/Bramble.jl#283): named in `precompile(Core.kwcall,
+                # `Core.kwcall`: named in `precompile(Core.kwcall,
                 # (...))` directives in `src/precompile/solver_sessions.jl` and
                 # `src/precompile/form_sessions.jl`, caching the keyword-call entry
                 # signature a REPL call dispatches to -- otherwise inlined into the

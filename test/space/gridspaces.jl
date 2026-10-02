@@ -66,12 +66,10 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
 
         @testset "_innerplus_mean_weights!" begin
             # The transverse factor: every entry, boundary included, is the mesh's own
-            # half_spacing there (gpena/Bramble.jl#236) -- unlike _innerplus_weights!
-            # above, the *aligned* factor, whose first entry is correctly zero (no cell
-            # behind node 1 along the direction being differenced). Hand-zeroing the two
-            # boundary entries here used to delete real quadrature weight instead: see
-            # _innerplus_mean_weights!'s own docstring for why that was wrong and how it
-            # was checked against the discrete summation-by-parts identities before fixing.
+            # half_spacing there. This differs from _innerplus_weights! above, the *aligned*
+            # factor, whose first entry is correctly zero (no cell behind node 1 along the
+            # direction being differenced). Zeroing the two boundary entries here would
+            # delete real quadrature weight; see _innerplus_mean_weights!'s docstring.
             u = vector(backend(mesh1d), npoints(mesh1d))
             N = npoints(mesh1d)
             _innerplus_mean_weights!(u, mesh1d, 1)
@@ -162,7 +160,7 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
             @test weights(W2, Innerplus(), 2) === w_plus[2]
         end
 
-        # weights(Wₕ, Val(S)) for every staggered set S ⊆ 1:D (gpena/Bramble.jl#115, #234).
+        # weights(Wₕ, Val(S)) for every staggered set S ⊆ 1:D.
         # Checked against the mesh's own spacing/half_spacing directly, hand-multiplied per
         # axis -- independent of the per-axis factors `SpaceWeights` stores internally.
         @testset "weights(Wₕ, Val(S))" begin
@@ -182,8 +180,7 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
                     expected = prod(d -> (d in S ? aligned(d, I[d]) : cellfac(d, I[d])), 1:3)
                     @test w[LinearIndices(n)[I]] ≈ expected
                     # Every S, including the two existing families (S = () and
-                    # singletons), returns a `SeparableWeights` (gpena/Bramble.jl#115,
-                    # S6.8), which answers a `CartesianIndex` directly (the access pattern
+                    # singletons), returns a `SeparableWeights`, which answers a `CartesianIndex` directly (the access pattern
                     # an assembly loop already has for free -- see its own docstring) as
                     # well as a linear index.
                     @test w[I] ≈ expected
@@ -255,12 +252,10 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
             @test ndofs(V, Tuple) == (ndofs(W), ndofs(W))
             @test spaces(V) === (W, W)
 
-            # gpena/Bramble.jl#67: `weights` used to forward to the first leaf, which
-            # silently answered with the wrong vector on a composite whose leaves have
-            # different meshes. Deleted in favor of the same "reject at dispatch" contract
-            # `normₕ`/`norm₊` already use for composites — checked here rather than just
-            # asserted, since `V`'s two leaves happen to share one mesh and so cannot tell
-            # a correct forward from a wrong one.
+            # `weights` rejects a composite at dispatch, like `normₕ`/`norm₊`. Forwarding
+            # to the first leaf would answer with the wrong vector when the leaves have
+            # different meshes. `V`'s two leaves share one mesh, so only the dispatch
+            # error tells a correct rejection from a forward.
             @test_throws MethodError weights(V)
             @test_throws MethodError weights(V, Innerh())
             @test_throws MethodError weights(V, Innerplus(), 1)
@@ -372,7 +367,7 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
         for n in 1:4
             @test typeof(gridspace(mesh2d, n)) === typeof(gridspace(mesh2d, Val(n)))
         end
-        # `^`'s Int spelling is capped at 3 (gpena/Bramble.jl#147); see below.
+        # `^`'s Int spelling is capped at 3; see below.
         for n in 1:3
             @test typeof(W^n) === typeof(W^Val(n))
         end
@@ -391,8 +386,7 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
         @test_throws ArgumentError gridspace(mesh2d, 0)
         @test_throws ArgumentError W^0
 
-        # gpena/Bramble.jl#147: `^`'s Int spelling only accepts 1 <= N <= 3. Beyond
-        # that it throws rather than silently falling back to Val(N), because that
+        # `^`'s Int spelling only accepts 1 <= N <= 3. Beyond that it throws rather than silently falling back to Val(N), because that
         # fallback is exactly what reintroduces the union-return instability below.
         @test_throws ArgumentError W^4
         @test_throws ArgumentError W^100
@@ -402,10 +396,9 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
         # *except* for `^`, whose Int spelling is deliberately capped at N ∈ {1,2,3}
         # so that a dynamic N (one the compiler cannot constant-fold, e.g. threaded
         # through a generic argument) still resolves to a union of concrete leaves.
-        # Julia's return-type inference only union-splits up to 3 concrete types; one
+        # Julia's return-type inference only union-splits up to 3 concrete types. One
         # more branch (even N ∈ {1,2,3,4}) collapses the whole union back down to the
-        # abstract `Union{ScalarGridSpace, CompositeGridSpace}` — confirmed directly
-        # against `Base.return_types` before picking 3 as the cap, not assumed.
+        # abstract `Union{ScalarGridSpace, CompositeGridSpace}`.
         lit2(Ω) = gridspace(Ω, 2)
         lit5(Ω) = gridspace(Ω, 5)
         pow2(Wx) = Wx^2
@@ -559,16 +552,16 @@ end
     end
 end
 
-# Invariants tested (gpena/Bramble.jl#17, #45):
-# 1. Neither grid space had a `show` or `summary` of its own, so both fell through to the
-#    default: `summary(gridspace(...))` was 563 characters of nested type parameters, and
-#    displaying one dumped every weight vector with it.
+# Invariants tested:
+# 1. Each grid space has its own `show` and `summary`, since the default would print
+#    `summary(gridspace(...))` as hundreds of characters of nested type parameters and
+#    dump every weight vector on display.
 # 2. Two-argument `show` is the embeddable one-liner; `MIME"text/plain"` is the detailed
 #    block, and neither may end with a newline.
 # 3. A composite whose leaves are all identical collapses to one `N × …` line; a
 #    heterogeneous one enumerates its leaves, since that is when per-leaf detail informs.
-# `host_weights` and `Array` of a bare `SeparableWeights` on host storage
-# (gpena/Bramble.jl#310): the first is the identity, the second the dense tensor product in
+# `host_weights` and `Array` of a bare `SeparableWeights` on host storage.
+# The first is the identity, the second the dense tensor product in
 # `CartesianIndices` order. The oracle is built from `points` alone, per axis: the backward
 # spacing (zero at the first node) on a staggered axis, the half-cell width elsewhere.
 @testset "host_weights, SeparableWeights arrays" begin
@@ -678,7 +671,7 @@ end
     end
 end
 
-# Composite grid space invariants (gpena/Bramble.jl#120).
+# Composite grid space invariants.
 #
 # Component count, grid size and partition are all drawn, so nothing here rests on the
 # particular `Val(2)`/`Val(3)` spaces the deterministic tests use. The components are given

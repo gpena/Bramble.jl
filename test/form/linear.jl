@@ -3,7 +3,7 @@ module FormLinearTests
 using Test
 using Bramble
 using Bramble: execution_policy
-# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+# Internal names: defined and documented, not exported.
 import Bramble: M₊ᵧ
 using ForwardDiff
 using LinearAlgebra: Diagonal, diag, dot, I
@@ -791,9 +791,9 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
     end
 
     @testset "Wrong-length vector refused" begin
-        # The sweep writes with `@inbounds`, so a short vector used to be written out of
-        # bounds and a long one kept a stale tail (gpena/Bramble.jl#361). Every linear entry
-        # point now checks the length before writing anything, so the vector comes back
+        # The sweep writes with `@inbounds`, so a short vector would be written out of
+        # bounds and a long one would keep a stale tail. Every linear entry
+        # point checks the length before writing anything, so the vector comes back
         # untouched.
         for (Ωw, dim) in ((mesh(domain(interval(0.0, 1.0)), 13, false), "1D"),
             (mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (false, false)),
@@ -952,10 +952,9 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
     @testset "Allocation contract" begin
         # This is what a time loop calls every step. The assembly kernel itself is
         # allocation free -- `form.ast` is a field read, not a resolution, so there is
-        # nothing left to hoist out of the call the way the now-deprecated `ast` keyword
-        # (#105) once claimed to (a fixed 160 B saved per call): both `assemble!(b, lf)` and
-        # the equivalent with the keyword measured 0 bytes, which is why the keyword is
-        # gone from these tests rather than compared against.
+        # nothing left to hoist out of the call the way the deprecated `ast` keyword
+        # claimed to: both `assemble!(b, lf)` and the equivalent with the keyword measure
+        # 0 bytes.
         #
         # Measured inside a function on concrete locals: read from a non-const global, the
         # arguments box at the call boundary and the reading is of the box.
@@ -1033,15 +1032,15 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         Vhet_alloc = Bramble.CompositeGridSpace((gridspace(Ωhc), gridspace(Ωhc_small)))
         uhet_alloc = Rₕ(Vhet_alloc, (x -> x[1] + x[2], x -> x[1] - x[2]))
 
-        # On Julia nightly specifically (checked: never on a release build, across many
+        # On Julia nightly specifically (never on a release build, across many
         # repeated runs), a single measurement drifts by one or two
         # 64-byte quanta, nondeterministically, in either direction: the thread-spawn
         # machinery's own scheduling noise, not anything the composite-space routing does
         # differently per leaf. Neither the minimum over repeats nor an exact equality
-        # converged alone (checked: still flaked after 5 repeats), so the two are
+        # converged alone (it still flaked after 5 repeats), so the two are
         # combined: the minimum rejects one-off spikes, then a tolerance allows the
-        # genuine floor-level noise that remains; the property under test is "constant",
-        # not "bit-for-bit reproducible", which nightly's scheduler does not promise.
+        # genuine floor-level noise that remains; the property under test is that the count is constant,
+        # not bit-for-bit reproducible, which nightly's scheduler does not promise.
         min_parallel_bytes(space, u1, u2) = minimum(ntuple(_ -> parallel_bytes(space, u1, u2), 5))
         het = min_parallel_bytes(Vhet_alloc, uhet_alloc, uhet_alloc)
         homo = min_parallel_bytes(Vhomo, uhomo, uhomo)

@@ -170,11 +170,11 @@ b_{idx + c} = S \\cdot w_c, \\qquad \\sum_{c \\in \\{0, 1\\}^D} w_c = 1
 - **Contraction**: Contracting the linear form against a discrete grid function ``v_h \\in W_h`` evaluates ``\\ell(v_h) = b \\cdot v_h \\approx S \\cdot v_h(x_0)`` with ``\\mathcal{O}(h^2)`` accuracy.
 
 # Arguments
-- `x0`: Point coordinate: scalar number (1D), `NTuple{D, Real}`, or `AbstractVector{<:Real}`.
-- `strength`: Source intensity (default: `1.0`). Accepts:
+- `x0`: Point coordinate, a scalar number (1D), `NTuple{D, Real}`, or `AbstractVector{<:Real}`.
+- `strength`: Source intensity (default: `1.0`). Accepts any of the following.
   - A constant `Number` (e.g. `2.5`).
-  - A dynamic `Ref(val)`: Enables live in-place updates (`strength[] = new_val`) in time-stepping loops without rebuilding the form and with **0 heap allocations**.
-  - A zero-argument function thunk: `() -> f(t)` for time-dependent sources.
+  - A dynamic `Ref(val)`, which enables live in-place updates (`strength[] = new_val`) in time-stepping loops without rebuilding the form and with **0 heap allocations**.
+  - A zero-argument function thunk, `() -> f(t)`, for time-dependent sources.
 - `points`: Collection of point coordinates for multiple simultaneous sources.
 - `strengths`: Matching collection of intensities, or a single scalar broadcast to all points.
 

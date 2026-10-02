@@ -170,7 +170,7 @@ struct Innerplus <: InnerProductType end
 
 Selector for the standard discrete ``L^2`` inner product weighted by cell measures.
 
-The weights are the volumes (1D: lengths, 2D: areas, 3D: volumes) of grid cells,
+The weights are the volumes (lengths in 1D, areas in 2D, volumes in 3D) of grid cells,
 denoted ``|\\square_k|``. This is the most common inner product for finite difference
 methods and corresponds to the trapezoid rule for integration on non-uniform grids.
 
@@ -270,14 +270,14 @@ function dim end
 Returns the total number of degrees of freedom (DOFs) in the function space `Wₕ`.
 
 !!! warning "The `Tuple` form means something different for a composite space"
-    On a [`ScalarGridSpace`](@ref), `ndofs(Wₕ, Tuple)` is the grid's shape: one entry
+    On a [`ScalarGridSpace`](@ref), `ndofs(Wₕ, Tuple)` is the grid's shape, with one entry
     per **spatial dimension** (`Nₓ`, `Nᵧ`, ...). On a [`CompositeGridSpace`](@ref), it is
     instead one entry per **component**, each that component's own (scalar) DOF count,
     unrelated to spatial dimension, and not a shape a `prod` should be taken over. Code
     that does not know in advance which kind of space it was given should reach for one
     of the two unambiguous forms instead: `npoints(mesh(Wₕ), Tuple)` for the grid shape,
     or `map(ndofs, spaces(Wₕ))` for the per-component counts. Mixing them up is not
-    hypothetical: `src/operators/difference.jl`'s `_grid_dims` avoids
+    hypothetical, since `src/operators/difference.jl`'s `_grid_dims` avoids
     `ndofs(Wₕ, Tuple)` for exactly this reason, after a 3-component 4×6 space addressed
     13824 slots into 72 and segfaulted under an `@inbounds` engine.
 """

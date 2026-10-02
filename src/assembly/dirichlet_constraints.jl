@@ -3,17 +3,17 @@
 # Dirichlet conditions for the discrete variational assembly: `u = g` on a marked part of the
 # boundary, imposed by replacing the constrained rows of the assembled system.
 #
-#   bc = dirichlet_constraints(Ωₕ, :left => x -> 0.0, :right => x -> 1.0)
-#   dirichlet_bc!(A, mesh(Wₕ), :left, :right)
-#   dirichlet_bc!(F, mesh(Wₕ), bc, :left, :right)
-#   symmetrize!(A, F, mesh(Wₕ), :left, :right)
+#     bc = dirichlet_constraints(Ωₕ, :left => x -> 0.0, :right => x -> 1.0)
+#     dirichlet_bc!(A, mesh(Wₕ), :left, :right)
+#     dirichlet_bc!(F, mesh(Wₕ), bc, :left, :right)
+#     symmetrize!(A, F, mesh(Wₕ), :left, :right)
 #
-# Constrained indices are walked rather than scanned for: `_each_marked` calls
+# Constrained indices are walked rather than scanned for. `_each_marked` calls
 # `MarkedIndices` (utils/linear_algebra.jl), which skips empty `BitVector` chunks and steps
 # set bits with `trailing_zeros`, so every routine here costs the boundary cardinality rather
 # than `ndofs`. Sparse matrices are modified through their CSC arrays in one sweep that writes
 # the diagonal where it meets it, since `A[i, i] = one(T)` afterwards would binary-search the
-# column. No `@simd` anywhere: these loops are branch-driven.
+# column. There is no `@simd` anywhere, since these loops are branch-driven.
 
 """
     DirichletConstraint = DomainMarkers

@@ -8,7 +8,7 @@ using LinearSolve: KrylovJL_GMRES
 using LinearAlgebra: ldiv!, norm, issymmetric
 
 # BrambleILUZeroExt: `ilu_preconditioner` builds the ILU(0) factorization
-# (solvers/ilu_preconditioner.jl explains the underscored-fallback idiom), and
+# (solvers/ilu_preconditioner.jl explains the `_`-prefixed fallback idiom), and
 # `BrambleSciMLExt`'s `preconditioner = :ilu0` reaches the same object through `solve`. What
 # is checked here: the factorization from a plain matrix and from a `BilinearForm` agree, the
 # result has a working `ldiv!`, `preconditioner = :ilu0` in `solve` reaches the right answer,

@@ -91,7 +91,7 @@ end
 
 _pc_vectorial_ops(uₕ) = _pc_apply_each(_PC_OPS_ALL, uₕ)
 
-# The vector calculus operators (gpena/Bramble.jl#158). Each recurses over directions, so a
+# The vector calculus operators. Each recurses over directions, so a
 # session per dimension is what caches the recursion's own specializations; the gradient is
 # the field they are most often applied to.
 function _pc_vector_calculus(uₕ, ::Val{D}) where {D}
@@ -181,8 +181,7 @@ function _pc_operator_session(uₕ, cₕ, dim_val::Val)
 end
 
 # εₕ/εₕ! dispatch on the field's grid space, which is keyed by the domain's marker names,
-# so it needs its own mesh rather than reusing uₕ/cₕ above: built small and standalone here
-# (gpena/Bramble.jl#283).
+# so it needs its own mesh rather than reusing uₕ/cₕ above, built small and standalone here.
 function _pc_strain_tensor_session()
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
     Ω = domain(S, :boundary => boundary_symbols(S))
@@ -194,18 +193,18 @@ function _pc_strain_tensor_session()
     return nothing
 end
 
-# The index shifts (gpena/Bramble.jl#391). Only the form session below is cached: a first
-# call of a shift on a grid function costs about 7 ms, too little to pay for its share of the
-# package build (measured in the test-suite plan, S6.5), so the grid-function shifts are left
-# to first use.
+# The index shifts. Only the form session below is cached: a first call of a shift on a grid
+# function costs about 7 ms, too little to pay for its share of the package build, so the
+# grid-function shifts are left to first use.
 const _PC_SHIFTS = (S₊ₓ, S₋ₓ, S₊ᵧ, S₋ᵧ, S₊₂, S₋₂)
 
 # The index shifts inside a form: the form session reaches no `ShiftNode` otherwise, only
 # `shift_op(id, 1, 1)` as a stencil that is never assembled. On a non-uniform mesh of each
-# dimension, along each direction: the neighbour sum written with the exported vectorial aliases, `S₊ₕ(u)[d] + S₋ₕ(u)[d]`
-# (in 1D, `[1]` takes a component of the single node rather than a direction, a node of its
-# own), and, per shift, the shifted unknown alone, `innerₕ(S(u), v)`, as its own form:
-# assembly specializes on the whole form, so the sum does not cache the single term.
+# dimension, along each direction. Two forms are built. One is the neighbour sum written with
+# the exported vectorial aliases, `S₊ₕ(u)[d] + S₋ₕ(u)[d]` (in 1D, `[1]` takes a component of
+# the single node rather than a direction, a node of its own). The other is, per shift, the
+# shifted unknown alone, `innerₕ(S(u), v)`, as its own form. Assembly specializes on the
+# whole form, so the sum does not cache the single term.
 # Compositions (`S(D₋ₓ(u))`, `S(jumpₓ(u))`, ...) are left to first use: each is a form type
 # of its own, and caching one would be picking the tests' cases. Float64 only, as the tests
 # and the solvers assemble.

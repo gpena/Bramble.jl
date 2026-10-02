@@ -5,7 +5,7 @@
 # --- SciMLBase handoff -------------------------------------------------------------- #
 #
 # The three entry points below need SciMLBase and are implemented in `BrambleSciMLExt`. Each
-# forwards to an underscored fallback whose first argument is `::Any` rather than the
+# forwards to an `_`-prefixed fallback whose first argument is `::Any` rather than the
 # concrete type, so the extension's method is a strict specialisation: an identical signature
 # would overwrite a method during precompilation, which Julia refuses. Same idiom as
 # `ast_sparsity_detector`/`_ast_sparsity_detector` and `export_vtk`/`_export_vtk`.

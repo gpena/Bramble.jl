@@ -303,9 +303,9 @@ end
 """
     points(Ωₕ::AbstractMeshType) -> Union{Vector, NTuple}
 
-Return the coordinates of the mesh points:
-  - For 1D meshes ([`Mesh1D`](@ref)): returns a coordinate vector `Vector{T}` of length ``N_x``.
-  - For nD meshes ([`MeshnD`](@ref)): returns an `NTuple{D, Vector{T}}` containing the 1D coordinate vectors along each axis.
+Return the coordinates of the mesh points.
+  - For 1D meshes ([`Mesh1D`](@ref)), returns a coordinate vector `Vector{T}` of length ``N_x``.
+  - For nD meshes ([`MeshnD`](@ref)), returns an `NTuple{D, Vector{T}}` containing the 1D coordinate vectors along each axis.
 
 See also: [`point`](@ref).
 """
@@ -314,9 +314,9 @@ function points end
 """
     point(Ωₕ::AbstractMeshType, idx)
 
-Return the coordinate point at index `idx` (linear integer, tuple `(i, j)`, or `CartesianIndex`):
-  - For 1D meshes: scalar coordinate ``x_i``.
-  - For nD meshes: coordinate tuple ``(x_{i_1}, \\dots, x_{i_D})``.
+Return the coordinate point at index `idx` (linear integer, tuple `(i, j)`, or `CartesianIndex`).
+  - For 1D meshes, the scalar coordinate ``x_i``.
+  - For nD meshes, the coordinate tuple ``(x_{i_1}, \\dots, x_{i_D})``.
 
 Direct indexing `Ωₕ[idx]` delegates to `point(Ωₕ, idx)`.
 """
@@ -398,9 +398,9 @@ function hₘₐₓ end
 """
     hₘᵢₙ(Ωₕ::AbstractMeshType) -> Real
 
-Return the diagonal of the smallest cell in the mesh, the counterpart of [`hₘₐₓ`](@ref):
-  - In 1D: ``\\min_i (x_i - x_{i-1})``.
-  - In nD:
+Return the diagonal of the smallest cell in the mesh, the counterpart of [`hₘₐₓ`](@ref).
+  - In 1D, ``\\min_i (x_i - x_{i-1})``.
+  - In nD,
 
 ```math
 h_{\\min} = \\min_{\\mathbf{i}} \\| (h_{1, i_1}, \\dots, h_{D, i_D}) \\|_2.

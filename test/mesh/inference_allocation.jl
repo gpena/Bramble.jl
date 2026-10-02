@@ -201,8 +201,8 @@ using ..TestUtils: alloc_test, @test_allocs
             s
         )
 
-        # gpena/Bramble.jl#75: `points_iterator` was `Iterators.product` over
-        # `points(Ωₕ2)`'s per-axis vectors and is gone; this is that same construction.
+        # The same construction as `Iterators.product` over
+        # `points(Ωₕ2)`'s per-axis vectors.
         @test_allocs iterate_points_it(Iterators.product(points(Ωₕ2)...))
         @test_allocs iterate_points_gen(points(Ωₕ2))
     end

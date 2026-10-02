@@ -7,11 +7,11 @@ using PrecompileTools: @setup_workload, @compile_workload
 using SparseArrays: SparseMatrixCSC
 
 # `ilu_preconditioner`/`_ilu_operator`: `solvers/ilu_preconditioner.jl` explains the
-# underscored-fallback idiom and why `_ilu_operator` exists separately from the public
-# `ilu_preconditioner` -- it is what `BrambleSciMLExt`'s `preconditioner = :ilu0` calls,
+# `_`-prefixed fallback idiom and why `_ilu_operator` exists separately from the public
+# `ilu_preconditioner`. It is what `BrambleSciMLExt`'s `preconditioner = :ilu0` calls,
 # through `Bramble`'s own dispatch, without that extension ever depending on `ILUZero` itself.
-# `ilu0` already returns an object with `ldiv!`, unlike AMG's hierarchy, so both underscored
-# functions do the same thing.
+# `ilu0` already returns an object with `ldiv!`, unlike AMG's hierarchy, so both
+# `_ilu_*` functions do the same thing.
 
 function Bramble._ilu_preconditioner(A::SparseMatrixCSC; kwargs...)
     return ilu0(A; kwargs...)

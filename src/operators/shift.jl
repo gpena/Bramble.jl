@@ -310,10 +310,10 @@ matrix of `forward_shift` is the transpose of that of [`backward_shift`](@ref).
   mesh, a space or a grid function, since the direction is part of the node's type.
 
 # Returns
-- For a mesh or a grid space: the `npoints(Ωₕ) × npoints(Ωₕ)` matrix `shift(Ωₕ, dim_val,
+- For a mesh or a grid space, the `npoints(Ωₕ) × npoints(Ωₕ)` matrix `shift(Ωₕ, dim_val,
   Val(1))`, in the backend's `matrix_type`, with ones on the superdiagonal of that direction.
-- For a `VectorElement`: a new `VectorElement` of the same space holding ``u_{i+1}``.
-- For a `LazyOp`: the `ShiftNode` that assembles ``u_{i+1}`` inside a form.
+- For a `VectorElement`, a new `VectorElement` of the same space holding ``u_{i+1}``.
+- For a `LazyOp`, the `ShiftNode` that assembles ``u_{i+1}`` inside a form.
 
 # Throws
 - `ArgumentError`: `dim_val` is not between 1 and the mesh (or operand) dimension; or `uₕ` is
@@ -361,10 +361,10 @@ that of [`forward_shift`](@ref).
   mesh, a space or a grid function, since the direction is part of the node's type.
 
 # Returns
-- For a mesh or a grid space: the `npoints(Ωₕ) × npoints(Ωₕ)` matrix `shift(Ωₕ, dim_val,
+- For a mesh or a grid space, the `npoints(Ωₕ) × npoints(Ωₕ)` matrix `shift(Ωₕ, dim_val,
   Val(-1))`, in the backend's `matrix_type`, with ones on the subdiagonal of that direction.
-- For a `VectorElement`: a new `VectorElement` of the same space holding ``u_{i-1}``.
-- For a `LazyOp`: the `ShiftNode` that assembles ``u_{i-1}`` inside a form.
+- For a `VectorElement`, a new `VectorElement` of the same space holding ``u_{i-1}``.
+- For a `LazyOp`, the `ShiftNode` that assembles ``u_{i-1}`` inside a form.
 
 # Throws
 - `ArgumentError`: `dim_val` is not between 1 and the mesh (or operand) dimension; or `uₕ` is
@@ -501,7 +501,7 @@ end
 # for them. For an operand with offsets, `_reevaluated_shift` (`ast/common.jl`) supplies that
 # zero itself where the clamp bites. Nothing there would absorb it for a source: a source has
 # already been reduced to a value by the time this runs, with no offset left to relabel. A
-# source shifted off the grid therefore reads as zero here: an empty stencil, the same
+# source shifted off the grid therefore reads as zero here, an empty stencil, the same
 # "missing neighbour is zero" convention the masked stencils use, mirroring how
 # `RegionRestriction` already spells "contributes nothing here".
 #

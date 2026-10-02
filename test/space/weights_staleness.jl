@@ -8,15 +8,14 @@ using Bramble: change_points!, set_points!, weights
 using ..TestUtils: alloc_test, @test_allocs
 
 # `ScalarGridSpace` precomputes its inner-product weights once from the mesh at
-# `gridspace(Ωₕ)` time (gpena/Bramble.jl#221). The mesh is mutable (`set_points!`,
-# `change_points!`, `iterative_refinement!` all rewrite it in place), and nothing used to
-# stop a space built before such a mutation from silently computing against weights for a
-# mesh that no longer exists. Every check here is against an independent reference -- a
+# `gridspace(Ωₕ)` time. The mesh is mutable (`set_points!`, `change_points!`, `iterative_refinement!` all
+# rewrite it in place), so a space built before such a mutation must not silently compute
+# against weights for a mesh that no longer exists. Every check here is against an independent reference -- a
 # freshly built `gridspace(Ωₕ)` after the mutation, or a hand-computed exact integral --
 # never against another call to the code under test.
 
 @testset "Grid space weights staleness (#221)" begin
-    # change_points! gives the exact numbers from the issue.
+    # change_points! gives exact known numbers.
     @testset "Reproducer: issue's exact numbers" begin
         Ω = domain(interval(0.0, 1.0))
         Ωₕ = mesh(Ω, 5, true)
@@ -157,7 +156,7 @@ using ..TestUtils: alloc_test, @test_allocs
 
     # An interpolation's source leaf is read through `weights` when the form binds it, so a
     # host refill whose source mesh has moved throws instead of returning numbers for the
-    # old mesh (gpena/Bramble.jl#367). The moved mesh is only ever an interpolation source:
+    # old mesh. The moved mesh is only ever an interpolation source:
     # no term walks it natively, since a walked stale leaf already throws on its own.
     @testset "Interpolation source mesh moved" begin
         m1(n) = mesh(domain(interval(0.0, 1.0)), n, true)
@@ -192,7 +191,7 @@ using ..TestUtils: alloc_test, @test_allocs
     end
 
     # A linear form's `πₕ(uₕ)` source is read at every fill, not sampled once when the form
-    # is built (gpena/Bramble.jl#408): a refill after new values in `uₕ` matches a fresh
+    # is built: a refill after new values in `uₕ` matches a fresh
     # form, and one after `uₕ`'s mesh has moved throws instead of interpolating on it, as do
     # `interpolate_at` and `πₕ!` themselves. The source mesh is only ever read through
     # `interpolate_at`; the walked mesh is never moved.

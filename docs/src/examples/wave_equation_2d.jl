@@ -111,7 +111,7 @@ err
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 surface_plot(uT; title = "u at t = 1, on a 25 × 25 mesh") # hide
 
-# ## Energy
+# ## Energy drift
 #
 # The continuous problem conserves
 #
@@ -137,7 +137,7 @@ E[1], drift
 # integrator's tolerance showing rather than a conservation theorem: tightening `reltol` to
 # `1e-10` takes the drift to around `1e-14`, and loosening it gives the digits back.
 #
-# ## Order of convergence
+# ## Spatial order of the wave solution
 #
 # Refining space, with the time tolerance held fixed and tight enough that the spatial error
 # is what is being measured:
@@ -167,9 +167,11 @@ convergence_plot([(collect(hs), collect(errs), "2D wave", "#5B5FC7")]; # hide
 # Second order, the same rate the steady problems reach, which is the point: the second-order
 # semidiscretisation does not cost the scheme its spatial accuracy.
 #
-# ## See also
+# ## Where to go next
 #
 # - [Heat equation](heat_equation.md), the first-order counterpart, and where
 #   [`semidiscretize`](@ref) is introduced.
+# - [Linear and bilinear forms](@ref tutorial_form) for the stiffness form and the
+#   [Dirichlet conditions](@ref form_dirichlet) used here.
 # - [`SecondOrderSemidiscretization`](@ref) for the full accessor list and the solver
 #   restriction.

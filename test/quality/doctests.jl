@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Documenter
 
-# Decoupled from the documentation build (gpena/Bramble.jl#251): `docs/make.jl` sets
+# Decoupled from the documentation build: `docs/make.jl` sets
 # `doctest = false` and points here in a comment. `Documenter.doctest` only needs the module
 # it inspects and its own package loaded -- none of the six `jldoctest` blocks currently in
 # `src/` reach for anything outside `Bramble`/`SparseArrays` (already a test dependency) -- so

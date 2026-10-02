@@ -124,8 +124,7 @@ end
 # loaded so only this extension's own precompile pass reaches them. Sparspak always factors
 # as general unsymmetric LU (no `sym` keyword), so a single SPD system per dimension
 # exercises every call. Covers both 1D and 2D assembled systems since the `VectorElement`
-# type the second `ldiv!` method dispatches on depends on the mesh dimension. Added for
-# gpena/Bramble.jl#284.
+# type the second `ldiv!` method dispatches on depends on the mesh dimension.
 if Bramble.PRECOMPILE_WORKLOAD
     @setup_workload begin
         systems = map((1, 2)) do D

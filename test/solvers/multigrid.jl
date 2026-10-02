@@ -12,7 +12,7 @@ using LinearSolve: LinearProblem, KrylovJL_CG, solve
 using ForwardDiff: ForwardDiff
 using Random
 
-# Geometric multigrid (gpena/Bramble.jl#329). Meshes are non-uniform throughout: on a uniform
+# Geometric multigrid. Meshes are non-uniform throughout: on a uniform
 # mesh rebuilding each level from the domain would nest too, and hide a hierarchy that does
 # not take every other point.
 
@@ -47,7 +47,7 @@ _mg_oracle(Ωf, Ωc) = interpolation_matrix(gridspace(Ωf), gridspace(Ωc))
 _mg_agree(a, b) = isapprox(a, b; rtol = 1e-13, atol = 1e-13)
 
 # Non-uniform meshes in 1D, 2D and 3D, and two with a collapsed axis (which also cover
-# `interpolation_matrix` on collapsed axes, gpena/Bramble.jl#396), with a level count each.
+# `interpolation_matrix` on collapsed axes), with a level count each.
 function _mg_transfer_meshes(bk = backend())
     Random.seed!(MG_SEED)
     unit(a = 0.0, b = 1.0) = interval(a, b)
@@ -266,7 +266,7 @@ end
     @test bytes[1] == bytes[2]
 end
 
-# Smoothers (#329): mass plus variable diffusion on non-uniform meshes, with and without
+# Smoothers: mass plus variable diffusion on non-uniform meshes, with and without
 # Dirichlet rows, against dense references built from `assemble`.
 function _mg_smoother_form(D, n; T = Float64)
     Random.seed!(MG_SEED)
@@ -446,7 +446,7 @@ _mg_salloc(s, x, b) = (smooth!(s, x, b); @allocated smooth!(s, x, b))
     @test_throws DimensionMismatch jacobi_smoother(rect)
 end
 
-# Cycles (#329): mass plus variable diffusion with natural boundary conditions, SPD, on
+# Cycles: mass plus variable diffusion with natural boundary conditions, SPD, on
 # non-uniform meshes, against dense references built from `assemble` and
 # `interpolation_matrix`.
 function _mg_box(D)

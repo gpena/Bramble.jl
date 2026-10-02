@@ -689,14 +689,10 @@ end
             @test wrapped_large < 1000
 
             # `Parallel()` still costs the same regardless of grid size -- task spawn
-            # overhead, not anything proportional to the number of points. This is the
-            # test that caught point 51 (docs/form-unlock-plan.md): a five-capture
-            # anonymous closure occasionally (1 to 3 in 20 independent compiles) took a
-            # miscompiled path costing 176 B *per grid point*, 80 MiB on the large case
-            # here. Fixed by replacing the closure with a named, concretely-typed kernel
-            # struct (`_AvgKernel`, which also covers 1D since gpena/Bramble.jl#69 removed
-            # the `_AvgKernel1` split) -- not a guarantee the class of bug can
-            # never recur, so this stays a real regression guard, not just documentation.
+            # overhead, not anything proportional to the number of points. A five-capture
+            # anonymous closure can occasionally compile to a slow path costing 176 B *per
+            # grid point*, which a named, concretely-typed kernel struct (`_AvgKernel`)
+            # avoids. This guards against that class of bug returning.
             be_parallel = backend(policy = Parallel())
             small = avg_bytes_direct(be_parallel, 32)
             large = avg_bytes_direct(be_parallel, 1024)

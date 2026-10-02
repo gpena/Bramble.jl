@@ -278,14 +278,14 @@ using Bramble:
     end
 
     @testset "inner₊/inner₊₂ source-only left operand" begin
-        # inner₊(left::LazyOp, right::BackwardDifference) and its mirror, and the plain
+        # inner₊ with a LazyOp left and a BackwardDifference right, and its mirror, and the plain
         # inner₊ₓ/inner₊ᵧ/inner₊₂(left, right) methods, all branch the same way
         # innerₕ does: a LinearProduct when left is source-only, a BilinearProduct
         # otherwise. Both branches are the same function, so the untested LinearProduct
         # side is checked against the already-verified BilinearProduct side, contracted at
         # a concrete vector equal to the source's own values (not a from-scratch oracle, but
-        # a genuinely independent code path (_contracted_left_stencil vs local_stencil
-        # on a BilinearProduct) computing what should be the identical number).
+        # a genuinely independent code path, `_contracted_left_stencil` versus `local_stencil`
+        # on a BilinearProduct, computing what should be the identical number).
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
         Wₕ = gridspace(Ωₕ)
         f = x -> x^2 + sin(2x)

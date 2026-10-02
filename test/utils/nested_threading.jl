@@ -1,15 +1,15 @@
 module UtilsNestedThreadingTests
 
-# Every `CpuThreaded` (`Parallel()`) sweep runs a `Threads.@threads :static` loop, and Base
+# Every `CpuThreaded` (`Parallel()`) sweep runs a `Threads.@threads :static` loop. Base
 # refuses to start one of those inside another threaded region ("`@threads :static` cannot be
 # used concurrently or nested"). So a user who wraps Bramble calls in their own
 # `Threads.@threads for p in params ... end` -- a parameter sweep, say -- used to get that
-# error from `innerₕ`, `assemble`, the stencil engines and the vector-calculus operators.
-# `_in_threaded_region()` (src/utils/linear_algebra.jl) is the exact test Base makes, and
-# every such sweep now branches on it, running the same per-chunk or per-band body serially
+# error from `innerₕ`, `assemble`, the stencil engines or the vector-calculus operators.
+# `_in_threaded_region()` (src/utils/linear_algebra.jl) is the exact test Base makes.
+# Every such sweep now branches on it, running the same per-chunk or per-band body serially
 # on the calling task when nested. That counter is process-wide, so two `Threads.@spawn`ed
 # tasks can race: one reads `false`, then the other enters its region before Base's own
-# check. `_static_or_serial` therefore also catches exactly Base's error (raised before any
+# check. So `_static_or_serial` also catches exactly Base's error (raised before any
 # iteration runs) and answers it serially.
 #
 # Invariants tested:

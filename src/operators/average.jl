@@ -33,10 +33,10 @@ At boundary points where no neighbor exists:
 ## Use cases
 
 Typical uses:
-1. Staggered grids: transfer variables between cell centers and faces
-2. Discontinuous Galerkin: compute interface values
-3. Finite difference: approximate derivatives at intermediate points
-4. Conservative schemes: maintain flux conservation
+1. Staggered grids, to transfer variables between cell centers and faces
+2. Discontinuous Galerkin, to compute interface values
+3. Finite difference, to approximate derivatives at intermediate points
+4. Conservative schemes, to maintain flux conservation
 
 ## Example
 

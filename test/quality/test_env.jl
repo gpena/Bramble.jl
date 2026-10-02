@@ -2,7 +2,7 @@ module QualityTestEnvTests
 
 using Test
 
-# gpena/Bramble.jl#390: the test environment (`test/Project.toml`) lists only packages the
+# The test environment (`test/Project.toml`) lists only packages the
 # tests load, and every non-stdlib entry carries a `[compat]` bound. `Aqua.test_stale_deps`
 # cannot do this, since it takes a package module and `test/` is a project, not a package.
 #

@@ -40,7 +40,7 @@ using Bramble:
 
 # `simplify_ast` rewrites only the algebraic layer (`OperatorAdd`, `OperatorScale`,
 # `GridFunctionScale`) that `ast.jl`'s `+`/`*`/`/` overloads build, into a tree that routes
-# to fewer mesh sweeps (gpena/Bramble.jl#159, rules 1-3). Every check here is against either
+# to fewer mesh sweeps (rules 1-3). Every check here is against either
 # a hand-built reference matrix or a form assembled through a completely different call --
 # never against another call to the code under test.
 
@@ -51,7 +51,7 @@ using Bramble:
     B = D₋ₓ(A)                 # a second leaf, structurally different from `A`
 
     # Like-term combining fires only when the two subtrees' equality is settled by their types
-    # alone -- `_statically_equal`, i.e. `Base.issingletontype` (gpena/Bramble.jl#240). `A` and
+    # alone -- `_statically_equal`, i.e. `Base.issingletontype`. `A` and
     # `B` above are *not* singletons: `IdentityOperator` carries the grid space in a field, so
     # two of them are only equal by a run-time comparison. `S` and `T` are the singleton
     # counterparts -- an inner product of a trial and a test function, which is the shape every
@@ -65,7 +65,7 @@ using Bramble:
         @test simplify_ast(1 * A) === A
 
         # A floating-point coefficient is deliberately left alone, however it compares to
-        # `0` or `1` (gpena/Bramble.jl#240): collapsing on the value would make the node
+        # `0` or `1`: collapsing on the value would make the node
         # type -- and so the `AST` type parameter of any form built from it -- depend on a
         # number the compiler need not know, which costs `form` its inferred return type
         # for a runtime coefficient and raises `IllegalTypeAnalysisException` under Enzyme.
@@ -119,8 +119,8 @@ using Bramble:
     @testset "Data-carrying terms are never combined" begin
         # The gate, stated as tests: equality decided by reading a field at run time would make
         # this method's return type depend on that read, and `form`'s return type a `Union` of
-        # the combined and uncombined trees -- which is what Enzyme rejects
-        # (gpena/Bramble.jl#240). So a node holding data is left as the sum it was written as,
+        # the combined and uncombined trees -- which is what Enzyme rejects.
+        # So a node holding data is left as the sum it was written as,
         # *even when both sides hold the identical object*. One extra routed term, same numbers.
         vₕ = Rₕ(Wₕ, x -> x[1])
 
@@ -217,8 +217,8 @@ end
         @test nnz(A_zero) == nnz(A_ref)
         @test !(resolve_form_ast(a_zero) isa OperatorAdd)
 
-        # The integer `0` above is what buys that, and the restriction is deliberate
-        # (gpena/Bramble.jl#240): a floating-point `0.0` keeps its term, so the matrix
+        # The integer `0` above is what buys that, and the restriction is deliberate:
+        # a floating-point `0.0` keeps its term, so the matrix
         # still holds the stiffness band as stored zeros. Same numbers, wider pattern.
         a_zero_float = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 0.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
         A_zero_float = assemble(a_zero_float)
@@ -331,14 +331,14 @@ end
     # Lifting and combining a DiracSource.
     @testset "lifting: DiracSource, linear" begin
         # `dirac(...)` (a `DiracSource`) is a genuine `LazyOp` source exactly like
-        # `source_function` above, so it lifts and combines the same way (#226).
+        # `source_function` above, so it lifts and combines the same way.
         d = dirac((0.3, 0.4), 1.0)
         @test d isa DiracSource
         # Each coefficient still lifts out of its own inner product. The two terms are *not*
         # combined into `5 * innerₕ(d, v)`, though: a `DiracSource` carries its points and
         # strengths in fields, so deciding the two sides are the same subtree would mean
         # reading those at run time -- and the rule's two outcomes are different node types,
-        # which is what cost `form` its inferred return type (gpena/Bramble.jl#240). What may
+        # which is what cost `form` its inferred return type. What may
         # never change is the vector, and it does not.
         l = form(Wₕ, v -> innerₕ(2 * d, v) + innerₕ(3 * d, v))
         ast = resolve_form_ast(l)
@@ -356,7 +356,7 @@ end
 
 # Nested grid-function scales are not fused into one precomputed array: each keeps reading
 # its own coefficient at evaluation time, so an in-place change to either one reaches the next
-# `assemble!` (gpena/Bramble.jl#365). The reference is a freshly built form, and the diagonal
+# `assemble!`. The reference is a freshly built form, and the diagonal
 # of the bilinear case is checked against the hand-built product.
 @testset "simplifier: nested scales stay live" begin
     for Ωₕ in (mesh(domain(interval(0.0, 1.0)), 9, true),
@@ -403,7 +403,7 @@ end
     @test s.inner_op === A
 
     # a shift and its inverse do not collapse: `S₊ₓ(S₋ₓ(u))` is `u` in the interior but 0 at
-    # the last point, where the inner shift's read has left the grid (gpena/Bramble.jl#352)
+    # the last point, where the inner shift's read has left the grid.
     s0 = simplify_ast(shift_op(shift_op(A, 1, 2), 1, -2))
     @test s0 isa ShiftNode
     @test s0.shift_amount == -2
@@ -605,9 +605,9 @@ end
 # of the rewritten and unrewritten trees whenever the compiler cannot fold the comparison.
 # That costs every caller a dynamic dispatch into the assembly engine, and it is what Enzyme
 # rejects with `IllegalTypeAnalysisException` when differentiating with respect to an
-# operator's own coefficient (gpena/Bramble.jl#240). The value-reading rules are therefore
+# operator's own coefficient. The value-reading rules are therefore
 # restricted to `Integer` coefficients, and these are the checks that pin it: `isconcretetype`
-# on the inferred return type, which is exactly the property that was false before.
+# on the inferred return type, which is exactly the property the gate guarantees.
 #
 # `Float64` arguments rather than literals on purpose -- a literal coefficient is constant
 # -folded by inference and comes out concrete either way, so a literal proves nothing here.
@@ -655,8 +655,8 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
     @test _infers(_rt_lifted, (Float64, W))
     @test _infers(_rt_linear, (Float64, W, typeof(fₕ)))
 
-    # Two same-shaped terms carrying distinct runtime data, bilinear and linear
-    # (gpena/Bramble.jl#240). These were `false` before the like-term rule was gated.
+    # Two same-shaped terms carrying distinct runtime data, bilinear and linear.
+    # These infer a concrete type because the like-term rule is gated.
     g₁ = Rₕ(Wₕ, x -> 1.0 + x[1])
     g₂ = Rₕ(Wₕ, x -> 2.0 - x[2])
     @test _infers(_rt_two_coeffs, (W, typeof(g₁), typeof(g₂)))

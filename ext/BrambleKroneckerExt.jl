@@ -1,6 +1,5 @@
 # ext/BrambleKroneckerExt.jl: `Kronecker.jl` interop and fast diagonalisation for a
-# separable `BilinearForm` (S5.2, gpena/Bramble.jl#259, .agents/plans/v3-3-0-memory-
-# scaling.md), layered on top of the dependency-free `KroneckerLinearOperator` S5.1 built in
+# separable `BilinearForm`, layered on top of the dependency-free `KroneckerLinearOperator` in
 # `src/assembly/kronecker.jl`.
 #
 # Two independent pieces, both read `KroneckerLinearOperator`'s own `terms` (each a
@@ -179,13 +178,13 @@ end
 # Classifies `K`'s own terms once: the per-axis mass vector `H_d`, the per-axis assembled 1D
 # stiffness `A_d` (only ever read for an axis some term actually touches), that axis's
 # summed directional coefficient, and the summed mass-only coefficient. Reuses
-# `KroneckerLinearOperator`'s own factors (built once by `kronecker_operator`,
-# gpena/Bramble.jl#162) rather than re-walking the form's AST: `_separable_axis`
+# `KroneckerLinearOperator`'s own factors (built once by `kronecker_operator`)
+# rather than re-walking the form's AST: `_separable_axis`
 # (`src/assembly/kronecker.jl`) already guarantees a mass term's factor is `Diagonal` on every
 # axis and a directional term's is `Diagonal` on every axis but the one it differentiates,
 # so which factor is which is read off its type alone.
 #
-# A device-backed `K` (gpena/Bramble.jl#323) holds `_KronDeviceDiagonal`/`_KronDeviceSparse`
+# A device-backed `K` holds `_KronDeviceDiagonal`/`_KronDeviceSparse`
 # factors (`src/assembly/kronecker.jl`); `_fdm_host_factor` brings each back to the host as a
 # `Diagonal`/`SparseMatrixCSC` first. They are the 1D factors, O(n_d) per axis, and the
 # eigendecomposition below is a host LAPACK call anyway, so this copy is negligible.
@@ -264,7 +263,7 @@ function _fdm_apply_mode(X::Array{T}, M::AbstractMatrix, d::Int) where {T}
     return reshape(Y3, newdims)
 end
 
-# Device path (gpena/Bramble.jl#323): `X` and `M` are both device arrays, so the mode
+# Device path. `X` and `M` are both device arrays, so the mode
 # product is one dense device matmul with no host round trip. Axis `d` is brought to the
 # front with `permutedims` (a device kernel), `M * X2` runs on the `(m, pre * post)`
 # matricisation, and `permutedims` puts the axis back. For `d == 1` no permutation is
@@ -329,7 +328,7 @@ function _fdm_solve_core(K::KroneckerLinearOperator{T, D}, F::AbstractVector, di
         H = ntuple(d -> H[d][rng[d]], Val(D))
         A = ntuple(d -> A[d][rng[d], rng[d]], Val(D))
         # A view plus broadcast, not `getindex` with ranges: no scalar indexing on a
-        # device `F` (gpena/Bramble.jl#323), and the same values on the host.
+        # device `F`, and the same values on the host.
         Fint = similar(F, T, prod(dims_solve))
         reshape(Fint, dims_solve) .= view(reshape(F, dims_full), rng...)
     else
@@ -413,7 +412,7 @@ end
 # Warms this extension's entry points -- `Kronecker.kronecker` and both `fdm_solve` calls
 # (unconstrained and `dirichlet = :boundary`) -- on a 2D separable, constant-coefficient
 # form, only reachable once `Kronecker` is loaded so only this extension's own precompile
-# pass reaches them. Not named in gpena/Bramble.jl#259; added for gpena/Bramble.jl#284.
+# pass reaches them.
 if Bramble.PRECOMPILE_WORKLOAD
     @setup_workload begin
         Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :boundary =>

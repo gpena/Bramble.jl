@@ -1,10 +1,6 @@
 #===========================================================================#
-# TTFX (time-to-first-X) harness -- gpena/Bramble.jl#283, #284:
-#
-#     "TTFX drops >= 150 ms pde_solve, >= 120 ms sd2, >= 80 ms assemble_add!;
-#      precompile overhead < +0.8 s"                                  (#283)
-#     "TTFX drops >= 250 ms SuiteSparse, >= 200 ms Sparspak, >= 500 ms
-#      Kronecker"                                                     (#284)
+# TTFX (time-to-first-X) harness. Each case has a minimum before-minus-after
+# reduction in first-call time, and the precompile overhead has a ceiling of +0.8 s.
 #
 # Plain Julia, Base and stdlib only. This file is launched with no
 # `--project` of its own (`julia --startup-file=no benchmark/ttfx.jl ...`)
@@ -110,7 +106,7 @@ function _validate_tree(tree::AbstractString, label::AbstractString)
     return nothing
 end
 
-# --- Cases (thresholds are before-minus-after reductions, gpena/Bramble.jl#283/#284) --- #
+# --- Cases (thresholds are before-minus-after reductions) --- #
 
 struct TTFXCase
     name::String            # display name, matches the issue's own call shape
@@ -171,7 +167,7 @@ const CASES = TTFXCase[
         "F = assemble(l)",
         "fdm_solve(a_spd, F)"
     ),
-    # gpena/Bramble.jl#391: paths the precompile workload did not reach. Thresholds are
+    # Paths the precompile workload did not reach. Thresholds are
     # placeholders (0.0): the gain is what the workload sessions are judged on, not a gate here.
     # Every case runs on the non-uniform 2D FIXTURE mesh, except GMG (uniform, what it supports).
     TTFXCase(

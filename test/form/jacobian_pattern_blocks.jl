@@ -6,7 +6,7 @@ using SparseArrays: sparse, findnz, dropzeros
 using Bramble: D₋ₓ, Mₕ, jacobian_pattern
 
 # `jacobian_pattern` on a pair with a composite space on one side and a scalar space on the
-# other (gpena/Bramble.jl#367). `assemble` walks such a pair block by block, the scalar side
+# other. `assemble` walks such a pair block by block, the scalar side
 # as a one-leaf composite; before this the pattern took the scalar path, whose `_walked_leaf`
 # picks one whole space and cannot name the component a term reads on the composite side:
 # a `πₕ` term threw a MethodError, and a native-only pair returned a pattern short of
@@ -53,7 +53,7 @@ const _CASES = (
 end
 
 # A coefficient computed on the walked mesh from a trial function on another mesh
-# (gpena/Bramble.jl#409): the dependency names that computation through `πₕ`, and the
+# The dependency names that computation through `πₕ`, and the
 # pattern widens every row the term reaches into the columns `πₕ` reads there. The oracle
 # is a dense finite-difference Jacobian of the Newton residual `A(c(u)) u`, `c` rebuilt at
 # run time from the same composition the dependency names. Non-uniform meshes throughout.

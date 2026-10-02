@@ -147,7 +147,7 @@ function _lower_sources(op::ShiftNode{D, Dim}, space) where {D, Dim}
     return inner === op.inner_op ? op : ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
 end
 
-# --- Eager source lowering across a CompositeGridSpace's leaves (gpena/Bramble.jl#197) --- #
+# --- Eager source lowering across a CompositeGridSpace's leaves --- #
 #
 # A non-composite space has exactly one leaf -- itself -- so `_lower_sources` above runs
 # directly against `Wₕ`, unambiguous. A composite space's terms follow the same routing rule
@@ -190,8 +190,8 @@ Grid partitioning for parallel assembly is determined from the resolved AST duri
 Every `SourceFunction` reachable from the simplified AST -- a source term built directly from
 a plain function, `f(x)`, rather than a [`VectorElement`](@ref) or a `Ref` -- is then
 sampled once against its own leaf's space and lowered to a `SourceVector`
-(gpena/Bramble.jl#197): a brand-new closure passed as a source used to force a full
-recompilation of the assembly pipeline (~11ms measured) on every distinct closure, since
+because a brand-new closure passed as a source would force a full
+recompilation of the assembly pipeline on every distinct closure, since
 Julia gives it its own type; assembling against the fixed `SourceVector` shape instead means
 that cost is paid once, here, not on every later `assemble!`/`assemble` call. This changes
 what a raw closure that captures mutable state does: it is evaluated once, now, not
@@ -201,7 +201,7 @@ alternative (`update_coefficients!`) a source meant to keep varying should use i
 
 The one exception is an interpolant [`πₕ`](@ref)`(uₕ)`, which is never sampled: every
 `assemble`/`assemble!` evaluates it on `uₕ`'s current values, and throws an `ArgumentError`
-once `uₕ`'s mesh has moved (gpena/Bramble.jl#408).
+once `uₕ`'s mesh has moved.
 
 # Examples
 
@@ -327,7 +327,7 @@ end
 @inline _paired(::Tuple, ::Tuple{}) = ()
 @inline _paired(a::Tuple, b::Tuple) = (first(a), _paired(Base.tail(a), Base.tail(b))...)
 
-# The type every leaf of `term` can put in an entry, promoted against `T` (gpena/Bramble.jl#370).
+# The type every leaf of `term` can put in an entry, promoted against `T`.
 #
 # Read from the node types wherever they carry it (a `Number` or `Ref{T}` scale, an array
 # coefficient or source), and from a value only where nothing else reveals it: a thunk is
@@ -368,7 +368,7 @@ const _ELTYPE_WRAPPERS = Union{
 @inline _leaf_eltype(T, op::SourceConstant, sp) = _value_eltype(T, op.value)
 
 # A function of position reveals its type only through a value: sampled once, at an
-# interior grid point, on the host copy of the mesh (`host_weights`, gpena/Bramble.jl#361).
+# interior grid point, on the host copy of the mesh (`host_weights`).
 # Interior, not the first point: a function defined on a smaller mesh (an interpolant
 # `πₕ(uₕ; outside = fill)` under a difference) answers a boundary point with its fill,
 # whose type need not be its values'.
@@ -379,7 +379,7 @@ const _ELTYPE_WRAPPERS = Union{
     return promote_type(T, typeof(op.func(point(Ωₕ, I))))
 end
 
-# An interpolant `πₕ(uₕ)` is left unsampled (gpena/Bramble.jl#408), so probing it at a
+# An interpolant `πₕ(uₕ)` is left unsampled, so probing it at a
 # point would answer with the fill's type wherever that point lies outside `uₕ`'s mesh:
 # its type is read off `uₕ`, the walked mesh's coordinates and the fill instead.
 @inline _leaf_eltype(T, op::SourceFunction{D, <:GridInterpolant}, sp::ScalarGridSpace) where {D} = promote_type(
@@ -433,7 +433,7 @@ end
 
 # A term naming no component is assembled on every diagonal block, so each of their leaves
 # decides its type, not the first alone: a wider later leaf (Float64 behind Float32, a
-# `Dual`-coordinate mesh) would otherwise be rounded or refused (gpena/Bramble.jl#370). Tail
+# `Dual`-coordinate mesh) would otherwise be rounded or refused. Tail
 # recursion over the leaf tuple keeps the fold static.
 @inline _every_leaf_eltype(term, leaves::Tuple{Any}, T) = _folded_eltype(
     term, first(first(leaves)), T)
@@ -615,8 +615,8 @@ end
     _batch_linear_band_sweep!(b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α) -> Nothing
 
 [`CpuPolyester`](@ref)'s counterpart of the `Threads.@threads` body in
-[`_sweep_linear_band_colour!`](@ref), filled by `BramblePolyesterExt`
-(gpena/Bramble.jl#190). The only `src/` method errors naming Polyester.
+[`_sweep_linear_band_colour!`](@ref), filled by `BramblePolyesterExt`.
+The only `src/` method errors naming Polyester.
 """
 @noinline function _batch_linear_band_sweep!(
         b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
@@ -626,7 +626,7 @@ end
 
 # Dispatches on the *effective* execution policy (`_sweep_parallel!` computes it):
 # `CpuThreaded` keeps `Threads.@threads` exactly as before; `CpuPolyester` reaches its own hook
-# instead, so it never silently threads with the wrong mechanism (gpena/Bramble.jl#190).
+# instead, so it never silently threads with the wrong mechanism.
 # `CpuSerial` never reaches this function -- `_effective_parallel_policy` only ever hands it
 # `CpuThreaded` or `CpuPolyester`.
 @noinline function _sweep_colour!(
@@ -666,7 +666,7 @@ end
     _batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mesh_markers, offset, α) -> Nothing
 
 [`CpuPolyester`](@ref)'s counterpart of the `Threads.@threads` body in `_sweep_colour!`,
-filled by `BramblePolyesterExt` (gpena/Bramble.jl#190). The only `src/` method errors
+filled by `BramblePolyesterExt`. The only `src/` method errors
 naming Polyester.
 """
 @noinline function _batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mesh_markers, offset, α)
@@ -678,7 +678,7 @@ end
 # function is already on the forced-threaded path (`_assemble_linear_parallel_core!`,
 # entered from a non-`CpuSerial` branch, or from `assemble_parallel!`'s own "regardless of
 # policy" contract); `CpuPolyester` passes through unchanged so the colour/band sweeps below
-# reach their own hook instead of `Threads.@threads` (gpena/Bramble.jl#190).
+# reach their own hook instead of `Threads.@threads`.
 function _sweep_parallel!(
         b::AbstractVector, sp, term::TERM, grid_inds, strides, offset::Int, α = true
 ) where {TERM}
@@ -771,7 +771,7 @@ end
 The rule that carries the semantics of composite linear forms: **a term naming no component
 goes to every leaf; a term naming one goes to that leaf alone.** It used to be stated in a
 comment and then implemented three times over, once per consumer -- scatter into `b`,
-contract into an accumulator, sweep threaded (gpena/Bramble.jl#55). It is now written once
+contract into an accumulator, sweep threaded. It is now written once
 here, and the three consumers differ only in what they do per leaf.
 
 Recursing the tree rather than flattening it into a vector of terms first avoids allocation
@@ -917,14 +917,14 @@ end
 Refill `b` with the assembled `form` and return it with zero allocations (**0 bytes**).
 
 On a test space whose backend lives on a device (a Metal space, say), `b` is filled on the
-host and uploaded in one `copyto!`, as system matrices are (gpena/Bramble.jl#361): that path
+host and uploaded in one `copyto!`, as system matrices are: that path
 allocates a host buffer and host mirrors of the space on every call, so the zero-allocation
 guarantee is the host path's alone.
 
 `assemble!` uses the pre-resolved `form.ast` stored directly inside the form.
 
 ## Live coefficients
-- Grid functions: the stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(uₕ, ...)` or `parent(uₕ) .= ...`) between steps automatically updates the assembled vector without needing to rebuild the form. Nested scales such as `uₕ * (wₕ * v)` stay live too: each grid function is read at assembly time, never fused into a copy when the form is built.
+- Grid functions: the stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(uₕ, ...)` or `parent(uₕ) .= ...`) between steps automatically updates the assembled vector without needing to rebuild the form. Nested scales such as `uₕ * (wₕ * v)` stay live too, because each grid function is read at assembly time and never fused into a copy when the form is built.
 - Dynamic scalars: plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `α = Ref(1.0); l = form(Wₕ, v -> α * innerₕ(uₕ, v))`). Mutating `α[] = new_val` evaluates live during assembly with 0 allocations.
 
 # Arguments
@@ -983,7 +983,7 @@ function _assemble_linear!(
     space = form.test_space
     _validate_term_markers(ast, markers(mesh(space)), "the form's space")
 
-    # A genuine 3-way dispatch, not a binary `isa CpuSerial` check (gpena/Bramble.jl#190):
+    # A genuine 3-way dispatch, not a binary `isa CpuSerial` check:
     # `CpuPolyester` is neither `CpuSerial` nor `CpuThreaded`'s `Threads.@threads` path, and
     # Two branches, not three: `CpuSerial` runs the serial core, and everything else goes
     # to `_assemble_linear_parallel_core!`, whose own `_sweep_parallel!` computes the
@@ -991,7 +991,7 @@ function _assemble_linear!(
     # `_batch_*` hook for `CpuPolyester`. A `CpuPolyester` fast-fail used to sit here, on the
     # reasoning that failing before the call chain was more honest; it was neither, since
     # it fired even with Polyester loaded and the hooks implemented, so `assemble` on a
-    # `LinearForm` could never work under `CpuPolyester` at all (gpena/Bramble.jl#190). Without
+    # `LinearForm` could never work under `CpuPolyester` at all. Without
     # Polyester the hook still raises, one frame deeper, naming the package.
     policy = execution_policy(space)
     if policy isa CpuSerial
@@ -1006,11 +1006,11 @@ function _assemble_linear!(
     return b
 end
 
-# --- Device test spaces: host fill, one upload (gpena/Bramble.jl#361) ---------------- #
+# --- Device test spaces: host fill, one upload ---------------- #
 #
 # The sweep reads weights, spacings and source values one grid point at a time, which a
-# device-backed space refuses. So a device test space is assembled the way #317 settled for
-# matrices: the whole sweep, Dirichlet values included, runs on a host mirror of the space
+# device-backed space refuses. So a device test space is assembled the way matrices are:
+# the whole sweep, Dirichlet values included, runs on a host mirror of the space
 # (`host_weights` per leaf) into a host buffer, and `b` receives it in one `copyto!`. Not a
 # device scatter kernel, and not scalar writes under `allowscalar`, which would be correct
 # and silently slow. The buffer and the mirrors are rebuilt on every call, so unlike the
@@ -1064,7 +1064,7 @@ end
 # `Vector`, which `_grid_function_value` indexes the same way). The walk covers the nodes a
 # source reaches through (`_lower_sources`'s own set plus `RegionRestriction`) and every
 # `@node_family` node, so a coefficient under `Mₓ(u * v)` or `D₋ₓ(u * v)` is reached too
-# (gpena/Bramble.jl#364); a node outside it is returned as it is, and device data left inside
+#; a node outside it is returned as it is, and device data left inside
 # one fails loudly at its first scalar read rather than assembling wrong numbers.
 @inline _host_sources(op) = op
 

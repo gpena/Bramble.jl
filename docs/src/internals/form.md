@@ -152,7 +152,7 @@ shares the same recording a serial fill builds ("One setup walk per term", below
 fill against a new matrix records, and every fill after it, threaded or serial, sweeps the
 same band colours but reads each entry's position from the recording instead of searching for
 it. `ReplaySink` addresses a point through `point_ptr[lin_idx]`, not a running counter, so one
-recording serves any visit order and any thread — the colouring above still keeps two
+recording serves any visit order and any thread. The colouring above still keeps two
 concurrently-swept points off the same entry, but nothing else about the sweep needs to
 change.
 
@@ -171,13 +171,13 @@ replay (`CpuThreaded` in `src/`; `CpuPolyester` once `BramblePolyesterExt` fills
 batch functions). A device matrix, a device leaf, or a policy with no replay hook keeps
 searching that unit, beside other units of the same form that do replay.
 
-## Algebraic simplification of the `+`/`*` layer
+## Algebraic simplification of the sum and product layer
 
 `form(Wₕ, Vₕ, f)`/`form(Wₕ, f)` call [`Bramble.simplify_ast`](@ref) on the resolved expression before
 storing it (`ast/simplifier.jl`, [gpena/Bramble.jl#159](https://github.com/gpena/Bramble.jl/issues/159)).
-Most of it rewrites three node types: `OperatorAdd`, `OperatorScale` and `GridFunctionScale`
-— exactly what `ast.jl`'s `+`, `*` and `/` overloads build. Every other node — differences,
-averages, jumps, restrictions, interpolation, and every leaf — is semantic rather than
+Most of it rewrites three node types: `OperatorAdd`, `OperatorScale` and `GridFunctionScale`.
+They are exactly what `ast.jl`'s `+`, `*` and `/` overloads build. Every other node (differences,
+averages, jumps, restrictions, interpolation, and every leaf) is semantic rather than
 algebraic, and is left as it is. Two exceptions reach one layer deeper, into
 `BilinearProduct`/`LinearProduct` (what `innerₕ`/`inner₊`/... build) and into `ShiftNode`:
 leaving them untouched would mean either a correctness gap (§"Component distribution" below)
@@ -200,7 +200,7 @@ smaller number of sweeps for the same matrix or vector:
 | `c * A + c * B`, same `c` | `c * (A + B)` | two routed terms become one |
 
 `ZeroOperator{D,Nothing}(nothing)` is synthesized for the zero case rather than reusing a
-concrete space, because a `LazyOp{D}` subtree in general carries no space to read back —
+concrete space, because a `LazyOp{D}` subtree in general carries no space to read back.
 `space(op)` is only ever implemented for `IdentityOperator`/`ZeroOperator` themselves. Every
 consumer of `ZeroOperator` (`local_stencil`, `stencil_offsets`, `component`) reads only its
 `D` type parameter; the one exception, `symmetry.jl`'s `_same_operator_shape` comparing
@@ -208,21 +208,21 @@ consumer of `ZeroOperator` (`local_stencil`, `stencil_offsets`, `component`) rea
 the same space would.
 
 "Same `A`" is two predicates, not one. `_ast_equal` (`ast/simplifier.jl`) is the *definition*:
-a structural equality over `LazyOp` subtrees — the same concrete node type, and every field
+a structural equality over `LazyOp` subtrees. It asks for the same concrete node type and every field
 equal, recursively for a field that is itself a `LazyOp`, by `===` otherwise. `===` rather than `==` for a leaf field (a grid
 function, a closure, a component index) is deliberate: two arrays holding equal values right
 now are not the same operator once one of them is mutated in place and the other is not, and
 two independently built closures are never "the same" scaling function merely because they
 compute the same thing. Missing an equal-but-distinct pair only forgoes a rewrite; treating
 two different subtrees as equal would change what an assembled form computes, silently, which
-none of these rules may ever do — every rewrite here is an algebraic identity, so the
+none of these rules may ever do. Every rewrite here is an algebraic identity, so the
 assembled matrix or vector is unaffected up to floating-point association (folding `2 * x +
 3 * x` into `5 * x` can move the last bit; not folding it does too, in the other direction).
 
 `_statically_equal` is the *gate*, and it is what the like-term rule actually branches on:
 whether `_ast_equal`'s answer is settled by the two types alone, which is
 `Base.issingletontype`. The rule has to be gated this way because its two outcomes return
-different node types — an `OperatorScale` when it fires, an `OperatorAdd` when it does not — so
+different node types (an `OperatorScale` when it fires, an `OperatorAdd` when it does not), so
 an answer inference cannot fold makes `form`'s return type a `Union` of both, costing every
 caller a dynamic dispatch into the assembly engine and drawing
 `IllegalTypeAnalysisException` from Enzyme (gpena/Bramble.jl#240). That bit every sum of two
@@ -233,14 +233,14 @@ two source vectors in a linear form.
 In practice the gate is generous, because the trees `form` builds out of pure operators *are*
 singletons: a `BilinearProduct` over `TrialFunction`/`TestFunction`, wrapped in any stack of
 difference or average nodes, has singleton fields all the way down. What it excludes is a node
-carrying data — a `GridFunctionScale` holding an array, a `SourceVector`, a `DiracSource`, an
+carrying data, such as a `GridFunctionScale` holding an array, a `SourceVector`, a `DiracSource`, or an
 `IndexedTrialFunction` whose `component_idx` is a field rather than a type parameter. Those
-sums assemble as the two terms they were written as: one extra routed term, and the same
+sums assemble as the two terms they were written as, which means one extra routed term and the same
 numbers.
 
 A `Base.RefValue` coefficient (§2's dynamic scalar coefficients) is never dereferenced by the
 pass and never combined with a static number, or with a different `Ref`, only recognized as
-the same coefficient when it is the same `Ref` object on both sides — the whole point of a
+the same coefficient when it is the same `Ref` object on both sides. The whole point of a
 `Ref` coefficient is that its value can change after the form is built, so folding its
 current value into a static number would bake in a snapshot the rest of the design goes out
 of its way to avoid.
@@ -258,7 +258,7 @@ of its way to avoid.
 | `Shift_a(Shift_b(u))`, same dimension, `a` and `b` of one sign | `Shift_{a+b}(u)` | additive only then: a shift reads 0 off the grid, so `Shift_k(Shift_{-k}(u))` is not `u` at the boundary and stays nested |
 
 Factoring a shared argument uses the like-term rule's gate: the shared argument must pass
-`_statically_equal`, so whether the rule fires is settled by the argument types, and a
+`_statically_equal`. Whether the rule fires is settled by the argument types, and a
 data-carrying argument (a grid-function scaling, a `SourceVector`) is never shared. The
 unshared arguments are not compared at all, so they may carry data: `⟨g₁u, v⟩ + ⟨g₂u, v⟩`
 becomes `⟨g₁u + g₂u, v⟩`. Each term's coefficient moves onto its own unshared argument,
@@ -267,15 +267,15 @@ coefficients still factor. Only products naming no component on either side fact
 rule never builds a component-mixing sum. `simplify_ast(::OperatorAdd)` searches the already
 simplified left operand for a summand sharing an argument with the right one
 (`_absorb`), so a left-deep sum of many terms factors every match, not only adjacent ones.
-Fewer products is fewer compiled terms: the 3D scalar form of 27 distinct `innerₕ` terms in
+Fewer products means fewer compiled terms. The 3D scalar form of 27 distinct `innerₕ` terms in
 `nterm-form.jl`, whose pairs share trial operators three at a time, compiles its first
 assemble in 6.6–6.7 s factored against 16.4–17.1 s unfactored (two interleaved runs each,
 2 threads).
 
 Scalar lifting matters beyond routing: `_same_operator_shape` (`symmetry.jl`) recognises
-`⟨L(u), L(v)⟩` — the same operator chain on both sides — structurally, by comparing the
+`⟨L(u), L(v)⟩`, the same operator chain on both sides, structurally, by comparing the
 concrete node types down both arguments. `innerₕ(2 * D₋ₓ(u), D₋ₓ(v))`'s trial side used to be
-an `OperatorScale` and its test side a bare `BackwardDifference` — different types, so the
+an `OperatorScale` and its test side a bare `BackwardDifference`. Those are different types, so the
 check answered `false` even though `2 * ⟨Lu, Lv⟩` is exactly the symmetric,
 positive-semidefinite shape it exists to recognise. Lifting the `2` out removes the mismatch.
 
@@ -284,12 +284,12 @@ product has no other way to assemble: `test_component_or_nothing`/
 `trial_component_or_nothing` (`block_extract.jl`) *throw* when the two sides of a sum they
 walk into name different components, since the router needs exactly one block (or none) per
 routed term and a mixed sum inside one product answers neither. Distributing it into two
-clean products, each naming one component, is the only routing-safe shape — so unlike every
+clean products, each naming one component, is the only routing-safe shape. So, unlike every
 other rule here, this one can turn a single sweep back into two. It is guarded accordingly: a
 same-component sum (`v(1) + D₋ₓ(v(1))`, or no component at all) is left as the single term it
 already is, and only fires when the two sides actually disagree.
 
-That guard — call it `_mixes_components(a, b)` — has to be checked again wherever an
+That guard, `_mixes_components(a, b)`, has to be checked again wherever an
 `OperatorAdd` could end up hidden inside an `OperatorScale`/`GridFunctionScale` wrapper,
 because hiding one there reintroduces exactly the unroutable shape: `2 * (A + B)` for `A`/`B`
 naming different components would throw at assembly the same way the un-lifted `innerₕ(fₕ, v(1)
@@ -306,11 +306,11 @@ form, every block a composite form's term routes to, and one unit for a transpos
 ⟨Au, Bv⟩ + ⟨Bu, Av⟩ (`_pair_plan`, `symmetry.jl`). `_foreach_unit` (`bilinear_execution.jl`)
 enumerates the units in the order the replay consumes segments. Before the first fill each
 unit is walked once by `_coord_walk!` (`bilinear_pattern.jl`), in two passes over one sink
-type (`_CoordSink`): a counting pass sizes the coordinate vectors and fills the unit's
+type (`_CoordSink`). A counting pass sizes the coordinate vectors and fills the unit's
 `point_ptr`, a filling pass writes every entry's `(row, col)`, and for a pair also the
 transposed entry `(col + dr, row + dc)` its second term writes. Those coordinates are the
 sparsity pattern (`sparse!`, keeping `I`/`J`), and, searched in the new matrix, the replay
-positions: one `Segment` per unit. For a `SparseMatrixCSC` under `CpuSerial`,
+positions, one `Segment` per unit. For a `SparseMatrixCSC` under `CpuSerial`,
 `allocate_system_matrix` stores that recording in `form.cache`, so the first fill of
 `assemble` is already the replay. Any other `A` records the same way on its first
 `assemble!`.
@@ -351,12 +351,10 @@ the εc warm ratio is ≤ 0.90, the scalar warm ratio ≤ 1.02 and both first-as
 | εc, 3D         | 1.133 (7.07 s → 8.01 s)     | 0.907 (3.64 ms → 3.30 ms)     |
 | scalar, 2D     | 0.994                       | 0.995                         |
 
-Decision: not adopted.
-
-It fails on εc first assembly (13.3% slower) and, narrowly, on εc warm assembly (9.3%
-faster, short of 10%). Compile cost rose because term-outer units of equal type share one
-compiled kernel, and grouping gives each group
-its own sweep and member preparation, breaking that sharing. The warm gain of about 9% is
+The decision is not to adopt it. It fails on εc first assembly (13.3% slower) and narrowly
+on εc warm assembly (9.3% faster, short of 10%). Compile cost rose because term-outer units
+of equal type share one compiled kernel. Grouping gives each group its own sweep and member
+preparation, which breaks that sharing. The warm gain of about 9% is
 well below the ~50% duplicated share, so most of that share is not recovered by evaluating
 the operand stencils once. The replay stays term-outer, one unit at a time as described in
 [One setup walk per term](@ref), and the prototype was not merged.
@@ -364,7 +362,7 @@ the operand stencils once. The replay stays term-outer, one unit at a time as de
 ## The matrix-type seam (S1.1)
 
 Assembly used to name `SparseMatrixCSC` in every signature between `allocate_system_matrix`
-and the sinks that scatter into it — 20 methods across `bilinear_execution.jl` alone. The
+and the sinks that scatter into it, 20 methods across `bilinear_execution.jl` alone. The
 milestone that made a `Matrix{Float64}` backend assemble the same values as CSC
 ([gpena/Bramble.jl#12](https://github.com/gpena/Bramble.jl/issues/12)) narrowed that down to
 four primitives, each with a `SparseMatrixCSC` method and a generic `AbstractMatrix`
@@ -406,8 +404,8 @@ rather than silently. Threading a non-CSC backend is future work.
 
 `test/form/bilinear.jl`'s "Dense backend" testset is the regression check: a
 `backend(matrix_type = Matrix{Float64})` mesh assembles to a `Matrix{Float64}` equal to the
-default CSC assembly, with and without `dirichlet`/`symmetrize!`, and `assemble!` refills it
-— while the CSC path's own `assemble!` keeps allocating zero bytes.
+default CSC assembly, with and without `dirichlet`/`symmetrize!`, and `assemble!` refills it,
+while the CSC path's own `assemble!` keeps allocating zero bytes.
 
 ## The extension contract
 
@@ -464,7 +462,7 @@ Pages = [
 ]
 ```
 
-### `DiracSource`, bandwidth analysis and structural properties
+### Point sources, bandwidth analysis and structural properties
 
 `DiracSource` is filtered out of the block above since its docstring's `@ref`s point here
 rather than the autodocs entry. `issymmetric(::BilinearForm)`/`isposdef(::BilinearForm)`

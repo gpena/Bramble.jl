@@ -6,8 +6,7 @@ using Bramble: normal_vector
 using LinearAlgebra: dot
 using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
 
-# The outward normal, as a discrete grid function and as a symbol inside a form
-# (gpena/Bramble.jl#213).
+# The outward normal, as a discrete grid function and as a symbol inside a form.
 #
 # Every assertion here is against an analytically known flux -- an edge length, a sign, the
 # divergence theorem -- rather than against a second call to the same code. The sign
@@ -43,8 +42,8 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
     @testset "dot(F, η) carries the outward sign" begin
         Ωₕ = mesh(Ω, (9, 8), (true, true))
         Wₕ = gridspace(Ωₕ)
-        # F = (1, 0): the flux is +1 through :xmax, -1 through :xmin, and 0 through the two y
-        # faces, each times the length of the edge, which is 1 here
+        # F = (1, 0), so the flux is +1 through the x-max face, -1 through the x-min face, and 0
+        # through the two y faces, each times the length of the edge, which is 1 here
         F = (x -> 1.0, x -> 0.0)
         ones_ = Rₕ(Wₕ, x -> 1.0)
         flux(markers) = dot(

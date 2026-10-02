@@ -16,7 +16,7 @@
 # u_{\text{exact}}``. This is deliberately *not* a trigonometric solution such as
 # ``\sin(\pi x)\sin(\pi y)``: on a uniform grid that happens to be (very nearly) a single
 # eigenmode of the discrete Laplacian, which both plain and preconditioned CG then solve in a
-# handful of iterations regardless of mesh size -- a measurement made once already, that
+# handful of iterations regardless of mesh size. A measurement made once already did exactly that: it
 # looked like a working comparison and said nothing about the preconditioner at all.
 # ``e^{x+y}`` excites the discrete spectrum broadly, so the iteration counts below reflect
 # the operator's actual conditioning.
@@ -24,8 +24,8 @@
 # ## Why this needs a preconditioner at all
 #
 # The condition number of the assembled Laplacian scales as ``\mathcal{O}(h^{-2})``, so an
-# unpreconditioned Krylov method needs ``\mathcal{O}(h^{-1})`` iterations -- doubling, very
-# roughly, every time the mesh is refined by a factor of two. Algebraic multigrid builds a
+# unpreconditioned Krylov method needs ``\mathcal{O}(h^{-1})`` iterations, doubling very
+# roughly every time the mesh is refined by a factor of two. Algebraic multigrid builds a
 # coarse-grid hierarchy directly from the graph of the assembled matrix and gives a Krylov
 # method grid-independent, ``\mathcal{O}(1)`` iterations instead. [`amg_preconditioner`](@ref)
 # wraps [AlgebraicMultigrid.jl](https://github.com/JuliaLinearAlgebra/AlgebraicMultigrid.jl)'s
@@ -38,7 +38,7 @@
 # the matching *column* is left alone, so the assembled matrix is not exactly symmetric even
 # though the underlying operator is. Passing `symmetrize = true` to the two-form
 # [`assemble`](@ref) (or to [`linear_problem`](@ref)/`solve` below) restores that symmetry by
-# folding the removed columns into the right-hand side -- do this before handing the matrix to
+# folding the removed columns into the right-hand side. Do this before handing the matrix to
 # AMG, not after.
 
 using Bramble
@@ -73,7 +73,7 @@ issymmetric(A)
 
 # ## Three ways to solve it
 #
-# **Direct**: `A \ F`, a sparse `LU`/`Cholesky` factorization -- exact up to round-off, and
+# **Direct**: `A \ F`, a sparse `LU`/`Cholesky` factorization. It is exact up to round-off, and
 # perfectly fine at this size.
 
 u_direct = A \ F
@@ -100,7 +100,7 @@ sol_amg.iters
 
 # The same three lines collapse into one call through [`linear_problem`](@ref)'s companion
 # `solve(a::BilinearForm, l::LinearForm; ...)`, which assembles, solves and unwraps the result
-# to a [`VectorElement`](@ref) directly -- `preconditioner = :amg` reaches
+# to a [`VectorElement`](@ref) directly. `preconditioner = :amg` reaches
 # [`amg_preconditioner`](@ref) internally, so there is nothing to build by hand:
 
 uₕ = solve(a, l; dirichlet = bcs, symmetrize = true, solver = KrylovJL_CG(), preconditioner = :amg)
@@ -136,8 +136,8 @@ for (n, p, m) in zip(ns, plain_iters, amg_iters)
     println("n = $(lpad(n, 3))   plain CG = $(lpad(p, 4))   AMG-CG = $(lpad(m, 3))")
 end
 
-# `plain CG` roughly doubles at each refinement -- the `O(h^-1)` growth the condition number
-# predicts -- while `AMG-CG` stays within a handful of iterations across a 64-fold increase in
+# `plain CG` roughly doubles at each refinement, the `O(h^-1)` growth the condition number
+# predicts, while `AMG-CG` stays within a handful of iterations across a 64-fold increase in
 # degrees of freedom.
 
 #-
@@ -148,3 +148,13 @@ end
 @test maximum(amg_iters) - minimum(amg_iters) <= 6                                           #src
 @test all(<=(15), amg_iters)                                                                 #src
 @test plain_iters[end] > 8 * amg_iters[end]                                                  #src
+
+# ## Where to go next
+#
+#   - [Choosing a solver](@ref tutorial_solvers) compares the direct and Krylov solvers
+#     and the preconditioners this page uses, and [Solvers by problem](@ref
+#     tutorial_solvers_by_problem) says which to reach for on which kind of problem.
+#   - [Linear Poisson](poisson_linear.md) solves a similar Dirichlet problem with the
+#     default direct solve.
+#   - The [matrix-free operator](matrix_free_operator.md) page applies a form without
+#     assembling the matrix, which is the other way to save memory on a large system.

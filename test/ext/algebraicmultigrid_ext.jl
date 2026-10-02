@@ -8,7 +8,7 @@ using LinearSolve: KrylovJL_CG
 using LinearAlgebra: norm, issymmetric, ldiv!
 
 # BrambleAlgebraicMultigridExt: `amg_preconditioner` builds the AMG hierarchy
-# (solvers/amg_preconditioner.jl explains the underscored-fallback idiom), and
+# (solvers/amg_preconditioner.jl explains the `_`-prefixed fallback idiom), and
 # `BrambleSciMLExt`'s `preconditioner = :amg` reaches the same hierarchy, wrapped by
 # `AlgebraicMultigrid.aspreconditioner`, through `solve`. What is checked here: the
 # hierarchy from a plain matrix and from a `BilinearForm` agree, `aspreconditioner` of the

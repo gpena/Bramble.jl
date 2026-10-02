@@ -5,7 +5,7 @@ using Test, Bramble
 # A public name (exported or declared `public`) is only reachable in the built manual if
 # some `@docs` or `@autodocs` block lists it. Documenter's own `missing_docs` check tests
 # the wrong side of this gap: it verifies a docstring exists in *source*, not that any page
-# includes it (gpena/Bramble.jl#314). `host_weights` and `metal_sparse_csr`/`metal_sparse_csc`
+# includes it. `host_weights` and `metal_sparse_csr`/`metal_sparse_csc`
 # carried real docstrings and were still unreachable, and a `[`name`](@ref)` to one of them
 # fails the docs build with "Cannot resolve @ref" rather than rendering nowhere quietly.
 #

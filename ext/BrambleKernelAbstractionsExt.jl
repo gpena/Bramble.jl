@@ -1,19 +1,17 @@
-# ext/BrambleKernelAbstractionsExt.jl: the home for every device kernel in Bramble
-# (gpena/Bramble.jl#174, S0.1 of .agents/plans/metal-and-apple-silicon-acceleration.md).
+# ext/BrambleKernelAbstractionsExt.jl: the home for every device kernel in Bramble.
 #
-# Every `@kernel` the rest of the milestone writes lives here, and every one of them is
+# Every `@kernel` lives here, and every one of them is
 # written against `KernelAbstractions.Backend` alone -- never against `Metal.MtlVector` or
 # any other concrete device array type. That is what makes them GPU-agnostic: a new GPU
 # backend (CUDA, ROCm, oneAPI, ...) inherits every kernel in this file for free, simply by
 # supplying one `ka_device` method (`src/utils/device_kernels.jl`) that names its own
 # `KernelAbstractions.Backend`. `BrambleMetalExt` does exactly that for `Metal.MtlVector`.
 #
-# KernelAbstractions' own CPU backend is out of scope on purpose (#174 criterion (c) --
-# see `.agents/plans/ka-cpu-measurement.md`): the CPU sweeps in
+# KernelAbstractions' own CPU backend is out of scope on purpose: the CPU sweeps in
 # `src/utils/linear_algebra.jl` stay `@simd`/`Threads.@threads`/`Polyester.@batch`, untouched
 # by this file.
 #
-# S2.1 (gpena/Bramble.jl#94, #174): mesh coordinate kernels. Every kernel below fills a
+# Mesh coordinate kernels. Every kernel below fills a
 # device-backed `Mesh1D` vector (`pts`, `half_pts`, `spacings`, `half_spacings`, or the
 # refined-points buffer) with exactly the arithmetic the CPU loop in `src/mesh/mesh1d.jl`
 # already performs -- with one deliberate exception: every `* 0.5` becomes `/ 2`, since a
@@ -61,8 +59,7 @@ import Bramble:
                 ka_synchronize
 
 # ---------------------------------------------------------------------------
-# Fused uniform mesh init (gpena/Bramble.jl#303, S9 of
-# .agents/plans/v3-4-0-device-quirks-and-kernels.md): one kernel over `1:(n + 1)` fills
+# Fused uniform mesh init: one kernel over `1:(n + 1)` fills
 # points, spacings, half points and half spacings together, replacing a uniform point fill
 # plus the three sequential launches below (`_launch_spacing!`, `_launch_half_points!`,
 # `_launch_half_spacing!`) for a uniform device mesh. Every entry is closed-form arithmetic
@@ -157,8 +154,7 @@ function _launch_half_spacing!(x::AbstractVector, h, n::Int, dev)
 end
 
 # ---------------------------------------------------------------------------
-# Fused non-uniform mesh metrics (gpena/Bramble.jl#305, S10 of
-# .agents/plans/v3-4-0-device-quirks-and-kernels.md): one kernel over `1:(n + 1)` work
+# Fused non-uniform mesh metrics: one kernel over `1:(n + 1)` work
 # items fills `spacings`, `half_pts` and `half_spacings` together from `pts` alone,
 # replacing the three sequential launches above (`_launch_spacing!`, `_launch_half_points!`,
 # `_launch_half_spacing!`) for a non-uniform device mesh. Each thread reads only its own
@@ -235,7 +231,7 @@ function _launch_refine_indices!(new_points::AbstractVector, old_points, N_old::
 end
 
 # ---------------------------------------------------------------------------
-# S2.3 (gpena/Bramble.jl#94, #174): the `GpuPolicy` device sweep seam
+# The `GpuPolicy` device sweep seam
 # (`src/utils/linear_algebra.jl`), and the two operators that evaluate a
 # user-supplied function on the device -- `Rₕ!` (`src/operators/restriction.jl`) and
 # `avgₕ!` (`src/operators/cell_average.jl`).
@@ -271,10 +267,9 @@ end
 
 # --- the generic `_sweep_for!`/`_sweep_scatter_for!` seam ------------------ #
 #
-# `_sweep_for!`/`_sweep_scatter_for!` (`src/utils/linear_algebra.jl`, gpena/Bramble.jl#298)
+# `_sweep_for!`/`_sweep_scatter_for!` (`src/utils/linear_algebra.jl`)
 # check locality before reaching here: only a `DeviceLocality` destination paired with a
-# `GpuPolicy` dispatches to `_gpu_for!`/`_gpu_scatter_for!` below, which keep their own names
-# and signatures -- the rename only touched the seam above them.
+# `GpuPolicy` dispatches to `_gpu_for!`/`_gpu_scatter_for!` below.
 
 @kernel function _generic_for_kernel!(v, @Const(idxs), f)
     i = @index(Global)
@@ -309,7 +304,7 @@ function _gpu_scatter_for!(policy, mats::Tuple, idxs, g)
     return nothing
 end
 
-# --- the marker index list of a masked projection (gpena/Bramble.jl#297) ----------------- #
+# --- the marker index list of a masked projection ----------------- #
 #
 # Every projection kernel below takes one more top-level argument, `sel`: `nothing` for an
 # unmasked call, or a device `Int32` vector holding the linear grid indices of the marked
@@ -356,10 +351,9 @@ function _launch_restriction_scatter!(mats::Tuple, pts::AbstractVector, f, dev, 
     return nothing
 end
 
-# `D >= 2` counterparts (gpena/Bramble.jl#94, #174, S2.3): `pts` is a `Tuple` of `D`
+# `D >= 2` counterparts: `pts` is a `Tuple` of `D`
 # per-axis coordinate vectors (`points(Ωₕ::MeshnD)`), passed whole as one top-level kernel
-# argument -- `Adapt.jl` converts a `Tuple` of arrays element-wise, confirmed against a
-# real Metal device while designing this, unlike a struct nesting the same arrays. `idxs`
+# argument -- `Adapt.jl` converts a `Tuple` of arrays element-wise, unlike a struct nesting the same arrays. `idxs`
 # (`indices(Ωₕ)`) is a bits `CartesianIndices`, so `idxs[i]` and `pts[d][I[d]]` are both
 # ordinary arithmetic, not scalar array indexing. `f` still receives an `NTuple{D}`, per
 # `Rₕ!`'s own docstring.
@@ -472,131 +466,64 @@ end
 # --- Difference, jump and average operators (src/operators/difference.jl and
 # src/operators/average.jl are the CPU originals) ---------------------------------- #
 #
-# S2.4 (gpena/Bramble.jl#94, #174): `jump.jl` needs nothing of its own here -- `jump_dim!`/
-# `jump!` forward straight into `forward_difference_dim!`/`forward_difference!`, so the
-# one-sided launcher below already covers it.
+# `jump.jl` needs nothing of its own here: `jump_dim!`/`jump!` forward straight into
+# `forward_difference_dim!`/`forward_difference!`, so the one-sided launcher below already
+# covers it.
 #
-# Revised by S12 (gpena/Bramble.jl#306, #302): through S11 every kernel here built a
-# `CartesianIndex` via `@index(Global, Cartesian)`, then converted it back to a linear index
-# with `LinearIndices(dims)` -- once for the point itself, once more for its neighbour -- and
-# branched on `I[DIM]` with a data-dependent `if`/`elseif`, which is exactly the boundary
-# divergence #306 measured splitting Metal's memory transactions and dropping bus throughput
-# from ~74 GB/s to ~18 GB/s. Every kernel below instead launches over a flat linear
-# `ndrange = length(out)`, takes the *scalar* stride along `DIM` (`_axis_stride`, computed
-# once on the host before the launch, from `dims` and `DIM` -- both compile-time `Val`s, so
-# the loop inside it unrolls to nothing at runtime) and derives the point's own coordinate
-# along `DIM` from one `fld`/`mod` pair, never a `CartesianIndex`. The boundary test becomes
-# one index comparison, and the branch itself is replaced by `ifelse` (a predicated select,
-# not a divergent instruction stream): both the interior and boundary values are computed
-# unconditionally -- reading a clamped, always-in-bounds neighbour index when the true one
-# would fall off the grid -- and `ifelse` picks the one that matters. Every SIMD-group thread
-# now runs the identical instruction sequence regardless of where it sits on the grid.
+# Every kernel here launches over a flat linear `ndrange = length(out)`. It takes the
+# *scalar* stride along `DIM` (`_axis_stride`, computed once on the host before the launch
+# from `dims` and `DIM`, both compile-time `Val`s) and derives the point's own coordinate
+# along `DIM` from one `fld`/`mod` pair, never a `CartesianIndex`. The boundary test is one
+# index comparison, and the branch is an `ifelse` (a predicated select, not a divergent
+# instruction stream): both the interior and boundary values are computed unconditionally,
+# reading a clamped, always-in-bounds neighbour index when the true one would fall off the
+# grid, and `ifelse` picks the one that matters. A data-dependent `if` on the axis
+# coordinate splits Metal's memory transactions at the boundary, so every SIMD-group thread
+# runs the identical instruction sequence regardless of where it sits on the grid.
 #
-# Every kernel still calls the very `Bramble._compute_difference`/`Bramble._compute_average`
+# Every kernel calls the very `Bramble._compute_difference`/`Bramble._compute_average`
 # methods the CPU sweep calls, so the device and host answers stay identical by construction
-# for every family except the two named in the reciprocal-spacing note below. `h` arrives
-# already resolved to either `nothing` or a plain top-level array by
-# `Bramble._resolve_device_spacing` (`difference.jl`): never the `StarSpacings` wrapper,
-# which -- like any struct nesting a device array -- fails kernel compilation.
+# for every family except the reciprocal-spacing case below. `h` arrives already resolved to
+# either `nothing` or a plain top-level array by `Bramble._resolve_device_spacing`
+# (`difference.jl`), never the `StarSpacings` wrapper, which, like any struct nesting a
+# device array, fails kernel compilation.
 #
-# --- Threadgroup shape, measured and rejected -------------------------------------------
+# --- Launch shape ------------------------------------------------------------------------
 #
-# The stride/branch-free rewrite above leaves this kernel at ~20% of the 73.5 GB/s Metal
-# peak (measured on a 3000x3000 mesh: ~4.9 ms on a uniform mesh, ~4.67 ms on the non-uniform
-# one `benchmark/gpu_stencils.jl`'s own workgroup-shape section reruns) with the GPU busy
-# essentially the whole wall-clock time -- not launch overhead, and not (per the device-side
-# profile) idle time either, so #306/#302's own remaining proposal was worth checking:
-# "configure threadgroups for optimal SIMD coalescing (e.g. (16, 16) or (32, 8))". Measured
-# directly, `Metal.@bprofile` device-side busy time, three repeated in-process runs, same
-# non-uniform 3000x3000 case:
+# The flat `ndrange` with the default `workgroupsize` is the shipped launch. An explicit
+# `workgroupsize` of 256, 512 or 1024 measures the same, and a 2D `ndrange = dims` with
+# `workgroupsize` (16, 16), (32, 8) or the default is about 1.8x slower on Metal. `@index(Global)`
+# under a 2D `ndrange` returns the same column-major linear index a flat `ndrange` gives, so
+# only the launch differs. `benchmark/gpu_stencils.jl` reruns the workgroup-shape comparison.
 #
-#   flat `ndrange = length(out)`, default workgroupsize (shipped):  ~4.67 ms/launch
-#   flat `ndrange = length(out)`, explicit workgroupsize 256/512/1024: ~4.67 ms/launch (no
-#     measurable difference from the default -- KernelAbstractions' own choice already
-#     matches whatever these three do)
-#   2D `ndrange = dims`, workgroupsize (16, 16):  ~8.53 ms/launch (1.8x SLOWER)
-#   2D `ndrange = dims`, workgroupsize (32, 8):   ~8.49 ms/launch (1.8x SLOWER)
-#   2D `ndrange = dims`, default workgroupsize:   ~8.57 ms/launch (1.8x SLOWER)
+# --- 32-bit index arithmetic -------------------------------------------------------------
 #
-# All three were stable to <0.01 ms across the three runs -- not noise. `@index(Global)`
-# under a 2D `ndrange` was confirmed separately to return the identical column-major linear
-# index a flat `ndrange` gives (so the flat-index stride arithmetic above did not have to
-# change to try this; only the launch's `ndrange`/`workgroupsize` did), which rules out a
-# correctness difference explaining the gap -- both shapes were checked against the CPU
-# reference and agree to the same tolerance. The 2D dispatch is simply slower on this
-# device: shipped stays the flat `ndrange`, default `workgroupsize`, exactly as it already
-# was before this was tried. #302's own hand-written 2D kernel measurement (293.5 us at
-# 1024x1024, predicting ~2.5 ms scaled to 3000x3000) does not reproduce here, on Metal.jl
-# 1.10 and this M2 -- reported as measured, not assumed.
+# Apple GPUs are 32-bit native, so the `i_dim = mod(fld(idx - 1, s), n) + 1` recovery is
+# done in `Int32`: `idx` is converted once at kernel entry, the launcher passes `n` and `s`
+# as `Int32` so nothing widens back inside the kernel, and the result is converted to `Int`
+# only where array indexing needs it. On a 3000x3000 non-uniform mesh this runs about four
+# times faster than the default `Int` (`Int64`) version and is bitwise identical to it. A plain
+# KernelAbstractions copy kernel of the same size shows that launch overhead and the flat
+# `@index(Global)` pattern are not the cost. `benchmark/gpu_stencils.jl` reruns the
+# comparison in its `_run_int32_index` section.
 #
-# --- 64-bit index arithmetic, the actual bottleneck the threadgroup-shape and reciprocal-
-#     spacing measurements above were both taken *underneath* --------------------------- #
+# A "fraction of peak" figure anywhere in this file or its benchmarks uses the peak measured
+# on this host (a plain KA copy kernel), not the hardware spec figure. Even that is a floor,
+# because a stencil whose neighbour reads overlap between adjacent threads can measure above
+# it when a read hits a cache line an adjacent thread already pulled. Read the ratios as how
+# close a kernel gets to what a copy achieves, not as a fraction of a DRAM ceiling.
 #
-# A control settles what the ~20%-of-peak figure above means: a plain KernelAbstractions
-# copy kernel, same element count, same flat `ndrange`, same `@index(Global)` pattern,
-# reaches ~98% of this machine's own measured ceiling (a KA copy kernel here: 72.35 GB/s,
-# not #306's 73.5 GB/s Metal spec figure -- see the note on percentages below). So neither
-# kernel launch overhead nor KA's indexing pattern in general explains the gap: the copy
-# kernel pays the same overhead and still saturates. The one thing the difference kernel
-# does that the copy kernel does not is recover the axis coordinate from the flat index
-# with `i_dim = mod(fld(idx - 1, s), n) + 1` -- one integer division and one modulo, every
-# thread, every launch -- and `idx`, `s`, `n` are all Julia's default `Int` (`Int64`).
-# Apple GPUs are 32-bit-native; Metal.jl 1.10 shipping `UInt16` variants of every thread-
-# and grid-indexing intrinsic, and gpena/Bramble.jl#319 independently arguing for `Int32`
-# sparse indices on this same hardware, are both symptoms of the same fact: 64-bit integer
-# division on this hardware is not native-width arithmetic.
+# --- Reciprocal spacing ------------------------------------------------------------------
 #
-# Measured directly (three repeated `Metal.@bprofile` device-side-busy-time runs, same
-# non-uniform 3000x3000 case, `D₋ₓ!`): doing the *exact same* `fld`/`mod` recovery in
-# `Int32` instead of `Int64` -- convert `idx` once at kernel entry, take `n`/`s` in as
-# `Int32` from the launcher so nothing widens back inside the kernel, convert the *result*
-# back to `Int` only where array indexing needs it -- took the kernel from 4.67-5.00 ms/launch
-# to 1.155-1.203 ms/launch, stable to within 0.05 ms across two of the three runs (the first
-# run's outlier reads as compile/warm-up noise inside the profiling window, matching the
-# pattern seen elsewhere in this file). Two diagnostics taken first, to make sure the right
-# thing was being isolated before reaching for this fix: a scalar-`h`/no-index-recovery
-# variant (not shippable -- boundary correctness dropped on purpose) reached 0.77-0.87 ms,
-# and a full-size reciprocal array read directly by the flat index, no div/mod at all
-# (also a diagnostic: it does not amortise a per-launch construction cost, measured
-# separately at 1.2-3.7 ms and unstable run to run -- rejected for that reason) reached
-# 1.16 ms. The `Int32` fix lands in between the two diagnostics, with none of either one's
-# downsides: no extra array, no extra memory traffic, no per-launch construction to pay for,
-# and the same win on every axis (`DIM = 1`, `2` or `3`) rather than only the cheap one.
-# Correctness: bitwise identical to the `Int64` version on the same input (`max|Δ| = 0.0`),
-# and within `rtol = 1f-5` of the CPU reference, exactly as the `Int64` version was.
-#
-# `benchmark/gpu_stencils.jl`'s own `_run_int32_index` section reruns this comparison.
-#
-# One reading note, since a percentage invites misreading it as an absolute: the "fraction
-# of peak" figures anywhere in this file or its benchmarks use whichever peak was measured
-# on THIS host (a plain KA copy kernel, ~72.35 GB/s), not the 73.5 GB/s Metal hardware
-# spec figure #306 quotes -- and even that is a floor, not a ceiling: a kernel whose
-# neighbour reads overlap between adjacent threads (as every stencil's do) can measure
-# *above* either figure, because some of those reads hit a cache line an adjacent thread
-# already pulled rather than round-tripping DRAM. Read the ratios in this file as "how much
-# closer to what a copy achieves", not as a literal fraction of an DRAM bandwidth ceiling.
-#
-# --- Reciprocal spacing (gpena/Bramble.jl#306 item 4) ------------------------------------
-#
-# Measured before the `Int32` fix above (so under a much larger, now-removed constant
-# factor): once the stride/branch-free rewrite is in place, a per-thread
-# `(cur - other) / h[i_dim]` against `(cur - other) * invh[i_dim]` -- `invh` a bulk
-# `inv.(h)` computed once, up front -- gave a stable 1.03x, small because the `Int64`
-# div/mod dominated everything else at the time. Kept after the `Int32` fix regardless: it
-# is still strictly cheaper (one multiply against one divide, same memory traffic, same
-# array, no new state), so there is no reason to divide once multiplying by a fresh
-# reciprocal is already correct and in place. `invh` is recomputed fresh, once per launch,
-# from whatever `h` this call was given (`_reciprocal_spacing` below), never cached on the
-# mesh across calls, for the reasons given at S12's `inv_spacings` design note (`h` is a
-# per-*axis* array, and a mesh-level cache would not reach `D₊`'s or `Dc`'s `h` either,
-# which are not the mesh's own cached `spacings` field).
-#
-# Applied to the two families #302/#306 actually measured as bottlenecks (`D₋ₓ`/`D₊ₓ`, the
-# one-sided finite differences, and `Dcₓ`, `Centered`): `CrossWeighted` (`D̽`) reads two
-# distinct raw spacings and combines them in a weighted average that is not a single
-# reciprocal multiply, so its interior branch keeps calling `_compute_difference` unchanged
-# (still a division, functionally identical to before this file) -- it still gets the
-# `Int32` fix, independent of this choice. The average engine has no spacing at all (it
+# The one-sided differences (`D₋ₓ`/`D₊ₓ`) and `Centered` (`Dcₓ`) multiply by a reciprocal,
+# `(cur - other) * invh[i_dim]`, rather than dividing by `h[i_dim]`: one multiply instead of
+# one divide, same memory traffic. `invh` is a bulk `inv.(h)` recomputed fresh, once per
+# launch, from whatever `h` the call was given (`_reciprocal_spacing` below), and never
+# cached on the mesh: `h` is a per-*axis* array, and a mesh-level cache would not reach
+# `D₊`'s or `Dc`'s `h`, which are not the mesh's own cached `spacings` field.
+# `CrossWeighted` (`D̽`) reads two distinct raw spacings and combines them in a weighted
+# average that is not a single reciprocal multiply, so its interior branch keeps calling
+# `_compute_difference` (still a division). The average engine has no spacing at all (it
 # divides by the literal constant 2) and needs none of this.
 # ---------------------------------------------------------------------------
 
@@ -604,8 +531,7 @@ end
 @inline _reciprocal_spacing(h::AbstractVector) = inv.(h)
 
 # The linear stride along axis `DIM` of a column-major `dims::NTuple{D,Int}` array: 1 for
-# `DIM == 1`, `dims[1]` for `DIM == 2`, `dims[1] * dims[2]` for `DIM == 3` -- exactly the
-# formula #306's proposal 2 gives. `D` and `DIM` are both `Val`s here, so this loop unrolls
+# `DIM == 1`, `dims[1]` for `DIM == 2`, `dims[1] * dims[2]` for `DIM == 3`. `D` and `DIM` are both `Val`s here, so this loop unrolls
 # to a handful of multiplications at compile time; it runs once on the host before a launch,
 # never per thread inside a kernel. Returned as `Int32` directly (see the file-level note
 # above): every kernel below takes `n`/`s` already narrowed, so nothing widens them back.
@@ -770,7 +696,7 @@ function _launch_average_engine!(out::AbstractVector, in_ref, dims::Tuple, dir, 
     return nothing
 end
 
-# --- Row-parallel SpMV/SpMM for a device CSR matrix (gpena/Bramble.jl#250, #174, S3.2) -- #
+# --- Row-parallel SpMV/SpMM for a device CSR matrix -- #
 #
 # `BrambleMetalExt`'s `mul!` methods for `MetalSparseMatrixCSR` call `_launch_spmv_csr!`/
 # `_launch_spmm_csr!` with the matrix's raw `rowPtr`/`colVal`/`nzVal` arrays -- never the
@@ -801,7 +727,7 @@ function _launch_spmv_csr!(y::AbstractVector, rowPtr, colVal, nzVal, x::Abstract
     return nothing
 end
 
-# Dirichlet rows of a device CSR matrix (gpena/Bramble.jl#361): `_dirichlet_bc_device!`
+# Dirichlet rows of a device CSR matrix: `_dirichlet_bc_device!`
 # (`src/assembly/dirichlet_constraints.jl`) hands over the raw arrays and the constrained
 # rows, already checked there to store their diagonal where they have a diagonal column (a
 # row past the last column matches no `colVal` and is only zeroed). One work item per
@@ -828,8 +754,8 @@ function _launch_dirichlet_rows_csr!(rowPtr, colVal, nzVal, rows::Vector)
     return nothing
 end
 
-# `KroneckerLinearOperator` `mul!` as one fused kernel (gpena/Bramble.jl#323,
-# `src/assembly/kronecker.jl`). One work item per entry `g` of `y`: it recovers its grid index
+# `KroneckerLinearOperator` `mul!` as one fused kernel
+# (`src/assembly/kronecker.jl`). One work item per entry `g` of `y`: it recovers its grid index
 # from `dims`/`strides`, then sums every term's contribution -- the product of the term's
 # diagonal entries at that index times, for its one sparse factor (if any) on axis `e`, the
 # factor's row `i_e` against `x` along axis `e`, or `x[g]` itself for the mass term. Every
@@ -914,7 +840,7 @@ function _launch_spmm_csr!(C::AbstractMatrix, rowPtr, colVal, nzVal, B::Abstract
     return nothing
 end
 
-# --- Fused vector-calculus kernels (gpena/Bramble.jl#306, #302, S12 part 4) -------------- #
+# --- Fused vector-calculus kernels -------------- #
 #
 # `src/operators/vector_calculus.jl`'s CPU engines accumulate one spatial direction
 # (or, for the strain tensor's off-diagonal entries, one difference and the average composed
@@ -1225,39 +1151,30 @@ function _launch_fused_strain_offdiag!(
     return nothing
 end
 
-# --- Device-write synchronisation (gpena/Bramble.jl#94, S4.2; revised #302, #306, S11) -- #
+# --- Device-write synchronisation -- #
 #
-# Through S10, every launcher above called `synchronize(dev)` right after launching, so
-# each device kernel paid a host round-trip before the next one could even be enqueued --
-# exactly what `GpuKernel` (`src/utils/backend.jl`) claims not to do. S11 removes that call
-# from every launcher in this file: a kernel launch now only enqueues onto the device's own
-# command queue and returns, so a chain of them (`D₋ₓ` into `D₋ᵧ` into a sum, say) pipelines
-# instead of blocking after each step. Kernels enqueued on the same queue still run in that
-# queue's order, so one kernel reading what an earlier one wrote (the entire point of
-# chaining operators) needs no synchronisation between them -- only code that leaves the
-# queue and touches the array some other way needs a barrier first.
+# No launcher above calls `synchronize(dev)` after launching: a kernel launch only enqueues
+# onto the device's own command queue and returns, so a chain of them (`D₋ₓ` into `D₋ᵧ` into
+# a sum, say) pipelines instead of blocking after each step. Kernels enqueued on the same
+# queue still run in that queue's order, so one kernel reading what an earlier one wrote
+# (the entire point of chaining operators) needs no synchronisation between them. Only code
+# that leaves the queue and touches the array some other way needs a barrier first.
 #
-# `GpuKernel` is the only `GpuPolicy` that exists today, and no `_launch_*!` here is ever
-# reached under anything else, so there is deliberately no policy argument threaded through
-# to branch on: adding one now would be conditional logic with nothing to condition on.
-# `ka_synchronize` below is that barrier, kept for the two kinds of caller that still need
-# one:
+# `GpuKernel` is the only `GpuPolicy` that exists, and no `_launch_*!` here is ever reached
+# under anything else, so no policy argument is threaded through to branch on.
+# `ka_synchronize` below is that barrier, for the two kinds of caller that need one:
 #
-#   - a genuine host boundary: converting a device array to a host one (`Array(...)`,
-#     `host_points`, ...), a host-side reduction or assertion, or anything else that reads
-#     the array outside the device's own command queue;
+#   - a genuine host boundary, such as converting a device array to a host one
+#     (`Array(...)`, `host_points`, ...), a host-side reduction or assertion, or anything
+#     else that reads the array outside the device's own command queue;
 #   - a write that reaches device memory through something other than a `@kernel` launch on
-#     that queue -- a plain `copyto!`, which queues a transfer exactly like a kernel launch
-#     does but is not itself one of the launches this file just stopped synchronising.
+#     that queue, such as a plain `copyto!`, which queues a transfer like a kernel launch
+#     does.
 #     `_flush_device_scatter!` and `_zero_stored!` (`src/assembly/bilinear_traversal.jl`) are
 #     this second kind: `_flush_device_scatter!` ends a device-resident matrix's assembly
-#     with `copyto!(A.nzVal, mirror.nzval)` and calls `ka_synchronize` right after, exactly
-#     as it already did before S11 -- that call was never one of the ones removed above, and
-#     it is what keeps `assemble`/`assemble!` from returning before the write lands (S4.2's
-#     race, found at `n = 513` over repeated assemblies, invisible at a small `CHECK` size).
-#     S11's own check script re-runs that exact shape at n = 513, 1025 and 2049 over 40
-#     assemblies each, since removing synchronisation elsewhere is precisely the change that
-#     could resurrect it if this file's other launchers were what had been masking it.
+#     with `copyto!(A.nzVal, mirror.nzval)` and calls `ka_synchronize` right after. That call
+#     keeps `assemble`/`assemble!` from returning before the write lands, a race that shows
+#     only at larger sizes over repeated assemblies.
 #
 # A host reduction is a boundary of the first kind without any extra call needed: `_dot`'s
 # device method (`src/utils/linear_algebra.jl`) is `sum(u .* v .* w)`, and fetching a

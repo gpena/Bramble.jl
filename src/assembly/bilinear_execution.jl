@@ -752,11 +752,11 @@ end
 
 # The threaded leaves: one unit swept band by band (`_sweep_bilinear!`), coloured by the
 # unit's own row reach. A unit whose rows are not a fixed reach from its point (a test-side
-# interpolation) is replayed on one thread instead, as the searching sweep does
+# interpolation) is replayed on one thread, as the searching sweep does
 # (`_sweep_bilinear_serial!`). A diagonal segment needs its own target type, so it gets its
-# own sweep instance; that branch exists in 1D only (`_diagonal_replay`). A unit whose leaf
-# cannot replay (`_leaf_replays`) searches instead, on the matrix, as the whole form did
-# before; the recording's other units still replay. `sp` is already a host-weights leaf
+# own sweep instance, in 1D only (`_diagonal_replay`). A unit whose leaf
+# cannot replay (`_leaf_replays`) searches instead, on the matrix. The recording's other
+# units still replay. `sp` is already a host-weights leaf
 # (`host_weights`, taken once per leaf by the unit walk), since a device leaf's weights
 # cannot be read point by point.
 @noinline function _replay_unit!(

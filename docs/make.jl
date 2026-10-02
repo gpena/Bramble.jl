@@ -14,7 +14,7 @@ using SciMLSensitivity
 include("generate_benchmarks.jl")
 generate_benchmarks_markdown()
 
-# Worked-example pages (gpena/Bramble.jl#117). Each one is written as a runnable script and the
+# Worked-example pages. Each one is written as a runnable script and the
 # markdown Documenter renders is generated from them here, so the page a reader sees and the
 # file the suite runs are the same file. Lines marked `#src` -- the assertions that make the
 # rendered numbers load-bearing -- are stripped on the way to markdown and kept when
@@ -46,9 +46,9 @@ end
 
 # `asyncmap` rather than a serial loop: harmless either way since `Literate.markdown` with
 # `documenter = true` only rewrites `.jl` syntax into `@example`-tagged markdown here, it
-# does not execute any of it (that happens later, inside `makedocs`, one page at a time) —
-# measured at ~1.7s total for all 8 files serially, so this is not where a slow build's time
-# goes (gpena/Bramble.jl#251), but there is no reason to keep it serial either.
+# does not execute any of it (that happens later, inside `makedocs`, one page at a time).
+# Serially it is cheap, so this is not where a slow build's time goes, but there is no
+# reason to keep it serial either.
 let dir = joinpath(@__DIR__, "src", "examples")
     asyncmap(LITERATE_EXAMPLES) do file
         Literate.markdown(
@@ -72,13 +72,18 @@ foundations = "Discrete foundations" => [
     "tutorials/geometry.md",
     "tutorials/mesh.md",
     "tutorials/space.md",
-    "tutorials/operators.md"
+    "tutorials/operators.md",
+    "tutorials/operator_accuracy.md",
+    "tutorials/interpolation.md"
 ]
 forms = "Forms and assembly" => [
-    "tutorials/form.md"
+    "tutorials/form.md",
+    "tutorials/coupled_systems.md"
 ]
 scientific = "Solvers and scientific computing" => [
     "tutorials/solvers.md",
+    "tutorials/solvers_by_problem.md",
+    "tutorials/time_stepping.md",
     "tutorials/autodiff.md",
     "tutorials/backend.md"
 ]
@@ -142,7 +147,7 @@ documentation = "Documentation" => [
 
 # Every new page needs `CurrentModule = Bramble` in its `@meta` block, or its page-level
 # `@ref`s resolve against `Main` and fail even when the docstring is included
-# (docs/src/internals/gpu.md hit this, gpena/Bramble.jl#314). Against `Main`, only exported
+# (docs/src/internals/gpu.md hit this). Against `Main`, only exported
 # names resolve: a name that is `public` but not exported fails there.
 #     ```@meta
 #     CurrentModule = Bramble
@@ -152,7 +157,7 @@ allpages = [home, getting_started, foundations, forms, scientific,
 
 makedocs(;
     format = Material3(;
-        # Arctic theme with a light/dark toggle (#355). MaterialDocs replaces Documenter's
+        # Arctic theme with a light/dark toggle. MaterialDocs replaces Documenter's
         # own HTML writer, so search, doctest and `@ref` handling are unchanged. Arctic
         # brings its own Inter and JetBrains Mono fonts, so no font asset is loaded here.
         theme = :arctic,
@@ -181,10 +186,10 @@ makedocs(;
     # docstring) is enforced in test/quality/exports.jl instead, where it has no false
     # positives. A broken `@ref` is always a real mistake, so that one is an error.
     warnonly = [:missing_docs],
-    # Decoupled (gpena/Bramble.jl#251): checked instead by test/quality/doctests.jl, in
+    # Checked instead by test/quality/doctests.jl, in
     # parallel with the rest of that group, rather than on every docs build. This only skips
     # Documenter's own separate "Doctest" pipeline stage (the handful of `@jldoctest` blocks
-    # in `src/`) — it does *not* skip executing the worked examples' `@example` blocks, which
+    # in `src/`). It does *not* skip executing the worked examples' `@example` blocks, which
     # "ExpandTemplates" always runs regardless of this setting and is where a slow build's
     # time actually goes.
     doctest = false

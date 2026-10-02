@@ -36,8 +36,8 @@ using ..TestUtils: alloc_test, @test_allocs
     end
 
     @testset "Geometric interior" begin
-        # The bug this closes: :interior used to mean "not :boundary", and a mesh with no
-        # :boundary key silently made that "true everywhere".
+        # The old bug was that `:interior` meant "not `:boundary`", and a mesh with no
+        # `:boundary` key silently made that "true everywhere".
         Ωₕ = mesh(domain(S, :bottom => :bottom), (4, 4), (true, true))
         Wₕ = gridspace(Ωₕ)
         u = Rₕ(Wₕ, x -> 1.0)
@@ -71,15 +71,15 @@ using ..TestUtils: alloc_test, @test_allocs
     end
 
     @testset "warn_marker_mismatch = false is silent" begin
-        # gpena/Bramble.jl#18: the warning has no way to tell "a mistake" from "the caller
-        # redefined the label on purpose" — this is that opt-out, checked in both directions
+        # The warning has no way to tell "a mistake" from "the caller
+        # redefined the label on purpose". This is that opt-out, checked in both directions
         # so it silences the warning without silently dropping the custom marker too.
         Ωₕ = @test_logs mesh(
             domain(S, :boundary => :left), (4, 4), (true, true); warn_marker_mismatch = false
         )
         @test sum(Bramble.markers(Ωₕ)[:boundary]) == 4   # the custom definition still wins
 
-        # The default stays warn-on-mismatch — false is opt-in, not a silent global change.
+        # The default stays warn-on-mismatch. false is opt-in, not a silent global change.
         @test_logs (:warn, r"boundary.*something other than") mesh(
             domain(S, :boundary => :left), (4, 4), (true, true)
         )
@@ -127,18 +127,17 @@ using ..TestUtils: alloc_test, @test_allocs
         # `Dict{Symbol, CartesianIndices}` per call just to iterate or index it once. Both
         # now query `boundary_symbol_to_cartesian`'s `NamedTuple` directly, so that lookup
         # itself is zero-allocation (checked below) and `_set_markers_symbols!` measures
-        # 832 B -> 0 B against the pre-#124 commit (43df4c0).
+        # 0 B.
         #
         # `_ensure_geometric_markers!` as a whole is NOT claimed zero: it still allocates
         # 192 B for this 8x8 mesh, two `BitVector`s' worth (`falses(npoints(Ωₕ))` for the
-        # boundary mask, `.!boundary_set` for its interior complement) -- unconditionally
-        # computed every call, whether or not :boundary/:interior turn out to already be
-        # registered. Measured directly (not from an isolated empty-dict call, which adds
+        # boundary mask and `.!boundary_set` for its interior complement), computed on every
+        # call whether or not the markers are already registered. Measured directly (not from an isolated empty-dict call, which adds
         # an unrelated ~368 B Dict-growth artifact never reachable through the public API,
-        # since `domain(X)` always pre-registers `:boundary`): this 192 B is unchanged by
-        # #124 and is unrelated to it -- a one-time mesh-construction cost, not a hot loop.
+        # since `domain(X)` always pre-registers `:boundary`): this 192 B is unrelated to
+        # the marker fill -- a one-time mesh-construction cost, not a hot loop.
         # Whether it can be cut further (writing the interior mask directly instead of
-        # negating a scratch copy) is a separate question from what #124 fixed.
+        # negating a scratch copy) is a separate question from the fill itself.
         Ωₕ = mesh(domain(S), (8, 8), (true, true))
         idxs = Bramble.indices(Ωₕ)
 
@@ -193,10 +192,11 @@ using ..TestUtils: alloc_test, @test_allocs
         @test Bramble.index_in_marker(Ωₕ_2d, :ym) == Bramble.index_in_marker(Ωₕ_2d, :b)
         @test Bramble.index_in_marker(Ωₕ_2d, :yp) == Bramble.index_in_marker(Ωₕ_2d, :t)
 
-        # 3D Domains: verify axis alignment and resolution of the 3D axis transposition ambiguity
-        # Axis 1 (x): :xmin <-> :back, :xmax <-> :front
-        # Axis 2 (y): :ymin <-> :left, :ymax <-> :right
-        # Axis 3 (z): :zmin <-> :bottom, :zmax <-> :top
+        # 3D Domains check axis alignment and resolve the 3D axis transposition ambiguity.
+        #
+        #     Axis 1 (x): `:xmin` <-> `:back`, `:xmax` <-> `:front`
+        #     Axis 2 (y): `:ymin` <-> `:left`, `:ymax` <-> `:right`
+        #     Axis 3 (z): `:zmin` <-> `:bottom`, `:zmax` <-> `:top`
         S3 = interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)
         Ωₕ_3d = mesh(
             domain(
@@ -308,7 +308,7 @@ end
     end
 end
 
-# `(x, t, p)` conditions fixed at a time and a parameter (gpena/Bramble.jl#240). The pairs go
+# `(x, t, p)` conditions fixed at a time and a parameter. The pairs go
 # straight to `_create_generic_markers`: `markers(space, pairs...)` would probe a three-argument
 # predicate with one argument and refuse it.
 @testset "Parameter-evaluated markers" begin

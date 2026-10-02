@@ -31,7 +31,7 @@
 # amplitude and the boundary ramp's rate -- are both unknown; five noisy point observations
 # of `u`, taken at five different times, are all that is given.
 #
-# ## Solving it
+# ## Discretisation and the initial condition
 
 using Bramble
 
@@ -60,7 +60,7 @@ u₀(κ) = begin
     v
 end
 
-# ## Solving forward
+# ## The forward solve
 #
 # `specialize = SciMLBase.FullSpecialize` is required, not optional, for
 # [`Bramble.adjoint_sensitivities`](@ref) to reach this trajectory afterwards: without it, the
@@ -77,9 +77,9 @@ function forward(κ, β)
     return solve(prob, FBDF(); abstol = 1e-9, reltol = 1e-9, saveat = ts)
 end
 
-# ## Synthetic observations
+# ## Observations along the trajectory
 #
-# Three interior points, the true trajectory there at each of the five times above plus a
+# As on [the steady page](inverse_diffusion.md), the observations are synthetic. Three interior points, the true trajectory there at each of the five times above plus a
 # small fixed perturbation standing in for measurement noise -- fixed rather than
 # `Random`-drawn, so the page renders the same numbers every build. Fifteen data points in
 # all (three points × five times), the "trajectory" the steady page's single-time-point
@@ -98,7 +98,7 @@ loss(κ, β) = begin
     )
 end
 
-# ## Gradient descent, driven by the adjoint
+# ## One backward solve, two gradients
 #
 # `using SciMLSensitivity` is what makes `BrambleSciMLSensitivityExt` define
 # [`Bramble.adjoint_sensitivities`](@ref), which reaches SciMLSensitivity's own adjoint
@@ -147,7 +147,7 @@ println("(κ, β) = ", (κ, β))
 @test isapprox(β, β_true; atol = 0.01)                                                #src
 @test loss(κ, β) < loss(0.2, 0.3)                                                     #src
 
-# ## Cost: one backward solve, for every parameter and every saved step at once
+# ## Cost: independent of parameter count and saved steps
 #
 # `∂J` above costs one forward solve plus one backward (adjoint) solve, regardless of how
 # many parameters `κ`/`β` were together, and regardless of how many points `ts` saves the
@@ -158,10 +158,12 @@ println("(κ, β) = ", (κ, β))
 # one solve per parameter, and checkpointing costs would grow with the number of saved steps
 # for a naive discrete adjoint.
 #
-# ## See also
+# ## Where to go next
 #
 #   - [`Bramble.adjoint_sensitivities`](@ref) and [`ode_problem`](@ref) in the
 #     [API reference](../api_sciml.md).
 #   - [Recovering a diffusion coefficient](inverse_diffusion.md) for the steady-state adjoint
 #     this extends.
 #   - [Heat equation](heat_equation.md) for the forward transient problem this inverts.
+#   - [Automatic differentiation](../tutorials/autodiff.md) for the differentiation tools
+#     both inverse pages rely on.

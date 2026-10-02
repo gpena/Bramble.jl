@@ -12,7 +12,7 @@ using ..TestUtils: _run_example_page
 # This replaces test/examples/convergence.jl's "Linear Poisson" and "Convection-diffusion"
 # testsets and the whole of nonlinear_convergence.jl, which mirrored these pages line by line
 # so that the rendered numbers were checked somewhere. There is no second copy to keep in
-# step now (gpena/Bramble.jl#117). What those files covered that the pages do not -- a
+# step now. What those files covered that the pages do not -- a
 # variable-coefficient operator no page uses -- stays in convergence.jl.
 #
 # More pages run from test/examples/ext_pages.jl, in this same `examples` group, for what
@@ -58,7 +58,7 @@ using ..TestUtils: _run_example_page
         _run_example_page(:boundary_layer_graded)
     end
 
-    # The matrix-free Kronecker operator worked example (v3.3.0 plan S5.3, gpena/Bramble.jl#259).
+    # The matrix-free Kronecker operator worked example.
     # It needs `using Kronecker`, but that is a lightweight, pure-Julia weak dependency --
     # unlike the stiff DAE solver, `NonlinearSolve` and `AlgebraicMultigrid` that justify
     # holding the pages in test/examples/ext_pages.jl in their own file -- and

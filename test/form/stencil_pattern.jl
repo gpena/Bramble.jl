@@ -2,7 +2,7 @@ module FormStencilPatternTests
 
 using Test
 using Bramble
-# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+# Internal names: defined and documented, not exported.
 import Bramble: D₊ₓ, M₊ₓ, M₊ᵧ
 using Random
 using SparseArrays
@@ -296,7 +296,7 @@ end
         @test sort(stencil_offsets(innerₕ(uh, v) + innerₕ(uh, D₋ₓ(v)))) == [(-1,), (0,)]
 
         # A bilinear product pairs a row offset with a column offset -- but colouring, the
-        # one consumer of this function (gpena/Bramble.jl#54), only ever needs the row
+        # one consumer of this function, only ever needs the row
         # side: a write collision needs both to coincide, and colour-separated rows can't.
         # So this reduces to the test factor's reach, same as a LinearProduct already does,
         # regardless of how complex the trial factor is.

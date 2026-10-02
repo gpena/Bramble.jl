@@ -318,7 +318,7 @@ end
         compact = sprint(show, sd)
         @test compact == "Semidiscretization{$n dofs, 1 constrained label}"
         @test summary(sd) == compact
-        # The default would spell out every nested type parameter (gpena/Bramble.jl#17).
+        # The default would spell out every nested type parameter.
         @test length(compact) < 80
 
         block = sprint(show, MIME"text/plain"(), sd)
@@ -356,7 +356,7 @@ end
     end
 end
 
-# The matrix-type seam extended to the consumers of assembly (S1.2, gpena/Bramble.jl#12):
+# The matrix-type seam extended to the consumers of assembly ):
 # `semidiscretize`, `mass_matrix` and `operator_matrix` read whatever matrix type the form's
 # own backend produces -- the `Semidiscretization{...,MT,...}` parameter already carried for
 # both matrices -- rather than assuming `SparseMatrixCSC`. A dense `Matrix{Float64}` backend
@@ -434,7 +434,7 @@ end
     end
 end
 
-# gpena/Bramble.jl#283: pin `sd2 = semidiscretize_second_order(...)`, `rhs =
+# Pin `sd2 = semidiscretize_second_order(...)`, `rhs =
 # semidiscretize_rhs(...)` and their residual calls as inferred and allocation-free -- the
 # calls a time-stepping loop makes every step. Allocation checks go behind a function
 # barrier (bramble-verification §1); `@inferred` reads no global binding here, so it is
@@ -569,7 +569,7 @@ end
     @test last(eoc) > 1.95
 end
 
-# `semidiscretize_rhs` (gpena/Bramble.jl#163): `du = M⁻¹(F(t) - A u)` with `M`'s diagonal
+# `semidiscretize_rhs`: `du = M⁻¹(F(t) - A u)` with `M`'s diagonal
 # folded in once, instead of a solver factorising `M` at every step. Checked against
 # `weights(Wₕ).innerh`, the space's own independently-computed `L²` weight vector -- not
 # against `mass_matrix(sd)`'s diagonal, which would just check the implementation agrees

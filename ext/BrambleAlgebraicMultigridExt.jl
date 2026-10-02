@@ -5,8 +5,8 @@ using AlgebraicMultigrid: AlgebraicMultigrid, smoothed_aggregation, ruge_stuben,
 using PrecompileTools: @setup_workload, @compile_workload
 
 # `amg_preconditioner`/`_amg_operator`: `solvers/amg_preconditioner.jl` explains the
-# underscored-fallback idiom and why `_amg_operator` exists separately from the public
-# `amg_preconditioner` -- it is what `BrambleSciMLExt`'s `preconditioner = :amg` calls,
+# `_`-prefixed fallback idiom and why `_amg_operator` exists separately from the public
+# `amg_preconditioner`. It is what `BrambleSciMLExt`'s `preconditioner = :amg` calls,
 # through `Bramble`'s own dispatch, without that extension ever depending on
 # `AlgebraicMultigrid` itself.
 

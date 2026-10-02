@@ -332,10 +332,8 @@ struct Row
     t_poly::Float64
 end
 
-# Some Polyester stencil paths are still mid-flight in this repo (gpena/Bramble.jl#356:
-# S7.1/S7.2 thread the difference/average engines under CpuThreaded/CpuPolyester but have
-# not landed for every operator yet), so a Polyester arm can raise instead of just being
-# slow. Caught here rather than left to crash this script: that cell's Polyester column
+# Not every operator has a threaded Polyester stencil path, so a Polyester arm can raise
+# instead of just being slow. Caught here rather than left to crash this script: that cell's Polyester column
 # reports "none"/"-" instead, exactly as if Polyester were unavailable altogether.
 function _poly_try(label::AbstractString, f::F) where {F}
     try
@@ -479,8 +477,8 @@ function _run_cheap(D::Int, n::Int)
         sm_b, poly_ihm ? (() -> innerₕ(ihm_fu_b, ihm_gv_b; markers = (:boundary,))) : (() -> nothing)
     )
 
-    # --- D₋ₓ! (in place; now threaded under CpuThreaded and batched under
-    # CpuPolyester -- #356) --
+    # --- D₋ₓ! (in place; threaded under CpuThreaded and batched under
+    # CpuPolyester) --
     # independent Polyester operand: kept independent so a failure there must
     # not gate any other workload's Polyester arm.
     dx_s = element(Ws, Float64)
@@ -501,7 +499,7 @@ function _run_cheap(D::Int, n::Int)
         poly_dx ? parent(dx_e) : nothing, poly_dx ? (() -> D₋ₓ!(dx_e, dx_fu_b)) : (() -> nothing)
     )
 
-    # --- broadcast axpy: vₕ .= a .* uₕ .+ wₕ (now threaded/batched, #357) ---
+    # --- broadcast axpy: vₕ .= a .* uₕ .+ wₕ (threaded/batched) ---
     # independent Polyester operands from every workload above.
     α = 1.7
     ax_s = element(Ws, Float64)

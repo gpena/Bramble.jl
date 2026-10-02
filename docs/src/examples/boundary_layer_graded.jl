@@ -143,9 +143,9 @@ collect(zip(σs, errors_by_σ))
 # There is nothing sacred about `tanh`: a geometric or piecewise-linear grading does the same
 # job, and the mesh only ever sees the point vector.
 #
-# ## See also
+# ## Where to go next
 #
 # - [Convection-diffusion](convection_diffusion_linear.md), the same operator on a smooth
 #   solution, where a uniform mesh is fine.
-# - The [mesh tutorial](../tutorials/mesh.md) covers [`change_points!`](@ref) and
+# - The [mesh tutorial](@ref tutorial_mesh) covers [`change_points!`](@ref) and
 #   `Bramble.set_points!`, which also accepts a different point count.

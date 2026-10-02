@@ -7,7 +7,7 @@ using Random
 using ..TestUtils: alloc_test
 
 # Under a `CpuThreaded` (`Parallel()`) backend, `dest .= expr` into a `VectorElement` runs
-# in static bands of the destination's storage, one per thread (gpena/Bramble.jl#357).
+# in static bands of the destination's storage, one per thread.
 # Every point runs the very loop body the serial broadcast runs, so the answer must equal
 # the `Serial()` one exactly, not merely to a tolerance, including when `dest` itself
 # appears on the right-hand side. The meshes are non-uniform, so the operands differ from
@@ -29,7 +29,7 @@ end
 
 const _SIZES = ((1,), (2,), (7,), (1001,), (5, 3), (40, 37), (4, 3, 5), (13, 11, 9))
 
-# Every broadcast shape the issue names, each writing into a fresh `NaN` destination (or
+# Every broadcast shape, each writing into a fresh `NaN` destination (or
 # updating a copy in place): VectorElements only, a plain vector, literal scalars, a `Ref`
 # and a runtime `Float64`, and `dest` on its own right-hand side.
 function _results(n, policy)

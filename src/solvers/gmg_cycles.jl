@@ -1,4 +1,4 @@
-# gmg_cycles.jl: the cycles of geometric multigrid (gpena/Bramble.jl#329) and the
+# gmg_cycles.jl: the cycles of geometric multigrid and the
 # preconditioner and solver built on them.
 #
 # Every level is rediscretised: `build(gridspace(H[l]))` gives the level's form, applied
@@ -86,14 +86,14 @@ end
 """
     gmg_preconditioner(build, Ωₕ::AbstractMeshType; levels = nothing, cycle = :V, ν₁ = 2, ν₂ = 2, smoother = op -> chebyshev_smoother(op)) -> GMGPreconditioner
 
-The geometric multigrid preconditioner of the form `build(gridspace(Ωₕ))`: `ldiv!(y, P, x)`
+The geometric multigrid preconditioner of the form `build(gridspace(Ωₕ))`. `ldiv!(y, P, x)`
 runs one cycle for `A y = x` from `y = 0` over the hierarchy
-[`GeometricMeshHierarchy`](@ref)`(Ωₕ, levels)`. Each level `l` is rediscretised: its form is
-`build(gridspace(H[l]))`, applied through [`matrix_free_operator`](@ref) under the backend's
-execution policy, and smoothed by `smoother(op)`. Levels are joined by [`prolongate!`](@ref)
-and [`coarsen!`](@ref) (`Pᵀ`, unscaled: Bramble's forms carry the discrete measure). The
-coarsest level's matrix is assembled, stored dense and LU-factorised once, and solved
-exactly.
+[`GeometricMeshHierarchy`](@ref)`(Ωₕ, levels)`. Each level `l` is rediscretised, so its
+form is `build(gridspace(H[l]))`, applied through [`matrix_free_operator`](@ref) under the
+backend's execution policy, and smoothed by `smoother(op)`. Levels are joined by
+[`prolongate!`](@ref) and [`coarsen!`](@ref) (`Pᵀ`, unscaled, since Bramble's forms carry
+the discrete measure). The coarsest level's matrix is assembled, stored dense and
+LU-factorised once, and solved exactly.
 
 A V-cycle on level `l` smooths `ν₁` times, restricts the residual, runs one cycle on level
 `l - 1` from zero (two for a W-cycle), adds the prolongated correction and smooths `ν₂`
@@ -139,12 +139,12 @@ the grid size.
 - `Ωₕ`: The finest mesh.
 
 # Keywords
-- `levels`: The number of levels, `Ωₕ` included, an integer (default: `nothing`, for as many as
+- `levels`: The number of levels, `Ωₕ` included, an integer (`nothing` by default, for as many as
   coarsening by 2 allows while every axis with more than one point keeps at least three, so
   33² gives 5 levels down to 3², and 97 points, with `96 = 3 ⋅ 2⁵`, give 6 down to 4).
-- `cycle`: `:V`, `:W` or `:FMG`, the cycle `ldiv!` runs (default: `:V`).
+- `cycle`: `:V`, `:W` or `:FMG`, the cycle `ldiv!` runs (`:V` by default).
 - `ν₁`, `ν₂`: The number of [`smooth!`](@ref) calls before and after the coarse
-  correction (default: `2` each).
+  correction (`2` each by default).
 - `smoother`: A function of a level's [`MatrixFreeOperator`](@ref) returning its
   [`AbstractSmoother`](@ref) (default: `op -> chebyshev_smoother(op)`, degree 2, which damped
   most per product with `A` in the two-grid measurements of [`chebyshev_smoother`](@ref)). A

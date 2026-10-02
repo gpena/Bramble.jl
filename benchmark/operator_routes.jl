@@ -1,4 +1,4 @@
-# The three operator routes on one separable form (gpena/Bramble.jl#420).
+# The three operator routes on one separable form.
 #
 # For the SPD form innerₕ(u, v) + inner₊(∇ₕu, ∇ₕv), with no Dirichlet rows and
 # `is_separable` true, on graded non-uniform meshes of the unit square and cube, each route

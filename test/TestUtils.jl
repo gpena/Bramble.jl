@@ -84,36 +84,37 @@ const WITH_SLOW_TESTS = TEST_GROUP in ("all", "slow", "full")
 # smoke test (form/forwarddiff_smoke.jl) still runs in `unit`, so assembly with dual numbers
 # cannot silently regress.
 #
-# Switched off until v4.3.0 (AD). To turn back on: add Enzyme, Mooncake,
+# Switched off until v4.3.0 (AD). To turn back on, add Enzyme, Mooncake,
 # SparseConnectivityTracer, SparseMatrixColorings, DifferentiationInterface,
 # SciMLSensitivity and ChainRulesCore (whichever the file loads) to test/Project.toml and set
-# `BRAMBLE_TEST_AD=true`; then remove this switch once v4.3.0 settles the backends.
-#   whole files, `unit` (and slow/full/all):
+# `BRAMBLE_TEST_AD=true`, then remove this switch once v4.3.0 settles the backends.
+#   whole files, `unit` (and slow/full/all)
 #     space/autodiff.jl, space/autodiff_backends.jl   test/runtests.jl
 #     form/autodiff.jl                                test/form/runtests.jl
 #     form/jacobian_pattern.jl (also needs `slow`)    test/form/runtests.jl
-#   whole files, groups `ad`, `full`, `backends` ("AD backends (expensive)" in runtests.jl):
+#   whole files, groups `ad`, `full`, `backends` ("AD backends (expensive)" in runtests.jl)
 #     space/autodiff_heavy.jl, space/autodiff_policies.jl, ext/chainrules_enzyme_ext.jl,
 #     examples/inverse_diffusion.jl, ext/sparse_ad_ext.jl, ext/ad_backend_verification.jl,
 #     ext/sciml_sensitivity_ext.jl, examples/transient_inverse_problem.jl,
 #     ext/chainrules_ext.jl
-#   inline blocks, gated with `WITH_AD_TESTS` at the site:
-#     form/bilinear.jl "Matrix differentiation", "Dual arguments (#326)";
+#   inline blocks, gated with `WITH_AD_TESTS` at the site
+#     form/bilinear.jl "Matrix differentiation", "Dual arguments";
 #     form/linear.jl "Parallel differentiation", the nonlinear residual Jacobian `if`,
 #     "Assembled residual differentiation"; form/dirac.jl three `if`s (ForwardDiff through
 #     Dirac strengths); form/kronecker.jl `if` (Duals through the Kronecker scratch);
 #     form/interpolation_operator.jl "Differentiation"; form/type_cached_assemble.jl
 #     "matches direct, Float64 and Dual", "structural: pattern matches assemble(a)",
 #     "Newton solve matches direct"; form/semidiscrete.jl `if` (Dual `t` rebuild);
+#
 #     form/source_operators.jl "Source differentiation", "lowered source: Dual
 #     propagates"; form/reaction_flux.jl "reaction: Dual load vector";
 #     ext/sparspak_ext.jl `if` (generic-eltype AD through Sparspak).
 #
-# Switched off until v4.4.0 (GPU). To turn back on: add Metal, GPUArrays and
+# Switched off until v4.4.0 (GPU). To turn back on, add Metal, GPUArrays and
 # KernelAbstractions to test/Project.toml, set `BRAMBLE_TEST_GPU=true` and run the `gpu`
-# group on an Apple Silicon Mac (outside CI, or with `CI` unset: `_run_gpu_tests()` below
-# skips device kernels on a CI runner); then remove this switch once v4.4.0 lands.
-#   whole files, group `gpu`: ext/metal_ext.jl (which now also holds the "Metal GPU
+# group on an Apple Silicon Mac (outside CI, or with `CI` unset, where `_run_gpu_tests()` below
+# skips device kernels on a CI runner), then remove this switch once v4.4.0 lands.
+#   whole files, group `gpu`, ext/metal_ext.jl (which now also holds the "Metal GPU
 #     backend" testset that used to sit inline in utils/backends.jl),
 #     ext/metal_fullstack.jl, ext/metal_assembly_replay.jl, ext/metal_form_assembly.jl.
 const WITH_AD_TESTS = get(ENV, "BRAMBLE_TEST_AD", "false") == "true"

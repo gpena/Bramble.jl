@@ -6,12 +6,12 @@ CurrentModule = Bramble
 # API reference
 
 This reference lists the docstrings of the public names in `Bramble.jl`'s core library,
-grouped by the stage of a computation they belong to. The names for the SciML, automatic
-differentiation and solver integrations are on [Scientific computing: SciML, AD and
-solvers](api_sciml.md). A typical program follows the pages in order: describe the domain,
-build a mesh on it, define a grid space, apply difference operators, and assemble and solve
-a form. If you are new to the library, start with the tutorials and come here to look up a
-signature or an option.
+grouped by the stage of a computation they belong to. The SciML, automatic differentiation
+and solver integrations are on [Scientific computing: SciML, AD and
+solvers](api_sciml.md). A typical program follows the pages in order. It describes the domain,
+builds a mesh on it, defines a grid space, applies difference operators, and assembles and
+solves a form. If you are new to the library, start with the tutorials and come here to look
+up a signature or an option.
 
 - [Utilities](api/utilities.md): linear algebra backends and other package-wide helpers.
 - [Geometry](api/geometry.md): sets, intervals, markers and domains, which describe where a

@@ -33,7 +33,7 @@
 #
 # where ``A`` is the same discrete Laplacian the steady problem assembles, ``F(t)`` is the
 # source at time ``t``, and ``M`` is the mass matrix of the discrete inner product
-# ``\langle \cdot, \cdot \rangle_h`` — diagonal, since that inner product is a weighted sum
+# ``\langle \cdot, \cdot \rangle_h``. It is diagonal, since that inner product is a weighted sum
 # over grid points.
 #
 # [`semidiscretize`](@ref) builds exactly this. The spatial form is written the way the steady
@@ -64,12 +64,12 @@ sd = semidiscretize(a, l;
 # what lets the boundary values be written as `g(x, t)` rather than `g(x)`; `semidiscretize`
 # detects that by the same arity test and re-evaluates them at every step.
 # `update_coefficients!` is called with the current time just before each assembly, and is
-# where a time-dependent source belongs — `Rₕ!` writes into the `fₕ` the form already holds a
+# where a time-dependent source belongs. `Rₕ!` writes into the `fₕ` the form already holds a
 # reference to, so nothing is rebuilt and nothing is allocated.
 #
 # ## Dirichlet conditions as algebraic constraints
 #
-# A constrained row of `A` is ``e_k`` and the matching entry of `F(t)` is ``g(x_i, t)`` —
+# A constrained row of `A` is ``e_k`` and the matching entry of `F(t)` is ``g(x_i, t)``,
 # which is what `assemble` produces for the steady problem too. [`mass_matrix`](@ref) zeroes
 # those same rows, so each one reads
 #
@@ -78,7 +78,7 @@ sd = semidiscretize(a, l;
 # ```
 #
 # the boundary condition itself. The system is therefore a differential-algebraic one, and
-# needs only ``g`` — never ``\partial_t g``, which prescribing ``u_h'`` on the boundary would
+# needs only ``g``, never ``\partial_t g``, which prescribing ``u_h'`` on the boundary would
 # have required:
 
 M = mass_matrix(sd)
@@ -89,11 +89,11 @@ M = mass_matrix(sd)
 @test M[1, 1] == 0.0 && M[101, 101] == 0.0                      #src
 @test M[51, 51] ≈ hₘₐₓ(Ωₕ)                                      #src
 
-# ## Solving it
+# ## Solving with a BDF stepper
 #
 # [`ode_problem`](@ref) wraps the semidiscretisation, its mass matrix, and its exact Jacobian
 # ``-A`` into a problem `OrdinaryDiffEq` can step. Because the mass matrix is singular, the
-# method has to be one that admits that — `FBDF` and `QNDF` here, or a Rosenbrock method such
+# method has to be one that admits that: `FBDF` and `QNDF` here, or a Rosenbrock method such
 # as `Rodas5P`:
 
 using OrdinaryDiffEqBDF
@@ -122,7 +122,7 @@ spacetime_surface_plot(points(Ωₕ), collect(ts), Z; title = "Heat equation, x-
 
 # `sol` is also a ParaView time series waiting to happen: one `.pvd` collection, one `.vtr`
 # per step, with a working time slider once opened. `Wₕ` (not just the mesh) is what turns
-# each raw solution vector back into a properly shaped field — see the
+# each raw solution vector back into a properly shaped field. See the
 # [VTK export tutorial](../tutorials/vtk_export.md#5.-Time-series-for-ParaView) for the
 # hand-written-loop form this is shorthand for.
 
@@ -136,22 +136,22 @@ nothing # hide
 @test isfile(joinpath(pvd_dir, "heat.pvd"))         #src
 
 # The initial condition handed in is copied, never mutated, and the copy is made consistent
-# with the algebraic rows at ``t_0`` before stepping starts — an index-1 system whose initial
+# with the algebraic rows at ``t_0`` before stepping starts, because an index-1 system whose initial
 # condition disagrees with its own constraints is otherwise rejected by the solver or absorbed
 # into the first step.
 #
 # !!! note "Rosenbrock methods need `∂f/∂t`"
 #     `Rodas5P` and friends also want the time derivative of the right-hand side, which they
 #     build by differentiating through `t`. An `update_coefficients!` hook writing into a
-#     `Float64` grid function — the one above does — cannot accept a `ForwardDiff.Dual` time,
+#     `Float64` grid function, as the one above does, cannot accept a `ForwardDiff.Dual` time,
 #     so pass `Rodas5P(autodiff = AutoFiniteDiff())` from `ADTypes`, use a BDF method (which
-#     needs no `∂f/∂t` at all), or supply an analytical `tgrad` — see below.
+#     needs no `∂f/∂t` at all), or supply an analytical `tgrad`, as the next section does.
 #
-# ## An analytical `tgrad` for Rosenbrock methods
+# ## An analytical time derivative for Rosenbrock methods
 #
 # `ode_function`/`ode_problem` take a `tgrad` keyword: an exact `∂f/∂t`, handed straight to
 # `ODEFunction` so a Rosenbrock method never has to differentiate through `t` at all. For this
-# problem `f(t) = F(t) - A u_h` and `A` does not depend on `t`, so `∂f/∂t = ∂F/∂t` — assembled
+# problem `f(t) = F(t) - A u_h` and `A` does not depend on `t`, so `∂f/∂t = ∂F/∂t`, assembled
 # the same way `F` itself is, from the time derivative of the source:
 
 using OrdinaryDiffEqRosenbrock
@@ -182,8 +182,8 @@ normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ_r)
 # fixed `BilinearForm` closes over a `Float64` coefficient buffer, which cannot hold the
 # `Dual` a Rosenbrock stepper reaches for either way. `semidiscretize(build, l; ...)` instead
 # takes a `build(t) -> (a, refill!)` factory, called once per element type `t` is ever seen
-# at — `Float64` on an ordinary step, `Dual` while `Rodas5P`'s default `autodiff`
-# differentiates through `t` — so the coefficient buffer it refills is always the right type.
+# at `Float64` on an ordinary step, and at `Dual` while `Rodas5P`'s default `autodiff`
+# differentiates through `t`. The coefficient buffer it refills is always the right type.
 # The source is held fixed here on purpose, to isolate the operator: a `t`-dependent source
 # reached through `update_coefficients!` has the same `Float64`-buffer limitation `tgrad`
 # fixes above, for the same reason:
@@ -211,7 +211,7 @@ maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end]))
 # hand-written `tgrad` was needed for the operator itself.
 @test maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end])) < 1.0e-6              #src
 #
-# ## Hand-rolled backward Euler with `assemble_add!`
+# ## Hand-rolled backward Euler
 #
 # `semidiscretize`/`ode_problem` above hide the per-step matrix assembly entirely. Building
 # it explicitly -- the shape a solver without a method-of-lines layer expects -- is what
@@ -278,7 +278,7 @@ maximum(abs.(u_be .- sol_t_fbdf.u[end]))
 # answer entirely.
 @test 1.0e-4 < maximum(abs.(u_be .- sol_t_fbdf.u[end])) < 1.0e-3                         #src
 #
-# ## Checking the answer
+# ## Convergence under refinement
 #
 # Second order in space is the promise. Refining the mesh while holding the time tolerance far
 # below the spatial error isolates it:
@@ -324,7 +324,7 @@ all(>(1.95), orders)    # second order is the promise
 # Nothing above exercised the `(x, t)` in the boundary condition, since the manufactured
 # solution vanishes on ``\partial\Omega``. Driving the problem entirely from the boundary
 # does: start at zero and raise the left end linearly, with the right end held fixed. The two
-# ends are named on the domain above — a bare `domain(interval(...))` registers only
+# ends are named on the domain above; a bare `domain(interval(...))` registers only
 # `:boundary` and `:interior`, so there would be no `:left` to constrain.
 
 gₕ = element(Wₕ, 0.0)
@@ -350,7 +350,7 @@ u_end = sol_drive.u[end]
 
 # At ``t = 1`` the ends hold the prescribed ``g`` to solver tolerance: one and zero. The interior is
 # climbing towards the straight line ``1 - x`` that the source-free steady problem gives, but
-# has not arrived — ``0.44`` at the midpoint against the steady ``0.5``. It should not have:
+# has not arrived, with ``0.44`` at the midpoint against the steady ``0.5``. It has not had time, since
 # the left end was still moving over the whole interval, so diffusion is chasing a boundary
 # value that never settled. Holding ``g`` fixed and stepping further is what reaches the line,
 # and the [steady solve](#Steady-problems-and-LinearSolve) below is its limit.
@@ -358,7 +358,7 @@ u_end = sol_drive.u[end]
 # ## Steady problems and LinearSolve
 #
 # The same forms describe the steady problem, and [`linear_problem`](@ref) hands it straight to
-# `LinearSolve` — with its factorisations, Krylov methods and preconditioners — instead of
+# `LinearSolve`, with its factorisations, Krylov methods and preconditioners, instead of
 # assembling by hand first:
 #
 # ```julia
@@ -372,10 +372,14 @@ u_end = sol_drive.u[end]
 # [`assemble`](@ref) takes, and returns exactly `LinearProblem(A, F)` for the `A` and `F` that
 # [`assemble`](@ref)`(a, l; ...)` produces.
 #
-# ## See also
+# ## Where to go next
 #
 #   - [`semidiscretize`](@ref), [`ode_problem`](@ref), [`ode_function`](@ref), [`assemble_add!`](@ref)
 #     in the [API reference](../api.md).
+#   - [Solving at every time step](@ref tutorial_time_stepping) for the linear-solve strategies a
+#     hand-written loop like the one above can choose between.
+#   - [Linear and bilinear forms](@ref tutorial_form) for the forms and the
+#     [Dirichlet conditions](@ref form_dirichlet) used throughout.
 #   - [Linear Poisson](poisson_linear.md) for the steady version of the same spatial operator.
 #   - [Coupled reaction-diffusion](coupled_reaction_diffusion.md) for systems on a composite
 #     space, which `semidiscretize` accepts unchanged.

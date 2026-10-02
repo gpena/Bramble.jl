@@ -1,8 +1,7 @@
-# ext/BrambleSparseMatricesCSRExt.jl: the `SparseMatrixCSR` backend (S3.1,
-# gpena/Bramble.jl#214, .agents/plans/v3-3-0-memory-scaling.md).
+# ext/BrambleSparseMatricesCSRExt.jl: the `SparseMatrixCSR` backend.
 #
 # Plugs `SparseMatricesCSR.jl`'s `SparseMatrixCSR{1,T,Int}` (the one-based variant, matching
-# Bramble's own indexing) into the matrix-type seam S1.1 opened in `src/assembly/`:
+# Bramble's own indexing) into the matrix-type seam in `src/assembly/`:
 # `_scatter_position`, `_scatter_add!` (bilinear_traversal.jl), `_allocate_from_pattern`
 # (bilinear_pattern.jl) and `_zero_stored!` (bilinear.jl); and into the Dirichlet/symmetrize
 # fast paths `dirichlet_constraints.jl` already carries a `SparseMatrixCSC` specialisation of
@@ -10,11 +9,11 @@
 #
 # `assemble_parallel!` needs no method here. The band-coloured threaded sweep in
 # `bilinear_execution.jl` is typed `A::AbstractMatrix` and reaches storage only through
-# `_scatter_position` and `_scatter_add!` (gpena/Bramble.jl#190), so a `SparseMatrixCSR`
-# threads through the two methods below like any other host matrix. A `CpuThreaded` refill
-# replays the form's recorded `nzval` positions through `_scatter_add!` without calling
-# `_scatter_position` (gpena/Bramble.jl#338); the recording itself searches once per matrix
-# object, serially. A `CpuPolyester` fill still searches.
+# `_scatter_position` and `_scatter_add!`, so a `SparseMatrixCSR`
+# threads through the two methods below like any other host matrix. A `CpuThreaded` or
+# `CpuPolyester` refill replays the form's recorded `nzval` positions through `_scatter_add!`
+# without calling `_scatter_position`; the recording itself searches once per matrix
+# object, serially.
 #
 # `SparseMatrixCSR`'s own `setindex!` throws on an entry outside the sparsity pattern rather
 # than growing it the way `SparseMatrixCSC`'s does (`A[i,i] = one(T)`), so the Dirichlet and
@@ -79,7 +78,7 @@ end
     return SparseMatrixCSR{1}(Int(n), Int(n), ones(Ti, n + 1), Ti[], T[])
 end
 
-# --- the matrix-type seam (S1.1) ---------------------------------------------------- #
+# --- the matrix-type seam ---------------------------------------------------- #
 
 # Built directly with `sparsecsr` rather than via the `SparseMatrixCSC` `sparse!` already
 # builds for the CSC backend, converted afterwards: `sparsecsr(I, J, V, m, n, combine)`
@@ -89,10 +88,7 @@ end
 # arrays directly. Converting an already-built `SparseMatrixCSC` to CSR instead
 # (`SparseMatrixCSR(A::SparseMatrixCSC) = SparseMatrixCSR(transpose(sparse(transpose(A))))`)
 # pays that sort-and-combine twice: once to build `A`, once more to materialise
-# `sparse(transpose(A))`. Measured directly (best of 15, warmed): a 200x200 2D
-# five-point Poisson pattern (40,000 dofs, 199,200 entries pre-combine) built in 1.12 ms via
-# `sparsecsr(Val(1), I, J, V, n, n, +)` against 2.59 ms via
-# `SparseMatrixCSR(sparse!(I, J, V, n, n, +))` -- direct `sparsecsr` about 2.3x faster.
+# `sparse(transpose(A))`.
 function Bramble._allocate_from_pattern(
         ::Type{MT},
         nrows::Int,
@@ -261,8 +257,7 @@ end
 # once `SparseMatricesCSR` is loaded, so only this extension's own precompile pass reaches
 # them. Covers both 1D and 2D meshes since `assemble` specialises on the form/grid-space
 # type, which depends on the mesh dimension, even though the assembled `SparseMatrixCSR{1,
-# Float64, Int}` itself does not. Not named in gpena/Bramble.jl#196; added for
-# gpena/Bramble.jl#284.
+# Float64, Int}` itself does not.
 if Bramble.PRECOMPILE_WORKLOAD
     @setup_workload begin
         be = csr_backend()

@@ -153,12 +153,12 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
             )
         end
 
-        # gpena/Bramble.jl#142: does Accelerate's libSparse/LBT-forwarded LAPACK differ
+        # gpena/Bramble.jl#142 asks whether Accelerate's libSparse/LBT-forwarded LAPACK differ
         # numerically from the plain `LinearAlgebra` path enough to need new suite
-        # tolerances? Answered here by relative residual, ‖A*x - b‖ / ‖b‖, computed for
+        # tolerances. Answered here by relative residual, ‖A*x - b‖ / ‖b‖, computed for
         # every symmetry branch `accelerate_factorize` dispatches on (sparse SPD Cholesky,
         # symmetric LDLᵀ, unsymmetric LUTPP, sparse QR) plus the dense `accelerate_factorize`
-        # methods (:cholesky, :lu, :qr, :auto), against the
+        # methods (cholesky, lu, qr and auto), against the
         # same right-hand sides solved by plain `LinearAlgebra.lu`/`\\`. `worst[]` is the
         # maximum observed across all of that -- the figure S5.5 quotes when answering
         # #142 -- printed at the end so it shows up in a plain `include` of this file, not

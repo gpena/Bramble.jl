@@ -1,6 +1,6 @@
 # vector_calculus.jl
 # The higher-level discrete vector calculus operators: divergence, curl and the Laplacian
-# (gpena/Bramble.jl#158). Each is a contraction of the directional differences
+#. Each is a contraction of the directional differences
 # `operators/difference.jl` already provides, and each used to be written out by hand at
 # every call site.
 #
@@ -18,8 +18,7 @@
 # The vector field is an `NTuple{D, VectorElement}` -- what `∇ₕ` returns -- or a composite
 # grid function with `D` leaves. Both spellings reach the same kernels.
 
-# --- Device dispatch for the fused vector-calculus kernels (gpena/Bramble.jl#306, #302,
-# S12, part 4) ------------------------------------------------------------------------- #
+# --- Device dispatch for the fused vector-calculus kernels ---------------------------------------------------- #
 #
 # Every accumulating engine below (`_accumulate_backward!`, `_accumulate_forward!`,
 # `_accumulate_laplacian!`, `_avg_backward_inplace!`) is a host `@inbounds @simd for` loop
@@ -111,7 +110,7 @@ _launch_fused_strain_offdiag!(out, ui, uj, hi, hj, dims, dim_i, dim_j, dev) = _t
 # Every accumulating engine takes a trailing `nbands, b` and runs only the `b`-th of `nbands`
 # slabs of the grid cut along its last axis (`_band_range`/`_band_slab`, the cut
 # `_difference_band!` makes, operators/difference.jl); `1, 1` is the whole grid.
-# `_run_bands!` picks how the bands run from the execution policy (gpena/Bramble.jl#356):
+# `_run_bands!` picks how the bands run from the execution policy:
 # `CpuThreaded` runs one band per thread under `Threads.@threads :static` (every band in turn
 # where a `:static` loop cannot start, `_static_or_serial`), `CpuPolyester` one band per
 # `Polyester.@batch` task (`_batch_run_bands!`, filled by `BramblePolyesterExt`), every other
@@ -216,7 +215,7 @@ end
     return nothing
 end
 
-# Every destination leaf must be a grid function of the source's grid (gpena/Bramble.jl#402):
+# Every destination leaf must be a grid function of the source's grid:
 # the engines index each one under `@inbounds` with the source's shape. Checked at each
 # public entry point rather than in the shared engines, so host and device refuse alike and
 # a destination is checked once, not once per direction. `uₕ` is the scalar source or the
@@ -319,7 +318,7 @@ function _divergence!(vₕ, comps, Wₕ, dir, ::Val{D}) where {D}
 end
 
 # One direction per rung. Recursion on `Val(d)` rather than a loop over `1:D`, because
-# `Val(d)` captured in a closure boxes (gpena/Bramble.jl#146) and this is the whole reason
+# `Val(d)` captured in a closure boxes and this is the whole reason
 # the vectorial aliases are written out the way they are.
 @inline function _accumulate_direction!(
         pol, vₕ, comps, Ωₕ, dims, dir, ::Val{d}, ::Val{D}
@@ -563,7 +562,7 @@ end
 
 # --- Strain tensor -------------------------------------------------------------------- #
 #
-# gpena/Bramble.jl#234 (runtime half, v3.3.0 plan S6.7): the discrete strain tensor of a
+# The discrete strain tensor of a
 # vector field,
 #
 #     εₕ(uₕ) = (∇ₕ(uₕ) + ∇ₕ(uₕ)ᵀ) / 2
@@ -596,7 +595,7 @@ end
 # the same convention `docs/src/examples/elasticity_3d.jl` hand-expands term by term (its own
 # document-local `εₕ(p, i, j)` closure), which this replaces as a general operator.
 #
-# `divₕ` needs no extension for this. #158's `divₕ` (above) is the unstaggered
+# `divₕ` needs no extension for this. The `divₕ` above is the unstaggered
 # `Σᵢ D₋ᵢ(uᵢ)`, the SBP dual `∇ₕ`/`inner₊` already close an integration-by-parts identity
 # against (`test/space/discrete_calculus_identities.jl`, `test/space/sbp_identities.jl`,
 # `test/space/inference_allocation.jl`); it already accepts a `D`-leaf composite and returns a
@@ -713,7 +712,7 @@ end
 # One row (fixed `i`) of the tensor: the diagonal entry, then every off-diagonal pair
 # `(i, j)` with `j > i` (the mirror `(j, i)` is filled by the same call, `_strain_pair!`
 # writing both). Recursion on `Val(d)` rather than a loop over `1:D`, for the same boxing
-# reason `_accumulate_direction!` above is written this way (gpena/Bramble.jl#146).
+# reason `_accumulate_direction!` above is written this way.
 @inline function _strain_offdiag!(pol, dest, comps, Ωₕ, dims, ::Val{i}, ::Val{j}, ::Val{D}) where {i, j, D}
     j > i && _strain_pair!(pol, dest, comps, Ωₕ, dims, Val(i), Val(j))
     _strain_offdiag!(pol, dest, comps, Ωₕ, dims, Val(i), Val(j - 1), Val(D))
@@ -804,7 +803,7 @@ function εₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     return dest
 end
 
-# --- Centered vector calculus (gpena/Bramble.jl#287) ------------------------------------- #
+# --- Centered vector calculus ------------------------------------- #
 #
 # The centered family reuses the accumulating machinery above with `Centered()` as the
 # direction: `_accumulate_one!` gains a `Centered` method over its own engine, and
@@ -1061,7 +1060,7 @@ end
 
 @inline _centered_strain_rows!(pol, dest, comps, Ωₕ, dims, dir, ::Val{0}, ::Val{D}) where {D} = nothing
 
-# --- Tilde vector calculus and the forward strain (gpena/Bramble.jl#287) ------------------- #
+# --- Tilde vector calculus and the forward strain ------------------- #
 #
 # `D̃` is a forward difference over the averaged spacing `star_spacings` returns, not over the
 # forward spacing. `StarForward` is the marker that lets the accumulating machinery above
@@ -1327,16 +1326,16 @@ function ε₊ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     return dest
 end
 
-# --- Cross-weighted vector calculus (gpena/Bramble.jl#349) --------------------------------- #
+# --- Cross-weighted vector calculus --------------------------------- #
 #
 # The cross-weighted family goes through the centered family's machinery with
-# `CrossWeighted()` as the direction: `_accumulate_one!` gains a method over its own
+# `CrossWeighted()` as the direction. `_accumulate_one!` gains a method over its own
 # accumulating engine, so `div̽ₕ`/`curl̽ₕ` reach `_divergence!`/`_curl!` unchanged, and
 # `∇̽ₕ!`/`ε̽ₕ!` share `∇cₕ!`'s and `εcₕ!`'s traversals. Every cross-weighted difference sits
 # on the grid point itself, so, as for the centered family, nothing is averaged. Unlike it,
-# nothing is truncated either: each end slice takes the one-sided difference its near side
-# still defines, exactly as `D̽ₓ` does. The device story is the centered family's too: no
-# kernel yet, and the same named error before any scalar indexing.
+# nothing is truncated either. Each end slice takes the one-sided difference its near side
+# still defines, exactly as `D̽ₓ` does. The device story is the centered family's too, with no
+# kernel yet and the same named error before any scalar indexing.
 
 @inline _direction_spacing(sub, ::CrossWeighted) = spacings(sub)
 
@@ -1356,7 +1355,7 @@ centered difference per direction:
 ```
 
 The same function as [`D̽ₕ`](@ref): the dispatch alias and the tuple-valued alias coincide
-for this family (gpena/Bramble.jl#140), so `∇̽ₕ` is simply another name for it, under the
+for this family, so `∇̽ₕ` is simply another name for it, under the
 `∇` notation the other vectorial gradients share. In 1D it returns the bare grid function,
 above a `D`-tuple. The first and last point along each direction have no truncated-boundary
 convention of their own and fall back to the one-sided difference the near side still
@@ -1546,7 +1545,7 @@ function ε̽ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     return dest
 end
 
-# --- ⋅ and × contract a gradient alias to its divergence/curl (gpena/Bramble.jl#341) ------- #
+# --- ⋅ and × contract a gradient alias to its divergence/curl ------- #
 #
 # `∇ₕ ⋅ uₕ` / `∇ₕ × uₕ` read as the textbook notation for `divₕ(uₕ)` / `curlₕ(uₕ)`, and the
 # same for the other four gradient aliases (`∇cₕ`/`∇̽ₕ`/`∇̃ₕ` are `const` aliases of
@@ -1581,11 +1580,11 @@ const _DivCurlOperand = Union{Tuple{Vararg{VectorElement}}, VectorElement}
 @inline dot(::typeof(∇̽ₕ), uₕ::_DivCurlOperand) = div̽ₕ(uₕ)
 @inline ×(::typeof(∇̽ₕ), uₕ::_DivCurlOperand) = curl̽ₕ(uₕ)
 
-# --- ⋅ and × over a form-side trial/test function (gpena/Bramble.jl#341) ------------------ #
+# --- ⋅ and × over a form-side trial/test function ------------------ #
 #
 # `∇ₕ ⋅ u`/`∇ₕ × u` (and the four sibling gradient aliases) contract to `divₕ(u)`/`curlₕ(u)`
 # the same way over a symbolic `u`. `LazyOp` (ast/ast.jl) is included before this file, the
-# AST core preceding src/operators/difference.jl (gpena/Bramble.jl#350), so these methods
+# AST core preceding src/operators/difference.jl, so these methods
 # sit beside their `_DivCurlOperand`-typed numeric-`uₕ` siblings above.
 @inline dot(::typeof(∇ₕ), uₕ::LazyOp) = divₕ(uₕ)
 @inline ×(::typeof(∇ₕ), uₕ::LazyOp) = curlₕ(uₕ)

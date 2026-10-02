@@ -4,7 +4,13 @@ CurrentModule = Bramble
 
 # Writing PGFPlots data files
 
-`export_vtk` writes a full grid for a viewer like ParaView. For a plot going straight into a
+**What you will learn.** How to write a 1D curve or a 2D surface as a plain table that `pgfplots` plots in a LaTeX document.
+
+**What you need first.** The [mesh tutorial](@ref tutorial_mesh) and the [space tutorial](@ref tutorial_space), for meshes and grid functions.
+
+**Where next.** The [VTK export tutorial](vtk_export.md) covers full grids, vector fields and time series for ParaView.
+
+[`export_vtk`](@ref) writes a full grid for a viewer like ParaView. For a plot going straight into a
 LaTeX document, that is usually more than is wanted: `export_pgfplots` writes the plain
 whitespace-separated table `pgfplots` reads directly with `\addplot table {...}`, needing no
 package beyond `Base`. Every block below runs when this page is built, and writes the file
@@ -72,6 +78,9 @@ u2 = Rₕ(W2, x -> sin(x[1]) * x[2])
 f3 = export_pgfplots(joinpath(mktempdir(), "surf"), Ω2, "u" => u2)
 read(f3, String)
 ```
+
+!!! tip "Try this"
+    Change `(5, 4)` to `(3, 3)` and print the file again. Count the blank lines: there is one between each pair of scan lines, so the number of rows in the surface is visible in the text.
 
 Miss those blank lines (writing every point as one long unbroken list) and the same numbers
 plot as a shredded zigzag instead of a surface, because `pgfplots` has no way to tell where

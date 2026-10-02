@@ -21,16 +21,16 @@ form is accepted there.
 `inner₊` and `innerₕ` are each spelled twice in this package, and the two meanings do not
 live in the same layer. Here they take grid functions and return a **number**. In
 `src/operators/inner.jl` they take operators and return an **AST node** for a form to
-be assembled from. CONTEXT.md draws that line at the domain level: a form is symbolic, a
+be assembled from. CONTEXT.md draws that line at the domain level. A form is symbolic. A
 grid function is data.
 
 The two families are kept from colliding by the `NTuple{N,<:Tuple}` restriction on the
-symbolic tuple overload: a tuple of grid functions is not a tuple of tuples, so it cannot
-reach the symbolic method, and the `@generated` methods below stay reachable. Widen either
-side and the collision is real. The constraint is asserted in
-`test/form/inner_products.jl`, testset "Symbolic and numeric families stay apart"
-(gpena/Bramble.jl#60), so a change to either signature fails a test rather than silently
-returning the wrong kind of thing.
+symbolic tuple overload. A tuple of grid functions is not a tuple of tuples, so it cannot
+reach the symbolic method, and the `@generated` methods below stay reachable. Widening
+either side makes the two collide. The constraint is asserted in
+`test/form/inner_products.jl`, testset "Symbolic and numeric families stay apart", so a
+change to either signature fails a test rather than silently returning the wrong kind of
+thing.
 
 A composite grid function is deliberately not accepted by either. It is a stack of
 scalar functions with no single weighting of its own, and summing over its
@@ -1024,19 +1024,16 @@ function _tuple_element_dim(::Type{T}) where {T <: Tuple}
     return isempty(ft) ? nothing : get_dimension_from_type(first(ft))
 end
 
-# Whether `@generated` is load-bearing here, or just this file's house style, was asked in
-# gpena/Bramble.jl#61 and measured rather than asserted (bramble-verification §1): an
-# ordinary function computing `D`/`mesh_dim` this same way and passing them on as
+# `@generated` is load-bearing here, not just this file's house style (bramble-verification
+# §1). An ordinary function computing `D`/`mesh_dim` this same way and passing them on as
 # `Val(D)`/`Val(mesh_dim)` inferred to `Any` and allocated (112–592 B across 1D/2D/3D,
 # scalar and tuple inputs), where the `@generated` version below infers concretely and
-# allocates 0. The difference is constant propagation, not type stability: `D`/`mesh_dim`
+# allocates 0. The difference is constant propagation, not type stability. `D`/`mesh_dim`
 # come out of a several-branch `if`/`something` chain, and while that chain's return type is
 # already concrete (`Tuple{Int,Int}`), Julia's inliner does not reliably fold it down to the
-# *specific* compile-time value `Val(D)` needs from inside a caller, unlike a plain `map`
-# or `sum` over an already concretely-sized `Tuple`, which Julia unrolls and specializes on
-# its own (see `form/common.jl`'s stencil primitives, sibling functions in this same
-# investigation that turned out not to need `@generated` at all). So: load-bearing here,
-# incidental there.
+# *specific* compile-time value `Val(D)` needs from inside a caller. A plain `map` or `sum`
+# over an already concretely-sized `Tuple` is unrolled and specialized by Julia on its own
+# (see `form/common.jl`'s stencil primitives, which do not need `@generated`).
 function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
     dim_u = get_dimension_from_type(u_type)
     dim_v = get_dimension_from_type(v_type)
@@ -1174,25 +1171,23 @@ itself a scalar grid function and is accepted.
 # offset and the loop shape are fixed at compile time, and the spacing and weight are read
 # once per direction rather than once per grid point.
 #
-# The loop mirrors `_dot`'s `SeparableWeights` specialization above: the outer loop runs
+# The loop mirrors `_dot`'s `SeparableWeights` specialization above. The outer loop runs
 # over the axis-1 lines (`CartesianIndices` of `dims[2:D]`), and the inner `@inbounds @simd`
 # loop walks each line's contiguous entries. The boundary slice contributes nothing (the
 # backward difference is truncated to zero there, so its square is zero), so only the
-# interior is walked:
-#   - d = 1: the line runs over `i₁ ∈ 2:n₁`, reading the weight factor `factors[1][i₁]` and
+# interior is walked.
+#   - d = 1, the line runs over `i₁ ∈ 2:n₁`, reading the weight factor `factors[1][i₁]` and
 #     dividing by the spacing `h[i₁]` per point; the backward neighbour is the previous entry.
-#     The division is kept: on 2D 1000² this pass takes 1.21x a dense `_dot`, and 1.07x
+#     The division is kept, since on 2D 1000² this pass takes 1.21x a dense `_dot`, and 1.07x
 #     with a multiplication in its place, so it does not limit the speed.
-#   - d ≥ 2: lines with `I_d = 1` are skipped. Along a line the spacing `h[I_d]` and every
+#   - d ≥ 2, lines with `I_d = 1` are skipped. Along a line the spacing `h[I_d]` and every
 #     weight factor but the first are constant, so the line sum is `Σ factors[1][i₁] δ²`
 #     over the undivided differences `δ = u[k] - u[k - stride_d]`, and it is scaled once by
 #     `c · inv(h[I_d])²`, where `c` is the product of the other axes' factors and
 #     `stride_d = n₁ ⋯ n_{d-1}`.
-# The weight factors are read directly, so `getindex`'s device guard is repeated (#310).
-# Measured on non-uniform 1000² and 100³ grids (minimum of 15 runs): snorm₁ₕ takes 2.56x
-# (2D) and 3.82x (3D) the time of a dense `_dot` over the collected `innerₕ` weights, about
-# 1.3x per direction; the previous point-wise walk over `CartesianIndices(interior)`, whose
-# per-point division did not vectorise, took 12.7x in 2D.
+# The weight factors are read directly, so `getindex`'s device guard is repeated.
+# On non-uniform 1000² and 100³ grids, snorm₁ₕ takes 2.56x (2D) and 3.82x (3D) the time of a
+# dense `_dot` over the collected `innerₕ` weights, about 1.3x per direction.
 @inline function _seminorm_sq_along(data, space, Ωₕ, li, ::Val{d}, ::Val{D}) where {d, D}
     h = backward_spacings_for_derivative(Ωₕ(d))
     w = weights(space, Innerplus(), d)

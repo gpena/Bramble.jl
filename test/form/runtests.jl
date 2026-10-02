@@ -21,7 +21,7 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("interpolation.jl")
     include("bilinear.jl")
     include("assemble_add.jl")
-    # The threaded refill replays the recorded nzval positions (gpena/Bramble.jl#338).
+    # The threaded refill replays the recorded nzval positions.
     include("threaded_replay.jl")
     include("zero_form.jl")
     include("coordinate_walk.jl")
@@ -52,7 +52,7 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     # It is also behind the AD switch (TestUtils.WITH_AD_TESTS), which is off in every group
     # until v4.3.0, so for now it runs nowhere.
     TestUtils.WITH_SLOW_TESTS && TestUtils.WITH_AD_TESTS && include("jacobian_pattern.jl")
-    # Mixed composite/scalar pairs (gpena/Bramble.jl#367): dependency-free, so on every push.
+    # Mixed composite/scalar pairs: dependency-free, so on every push.
     include("jacobian_pattern_blocks.jl")
     include("type_cached_assemble.jl")
     include("semidiscrete.jl")
@@ -62,7 +62,7 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     # group.
     include("bandwidth.jl")
     include("kronecker.jl")
-    # Matrix-free application of any bilinear form (gpena/Bramble.jl#326).
+    # Matrix-free application of any bilinear form.
     include("matrix_free.jl")
     include("expression.jl")
     # Composite trial/test functions through the symbolic `∇ₕ`/`εₕ`/`divₕ` builders (S6.5).

@@ -4,7 +4,7 @@ using Test
 using JET
 
 # JET's error analysis over the test code itself: test/TestUtils.jl and every test module
-# under test/ (gpena/Bramble.jl#390). It catches what only fails when a branch runs: an
+# under test/. It catches what only fails when a branch runs: an
 # undefined name, a possible `UndefVarError`, a call with the wrong arity.
 #
 # `BRAMBLE_TEST_JET_FILES` (colon-separated paths) overrides the file list.
@@ -115,8 +115,8 @@ function _filtered(r, path, throws_lines)
     # interpreter, not a property of the test code.
     r isa JET.MissingConcretizationErrorReport && return true
     # Same cause, seen from the other side: a closure written in toplevel `@testset` code
-    # whose definition JET did not evaluate is reported as its generated name (`#12#13`,
-    # `#f#f##0`) being undefined. A user-written name never starts with `#`.
+    # whose definition JET did not evaluate is reported as its generated name (a `#`-prefixed
+    # anonymous-function name) being undefined. A user-written name never starts with `#`.
     r isa JET.UndefVarErrorReport && occursin(r"\.#[^.]*`", _message(r)) && return true
     false
 end

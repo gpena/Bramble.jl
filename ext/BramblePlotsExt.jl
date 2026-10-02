@@ -44,7 +44,7 @@ end
 
 # Plots.jl's `heatmap(x, y, z)`/`surface(x, y, z)` read `z` as an image matrix: the first
 # index of `z` is the row, plotted against `y`, the second is the column, plotted against
-# `x` — so `size(z) == (length(y), length(x))`. `reshape(uₕ)` is `(nx, ny)`, x fastest,
+# `x`, so `size(z) == (length(y), length(x))`. `reshape(uₕ)` is `(nx, ny)`, x fastest,
 # so it needs transposing to match; without it the plot would be silently rotated.
 @recipe function f(uₕ::VectorElement{<:ScalarGridSpace{2}})
     seriestype --> :heatmap

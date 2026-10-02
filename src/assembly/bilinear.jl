@@ -38,14 +38,14 @@ itself is ever the target of differentiation, so `_try_diagonal_segment` needed 
 Enzyme can reason about -- a discriminated struct, not a two-branch `Union`.
 
 `is_diagonal` selects which shape is populated:
-- `false` (flat): `point_ptr`/`positions` cover every entry, exactly as [`NzvalSegment`](@ref)
+- `false` (flat). `point_ptr`/`positions` cover every entry, exactly as [`NzvalSegment`](@ref)
   always has; `base`/`stride`/`interior` are unused placeholders (empty, zero).
-- `true` (diagonal, gpena/Bramble.jl#160): `point_ptr`/`positions` cover only the boundary
+- `true` (diagonal, gpena/Bramble.jl#160). `point_ptr`/`positions` cover only the boundary
   shell; `base`/`stride`/`P`/`interior` carry the interior's per-tap stride arithmetic --
   interior entries are `base[k] + stride[k] * n` for the `n`-th point `interior`'s own
   iteration order visits (`n` zero-based), rather than one stored `Int` per entry, so
   `positions` never carries the interior's `O(N * P)` share at all. 1D forms only
-  (`_diagonal_replay`): from 2D up no difference term's interior has a constant stride.
+  (`_diagonal_replay`), since from 2D up no difference term's interior has a constant stride.
 
 Built by `_try_diagonal_segment` only when every interior point produces the same number of
 entries `P` and the same per-tap stride holds across the whole interior -- checked once, not
@@ -426,8 +426,8 @@ ignoring the backend's policy.
 `assemble!` uses the pre-resolved `form.ast` stored directly inside the form.
 
 ## Live coefficients
-- Grid functions: the stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(cₕ, ...)` or `parent(cₕ) .= ...`) between steps automatically updates the matrix entries. Nested scales such as `uₕ * (wₕ * v)` stay live too: each grid function is read at assembly time, never fused into a copy when the form is built. On the host this costs 0 allocations; on a device-backed space each fill copies the coefficient to the host anew, so it stays live but is not allocation-free there (see [GPU acceleration](@ref)).
-- Dynamic scalars: plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `β = Ref(1.0); a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))`). Mutating `β[] = new_val` evaluates live during assembly with 0 allocations on the host; the `Ref` itself adds nothing, but a device-backed space's call still allocates regardless of the scalar (see [GPU acceleration](@ref)).
+- Grid functions. The stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(cₕ, ...)` or `parent(cₕ) .= ...`) between steps automatically updates the matrix entries. Nested scales such as `uₕ * (wₕ * v)` stay live too: each grid function is read at assembly time, never fused into a copy when the form is built. On the host this costs 0 allocations; on a device-backed space each fill copies the coefficient to the host anew, so it stays live but is not allocation-free there (see [GPU acceleration](@ref)).
+- Dynamic scalars. Plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `β = Ref(1.0); a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))`). Mutating `β[] = new_val` evaluates live during assembly with 0 allocations on the host; the `Ref` itself adds nothing, but a device-backed space's call still allocates regardless of the scalar (see [GPU acceleration](@ref)).
 """
 function assemble!(
         A::AbstractMatrix,

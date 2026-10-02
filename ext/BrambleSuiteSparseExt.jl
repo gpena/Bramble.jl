@@ -171,8 +171,7 @@ end
 # backend, only reachable once `SuiteSparse` is loaded so only this extension's own
 # precompile pass reaches them. Covers both `:spd` (CHOLMOD) and `:unsymmetric` (UMFPACK)
 # factorizations, and both 1D and 2D assembled systems since the `VectorElement` type the
-# second `ldiv!` method dispatches on depends on the mesh dimension. Not named in
-# gpena/Bramble.jl#196; added for gpena/Bramble.jl#284.
+# second `ldiv!` method dispatches on depends on the mesh dimension.
 if Bramble.PRECOMPILE_WORKLOAD
     @setup_workload begin
         systems = map((1, 2)) do D

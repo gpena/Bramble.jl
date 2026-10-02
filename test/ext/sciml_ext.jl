@@ -22,7 +22,7 @@ using LightXML: parse_file, root, find_element, child_elements, attribute, free
 # picks `AutoPolyesterForwardDiff` whenever PolyesterForwardDiff is loaded (the `full`
 # group loads it), and Polyester's closure path fails on the macOS CI runners with
 # "closures are not supported on this platform" -- two errors in every Weekly macOS leg
-# since v3.4.0, from a choice that depends on which packages happen to be loaded (gpena/Bramble.jl#325).
+# since v3.4.0, from a choice that depends on which packages happen to be loaded.
 const _NEWTON = NewtonRaphson(; autodiff = AutoForwardDiff())
 using LinearSolve: KrylovJL_GMRES
 
@@ -126,8 +126,8 @@ end
 
     @testset "ode_problem: p reaches residual" begin
         # `θ` scales the boundary value and its rate, `(x, t, θ) -> θ[1] + θ[2] * t`, threaded
-        # through the residual's own `p` -- gpena/Bramble.jl#239's own gap: nothing before this
-        # let a Dirichlet condition see the ODEProblem's parameter at all.
+        # through the residual's own `p`, so a Dirichlet
+        # condition sees the ODEProblem's parameter.
         bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t, θ) -> θ[1] + θ[2] * t)
         sd_p = semidiscretize(a, l; dirichlet = bcs)
         u₀ = Rₕ(Wₕ, x -> 0.0)
@@ -154,7 +154,7 @@ end
         @test ode_problem(sd_t, u₀, I).p isa SciMLBase.NullParameters
     end
 
-    # `semidiscretize_rhs` (gpena/Bramble.jl#163): the point of folding `M⁻¹` in ahead of
+    # `semidiscretize_rhs`: the point of folding `M⁻¹` in ahead of
     # time is reaching solvers that cannot touch a mass matrix at all -- `Tsit5` is one, and
     # is checked to actually reject `sd`'s own `ODEProblem` below, not just to work on
     # `rhs`'s. Agreement against a mass-matrix-aware `Rodas5P` solve of the same system is
@@ -204,7 +204,7 @@ end
 
     # `element(Wₕ, sol)`/`VectorElement(sol, Wₕ)` unwrap a `LinearSolve` solution into a
     # `VectorElement`, and `solve(a, l; ...)` does assembly, solve and unwrapping in one call
-    # -- the three pieces #156 asks for, all reached through the steady system `prob`/`A`/`F`
+    # -- the three pieces, all reached through the steady system `prob`/`A`/`F`
     # already agree on above.
     @testset "solve: VectorElement from solution" begin
         A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
@@ -314,7 +314,7 @@ end
         _check_eoc(n -> solve_to(n, Rodas5P(); tgrad = exact_tgrad), (11, 21, 41))
     end
 
-    # `semidiscretize(build, l; ...)` (src/problems/semidiscrete.jl) is the other half of #107:
+    # `semidiscretize(build, l; ...)` (src/problems/semidiscrete.jl) is the other half of the above:
     # an operator that genuinely depends on `t` -- not just the source -- built fresh per
     # element type instead of one fixed `Float64`-typed matrix. This is what lets `Rodas5P`'s
     # *default* `autodiff` differentiate through `t` at all: the classic `BilinearForm` path

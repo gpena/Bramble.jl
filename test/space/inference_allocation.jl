@@ -5,7 +5,7 @@ using Bramble
 using Bramble: divₕ!, curlₕ!, Δₕ!, norm₊
 using Bramble: D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, M₂, Mₓ, VectorElement, inner₊ᵧ, inner₊ₓ, jumpᵧ, jump₂
 using Bramble: jumpₓ, norminf
-# Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
+# Internal: defined and documented, not exported.
 import Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂
 import Bramble: div₊ₕ!
 using Bramble:
@@ -22,16 +22,14 @@ using ..TestUtils: alloc_test, @test_allocs
 
 # Type stability and allocation across grid spaces, operators and inner products.
 #
-# Every property here was established by measurement while optimising this subsystem and
-# then left unguarded. Each one has already regressed at least once during that work:
+# Every property here is one the suite would otherwise not see, because line coverage
+# does not. Each one is a failure the code can fall back into:
 #
 #   - the difference engine boxed its spacing callable and allocated 64 bytes per grid
 #     point, until `h` was given a type parameter;
 #   - the seminorm rebuilt a closure and a weight vector per point;
 #   - summing the seminorm directions through `ntuple` reintroduced an allocation;
 #   - the operators wrote out of bounds on composite grid functions.
-#
-# None of it was visible to the suite, because line coverage does not see any of it.
 
 @testset "Inference and allocations" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 64, false)
@@ -78,14 +76,14 @@ using ..TestUtils: alloc_test, @test_allocs
         @test @inferred(inner₊ₓ(uₕ2, uₕ2)) isa Float64
         @test @inferred(inner₊ᵧ(uₕ2, uₕ2)) isa Float64
         # the surface weight is computed per point rather than read from a stored vector,
-        # so it is worth pinning that it still infers and still allocates nothing (#157)
+        # so it is worth pinning that it still infers and still allocates nothing
         @test @inferred(inner_Γ(uₕ2, uₕ2, :ymin)) isa Float64
         @test @inferred(inner_Γ(uₕ3, uₕ3, :boundary)) isa Float64
     end
 
     @testset "Type stability (vector calculus)" begin
-        # gpena/Bramble.jl#158: each of these recurses over directions on `Val(d)` rather
-        # than looping, for the same boxing reason the vectorial aliases do (#146).
+        # Each of these recurses over directions on `Val(d)` rather than looping, for the
+        # same boxing reason the vectorial aliases do.
         for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), ("3D", uₕ3))
             @testset "$lbl" begin
                 @test @inferred(divₕ(∇ₕ(uₕ))) isa VectorElement
@@ -120,7 +118,7 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs inner_Γ(uₕ3, uₕ3, :boundary)
 
         # the mutating vector-calculus forms accumulate into their destination in one
-        # traversal per direction, so none of them needs a scratch grid function (#158)
+        # traversal per direction, so none of them needs a scratch grid function
         let v1 = similar(uₕ1), v2 = similar(uₕ2), v3 = similar(uₕ3)
             @test_allocs Δₕ!(v1, uₕ1)
             @test_allocs Δₕ!(v2, uₕ2)
@@ -155,8 +153,7 @@ using ..TestUtils: alloc_test, @test_allocs
         #
         # A cached vector is what the operators actually pass, and it specialises anyway,
         # so only a callable exercises this. The property is that the cost does not grow
-        # with the grid: measured 32 B at both sizes below with the type parameter, and
-        # 57,328 then 516,080 without it.
+        # with the grid, which the type parameter on `h` guarantees.
         function callable_bytes(n)
             Ωₙ = mesh(domain(interval(0.0, 1.0)), n, true)
             uₙ = Rₕ(gridspace(Ωₙ), sin)
@@ -231,7 +228,7 @@ using ..TestUtils: alloc_test, @test_allocs
         @test alloc_test(Rₕ!, v, f_tup; markers = (:left,)) == 0
         @test alloc_test(avgₕ!, v, f_tup; markers = (:left,)) == 0
 
-        # gpena/Bramble.jl#182: the single-vector-function form scatters one evaluation of
+        # The single-vector-function form scatters one evaluation of
         # `f` across every leaf of a shared-mesh composite space (`_rule_scatter_kernel`),
         # rather than one rule per leaf -- verify that path is zero-alloc too, not just the
         # tuple-of-functions form above.
@@ -241,11 +238,10 @@ using ..TestUtils: alloc_test, @test_allocs
         @test alloc_test(Rₕ!, v, f_vec; markers = (:left,)) == 0
         @test alloc_test(avgₕ!, v, f_vec; markers = (:left,)) == 0
 
-        # gpena/Bramble.jl#64: `_avgₕ!`/`_avg_masked!`'s composite Tuple methods used to
-        # route the per-leaf application through `map(f, t1, t2)` with a closure that
-        # reconstructs `Val(D)` inside it. Measured 192 B where a plain `ntuple` over the
-        # same body gives 0 -- the Core.Box trap this suite otherwise only documents on the
-        # difference engine, here on the fix for nested composite spaces.
+        # `_avgₕ!`/`_avg_masked!`'s composite Tuple methods must not route the per-leaf
+        # application through `map(f, t1, t2)` with a closure that reconstructs `Val(D)`
+        # inside it, which boxes. A plain `ntuple` over the same body allocates nothing,
+        # which this pins for nested composite spaces.
         Vn = (W × W) × W
         un = element(Vn)
         f_tup3 = (f, f, f)
@@ -253,17 +249,17 @@ using ..TestUtils: alloc_test, @test_allocs
         @test alloc_test(avgₕ!, un, f_tup3; markers = (:left,)) == 0
         @test alloc_test(Rₕ!, un, f_tup3; markers = (:left,)) == 0
 
-        # Same single-vector-function scatter path (gpena/Bramble.jl#182), three levels deep.
+        # Same single-vector-function scatter path, three levels deep.
         f_vec3(x) = (sin(x[1]), cos(x[2]), x[1] + x[2])
         @test alloc_test(Rₕ!, un, f_vec3) == 0
         @test alloc_test(avgₕ!, un, f_vec3) == 0
 
-        # Zero allocations for copyto! (values!'s replacement, gpena/Bramble.jl#73) and πₕ!
+        # Zero allocations for copyto! and πₕ!
         @test alloc_test(copyto!, u, 1.0) == 0
         @test alloc_test(copyto!, u, parent(u)) == 0
 
         # Zero allocations for the specialised in-place broadcast copyto!
-        # (gpena/Bramble.jl#181): unwrapping every VectorElement leaf down to its own
+        # Unwrapping every VectorElement leaf down to its own
         # `parent` before delegating must not itself allocate, on a compound expression
         # (multiple operators fused) as well as a single scaling.
         _compound!(w, u, v, α) = (w .= u .+ v .* α)

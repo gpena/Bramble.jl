@@ -4,16 +4,19 @@ CurrentModule = Bramble
 
 # [Mesh tutorial](@id tutorial_mesh)
 
-A mesh discretizes a [`Domain`](@ref) into points, and carries the metric quantities every
-difference operator reads: spacings, half points and cell measures. Every block below runs
-when this page is built.
+**What you will learn.** How a domain becomes a mesh, how to make the points non-uniform, and what the spacings, half points and cell measures that difference operators read mean.
+
+**What you need first.** The [geometry tutorial](@ref tutorial_geometry), for sets, markers and domains.
+
+**Where next.** The [space tutorial](space.md) puts discrete functions on a mesh.
+
+Every block below runs when this page is built.
 
 ---
 
-## 1. Constructing meshes
+## A first mesh
 
-[`mesh`](@ref) takes a domain (or a bare geometric set) and a point count. The count is one
-integer per axis, or a single integer for the same resolution along every axis:
+Take the unit interval and ask for eleven points. [`mesh`](@ref) takes a domain and a point count:
 
 ```@example mesh
 using Bramble
@@ -27,9 +30,22 @@ import Bramble: cell_measure, change_points!, half_point, half_points, half_spac
 points(Ωₕ)
 ```
 
-The third positional argument, or the `uniform` keyword, chooses the point distribution per
-axis. `false` draws interior points at random and sorts them, which is what the convergence
-studies elsewhere in this manual use to expose order reduction on non-uniform grids:
+The points are equally spaced, ``h = 0.1``, and the largest cell measure confirms it:
+
+```@example mesh
+hₘₐₓ(Ωₕ), is_uniform(Ωₕ)
+```
+
+The mesh carries more than coordinates. Spacings, half points and cell measures, which the difference operators read, are computed from the points and cached.
+
+!!! tip "Try this"
+    Change `11` to `21` and print `hₘₐₓ(Ωₕ)` again. Doubling the number of intervals halves the spacing.
+
+---
+
+## Non-uniform meshes
+
+Real problems rarely want equal spacing: boundary layers and corners need points packed where the solution changes fast. The third positional argument of `mesh`, or the `uniform` keyword, chooses the distribution per axis. `false` draws interior points at random and sorts them, which the convergence studies in this manual use to expose order reduction on non-uniform grids:
 
 ```@example mesh
 Ωₕ_rand = mesh(Ω, 11, false)
@@ -37,39 +53,25 @@ studies elsewhere in this manual use to expose order reduction on non-uniform gr
 is_uniform(Ωₕ), is_uniform(Ωₕ_rand)
 ```
 
-Above one dimension a mesh is a tensor product of 1D submeshes, stored per axis, so
-coordinate storage is $O(N_x + N_y + N_z)$ while the grid it addresses is the full product.
-The distribution flag is per axis there: `(true, false)` would be uniform in $x$ and random
-in $y$.
+To place the points yourself, build any mesh and replace its coordinates. [`change_points!`](@ref) keeps the point count, so it can grade a mesh toward the left end:
 
 ```@example mesh
-Ωₕ_2d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (10, 20), (true, true))
+Ωₕ_graded = mesh(Ω, 11)
+change_points!(Ωₕ_graded, collect(range(0.0, 1.0, length = npoints(Ωₕ_graded)) .^ 2))
 
-npoints(Ωₕ_2d, Tuple), size(Ωₕ_2d)
+points(Ωₕ_graded), hₘₐₓ(Ωₕ_graded)
 ```
 
-`Ωₕ_2d(k)` is the submesh along axis `k`, and everything documented for a 1D mesh applies
-to it:
+Squaring the uniform points packs them near ``x = 0`` and stretches the cells near ``x = 1``, so `hₘₐₓ` is no longer ``0.1``. `Bramble.set_points!` is the variant that also accepts a different point count. The [graded boundary layer example](../examples/boundary_layer_graded.md) builds such a mesh for a real problem.
 
-```@example mesh
-Ωₕ_2d(1)
-```
-
-A geometric set can be passed directly when no custom labels are needed; `:boundary` and
-`:interior` are provisioned either way:
-
-```@example mesh
-X = interval(0.0, 1.0) × interval(0.0, 2.0)
-Ωₕ_direct = mesh(X, 20)      # isotropic: 20 × 20
-
-:boundary in keys(markers(Ωₕ_direct)), :interior in keys(markers(Ωₕ_direct))
-```
+!!! tip "Try this"
+    Replace the exponent `2` by `3`. The points crowd closer to ``x = 0`` and `hₘₐₓ` grows.
 
 ---
 
-## 2. Coordinates and metric properties
+## Half points, spacings and cell measures
 
-One non-uniform 1D mesh exposes every convention at once:
+One small non-uniform mesh exposes every convention at once. Four points at ``0, 0.2, 0.6, 1``:
 
 ```@example mesh
 Ωₕ_fig = mesh(domain(interval(0.0, 1.0)), 4, true)
@@ -144,66 +146,42 @@ points(Ωₕ_fig)
 </figure>
 ```
 
-Four conventions are worth reading off that picture, because they are the ones that
-surprise:
+Four conventions are worth reading off that picture, because they are the ones that surprise:
 
-- **`half_points` has `N + 1` entries.** They are the cell interfaces, and the first and
-  last coincide with `x₁` and `x_N` rather than sitting outside the domain.
-- **The cell around `xᵢ` spans `half_points[i]` to `half_points[i+1]`**, with width
-  `half_spacing(Ωₕ, i)`, which is what `cell_measure(Ωₕ, i)` returns.
-- **Boundary cells are half-width**, since `x₁` and `x_N` sit on the edge of their own cell
-  rather than at its centre.
-- **`spacing` looks backward, `forward_spacing` forward**: `spacing(Ωₕ, i) = xᵢ - xᵢ₋₁` and
-  `forward_spacing(Ωₕ, i) = xᵢ₊₁ - xᵢ`, each falling back to its neighbour at the end where
-  the stencil runs out.
+- **`half_points` has `N + 1` entries.** They are the cell interfaces, and the first and last coincide with `x₁` and `x_N` rather than sitting outside the domain.
+- **The cell around `xᵢ` spans `half_points[i]` to `half_points[i+1]`**, with width `half_spacing(Ωₕ, i)`, which is what `cell_measure(Ωₕ, i)` returns.
+- **Boundary cells are half-width**, since `x₁` and `x_N` sit on the edge of their own cell rather than at its centre.
+- **`spacing` looks backward, `forward_spacing` forward**: `spacing(Ωₕ, i) = xᵢ - xᵢ₋₁` and `forward_spacing(Ωₕ, i) = xᵢ₊₁ - xᵢ`, each falling back to its neighbour at the end where the stencil runs out.
 
 ```@example mesh
 half_points(Ωₕ_fig), [cell_measure(Ωₕ_fig, i) for i in 1:4]
 ```
 
-The four cells sum to the domain length, and the two boundary cells are the smallest.
+The four cells sum to the domain length, and the two boundary cells are the smallest. The [reference](@ref mesh_reference) below lists the accessor for each quantity.
 
-### 2.1 Points
+!!! tip "Try this"
+    Move the third point with `Bramble.set_points!(Ωₕ_fig, [0.0, 0.2, 0.8, 1.0])` and recompute the cell measures. The cells around `x₂` and `x₄` become 0.4 and 0.1, the cell around `x₃` stays 0.4 because it spans `(x₄ - x₂)/2`, and the sum is still 1.
 
-`points` returns the coordinate vector, or a tuple of them above 1D. A single coordinate
-comes from `point(Ωₕ, idx)` or from indexing, with a linear index, a tuple or a
-`CartesianIndex`:
+---
 
-```@example mesh
-Ωₕ_fig[3], point(Ωₕ_fig, 3)
-```
+## Meshes in two dimensions
 
-```@example mesh
-Ωₕ_2d[2, 5], point(Ωₕ_2d, CartesianIndex(2, 5))
-```
-
-### 2.2 Half points
+Above one dimension a mesh is a tensor product of 1D submeshes, stored per axis, so coordinate storage is ``O(N_x + N_y + N_z)`` while the grid it addresses is the full product. The point count is one integer per axis, or a single integer for the same resolution along every axis. The distribution flag is per axis too: `(true, false)` would be uniform in ``x`` and random in ``y``.
 
 ```@example mesh
-half_points(Ωₕ_fig), half_point(Ωₕ_fig, 3)
+Ωₕ_2d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (10, 20), (true, true))
+
+npoints(Ωₕ_2d, Tuple), size(Ωₕ_2d)
 ```
 
-### 2.3 Spacings and cell measures
-
-| Function | Meaning |
-| --- | --- |
-| `spacing(Ωₕ, i)` | backward spacing $h_i = x_i - x_{i-1}$ ($x_2 - x_1$ at $i = 1$) |
-| `forward_spacing(Ωₕ, i)` | forward spacing $h_{i+1} = x_{i+1} - x_i$ |
-| `half_spacing(Ωₕ, i)` | cell width $h_{i+1/2} = (h_i + h_{i+1})/2$ |
-| `cell_measure(Ωₕ, idx)` | measure of the control volume at `idx`: the product of the per-axis cell widths |
-| `hₘₐₓ(Ωₕ)` | largest cell measure in the mesh |
-
-A 1D mesh stores its backward spacings, so `spacings` hands back the whole vector and the
-accessors index it. The cache is rebuilt by `set_points!`, and so by
-[`iterative_refinement!`](@ref) and [`change_points!`](@ref) as well:
+`Ωₕ_2d(k)` is the submesh along axis `k`, and everything said above about a 1D mesh applies to it:
 
 ```@example mesh
-spacings(Ωₕ_fig), spacings(Ωₕ_fig)[3] == spacing(Ωₕ_fig, 3)
+Ωₕ_2d(1)
 ```
 
-```@example mesh
-hₘₐₓ(Ωₕ_fig), cell_measure(Ωₕ_2d, (3, 4))
-```
+The cell around ``(x_i, y_j)`` is the rectangle spanned by the two per-axis intervals, so its measure is the product of the per-axis widths. The picture shows a ``4 \times 3`` mesh with non-uniform points on both axes:
+
 ```@raw html
 <figure style="margin:1.5em 0;text-align:center">
 <svg viewBox="0 0 700 380" width="100%" style="max-width:700px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif" role="img"
@@ -260,8 +238,7 @@ hₘₐₓ(Ωₕ_fig), cell_measure(Ωₕ_2d, (3, 4))
 </figure>
 ```
 
-The cell around `(xᵢ, yⱼ)` is the rectangle spanned by the two per-axis intervals, so its
-measure is the product of the per-axis widths. On the mesh drawn above:
+The cell around `(x₃, y₂)` is highlighted. Its measure is the product of the two widths:
 
 ```@example mesh
 Ω_prod = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
@@ -272,15 +249,20 @@ cell_measure(Ωₕ_prod, CartesianIndex(3, 2)),
 half_spacing(Ωₕ_prod(1), 3) * half_spacing(Ωₕ_prod(2), 2)
 ```
 
-The cells tile the domain exactly here too: the twelve measures sum to the area.
+The cells tile the domain exactly: the twelve measures sum to the area.
 
 ```@example mesh
 sum(cell_measure(Ωₕ_prod, I) for I in indices(Ωₕ_prod))
 ```
 
+Above 1D, `change_points!` takes the markers alongside the per-axis coordinate vectors, so the labels are re-evaluated at the new positions.
+
+!!! tip "Try this"
+    Rebuild the product mesh with `(3, 3)` points and `[0.0, 0.5, 1.0]` on both axes. The single interior cell has measure ``0.25``, and the corner cells have ``0.0625``.
+
 ---
 
-## 3. Boundary and interior indexing
+## Boundary, interior and markers
 
 Indices are Julia's own `CartesianIndices`:
 
@@ -293,14 +275,7 @@ is_boundary_index(Ωₕ_prod, CartesianIndex(1, 2)),
 is_boundary_index(Ωₕ_prod, CartesianIndex(2, 2))
 ```
 
-`boundary_indices(Ωₕ)` gives the facets separately, as a tuple of index sets.
-
----
-
-## 4. Markers on meshes
-
-Building a mesh over a labelled domain projects each marker onto the grid points as a
-`BitVector`, so membership is one lookup:
+Building a mesh over a labelled domain projects each marker onto the grid points as a `BitVector`, so membership is one lookup. Here the domain has an inlet, an outlet, walls, and a disc-shaped obstacle given by a predicate:
 
 ```@example mesh
 I = interval(0.0, 1.0)
@@ -315,26 +290,15 @@ I = interval(0.0, 1.0)
 sum(index_in_marker(Ωₕ_marked, :walls)), sum(index_in_marker(Ωₕ_marked, :obstacle))
 ```
 
+!!! tip "Try this"
+    Change the radius `0.15` to `0.3` and rebuild. The obstacle count grows roughly fourfold, with the disc area.
+
 ---
 
-## 5. Mesh adaptation
+## Refinement
 
-### 5.1 In-place refinement
+[`iterative_refinement!`](@ref) inserts a point at every cell midpoint, updating indices and reapplying the domain's markers. Refinement is uniform and dyadic: `N` points become `2N - 1` along every axis.
 
-[`iterative_refinement!`](@ref) inserts a point at every cell midpoint, updating indices and
-reapplying the domain's markers. Refinement is uniform and dyadic: `N` points become
-`2N - 1` along every axis.
-
-A mesh carrying custom markers needs the two-argument form: the labels are re-evaluated on
-the new points, and refining without a domain to re-derive them from is an error rather than
-a silent loss.
-
-```@example mesh
-Ωₕ_ref = mesh(Ω_marked, (20, 20))
-iterative_refinement!(Ωₕ_ref, markers(Ω_marked))
-
-npoints(Ωₕ_ref, Tuple), sum(index_in_marker(Ωₕ_ref, :obstacle))
-```
 ```@raw html
 <figure>
 <svg viewBox="0 0 740 210" width="100%" style="max-width:740px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
@@ -407,20 +371,60 @@ npoints(Ωₕ_ref, Tuple), sum(index_in_marker(Ωₕ_ref, :obstacle))
 </figure>
 ```
 
-### 5.2 Relocating coordinates
-
-[`change_points!`](@ref) replaces the coordinates of an existing mesh, keeping the point
-count, which is what a moving boundary or a graded grid needs:
+A mesh carrying custom markers needs the two-argument form: the labels are re-evaluated on the new points, and refining without a domain to re-derive them from is an error rather than a silent loss.
 
 ```@example mesh
-Ωₕ_move = mesh(domain(interval(0.0, 1.0)), 11)
-change_points!(Ωₕ_move, collect(range(0.0, 1.0, length = npoints(Ωₕ_move)) .^ 2))
+Ωₕ_ref = mesh(Ω_marked, (20, 20))
+iterative_refinement!(Ωₕ_ref, markers(Ω_marked))
 
-points(Ωₕ_move)
+npoints(Ωₕ_ref, Tuple), sum(index_in_marker(Ωₕ_ref, :obstacle))
 ```
 
-Above 1D, pass the markers alongside the per-axis coordinate vectors so the labels are
-re-evaluated at the new positions, as §2's product mesh does. `Bramble.set_points!` is the
-variant that also accepts a different point count.
+---
 
-Next: [grid spaces](space.md), which put discrete functions on a mesh.
+## [Reference](@id mesh_reference)
+
+### Constructing from a set
+
+A geometric set can be passed directly when no custom labels are needed. `:boundary` and `:interior` are provisioned either way:
+
+```@example mesh
+X = interval(0.0, 1.0) × interval(0.0, 2.0)
+Ωₕ_direct = mesh(X, 20)      # isotropic: 20 × 20
+
+:boundary in keys(markers(Ωₕ_direct)), :interior in keys(markers(Ωₕ_direct))
+```
+
+### Points and half points
+
+`points` returns the coordinate vector, or a tuple of them above 1D. A single coordinate comes from `point(Ωₕ, idx)` or from indexing, with a linear index, a tuple or a `CartesianIndex`:
+
+```@example mesh
+Ωₕ_fig[3], point(Ωₕ_fig, 3), Ωₕ_2d[2, 5], point(Ωₕ_2d, CartesianIndex(2, 5))
+```
+
+```@example mesh
+half_points(Ωₕ_fig), half_point(Ωₕ_fig, 3)
+```
+
+### Spacings and cell measures
+
+| Function | Meaning |
+| --- | --- |
+| `spacing(Ωₕ, i)` | backward spacing ``h_i = x_i - x_{i-1}`` (``x_2 - x_1`` at ``i = 1``) |
+| `forward_spacing(Ωₕ, i)` | forward spacing ``h_{i+1} = x_{i+1} - x_i`` |
+| `half_spacing(Ωₕ, i)` | cell width ``h_{i+1/2} = (h_i + h_{i+1})/2`` |
+| `cell_measure(Ωₕ, idx)` | measure of the control volume at `idx`: the product of the per-axis cell widths |
+| `hₘₐₓ(Ωₕ)` | largest cell measure in the mesh |
+
+A 1D mesh stores its backward spacings, so `spacings` hands back the whole vector and the accessors index it. The cache is rebuilt by `set_points!`, and so by [`iterative_refinement!`](@ref) and [`change_points!`](@ref) as well:
+
+```@example mesh
+spacings(Ωₕ_fig), spacings(Ωₕ_fig)[3] == spacing(Ωₕ_fig, 3)
+```
+
+```@example mesh
+hₘₐₓ(Ωₕ_fig), cell_measure(Ωₕ_2d, (3, 4))
+```
+
+`boundary_indices(Ωₕ)` gives the boundary facets separately, as a tuple of index sets.

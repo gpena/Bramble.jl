@@ -193,7 +193,7 @@ using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunctio
         @test all(isfinite, parent(mx))
     end
 
-    # The `outside` policies (gpena/Bramble.jl#223) on non-uniform meshes. The oracle is the
+    # The `outside` policies on non-uniform meshes. The oracle is the
     # affine function itself: the interpolant reproduces it exactly inside the domain, and
     # the boundary cell's own slope is the function's slope, so `:extrapolate` reproduces it
     # outside too, while `:clamp` reads it at the nearest boundary point.

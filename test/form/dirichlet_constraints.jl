@@ -53,9 +53,8 @@ using ..TestUtils: WITH_SLOW_TESTS
         end
 
         @testset "Rejects an input with no domain" begin
-            # gpena/Bramble.jl#34: a bad `input` used to surface as a MethodError from
-            # `set`, an internal accessor the caller never named. Now a real check names
-            # the accepted types instead.
+            # A bad `input` is refused by a check that names the accepted types, not by a
+            # MethodError from `set`, an internal accessor the caller never named.
             @test_throws "must be a CartesianProduct" dirichlet_constraints(
                 "not a domain", :gamma_1 => f1
             )
@@ -79,10 +78,9 @@ using ..TestUtils: WITH_SLOW_TESTS
         end
 
         @testset "Time domain rejects space-only BCs" begin
-            # gpena/Bramble.jl#33: passing a time domain alongside a `func(x)`-only
-            # condition used to be silently accepted -- the time domain had no effect at
-            # all -- and only broke later, once `bcs(t)` was actually called during
-            # assembly. Caught here by arity, at construction.
+            # A time domain alongside a `func(x)`-only condition has no effect and would
+            # break only once `bcs(t)` is called during assembly. It is caught by arity, at
+            # construction.
             @test_throws "must accept (x, t)" dirichlet_constraints(Ωd, I, :gamma_1 => f1)
         end
 
@@ -200,7 +198,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         end
         @test any(marked)                  # the marker selects something
 
-        # Alias verification: :ymin on Wₕ (registered as :bottom) yields identical constrained matrix
+        # Alias verification. :ymin on Wₕ (registered as :bottom) yields an identical constrained matrix
         A_alias = _eye(nW)
         A_alias[1, 2] = 5.0
         dirichlet_bc!(A_alias, Wₕ, :ymin)
@@ -476,7 +474,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
     # Composite space.
     @testset "Multiple labels match sequential (#334)" begin
         # Composite `dirichlet_bc!`/`symmetrize!` now combine every label into one mask
-        # per leaf and sweep `A` once, instead of once per label (gpena/Bramble.jl#334).
+        # per leaf and sweep `A` once, instead of once per label.
         # The oracle is that combining changes nothing: applying `:bottom, :top` together
         # must equal applying them one label at a time, for both the matrix and (for
         # `symmetrize!`) the right-hand side.
@@ -751,10 +749,9 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
     @testset "Marker reads allocate nothing (#99)" begin
         # `DomainMarkers.symbols`/`.tuples` moved from Set to Tuple, so every marker read
         # reached from a Dirichlet constraint -- including `_normalize_dirichlet`, which
-        # every `dirichlet =` keyword on `form`/`assemble!` passes through -- is now an
-        # unrolled sweep with nothing to allocate. Measured against the pre-#99 commit
-        # (43df4c0): `_normalize_dirichlet` 480 B (1 label) / 720 B (3 labels) -> 0 B;
-        # iterating `label_identifiers` 96 B / 176 B -> 0 B.
+        # every `dirichlet =` keyword on `form`/`assemble!` passes through -- is an
+        # unrolled sweep with nothing to allocate: `_normalize_dirichlet` and iterating
+        # `label_identifiers` both measure 0 B.
         function marker_read_bytes(bcs)
             Bramble.symbols(bcs)
             Bramble.tuples(bcs)

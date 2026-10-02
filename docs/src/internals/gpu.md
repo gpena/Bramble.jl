@@ -219,15 +219,15 @@ cache -- and `_flush_device_scatter!` ends the sweep with one
 `copyto!(A.nzVal, A.mirror.nzval)`, a single bulk transfer, not one write per nonzero. See
 "What a device sparse type must provide" above for the field's shape.
 
-**Read the mirror for what it actually is: the fill step performs no device compute.**
+**Read the mirror for what it is. The fill step performs no device compute.**
 Every scatter-add above happens on the CPU, into the mirror's plain `Vector` storage, on
 every backend. The device sparse matrix's own storage is touched exactly once per
 assembly, by the bulk `copyto!` at the end. "Assembling on a device-backed space" is CPU
 assembly plus an upload -- there is no device-side fill step to have sped up or slowed
 down. Measured on this host (`innerₕ(D₋ₓ(U), D₋ₓ(V))`, `BenchmarkTools`, one warmed
-process): device `assemble`/`assemble!` are 2-8x slower than the host path, in 1D, 2D and
+process), device `assemble`/`assemble!` are 2-8x slower than the host path, in 1D, 2D and
 3D, both forms, with no offsetting benefit anywhere in the number, because the device
-never does anything the host wasn't already going to do. Full detail and the table:
+never does anything the host wasn't already going to do. Full detail and the table are in
 [gpena/Bramble.jl#317](https://github.com/gpena/Bramble.jl/issues/317#issuecomment-5764380143).
 Treat this path as a correctness fallback -- something that produces *a* device-resident
 matrix for a consumer that needs entries, not a performance path. #317 has decided that the
@@ -475,12 +475,12 @@ decides whether to close it as not planned.
 
 ### If the direction needs revisiting
 
-Two measured facts would change this decision: a workload whose assembled matrix stops
-fitting device memory at a size beyond those above, or one that needs a large
+Two measured facts would change this decision. One is a workload whose assembled matrix stops
+fitting device memory at a size beyond those above. The other is a workload that needs a large
 device-resident matrix held continuously and rebuilt often (the scenario #316's own
 abandonment names as the one where its memory argument returns). Either should be recorded
 as a fresh issue with its own numbers, rather than by reopening #317. A broader matrix-free path
-is also recorded on #317 without being scoped: `assemble` on a device-backed form returning
+is also recorded on #317 without being scoped. It would have `assemble` on a device-backed form return
 a matrix-free operator for any form the already-fused device kernels can express, not only
 the separable ones, with host assembly plus upload as the fallback for the rest. The architecture that
 would then be weighed is kept below, in "Appendix: device assembly, if this decision is ever
@@ -492,19 +492,21 @@ revisited".
 concrete step toward the matrix-free-on-device direction the previous section selects for
 separable applies: a [`KroneckerLinearOperator`](@ref) built from a device-backed form, and
 [`fdm_solve`](@ref) on top of it, both apply on the device with no host round trip once
-built. The split below is decided and built, not a target.
+built. The split below is decided and built, not a target. What the Kronecker operator is, and
+what it saves, is told on the [memory scaling](../examples/memory_scaling.md) page; this
+section keeps only how it runs on a device.
 
-**`KroneckerLinearOperator`.** [`kronecker_operator`](@ref) always builds the 1D mass and
+**The operator.** [`kronecker_operator`](@ref) always builds the 1D mass and
 difference factors on the host mirror of the mesh (`_host_mirror_mesh`), the same way it
 does for a host-backed form -- a device-backed axis space cannot be scalar-indexed to
 assemble a 1D factor. Each factor is then moved to the backend's storage once, by
-`_kron_to_storage`: a `Diagonal` mass factor becomes a `_KronDeviceDiagonal` holding one
+`_kron_to_storage`. A `Diagonal` mass factor becomes a `_KronDeviceDiagonal` holding one
 device vector, and a `SparseMatrixCSC` difference factor becomes a `_KronDeviceSparse`
 holding its `colptr`/`rowval`/`nzval` as three separate device arrays -- never the matrix
 struct itself, for the same non-bitstype-kernel-argument reason as "A struct nesting a
 device array will not compile" above. `mul!` no longer sweeps the grid once per axis per
 term ([gpena/Bramble.jl#323](https://github.com/gpena/Bramble.jl/issues/323) shipped that
-version; a later change replaced it): every term `kronecker_operator` builds has at most
+version, and a later change replaced it). Every term `kronecker_operator` builds has at most
 one non-diagonal factor, so `mul!` now applies the whole operator in a single fused pass,
 writing each entry of `y` once. On the host that pass walks grid lines along axis 1,
 folding the other axes' diagonal entries into one scalar per line, and a term whose
@@ -523,7 +525,7 @@ the `scratch` keyword some callers still pass is accepted and ignored: the fused
 no work buffers.
 
 **`fdm_solve`.** The 1D factors' generalised eigendecomposition (`_fdm_eigendecompose`)
-stays on the host: it is a small, per-axis LAPACK call regardless of `K`'s own storage, so
+stays on the host, being a small per-axis LAPACK call regardless of `K`'s own storage. So
 a device-backed `K`'s factors are copied back to the host first (`_fdm_host_factor`) before
 the eigensolve runs. Everything downstream of that eigensolve follows the storage of the
 right-hand side `F` instead: `_fdm_apply` copies the eigenvector matrices `Q_d`, their
@@ -625,9 +627,9 @@ with the mirror cache. Launching over the list rather than over every point with
 predicate is also the cheaper choice for the usual case, a `:boundary` marker, which covers
 a vanishing fraction of the grid.
 
-## `GpuOffload`: per-call device routing without a device-typed space
+## Per-call device routing without a device-typed space
 
-[`GpuOffload`](@ref) ([gpena/Bramble.jl#324](https://github.com/gpena/Bramble.jl/issues/324))
+[`GpuOffload`](@ref), one of the [execution policies](@ref backend_policies) ([gpena/Bramble.jl#324](https://github.com/gpena/Bramble.jl/issues/324))
 is a different shape from everything above: a [`CpuPolicy`](@ref) -- `locality` answers
 [`HostLocality`](@ref) for it, and the `Backend` it configures keeps host storage -- that
 wraps an inner `CpuPolicy` alongside a device `Backend`. It routes only `Rₕ!`/`avgₕ!`'s fill
@@ -654,12 +656,12 @@ same four rows, correctness gated before timing (`rtol = atol = 1f-5`, `Float64`
 | `avgₕ!` 2D, 3000x3000 | -- | -- | 10.86x |
 
 Three of the four rows win clearly, close to the issue's own exploratory figures
-(1.98x/9.87x/20.52x for the same three rows) -- but `Rₕ!` 1D at ten million points *loses*,
-0.86x, host wins. The reason is the same no-hidden-cache design named above: `Rₕ!` is one
-cheap function evaluation per point, already fast on four CPU threads, and does not
+(1.98x/9.87x/20.52x for the same three rows). `Rₕ!` 1D at ten million points *loses*
+at 0.86x, so the host wins. The reason is the no-hidden-cache design named above. `Rₕ!` is
+one cheap function evaluation per point and already fast on four CPU threads, so it does not
 amortise the per-call mesh-axis upload plus full result copy-back that `GpuOffload` pays on
 every call with nothing cached. `avgₕ!`'s per-cell quadrature is expensive enough on the
-host that the same round trip is dwarfed instead, which is why its two rows show the
+host that the same round trip is dwarfed. That is why its two rows show the
 largest wins in the table. Read this policy as a win for expensive per-point/per-cell work
 on a large grid, not as something to reach for by default -- measure the specific call
 before choosing it over the wrapped inner policy alone.

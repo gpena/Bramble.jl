@@ -1,5 +1,5 @@
 # matrix_free.jl: `MatrixFreeOperator`, a `BilinearForm` applied to a vector without its
-# matrix (gpena/Bramble.jl#326). `mul!` walks the form's (term, block) units exactly as the
+# matrix. `mul!` walks the form's (term, block) units exactly as the
 # serial replay does (`_replay_summands!`/`_replay_blocks!`, bilinear_execution.jl), through
 # the same `visit_bilinear_stencil`, and hands each entry to an `ActionSink` that adds
 # `α * weight * x[col]` into `y[row]` instead of into a stored `nzval`. Every AST node the
@@ -183,11 +183,13 @@ The linear operator of `a`, applied without assembling its matrix: `op * x` agre
 
 # Keywords
 - `dirichlet`: The Dirichlet labels whose rows become identity rows, in any form `assemble`
-  accepts (`:boundary`, a tuple of labels, `:left => g`, [`dirichlet_constraints`](@ref));
+  accepts (a symbol, a tuple of labels, a pair with its value, [`dirichlet_constraints`](@ref));
   boundary values are ignored, as they are by the matrix (default: `nothing`).
+
 - `dirichlet_components`: The leaves of a composite test space the labels bind to, as in
-  [`dirichlet_bc!`](@ref): an `Int`, a `Tuple` of `Int`s, or `nothing` for every leaf
+  [`dirichlet_bc!`](@ref). It is an `Int`, a `Tuple` of `Int`s, or `nothing` for every leaf
   (default: `nothing`).
+
 - `policy`: The [`ExecutionPolicy`](@ref) of `mul!` (default: the trial space's).
   [`CpuSerial`](@ref) walks the form on the calling task; any other CPU policy threads it,
   with each leaf's own mechanism (see [`MatrixFreeOperator`](@ref)).
@@ -541,7 +543,7 @@ end
     )
 end
 
-# --- The fused threaded sweep (gpena/Bramble.jl#326, M1.5) ------------------------------ #
+# --- The fused threaded sweep ------------------------------ #
 #
 # Sweeping each unit in its own colour bands, as above, costs two parallel regions per unit
 # and walks every point through the guarded entry walk: on 4 threads the product was at most
@@ -834,13 +836,13 @@ end
 
 # The region's mechanism. `CpuPolyester` (and any other CPU policy) takes `_run_bands!`, as
 # the engines do. `CpuThreaded` spawns one task per band and walks the first band on the
-# calling task, rather than `_run_bands!`'s `Threads.@threads :static`: on this host a
+# calling task, rather than `_run_bands!`'s `Threads.@threads :static`. On this host a
 # `:static` region costs 25-30 us when it follows another closely (a product repeated in a
 # solver), `:dynamic` about 20 us with the walk, a spawn about 5 us, and at 4096 unknowns the
 # whole serial product is 30 us (2D 64²: 32 us `:static`, 20 us `:dynamic`, 11 us spawned).
 # Nothing on the path reads `threadid()`, so a task may run on, or move to, any thread. A
 # spawn nests inside a user's `Threads.@threads` loop, which `:static` cannot
-# (`_static_or_serial`), so no fallback is needed: `@sync` waits by yielding, and the waiting
+# (`_static_or_serial`), so no fallback is needed. `@sync` waits by yielding, and the waiting
 # thread runs the bands itself if every other one is busy. Each band writes only its own
 # rows, in the serial order, so the result does not depend on where a band runs.
 @inline _mf_run_bands!(policy::CpuPolicy, s, a, plan, nbands::Int) = _run_bands!(

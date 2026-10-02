@@ -1,7 +1,6 @@
-# ext/BramblePolyesterExt.jl: the Polyester-batched sweeps behind `CpuPolyester` (S7.2,
-# gpena/Bramble.jl#190, .agents/plans/v3-3-0-memory-scaling.md).
+# ext/BramblePolyesterExt.jl: the Polyester-batched sweeps behind `CpuPolyester`.
 #
-# S7.1 left nine hooks in `src/` as `@noinline` methods that error naming Polyester
+# Nine hooks in `src/` are `@noinline` methods that error naming Polyester
 # (`src/utils/linear_algebra.jl`, `src/assembly/bilinear_execution.jl`, `src/assembly/linear.jl`):
 # `_batch_for!`, `_batch_axis_for!`, `_batch_scatter_for!`, `_batch_dot`, `_batch_dot_masked`,
 # `_batch_bilinear_colour_sweep!`, `_batch_bilinear_band_sweep!`, `_batch_linear_colour_sweep!`
@@ -12,33 +11,31 @@
 # `assemble_parallel!`, `_assemble_linear!`) are untouched by this file: this only supplies what
 # runs once the caller has already zeroed and dispatched.
 #
-# S7.2 (gpena/Bramble.jl#356) left three more of the same shape in
+# Three more hooks have the same shape in
 # `src/operators/difference.jl`/`src/operators/average.jl`: `_batch_difference_engine!`,
 # `_batch_average_engine!` and `_batch_centered_average_engine!`, each the `@batch` counterpart of
 # `_threaded_difference_engine!`/`_threaded_average_engine!`/`_threaded_centered_average_engine!`,
 # running one `_difference_band!`/`_average_band!`/`_centered_average_band!` per band.
 #
-# S3.1 (gpena/Bramble.jl#338) added a warmed refill that replays recorded `nzval` positions
-# instead of searching, gated per unit by `_threaded_replay_policy`: only `CpuThreaded`
-# answered `true` in `src/`, so `CpuPolyester` kept searching even once a recording existed.
-# This file's `_threaded_replay_policy(::CpuPolyester) = true` opts it in, and
+# A warmed refill replays recorded `nzval` positions instead of searching, gated per unit by
+# `_threaded_replay_policy`; only `CpuThreaded` answers `true` in `src/`.
+# This file's `_threaded_replay_policy(::CpuPolyester) = true` opts `CpuPolyester` in, and
 # `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` are the `@batch` counterparts
 # of `_batch_bilinear_band_sweep!`/`_batch_bilinear_colour_sweep!` above, reached instead of
 # them once a unit's leaf can replay (`_leaf_replays`, bilinear_execution.jl): the colouring is
 # identical, only `_replay_point!` (reads the recording) stands in for `_scatter_point!`
 # (searches).
 #
-# S7.5 (gpena/Bramble.jl#356) left one more in `src/operators/vector_calculus.jl`:
+# One more hook lives in `src/operators/vector_calculus.jl`:
 # `_batch_run_bands!`, the `@batch` counterpart of `_run_bands!`'s `CpuThreaded` arm, reached
-# by the divergence, curl and strain-average engines. Unlike the three S7.2 hooks, it stays
+# by the divergence, curl and strain-average engines. Unlike the three hooks above, it stays
 # generic over the band function `f` instead of naming one.
 #
 # `Polyester.@batch` accepts a `CartesianIndices` directly (`closure.jl`'s own `splitloop`
 # already splits it along its last axis, the same trick `_threaded_axis_for!` hand-rolls for
 # `Threads.@threads`), so none of the manual axis-chunking `src/utils/linear_algebra.jl` uses
-# for the threaded path is reproduced here. gpena/Bramble.jl#190's own measurement is why:
-# axis-chunking helps `Threads.@threads` (it removes a linear-index conversion `Threads`
-# cannot avoid on its own) and hurts `@batch`, which already does the equivalent split
+# for the threaded path is reproduced here. Axis-chunking helps `Threads.@threads` (it removes a linear-index conversion `Threads`
+# cannot avoid on its own) but hurts `@batch`, which already does the equivalent split
 # internally -- chunking on top would split twice.
 module BramblePolyesterExt
 
@@ -55,9 +52,7 @@ using PrecompileTools: @setup_workload, @compile_workload
 #
 # Direct translations of `_threaded_for!`/`_threaded_axis_for!`'s bodies: `idxs` is whatever
 # `_sweep_for!` was handed (a linear range for `_batch_for!`, a `CartesianIndices` for
-# `_batch_axis_for!`), and `@batch` partitions it without any conversion of its own. Only the
-# `_sweep_for!` seam itself was renamed (gpena/Bramble.jl#298); `_batch_for!`/`_batch_axis_for!`
-# below it, implemented in this extension, keep their names unchanged.
+# `_batch_axis_for!`), and `@batch` partitions it without any conversion of its own. 
 
 #
 # `v::AbstractArray` (rather than an unconstrained `v`) so each of these is a genuine
@@ -163,13 +158,13 @@ function Bramble._batch_dot_masked(
     return s
 end
 
-# `SeparableWeights` specializations (gpena/Bramble.jl#281, #288): `inner₊(uₕ, vₕ, Val(S))`
-# passes the weight as the *second* positional argument (space/inner_product.jl:609), so
+# `SeparableWeights` specializations. `inner₊(uₕ, vₕ, Val(S))`
+# passes the weight as the *second* positional argument (space/inner_product.jl), so
 # under `CpuPolyester` it is `_batch_dot`'s own second parameter, not third -- these dispatch on
-# that position, mirroring the `CpuSerial`/`CpuThreaded` specializations at
-# space/inner_product.jl:435-476. Same reasoning as those: `w[I]` (the `CartesianIndex`
-# `getindex`) multiplies per-axis factors directly, while `w[i]` (linear) divrems `i` back
-# into a `CartesianIndex` first -- an `O(n^D)` cost paid on every point, every batch task.
+# that position, mirroring the `CpuSerial`/`CpuThreaded` specializations in
+# space/inner_product.jl. Same reasoning as those: `w[I]` (the `CartesianIndex`
+# `getindex`) multiplies per-axis factors directly. `w[i]` (linear) divrems `i` back
+# into a `CartesianIndex` first, an `O(n^D)` cost paid on every point, every batch task.
 # The unmasked walk goes straight over `CartesianIndices(w.dims)` (which `@batch` also
 # accepts, see this file's header comment); the masked walks stay over the flat `1:n` mask
 # index space (masks are linear-indexed) and convert only the one index needed for `w`.
@@ -231,26 +226,15 @@ end
 #
 # `A::AbstractMatrix` (matching the `CpuThreaded` reference signature in
 # bilinear_execution.jl), rather than the stub's fully unconstrained `A`, so this is a genuine
-# specialisation of the `src/` stub and not a redefinition of the identical signature: the
-# actual cause of this file's precompilation failure before this fix -- these four sweep
-# hooks were the only ones left unconstrained, so `BramblePolyesterExt`'s own module body
-# aborted evaluating itself partway through (right here), leaving everything defined after
-# this point in the file -- including the linear sweeps below -- never installed, which is
-# why a bilinear `assemble!` under `CpuPolyester` still reached the `src/` error stub with
-# Polyester loaded.
+# specialisation of the `src/` stub and not a redefinition of the identical signature.
+# Redefining it aborts the module body partway, leaving everything defined after it
+# uninstalled, so a bilinear `assemble!` under `CpuPolyester` reaches the `src/` error stub
+# with Polyester loaded.
 #
-# A trailing device-only parameter once lived here (gpena/Bramble.jl#94, S4.2), threading a
-# resolved device-sparse staging object through the sweep by hand. Adding it to the
-# `CpuThreaded` reference signature in `bilinear_execution.jl` without updating this
-# extension's copy is exactly what caused the precompilation failure above: the arities
-# stopped matching, dispatch silently fell through to the `src/` error stub, and its message
-# ("you forgot to load Polyester") was actively wrong -- Polyester *was* loaded, the arity just
-# no longer matched. gpena/Bramble.jl#313 removed the parameter for good: a device sparse
-# matrix now carries the staging object as a field of its own, so `add_to_sparse!` reads it
-# off `A` directly and nothing device-specific is threaded through the sweep chain at all.
-# Kept as a cautionary comment rather than deleted outright -- the next signature this
-# extension has to match should be diffed against `bilinear_execution.jl` rather than assumed
-# unchanged.
+# Each signature here must match the `CpuThreaded` reference in `bilinear_execution.jl`.
+# A mismatched arity makes dispatch fall through silently to the `src/` error stub, whose
+# message ("you forgot to load Polyester") is then wrong. Diff against
+# `bilinear_execution.jl` whenever it changes.
 
 function Bramble._batch_bilinear_colour_sweep!(
         A::AbstractMatrix, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
@@ -275,14 +259,14 @@ function Bramble._batch_bilinear_band_sweep!(
 end
 
 # --- _threaded_replay_policy/_batch_bilinear_band_replay!/_batch_bilinear_colour_replay! ---- #
-# (src/assembly/bilinear_execution.jl, gpena/Bramble.jl#338)
+# (src/assembly/bilinear_execution.jl)
 #
 # Opts `CpuPolyester` into the warmed-refill replay `CpuThreaded` already gets: without this,
 # `_leaf_replays` never answers `true` for a `CpuPolyester` leaf, so its units keep searching
 # even once a recording exists. `target::_ReplayTarget` -- rather than the stub's unconstrained
 # `target` -- is what makes each of these a genuine specialisation of its `src/` stub, the same
 # `A::AbstractMatrix` reasoning the sweep hooks above give. A matrix-free product
-# (`MatrixFreeOperator`, src/assembly/matrix_free.jl, gpena/Bramble.jl#326) sweeps through
+# (`MatrixFreeOperator`, src/assembly/matrix_free.jl) sweeps through
 # the same two hooks with an `_ActionTarget`, the sink adding `α * w * x[col]` into
 # `y[row]`: the colouring and the per-point step (`_replay_point!`) are the same.
 Bramble._threaded_replay_policy(::CpuPolyester) = true
@@ -415,7 +399,7 @@ function Bramble._batch_broadcast!(v::AbstractVector, bc, ax)
     return nothing
 end
 
-# The threaded matrix-free apply (gpena/Bramble.jl#391): `matrix_free_operator` under
+# The threaded matrix-free apply: `matrix_free_operator` under
 # `CpuPolyester` in 1D-3D on non-uniform meshes, in the forms the tests and users reach --
 # the policy passed to the operator or carried by the mesh backend, with and without
 # `dirichlet = :boundary`, and the 3- and 5-argument `mul!`.

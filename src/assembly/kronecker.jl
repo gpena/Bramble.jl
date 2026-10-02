@@ -607,7 +607,7 @@ end
 # `TrackedVector` (`TrackedArray{V, D, 1}`) satisfies this method's `AbstractVector` on both
 # `y` and `x` -- the classic diagonal clash where each method wins on a different argument
 # and neither dominates. Unlike the `*` method removed below, this one cannot simply be
-# deleted: `mul!` is the primitive `AbstractMatrix` operations are built from, not something
+# deleted, because `mul!` is the primitive `AbstractMatrix` operations are built from, not something
 # derived from a richer method the way `K * x` is derived from this `mul!`. Narrowing `y`/`x`
 # to something other than `AbstractVector` was considered and rejected: this operator's own
 # docstring commits it to plugging into `LinearProblem`/`KrylovJL_CG` "the same way an

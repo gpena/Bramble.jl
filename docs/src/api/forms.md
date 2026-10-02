@@ -46,9 +46,9 @@ inner₊(∇ₕ(u), ∇ₕ(v))` -- `kronecker_operator` builds a `KroneckerLinea
 applies in one fused pass over the grid instead of ever assembling the `D`-dimensional
 matrix: a
 `200^3` mesh stores `O(200)` numbers per axis rather than the assembled matrix's `O(200^3)`
-stored entries ([#162](https://github.com/gpena/Bramble.jl/issues/162)). `is_separable`
+stored entries. `is_separable`
 checks the condition beforehand. `fdm_solve` requires `using Kronecker` (the
-`BrambleKroneckerExt` extension, [#259](https://github.com/gpena/Bramble.jl/issues/259))
+`BrambleKroneckerExt` extension)
 and solves a separable, constant-coefficient system by fast diagonalisation instead of a
 general sparse factorisation.
 

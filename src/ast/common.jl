@@ -26,9 +26,8 @@ Zero-initialized offset tuple of dimension `D`.
 
 Shifts all coordinates in a stencil tuple by `delta` in dimension `Dim`.
 
-`map` over a `Tuple` unrolls and stays type-stable at compile time in Julia, measured
-against a `@generated` version this once was (gpena/Bramble.jl#63): identical zero
-allocations and identical inferred return type, so the code generation bought nothing
+`map` over a `Tuple` unrolls and stays type-stable at compile time in Julia, with zero
+allocations and an identical inferred return type, so code generation would buy nothing
 here.
 """
 @inline shift_stencil(inner::Tuple, ::Val{Dim}, ::Val{Delta}) where {Dim, Delta} = map(
@@ -40,13 +39,12 @@ here.
         shift_offset(t[1], Dim, delta), t[2]), inner)
 
 # `(left..., right...)` is already resolved at compile time for tuples; no metaprogramming
-# needed (gpena/Bramble.jl#63).
+# needed.
 @inline concatenate_stencils(left::Tuple, right::Tuple) = (left..., right...)
 
 # Recursion on tuple structure (`_flatten_tuples`, below) rather than `Iterators.flatten`:
-# measured (gpena/Bramble.jl#63), the latter does not stay type-stable for a tuple-of-tuples
-# and allocates (752 B for a 2×3 outer product), where this and the `@generated` version it
-# replaces both allocate 0.
+# the latter does not stay type-stable for a tuple-of-tuples
+# and allocates (752 B for a 2×3 outer product), where this allocates 0.
 @inline _flatten_tuples(::Tuple{}) = ()
 @inline _flatten_tuples(t::Tuple) = (first(t)..., _flatten_tuples(Base.tail(t))...)
 
@@ -70,7 +68,7 @@ one) and `entry_weights` keeps the coefficients.
 
 Taken apart for `Enzyme`, which cannot type a stencil entry's mixed `Int`/`Float64` tuple
 in a function that reads *both* halves of it and is not inlined into the function being
-differentiated (gpena/Bramble.jl#249). All three conditions are needed, measured one at a
+differentiated. All three conditions are needed, measured one at a
 time: the same loop written inside the differentiated closure compiles, so does one that
 reads only the offsets, and so does one that reads only the weights -- what fails is the
 combination, with `EnzymeNoTypeError` inside `_visit_guarded_region!`. Reading the offsets
@@ -82,7 +80,7 @@ happens where the entries are consumed (`_visit_entries`). That is enough, and t
 narrower change: every `local_stencil` method, the stencil algebra above and the tests that
 compare stencils against literal tuples all stay as they are. Enzyme differentiates
 `local_stencil` and `scale_stencil` themselves correctly at any stencil size measured, up
-to 63 machine words -- the size threshold gpena/Bramble.jl#249 was filed against is really
+to 63 machine words -- a failure at a large stencil is really
 `_peelable` selecting the guarded walk, not an aggregate Enzyme cannot type.
 
 `map` over a `Tuple` unrolls and stays type-stable, the same property the rest of the
@@ -100,16 +98,14 @@ stencil algebra in this file relies on, so neither call allocates.
 The sum of a stencil's coefficients, ignoring its offsets entirely.
 
 Required by `_contracted_left_stencil` (`operators/inner.jl`) for a source-only
-subtree's own `local_stencil`: not the offsets, which mean nothing for a value that
+subtree's own `local_stencil`. The offsets mean nothing for a value that
 contributes no matrix structure, only their total. `false` rather than `0` or `zero(T)` is
-the empty-stencil answer: [`RegionRestriction`](@ref) can legitimately produce `()` for a
+the empty-stencil answer, since [`RegionRestriction`](@ref) can legitimately produce `()` for a
 point outside its region, and there is no `T` to call `zero` on when there are no entries to
 read one from; `false` promotes to whatever numeric type the other entries (or, empty, the
-caller's own multiplication) turn out to have: exactly `sum(f, itr; init = false)`'s own
-behavior, which is what this calls. This used to be its own `@generated` unrolled fold
-"like every other stencil-algebra primitive" in this file; measured against `sum` directly
-(gpena/Bramble.jl#63), identical zero allocations and identical inferred type, so the
-`@generated` version bought nothing that `sum` was not already providing.
+caller's own multiplication) turn out to have. That is exactly `sum(f, itr; init = false)`'s own
+behavior, which is what this calls. A `@generated` unrolled fold would buy nothing: `sum`
+already gives zero allocations and the same inferred type.
 """
 @inline sum_stencil_values(stencil::Tuple) = sum(t -> t[end], stencil; init = false)
 
@@ -244,7 +240,7 @@ A stencil entry's test slot, naming a row of the test space directly rather than
 from the point being evaluated.
 
 The mirror of [`AbsoluteColumn`](@ref), and it exists for the mirror reason: a test-side
-interpolation (`innerₕ(u, πₕ(w))`, gpena/Bramble.jl#263) determines which rows a point's
+interpolation (`innerₕ(u, πₕ(w))`) determines which rows a point's
 contribution scatters into, on a mesh other than the one being walked, so it names them
 outright. The walked mesh is then the trial function's -- whichever side stays native is the
 side that supplies the quadrature weight and the grid being swept.
@@ -260,7 +256,7 @@ end
 # (clamped to the mesh) and adding a constant to the offsets (`shift_stencil`). Plain
 # relabelling of the stencil evaluated at the point itself is exact only for a bare trial or
 # test leaf: any nested stencil operator carries the neighbour's own spacing and boundary
-# mask, which the point's stencil does not (gpena/Bramble.jl#287).
+# mask, which the point's stencil does not.
 #
 # Two kinds of node break that. An interpolation's entries name absolute columns chosen by
 # `locate_cell` from the point's own coordinates, and a source's entries carry the function's
@@ -314,8 +310,8 @@ struct PointDependentStencil <: StencilShiftTrait end
 # `ShiftNode` is the one caller with no mask of its own (unlike every difference, average and
 # jump), so the re-evaluating shift below (`_reevaluated_shift`) zeroes a clamped tap itself:
 # relabelling a nested stencil evaluated at the clamped point would otherwise move its
-# backward taps back onto the grid (`shift_op(D₋ₓ(u), 1, 1)` kept `-u_n/h` at the last point,
-# gpena/Bramble.jl#352). For the masked callers that zero is one they already multiply in.
+# backward taps back onto the grid (`shift_op(D₋ₓ(u), 1, 1)` kept `-u_n/h` at the last point).
+# For the masked callers that zero is one they already multiply in.
 # A bare leaf needs no zero: relabelling it moves its one offset off the grid, and the
 # assembly's own bounds check drops it. A source has no offset left for that check once a
 # `PointDependentStencil` has reduced the shift to a bare value, so `ShiftNode` checks
@@ -363,7 +359,7 @@ by relabelling while whatever multiplies it has to be read at the new point:
   - `GridFunctionScale` shifts its operand by the operand's own rule (a recursive call to
     this same function), then reads its coefficient at the shifted point and scales by it,
     so `D₋ₓ(cₕ * u)` moves the trial column *and* re-reads `cₕ` at the tap
-    (gpena/Bramble.jl#271).
+   .
   - `OperatorAdd` recurses into each summand and `concatenate_stencils` the two results,
     since a sum can mix a point-dependent summand (one carrying a `GridFunctionScale`) with
     a translation-invariant one, and the generic point-dependent branch would re-evaluate
@@ -445,7 +441,7 @@ const _BareLeaf = Union{TrialFunction, TestFunction}
 # (`D₋ₓ(c * u)` inherits `GridFunctionScale`'s trait): its entries are offsets from the
 # point it was evaluated at, so they move by `delta` exactly as a translation-invariant
 # operand's do. Without the relabelling, `D₊ₓ(D₋ₓ(c * u))` put the neighbour's stencil on
-# the point's own columns (gpena/Bramble.jl#352).
+# the point's own columns.
 @inline function _shifted_inner_stencil(
         ::PointDependentStencil,
         inner_op,
@@ -501,7 +497,7 @@ end
 # read there times `u`'s own stencil *at* `Ishift` -- offset zero, not `delta`). What is
 # needed instead is the operand shifted by its own rule, with the coefficient read
 # separately at the shifted point, which is what this override gives it ahead of the
-# generic trait dispatch (gpena/Bramble.jl#271). `inner` is discarded, the same as the
+# generic trait dispatch. `inner` is discarded, the same as the
 # generic point-dependent branch discards it: it was evaluated at `I`, and the coefficient
 # this tap needs is the one at `Ishift`.
 @inline function shifted_inner_stencil(
@@ -574,7 +570,7 @@ Constructs a `SourceFunction` wrapping function `f`.
 """
 source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
 
-# --- Eager spatial lowering of source functions (gpena/Bramble.jl#197) ------------- #
+# --- Eager spatial lowering of source functions ------------- #
 #
 # `local_stencil(op::SourceFunction, space, I, markers, lin_idx)` calls `op.func(point(mesh(
 # space), I))` fresh at every grid point of every assembly -- which is what lets a closure
@@ -601,7 +597,7 @@ source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
 #
 # One exception: the interpolant `πₕ(uₕ)`, whose function is a `GridInterpolant`
 # (operators/interpolation.jl, which holds its method), is left unsampled and read at every
-# fill (gpena/Bramble.jl#408). Its values are `uₕ`'s, which a caller changes in place, and
+# fill. Its values are `uₕ`'s, which a caller changes in place, and
 # only `interpolate_at` at fill time can see `uₕ`'s mesh move and refuse it; its type
 # depends on `uₕ`'s element type only, so it costs no recompilation either.
 #
@@ -638,7 +634,7 @@ end
 # skill, "include-order rule").
 
 # ==============================================================================
-# 4. Deprecated `ast` keyword (gpena/Bramble.jl#105)
+# 4. Deprecated `ast` keyword
 # ==============================================================================
 
 # Measured to buy nothing: `resolve_form_ast(form)` is a field read, not a resolution, so

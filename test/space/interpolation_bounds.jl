@@ -153,7 +153,7 @@ using ..TestUtils: alloc_test, @test_allocs
         )
     end
 
-    # It must be :error, :clamp, :extrapolate, or a Number.
+    # It must be one of `:error`, `:clamp`, `:extrapolate`, or a Number.
     @testset "outside rejects unknown values" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
         uₕ = Rₕ(gridspace(Ωₕ), x -> x[1])

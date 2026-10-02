@@ -3,13 +3,13 @@
 # `ilu_preconditioner`: zero-fill incomplete LU (ILU(0)) preconditioning for the unsymmetric,
 # convection-dominated matrices Bramble's SBP forms assemble, where algebraic multigrid does
 # not degrade gracefully (gpena/Bramble.jl#244). Implemented in `BrambleILUZeroExt`, the same
-# underscored-fallback idiom `amg_preconditioner` uses (solvers/amg_preconditioner.jl):
+# `_`-prefixed fallback idiom `amg_preconditioner` uses (solvers/amg_preconditioner.jl):
 # the extension's method narrows on `A::AbstractMatrix`, a strict specialisation of this
 # file's `::Any` fallback.
 #
 # Unlike `amg_preconditioner`, which returns a bare `MultiLevel` hierarchy that still needs
 # `AlgebraicMultigrid.aspreconditioner` to gain `ldiv!`, `ILUZero.ilu0` already returns an
-# `ILU0Precon` with `ldiv!` defined directly -- so `ilu_preconditioner` and the underscored
+# `ILU0Precon` with `ldiv!` defined directly -- so `ilu_preconditioner` and the `_`-prefixed
 # `_ilu_operator` `BrambleSciMLExt`'s `preconditioner = :ilu0` reaches are the same call, kept
 # as two names only for parity with the AMG pair.
 

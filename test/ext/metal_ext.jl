@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: execution_policy, KroneckerLinearOperator, normal_vector
 using Metal
-# BrambleMetalExt's trigger is now the pair `["Metal", "GPUArrays"]` (gpena/Bramble.jl#321),
+# BrambleMetalExt's trigger is now the pair `["Metal", "GPUArrays"]`,
 # not `Metal` alone -- both must be `using`'d here for the extension to load at all.
 using GPUArrays
 using WriteVTK
@@ -19,17 +19,17 @@ using ..TestUtils: _run_gpu_tests
 
 # BrambleMetalExt's backend allocation primitives
 # (`vector`/`matrix`/`_backend_eye`/`_backend_zeros`/`metal_backend`). Meshes and
-# gridspaces on a Metal-backed vector are built further below, in the #307-#312
+# gridspaces on a Metal-backed vector are built further below, in the
 # device-quirk testsets: `mesh` construction no longer fills point coordinates with a
 # scalar CPU loop (which GPUArrays refuses on a device array, "Scalar indexing is
 # disallowed"). A uniform device mesh fills its four arrays in one `KernelAbstractions`
-# launch (gpena/Bramble.jl#303), and a non-uniform one generates its coordinates on the
-# host and transfers them in a single `copyto!` (gpena/Bramble.jl#304). What is still not
+# launch, and a non-uniform one generates its coordinates on the
+# host and transfers them in a single `copyto!`. What is still not
 # exercised anywhere here is a full PDE assembly pipeline on a GPU-resident mesh; that
 # remains a separate gap, outside the extension's own scope.
 #
 # `Metal.functional() && _run_gpu_tests()` gates every testset here that touches an actual
-# device array: precompiling and loading `Metal` succeeds on any platform (it degrades
+# device array. Precompiling and loading `Metal` succeeds on any platform (it degrades
 # gracefully rather than erroring, the same convention CUDA.jl uses), but only a real Apple
 # Silicon Mac has a working device, so a host without one skips those rather than fails.
 # `_run_gpu_tests()` is the second half of that gate, not a restatement of it: GitHub's
@@ -41,7 +41,7 @@ using ..TestUtils: _run_gpu_tests
 
 @testset "BrambleMetalExt" begin
     # A device VT (MtlVector) under a host CpuPolicy is rejected at construction
-    # (gpena/Bramble.jl#296, #298): `_metal_backend` only builds `Backend{MtlVector{T},
+    #: `_metal_backend` only builds `Backend{MtlVector{T},
     # MtlMatrix{T}, typeof(policy)}()`, a type-level construction that never allocates a
     # device array, so the rejection fires from `MtlVector`/`policy` type information alone.
     # That means it needs `using Metal` to be loaded (for the `MtlVector` type and the
@@ -68,7 +68,7 @@ using ..TestUtils: _run_gpu_tests
         @testset "metal_backend element types" begin
             @test metal_backend() isa Backend
             # a GPU is massively parallel and cannot execute serially, so the default says
-            # so (gpena/Bramble.jl#191); it used to be Serial()
+            # so; it used to be Serial()
             @test execution_policy(metal_backend()) === GpuKernel()
             @test execution_policy(metal_backend(Float16)) === GpuKernel()
             @test metal_backend(Float32) isa Backend
@@ -118,12 +118,11 @@ using ..TestUtils: _run_gpu_tests
 end
 
 # ---------------------------------------------------------------------------
-# Sparse CSR/CSC: construction, conversion, and SpMV/SpMM accuracy (gpena/Bramble.jl#250)
+# Sparse CSR/CSC: construction, conversion, and SpMV/SpMM accuracy
 # ---------------------------------------------------------------------------
 #
 # Gated on `Metal.functional()` like the testset above, but the skip path here `@warn`s
-# instead of only `@test_skip`ing: a silent skip is issue #84's failure mode, and this
-# milestone has already shipped one silent skip that had to be fixed later, so a host
+# instead of only `@test_skip`ing: a silent skip hides a failure, so a host
 # without a functional device is loud about what it did not check.
 if !Metal.functional() || !_run_gpu_tests()
     @warn "Skipping Metal sparse CSR/CSC tests: Metal.functional() is false, or GPU tests are skipped in CI"
@@ -157,7 +156,7 @@ else
 
         # β != 0 against a non-zero destination: `iszero(β)` is special-cased, so a test
         # that only ever passes β = 0 would not catch a destination wrongly left untouched
-        # or wrongly zeroed (gpena/Bramble.jl#250, S3.2).
+        # or wrongly zeroed.
         y0 = rand(Float32, m)
         α, β = 2.0f0, 3.0f0
         y = mtl(copy(y0))
@@ -199,8 +198,7 @@ else
         A = sprand(Float32, m, n, 0.1)
         Gc = metal_sparse_csc(A)
 
-        # Split into vector and matrix `mul!` methods on purpose (gpena/Bramble.jl#250,
-        # S3.2): a single `::AbstractVecOrMat` signature ties with LinearAlgebra's own
+        # Split into vector and matrix `mul!` methods on purpose: a single `::AbstractVecOrMat` signature ties with LinearAlgebra's own
         # generic `mul!` and raises `MethodError: ... is ambiguous` instead of this
         # `ArgumentError` -- so assert the error type and message, not merely that
         # something throws.
@@ -223,7 +221,7 @@ else
         @test occursin("CSR", sprint(showerror, err))
     end
 
-    # #250 also asks for an `ArgumentError` on `Float64`. That guard
+    # An `ArgumentError` is also expected on `Float64`. That guard
     # (`_check_metal_sparse_eltype` inside `mul!`, ext/BrambleMetalExt.jl) is real but
     # unreachable through the normal path: `metal_sparse_csr` on a `Float64` matrix already
     # throws inside Metal.jl's own `mtl()`, because `MtlVector{Float64}` cannot be
@@ -247,8 +245,7 @@ else
 end
 
 # ---------------------------------------------------------------------------
-# Mesh and space quirks fixed by #307-#312 (S14 of
-# .agents/plans/v3-4-0-device-quirks-and-kernels.md): one testset per issue. None of them
+# Mesh and space quirks one testset per quirk. None of them
 # uses `@allowscalar` -- every device value below reaches the host through a bulk
 # transfer (`Array`, `host_points`, `host_weights`, ...) or a closed-form/host-side
 # computation, exactly the paths S1-S7 added, never a per-point scalar read of a device
@@ -484,7 +481,7 @@ else
         @test all(==(0.0f0), ny[:, 1:(n - 1)])
         @test all(==(1.0f0), ny[:, n])
 
-        # #333: a 3D device space matches host on every face, and the fill builds only
+        # A 3D device space matches host on every face, and the fill builds only
         # O(facet) host data -- far below one full-volume host buffer.
         m3 = 64
         S3 = domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0))
@@ -706,7 +703,7 @@ else
         @test isapprox(interpolate_at(uh, 0.5), 1.0)
     end
 
-    # #336: export_vtk on a device mesh/field routes coordinates and data through
+    # `export_vtk` on a device mesh/field routes coordinates and data through
     # `host_points`/`Array` before WriteVTK ever sees them -- otherwise WriteVTK's
     # `unsafe_write` fails on a device pointer. 1D scalar, 2D scalar, and 2D
     # vector/composite, matching the issue's own repro.
@@ -735,7 +732,7 @@ else
         @test isfile(joinpath(d, "c.vtr"))
     end
 
-    # #346: `copyto!(dest::VectorElement, src::VectorElement)` had no method of its own, so
+    # `copyto!(dest::VectorElement, src::VectorElement)` had no method of its own, so
     # it fell to Base's generic `AbstractArray` `copyto!` -- scalar `getindex`/`setindex!`,
     # which `GPUArrays` refuses on device storage. Device-to-device must now round-trip
     # through the same `_broadcast_copyto!` seam as `dest .= src` instead.
@@ -757,8 +754,8 @@ end
     if !Metal.functional() || !_run_gpu_tests()
         @test_skip "Metal GPU backend tests skipped: Metal.functional() is false, or GPU tests are skipped in CI"
     else
-        # MtlVector/MtlMatrix answer DeviceLocality() (gpena/Bramble.jl#298,
-        # ext/BrambleMetalExt.jl), so the default Serial() policy -- HostLocality() -- no
+        # MtlVector/MtlMatrix answer DeviceLocality()
+        # (ext/BrambleMetalExt.jl), so the default Serial() policy -- HostLocality() -- no
         # longer agrees with them; GpuKernel() is required.
         be_metal = backend(
             vector_type = MtlVector{Float32}, matrix_type = MtlMatrix{Float32},

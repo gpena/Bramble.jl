@@ -10,7 +10,7 @@ using Random
 using Bramble: Mₓ!, type_cached_assemble!
 using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
 
-# `type_cached_assemble!` (form/type_cached_assemble.jl, gpena/Bramble.jl#20): caches a
+# `type_cached_assemble!` (form/type_cached_assemble.jl): caches a
 # coefficient-dependent BilinearForm's sparsity pattern per element type, so a Newton
 # residual generic over `T` only pays allocate_system_matrix's own cost once per type
 # instead of on every call.

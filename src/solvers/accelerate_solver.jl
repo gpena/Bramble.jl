@@ -30,13 +30,13 @@ Compute the sparse direct factorization of `A` (or the assembled matrix of `a`) 
 Accelerate's native `libSparse` on macOS.
 
 # Symmetry and factorization options
-- `sym = :auto` (default): automatically detects symmetry. If `A` is symmetric with strictly positive
+- `sym = :auto` (default) automatically detects symmetry. If `A` is symmetric with strictly positive
   diagonal, uses Cholesky (`SparseFactorizationCholesky`). If symmetric, uses ``LDL^T`` (`SparseFactorizationLDLT`).
   Otherwise uses threshold partial pivoting LU (`SparseFactorizationLUTPP`).
-- `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`): symmetric positive definite Cholesky.
-- `sym = :symmetric` or `2` (or `kind = :ldlt`): symmetric indefinite ``LDL^T``.
-- `sym = :unsymmetric` or `0` (or `kind = :lu` / `:lutpp`): general unsymmetric LU with threshold partial pivoting.
-- `kind = :qr`: sparse QR factorization.
+- `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`) selects symmetric positive definite Cholesky.
+- `sym = :symmetric` or `2` (or `kind = :ldlt`) selects symmetric indefinite ``LDL^T``.
+- `sym = :unsymmetric` or `0` (or `kind = :lu` / `:lutpp`) selects general unsymmetric LU with threshold partial pivoting.
+- `kind = :qr` selects sparse QR factorization.
 
 Requires macOS and [AppleAccelerate.jl](https://github.com/JuliaLinearAlgebra/AppleAccelerate.jl);
 call `using AppleAccelerate` before calling this function.
@@ -91,12 +91,12 @@ exists so dense callers can spell `accelerate_factorize` with the same `sym`/`ki
 vocabulary as the sparse methods above. `kwargs...` is accepted but unused.
 
 # Symmetry and factorization options
-- `sym = :auto` (default): `LinearAlgebra.cholesky` if `A` is symmetric positive definite,
+- `sym = :auto` (default) uses `LinearAlgebra.cholesky` if `A` is symmetric positive definite,
   otherwise `LinearAlgebra.lu`.
-- `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`): `LinearAlgebra.cholesky`.
-- `sym = :unsymmetric` or `0` (or `kind = :lu`): `LinearAlgebra.lu`.
-- `kind = :qr`: `LinearAlgebra.qr`.
-- `sym = :symmetric`, `2`, or `kind = :ldlt`: not implemented here. The dense analogue of a
+- `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`) uses `LinearAlgebra.cholesky`.
+- `sym = :unsymmetric` or `0` (or `kind = :lu`) uses `LinearAlgebra.lu`.
+- `kind = :qr` uses `LinearAlgebra.qr`.
+- `sym = :symmetric`, `2`, or `kind = :ldlt` is not implemented here. The dense analogue of a
   sparse `LDLᵀ` factorization is `LinearAlgebra.bunchkaufman`, which this method does not
   wrap; call it directly.
 

@@ -3,88 +3,63 @@ CurrentModule = Bramble
 CollapsedDocStrings = false
 ```
 
-# Automatic differentiation tutorial
+# Automatic differentiation
 
-Bramble's operators, grid functions and form assembly are generic over the scalar type, so
-a discrete quantity can be differentiated with respect to whatever parameter produced it.
-Backends reach the code through
-[DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl),
-so switching between forward and reverse mode leaves the objective untouched.
+**What you will learn.** How to differentiate a discrete quantity with respect to a parameter, from a single derivative to the Jacobian of a nonlinear residual, and how to choose an automatic differentiation backend.
 
----
+**What you need first.** The [space tutorial](@ref tutorial_space), for grid spaces and discrete functions, the [operators tutorial](@ref tutorial_operators), and the [form tutorial](@ref tutorial_form), for assembling a system with Dirichlet conditions.
 
-## 1. Backends
+**Where next.** The [solvers tutorial](solvers.md) covers what to do with the linear system once the Jacobian is large.
 
-The stencil kernels write into preallocated arrays, so a backend has to support array
-mutation. That rules out `Zygote.jl`; the five below work.
-
-| Backend | Mode | Reach for it when | Construction |
-| :--- | :--- | :--- | :--- |
-| ForwardDiff | forward | $\le 20$ parameters or Jacobian colours | `AutoForwardDiff()` |
-| PolyesterForwardDiff | forward | the same, with chunks spread over threads | `AutoPolyesterForwardDiff()` |
-| ReverseDiff | reverse | a scalar loss over many parameters, compiled in under a second | `AutoReverseDiff()` |
-| Mooncake | reverse | the same, source-to-source, no tape recorded up front | `AutoMooncake(; config = nothing)` |
-| Enzyme | reverse | many parameters and the tightest reverse-mode cost | see below |
-
-Enzyme needs two annotations whenever the differentiated closure captures a mesh or a grid
-space, which in this package it almost always does:
-
-```@example autodiff_tutorial
-using Bramble, Enzyme, DifferentiationInterface
-import Bramble: ast_sparsity_detector
-
-enzyme_backend = AutoEnzyme(;
-    mode = Enzyme.set_runtime_activity(Enzyme.Reverse),
-    function_annotation = Enzyme.Const)
-```
-
-`set_runtime_activity` lets Enzyme track activity through the captured geometry, and
-`Enzyme.Const` declares the function object itself, which holds those references, as not
-differentiated. [`pde_solve`](@ref) additionally carries its own `EnzymeRules` adjoint, so
-differentiating through a linear solve needs nothing beyond `using Enzyme`.
+Bramble's operators, grid functions and form assembly are generic over the scalar type, so a discrete quantity can be differentiated with respect to whatever parameter produced it. The differentiation backends are reached through [DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl), so switching between forward and reverse mode leaves your objective untouched. Every block below runs when this page is built.
 
 ---
 
-## 2. Use case: scalar parameter sensitivity
+## Differentiate with respect to a scalar
 
-In this use case, we compute the sensitivity of a discrete energy norm with respect to a scalar scaling factor $a$:
+Take the discrete energy of a scaled sine, as a function of the scale ``a``:
 
 ```math
-\mathcal{J}(a) = \| R_h(a \sin(\pi x)) \|_h^2
+\mathcal{J}(a) = \| R_h(a \sin(\pi x)) \|_h^2 .
 ```
 
-Analytically, $\int_0^1 \sin^2(\pi x)\,dx = \frac{1}{2}$, so $\mathcal{J}(a) \approx \frac{1}{2} a^2$ and $\frac{d\mathcal{J}}{da} \approx a$.
+Analytically ``\int_0^1 \sin^2(\pi x)\,dx = \tfrac12``, so ``\mathcal{J}(a) \approx \tfrac12 a^2`` and ``d\mathcal{J}/da \approx a``. Build a small grid space and write the objective as an ordinary function of ``a``:
 
 ```@example autodiff_tutorial
-using ForwardDiff
+using Bramble, DifferentiationInterface, ForwardDiff
 
 Ω = domain(interval(0.0, 1.0))
 Ωₕ = mesh(Ω, 32, true)
 Wₕ = gridspace(Ωₕ)
 
-# Scalar objective function
 function energy(a)
     uₕ = Rₕ(Wₕ, x -> a * sin(π * x[1]))
     return normₕ(uₕ)^2
 end
-
-backend = AutoForwardDiff()
-a_val = 2.0
-dJ = DifferentiationInterface.derivative(energy, backend, a_val)
-println("dJ/da at a = $a_val: ", round(dJ, digits = 4))
+nothing # hide
 ```
 
----
+`energy` restricts a function to the grid with [`Rₕ`](@ref) and takes its discrete norm. Nothing in it mentions differentiation. Hand it to DifferentiationInterface together with a backend, here forward-mode `AutoForwardDiff()`, and a point:
 
-## 3. Use case: multi-parameter gradient for inverse problems
+```@example autodiff_tutorial
+ad = AutoForwardDiff()
+a_val = 2.0
+dJ = DifferentiationInterface.derivative(energy, ad, a_val)
+round(dJ, digits = 4)
+```
 
-When estimating parameters (such as source coefficients or material properties), we compute the gradient of an objective functional with respect to a parameter vector $\mathbf{p}$:
+The derivative is close to the analytic value ``a = 2``. It works because `Rₕ`, `normₕ` and the grid space accept the dual numbers ForwardDiff passes through them.
+
+!!! tip "Try this"
+    Set `a_val = 3.0`. The derivative follows the analytic ``d\mathcal{J}/da \approx a`` and returns about ``3``.
+
+## Differentiate with respect to several parameters
+
+When fitting parameters, such as source coefficients, you want the gradient of an objective with respect to a vector ``\mathbf{p}``. Use the discrete norm plus the ``H^1`` semi-norm [`snorm₁ₕ`](@ref):
 
 ```math
-\mathcal{J}(\mathbf{p}) = \| u_h(\mathbf{p}) \|_h^2 + | u_h(\mathbf{p}) |_{1,h}^2
+\mathcal{J}(\mathbf{p}) = \| u_h(\mathbf{p}) \|_h^2 + | u_h(\mathbf{p}) |_{1,h}^2 .
 ```
-
-where $|\cdot|_{1,h}$ is the discrete $H^1$ semi-norm computed via [`snorm₁ₕ`](@ref).
 
 ```@example autodiff_tutorial
 function loss(p)
@@ -94,57 +69,48 @@ end
 
 p0 = [1.0, 2.0]
 g_forward = DifferentiationInterface.gradient(loss, AutoForwardDiff(), p0)
-println("ForwardDiff gradient: ", round.(g_forward, digits = 4))
+round.(g_forward, digits = 4)
 ```
 
-For problems with many parameters, swapping `AutoForwardDiff()` for `AutoReverseDiff()` or `AutoEnzyme(...)` uses reverse mode without changing the definition of `loss`.
+!!! tip "Try this"
+    With many parameters, swap `AutoForwardDiff()` for a reverse-mode backend such as `AutoReverseDiff()` (after `using ReverseDiff`). The definition of `loss` does not change and the gradient agrees. The [backend table](@ref autodiff_backends) below says when each is worth it.
 
----
+## Differentiate through a linear solve
 
-## 4. Use case: differentiating through Dirichlet constraints and linear solves
+A parameter can also enter the boundary data and the source of a linear system ``A u = F(p)``. Three things matter:
 
-Parameter sensitivities can also enter boundary conditions and linear form sources.
-
-When solving $A u = F(p)$:
-1. Boundary conditions are constructed with `dirichlet_constraints` using a closure that captures the parameter.
-2. The vector element for the source term must be allocated with the parameter's scalar type: `element(Wₕ, eltype(p))`.
-3. Standard sparse solvers (UMFPACK) expect `Float64` entries. For automatic differentiation through the solve with dual numbers, convert the assembled matrix to dense format `Matrix(A) \ F` or use an iterative solver:
+1. Build the Dirichlet conditions with `dirichlet_constraints`, using a closure that captures the parameter (see [Dirichlet conditions](@ref form_dirichlet)).
+2. Allocate the source with the parameter's scalar type, `element(Wₕ, eltype(p))`.
+3. Sparse direct solvers such as UMFPACK expect `Float64` entries. To differentiate through the solve with dual numbers, convert the matrix to dense with `Matrix(A) \ F`, or use an iterative solver.
 
 ```@example autodiff_tutorial
-# Discrete Laplacian on nonuniform grid
 a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
 A = assemble(a; dirichlet = :boundary)
 Adense = Matrix(A)
 
 function solve_objective(p)
-    # 1. Parameter-dependent Dirichlet boundary data
-    bcs = dirichlet_constraints(Ω, :boundary => (x -> p[1]))
+    bcs = dirichlet_constraints(Ω, :boundary => (x -> p[1]))   # boundary data depends on p
 
-    # 2. Source term allocated with the dual/tracked scalar type
-    gₕ = element(Wₕ, eltype(p))
+    gₕ = element(Wₕ, eltype(p))                                 # source in the tracked scalar type
     avgₕ!(gₕ, x -> p[2] * sin(π * x[1]))
 
-    # 3. Assemble right-hand side with constraints
     l = form(Wₕ, v -> innerₕ(gₕ, v))
     F = assemble(l; dirichlet = bcs)
 
-    # 4. Linear solve and scalar objective
     u = Adense \ F
     return sum(abs2, u)
 end
 
 p_init = [1.0, 2.0]
 grad_solve = DifferentiationInterface.gradient(solve_objective, AutoForwardDiff(), p_init)
-println("Sensitivity w.r.t. [boundary_val, source_scale]: ", round.(grad_solve, digits = 4))
+round.(grad_solve, digits = 4)
 ```
 
----
+The two entries are the sensitivities with respect to the boundary value and the source scale. The matrix `A` does not depend on ``p``, so it is assembled once outside the function.
 
-## 5. Use case: sparse Jacobian for nonlinear PDE residuals
+## Differentiate a nonlinear residual
 
-For nonlinear PDEs, residuals $R(u) = A(u)u - F$ have a localized stencil structure. Computing the Jacobian $\partial R / \partial u$ entry-by-entry with dense AD is wasteful.
-
-Using sparse forward-mode AD with `SparseConnectivityTracer.jl` and `SparseMatrixColorings.jl`, the sparsity pattern is detected and columns are colored once. The Jacobian is then evaluated in a compressed sweep:
+For a nonlinear problem, the residual ``R(u) = A(u)u - F`` has a localized stencil, so computing its Jacobian ``\partial R / \partial u`` entry by entry with dense differentiation is wasteful. Sparse forward mode detects the sparsity pattern with `SparseConnectivityTracer.jl`, colours the columns once with `SparseMatrixColorings.jl`, and then evaluates the Jacobian in a compressed sweep. Here the diffusion coefficient depends on the state:
 
 ```@example autodiff_tutorial
 using SparseArrays
@@ -154,14 +120,12 @@ const sparse_backend = AutoSparse(AutoForwardDiff();
     sparsity_detector = SparseConnectivityTracer.TracerSparsityDetector(),
     coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
 
-# Nonlinear residual with state-dependent diffusion
 function pde_residual(u_vec)
     T = eltype(u_vec)
     uₕ = element(Wₕ, T)
     uₕ .= u_vec
 
-    # Local diffusion coefficient depending on the state
-    αvals = 1.0 .+ uₕ .^ 2
+    αvals = 1.0 .+ uₕ .^ 2                      # diffusion coefficient depends on the state
     a = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
     A_sparse = assemble(a; dirichlet = :boundary)
 
@@ -173,25 +137,20 @@ u0 = zeros(ndofs(Wₕ))
 prep = DifferentiationInterface.prepare_jacobian(pde_residual, sparse_backend, u0)
 J = DifferentiationInterface.jacobian(pde_residual, prep, sparse_backend, u0)
 
-println("Jacobian dimensions: ", size(J))
-println("Non-zero entries: ", nnz(J))
+size(J), nnz(J)
 ```
 
-`TracerSparsityDetector` works this way for *any* Julia function, which is exactly why it has to
-run `pde_residual` once to find out. `pde_residual` here is not arbitrary, though: its matrix
-`A_sparse` comes from a `BilinearForm`, whose own sparsity is already known directly
-from its AST: no tracing needed for that part. [`jacobian_pattern`](@ref) reads that
-pattern off the form, widened by the reach of each coefficient's own dependence on the
-unknown, named the same way a form term names an operator: a function of the trial
-placeholder. `αvals` here is `1.0 .+ uₕ.^2`, a plain pointwise function of `uₕ` at the *same*
-grid point (no averaging, unlike the staggered `Mₕ(u)` coefficient in
-[the nonlinear Poisson example](../examples/poisson_nonlinear.md)), so its dependency is
-just the trial placeholder itself, `U -> U`. [`ast_sparsity_detector`](@ref) hands the
-result straight to `AutoSparse` in place of the tracer, once
-[ADTypes.jl](https://github.com/SciML/ADTypes.jl) is loaded:
+The Jacobian is sparse: only the stencil's entries are stored, not all of ``n^2``. `prepare_jacobian` does the detection and colouring once, and `jacobian` reuses it at every point.
+
+### Skip the tracer
+
+`TracerSparsityDetector` works for any Julia function, so it has to run `pde_residual` once to find the pattern. Here that is wasted effort. The matrix comes from a `BilinearForm`, and a form's sparsity is already known from its AST. [`jacobian_pattern`](@ref) reads the pattern off the form and widens it by how each coefficient depends on the unknown.
+
+In this residual `αvals` is a pointwise function of `uₕ` at the same grid point, with no averaging, so its dependency is just the trial placeholder `U -> U`. [`ast_sparsity_detector`](@ref) hands the result to `AutoSparse` in place of the tracer, once [ADTypes.jl](https://github.com/SciML/ADTypes.jl) is loaded:
 
 ```@example autodiff_tutorial
 using ADTypes
+import Bramble: ast_sparsity_detector
 
 αvals0 = 1.0 .+ parent(element(Wₕ, 0.0)) .^ 2
 a_for_pattern = form(Wₕ, Wₕ, (U, V) -> inner₊(αvals0 * ∇ₕ(U), ∇ₕ(V)))
@@ -206,31 +165,34 @@ J_native = DifferentiationInterface.jacobian(pde_residual, prep_native, native_b
 J == J_native
 ```
 
-`a_for_pattern` only needs *some* concrete coefficient to build a `BilinearForm` from: the
-pattern is a property of the AST, not of `αvals0`'s values, so evaluating it at `u = 0` is as
-good as evaluating it at any other point. Same Jacobian either way, but no tracing pass paid
-for it: `jacobian_pattern` only ever walks the grid once, touching neither `ForwardDiff` nor
-the coefficient's actual values, so `prepare_jacobian` gets cheaper as the mesh grows rather
-than scaling with however long one residual call takes to trace. The trade is scope, not
-correctness: it only applies when the residual's matrix is assembled from a `BilinearForm`
-in the first place (as here) -- composite trial/test spaces are supported too (see
-[`jacobian_pattern`](@ref)'s own docstring, and
-[the coupled reaction-diffusion example](../examples/coupled_reaction_diffusion.md#Skipping-the-tracer-here-too)).
-`TracerSparsityDetector` above keeps working regardless of how `A_sparse` was built,
-which is the case to reach for it.
+`a_for_pattern` only needs some concrete coefficient to build a `BilinearForm`. The pattern belongs to the AST, not to the values of `αvals0`, so evaluating it at ``u = 0`` is as good as anywhere else. The Jacobian is the same, but no tracing pass paid for it, so `prepare_jacobian` gets cheaper relative to tracing as the mesh grows. The trade is scope: it applies only when the residual's matrix is assembled from a `BilinearForm`, as here. Composite trial and test spaces are supported too (see the [`jacobian_pattern`](@ref) docstring and [the coupled reaction-diffusion example](../examples/coupled_reaction_diffusion.md#Skipping-the-tracer-here-too)). Keep `TracerSparsityDetector` for the case where the matrix was built some other way.
 
 ---
 
-## 6. Choosing a backend
+## [Reference: choosing a backend](@id autodiff_backends)
 
-ForwardDiff for a handful of parameters, a directional derivative, or a colour-compressed
-sparse Jacobian. ReverseDiff, Mooncake or Enzyme once the parameter count grows past a few
-dozen and the objective is scalar: one reverse sweep then replaces one forward sweep per
-parameter. Enzyme is the fastest of the three here and the one with an adjoint rule for
-[`pde_solve`](@ref); ReverseDiff compiles fastest.
+The stencil kernels write into preallocated arrays, so a backend has to support array mutation. That rules out `Zygote.jl`. These five work:
 
-Sparse forward mode stays competitive far longer than the parameter count suggests, because
-the colour count is set by the stencil rather than by the mesh: a Cartesian difference
-stencil needs the same handful of colours at every resolution. Past the point where storing
-or factorizing the Jacobian is the binding constraint, the
-[solvers tutorial](solvers.md) covers what to do with the linear system itself.
+| Backend | Mode | Reach for it when | Construction |
+| :--- | :--- | :--- | :--- |
+| ForwardDiff | forward | $\le 20$ parameters or Jacobian colours | `AutoForwardDiff()` |
+| PolyesterForwardDiff | forward | the same, with chunks spread over threads | `AutoPolyesterForwardDiff()` |
+| ReverseDiff | reverse | a scalar loss over many parameters, compiled in under a second | `AutoReverseDiff()` |
+| Mooncake | reverse | the same, source-to-source, no tape recorded up front | `AutoMooncake(; config = nothing)` |
+| Enzyme | reverse | many parameters and the tightest reverse-mode cost | see below |
+
+Enzyme needs two annotations whenever the differentiated closure captures a mesh or a grid space, which in this package it almost always does:
+
+```@example autodiff_tutorial
+using Enzyme
+
+enzyme_backend = AutoEnzyme(;
+    mode = Enzyme.set_runtime_activity(Enzyme.Reverse),
+    function_annotation = Enzyme.Const)
+```
+
+`set_runtime_activity` lets Enzyme track activity through the captured geometry, and `Enzyme.Const` declares the function object itself, which holds those references, as not differentiated. [`pde_solve`](@ref) carries its own `EnzymeRules` adjoint, so differentiating through a linear solve needs nothing beyond `using Enzyme`.
+
+Use ForwardDiff for a handful of parameters, a directional derivative, or a colour-compressed sparse Jacobian. Use ReverseDiff, Mooncake or Enzyme once the parameter count passes a few dozen and the objective is scalar, because one reverse sweep then replaces one forward sweep per parameter. Enzyme is the fastest of the three and the one with an adjoint rule for `pde_solve`. ReverseDiff compiles fastest.
+
+Sparse forward mode stays competitive far longer than the parameter count suggests, because the colour count is set by the stencil rather than the mesh: a Cartesian difference stencil needs the same handful of colours at every resolution. Once storing or factorizing the Jacobian is the binding constraint, the [solvers tutorial](solvers.md) covers the linear system itself.

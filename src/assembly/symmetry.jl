@@ -22,10 +22,10 @@ The check walks the same AST `local_stencil` walks to assemble, asking whether `
 and `right_op` (or, for a pair, one term's `left_op` and the other's `right_op`) are the same
 operator chain up to substituting `TrialFunction` for `TestFunction` at the leaves. It
 evaluates nothing: two coefficients compare equal only when they are the same object, which
-is exactly what happens when `L` is written once and applied to both arguments: both sides
+is exactly what happens when `L` is written once and applied to both arguments, so both sides
 then close over the identical variable. A numerically equal
 but distinct coefficient is deliberately not recognised: this answers "is it this
-pattern", not "does it happen to work out".
+pattern" and not "does it happen to work out".
 
 None of this means anything unless the trial and test argument range over the same space:
 "symmetric" presupposes a square matrix, and `form(Wₕ, Vₕ, ...)` with `Wₕ ≠ Vₕ` need not even

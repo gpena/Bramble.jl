@@ -73,7 +73,7 @@
 # ## Gates (bramble-benchmarks §1), via `.claude/scripts/check_power_load.sh`
 #
 # Delegates to the repo's own AC-power/load-average gate script rather than reimplementing
-# `pmset`/`uptime` parsing here (this script's own WHY: match `polyester_crossover.jl`'s
+# `pmset`/`uptime` parsing here (this script's own WHY, match `polyester_crossover.jl`'s
 # shape but reuse the shared gate script). Its stdout ("Power: ..." / "Load: ...") is
 # captured and reused as this run's own Power/Load columns, refreshed once per grid size so
 # a long full run's later rows do not silently reuse a stale reading from its first minute.

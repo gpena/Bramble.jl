@@ -69,9 +69,8 @@ fixed dictionary/dynamic-dispatch overhead fetching the cached entry back out (a
 independent of `ndofs`) -- not the `O(ndofs)` pattern rebuild a cache miss (or no cache at
 all) pays every time.
 
-Not thread-safe: `cache` is a plain, unlocked `Dict`, sized for the one-cache-per-residual
-usage above. A form assembled from more than one task needs a lock or a per-task cache,
-the same as any other shared mutable `Dict`.
+Not thread-safe. `cache` is a bare `Dict` with no lock, one per residual. Assembling from
+more than one task needs a lock or one cache per task.
 """
 function type_cached_assemble!(
         build::F,

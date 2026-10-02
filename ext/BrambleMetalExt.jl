@@ -40,13 +40,13 @@ function Bramble._metal_backend(
 end
 
 # ---------------------------------------------------------------------------
-# ka_device — the device-kernel substrate seam (gpena/Bramble.jl#174)
+# ka_device. The device-kernel substrate seam
 # ---------------------------------------------------------------------------
 
 ka_device(::Backend{<:MtlVector, MT, EP}) where {MT, EP} = MetalBackend()
 
 # ---------------------------------------------------------------------------
-# locality — the storage-locality trait (gpena/Bramble.jl#298)
+# locality. The storage-locality trait
 # ---------------------------------------------------------------------------
 #
 # Locality is derived from storage, not from a caller's intent: an array living in Metal
@@ -57,8 +57,7 @@ Bramble.locality(::Type{<:MtlVector}) = Bramble.DeviceLocality()
 Bramble.locality(::Type{<:MtlMatrix}) = Bramble.DeviceLocality()
 
 # ---------------------------------------------------------------------------
-# _gpu_functional — the loaded-and-functional predicate gpu_backend needs
-# (gpena/Bramble.jl#192)
+# _gpu_functional. The loaded-and-functional predicate gpu_backend needs
 # ---------------------------------------------------------------------------
 #
 # More specific than the `::Val` stub in `src/utils/backend.jl` (this one matches only
@@ -71,7 +70,7 @@ function Bramble._gpu_functional(::Val{:metal})
 end
 
 # ---------------------------------------------------------------------------
-# vector / matrix allocation — GPU-side construction
+# vector / matrix allocation. GPU-side construction
 # ---------------------------------------------------------------------------
 
 @inline function vector(::Backend{VT, MT, EP}, n::Integer) where {T, VT <: MtlVector{T}, MT, EP}
@@ -85,7 +84,7 @@ end
 end
 
 # ---------------------------------------------------------------------------
-# backend_eye / backend_zeros — Metal-specific implementations
+# backend_eye / backend_zeros. Metal-specific implementations
 # ---------------------------------------------------------------------------
 
 function _backend_eye(::Type{MtlMatrix{T}}, n::Integer) where {T}
@@ -99,7 +98,7 @@ function _backend_zeros(::Type{MtlMatrix{T}}, n::Integer) where {T}
 end
 
 # ---------------------------------------------------------------------------
-# Sparse CSR/CSC types in device memory (gpena/Bramble.jl#250)
+# Sparse CSR/CSC types in device memory
 # ---------------------------------------------------------------------------
 #
 # Tagged Metal.jl (checked at v1.10.0 on this host) defines neither `MtlSparseMatrixCSR` nor
@@ -199,7 +198,7 @@ else
 end
 
 # ---------------------------------------------------------------------------
-# locality for the device sparse types (gpena/Bramble.jl#298)
+# locality for the device sparse types
 # ---------------------------------------------------------------------------
 #
 # Same rule as MtlVector/MtlMatrix above -- locality is derived from storage, and these are
@@ -215,7 +214,7 @@ Bramble.locality(::Type{<:MetalSparseMatrixCSC}) = Bramble.DeviceLocality()
 Bramble._has_device_csr_mirror(::Type{<:MetalSparseMatrixCSR}) = true
 
 # ---------------------------------------------------------------------------
-# Host -> device conversion (gpena/Bramble.jl#250)
+# Host -> device conversion
 # ---------------------------------------------------------------------------
 #
 # Docstrings live on the `metal_sparse_csr`/`metal_sparse_csc` stubs in `src/utils/backend.jl`
@@ -227,7 +226,7 @@ function Bramble.metal_sparse_csr(A::SparseMatrixCSC{Tv, Ti}) where {Tv, Ti}
     # CSC(transpose(A)) is exactly A's row-major (CSR) storage: a sparse-to-sparse conversion,
     # not a densifying one.
     Aᵀ = SparseMatrixCSC(transpose(A))
-    # The mirror (gpena/Bramble.jl#313) is built right here, from the very host arrays about
+    # The mirror is built right here, from the very host arrays about
     # to be uploaded: `Aᵀ.colptr`/`Aᵀ.rowval` are already `Vector{Ti}`s on the host at this
     # point (`SparseMatrixCSC{Tv,Ti}`'s own index type), so this needs no conversion and no
     # separate device-to-host transfer -- carrying them in `Ti` rather than widening to `Int`
@@ -246,7 +245,6 @@ end
 
 # ---------------------------------------------------------------------------
 # _allocate_from_pattern -- born a form's system matrix in device memory
-# (gpena/Bramble.jl#94)
 # ---------------------------------------------------------------------------
 #
 # `matrix_type(backend(form.test_space))` for a Metal backend is `MtlMatrix{T}`
@@ -269,13 +267,13 @@ function Bramble._allocate_from_pattern(
 end
 
 # ---------------------------------------------------------------------------
-# SpMV / SpMM -- mul!(y, A::CSR, x, α, β) and mul!(C, A::CSR, B, α, β) (gpena/Bramble.jl#250)
+# SpMV / SpMM for CSR (`y = A x`, `C = A B`)
 # ---------------------------------------------------------------------------
 #
 # The kernels themselves are `KernelAbstractions` kernels in `BrambleKernelAbstractionsExt`
-# (gpena/Bramble.jl#174's departure from #250's `@metal` text -- see this plan's S3.2), so
+# (not `@metal` kernels), so
 # these methods do the type/dimension checks and forward the raw `rowPtr`/`colVal`/`nzVal`
-# arrays -- never `A` itself, since a struct nesting a device array fails kernel compilation.
+# arrays, never `A` itself, since a struct nesting a device array fails kernel compilation.
 
 @noinline function _check_metal_sparse_eltype(::Type{Tv}) where {Tv}
     Tv <: Union{Float16, Float32} && return nothing

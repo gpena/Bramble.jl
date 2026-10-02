@@ -2,23 +2,18 @@
 CurrentModule = Bramble
 ```
 
-# Choosing a solver, backend, and execution policy
+# [Choosing a solver, backend and execution policy](@id tutorial_solvers)
 
-Every worked example so far has used `\` or a single, unremarked `solve(a, l; ...)` call,
-running under whatever `Backend` and execution policy happened to be the default. Bramble
-actually exposes three largely independent choices: a **backend** for how the system matrix is
-stored (`SparseMatrixCSC` by default, `SparseMatrixCSR` via [`csr_backend`](@ref), or a
-matrix-free [`KroneckerLinearOperator`](@ref) for separable forms), an **execution policy** for
-how grid operations and form assembly are threaded ([`CpuSerial`](@ref)/`Serial()`,
-[`CpuThreaded`](@ref)/`Parallel()`, [`CpuPolyester`](@ref)), and a **solver** for the resulting
-linear system -- four direct factorization backends behind one
-[`sparse_factorize`](@ref)/[`refactor!`](@ref) interface (SuiteSparse, Apple Accelerate, MUMPS,
-Sparspak -- [`sparse_factorize`](@ref)'s own docstring lists all four), iterative Krylov methods
-through `LinearSolve`, and two preconditioners, [`amg_preconditioner`](@ref) and
-[`ilu_preconditioner`](@ref). This tutorial is about *choosing* among all three axes, not about
-any one of their APIs in isolation. Every number below either comes from the code shown on this
-page or is cited from a specific, already-committed benchmark -- nothing here was measured
-freshly for this page.
+**What you will learn.** How to choose a matrix backend, an execution policy and a linear solver, and where the matrix-free operator and its preconditioners fit.
+
+**What you need first.** The [form tutorial](@ref tutorial_form) for assembling a system, and the [backend tutorial](@ref tutorial_backend) for backends and execution policies.
+
+**Where next.** [Solvers by problem](solvers_by_problem.md), which runs these choices on four problem classes.
+
+Three choices are largely independent. A **backend** fixes how the system matrix is stored.
+An **execution policy** fixes how grid operations and assembly are threaded. A **solver**
+solves the resulting linear system. This page helps you choose among them. Every number is
+produced by code on the page or cited from a named, committed benchmark.
 
 ## Rules of thumb
 
@@ -26,56 +21,35 @@ freshly for this page.
 
 | Backend | Recommended for | Avoid when |
 |---|---|---|
-| `SparseMatrixCSC` (default) | The default for everything below -- direct solves route straight into SuiteSparse/Accelerate/MUMPS with no conversion. | -- |
-| `SparseMatrixCSR` ([`csr_backend`](@ref), requires `using SparseMatricesCSR`) | 3D problems where matrix memory is the binding constraint: the same 3D Poisson system stores 24.4 MiB against CSC's 59.1 MiB (commit `7c901266`). Assembly cost itself is roughly a wash between the two backends. | A direct solve -- measured 2.4x-4.2x **slower** than CSC in the same benchmark. `SparseMatricesCSR.jl` has no native CSR solve path: `\` routes through a `TransposeFactorization` wrapped around a reinterpreted LU rather than calling SuiteSparse directly. |
-| [`KroneckerLinearOperator`](@ref) ([`kronecker_operator`](@ref), for separable forms -- see [`is_separable`](@ref)) | Matrix-free evaluation of a separable operator (`innerₕ`/`∇ₕ`-only terms on a tensor-product mesh): `O(n)` storage per axis instead of the assembled matrix's `O(n^D)`. | Any form with a grid-function coefficient, a region restriction (Dirichlet included), an interpolation, or a mixed/forward/centered/averaged/jump operator -- `kronecker_operator` throws on these. No CSC/CSR-style memory-or-time crossover has been measured for this repository's own separable forms yet; don't infer one from the CSR figures above -- that comparison has not been run. |
+| `SparseMatrixCSC` (default) | Everything below. Direct solves go straight into SuiteSparse, Accelerate or MUMPS with no conversion. | Never wrong as a default. |
+| `SparseMatrixCSR` ([`csr_backend`](@ref), needs `using SparseMatricesCSR`) | 3D problems where matrix memory binds: the same 3D Poisson system takes 24.4 MiB against CSC's 59.1 MiB (commit `7c901266`). Assembly cost is about the same. | A direct solve, measured 2.4x to 4.2x **slower** than CSC in the same benchmark. `SparseMatricesCSR.jl` has no native CSR solve, so `\` goes through a transposed factorization of a reinterpreted LU. |
+| [`KroneckerLinearOperator`](@ref) ([`kronecker_operator`](@ref), for separable forms, see [`is_separable`](@ref)) | A separable operator on a tensor-product mesh: `O(n)` storage per axis instead of `O(n^D)`. | Any form with a grid-function coefficient, a region restriction, an interpolation, or a mixed, forward, centered, averaged or jump operator: `kronecker_operator` throws. No memory or time crossover against CSC has been measured for it. |
 
 ### Execution policies
 
-An execution policy decides how many CPU threads the grid operations and the assembly use.
-The three below give the same answer; only the speed differs, and which one is fastest depends on the size of the problem.
-
-| Policy | Recommended for | Avoid when |
-|---|---|---|
-| [`CpuSerial`](@ref) / `Serial()` (default) | Small problems and operations repeated many times, such as a step inside a time loop. It is the safe default and has no threading overhead. | Never wrong as a default. It is only worth leaving once a workload is clearly above a measured crossover. |
-| [`CpuThreaded`](@ref) / `Parallel()` (`Base.Threads.@threads`, unconditional) | Large grids, when Polyester is not available. | Small grids, where `CpuSerial` still wins. Its crossover for `innerₕ`/`_dot` sits one to two orders of magnitude above [`CpuPolyester`](@ref)'s ([gpena/Bramble.jl#301](https://github.com/gpena/Bramble.jl/issues/301)). |
-| [`CpuPolyester`](@ref) (Polyester `@batch`, requires `using Polyester`) | The default choice once Polyester is loaded: it beats `CpuThreaded` at every crossover measured. | Small grids, where `CpuSerial` still wins. It needs the `BramblePolyesterExt` extension (`using Polyester`), or the call errors naming the package. |
-
-The **crossover** is the smallest problem size at which a parallel policy beats `CpuSerial`
-twice running. Below it, threads cost more to start than they save. Because it
-depends on both the operation and the machine, no single size fits every case. One table,
-[Measured crossovers](backend.md#Measured-crossovers), gives the figure for each operation,
-taken on an Apple M2 with four threads on AC power. To measure your own, run this from a
-checkout of the repository. `N` is the thread count you plan to use:
-
-```bash
-julia --threads=N --project=benchmark benchmark/policy_crossover.jl
-```
-
-The script prints one `CROSSOVER |` line per operation and dimension, in total degrees of
-freedom per dimension. The published table is different: it counts points per axis on a 2D
-grid, from `benchmark/polyester_crossover.jl`. See
-[Measuring your own crossovers](backend.md#Measuring-your-own-crossovers) for the details.
+[`CpuSerial`](@ref) is the default and the right choice for small grids and for steps
+repeated inside a time loop. [`CpuPolyester`](@ref) (after `using Polyester`) and
+[`CpuThreaded`](@ref) win above a per-operation crossover, and Polyester crosses first. All
+three give the same answer. The [backend tutorial](backend.md#Measured-crossovers) holds the
+crossover table and the script that measures your own.
 
 ### Direct and iterative solvers
 
 | Solver | Recommended for | Avoid when |
 |---|---|---|
-| SuiteSparse (`:default`/`:suitesparse` -- CHOLMOD for SPD/symmetric, UMFPACK for unsymmetric) | The general default: exact to round-off, no tolerance to pick. | Meshes where fill-in makes memory the binding constraint -- 3D problems past a few hundred thousand DOF (see below). |
-| Apple Accelerate (`:accelerate`, macOS, `using AppleAccelerate`) | Symmetric systems on macOS -- measured 1.2-1.3x faster than a plain direct solve (`n = 80`: 0.83x the runtime; `n = 120`: 0.78x; [gpena/Bramble.jl#246](https://github.com/gpena/Bramble.jl/issues/246)). | Unsymmetric systems -- measured 2.3-3.6x **slower** than a plain direct solve before `:default`'s dispatch was narrowed to `issymmetric(A)`. An explicit `solver = :accelerate` still honours a direct request on an unsymmetric system. |
-| MUMPS (`:mumps`) | Parallel multifrontal factorization, where that architecture fits the deployment. | Not yet benchmarked in this repository against SuiteSparse -- no measured crossover to report. |
-| Sparspak (`:sparspak`) | Zero binary dependency; generic over element type (`Float32`, `BigFloat`, `ForwardDiff.Dual`) where SuiteSparse/MUMPS/Accelerate cannot factor at all. | Not yet benchmarked for speed against SuiteSparse -- treat it as the portability/correctness choice, not (yet, measurably) the fast one. |
-| `KrylovJL_CG` + [`amg_preconditioner`](@ref) | Symmetric positive-definite systems, especially solved repeatedly or too large to factorize directly: measured 20x fewer iterations than plain CG on a Poisson system below, a ratio that widens as `O(h^-1)` against AMG's `O(1)`. | Unsymmetric, convection-dominated systems -- `ruge_stuben` AMG failed to converge within 300 iterations on the system below, the same failure [gpena/Bramble.jl#244](https://github.com/gpena/Bramble.jl/issues/244) measured (capped at 2000 iterations without converging), where ILU(0) needed 18. |
-| `KrylovJL_GMRES` + [`ilu_preconditioner`](@ref) | Unsymmetric, convection-dominated systems -- 18 iterations against AMG's non-convergence ([gpena/Bramble.jl#244](https://github.com/gpena/Bramble.jl/issues/244)); no fill-in parameter to tune, cheap to build. | Elliptic, symmetric systems -- reach for AMG there instead, which this section's own numbers argue for. |
+| SuiteSparse (`:default`, `:suitesparse`; CHOLMOD for SPD, UMFPACK for unsymmetric) | The general default: exact to round-off, no tolerance to pick. | Fill-in makes memory bind: 3D problems past a few hundred thousand unknowns. |
+| Apple Accelerate (`:accelerate`, macOS, `using AppleAccelerate`) | Symmetric systems on macOS, measured 1.2x to 1.3x faster than a plain direct solve ([#246](https://github.com/gpena/Bramble.jl/issues/246)). | Unsymmetric systems, measured 2.3x to 3.6x **slower** before `:default` was narrowed to symmetric matrices. |
+| MUMPS (`:mumps`) | Parallel multifrontal factorization. | Not benchmarked here against SuiteSparse, so there is no crossover to report. |
+| Sparspak (`:sparspak`) | No binary dependency, and generic over the element type (`Float32`, `BigFloat`, `ForwardDiff.Dual`), where the others cannot factor at all. | Not benchmarked for speed: it is the portability choice. |
+| `KrylovJL_CG` + [`amg_preconditioner`](@ref) | SPD systems solved repeatedly or too large to factorize: 20 times fewer iterations than plain CG in [solvers by problem](solvers_by_problem.md), a ratio that widens as `O(h^-1)` against AMG's `O(1)`. | Unsymmetric, convection-dominated systems: AMG did not converge in 300 iterations where ILU(0) needed 18 ([#244](https://github.com/gpena/Bramble.jl/issues/244)). |
+| `KrylovJL_GMRES` + [`ilu_preconditioner`](@ref) | Unsymmetric, convection-dominated systems; cheap to build, no fill-in parameter. | Elliptic, symmetric systems: use AMG there. |
 
-Kronecker-vs-CSC/CSR memory and time, and any Pardiso comparison, are deliberately absent from
-this page: neither has been measured for this repository, and inventing a number would be worse
-than leaving the row blank.
+[`sparse_factorize`](@ref) lists all four direct backends behind one interface.
 
 ## Decision tree
 
-Choose a backend and a solver first, from what the problem itself looks like. Each leaf of
-the diagram is explained in the table below it.
+Choose a backend and a solver first, from what the problem looks like. The table below the
+diagram explains each leaf.
 
 ```@raw html
 <pre class="mermaid" data-src="">
@@ -93,18 +67,19 @@ flowchart TD
 </pre>
 ```
 
+
 | Leaf | Backend and solver | Why |
 |---|---|---|
-| Kronecker operator with CG | [`KroneckerLinearOperator`](@ref) from [`kronecker_operator`](@ref), solved with `KrylovJL_CG` using matrix-free `mul!`. | A separable form (tensor-product mesh, only `innerₕ`/`∇ₕ` terms) needs `O(n)` storage per axis instead of `O(n^D)`. |
-| Cholesky factorization | `SparseMatrixCSC` with `sparse_factorize` and `sym = spd`, which uses SuiteSparse CHOLMOD. | Exact to round-off, with no tolerance to pick. |
-| Factorize once, refactor each step | `SparseMatrixCSC`: factorize once, then call `refactor!` at each step. | The sparsity pattern is fixed, for example in implicit time stepping, so the symbolic analysis is reused. |
-| CG with an AMG preconditioner | `SparseMatrixCSC` with `KrylovJL_CG` and [`amg_preconditioner`](@ref). | In 3D with hundreds of thousands of degrees of freedom, memory is the limit. AMG needs `O(1)` iterations instead of `O(h^-1)`. |
-| GMRES with an ILU preconditioner | `SparseMatrixCSC` with `KrylovJL_GMRES` and [`ilu_preconditioner`](@ref). | Do not use `amg_preconditioner` here: it did not converge on convection-dominated systems (see the solver table above). |
-| LU factorization | `SparseMatrixCSC` with `sparse_factorize` and `sym = unsymmetric`, which uses SuiteSparse UMFPACK. | The general direct solver for unsymmetric systems. |
+| Kronecker operator with CG | [`KroneckerLinearOperator`](@ref) from [`kronecker_operator`](@ref), solved with `KrylovJL_CG`. | A separable form needs `O(n)` storage per axis instead of `O(n^D)`. |
+| Cholesky factorization | `SparseMatrixCSC` with `sparse_factorize` and `sym = :spd` (SuiteSparse CHOLMOD). | Exact to round-off, with no tolerance to pick. |
+| Factorize once, refactor each step | `SparseMatrixCSC`: factorize once, then `refactor!` at each step. | The sparsity pattern is fixed, so the symbolic analysis is reused. See [time stepping](time_stepping.md). |
+| CG with an AMG preconditioner | `SparseMatrixCSC` with `KrylovJL_CG` and [`amg_preconditioner`](@ref). | In 3D memory is the limit, and AMG needs `O(1)` iterations instead of `O(h^-1)`. |
+| GMRES with an ILU preconditioner | `SparseMatrixCSC` with `KrylovJL_GMRES` and [`ilu_preconditioner`](@ref). | AMG did not converge on convection-dominated systems. |
+| LU factorization | `SparseMatrixCSC` with `sparse_factorize` and `sym = :unsymmetric` (SuiteSparse UMFPACK). | The general direct solver for unsymmetric systems. |
 
-The second tree picks an execution policy. Its first question uses the
-[crossover defined above](#Execution-policies), and the sizes that answer it are in
-[Measured crossovers](backend.md#Measured-crossovers).
+The second tree picks an execution policy. Its first question uses the crossover from the
+[backend tutorial](backend.md#Measured-crossovers): the smallest size at which a parallel
+policy beats `CpuSerial`.
 
 ```@raw html
 <pre class="mermaid" data-src="">
@@ -175,302 +150,27 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () 
 
 | Leaf | When it applies |
 |---|---|
-| `CpuSerial` | The grid is below the crossover for the operation. It is also the answer when Polyester is missing and the grid is below `CpuThreaded`'s higher crossover. |
-| `CpuPolyester` | The grid is above the crossover and `using Polyester` has been run. It crosses over earlier than `CpuThreaded` for every operation measured. |
+| `CpuSerial` | The grid is below the crossover, or Polyester is missing and the grid is below `CpuThreaded`'s higher crossover. |
+| `CpuPolyester` | The grid is above the crossover and `using Polyester` has been run. |
 | `CpuThreaded` | Polyester is not loaded and the grid is above `CpuThreaded`'s own crossover. |
 
-The two trees compose: pick a backend and solver from the first tree, then an execution
-policy from the second. The policy governs how the grid operations and assembly *feeding*
-that solve are threaded, not which solver is chosen. The macOS Apple Accelerate dispatch is a
-further, orthogonal narrowing of the direct-solve leaves above; it is covered on its own below
-since it only ever applies automatically to `:default` and only on one platform.
+The trees compose: pick a backend and solver from the first, then a policy from the second.
+The policy governs the grid operations and assembly that feed the solve, not the solver.
 
-## Symmetric positive-definite systems
+## Matrix-free operators
 
-A Poisson problem's stiffness matrix is the model case: symmetric, positive definite, and
-increasingly ill-conditioned under refinement (`O(h^-2)`).
+[`matrix_free_operator`](@ref) applies any form [`assemble`](@ref) accepts without storing
+its matrix. It agrees with the assembled product, Dirichlet rows and composite spaces
+included. The [matrix-free operator page](../examples/matrix_free_operator.md) defines it and
+states where it stops. The [memory scaling page](../examples/memory_scaling.md) builds the
+cheaper Kronecker operator for separable forms and measures its storage.
 
-```@example solvers
-using Bramble
-using SuiteSparse
-using SciMLBase, LinearSolve, LinearAlgebra, SparseArrays
-using AlgebraicMultigrid: aspreconditioner
-using ILUZero
-using Random
-import Bramble: sparse_factorize, refactor!
+## Time and memory against a sparse product
 
-Ωd = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
-function spd_system(n)
-    Ωₕ = mesh(Ωd, (n, n), (true, true))
-    Wₕ = gridspace(Ωₕ)
-    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-    fₕ = element(Wₕ)
-    avgₕ!(fₕ, x -> exp(x[1] + x[2]))
-    l = form(Wₕ, v -> innerₕ(fₕ, v))
-    bcs = dirichlet_constraints(Ωd, :boundary => (x -> exp(x[1] + x[2])))
-    return assemble(a, l; dirichlet = bcs, symmetrize = true)
-end
-
-A, F = spd_system(60)
-issymmetric(A), size(A)
-```
-
-A direct solve needs one line, and no tolerance to pick:
-
-```@example solvers
-fact = sparse_factorize(A; sym = :spd)   # SuiteSparse CHOLMOD
-u_direct = fact \ F
-nothing # hide
-```
-
-An iterative solve needs a method and, for anything past a token mesh, a preconditioner to
-keep the iteration count from growing with `h`:
-
-```@example solvers
-prob = LinearProblem(A, F)
-sol_plain = solve(prob, KrylovJL_CG(); reltol = 1e-10, abstol = 1e-10)
-P = aspreconditioner(amg_preconditioner(A))
-sol_amg = solve(prob, KrylovJL_CG(); Pl = P, reltol = 1e-10, abstol = 1e-10)
-sol_plain.iters, sol_amg.iters
-```
-
-Twenty times fewer iterations, and -- since AMG's hierarchy assumes the matrix stays close to
-what elliptic forms actually assemble -- this ratio only widens as `n` grows, `O(h^-1)`
-against AMG's `O(1)`.
-
-**When each wins**: for a single solve on a mesh a direct factorization can afford, `\` is
-simpler and exact to round-off, with no tolerance to choose. AMG pays off once the same
-operator is solved repeatedly, or once fill-in makes a direct factorization's memory the
-binding constraint -- 3D problems past a few hundred thousand degrees of freedom, where a
-sparse direct solve's `O(N)`-to-`O(N^{4/3})` fill (mesh-dependent) outgrows what a machine
-holds, while AMG's memory stays `O(N)`.
-
-## Unsymmetric, convection-dominated systems
-
-Adding advection to the same operator breaks the symmetry AMG's hierarchy relies on. The
-convective term below, `inner₊(Mₕ(u), ∇ₕ(v))`, is the same SBP-staggered discretization the
-[convection-diffusion tutorial](../examples/convection_diffusion_linear.md) uses -- not a bare
-forward difference, which is unstable for a positive advection direction and produces a
-matrix so far from diagonally dominant that even ILU(0) breaks down on it.
-
-```@example solvers
-function convection_diffusion_system(n; eps = 1.0e-2)
-    Ωₕ = mesh(Ωd, (n, n), (true, true))
-    Wₕ = gridspace(Ωₕ)
-    a = form(Wₕ, Wₕ, (u, v) -> eps * inner₊(∇ₕ(u), ∇ₕ(v)) + inner₊(Mₕ(u), ∇ₕ(v)))
-    fₕ = element(Wₕ)
-    avgₕ!(fₕ, x -> exp(x[1] + x[2]))
-    l = form(Wₕ, v -> innerₕ(fₕ, v))
-    bcs = dirichlet_constraints(Ωd, :boundary => (x -> exp(x[1] + x[2])))
-    return assemble(a, l; dirichlet = bcs, symmetrize = false)
-end
-
-Acd, Fcd = convection_diffusion_system(60)
-issymmetric(Acd)
-```
-
-Direct factorization needs only the symmetry hint changed:
-
-```@example solvers
-fact_cd = sparse_factorize(Acd; sym = :unsymmetric)   # SuiteSparse UMFPACK
-u_direct_cd = fact_cd \ Fcd
-nothing # hide
-```
-
-Iteratively, GMRES replaces CG (the matrix is no longer symmetric), and ILU(0) replaces AMG:
-
-```@example solvers
-prob_cd = LinearProblem(Acd, Fcd)
-sol_cd_plain = solve(prob_cd, KrylovJL_GMRES(); reltol = 1e-10, abstol = 1e-10)
-P_ilu = ilu_preconditioner(Acd)
-sol_cd_ilu = solve(prob_cd, KrylovJL_GMRES(); Pl = P_ilu, reltol = 1e-10, abstol = 1e-10)
-sol_cd_plain.iters, sol_cd_ilu.iters
-```
-
-And AMG, tried anyway, on the same system:
-
-```@example solvers
-P_amg_cd = aspreconditioner(amg_preconditioner(Acd; method = :ruge_stuben))
-sol_cd_amg = solve(
-    prob_cd, KrylovJL_GMRES(); Pl = P_amg_cd, reltol = 1e-10, abstol = 1e-10, maxiters = 300
-)
-sol_cd_amg.iters, sol_cd_amg.retcode
-```
-
-`MaxIters`: AMG does not merely underperform here, it fails to converge in 300 iterations
-where ILU(0) needed a fraction of that -- the same failure
-[gpena/Bramble.jl#244](https://github.com/gpena/Bramble.jl/issues/244) measured (`ruge_stuben`
-capped at 2000 iterations without converging on a similar system). Classical algebraic
-multigrid assumes something close to an M-matrix; strong advection breaks that assumption,
-where ILU(0)'s local, pattern-preserving factorization has no such requirement.
-
-**When each wins**: ILU(0) is the right default for unsymmetric, convection-dominated forms.
-Reach for AMG only on the elliptic, symmetric systems the previous section covers -- not as a
-general-purpose default, which is exactly the mistake this section's own numbers argue against.
-
-## Coupled multi-component systems: elasticity
-
-A scalar Poisson system and a convection-diffusion system both come from a single grid space.
-Elasticity's bilinear form couples three components of a vector-valued unknown through
-[`εₕ`](@ref) and [`divₕ`](@ref) (the [elasticity tutorial](../examples/elasticity_3d.md) derives
-the form in full); the solver question is whether that coupling changes anything about the
-recommendations above. It assembles into an ordinary `SparseMatrixCSC`, and when the Lamé
-parameters are positive and enough of the boundary is clamped to remove rigid-body motion, the
-symmetrized matrix is exactly as SPD as the scalar Poisson case -- so the same direct/AMG
-choice applies, and this is what is worth checking rather than assuming.
-
-A modest clamped beam, small enough to factor directly and still worth cross-checking against
-an iterative solve:
-
-```@example solvers
-lame(E, ν) = (E / (2 * (1 + ν)), E * ν / ((1 + ν) * (1 - 2ν)))
-Emod, νmod = 1.0, 0.3
-μe, λe = lame(Emod, νmod)
-
-elasticity_form_el(Vₕ) = form(
-    Vₕ, Vₕ, (u, v) -> 2μe * inner₊(εₕ(u), εₕ(v)) + λe * inner₊(divₕ(u), divₕ(v)))
-
-function body_force_el(Vₕ, f)
-    fₕ = element(Vₕ)
-    avgₕ!(fₕ, f)
-    return form(Vₕ, q -> innerₕ(fₕ(1), q(1)) + innerₕ(fₕ(2), q(2)) + innerₕ(fₕ(3), q(3)))
-end
-
-Ω_beam = domain(box((0.0, 0.0, 0.0), (2.0, 0.4, 0.4)), :clamped => :back)
-function elasticity_system(n)
-    Ωₕ = mesh(Ω_beam, n, (true, true, true))
-    Vₕ = gridspace(Ωₕ)^Val(3)
-    return assemble(elasticity_form_el(Vₕ), body_force_el(Vₕ, x -> (0.0, 0.0, -1.0e-4));
-        dirichlet = dirichlet_constraints(Ω_beam, :clamped => x -> 0.0), symmetrize = true)
-end
-
-Ael, Fel = elasticity_system((17, 6, 6))
-issymmetric(Ael), size(Ael)
-```
-
-Direct and iterative solves against each other, rather than against a wall clock:
-
-```@example solvers
-fact_el = sparse_factorize(Ael; sym = :spd)
-u_direct_el = fact_el \ Fel
-
-prob_el = LinearProblem(Ael, Fel)
-sol_el = solve(prob_el, KrylovJL_CG(); reltol = 1e-10, abstol = 1e-10)
-P_el = aspreconditioner(amg_preconditioner(Ael))
-sol_el_amg = solve(prob_el, KrylovJL_CG(); Pl = P_el, reltol = 1e-10, abstol = 1e-10)
-
-norm(u_direct_el - sol_el.u) / norm(u_direct_el),
-norm(u_direct_el - sol_el_amg.u) / norm(u_direct_el),
-sol_el.iters, sol_el_amg.iters
-```
-
-All three agree to near round-off, and AMG still cuts the iteration count sharply even though
-its hierarchy is built from the graph of the coupled `1836 x 1836` matrix with no awareness
-that three displacement components sit underneath it -- the SPD argument from the Poisson
-section transfers unchanged; what changes is only the assembled operator, not which solver
-theory applies to it.
-
-**When each wins**: exactly the SPD-systems guidance above, with one caveat -- these are
-correctness cross-checks on one modest mesh, not a new timing comparison. Whether AMG's
-graph-only coarsening keeps its `O(1)` iteration-count advantage at the scale the
-[elasticity tutorial](../examples/elasticity_3d.md)'s own cantilever meshes reach has not been
-measured, and this page does not claim it either way.
-
-## Hyperbolic, transient systems: the acoustic wave equation
-
-The [wave equation tutorial](../examples/wave_equation_2d.md) semidiscretizes
-`∂ₜₜu - c²Δu = 0` into `M ü_h + K u_h = F(t)` and hands the assembled stiffness matrix `K` to
-`OrdinaryDiffEq` through [`semidiscretize_second_order`](@ref). That `K` comes from
-`inner₊(∇ₕ(u), ∇ₕ(v))` on a tensor-product mesh -- exactly the separable shape
-[`is_separable`](@ref) recognises -- so the same operator can also be built matrix-free with
-[`kronecker_operator`](@ref) instead of assembled into a `SparseMatrixCSC`:
-
-```@example solvers
-Ω_wave = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
-Ωw = mesh(Ω_wave, (40, 40), (true, true))
-Ww = gridspace(Ωw)
-Kform_w = form(Ww, Ww, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-is_separable(Kform_w)
-```
-
-```@example solvers
-Kw_assembled = assemble(Kform_w)      # SparseMatrixCSC, action by SpMV
-Kw_kron = kronecker_operator(Kform_w) # KroneckerLinearOperator, action as one fused pass
-Base.summarysize(Kw_assembled), Base.summarysize(Kw_kron)
-```
-
-The structural difference this page can make honestly: on this `40 x 40` mesh the assembled
-matrix already holds noticeably more bytes than the Kronecker factors, and that gap only grows
-with mesh size (`O(n^2)` stored entries against `O(n)` numbers per axis for a 2D operator, `n`
-grid points per axis). What matters more than the byte count is that the two give the same
-answer -- the matrix-free `mul!` is not an approximation of the assembled SpMV, it is the same
-linear map computed a different way:
-
-```@example solvers
-Random.seed!(20260922)
-xrand = rand(size(Kw_assembled, 1))
-norm(Kw_assembled * xrand - Kw_kron * xrand) / norm(Kw_assembled * xrand)
-```
-
-**When each applies, and where the comparison stops**: [`KroneckerLinearOperator`](@ref)
-carries no boundary handling of its own -- Dirichlet rows are explicitly out of scope for it,
-so the wave tutorial's own [`semidiscretize_second_order`](@ref) call, which needs a
-boundary-constrained `K` (a constrained row replaced by `eₖ`), stays on the assembled path.
-The comparison above is therefore about the *interior* spatial operator's action, not a
-drop-in replacement for the boundary-constrained system the wave example actually steps. A
-boundary-aware, matrix-free solve for a separable operator is `bramble-plan`'s v3.3.0 subplan
-S5.2, layered through a `Kronecker.jl` extension and its fast-diagonalisation solve -- not
-something this page measures or assumes exists yet. No wall-clock comparison is made here
-between the two evaluation strategies; the byte counts above are a live structural comparison,
-not a timing claim, and no crossover mesh size at which one becomes faster than the other has
-been measured for this repository.
-
-## Matrix-free operators, preconditioners and multigrid
-
-[`matrix_free_operator`](@ref) lifts the Kronecker operator's restrictions: it applies any
-form [`assemble`](@ref) accepts (grid-function coefficients, Dirichlet rows, composite spaces)
-by walking the form's stencil on each product, and never stores the matrix. The example is
-mass plus variable diffusion on a smoothly graded, non-uniform mesh:
-
-```@example solvers
-Ω_mf = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
-graded(n) = [t + 0.1 * sinpi(2t) for t in range(0.0, 1.0; length = n)]
-function graded_mesh(n)
-    Ωₕ = mesh(Ω_mf, (n, n), (true, true))
-    Bramble.change_points!(Ωₕ, (graded(n), graded(n)))
-    return Ωₕ
-end
-spd_form(W) = form(W, W,
-    (u, v) -> innerₕ(u, v) + inner₊(Rₕ(W, x -> 1 + x[1] * x[2]) * ∇ₕ(u), ∇ₕ(v)))
-
-Ωmf = graded_mesh(65)
-Wmf = gridspace(Ωmf)
-a_mf = spd_form(Wmf)
-op = matrix_free_operator(a_mf)
-size(op)
-```
-
-The operator is the assembled matrix's linear map, applied in place with `mul!` or out of
-place with `*`, on plain vectors and on [`VectorElement`](@ref)s alike:
-
-```@example solvers
-Random.seed!(20260928)
-x_mf = rand(size(op, 2))
-y_mf = similar(x_mf)
-A_mf = assemble(a_mf)
-mul!(y_mf, op, x_mf)                  # in place
-uₕ = element(Wmf, x_mf)
-vₕ = op * uₕ                          # out of place, a VectorElement of Wmf
-(norm(y_mf - A_mf * x_mf) / norm(A_mf * x_mf) < 1e-14, op * x_mf == y_mf, vₕ == y_mf)
-```
-
-### Time and memory against a sparse product
-
-Measured on an Apple M2 on AC power, `--threads=4`, each case alone, with Julia 1.13.1, on
-2026-09-28 (after the threaded product became one parallel region, commit `40b0516d`). The
-form is mass plus variable diffusion on non-uniform meshes, the sparse product is serial CSR,
-and times are the minimum of repeats. A time ratio above 1 means the matrix-free product is
-faster; bytes are `Base.summarysize`.
+Measured on an Apple M2 on AC power, `--threads=4`, each case alone, Julia 1.13.1, on
+2026-09-28 (commit `40b0516d`). The form is mass plus variable diffusion on non-uniform
+meshes, the sparse product is serial CSR, and times are the minimum of repeats. A time ratio
+above 1 means the matrix-free product is faster. Bytes are `Base.summarysize`.
 
 | Mesh | Unknowns | SpMV / serial matrix-free | SpMV / threaded matrix-free | CSR bytes / matrix-free bytes |
 |---|---|---|---|---|
@@ -484,20 +184,57 @@ faster; bytes are `Base.summarysize`.
 | 3D 32³ | 32768 | 0.36 | 1.13 | 13.7 |
 | 3D 128³ | 2.1 × 10⁶ | 0.36 | 1.16 | 14.4 |
 
-Serial, the matrix-free product is 1.6–3.4× slower than serial SpMV at every size: it
-recomputes each entry from the mesh and the coefficient. Threaded on 4 threads, the crossover
-where it beats serial SpMV is 1D 10⁵ unknowns, 2D 64² and 3D 32³, and it stays ahead above
-them (2.2× at 1D 10⁷, 1.6× at 2D 2048², 1.2× at 3D 128³). In 1D the CSR matrix and the
-operator take the same memory; in 2D and 3D the CSR matrix takes 10.6× and 14.4× the memory
-at the largest sizes. The matrix-free operator is therefore the choice when memory binds or
-threads are available, and assembled SpMV stays faster on one thread.
+Serial, the matrix-free product is 1.6 to 3.4 times slower than serial SpMV at every size,
+because it recomputes each entry from the mesh and the coefficient. On 4 threads it beats
+serial SpMV from 1D 10⁵ unknowns, 2D 64² and 3D 32³, and stays ahead above them (2.2 times
+at 1D 10⁷, 1.6 at 2D 2048², 1.2 at 3D 128³). In 1D the two take the same memory; in 2D and
+3D the CSR matrix takes 10.6 and 14.4 times the memory at the largest sizes. Choose the
+operator when memory binds or threads are available. Assembled SpMV stays faster on one
+thread.
 
-### Jacobi and Chebyshev preconditioning
+## Jacobi and Chebyshev preconditioning
 
-A `MatrixFreeOperator` goes directly into a `LinearProblem`, and the matrix-free
-preconditioners go into `Pl`. [`jacobi_preconditioner`](@ref) reads `diag(A)` off one
-stencil walk. [`chebyshev_preconditioner`](@ref) is a fixed degree-4 polynomial in `D⁻¹A`,
-Jacobi-scaled, on a spectrum bound from `Bramble.max_eigenvalue_estimate`:
+The matrix-free preconditioners need no assembled matrix. The problem below is mass plus
+variable diffusion on a smoothly graded, non-uniform mesh. A graded mesh is where
+a matrix-free product earns its keep, because every stencil entry depends on the local
+spacing.
+
+```@example solvers
+using Bramble
+using SciMLBase, LinearSolve, LinearAlgebra, Random
+
+Ω_mf = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+graded(n) = [t + 0.1 * sinpi(2t) for t in range(0.0, 1.0; length = n)]
+function graded_mesh(n)
+    Ωₕ = mesh(Ω_mf, (n, n), (true, true))
+    Bramble.change_points!(Ωₕ, (graded(n), graded(n)))
+    return Ωₕ
+end
+spd_form(W) = form(W, W,
+    (u, v) -> innerₕ(u, v) + inner₊(Rₕ(W, x -> 1 + x[1] * x[2]) * ∇ₕ(u), ∇ₕ(v)))
+
+Ωmf = graded_mesh(65)
+Wmf = gridspace(Ωmf)
+a_mf = spd_form(Wmf)
+A_mf = assemble(a_mf)
+op = matrix_free_operator(a_mf)
+size(op)
+```
+
+The operator is a linear map, applied with `mul!` or `*`. It matches the assembled product:
+
+```@example solvers
+Random.seed!(20260928)
+x_mf = rand(size(op, 2))
+y_mf = similar(x_mf)
+mul!(y_mf, op, x_mf)
+norm(y_mf - A_mf * x_mf) / norm(A_mf * x_mf) < 1e-14
+```
+
+A `MatrixFreeOperator` goes directly into a `LinearProblem`, and the preconditioners go into
+`Pl`. [`jacobi_preconditioner`](@ref) reads `diag(A)` off one stencil walk.
+[`chebyshev_preconditioner`](@ref) is a fixed degree-4 polynomial in `D⁻¹A`, scaled by
+Jacobi, on a spectrum bound from `Bramble.max_eigenvalue_estimate`:
 
 ```@example solvers
 b_mf = op * rand(size(op, 1))
@@ -509,15 +246,19 @@ P_cheb = chebyshev_preconditioner(op)
 cg_iters(), cg_iters(Pl = P_jac), cg_iters(Pl = P_cheb)
 ```
 
-On this 65² mesh, CG took 499 iterations unpreconditioned, 329 with Jacobi and 93 with
-Chebyshev. Both are built without ever assembling `A`.
+On this 65² mesh CG took 499 iterations unpreconditioned, 329 with Jacobi and 93 with
+Chebyshev. Neither builds `A`.
 
-### Geometric multigrid
+!!! tip "Try this"
+    Change `graded_mesh(65)` to `graded_mesh(33)` and rerun the blocks. The three counts fall
+    to 246, 179 and 52, and Chebyshev's advantage over plain CG narrows from 5.4 times to 4.7.
+
+## Geometric multigrid
 
 [`gmg_preconditioner`](@ref) takes a builder `W -> form(...)` rather than a form, because a
 form is tied to its space: each level of the [`GeometricMeshHierarchy`](@ref) is
 rediscretised by calling the builder on that level's space. Every grid function in the form,
-here the coefficient `Rₕ(W, κ)`, must be built from `W` inside the builder; one captured from
+here the coefficient `Rₕ(W, κ)`, must be built from `W` inside the builder. One captured from
 the finest space gives a wrong coarse operator.
 
 ```@example solvers
@@ -530,191 +271,55 @@ Six levels down to 3², and 10 CG iterations against Chebyshev's 93. [`gmg_solve
 the cycles as a stationary iteration instead, and [`v_cycle!`](@ref), [`w_cycle!`](@ref) and
 [`fmg!`](@ref) are the cycles themselves.
 
-**Limits.** The smoothers are point smoothers, and they stall on stretched cells. On the
-random meshes of `mesh(…, false)`, whose largest aspect ratio grows with `n` (96 at 33², 52600
-at 513²), CG with the V-cycle took 14–25, 26–37 and 32–116 iterations at 2D 33², 65² and 129²
+The smoothers are point smoothers, and they stall on stretched cells. On the random meshes of
+`mesh(…, false)`, whose largest aspect ratio grows with `n` (96 at 33², 52600 at 513²), CG
+with the V-cycle took 14 to 25, 26 to 37 and 32 to 116 iterations at 2D 33², 65² and 129²
 over four draws, and 87 at 513². A random base refined with [`iterative_refinement!`](@ref)
 keeps its aspect ratio, but the counts still grow per level: 11 to 26 from 17² to 257² on a
-2D base of 9² (aspect ratio 10.9), 14 to 29 from 9³ to 65³ on a 3D base of 5³ (aspect ratio
-15). The mesh-independent counts, 6 iterations from 2D 33² to 513² and 7 from 3D 17³ to 129³,
-were measured on meshes with bounded aspect ratio (uniform points jittered by up to `±0.3h`).
-Line and plane smoothers for stretched meshes are planned in
-[gpena/Bramble.jl#394](https://github.com/gpena/Bramble.jl/issues/394). With Dirichlet rows
-(`dirichlet` on the operator or preconditioner), CG needs a right-hand side that is zero on
-those rows. Device execution of the operator, the preconditioners and the cycles is tracked
-on milestone [v4.4.0](https://github.com/gpena/Bramble.jl/milestone/38).
+2D base of 9² (aspect ratio 10.9), and 14 to 29 from 9³ to 65³ on a 3D base of 5³ (aspect
+ratio 15). The mesh-independent counts, 6 iterations from 2D 33² to 513² and 7 from 3D 17³
+to 129³, were measured on meshes with bounded aspect ratio (uniform points jittered by up to
+`±0.3h`). Line and plane smoothers for stretched meshes are planned in
+[#394](https://github.com/gpena/Bramble.jl/issues/394). With Dirichlet rows, CG needs a
+right-hand side that is zero on those rows. Device execution of the operator, the
+preconditioners and the cycles is tracked on milestone
+[v4.4.0](https://github.com/gpena/Bramble.jl/milestone/38).
 
-## Steady vs. unsteady problems
+## macOS: when the default solve uses Apple Accelerate
 
-Every comparison above solved one linear system. A steady problem only ever needs one; a
-time-dependent problem solved by an implicit scheme needs one *per step*, against the same
-sparsity pattern (the mesh does not change) but generally different numerical values (a
-time-varying coefficient, or the previous step's solution feeding a semi-implicit term). That
-repetition is what makes "factorize once, reuse" worth considering as an alternative to
-preconditioning from scratch every step.
-
-Take backward Euler for `∂u/∂t = Δu - c(t) u`, with a reaction coefficient `c(t)` that varies
-in time -- the same sparsity pattern every step, different values, so a symbolic
-factorization computed once stays valid for all of them:
-
-```@example solvers
-n = 40
-Ωₕ = mesh(Ωd, (n, n), (true, true))
-Wₕ = gridspace(Ωₕ)
-M = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))
-K = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))))
-dt = 0.01
-nsteps = 15
-c(t) = 1.0 + 0.5 * sin(4t)   # always positive, so A(t) stays SPD
-u0vec = fill(1.0, size(M, 1))
-nothing # hide
-```
-
-### Strategy A: factorize once, `refactor!` each step
-
-```@example solvers
-function direct_reuse(M, K, c, dt, nsteps, u0vec)
-    A1 = M ./ dt .+ K .+ c(dt) .* M
-    fact = sparse_factorize(A1; sym = :spd)
-    u = copy(u0vec)
-    for step in 2:nsteps
-        An = M ./ dt .+ K .+ c(step * dt) .* M
-        refactor!(fact, An)             # reuses the symbolic factorization
-        u = fact \ ((M ./ dt) * u)
-    end
-    return u
-end
-
-uA = direct_reuse(M, K, c, dt, nsteps, u0vec)
-nothing # hide
-```
-
-`refactor!` recomputes only the numeric values against the fixed elimination tree from step
-1's factorization -- a pure back-substitution cost per step, no fresh symbolic analysis and no
-iteration count to track at all.
-
-### Strategy B/C: iterative, cold-started vs. warm-started
-
-An iterative solve has no factorization to reuse, but has something a direct solve does not:
-an initial guess. Consecutive time steps are close together, so the *previous* step's solution
-is normally a much better starting point than the zero vector every cold solve implicitly
-uses.
-
-`LinearSolve`'s Krylov wrappers only honour a warm start for GMRES/FGMRES (`warm_start`
-is ignored by every other method, CG included, per `KrylovJL_GMRES`'s own docstring) --
-and only when the *same cache* is reused across solves, not a fresh `LinearProblem` built
-each step:
-
-```@example solvers
-function iterative_cold(M, K, c, dt, nsteps, u0vec)
-    u = copy(u0vec)
-    total = 0
-    for step in 2:nsteps
-        An = M ./ dt .+ K .+ c(step * dt) .* M
-        rhs = (M ./ dt) * u
-        sol = solve(LinearProblem(An, rhs), KrylovJL_GMRES(); reltol = 1e-10, abstol = 1e-10)
-        total += sol.iters
-        u = sol.u
-    end
-    return u, total
-end
-
-function iterative_warm(M, K, c, dt, nsteps, u0vec)
-    u = copy(u0vec)
-    A0 = M ./ dt .+ K .+ c(2dt) .* M
-    cache = init(
-        LinearProblem(A0, (M ./ dt) * u),
-        KrylovJL_GMRES(warm_start = LinearSolve.WarmStart.Previous);
-        reltol = 1e-10, abstol = 1e-10
-    )
-    sol = solve!(cache)
-    total = sol.iters
-    u = sol.u
-    for step in 3:nsteps
-        cache.A = M ./ dt .+ K .+ c(step * dt) .* M
-        cache.b = (M ./ dt) * u
-        sol = solve!(cache)              # seeds from cache.u, the previous step's solution
-        total += sol.iters
-        u = sol.u
-    end
-    return u, total
-end
-
-uB, iters_cold = iterative_cold(M, K, c, dt, nsteps, u0vec)
-uC, iters_warm = iterative_warm(M, K, c, dt, nsteps, u0vec)
-iters_cold, iters_warm
-```
-
-All three strategies agree with each other to near round-off:
-
-```@example solvers
-norm(uA - uB) / norm(uA), norm(uA - uC) / norm(uA)
-```
-
-Warm-starting cuts the total iteration count across the whole run, though by less than a
-single-step comparison in isolation would suggest -- each step's operator has actually
-changed (`c(t)` moved), not only its right-hand side, so the previous solution is a good but
-imperfect guess, not the exact answer to a nearby problem.
-
-**When each wins**: for a fixed-pattern time loop, factorizing once and calling `refactor!`
-is the simplest correct choice -- no iteration count to track, no preconditioner to build, and
-the [forms tutorial](form.md)'s own solver note already measured direct reuse running an
-order of magnitude faster per step than iterative AMG-CG or GMRES on repeated solves. Reach
-for a warm-started iterative solve instead when the matrix is too large to factorize at all
-(the memory argument from the SPD section above, now applied per step rather than once), where
-the reduction above is free on top of whatever iteration count the preconditioner alone already
-bought.
-
-## macOS: when the default solve reaches for Apple Accelerate
-
-[`pde_solve`](@ref)'s `:default` solver -- the one every `\` in the sections above sits on
-top of -- reaches for Apple's Accelerate framework instead of a bare `A \ F` on macOS, but
-only when `AppleAccelerate.jl` is loaded (`using AppleAccelerate`) **and** the system is
-symmetric:
+[`pde_solve`](@ref)'s `:default` solver, which every `\` above sits on, uses Apple's
+Accelerate framework instead of a bare `A \ F` on macOS, but only when `AppleAccelerate.jl`
+is loaded and the system is symmetric:
 
 ```julia
-using Bramble, AppleAccelerate  # loading it is enough to opt in; no other setup
+using Bramble, AppleAccelerate  # loading it is enough to opt in
 
-A_sym, F_sym = spd_system(80)                      # symmetric: Accelerate's Cholesky/LDLᵀ path
-A_uns, F_uns = convection_diffusion_system(80)     # unsymmetric: stays on `A \ F`
-
+# A_sym, F_sym: the SPD system of the solvers-by-problem page; A_uns, F_uns: its
+# convection-diffusion system. Both at n = 80.
 u_sym = pde_solve(A_sym, F_sym)   # == pde_solve(A_sym, F_sym; solver = :accelerate)
 u_uns = pde_solve(A_uns, F_uns)   # == A_uns \ F_uns, Accelerate never runs
 ```
 
-This is narrower than Accelerate's own availability suggests, and deliberately so
-([gpena/Bramble.jl#246](https://github.com/gpena/Bramble.jl/issues/246)): measured against
-`A \ F` on Bramble-shaped systems, the symmetric path is a 1.2-1.3x win (`n = 80`: 0.83x
-the runtime; `n = 120`: 0.78x), while an unsymmetric convection-diffusion system was
-2.3-3.6x **slower** through Accelerate before the dispatch was narrowed to
-`issymmetric(A)`. `solver = :accelerate` still honours an explicit request on an
-unsymmetric system -- only the automatic `:default` choice avoids it.
+The rule is narrow on purpose ([#246](https://github.com/gpena/Bramble.jl/issues/246)).
+Against `A \ F` on Bramble-shaped systems the symmetric path is a 1.2x to 1.3x win (`n = 80`:
+0.83 of the runtime; `n = 120`: 0.78), while an unsymmetric convection-diffusion system was
+2.3x to 3.6x **slower** through Accelerate before the dispatch tested `issymmetric(A)`.
+`solver = :accelerate` still honours an explicit request on an unsymmetric system.
 
-Symmetry can be asserted rather than detected: `sym = :spd`/`:definite`/`:symmetric` takes
-the Accelerate path without testing `issymmetric(A)` again, and `sym = :unsymmetric` skips
-straight to `A \ F`. An unrecognised `sym` under `:default` does not error -- it silently
-falls back to `A \ F`, the same as `:default` ignoring `sym` entirely before this dispatch
-existed. `solver = :accelerate` spelled out explicitly does validate `sym` and throws on a
-value it does not recognise, so the two are not symmetric in strictness.
-
-The choice is macOS-only and opt-in: without `using AppleAccelerate`, or on Linux/Windows,
-`:default` is exactly `A \ F`, unchanged. [`accelerate_factorize`](@ref) and
-[`accelerate_solve`](@ref)'s own documentation covers the extension-scoping, threading and
-accuracy questions [gpena/Bramble.jl#142](https://github.com/gpena/Bramble.jl/issues/142)
-asked about Accelerate in full, including the measured worst-case residual against
-`LinearAlgebra` and the `BLAS_THREADING_MULTI_THREADED`/`BLAS_THREADING_SINGLE_THREADED`
-knob for vecLib's own internal threading.
+Symmetry can be asserted instead of detected: `sym = :spd`, `:definite` or `:symmetric` takes
+the Accelerate path without testing `issymmetric(A)`, and `sym = :unsymmetric` goes straight
+to `A \ F`. Under `:default` an unrecognised `sym` falls back to `A \ F`; an explicit
+`solver = :accelerate` validates `sym` and throws. Without `using AppleAccelerate`, or off
+macOS, `:default` is exactly `A \ F`. The docstrings of [`accelerate_factorize`](@ref) and
+[`accelerate_solve`](@ref) cover threading and accuracy
+([#142](https://github.com/gpena/Bramble.jl/issues/142)).
 
 ## Where to go next
 
-[`sparse_factorize`](@ref)'s own docstring lists every direct backend and when each is
-preferred by problem size and platform. [`amg_preconditioner`](@ref) and
-[`ilu_preconditioner`](@ref) cover the preconditioners themselves in more depth, including
-[gpena/Bramble.jl#244](https://github.com/gpena/Bramble.jl/issues/244)'s full evaluation of
-the wider JuliaSparse ecosystem. [`KroneckerLinearOperator`](@ref) and [`is_separable`](@ref)
-cover the matrix-free path in more depth than the wave-equation section above needs, and
-[`CpuSerial`](@ref), [`CpuThreaded`](@ref), and [`CpuPolyester`](@ref) each document their own
-measured crossover in full, workload by workload, rather than the summary table above. The
-[elasticity](../examples/elasticity_3d.md) and [wave equation](../examples/wave_equation_2d.md)
-tutorials are where the two new archetypes above are actually derived and solved end to end;
-this page only adds the solver comparison on top of them.
+[Solvers by problem](solvers_by_problem.md) runs the choices above on a Poisson problem, a
+convection-diffusion problem, an elasticity problem and a wave equation, and
+[time stepping](time_stepping.md) reuses one factorization across steps.
+[`sparse_factorize`](@ref), [`amg_preconditioner`](@ref) and [`ilu_preconditioner`](@ref)
+document the solvers and preconditioners in full, and
+[`CpuSerial`](@ref), [`CpuThreaded`](@ref) and [`CpuPolyester`](@ref) document their own
+crossovers.
