@@ -1,4 +1,4 @@
-name: Julia nightly
+name: Julia DEV
 
 # On-demand run of the `unit` test group against the Julia nightly build, for finding out what
 # a coming Julia release does to Bramble. Nothing triggers it but `workflow_dispatch`, and nothing depends on
@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   test:
-    name: Julia nightly - unit - ${{ inputs.os }}
+    name: Julia DEV - unit - ${{ inputs.os }}
     runs-on: ${{ inputs.os }}
     timeout-minutes: 90
     steps:
