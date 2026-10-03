@@ -34,6 +34,9 @@
 # `src/assembly/kronecker.jl` has `_batch_kron_lines!`, which runs a `KroneckerLinearOperator`
 # product's grid lines under `@batch` when the operator's own policy is `CpuPolyester`.
 #
+# `src/problems/semidiscrete_rhs.jl` has `_batch_csr_spmv!`, which runs the explicit
+# right-hand side's product `du .-= A u` one compressed row per `@batch` iteration.
+#
 # `Polyester.@batch` accepts a `CartesianIndices` directly (`closure.jl`'s own `splitloop`
 # already splits it along its last axis, the same trick `_threaded_axis_for!` hand-rolls for
 # `Threads.@threads`), so none of the manual axis-chunking `src/utils/linear_algebra.jl` uses
@@ -430,6 +433,32 @@ function Bramble._batch_kron_lines!(
         off = (o - 1) * m
         _kron_line_init!(a[1], a[5], off, m)
         _kron_line_terms!(a[1], a[2], a[3], a[4], Tuple(lines[o]), ss, off, m)
+    end
+    return nothing
+end
+
+# --- _batch_csr_spmv! (src/problems/semidiscrete_rhs.jl) ---------------------------- #
+#
+# `SemidiscretizeRHS`'s product under `CpuPolyester`: row `i` sums
+# `nzval[perm[k]] * u[colval[k]]` over its compressed-row slice and subtracts it from `du[i]`,
+# so each iteration writes one entry of `du` and none races. `nzval` is `nonzeros(A)` itself,
+# gathered through `perm`, so the values are always `A`'s current ones. The arrays are plain arguments, captured directly: `@batch`
+# turns each into a `PtrArray`, and with no struct to rebuild around them the row loop runs
+# at full speed (benchmark/batch_survey.jl, candidate 3). The accumulator starts from
+# `z`, the zero of the promoted element type, computed outside the loop so the sum is
+# type-stable for `Dual` and other element types.
+function Bramble._batch_csr_spmv!(
+        du::AbstractVector, rowptr::AbstractVector{<:Integer},
+        colval::AbstractVector{<:Integer}, perm::AbstractVector{<:Integer},
+        nzval::AbstractVector, u::AbstractVector
+)
+    z = zero(promote_type(eltype(du), eltype(nzval), eltype(u)))
+    @batch for i in 1:(length(rowptr) - 1)
+        acc = z
+        @inbounds for k in rowptr[i]:(rowptr[i + 1] - 1)
+            acc += nzval[perm[k]] * u[colval[k]]
+        end
+        @inbounds du[i] -= acc
     end
     return nothing
 end
