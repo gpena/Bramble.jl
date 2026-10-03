@@ -496,7 +496,7 @@ end
     ::CpuThreaded, out, in_ref, h::H, dims, dir, dim_val) where {H} = _threaded_difference_engine!(
     out, in_ref, h, dims, dir, dim_val)
 @noinline _difference_engine!(
-    ::CpuPolyester, out, in_ref, h::H, dims, dir, dim_val) where {H} = _batch_difference_engine!(
+    ::CpuPolyester, out, in_ref, h::H, dims, dir, dim_val) where {H} = _late(_batch_difference_engine!,
     out, in_ref, h, dims, dir, dim_val)
 
 #------------------------------------------------------------------------------------------#

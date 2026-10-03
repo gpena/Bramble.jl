@@ -738,7 +738,7 @@ end
 # alone, so the branch folds away.
 @inline _threaded_replay_policy(::CpuThreaded) = true
 @inline _threaded_replay_policy(::Any) = false
-@inline _leaf_replays(_A, sp) = _threaded_replay_policy(_effective_parallel_policy(sp))
+@inline _leaf_replays(_A, sp) = _late(_threaded_replay_policy, _effective_parallel_policy(sp))
 
 # Whether a form's threaded refill uses the recording at all: at least one leaf on either
 # side that replays. A form none of whose leaves can replay keeps the
@@ -784,8 +784,7 @@ end
         _sweep_bilinear_serial!(target, sp, term, row_offset, col_offset, α)
     else
         _sweep_bilinear!(
-            target, sp, term, _colour_strides(stencil_offsets(term)), row_offset,
-            col_offset, α
+            target, sp, term, _term_colour_strides(term), row_offset, col_offset, α
         )
     end
     return nothing
@@ -817,8 +816,7 @@ end
     if _has_test_interp(p1) || _has_trial_interp(p1) || _has_test_interp(p2)
         _sweep_bilinear_serial!(target, sp, p1, row_offset, col_offset)
     else
-        rows = sort!(union(stencil_offsets(p1), stencil_offsets(p2)))
-        _sweep_bilinear!(target, sp, p1, _colour_strides(rows), row_offset, col_offset)
+        _sweep_bilinear!(target, sp, p1, _term_colour_strides(p1, p2), row_offset, col_offset)
     end
     return nothing
 end
@@ -877,7 +875,8 @@ end
         col_offset::Int,
         α
 ) where {TERM}
-    return _batch_bilinear_colour_sweep!(
+    return _late(
+        _batch_bilinear_colour_sweep!,
         A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
     )
 end
@@ -907,7 +906,8 @@ end
         col_offset::Int,
         _
 ) where {TERM}
-    return _batch_bilinear_colour_replay!(
+    return _late(
+        _batch_bilinear_colour_replay!,
         target, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset
     )
 end
@@ -1006,7 +1006,8 @@ end
         col_offset::Int,
         α
 ) where {TERM}
-    return _batch_bilinear_band_sweep!(
+    return _late(
+        _batch_bilinear_band_sweep!,
         A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α
     )
 end
@@ -1039,7 +1040,8 @@ end
         col_offset::Int,
         _
 ) where {TERM}
-    return _batch_bilinear_band_replay!(
+    return _late(
+        _batch_bilinear_band_replay!,
         target, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset,
         col_offset
     )
@@ -1197,7 +1199,7 @@ function _assemble_blocks_parallel!(
                 A,
                 sp,
                 bound,
-                _colour_strides(stencil_offsets(bound)),
+                _term_colour_strides(bound),
                 blk.row_offset,
                 blk.col_offset,
                 α
@@ -1238,7 +1240,7 @@ function _assemble_bilinear_parallel_core!(
     if _has_test_interp(bound)
         _sweep_bilinear_serial!(A, sp, bound, 0, 0, α)
     else
-        _sweep_bilinear!(A, sp, bound, _colour_strides(stencil_offsets(bound)), 0, 0, α)
+        _sweep_bilinear!(A, sp, bound, _term_colour_strides(bound), 0, 0, α)
     end
     # A no-op for a host matrix; for a device one, copies `A`'s own mirror (gpena/Bramble.jl#313)
     # back across in one bulk `copyto!` -- see `_flush_device_scatter!`'s own docstring

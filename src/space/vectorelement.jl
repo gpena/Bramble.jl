@@ -550,7 +550,7 @@ end
 # band, run under `Polyester.@batch` by `_batch_broadcast!` instead of `_static_or_serial`.
 @noinline function _polyester_broadcast!(v::AbstractVector, bc::Broadcast.Broadcasted)
     bc′ = _prepared_broadcast(v, bc)
-    return _batch_broadcast!(v, bc′, axes(v, 1))
+    return _late(_batch_broadcast!, v, bc′, axes(v, 1))
 end
 
 """

@@ -320,13 +320,14 @@ end
     out, in_ref, dims, dir, dim_val)
 @inline _average_engine!(::CpuThreaded, out, in_ref, dims, dir, dim_val) = _threaded_average_engine!(
     out, in_ref, dims, dir, dim_val)
-@noinline _average_engine!(::CpuPolyester, out, in_ref, dims, dir, dim_val) = _batch_average_engine!(
+@noinline _average_engine!(::CpuPolyester, out, in_ref, dims, dir, dim_val) = _late(_batch_average_engine!,
     out, in_ref, dims, dir, dim_val)
 
 @inline _centered_average_engine!(::CpuSerial, out, in_ref, dims, dim_val) = _centered_average_engine!(out, in_ref, dims, dim_val)
 @inline _centered_average_engine!(::CpuThreaded, out, in_ref, dims, dim_val) = _threaded_centered_average_engine!(
     out, in_ref, dims, dim_val)
-@noinline _centered_average_engine!(::CpuPolyester, out, in_ref, dims, dim_val) = _batch_centered_average_engine!(
+@noinline _centered_average_engine!(::CpuPolyester, out, in_ref, dims, dim_val) = _late(
+    _batch_centered_average_engine!,
     out, in_ref, dims, dim_val)
 
 @noinline function _throw_no_device_centered_average()

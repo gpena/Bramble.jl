@@ -2,7 +2,6 @@ name: Nightly
 
 # Everything the per-push CI.yml deliberately leaves off, once a day: Linux entirely, and the
 # checks that are not canaries but don't need every-push feedback either.
-# The 1.12 floor is covered weekly instead — see Weekly.yml.
 #
 # CI.yml's push gate is macOS-only, and runs the `unit` group. Linux lives here, in the
 # `slow` job below, on the same released Julia 1.13 — a second platform on the gate doubles
@@ -34,10 +33,7 @@ name: Nightly
 # `test` runs Julia nightly on both platforms, and is switched off (`if: false`) while the
 # 1.14 dev series breaks upstream packages Bramble tests against: GPUCompiler and Mooncake fail
 # to precompile (`WorldView` not defined in `Compiler`), JET refuses to run, and SparseArrays'
-# `lu` recurses without end on a `Dual` matrix. Delete the `if:` to bring it back. The 1.12
-# floor moved to Weekly.yml, which already runs the full suite (a superset of `unit`) on 1.12
-# and 1.13, ubuntu and macOS, so a separate 1.12 leg here would only repeat a narrower version
-# of that coverage.
+# `lu` recurses without end on a `Dual` matrix. Delete the `if:` to bring it back.
 
 permissions:
   contents: read
@@ -85,6 +81,11 @@ jobs:
   #
   # Keep the version in step with CI.yml's matrix. The point of the ubuntu leg is that the
   # two platforms run the same thing; a drift makes it a different question.
+  #
+  # The ubuntu leg also uploads the `slow` half of the coverage, to Codecov (flag `suite`)
+  # and as the `lcov-suite` artifact that Weekly.yml's per-file coverage floor merges with
+  # its `backends` half. id-token: write is for the codecov-action's `use_oidc: true`;
+  # Weekly.yml's `full` job explains why the job fails without it.
   slow:
     name: Julia 1.13 + deferred tests (${{ matrix.os }})
     needs: changed
@@ -94,6 +95,7 @@ jobs:
     permissions:
       contents: read
       actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -131,6 +133,23 @@ jobs:
           # 5, below the macOS leg's 7 GB runner, so a blow-up fails by name (see
           # TestUtils.jl) before the runner just kills the job. Coverage is on by default here.
           BRAMBLE_TEST_MAXRSS_GB: 5
+
+      - uses: julia-actions/julia-processcoverage@v1
+        if: matrix.os == 'ubuntu-latest'
+      - uses: codecov/codecov-action@v5
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
+          flags: suite
+          fail_ci_if_error: false
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.os == 'ubuntu-latest'
+        with:
+          name: lcov-suite
+          path: lcov.info
+          if-no-files-found: warn
 
   test:
     name: Julia nightly (${{ matrix.os }})
@@ -196,18 +215,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Both supported releases. What Aqua and JET report is version-dependent in a way
-        # the unit tests are not -- method ambiguities and inference results move with the
-        # compiler -- so running one version here would leave the other unchecked. This job
-        # was pinned to 1.12 alone while test/quality/aqua.jl still skipped the
-        # persistent_tasks check on 1.13; it no longer does.
+        # Julia 1.13 only; CI no longer runs 1.12.
         #
         # This is the *only* place the quality group runs in CI. Weekly.yml used to re-derive
         # it as part of `full`, on a 2x2 matrix, to learn nothing this daily job had not
         # already reported; `full` stopped implying `quality` (test/runtests.jl) rather than
         # this job's cadence being reduced, because a quality regression found six days late
         # is a quality regression found six days late.
-        version: ["1.12", "1.13"]
+        version: ["1.13"]
     steps:
       - uses: actions/checkout@v5
 
@@ -224,6 +239,30 @@ jobs:
       - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
           BRAMBLE_TEST_GROUP: quality
+  # Keeps the repository under its 10 GB Actions cache quota. julia-actions/cache never
+  # deletes old entries on the default branch (it leaves them to GitHub's eviction), so every
+  # nightly run added about 2.3 GB on `main`: a `unit-and-slow` entry per OS and a `quality`
+  # entry. Only the newest entry per key prefix (the key without `;run_id=...`) is ever
+  # restored, so this deletes the rest once the saving jobs are done.
+  prune-caches:
+    name: Prune superseded caches on main
+    needs: [slow, quality]
+    if: ${{ always() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/${{ github.repository }}/actions/caches?ref=refs/heads/main&per_page=100" --jq '.actions_caches[]' |
+            jq -rs 'group_by(.key | sub(";run_id=.*$"; "")) | map(sort_by(.created_at) | reverse | .[1:][]) | .[] | "\(.id) \(.key)"' |
+            while read -r id key; do
+              echo "Deleting $key"
+              gh api -X DELETE "repos/${{ github.repository }}/actions/caches/$id" || true
+            done
+
   format:
     name: Format check
     needs: changed

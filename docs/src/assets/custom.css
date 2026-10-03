@@ -87,3 +87,23 @@
   background: transparent;
   border-radius: 0;
 }
+
+/* Sidebar: MaterialDocs gives nested sections no indent and hides only the links of a
+   collapsed section, not its child sections. */
+
+.md-nav-section .md-nav-section {
+  margin-top: 0.25rem;
+  padding-left: 0.75rem;
+}
+
+.md-nav-section .md-nav-section > .md-nav-section-title {
+  text-transform: none;
+}
+
+.md-nav-collapsed .md-nav-section {
+  display: none;
+}
+
+.md-nav-section-title::after {
+  font-size: 1.25em;
+}

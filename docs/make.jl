@@ -168,6 +168,8 @@ makedocs(;
         versions = false,
         # Material3 forwards the keywords below to the underlying `Documenter.HTML`.
         prettyurls = get(ENV, "CI", nothing) == "true",
+        # Every sidebar section starts collapsed, except the ones leading to the current page.
+        collapselevel = 1,
         # The API reference is split into one page per section because MaterialDocs rendered
         # the single page at 682 KiB. The limits stay to catch a page that grows by accident.
         size_threshold = 600 * 1024,

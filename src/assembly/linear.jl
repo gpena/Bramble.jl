@@ -503,6 +503,57 @@ argument carries no difference) strides by 1 in every dimension, resulting in a 
     return hi .- lo .+ 1
 end
 
+# `_colour_strides(stencil_offsets(op))` without the offset `Vector`s, so a threaded refill or
+# product costs no heap allocation per unit and call. `_row_bounds(op)` is the corner pair
+# `(lo, hi)` of the box around `stencil_offsets(op)`, read off the same tree by the same rules:
+# a tap or a shift moves the child's box along its own dimension by its least and greatest
+# step, a sum takes the box around both summands, and every other node passes its child's
+# through. A node with no method here falls back to `stencil_offsets` itself, so the bounds
+# always agree with the offsets, at worst at the old cost.
+@inline _row_bounds(op) = _offset_bounds(stencil_offsets(op))
+
+@inline function _offset_bounds(offsets::Vector{NTuple{D, Int}}) where {D}
+    isempty(offsets) && return (ntuple(_ -> 0, D), ntuple(_ -> -1, D))
+    lo = hi = first(offsets)
+    for o in offsets
+        lo = min.(lo, o)
+        hi = max.(hi, o)
+    end
+    return (lo, hi)
+end
+
+@inline _row_bounds(::Union{
+    TrialFunction{D}, TestFunction{D}, IndexedTrialFunction{D}, IndexedTestFunction{D},
+    SourceFunction{D}, SourceVector{D}, SourceConstant{D}, DiracSource{D},
+    IdentityOperator{D}, ZeroOperator{D}}) where {D} = (ntuple(_ -> 0, D), ntuple(_ -> 0, D))
+
+@inline function _moved_bounds(
+        (lo, hi)::NTuple{2, NTuple{D, Int}}, ::Val{Dim}, steps::Tuple
+) where {D, Dim}
+    smin, smax = minimum(steps), maximum(steps)
+    return (ntuple(i -> i == Dim ? lo[i] + smin : lo[i], Val(D)),
+        ntuple(i -> i == Dim ? hi[i] + smax : hi[i], Val(D)))
+end
+
+@inline _row_bounds(op::TappedNode{D, Dim}) where {D, Dim} = _moved_bounds(
+    _row_bounds(op.inner_op), Val(Dim), map(_shift_delta, _stencil_taps(op)))
+@inline _row_bounds(op::ShiftNode{D, Dim}) where {D, Dim} = _moved_bounds(
+    _row_bounds(op.inner_op), Val(Dim), (op.shift_amount,))
+@inline _row_bounds(op::Union{OperatorScale, GridFunctionScale, RegionRestriction,
+    InterpolationNode}) = _row_bounds(op.inner_op)
+@inline _row_bounds(op::Union{LinearProduct, BilinearProduct}) = _row_bounds(op.right_op)
+@inline _row_bounds(op::OperatorAdd) = _union_bounds(
+    _row_bounds(op.left_op), _row_bounds(op.right_op))
+
+@inline _union_bounds((lo1, hi1), (lo2, hi2)) = (min.(lo1, lo2), max.(hi1, hi2))
+
+# The strides of `_colour_strides` over the rows one term reaches, or two terms together
+# (a transposed pair, whose rows are both terms' rows).
+@inline _term_colour_strides(op) = _bounds_strides(_row_bounds(op))
+@inline _term_colour_strides(p1, p2) = _bounds_strides(
+    _union_bounds(_row_bounds(p1), _row_bounds(p2)))
+@inline _bounds_strides((lo, hi)) = max.(hi .- lo .+ 1, 1)
+
 # One colour of `grid_inds`, represented as a strided subgrid without allocating index vectors.
 @inline function _colour_subgrid(
         grid_inds::CartesianIndices{D}, c::CartesianIndex{D}, strides::NTuple{D, Int}
@@ -606,7 +657,8 @@ end
         offset::Int,
         α = true
 ) where {TERM}
-    return _batch_linear_band_sweep!(
+    return _late(
+        _batch_linear_band_sweep!,
         b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
     )
 end
@@ -659,7 +711,7 @@ end
 @noinline function _sweep_colour!(
         ::CpuPolyester, b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int, α = true
 ) where {TERM}
-    return _batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mesh_markers, offset, α)
+    return _late(_batch_linear_colour_sweep!, b, sp, term, idxs, lin_indices, mesh_markers, offset, α)
 end
 
 """
@@ -730,7 +782,7 @@ end
 function _assemble_linear_parallel_core!(
         b::AbstractVector, space, ast::AST_TYPE, α = true
 ) where {AST_TYPE}
-    strides = _colour_strides(stencil_offsets(ast))
+    strides = _term_colour_strides(ast)
     _sweep_parallel!(b, space, ast, indices(mesh(space)), strides, 0, α)
     return b
 end
@@ -877,7 +929,7 @@ end
 function _route_terms_parallel!(b::AbstractVector, term::TERM, leaves, α = true) where {TERM}
     # Hoisted out of the per-leaf call, as before: the colouring depends on the term's
     # stencil, not on which leaf it lands in.
-    strides = _colour_strides(stencil_offsets(term))
+    strides = _term_colour_strides(term)
     each_routed_leaf(term, leaves) do sp, offset
         return _sweep_parallel!(b, sp, term, indices(mesh(sp)), strides, offset, α)
     end

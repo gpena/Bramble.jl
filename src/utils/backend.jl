@@ -225,6 +225,16 @@ both runs. Against [`CpuThreaded`](@ref) directly, this policy beats it from 100
 and 125 in 3D for both workloads in both runs, again one to two orders of magnitude below
 [`CpuThreaded`](@ref)'s own crossover against `CpuSerial` for the same workload.
 
+A warm call under this policy allocates a small constant amount per call, independent of the
+grid: the same bytes on a 33² grid as on a 513² one. The cause is Polyester's argument box.
+`@batch` copies the arguments its loop captures into a heap-allocated `ManualMemory.Reference`
+on every call, sized by what the loop captures, and plain arrays become `PtrArray`s, which
+allocate nothing. No call reaches `Threads.@threads` or `Threads.@spawn`. Measured on a 2D
+non-uniform grid with 4 threads, every path allocates only these boxes, each at most 304 B:
+differences, shifts, averages, divergence and curl allocate 0 B; `innerₕ` 96 B; a broadcast
+128 B; `avgₕ!` 160 B; linear assembly 256 B; a fused matrix-free product 112 B; and a bilinear
+refill 1520 B, which is five colour sweeps of 304 B each (gpena/Bramble.jl#400).
+
 See also: [`CpuThreaded`](@ref), [`CpuSerial`](@ref), [`ExecutionPolicy`](@ref).
 """
 struct CpuPolyester <: CpuPolicy end

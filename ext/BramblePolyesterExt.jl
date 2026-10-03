@@ -31,19 +31,37 @@
 # by the divergence, curl and strain-average engines. Unlike the three hooks above, it stays
 # generic over the band function `f` instead of naming one.
 #
+# `src/assembly/kronecker.jl` has `_batch_kron_lines!`, which runs a `KroneckerLinearOperator`
+# product's grid lines under `@batch` when the operator's own policy is `CpuPolyester`.
+#
+# `src/problems/semidiscrete_rhs.jl` has `_batch_csr_spmv!`, which runs the explicit
+# right-hand side's product `du .-= A u` one compressed row per `@batch` iteration.
+#
 # `Polyester.@batch` accepts a `CartesianIndices` directly (`closure.jl`'s own `splitloop`
 # already splits it along its last axis, the same trick `_threaded_axis_for!` hand-rolls for
 # `Threads.@threads`), so none of the manual axis-chunking `src/utils/linear_algebra.jl` uses
 # for the threaded path is reproduced here. Axis-chunking helps `Threads.@threads` (it removes a linear-index conversion `Threads`
 # cannot avoid on its own) but hurts `@batch`, which already does the equivalent split
 # internally -- chunking on top would split twice.
+#
+# Allocation bound: a warm `CpuPolyester` call allocates a small constant amount per call,
+# independent of the grid (the same on a 33² and a 513² grid). The cause is
+# Polyester's argument box: `@batch` copies the arguments its loop captures into a
+# heap-allocated `ManualMemory.Reference` on every call, sized by what the loop captures.
+# Plain arrays become `PtrArray`s, which allocate nothing. Measured on a 2D non-uniform grid
+# with 4 threads, every box is at most 304 B.
+# Differences, shifts, averages, divergence and curl allocate 0 B; `innerₕ` 96 B; a
+# broadcast 128 B; `avgₕ!` 160 B; linear assembly 256 B; a fused matrix-free product 112 B;
+# a bilinear refill 1520 B (five colour sweeps of 304 B each). No `CpuPolyester` call reaches
+# `Threads.@threads` or `Threads.@spawn` (gpena/Bramble.jl#400).
 module BramblePolyesterExt
 
 using Bramble
 using Bramble: MarkedIndicesUnion, SeparableWeights, _reduce_or_chunk, _throw_dot_dim_error,
                _write_components!, _band_range, _scatter_point!, _scatter_linear_point!,
                CpuPolyester, _ReplayTarget, _ActionTarget, _replay_point!, _difference_band!,
-               _average_band!, _centered_average_band!, _broadcast_band!
+               _average_band!, _centered_average_band!, _broadcast_band!, _kron_line_init!,
+               _kron_line_terms!
 using Polyester: Polyester, @batch
 using LinearAlgebra: mul!
 using PrecompileTools: @setup_workload, @compile_workload
@@ -395,6 +413,63 @@ function Bramble._batch_broadcast!(v::AbstractVector, bc, ax)
     bcref = Ref(bc)
     @batch for b in 1:n
         _broadcast_band!(v, bcref[], ax, n, b)
+    end
+    return nothing
+end
+
+# --- _batch_kron_lines! (src/assembly/kronecker.jl) -------------------------------- #
+#
+# `CpuPolyester`'s host `KroneckerLinearOperator` product: one grid line along axis 1 per
+# `@batch` iteration, each line `_kron_line_init!` then `_kron_line_terms!`, exactly the
+# serial `_kron_fused!` loop.
+#
+# `y`, `x` and the terms cross `@batch` in one `Ref` box rather than being captured:
+# `@batch` turns a captured array into a `PtrArray` and rebuilds every struct around one (a
+# sparse factor, a diagonal) inside each task, and the line kernels then ran about half as
+# fast (benchmark/batch_survey.jl, candidate 1). The box is fresh per call, so concurrent
+# products on one operator share nothing. It costs a small heap allocation per call that does
+# not grow with the grid: Polyester boxes its own argument tuple in a `ManualMemory.Reference`,
+# which goes on the heap once the tuple holds a reference to a GC object, and the `Ref` box
+# is one such object. The coefficients and `β` ride in the box too; the strides, the line
+# indices and `m` are captured directly. `y::AbstractVector` and
+# `lines::CartesianIndices` make this a genuine specialisation of the `src/` stub, the same
+# reasoning as the hooks above.
+function Bramble._batch_kron_lines!(
+        y::AbstractVector, terms::Tuple, cs::Tuple, x::AbstractVector, β, ss::Tuple,
+        lines::CartesianIndices, m::Int
+)
+    args = Ref((y, terms, cs, x, β))
+    @batch for o in 1:length(lines)
+        a = args[]
+        off = (o - 1) * m
+        _kron_line_init!(a[1], a[5], off, m)
+        _kron_line_terms!(a[1], a[2], a[3], a[4], Tuple(lines[o]), ss, off, m)
+    end
+    return nothing
+end
+
+# --- _batch_csr_spmv! (src/problems/semidiscrete_rhs.jl) ---------------------------- #
+#
+# `SemidiscretizeRHS`'s product under `CpuPolyester`: row `i` sums
+# `nzval[perm[k]] * u[colval[k]]` over its compressed-row slice and subtracts it from `du[i]`,
+# so each iteration writes one entry of `du` and none races. `nzval` is `nonzeros(A)` itself,
+# gathered through `perm`, so the values are always `A`'s current ones. The arrays are plain arguments, captured directly: `@batch`
+# turns each into a `PtrArray`, and with no struct to rebuild around them the row loop runs
+# at full speed (benchmark/batch_survey.jl, candidate 3). The accumulator starts from
+# `z`, the zero of the promoted element type, computed outside the loop so the sum is
+# type-stable for `Dual` and other element types.
+function Bramble._batch_csr_spmv!(
+        du::AbstractVector, rowptr::AbstractVector{<:Integer},
+        colval::AbstractVector{<:Integer}, perm::AbstractVector{<:Integer},
+        nzval::AbstractVector, u::AbstractVector
+)
+    z = zero(promote_type(eltype(du), eltype(nzval), eltype(u)))
+    @batch for i in 1:(length(rowptr) - 1)
+        acc = z
+        @inbounds for k in rowptr[i]:(rowptr[i + 1] - 1)
+            acc += nzval[perm[k]] * u[colval[k]]
+        end
+        @inbounds du[i] -= acc
     end
     return nothing
 end
