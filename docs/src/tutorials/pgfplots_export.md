@@ -96,7 +96,7 @@ reason rather than silently writing one of several fields:
 try
     export_pgfplots(joinpath(mktempdir(), "bad"), Ω2, "u" => u2, "v" => u2)
 catch e
-    println(e)
+    showerror(stdout, e)
 end
 ```
 
@@ -110,6 +110,6 @@ u3 = Rₕ(W3, x -> x[1])
 try
     export_pgfplots(joinpath(mktempdir(), "bad3d"), Ω3, "u" => u3)
 catch e
-    println(e)
+    showerror(stdout, e)
 end
 ```

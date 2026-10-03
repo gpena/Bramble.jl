@@ -47,7 +47,7 @@ two-component space raises an `ArgumentError`. A term must name both components 
 try
     form(Vₕ, Vₕ, (u, v) -> innerₕ(u[1], v))
 catch e
-    println(e)
+    showerror(stdout, e)
 end
 ```
 
@@ -169,7 +169,7 @@ A *bilinear* term coupling two leaves over different meshes has no assembly to g
 try
     assemble(form(Vh, Vh, (u, v) -> innerₕ(u(2), v(1))))
 catch e
-    println(e)
+    showerror(stdout, e)
 end
 ```
 

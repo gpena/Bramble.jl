@@ -180,6 +180,10 @@ makedocs(;
         assets = ["assets/favicon.ico", "assets/custom.css"]
     ),
     sitename = "Bramble.jl",
+    # Source links point at `main` rather than the commit the docs were built from, so they
+    # show the code as it is now. The line anchors are those of the build and drift as
+    # `main` moves on.
+    repo = "https://github.com/gpena/Bramble.jl/blob/main{path}#{line}",
     pages = allpages,
     authors = "Gonçalo Pena",
     # `missing_docs` stays a warning: Documenter reports every internal helper it cannot
@@ -208,6 +212,25 @@ let path = joinpath(@__DIR__, "build", "assets", "search-index.json")
         index = replace(index,
             r"[\x00-\x1f]" => c -> "\\u" * string(Int(c[1]); base = 16, pad = 4))
         write(path, index)
+    end
+end
+
+# MaterialDocs 0.2.0 writes a Markdown image's `src` as Documenter resolves it, relative to
+# the root of the build (`assets/x.svg`), and does not prefix the way back up from the page.
+# The image then loads only on a top-level page: on `tutorials/geometry/index.html` the
+# browser asks for `tutorials/geometry/assets/x.svg`. Each such `src` gets the relative path
+# from its page to the build root, which works with and without pretty URLs. A local
+# `docs.sh` build lands in `BRAMBLE_DOCS_BUILD` rather than `docs/build`.
+let build = get(ENV, "BRAMBLE_DOCS_BUILD", joinpath(@__DIR__, "build"))
+    for (dir, _, files) in walkdir(build), file in files
+        endswith(file, ".html") || continue
+        root = relpath(build, dir)
+        root == "." && continue
+        path = joinpath(dir, file)
+        html = read(path, String)
+        fixed = replace(html,
+            r"(<figure class=\"md-figure\">\s*<img src=\")(?![a-z]+:|/|\.\./)" => SubstitutionString("\\1" * root * "/"))
+        fixed == html || write(path, fixed)
     end
 end
 

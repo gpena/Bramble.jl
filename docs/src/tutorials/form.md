@@ -338,7 +338,7 @@ A marker that exists nowhere the term reaches is an error, not a silent zero:
 try
     assemble(form(Wd, Wd, (u, v) -> innerₕ(u, v; markers = (:nope,))))
 catch e
-    println(e)
+    showerror(stdout, e)
 end
 ```
 

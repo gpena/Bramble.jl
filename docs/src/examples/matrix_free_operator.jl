@@ -118,7 +118,7 @@ a₁ = form(W₁, W₁, (u, v) -> innerₕ(u, v))
 try
     matrix_free_operator(a₁; policy = Bramble.GpuKernel())
 catch err
-    err
+    showerror(stdout, err)
 end
 
 @test_throws ArgumentError matrix_free_operator(a₁; policy = Bramble.GpuKernel()) #src
