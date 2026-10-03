@@ -108,16 +108,17 @@ divides it away. Also requires `mass_matrix(sd)` to actually be diagonal: the de
 
 When the space's execution policy is [`CpuPolyester`](@ref) (`using Polyester` required),
 `sd` was built with `reassemble = false` and `A` is a `SparseMatrixCSC`, the product `A u`
-runs one row per `Polyester.@batch` iteration, each row writing its own entry of `du`. Rows
-need `A`'s pattern in compressed-row order, built here once: two `Int` arrays of length
-`nnz(A)` (the column of each entry, and its position in `nonzeros(A)`) and one of length
-`size(A, 1) + 1`, costing about three products to build. The values are read from `A`
-itself at every call, so editing `nonzeros(operator_matrix(sd))` afterwards is seen; a
-change to `A`'s stored pattern is not, and if it changes `nnz(A)` the call falls back to
-the serial product. The row sums run in a different order than the serial column product,
-so the result agrees with [`CpuSerial`](@ref)'s to rounding, not bit for bit. With
-`reassemble = true` `A` changes at every step and a fresh copy would cost more than the
-threads save, so that case, like every other policy, keeps the serial product.
+runs one row per `Polyester.@batch` iteration, each row writing its own entry of `du`. That
+needs `A`'s pattern in compressed-row order, which is built here once. It takes two `Int`
+arrays of length `nnz(A)` (the column of each entry, and its position in `nonzeros(A)`)
+and one of length `size(A, 1) + 1`, and costs about three products to build. The values
+are not copied. They are read from `A` itself at every call, so editing
+`nonzeros(operator_matrix(sd))` afterwards is seen. A change to `A`'s stored pattern is
+not seen, and if it changes `nnz(A)` the call falls back to the serial product. The row
+sums run in a different order than the serial column product, so the result agrees with
+[`CpuSerial`](@ref)'s to rounding, not bit for bit. With `reassemble = true`, `A` changes
+at every step and a fresh copy would cost more than the threads save. That case, like
+every other policy, keeps the serial product.
 
 # Examples
 

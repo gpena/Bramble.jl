@@ -124,9 +124,10 @@ end
 
 # --- Candidate 1: `_kron_fused!`, the KroneckerLinearOperator product ---------------- #
 #
-# Serial: `mul!(y, K, x)` as Bramble runs it. Prototype: the same line loop with `@batch`
-# over the lines; each line writes the disjoint slice `y[off+1 : off+m]`. Faithful: the
-# per-line work is Bramble's own `_kron_line_init!`/`_kron_line_terms!`.
+# The serial method is `mul!(y, K, x)` as Bramble runs it. The prototype is the same line
+# loop with `@batch` over the lines, and each line writes the disjoint slice
+# `y[off+1 : off+m]`. It stays faithful because the per-line work is Bramble's own
+# `_kron_line_init!`/`_kron_line_terms!`.
 
 c1_serial!(y, K, x) = mul!(y, K, x)
 
@@ -294,13 +295,13 @@ end
 
 # --- Candidate 4: the Jacobi diagonal build ----------------------------------------- #
 #
-# Serial: `_mf_apply!(CpuSerial(), DiagonalSink(d), form)`, line for line what
-# `jacobi_preconditioner` runs. Prototype: the fused matrix-free sweep's row ownership,
-# with `@batch` over bands of the last axis: each band walks its widened range and keeps,
-# on the rim, only the diagonal entries whose row it owns (`_OwnedAction`). That ownership
-# exists in `src/` for action sinks alone, so the two methods below extend it to
-# `DiagonalSink`, in this process only. Every row then receives its entries in the serial
-# order: the result is bitwise the serial one.
+# The serial method is `_mf_apply!(CpuSerial(), DiagonalSink(d), form)`, line for line what
+# `jacobi_preconditioner` runs. The prototype borrows the fused matrix-free sweep's row
+# ownership and runs `@batch` over bands of the last axis. Each band walks its widened
+# range. On the rim it keeps only the diagonal entries whose row it owns (`_OwnedAction`).
+# That ownership exists in `src/` for action sinks alone, so the two methods below extend
+# it to `DiagonalSink`, in this process only. Every row then receives its entries in the
+# serial order, which makes the result bitwise the serial one.
 
 function Bramble._mf_owned(s::Bramble.DiagonalSink, lo::Int, hi::Int, ro::Int, ::Int)
     Bramble._OwnedAction(
@@ -348,10 +349,11 @@ end
 
 # --- Candidate 5: the bilinear first fill / recording ------------------------------- #
 #
-# Serial: `_form_coordinates` (the coordinate walk: a count pass, then a fill pass, over
-# every (term, block) unit) followed by `_coordinates_to_positions!` (the CSC position
-# search), as the first `assemble` runs them. Prototype: both passes of the walk under
-# `@batch` over the units, then the search under `@batch` over the coordinates.
+# The serial method is `_form_coordinates` followed by `_coordinates_to_positions!`, as the
+# first `assemble` runs them. The first is the coordinate walk, a count pass and then a
+# fill pass over every (term, block) unit. The second is the CSC position search. The
+# prototype runs both passes of the walk under `@batch` over the units, then the search
+# under `@batch` over the coordinates.
 #
 # The walk is independent per unit, as notes F says. The count pass of a unit writes only
 # that unit's point pointers and count, here into slot `u` instead of `push!`. Once the
@@ -360,11 +362,11 @@ end
 # slice. Within a unit the walk stays serial: its sink advances one running counter, so
 # splitting a unit would need the per-point offsets threaded through the walk. The gain is
 # therefore capped by the number of units (3 for this form) and the largest unit's walk.
-# Left out: the pattern construction (`sparse!`), the segment layout and the replay, all
-# sequential here. The row's share is that of the walk and the search together; the
-# script also prints the whole recording's share. Recording would matter in a one-shot
-# assemble-and-solve, which none of the three solves is: here it runs once, in the
-# explicit solve's setup, so its share is small.
+# The pattern construction (`sparse!`), the segment layout and the replay are left out, and
+# all of them are sequential here. The row's share is that of the walk and the search
+# together, and the script also prints the whole recording's share. Recording would matter
+# in a one-shot assemble-and-solve, which none of the three solves is. Here it runs once,
+# in the explicit solve's setup, so its share is small.
 
 function c5_serial(W, A, ast)
     p = Bramble._form_coordinates(W, W, ast)
@@ -460,12 +462,13 @@ end
 
 # --- Candidate 6: the sparse Dirichlet sweep `_dirichlet_bc_rows!` ------------------ #
 #
-# Serial: `_dirichlet_bc_rows!(A, entries)` on the mesh's `:boundary` marker. Prototype:
-# `@batch` over columns, each column's stored values written only by its own task. Left
-# out: the rare `A[j, j] = one(T)` insertion of a missing diagonal, which changes the
-# pattern and cannot run in parallel; the script checks that every constrained column
-# already stores its diagonal (true for any assembled Poisson matrix) so nothing is
-# skipped here. The sweep is idempotent, so repeated timing runs see the same work.
+# The serial method is `_dirichlet_bc_rows!(A, entries)` on the mesh's `:boundary` marker.
+# The prototype runs `@batch` over columns, each column's stored values written only by its
+# own task. It leaves out the rare `A[j, j] = one(T)` insertion of a missing diagonal,
+# which changes the pattern and cannot run in parallel. The script checks that every
+# constrained column already stores its diagonal (true for any assembled Poisson matrix),
+# so nothing is skipped here. The sweep is idempotent, so repeated timing runs see the
+# same work.
 
 c6_serial!(A, entries) = Bramble._dirichlet_bc_rows!(A, entries)
 
