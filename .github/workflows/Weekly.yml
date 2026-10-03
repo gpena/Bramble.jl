@@ -4,20 +4,20 @@ name: Weekly
 #
 # Not the quality group, though -- Aqua, JET, explicit-imports, exports and invalidations run
 # daily in nightly.yml, and `full` used to drag them in here as well, four times over on this
-# matrix. `full` no longer implies `quality` (see test/runtests.jl); this job is the unit
-# suite on Julia 1.13 across both platforms, plus the package extensions and coverage.
+# matrix. `full` no longer implies `quality` (see test/runtests.jl).
 #
-# Each OS runs as two jobs, `part: suite` (the `slow` group: unit plus the slow
-# blocks) and `part: backends` (the `backends` group: the package extensions), which
-# together cover what `full` does except the manual snippets, which only run locally anyway.
-# The worked-example pages are in neither half: they are the `examples` group, which
-# docs-on-demand.yml runs before every docs build.
+# Nor the `slow` group: nightly.yml's `slow` job runs it daily on the same Julia 1.13 and
+# both platforms, and its ubuntu leg uploads that half of the coverage. This workflow runs
+# the other half, the `backends` group (the package extensions), on both platforms, and the
+# per-file coverage floor over both halves. Together they cover what `full` does except the
+# manual snippets, which only run locally anyway. The worked-example pages are in neither
+# half: they are the `examples` group, which docs-on-demand.yml runs before every docs build.
 #
 # AD and GPU tests are switched off in every group until v4.3.0 and v4.4.0 respectively
 # (test/TestUtils.jl, `WITH_AD_TESTS` and `WITH_GPU_TESTS`, and the `ad` and `gpu` groups).
 # Each comes back by setting `BRAMBLE_TEST_AD` or `BRAMBLE_TEST_GPU` in this workflow's env
 # and adding its packages: the step that installed Enzyme, Mooncake, PolyesterForwardDiff
-# and SciMLSensitivity for the `backends` half is gone, and v4.3.0 restores it from git
+# and SciMLSensitivity for the `backends` group is gone, and v4.3.0 restores it from git
 # history together with the AD tests.
 #
 # This is a canary rather than a gate: it is not required for a merge, and a failure here
@@ -43,7 +43,7 @@ env:
 
 jobs:
   # As in nightly.yml: a scheduled run on the same `main` commit as the last successful
-  # scheduled run would repeat its eight `full` legs exactly, so they stop here. A manual
+  # scheduled run would repeat its `full` legs exactly, so they stop here. A manual
   # dispatch always runs. The security audit does not wait on this: advisories are published
   # whether or not `main` moved.
   changed:
@@ -63,13 +63,13 @@ jobs:
           if [ "$last" = "${{ github.sha }}" ]; then echo "run=false" >> "$GITHUB_OUTPUT"; else echo "run=true" >> "$GITHUB_OUTPUT"; fi
 
   full:
-    name: Full suite, ${{ matrix.part }} (Julia ${{ matrix.version }}, ${{ matrix.os }})
+    name: Package extensions (Julia ${{ matrix.version }}, ${{ matrix.os }})
     needs: changed
     if: ${{ needs.changed.outputs.run == 'true' }}
     runs-on: ${{ matrix.os }}
-    # 120, not 90: on the v3.11.0 tag the (since dropped) Julia 1.12 legs were cancelled at
-    # 90 minutes, while the 1.13 legs finish in about 69. The headroom stays for cold caches.
-    timeout-minutes: 120
+    # The `backends` legs took 5 to 25 minutes in the last three runs; compiled images are not
+    # cached here (see below), so a leg spends most of its time precompiling.
+    timeout-minutes: 60
     # Nothing here gates a merge, but a red run should still mean something specific.
     # Julia nightly is not in this matrix (see below), so a failure here is Bramble's own —
     # on the 1.13 release, on either OS.
@@ -85,14 +85,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The 1.13 release, on both platforms. CI no longer runs Julia 1.12. Julia nightly
-        # is deliberately not here: what this workflow tests is how
-        # the suite and the package extensions behave under a Julia version change, and
-        # `nightly` itself moves daily for reasons unrelated to Bramble, which would make a
+        # The 1.13 release, on both platforms. Julia nightly is deliberately not here: what
+        # this workflow tests is how the package extensions behave under their own upstream
+        # releases, and `nightly` itself moves daily for reasons unrelated to Bramble, which would make a
         # red leg here noise rather than signal.
         version: ["1.13"]
         os: [ubuntu-latest, macOS-latest]
-        part: [suite, backends]
     steps:
       - uses: actions/checkout@v5
 
@@ -100,7 +98,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
 
-      # Compiled images are not cached here, on purpose. Eight legs of them are about 5 GB, and
+      # Compiled images are not cached here, on purpose. When this job had eight legs they were about 5 GB, and
       # the repository's cache quota is 10 GB: they evicted the `unit-and-slow` entry that CI
       # restores for every PR and Nightly saves on `main` (CI.yml, nightly.yml). The registry,
       # the packages and the artifacts are still cached; the compile cost (a warm leg ran about
@@ -112,8 +110,8 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
-      # Coverage is collected on one leg only: Julia 1.13 on ubuntu-latest. See CI.yml's history for why only
-      # one job uploads at all.
+      # Coverage is collected on the ubuntu leg only; the `slow` half comes from nightly.yml.
+      # See CI.yml's history for why only one leg per half uploads at all.
       # A `run:` step instead of julia-actions/julia-runtest, because that action cannot pass Julia
       # flags: its harness hard-codes `julia_args` to `--check-bounds` alone. Every group of the
       # suite runs at `--optimize=1`, which on the plain harness cut the slow group from 1051 s to
@@ -126,7 +124,7 @@ jobs:
       # default). `JULIA_NUM_THREADS=auto` comes from the workflow-level `env`.
       - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=${{ matrix.os == 'ubuntu-latest' }}, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
-          BRAMBLE_TEST_GROUP: ${{ matrix.part == 'suite' && 'slow' || 'backends' }}
+          BRAMBLE_TEST_GROUP: backends
 
       - uses: julia-actions/julia-processcoverage@v1
         if: matrix.os == 'ubuntu-latest'
@@ -136,17 +134,20 @@ jobs:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
           use_oidc: true
+          flags: backends
           fail_ci_if_error: false
       # Kept for the `coverage-floor` job below: each half sees only its own files.
       - uses: actions/upload-artifact@v4
         if: always() && matrix.os == 'ubuntu-latest'
         with:
-          name: lcov-${{ matrix.part }}
+          name: lcov-backends
           path: lcov.info
           if-no-files-found: warn
 
-  # Per-file coverage floor over the two coverage halves merged. A separate job
-  # because each `full` leg sees only its half. Writes the report to the job summary, then
+  # Per-file coverage floor over the two coverage halves merged: `lcov-backends` from this
+  # run, and `lcov-suite` from the newest nightly.yml run on `main` that produced one. The
+  # halves can come from different commits, at most a week apart; nightly's half is
+  # normally from the Sunday run. Writes the report to the job summary, then
   # fails the job when a non-exempt src/ file is below the floor (`--fail --prefix src/`);
   # ext/ files stay in the report but cannot fail it.
   coverage-floor:
@@ -158,6 +159,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      actions: read  # to download nightly.yml's `lcov-suite` artifact
     steps:
       - uses: actions/checkout@v5
 
@@ -171,6 +173,16 @@ jobs:
         with:
           pattern: lcov-*
           path: lcov
+
+      - name: Fetch the `slow` half from the newest nightly
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=lcov-suite&per_page=20" \
+            --jq '[.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main")][0].workflow_run.id // ""')
+          if [ -z "$run_id" ]; then echo "::warning::No unexpired lcov-suite artifact from nightly.yml on main."; exit 0; fi
+          gh run download "$run_id" --repo "${{ github.repository }}" --name lcov-suite --dir lcov/lcov-suite
 
       - name: Report the per-file coverage floor
         run: |

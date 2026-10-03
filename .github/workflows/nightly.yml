@@ -81,6 +81,11 @@ jobs:
   #
   # Keep the version in step with CI.yml's matrix. The point of the ubuntu leg is that the
   # two platforms run the same thing; a drift makes it a different question.
+  #
+  # The ubuntu leg also uploads the `slow` half of the coverage, to Codecov (flag `suite`)
+  # and as the `lcov-suite` artifact that Weekly.yml's per-file coverage floor merges with
+  # its `backends` half. id-token: write is for the codecov-action's `use_oidc: true`;
+  # Weekly.yml's `full` job explains why the job fails without it.
   slow:
     name: Julia 1.13 + deferred tests (${{ matrix.os }})
     needs: changed
@@ -90,6 +95,7 @@ jobs:
     permissions:
       contents: read
       actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -127,6 +133,23 @@ jobs:
           # 5, below the macOS leg's 7 GB runner, so a blow-up fails by name (see
           # TestUtils.jl) before the runner just kills the job. Coverage is on by default here.
           BRAMBLE_TEST_MAXRSS_GB: 5
+
+      - uses: julia-actions/julia-processcoverage@v1
+        if: matrix.os == 'ubuntu-latest'
+      - uses: codecov/codecov-action@v5
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
+          flags: suite
+          fail_ci_if_error: false
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.os == 'ubuntu-latest'
+        with:
+          name: lcov-suite
+          path: lcov.info
+          if-no-files-found: warn
 
   test:
     name: Julia nightly (${{ matrix.os }})

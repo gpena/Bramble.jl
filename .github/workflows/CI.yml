@@ -53,8 +53,6 @@ jobs:
     # push has to pass on. It replaced the `~1.13.0-0` canary leg that sat here while
     # 1.13 was in prerelease, allowed to fail.
     #
-    # No CI workflow runs the Julia 1.12 floor that Project.toml still declares.
-    #
     # macOS only, deliberately. This gate exists to give a push fast feedback, and a second
     # platform doubles the runner time without doubling what is learned: the two legs run
     # the same suite over the same tree and disagree only where something is genuinely

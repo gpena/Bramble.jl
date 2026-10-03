@@ -16,6 +16,14 @@ ignore:
   - "ext"
   - "ext/**/*"
 
+# The two coverage halves are uploaded from different workflows on different days: the
+# `slow` group daily from nightly.yml (flag `suite`), the `backends` group weekly from
+# Weekly.yml (flag `backends`). Carryforward keeps each flag's last upload on commits
+# that only received the other half, so the total does not drop between them.
+flag_management:
+  default_rules:
+    carryforward: true
+
 coverage:
   status:
     project:
