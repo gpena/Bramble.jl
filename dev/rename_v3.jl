@@ -118,7 +118,7 @@ A rename applied twice fails no test and leaves no stale name behind -- it simpl
 too few of the new name. So each file records, for every pair, how many of the old name it
 held and how many of the new name it already held; afterwards the new count must be their
 sum. Text is NFC-normalised before counting, because a file written through a
-macOS/OneDrive path can carry decomposed forms that `count` would otherwise miss.
+macOS or synced-folder path can carry decomposed forms that `count` would otherwise miss.
 
 Two pairs cannot be checked that way and say so through [`conserves`](@ref):
 

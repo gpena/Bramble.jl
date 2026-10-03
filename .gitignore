@@ -38,11 +38,10 @@ docs/src/examples/matrix_free_operator.md
 # No leading slash, so it matches at any depth.
 .latexmkrc
 
-# OneDrive sync conflicts. The repository lives inside a OneDrive folder, and when the
-# same path is written on two machines OneDrive keeps both by appending a space and a
-# number to the name: `docs/build 2/`, `assets 2/`, and so on. They are duplicates of
-# ignored build output but the ignore rules above do not match the renamed form, so
-# `git add -A` would commit them.
+# File-sync conflicts. When the same path is written on two machines, a sync client keeps
+# both by appending a space and a number to the name: `docs/build 2/`, `assets 2/`, and
+# so on. They are duplicates of ignored build output but the ignore rules above do not
+# match the renamed form, so `git add -A` would commit them.
 *\ [0-9]
 *\ [0-9]/
 *\ [0-9].*
