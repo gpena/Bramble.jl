@@ -18,7 +18,7 @@ CurrentModule = Bramble
 ```@raw html
 </div>
 <p class="bramble-badges">
-<a href="https://julialang.org"><img alt="Julia 1.12+" src="https://img.shields.io/badge/Julia-1.12%2B-9558B2?logo=julia&amp;logoColor=white"></a>
+<a href="https://julialang.org"><img alt="Julia 1.13+" src="https://img.shields.io/badge/Julia-1.13%2B-9558B2?logo=julia&amp;logoColor=white"></a>
 <a href="https://github.com/gpena/Bramble.jl/actions?query=workflow%3ACI"><img alt="CI" src="https://github.com/gpena/Bramble.jl/workflows/CI/badge.svg"></a>
 <a href="https://codecov.io/gh/gpena/Bramble.jl"><img alt="codecov" src="https://codecov.io/gh/gpena/Bramble.jl/branch/main/graph/badge.svg"></a>
 <a href="https://github.com/gpena/Bramble.jl/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
