@@ -76,6 +76,14 @@ function _mf_cases(be = backend())
     return out
 end
 
+# A graded mesh as benchmark/operator_routes.jl builds one: uniform, then moved by
+# `change_points!` to `t^(1 + d/4)` along axis `d`, so every axis of length > 2 is non-uniform.
+function _mf_graded_space(n::NTuple{D, Int}) where {D}
+    Ωₕ = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n, ntuple(_ -> true, D))
+    Bramble.change_points!(Ωₕ, ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
+    return gridspace(Ωₕ)
+end
+
 _mf_op(a, dl) = dl === nothing ? matrix_free_operator(a) : matrix_free_operator(a; dirichlet = dl)
 _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
 
@@ -367,6 +375,52 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
                 @test all(1:20) do _
                     mul!(yt, opt, x)
                     return same(yt, ref)
+                end
+            end
+        end
+    end
+
+    # The zero-byte cases above are small and carry a coefficient κ, so they never reach the
+    # cached geometry, which only a constant-coefficient `inner₊(D₋ᵢu, D₋ᵢv)` reads, nor a
+    # large gathered interior. #428's form on graded meshes: one with an empty interior box
+    # (an axis of 2 points) and one large, in 2D and 3D. Besides the bytes, the asserts check
+    # that every condition the serial walk tests to choose its route holds on the units it
+    # walks (`_mf_apply!` to `_mf_walk!`): no unit is paired, each gathers and is peelable,
+    # and both `inner₊(D₋ᵢu, D₋ᵢv)` units are answered by the cached geometry the sink
+    # carries (`_mf_whole`). They do not prove the branch bodies run the gather and the cache.
+    @testset "matrix-free: zero bytes at scale" begin
+        for n in ((9, 2), (257, 257), (5, 4, 2), (33, 33, 33))
+            W = _mf_graded_space(n)
+            @test !Bramble.is_uniform(mesh(W)(1))
+            a = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+            for dl in (nothing, :boundary)
+                @testset "$(join(n, '×')) $(something(dl, :none))" begin
+                    op = _mf_op(a, dl)
+                    @test op.policy === Bramble.CpuSerial()
+                    @test Bramble._mf_gathers(a.ast)
+                    @test op.geom isa Bramble._MFGeometry
+                    @test op.geom.version == Bramble._mesh_version(mesh(W))
+                    @test Bramble._mf_sink_geom(op.policy, op.geom) === op.geom
+                    # The units and walked space `_mf_apply!` hands to `_mf_walk!`.
+                    bound = Bramble._bind_interp_spaces(a.ast, W, W)
+                    sp = Bramble.host_weights(Bramble._walked_leaf(bound, W, W))
+                    units = Bramble._summands(bound)
+                    @test all(p -> p[2] == 0, Bramble._pair_plan(fieldtypes(typeof(units))))
+                    ax = axes(Bramble.indices(mesh(sp)))
+                    @test all(t -> Bramble._mf_gathers(t), units)
+                    @test all(t -> Bramble._peelable(ax, Bramble._stencil_margin(t)), units)
+                    sep = filter(t -> t isa Bramble._MFSeparableTerm, units)
+                    @test length(sep) == length(n)
+                    @test all(t -> Bramble._mf_whole(op.geom, t, sp), sep)
+                    A = _mf_mat(a, dl)
+                    x = randn(size(A, 2))
+                    y0 = randn(size(A, 1))
+                    @test _mf_agree(op * x, A * x)
+                    y = copy(y0)
+                    mul!(y, op, x, 0.5, 2.0)
+                    @test _mf_agree(y, 0.5 * (A * x) + 2.0 * y0)
+                    @test _mf_alloc3(y, op, x) == 0
+                    @test _mf_alloc5(y, op, x) == 0
                 end
             end
         end
