@@ -115,19 +115,15 @@ A = assemble(a; dirichlet = :boundary)
 
 ## Workflow architecture
 
-```
-╭──────────────╮     ╭──────────────╮     ╭──────────────╮
-│    Domain    │     │     Mesh     │     │  Grid Space  │
-│ (Intervals,  │ ━━► │ (Primary and │ ━━► │  (Scalar &   │
-│   Markers)   │     │ Dual Grids)  │     │  Composite)  │
-╰──────────────╯     ╰──────────────╯     ╰──────┬───────╯
-                                                 │
-                                                 ▼
-╭──────────────╮     ╭──────────────╮     ╭──────────────╮
-│ Linear Solve │     │   Assemble   │     │ Form Syntax  │
-│   (A \ F /   │ ◄━━ │ (Sparse CSC, │ ◄━━ │  (Bilinear,  │
-│  Iterative)  │     │ Constraints) │     │   Linear)    │
-╰──────────────╯     ╰──────────────╯     ╰──────────────╯
+```mermaid
+flowchart LR
+    domain("Domain<br/>intervals, markers")
+    mesh("Mesh<br/>primary and dual grids")
+    space("Grid space<br/>scalar and composite")
+    form("Form syntax<br/>bilinear, linear")
+    assemble("Assemble<br/>sparse CSC, constraints")
+    solve("Linear solve<br/>A \ F or iterative")
+    domain --> mesh --> space --> form --> assemble --> solve
 ```
 
 ---
