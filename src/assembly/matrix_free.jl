@@ -8,7 +8,7 @@
 # no second stencil evaluator to keep in step with the first.
 
 """
-    ActionSink(y::AbstractVector, x::AbstractVector, α, mask)
+    ActionSink(y::AbstractVector, x::AbstractVector, α, mask, geom = nothing)
 
 The matrix-free sink: an entry `(row, col, weight)` of the form's stencil adds
 `α * weight * x[col]` to `y[row]`, so one walk of [`visit_bilinear_stencil`](@ref) adds
@@ -16,14 +16,17 @@ The matrix-free sink: an entry `(row, col, weight)` of the form's stencil adds
 
 `mask` is `nothing` for a form with no Dirichlet rows, or a `BitVector` over the rows whose
 set entries are skipped: those rows are identity rows, written after the walk (the
-[`dirichlet_bc!`](@ref) contract).
+[`dirichlet_bc!`](@ref) contract). `geom` is the operator's cached per-axis geometry
+(`_MFGeometry`), or `nothing`; only the gathered interior reads it.
 """
-struct ActionSink{Y <: AbstractVector, X <: AbstractVector, S, M}
+struct ActionSink{Y <: AbstractVector, X <: AbstractVector, S, M, G}
     y::Y
     x::X
     α::S
     mask::M
+    geom::G
 end
+ActionSink(y::AbstractVector, x::AbstractVector, α, mask) = ActionSink(y, x, α, mask, nothing)
 
 # Whether row `row` takes stencil entries: always without a mask, off Γ_D with one.
 @inline _mf_live(::Nothing, ::Int) = true
@@ -39,7 +42,7 @@ end
 # A transposed pair ⟨Au, Bv⟩ + ⟨Bu, Av⟩ walked once, as `_PairReplaySink` does: an entry
 # `(row, col)` of the first term also stands for the second term's entry `(col + dr, row + dc)`.
 # `half` selects both (`0`), the first term's only (`1`) or the transposed only (`2`).
-struct _PairActionSink{Y <: AbstractVector, X <: AbstractVector, S1, S2, M}
+struct _PairActionSink{Y <: AbstractVector, X <: AbstractVector, S1, S2, M, G}
     y::Y
     x::X
     α1::S1
@@ -48,6 +51,7 @@ struct _PairActionSink{Y <: AbstractVector, X <: AbstractVector, S1, S2, M}
     dr::Int
     dc::Int
     half::Int
+    geom::G
 end
 
 @inline function _sink_entry!(s::_PairActionSink, row::Int, col::Int, weight, ::Int)
@@ -62,7 +66,7 @@ end
 end
 
 @inline _pair_action_sink(s::ActionSink, α1, α2, dr::Int, dc::Int, half::Int) = _PairActionSink(
-    s.y, s.x, α1, α2, s.mask, dr, dc, half)
+    s.y, s.x, α1, α2, s.mask, dr, dc, half, s.geom)
 
 """
     ContractionSink(v::AbstractVector, u::AbstractVector, acc::Base.RefValue)
@@ -107,7 +111,7 @@ end
 end
 
 """
-    MatrixFreeOperator{T, Form, DLabels, EP, Plan} <: AbstractMatrix{T}
+    MatrixFreeOperator{T, Form, DLabels, EP, Plan, Geom} <: AbstractMatrix{T}
 
 A [`BilinearForm`](@ref) as a linear operator: `mul!(y, op, x)` computes `A * x`, and
 `mul!(y, op, x, α, β)` computes `α * A * x + β * y`, for `A = assemble(a; dirichlet)`,
@@ -149,10 +153,13 @@ one product per entry.
 - `EP`: The [`ExecutionPolicy`](@ref) the operator was built with.
 - `Plan`: `Nothing`, or the type of the threaded sweep's plan (the grid its bands cut and
   the terms' reach), fixed when the operator is built.
+- `Geom`: `Nothing`, or the type of the per-axis mesh geometry cached when the operator is
+  built (`_MFGeometry`, a scalar form's only). It holds no coefficient, and a product on a
+  mesh moved since reads the mesh afresh, as it would without it.
 
 See also: [`matrix_free_operator`](@ref), [`assemble`](@ref), [`KroneckerLinearOperator`](@ref).
 """
-struct MatrixFreeOperator{T, Form <: BilinearForm, DLabels, EP <: ExecutionPolicy, Plan} <:
+struct MatrixFreeOperator{T, Form <: BilinearForm, DLabels, EP <: ExecutionPolicy, Plan, Geom} <:
        AbstractMatrix{T}
     form::Form
     labels::DLabels
@@ -161,6 +168,7 @@ struct MatrixFreeOperator{T, Form <: BilinearForm, DLabels, EP <: ExecutionPolic
     plan::Plan
     nrows::Int
     ncols::Int
+    geom::Geom
 end
 
 @noinline function _throw_matrix_free_gpu(policy)
@@ -234,9 +242,11 @@ function matrix_free_operator(
         _mf_fill_mask!(mask, Wv, labels, dirichlet_components)
     end
     T = _matrix_eltype(a, a.ast)
-    plan = _mf_plan(policy, a)
-    return MatrixFreeOperator{T, typeof(a), typeof(labels), typeof(policy), typeof(plan)}(
-        a, labels, mask, policy, plan, nrows, ndofs(trial_space(a))
+    geom = _mf_geometry(a)
+    plan = _mf_plan(policy, a, geom)
+    return MatrixFreeOperator{
+        T, typeof(a), typeof(labels), typeof(policy), typeof(plan), typeof(geom)}(
+        a, labels, mask, policy, plan, nrows, ndofs(trial_space(a)), geom
     )
 end
 
@@ -291,10 +301,19 @@ function mul!(
         yd .*= β
     end
     mask = _mf_mask(op)
-    _mf_product!(op.plan, op.policy, ActionSink(yd, xd, α, mask), op.form)
+    _mf_product!(
+        op.plan, op.policy, ActionSink(yd, xd, α, mask, _mf_sink_geom(op.policy, op.geom)),
+        op.form)
     _mf_identity_rows!(yd, xd, α, mask)
     return y
 end
+
+# The geometry the product's sink carries: the operator's on a serial policy, `nothing`
+# otherwise. A threaded product's sink crosses into its tasks (`Polyester.@batch` copies it
+# into a heap box), so it stays as small as it was; its band tasks take the geometry from
+# the plan (`_MFFormBox`) instead, and the per-unit sweep does not read it.
+@inline _mf_sink_geom(::CpuSerial, geom) = geom
+@inline _mf_sink_geom(_, _) = nothing
 
 # A Dirichlet row of `α * A * x + β * y` is `α * x[i] + β * y[i]`; `β * y[i]` is already in
 # place, since the walk skipped the row. A row past the last column (a rectangular form, say
@@ -598,8 +617,9 @@ end
 # a face tests each point against the box. The entries of a stencil are indexed by their
 # place in it, read off the first interior point: so a unit gathers only when its stencil has
 # the same short list of entries everywhere (`_mf_gathers`). Other units, and grids too
-# small to peel, keep the scatter. Each row's sum is the same whichever
-# loop computed it, and the serial walk and every band of the fused sweep gather it, so the
+# small to peel, keep the scatter. A unit whose weights the operator's cached geometry
+# answers gathers its shell too (see "The cached geometry" below). Each row's sum is the same
+# whichever loop computed it, and the serial walk and every band of the fused sweep gather it, so the
 # threaded product stays bitwise the serial one.
 
 # Whether a unit's interior can be gathered (see above): a sum asks each of its terms, and a
@@ -642,7 +662,7 @@ _mf_tapped(_) = _MF_LONG
     margin = _stencil_margin(term)
     if gathers && _peelable(axes(grid_inds), margin)
         _mf_gather_unit!(s, term, sp, ro, co, _full_range(last(axes(grid_inds))))
-        _mf_scatter_shell!(s, term, sp, ro, co)
+        _mf_whole(s.geom, term, sp) || _mf_scatter_shell!(s, term, sp, ro, co)
     else
         visit_bilinear_stencil(s, term, sp, ro, co)
     end
@@ -664,16 +684,17 @@ end
 # The rows whose last index lies in `cut`, gathered: an entry's own row, and a pair's
 # transposed row at the transposed block's origin `co + dr`, reading `x` at `ro + dc`.
 @inline function _mf_gather_unit!(s::ActionSink, term, sp, ro::Int, co::Int, cut::UnitRange{Int})
-    _mf_gather!(s.y, s.x, s.α, s.mask, term, sp, ro, co, Val(false), cut)
+    _mf_gather!(s.y, s.x, s.α, s.mask, s.geom, term, sp, ro, co, Val(false), cut)
     return nothing
 end
 
 @inline function _mf_gather_unit!(
         s::_PairActionSink, term, sp, ro::Int, co::Int, cut::UnitRange{Int}
 )
-    s.half != 2 && _mf_gather!(s.y, s.x, s.α1, s.mask, term, sp, ro, co, Val(false), cut)
+    s.half != 2 && _mf_gather!(s.y, s.x, s.α1, s.mask, s.geom, term, sp, ro, co, Val(false), cut)
     if s.half != 1
-        _mf_gather!(s.y, s.x, s.α2, s.mask, term, sp, co + s.dr, ro + s.dc, Val(true), cut)
+        _mf_gather!(
+            s.y, s.x, s.α2, s.mask, s.geom, term, sp, co + s.dr, ro + s.dc, Val(true), cut)
     end
     return nothing
 end
@@ -682,9 +703,11 @@ end
 # swaps the roles of the trial and test offsets (a pair's transposed half). Each line along
 # axis 1 is unguarded where it and every row on it lie at least `2 * margin` from every
 # face, guarded elsewhere. The entries' offsets are read here, in the function the rows'
-# loop is compiled into, so that they are constants there.
+# loop is compiled into, so that they are constants there. Weights are live. When the
+# operator's cached geometry `geom` answers the term (`_mf_evaluator`), they come from it
+# instead, over every point with a stencil (`_mf_whole_box`), and no shell is left to scatter.
 @noinline function _mf_gather!(
-        y, x, α, mask, term::TERM, sp, rs::Int, cs::Int, tr::Val, cut::UnitRange{Int}
+        y, x, α, mask, geom, term::TERM, sp, rs::Int, cs::Int, tr::Val, cut::UnitRange{Int}
 ) where {TERM}
     Ωₕ = mesh(sp)
     mesh_markers = markers(Ωₕ)
@@ -692,16 +715,46 @@ end
     lin = LinearIndices(grid_inds)
     margin = _stencil_margin(term)
     ax = map(_full_range, axes(grid_inds))
-    box = CartesianIndices(map(r -> _interior_range(r, margin), ax))
-    isempty(box) && return nothing
-    I0 = first(box)
-    offs = entry_offsets(local_stencil(term, sp, I0, mesh_markers, lin[I0]))
     rows = (Base.front(ax)..., intersect(last(ax), cut))
-    inner = map(r -> _interior_range(r, 2 * margin), ax)
+    ev = _mf_evaluator(geom, term, sp)
+    if ev === nothing
+        box = CartesianIndices(map(r -> _interior_range(r, margin), ax))
+        isempty(box) && return nothing
+        I0 = first(box)
+        offs = entry_offsets(local_stencil(term, sp, I0, mesh_markers, lin[I0]))
+        inner = map(r -> _interior_range(r, 2 * margin), ax)
+        _mf_gather_rows!(
+            (y, x, α, mask, term, sp, mesh_markers, lin, offs, rs, cs, tr, nothing), box,
+            rows, inner)
+    else
+        box = _mf_whole_box(ev, ax)
+        isempty(box) && return nothing
+        I0 = first(box)
+        offs = entry_offsets(local_stencil(term, sp, I0, mesh_markers, lin[I0]))
+        inner = _mf_unguarded_rows(box, offs, tr)
+        _mf_gather_rows!(
+            (y, x, α, mask, term, sp, mesh_markers, lin, offs, rs, cs, tr, ev), box, rows,
+            inner)
+    end
+    return nothing
+end
+
+# The rows every one of whose entries' points lies in `box`: each axis of `box` narrowed by
+# the entries' row offsets along it.
+@inline function _mf_unguarded_rows(box::CartesianIndices{D}, offs, tr::Val) where {D}
+    return ntuple(Val(D)) do d
+        @inline
+        os = map(o -> _mf_row_offset(o, tr)[d], offs)
+        r = box.indices[d]
+        (first(r) + maximum(os)):(last(r) + minimum(os))
+    end
+end
+
+# The rows `rows` of `_mf_gather!`, with its arguments `args` and the evaluator last in them.
+@inline function _mf_gather_rows!(args, box, rows, inner)
     r1 = first(rows)
     c1 = intersect(r1, first(inner))
     lo1, hi1 = isempty(c1) ? (r1, 1:0) : (first(r1):(first(c1) - 1), (last(c1) + 1):last(r1))
-    args = (y, x, α, mask, term, sp, mesh_markers, lin, offs, rs, cs, tr)
     @inbounds for J in CartesianIndices(Base.tail(rows))
         if all(map(in, Tuple(J), Base.tail(inner)))
             for i in lo1
@@ -722,16 +775,17 @@ end
 
 # The unguarded rows `c1` of the line `J`, each point's stencil carried to the next row.
 @inline function _mf_gather_line!(
-        y, x, α, mask, term, sp, mesh_markers, lin, offs, rs::Int, cs::Int, tr::Val,
+        y, x, α, mask, term, sp, mesh_markers, lin, offs, rs::Int, cs::Int, tr::Val, ev,
         c1::UnitRange{Int}, J::CartesianIndex
 )
     isempty(c1) && return nothing
+    ev = _mf_line_evaluator(ev, offs, tr, J)
     R = CartesianIndex(first(c1), Tuple(J)...)
-    st = _mf_line_stencils(nothing, term, sp, mesh_markers, lin, offs, R, tr)
+    st = _mf_line_stencils(nothing, ev, term, sp, mesh_markers, lin, offs, R, tr)
     _mf_row_sum!(y, x, α, mask, lin, offs, st, R, rs, cs, tr)
     for i in (first(c1) + 1):last(c1)
         R = CartesianIndex(i, Tuple(J)...)
-        st = _mf_line_stencils(st, term, sp, mesh_markers, lin, offs, R, tr)
+        st = _mf_line_stencils(st, ev, term, sp, mesh_markers, lin, offs, R, tr)
         _mf_row_sum!(y, x, α, mask, lin, offs, st, R, rs, cs, tr)
     end
     return nothing
@@ -756,14 +810,13 @@ end
 # that each entry's offsets are constants and two entries at one point share its evaluation.
 # A stencil the previous row of the line evaluated (`prev`, `nothing` on a line's first row)
 # is taken from it. The points lie in the interior box, so every read is in bounds.
-@inline function _mf_line_stencils(prev, term, sp, mesh_markers, lin, offs, R, tr::Val)
+@inline function _mf_line_stencils(prev, ev, term, sp, mesh_markers, lin, offs, R, tr::Val)
     return ntuple(Val(length(offs))) do k
         @inline
         o = _mf_row_offset(offs[k], tr)
         j = prev === nothing ? 0 : _mf_behind(offs, o, tr)
         if j == 0
-            P = R - CartesianIndex(o)
-            @inbounds entry_weights(local_stencil(term, sp, P, mesh_markers, lin[P]))
+            _mf_line_weights(ev, term, sp, R, o, mesh_markers, lin, offs, tr)
         else
             prev[j]
         end
@@ -787,8 +840,8 @@ end
 # interior box `box` adds zero, since the shell scatters it. The same sum as `_mf_row_sum!`
 # over the entries kept.
 @inline function _mf_guarded_row!(
-        y, x, α, mask, term, sp, mesh_markers, lin, offs, rs::Int, cs::Int, tr::Val, box,
-        R::CartesianIndex
+        y, x, α, mask, term, sp, mesh_markers, lin, offs, rs::Int, cs::Int, tr::Val, ev,
+        box, R::CartesianIndex
 )
     T = eltype(y)
     terms = ntuple(Val(length(offs))) do k
@@ -796,7 +849,7 @@ end
         P = R - CartesianIndex(_mf_row_offset(offs[k], tr))
         P in box || return zero(T)
         @inbounds begin
-            w = entry_weights(local_stencil(term, sp, P, mesh_markers, lin[P]))[k]
+            w = _mf_point_weights(ev, term, sp, P, mesh_markers, lin, offs)[k]
             c = lin[P + CartesianIndex(_mf_col_offset(offs[k], tr))] + cs
             return convert(T, w * x[c])
         end
@@ -811,6 +864,171 @@ end
     @inbounds yr = y[row]
     @inbounds y[row] = ifelse(_mf_live(mask, row), yr + α * acc, yr)
     return nothing
+end
+
+# --- The cached geometry ----------------------------------------------------------- #
+#
+# A row's weights are evaluated live, so a coefficient changed in place is seen by the next
+# product. For `inner₊(D₋ᵢu, D₋ᵢv)` (what `∇ₕ` expands to, `_separable_axis`) that evaluation
+# is all mesh geometry: the weight at `P` is `±a[Pᵢ] / h[Pᵢ]² * ∏_{d ≠ i} c_d[P_d]`, with `a`
+# the space's aligned factor along `i`, `h` the spacing and `c_d` its cell factors. Live, it
+# reads the spacing and divides by it per point. So the operator caches `a / h²` per axis
+# when it is built (`_MFGeometry`, O(Σ n_d) numbers), and the gather reads it and the cell
+# factors, multiplying the factors past axis 1 once per line. Nothing else is cached: the
+# cache answers only its own mesh at the version it was built for, and a product on a mesh
+# moved since (`change_points!`) evaluates live, where the space's stale weights throw as
+# they did before.
+#
+# The cached weights are defined at every point, zero where `D₋` has no stencil, so such a
+# unit gathers its shell as well instead of scattering it (`_mf_whole_box`). On #428's form
+# over a graded 64³ grid, against the assembled SpMV's 1.21 ms, the product took 1.68 ms
+# live, 1.49 with 1/h read from a table, 1.39 with the cached factors, and 0.62 gathering
+# the shell too: the shell's 9% of the points had cost 0.19 ms of each `D₋` unit's 0.45.
+
+"""
+    _MFGeometry{D, T, M}
+
+The per-axis geometry of a scalar form's mesh `mesh`, cached when a
+[`MatrixFreeOperator`](@ref) is built: `scaled[d][i]` is the space's aligned weight factor
+along `d` over the squared spacing `h_d(i)²` (zero at `i = 1`, where `D₋` has no stencil),
+valid while `_mesh_version(mesh) == version`.
+"""
+struct _MFGeometry{D, T, M}
+    mesh::M
+    version::Int
+    scaled::NTuple{D, Vector{T}}
+end
+
+# The geometry of `a`'s mesh, or `nothing`: only a scalar form with a term the cache answers,
+# whose two spaces share one mesh with weights built for its current version, is cached.
+# Any other form's sinks stay as they were, so a boxed stencil's bytes do not grow.
+function _mf_geometry(a::BilinearForm)
+    Wu, Wv = trial_space(a), test_space(a)
+    (Wu isa ScalarGridSpace && Wv isa ScalarGridSpace && _mf_reads_geometry(a.ast)) ||
+        return nothing
+    sp = host_weights(Wu)
+    m = mesh(sp)
+    (m === mesh(host_weights(Wv)) && sp.weights.built_version == _mesh_version(m)) ||
+        return nothing
+    return _MFGeometry(m, _mesh_version(m), _mf_scaled(m, sp.weights.aligned))
+end
+
+# `aligned[d][i] / h_d(i)²` per axis `d`, zero at `i = 1`; `h_d(i)` is read at the point
+# whose other indices are 1, since the spacing along `d` depends on `i` alone.
+function _mf_scaled(m::AbstractMeshType{D}, aligned::NTuple{D}) where {D}
+    n = npoints(m, Tuple)
+    return ntuple(Val(D)) do d
+        al = aligned[d]
+        [i == 1 ? zero(eltype(al)) :
+         al[i] / spacing(m, CartesianIndex(ntuple(k -> k == d ? i : 1, Val(D))), d)^2
+         for i in 1:n[d]]
+    end
+end
+
+# The weights of `inner₊(D₋ᵢu, D₋ᵢv)` along `Dim` from the cached `g = a / h²` and the cell
+# factors `cf`.
+struct _MFSeparable{Dim, D, G <: AbstractVector, C <: NTuple{D, AbstractVector}}
+    g::G
+    cf::C
+end
+
+const _MFSeparableTerm{D, Dim} = BilinearProduct{
+    D, InnerPlus{Dim}, <:BackwardDifference{D, Dim, <:TrialFunction{D}},
+    <:BackwardDifference{D, Dim, <:TestFunction{D}}}
+
+# Whether some summand of `op` is a `_MFSeparableTerm`, bare or scaled (a pair walks its
+# terms' bare products).
+_mf_reads_geometry(op::OperatorAdd) = _mf_reads_geometry(op.left_op) ||
+                                      _mf_reads_geometry(op.right_op)
+_mf_reads_geometry(op::OperatorScale) = _mf_reads_geometry(op.inner_op)
+_mf_reads_geometry(::_MFSeparableTerm) = true
+_mf_reads_geometry(_) = false
+
+# How the gather evaluates `term`'s weights: `nothing` live, or from the cached geometry
+# when `geom` is the walked mesh's at its current version.
+@inline _mf_evaluator(_, _, _) = nothing
+@inline function _mf_evaluator(
+        geom::_MFGeometry{D}, ::_MFSeparableTerm{D, Dim}, sp
+) where {D, Dim}
+    m = mesh(sp)
+    (m === geom.mesh && geom.version == _mesh_version(m) &&
+     sp.weights.built_version == geom.version) || return nothing
+    cf = sp.weights.cellfactor
+    return _MFSeparable{Dim, D, typeof(geom.scaled[Dim]), typeof(cf)}(geom.scaled[Dim], cf)
+end
+
+# Whether the gather takes all of `term`'s points (the cached geometry answers it), so that
+# no shell is scattered.
+@inline _mf_whole(geom, term, sp) = _mf_evaluator(geom, term, sp) !== nothing
+
+# The points whose `inner₊(D₋ᵢu, D₋ᵢv)` stencil is not zero: all but the first along `Dim`,
+# where `D₋` has none. Each of their entries lands in the grid.
+@inline _mf_whole_box(::_MFSeparable{Dim}, ax) where {Dim} = CartesianIndices(
+    ntuple(d -> d == Dim ? ((first(ax[d]) + 1):last(ax[d])) : ax[d], Val(length(ax))))
+
+# The weights of `term`'s stencil at `P`, in entry order. From the cached geometry, an entry
+# whose trial and test taps lie on the same side of `P` along `Dim` is `+b`, otherwise `-b`.
+# `P` lies in the interior box, so every read is in bounds.
+@inline _mf_point_weights(::Nothing, term, sp, P, mesh_markers, lin, offs) = @inbounds entry_weights(
+    local_stencil(term, sp, P, mesh_markers, lin[P]))
+@inline function _mf_point_weights(
+        ev::_MFSeparable{Dim, D}, _, _, P, _, _, offs
+) where {Dim, D}
+    b = prod(ntuple(d -> @inbounds(_mf_factor(ev, d)[P[d]]), Val(D)))
+    return _mf_signed(b, offs, Val(Dim))
+end
+
+# The factor `ev` reads along axis `d`: the cached `a / h²` along `Dim`, a cell factor
+# elsewhere.
+@inline _mf_factor(ev::_MFSeparable{Dim}, d::Int) where {Dim} = d == Dim ? ev.g : ev.cf[d]
+
+# `b` signed for each entry: `+b` when its trial and test taps lie on the same side of the
+# point along `Dim`, `-b` otherwise.
+@inline _mf_signed(b, offs, ::Val{Dim}) where {Dim} = ntuple(Val(length(offs))) do k
+    @inline
+    (offs[k][1][Dim] == 0) == (offs[k][2][Dim] == 0) ? b : -b
+end
+
+# Along a line `J` (the indices past the first) every factor but axis 1's is a constant of
+# the entry's row offset, so `_mf_gather_line!` multiplies them once per line: `lc[k]` for
+# the point of entry `k`, and each row reads one factor and multiplies once.
+struct _MFSeparableLine{Dim, V, L}
+    a1::V
+    lc::L
+end
+
+# `ev` along the line `J`: a live evaluator stays live.
+@inline _mf_line_evaluator(ev, _, _, _) = ev
+@inline function _mf_line_evaluator(
+        ev::_MFSeparable{Dim, D}, offs, tr::Val, J::CartesianIndex
+) where {Dim, D}
+    lc = ntuple(Val(length(offs))) do k
+        @inline
+        o = _mf_row_offset(offs[k], tr)
+        prod(ntuple(i -> @inbounds(_mf_factor(ev, i + 1)[J[i] - o[i + 1]]), Val(D - 1)))
+    end
+    a1 = _mf_factor(ev, 1)
+    return _MFSeparableLine{Dim, typeof(a1), typeof(lc)}(a1, lc)
+end
+
+# The first entry whose row offset is `o`: entries at one point read one line constant, so
+# their weights share one evaluation. Foldable, as `_mf_behind` is.
+Base.@assume_effects :foldable function _mf_first_at(offs, o, tr::Val)
+    for j in 1:length(offs)
+        _mf_row_offset(offs[j], tr) == o && return j
+    end
+    return 0
+end
+
+# The weights of the stencil at `R - o`, the point of an entry with row offset `o` on row
+# `R` of a line.
+@inline _mf_line_weights(ev, term, sp, R, o, mesh_markers, lin, offs, ::Val) = _mf_point_weights(
+    ev, term, sp, R - CartesianIndex(o), mesh_markers, lin, offs)
+@inline function _mf_line_weights(
+        ev::_MFSeparableLine{Dim}, _, _, R, o, _, _, offs, tr::Val
+) where {Dim}
+    b = @inbounds ev.a1[R[1] - o[1]] * ev.lc[_mf_first_at(offs, o, tr)]
+    return _mf_signed(b, offs, Val(Dim))
 end
 
 # --- The fused threaded sweep ------------------------------ #
@@ -849,30 +1067,38 @@ end
 # `locate_cell`, which no offset bounds; they are walked serially after the bands, as in the
 # per-unit sweep.
 
+# The plan's boxed form `form[]` and the operator's cached geometry `geom` (`_MFGeometry` or
+# `nothing`), behind the one pointer the `@batch` box carries (`_MFFusedPlan`).
+mutable struct _MFFormBox{F <: BilinearForm, G}
+    const form::F
+    const geom::G
+end
+Base.getindex(b::_MFFormBox) = b.form
+
 """
-    _MFFusedPlan{D, EP, F}
+    _MFFusedPlan{D, EP, F, G}
 
 The fused threaded sweep's plan, fixed when a [`MatrixFreeOperator`](@ref) is built: the
 grid size `dims` every fused unit walks, the least and greatest row offset `omin`, `omax`
 of any fused unit along the last axis, the effective parallel policy `policy` every fused
 unit's leaf carries (or the operator's own, when that is [`CpuPolyester`](@ref)), whether
 some unit walks serially (`interp`, a test-side interpolation), and the operator's own form
-`form`, boxed once here.
+`form`, boxed once here with its cached geometry (`_MFFormBox`).
 
 The band tasks read the form through `form` rather than taking it as an argument:
 `Polyester.@batch` copies its arguments into a heap box on every call, and a form stored
 inline (its spaces' weight vectors, a coefficient's grid function) made that box 400-740 B
-per product. The box now holds one pointer to `form`. The box is written once, here, and
+per product. The box now holds one pointer to `form`, which is written once, here, and
 only read afterwards, so concurrent products on one operator share it safely, and it keeps
 alive nothing the operator does not already hold.
 """
-struct _MFFusedPlan{D, EP <: CpuPolicy, F <: BilinearForm}
+struct _MFFusedPlan{D, EP <: CpuPolicy, F <: BilinearForm, G}
     dims::NTuple{D, Int}
     omin::Int
     omax::Int
     policy::EP
     interp::Bool
-    form::Base.RefValue{F}
+    form::_MFFormBox{F, G}
 end
 
 # What the build-time walk collects: every fused unit's row offsets, the grid size and
@@ -914,8 +1140,8 @@ const _MF_NO_COLLECT = _MFCollected()
 # cannot take (no fused unit, or units that disagree on the grid or policy). Under
 # `CpuPolyester` every leaf's effective policy is `CpuPolyester`, whatever its backend, so the
 # bands reach `_run_bands!(::CpuPolyester)`; any other policy takes each leaf's own.
-_mf_plan(::CpuSerial, ::BilinearForm) = nothing
-function _mf_plan(policy::CpuPolicy, a::BilinearForm)
+_mf_plan(::CpuSerial, ::BilinearForm, _ = nothing) = nothing
+function _mf_plan(policy::CpuPolicy, a::BilinearForm, geom = _mf_geometry(a))
     acc = _MFCollected(policy isa CpuPolyester ? policy : nothing)
     T = _matrix_eltype(a, a.ast)
     _mf_apply!(_MFPass(_MF_COLLECT, 1:0, 0, 0, acc), ActionSink(T[], T[], true, nothing), a)
@@ -925,7 +1151,7 @@ function _mf_plan(policy::CpuPolicy, a::BilinearForm)
     last_offsets = Int[o[D] for o in acc.offsets]
     return _MFFusedPlan(
         dims, minimum(last_offsets; init = 0), maximum(last_offsets; init = 0), acc.policy,
-        acc.interp, Ref(a)
+        acc.interp, _MFFormBox(a, geom)
     )
 end
 
@@ -1036,7 +1262,7 @@ end
     lo, core, hi = clo > chi ? (vlo:vhi, 1:0, 1:0) : (vlo:(clo - 1), clo:chi, (chi + 1):vhi)
     if _mf_gathers(term) && _peelable(axes(indices(mesh(sp))), _stencil_margin(term))
         _mf_gather_unit!(s, term, sp, ro, co, p.own)
-        _mf_visit_shell!(s, owned, term, sp, ro, co, lo, core, hi)
+        _mf_whole(s.geom, term, sp) || _mf_visit_shell!(s, owned, term, sp, ro, co, lo, core, hi)
     else
         _mf_visit_slab!(s, owned, term, sp, ro, co, lo, core, hi)
     end
@@ -1131,6 +1357,7 @@ end
         _y, s, _, plan::_MFFusedPlan{D}, nbands::Int, ntasks::Int, k::Int
 ) where {D}
     a = plan.form[]
+    s = _mf_with_geom(s, plan.form.geom)
     len = plan.dims[D]
     for b in k:ntasks:nbands
         own = _band_range(1:len, nbands, b)
@@ -1138,6 +1365,9 @@ end
     end
     return nothing
 end
+
+# A band task's sink with the plan's geometry, which the sink did not carry across.
+@inline _mf_with_geom(s::ActionSink, geom) = ActionSink(s.y, s.x, s.α, s.mask, geom)
 
 # The region's mechanism. `CpuPolyester` (and any other CPU policy) takes `_run_bands!`, as
 # the engines do. `CpuThreaded` spawns one task per band and walks the first band on the
