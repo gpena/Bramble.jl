@@ -50,7 +50,9 @@
 # heap-allocated `ManualMemory.Reference` on every call, sized by what the loop captures.
 # Plain arrays become `PtrArray`s, which allocate nothing. Measured on a 2D non-uniform grid
 # with 4 threads, every box is at most 304 B.
-# Differences, shifts, averages, divergence and curl allocate 0 B; `innerₕ` 96 B; a
+# Differences, shifts, averages, divergence and curl allocate 0 B, and so does a
+# `KroneckerLinearOperator` product, whose loop captures only plain arrays and isbits
+# values (`_batch_kron_lines!` below), so its box stays on the stack; `innerₕ` 96 B; a
 # broadcast 128 B; `avgₕ!` 160 B; linear assembly 256 B; a fused matrix-free product 112 B;
 # a bilinear refill 1520 B (five colour sweeps of 304 B each). No `CpuPolyester` call reaches
 # `Threads.@threads` or `Threads.@spawn` (gpena/Bramble.jl#400).
@@ -61,7 +63,7 @@ using Bramble: MarkedIndicesUnion, SeparableWeights, _reduce_or_chunk, _throw_do
                _write_components!, _band_range, _scatter_point!, _scatter_linear_point!,
                CpuPolyester, _ReplayTarget, _ActionTarget, _replay_point!, _difference_band!,
                _average_band!, _centered_average_band!, _broadcast_band!, _kron_line_init!,
-               _kron_line_terms!
+               _kron_line_terms!, _kron_host_raw, _kron_host_rebuild
 using Polyester: Polyester, @batch
 using LinearAlgebra: mul!
 using PrecompileTools: @setup_workload, @compile_workload
@@ -423,27 +425,27 @@ end
 # `@batch` iteration, each line `_kron_line_init!` then `_kron_line_terms!`, exactly the
 # serial `_kron_fused!` loop.
 #
-# `y`, `x` and the terms cross `@batch` in one `Ref` box rather than being captured:
-# `@batch` turns a captured array into a `PtrArray` and rebuilds every struct around one (a
-# sparse factor, a diagonal) inside each task, and the line kernels then ran about half as
-# fast (benchmark/batch_survey.jl, candidate 1). The box is fresh per call, so concurrent
-# products on one operator share nothing. It costs a small heap allocation per call that does
-# not grow with the grid: Polyester boxes its own argument tuple in a `ManualMemory.Reference`,
-# which goes on the heap once the tuple holds a reference to a GC object, and the `Ref` box
-# is one such object. The coefficients and `β` ride in the box too; the strides, the line
-# indices and `m` are captured directly. `y::AbstractVector` and
+# Only plain arrays and isbits values cross `@batch`. Those are `y`, `x`, the coefficients,
+# `β`, the strides, the line indices, `m`, and each term's factors as `_kron_host_raw`
+# gives them (nested tuples of diagonals, CSC `colptr`/`rowval`/`nzval` and `_KronTridiag`
+# bands). `@batch` turns every one of those arrays into a `PtrArray` under its own
+# `GC.@preserve`, so its argument box holds no GC reference and stays on the stack, and a
+# warm product allocates 0 B. Each task rebuilds the light structs (`Diagonal`, `_KronCSC`,
+# `_KronTridiag`) around the `PtrArray`s with `_kron_host_rebuild`. Rejected: a `Ref` box
+# around the terms (it put Polyester's box on the heap, 272 B per call), and capturing the
+# terms whole (the kernels ran at half speed on a struct-wrapped `PtrArray`,
+# benchmark/batch_survey.jl candidate 1). `y::AbstractVector` and
 # `lines::CartesianIndices` make this a genuine specialisation of the `src/` stub, the same
 # reasoning as the hooks above.
 function Bramble._batch_kron_lines!(
         y::AbstractVector, terms::Tuple, cs::Tuple, x::AbstractVector, β, ss::Tuple,
         lines::CartesianIndices, m::Int
 )
-    args = Ref((y, terms, cs, x, β))
+    raw = map(_kron_host_raw, terms)
     @batch for o in 1:length(lines)
-        a = args[]
         off = (o - 1) * m
-        _kron_line_init!(a[1], a[5], off, m)
-        _kron_line_terms!(a[1], a[2], a[3], a[4], Tuple(lines[o]), ss, off, m)
+        _kron_line_init!(y, β, off, m)
+        _kron_line_terms!(y, map(_kron_host_rebuild, raw), cs, x, Tuple(lines[o]), ss, off, m)
     end
     return nothing
 end

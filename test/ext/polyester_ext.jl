@@ -215,7 +215,7 @@ function _pa_paths()
             y = similar(b)
             _pa_case(() -> ldiv!(y, Pc, b), () -> copy(y); levels = length(Pc.ops))
         end))
-    push!(P, ("Kronecker mul!", false, 1, (n, p) -> begin
+    push!(P, ("Kronecker mul!", false, 0, (n, p) -> begin
         K = kronecker_operator(_pa_poisson(_pa_space(n, p)))
         x = randn(Xoshiro(4), size(K, 2))
         y = similar(x)

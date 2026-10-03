@@ -421,11 +421,22 @@ _kron_entry(::Union{_KronDeviceDiagonal, _KronDeviceSparse}, ::Int, ::Int) = _th
 # than going through its `CartesianIndex` `getindex` in the inner loop.
 @inline _kron_diag(F::Diagonal{<:Any, <:SeparableWeights{1}}) = F.diag.factors[1]
 
+# A CSC factor rebuilt around the arrays `Polyester.@batch` hands each task
+# (`_kron_host_rebuild`): the line kernels read only these three fields, which a
+# `SparseMatrixCSC` has under the same names, so both run the same kernel.
+struct _KronCSC{CP <: AbstractVector, RV <: AbstractVector, NV <: AbstractVector}
+    colptr::CP
+    rowval::RV
+    nzval::NV
+end
+
+const _KronCSCLike = Union{SparseMatrixCSC, _KronCSC}
+
 # One axis `e >= 2` of a term on the line whose axis-`e` index is `i`: a diagonal factor
 # contributes its entry to the line weight; the sparse factor contributes weight one and is
 # returned, with `i` and the axis stride, as the line's neighbour axis.
 @inline _kron_line_split(F::Diagonal, i::Int, ::Int) = (_kron_diag(F)[i], nothing)
-@inline _kron_line_split(F::SparseMatrixCSC, i::Int, stride::Int) = (one(eltype(F)), (F, i, stride))
+@inline _kron_line_split(F::_KronCSCLike, i::Int, stride::Int) = (one(eltype(F.nzval)), (F, i, stride))
 
 # At most one sparse factor per term, so at most one side is ever not `nothing`; two sparse
 # factors throw, since `kronecker_operator` never builds such a term.
@@ -486,9 +497,9 @@ end
 @inline function _kron_line!(y, F1::Diagonal, ::Nothing, sp::Tuple, x, s, off::Int, m::Int)
     F, ie, stride = sp
     h = _kron_diag(F1)
-    rows = rowvals(F)
-    vals = nonzeros(F)
-    @inbounds for k in nzrange(F, ie)
+    rows = F.rowval
+    vals = F.nzval
+    @inbounds for k in F.colptr[ie]:(F.colptr[ie + 1] - 1)
         c = s * vals[k]
         xoff = off + (rows[k] - ie) * stride
         @simd for i in 1:m
@@ -499,7 +510,8 @@ end
 end
 
 # Directional term along axis 1, tridiagonal factor: ends by hand, interior as one loop.
-@inline function _kron_line!(y, ::SparseMatrixCSC, L::_KronTridiag, ::Nothing, x, s, off::Int, m::Int)
+# The axis-1 factor itself is never read here or below: `line` carries it.
+@inline function _kron_line!(y, ::Any, L::_KronTridiag, ::Nothing, x, s, off::Int, m::Int)
     dg, sub = L.dg, L.sub
     @inbounds if m == 1
         y[off + 1] += s * (dg[1] * x[off + 1])
@@ -514,12 +526,12 @@ end
 end
 
 # Directional term along axis 1, any other sparsity: gather row `i` of the factor.
-@inline function _kron_line!(y, ::SparseMatrixCSC, F1::SparseMatrixCSC, ::Nothing, x, s, off::Int, m::Int)
-    rows = rowvals(F1)
-    vals = nonzeros(F1)
+@inline function _kron_line!(y, ::Any, F1::_KronCSCLike, ::Nothing, x, s, off::Int, m::Int)
+    rows = F1.rowval
+    vals = F1.nzval
     @inbounds for i in 1:m
         acc = zero(eltype(y))
-        for k in nzrange(F1, i)
+        for k in F1.colptr[i]:(F1.colptr[i + 1] - 1)
             acc += vals[k] * x[off + rows[k]]
         end
         y[off + i] += s * acc
@@ -576,6 +588,27 @@ end
     lines = CartesianIndices(Base.tail(dims))
     _late(_batch_kron_lines!, y, K.terms, cs, x, β, ss, lines, dims[1])
     return y
+end
+
+# What a term's line kernels read, as plain arrays only: a diagonal factor as its vector, a
+# CSC factor as `(colptr, rowval, nzval)`, a `_KronTridiag` as `(dg, sub)`. `@batch` turns
+# every array in these nested tuples into a `PtrArray` under its own `GC.@preserve`, and
+# each task puts the light structs back around them with `_kron_host_rebuild`; the
+# coefficients stay out, since `cs` carries them.
+_kron_host_raw(::Nothing) = nothing
+_kron_host_raw(F::Diagonal) = _kron_diag(F)
+_kron_host_raw(F::SparseMatrixCSC) = (F.colptr, F.rowval, F.nzval)
+_kron_host_raw(L::_KronTridiag) = (L.dg, L.sub)
+_kron_host_raw(t::KroneckerTerm) = (map(_kron_host_raw, t.factors), _kron_host_raw(t.line))
+
+@inline _kron_host_rebuild(::Nothing) = nothing
+@inline _kron_host_rebuild(v::AbstractVector) = Diagonal(v)
+@inline _kron_host_rebuild(r::NTuple{3, AbstractVector}) = _KronCSC(r...)
+@inline _kron_host_rebuild(r::NTuple{2, AbstractVector}) = _KronTridiag(r...)
+@inline function _kron_host_rebuild(r::Tuple{Tuple, Any})
+    F = map(_kron_host_rebuild, r[1])
+    L = _kron_host_rebuild(r[2])
+    return KroneckerTerm{length(F), Tuple{}, typeof(F), typeof(L)}((), F, L)
 end
 
 """
@@ -663,8 +696,8 @@ end
 #
 # `scratch` is accepted and ignored: the fused pass above needs no work vectors, so a serial
 # host `mul!` allocates nothing with or without it, and callers that pass one keep working.
-# Under `CpuPolyester` a product allocates a small constant per call, independent of the
-# grid, for the argument box Polyester sends to its threads.
+# Under `CpuPolyester` a warm product allocates nothing either: only plain arrays and isbits
+# values cross `@batch` (`_kron_host_raw`), so Polyester keeps its argument box on the stack.
 #
 # Five-argument form, `y = α * K * x + β * y`, with `LinearAlgebra`'s semantics: `β == 0`
 # (including `false`) overwrites `y`, so a `NaN` already in `y` does not survive; otherwise
