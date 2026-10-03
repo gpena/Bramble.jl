@@ -491,7 +491,27 @@ end
 # The threaded matrix-free apply: `matrix_free_operator` under
 # `CpuPolyester` in 1D-3D on non-uniform meshes, in the forms the tests and users reach --
 # the policy passed to the operator or carried by the mesh backend, with and without
-# `dirichlet = :boundary`, and the 3- and 5-argument `mul!`.
+# `dirichlet = :boundary`, and the 3- and 5-argument `mul!`; then the other first-call
+# paths of benchmark/polyester_first_call.jl that cost 100 ms or more.
+#
+# The calls of benchmark/polyester_first_call.jl, made from inside functions that take their
+# arguments as ordinary values. Code in a user's function is inferred statically, so its
+# call sites carry the partly abstract types inference sees there (`<:Tuple{...}`,
+# unbound `_MFFusedPlan` parameters). Calls made at top level are dispatched at run time on
+# the concrete values and cache other instances, which leave the first call to infer these.
+function _pw_first_calls(u, w, g, a, l, x, y)
+    avgₕ!(u, g)
+    innerₕ(u, w)
+    w .= 2.0 .* u .+ w
+    A = Bramble.allocate_system_matrix(a)
+    assemble!(A, a)
+    assemble!(A, a)
+    Bramble.semidiscretize_rhs(semidiscretize(a, l))(y, x, nothing, 0.0)
+    return nothing
+end
+_pw_kron_call(a, x, y) = (mul!(y, kronecker_operator(a), x); nothing)
+_pw_mf_call(a, x, y) = (mul!(y, matrix_free_operator(a), x); nothing)
+
 if Bramble.PRECOMPILE_WORKLOAD
     @setup_workload begin
         _pw_form(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
@@ -511,6 +531,19 @@ if Bramble.PRECOMPILE_WORKLOAD
                 op = matrix_free_operator(_pw_form(Wp); dirichlet = :boundary)
                 mul!(y, op, x)
                 mul!(y, op, x, 0.5, 2.0)
+                # The other paths whose first call paid 100 ms or more (#434). Cheaper paths
+                # stay out: each precompiled `@batch` signature adds about four binding-edge
+                # invalidations.
+                g(x) = sum(x)
+                u = Rₕ(Wp, g)
+                w = Rₕ(Wp, x -> x[1])
+                a = _pw_form(Wp)
+                l = form(Wp, v -> innerₕ(u, v))
+                xp = ones(ndofs(Wp))
+                yp = similar(xp)
+                _pw_first_calls(u, w, g, a, l, xp, yp)
+                _pw_mf_call(a, xp, yp)
+                length(n) > 1 && _pw_kron_call(a, xp, yp)
             end
         end
     end

@@ -58,41 +58,43 @@ function child_run(path)
     W = gridspace(Ω)
     g(x) = sin(3x[1] + 2x[2]) + x[1] * x[2]
     poisson(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+    # Each path's setup is a `let` block, so its variables are fresh locals of the closure it
+    # returns and are captured with their concrete types, not in a `Core.Box` (a name
+    # assigned in several branches of one function is boxed, which widens every call).
     call = if path == "avg"
-        u = element(W)
-        () -> avgₕ!(u, g)
+        let u = element(W)
+            () -> avgₕ!(u, g)
+        end
     elseif path == "innerh"
-        u = Rₕ(W, g)
-        w = Rₕ(W, x -> x[1])
-        () -> innerₕ(u, w)
+        let u = Rₕ(W, g), w = Rₕ(W, x -> x[1])
+            () -> innerₕ(u, w)
+        end
     elseif path == "broadcast"
-        u = Rₕ(W, g)
-        w = Rₕ(W, x -> x[1])
-        () -> (w .= 2.0 .* u .+ w)
+        let u = Rₕ(W, g), w = Rₕ(W, x -> x[1])
+            () -> (w .= 2.0 .* u .+ w)
+        end
     elseif path == "assemble"
-        a = poisson(W)
-        () -> begin
-            A = Bramble.allocate_system_matrix(a)
-            assemble!(A, a)
-            assemble!(A, a)
+        let a = poisson(W)
+            () -> begin
+                A = Bramble.allocate_system_matrix(a)
+                assemble!(A, a)
+                assemble!(A, a)
+            end
         end
     elseif path == "kronecker"
-        a = poisson(W)
-        x = ones(ndofs(W))
-        y = similar(x)
-        () -> mul!(y, kronecker_operator(a), x)
+        let a = poisson(W), x = ones(ndofs(W)), y = similar(x)
+            () -> mul!(y, kronecker_operator(a), x)
+        end
     elseif path == "rhs"
-        f = Rₕ(W, g)
-        a = poisson(W)
-        l = form(W, v -> innerₕ(f, v))
-        u = ones(ndofs(W))
-        du = similar(u)
-        () -> Bramble.semidiscretize_rhs(semidiscretize(a, l))(du, u, nothing, 0.0)
+        let f = Rₕ(W, g), a = poisson(W), l = form(W, v -> innerₕ(f, v)),
+            u = ones(ndofs(W)), du = similar(u)
+
+            () -> Bramble.semidiscretize_rhs(semidiscretize(a, l))(du, u, nothing, 0.0)
+        end
     elseif path == "matrix_free"
-        a = poisson(W)
-        x = ones(ndofs(W))
-        y = similar(x)
-        () -> mul!(y, matrix_free_operator(a), x)
+        let a = poisson(W), x = ones(ndofs(W)), y = similar(x)
+            () -> mul!(y, matrix_free_operator(a), x)
+        end
     else
         error("unknown path $path")
     end
