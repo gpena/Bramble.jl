@@ -482,10 +482,9 @@ end
 # are not a fixed reach from the point (a test-side interpolation, which names rows through
 # `locate_cell`) walks serially, as the threaded assembly's does (`_sweep_bilinear_serial!`).
 #
-# The colours are assembly's own, `_colour_strides(stencil_offsets(term))`, and a pair's take
-# both terms' row reach, since its transposed entries land on the first term's columns.
-# `stencil_offsets` builds small `Vector`s, a fixed cost per unit and product that does not
-# grow with the grid, as the threaded sweep's own task spawns do not.
+# The colours are assembly's own, `_term_colour_strides(term)` (`_colour_strides` over the
+# term's row reach, computed without a heap vector, linear.jl), and a pair's take both terms'
+# row reach, since its transposed entries land on the first term's columns.
 
 const _ActionTarget = Union{ActionSink, _PairActionSink}
 
@@ -521,7 +520,7 @@ end
     if _has_test_interp(term)
         visit_bilinear_stencil(s, term, sp, ro, co)
     else
-        _sweep_bilinear!(_mf_target(p, s), sp, term, _colour_strides(stencil_offsets(term)), ro, co)
+        _sweep_bilinear!(_mf_target(p, s), sp, term, _term_colour_strides(term), ro, co)
     end
     return nothing
 end
@@ -537,8 +536,7 @@ end
     if _has_test_interp(p1) || _has_trial_interp(p1) || _has_test_interp(p2)
         visit_bilinear_stencil(s, p1, sp, ro, co)
     else
-        rows = sort!(union(stencil_offsets(p1), stencil_offsets(p2)))
-        _sweep_bilinear!(_mf_target(p, s), sp, p1, _colour_strides(rows), ro, co)
+        _sweep_bilinear!(_mf_target(p, s), sp, p1, _term_colour_strides(p1, p2), ro, co)
     end
     return nothing
 end
@@ -609,20 +607,29 @@ end
 # per-unit sweep.
 
 """
-    _MFFusedPlan{D, EP}
+    _MFFusedPlan{D, EP, F}
 
 The fused threaded sweep's plan, fixed when a [`MatrixFreeOperator`](@ref) is built: the
 grid size `dims` every fused unit walks, the least and greatest row offset `omin`, `omax`
 of any fused unit along the last axis, the effective parallel policy `policy` every fused
-unit's leaf carries (or the operator's own, when that is [`CpuPolyester`](@ref)), and
-whether some unit walks serially (`interp`, a test-side interpolation).
+unit's leaf carries (or the operator's own, when that is [`CpuPolyester`](@ref)), whether
+some unit walks serially (`interp`, a test-side interpolation), and the operator's own form
+`form`, boxed once here.
+
+The band tasks read the form through `form` rather than taking it as an argument:
+`Polyester.@batch` copies its arguments into a heap box on every call, and a form stored
+inline (its spaces' weight vectors, a coefficient's grid function) made that box 400-740 B
+per product. The box now holds one pointer to `form`. The box is written once, here, and
+only read afterwards, so concurrent products on one operator share it safely, and it keeps
+alive nothing the operator does not already hold.
 """
-struct _MFFusedPlan{D, EP <: CpuPolicy}
+struct _MFFusedPlan{D, EP <: CpuPolicy, F <: BilinearForm}
     dims::NTuple{D, Int}
     omin::Int
     omax::Int
     policy::EP
     interp::Bool
+    form::Base.RefValue{F}
 end
 
 # What the build-time walk collects: every fused unit's row offsets, the grid size and
@@ -675,7 +682,7 @@ function _mf_plan(policy::CpuPolicy, a::BilinearForm)
     last_offsets = Int[o[D] for o in acc.offsets]
     return _MFFusedPlan(
         dims, minimum(last_offsets; init = 0), maximum(last_offsets; init = 0), acc.policy,
-        acc.interp
+        acc.interp, Ref(a)
     )
 end
 
@@ -843,10 +850,12 @@ end
 end
 
 # One product. Without a plan, the unit walk under the operator's own policy: serial, or the
-# per-unit threaded sweep.
+# per-unit threaded sweep. A plan whose boxed form is not `a` (an operator rebuilt around
+# another form) walks per unit too, since its bands would read the wrong form.
 @inline _mf_product!(::Nothing, policy, s, a::BilinearForm) = _mf_apply!(policy, s, a)
 
-function _mf_product!(plan::_MFFusedPlan{D}, _, s::ActionSink, a::BilinearForm) where {D}
+function _mf_product!(plan::_MFFusedPlan{D}, policy, s::ActionSink, a::BilinearForm) where {D}
+    plan.form[] === a || return _mf_apply!(policy, s, a)
     len = plan.dims[D]
     nbands = min(Threads.nthreads(), len)
     _mf_run_bands!(plan.policy, s, a, plan, nbands)
@@ -855,10 +864,13 @@ function _mf_product!(plan::_MFFusedPlan{D}, _, s::ActionSink, a::BilinearForm) 
 end
 
 # Task `k` of `ntasks` (`_run_bands!`'s trailing pair): bands `k`, `k + ntasks`, ... of
-# `nbands`, every unit walked over each. `y` is `s.y`, first for `_run_bands!`'s sake.
+# `nbands`, every unit walked over each. `y` is `s.y`, first for `_run_bands!`'s sake. The
+# form is the plan's (`_MFFusedPlan`); the third argument is ignored, `nothing` under
+# `_run_bands!` so that no `@batch` box carries the form inline.
 @noinline function _mf_band_task!(
-        _y, s, a, plan::_MFFusedPlan{D}, nbands::Int, ntasks::Int, k::Int
+        _y, s, _, plan::_MFFusedPlan{D}, nbands::Int, ntasks::Int, k::Int
 ) where {D}
+    a = plan.form[]
     len = plan.dims[D]
     for b in k:ntasks:nbands
         own = _band_range(1:len, nbands, b)
@@ -878,8 +890,8 @@ end
 # (`_static_or_serial`), so no fallback is needed. `@sync` waits by yielding, and the waiting
 # thread runs the bands itself if every other one is busy. Each band writes only its own
 # rows, in the serial order, so the result does not depend on where a band runs.
-@inline _mf_run_bands!(policy::CpuPolicy, s, a, plan, nbands::Int) = _run_bands!(
-    policy, _mf_band_task!, s.y, s, a, plan, nbands)
+@inline _mf_run_bands!(policy::CpuPolicy, s, _, plan, nbands::Int) = _run_bands!(
+    policy, _mf_band_task!, s.y, s, nothing, plan, nbands)
 
 @noinline function _mf_run_bands!(::CpuThreaded, s, a, plan, nbands::Int)
     @sync begin

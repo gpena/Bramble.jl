@@ -784,8 +784,7 @@ end
         _sweep_bilinear_serial!(target, sp, term, row_offset, col_offset, α)
     else
         _sweep_bilinear!(
-            target, sp, term, _colour_strides(stencil_offsets(term)), row_offset,
-            col_offset, α
+            target, sp, term, _term_colour_strides(term), row_offset, col_offset, α
         )
     end
     return nothing
@@ -817,8 +816,7 @@ end
     if _has_test_interp(p1) || _has_trial_interp(p1) || _has_test_interp(p2)
         _sweep_bilinear_serial!(target, sp, p1, row_offset, col_offset)
     else
-        rows = sort!(union(stencil_offsets(p1), stencil_offsets(p2)))
-        _sweep_bilinear!(target, sp, p1, _colour_strides(rows), row_offset, col_offset)
+        _sweep_bilinear!(target, sp, p1, _term_colour_strides(p1, p2), row_offset, col_offset)
     end
     return nothing
 end
