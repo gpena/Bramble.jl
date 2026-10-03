@@ -575,8 +575,10 @@ end
 struct _BcHostNode{F} end
 struct _BcHostExtruded end
 
-_bc_host_raw(bc::Broadcast.Broadcasted{S, A, F}) where {S, A, F} = (
-    _BcHostNode{F}(), bc.style, bc.f, map(_bc_host_raw, bc.args), bc.axes)
+function _bc_host_raw(bc::Broadcast.Broadcasted{S, A, F}) where {S, A, F}
+    (
+        _BcHostNode{F}(), bc.style, bc.f, map(_bc_host_raw, bc.args), bc.axes)
+end
 _bc_host_raw(e::Broadcast.Extruded) = (_BcHostExtruded(), e.x, e.keeps, e.defaults)
 # A 0-dimensional array stays inside its `Extruded`, so `@batch` never sees it bare:
 # `StrideArraysCore` throws making a `PtrArray` of a 0-dimensional `Array`. The struct puts

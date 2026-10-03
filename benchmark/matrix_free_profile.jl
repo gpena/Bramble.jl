@@ -124,6 +124,7 @@ function diagonals(A, offs)
     rows = rowvals(A)
     vals = nonzeros(A)
     for j in 1:n, p in nzrange(A, j)
+
         k = findfirst(==(j - rows[p]), offs)
         k === nothing || (W[k][rows[p]] = vals[p])
     end

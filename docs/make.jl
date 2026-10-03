@@ -223,13 +223,15 @@ end
 # `docs.sh` build lands in `BRAMBLE_DOCS_BUILD` rather than `docs/build`.
 let build = get(ENV, "BRAMBLE_DOCS_BUILD", joinpath(@__DIR__, "build"))
     for (dir, _, files) in walkdir(build), file in files
+
         endswith(file, ".html") || continue
         root = relpath(build, dir)
         root == "." && continue
         path = joinpath(dir, file)
         html = read(path, String)
         fixed = replace(html,
-            r"(<figure class=\"md-figure\">\s*<img src=\")(?![a-z]+:|/|\.\./)" => SubstitutionString("\\1" * root * "/"))
+            r"(<figure class=\"md-figure\">\s*<img src=\")(?![a-z]+:|/|\.\./)" =>
+                SubstitutionString("\\1" * root * "/"))
         fixed == html || write(path, fixed)
     end
 end

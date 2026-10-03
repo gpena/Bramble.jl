@@ -81,8 +81,10 @@ const SIZES = (65, 1025)
 
 # The `PtrArray` type `@batch` makes of an array of type `A` (through the same
 # `object_and_preserve` it calls), so a rebuilt type names exactly what each task receives.
-_ptrtype(::Type{A}) where {A <: Array} = typeof(first(Polyester.object_and_preserve(
-    A(undef, ntuple(_ -> 0, ndims(A))))))
+function _ptrtype(::Type{A}) where {A <: Array}
+    typeof(first(Polyester.object_and_preserve(
+        A(undef, ntuple(_ -> 0, ndims(A))))))
+end
 
 # An array `@batch` turns into a `PtrArray`.
 _isleaf(T) = T <: Array && isconcretetype(T) && isbitstype(eltype(T))
@@ -269,7 +271,7 @@ end
 
 # Hook-level calls: every captured replay call of one refill, or the one band region.
 run_replay_ref(calls) = (foreach(c -> invoke(B._batch_bilinear_band_replay!,
-    _EXT_REPLAY_SIG, c...), calls); nothing)
+            _EXT_REPLAY_SIG, c...), calls); nothing)
 run_replay_proto(calls) = (foreach(c -> proto_band_replay!(c...), calls); nothing)
 run_mf_ref(c) = ref_mf_bands!(c...)
 run_mf_proto(c) = proto_mf_bands!(c...)

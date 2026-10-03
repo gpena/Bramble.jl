@@ -86,9 +86,7 @@ function child_run(path)
             () -> mul!(y, kronecker_operator(a), x)
         end
     elseif path == "rhs"
-        let f = Rₕ(W, g), a = poisson(W), l = form(W, v -> innerₕ(f, v)),
-            u = ones(ndofs(W)), du = similar(u)
-
+        let f = Rₕ(W, g), a = poisson(W), l = form(W, v -> innerₕ(f, v)), u = ones(ndofs(W)), du = similar(u)
             () -> Bramble.semidiscretize_rhs(semidiscretize(a, l))(du, u, nothing, 0.0)
         end
     elseif path == "matrix_free"
