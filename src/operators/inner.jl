@@ -100,18 +100,27 @@ end
 # Weight Helpers
 # ==============================================================================
 
-@inline compute_weight(::InnerH, space, I::CartesianIndex{D}, lin_idx::Int) where {D} = weights(space, Innerh())[lin_idx]
+# Every family `weights` returns today is a lazy `SeparableWeights`, read here by `I`: its
+# `Int` getindex would rebuild `I` from `lin_idx` with D-1 integer divisions per point per
+# term. No current `weights` method reaches the `AbstractVector` method: it is the fallback
+# for a dense weight vector, or a `CartesianIndex` of another dimension, read by `lin_idx`.
+@inline _weight_at(w::SeparableWeights{D}, I::CartesianIndex{D}, ::Int) where {D} = w[I]
+@inline _weight_at(w::AbstractVector, ::CartesianIndex, lin_idx::Int) = w[lin_idx]
+
+@inline compute_weight(
+    ::InnerH, space, I::CartesianIndex{D}, lin_idx::Int
+) where {D} = _weight_at(weights(space, Innerh()), I, lin_idx)
 
 @inline compute_weight(
     ::InnerPlus{ActiveDim}, space, I::CartesianIndex{D}, lin_idx::Int
-) where {ActiveDim, D} = weights(space, Innerplus(), ActiveDim)[lin_idx]
+) where {ActiveDim, D} = _weight_at(weights(space, Innerplus(), ActiveDim), I, lin_idx)
 
 # `weights(space, Val(S))` for `length(S) >= 2` is a `SeparableWeights` (scalar_gridspace.jl),
 # a lazy per-axis product with no full-grid vector behind it. It answers a `CartesianIndex`
 # directly, at whatever point this is called for -- the currently-visited one, or a shifted
 # neighbour, whichever `local_stencil` passes in -- with no linear-index division/modulo, so
-# `I` is used here rather than `lin_idx` (the dense-vector path above keeps using `lin_idx`,
-# unchanged).
+# `I` is used here rather than `lin_idx`, as `_weight_at` above does for `InnerH` and
+# `InnerPlus{Dim}`.
 @inline compute_weight(
     ::InnerPlusSet{S}, space, I::CartesianIndex{D}, lin_idx::Int
 ) where {S, D} = weights(space, Val(S))[I]

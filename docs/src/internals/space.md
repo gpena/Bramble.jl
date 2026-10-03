@@ -70,16 +70,17 @@ builds them the same way as every other `S`, from `aligned`/`cellfactor` alone, 
 full-grid vector filled anywhere in the function. `SpaceWeights` has no dense branch left
 -- every weight it returns, for every `S`, is a `SeparableWeights`.
 
-One asymmetry survives this change and is worth naming. `InnerH` and `InnerPlus{Dim}`'s
-own `compute_weight` still reads `weights(space, Innerh())[lin_idx]` by *linear* index,
-not by the `CartesianIndex` the assembly loop already has in hand -- only the
-`InnerPlusSet` node S6.4 added reads by `CartesianIndex`. So a symbolic `innerₕ(u, v)` or
-`inner₊ₓ(u, v)` term inside a form now pays the same division-per-axis a linear
-`SeparableWeights` access always costs, once per assembled point, where before it read a
-dense vector directly. That is not a regression in the numbers below: a `CartesianIndex`
-conversion is a small fraction of what `local_stencil` already spends on each point
-(several operators' own stencils, Dirichlet handling, the sparse write itself), and
-nothing measured here moves outside the range already on record for the same form.
+S6.8 left one asymmetry, which gpena/Bramble.jl#428 has since removed. At S6.8, `InnerH`
+and `InnerPlus{Dim}`'s own `compute_weight` read their weight by *linear* index, not by
+the `CartesianIndex` the assembly loop already had in hand, so a symbolic `innerₕ(u, v)`
+or `inner₊ₓ(u, v)` term paid the division-per-axis of a linear `SeparableWeights` access
+once per point; the S6.8 refill below was measured with that cost in. Today all three
+nodes, `InnerH`, `InnerPlus{Dim}` and `InnerPlusSet`, read a `SeparableWeights` by
+`CartesianIndex` (`_weight_at` in `src/operators/inner.jl`); a dense weight vector, which
+no current `weights` method returns, would still be read by linear index. Removing the
+division speeds up the serial matrix-free product most, since there the weight read is a
+larger share of each point's work than in assembly; the measured figures are in
+gpena/Bramble.jl#428.
 
 ### The one-dimensional case
 
@@ -192,9 +193,9 @@ threads (this repository's standard, `bramble-benchmarks` §1):
 
 No regression: the refill sits at or below S6.2's own range, and allocation is still zero
 on every run, matching the documented zero-allocation `assemble!` contract. The
-division-per-axis `InnerH`/`InnerPlus{Dim}`'s `compute_weight` now pays (previous
-section) does not show up here -- it is a small fraction of everything else one
-assembled point costs.
+division-per-axis `InnerH`/`InnerPlus{Dim}`'s `compute_weight` paid at S6.8 (previous
+section, since removed) did not show up here -- it was a small fraction of everything
+else one assembled point costs.
 
 `gridspace` construction on the same `100³` mesh, warmed up, minimum of 7: 0.00008-0.00013
 ms (83-125 ns), allocating 2,784 B. That allocation is the `D = 3` per-axis `aligned`
