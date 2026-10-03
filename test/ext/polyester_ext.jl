@@ -142,14 +142,14 @@ function _pa_paths()
     push!(P,
         ("εₕ!",
             true,
-            2,
+            0,
             (n, p) -> begin
                 W = _pa_space(n, p)
                 u = (Rₕ(W, _pa_g), Rₕ(W, _pa_h))
                 e = ntuple(_ -> ntuple(_ -> similar(u[1]), 2), 2)
                 _pa_case(() -> Bramble.εₕ!(e, u), () -> _pa_flat(e))
             end))
-    push!(P, ("broadcast", true, 1, (n, p) -> begin
+    push!(P, ("broadcast", true, 0, (n, p) -> begin
         W = _pa_space(n, p)
         u = Rₕ(W, _pa_g)
         w = Rₕ(W, x -> x[1])
@@ -887,6 +887,22 @@ end
 # Broadcast under CpuPolyester equals Serial.
 @testset "broadcast equals Serial, n=$n" for n in _BC357_SIZES
     _bc357_check_equal(n)
+end
+
+# A 0-dimensional array leaf stays inside its `Extruded` when `_batch_broadcast!` hands the
+# tree to `@batch` (`_bc_host_raw`, src/space/vectorelement.jl): bare, it threw on the first
+# call in a session, since `StrideArraysCore` cannot make a `PtrArray` of it. The function
+# is fresh to this testset, so the `CpuPolyester` call below is that broadcast's first.
+@testset "broadcast, 0-dim leaf, equals Serial" begin
+    times0d(a, c) = 2.0 * a * c + 1.0
+    res = map((Serial(), CpuPolyester())) do policy
+        Wₕ = _bc357_space((9, 9), policy)
+        uₕ = Rₕ(Wₕ, x -> sin(3sum(x)) + prod(x))
+        v = similar(uₕ)
+        v .= times0d.(uₕ, fill(1.5))
+        return copy(parent(v))
+    end
+    @test res[2] == res[1]
 end
 
 # Silent on a single thread: there is nothing to band across.
