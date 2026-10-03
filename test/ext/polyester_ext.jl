@@ -63,13 +63,14 @@ function _fillnz!(A, v)
     return fill!(nonzeros(A), v)
 end
 
-# The paths of "allocation under CpuPolyester" below, kept as source text so that the child
-# process counting Threads entry points runs exactly the same calls. Each entry is a name,
-# whether the file asserts bitwise equality with `CpuSerial` for that operator, how many
-# `Base.RefValue`s a warm `CpuPolyester` call allocates (measured at -O1), and a setup
-# taking (grid points per axis, policy) on a non-uniform 2D grid and returning the call to
-# measure, a function reading its result, and the number of multigrid levels (0 elsewhere).
-const _PA_PATHS_SRC = raw"""
+# The paths of "allocation under CpuPolyester" below. The child process counting Threads
+# entry points reads this block from the file, between the two marker lines, so that it runs
+# exactly the same calls. Each entry is a name, whether the file asserts bitwise equality
+# with `CpuSerial` for that operator, how many `Base.RefValue`s a warm `CpuPolyester` call
+# allocates (measured at -O1), and a setup taking (grid points per axis, policy) on a
+# non-uniform 2D grid and returning the call to measure, a function reading its result, and
+# the number of multigrid levels (0 elsewhere).
+# BEGIN _pa paths
 using Bramble: CpuPolyester, CpuSerial, CpuThreaded, change_points!, semidiscretize_rhs,
                allocate_system_matrix, D₋ₓ, inner₊ₓ, S₊ₓ!
 using LinearAlgebra: mul!, ldiv!
@@ -98,16 +99,22 @@ _pa_spd(W) = (κ = Rₕ(W, x -> 1 + sum(abs2, x));
     form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))))
 _pa_poisson(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 _pa_copy(u) = copy(parent(u))
+_pa_flat(e) = reduce(vcat, [_pa_copy(e[i][j]) for i in 1:2 for j in 1:2])
+_pa_two_leaf(u, v) = innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(2)), D₋ₓ(v(2))) + innerₕ(u(2), v(2))
 _pa_case(call, result; levels = 0) = (; call, result, levels)
 
 function _pa_paths()
     P = Tuple{String, Bool, Int, Function}[]
     push!(P, ("difference D₋ₓ!", true, 0, (n, p) -> begin
-        W = _pa_space(n, p); u = Rₕ(W, _pa_g); w = similar(u)
+        W = _pa_space(n, p)
+        u = Rₕ(W, _pa_g)
+        w = similar(u)
         _pa_case(() -> Bramble.D₋ₓ!(w, u), () -> _pa_copy(w))
     end))
     push!(P, ("average Mₓ!", true, 0, (n, p) -> begin
-        W = _pa_space(n, p); u = Rₕ(W, _pa_g); w = similar(u)
+        W = _pa_space(n, p)
+        u = Rₕ(W, _pa_g)
+        w = similar(u)
         _pa_case(() -> Bramble.Mₓ!(w, u), () -> _pa_copy(w))
     end))
     push!(P, ("avgₕ!", false, 0, (n, p) -> begin
@@ -115,81 +122,130 @@ function _pa_paths()
         _pa_case(() -> avgₕ!(u, _pa_g), () -> _pa_copy(u))
     end))
     push!(P, ("shift S₊ₓ!", true, 0, (n, p) -> begin
-        W = _pa_space(n, p); u = Rₕ(W, _pa_g); w = similar(u)
+        W = _pa_space(n, p)
+        u = Rₕ(W, _pa_g)
+        w = similar(u)
         _pa_case(() -> S₊ₓ!(w, u), () -> _pa_copy(w))
     end))
     push!(P, ("divₕ!", true, 0, (n, p) -> begin
-        W = _pa_space(n, p); u = (Rₕ(W, _pa_g), Rₕ(W, _pa_h)); v = similar(u[1])
+        W = _pa_space(n, p)
+        u = (Rₕ(W, _pa_g), Rₕ(W, _pa_h))
+        v = similar(u[1])
         _pa_case(() -> Bramble.divₕ!(v, u), () -> _pa_copy(v))
     end))
     push!(P, ("curlₕ!", true, 0, (n, p) -> begin
-        W = _pa_space(n, p); u = (Rₕ(W, _pa_g), Rₕ(W, _pa_h)); v = similar(u[1])
+        W = _pa_space(n, p)
+        u = (Rₕ(W, _pa_g), Rₕ(W, _pa_h))
+        v = similar(u[1])
         _pa_case(() -> Bramble.curlₕ!(v, u), () -> _pa_copy(v))
     end))
-    push!(P, ("εₕ!", true, 2, (n, p) -> begin
-        W = _pa_space(n, p); u = (Rₕ(W, _pa_g), Rₕ(W, _pa_h))
-        e = ntuple(_ -> ntuple(_ -> similar(u[1]), 2), 2)
-        _pa_case(() -> Bramble.εₕ!(e, u), () -> reduce(vcat, [_pa_copy(e[i][j]) for i in 1:2 for j in 1:2]))
-    end))
+    push!(P,
+        ("εₕ!",
+            true,
+            2,
+            (n, p) -> begin
+                W = _pa_space(n, p)
+                u = (Rₕ(W, _pa_g), Rₕ(W, _pa_h))
+                e = ntuple(_ -> ntuple(_ -> similar(u[1]), 2), 2)
+                _pa_case(() -> Bramble.εₕ!(e, u), () -> _pa_flat(e))
+            end))
     push!(P, ("broadcast", true, 1, (n, p) -> begin
-        W = _pa_space(n, p); u = Rₕ(W, _pa_g); w = Rₕ(W, x -> x[1]); v = similar(u)
+        W = _pa_space(n, p)
+        u = Rₕ(W, _pa_g)
+        w = Rₕ(W, x -> x[1])
+        v = similar(u)
         _pa_case(() -> (v .= 2.0 .* u .+ w), () -> _pa_copy(v))
     end))
     push!(P, ("innerₕ", false, 0, (n, p) -> begin
-        W = _pa_space(n, p); u = Rₕ(W, _pa_g); w = Rₕ(W, x -> x[1])
+        W = _pa_space(n, p)
+        u = Rₕ(W, _pa_g)
+        w = Rₕ(W, x -> x[1])
         _pa_case(() -> innerₕ(u, w), () -> innerₕ(u, w))
     end))
     push!(P, ("inner₊ₓ", false, 0, (n, p) -> begin
-        W = _pa_space(n, p); u = Rₕ(W, _pa_g); w = Rₕ(W, x -> x[1])
+        W = _pa_space(n, p)
+        u = Rₕ(W, _pa_g)
+        w = Rₕ(W, x -> x[1])
         _pa_case(() -> inner₊ₓ(u, w), () -> inner₊ₓ(u, w))
     end))
-    push!(P, ("innerₕ masked", false, 0, (n, p) -> begin
-        W = _pa_space(n, p); u = Rₕ(W, _pa_g); w = Rₕ(W, x -> x[1])
-        _pa_case(() -> innerₕ(u, w; markers = (:dir,)), () -> innerₕ(u, w; markers = (:dir,)))
-    end))
+    push!(P,
+        ("innerₕ masked", false, 0,
+            (n, p) -> begin
+                W = _pa_space(n, p)
+                u = Rₕ(W, _pa_g)
+                w = Rₕ(W, x -> x[1])
+                m = (:dir,)
+                _pa_case(() -> innerₕ(u, w; markers = m), () -> innerₕ(u, w; markers = m))
+            end))
     push!(P, ("assemble! bilinear (replay)", false, 0, (n, p) -> begin
-        a = _pa_poisson(_pa_space(n, p)); A = allocate_system_matrix(a)
+        a = _pa_poisson(_pa_space(n, p))
+        A = allocate_system_matrix(a)
         _pa_case(() -> assemble!(A, a), () -> copy(A))
     end))
     push!(P, ("assemble! linear", false, 0, (n, p) -> begin
-        W = _pa_space(n, p); f = Rₕ(W, _pa_g); l = form(W, v -> innerₕ(f, v)); b = zeros(ndofs(W))
+        W = _pa_space(n, p)
+        f = Rₕ(W, _pa_g)
+        l = form(W, v -> innerₕ(f, v))
+        b = zeros(ndofs(W))
         _pa_case(() -> assemble!(b, l), () -> copy(b))
     end))
     push!(P, ("matrix-free fused", false, 0, (n, p) -> begin
         op = matrix_free_operator(_pa_poisson(_pa_space(n, p)))
-        x = randn(Xoshiro(1), size(op, 2)); y = similar(x)
+        x = randn(Xoshiro(1), size(op, 2))
+        y = similar(x)
         _pa_case(() -> mul!(y, op, x), () -> copy(y))
     end))
-    push!(P, ("matrix-free per-unit", false, 0, (n, p) -> begin
-        V = Bramble.CompositeGridSpace((_pa_leaf(n, p), _pa_leaf(n ÷ 2 + 1, p)))
-        a = form(V, V, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(2)), D₋ₓ(v(2))) + innerₕ(u(2), v(2)))
-        op = matrix_free_operator(a)
-        x = randn(Xoshiro(2), size(op, 2)); y = similar(x)
-        _pa_case(() -> mul!(y, op, x), () -> copy(y))
-    end))
-    push!(P, ("GMG V-cycle", false, 0, (n, p) -> begin
-        Ω = _pa_jitter(n, p); Pc = gmg_preconditioner(_pa_spd, Ω; cycle = :V)
-        b = randn(Xoshiro(3), npoints(Ω)); y = similar(b)
-        _pa_case(() -> ldiv!(y, Pc, b), () -> copy(y); levels = length(Pc.ops))
-    end))
+    push!(P,
+        ("matrix-free per-unit",
+            false,
+            0,
+            (n, p) -> begin
+                V = Bramble.CompositeGridSpace((_pa_leaf(n, p), _pa_leaf(n ÷ 2 + 1, p)))
+                a = form(V, V, _pa_two_leaf)
+                op = matrix_free_operator(a)
+                x = randn(Xoshiro(2), size(op, 2))
+                y = similar(x)
+                _pa_case(() -> mul!(y, op, x), () -> copy(y))
+            end))
+    push!(P, (
+        "GMG V-cycle", false, 0, (n, p) -> begin
+            Ω = _pa_jitter(n, p)
+            Pc = gmg_preconditioner(_pa_spd, Ω; cycle = :V)
+            b = randn(Xoshiro(3), npoints(Ω))
+            y = similar(b)
+            _pa_case(() -> ldiv!(y, Pc, b), () -> copy(y); levels = length(Pc.ops))
+        end))
     push!(P, ("Kronecker mul!", false, 1, (n, p) -> begin
         K = kronecker_operator(_pa_poisson(_pa_space(n, p)))
-        x = randn(Xoshiro(4), size(K, 2)); y = similar(x)
+        x = randn(Xoshiro(4), size(K, 2))
+        y = similar(x)
         _pa_case(() -> mul!(y, K, x), () -> copy(y))
     end))
-    push!(P, ("explicit RHS", false, 0, (n, p) -> begin
-        W = _pa_space(n, p); f = Rₕ(W, _pa_g)
-        r = semidiscretize_rhs(semidiscretize(_pa_poisson(W), form(W, v -> innerₕ(f, v))))
-        u = randn(Xoshiro(5), length(r.inv_mass_diag)); du = similar(u)
-        _pa_case(() -> r(du, u, nothing, 0.0), () -> copy(du))
-    end))
+    push!(P, ("explicit RHS", false, 0,
+        (n, p) -> begin
+            W = _pa_space(n, p)
+            f = Rₕ(W, _pa_g)
+            l = form(W, v -> innerₕ(f, v))
+            r = semidiscretize_rhs(semidiscretize(_pa_poisson(W), l))
+            u = randn(Xoshiro(5), length(r.inv_mass_diag))
+            du = similar(u)
+            _pa_case(() -> r(du, u, nothing, 0.0), () -> copy(du))
+        end))
     return P
 end
-"""
-include_string(@__MODULE__, _PA_PATHS_SRC, "polyester_ext.jl: _PA_PATHS_SRC")
+# END _pa paths
+
+# The block above as text, for the child process.
+function _pa_paths_src()
+    src = read(@__FILE__, String)
+    start = last(findfirst("# BEGIN _pa paths\n", src)) + 1
+    stop = first(findfirst("# END _pa paths", src)) - 1
+    return src[start:stop]
+end
 
 # The two grids: the warm bytes of every path must be the same on both.
-const _PA_SMALL, _PA_LARGE = 17, 129
+const _PA_SMALL = 17
+const _PA_LARGE = 129
 
 # Counts the Threads entry points each path reaches, in a child process, because counting
 # means overriding the only two in `src` for the whole process: `_static_or_serial`, behind
@@ -214,7 +270,7 @@ function _pa_threads_hits()
         Main.HITS[] += 1
         return serial!(args...)
     end
-    $(_PA_PATHS_SRC)
+    $(_pa_paths_src())
     hits(case) = (HITS[] = 0; case.call(); case.call(); case.call(); HITS[])
     for (name, _, _, setup) in _pa_paths()
         if name in ("difference D₋ₓ!", "matrix-free fused")

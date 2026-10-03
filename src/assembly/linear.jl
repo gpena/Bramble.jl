@@ -527,9 +527,12 @@ end
     SourceFunction{D}, SourceVector{D}, SourceConstant{D}, DiracSource{D},
     IdentityOperator{D}, ZeroOperator{D}}) where {D} = (ntuple(_ -> 0, D), ntuple(_ -> 0, D))
 
-@inline function _moved_bounds((lo, hi), ::Val{Dim}, steps::Tuple) where {Dim}
-    return (Base.setindex(lo, lo[Dim] + minimum(steps), Dim),
-        Base.setindex(hi, hi[Dim] + maximum(steps), Dim))
+@inline function _moved_bounds(
+        (lo, hi)::NTuple{2, NTuple{D, Int}}, ::Val{Dim}, steps::Tuple
+) where {D, Dim}
+    smin, smax = minimum(steps), maximum(steps)
+    return (ntuple(i -> i == Dim ? lo[i] + smin : lo[i], Val(D)),
+        ntuple(i -> i == Dim ? hi[i] + smax : hi[i], Val(D)))
 end
 
 @inline _row_bounds(op::TappedNode{D, Dim}) where {D, Dim} = _moved_bounds(

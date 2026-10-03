@@ -22,6 +22,8 @@ Wp = gridspace(mesh(domain(X), n, nu; backend = backend(policy = CpuPolyester())
 f(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 x = ones(ndofs(Wp))
 y = similar(x)
+# Bound first: `@snoop_inference` assigns in a branch JET cannot see is always taken.
+tinf = nothing
 tinf = @snoop_inference begin
     mul!(y, matrix_free_operator(f(W); policy = CpuPolyester()), x)
     mul!(y, matrix_free_operator(f(Wp)), x)
