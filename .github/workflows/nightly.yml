@@ -239,6 +239,30 @@ jobs:
       - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
           BRAMBLE_TEST_GROUP: quality
+  # Keeps the repository under its 10 GB Actions cache quota. julia-actions/cache never
+  # deletes old entries on the default branch (it leaves them to GitHub's eviction), so every
+  # nightly run added about 2.3 GB on `main`: a `unit-and-slow` entry per OS and a `quality`
+  # entry. Only the newest entry per key prefix (the key without `;run_id=...`) is ever
+  # restored, so this deletes the rest once the saving jobs are done.
+  prune-caches:
+    name: Prune superseded caches on main
+    needs: [slow, quality]
+    if: ${{ always() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/${{ github.repository }}/actions/caches?ref=refs/heads/main&per_page=100" --jq '.actions_caches[]' |
+            jq -rs 'group_by(.key | sub(";run_id=.*$"; "")) | map(sort_by(.created_at) | reverse | .[1:][]) | .[] | "\(.id) \(.key)"' |
+            while read -r id key; do
+              echo "Deleting $key"
+              gh api -X DELETE "repos/${{ github.repository }}/actions/caches/$id" || true
+            done
+
   format:
     name: Format check
     needs: changed
