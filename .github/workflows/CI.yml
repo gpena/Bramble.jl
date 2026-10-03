@@ -74,7 +74,6 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-      actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
     strategy:
       fail-fast: false
       matrix:
@@ -96,11 +95,36 @@ jobs:
       # `main`, which a PR can restore. A warm run measured 997 s against 2100 s cold. Both
       # jobs must keep the same Julia version, `--optimize` level and coverage setting, since
       # whichever saved last is what the next PR restores; change them together.
-      - uses: julia-actions/cache@v2
+      #
+      # Restore-only: a PR's entry is scoped to its own merge ref, so no other PR can restore
+      # it, and each one was about 550 MB against the repository's 10 GB cache quota. Only
+      # nightly.yml saves. `actions/cache/restore` stands in for julia-actions/cache@v2, which
+      # has no restore-only input; the key and paths below are what that action builds for
+      # this `cache-name` with `include-matrix: false`. The cache version hashes the path
+      # strings, so they must be the expanded `$HOME` paths it uses, in its order, or nothing
+      # matches.
+      - id: depot
+        run: |
+          mkdir -p "$HOME/.julia"
+          echo "path=$HOME/.julia" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
         with:
-          cache-compiled: "true"
-          cache-name: julia-cache;unit-and-slow;julia=1.13
-          include-matrix: "false"
+          path: |
+            ${{ steps.depot.outputs.path }}/artifacts
+            ${{ steps.depot.outputs.path }}/packages
+            ${{ steps.depot.outputs.path }}/registries
+            ${{ steps.depot.outputs.path }}/compiled
+            ${{ steps.depot.outputs.path }}/scratchspaces
+            ${{ steps.depot.outputs.path }}/logs
+          key: julia-cache;unit-and-slow;julia=1.13;os=${{ runner.os }};
+          restore-keys: julia-cache;unit-and-slow;julia=1.13;os=${{ runner.os }};
+      # As julia-actions/cache does: a restored registry may be older than a compat bump.
+      - name: Update any cached registries
+        continue-on-error: true
+        run: |
+          if [ -n "$(ls -A "$HOME/.julia/registries" 2>/dev/null)" ]; then
+            julia -e 'import Pkg; Pkg.Registry.update()'
+          fi
       - uses: julia-actions/julia-buildpkg@v1
       # A `run:` step instead of julia-actions/julia-runtest, because that action has no input
       # that reaches the Julia flags: its harness hard-codes `julia_args` to `--check-bounds`
@@ -120,7 +144,7 @@ jobs:
       #
       # Open question: Julia keys package image caches on the optimisation level, so the -O1
       # test subprocess probably recompiles every dependency once on a cold cache.
-      # `cache-compiled: "true"` above should keep those images across runs, so the cost
+      # The `compiled` directory restored above should keep those images across runs, so the cost
       # would fall on cold runners only. This has not been measured.
       - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
