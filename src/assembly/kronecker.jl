@@ -182,9 +182,8 @@ very matrix this operator avoids forming).
 `K` holds no work buffers: it stores only its `D` one-dimensional factors and its execution
 policy, so it is immutable after construction and safe to share across threads (concurrent
 `mul!` calls on one `K` never race). The fused pass needs no scratch either. A serial host
-`mul!` allocates nothing; under [`CpuPolyester`](@ref) each product allocates a small
-constant amount, the same on every grid, for the argument box Polyester sends to its
-threads. `mul!` is generic over the element type, so ForwardDiff `Dual`s pass through. The
+`mul!` allocates nothing, and so does a [`CpuPolyester`](@ref) product: each task rebuilds
+the light structs around plain arrays, so Polyester's argument box stays on the stack. `mul!` is generic over the element type, so ForwardDiff `Dual`s pass through. The
 `scratch = (b1, b2)` keyword that `mul!(y, K, x; scratch)` and
 `mul!(y, K, x, α, β; scratch)` accept is kept so existing callers still work, and is
 ignored.

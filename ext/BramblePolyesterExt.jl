@@ -49,13 +49,18 @@
 # Polyester's argument box: `@batch` copies the arguments its loop captures into a
 # heap-allocated `ManualMemory.Reference` on every call, sized by what the loop captures.
 # Plain arrays become `PtrArray`s, which allocate nothing. Measured on a 2D non-uniform grid
-# with 4 threads, every box is at most 304 B.
+# with 4 threads, every box is at most 512 B.
 # Differences, shifts, averages, divergence, curl, `εₕ!`, `avgₕ!`, broadcasts, `innerₕ` and
 # `inner₊` allocate 0 B, and so does a `KroneckerLinearOperator` product. Their loops capture
 # only plain arrays and isbits values, rebuilding any struct around them inside each task
 # (`_batch_kron_lines!`, `_batch_broadcast!`, `_batch_for!` below), so the box stays on the
 # stack. Linear assembly allocates 256 B; a fused matrix-free product 112 B; a bilinear
-# refill 1520 B (five colour sweeps of 304 B each). No `CpuPolyester` call reaches
+# refill 1520 B (five colour sweeps of 304 B each); a per-unit matrix-free product 1088 B, a
+# GMG V-cycle 1008 B per level, an explicit RHS 256 B. Those loops capture a form or another
+# struct holding a GC reference, which puts the box on the heap; this release keeps the
+# 512 B bound for them and gpena/Bramble.jl#437 follows up. An `avgₕ!` whose source closure
+# captures an array, and a broadcast with a 0-dimensional array leaf, box likewise. The test
+# file's `_PA_ZERO_PATHS` asserts 0 B for the first group. No `CpuPolyester` call reaches
 # `Threads.@threads` or `Threads.@spawn` (gpena/Bramble.jl#400).
 module BramblePolyesterExt
 
