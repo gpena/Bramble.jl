@@ -2,9 +2,10 @@
 # matrix. `mul!` walks the form's (term, block) units exactly as the
 # serial replay does (`_replay_summands!`/`_replay_blocks!`, bilinear_execution.jl), through
 # the same `visit_bilinear_stencil`, and hands each entry to an `ActionSink` that adds
-# `α * weight * x[col]` into `y[row]` instead of into a stored `nzval`. Every AST node the
-# assembly supports is therefore supported here, with no second stencil evaluator to keep in
-# step with the first.
+# `α * weight * x[col]` into `y[row]` instead of into a stored `nzval`; the interior of most
+# units is gathered row by row instead, from the same `local_stencil` (see "The gathered
+# interior" below). Every AST node the assembly supports is therefore supported here, with
+# no second stencil evaluator to keep in step with the first.
 
 """
     ActionSink(y::AbstractVector, x::AbstractVector, α, mask)
@@ -470,7 +471,8 @@ end
 
 # --- One unit, serial or threaded --------------------------------------------------- #
 #
-# Serially, one unit is one `visit_bilinear_stencil` walk, with its unguarded interior. Under
+# Serially, one unit is one `visit_bilinear_stencil` walk, with its unguarded interior, or,
+# for an action sink, the gathered interior and the scattered shell (`_mf_walk!`). Under
 # a threaded policy whose form the fused sweep below cannot take (`_mf_plan` answered
 # `nothing`), it is the colour-banded sweep the threaded assembly runs
 # (`_sweep_bilinear!`, bilinear_execution.jl), with the action sink in place of a replay
@@ -516,6 +518,8 @@ end
 
 @inline _mf_visit!(::CpuSerial, s, term, sp, ro::Int, co::Int) = (
     visit_bilinear_stencil(s, term, sp, ro, co); nothing)
+@inline _mf_visit!(::CpuSerial, s::_ActionTarget, term, sp, ro::Int, co::Int) = _mf_walk!(
+    s, term, sp, ro, co, _mf_gathers(term))
 @inline function _mf_visit!(p::CpuPolicy, s, term::TERM, sp, ro::Int, co::Int) where {TERM}
     if _has_test_interp(term)
         visit_bilinear_stencil(s, term, sp, ro, co)
@@ -530,6 +534,8 @@ end
 # `_replay_pair_unit!` does.
 @inline _mf_visit_pair!(::CpuSerial, s, p1, _p2, sp, ro::Int, co::Int) = (
     visit_bilinear_stencil(s, p1, sp, ro, co); nothing)
+@inline _mf_visit_pair!(::CpuSerial, s::_PairActionSink, p1, p2, sp, ro::Int, co::Int) = _mf_walk!(
+    s, p1, sp, ro, co, _mf_gathers(p1) && !_has_test_interp(p2))
 @inline function _mf_visit_pair!(
         p::CpuPolicy, s, p1::P1, p2::P2, sp, ro::Int, co::Int
 ) where {P1, P2}
@@ -568,6 +574,243 @@ end
         _batch_bilinear_colour_replay!,
         s, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset
     )
+end
+
+# --- The gathered interior ---------------------------------------------------------- #
+#
+# The scatter above adds each entry into its row as its point is walked. A row collects its
+# entries from several points (`⟨D₋u, D₋v⟩` writes rows `I` and `I - e`), and two consecutive
+# points write one row, so the loop carries a dependence through `y`. An action sink's unit
+# walks its interior the other way round. Each row `R` sums its own entries, from the points
+# `P = R - o_v` of their test offsets `o_v` (trial offsets, for a pair's transposed half),
+# and adds the sum into `y[R]` once, with one Dirichlet test, in a loop along axis 1.
+#
+# A row reads a point's stencil once per distinct offset. Along axis 1 it also reads, for
+# `D₋ₓ`, the point the previous row read, so the line carries each point's stencil to the
+# next row and evaluates every point once (`_mf_line_stencils`). On #428's form over graded
+# 512² and 64³ grids, the `D₋ₓ` unit took 1.15 ms scattered, 0.58 gathered row by row and
+# 0.27 carried (64³: 0.67, 0.64 and 0.37). Units sharing no point along axis 1 (`innerₕ`,
+# `D₋` along another axis) ran the same either way, so every line carries.
+#
+# Every entry of a point of the interior box (the points `visit_bilinear_stencil` walks
+# unguarded) is gathered, and the boundary shell is still scattered. A row at least twice the
+# margin from every face takes all its entries from interior points, unguarded; a row nearer
+# a face tests each point against the box. The entries of a stencil are indexed by their
+# place in it, read off the first interior point: so a unit gathers only when its stencil has
+# the same short list of entries everywhere (`_mf_gathers`). Other units, and grids too
+# small to peel, keep the scatter. Each row's sum is the same whichever
+# loop computed it, and the serial walk and every band of the fused sweep gather it, so the
+# threaded product stays bitwise the serial one.
+
+# Whether a unit's interior can be gathered (see above): a sum asks each of its terms, and a
+# term must have at most `_MF_GATHER_ENTRIES` entries by `_mf_entries`.
+@inline _mf_gathers(op::OperatorAdd) = _mf_gathers(op.left_op) && _mf_gathers(op.right_op)
+@inline _mf_gathers(term) = _mf_entries(term) <= _MF_GATHER_ENTRIES
+
+# A row's sum is unrolled over the stencil's entries. Two entries share one evaluation of
+# their point only when the compiler sees the stencil whole. A sum under a product (its
+# stencil's length depends on the point, so it is boxed) or a long nested stencil does not
+# get that. On a 40×41 grid `innerₕ(L(u), L(v))` with `L = D₋ₓD₊ₓ + D₋ᵧD₊ᵧ` (36 entries) took
+# 10 s to compile its first product and 4.5 times the scatter's time and bytes after, and
+# `innerₕ(D₋ₓD₊ₓu, D₋ᵧD₊ᵧv)` (16 entries, unboxed) took 1 s to compile against 0.06 s. A tap
+# over another tap re-evaluates its operand out of line (`_reevaluated_shift`,
+# ast/common.jl), so its entries share nothing either. On a 200×201 grid the gather ran
+# `innerₕ(D₋ₓD₊ₓD₋ᵧu, v)` 5 times slower than the scatter, and `innerₕ(D₋ₓ(κD₊ₓu), v)` 1.1
+# times, while `innerₕ(D₋ₓ(κu), D₋ₓv)` ran in 0.75 of it. So the gather takes a tap over a
+# leaf or a scaled leaf, a scale, and a product, up to 9 entries (`inner₊(∇ₕu, ∇ₕv)` has 4, a
+# 3-tap average on both sides 9). Everything else, including a nested tap, a region
+# restriction (an empty stencil outside its region), an interpolation (rows and columns
+# named through `locate_cell`) and a shift, keeps the scatter. Answered from the node types
+# alone: it folds to a constant, and a unit that scatters never compiles the gather.
+const _MF_GATHER_ENTRIES = 9
+const _MF_LONG = 1 << 20
+const _MFLeaf = Union{TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFunction}
+_mf_entries(::_MFLeaf) = 1
+_mf_entries(op::TappedNode) = length(_stencil_taps(op)) * _mf_tapped(op.inner_op)
+_mf_entries(op::Union{OperatorScale, GridFunctionScale}) = _mf_entries(op.inner_op)
+_mf_entries(op::BilinearProduct) = min(_mf_entries(op.left_op) * _mf_entries(op.right_op), _MF_LONG)
+_mf_entries(_) = _MF_LONG
+# The operand of a tap: a leaf, or a scaled one, counts one entry; anything else is long.
+_mf_tapped(::_MFLeaf) = 1
+_mf_tapped(op::Union{OperatorScale, GridFunctionScale}) = _mf_tapped(op.inner_op)
+_mf_tapped(_) = _MF_LONG
+
+# A serial unit: the interior gathered and the shell scattered, or, when it cannot be
+# gathered, `visit_bilinear_stencil`'s scatter.
+@inline function _mf_walk!(s, term::TERM, sp, ro::Int, co::Int, gathers::Bool) where {TERM}
+    grid_inds = indices(mesh(sp))
+    margin = _stencil_margin(term)
+    if gathers && _peelable(axes(grid_inds), margin)
+        _mf_gather_unit!(s, term, sp, ro, co, _full_range(last(axes(grid_inds))))
+        _mf_scatter_shell!(s, term, sp, ro, co)
+    else
+        visit_bilinear_stencil(s, term, sp, ro, co)
+    end
+    return nothing
+end
+
+# `visit_bilinear_stencil`'s boundary shell alone.
+@noinline function _mf_scatter_shell!(s::SINK, term::TERM, sp, ro::Int, co::Int) where {SINK, TERM}
+    Ωₕ = mesh(sp)
+    mesh_markers = markers(Ωₕ)
+    grid_inds = indices(Ωₕ)
+    lin_indices = LinearIndices(grid_inds)
+    @inbounds for slab in _boundary_shell_slabs(axes(grid_inds), _stencil_margin(term))
+        _visit_guarded_region!(s, term, sp, mesh_markers, lin_indices, slab, ro, co)
+    end
+    return nothing
+end
+
+# The rows whose last index lies in `cut`, gathered: an entry's own row, and a pair's
+# transposed row at the transposed block's origin `co + dr`, reading `x` at `ro + dc`.
+@inline function _mf_gather_unit!(s::ActionSink, term, sp, ro::Int, co::Int, cut::UnitRange{Int})
+    _mf_gather!(s.y, s.x, s.α, s.mask, term, sp, ro, co, Val(false), cut)
+    return nothing
+end
+
+@inline function _mf_gather_unit!(
+        s::_PairActionSink, term, sp, ro::Int, co::Int, cut::UnitRange{Int}
+)
+    s.half != 2 && _mf_gather!(s.y, s.x, s.α1, s.mask, term, sp, ro, co, Val(false), cut)
+    if s.half != 1
+        _mf_gather!(s.y, s.x, s.α2, s.mask, term, sp, co + s.dr, ro + s.dc, Val(true), cut)
+    end
+    return nothing
+end
+
+# `rs` and `cs` shift a row and a column of the walked grid into the matrix; `Val(true)`
+# swaps the roles of the trial and test offsets (a pair's transposed half). Each line along
+# axis 1 is unguarded where it and every row on it lie at least `2 * margin` from every
+# face, guarded elsewhere. The entries' offsets are read here, in the function the rows'
+# loop is compiled into, so that they are constants there.
+@noinline function _mf_gather!(
+        y, x, α, mask, term::TERM, sp, rs::Int, cs::Int, tr::Val, cut::UnitRange{Int}
+) where {TERM}
+    Ωₕ = mesh(sp)
+    mesh_markers = markers(Ωₕ)
+    grid_inds = indices(Ωₕ)
+    lin = LinearIndices(grid_inds)
+    margin = _stencil_margin(term)
+    ax = map(_full_range, axes(grid_inds))
+    box = CartesianIndices(map(r -> _interior_range(r, margin), ax))
+    isempty(box) && return nothing
+    I0 = first(box)
+    offs = entry_offsets(local_stencil(term, sp, I0, mesh_markers, lin[I0]))
+    rows = (Base.front(ax)..., intersect(last(ax), cut))
+    inner = map(r -> _interior_range(r, 2 * margin), ax)
+    r1 = first(rows)
+    c1 = intersect(r1, first(inner))
+    lo1, hi1 = isempty(c1) ? (r1, 1:0) : (first(r1):(first(c1) - 1), (last(c1) + 1):last(r1))
+    args = (y, x, α, mask, term, sp, mesh_markers, lin, offs, rs, cs, tr)
+    @inbounds for J in CartesianIndices(Base.tail(rows))
+        if all(map(in, Tuple(J), Base.tail(inner)))
+            for i in lo1
+                _mf_guarded_row!(args..., box, CartesianIndex(i, Tuple(J)...))
+            end
+            _mf_gather_line!(args..., c1, J)
+            for i in hi1
+                _mf_guarded_row!(args..., box, CartesianIndex(i, Tuple(J)...))
+            end
+        else
+            for i in r1
+                _mf_guarded_row!(args..., box, CartesianIndex(i, Tuple(J)...))
+            end
+        end
+    end
+    return nothing
+end
+
+# The unguarded rows `c1` of the line `J`, each point's stencil carried to the next row.
+@inline function _mf_gather_line!(
+        y, x, α, mask, term, sp, mesh_markers, lin, offs, rs::Int, cs::Int, tr::Val,
+        c1::UnitRange{Int}, J::CartesianIndex
+)
+    isempty(c1) && return nothing
+    R = CartesianIndex(first(c1), Tuple(J)...)
+    st = _mf_line_stencils(nothing, term, sp, mesh_markers, lin, offs, R, tr)
+    _mf_row_sum!(y, x, α, mask, lin, offs, st, R, rs, cs, tr)
+    for i in (first(c1) + 1):last(c1)
+        R = CartesianIndex(i, Tuple(J)...)
+        st = _mf_line_stencils(st, term, sp, mesh_markers, lin, offs, R, tr)
+        _mf_row_sum!(y, x, α, mask, lin, offs, st, R, rs, cs, tr)
+    end
+    return nothing
+end
+
+# The row offset of an entry `(off_u, off_v)`: `off_v`, or `off_u` for a transposed half.
+@inline _mf_row_offset(o, ::Val{TR}) where {TR} = TR ? o[1] : o[2]
+@inline _mf_col_offset(o, ::Val{TR}) where {TR} = TR ? o[2] : o[1]
+
+# The first entry whose row offset is `o` moved one point back along axis 1, or 0: the entry
+# whose point, on the previous row of a line, is the point of `o` on this one. Foldable, so
+# that over constant offsets it is answered when the line's loop is compiled.
+Base.@assume_effects :foldable function _mf_behind(offs, o, tr::Val)
+    t = Base.setindex(o, o[1] - 1, 1)
+    for j in 1:length(offs)
+        _mf_row_offset(offs[j], tr) == t && return j
+    end
+    return 0
+end
+
+# The weights of the stencil at each entry's point `R - o_row`, in entry order, unrolled so
+# that each entry's offsets are constants and two entries at one point share its evaluation.
+# A stencil the previous row of the line evaluated (`prev`, `nothing` on a line's first row)
+# is taken from it. The points lie in the interior box, so every read is in bounds.
+@inline function _mf_line_stencils(prev, term, sp, mesh_markers, lin, offs, R, tr::Val)
+    return ntuple(Val(length(offs))) do k
+        @inline
+        o = _mf_row_offset(offs[k], tr)
+        j = prev === nothing ? 0 : _mf_behind(offs, o, tr)
+        if j == 0
+            P = R - CartesianIndex(o)
+            @inbounds entry_weights(local_stencil(term, sp, P, mesh_markers, lin[P]))
+        else
+            prev[j]
+        end
+    end
+end
+
+# Row `R` from its points' stencils `st`: entry `k` is `st[k][k]` times `x` at its column.
+@inline function _mf_row_sum!(y, x, α, mask, lin, offs, st, R, rs::Int, cs::Int, tr::Val)
+    T = eltype(y)
+    terms = ntuple(Val(length(offs))) do k
+        @inline
+        P = R - CartesianIndex(_mf_row_offset(offs[k], tr))
+        @inbounds c = lin[P + CartesianIndex(_mf_col_offset(offs[k], tr))] + cs
+        @inbounds convert(T, st[k][k] * x[c])
+    end
+    _mf_add_row!(y, α, mask, @inbounds(lin[R]) + rs, foldl(+, terms))
+    return nothing
+end
+
+# Row `R` of a line nearer a face, entry by entry: an entry whose point lies outside the
+# interior box `box` adds zero, since the shell scatters it. The same sum as `_mf_row_sum!`
+# over the entries kept.
+@inline function _mf_guarded_row!(
+        y, x, α, mask, term, sp, mesh_markers, lin, offs, rs::Int, cs::Int, tr::Val, box,
+        R::CartesianIndex
+)
+    T = eltype(y)
+    terms = ntuple(Val(length(offs))) do k
+        @inline
+        P = R - CartesianIndex(_mf_row_offset(offs[k], tr))
+        P in box || return zero(T)
+        @inbounds begin
+            w = entry_weights(local_stencil(term, sp, P, mesh_markers, lin[P]))[k]
+            c = lin[P + CartesianIndex(_mf_col_offset(offs[k], tr))] + cs
+            return convert(T, w * x[c])
+        end
+    end
+    _mf_add_row!(y, α, mask, @inbounds(lin[R]) + rs, foldl(+, terms))
+    return nothing
+end
+
+# `α * acc` added into `y[row]`, a live row; a Dirichlet row is rewritten with its own value,
+# so the loop keeps no branch. `mul!` checked `y` against the matrix's size.
+@inline function _mf_add_row!(y, α, mask, row::Int, acc)
+    @inbounds yr = y[row]
+    @inbounds y[row] = ifelse(_mf_live(mask, row), yr + α * acc, yr)
+    return nothing
 end
 
 # --- The fused threaded sweep ------------------------------ #
@@ -779,7 +1022,9 @@ end
 # their rows, `[a - omax, b - omin]`. Its core `[a - omin, b - omax]`, whose rows all fall in
 # `a:b`, goes through the plain sink, and the rim on either side through `_OwnedAction`.
 # `lo`, `core` and `hi` are the widened range cut in three, in increasing order (the whole
-# range is `lo` when the band is too narrow to have a core).
+# range is `lo` when the band is too narrow to have a core). A gathered unit cuts only its
+# shell this way. Each of its interior rows is summed from every point it reads, so the band
+# gathers exactly the rows it owns, with no rim.
 @inline function _mf_visit_band!(p::_MFPass, s, term::TERM, sp, ro::Int, co::Int) where {TERM}
     dims = size(indices(mesh(sp)))
     len = last(dims)
@@ -788,10 +1033,12 @@ end
     vlo, vhi = max(1, a - p.omax), min(len, b - p.omin)
     clo, chi = max(vlo, a - p.omin), min(vhi, b - p.omax)
     owned = _mf_owned(s, (a - 1) * stride + 1, b * stride, ro, co)
-    if clo > chi
-        _mf_visit_slab!(s, owned, term, sp, ro, co, vlo:vhi, 1:0, 1:0)
+    lo, core, hi = clo > chi ? (vlo:vhi, 1:0, 1:0) : (vlo:(clo - 1), clo:chi, (chi + 1):vhi)
+    if _mf_gathers(term) && _peelable(axes(indices(mesh(sp))), _stencil_margin(term))
+        _mf_gather_unit!(s, term, sp, ro, co, p.own)
+        _mf_visit_shell!(s, owned, term, sp, ro, co, lo, core, hi)
     else
-        _mf_visit_slab!(s, owned, term, sp, ro, co, vlo:(clo - 1), clo:chi, (chi + 1):vhi)
+        _mf_visit_slab!(s, owned, term, sp, ro, co, lo, core, hi)
     end
     return nothing
 end
@@ -820,14 +1067,27 @@ end
         _mf_piece!(owned, term, sp, mesh_markers, lin_indices, front, r, lo, ro, co, true)
         _mf_piece!(s, term, sp, mesh_markers, lin_indices, front, r, core, ro, co, true)
         _mf_piece!(owned, term, sp, mesh_markers, lin_indices, front, r, hi, ro, co, true)
-        @inbounds for shell in _boundary_shell_slabs(ax, margin)
-            front, r = Base.front(shell.indices), last(shell.indices)
-            _mf_piece!(owned, term, sp, mesh_markers, lin_indices, front, r, lo, ro, co, false)
-            _mf_piece!(s, term, sp, mesh_markers, lin_indices, front, r, core, ro, co, false)
-            _mf_piece!(owned, term, sp, mesh_markers, lin_indices, front, r, hi, ro, co, false)
-        end
+        _mf_visit_shell!(s, owned, term, sp, ro, co, lo, core, hi)
     else
         front, r = map(_full_range, Base.front(ax)), _full_range(last(ax))
+        _mf_piece!(owned, term, sp, mesh_markers, lin_indices, front, r, lo, ro, co, false)
+        _mf_piece!(s, term, sp, mesh_markers, lin_indices, front, r, core, ro, co, false)
+        _mf_piece!(owned, term, sp, mesh_markers, lin_indices, front, r, hi, ro, co, false)
+    end
+    return nothing
+end
+
+# The boundary shell of a peelable grid, each slab cut to `lo`, `core` and `hi` as above.
+@noinline function _mf_visit_shell!(
+        s::SINK, owned::OWNED, term::TERM, sp, ro::Int, co::Int, lo::UnitRange{Int},
+        core::UnitRange{Int}, hi::UnitRange{Int}
+) where {SINK, OWNED, TERM}
+    Ωₕ = mesh(sp)
+    mesh_markers = markers(Ωₕ)
+    grid_inds = indices(Ωₕ)
+    lin_indices = LinearIndices(grid_inds)
+    @inbounds for shell in _boundary_shell_slabs(axes(grid_inds), _stencil_margin(term))
+        front, r = Base.front(shell.indices), last(shell.indices)
         _mf_piece!(owned, term, sp, mesh_markers, lin_indices, front, r, lo, ro, co, false)
         _mf_piece!(s, term, sp, mesh_markers, lin_indices, front, r, core, ro, co, false)
         _mf_piece!(owned, term, sp, mesh_markers, lin_indices, front, r, hi, ro, co, false)
