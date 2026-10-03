@@ -43,6 +43,17 @@
 # for the threaded path is reproduced here. Axis-chunking helps `Threads.@threads` (it removes a linear-index conversion `Threads`
 # cannot avoid on its own) but hurts `@batch`, which already does the equivalent split
 # internally -- chunking on top would split twice.
+#
+# Allocation bound: a warm `CpuPolyester` call allocates a small constant amount per call,
+# independent of the grid (the same on a 33² and a 513² grid). The cause is
+# Polyester's argument box: `@batch` copies the arguments its loop captures into a
+# heap-allocated `ManualMemory.Reference` on every call, sized by what the loop captures.
+# Plain arrays become `PtrArray`s, which allocate nothing. Measured on a 2D non-uniform grid
+# with 4 threads, every box is at most 304 B.
+# Differences, shifts, averages, divergence and curl allocate 0 B; `innerₕ` 96 B; a
+# broadcast 128 B; `avgₕ!` 160 B; linear assembly 256 B; a fused matrix-free product 112 B;
+# a bilinear refill 1520 B (five colour sweeps of 304 B each). No `CpuPolyester` call reaches
+# `Threads.@threads` or `Threads.@spawn` (gpena/Bramble.jl#400).
 module BramblePolyesterExt
 
 using Bramble
