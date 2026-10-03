@@ -63,6 +63,222 @@ function _fillnz!(A, v)
     return fill!(nonzeros(A), v)
 end
 
+# The paths of "allocation under CpuPolyester" below, kept as source text so that the child
+# process counting Threads entry points runs exactly the same calls. Each entry is a name,
+# whether the file asserts bitwise equality with `CpuSerial` for that operator, how many
+# `Base.RefValue`s a warm `CpuPolyester` call allocates (measured at -O1), and a setup
+# taking (grid points per axis, policy) on a non-uniform 2D grid and returning the call to
+# measure, a function reading its result, and the number of multigrid levels (0 elsewhere).
+const _PA_PATHS_SRC = raw"""
+using Bramble: CpuPolyester, CpuSerial, CpuThreaded, change_points!, semidiscretize_rhs,
+               allocate_system_matrix, D₋ₓ, inner₊ₓ, S₊ₓ!
+using LinearAlgebra: mul!, ldiv!
+using Random: Xoshiro, randn
+
+function _pa_jitter(n, policy; seed = 4321)
+    rng = Xoshiro(seed)
+    X = interval(0.0, 1.0) × interval(0.0, 1.0)
+    Ω = mesh(domain(X, :dir => boundary_symbols(X)), (n, n), (true, true);
+        backend = backend(policy = policy))
+    h = 1 / (n - 1)
+    function pts()
+        x = collect(range(0.0, 1.0; length = n)) .+ 0.3h .* (2 .* rand(rng, n) .- 1)
+        x[1], x[end] = 0.0, 1.0
+        return sort!(x)
+    end
+    change_points!(Ω, (pts(), pts()))
+    return Ω
+end
+_pa_space(n, policy) = gridspace(_pa_jitter(n, policy))
+_pa_leaf(n, policy) = gridspace(_pa_jitter(n, policy; seed = n))
+
+_pa_g(x) = sin(3x[1] + 2x[2]) + x[1] * x[2]
+_pa_h(x) = x[1] * x[2]
+_pa_spd(W) = (κ = Rₕ(W, x -> 1 + sum(abs2, x));
+    form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))))
+_pa_poisson(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+_pa_copy(u) = copy(parent(u))
+_pa_case(call, result; levels = 0) = (; call, result, levels)
+
+function _pa_paths()
+    P = Tuple{String, Bool, Int, Function}[]
+    push!(P, ("difference D₋ₓ!", true, 0, (n, p) -> begin
+        W = _pa_space(n, p); u = Rₕ(W, _pa_g); w = similar(u)
+        _pa_case(() -> Bramble.D₋ₓ!(w, u), () -> _pa_copy(w))
+    end))
+    push!(P, ("average Mₓ!", true, 0, (n, p) -> begin
+        W = _pa_space(n, p); u = Rₕ(W, _pa_g); w = similar(u)
+        _pa_case(() -> Bramble.Mₓ!(w, u), () -> _pa_copy(w))
+    end))
+    push!(P, ("avgₕ!", false, 0, (n, p) -> begin
+        u = element(_pa_space(n, p))
+        _pa_case(() -> avgₕ!(u, _pa_g), () -> _pa_copy(u))
+    end))
+    push!(P, ("shift S₊ₓ!", true, 0, (n, p) -> begin
+        W = _pa_space(n, p); u = Rₕ(W, _pa_g); w = similar(u)
+        _pa_case(() -> S₊ₓ!(w, u), () -> _pa_copy(w))
+    end))
+    push!(P, ("divₕ!", true, 0, (n, p) -> begin
+        W = _pa_space(n, p); u = (Rₕ(W, _pa_g), Rₕ(W, _pa_h)); v = similar(u[1])
+        _pa_case(() -> Bramble.divₕ!(v, u), () -> _pa_copy(v))
+    end))
+    push!(P, ("curlₕ!", true, 0, (n, p) -> begin
+        W = _pa_space(n, p); u = (Rₕ(W, _pa_g), Rₕ(W, _pa_h)); v = similar(u[1])
+        _pa_case(() -> Bramble.curlₕ!(v, u), () -> _pa_copy(v))
+    end))
+    push!(P, ("εₕ!", true, 2, (n, p) -> begin
+        W = _pa_space(n, p); u = (Rₕ(W, _pa_g), Rₕ(W, _pa_h))
+        e = ntuple(_ -> ntuple(_ -> similar(u[1]), 2), 2)
+        _pa_case(() -> Bramble.εₕ!(e, u), () -> reduce(vcat, [_pa_copy(e[i][j]) for i in 1:2 for j in 1:2]))
+    end))
+    push!(P, ("broadcast", true, 1, (n, p) -> begin
+        W = _pa_space(n, p); u = Rₕ(W, _pa_g); w = Rₕ(W, x -> x[1]); v = similar(u)
+        _pa_case(() -> (v .= 2.0 .* u .+ w), () -> _pa_copy(v))
+    end))
+    push!(P, ("innerₕ", false, 0, (n, p) -> begin
+        W = _pa_space(n, p); u = Rₕ(W, _pa_g); w = Rₕ(W, x -> x[1])
+        _pa_case(() -> innerₕ(u, w), () -> innerₕ(u, w))
+    end))
+    push!(P, ("inner₊ₓ", false, 0, (n, p) -> begin
+        W = _pa_space(n, p); u = Rₕ(W, _pa_g); w = Rₕ(W, x -> x[1])
+        _pa_case(() -> inner₊ₓ(u, w), () -> inner₊ₓ(u, w))
+    end))
+    push!(P, ("innerₕ masked", false, 0, (n, p) -> begin
+        W = _pa_space(n, p); u = Rₕ(W, _pa_g); w = Rₕ(W, x -> x[1])
+        _pa_case(() -> innerₕ(u, w; markers = (:dir,)), () -> innerₕ(u, w; markers = (:dir,)))
+    end))
+    push!(P, ("assemble! bilinear (replay)", false, 0, (n, p) -> begin
+        a = _pa_poisson(_pa_space(n, p)); A = allocate_system_matrix(a)
+        _pa_case(() -> assemble!(A, a), () -> copy(A))
+    end))
+    push!(P, ("assemble! linear", false, 0, (n, p) -> begin
+        W = _pa_space(n, p); f = Rₕ(W, _pa_g); l = form(W, v -> innerₕ(f, v)); b = zeros(ndofs(W))
+        _pa_case(() -> assemble!(b, l), () -> copy(b))
+    end))
+    push!(P, ("matrix-free fused", false, 0, (n, p) -> begin
+        op = matrix_free_operator(_pa_poisson(_pa_space(n, p)))
+        x = randn(Xoshiro(1), size(op, 2)); y = similar(x)
+        _pa_case(() -> mul!(y, op, x), () -> copy(y))
+    end))
+    push!(P, ("matrix-free per-unit", false, 0, (n, p) -> begin
+        V = Bramble.CompositeGridSpace((_pa_leaf(n, p), _pa_leaf(n ÷ 2 + 1, p)))
+        a = form(V, V, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(2)), D₋ₓ(v(2))) + innerₕ(u(2), v(2)))
+        op = matrix_free_operator(a)
+        x = randn(Xoshiro(2), size(op, 2)); y = similar(x)
+        _pa_case(() -> mul!(y, op, x), () -> copy(y))
+    end))
+    push!(P, ("GMG V-cycle", false, 0, (n, p) -> begin
+        Ω = _pa_jitter(n, p); Pc = gmg_preconditioner(_pa_spd, Ω; cycle = :V)
+        b = randn(Xoshiro(3), npoints(Ω)); y = similar(b)
+        _pa_case(() -> ldiv!(y, Pc, b), () -> copy(y); levels = length(Pc.ops))
+    end))
+    push!(P, ("Kronecker mul!", false, 1, (n, p) -> begin
+        K = kronecker_operator(_pa_poisson(_pa_space(n, p)))
+        x = randn(Xoshiro(4), size(K, 2)); y = similar(x)
+        _pa_case(() -> mul!(y, K, x), () -> copy(y))
+    end))
+    push!(P, ("explicit RHS", false, 0, (n, p) -> begin
+        W = _pa_space(n, p); f = Rₕ(W, _pa_g)
+        r = semidiscretize_rhs(semidiscretize(_pa_poisson(W), form(W, v -> innerₕ(f, v))))
+        u = randn(Xoshiro(5), length(r.inv_mass_diag)); du = similar(u)
+        _pa_case(() -> r(du, u, nothing, 0.0), () -> copy(du))
+    end))
+    return P
+end
+"""
+include_string(@__MODULE__, _PA_PATHS_SRC, "polyester_ext.jl: _PA_PATHS_SRC")
+
+# The two grids: the warm bytes of every path must be the same on both.
+const _PA_SMALL, _PA_LARGE = 17, 129
+
+# Counts the Threads entry points each path reaches, in a child process, because counting
+# means overriding the only two in `src` for the whole process: `_static_or_serial`, behind
+# every `Threads.@threads :static`, and `_mf_run_bands!(::CpuThreaded, …)`, the only
+# `Threads.@spawn`. Later testsets need `CpuThreaded` to really thread, so the override must
+# not live in this process. Every call of a path counts, warm-up included, on both grids. The
+# child also counts two `CpuThreaded` calls, the positive control that the counters see a
+# Threads path. Returns the hits keyed by path name, the controls under "control <name>".
+function _pa_threads_hits()
+    code = """
+    using Bramble, Polyester
+    const HITS = Ref(0)
+    @eval Bramble @noinline function _mf_run_bands!(::CpuThreaded, s, a, plan, nbands::Int)
+        Main.HITS[] += 1
+        for b in 1:nbands
+            _mf_band_task!(s.y, s, a, plan, nbands, nbands, b)
+        end
+        return nothing
+    end
+    @eval Bramble @inline function _static_or_serial(threaded!::F, serial!::G,
+            args::Vararg{Any, N}) where {F, G, N}
+        Main.HITS[] += 1
+        return serial!(args...)
+    end
+    $(_PA_PATHS_SRC)
+    hits(case) = (HITS[] = 0; case.call(); case.call(); case.call(); HITS[])
+    for (name, _, _, setup) in _pa_paths()
+        if name in ("difference D₋ₓ!", "matrix-free fused")
+            println("HITS\\tcontrol ", name, "\\t", hits(setup($(_PA_LARGE), CpuThreaded())))
+        end
+        h = hits(setup($(_PA_SMALL), CpuPolyester())) + hits(setup($(_PA_LARGE), CpuPolyester()))
+        println("HITS\\t", name, "\\t", h)
+    end
+    """
+    project = something(Base.active_project())
+    cmd = `$(Base.julia_cmd()) --project=$project --startup-file=no --threads=$(Threads.nthreads()) -e $code`
+    out = Dict{String, Int}()
+    for line in eachline(cmd)
+        startswith(line, "HITS\t") || continue
+        _, name, h = split(line, '\t')
+        out[name] = parse(Int, h)
+    end
+    return out
+end
+
+# Polyester boxes its argument tuple on every `@batch` call (`ManualMemory.Reference`); a
+# `Base.RefValue` carrying the arguments is the other box Bramble passes across `@batch`, at
+# most one per launch.
+# Profile is loaded by package id because it reaches the test environment through
+# SnoopCompile, not as a direct dependency.
+const _PA_PROFILE = Base.require(Base.PkgId(
+    Base.UUID("9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"), "Profile"))
+const _PA_REFERENCE = Base.loaded_modules[Base.PkgId(
+    Base.UUID("d125e4d3-2237-4719-b19c-fa641b8a4667"), "ManualMemory")].Reference
+_pa_isbox(T) = T <: _PA_REFERENCE || T <: Base.RefValue
+
+# Function barriers (bramble-verification §1): warmed twice, then measured.
+@noinline function _pa_bytes(call::F) where {F}
+    call()
+    call()
+    return @allocated call()
+end
+
+# Every allocation of one warm call, at sample_rate = 1: the largest argument box, the type
+# and size of everything that is not one, and the number of `Base.RefValue`s.
+function _pa_allocations(call::F) where {F}
+    call()
+    call()
+    Allocs = _PA_PROFILE.Allocs
+    Allocs.clear()
+    Allocs.start(; sample_rate = 1)
+    try
+        call()
+    finally
+        Allocs.stop()
+    end
+    r = Allocs.fetch().allocs
+    box = maximum((x.size for x in r if _pa_isbox(x.type)); init = 0)
+    other = Any[(x.type, x.size) for x in r if !_pa_isbox(x.type)]
+    # Each `@batch` launch makes exactly one `Reference`; a `RefValue` counts as a box only
+    # alongside one, so stray `Ref`s are not mistaken for boxes.
+    nref = count(x -> x.type <: _PA_REFERENCE, r)
+    nval = count(x -> x.type <: Base.RefValue, r)
+    nval <= nref || push!(other, (Base.RefValue, nval - nref))
+    return box, other, nval
+end
+
+_pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(abs, s)))
+
 @testset "Polyester extension (CpuPolyester)" begin
     # Needs this extension to be loaded (S7.1).
     @testset "CpuPolyester backend and grid space" begin
@@ -235,52 +451,42 @@ end
         @test isapprox(Matrix(Apd), Matrix(Abd); atol = 1.0e-12)
     end
 
-    # CpuPolyester allocation is held to what test/space/vector_elements.jl accepts for Parallel().
-    @testset "allocation within Parallel() bound" begin
-        # Function barriers (bramble-verification §1): the warm-up call and the measured
-        # call both happen inside one function, over its own arguments.
-        function _avg_allocs(u, f)
-            avgₕ!(u, f)
-            return @allocated avgₕ!(u, f)
+    # Per path, a warm CpuPolyester call allocates the same bytes on a small and a large
+    # non-uniform grid (a multigrid cycle per coarsening level, since it runs every level's
+    # loops), nothing but `@batch` argument boxes of at most 512 B each, reaches no Threads
+    # entry point, and gives the CpuSerial result: bitwise for the operators asserted bitwise
+    # elsewhere in this file, to rounding for reductions, assembly and solvers. Silent on a
+    # single thread, where `@batch` runs serially.
+    if Threads.nthreads() >= 2
+        @testset "allocation under CpuPolyester" begin
+            hits = _pa_threads_hits()
+            @test get(hits, "control difference D₋ₓ!", 0) > 0
+            @test get(hits, "control matrix-free fused", 0) > 0
+            @testset "$name" for (name, bitwise, nrefs, setup) in _pa_paths()
+                small = setup(_PA_SMALL, CpuPolyester())
+                large = setup(_PA_LARGE, CpuPolyester())
+                bs, bl = _pa_bytes(small.call), _pa_bytes(large.call)
+                if small.levels > 0
+                    @test bs % (small.levels - 1) == 0 && bl % (large.levels - 1) == 0
+                    bs, bl = bs ÷ (small.levels - 1), bl ÷ (large.levels - 1)
+                end
+                @test bs == bl
+                for case in (small, large)
+                    box, other, nval = _pa_allocations(case.call)
+                    @test box <= 512
+                    @test isempty(other)
+                    @test nval == nrefs
+                end
+                @test get(hits, name, -1) == 0
+                for (n, case) in ((_PA_SMALL, small), (_PA_LARGE, large))
+                    ref = setup(n, CpuSerial())
+                    ref.call()
+                    case.call()
+                    s, b = ref.result(), case.result()
+                    @test bitwise ? b == s : _pa_close(b, s)
+                end
+            end
         end
-        function _assemble_allocs(A, a)
-            assemble!(A, a)
-            return @allocated assemble!(A, a)
-        end
-        function _dot_allocs(u, v)
-            innerₕ(u, v)
-            return @allocated innerₕ(u, v)
-        end
-
-        f2(x) = sin(x[1] + x[2])
-        mk(be, n) = element(gridspace(mesh(
-            domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n); backend = be)))
-
-        ub_small = mk(backend(policy = CpuPolyester()), 32)
-        ub_large = mk(backend(policy = CpuPolyester()), 1024)
-
-        batch_small = _avg_allocs(ub_small, f2)
-        batch_large = _avg_allocs(ub_large, f2)
-        @info "avgₕ! CpuPolyester allocation diagnostic: small=$batch_small large=$batch_large " *
-              "nthreads=$(Threads.nthreads())"
-
-        # The same guarantee test/space/vector_elements.jl's own "Allocation scaling"
-        # testset asserts for `Parallel()`: size-independent (batch-spawn overhead, not
-        # proportional to grid points) and small in absolute terms. A naive `@batch` at 64 B/call against `Threads`' 1.6 KB
-        # at 128^2 -- lower, not higher, so the same threshold applies without loosening it.
-        @test batch_large < 4 * batch_small + 1     # +1 guards small == 0
-        @test batch_large < 100_000                 # proportional would be tens of MB
-
-        p = _poisson_pair(Val(2), 9)
-        Ab = allocate_system_matrix(p.ab)
-        assemble_allocs = _assemble_allocs(Ab, p.ab)
-        @info "assemble! (CpuPolyester) allocation diagnostic: $assemble_allocs B"
-        @test assemble_allocs < 100_000
-
-        u64, v64 = Rₕ(p.Wb, x -> 1.0), Rₕ(p.Wb, x -> 2.0)
-        dot_allocs = _dot_allocs(u64, v64)
-        @info "innerₕ (CpuPolyester) allocation diagnostic: $dot_allocs B"
-        @test dot_allocs < 100_000
     end
 
     @testset "Determinism across repeated runs" begin
