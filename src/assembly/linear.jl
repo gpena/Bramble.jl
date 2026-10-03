@@ -779,7 +779,7 @@ end
 function _assemble_linear_parallel_core!(
         b::AbstractVector, space, ast::AST_TYPE, α = true
 ) where {AST_TYPE}
-    strides = _colour_strides(stencil_offsets(ast))
+    strides = _term_colour_strides(ast)
     _sweep_parallel!(b, space, ast, indices(mesh(space)), strides, 0, α)
     return b
 end
@@ -926,7 +926,7 @@ end
 function _route_terms_parallel!(b::AbstractVector, term::TERM, leaves, α = true) where {TERM}
     # Hoisted out of the per-leaf call, as before: the colouring depends on the term's
     # stencil, not on which leaf it lands in.
-    strides = _colour_strides(stencil_offsets(term))
+    strides = _term_colour_strides(term)
     each_routed_leaf(term, leaves) do sp, offset
         return _sweep_parallel!(b, sp, term, indices(mesh(sp)), strides, offset, α)
     end

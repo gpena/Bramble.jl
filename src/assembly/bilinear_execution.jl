@@ -1199,7 +1199,7 @@ function _assemble_blocks_parallel!(
                 A,
                 sp,
                 bound,
-                _colour_strides(stencil_offsets(bound)),
+                _term_colour_strides(bound),
                 blk.row_offset,
                 blk.col_offset,
                 α
@@ -1240,7 +1240,7 @@ function _assemble_bilinear_parallel_core!(
     if _has_test_interp(bound)
         _sweep_bilinear_serial!(A, sp, bound, 0, 0, α)
     else
-        _sweep_bilinear!(A, sp, bound, _colour_strides(stencil_offsets(bound)), 0, 0, α)
+        _sweep_bilinear!(A, sp, bound, _term_colour_strides(bound), 0, 0, α)
     end
     # A no-op for a host matrix; for a device one, copies `A`'s own mirror (gpena/Bramble.jl#313)
     # back across in one bulk `copyto!` -- see `_flush_device_scatter!`'s own docstring
