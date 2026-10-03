@@ -244,9 +244,20 @@ function matrix_free_operator(
     T = _matrix_eltype(a, a.ast)
     geom = _mf_geometry(a)
     plan = _mf_plan(policy, a, geom)
+    ncols = ndofs(trial_space(a))
+    return _mf_operator(T, a, labels, mask, policy, plan, nrows, ncols, geom)
+end
+
+# The operator from its parts, each type parameter read off the value passed. Whether
+# `geom` (and so `plan`) is `nothing` depends on the mesh's state, not on a type, so the
+# caller holds a union; this call takes each member on its own, so `Geom` is always the
+# type of `geom`.
+function _mf_operator(
+        ::Type{T}, a, labels, mask, policy, plan, nrows, ncols, geom
+) where {T}
     return MatrixFreeOperator{
         T, typeof(a), typeof(labels), typeof(policy), typeof(plan), typeof(geom)}(
-        a, labels, mask, policy, plan, nrows, ndofs(trial_space(a)), geom
+        a, labels, mask, policy, plan, nrows, ncols, geom
     )
 end
 
@@ -344,7 +355,7 @@ end
 The `(i, j)` entry of the matrix `op` stands for, read off one product with the `j`-th unit
 vector. For inspection: each call walks the whole form.
 """
-function Base.getindex(op::MatrixFreeOperator{T}, i::Int, j::Int) where {T}
+function Base.getindex(op::MatrixFreeOperator{T}, i::Int, j::Int) where {T <: Number}
     @boundscheck checkbounds(op, i, j)
     x = zeros(T, op.ncols)
     x[j] = one(T)
@@ -799,7 +810,7 @@ end
 # whose point, on the previous row of a line, is the point of `o` on this one. Foldable, so
 # that over constant offsets it is answered when the line's loop is compiled.
 Base.@assume_effects :foldable function _mf_behind(offs, o, tr::Val)
-    t = Base.setindex(o, o[1] - 1, 1)
+    t = ntuple(k -> k == 1 ? o[1] - 1 : o[k], Val(length(o)))
     for j in 1:length(offs)
         _mf_row_offset(offs[j], tr) == t && return j
     end
@@ -902,10 +913,10 @@ end
 # The geometry of `a`'s mesh, or `nothing`: only a scalar form with a term the cache answers,
 # whose two spaces share one mesh with weights built for its current version, is cached.
 # Any other form's sinks stay as they were, so a boxed stencil's bytes do not grow.
-function _mf_geometry(a::BilinearForm)
-    Wu, Wv = trial_space(a), test_space(a)
-    (Wu isa ScalarGridSpace && Wv isa ScalarGridSpace && _mf_reads_geometry(a.ast)) ||
-        return nothing
+_mf_geometry(a::BilinearForm) = _mf_geometry(a, trial_space(a), test_space(a))
+_mf_geometry(::BilinearForm, _, _) = nothing
+function _mf_geometry(a::BilinearForm, Wu::ScalarGridSpace, Wv::ScalarGridSpace)
+    _mf_reads_geometry(a.ast) || return nothing
     sp = host_weights(Wu)
     m = mesh(sp)
     (m === mesh(host_weights(Wv)) && sp.weights.built_version == _mesh_version(m)) ||

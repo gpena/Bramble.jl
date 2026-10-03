@@ -375,6 +375,7 @@ using ExplicitImports
                 :ArrayStyle,
                 :BroadcastStyle,
                 :Broadcasted,
+                :Extruded,
                 :RefValue,
                 :ReshapedArray,
                 :SizeUnknown,
