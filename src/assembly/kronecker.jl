@@ -161,7 +161,7 @@ struct KroneckerTerm{D, S <: Tuple, F <: Tuple, L}
 end
 
 """
-    KroneckerLinearOperator{T, D, TermsT <: Tuple}
+    KroneckerLinearOperator{T, D, TermsT <: Tuple, P <: ExecutionPolicy}
 
 A matrix-free linear operator for a separable [`BilinearForm`](@ref) (see
 [`is_separable`](@ref)): the sum, over its terms, of a Kronecker product of `D`
@@ -179,13 +179,22 @@ supports `size`, `eltype`, `getindex`, `Base.:*`, three- and five-argument `mul!
 `SparseMatrixCSC(K)` (an explicit `kron` of the factors, for testing and inspection -- the
 very matrix this operator avoids forming).
 
-`K` holds no work buffers: it stores only its `D` one-dimensional factors, so it is
-immutable after construction and safe to share across threads (concurrent `mul!` calls on
-one `K` never race). The fused pass needs no scratch either: `mul!` allocates nothing on
-the host, and is generic over the element type, so ForwardDiff `Dual`s pass through. The
+`K` holds no work buffers: it stores only its `D` one-dimensional factors and its execution
+policy, so it is immutable after construction and safe to share across threads (concurrent
+`mul!` calls on one `K` never race). The fused pass needs no scratch either. A serial host
+`mul!` allocates nothing; under [`CpuPolyester`](@ref) each product allocates a small
+constant amount, the same on every grid, for the argument box Polyester sends to its
+threads. `mul!` is generic over the element type, so ForwardDiff `Dual`s pass through. The
 `scratch = (b1, b2)` keyword that `mul!(y, K, x; scratch)` and
 `mul!(y, K, x, α, β; scratch)` accept is kept so existing callers still work, and is
 ignored.
+
+`P` is the execution policy of the space the operator was built on
+(`execution_policy(backend(trial_space(a)))`), kept as the `policy` field. On the host, a
+[`CpuPolyester`](@ref) operator runs the grid lines along axis 1 as `Polyester.@batch` tasks
+(`using Polyester` required); every other policy runs them serially. Each line writes its
+own slice of `y`, so both give the same result bit for bit. An operator built directly from
+its terms, `KroneckerLinearOperator{T, D, TermsT}(terms, dims, n)`, is [`CpuSerial`](@ref).
 
 On a device-backed form (gpena/Bramble.jl#323) the factors are built on the host and then
 moved to the space backend's device storage, so `mul!` with device `x`/`y` runs entirely on
@@ -199,10 +208,17 @@ extension and its fast-diagonalisation solve.
 
 See also: [`is_separable`](@ref), [`kronecker_operator`](@ref).
 """
-struct KroneckerLinearOperator{T, D, TermsT <: Tuple} <: AbstractMatrix{T}
+struct KroneckerLinearOperator{T, D, TermsT <: Tuple, P <: ExecutionPolicy} <: AbstractMatrix{T}
     terms::TermsT
     dims::NTuple{D, Int}
     n::Int
+    policy::P
+end
+
+# Without a policy the operator runs serially: what every operator did before the policy was
+# a parameter.
+function KroneckerLinearOperator{T, D, TermsT}(terms, dims, n) where {T, D, TermsT <: Tuple}
+    return KroneckerLinearOperator{T, D, TermsT, CpuSerial}(terms, dims, n, CpuSerial())
 end
 
 @noinline function _throw_not_separable_dim(D::Int)
@@ -313,7 +329,8 @@ function kronecker_operator(a::BilinearForm{D}) where {D}
     dims = ndofs(Wu, Tuple)
     n = ndofs(Wu)
     T = eltype(mass_vecs[1])
-    return KroneckerLinearOperator{T, D, typeof(terms)}(terms, dims, n)
+    policy = execution_policy(be)
+    return KroneckerLinearOperator{T, D, typeof(terms), typeof(policy)}(terms, dims, n, policy)
 end
 
 # --- Device-resident factors (gpena/Bramble.jl#323) ---------------------------------- #
@@ -547,6 +564,32 @@ function _kron_fused!(::HostLocality, y, K::KroneckerLinearOperator, x, cs::Tupl
     return y
 end
 
+# Under `CpuPolyester` the lines run as `Polyester.@batch` tasks (`_batch_kron_lines!`,
+# filled by `BramblePolyesterExt`). Each line writes only its own slice of `y` and reads `x`,
+# so the result is bitwise the serial loop's.
+@noinline function _kron_fused!(
+        ::HostLocality, y, K::KroneckerLinearOperator{<:Any, <:Any, <:Tuple, CpuPolyester}, x,
+        cs::Tuple, β
+)
+    dims = K.dims
+    ss = Base.front(cumprod(dims))::Tuple{Vararg{Int}}
+    lines = CartesianIndices(Base.tail(dims))
+    _late(_batch_kron_lines!, y, K.terms, cs, x, β, ss, lines, dims[1])
+    return y
+end
+
+"""
+    _batch_kron_lines!(y, terms, cs, x, β, ss, lines, m) -> Nothing
+
+[`CpuPolyester`](@ref)'s host `KroneckerLinearOperator` product, filled by
+`BramblePolyesterExt`: line `o` of `lines` (the `CartesianIndices` of axes `2:D`) starts at
+offset `(o - 1) * m` and gets `_kron_line_init!` then `_kron_line_terms!`, one line per
+`Polyester.@batch` iteration. The only `src/` method errors naming Polyester.
+"""
+@noinline function _batch_kron_lines!(y, terms, cs, x, β, ss, lines, m)
+    return _throw_cpubatch_without_polyester(:_batch_kron_lines!)
+end
+
 # Device: one work item per entry of `y`, in `BrambleKernelAbstractionsExt`. The kernel is
 # handed raw arrays -- a diagonal factor as its vector, a sparse one as its
 # `(colptr, rowval, nzval)` tuple -- because a struct nesting a device array fails
@@ -618,8 +661,10 @@ end
 # ::ReverseDiff.TrackedArray)`, forwarding to `ReverseDiff.record_mul!` so the reverse pass
 # stays correct.
 #
-# `scratch` is accepted and ignored: the fused pass above needs no work vectors, so `mul!`
-# allocates nothing on the host with or without it, and callers that pass one keep working.
+# `scratch` is accepted and ignored: the fused pass above needs no work vectors, so a serial
+# host `mul!` allocates nothing with or without it, and callers that pass one keep working.
+# Under `CpuPolyester` a product allocates a small constant per call, independent of the
+# grid, for the argument box Polyester sends to its threads.
 #
 # Five-argument form, `y = α * K * x + β * y`, with `LinearAlgebra`'s semantics: `β == 0`
 # (including `false`) overwrites `y`, so a `NaN` already in `y` does not survive; otherwise

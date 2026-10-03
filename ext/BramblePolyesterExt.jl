@@ -31,6 +31,9 @@
 # by the divergence, curl and strain-average engines. Unlike the three hooks above, it stays
 # generic over the band function `f` instead of naming one.
 #
+# `src/assembly/kronecker.jl` has `_batch_kron_lines!`, which runs a `KroneckerLinearOperator`
+# product's grid lines under `@batch` when the operator's own policy is `CpuPolyester`.
+#
 # `Polyester.@batch` accepts a `CartesianIndices` directly (`closure.jl`'s own `splitloop`
 # already splits it along its last axis, the same trick `_threaded_axis_for!` hand-rolls for
 # `Threads.@threads`), so none of the manual axis-chunking `src/utils/linear_algebra.jl` uses
@@ -43,7 +46,8 @@ using Bramble
 using Bramble: MarkedIndicesUnion, SeparableWeights, _reduce_or_chunk, _throw_dot_dim_error,
                _write_components!, _band_range, _scatter_point!, _scatter_linear_point!,
                CpuPolyester, _ReplayTarget, _ActionTarget, _replay_point!, _difference_band!,
-               _average_band!, _centered_average_band!, _broadcast_band!
+               _average_band!, _centered_average_band!, _broadcast_band!, _kron_line_init!,
+               _kron_line_terms!
 using Polyester: Polyester, @batch
 using LinearAlgebra: mul!
 using PrecompileTools: @setup_workload, @compile_workload
@@ -395,6 +399,37 @@ function Bramble._batch_broadcast!(v::AbstractVector, bc, ax)
     bcref = Ref(bc)
     @batch for b in 1:n
         _broadcast_band!(v, bcref[], ax, n, b)
+    end
+    return nothing
+end
+
+# --- _batch_kron_lines! (src/assembly/kronecker.jl) -------------------------------- #
+#
+# `CpuPolyester`'s host `KroneckerLinearOperator` product: one grid line along axis 1 per
+# `@batch` iteration, each line `_kron_line_init!` then `_kron_line_terms!`, exactly the
+# serial `_kron_fused!` loop.
+#
+# `y`, `x` and the terms cross `@batch` in one `Ref` box rather than being captured:
+# `@batch` turns a captured array into a `PtrArray` and rebuilds every struct around one (a
+# sparse factor, a diagonal) inside each task, and the line kernels then ran about half as
+# fast (benchmark/batch_survey.jl, candidate 1). The box is fresh per call, so concurrent
+# products on one operator share nothing. It costs a small heap allocation per call that does
+# not grow with the grid: Polyester boxes its own argument tuple in a `ManualMemory.Reference`,
+# which goes on the heap once the tuple holds a reference to a GC object, and the `Ref` box
+# is one such object. The coefficients and `β` ride in the box too; the strides, the line
+# indices and `m` are captured directly. `y::AbstractVector` and
+# `lines::CartesianIndices` make this a genuine specialisation of the `src/` stub, the same
+# reasoning as the hooks above.
+function Bramble._batch_kron_lines!(
+        y::AbstractVector, terms::Tuple, cs::Tuple, x::AbstractVector, β, ss::Tuple,
+        lines::CartesianIndices, m::Int
+)
+    args = Ref((y, terms, cs, x, β))
+    @batch for o in 1:length(lines)
+        a = args[]
+        off = (o - 1) * m
+        _kron_line_init!(a[1], a[5], off, m)
+        _kron_line_terms!(a[1], a[2], a[3], a[4], Tuple(lines[o]), ss, off, m)
     end
     return nothing
 end
