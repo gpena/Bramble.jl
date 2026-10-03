@@ -53,10 +53,7 @@ jobs:
     # push has to pass on. It replaced the `~1.13.0-0` canary leg that sat here while
     # 1.13 was in prerelease, allowed to fail.
     #
-    # The 1.12 floor that Project.toml still declares moved to the weekly-scheduled
-    # Weekly.yml, which runs the full suite on 1.12 and 1.13, both OSes. The trade: a break
-    # that only 1.12 sees is now caught the same week rather than the same push. It still
-    # fails Weekly.yml when it happens.
+    # No CI workflow runs the Julia 1.12 floor that Project.toml still declares.
     #
     # macOS only, deliberately. This gate exists to give a push fast feedback, and a second
     # platform doubles the runner time without doubling what is learned: the two legs run

@@ -2,7 +2,6 @@ name: Nightly
 
 # Everything the per-push CI.yml deliberately leaves off, once a day: Linux entirely, and the
 # checks that are not canaries but don't need every-push feedback either.
-# The 1.12 floor is covered weekly instead — see Weekly.yml.
 #
 # CI.yml's push gate is macOS-only, and runs the `unit` group. Linux lives here, in the
 # `slow` job below, on the same released Julia 1.13 — a second platform on the gate doubles
@@ -34,10 +33,7 @@ name: Nightly
 # `test` runs Julia nightly on both platforms, and is switched off (`if: false`) while the
 # 1.14 dev series breaks upstream packages Bramble tests against: GPUCompiler and Mooncake fail
 # to precompile (`WorldView` not defined in `Compiler`), JET refuses to run, and SparseArrays'
-# `lu` recurses without end on a `Dual` matrix. Delete the `if:` to bring it back. The 1.12
-# floor moved to Weekly.yml, which already runs the full suite (a superset of `unit`) on 1.12
-# and 1.13, ubuntu and macOS, so a separate 1.12 leg here would only repeat a narrower version
-# of that coverage.
+# `lu` recurses without end on a `Dual` matrix. Delete the `if:` to bring it back.
 
 permissions:
   contents: read
@@ -196,18 +192,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Both supported releases. What Aqua and JET report is version-dependent in a way
-        # the unit tests are not -- method ambiguities and inference results move with the
-        # compiler -- so running one version here would leave the other unchecked. This job
-        # was pinned to 1.12 alone while test/quality/aqua.jl still skipped the
-        # persistent_tasks check on 1.13; it no longer does.
+        # Julia 1.13 only; CI no longer runs 1.12.
         #
         # This is the *only* place the quality group runs in CI. Weekly.yml used to re-derive
         # it as part of `full`, on a 2x2 matrix, to learn nothing this daily job had not
         # already reported; `full` stopped implying `quality` (test/runtests.jl) rather than
         # this job's cadence being reduced, because a quality regression found six days late
         # is a quality regression found six days late.
-        version: ["1.12", "1.13"]
+        version: ["1.13"]
     steps:
       - uses: actions/checkout@v5
 
