@@ -24,6 +24,15 @@ const KronExt = Base.get_extension(Bramble, :BrambleKroneckerExt)
 
 const KRON_EXT_SEED = 20260919
 
+using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
+
+# Uniform, then moved to `t^(1 + d/4)` along axis `d`, so no two axes share their nodes.
+function graded_space(n::NTuple{D, Int}) where {D}
+    Ω = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n, ntuple(_ -> false, D))
+    Bramble.change_points!(Ω, ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
+    return gridspace(Ω)
+end
+
 @testset "Kronecker extension" begin
     @testset "Kronecker.jl object equals CSC" begin
         Random.seed!(KRON_EXT_SEED)
@@ -135,6 +144,129 @@ const KRON_EXT_SEED = 20260919
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(fₕ * u, v))
         @test !is_separable(a)
         @test_throws ArgumentError fdm_solve(a, rand(ndofs(Wₕ)))
+    end
+
+    # Laplacian-like forms beyond the classic one (#427), on graded meshes whose axes carry
+    # different nodes: each solves to the sparse direct solve, from the form and from its
+    # operator, with and without homogeneous Dirichlet.
+    @testset "fdm_solve: Laplacian-like forms" begin
+        for n in ((9, 7), (6, 5, 7))
+            Wₕ = graded_space(n)
+            D = length(n)
+            fx = Rₕ(Wₕ, x -> 1 + x[1])
+            c = Ref(2.5)
+            lap(op) = (u, v) -> innerₕ(u, v) +
+                                sum(innerₕ(op(u, Val(d)), op(v, Val(d))) for d in 1:D)
+            accepted = [
+                "Ref coefficient" => (u, v) -> innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v)),
+                "forward" => lap(Bramble.D₊),
+                "averaged mass" => (u, v) -> innerₕ(Mₓ(u), Mₓ(v)) +
+                                             inner₊(∇ₕ(u), ∇ₕ(v)),
+                "x-coefficient" => (u, v) -> innerₕ(fx * u, v) +
+                                             inner₊(∇ₕ(u), ∇ₕ(v)),
+                "Robin face" => (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                          inner_Γ(u, v; markers = (:xmin,)),
+                # Indefinite but nonsingular: the singularity test must not refuse it.
+                "negative mass" => (u, v) -> -1.0 * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)),
+            ]
+            for (name, f) in accepted, dir in (nothing, :boundary)
+                a = form(Wₕ, Wₕ, f)
+                c[] = 2.5
+                K = kronecker_operator(a)
+                c[] = 4.0  # read when fdm_solve is called, not when `a` or `K` was built
+                A = assemble(a; dirichlet = dir)
+                F = rand(MersenneTwister(length(name)), size(A, 1))
+                dir === :boundary && (F[Bramble._combined_mask(mesh(Wₕ), (:boundary,))] .= 0)
+                xref = A \ F
+                @test isapprox(fdm_solve(a, F; dirichlet = dir), xref; rtol = 1e-9)
+                dir === nothing && @test isapprox(fdm_solve(K, F), xref; rtol = 1e-9)
+            end
+        end
+    end
+
+    # Every other form throws, naming the reason, and is never solved wrongly.
+    @testset "fdm_solve: refusals name the reason" begin
+        refusal(f) =
+            try
+                f()
+                "no error"
+            catch e
+                e isa ArgumentError ? sprint(showerror, e) : "wrong error $(typeof(e))"
+            end
+        Wₕ = graded_space((9, 7))
+        fx = Rₕ(Wₕ, x -> 1 + x[1])
+        fy = Rₕ(Wₕ, x -> 2 + x[2]^2)
+        fxy = Rₕ(Wₕ, x -> (1 + x[1]) * (2 + x[2]^2))
+        L(u, v) = inner₊(∇ₕ(u), ∇ₕ(v))
+        rint(u) = Bramble.restrict_to(:interior, u)
+        refused = [
+            "mixed" => ((u, v) -> innerₕ(D₋ₓ(D₋ᵧ(u)), v) + L(u, v),
+                r"non-mass factors on two axes"),
+            "advection" => ((u, v) -> innerₕ(D₋ₓ(u), v) + L(u, v),
+                r"axis-1 operator is not symmetric"),
+            "two-axis coefficient" => ((u, v) -> innerₕ(fx * (fy * u), v) + L(u, v),
+                r"non-mass factors on two axes"),
+            "one-axis gradient" => ((u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(u, v),
+                r"axis 2 has no term of its own"),
+            "singular mass" => ((u, v) -> innerₕ(rint(u), v),
+                r"mass is not symmetric positive definite"),
+            # Pure Neumann: constants are in the kernel, so a solve would return garbage.
+            "gradient only" => (L, r"the system is singular"),
+            "chain, average, y-stiffness" => ((u, v) -> innerₕ(D₋ₓ(Mₓ(u)), D₋ₓ(Mₓ(v))) +
+                                                        innerₕ(Mₓ(u), Mₓ(v)) +
+                                                        inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)),
+                r"the system is singular"),
+            "1e-14 mass" => ((u, v) -> 1e-14 * innerₕ(u, v) + L(u, v), r"the system is singular"),
+        ]
+        F = rand(MersenneTwister(KRON_EXT_SEED), ndofs(Wₕ))
+        for (name, (f, why)) in refused
+            a = form(Wₕ, Wₕ, f)
+            @test is_separable(a)
+            K = kronecker_operator(a)
+            for m in (refusal(() -> fdm_solve(a, F)), refusal(() -> fdm_solve(K, F)))
+                @test occursin("fdm_solve does not support this form", m)
+                @test occursin(why, m)
+                @test occursin("kronecker_operator(a)", m)
+            end
+        end
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(fxy * u, v) + L(u, v))
+        m = refusal(() -> fdm_solve(a, F))
+        @test occursin(r"does not support this form: it is not separable", m)
+        @test !occursin("kronecker_operator(a)", m)  # it would throw too
+
+        Vₕ = gridspace(mesh(Wₕ), Val(2))
+        b = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)) +
+                                   L(u(1), v(1)) + L(u(2), v(2)))
+        G = rand(2 * ndofs(Wₕ))
+        @test occursin(r"does not support this form: it is posed on a composite space",
+            refusal(() -> fdm_solve(b, G)))
+        @test occursin("composite space", refusal(() -> fdm_solve(kronecker_operator(b), G)))
+    end
+
+    # Well conditioned in Float32 (eigenvalue ratio about 8e3): the singularity test must
+    # not grow with the number of unknowns, which refused this solve.
+    @testset "fdm_solve: Float32 Laplacian" begin
+        Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+        Wₕ = gridspace(mesh(Ω, (33, 33), (true, true); backend = backend(Float32)))
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        A = assemble(a)
+        F = rand(MersenneTwister(KRON_EXT_SEED), Float32, size(A, 1))
+        x = fdm_solve(a, F)
+        @test eltype(x) === Float32
+        @test isapprox(x, Float64.(A) \ Float64.(F); rtol = 1e-3)
+    end
+
+    # A 2-point axis leaves no interior unknown under `dirichlet = :boundary`.
+    @testset "fdm_solve: empty interior" begin
+        for n in ((2, 2), (2, 4), (2, 3, 3), (3, 2, 4))
+            Wₕ = graded_space(n)
+            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+            A = assemble(a; dirichlet = :boundary)
+            F = zeros(size(A, 1))
+            x = fdm_solve(a, F; dirichlet = :boundary)
+            @test length(x) == ndofs(Wₕ)
+            @test x == A \ F
+        end
     end
 
     # The allocation of a second fdm_solve call is reported, not asserted to be zero.
