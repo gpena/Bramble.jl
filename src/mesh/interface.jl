@@ -145,6 +145,9 @@ at this level, so the default here is `false`.
 # genuine single-point mesh over a non-degenerate domain, has no interval at all.
 @inline _nothing_to_refine(::AbstractMeshType) = false
 
+# Only a `MeshnD` can disagree with its own submeshes; see its method in `meshnd.jl`.
+@inline _check_submesh_sizes(::AbstractMeshType) = nothing
+
 #===========================================================================#
 # Refinement and point replacement
 #
@@ -432,6 +435,11 @@ Without `domain_markers`, any custom marker `Ωₕ` carries beyond `:boundary`/`
 no domain here to re-derive it from, so this throws an `ArgumentError` rather than silently
 dropping it. Pass `domain_markers` (the same ones the mesh was built with, or equivalent) to
 keep them.
+
+On a multi-dimensional mesh, refine the whole mesh, not one of its submeshes:
+`iterative_refinement!(Ωₕ(1))` changes that axis's point count but not the parent's index set
+or markers, and [`gridspace`](@ref)`(Ωₕ)` then throws an `ArgumentError` instead of building
+on the inconsistent grid.
 
 !!! warning "Invalidates every ScalarGridSpace already built on Ωₕ"
     Bumps `Ωₕ`'s mesh version (gpena/Bramble.jl#221; see [`set_points!`](@ref), which this
