@@ -19,8 +19,9 @@
 # tensor structure), a `RegionRestriction` (Dirichlet rows included -- S5.2 handles
 # constraints through the `Kronecker.jl` extension, not here), an `InterpolationNode`
 # (cross-mesh, no per-axis submesh), an `InnerGamma` surface weight (a `(D-1)`-dimensional
-# integral, no full-`D` factorisation), a composite space (leaves can have different
-# meshes), a 1D mesh (nothing to factor), and any node this file does not explicitly
+# integral, no full-`D` factorisation), a composite space whose leaves have different
+# meshes (`kronecker_block.jl` takes the rest, one block at a time), a 1D mesh (nothing to
+# factor), and any node this file does not explicitly
 # recognise (forward/centered/star/cross-weighted differences, averages, jumps, a mixed
 # multi-axis composition). A false negative here only forgoes the fast path; a false
 # positive would build an operator that silently computes the wrong matrix-vector product.
@@ -112,8 +113,10 @@ Whether `a`'s resolved AST is a sum of terms each expressible as a sum of Kronec
 of one-dimensional factors over a `MeshnD`: every addend, its constant (literal or `Ref`)
 scalar coefficients stripped, has a projection onto the mesh's axes (`_kron_project`).
 
-`a`'s trial and test space must both be a (non-composite) [`ScalarGridSpace`](@ref) sharing
-one mesh, at least two-dimensional (a 1D mesh has nothing to factor). A grid-function
+`a`'s trial and test space must both be a [`ScalarGridSpace`](@ref) sharing one mesh, at
+least two-dimensional (a 1D mesh has nothing to factor). On a composite space every leaf
+must live on that one mesh and every (test leaf, trial leaf) block of `a` must be separable
+in this sense; leaves on different meshes answer `false`. A grid-function
 coefficient varying along more than one axis, a region restriction other than `:interior`,
 an interpolation, or any node without a projection answers `false`: a false negative only
 forgoes the Kronecker fast path, so this never claims separability it cannot back up with
@@ -134,10 +137,13 @@ See also: [`kronecker_operator`](@ref), [`KroneckerLinearOperator`](@ref).
 """
 function is_separable(a::BilinearForm{D}) where {D}
     D == 1 && return false
-    Wu = trial_space(a)
-    Wv = test_space(a)
-    Wu isa ScalarGridSpace || return false
-    Wv isa ScalarGridSpace || return false
+    return _kron_separable(trial_space(a), test_space(a), a)
+end
+
+# By the trial and test space: two scalar spaces here, composite ones (one block per leaf
+# pair) in `kronecker_block.jl`, anything else is not separable.
+_kron_separable(::Any, ::Any, ::BilinearForm) = false
+function _kron_separable(Wu::ScalarGridSpace, Wv::ScalarGridSpace, a::BilinearForm)
     mesh(Wu) === mesh(Wv) || return false
     Ωₕ = _host_mirror_mesh(mesh(Wu))
     return all(l -> _kron_project(l[2], Ωₕ) !== nothing, _kron_leaves(resolve_form_ast(a), ()))
@@ -311,10 +317,12 @@ end
     )
 end
 
-@noinline function _throw_not_separable_term(term, Ωₕ)
+# `block` names the composite form's block the term is in (`kronecker_block.jl`), or is
+# empty for a scalar form.
+@noinline function _throw_not_separable_term(term, Ωₕ, block::String = "")
     throw(
         ArgumentError(
-        "kronecker_operator: the term $(nameof(typeof(term))) has no Kronecker factors: " *
+        "kronecker_operator: the term $(nameof(typeof(term)))$block has no Kronecker factors: " *
         "$(_kron_refused_node(term, Ωₕ)) has no projection onto the mesh's axes. See " *
         "`is_separable` for what factors.",
     ),
@@ -381,7 +389,7 @@ end
 end
 
 """
-    kronecker_operator(a::BilinearForm) -> KroneckerLinearOperator
+    kronecker_operator(a::BilinearForm) -> Union{KroneckerLinearOperator, KroneckerBlockOperator}
 
 Build a matrix-free [`KroneckerLinearOperator`](@ref) for the separable bilinear form `a`
 (see [`is_separable`](@ref)), without ever assembling the `D`-dimensional matrix.
@@ -395,12 +403,18 @@ and terms sharing a factor on an axis share one matrix. Factors are always built
 grid-function coefficient is read once, here, and a warning says so; a scalar or `Ref`
 coefficient stays live.
 
+On a composite trial or test space whose leaves all share one mesh, the result is a
+`Bramble.KroneckerBlockOperator` (not exported): one `KroneckerLinearOperator` per nonzero
+(test leaf, trial leaf) block, placed at that block's rows and columns, with the same
+`size`, `getindex`, `mul!`, `SparseMatrixCSC` and `issymmetric` interface.
+
 # Throws
 
-  - `ArgumentError`: `a` is not separable, naming the offending node (or dimension, or
-    space) -- the same check [`is_separable`](@ref) runs, made specific; or `a` is
-    device-backed and a term has more than one non-diagonal factor or a non-symmetric one,
-    which the device kernel cannot apply (`_kron_check_device`).
+  - `ArgumentError`: `a` is not separable, naming the offending node and, on a composite
+    space, its block (or the dimension, or the spaces) -- the same check
+    [`is_separable`](@ref) runs, made specific; or `a` is device-backed and a term has more
+    than one non-diagonal factor or a non-symmetric one, which the device kernel cannot
+    apply (`_kron_check_device`).
 
 # Examples
 
@@ -417,26 +431,52 @@ See also: [`is_separable`](@ref), [`KroneckerLinearOperator`](@ref).
 """
 function kronecker_operator(a::BilinearForm{D}) where {D}
     D == 1 && _throw_not_separable_dim(D)
-    Wu = trial_space(a)
-    Wv = test_space(a)
-    (Wu isa ScalarGridSpace && Wv isa ScalarGridSpace) || _throw_not_separable_space(Wu, Wv)
-    mesh(Wu) === mesh(Wv) || _throw_not_separable_space(Wu, Wv)
+    return _kron_operator(trial_space(a), test_space(a), a)
+end
 
-    # Factors are always built on the host -- a device-backed mesh's per-axis spaces would
-    # otherwise be scalar-indexed by `weights`/`assemble` -- and only then moved to the
-    # storage `Wu`'s backend chooses (`_kron_to_storage`). On a host mesh
-    # `_host_mirror_mesh` returns the mesh itself and `_kron_to_storage` is the identity.
-    be = backend(Wu)
-    loc = locality(be)
-    Ωₕ = _host_mirror_mesh(mesh(Wu))
+# By the trial and test space, as `_kron_separable`: two scalar spaces here, composite ones
+# in `kronecker_block.jl`, anything else refused.
+_kron_operator(Wu, Wv, ::BilinearForm) = _throw_not_separable_space(Wu, Wv)
+
+function _kron_operator(Wu::ScalarGridSpace, Wv::ScalarGridSpace, a::BilinearForm)
+    mesh(Wu) === mesh(Wv) || _throw_not_separable_space(Wu, Wv)
+    cache = _kron_cache(mesh(Wu))
+    K, reads_coef = _kron_build(cache, backend(Wu), ndofs(Wu, Tuple),
+        _kron_leaves(resolve_form_ast(a), ()), "")
+    reads_coef && _warn_kron_coefficient()
+    return K
+end
+
+# What every operator of one `kronecker_operator` call shares: the host mesh the factors are
+# built on, each axis's mass factor, and each axis's factors built so far (`_kron_cached!`).
+# Factors are always built on the host -- a device-backed mesh's per-axis spaces would
+# otherwise be scalar-indexed by `weights`/`assemble` -- and only then moved to the storage
+# the backend chooses (`_kron_to_storage`). On a host mesh `_host_mirror_mesh` returns the
+# mesh itself and `_kron_to_storage` is the identity.
+function _kron_cache(Ω::AbstractMeshType{D}) where {D}
+    Ωₕ = _host_mirror_mesh(Ω)
     mass = ntuple(d -> Diagonal(weights(_kron_axis_space(Ωₕ, d), Innerh())), Val(D))
     seen = ntuple(_ -> Any[], Val(D))
+    return (; Ωₕ, mass, seen)
+end
+
+"""
+    _kron_build(cache, be, dims, leaves, block::String) -> (KroneckerLinearOperator, Bool)
+
+The operator on backend `be` and a grid of `dims` points summing `leaves`, `(scales, term)`
+pairs from `_kron_leaves`, each term projected on `cache.Ωₕ`, and whether a term read a
+grid-function coefficient (the caller warns once). Throws naming `block` (see
+`_throw_not_separable_term`) when a term does not project.
+"""
+function _kron_build(cache, be, dims::NTuple{D, Int}, leaves, block::String) where {D}
+    loc = locality(be)
+    (; Ωₕ, mass, seen) = cache
     T = eltype(mass[1])
     reads_coef = false
     terms = ()
-    for (scales, term) in _kron_leaves(resolve_form_ast(a), ())
+    for (scales, term) in leaves
         P = _kron_project(term, Ωₕ)
-        P === nothing && _throw_not_separable_term(term, Ωₕ)
+        P === nothing && _throw_not_separable_term(term, Ωₕ, block)
         reads_coef |= _kron_reads_coef(term)
         for projected in P
             factors = ntuple(d -> _kron_cached!(seen[d], _kron_factor(projected[d], mass[d])), Val(D))
@@ -446,12 +486,9 @@ function kronecker_operator(a::BilinearForm{D}) where {D}
             terms = (terms..., _kron_to_storage(loc, be, t))
         end
     end
-    reads_coef && _warn_kron_coefficient()
-
-    dims = ndofs(Wu, Tuple)
-    n = ndofs(Wu)
     policy = execution_policy(be)
-    return KroneckerLinearOperator{T, D, typeof(terms), typeof(policy)}(terms, dims, n, policy)
+    K = KroneckerLinearOperator{T, D, typeof(terms), typeof(policy)}(terms, dims, prod(dims), policy)
+    return K, reads_coef
 end
 
 # --- Device-resident factors (gpena/Bramble.jl#323) ---------------------------------- #
@@ -926,13 +963,21 @@ end
 # Without this method `mul!(y, K, x, α, β)` falls to `LinearAlgebra`'s generic `O(n^2)`
 # `getindex` loop. `α`/`β` may be `Int` (`semidiscretize_rhs` passes `-1, 1`).
 function mul!(
-        y::AbstractVector, K::KroneckerLinearOperator{T}, x::AbstractVector, α::Number,
+        y::AbstractVector, K::KroneckerLinearOperator, x::AbstractVector, α::Number,
         β::Number; scratch = nothing
-) where {T}
+)
+    # The line kernels index `y` and `x` from 1 under `@inbounds`.
+    Base.require_one_based_indexing(y, x)
     n = K.n
     (length(x) == n && length(y) == n) || _throw_kron_dimmismatch(K, x, y)
+    return _kron_apply!(locality(typeof(y)), y, K, x, α, β)
+end
+
+# The product with the locality given rather than read off `y`: a composite operator
+# (`kronecker_block.jl`) hands each block a view, whose type says host even on a device.
+function _kron_apply!(loc, y, K::KroneckerLinearOperator{T}, x, α, β) where {T}
     cs = map(t -> _kron_scalar(T, α * _kron_coeff(t.scales)), K.terms)
-    _kron_fused!(locality(typeof(y)), y, K, x, cs, β)
+    _kron_fused!(loc, y, K, x, cs, β)
     return y
 end
 
