@@ -32,8 +32,19 @@
 # `BilinearForm` resists (its `cache::_AssemblyCache{D, AST}` is mutable and shares the
 # `AST` parameter with `ast`), so the matrix-free prototype splits the form's three walked
 # parts instead, `(trial_space, test_space, ast)`, and walks them with `_mf_apply_parts!`,
-# `_mf_apply!`'s body over the parts. The fused plan's `form::RefValue` is not captured: its
+# `_mf_apply!`'s body over the parts. The fused plan's `form` box is not captured: its
 # `dims`, `omin`, `omax` are isbits.
+#
+# ## The hot vectors (#437's first experiment, subplan R0 of the v3.25.0 plan)
+#
+# The vectors each point writes or reads cross `@batch` as top-level loop arguments, not as
+# leaves of the skeleton. They are the matrix's `nzval` in the replay (a `SparseMatrixCSC`
+# keeps its arrays by declared type, so the generic split leaves the whole matrix by
+# reference) and the product's `x` and `y` in the fused band. Each task rebuilds its sink
+# around them. The replay builds a `_SplitReplaySink` (`ReplaySink`'s replay over `nzval`
+# and the split recording), the band an `ActionSink` with the operator's per-axis geometry
+# cache `geom` attached, as `_mf_band_task!` attaches it. What still resists stays by
+# reference, since R0 measures time, not bytes.
 #
 # ## The measurement
 #
@@ -212,11 +223,31 @@ const MF_CALLS = Any[]
 
 const _EXT_REPLAY_SIG = Tuple{Union{B._ReplayTarget, B._ActionTarget}, ntuple(_ -> Any, 10)...}
 
-function proto_band_replay!(target, sp, term, ax, bidx, nbands, rest, lin_indices,
-        mesh_markers, row_offset, col_offset)
-    skel, arrays = _split((target, sp, term, mesh_markers))
+# `ReplaySink`'s replay with the matrix reduced to its stored values `nzval`: a point's
+# entries add at the recorded positions, as `_scatter_add!` on a `SparseMatrixCSC` does.
+struct _SplitReplaySink{V <: AbstractVector, P <: AbstractVector, Q <: AbstractVector, S}
+    nzval::V
+    point_ptr::P
+    positions::Q
+    α::S
+end
+@inline B._sink_point!(s::_SplitReplaySink, lin_idx::Int, ::CartesianIndex) = @inbounds(
+    s.point_ptr[lin_idx])
+@inline B._sink_needs_coordinates(::_SplitReplaySink) = false
+Base.@propagate_inbounds function B._sink_entry!(
+        s::_SplitReplaySink, ::Int, ::Int, weight, slot::Int)
+    @inbounds s.nzval[s.positions[slot]] += s.α * weight
+    return nothing
+end
+
+function proto_band_replay!(target::B.ReplaySink, sp, term, ax, bidx, nbands, rest,
+        lin_indices, mesh_markers, row_offset, col_offset)
+    nzval = nonzeros(target.A)
+    α = target.α
+    skel, arrays = _split((target.point_ptr, target.positions, sp, term, mesh_markers))
     @batch for b in bidx
-        t, s, tm, mm = _rebuild(skel, arrays)
+        pp, pos, s, tm, mm = _rebuild(skel, arrays)
+        t = _SplitReplaySink(nzval, pp, pos, α)
         for I in CartesianIndices((rest..., B._band_range(ax, nbands, b)))
             B._replay_point!(t, tm, s, I, lin_indices, mm, row_offset, col_offset)
         end
@@ -247,12 +278,18 @@ function _mf_apply_parts!(policy, s, Wu, Wv, ast)
     return nothing
 end
 
-function proto_mf_bands!(s, plan::B._MFFusedPlan{D}, nbands::Int) where {D}
+# The fused band: `x` and `y` top level, the form's walked parts split, and the operator's
+# geometry cache `geom` attached to each task's sink (by reference: `_MFGeometry` declares
+# its `scaled` vectors, so the split keeps it whole).
+function proto_mf_bands!(s::B.ActionSink, plan::B._MFFusedPlan{D}, nbands::Int) where {D}
     a = plan.form[]
-    skel, arrays = _split((s, a.trial_space, a.test_space, a.ast))
+    geom = plan.form.geom
+    x, y, α, mask = s.x, s.y, s.α, s.mask
+    skel, arrays = _split((a.trial_space, a.test_space, a.ast))
     len, omin, omax = plan.dims[D], plan.omin, plan.omax
     @batch for b in 1:nbands
-        s′, Wu, Wv, ast = _rebuild(skel, arrays)
+        Wu, Wv, ast = _rebuild(skel, arrays)
+        s′ = B.ActionSink(y, x, α, mask, geom)
         own = B._band_range(1:len, nbands, b)
         pass = B._MFPass(B._MF_BAND, own, omin, omax, B._MF_NO_COLLECT)
         _mf_apply_parts!(pass, s′, Wu, Wv, ast)
@@ -367,7 +404,9 @@ function replay_rows(n)
     eq_ref = same_matrix(A, Aref)
     calls = Base.invokelatest(captured, REPLAY_CALLS, assemble!, A, a)
     isempty(calls) && error("no band replay reached at n = $n")
-    n == first(SIZES) && print_resistors("replay", first(calls))
+    c = first(calls)                    # what `proto_band_replay!` splits
+    n == first(SIZES) && print_resistors("replay",
+        (c[1].point_ptr, c[1].positions, c[2], c[3], c[9]))
     bref = measure_bytes(run_replay_ref, calls)
     bproto = measure_bytes(run_replay_proto, calls)
     tr, tp, ratio = time_rounds("replay", n, run_replay_ref, run_replay_proto, calls)
@@ -393,8 +432,8 @@ function mf_rows(n)
     length(mfc) == 1 || error("expected one band region at n = $n, got $(length(mfc))")
     call = only(mfc)
     f = call[2].form[]
-    n == first(SIZES) && print_resistors("mf_band",
-        (call[1], f, (f.trial_space, f.test_space, f.ast)))
+    n == first(SIZES) && print_resistors("mf_band",    # what `proto_mf_bands!` captures
+        ((f.trial_space, f.test_space, f.ast), call[1].mask, call[2].form.geom))
     bref = measure_bytes(run_mf_ref, call)
     bproto = measure_bytes(run_mf_proto, call)
     tr, tp, ratio = time_rounds("mf_band", n, run_mf_ref, run_mf_proto, call)
