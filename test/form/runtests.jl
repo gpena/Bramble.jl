@@ -64,6 +64,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("kronecker.jl")
     include("kronecker_projection.jl")
     include("kronecker_block.jl")
+    # The critics' edge cases for the general Kronecker operators (#427, #439, #442).
+    include("kronecker_edge.jl")
     # Matrix-free application of any bilinear form.
     include("matrix_free.jl")
     include("expression.jl")
