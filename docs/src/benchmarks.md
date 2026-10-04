@@ -67,7 +67,7 @@ Most operator and restriction benchmarks run on about one million grid points pe
 
 ## Comparisons in the latest baseline
 
-Every chart in this section reads the latest baseline alone (v3.20.0, `ba309208`), recorded with 4 threads, and finds its pairs by benchmark name; a comparison whose benchmarks the baseline lacks is left out.
+Every chart in this section reads the latest baseline alone (v3.23.0, `54e4457e`), recorded with 4 threads, and finds its pairs by benchmark name; a comparison whose benchmarks the baseline lacks is left out.
 
 ### Execution policy
 
@@ -78,11 +78,12 @@ Each bar is the median of the `Serial()` run of a benchmark divided by its media
 
 ```@raw html
 <div style="width:100%; margin:1.2rem 0 2.5rem 0;">
-<div id="bench_chart_1" data-bench="policy" data-run="ba309208" style="width:100%; height:380px;"></div>
+<div id="bench_chart_1" data-bench="policy" data-run="54e4457e" style="width:100%; height:380px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
-  const data = [{ name: "Parallel()", x: ["Rₕ! 1D","Rₕ! 2D","Rₕ! 3D","avgₕ! 1D","avgₕ! 2D","avgₕ! 3D","assemble (BilinearForm) 2D"], y: [2.1952889286770287,3.1048138610792937,2.9971308261864,2.4323009373940545,3.359134264559339,3.510131479215211,1.0801449426991043], type: 'bar', marker: { color: '#3b82f6' }, hovertext: ["Rₕ! 1D: 1.34 ms, ×2.2 faster than Serial()","Rₕ! 2D: 1.28 ms, ×3.1 faster than Serial()","Rₕ! 3D: 1.47 ms, ×3.0 faster than Serial()","avgₕ! 1D: 7.75 ms, ×2.43 faster than Serial()","avgₕ! 2D: 31.61 ms, ×3.36 faster than Serial()","avgₕ! 3D: 174.53 ms, ×3.51 faster than Serial()","assemble (BilinearForm) 2D: 4.52 ms, ×1.08 faster than Serial()"], hoverinfo: 'text' }];
+  const data = [{ name: "Parallel()", x: ["Rₕ! 1D","Rₕ! 2D","Rₕ! 3D","avgₕ! 1D","avgₕ! 2D","avgₕ! 3D","assemble (BilinearForm) 2D"], y: [2.1974865522920344,3.1418034321372854,2.9530822638333682,2.4203645058926253,3.4752270260047506,3.439032638022571,1.1918093913922772], type: 'bar', marker: { color: '#3b82f6' }, hovertext: ["Rₕ! 1D: 1.35 ms, ×2.2 faster than Serial()","Rₕ! 2D: 1.28 ms, ×3.14 faster than Serial()","Rₕ! 3D: 1.49 ms, ×2.95 faster than Serial()","avgₕ! 1D: 7.88 ms, ×2.42 faster than Serial()","avgₕ! 2D: 32.53 ms, ×3.48 faster than Serial()","avgₕ! 3D: 180.96 ms, ×3.44 faster than Serial()","assemble (BilinearForm) 2D: 3.96 ms, ×1.19 faster than Serial()"], hoverinfo: 'text' },
+{ name: "CpuPolyester()", x: ["Rₕ! 1D","Rₕ! 2D","Rₕ! 3D","avgₕ! 1D","avgₕ! 2D","avgₕ! 3D","assemble (BilinearForm) 2D"], y: [2.2610390115043595,3.489909671829308,3.253291303541628,2.3462388093978803,3.4708087594825967,3.411627875041029,0.9067580739839194], type: 'bar', marker: { color: '#f59e0b' }, hovertext: ["Rₕ! 1D: 1.31 ms, ×2.26 faster than Serial()","Rₕ! 2D: 1.15 ms, ×3.49 faster than Serial()","Rₕ! 3D: 1.35 ms, ×3.25 faster than Serial()","avgₕ! 1D: 8.13 ms, ×2.35 faster than Serial()","avgₕ! 2D: 32.58 ms, ×3.47 faster than Serial()","avgₕ! 3D: 182.42 ms, ×3.41 faster than Serial()","assemble (BilinearForm) 2D: 5.2 ms, ×0.91 faster than Serial()"], hoverinfo: 'text' }];
   const layout = {
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
@@ -119,12 +120,12 @@ Each bar is the median of a benchmark in `Float32` or `Double64` divided by its 
 
 ```@raw html
 <div style="width:100%; margin:1.2rem 0 2.5rem 0;">
-<div id="bench_chart_2" data-bench="precision" data-run="ba309208" style="width:100%; height:380px;"></div>
+<div id="bench_chart_2" data-bench="precision" data-run="54e4457e" style="width:100%; height:380px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
-  const data = [{ name: "Float32", x: ["Rₕ!","assemble!","avgₕ!","innerₕ"], y: [0.9734627501064282,0.8829339538568175,0.9559598369619247,0.5018108827507963], type: 'bar', marker: { color: '#3b82f6' }, hovertext: ["Rₕ!: 285.8 μs, ×0.97 the Float64 time","assemble!: 71.3 μs, ×0.88 the Float64 time","avgₕ!: 1.8 ms, ×0.96 the Float64 time","innerₕ: 11.5 μs, ×0.5 the Float64 time"], hoverinfo: 'text' },
-{ name: "Double64", x: ["Rₕ!","assemble!","avgₕ!","innerₕ"], y: [30.24081055768412,13.279724477671056,44.266350664413295,48.684731858445694], type: 'bar', marker: { color: '#f59e0b' }, hovertext: ["Rₕ!: 8.88 ms, ×30.24 the Float64 time","assemble!: 1.07 ms, ×13.28 the Float64 time","avgₕ!: 83.49 ms, ×44.27 the Float64 time","innerₕ: 1.12 ms, ×48.68 the Float64 time"], hoverinfo: 'text' }];
+  const data = [{ name: "Float32", x: ["Rₕ!","assemble!","avgₕ!","innerₕ"], y: [0.9730365859058596,0.8315694754089554,0.9541113065915092,0.5], type: 'bar', marker: { color: '#3b82f6' }, hovertext: ["Rₕ!: 285.7 μs, ×0.97 the Float64 time","assemble!: 61.9 μs, ×0.83 the Float64 time","avgₕ!: 1.81 ms, ×0.95 the Float64 time","innerₕ: 11.5 μs, ×0.5 the Float64 time"], hoverinfo: 'text' },
+{ name: "Double64", x: ["Rₕ!","assemble!","avgₕ!","innerₕ"], y: [30.46909391892582,13.86574981868973,44.24879470623943,46.6504625589108], type: 'bar', marker: { color: '#f59e0b' }, hovertext: ["Rₕ!: 8.95 ms, ×30.47 the Float64 time","assemble!: 1.03 ms, ×13.87 the Float64 time","avgₕ!: 83.79 ms, ×44.25 the Float64 time","innerₕ: 1.07 ms, ×46.65 the Float64 time"], hoverinfo: 'text' }];
   const layout = {
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
@@ -162,12 +163,12 @@ The same operator along `x` (the contiguous storage direction) and along `y` (ac
 
 ```@raw html
 <div style="width:100%; margin:1.2rem 0 2.5rem 0;">
-<div id="bench_chart_3" data-bench="direction" data-run="ba309208" style="width:100%; height:278px;"></div>
+<div id="bench_chart_3" data-bench="direction" data-run="54e4457e" style="width:100%; height:324px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
-  const data = [{ name: "along x", x: [0.2035835,0.163,0.162541], y: ["D₋ₓ|ᵧ","M₊ₓ|ᵧ 2D","jumpₓ|ᵧ 2D"], type: 'bar', orientation: 'h', marker: { color: '#3b82f6' }, hovertext: ["D₋ₓ|ᵧ: 203.6 μs","M₊ₓ|ᵧ 2D: 163.0 μs","jumpₓ|ᵧ 2D: 162.5 μs"], hoverinfo: 'text' },
-{ name: "along y", x: [0.161959,0.161625,0.161416], y: ["D₋ₓ|ᵧ","M₊ₓ|ᵧ 2D","jumpₓ|ᵧ 2D"], type: 'bar', orientation: 'h', marker: { color: '#f59e0b' }, hovertext: ["D₋ₓ|ᵧ: 162.0 μs","M₊ₓ|ᵧ 2D: 161.6 μs","jumpₓ|ᵧ 2D: 161.4 μs"], hoverinfo: 'text' }];
+  const data = [{ name: "along x", x: [0.204625,0.203958,0.162625,0.162709], y: ["D₋ₓ|ᵧ","D₋ₓ|ᵧ (non-uniform)","M₊ₓ|ᵧ 2D","jumpₓ|ᵧ 2D"], type: 'bar', orientation: 'h', marker: { color: '#3b82f6' }, hovertext: ["D₋ₓ|ᵧ: 204.6 μs","D₋ₓ|ᵧ (non-uniform): 204.0 μs","M₊ₓ|ᵧ 2D: 162.6 μs","jumpₓ|ᵧ 2D: 162.7 μs"], hoverinfo: 'text' },
+{ name: "along y", x: [0.16225,0.161916,0.159917,0.1603335], y: ["D₋ₓ|ᵧ","D₋ₓ|ᵧ (non-uniform)","M₊ₓ|ᵧ 2D","jumpₓ|ᵧ 2D"], type: 'bar', orientation: 'h', marker: { color: '#f59e0b' }, hovertext: ["D₋ₓ|ᵧ: 162.2 μs","D₋ₓ|ᵧ (non-uniform): 161.9 μs","M₊ₓ|ᵧ 2D: 159.9 μs","jumpₓ|ᵧ 2D: 160.3 μs"], hoverinfo: 'text' }];
   const layout = {
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
@@ -204,11 +205,11 @@ A bilinear form assembled for the first time, refilled in place, and combined wi
 
 ```@raw html
 <div style="width:100%; margin:1.2rem 0 2.5rem 0;">
-<div id="bench_chart_4" data-bench="assembly" data-run="ba309208" style="width:100%; height:324px;"></div>
+<div id="bench_chart_4" data-bench="assembly" data-run="54e4457e" style="width:100%; height:324px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
-  const data = [{ name: "median time", x: [4.883291,0.303083,6.89975,0.377], y: ["first assembly (allocates and fills)","refill (pattern reused)","assemble the pieces, then add","assemble_add!"], type: 'bar', orientation: 'h', marker: { color: '#3b82f6' }, hovertext: ["first assembly (allocates and fills): 4.88 ms","refill (pattern reused): 303.1 μs","assemble the pieces, then add: 6.9 ms","assemble_add!: 377.0 μs"], hoverinfo: 'text' }];
+  const data = [{ name: "median time", x: [4.7145,0.297583,5.662167,0.354375], y: ["first assembly (allocates and fills)","refill (pattern reused)","assemble the pieces, then add","assemble_add!"], type: 'bar', orientation: 'h', marker: { color: '#3b82f6' }, hovertext: ["first assembly (allocates and fills): 4.71 ms","refill (pattern reused): 297.6 μs","assemble the pieces, then add: 5.66 ms","assemble_add!: 354.4 μs"], hoverinfo: 'text' }];
   const layout = {
     paper_bgcolor: theme.bg,
     plot_bgcolor: theme.bg,
@@ -237,15 +238,107 @@ A bilinear form assembled for the first time, refilled in place, and combined wi
 </div>
 ```
 
+### Uniform and non-uniform grids
+
+Each benchmark on a uniform mesh and on the same mesh with graded axes (the benchmark of the same name with a ` (non-uniform)` suffix).
+
+- `operators 2D`: The finite-difference stencil engine on a 1000×1000 grid: the difference operator along the grid's contiguous storage direction (`D₋ₓ`) versus across it (`D₋ᵧ`), which access memory very differently and so can perform very differently.
+- `operators 3D`: The same stencil engine in 3D (`D₋₂`), together with the inner product `innerₕ` and the full gradient `∇ₕ`.
+- `forms`: Linear and bilinear form assembly, across 1D/2D and the `Serial()`/`Parallel()`/`CpuPolyester()` backends, and the refill and `assemble_add!` paths on a fixed matrix pattern.
+
+```@raw html
+<div style="width:100%; margin:1.2rem 0 2.5rem 0;">
+<div id="bench_chart_5" data-bench="uniformity" data-run="54e4457e" style="width:100%; height:784px;"></div>
+<script>
+(function () {
+  const theme = window.bramblePlotlyTheme();
+  const data = [{ name: "uniform", x: [0.294583,0.369083,0.16225,0.204625,0.170834,0.705917,0.704042,1.2401045,1.14875,0.229292,0.197375,0.691,4.7145,0.297583], y: ["Dcₓ","D₋(uₕ, d) over d","D₋ᵧ","D₋ₓ","Mₓ","curlₕ!","divₕ!","Δₕ","Δₕ!","D₋₂","innerₕ","∇ₕ","assemble (BilinearForm) 2D, Serial() backend","assemble! (matrix) 2D"], type: 'bar', orientation: 'h', marker: { color: '#3b82f6' }, hovertext: ["Dcₓ: 294.6 μs","D₋(uₕ, d) over d: 369.1 μs","D₋ᵧ: 162.2 μs","D₋ₓ: 204.6 μs","Mₓ: 170.8 μs","curlₕ!: 705.9 μs","divₕ!: 704.0 μs","Δₕ: 1.24 ms","Δₕ!: 1.15 ms","D₋₂: 229.3 μs","innerₕ: 197.4 μs","∇ₕ: 691.0 μs","assemble (BilinearForm) 2D, Serial() backend: 4.71 ms","assemble! (matrix) 2D: 297.6 μs"], hoverinfo: 'text' },
+{ name: "non-uniform", x: [0.257792,0.365916,0.161916,0.203958,0.15625,0.705834,0.702792,1.191208,1.147792,0.214791,0.197416,0.6868545,3.155125,0.267875], y: ["Dcₓ","D₋(uₕ, d) over d","D₋ᵧ","D₋ₓ","Mₓ","curlₕ!","divₕ!","Δₕ","Δₕ!","D₋₂","innerₕ","∇ₕ","assemble (BilinearForm) 2D, Serial() backend","assemble! (matrix) 2D"], type: 'bar', orientation: 'h', marker: { color: '#f59e0b' }, hovertext: ["Dcₓ: 257.8 μs","D₋(uₕ, d) over d: 365.9 μs","D₋ᵧ: 161.9 μs","D₋ₓ: 204.0 μs","Mₓ: 156.2 μs","curlₕ!: 705.8 μs","divₕ!: 702.8 μs","Δₕ: 1.19 ms","Δₕ!: 1.15 ms","D₋₂: 214.8 μs","innerₕ: 197.4 μs","∇ₕ: 686.9 μs","assemble (BilinearForm) 2D, Serial() backend: 3.16 ms","assemble! (matrix) 2D: 267.9 μs"], hoverinfo: 'text' }];
+  const layout = {
+    paper_bgcolor: theme.bg,
+    plot_bgcolor: theme.bg,
+    font: { color: theme.text },
+    barmode: 'group',
+    legend: { orientation: 'h', y: -0.25 },
+    shapes: [],
+    xaxis: {
+      title: { text: "median time (ms)", font: { color: theme.text } },
+      type: 'log', color: theme.text, gridcolor: theme.grid,
+    },
+    yaxis: { color: theme.text, automargin: true, autorange: 'reversed', tickfont: { size: 10 } },
+    margin: { t: 20, l: 260, r: 20, b: 60 },
+  };
+  Plotly.newPlot('bench_chart_5', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bench_chart_5', function () {
+    const t = window.bramblePlotlyTheme();
+    return {
+      'font.color': t.text,
+      'xaxis.color': t.text, 'xaxis.gridcolor': t.grid, 'xaxis.title.font.color': t.text,
+      'yaxis.color': t.text,
+    };
+  });
+})();
+</script>
+</div>
+```
+
+### Dimension
+
+The median time per grid point, in nanoseconds per point, of benchmarks that differ only in the dimension of their name. The time is divided by the `points:` tag of the group, the number of grid points its benchmarks run on.
+
+- `jumps & averages`: Jump and average operators across cell interfaces, in 2D and 3D.
+- `restriction`: Point interpolation (`Rₕ!`) and cell-averaging (`avgₕ!`), compared across the `Serial()` (the allocation-free default), `Parallel()` and `CpuPolyester()` backends, split by dimension.
+
+```@raw html
+<div style="width:100%; margin:1.2rem 0 2.5rem 0;">
+<div id="bench_chart_6" data-bench="dimension" data-run="54e4457e" style="width:100%; height:460px;"></div>
+<script>
+(function () {
+  const theme = window.bramblePlotlyTheme();
+  const data = [{ name: "jumpₕ nD", x: ["1D","2D","3D"], y: [null,0.331,0.643583], type: 'scatter', mode: 'lines+markers', connectgaps: true, line: { color: '#3b82f6' }, marker: { color: '#3b82f6', size: 7 }, hovertext: ["1D","jumpₕ nD, 2D: 0.331 ns per point","jumpₕ nD, 3D: 0.644 ns per point"], hoverinfo: 'text' },
+{ name: "Rₕ! nD, CpuPolyester() backend", x: ["1D","2D","3D"], y: [1.312459,1.154125,1.34825], type: 'scatter', mode: 'lines+markers', connectgaps: true, line: { color: '#f59e0b' }, marker: { color: '#f59e0b', size: 7 }, hovertext: ["Rₕ! nD, CpuPolyester() backend, 1D: 1.31 ns per point","Rₕ! nD, CpuPolyester() backend, 2D: 1.15 ns per point","Rₕ! nD, CpuPolyester() backend, 3D: 1.35 ns per point"], hoverinfo: 'text' },
+{ name: "Rₕ! nD, Parallel() backend", x: ["1D","2D","3D"], y: [1.350416,1.282,1.4853125], type: 'scatter', mode: 'lines+markers', connectgaps: true, line: { color: '#10b981' }, marker: { color: '#10b981', size: 7 }, hovertext: ["Rₕ! nD, Parallel() backend, 1D: 1.35 ns per point","Rₕ! nD, Parallel() backend, 2D: 1.28 ns per point","Rₕ! nD, Parallel() backend, 3D: 1.49 ns per point"], hoverinfo: 'text' },
+{ name: "Rₕ! nD, Serial() backend (default)", x: ["1D","2D","3D"], y: [2.967521,4.027792,4.38625], type: 'scatter', mode: 'lines+markers', connectgaps: true, line: { color: '#ef4444' }, marker: { color: '#ef4444', size: 7 }, hovertext: ["Rₕ! nD, Serial() backend (default), 1D: 2.97 ns per point","Rₕ! nD, Serial() backend (default), 2D: 4.03 ns per point","Rₕ! nD, Serial() backend (default), 3D: 4.39 ns per point"], hoverinfo: 'text' },
+{ name: "avgₕ! nD, CpuPolyester() backend", x: ["1D","2D","3D"], y: [8.133834,32.576125,182.415875], type: 'scatter', mode: 'lines+markers', connectgaps: true, line: { color: '#8b5cf6' }, marker: { color: '#8b5cf6', size: 7 }, hovertext: ["avgₕ! nD, CpuPolyester() backend, 1D: 8.13 ns per point","avgₕ! nD, CpuPolyester() backend, 2D: 32.6 ns per point","avgₕ! nD, CpuPolyester() backend, 3D: 182.0 ns per point"], hoverinfo: 'text' },
+{ name: "avgₕ! nD, Parallel() backend", x: ["1D","2D","3D"], y: [7.8847285,32.534709,180.96225], type: 'scatter', mode: 'lines+markers', connectgaps: true, line: { color: '#06b6d4' }, marker: { color: '#06b6d4', size: 7 }, hovertext: ["avgₕ! nD, Parallel() backend, 1D: 7.88 ns per point","avgₕ! nD, Parallel() backend, 2D: 32.5 ns per point","avgₕ! nD, Parallel() backend, 3D: 181.0 ns per point"], hoverinfo: 'text' },
+{ name: "avgₕ! nD, Serial() backend (default)", x: ["1D","2D","3D"], y: [19.083917,113.0655,622.335084], type: 'scatter', mode: 'lines+markers', connectgaps: true, line: { color: '#ec4899' }, marker: { color: '#ec4899', size: 7 }, hovertext: ["avgₕ! nD, Serial() backend (default), 1D: 19.1 ns per point","avgₕ! nD, Serial() backend (default), 2D: 113.0 ns per point","avgₕ! nD, Serial() backend (default), 3D: 622.0 ns per point"], hoverinfo: 'text' }];
+  const layout = {
+    paper_bgcolor: theme.bg,
+    plot_bgcolor: theme.bg,
+    font: { color: theme.text },
+    barmode: 'group',
+    legend: { orientation: 'h', y: -0.25 },
+    shapes: [],
+    yaxis: {
+      title: { text: "median time per grid point (ns)", font: { color: theme.text } },
+      type: 'log', color: theme.text, gridcolor: theme.grid,
+    },
+    xaxis: { color: theme.text, automargin: true, tickangle: -30 },
+    margin: { t: 20, l: 70, r: 20, b: 130 },
+  };
+  Plotly.newPlot('bench_chart_6', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bench_chart_6', function () {
+    const t = window.bramblePlotlyTheme();
+    return {
+      'font.color': t.text,
+      'yaxis.color': t.text, 'yaxis.gridcolor': t.grid, 'yaxis.title.font.color': t.text,
+      'xaxis.color': t.text,
+    };
+  });
+})();
+</script>
+</div>
+```
+
 ## Regressions since the previous baseline
 
-Each bar is one benchmark's median in the latest baseline (v3.20.0, `ba309208`) divided by its median in the one before (v3.13.0, `7c39cb79`); a bar to the left of the dotted line is faster. The spread of a run is its interquartile range, from the first to the third quartile of the samples of that one run. A change is flagged, in red when slower and green when faster, only when the two runs' interquartile ranges do not overlap; a grey bar is within the spread. No fixed percentage band is used, because separate launches of the same code can differ by 10 to 30%, which a fixed band would either hide on a quiet benchmark or flag on a loud one.
+Each bar is one benchmark's median in the latest baseline (v3.23.0, `54e4457e`) divided by its median in the one before (v3.20.0, `ba309208`); a bar to the left of the dotted line is faster. The spread of a run is its interquartile range, from the first to the third quartile of the samples of that one run. A change is flagged, in red when slower and green when faster, only when the two runs' interquartile ranges do not overlap; a grey bar is within the spread. No fixed percentage band is used, because separate launches of the same code can differ by 10 to 30%, which a fixed band would either hide on a quiet benchmark or flag on a loud one.
 
 0 of 81 benchmarks are flagged. 81 have no spread recorded in one of the two runs (baselines saved before the quartiles were recorded keep only the minimum, median and maximum), so they are never flagged. Hover a bar for the two medians.
 
 ```@raw html
 <div style="width:100%; margin:1.2rem 0 2.5rem 0;">
-<div id="bench_chart_5" data-bench="regression" data-flagged="" style="width:100%; height:1376px;"></div>
+<div id="bench_chart_7" data-bench="regression" data-flagged="" style="width:100%; height:1376px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
@@ -253,9 +346,9 @@ Each bar is one benchmark's median in the latest baseline (v3.20.0, `ba309208`) 
     type: 'bar',
     orientation: 'h',
     y: ["operators 2D/Dcₓ","operators 2D/D₋(uₕ, d) over d","operators 2D/D₋ᵧ","operators 2D/D₋ₓ","operators 2D/Mₓ","operators 2D/curlₕ!","operators 2D/divₕ!","operators 2D/Δₕ","operators 2D/Δₕ!","operators 3D/D₋₂","operators 3D/innerₕ","operators 3D/∇ₕ","jumps & averages/M₊ᵧ 2D","jumps & averages/M₊₂ 3D","jumps & averages/M₊ₓ 2D","jumps & averages/jumpᵧ 2D","jumps & averages/jump₂ 3D","jumps & averages/jumpₓ 2D","jumps & averages/jumpₕ 2D","jumps & averages/jumpₕ 3D","inner products 2D/innerₕ","inner products 2D/norm₁ₕ","inner products 2D/normₕ","inner products 2D/snorm₁ₕ","restriction/Rₕ 1D (allocates its output)","restriction/Rₕ! 1D, Parallel() backend","restriction/Rₕ! 1D, Serial() backend (default)","restriction/Rₕ! 2D, Parallel() backend","restriction/Rₕ! 2D, Serial() backend (default)","restriction/Rₕ! 3D, Parallel() backend","restriction/Rₕ! 3D, Serial() backend (default)","restriction/avgₕ! 1D, Parallel() backend","restriction/avgₕ! 1D, Serial() backend (default)","restriction/avgₕ! 2D, Parallel() backend","restriction/avgₕ! 2D, Serial() backend (default)","restriction/avgₕ! 3D, Parallel() backend","restriction/avgₕ! 3D, Serial() backend (default)","composite/D₋ₓ (3 components)","composite/∇ₕ (3 components)","construction/gridspace 2D","construction/gridspace 3D","construction/hₘₐₓ 3D","startup & latency/TTFX (load + first operator)","startup & latency/TTFX first-assembly (assemble)","startup & latency/TTFX first-projection (Rₕ)","startup & latency/TTFX mesh construction","startup & latency/using Bramble","forms/allocate_system_matrix 2D","forms/assemble (BilinearForm) 2D, Parallel() backend","forms/assemble (BilinearForm) 2D, Serial() backend","forms/assemble! (matrix) 2D","forms/assemble! 1D","forms/assemble! 1D, Parallel() backend","forms/assemble! 2D","forms/assemble-then-add (matrix) 2D","forms/assemble_add! (matrix) 2D","forms/assemble_parallel! 1D","forms/assemble_parallel! 2D","forms/evaluate! 1D","forms/form (bilinear, 2D)","forms/l(vₕ) 1D","jacobian sparsity/jacobian (native), 1D n=100","jacobian sparsity/jacobian (native), 1D n=10000","jacobian sparsity/jacobian (traced), 1D n=100","jacobian sparsity/jacobian (traced), 1D n=10000","jacobian sparsity/prepare_jacobian (native), 1D n=100","jacobian sparsity/prepare_jacobian (native), 1D n=10000","jacobian sparsity/prepare_jacobian (traced), 1D n=100","jacobian sparsity/prepare_jacobian (traced), 1D n=10000","precision 1D/Rₕ! Double64","precision 1D/Rₕ! Float32","precision 1D/Rₕ! Float64","precision 1D/assemble! Double64","precision 1D/assemble! Float32","precision 1D/assemble! Float64","precision 1D/avgₕ! Double64","precision 1D/avgₕ! Float32","precision 1D/avgₕ! Float64","precision 1D/innerₕ Double64","precision 1D/innerₕ Float32","precision 1D/innerₕ Float64"],
-    x: [0.6391193379177028,0.7032248493700931,0.6627478260869565,0.7304518332741318,0.7456781872707969,0.7049109558030524,0.6978935698447893,0.7424456218573923,0.729846635755635,0.7216739044611133,0.7528202193609919,0.7194210664565275,0.7122648369227514,0.8017926775474195,0.7630193095377413,0.8052360095381577,0.8023823712987027,0.7980723435804524,0.7794545992309967,0.7865567780909396,0.8401439557925487,0.7987089637221408,0.7999965673486201,0.8396456256921373,0.48470282920031604,0.5784345909543651,0.7508545864397721,0.5199395050564615,0.8399419056395325,0.4534277531092017,0.7141751032901317,0.4990814926447651,0.7730959251531335,0.5387414258167674,0.5757577588217111,0.5138531289515793,0.8276751722352916,0.7370095181248217,0.7485652131938858,1.0343993085566119,0.8926665487524472,0.8732464718380211,0.8037677286039071,0.8073445729987891,0.7930403894690944,0.7675433099944518,0.756523024952463,0.6738199349657785,0.6790265845599279,0.8073112615276368,0.35816565411145473,0.6332390173751058,0.47275153396013697,0.5819272940174579,0.5979266963838337,0.6476728444691832,0.4325062611806798,0.44862275799140144,0.46649292628443784,0.5533403931462184,0.8037023297896404,0.8254633245757296,0.8065608857037454,0.8337800011911143,0.8063998023227081,0.8154025898159868,0.8273002571296731,0.8490695187165775,0.8591620907057149,0.9332594177587721,0.8396579479225418,0.8347547974413646,0.8341267249757046,0.8421164470888228,0.7679263934301575,0.9092397666601516,0.9056417260235371,0.7964790962837838,0.9492026652691473,0.7976694180481376,0.7994209369658493],
+    x: [1.1601546962196307,0.9981960784313726,1.0017967510295815,1.0051158369907187,0.9690454986357784,1.0042093553242157,0.9941463242432266,1.0796426161715094,1.037519598846829,1.0034660831509847,1.0002128381973618,1.0091878447632499,0.9894323279195669,0.9627741980916165,0.9976993865030674,0.9932937255290678,0.9994506508688505,1.001033585372306,1.004805459341807,1.0079284846766863,0.9997852931011008,0.9997278836189197,1.0,0.9999134792930625,1.0063709077380953,1.005771349113369,1.0067781900987332,0.9982643282467535,1.0101572696456642,1.0074751134781983,0.9926683422930916,1.0167830430082443,1.0117932159033443,1.029358151880773,1.0649331009469607,1.0368274693159234,1.0158261957107704,1.0487369240287765,0.9991835493797864,1.003102503033299,0.9597724827056111,1.004,1.2402308088113065,1.178656939039888,1.1733758429822185,1.1911379720056885,1.1983183334306042,0.8659792952901352,0.8749802862622731,0.9654349904603269,0.9818531557362175,0.9261156065417051,0.9012810485769078,0.8471719381329973,0.8206336461465995,0.9399867374005305,1.0057719908508465,0.9712399245063288,0.9706988940827728,0.9959151757258472,0.999577841520581,1.1505376344086022,1.0167847946045372,1.1100714285714286,1.0089885092691895,1.0622089552238807,1.0113965095779462,0.9877647335449522,0.9645086519114688,1.0074047312347219,0.9994192413052376,0.9998569604086845,0.96227078965286,0.8679872150727563,0.9216011486285771,1.0036117527384172,1.0020684969495286,1.0040099413460584,0.958173644000043,0.9963478260869565,0.9999563642710652],
     marker: { color: ["#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af","#9ca3af"] },
-    hovertext: ["397.3 μs → 253.9 μs, ×0.639 (no spread recorded)","525.8 μs → 369.8 μs, ×0.703 (no spread recorded)","244.4 μs → 162.0 μs, ×0.663 (no spread recorded)","278.7 μs → 203.6 μs, ×0.73 (no spread recorded)","236.4 μs → 176.3 μs, ×0.746 (no spread recorded)","997.2 μs → 703.0 μs, ×0.705 (no spread recorded)","1.01 ms → 708.2 μs, ×0.698 (no spread recorded)","1.55 ms → 1.15 ms, ×0.742 (no spread recorded)","1.52 ms → 1.11 ms, ×0.73 (no spread recorded)","316.6 μs → 228.5 μs, ×0.722 (no spread recorded)","262.1 μs → 197.3 μs, ×0.753 (no spread recorded)","951.8 μs → 684.7 μs, ×0.719 (no spread recorded)","226.9 μs → 161.6 μs, ×0.712 (no spread recorded)","283.4 μs → 227.2 μs, ×0.802 (no spread recorded)","213.6 μs → 163.0 μs, ×0.763 (no spread recorded)","200.5 μs → 161.4 μs, ×0.805 (no spread recorded)","283.6 μs → 227.5 μs, ×0.802 (no spread recorded)","203.7 μs → 162.5 μs, ×0.798 (no spread recorded)","422.6 μs → 329.4 μs, ×0.779 (no spread recorded)","811.8 μs → 638.5 μs, ×0.787 (no spread recorded)","227.3 μs → 191.0 μs, ×0.84 (no spread recorded)","768.4 μs → 613.7 μs, ×0.799 (no spread recorded)","174.8 μs → 139.8 μs, ×0.8 (no spread recorded)","564.4 μs → 473.9 μs, ×0.84 (no spread recorded)","2.77 ms → 1.34 ms, ×0.485 (no spread recorded)","2.32 ms → 1.34 ms, ×0.578 (no spread recorded)","3.93 ms → 2.95 ms, ×0.751 (no spread recorded)","2.47 ms → 1.28 ms, ×0.52 (no spread recorded)","4.75 ms → 3.99 ms, ×0.84 (no spread recorded)","3.25 ms → 1.47 ms, ×0.453 (no spread recorded)","6.19 ms → 4.42 ms, ×0.714 (no spread recorded)","15.54 ms → 7.75 ms, ×0.499 (no spread recorded)","24.4 ms → 18.86 ms, ×0.773 (no spread recorded)","58.67 ms → 31.61 ms, ×0.539 (no spread recorded)","184.4 ms → 106.17 ms, ×0.576 (no spread recorded)","339.66 ms → 174.53 ms, ×0.514 (no spread recorded)","740.19 ms → 612.64 ms, ×0.828 (no spread recorded)","901.3 μs → 664.3 μs, ×0.737 (no spread recorded)","1.94 ms → 1.45 ms, ×0.749 (no spread recorded)","884.9 ns → 915.4 ns, ×1.034 (no spread recorded)","193.0 ns → 172.3 ns, ×0.893 (no spread recorded)","36.0 ns → 31.4 ns, ×0.873 (no spread recorded)","588.46 ms → 472.99 ms, ×0.804 (no spread recorded)","628.42 ms → 507.35 ms, ×0.807 (no spread recorded)","617.34 ms → 489.58 ms, ×0.793 (no spread recorded)","603.44 ms → 463.17 ms, ×0.768 (no spread recorded)","600.19 ms → 454.06 ms, ×0.757 (no spread recorded)","4.97 ms → 3.35 ms, ×0.674 (no spread recorded)","6.66 ms → 4.52 ms, ×0.679 (no spread recorded)","6.05 ms → 4.88 ms, ×0.807 (no spread recorded)","846.2 μs → 303.1 μs, ×0.358 (no spread recorded)","1.43 ms → 908.0 μs, ×0.633 (no spread recorded)","1.15 ms → 546.0 μs, ×0.473 (no spread recorded)","2.03 ms → 1.18 ms, ×0.582 (no spread recorded)","11.54 ms → 6.9 ms, ×0.598 (no spread recorded)","582.1 μs → 377.0 μs, ×0.648 (no spread recorded)","1.12 ms → 483.5 μs, ×0.433 (no spread recorded)","1.09 ms → 491.2 μs, ×0.449 (no spread recorded)","2.35 ms → 1.1 ms, ×0.466 (no spread recorded)","29.5 ns → 16.3 ns, ×0.553 (no spread recorded)","1.11 ms → 888.3 μs, ×0.804 (no spread recorded)","14.1 μs → 11.6 μs, ×0.825 (no spread recorded)","1.01 ms → 815.5 μs, ×0.807 (no spread recorded)","16.8 μs → 14.0 μs, ×0.834 (no spread recorded)","1.01 ms → 815.9 μs, ×0.806 (no spread recorded)","20.5 μs → 16.8 μs, ×0.815 (no spread recorded)","1.35 ms → 1.12 ms, ×0.827 (no spread recorded)","70.1 μs → 59.5 μs, ×0.849 (no spread recorded)","6.15 ms → 5.28 ms, ×0.859 (no spread recorded)","9.51 ms → 8.88 ms, ×0.933 (no spread recorded)","340.4 μs → 285.8 μs, ×0.84 (no spread recorded)","351.8 μs → 293.6 μs, ×0.835 (no spread recorded)","1.29 ms → 1.07 ms, ×0.834 (no spread recorded)","84.7 μs → 71.3 μs, ×0.842 (no spread recorded)","105.2 μs → 80.8 μs, ×0.768 (no spread recorded)","91.82 ms → 83.49 ms, ×0.909 (no spread recorded)","1.99 ms → 1.8 ms, ×0.906 (no spread recorded)","2.37 ms → 1.89 ms, ×0.796 (no spread recorded)","1.18 ms → 1.12 ms, ×0.949 (no spread recorded)","14.4 μs → 11.5 μs, ×0.798 (no spread recorded)","28.7 μs → 22.9 μs, ×0.799 (no spread recorded)"],
+    hovertext: ["253.9 μs → 294.6 μs, ×1.16 (no spread recorded)","369.8 μs → 369.1 μs, ×0.998 (no spread recorded)","162.0 μs → 162.2 μs, ×1.002 (no spread recorded)","203.6 μs → 204.6 μs, ×1.005 (no spread recorded)","176.3 μs → 170.8 μs, ×0.969 (no spread recorded)","703.0 μs → 705.9 μs, ×1.004 (no spread recorded)","708.2 μs → 704.0 μs, ×0.994 (no spread recorded)","1.15 ms → 1.24 ms, ×1.08 (no spread recorded)","1.11 ms → 1.15 ms, ×1.038 (no spread recorded)","228.5 μs → 229.3 μs, ×1.003 (no spread recorded)","197.3 μs → 197.4 μs, ×1.0 (no spread recorded)","684.7 μs → 691.0 μs, ×1.009 (no spread recorded)","161.6 μs → 159.9 μs, ×0.989 (no spread recorded)","227.2 μs → 218.8 μs, ×0.963 (no spread recorded)","163.0 μs → 162.6 μs, ×0.998 (no spread recorded)","161.4 μs → 160.3 μs, ×0.993 (no spread recorded)","227.5 μs → 227.4 μs, ×0.999 (no spread recorded)","162.5 μs → 162.7 μs, ×1.001 (no spread recorded)","329.4 μs → 331.0 μs, ×1.005 (no spread recorded)","638.5 μs → 643.6 μs, ×1.008 (no spread recorded)","191.0 μs → 190.9 μs, ×1.0 (no spread recorded)","613.7 μs → 613.5 μs, ×1.0 (no spread recorded)","139.8 μs → 139.8 μs, ×1.0 (no spread recorded)","473.9 μs → 473.8 μs, ×1.0 (no spread recorded)","1.34 ms → 1.35 ms, ×1.006 (no spread recorded)","1.34 ms → 1.35 ms, ×1.006 (no spread recorded)","2.95 ms → 2.97 ms, ×1.007 (no spread recorded)","1.28 ms → 1.28 ms, ×0.998 (no spread recorded)","3.99 ms → 4.03 ms, ×1.01 (no spread recorded)","1.47 ms → 1.49 ms, ×1.007 (no spread recorded)","4.42 ms → 4.39 ms, ×0.993 (no spread recorded)","7.75 ms → 7.88 ms, ×1.017 (no spread recorded)","18.86 ms → 19.08 ms, ×1.012 (no spread recorded)","31.61 ms → 32.53 ms, ×1.029 (no spread recorded)","106.17 ms → 113.07 ms, ×1.065 (no spread recorded)","174.53 ms → 180.96 ms, ×1.037 (no spread recorded)","612.64 ms → 622.34 ms, ×1.016 (no spread recorded)","664.3 μs → 696.7 μs, ×1.049 (no spread recorded)","1.45 ms → 1.45 ms, ×0.999 (no spread recorded)","915.4 ns → 918.2 ns, ×1.003 (no spread recorded)","172.3 ns → 165.3 ns, ×0.96 (no spread recorded)","31.4 ns → 31.6 ns, ×1.004 (no spread recorded)","472.99 ms → 586.62 ms, ×1.24 (no spread recorded)","507.35 ms → 597.99 ms, ×1.179 (no spread recorded)","489.58 ms → 574.46 ms, ×1.173 (no spread recorded)","463.17 ms → 551.7 ms, ×1.191 (no spread recorded)","454.06 ms → 544.11 ms, ×1.198 (no spread recorded)","3.35 ms → 2.9 ms, ×0.866 (no spread recorded)","4.52 ms → 3.96 ms, ×0.875 (no spread recorded)","4.88 ms → 4.71 ms, ×0.965 (no spread recorded)","303.1 μs → 297.6 μs, ×0.982 (no spread recorded)","908.0 μs → 840.9 μs, ×0.926 (no spread recorded)","546.0 μs → 492.1 μs, ×0.901 (no spread recorded)","1.18 ms → 1.0 ms, ×0.847 (no spread recorded)","6.9 ms → 5.66 ms, ×0.821 (no spread recorded)","377.0 μs → 354.4 μs, ×0.94 (no spread recorded)","483.5 μs → 486.3 μs, ×1.006 (no spread recorded)","491.2 μs → 477.0 μs, ×0.971 (no spread recorded)","1.1 ms → 1.06 ms, ×0.971 (no spread recorded)","16.3 ns → 16.3 ns, ×0.996 (no spread recorded)","888.3 μs → 887.9 μs, ×1.0 (no spread recorded)","11.6 μs → 13.4 μs, ×1.151 (no spread recorded)","815.5 μs → 829.2 μs, ×1.017 (no spread recorded)","14.0 μs → 15.5 μs, ×1.11 (no spread recorded)","815.9 μs → 823.2 μs, ×1.009 (no spread recorded)","16.8 μs → 17.8 μs, ×1.062 (no spread recorded)","1.12 ms → 1.13 ms, ×1.011 (no spread recorded)","59.5 μs → 58.8 μs, ×0.988 (no spread recorded)","5.28 ms → 5.09 ms, ×0.965 (no spread recorded)","8.88 ms → 8.95 ms, ×1.007 (no spread recorded)","285.8 μs → 285.7 μs, ×0.999 (no spread recorded)","293.6 μs → 293.6 μs, ×1.0 (no spread recorded)","1.07 ms → 1.03 ms, ×0.962 (no spread recorded)","71.3 μs → 61.9 μs, ×0.868 (no spread recorded)","80.8 μs → 74.5 μs, ×0.922 (no spread recorded)","83.49 ms → 83.79 ms, ×1.004 (no spread recorded)","1.8 ms → 1.81 ms, ×1.002 (no spread recorded)","1.89 ms → 1.89 ms, ×1.004 (no spread recorded)","1.12 ms → 1.07 ms, ×0.958 (no spread recorded)","11.5 μs → 11.5 μs, ×0.996 (no spread recorded)","22.9 μs → 22.9 μs, ×1.0 (no spread recorded)"],
     hoverinfo: 'text',
   }];
   const layout = {
@@ -274,8 +367,8 @@ Each bar is one benchmark's median in the latest baseline (v3.20.0, `ba309208`) 
     yaxis: { color: theme.text, autorange: 'reversed', tickfont: { size: 9 }, automargin: true },
     margin: { t: 20, l: 260, r: 20, b: 50 },
   };
-  Plotly.newPlot('bench_chart_5', data, layout, { displayModeBar: false, responsive: true });
-  window.brambleRegisterPlotlyChart('bench_chart_5', function () {
+  Plotly.newPlot('bench_chart_7', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bench_chart_7', function () {
     const t = window.bramblePlotlyTheme();
     return {
       'font.color': t.text,
@@ -303,7 +396,7 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
 
 ```@raw html
 <div style="width:100%; margin:1.2rem 0 2.5rem 0;">
-<div id="bench_chart_6" data-bench="standalone-operator_routes-construction" data-run="86e058eb-dirty" style="width:100%; height:420px;"></div>
+<div id="bench_chart_8" data-bench="standalone-operator_routes-construction" data-run="86e058eb-dirty" style="width:100%; height:420px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
@@ -317,7 +410,7 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
 { type: 'scatter', mode: 'lines+markers', name: "matrix-free, CpuThreaded(), 3D", x: [512,4096,32768,110592,262144], y: [0.0025830000000000002,0.002375,0.003,0.003417,0.003375], line: { color: '#ef4444', dash: 'dash' }, marker: { color: '#ef4444', size: 6 }, hovertext: ["matrix-free, CpuThreaded(), 3D, n = 8 (512 degrees of freedom): 2.6 μs, 5.188 KiB allocated","matrix-free, CpuThreaded(), 3D, n = 16 (4096 degrees of freedom): 2.4 μs, 5.375 KiB allocated","matrix-free, CpuThreaded(), 3D, n = 32 (32768 degrees of freedom): 3.0 μs, 5.750 KiB allocated","matrix-free, CpuThreaded(), 3D, n = 48 (110592 degrees of freedom): 3.4 μs, 6.219 KiB allocated","matrix-free, CpuThreaded(), 3D, n = 64 (262144 degrees of freedom): 3.4 μs, 6.500 KiB allocated"], hoverinfo: 'text' }];
   // The legend is anchored to the bottom of the chart; its rows depend on the width, so
   // the bottom margin and the chart's height grow with the rows it needs.
-  const el = document.getElementById('bench_chart_6');
+  const el = document.getElementById('bench_chart_8');
   const perRow = Math.max(1, Math.floor((el.clientWidth - 40) / 190));
   const legendPx = 22 * Math.ceil(data.length / perRow);
   el.style.height = (420 + legendPx) + 'px';
@@ -336,8 +429,8 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
     },
     margin: { t: 20, l: 70, r: 20, b: 70 + legendPx },
   };
-  Plotly.newPlot('bench_chart_6', data, layout, { displayModeBar: false, responsive: true });
-  window.brambleRegisterPlotlyChart('bench_chart_6', function () {
+  Plotly.newPlot('bench_chart_8', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bench_chart_8', function () {
     const t = window.bramblePlotlyTheme();
     return {
       'font.color': t.text,
@@ -358,7 +451,7 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
 
 ```@raw html
 <div style="width:100%; margin:1.2rem 0 2.5rem 0;">
-<div id="bench_chart_7" data-bench="standalone-operator_routes-product" data-run="86e058eb-dirty" style="width:100%; height:420px;"></div>
+<div id="bench_chart_9" data-bench="standalone-operator_routes-product" data-run="86e058eb-dirty" style="width:100%; height:420px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
@@ -372,7 +465,7 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
 { type: 'scatter', mode: 'lines+markers', name: "matrix-free, CpuThreaded(), 3D", x: [512,4096,32768,110592,262144], y: [0.006709,0.017583,0.080375,0.235625,0.5082920000000001], line: { color: '#ef4444', dash: 'dash' }, marker: { color: '#ef4444', size: 6 }, hovertext: ["matrix-free, CpuThreaded(), 3D, n = 8 (512 degrees of freedom): 6.7 μs per product, 1.031 KiB held","matrix-free, CpuThreaded(), 3D, n = 16 (4096 degrees of freedom): 17.6 μs per product, 1.219 KiB held","matrix-free, CpuThreaded(), 3D, n = 32 (32768 degrees of freedom): 80.4 μs per product, 1.594 KiB held","matrix-free, CpuThreaded(), 3D, n = 48 (110592 degrees of freedom): 235.6 μs per product, 1.969 KiB held","matrix-free, CpuThreaded(), 3D, n = 64 (262144 degrees of freedom): 508.3 μs per product, 2.344 KiB held"], hoverinfo: 'text' }];
   // The legend is anchored to the bottom of the chart; its rows depend on the width, so
   // the bottom margin and the chart's height grow with the rows it needs.
-  const el = document.getElementById('bench_chart_7');
+  const el = document.getElementById('bench_chart_9');
   const perRow = Math.max(1, Math.floor((el.clientWidth - 40) / 190));
   const legendPx = 22 * Math.ceil(data.length / perRow);
   el.style.height = (420 + legendPx) + 'px';
@@ -391,8 +484,8 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
     },
     margin: { t: 20, l: 70, r: 20, b: 70 + legendPx },
   };
-  Plotly.newPlot('bench_chart_7', data, layout, { displayModeBar: false, responsive: true });
-  window.brambleRegisterPlotlyChart('bench_chart_7', function () {
+  Plotly.newPlot('bench_chart_9', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bench_chart_9', function () {
     const t = window.bramblePlotlyTheme();
     return {
       'font.color': t.text,
@@ -407,7 +500,7 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
 
 ```@raw html
 <div style="width:100%; margin:1.2rem 0 2.5rem 0;">
-<div id="bench_chart_8" data-bench="standalone-operator_routes-product-bytes" data-run="86e058eb-dirty" style="width:100%; height:420px;"></div>
+<div id="bench_chart_10" data-bench="standalone-operator_routes-product-bytes" data-run="86e058eb-dirty" style="width:100%; height:420px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
@@ -421,7 +514,7 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
 { type: 'scatter', mode: 'lines+markers', name: "matrix-free, CpuThreaded(), 3D", x: [512,4096,32768,110592,262144], y: [1056,1248,1632,2016,2400], line: { color: '#ef4444', dash: 'dash' }, marker: { color: '#ef4444', size: 6 }, hovertext: ["matrix-free, CpuThreaded(), 3D, n = 8 (512 degrees of freedom): 1.031 KiB held","matrix-free, CpuThreaded(), 3D, n = 16 (4096 degrees of freedom): 1.219 KiB held","matrix-free, CpuThreaded(), 3D, n = 32 (32768 degrees of freedom): 1.594 KiB held","matrix-free, CpuThreaded(), 3D, n = 48 (110592 degrees of freedom): 1.969 KiB held","matrix-free, CpuThreaded(), 3D, n = 64 (262144 degrees of freedom): 2.344 KiB held"], hoverinfo: 'text' }];
   // The legend is anchored to the bottom of the chart; its rows depend on the width, so
   // the bottom margin and the chart's height grow with the rows it needs.
-  const el = document.getElementById('bench_chart_8');
+  const el = document.getElementById('bench_chart_10');
   const perRow = Math.max(1, Math.floor((el.clientWidth - 40) / 190));
   const legendPx = 22 * Math.ceil(data.length / perRow);
   el.style.height = (420 + legendPx) + 'px';
@@ -440,8 +533,8 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
     },
     margin: { t: 20, l: 70, r: 20, b: 70 + legendPx },
   };
-  Plotly.newPlot('bench_chart_8', data, layout, { displayModeBar: false, responsive: true });
-  window.brambleRegisterPlotlyChart('bench_chart_8', function () {
+  Plotly.newPlot('bench_chart_10', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bench_chart_10', function () {
     const t = window.bramblePlotlyTheme();
     return {
       'font.color': t.text,
@@ -462,7 +555,7 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
 
 ```@raw html
 <div style="width:100%; margin:1.2rem 0 2.5rem 0;">
-<div id="bench_chart_9" data-bench="standalone-operator_routes-solve" data-run="86e058eb-dirty" style="width:100%; height:420px;"></div>
+<div id="bench_chart_11" data-bench="standalone-operator_routes-solve" data-run="86e058eb-dirty" style="width:100%; height:420px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
@@ -480,7 +573,7 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
 { type: 'scatter', mode: 'lines+markers', name: "direct (reference), 3D", x: [512,4096,32768,110592,262144], y: [0.534458,5.759334,145.2255,1469.591834,8080.564], line: { color: '#9ca3af', dash: 'dash' }, marker: { color: '#9ca3af', size: 6 }, hovertext: ["direct (reference), 3D, n = 8 (512 degrees of freedom): 534.5 μs, 0 CG iterations, true relative residual 6.55e-14","direct (reference), 3D, n = 16 (4096 degrees of freedom): 5.76 ms, 0 CG iterations, true relative residual 3.54e-13","direct (reference), 3D, n = 32 (32768 degrees of freedom): 145.23 ms, 0 CG iterations, true relative residual 1.83e-12","direct (reference), 3D, n = 48 (110592 degrees of freedom): 1.47 s, 0 CG iterations, true relative residual 4.87e-12","direct (reference), 3D, n = 64 (262144 degrees of freedom): 8.08 s, 0 CG iterations, true relative residual 1.05e-11"], hoverinfo: 'text' }];
   // The legend is anchored to the bottom of the chart; its rows depend on the width, so
   // the bottom margin and the chart's height grow with the rows it needs.
-  const el = document.getElementById('bench_chart_9');
+  const el = document.getElementById('bench_chart_11');
   const perRow = Math.max(1, Math.floor((el.clientWidth - 40) / 190));
   const legendPx = 22 * Math.ceil(data.length / perRow);
   el.style.height = (420 + legendPx) + 'px';
@@ -499,8 +592,8 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
     },
     margin: { t: 20, l: 70, r: 20, b: 70 + legendPx },
   };
-  Plotly.newPlot('bench_chart_9', data, layout, { displayModeBar: false, responsive: true });
-  window.brambleRegisterPlotlyChart('bench_chart_9', function () {
+  Plotly.newPlot('bench_chart_11', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bench_chart_11', function () {
     const t = window.bramblePlotlyTheme();
     return {
       'font.color': t.text,
@@ -523,7 +616,7 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
 
 ```@raw html
 <div style="width:100%; margin:1.2rem 0 2.5rem 0;">
-<div id="bench_chart_10" data-bench="standalone-matrix_free_spmv-time" data-run="86e058eb-dirty" style="width:100%; height:420px;"></div>
+<div id="bench_chart_12" data-bench="standalone-matrix_free_spmv-time" data-run="86e058eb-dirty" style="width:100%; height:420px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
@@ -538,7 +631,7 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
 { type: 'scatter', mode: 'lines+markers', name: "matrix-free, CpuThreaded(), 3D", x: [4096,32768,262144,884736,2097152], y: [0.026834,0.133833,0.686333,1.895458,5.284291], line: { color: '#ef4444', dash: 'dot' }, marker: { color: '#ef4444', size: 6 }, hovertext: ["matrix-free, CpuThreaded(), 3D, 4096 degrees of freedom: 26.8 μs, ×0.68 the SpMV speed","matrix-free, CpuThreaded(), 3D, 32768 degrees of freedom: 133.8 μs, ×1.12 the SpMV speed","matrix-free, CpuThreaded(), 3D, 262144 degrees of freedom: 686.3 μs, ×1.8 the SpMV speed","matrix-free, CpuThreaded(), 3D, 884736 degrees of freedom: 1.9 ms, ×2.19 the SpMV speed","matrix-free, CpuThreaded(), 3D, 2097152 degrees of freedom: 5.28 ms, ×1.97 the SpMV speed"], hoverinfo: 'text' }];
   // The legend is anchored to the bottom of the chart; its rows depend on the width, so
   // the bottom margin and the chart's height grow with the rows it needs.
-  const el = document.getElementById('bench_chart_10');
+  const el = document.getElementById('bench_chart_12');
   const perRow = Math.max(1, Math.floor((el.clientWidth - 40) / 190));
   const legendPx = 22 * Math.ceil(data.length / perRow);
   el.style.height = (420 + legendPx) + 'px';
@@ -557,8 +650,8 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
     },
     margin: { t: 20, l: 70, r: 20, b: 70 + legendPx },
   };
-  Plotly.newPlot('bench_chart_10', data, layout, { displayModeBar: false, responsive: true });
-  window.brambleRegisterPlotlyChart('bench_chart_10', function () {
+  Plotly.newPlot('bench_chart_12', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bench_chart_12', function () {
     const t = window.bramblePlotlyTheme();
     return {
       'font.color': t.text,
@@ -588,7 +681,7 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
 
 ```@raw html
 <div style="width:100%; margin:1.2rem 0 2.5rem 0;">
-<div id="bench_chart_11" data-bench="standalone-matrix_free_spmv-memory" data-run="86e058eb-dirty" style="width:100%; height:420px;"></div>
+<div id="bench_chart_13" data-bench="standalone-matrix_free_spmv-memory" data-run="86e058eb-dirty" style="width:100%; height:420px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
@@ -603,7 +696,7 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
 { type: 'scatter', mode: 'lines+markers', name: "matrix-free, CpuThreaded(), 3D", x: [4096,32768,262144,884736,2097152], y: [42520,280984,2177176,7317448,17323720], line: { color: '#ef4444', dash: 'dot' }, marker: { color: '#ef4444', size: 6 }, hovertext: ["matrix-free, CpuThreaded(), 3D, 4096 degrees of freedom: 41.523 KiB held","matrix-free, CpuThreaded(), 3D, 32768 degrees of freedom: 274.398 KiB held","matrix-free, CpuThreaded(), 3D, 262144 degrees of freedom: 2.076 MiB held","matrix-free, CpuThreaded(), 3D, 884736 degrees of freedom: 6.978 MiB held","matrix-free, CpuThreaded(), 3D, 2097152 degrees of freedom: 16.521 MiB held"], hoverinfo: 'text' }];
   // The legend is anchored to the bottom of the chart; its rows depend on the width, so
   // the bottom margin and the chart's height grow with the rows it needs.
-  const el = document.getElementById('bench_chart_11');
+  const el = document.getElementById('bench_chart_13');
   const perRow = Math.max(1, Math.floor((el.clientWidth - 40) / 190));
   const legendPx = 22 * Math.ceil(data.length / perRow);
   el.style.height = (420 + legendPx) + 'px';
@@ -622,8 +715,8 @@ Run on Apple M2 with 4 threads, power: AC, commit `86e058eb-dirty`, Julia 1.13.1
     },
     margin: { t: 20, l: 70, r: 20, b: 70 + legendPx },
   };
-  Plotly.newPlot('bench_chart_11', data, layout, { displayModeBar: false, responsive: true });
-  window.brambleRegisterPlotlyChart('bench_chart_11', function () {
+  Plotly.newPlot('bench_chart_13', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bench_chart_13', function () {
     const t = window.bramblePlotlyTheme();
     return {
       'font.color': t.text,
@@ -644,7 +737,7 @@ Run on Apple M2 with 4 threads, power: AC, commit `a6e862d4`, Julia 1.13.1, 2026
 
 ```@raw html
 <div style="width:100%; margin:1.2rem 0 2.5rem 0;">
-<div id="bench_chart_12" data-bench="standalone-policy_crossover" data-run="a6e862d4" style="width:100%; height:520px;"></div>
+<div id="bench_chart_14" data-bench="standalone-policy_crossover" data-run="a6e862d4" style="width:100%; height:520px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
@@ -665,8 +758,8 @@ Run on Apple M2 with 4 threads, power: AC, commit `a6e862d4`, Julia 1.13.1, 2026
     xaxis: { color: theme.text, automargin: true, tickangle: -30 },
     margin: { t: 20, l: 70, r: 20, b: 130 },
   };
-  Plotly.newPlot('bench_chart_12', data, layout, { displayModeBar: false, responsive: true });
-  window.brambleRegisterPlotlyChart('bench_chart_12', function () {
+  Plotly.newPlot('bench_chart_14', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bench_chart_14', function () {
     const t = window.bramblePlotlyTheme();
     return {
       'font.color': t.text,
@@ -687,7 +780,7 @@ Run on Apple M2 with 4 threads, power: AC, commit `af288c31`, Julia 1.13.1, 2026
 
 ```@raw html
 <div style="width:100%; margin:1.2rem 0 2.5rem 0;">
-<div id="bench_chart_13" data-bench="standalone-gpu_offload" data-run="af288c31" style="width:100%; height:380px;"></div>
+<div id="bench_chart_15" data-bench="standalone-gpu_offload" data-run="af288c31" style="width:100%; height:380px;"></div>
 <script>
 (function () {
   const theme = window.bramblePlotlyTheme();
@@ -706,8 +799,8 @@ Run on Apple M2 with 4 threads, power: AC, commit `af288c31`, Julia 1.13.1, 2026
     xaxis: { color: theme.text, automargin: true, tickangle: -30 },
     margin: { t: 20, l: 70, r: 20, b: 130 },
   };
-  Plotly.newPlot('bench_chart_13', data, layout, { displayModeBar: false, responsive: true });
-  window.brambleRegisterPlotlyChart('bench_chart_13', function () {
+  Plotly.newPlot('bench_chart_15', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bench_chart_15', function () {
     const t = window.bramblePlotlyTheme();
     return {
       'font.color': t.text,

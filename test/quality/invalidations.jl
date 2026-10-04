@@ -66,8 +66,11 @@ end
             end
         end
 
+        # Without coverage: a covered package's precompiled code is not used, so under CI's
+        # `coverage=true` every Bramble method infers again whatever Polyester did.
+        jl_nocov = Cmd(filter(a -> !startswith(a, "--code-coverage"), jl.exec))
         out = try
-            read(`$jl --project=$project --threads=2 --startup-file=no $reinfer`, String)
+            read(`$jl_nocov --project=$project --threads=2 --startup-file=no $reinfer`, String)
         catch e
             @test_skip "Polyester reinference subprocess failed to run: $e"
             nothing
