@@ -11,13 +11,14 @@
 # from that 1D form on `gridspace(Ωₕ(d))`, so its boundary rows are the ones the 1D
 # operator defines, not a second implementation of them. The trial and test sides project
 # independently, which is what covers mixed and advection terms. A sum inside a side is
-# distributed first, giving one Kronecker product per pair of addends.
+# distributed first, giving one Kronecker product per pair of addends, and an `inner_Γ`
+# weight is a sum over its faces, giving one more per face (`_kron_inners`).
 #
 # Anything without a method here answers `nothing`: a grid-function coefficient (no tensor
-# structure in general), a region other than `:interior`, a surface weight, an indexed
-# (composite) leaf, an interpolation, a scalar inside a side, and the star and
-# cross-weighted differences. A false negative only forgoes the Kronecker fast path; a false
-# positive would be a wrong product.
+# structure in general), a region other than `:interior`, an indexed (composite) leaf, an
+# interpolation, a scalar inside a side, and the star and cross-weighted differences. A
+# false negative only forgoes the Kronecker fast path; a false positive would be a wrong
+# product.
 
 # --- Splitting a side into sum-free chains ------------------------------------------- #
 
@@ -89,18 +90,42 @@ for N in (:BackwardDifference, :ForwardDifference, :CenteredDifference, :Backwar
     end
 end
 
-# --- The 1D inner product on each axis ----------------------------------------------- #
+# --- The 1D inner products on each axis --------------------------------------------- #
 
-# `InnerH` weighs every axis by its own `innerₕ` weights; `InnerPlus{Dim}` uses `inner₊` on
-# `Dim` and `innerₕ` elsewhere, the factorisation `kronecker_operator` already relies on.
-_kron_inner(::Type{InnerH}, ::Int, l, r) = innerₕ(l, r)
-function _kron_inner(::Type{InnerPlus{Dim}}, d::Int, l, r) where {Dim}
-    return d == Dim ? inner₊(l, r) : innerₕ(l, r)
+"""
+    _kron_inners(I::Type, Ωₕ::MeshnD{D}) -> Union{Nothing, Tuple}
+
+One `NTuple{D}` of 1D inner products per Kronecker term the weight `I` expands into, the
+entry on axis `d` the product the factor on that axis is assembled with. `nothing` for a
+weight with no such expansion.
+
+`InnerH` weighs every axis by its own `innerₕ` weights; `InnerPlus{Dim}` uses `inner₊` on
+`Dim` and `innerₕ` elsewhere, the factorisation `kronecker_operator` already relies on.
+`InnerGamma{MASK}` is a sum over the faces `MASK` names, each one Kronecker term: the 1D
+`inner_Γ` on that face's endpoint along its axis (weight 1 there, 0 elsewhere) and `innerₕ`
+on every other axis, whose weights multiply to the face's transverse measure. A point on two
+faces (a corner, a 3D edge) weighs the sum of its faces' measures (`_surface_weight`), so
+the face terms add with no correction. `MASK` is geometric, resolved from the face symbols
+when the form was built, so a domain that redefines `:xmin` does not change it.
+"""
+_kron_inners(::Type, ::MeshnD) = nothing
+_kron_inners(::Type{InnerH}, ::MeshnD{D}) where {D} = (ntuple(_ -> innerₕ, Val(D)),)
+function _kron_inners(::Type{InnerPlus{Dim}}, ::MeshnD{D}) where {Dim, D}
+    return (ntuple(d -> d == Dim ? inner₊ : innerₕ, Val(D)),)
 end
 
-_kron_has_inner(::Type) = false
-_kron_has_inner(::Type{InnerH}) = true
-_kron_has_inner(::Type{<:InnerPlus}) = true
+_kron_face_inner(side::Int) = (l, r) -> inner_Γ(l, r; markers = side == 1 ? :xmin : :xmax)
+
+function _kron_inners(::Type{InnerGamma{MASK}}, Ωₕ::MeshnD{D}) where {MASK, D}
+    np = npoints(Ωₕ, Tuple)
+    # On a one-point axis both faces are the same point, which the D-dimensional weight
+    # counts once and two face terms would count twice.
+    any(d -> MASK[d][1] && MASK[d][2] && np[d] < 2, 1:D) && return nothing
+    faces = [(d, s) for d in 1:D for s in 1:2 if MASK[d][s]]
+    return Tuple(map(faces) do (d, s)
+        ntuple(e -> e == d ? _kron_face_inner(s) : innerₕ, Val(D))
+    end)
+end
 
 # --- The `:interior` marker -------------------------------------------------------- #
 
@@ -130,8 +155,10 @@ coefficients already stripped by `_kron_leaves`, over the host tensor mesh `Ω�
 of per-axis factor tuples, each an `NTuple{D, SparseMatrixCSC}` whose `kron` (axis 1
 fastest) is one Kronecker product, so that `term` assembles to their sum. The factor on axis
 `d` is the 1D form on `gridspace(Ωₕ(d))` that `term` projects to there (see this file's
-header). `nothing` when `term` has a node with no projection, or restricts to
-`:interior` on a mesh whose `:interior` marker is not the product of its axes' own.
+header); there is one tuple per pair of addends of the two sides and per Kronecker term of
+the weight (several for `inner_Γ`, one per face). `nothing` when `term` has a node with no
+projection, or restricts to `:interior` on a mesh whose `:interior` marker is not the
+product of its axes' own.
 
 `Ωₕ` must be the mesh both the trial and the test space of `term`'s form live on: the
 factors are built on `Ωₕ`'s axes alone, so another mesh of the same size gives other
@@ -140,7 +167,8 @@ factors without any error.
 _kron_project(::LazyOp, ::Any) = nothing
 
 function _kron_project(term::BilinearProduct{D, I}, Ωₕ::MeshnD{D}) where {D, I}
-    _kron_has_inner(I) || return nothing
+    inners = _kron_inners(I, Ωₕ)
+    inners === nothing && return nothing
     ls = _kron_split(term.left_op)
     ls === nothing && return nothing
     rs = _kron_split(term.right_op)
@@ -149,11 +177,11 @@ function _kron_project(term::BilinearProduct{D, I}, Ωₕ::MeshnD{D}) where {D, 
         _kron_interior_is_tensor(Ωₕ) || return nothing
     end
     spaces = ntuple(d -> gridspace(Ωₕ(d)), Val(D))
-    pairs = vec([(l, r) for l in ls, r in rs])
-    return Tuple(map(pairs) do (l, r)
+    terms = vec([(l, r, w) for l in ls, r in rs, w in inners])
+    return Tuple(map(terms) do (l, r, w)
         ntuple(Val(D)) do d
             Wd = spaces[d]
-            f = (u, v) -> _kron_inner(I, d, _kron_axis(l, d, u), _kron_axis(r, d, v))
+            f = (u, v) -> w[d](_kron_axis(l, d, u), _kron_axis(r, d, v))
             assemble(form(Wd, Wd, f))
         end
     end)

@@ -89,13 +89,40 @@ end
         g = Rₕ(W, x -> x[1] + x[2])
         @test _proj_refused(form(W, W, (u, v) -> innerₕ(g * u, v)))
         @test _proj_refused(form(W, W, (u, v) -> innerₕ(restrict_to(:boundary, u), v)))
-        @test _proj_refused(form(W, W, (u, v) -> inner_Γ(u, v; markers = (:xmin,))))
         @test !_proj_refused(form(W, W, (u, v) -> innerₕ(u, v)))
 
         # A 1D mesh is not a `MeshnD`: nothing to factor.
         W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 9, false))
         a1 = form(W1, W1, (u, v) -> innerₕ(u, v))
         @test _proj_refused(a1)
+    end
+
+    @testset "inner_Γ is a sum over its faces" begin
+        W2 = _proj_graded_space((9, 7))
+        W3 = _proj_graded_space((6, 5, 7))
+        cases = (
+            (W2, :xmin, 1), (W2, :ymax, 1), (W2, (:xmin, :ymin), 2), (W2, :boundary, 4),
+            (W3, :zmax, 1), (W3, (:xmax, :ymin), 2), (W3, (:xmin, :ymax, :zmin), 3),
+            (W3, :boundary, 6))
+        for (W, mk, nfaces) in cases
+            a = form(W, W, (u, v) -> inner_Γ(u, v; markers = mk))
+            P = Bramble._kron_project(only(_proj_leaves(a))[2], mesh(W))
+            @test length(P) == nfaces
+            @test _proj_matches(a)
+            @test _proj_matches(form(W, W, (u, v) -> inner_Γ(D₋ₓ(u), D₊ᵧ(v); markers = mk)))
+            @test _proj_matches(form(W, W,
+                (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + 1.5 * inner_Γ(u, v; markers = mk)))
+        end
+        # The face mask is geometric: a domain-redefined `:xmin` does not move it.
+        I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωc = mesh(domain(I2, :xmin => x -> x[2] < 0.5), (6, 5), (false, true))
+        @test count(markers(Ωc)[:xmin]) == 12  # every point with y < 0.5, not the face
+        Wc = gridspace(Ωc)
+        @test _proj_matches(form(Wc, Wc, (u, v) -> inner_Γ(u, v; markers = :xmin)))
+        # On a one-point axis both faces are one point, weighed once; two terms double it.
+        W1 = gridspace(mesh(domain(I2), (1, 5), (true, true)))
+        @test _proj_matches(form(W1, W1, (u, v) -> inner_Γ(u, v; markers = :xmin)))
+        @test _proj_refused(form(W1, W1, (u, v) -> inner_Γ(u, v; markers = :boundary)))
     end
 
     @testset "custom :interior marker refused" begin
