@@ -167,9 +167,10 @@ end
                 "Robin face" => (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) +
                                           inner_Γ(u, v; markers = (:xmin,)),
                 # Indefinite but nonsingular: the singularity test must not refuse it.
-                "negative mass" => (u, v) -> -1.0 * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)),
+                "negative mass" => (u, v) -> -1.0 * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
             ]
             for (name, f) in accepted, dir in (nothing, :boundary)
+
                 a = form(Wₕ, Wₕ, f)
                 c[] = 2.5
                 K = kronecker_operator(a)
@@ -213,10 +214,10 @@ end
             # Pure Neumann: constants are in the kernel, so a solve would return garbage.
             "gradient only" => (L, r"the system is singular"),
             "chain, average, y-stiffness" => ((u, v) -> innerₕ(D₋ₓ(Mₓ(u)), D₋ₓ(Mₓ(v))) +
-                                                        innerₕ(Mₓ(u), Mₓ(v)) +
-                                                        inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)),
+                       innerₕ(Mₓ(u), Mₓ(v)) +
+                       inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)),
                 r"the system is singular"),
-            "1e-14 mass" => ((u, v) -> 1e-14 * innerₕ(u, v) + L(u, v), r"the system is singular"),
+            "1e-14 mass" => ((u, v) -> 1e-14 * innerₕ(u, v) + L(u, v), r"the system is singular")
         ]
         F = rand(MersenneTwister(KRON_EXT_SEED), ndofs(Wₕ))
         for (name, (f, why)) in refused
@@ -272,12 +273,13 @@ end
     # gpena/Bramble.jl#442: a K built before `change_points!` refuses `fdm_solve` and the
     # conversion with the stale-weights `ArgumentError`; both work before the move.
     @testset "stale K after a mesh move" begin
-        stale(f) = try
-            f()
-            false
-        catch e
-            e isa ArgumentError && occursin("change_points!", sprint(showerror, e))
-        end
+        stale(f) =
+            try
+                f()
+                false
+            catch e
+                e isa ArgumentError && occursin("change_points!", sprint(showerror, e))
+            end
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 7), (false, false))
         Wₕ = gridspace(Ωₕ)
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))

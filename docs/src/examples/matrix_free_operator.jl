@@ -294,9 +294,11 @@ function at_largest(table, column; forms = forms, kw...)
 end
 lead(ratio) = ratio < 1 / 1.2 ? :kronecker : ratio > 1.2 ? :matrix_free : :even
 with_lead(rows, route) = [(; r..., lead = lead(r[route])) for r in rows]
-not_faster(form, route) = [(r.dim, r.n)
-                           for r in route_ratios("product", "time_s", form; against = [route])
-                           if r[Symbol(route)] >= 1]
+function not_faster(form, route)
+    [(r.dim, r.n)
+     for r in route_ratios("product", "time_s", form; against = [route])
+     if r[Symbol(route)] >= 1]
+end
 
 # **Product.** One five-argument `mul!`, at 262144 unknowns, the threaded Kronecker product
 # against the threaded matrix-free one and against the assembled one, with the route each
@@ -323,8 +325,10 @@ shown(with_lead(serial_product, :matrix_free_serial))
 # narrows to a lead of under ten percent, which the margin counts as even. Each of those
 # statements is checked against the table on this page:
 
-lead_of(form, dim, column = :matrix_free_threaded, rows = threaded_product) = only(
-    lead(r[column]) for r in rows if r.form == form && r.dim == dim)
+function lead_of(form, dim, column = :matrix_free_threaded, rows = threaded_product)
+    only(
+        lead(r[column]) for r in rows if r.form == form && r.dim == dim)
+end
 
 @test all(r -> r.assembled < 0.5, threaded_product) #src
 @test all(lead_of(f, d) == :kronecker for f in spd_forms, d in (2, 3)) #src
@@ -333,11 +337,11 @@ lead_of(form, dim, column = :matrix_free_threaded, rows = threaded_product) = on
 @test lead_of("mixed", 3) == :kronecker #src
 @test all(r -> r.matrix_free_threaded < 0.5, filter(r -> r.form == "coefficient", threaded_product)) #src
 @test all(lead_of("coefficient", d, :matrix_free_serial, serial_product) == :kronecker
-          for d in (2, 3)) #src
+for d in (2, 3)) #src
 @test lead_of("mixed", 3, :matrix_free_serial, serial_product) == :kronecker #src
 @test lead_of("mixed", 2, :matrix_free_serial, serial_product) == :even #src
 @test all(lead_of("advection", d, :matrix_free_serial, serial_product) == :even
-          for d in (2, 3)) #src
+for d in (2, 3)) #src
 @test all(r -> 1 / 1.2 < r.matrix_free_serial < 1,
     filter(r -> r.form == "laplace", serial_product)) #src
 
@@ -356,7 +360,7 @@ smallest_kron = reduce(vcat,
     [filter(r -> r.n^r.dim < 2000,
          [(; form, r...)
           for r in route_ratios("product", "time_s", form;
-         of = "kronecker_threaded", against = ["kronecker"])])
+             of = "kronecker_threaded", against = ["kronecker"])])
      for form in forms])
 shown(smallest_kron)
 

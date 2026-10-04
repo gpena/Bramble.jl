@@ -550,8 +550,9 @@ end
         for n in ((5, 4), (12, 9, 11))
             Ks = [kronecker_operator(form(W, W, f))
                   for W in (_kron_graded_space(n, backend(; policy = P))
-                  for P in (Bramble.CpuSerial(), Bramble.CpuThreaded(), Bramble.CpuPolyester()))]
+            for P in (Bramble.CpuSerial(), Bramble.CpuThreaded(), Bramble.CpuPolyester()))]
             for K in Ks[2:3], (t, ts) in zip(K.terms, Ks[1].terms)
+
                 @test all(map((F, G) -> F == G && typeof(F) === typeof(G), t.factors, ts.factors))
             end
             x = rand(MersenneTwister(KRON_SEED), size(Ks[1], 1))
@@ -731,7 +732,7 @@ end
     @testset "Kronecker: stale spaces refused" begin
         space_error = "gridspace(mesh(Wₕ)) again"
         for mutate! in (Ω -> Bramble.change_points!(Ω,
-                    (range(0.0, 1.0; length = 7) .^ 2, range(0.0, 1.0; length = 6) .^ 2)),
+            (range(0.0, 1.0; length = 7) .^ 2, range(0.0, 1.0; length = 6) .^ 2)),
             Bramble.iterative_refinement!)
             Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
             Wₕ = gridspace(Ωₕ)

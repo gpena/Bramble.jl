@@ -189,10 +189,12 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
         # factors.
         for dims in ((2, 2), (2, 1, 3))
             D = length(dims)
-            check(Float64, dims, (
-                ((), ntuple(d -> band(dims[d], 1, 1), D)),
-                ((2.0,), ntuple(d -> d == 1 ? Diagonal(rand(rng, dims[d])) :
-                                     band(dims[d], 0, 1), D))))
+            check(Float64,
+                dims,
+                (
+                    ((), ntuple(d -> band(dims[d], 1, 1), D)),
+                    ((2.0,), ntuple(d -> d == 1 ? Diagonal(rand(rng, dims[d])) :
+                                         band(dims[d], 0, 1), D))))
             sym = ntuple(d -> (b = band(dims[d], 1, 0); b + b'), D)
             check(Float64, dims, (((), sym),))
         end
@@ -208,18 +210,22 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
         check(Float64, (6, 4), (((), (P5 + P5', band(4, 1, 1))),))
         check(Float64, (6, 4), (((), (band(6, 1, 1), Diagonal(rand(rng, 4)))),))
         # Five terms in 3D, none alike.
-        check(Float64, (5, 4, 6), (((Ref(0.3),), (band(5, 1, 2), band(4, 2, 1),
-                band(6, 1, 1))),
-            ((), (dg(5), dg(4), dg(6))), ((), (dg(5), band(4, 1, 0), dg(6))),
-            ((2.0, 3.0), (band(5, 0, 1), dg(4), band(6, 2, 2))),
-            ((), (dg(5), band(4, 1, 1), band(6, 1, 0)))))
+        check(Float64,
+            (5, 4, 6),
+            (((Ref(0.3),), (band(5, 1, 2), band(4, 2, 1),
+                    band(6, 1, 1))),
+                ((), (dg(5), dg(4), dg(6))), ((), (dg(5), band(4, 1, 0), dg(6))),
+                ((2.0, 3.0), (band(5, 0, 1), dg(4), band(6, 2, 2))),
+                ((), (dg(5), band(4, 1, 1), band(6, 1, 0)))))
 
-        check(Float32, (5, 4, 3), (((), (band(5, 1, 1; T = Float32),
-            band(4, 1, 1; T = Float32), band(3, 1, 1; T = Float32))),); rtol = 1e-4)
+        check(Float32, (5, 4, 3),
+            (((), (band(5, 1, 1; T = Float32),
+                band(4, 1, 1; T = Float32), band(3, 1, 1; T = Float32))),); rtol = 1e-4)
         check(ComplexF64, (5, 4), (((), (band(5, 1, 1; T = ComplexF64),
             band(4, 1, 1; T = ComplexF64))),))
-        check(BigFloat, (4, 3), (((), (sparse(BigFloat.(Matrix(band(4, 1, 1)))),
-            sparse(BigFloat.(Matrix(band(3, 1, 1)))))),))
+        check(BigFloat, (4, 3), ((
+            (), (sparse(BigFloat.(Matrix(band(4, 1, 1)))),
+                sparse(BigFloat.(Matrix(band(3, 1, 1)))))),))
         # A complex symmetric factor is symmetric; a Hermitian one is not.
         cs = band(5, 1, 0; T = ComplexF64)
         cs = cs + transpose(cs)
@@ -287,7 +293,7 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
         check((4, 3), (((), (spzeros(4, 4), band(3, 1, 1))),
             ((), (band(4, 1, 1), spzeros(3, 3)))))
         @test iszero(mul!(fill(NaN, 12), _ke_op(Float64, (4, 3),
-            (((), (spzeros(4, 4), band(3, 1, 1))),)), ones(12)))
+                (((), (spzeros(4, 4), band(3, 1, 1))),)), ones(12)))
 
         # A rectangular factor has no square product: refused where the term is built.
         @test_throws ArgumentError Bramble._kron_term((),
@@ -300,7 +306,7 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
         mkf(n) = n == 0 ? spzeros(0, 0) : sparse(randn(rng, n, n))
         mksym(n) = n == 0 ? spzeros(0, 0) :
                    (B = spdiagm(0 => randn(rng, n), -1 => randn(rng, max(n - 1, 0)));
-                   B + transpose(B) - Diagonal(diag(B)))
+            B + transpose(B) - Diagonal(diag(B)))
         for dims in ((0, 3), (3, 0), (2, 0, 3), (1, 0))
             D = length(dims)
             specsets = (
@@ -308,6 +314,7 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
                 ntuple(d -> d == 1 ? mksym(dims[d]) : Diagonal(rand(rng, dims[d])), D),
                 ntuple(d -> d == 1 ? mkf(dims[d]) : Diagonal(rand(rng, dims[d])), D))
             for fs in specsets, P in (CpuSerial(), CpuThreaded(), CpuPolyester())
+
                 K = _ke_op(Float64, dims, (((), fs),), P)
                 yb = fill(7.0, 3)
                 @test K * Float64[] == Float64[]
@@ -336,6 +343,7 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
         _ke_quiet() do
             for (D, n) in ((2, (2, 3)), (2, (6, 5)), (3, (4, 2, 3)), (3, (3, 4, 5))),
                 unif in (true, false)
+
                 flags = ntuple(_ -> unif, D)
                 # The geometric interior, and a custom marker that equals it, project.
                 same = domain(box(D), :interior => x -> all(xi -> 1e-12 < xi < 1 - 1e-12, x))
@@ -384,14 +392,16 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
             return Set([faces[get(D == 2 ? aliases2 : aliases3, mk, mk)]])
         end
         # Both faces of an axis that holds one point would weigh that point twice.
-        both_faces(n, mk) = any(d -> n[d] == 1 && (d, -1) in named(mk, length(n)) &&
-                                     (d, 1) in named(mk, length(n)), eachindex(n))
+        both_faces(n, mk) = any(
+            d -> n[d] == 1 && (d, -1) in named(mk, length(n)) &&
+                 (d, 1) in named(mk, length(n)), eachindex(n))
         masks2 = ((:left, :bottom), (:right, :top), (:xmin, :xmax), (:ymin, :ymax),
             (:xmin, :left), :boundary, (:boundary, :xmin))
         masks3 = ((:left, :top, :back), (:right, :bottom, :front), (:back, :front), :boundary)
         sizes2 = ((9, 7), (1, 5), (5, 1), (2, 5), (3, 3), (2, 2), (3, 1), (1, 1))
         sizes3 = ((6, 5, 7), (1, 4, 3), (4, 1, 3), (3, 4, 1), (2, 3, 2), (1, 1, 4), (1, 1, 1))
         for (sizes, masks) in ((sizes2, masks2), (sizes3, masks3)), n in sizes
+
             for graded in (true, false)
                 (graded || n == first(sizes)) || continue
                 W = _ke_space(n; graded)
@@ -418,9 +428,11 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
                     (:boundary,)),
                 ((u, v) -> inner_Γ(fx * u, restrict_to(:interior, D₋ₓ(v)); markers = :ymin),
                     (:ymin,)),
-                ((u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
-                           inner_Γ(u, v; markers = (:xmax, :xmin)) +
-                           inner_Γ(D₋ₓ(u), v; markers = :xmax), ((:xmax, :xmin), :xmax)))
+                (
+                    (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+                              inner_Γ(u, v; markers = (:xmax, :xmin)) +
+                              inner_Γ(D₋ₓ(u), v; markers = :xmax),
+                    ((:xmax, :xmin), :xmax)))
             for (f, masks) in forms
                 a = form(W, W, f)
                 if any(mk -> both_faces(n, mk), masks)
@@ -610,6 +622,7 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
         for K in Ks[2:3]
             @test SparseMatrixCSC(K) == SparseMatrixCSC(Ks[1])
             for (t, ts) in zip(K.terms, Ks[1].terms), d in 1:2
+
                 @test t.factors[d] == ts.factors[d]
             end
             @test K * xs == Ks[1] * xs
@@ -796,9 +809,11 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
             :set_the_same_points => Ω -> Bramble.set_points!(Ω(1), copy(Bramble.points(Ω(1)))),
             :refine_the_mesh => Bramble.iterative_refinement!,
             :refine_one_axis => Ω -> Bramble.iterative_refinement!(Ω(1)),
-            :mutate_and_back => Ω -> (p0 = copy(Bramble.points(Ω(1)));
-            Bramble.set_points!(Ω(1), p0 .^ 2); Bramble.set_points!(Ω(1), p0)))
+            :mutate_and_back =>
+                Ω -> (p0 = copy(Bramble.points(Ω(1)));
+                    Bramble.set_points!(Ω(1), p0 .^ 2); Bramble.set_points!(Ω(1), p0)))
         for (kind, mutate!) in mutations, P in (CpuSerial(), CpuPolyester())
+
             Ωₕ = _ke_mesh((7, 6), P; graded = false)
             W, V = gridspace(Ωₕ), gridspace(Ωₕ, Val(2))
             K = kronecker_operator(lap(W))
@@ -865,7 +880,8 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
         # the space's error, naming the remedy for the space.
         space_error = "gridspace(mesh(Wₕ)) again"
         for mutate! in (Ω -> Bramble.change_points!(Ω, (range(0, 1; length = 7) .^ 2,
-                    range(0, 1; length = 6) .^ 2)), Bramble.iterative_refinement!)
+            range(0, 1; length = 6) .^ 2)),
+            Bramble.iterative_refinement!)
             Ωₕ = _ke_mesh((7, 6); graded = false)
             W, V = gridspace(Ωₕ), gridspace(Ωₕ, Val(2))
             a = lap(W)

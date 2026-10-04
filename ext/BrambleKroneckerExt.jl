@@ -155,7 +155,7 @@ end
 # A 2-point axis leaves no interior at all; the solution is then zero everywhere.
 
 const _FDM_KRYLOV = "`kronecker_operator(a)` and a Krylov solver (for instance " *
-                   "`KrylovJL_GMRES` through LinearSolve.jl), or with "
+                    "`KrylovJL_GMRES` through LinearSolve.jl), or with "
 
 # Every refusal says `fdm_solve` does not support the form, names `reason`, and points to the
 # Krylov route that solves any separable form (`krylov = false` for a form that is not).
@@ -169,15 +169,19 @@ const _FDM_KRYLOV = "`kronecker_operator(a)` and a Krylov solver (for instance "
     )
 end
 
-_throw_fdm_not_separable(a) = _throw_fdm_unsupported(
-    "it is not separable (see `is_separable`): a grid-function coefficient varying along " *
-    "two or more axes (spell a product of one-axis coefficients `fx * (fy * u)`), a " *
-    "region restriction, an interpolation, or a 1D mesh has no Kronecker factors";
-    krylov = false)
+function _throw_fdm_not_separable(a)
+    _throw_fdm_unsupported(
+        "it is not separable (see `is_separable`): a grid-function coefficient varying along " *
+        "two or more axes (spell a product of one-axis coefficients `fx * (fy * u)`), a " *
+        "region restriction, an interpolation, or a 1D mesh has no Kronecker factors";
+        krylov = false)
+end
 
-_throw_fdm_composite() = _throw_fdm_unsupported(
-    "it is posed on a composite space, whose `kronecker_operator` is a block operator " *
-    "(`KroneckerBlockOperator`); fast diagonalisation needs one scalar Kronecker sum")
+function _throw_fdm_composite()
+    _throw_fdm_unsupported(
+        "it is posed on a composite space, whose `kronecker_operator` is a block operator " *
+        "(`KroneckerBlockOperator`); fast diagonalisation needs one scalar Kronecker sum")
+end
 
 @noinline function _throw_fdm_bad_dirichlet(dirichlet)
     throw(

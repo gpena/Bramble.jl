@@ -458,6 +458,7 @@ function _kron_factor(F::SparseMatrixCSC, H::Diagonal)
     h = zeros(eltype(F), size(F, 1))
     rows, vals = rowvals(F), nonzeros(F)
     for j in axes(F, 2), k in nzrange(F, j)
+
         rows[k] == j || return F
         h[j] = vals[k]
     end
@@ -1139,8 +1140,9 @@ end
 
 function _kron_show_stale(io::IO, K)
     summary(io, K)
-    print(io, ":\n  stale: its mesh was mutated in place (set_points!, change_points!, or " *
-              "iterative_refinement!) after it was built; no entries to show.")
+    print(io,
+        ":\n  stale: its mesh was mutated in place (set_points!, change_points!, or " *
+        "iterative_refinement!) after it was built; no entries to show.")
     return nothing
 end
 

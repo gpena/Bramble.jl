@@ -309,7 +309,6 @@ function main()
     for name in ("correctness", "construction", "product", "solve"))
     _out("kronecker_operator's snapshot warning for grid-function coefficients is silenced")
     for (D, ladder) in LADDERS, n in ladder, kind in FORMS
-
         _out("measuring $kind $(D)D n=$n")
         measure!(tables, kind, D, n)
         GC.gc()
