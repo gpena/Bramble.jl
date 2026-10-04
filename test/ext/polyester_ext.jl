@@ -79,13 +79,18 @@ const _PA_ZERO_PATHS = (
     "broadcast", "innerₕ", "inner₊ₓ", "innerₕ masked", "Kronecker mul!",
     "Kronecker mul! general"
 )
+# The one path whose kernel crosses `@batch` through the untyped `_late` barrier
+# (gpena/Bramble.jl#460): its `Fix1`, `ReshapedArray` and `CartesianIndices` arguments are
+# boxed on the heap, besides the argument box. Other paths must allocate nothing else.
+const _PA_BOXED_KERNEL_PATHS = ("space weights",)
+const _PA_BOXED_KERNEL_TYPES = Union{Base.Fix1, Base.ReshapedArray, CartesianIndices}
 
 # BEGIN _pa paths
 using Bramble: CpuPolyester, CpuSerial, CpuThreaded, change_points!, semidiscretize_rhs,
                allocate_system_matrix, D₋ₓ, inner₊ₓ, S₊ₓ!
 using LinearAlgebra: Diagonal, mul!, ldiv!
 using Random: Xoshiro, randn
-using SparseArrays: spdiagm
+using SparseArrays: nonzeros, spdiagm
 
 function _pa_jitter(n, policy; seed = 4321)
     rng = Xoshiro(seed)
@@ -113,6 +118,9 @@ _pa_copy(u) = copy(parent(u))
 _pa_flat(e) = reduce(vcat, [_pa_copy(e[i][j]) for i in 1:2 for j in 1:2])
 _pa_two_leaf(u, v) = innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(2)), D₋ₓ(v(2))) + innerₕ(u(2), v(2))
 _pa_case(call, result; levels = 0) = (; call, result, levels)
+_pa_comps(u) = reduce(vcat, [_pa_copy(c) for c in Bramble.components(u)])
+_pa_pair(x) = (_pa_g(x), _pa_h(x))
+_pa_times0d(a, c) = 2.0 * a * c + 1.0
 
 # A hand-built two-term Kronecker operator on an `n × n` grid that `kronecker_operator`
 # does not build yet: non-symmetric banded factors on both axes (a row gather on axis 1
@@ -262,6 +270,100 @@ function _pa_paths()
             du = similar(u)
             _pa_case(() -> r(du, u, nothing, 0.0), () -> copy(du))
         end))
+    push!(P, ("space weights", true, 0, (n, p) -> begin
+        Ω = _pa_jitter(n, p)
+        u = zeros(npoints(Ω))
+        _pa_case(() -> Bramble._innerh_weights!(u, Ω), () -> copy(u))
+    end))
+    push!(P, ("avgₕ! masked", false, 0, (n, p) -> begin
+        u = element(_pa_space(n, p))
+        _pa_case(() -> avgₕ!(u, _pa_g; markers = (:dir,)), () -> _pa_copy(u))
+    end))
+    push!(P, ("project! composite avg", false, 0, (n, p) -> begin
+        u = element(gridspace(_pa_jitter(n, p), Val(2)))
+        _pa_case(() -> avgₕ!(u, _pa_pair), () -> _pa_comps(u))
+    end))
+    push!(P, ("csr spmv", false, 0, (n, p) -> begin
+        A = assemble(_pa_poisson(_pa_space(n, p)))
+        csr = Bramble._rhs_csr(p, Val(false), A)
+        u = randn(Xoshiro(8), size(A, 2))
+        du0 = randn(Xoshiro(9), size(A, 1))
+        du = similar(du0)
+        _pa_case(() -> (copyto!(du, du0); Bramble._rhs_spmv!(du, A, csr, u)), () -> copy(du))
+    end))
+    push!(P, ("assemble! restricted", false, 0, (n, p) -> begin
+        W = _pa_space(n, p)
+        a = form(W, W,
+            (u, v) -> innerₕ(u, v; markers = (:dir,)) +
+                      inner₊(∇ₕ(u), ∇ₕ(v); markers = (:interior,)))
+        A = allocate_system_matrix(a)
+        _pa_case(() -> assemble!(A, a), () -> copy(A))
+    end))
+    push!(P, ("assemble! Ref coefficient", false, 0, (n, p) -> begin
+        W = _pa_space(n, p)
+        θ = Ref(2.5)
+        a = form(W, W, (u, v) -> θ * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        A = allocate_system_matrix(a)
+        first = similar(nonzeros(A))
+        call = () -> begin
+            θ[] = 2.5
+            assemble!(A, a)
+            copyto!(first, nonzeros(A))
+            θ[] = 4.0
+            assemble!(A, a)
+            return nothing
+        end
+        _pa_case(call, () -> vcat(first, nonzeros(A)))
+    end))
+    push!(P, ("assemble! linear interpolation", false, 0, (n, p) -> begin
+        W = _pa_space(n, p)
+        uc = Rₕ(_pa_leaf(n ÷ 2 + 1, p), _pa_g)
+        l = form(W, v -> innerₕ(πₕ(uc), v))
+        b = zeros(ndofs(W))
+        _pa_case(() -> assemble!(b, l), () -> copy(b))
+    end))
+    push!(P, ("assemble! bilinear (searching)", false, 0, (n, p) -> begin
+        a = _pa_poisson(_pa_space(n, p))
+        A = allocate_system_matrix(a)
+        call = () -> begin
+            Bramble._zero_stored!(A)
+            Bramble._assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast)
+        end
+        _pa_case(call, () -> copy(A))
+    end))
+    push!(P, ("Rₕ!", true, 0, (n, p) -> begin
+        u = element(_pa_space(n, p))
+        _pa_case(() -> Rₕ!(u, _pa_g), () -> _pa_copy(u))
+    end))
+    push!(P, ("Rₕ! masked", true, 0, (n, p) -> begin
+        u = element(_pa_space(n, p))
+        _pa_case(() -> Rₕ!(u, _pa_g; markers = (:dir,)), () -> _pa_copy(u))
+    end))
+    push!(P, ("project! composite Rₕ", true, 0, (n, p) -> begin
+        u = element(gridspace(_pa_jitter(n, p), Val(2)))
+        rule = Bramble.PointValue(_pa_pair)
+        _pa_case(() -> Bramble.project!(u, rule), () -> _pa_comps(u))
+    end))
+    push!(P, ("avgₕ! closure", false, 0, (n, p) -> begin
+        u = element(_pa_space(n, p))
+        c = [0.3, 0.7]
+        f = x -> c[1] * sin(3x[1] + 2x[2]) + c[2] * x[1] * x[2]
+        _pa_case(() -> avgₕ!(u, f), () -> _pa_copy(u))
+    end))
+    push!(P, ("broadcast 0-dim", true, 0, (n, p) -> begin
+        W = _pa_space(n, p)
+        u = Rₕ(W, _pa_g)
+        v = similar(u)
+        c = fill(1.5)
+        _pa_case(() -> (v .= _pa_times0d.(u, c)), () -> _pa_copy(v))
+    end))
+    push!(P, ("matrix-free fused masked", false, 0, (n, p) -> begin
+        op = matrix_free_operator(_pa_poisson(_pa_space(n, p)); dirichlet = :dir)
+        x = randn(Xoshiro(10), size(op, 2))
+        y0 = randn(Xoshiro(11), size(op, 1))
+        y = similar(y0)
+        _pa_case(() -> (copyto!(y, y0); mul!(y, op, x, 2.5, 0.7)), () -> copy(y))
+    end))
     return P
 end
 # END _pa paths
@@ -562,7 +664,11 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
                 for case in (small, large)
                     box, other, nval = _pa_allocations(case.call)
                     @test name in _PA_ZERO_PATHS ? box == 0 : box <= 512
-                    @test isempty(other)
+                    if name in _PA_BOXED_KERNEL_PATHS
+                        @test all(o -> o[1] <: _PA_BOXED_KERNEL_TYPES, other)
+                    else
+                        @test isempty(other)
+                    end
                     @test nval == nrefs
                 end
                 @test get(hits, name, -1) == 0
