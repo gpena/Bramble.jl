@@ -9,7 +9,11 @@
 # src/precompile/ (the *_sessions.jl files) are workloads too, and have their
 # own pattern rather than a broad src/precompile/** so that a non-workload file
 # added to that directory later is still measured.
+#
+# src/Bramble.jl, the module file, runs its includes and exports at load time, before the
+# coverage tracer is active, so it is ignored for the same reason.
 ignore:
+  - "src/Bramble.jl"
   - "src/precompile.jl"
   - "src/**/precompile.jl"
   - "src/precompile/*_sessions.jl"

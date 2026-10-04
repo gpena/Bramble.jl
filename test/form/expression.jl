@@ -102,6 +102,28 @@ using Bramble: TrialFunction, TestFunction, IdentityOperator, ZeroOperator, Oper
         @test !occursin("+ -", s)
     end
 
+    @testset "Product nodes rendered directly" begin
+        # The products as `innerₕ`/`inner₊`/`inner_Γ` build them, before `form` resolves
+        # them: a bilinear and a linear innerₕ, the staggered-set weight naming its set as
+        # a third argument, and the boundary weight (its markers are not rendered).
+        u, v = TrialFunction{2}(), TestFunction{2}()
+        @test expression(innerₕ(u, v)) == "innerₕ(u, v)"
+        @test expression(innerₕ(3.0, v)) == "innerₕ(3, v)"
+        @test expression(inner₊(u, v, Val((1, 2)))) == "inner₊(u, v, (1, 2))"
+        @test expression(inner_Γ(u, v; markers = (:left,))) == "inner_Γ(u, v)"
+
+        # The name and the product string per weight type. The weights are singleton
+        # types, so inference folds these calls at compile time and nothing runs; the
+        # barrier hides the type so each method is called, not folded away.
+        W = Bramble
+        name(w) = W._inner_name(Base.inferencebarrier(w))
+        @test name(W.InnerH()) == "innerₕ"
+        @test name(W.InnerPlusSet{(1, 2)}()) == "inner₊"
+        @test name(W.InnerGamma{((true, false), (false, false))}()) == "inner_Γ"
+        @test W._product_expression(Base.inferencebarrier(W.InnerPlusSet{(1, 2)}()), u, v) ==
+              "inner₊(u, v, (1, 2))"
+    end
+
     @testset "AST nodes rendered directly" begin
         # The nodes `form` never leaves in a resolved AST (the simplifier folds or lowers
         # them), rendered from the tree itself. Each expected string is written from the
