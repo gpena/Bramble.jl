@@ -48,27 +48,34 @@ Base.setindex!(v::_KBZeroBased, a, i::Int) = (v.data[i + 1] = a)
 _kb_alloc5(y, K, x, α, β) = @allocated mul!(y, K, x, α, β)
 _kb_alloc3(y, K, x) = @allocated mul!(y, K, x)
 
+# The checks of "matches assemble" for one mesh size, behind a function barrier: inlined in
+# the loop over 2D and 3D sizes, the space is a 2D/3D union and inference pairs a 3D trial
+# function with a 2D test function.
+function _kb_matches_assemble(n::NTuple{D, Int}) where {D}
+    V = gridspace(_kb_graded_mesh(n), Val(2))
+    a = form(V, V, _kb_coupled)
+    @test is_separable(a)
+    K = kronecker_operator(a)
+    A = assemble(a)
+    @test K isa KroneckerBlockOperator
+    @test size(K) == size(A)
+    @test eltype(K) === Float64
+    @test _kb_same_matrix(K, A)
+    @test K[2 + ndofs(V) ÷ 2, 3] == A[2 + ndofs(V) ÷ 2, 3]
+    @test K[3, 2 + ndofs(V) ÷ 2] == 0
+    x = rand(MersenneTwister(KB_SEED), size(A, 2))
+    y0 = rand(MersenneTwister(KB_SEED + 1), size(A, 1))
+    @test isapprox(K * x, A * x; rtol = 1e-12)
+    @test isapprox(mul!(copy(y0), K, x, 0.5, -3.0), 0.5 * (A * x) - 3.0 * y0;
+        rtol = 1e-12)
+    @test mul!(fill(NaN, size(A, 1)), K, x, 1.0, 0.0) == K * x
+    @test !issymmetric(K)
+end
+
 @testset "Kronecker blocks" begin
     @testset "matches assemble, 2D and 3D" begin
         for n in ((9, 7), (6, 5, 7))
-            V = gridspace(_kb_graded_mesh(n), Val(2))
-            a = form(V, V, _kb_coupled)
-            @test is_separable(a)
-            K = kronecker_operator(a)
-            A = assemble(a)
-            @test K isa KroneckerBlockOperator
-            @test size(K) == size(A)
-            @test eltype(K) === Float64
-            @test _kb_same_matrix(K, A)
-            @test K[2 + ndofs(V) ÷ 2, 3] == A[2 + ndofs(V) ÷ 2, 3]
-            @test K[3, 2 + ndofs(V) ÷ 2] == 0
-            x = rand(MersenneTwister(KB_SEED), size(A, 2))
-            y0 = rand(MersenneTwister(KB_SEED + 1), size(A, 1))
-            @test isapprox(K * x, A * x; rtol = 1e-12)
-            @test isapprox(mul!(copy(y0), K, x, 0.5, -3.0), 0.5 * (A * x) - 3.0 * y0;
-                rtol = 1e-12)
-            @test mul!(fill(NaN, size(A, 1)), K, x, 1.0, 0.0) == K * x
-            @test !issymmetric(K)
+            _kb_matches_assemble(n)
         end
     end
 

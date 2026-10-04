@@ -268,9 +268,11 @@ end
 
 function issymmetric(K::KroneckerBlockOperator)
     K.nrows == K.ncols || return false
-    return all(K.blocks) do b
+    # `all(map(...))`, not `all(f, ...)`: over a tuple of unlike blocks `all(f, ...)` infers
+    # `Union{Missing, Bool}` (three-valued logic), a `map` of `Bool`s infers `Bool`.
+    return all(map(K.blocks) do b
         b.rows == b.cols && return issymmetric(b.op)
-        return any(c -> c.rows == b.cols && c.cols == b.rows && _kron_transposes(b.op, c.op),
-            K.blocks)
-    end
+        return any(map(c -> c.rows == b.cols && c.cols == b.rows && _kron_transposes(b.op, c.op),
+            K.blocks))
+    end)
 end

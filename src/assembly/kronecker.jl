@@ -885,7 +885,9 @@ end
         y, terms::Tuple{KroneckerTerm, Vararg{KroneckerTerm}}, cs::Tuple, x, Js::Tuple, ss::Tuple,
         off::Int, m::Int
 )
-    F = terms[1].rows
+    # A host term's `rows` is a `Tuple`; the assertion keeps inference off the device
+    # terms' `nothing`.
+    F = terms[1].rows::Tuple
     w, sp = _kron_line_fold(Base.tail(F), Js, ss)
     _kron_line!(y, F[1], terms[1].line, sp, x, cs[1] * w, off, m)
     return _kron_line_terms!(y, Base.tail(terms), Base.tail(cs), x, Js, ss, off, m)
