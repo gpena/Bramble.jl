@@ -943,8 +943,8 @@ end
 # Expression rendering (gpena/Bramble.jl#274)
 # ==============================================================================
 
-# One name per weight type. `InnerGammaNormal` (normal.jl, a different subplan) adds its own
-# method to this same generic function -- no forward declaration needed.
+# One name per weight type. `InnerGammaNormal` adds its own method to this same generic
+# function in normal.jl, which is included after this file -- no forward declaration needed.
 _inner_name(::InnerH) = "innerₕ"
 _inner_name(::InnerPlus{Dim}) where {Dim} = "inner₊" * _BRAMBLE_var2symbol[Dim]
 _inner_name(::InnerPlusSet{S}) where {S} = "inner₊"

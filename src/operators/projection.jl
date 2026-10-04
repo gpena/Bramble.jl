@@ -83,8 +83,7 @@ there is no shared grid point to evaluate once and scatter.
 """
 function _rule_component end
 
-# --- the device fast path (gpena/Bramble.jl#94, #174, S2.3 of
-# .agents/plans/metal-and-apple-silicon-acceleration.md) ------------------------------- #
+# --- the device fast path (gpena/Bramble.jl#94, #174) ------------------------------- #
 #
 # `_rule_kernel`/`_rule_scatter_kernel` build a callable closing over the mesh itself
 # (`_RₕKernel`, `_AvgKernel`, `_AvgScatterKernel`), which is exactly right for the CPU sweep

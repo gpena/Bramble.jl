@@ -70,9 +70,9 @@ function _diagonal_or_throw(M::SparseMatrixCSC)
     return d
 end
 
-# Generic `AbstractMatrix` fallback (S1.2's extension of the matrix-type seam,
-# gpena/Bramble.jl#12): no `nonzeros`/`rowvals` to walk on a dense-backend matrix, so the
-# off-diagonal check reads every entry directly instead.
+# Generic `AbstractMatrix` fallback (the matrix-type seam, gpena/Bramble.jl#12): no
+# `nonzeros`/`rowvals` to walk on a dense-backend matrix, so the off-diagonal check reads
+# every entry directly instead.
 function _diagonal_or_throw(M::AbstractMatrix)
     n = size(M, 1)
     d = zeros(eltype(M), n)

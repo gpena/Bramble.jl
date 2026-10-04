@@ -235,19 +235,18 @@ fill stays on the host and is not moved to the device ("The device architecture 
 below).
 
 **What now assembles on a Metal-backed space.** Composite bilinear forms
-([gpena/Bramble.jl#361](https://github.com/gpena/Bramble.jl/issues/361), S1), every linear
-form -- scalar and composite (gpena/Bramble.jl#361, S2), Dirichlet conditions through
-`assemble`, `assemble!`, `dirichlet_bc!` and the combined `assemble(a, l)` (gpena/Bramble.jl#361,
-S4), `πₕ` across two device meshes and a composite with a cross-mesh block
-([gpena/Bramble.jl#363](https://github.com/gpena/Bramble.jl/issues/363), S5), a
-grid-function coefficient in a bilinear or linear form, live across a device-side mutation
-([gpena/Bramble.jl#364](https://github.com/gpena/Bramble.jl/issues/364), S6),
-`assemble_add!`/`assemble_parallel!` on a linear form, and `dirac` sources (S7, S8) all
-assemble on Metal and match the host. Each fix routed around the same wall the scalar case
-already went around: the element-type probe (`_probed_eltype`, `src/assembly/linear.jl`,
-S1), the linear sweep (S2), the interpolation node's source binding (S5) and the
-grid-function coefficient binding (S6) all read a `host_weights` mirror or a host copy
-rather than scalar-index device storage.
+([gpena/Bramble.jl#361](https://github.com/gpena/Bramble.jl/issues/361)), every linear form
+-- scalar and composite (gpena/Bramble.jl#361), Dirichlet conditions through `assemble`,
+`assemble!`, `dirichlet_bc!` and the combined `assemble(a, l)` (gpena/Bramble.jl#361), `πₕ`
+across two device meshes and a composite with a cross-mesh block
+([gpena/Bramble.jl#363](https://github.com/gpena/Bramble.jl/issues/363)), a grid-function
+coefficient in a bilinear or linear form, live across a device-side mutation
+([gpena/Bramble.jl#364](https://github.com/gpena/Bramble.jl/issues/364)),
+`assemble_add!`/`assemble_parallel!` on a linear form, and `dirac` sources all assemble on
+Metal and match the host. Each fix routed around the same wall the scalar case already went
+around: the element-type probe (`_probed_eltype`, `src/assembly/linear.jl`), the linear
+sweep, the interpolation node's source binding and the grid-function coefficient binding all
+read a `host_weights` mirror or a host copy rather than scalar-index device storage.
 
 Dirichlet rows are rewritten by one `KernelAbstractions` kernel that reads a constrained
 row's entries directly off the matrix's own `rowPtr`/`colVal`/`nzVal` -- a row's stored
@@ -271,24 +270,24 @@ docstring's "0 allocations" claim for live grid-function coefficients holds on t
 only: on a device space each fill copies the coefficient to the host anew.
 
 **What still doesn't assemble, or doesn't assemble on a device.**
-- **D3: `l(vₕ)`, a linear form contracted against a device element, is out of scope.** It
+- **`l(vₕ)`, a linear form contracted against a device element, is out of scope.** It
   fails because `_contract_linear_core` contracts against device storage point by point, a
-  different code path from the sweep-into-a-host-buffer shape S2 built; nothing above fixes
-  it.
-- **D4: `symmetrize!` on a Metal matrix is out of scope**, refused as stated above rather
+  different code path from the linear sweep's sweep-into-a-host-buffer shape above; nothing
+  above fixes it.
+- **`symmetrize!` on a Metal matrix is out of scope**, refused as stated above rather
   than silently wrong.
-- **A constrained row with no stored diagonal throws on a device CSR** (S4's designed
-  limit, above), where the host path inserts one.
+- **A constrained row with no stored diagonal throws on a device CSR** (the device
+  Dirichlet kernel's designed limit, above), where the host path inserts one.
 
 **Cost.** The device paths above allocate on every call: a host mirror of the space's
 weights (`host_weights`), a host copy of every device-storage coefficient, and one upload,
-none of which the host path pays. S2 measured a 2D `n = 17` linear form at roughly 17 KB per
+none of which the host path pays. A 2D `n = 17` linear form measured roughly 17 KB per
 call; a 1D Metal `assemble!` at `n = 100,001` measured roughly 2.47 MB per call, almost all
 of it rebuilding `host_weights(W)`, plus roughly 0.4 MB per grid-function coefficient in the
 form.
 
 **`dirac` on a device space.** A Float32 host space now gets a Float32 vector out of
-`dirac` (gpena/Bramble.jl#361, S8; previously always Float64, which then failed to assemble
+`dirac` (gpena/Bramble.jl#361; previously always Float64, which then failed to assemble
 on a Float32/Metal space). `dirac`'s default strength, `1.0`, is a Float64 literal, so pass
 a Float32 strength explicitly on a Float32/Metal space (`dirac(x0, 1f0)`) -- the same rule
 as any other Float64 coefficient (`innerₕ(1.0, v)` is refused on Metal too). In 1D, a vector
@@ -384,7 +383,7 @@ what still doesn't.
 ### The evidence
 
 **Memory and throughput: assembled CSR against Kronecker on Metal.**
-`benchmark/assembled_vs_matrixfree.jl --full` (S6.1 of the v3.14.0 plan, commit `9051ac58`)
+`benchmark/assembled_vs_matrixfree.jl --full` (v3.14.0, commit `9051ac58`)
 compared, for the same separable operator `innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))`, a host
 `assemble` uploaded once with `metal_sparse_csr` against a Metal-backed
 `kronecker_operator`, both `Float32`, after checking host-against-device agreement for both
@@ -439,7 +438,7 @@ true on every backend, as a host-side record/replay rather than a device table:
 `d47d3376`, and Metal since commit `208b23de`, where the first `assemble` searches the
 mirror's CSR layout once and every later `assemble!` (and `assemble_add!`) replays the
 recorded positions into the mirror before the single bulk flush -- no device scatter
-kernel. `benchmark/scatter_table.jl` (S5.1, commit `fb839b94`; AC power, load 3.01,
+kernel. `benchmark/scatter_table.jl` (commit `fb839b94`; AC power, load 3.01,
 `--threads=4`, every row agreeing with a fresh assemble) measured the refill at the minimum of
 40 `assemble!` calls; at 1D `n = 2049` CpuSerial took 0.00621 ms, CpuThreaded 0.05117 ms,
 CpuPolyester 0.01196 ms and Metal 1.29733 ms, and on a non-uniform 2D `129 × 97` grid
@@ -592,7 +591,7 @@ claimed.
   call -- never one per grid point.
 - **An asynchronous device write with nothing ordering it against a later write to the
   same buffer.** `assemble` returned before a device write had actually landed, and no
-  `CHECK` in the milestone caught it: the milestone's own 33-point grid was too small and
+  test in the milestone caught it: its 33-point test grid was too small and
   too fast to lose the race, and the bug only surfaced when a much larger, repeated
   full-stack assembly hit it (`n = 513`, then `n = 1025`). The first diagnosis -- the
   scatter flush's `copyto!` was unsynchronized -- was wrong; adding `ka_synchronize` there
@@ -606,7 +605,7 @@ claimed.
   `_flush_device_scatter!` already overwrites every stored entry from the mirror
   unconditionally. Any future device write needs the same discipline: order it against
   whatever else touches the same buffer, or remove the second writer, and do not trust a
-  small, single-run `CHECK` to have exercised the timing at all.
+  small, single-run test to have exercised the timing at all.
 
 ## Masked projection
 

@@ -599,12 +599,12 @@ end
 # `Σᵢ D₋ᵢ(uᵢ)`, the SBP dual `∇ₕ`/`inner₊` already close an integration-by-parts identity
 # against (`test/space/discrete_calculus_identities.jl`, `test/space/sbp_identities.jl`,
 # `test/space/inference_allocation.jl`); it already accepts a `D`-leaf composite and returns a
-# grid function, which is everything this subplan's goal asks of `divₕ`. The elasticity
+# grid function, which is all the runtime vector calculus needs of `divₕ`. The elasticity
 # example's own divergence term, `Σᵢ M₋ⱼM₋ₖ(D₋ᵢuᵢ)` (bringing every direction's contribution to
 # the one cell-centred point before summing, `{j, k}` the two directions other than `i`), is a
 # *different* object with a different staggering, needed only there; folding it into `divₕ`
 # would change what `divₕ` means for every existing caller of that identity rather than extend
-# it, so it is left to whatever the elasticity example itself becomes (S6.6) instead.
+# it, so it lives in the form-level `divₕ(u::LazyOp)` (operators/difference.jl) instead.
 
 # The backward average, in place: `out[I] = (out[I] + out[I - eᵢ]) / 2` along `DIM`, zero on
 # the first slice, exactly `_average_engine!`'s `Backward()` case (operators/average.jl)

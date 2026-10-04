@@ -238,7 +238,7 @@ Dirichlet row-zeroing `sd` was built with.
 end
 
 # `SparseArrays.blockdiag` only accepts sparse arguments; a dense-backend `mass_matrix`
-# (S1.2's extension of the matrix-type seam, gpena/Bramble.jl#12) needs its own block
+# (the matrix-type seam, gpena/Bramble.jl#12) needs its own block
 # assembly instead.
 @inline _block_diag_with_identity(M::SparseMatrixCSC, n) = blockdiag(M, sparse(I, n, n))
 function _block_diag_with_identity(M::AbstractMatrix, n)

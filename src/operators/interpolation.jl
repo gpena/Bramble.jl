@@ -1071,7 +1071,7 @@ end
 
 # --- Expression rendering ----------------------------------- #
 
-# Operand only, per the plan's departure from the issue text: `src_space` is `nothing` until
+# Operand only: `src_space` is `nothing` until
 # assembly binds it (`_bind_interp_spaces`) and carries no name a caller wrote, so rendering
 # it would show either `nothing` or an internal leaf object instead of anything the caller
 # recognizes.

@@ -136,7 +136,7 @@ if PRECOMPILE_WORKLOAD
                 Ωₕ2, be, :wall, x -> x[1] * x[2], (x, t) -> x[1] * x[2] * t, I_time, Val(2)
             )
 
-            # The 3D scalar Laplacian, non-uniform (gpena/Bramble.jl#S9): both spellings a
+            # The 3D scalar Laplacian, non-uniform: both spellings a
             # caller writes, `inner₊(∇ₕ(u), ∇ₕ(v))` (the tutorials' own, e.g.
             # docs/src/getting_started.md) and the summed one-sided-difference form. Measured
             # against the workload above with the one-walk change already in: +2.7 s
