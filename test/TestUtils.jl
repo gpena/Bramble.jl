@@ -15,6 +15,7 @@ module TestUtils
 using Test
 using SparseArrays: spdiagm
 using ForwardDiff
+using Printf: @sprintf
 
 # The test group, read once here rather than in each entry point, so that a subsystem's own
 # `runtests.jl` -- which is a standalone entry point and does not go through
@@ -144,18 +145,31 @@ end
 # Prints the start/end trace lines around one `Base.include(Main, path)` call, when active.
 # Broken out so the `include` override below (installed once, outside this module) is a
 # one-line forward into it.
+#
+# Format: `▸ path` before the file, then `✓ path  time  peak (+growth)` after it, with the
+# columns aligned and nested includes indented two spaces per level. The growth is how far
+# the process peak rose during this file, which is what tells files apart. `test/timing.jl`
+# parses these lines.
+const TRACE_DEPTH = Ref(0)
+
 function traced_include(real_include::F, path) where {F}
     TRACE_TESTS || return real_include(Main, path)
-    println("[trace] start ", path)
+    indent = "  "^TRACE_DEPTH[]
+    println("▸ ", indent, path)
     flush(stdout)
+    rss0_gb = Sys.maxrss() / 1024^3
     t0 = time()
-    result = real_include(Main, path)
+    TRACE_DEPTH[] += 1
+    result = try
+        real_include(Main, path)
+    finally
+        TRACE_DEPTH[] -= 1
+    end
     elapsed = time() - t0
     maxrss_gb = Sys.maxrss() / 1024^3
     println(
-        "[trace] end ", path,
-        " elapsed=", round(elapsed; digits = 2), "s",
-        " maxrss=", round(maxrss_gb; digits = 2), "GB"
+        "✓ ", rpad(indent * path, 52),
+        @sprintf("%8.2f s %6.2f GB (+%.2f)", elapsed, maxrss_gb, maxrss_gb - rss0_gb)
     )
     flush(stdout)
     # A named, failing `@test` beats a SIGKILL with no indication which file was running --
