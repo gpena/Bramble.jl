@@ -14,11 +14,16 @@
 # distributed first, giving one Kronecker product per pair of addends, and an `inner_Γ`
 # weight is a sum over its faces, giving one more per face (`_kron_inners`).
 #
-# Anything without a method here answers `nothing`: a grid-function coefficient (no tensor
-# structure in general), a region other than `:interior`, an indexed (composite) leaf, an
-# interpolation, a scalar inside a side, and the star and cross-weighted differences. A
-# false negative only forgoes the Kronecker fast path; a false positive would be a wrong
-# product.
+# A grid-function coefficient whose values vary along one axis `d` only is the diagonal
+# `I ⊗ ... ⊗ diag(g_d) ⊗ ... ⊗ I`, so it projects to its 1D values on `d`, at the same place
+# in the chain, and to the identity on every other axis (`_kron_coefs`). Its values are
+# read once, when the factors are built.
+#
+# Anything without a method here answers `nothing`: a grid-function coefficient varying
+# along two axes or living on another mesh, a region other than `:interior`, an indexed
+# (composite) leaf, an interpolation, a scalar inside a side, and the star and
+# cross-weighted differences. A false negative only forgoes the Kronecker fast path; a false
+# positive would be a wrong product.
 
 # --- Splitting a side into sum-free chains ------------------------------------------- #
 
@@ -90,6 +95,78 @@ for N in (:BackwardDifference, :ForwardDifference, :CenteredDifference, :Backwar
     end
 end
 
+# --- Single-axis grid-function coefficients ----------------------------------------- #
+
+# A `GridFunctionScale` coefficient after `_kron_coefs`: the values along `axis`, the only
+# axis the D-dimensional values vary along (any axis for a constant one).
+struct _KronCoef{T}
+    axis::Int
+    values::Vector{T}
+end
+
+_kron_split(op::GridFunctionScale) = _kron_split_wrapped(op)
+function _kron_rewrap(op::GridFunctionScale{D, V}, x::LazyOp{D}) where {D, V}
+    return GridFunctionScale{D, V, typeof(x)}(op.grid_function, x)
+end
+
+function _kron_axis(op::GridFunctionScale{D, <:_KronCoef}, d::Int, leaf::LazyOp{1}) where {D}
+    x = _kron_axis(op.inner_op, d, leaf)
+    c = op.grid_function
+    return d == c.axis ? GridFunctionScale(c.values, x) : x
+end
+
+"""
+    _kron_coef(g, Ωₕ::MeshnD) -> Union{Nothing, _KronCoef}
+
+The 1D coefficient a `GridFunctionScale`'s `g` projects to on `Ωₕ`, or `nothing` when its
+values vary along more than one axis or `g` lives on a mesh other than `Ωₕ`. The test is
+exact: every slice along the other axes must be `isequal` to the first, which
+`Rₕ(Wₕ, x -> f(x[d]))` meets because the points on an axis line share that coordinate
+exactly. A tolerance would turn a near miss into a wrong product.
+"""
+_kron_coef(::Any, ::MeshnD) = nothing
+_kron_coef(g::Number, Ωₕ::MeshnD) = _KronCoef(1, fill(g, npoints(Ωₕ, Tuple)[1]))
+function _kron_coef(g::VectorElement, Ωₕ::MeshnD)
+    space(g) isa ScalarGridSpace && mesh(space(g)) === Ωₕ || return nothing
+    return _kron_coef(parent(g), Ωₕ)
+end
+function _kron_coef(g::AbstractVector, Ωₕ::MeshnD{D}) where {D}
+    np = npoints(Ωₕ, Tuple)
+    length(g) == prod(np) || return nothing
+    A = reshape(collect(g), np)
+    first_slice(e) = selectdim(A, e, 1:1)
+    varying = filter(e -> !all(isequal.(A, first_slice(e))), 1:D)
+    length(varying) > 1 && return nothing
+    d = isempty(varying) ? 1 : only(varying)
+    return _KronCoef(d, A[ntuple(e -> e == d ? Colon() : 1, Val(D))...])
+end
+
+"""
+    _kron_coefs(op::LazyOp, Ωₕ::MeshnD) -> Union{Nothing, LazyOp}
+
+`op`, a sum-free chain from `_kron_split`, with each `GridFunctionScale` coefficient in it
+replaced by its `_KronCoef` on `Ωₕ`; `nothing` when one has none.
+"""
+_kron_coefs(op::Union{TrialFunction, TestFunction}, ::MeshnD) = op
+function _kron_coefs(op::LazyOp, Ωₕ::MeshnD)
+    inner = _kron_coefs(op.inner_op, Ωₕ)
+    inner === nothing && return nothing
+    return _kron_rewrap(op, inner)
+end
+function _kron_coefs(op::GridFunctionScale{D}, Ωₕ::MeshnD) where {D}
+    c = _kron_coef(op.grid_function, Ωₕ)
+    c === nothing && return nothing
+    inner = _kron_coefs(op.inner_op, Ωₕ)
+    inner === nothing && return nothing
+    return GridFunctionScale{D, typeof(c), typeof(inner)}(c, inner)
+end
+
+# Each chain with its coefficients replaced, or `nothing` when one chain has none.
+function _kron_coefs(chains::Tuple, Ωₕ::MeshnD)
+    out = map(op -> _kron_coefs(op, Ωₕ), chains)
+    return any(isnothing, out) ? nothing : out
+end
+
 # --- The 1D inner products on each axis --------------------------------------------- #
 
 """
@@ -157,8 +234,10 @@ fastest) is one Kronecker product, so that `term` assembles to their sum. The fa
 `d` is the 1D form on `gridspace(Ωₕ(d))` that `term` projects to there (see this file's
 header); there is one tuple per pair of addends of the two sides and per Kronecker term of
 the weight (several for `inner_Γ`, one per face). `nothing` when `term` has a node with no
-projection, or restricts to `:interior` on a mesh whose `:interior` marker is not the
-product of its axes' own.
+projection, a grid-function coefficient that varies along more than one axis or lives on
+another mesh, or restricts to `:interior` on a mesh whose `:interior` marker is not the
+product of its axes' own. A coefficient's values are read here, once: editing them later
+does not change the factors.
 
 `Ωₕ` must be the mesh both the trial and the test space of `term`'s form live on: the
 factors are built on `Ωₕ`'s axes alone, so another mesh of the same size gives other
@@ -170,8 +249,10 @@ function _kron_project(term::BilinearProduct{D, I}, Ωₕ::MeshnD{D}) where {D, 
     inners = _kron_inners(I, Ωₕ)
     inners === nothing && return nothing
     ls = _kron_split(term.left_op)
+    ls === nothing || (ls = _kron_coefs(ls, Ωₕ))
     ls === nothing && return nothing
     rs = _kron_split(term.right_op)
+    rs === nothing || (rs = _kron_coefs(rs, Ωₕ))
     rs === nothing && return nothing
     if any(_kron_restricts, ls) || any(_kron_restricts, rs)
         _kron_interior_is_tensor(Ωₕ) || return nothing

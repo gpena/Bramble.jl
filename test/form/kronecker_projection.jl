@@ -125,6 +125,52 @@ end
         @test _proj_refused(form(W1, W1, (u, v) -> inner_Γ(u, v; markers = :boundary)))
     end
 
+    @testset "single-axis coefficients factor" begin
+        for W in (_proj_graded_space((9, 7)), _proj_graded_space((6, 5, 7)))
+            fx = Rₕ(W, x -> 1 + x[1])
+            fy = Rₕ(W, x -> 2 + x[2]^2)
+            fl = Rₕ(W, x -> 1 + x[end]^3)  # the last axis: z in 3D
+            c = Rₕ(W, x -> 3.0)            # varies along no axis
+            forms = (
+                (u, v) -> innerₕ(fx * (fy * u), v) + inner₊ₓ(fy * D₋ₓ(u), D₋ₓ(v)),
+                (u, v) -> innerₕ(D₋ᵧ(fy * u), fx * D₊ₓ(v)),
+                (u, v) -> innerₕ(D₋ₓ(fx * (fx * u)), Mₓ(fl * v)),
+                (u, v) -> inner₊ᵧ(fl * D₋ᵧ(u), D₋ᵧ(fx * v)),
+                (u, v) -> innerₕ(c * (D₋ₓ(u) + fl * D₋ᵧ(u)), v),
+                (u, v) -> innerₕ(restrict_to(:interior, fy * u), fx * v),
+                (u, v) -> innerₕ(u, v) + inner_Γ(fy * u, fx * v; markers = :boundary),
+                (u, v) -> innerₕ(Vector(fl) * u, v),
+                (u, v) -> innerₕ((() -> 2.5) * u, v)
+            )
+            for f in forms
+                @test _proj_matches(form(W, W, f))
+            end
+        end
+        W = _proj_graded_space((9, 7))
+        fy = Rₕ(W, x -> 2 + x[2]^2)
+        # The coefficient sits where the D-dimensional one sits: `D₋ᵧ(fy * u)` on axis 2.
+        a = form(W, W, (u, v) -> innerₕ(D₋ᵧ(fy * u), v))
+        P = Bramble._kron_project(only(_proj_leaves(a))[2], mesh(W))
+        Wy = gridspace(mesh(W)(2))
+        gy = Rₕ(Wy, x -> 2 + x[1]^2)
+        @test only(P)[2] == assemble(form(Wy, Wy, (u, v) -> innerₕ(D₋ₓ(gy * u), v)))
+    end
+
+    @testset "rank-2 or foreign coefficient" begin
+        W = _proj_graded_space((9, 7))
+        # One ulp off at one point is no longer a single-axis coefficient.
+        g = Rₕ(W, x -> 1 + x[1])
+        parent(g)[12] = nextfloat(parent(g)[12])
+        @test _proj_refused(form(W, W, (u, v) -> innerₕ(g * u, v)))
+        @test _proj_refused(form(W, W, (u, v) -> innerₕ(u, D₋ₓ(g * v))))
+        # A coefficient on another mesh of the same size.
+        Wo = _proj_graded_space((9, 7))
+        go = Rₕ(Wo, x -> 1 + x[1])
+        @test _proj_refused(form(W, W, (u, v) -> innerₕ(go * u, v)))
+        # A plain vector of the wrong length.
+        @test _proj_refused(form(W, W, (u, v) -> innerₕ(ones(5) * u, v)))
+    end
+
     @testset "custom :interior marker refused" begin
         # A domain-redefined `:interior` marker is no product of the axes' interiors, and
         # `restrict_to(:interior, …)` reads the mesh's own marker.
