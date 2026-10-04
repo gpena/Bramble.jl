@@ -350,12 +350,15 @@ is_separable(form(Wₕ, Wₕ, (u, v) -> innerₕ(fₕ * u, v)))
 # ## The operator, and what it costs against the matrix it replaces
 #
 # `kronecker_operator` builds the matrix-free operator without ever forming the
-# `68921 x 68921` matrix; `assemble` builds that matrix, for comparison:
+# `68921 x 68921` matrix; `assemble` builds that matrix, for comparison. `K` keeps a
+# reference to `Ωₕ`, so that it can refuse to run once the mesh is mutated in place, and
+# `Base.summarysize` follows that reference. The mesh is shared with `Wₕ` rather than owned
+# by `K`, so its size is subtracted to count only what the operator adds:
 
 K = kronecker_operator(a)
 A = assemble(a)
 
-bytes_kronecker = Base.summarysize(K)
+bytes_kronecker = Base.summarysize(K) - Base.summarysize(Ωₕ)
 bytes_csc = Base.summarysize(A)
 (dofs = ndofs(Wₕ), bytes_kronecker = bytes_kronecker, bytes_csc = bytes_csc,
     kronecker_over_csc_percent = round(100 * bytes_kronecker / bytes_csc; digits = 4))
