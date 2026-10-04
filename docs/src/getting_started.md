@@ -143,7 +143,5 @@ Read the tutorials in the order of the sidebar, top to bottom. Each line says wh
 - [Mesh tutorial](tutorials/mesh.md): Turn a domain into a mesh, make its points non-uniform, and read the spacings and cell measures.
 - [Grid spaces and discrete functions](tutorials/space.md): Put a function on a mesh, measure it, and stack copies into a composite space.
 - [Difference, jump and average operators](tutorials/operators.md): Apply differences, jumps and averages, see what each does at the grid edge, and get the matrix.
-- [How accurate are the difference operators](tutorials/operator_accuracy.md): Measure the order of a difference operator and choose between the centered, second-order and summation-by-parts forms.
-- [Interpolation between meshes](tutorials/interpolation.md): Move a grid function between meshes, see what error that costs, and get the interpolation as a matrix.
 - [Linear and bilinear forms](tutorials/form.md): Write, assemble and solve a linear or bilinear form, with Dirichlet conditions, for a Poisson problem.
 - [Coupled systems](tutorials/coupled_systems.md): Write a form over several unknowns, constrain one block, and read values across different meshes.

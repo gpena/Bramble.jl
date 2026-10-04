@@ -8,7 +8,7 @@ CurrentModule = Bramble
 
 **What you need first.** The [mesh tutorial](@ref tutorial_mesh) and the [space tutorial](@ref tutorial_space), for meshes, grid spaces and discrete functions.
 
-**Where next.** The [accuracy tutorial](operator_accuracy.md) measures how well these operators approximate derivatives.
+**Where next.** The [form tutorial](form.md) assembles these operators into linear systems.
 
 Every block below runs when this page is built.
 
@@ -124,7 +124,7 @@ The finite difference is zero on its truncated slice, because there is no one-si
 parent(∇ₕ(uₕ))[1], parent(D₊ₓ(uₕ))[end], parent(jumpₕ(uₕ))[end]
 ```
 
-The last entry is ``-u_5 = -1``, not ``0``. That is what makes the jump agree with its matrix, as the [accuracy tutorial](@ref operator_accuracy_convergence) shows with a convergence study that the truncated point spoils.
+The last entry is ``-u_5 = -1``, not ``0``. That is what makes the jump agree with its matrix.
 
 The index shifts follow the jump: an off-grid neighbour reads as zero, so `S₊ₕ` is zero at the last point and `S₋ₕ` at the first.
 
@@ -272,7 +272,7 @@ uv = Rₕ(vector_gridspace(Ω₂), x -> (x[1] + 2x[2], 3x[1] - x[2]))
 parent(∇ₕ ⋅ uv) == parent(divₕ(uv)), parent(∇ₕ × uv) == parent(curlₕ(uv))
 ```
 
-The next page, the [accuracy tutorial](operator_accuracy.md), compares the centered and second-order variants of the difference. The [interpolation tutorial](interpolation.md) moves a grid function between meshes.
+The next page, the [form tutorial](form.md), assembles these operators into linear systems.
 
 ---
 
@@ -299,7 +299,7 @@ The forward difference and the forward average are `public` but not exported. Br
 
 ### Four differences compared
 
-Four families combine the same one-sided differences in different ways. The [accuracy tutorial](operator_accuracy.md) derives each; this table is the summary.
+Four families combine the same one-sided differences in different ways:
 
 | Operator | Stencil | Order, non-uniform | Order, uniform | Boundary |
 |:--|:--|:--|:--|:--|
