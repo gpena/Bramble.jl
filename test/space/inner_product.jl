@@ -1015,4 +1015,17 @@ _run_generated(ex) = Core.eval(@__MODULE__, ex)
     @test Bramble._generate_inner_plus_body(T, T, :sum) isa Expr
 end
 
+# The `AbstractVector` method of `_weight_at` is the internal fallback for a dense weight:
+# it reads by the linear index and ignores the `CartesianIndex`.
+@testset "_weight_at on a dense weight" begin
+    sep = Bramble.SeparableWeights{2, Float64, Vector{Float64}}(
+        ([1.0, 2.0], [0.5, 4.0]), (2, 2)
+    )
+    dense = collect(sep)
+    for (lin_idx, I) in enumerate(CartesianIndices((2, 2)))
+        @test Bramble._weight_at(dense, I, lin_idx) == dense[lin_idx]
+        @test Bramble._weight_at(dense, I, lin_idx) == Bramble._weight_at(sep, I, lin_idx)
+    end
+end
+
 end # module SpaceInnerProductTests

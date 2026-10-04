@@ -17,7 +17,7 @@
 
 [[exempt]]
 path = "src/Bramble.jl"
-reason = "The module file runs its includes and exports at load time."
+reason = "The module file runs its includes and exports at load time. Also ignored in codecov.yml, so Codecov does not show it either."
 
 [[exempt]]
 path = "src/operators/node_family.jl"

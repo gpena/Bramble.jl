@@ -62,6 +62,7 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     # group.
     include("bandwidth.jl")
     include("kronecker.jl")
+    include("kronecker_projection.jl")
     # Matrix-free application of any bilinear form.
     include("matrix_free.jl")
     include("expression.jl")
