@@ -122,6 +122,10 @@ an interpolation, or any node without a projection answers `false`: a false nega
 forgoes the Kronecker fast path, so this never claims separability it cannot back up with
 factors.
 
+Stale spaces throw. If `a`'s spaces were built before an in-place mutation of their mesh,
+`is_separable`, [`kronecker_operator`](@ref) and `fdm_solve(a, F)` throw the space's
+stale-weights `ArgumentError`, exactly as `assemble(a)` does, rather than answer.
+
 # Examples
 
 ```julia
@@ -145,6 +149,7 @@ end
 _kron_separable(::Any, ::Any, ::BilinearForm) = false
 function _kron_separable(Wu::ScalarGridSpace, Wv::ScalarGridSpace, a::BilinearForm)
     mesh(Wu) === mesh(Wv) || return false
+    _kron_check_spaces(a)
     Ωₕ = _host_mirror_mesh(mesh(Wu))
     return all(l -> _kron_project(l[2], Ωₕ) !== nothing, _kron_leaves(resolve_form_ast(a), ()))
 end
@@ -202,7 +207,7 @@ function _kron_term(scales::Tuple, factors::NTuple{D, AbstractMatrix}) where {D}
 end
 
 """
-    KroneckerLinearOperator{T, D, TermsT <: Tuple, P <: ExecutionPolicy}
+    KroneckerLinearOperator{T, D, TermsT <: Tuple, P <: ExecutionPolicy, M}
 
 A matrix-free linear operator for a separable [`BilinearForm`](@ref) (see
 [`is_separable`](@ref)): the sum, over its terms, of a Kronecker product of `D`
@@ -244,26 +249,79 @@ the device, as one `KernelAbstractions` kernel with one work item per entry of `
 (`using KernelAbstractions` required). `getindex` and `SparseMatrixCSC(K)` stay host-only
 and throw an `ArgumentError` on such an operator.
 
+The factors are read from the mesh once, when the operator is built (gpena/Bramble.jl#442):
+`K` keeps that mesh (`M` is its type) and its version then. After an in-place mutation of
+the mesh (`set_points!`, `change_points!`, `iterative_refinement!`), `mul!`, `getindex`,
+`SparseMatrixCSC(K)`, `fdm_solve(K, F)` and `Kronecker.kronecker(K)` throw an
+`ArgumentError`, as a space's stale weights do; build the operator again on the mutated
+mesh. An operator built directly from
+its terms has no mesh (`M` is `Nothing`) and never goes stale.
+
 Dirichlet rows are out of scope: this operator carries no boundary constraint of its own.
 `bramble-plan`'s v3.3.0 subplan S5.2 layers that on top, through the `Kronecker.jl`
 extension and its fast-diagonalisation solve.
 
 See also: [`is_separable`](@ref), [`kronecker_operator`](@ref).
 """
-struct KroneckerLinearOperator{T, D, TermsT <: Tuple, P <: ExecutionPolicy} <: AbstractMatrix{T}
+struct KroneckerLinearOperator{T, D, TermsT <: Tuple, P <: ExecutionPolicy, M} <:
+       AbstractMatrix{T}
     terms::TermsT
     dims::NTuple{D, Int}
     n::Int
     policy::P
+    # The mesh the factors were built from and its `_mesh_version` then, compared on every
+    # call (`_kron_check_fresh`); `nothing` for an operator built from hand-made terms.
+    mesh::M
+    version::Int
     # The line kernels index under `@inbounds`, trusting that every axis-`d` factor is
     # `dims[d] × dims[d]` and that `n == prod(dims)`: checked here, once, not in `mul!`.
-    function KroneckerLinearOperator{T, D, TermsT, P}(
-            terms, dims, n, policy
-    ) where {T, D, TermsT <: Tuple, P <: ExecutionPolicy}
+    function KroneckerLinearOperator{T, D, TermsT, P, M}(
+            terms, dims, n, policy, mesh, version
+    ) where {T, D, TermsT <: Tuple, P <: ExecutionPolicy, M}
         n == prod(dims) || _throw_kron_size(n, dims)
         foreach(t -> _kron_check_factors(t.factors, dims), terms)
-        return new{T, D, TermsT, P}(terms, dims, n, policy)
+        return new{T, D, TermsT, P, M}(terms, dims, n, policy, mesh, version)
     end
+end
+
+# Without a mesh: hand-made terms, which no mesh mutation can make stale.
+function KroneckerLinearOperator{T, D, TermsT, P}(
+        terms, dims, n, policy
+) where {T, D, TermsT <: Tuple, P <: ExecutionPolicy}
+    return KroneckerLinearOperator{T, D, TermsT, P, Nothing}(terms, dims, n, policy, nothing, 0)
+end
+
+# Whether `K`'s factors still describe its mesh: one integer comparison against the mesh's
+# current `_mesh_version`, the one a space's `weights` makes (`scalar_gridspace.jl`).
+@inline _kron_is_fresh(K::KroneckerLinearOperator) = _kron_is_fresh(K.mesh, K.version)
+@inline _kron_is_fresh(::Nothing, ::Int) = true
+@inline _kron_is_fresh(Ω::AbstractMeshType, version::Int) = version == _mesh_version(Ω)
+@inline function _kron_check_fresh(K)
+    _kron_is_fresh(K) || _throw_kron_stale()
+    return nothing
+end
+
+# The form's own spaces must not be stale either: each leaf's `weights` throws the
+# stale-weights error `assemble(a)` throws for them, before any factor is built.
+function _kron_check_spaces(a::BilinearForm)
+    for W in (trial_space(a), test_space(a))
+        foreach(l -> weights(first(l)), leaf_spaces_offsets(W))
+    end
+    return nothing
+end
+
+# The stale-weights error of `_throw_stale_weights` (`scalar_gridspace.jl`), with this
+# operator's remedy: its factors are the weights it would otherwise read stale.
+@noinline function _throw_kron_stale()
+    throw(
+        ArgumentError(
+        "KroneckerLinearOperator's factors were computed from its mesh before an in-place " *
+        "mutation (set_points!, change_points!, or iterative_refinement!) changed it -- " *
+        "every product, entry and solve through this operator would silently use factors " *
+        "for a mesh that no longer exists. Build the operator again: gridspace on the " *
+        "mutated mesh, then form and kronecker_operator.",
+    ),
+    )
 end
 
 @noinline function _throw_kron_nonsquare(d::Int, sz)
@@ -440,6 +498,7 @@ _kron_operator(Wu, Wv, ::BilinearForm) = _throw_not_separable_space(Wu, Wv)
 
 function _kron_operator(Wu::ScalarGridSpace, Wv::ScalarGridSpace, a::BilinearForm)
     mesh(Wu) === mesh(Wv) || _throw_not_separable_space(Wu, Wv)
+    _kron_check_spaces(a)
     cache = _kron_cache(mesh(Wu))
     K, reads_coef = _kron_build(cache, backend(Wu), ndofs(Wu, Tuple),
         _kron_leaves(resolve_form_ast(a), ()), "")
@@ -447,17 +506,19 @@ function _kron_operator(Wu::ScalarGridSpace, Wv::ScalarGridSpace, a::BilinearFor
     return K
 end
 
-# What every operator of one `kronecker_operator` call shares: the host mesh the factors are
-# built on, each axis's mass factor, and each axis's factors built so far (`_kron_cached!`).
+# What every operator of one `kronecker_operator` call shares: the mesh and its version
+# (recorded in each operator, `_kron_check_fresh`), the host mesh the factors are built on,
+# each axis's mass factor, and each axis's factors built so far (`_kron_cached!`).
 # Factors are always built on the host -- a device-backed mesh's per-axis spaces would
 # otherwise be scalar-indexed by `weights`/`assemble` -- and only then moved to the storage
 # the backend chooses (`_kron_to_storage`). On a host mesh `_host_mirror_mesh` returns the
 # mesh itself and `_kron_to_storage` is the identity.
 function _kron_cache(Ω::AbstractMeshType{D}) where {D}
     Ωₕ = _host_mirror_mesh(Ω)
+    version = _mesh_version(Ω)
     mass = ntuple(d -> Diagonal(weights(_kron_axis_space(Ωₕ, d), Innerh())), Val(D))
     seen = ntuple(_ -> Any[], Val(D))
-    return (; Ωₕ, mass, seen)
+    return (; Ω, version, Ωₕ, mass, seen)
 end
 
 """
@@ -487,7 +548,8 @@ function _kron_build(cache, be, dims::NTuple{D, Int}, leaves, block::String) whe
         end
     end
     policy = execution_policy(be)
-    K = KroneckerLinearOperator{T, D, typeof(terms), typeof(policy)}(terms, dims, prod(dims), policy)
+    K = KroneckerLinearOperator{T, D, typeof(terms), typeof(policy), typeof(cache.Ω)}(
+        terms, dims, prod(dims), policy, cache.Ω, cache.version)
     return K, reads_coef
 end
 
@@ -967,6 +1029,9 @@ function mul!(
         β::Number; scratch = nothing
 )
     # The line kernels index `y` and `x` from 1 under `@inbounds`.
+    # Before the size check (a refined mesh changes the sizes, and staleness is the cause),
+    # and before any kernel launches or any `@batch` task starts.
+    _kron_check_fresh(K)
     Base.require_one_based_indexing(y, x)
     n = K.n
     (length(x) == n && length(y) == n) || _throw_kron_dimmismatch(K, x, y)
@@ -1003,6 +1068,7 @@ own `(i_d, j_d)` entry) rather than through `mul!` -- `AbstractMatrix`'s minimal
 so `K` prints and indexes like the matrix it factors.
 """
 function Base.getindex(K::KroneckerLinearOperator{T, D}, i::Int, j::Int) where {T, D}
+    _kron_check_fresh(K)
     @boundscheck checkbounds(K, i, j)
     Ic = CartesianIndices(K.dims)[i]
     Jc = CartesianIndices(K.dims)[j]
@@ -1016,6 +1082,19 @@ function Base.getindex(K::KroneckerLinearOperator{T, D}, i::Int, j::Int) where {
         total += c * p
     end
     return total
+end
+
+# A stale operator has no entries to show (`getindex` throws): its summary and why.
+function Base.show(io::IO, m::MIME"text/plain", K::KroneckerLinearOperator)
+    _kron_is_fresh(K) && return invoke(show, Tuple{IO, MIME"text/plain", AbstractMatrix}, io, m, K)
+    return _kron_show_stale(io, K)
+end
+
+function _kron_show_stale(io::IO, K)
+    summary(io, K)
+    print(io, ":\n  stale: its mesh was mutated in place (set_points!, change_points!, or " *
+              "iterative_refinement!) after it was built; no entries to show.")
+    return nothing
 end
 
 # No `*` method of its own. `KroneckerLinearOperator <: AbstractMatrix`, so `LinearAlgebra`
@@ -1053,6 +1132,7 @@ pre-scaled by that term's coefficient) rather than summing each term's Kronecker
 into an accumulator one term at a time, which reallocates the whole `n x n` matrix per term.
 """
 function SparseArrays.SparseMatrixCSC(K::KroneckerLinearOperator{T}) where {T}
+    _kron_check_fresh(K)
     I = Int[]
     J = Int[]
     V = T[]

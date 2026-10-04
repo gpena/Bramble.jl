@@ -27,6 +27,18 @@ _kron_alloc_no_scratch(y, K, x) = @allocated mul!(y, K, x)
 
 _kron_alloc5_no_scratch(y, K, x, α, β) = @allocated mul!(y, K, x, α, β)
 
+# Whether `f()` throws an `ArgumentError` whose message contains `needle`: the stale-operator
+# error by default (gpena/Bramble.jl#442), or a stale space's with its remedy as `needle`.
+function _kron_stale(f, needle = "KroneckerLinearOperator's factors")
+    try
+        f()
+        return false
+    catch e
+        msg = sprint(showerror, e)
+        return e isa ArgumentError && occursin("change_points!", msg) && occursin(needle, msg)
+    end
+end
+
 # A graded mesh on backend `be`, as benchmark/operator_routes.jl builds one: uniform, then
 # moved by `change_points!` to `t^(1 + d/4)` along axis `d`.
 function _kron_graded_space(n::NTuple{D, Int}, be) where {D}
@@ -630,6 +642,109 @@ end
             # Constant in grid size: a large grid allocates no more than a small one.
             @test bytes[(257, 257)] <= bytes[(9, 7)]
             @test bytes[(33, 33, 33)] <= bytes[(6, 5, 4)]
+        end
+    end
+
+    # gpena/Bramble.jl#442: an operator built before `change_points!` refuses every entry
+    # point with the stale-weights `ArgumentError`, and a stale `mul!` leaves `y` as it was.
+    # The same operator works before the mutation; one rebuilt after it matches `assemble`.
+    # Hand-made terms have no mesh, so nothing makes them stale.
+    @testset "Kronecker: stale after a mesh move" begin
+        stale = _kron_stale
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 7), (false, false))
+        Wₕ = gridspace(Ωₕ)
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        K = kronecker_operator(a)
+        V = gridspace(Ωₕ, Val(2))
+        b = form(V, V, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(1)), v(2)))
+        KB = kronecker_operator(b)
+        x = rand(MersenneTwister(KRON_SEED), size(K, 2))
+        xb = rand(MersenneTwister(KRON_SEED + 1), size(KB, 2))
+        @test !stale(() -> K * x) && !stale(() -> K[1, 1]) && !stale(() -> SparseMatrixCSC(K))
+        @test !stale(() -> KB * xb) && !stale(() -> KB[1, 1])
+
+        Bramble.change_points!(Ωₕ,
+            (range(0.0, 1.0; length = 9) .^ 2, range(0.0, 1.0; length = 7) .^ 2))
+        y0 = rand(MersenneTwister(KRON_SEED + 2), size(K, 1))
+        y = copy(y0)
+        @test stale(() -> mul!(y, K, x))
+        @test stale(() -> mul!(y, K, x, 0.5, 1.0))
+        @test y == y0
+        @test stale(() -> K[1, 1])
+        @test stale(() -> SparseMatrixCSC(K))
+        yb0 = rand(MersenneTwister(KRON_SEED + 3), size(KB, 1))
+        yb = copy(yb0)
+        @test stale(() -> mul!(yb, KB, xb, 0.5, 1.0))
+        @test yb == yb0
+        @test stale(() -> KB[1, 1])
+        @test stale(() -> SparseMatrixCSC(KB))
+
+        W2 = gridspace(Ωₕ)
+        a2 = form(W2, W2, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        @test isapprox(kronecker_operator(a2) * x, assemble(a2) * x; rtol = 1e-12)
+        V2 = gridspace(Ωₕ, Val(2))
+        b2 = form(V2, V2, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(1)), v(2)))
+        @test isapprox(kronecker_operator(b2) * xb, assemble(b2) * xb; rtol = 1e-12)
+
+        t = K.terms[1]
+        Kh = KroneckerLinearOperator{Float64, 2, Tuple{typeof(t)}}((t,), K.dims, K.n)
+        @test Kh.mesh === nothing
+        @test !stale(() -> Kh * x) && !stale(() -> Kh[1, 1])
+    end
+
+    # A refinement changes the sizes too: vectors and indices sized for the refined mesh
+    # still get the stale error from `mul!` and `getindex`, not one that hides the cause. Displaying
+    # a stale operator prints its summary and says it is stale instead of throwing.
+    @testset "Kronecker: stale after refinement" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
+        Wₕ = gridspace(Ωₕ)
+        K = kronecker_operator(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))))
+        V = gridspace(Ωₕ, Val(2))
+        KB = kronecker_operator(form(V, V,
+            (u, v) -> innerₕ(u(1), v(1)) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2)))))
+        txt(A) = sprint(show, MIME"text/plain"(), A)
+        # Fresh: the default matrix display, a summary line then rows of entries.
+        for A in (K, KB)
+            @test startswith(txt(A), summary(A)) && !occursin("stale", txt(A))
+            @test countlines(IOBuffer(txt(A))) > 3
+        end
+
+        Bramble.iterative_refinement!(Ωₕ)
+        n, nb = ndofs(gridspace(Ωₕ)), ndofs(gridspace(Ωₕ, Val(2)))
+        @test n > size(K, 1) && nb > size(KB, 1)
+        x, y = rand(MersenneTwister(KRON_SEED), n), zeros(n)
+        xb, yb = rand(MersenneTwister(KRON_SEED + 1), nb), zeros(nb)
+        for (A, u, v, m) in ((K, x, y, n), (KB, xb, yb, nb))
+            @test _kron_stale(() -> mul!(v, A, u))
+            @test _kron_stale(() -> mul!(v, A, u, 0.5, 1.0))
+            # `LinearAlgebra`'s `*` checks sizes before our `mul!` runs: it throws, but
+            # names the size mismatch (no `*` method of ours, see `kronecker.jl`).
+            @test_throws DimensionMismatch A * u
+            @test _kron_stale(() -> A[m, m])
+            @test !_kron_stale(() -> txt(A))
+            @test startswith(txt(A), summary(A)) && occursin("stale", txt(A))
+        end
+    end
+
+    # A form whose spaces predate a mesh mutation is refused as `assemble` refuses it: the
+    # space's own stale-weights error, from `kronecker_operator` and `is_separable` alike.
+    @testset "Kronecker: stale spaces refused" begin
+        space_error = "gridspace(mesh(Wₕ)) again"
+        for mutate! in (Ω -> Bramble.change_points!(Ω,
+                    (range(0.0, 1.0; length = 7) .^ 2, range(0.0, 1.0; length = 6) .^ 2)),
+            Bramble.iterative_refinement!)
+            Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
+            Wₕ = gridspace(Ωₕ)
+            V = gridspace(Ωₕ, Val(2))
+            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+            b = form(V, V, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(1)), v(2)))
+            @test is_separable(a) && is_separable(b)
+            mutate!(Ωₕ)
+            for f in (a, b)
+                @test _kron_stale(() -> assemble(f), space_error)
+                @test _kron_stale(() -> kronecker_operator(f), space_error)
+                @test _kron_stale(() -> is_separable(f), space_error)
+            end
         end
     end
 

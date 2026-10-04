@@ -269,6 +269,33 @@ end
         end
     end
 
+    # gpena/Bramble.jl#442: a K built before `change_points!` refuses `fdm_solve` and the
+    # conversion with the stale-weights `ArgumentError`; both work before the move.
+    @testset "stale K after a mesh move" begin
+        stale(f) = try
+            f()
+            false
+        catch e
+            e isa ArgumentError && occursin("change_points!", sprint(showerror, e))
+        end
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 7), (false, false))
+        Wₕ = gridspace(Ωₕ)
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        K = kronecker_operator(a)
+        F = rand(MersenneTwister(KRON_EXT_SEED + 8), size(K, 1))
+        @test !stale(() -> fdm_solve(K, F)) && !stale(() -> kronecker(K))
+        Bramble.change_points!(Ωₕ,
+            (range(0.0, 1.0; length = 9) .^ 2, range(0.0, 1.0; length = 7) .^ 2))
+        @test stale(() -> fdm_solve(K, F))
+        @test stale(() -> kronecker(K))
+        # The form's own space predates the move: `fdm_solve(a, F)` refuses it as `assemble`
+        # does, with the space's stale-weights error, not a factorisation of stale weights.
+        @test_throws "gridspace(mesh(Wₕ)) again" fdm_solve(a, F)
+        @test_throws "gridspace(mesh(Wₕ)) again" fdm_solve(a, F; dirichlet = :boundary)
+        Bramble.iterative_refinement!(Ωₕ)
+        @test_throws "gridspace(mesh(Wₕ)) again" fdm_solve(a, F)
+    end
+
     # The allocation of a second fdm_solve call is reported, not asserted to be zero.
     @testset "fdm_solve: second-call allocations" begin
         Random.seed!(KRON_EXT_SEED + 7)

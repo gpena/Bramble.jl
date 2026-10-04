@@ -88,6 +88,7 @@ collect(Kronecker.kronecker(K)) ≈ SparseMatrixCSC(K)
 See also: [`kronecker_operator`](@ref), [`KroneckerLinearOperator`](@ref).
 """
 function Kronecker.kronecker(K::KroneckerLinearOperator)
+    Bramble._kron_check_fresh(K)
     terms = K.terms
     result = _kron_jl_term(terms[1])
     for term in Base.tail(terms)
@@ -488,10 +489,13 @@ Dirichlet. `K` must be Laplacian-like, as that method describes.
   - `ArgumentError` saying `fdm_solve` does not support the operator, with the reason,
     when `K` is not Laplacian-like, or is a composite space's block operator.
   - `DimensionMismatch`: `F`'s length does not match `K`'s size.
+  - `ArgumentError` naming `change_points!`: `K`'s mesh was mutated in place after `K` was
+    built (see [`KroneckerLinearOperator`](@ref)); build the operator again.
 
 See also: [`fdm_solve(::BilinearForm, ::AbstractVector)`](@ref).
 """
 function Bramble.fdm_solve(K::KroneckerLinearOperator, F::AbstractVector)
+    Bramble._kron_check_fresh(K)
     return _fdm_solve_core(K, F, nothing)
 end
 

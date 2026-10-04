@@ -76,6 +76,7 @@ function _kron_separable(Wu::_KronBlockSpace, Wv::_KronBlockSpace, a::BilinearFo
     tl, sl = leaf_spaces_offsets(Wu), leaf_spaces_offsets(Wv)
     Ω = _kron_shared_mesh(tl, sl)
     Ω === nothing && return false
+    _kron_check_spaces(a)
     Ωₕ = _host_mirror_mesh(Ω)
     return all(l -> _kron_project(l[4], Ωₕ) !== nothing, _kron_block_leaves(a, tl, sl))
 end
@@ -106,6 +107,8 @@ block applies under the execution policy of the form's backend, and the blocks r
 fixed order, so the product is the same bit for bit under every host policy and a warm one
 allocates nothing. `issymmetric` is `true` when every diagonal block is symmetric and every
 other block is, term by term and factor by factor, the transpose of its mirror block.
+Every block checks its mesh, so after an in-place mesh mutation the operator throws as a
+stale `KroneckerLinearOperator` does.
 """
 struct KroneckerBlockOperator{T, B <: Tuple, R <: Tuple} <: AbstractMatrix{T}
     blocks::B
@@ -132,6 +135,7 @@ function _kron_operator(Wu::_KronBlockSpace, Wv::_KronBlockSpace, a::BilinearFor
     tl, sl = leaf_spaces_offsets(Wu), leaf_spaces_offsets(Wv)
     Ω = _kron_shared_mesh(tl, sl)
     Ω === nothing && _throw_kron_block_meshes(tl, sl)
+    _kron_check_spaces(a)
     cache = _kron_cache(Ω)
     be = backend(Wu)
     leaves = _kron_block_leaves(a, tl, sl)
@@ -195,6 +199,9 @@ end
 function mul!(
         y::AbstractVector, K::KroneckerBlockOperator, x::AbstractVector, α::Number, β::Number
 )
+    # Every block, before the size check (a refined mesh changes the sizes) and before any
+    # block writes: a stale one must leave `y` untouched.
+    _kron_check_fresh(K)
     # Each block views `y` and `x` from 1.
     Base.require_one_based_indexing(y, x)
     (length(x) == K.ncols && length(y) == K.nrows) || _throw_kron_block_dimmismatch(K, x, y)
@@ -204,9 +211,18 @@ function mul!(
     return _kron_blocks_apply!(locality(typeof(y)), y, K.blocks, x, α, β)
 end
 
+# Whether every block's factors still describe the mesh (`kronecker.jl`).
+@inline _kron_is_fresh(K::KroneckerBlockOperator) = all(b -> _kron_is_fresh(b.op), K.blocks)
+
+function Base.show(io::IO, m::MIME"text/plain", K::KroneckerBlockOperator)
+    _kron_is_fresh(K) && return invoke(show, Tuple{IO, MIME"text/plain", AbstractMatrix}, io, m, K)
+    return _kron_show_stale(io, K)
+end
+
 # --- Inspection ---------------------------------------------------------------------- #
 
 function Base.getindex(K::KroneckerBlockOperator{T}, i::Int, j::Int) where {T}
+    _kron_check_fresh(K)
     @boundscheck checkbounds(K, i, j)
     total = zero(T)
     for b in K.blocks
@@ -217,6 +233,7 @@ function Base.getindex(K::KroneckerBlockOperator{T}, i::Int, j::Int) where {T}
 end
 
 function SparseArrays.SparseMatrixCSC(K::KroneckerBlockOperator{T}) where {T}
+    _kron_check_fresh(K)
     I = Int[]
     J = Int[]
     V = T[]
