@@ -615,6 +615,7 @@ _standalone_fig(meta, caption, chart) = "$caption\n\n$(_run_statement(meta))\n\n
 const _ROUTE_STYLE = Dict(
     "assembled" => ("assembled", "#3b82f6"),
     "kronecker" => ("Kronecker", "#f59e0b"),
+    "kronecker_threaded" => ("Kronecker, CpuThreaded()", "#a16207"),
     "matrix_free_serial" => ("matrix-free, serial", "#10b981"),
     "matrix_free_threaded" => ("matrix-free, CpuThreaded()", "#ef4444"),
     "fdm_solve" => ("fdm_solve (reference)", "#8b5cf6"),
@@ -651,54 +652,81 @@ function _route_hover(r, what)
     "$(get(_ROUTE_STYLE, r["route"], (r["route"], ""))[1]), $(r["dim"])D, n = $(r["n"]) ($(r["ndofs"]) degrees of freedom): $what"
 end
 
+# The forms of the `operator_routes` tables, in drawing order, each with its text. A result
+# saved before the `form` column existed holds the `laplace` form only.
+const _ROUTE_FORMS = [
+    ("laplace", "`innerₕ(u,v) + inner₊(∇ₕu,∇ₕv)`"),
+    ("coefficient", "`innerₕ(u,v) + inner₊(c ∇ₕu,∇ₕv)` with `c` a separable grid function"),
+    ("mixed",
+        "`innerₕ(u,v) + inner₊(∇ₕu,∇ₕv) + innerₕ(c D₋ₓ(D₋ᵧ u),v)` with `c` a separable grid function"),
+    ("advection", "`innerₕ(u,v) + inner₊(∇ₕu,∇ₕv) + innerₕ(D₋ₓu,v)`")
+]
+_row_form(r) = get(r, "form", "laplace")
+
 function _operator_routes_section(meta, tables)
     parts = String[]
-    routes = ["assembled", "kronecker", "matrix_free_serial", "matrix_free_threaded"]
-    if haskey(tables, "construction")
+    for (form, text) in _ROUTE_FORMS
+        sub = Dict(
+            name => [r for r in rows if _row_form(r) == form] for (name, rows) in tables)
+        any(!isempty, values(sub)) || continue
+        push!(parts, "#### Form `$form`\n\nThe separable form $text on a non-uniform mesh.")
+        push!(parts, _operator_routes_form(meta, sub, form, text))
+    end
+    return join(parts, "\n\n")
+end
+
+# The charts of one form: `tables` holds its rows only.
+function _operator_routes_form(meta, tables, form, text)
+    parts = String[]
+    routes = [
+        "assembled", "kronecker", "kronecker_threaded", "matrix_free_serial",
+        "matrix_free_threaded"]
+    if !isempty(get(tables, "construction", []))
         rows = tables["construction"]
         series = _route_series(
             rows, routes, r -> r["time_s"] * 1.0e3,
             r -> _route_hover(r, "$(_format_time(r["time_s"] * 1.0e9)), $(Base.format_bytes(r["bytes_alloc"])) allocated"))
         chart = _render_xy_chart(
-            "standalone-operator_routes-construction", meta, series,
+            "standalone-operator_routes-$form-construction", meta, series,
             "degrees of freedom", "construction time (ms)")
         push!(
             parts,
-            "#### Construction\n\n" * _standalone_fig(
+            "##### Construction, `$form`\n\n" * _standalone_fig(
                 meta,
-                "Time to build the operator of the separable form `innerₕ(u,v) + inner₊(∇ₕu,∇ₕv)` on a non-uniform mesh, by route. Matrix-free construction takes microseconds or less because the operator's plan is built at construction and no matrix is formed; the assembled and Kronecker routes build their matrices here.",
+                "Time to build the operator of the separable form $text on a non-uniform mesh, by route. Matrix-free construction takes microseconds or less because the operator's plan is built at construction and no matrix is formed; the assembled and Kronecker routes build their matrices here. The threaded Kronecker route builds on a space with `backend(; policy = CpuThreaded())`.",
                 chart))
     end
-    if haskey(tables, "product")
+    if !isempty(get(tables, "product", []))
         rows = tables["product"]
         series = _route_series(
             rows, routes, r -> r["time_s"] * 1.0e3,
             r -> _route_hover(r, "$(_format_time(r["time_s"] * 1.0e9)) per product, $(Base.format_bytes(r["bytes_held"])) held"))
         chart = _render_xy_chart(
-            "standalone-operator_routes-product", meta, series,
+            "standalone-operator_routes-$form-product", meta, series,
             "degrees of freedom", "time of one product (ms)")
         bseries = _route_series(
             rows, routes, r -> r["bytes_held"],
             r -> _route_hover(r, "$(Base.format_bytes(r["bytes_held"])) held"))
         bchart = _render_xy_chart(
-            "standalone-operator_routes-product-bytes", meta, bseries,
+            "standalone-operator_routes-$form-product-bytes", meta, bseries,
             "degrees of freedom", "bytes held by the operator")
         push!(
             parts,
-            "#### Product\n\n" *
+            "##### Product, `$form`\n\n" *
             _standalone_fig(
                 meta,
                 "Time of one operator-vector product, then the bytes the operator holds. The assembled route's bytes count its matrix only, not the scatter cache the assembled form keeps for refilling it.",
                 chart) * "\n\n" * _raw_chart(bchart))
     end
-    if haskey(tables, "solve")
+    # Solve rows exist for the symmetric positive definite forms only.
+    if !isempty(get(tables, "solve", []))
         rows = tables["solve"]
         series = _route_series(
             rows, [routes; "fdm_solve"; "direct"], r -> r["time_s"] * 1.0e3,
             r -> _route_hover(r,
                 "$(_format_time(r["time_s"] * 1.0e9)), $(r["iterations"]) CG iterations, true relative residual $(round(r["rel_residual"]; sigdigits = 3))"))
         chart = _render_xy_chart(
-            "standalone-operator_routes-solve", meta, series,
+            "standalone-operator_routes-$form-solve", meta, series,
             "degrees of freedom", "solve time (ms)")
         cg = [r for r in rows if r["route"] in routes]
         spread, residual = 0.0, cg[argmax([r["rel_residual"] for r in cg])]
@@ -706,11 +734,13 @@ function _operator_routes_section(meta, tables)
             its = [r["iterations"] for r in cg if (r["dim"], r["n"]) == key]
             spread = max(spread, (maximum(its) - minimum(its)) / minimum(its))
         end
+        refs = form == "laplace" ? "`fdm_solve` and the sparse direct solve" :
+               "the sparse direct solve"
         push!(
             parts,
-            "#### Solve\n\n" * _standalone_fig(
+            "##### Solve, `$form`\n\n" * _standalone_fig(
                 meta,
-                "Time of the solve of the same problem by conjugate gradients on each route, with `fdm_solve` and the sparse direct solve as reference curves. The CG iteration counts agree across routes to within $(round(100 * spread; digits = 2))% at every size. CG stops when its recursively updated residual reaches the tolerance, which is not the true residual: the largest true relative residual among the CG rows is $(round(residual["rel_residual"]; sigdigits = 2)), at $(residual["dim"])D with n = $(residual["n"]).",
+                "Time of the solve of the same problem by conjugate gradients on each route, with $refs as reference curves. The CG iteration counts agree across routes to within $(round(100 * spread; digits = 2))% at every size. CG stops when its recursively updated residual reaches the tolerance, which is not the true residual: the largest true relative residual among the CG rows is $(round(residual["rel_residual"]; sigdigits = 2)), at $(residual["dim"])D with n = $(residual["n"]).",
                 chart))
     end
     return join(parts, "\n\n")
