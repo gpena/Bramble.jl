@@ -1,143 +1,138 @@
 # Bramble
 
-Finite-difference discretisation of PDEs on Cartesian meshes: build a mesh over a domain,
-put a discrete function space on it, write a form in terms of difference operators, assemble
-it into a matrix. The vocabulary below is the one the code uses; the terms under _Avoid_ are
-the ones people reach for instead, which mean something else here or nothing at all.
+Finite-difference discretisation of PDEs on Cartesian meshes: build a mesh over a domain, put
+a grid space on it, write a form with difference operators, assemble it into a matrix. Below
+is the code's vocabulary; terms under _Avoid_ mean something else here, or nothing.
 
 ## Language
 
 ### Geometry
 
 **Set**:
-A geometric region, built as a `CartesianProduct` of intervals. Pure geometry — it knows
-nothing about discretisation or naming.
+A geometric region, a `CartesianProduct` of intervals. Pure geometry: no discretisation, no
+names.
 _Avoid_: region, area, box (`box` is the 3D constructor, not the concept)
 
 **Domain**:
-A set together with its markers. This is what a mesh is built from.
+A set with its markers; what a mesh is built from.
 _Avoid_: geometry, region
 
 **Marker**:
-A named subset of a domain, given as `label => face` or `label => predicate`. The name is a
-`Symbol`; the marker is the pairing of that name with the rule that selects points.
+A named subset of a domain, `label => face` or `label => predicate`: the pairing of a `Symbol`
+name with the rule selecting points.
 _Avoid_: tag, region, boundary condition (a marker names *where*, never *what value*)
 
 **Label**:
-The `Symbol` half of a marker — `:left`, `:boundary`. Say label for the name, marker for the
+The `Symbol` half of a marker (`:left`, `:boundary`). Label is the name, marker the
 name-plus-rule.
 
 ### Meshes
 
 **Mesh**:
-The discretisation of a domain into points, uniform or randomly perturbed. `Mesh1D` in one
-dimension, `MeshnD` above it.
-_Avoid_: grid on its own (it survives only as an adjective, in *grid space* and *grid
-function*), triangulation, cells
+A domain discretised into points, uniform or randomly perturbed: `Mesh1D`, or `MeshnD` above
+one dimension.
+_Avoid_: grid alone (only as an adjective: *grid space*, *grid function*), triangulation,
+cells
 
 **Submesh**:
-The one-dimensional mesh along a single axis of an `nD` mesh. Every `MeshnD` is a tuple of
-these.
+The 1D mesh along one axis of an `nD` mesh; every `MeshnD` is a tuple of them.
 _Avoid_: slice, axis mesh
 
 **Reserved markers**:
-`:boundary` and `:interior`, which every mesh computes from its own geometry whether or not
-the domain named them. A domain may redefine them; the custom definition wins.
+`:boundary` and `:interior`, which every mesh computes from its geometry whether or not the
+domain names them. A domain's own definition wins.
 
 **Refinement**:
-Dyadic halving in place via `iterative_refinement!`, so a refined mesh is the *same* mesh
-split, not an independent draw. This is what makes an order of convergence measurable on a
-random mesh.
+Dyadic halving in place (`iterative_refinement!`): the refined mesh is the same mesh split,
+not a new draw, which makes a convergence order measurable on a random mesh.
 
 ### Spaces and grid functions
 
 **Grid space**:
-The discrete function space over a mesh, carrying the quadrature weights. `ScalarGridSpace`
-for one field, `CompositeGridSpace` for several coupled.
+The discrete function space over a mesh, with its quadrature weights: `ScalarGridSpace` for
+one field, `CompositeGridSpace` for several coupled.
 _Avoid_: function space, discrete space, FE space
 
 **Vector element**:
-A function *in* a grid space — the discrete unknown, `uₕ`. Backed by a flat vector, but the
-element is the concept and the vector is storage.
+A function in a grid space, the discrete unknown `uₕ`. A flat vector is its storage, not the
+concept.
 _Avoid_: solution vector, DOF vector, array
 
 **Grid function**:
-Acceptable synonym for vector element, and the one the docstrings use in mathematical prose.
+Accepted synonym for vector element; the docstrings' word in mathematical prose.
 
 **Leaf space**:
-One scalar component of a composite space, numbered by its depth-first position. Velocity and
-pressure in a Stokes system are two leaves. Assembly and the Dirichlet path address leaves,
-through `leaf_spaces_offsets`.
-_Avoid_: component (used for the `components` keyword, which *selects* leaves), field, block
+One scalar component of a composite space, numbered depth-first (velocity and pressure in
+Stokes are two leaves). Assembly and the Dirichlet path address leaves through
+`leaf_spaces_offsets`.
+_Avoid_: component (the `components` keyword *selects* leaves), field, block
 
-⚠️ **Leaf numbering and `u(i)` are not the same scheme.** `u(i)` and `components(u)` address
-*immediate* subspaces, not leaves. On a flat composite the two coincide; on a nested one
-(`(W × W) × W`) they do not, and that divergence is a live defect — see
+⚠️ **Leaf numbering and `u(i)` differ.** `u(i)` and `components(u)` address *immediate*
+subspaces. They coincide with leaves on a flat composite, not on a nested one
+(`(W × W) × W`): a live defect,
 [#64](https://github.com/gpena/Bramble.jl/issues/64). Say which you mean until it is fixed.
 
 **Backend**:
-Where a space's arrays live and how they are iterated, carrying the execution policy
+Where a space's arrays live and how they are iterated, with the execution policy
 (`CpuSerial()`/`Serial()`, `CpuThreaded()`/`Parallel()`, or `GpuKernel()`) as a trait.
 _Avoid_: device, mode
 
 ### Operators
 
 **Difference operator**:
-A discrete derivative — `D₋ₓ` backward, `Dcₓ` centred, subscript naming the direction.
-A direction held in a variable indexes the vectorial operator: `∇ₕ[1] === ∇ₕ[:x] === D₋ₓ`.
-The `public`, unexported stem takes it as an argument: `Bramble.D₋(uₕ, 1)`, `(uₕ, :x)` and
-`(uₕ, Val(1))` are all `D₋ₓ(uₕ)`. The averages pass theirs to `Mₕ`/`M₊ₕ`; there is no bare `M`.
-_Avoid_: derivative (reserve for the continuous object), gradient (that is `∇ₕ`)
+A discrete derivative: `D₋ₓ` backward, `Dcₓ` centred, the subscript naming the direction. A
+direction in a variable indexes the vectorial operator: `∇ₕ[1] === ∇ₕ[:x] === D₋ₓ`. The
+`public`, unexported stem takes it as an argument: `Bramble.D₋(uₕ, 1)`, `(uₕ, :x)` and
+`(uₕ, Val(1))` all equal `D₋ₓ(uₕ)`. Averages pass it to `Mₕ`/`M₊ₕ`; there is no bare `M`.
+_Avoid_: derivative (the continuous object), gradient (that is `∇ₕ`)
 
 **Restriction (`Rₕ`)**:
-The projection of a continuous function onto the space of grid functions, taken by
-evaluating it at the mesh points.
-_Avoid_: interpolation (that is `πₕ`, a different operator), sampling
+Projection of a continuous function onto grid functions by evaluating it at mesh points.
+_Avoid_: interpolation (that is `πₕ`), sampling
 
 **Cell average (`avgₕ`)**:
-The same projection taken by averaging over each cell instead, by quadrature. Both land in
-the grid-function space; they differ in the rule, and this is the expensive one — six
-quadrature nodes per point.
+The same projection by quadrature over each cell instead: same target space, different rule,
+and the expensive one (six quadrature nodes per point).
 _Avoid_: restriction (name the rule, since both project)
 
 **Stencil**:
-The set of neighbouring points one operator application reads, with their weights.
-`local_stencil` returns it for a given index.
-_Avoid_: footprint, pattern (a *pattern* is the sparsity structure of a matrix)
+The neighbouring points one operator application reads, with weights; `local_stencil` returns
+it for an index.
+_Avoid_: footprint, pattern (a *pattern* is a matrix's sparsity)
 
 **`innerₕ` and `inner₊`**:
-`innerₕ` is the discrete ``L^2`` inner product, weighting each point by its cell measure.
-`inner₊` is the *modified* ``L^2_+`` product used with backward differences — a distinct
-object, not a spelling variant.
+`innerₕ` is the discrete ``L^2`` inner product, each point weighted by its cell measure;
+`inner₊` the *modified* ``L^2_+`` product used with backward differences. Distinct objects,
+not spellings.
 
 ### Forms and assembly
 
 **Form**:
-A symbolic expression in trial and test functions — `LinearForm` in one argument,
-`BilinearForm` in two. It stores structure, not values.
+A symbolic expression in trial and test functions (`LinearForm` in one, `BilinearForm` in
+two). Structure, not values.
 _Avoid_: weak form, variational form, integrand
 
 **Trial and test function**:
-The two arguments of a bilinear form. Matrix **rows** are indexed by the test function,
-columns by the trial function — the asymmetry is load-bearing and easy to write backwards.
+The two arguments of a bilinear form. The test function indexes matrix **rows**, the trial
+function columns: load-bearing and easy to write backwards.
 
 **Source**:
-A term carrying known data rather than an unknown, so it can appear in a linear form.
+A term carrying known data, not an unknown, so it can appear in a linear form.
 
 **AST**:
-The resolved operator expression a form is compiled to, via `resolve_form_ast`. What
-assembly actually walks.
+The resolved operator expression a form compiles to (`resolve_form_ast`); what assembly
+walks.
 _Avoid_: expression tree, symbolic form, IR
 
 **Pattern**:
-The sparsity structure of a system matrix: which entries can be non-zero, fixed by the
-stencil and invariant while mesh and expression are unchanged.
+A system matrix's sparsity: which entries can be non-zero, fixed by the stencil and invariant
+while mesh and expression are unchanged.
 _Avoid_: stencil, structure
 
 **Assembly**:
-Filling a matrix or vector from a form. `assemble` allocates and fills; `assemble!` refills
-one that exists, which is the time-loop call and must not allocate.
+Filling a matrix or vector from a form. `assemble` allocates and fills; `assemble!` refills an
+existing one, the time-loop call, and must not allocate.
 
 **Block**:
-One leaf-space pair's rectangle within a composite system matrix, located by a row offset
-from the test leaf and a column offset from the trial leaf.
+One leaf-space pair's rectangle in a composite system matrix: row offset from the test leaf,
+column offset from the trial leaf.
