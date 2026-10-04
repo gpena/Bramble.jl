@@ -225,15 +225,23 @@ both runs. Against [`CpuThreaded`](@ref) directly, this policy beats it from 100
 and 125 in 3D for both workloads in both runs, again one to two orders of magnitude below
 [`CpuThreaded`](@ref)'s own crossover against `CpuSerial` for the same workload.
 
-A warm call under this policy allocates a small constant amount per call, independent of the
-grid: the same bytes on a 33² grid as on a 513² one. The cause is Polyester's argument box.
-`@batch` copies the arguments its loop captures into a heap-allocated `ManualMemory.Reference`
-on every call, sized by what the loop captures, and plain arrays become `PtrArray`s, which
-allocate nothing. No call reaches `Threads.@threads` or `Threads.@spawn`. Measured on a 2D
-non-uniform grid with 4 threads, every path allocates only these boxes, each at most 304 B:
-differences, shifts, averages, divergence and curl allocate 0 B; `innerₕ` 96 B; a broadcast
-128 B; `avgₕ!` 160 B; linear assembly 256 B; a fused matrix-free product 112 B; and a bilinear
-refill 1520 B, which is five colour sweeps of 304 B each (gpena/Bramble.jl#400).
+Most warm calls under this policy allocate 0 bytes. Differences, shifts, averages, divergence,
+curl, `εₕ!`, `innerₕ`, `inner₊` and the masked dots, broadcasts, `avgₕ!` with a plain-function
+source, and the [`KroneckerLinearOperator`](@ref) product all allocate 0 B, on any grid. Their
+loops pass `@batch` only plain arrays and isbits values, and rebuild any light struct around
+them inside each task, so Polyester's argument box stays on the stack. No call reaches
+`Threads.@threads` or `Threads.@spawn`.
+
+The paths whose loops capture a form, or any value holding a GC reference, still allocate a
+small constant amount per call, the same on a 33² grid as on a 513² one, because Polyester
+then copies the arguments into a heap-allocated `ManualMemory.Reference`. Measured on a 2D
+non-uniform grid with 4 threads, each box is at most 512 B: linear assembly 256 B, a fused
+matrix-free product 112 B (2D) or 128 B (3D), a per-unit matrix-free product 1088 B, a bilinear
+refill 1520 B (five colour sweeps of 304 B), a multigrid V-cycle 1008 B per level, and an
+explicit right-hand side 256 B. An `avgₕ!` whose source closure captures an array, and a
+broadcast with a 0-dimensional array leaf, box in the same way. This release keeps the bound
+for these paths; removing the boxes is gpena/Bramble.jl#437 (gpena/Bramble.jl#400,
+gpena/Bramble.jl#433).
 
 See also: [`CpuThreaded`](@ref), [`CpuSerial`](@ref), [`ExecutionPolicy`](@ref).
 """

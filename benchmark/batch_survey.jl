@@ -40,7 +40,7 @@
 # index the captured arrays directly, which `@batch` handles at full speed.
 #
 # The prototypes live only in this script: `src/` is untouched until the winners are
-# converted. Candidate 4 adds two methods to Bramble internals, in this process only (see
+# converted. Candidate 4 adds three methods to Bramble internals, in this process only (see
 # there). Several call Bramble internals (`Bramble._name`), so a refactor in `src/` can
 # break this script; it is a survey, not a maintained benchmark.
 #
@@ -299,8 +299,8 @@ end
 # `jacobi_preconditioner` runs. The prototype borrows the fused matrix-free sweep's row
 # ownership and runs `@batch` over bands of the last axis. Each band walks its widened
 # range. On the rim it keeps only the diagonal entries whose row it owns (`_OwnedAction`).
-# That ownership exists in `src/` for action sinks alone, so the two methods below extend
-# it to `DiagonalSink`, in this process only. Every row then receives its entries in the
+# That ownership exists in `src/` for action sinks alone, so the first two methods below
+# extend it to `DiagonalSink`, in this process only. Every row then receives its entries in the
 # serial order, which makes the result bitwise the serial one.
 
 function Bramble._mf_owned(s::Bramble.DiagonalSink, lo::Int, hi::Int, ro::Int, ::Int)
@@ -311,6 +311,22 @@ end
         o::Bramble._OwnedAction{<:Bramble.DiagonalSink}, row::Int, col::Int, weight, slot::Int
 )
     o.lo <= row <= o.hi && Bramble._sink_entry!(o.s, row, col, weight, slot)
+    return nothing
+end
+# The band visit gathers a unit's interior for action sinks only; the serial walk scatters
+# every unit into a `DiagonalSink` (`visit_bilinear_stencil`), so the band scatters too.
+@inline function Bramble._mf_visit_band!(
+        p::Bramble._MFPass, s::Bramble.DiagonalSink, term::TERM, sp, ro::Int, co::Int
+) where {TERM}
+    dims = size(Bramble.indices(Bramble.mesh(sp)))
+    len = last(dims)
+    stride = prod(Base.front(dims))
+    a, b = first(p.own), last(p.own)
+    vlo, vhi = max(1, a - p.omax), min(len, b - p.omin)
+    clo, chi = max(vlo, a - p.omin), min(vhi, b - p.omax)
+    owned = Bramble._mf_owned(s, (a - 1) * stride + 1, b * stride, ro, co)
+    lo, core, hi = clo > chi ? (vlo:vhi, 1:0, 1:0) : (vlo:(clo - 1), clo:chi, (chi + 1):vhi)
+    Bramble._mf_visit_slab!(s, owned, term, sp, ro, co, lo, core, hi)
     return nothing
 end
 

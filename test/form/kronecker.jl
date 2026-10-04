@@ -24,6 +24,17 @@ _kron_alloc_with_scratch(y, K, x, s) = @allocated mul!(y, K, x; scratch = s)
 _kron_alloc5_with_scratch(y, K, x, α, β, s) = @allocated mul!(y, K, x, α, β; scratch = s)
 _kron_alloc_no_scratch(y, K, x) = @allocated mul!(y, K, x)
 
+_kron_alloc5_no_scratch(y, K, x, α, β) = @allocated mul!(y, K, x, α, β)
+
+# A graded mesh on backend `be`, as benchmark/operator_routes.jl builds one: uniform, then
+# moved by `change_points!` to `t^(1 + d/4)` along axis `d`.
+function _kron_graded_space(n::NTuple{D, Int}, be) where {D}
+    Ωₕ = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n, ntuple(_ -> true, D);
+        backend = be)
+    Bramble.change_points!(Ωₕ, ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
+    return gridspace(Ωₕ)
+end
+
 @testset "Kronecker" begin
     @testset "is_separable" begin
         for (npts2, npts3) in ((true, true), (false, false))
@@ -299,6 +310,42 @@ _kron_alloc_no_scratch(y, K, x) = @allocated mul!(y, K, x)
         @test isapprox(sol_A.u, sol_K.u; rtol = 1e-6, atol = 1e-8)
         # Both actually solve the system, not merely agree with each other.
         @test isapprox(A * sol_K.u, b; rtol = 1e-6, atol = 1e-8)
+    end
+
+    # The 0 B above is measured under the default (serial) policy only. `CpuThreaded()` runs
+    # the lines serially too and must stay at 0 B; `CpuPolyester`'s are tested in
+    # test/ext/polyester_ext.jl. Graded meshes, small and large, 2D and 3D, 3- and 5-argument
+    # `mul!`, each measured after a warm call.
+    @testset "Kronecker: zero bytes per policy" begin
+        for P in (Bramble.CpuSerial(), Bramble.CpuThreaded()),
+            n in ((9, 7), (257, 257), (6, 5, 4), (33, 33, 33))
+
+            @testset "$P $(join(n, '×'))" begin
+                W = _kron_graded_space(n, backend(; policy = P))
+                a = form(W, W, (u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)))
+                K = kronecker_operator(a)
+                @test K.policy === P
+                A = assemble(a)
+                N = ndofs(W)
+                x = rand(N)
+                y = similar(x)
+                y0 = rand(N)
+                s = (zeros(N), zeros(N))
+                mul!(y, K, x)
+                @test isapprox(y, A * x; rtol = 1e-12, atol = 1e-12)
+                y5 = copy(y0)
+                mul!(y5, K, x, 0.5, -3.0)
+                @test isapprox(y5, 0.5 * (A * x) - 3.0 * y0; rtol = 1e-12, atol = 1e-12)
+                _kron_alloc_no_scratch(y, K, x)
+                @test _kron_alloc_no_scratch(y, K, x) == 0
+                _kron_alloc_with_scratch(y, K, x, s)
+                @test _kron_alloc_with_scratch(y, K, x, s) == 0
+                _kron_alloc5_no_scratch(y5, K, x, 0.5, -3.0)
+                @test _kron_alloc5_no_scratch(y5, K, x, 0.5, -3.0) == 0
+                _kron_alloc5_with_scratch(y5, K, x, 0.5, -3.0, s)
+                @test _kron_alloc5_with_scratch(y5, K, x, 0.5, -3.0, s) == 0
+            end
+        end
     end
 
     # summarysize(K) << summarysize(assemble(a)).

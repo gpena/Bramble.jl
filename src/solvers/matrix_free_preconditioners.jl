@@ -101,7 +101,7 @@ function jacobi_preconditioner(
     return jacobi_preconditioner(op)
 end
 
-function jacobi_preconditioner(op::MatrixFreeOperator{T}) where {T}
+function jacobi_preconditioner(op::MatrixFreeOperator{T}) where {T <: Number}
     n = op.nrows
     n == op.ncols || _throw_jacobi_nonsquare(op)
     d = zeros(T, n)

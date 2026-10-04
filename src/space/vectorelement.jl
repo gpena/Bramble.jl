@@ -564,6 +564,34 @@ that errors naming Polyester.
     return _throw_cpubatch_without_polyester(:_batch_broadcast!)
 end
 
+# What `_batch_broadcast!` hands `Polyester.@batch` in place of the `Broadcasted` tree:
+# nested tuples holding only its styles, functions, leaf arrays and scalars, each node
+# tagged so the tasks can tell it from a tuple leaf. `@batch` turns every leaf array into a
+# `PtrArray` under its own `GC.@preserve`, so its argument box holds no GC reference and
+# stays on the stack, and each task puts the tree back together with `_bc_host_rebuild`.
+# The rebuild passes the style rather than recomputing it, since an `Extruded` leaf has no
+# `BroadcastStyle` to combine, and the tag keeps the function's type, so a type used as the
+# function (`Float64.(u)`) is still inferred after crossing as a `DataType`.
+struct _BcHostNode{F} end
+struct _BcHostExtruded end
+
+function _bc_host_raw(bc::Broadcast.Broadcasted{S, A, F}) where {S, A, F}
+    (
+        _BcHostNode{F}(), bc.style, bc.f, map(_bc_host_raw, bc.args), bc.axes)
+end
+_bc_host_raw(e::Broadcast.Extruded) = (_BcHostExtruded(), e.x, e.keeps, e.defaults)
+# A 0-dimensional array stays inside its `Extruded`, so `@batch` never sees it bare:
+# `StrideArraysCore` throws making a `PtrArray` of a 0-dimensional `Array`. The struct puts
+# Polyester's box on the heap, which costs bytes but not the result.
+_bc_host_raw(e::Broadcast.Extruded{<:AbstractArray{<:Any, 0}}) = e
+_bc_host_raw(x) = x
+
+@inline function _bc_host_rebuild(r::Tuple{_BcHostNode{F}, Any, Any, Tuple, Any}) where {F}
+    return Broadcast.Broadcasted(r[2], r[3]::F, map(_bc_host_rebuild, r[4]), r[5])
+end
+@inline _bc_host_rebuild(r::Tuple{_BcHostExtruded, Any, Any, Any}) = Broadcast.Extruded(r[2], r[3], r[4])
+@inline _bc_host_rebuild(x) = x
+
 # Rebuild the same expression tree over each `VectorElement` leaf's own storage. The
 # reconstructed `Broadcasted` carries no `VectorElement` among its args, so its own style
 # is computed fresh from plain arrays/scalars -- ordinary array broadcasting, not this

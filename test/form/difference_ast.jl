@@ -63,7 +63,7 @@ using Bramble:
             mentioning("ForwardDifference"), mentioning("BackwardDifference")
         )
 
-        # Two exceptions, and both are the same exception. `inner₊` is the documented one:
+        # Four exceptions, and all are the same exception. `inner₊` is the documented one:
         # the modified inner product is defined against backward differences and has no
         # forward counterpart. `_separable_axis` (`src/assembly/kronecker.jl`, gpena/Bramble.jl#162)
         # inherits it rather than introducing a second asymmetry -- it matches
@@ -71,7 +71,10 @@ using Bramble:
         # `inner₊` itself admits. A form written with forward differences is simply not
         # recognised as separable, which is the conservative direction: `is_separable` may
         # answer no to something separable, never yes to something that is not.
-        @test backward_only == Set([:inner₊, :_separable_axis])
+        # `_mf_evaluator` and `_mf_reads_geometry` (`src/assembly/matrix_free.jl`) match
+        # `_MFSeparableTerm`, the `inner₊(D₋ᵢu, D₋ᵢv)` shape, so they inherit it too. A
+        # forward-difference form falls back to live weights, again the conservative way.
+        @test backward_only == Set([:inner₊, :_separable_axis, :_mf_evaluator, :_mf_reads_geometry])
         @test isempty(forward_only)
     end
 

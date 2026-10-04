@@ -17,24 +17,26 @@
 
 ## Overview
 
-Classical finite difference schemes often experience order reduction on nonuniform grids: local truncation errors drop from second-order to first-order due to the lack of grid uniformity.
+Classical finite difference schemes often lose accuracy on nonuniform grids: the local truncation error drops from second to first order once the spacing varies.
 
-`Bramble.jl` provides finite difference discretizations for partial differential equations on nonuniform Cartesian domains in 1D, 2D, and 3D that are mimetic and often lead to supraconvergence. Staggered dual meshes and metric-weighted inner products restore global second-order convergence on arbitrary, rough, or randomly spaced grids without requiring coordinate transformations.
+`Bramble.jl` provides finite difference discretizations of partial differential equations on nonuniform Cartesian grids in 1D, 2D and 3D that are mimetic and often supraconvergent. Staggered dual meshes and metric-weighted inner products restore global second-order convergence on graded, rough or randomly spaced grids, without coordinate transformations.
 
-Equations are defined through bilinear and linear forms, then assembled into sparse matrices (`SparseMatrixCSC`). This provides the structure of weak formulations while retaining the compact stencils and sparsity of finite differences.
+Problems are written as bilinear and linear forms built from discrete operators, in notation close to the mathematics. `assemble` turns them into a sparse matrix and a right-hand side, or they can be applied matrix-free. Time-dependent problems become ODE systems for the SciML time steppers.
 
 ---
 
 ## Features
 
-- Nonuniform Cartesian meshes in 1D, 2D, and 3D with arbitrary point distributions.
-- Weak form syntax (`form`, `assemble`) assembling directly into native `SparseMatrixCSC` matrices.
-- Discrete calculus with metric-weighted forward ($D_{+x}$), backward ($D_{-x}$), and centered ($Dc_{x}$) difference operators alongside discrete inner products (`innerₕ`, `inner₊`).
-- Allocation-free runtime kernels: in-place restriction (`Rₕ!`) and Gauss-Legendre cell averaging (`avgₕ!`) allocate 0 bytes in time-stepping loops.
-- Boundary condition support for Dirichlet conditions, with a `symmetrize!` operator that restores symmetry for Cholesky factorizations.
-- Composite grid spaces (`Wₕ^Val(N)`) with block matrix assembly for coupled PDE systems.
-- End-to-end automatic differentiation via ForwardDiff and ReverseDiff through operators, form assembly, and nonlinear residuals.
-- Export pipelines for visualization via VTK (`export_vtk`) in ParaView and PGFPlots/TikZ for LaTeX figures.
+- **Meshes.** Nonuniform Cartesian meshes in 1D, 2D and 3D, with uniform, graded or random point distributions, boundary markers and iterative refinement.
+- **Discrete calculus.** Gradient, divergence, curl, Laplacian and strain operators (`∇ₕ`, `divₕ`, `curlₕ`, `Δₕ`, `εₕ`) in staggered, centered and averaged variants, jumps, means and index shifts, with discrete inner products and norms (`innerₕ`, `inner₊`, `inner_Γ`, `normₕ`) and point sources (`dirac`).
+- **Forms and assembly.** `form` and `assemble` build sparse matrices and load vectors directly. Separable operators assemble as Kronecker products, and `matrix_free_operator` applies a form without storing its matrix.
+- **Boundary conditions.** Dirichlet constraints by marker (`dirichlet_constraints`), restricted to chosen components of a system, with `symmetrize!` to keep symmetric problems symmetric.
+- **Coupled systems.** Composite spaces (`Wₕ^Val(N)`) and vector spaces, with block assembly addressed by component.
+- **Time-dependent problems.** `semidiscretize`, `ode_problem` and `second_order_ode_problem` hand first- and second-order systems to OrdinaryDiffEq and the rest of SciML.
+- **Solvers.** `pde_solve` with sparse direct factorizations (SuiteSparse, Apple Accelerate, MUMPS, Sparspak), preconditioners (algebraic multigrid, ILU(0), Jacobi, Chebyshev) and geometric multigrid (`gmg_solve`).
+- **Automatic differentiation.** Forward and reverse mode through operators, assembly and nonlinear residuals, via ForwardDiff, ReverseDiff and Enzyme, with sparse Jacobians and SciMLSensitivity adjoints for transient problems.
+- **Backends.** Serial, threaded (Polyester) and GPU (Metal, via KernelAbstractions) execution, with CSC or CSR storage chosen through `backend`.
+- **Visualization and export.** Plots and Makie recipes, VTK output for ParaView (`export_vtk`) and PGFPlots/TikZ output for LaTeX (`export_pgfplots`).
 
 ---
 
@@ -57,40 +59,30 @@ pkg> add https://github.com/gpena/Bramble.jl
 
 ## Quick start: 2D Poisson equation
 
-Solve $-\Delta u = g$ on $\Omega = (0, 1)^2$ with Dirichlet boundary data $u|_{\partial\Omega} = e^{x+y}$ on a randomly perturbed nonuniform mesh:
+Solve $-\Delta u = g$ on the unit square with zero boundary values and exact solution $u(x, y) = \sin(\pi x)\sin(\pi y)$, on a grid whose interior points are placed at random:
 
 ```julia
 using Bramble
 
-# 1. Domain and nonuniform mesh
-X = interval(0.0, 1.0) × interval(0.0, 1.0)
-Ωₕ = mesh(X, 32, false) # false creates a random nonuniform grid
-Wₕ = gridspace(Ωₕ)
+uexact(x) = sinpi(x[1]) * sinpi(x[2])
+g(x) = 2π^2 * uexact(x)
 
-# 2. Problem definitions (manufactured solution u_exact = exp(x + y))
-u_exact(x) = exp(x[1] + x[2])
-rhs(x) = -2 * u_exact(x)
-
-# 3. Bilinear form (discrete Laplacian) and matrix assembly
-a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-A = assemble(a; dirichlet = :boundary)
-
-# 4. Linear form (source term) and Dirichlet boundary conditions
+Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))   # the unit square
+Ωₕ = mesh(Ω, (33, 33), (false, false))                # 33 × 33 points, randomly spaced
+Wₕ = gridspace(Ωₕ)                                    # one unknown per point
 gₕ = element(Wₕ)
-avgₕ!(gₕ, rhs)
-bcs = dirichlet_constraints(Ω, :boundary => u_exact)
-l = form(Wₕ, v -> innerₕ(gₕ, v))
-F = assemble(l; dirichlet = bcs)
+Rₕ!(gₕ, g)                                            # the source, sampled at the points
 
-# 5. Solve linear system
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))    # the discrete Laplacian
+l = form(Wₕ, v -> innerₕ(gₕ, v))                      # the load
+A, F = assemble(a, l; dirichlet = dirichlet_constraints(Ω, :boundary => uexact))
+
 uₕ = element(Wₕ)
 uₕ .= A \ F
-
-# 6. Verify second-order accuracy against exact solution
-u_ref = element(Wₕ)
-Rₕ!(u_ref, u_exact)
-println("Error (normₕ): ", normₕ(uₕ - u_ref))
+maximum(abs, uₕ .- Rₕ(Wₕ, uexact))                     # the error at the grid points
 ```
+
+Passing `true` instead of `false` for an axis spaces its points uniformly.
 
 ---
 
@@ -115,19 +107,20 @@ A = assemble(a; dirichlet = :boundary)
 
 ## Workflow architecture
 
-```
-╭──────────────╮     ╭──────────────╮     ╭──────────────╮
-│    Domain    │     │     Mesh     │     │  Grid Space  │
-│ (Intervals,  │ ━━► │ (Primary and │ ━━► │  (Scalar &   │
-│   Markers)   │     │ Dual Grids)  │     │  Composite)  │
-╰──────────────╯     ╰──────────────╯     ╰──────┬───────╯
-                                                 │
-                                                 ▼
-╭──────────────╮     ╭──────────────╮     ╭──────────────╮
-│ Linear Solve │     │   Assemble   │     │ Form Syntax  │
-│   (A \ F /   │ ◄━━ │ (Sparse CSC, │ ◄━━ │  (Bilinear,  │
-│  Iterative)  │     │ Constraints) │     │   Linear)    │
-╰──────────────╯     ╰──────────────╯     ╰──────────────╯
+```mermaid
+flowchart LR
+    domain("Domain<br/>intervals, markers")
+    mesh("Mesh<br/>nonuniform grids")
+    space("Grid space<br/>scalar, composite, vector")
+    form("Forms<br/>bilinear, linear")
+    assemble("Assemble<br/>sparse or Kronecker")
+    matfree("Matrix-free<br/>operator")
+    solve("Solve<br/>direct, iterative, multigrid")
+    ode("Semidiscretize<br/>SciML time stepping")
+    domain --> mesh --> space --> form
+    form --> assemble --> solve
+    form --> matfree --> solve
+    form --> ode
 ```
 
 ---
@@ -136,14 +129,13 @@ A = assemble(a; dirichlet = :boundary)
 
 Documentation, tutorials, and the API reference are available at [https://gpena.github.io/Bramble.jl/](https://gpena.github.io/Bramble.jl/):
 
-- [Getting Started & Tutorials](https://gpena.github.io/Bramble.jl/tutorials/geometry/)
-- [Discrete Operators & Stencils](https://gpena.github.io/Bramble.jl/tutorials/operators/)
-- [Forms & Assembly](https://gpena.github.io/Bramble.jl/tutorials/form/)
-- [Automatic Differentiation](https://gpena.github.io/Bramble.jl/internals/autodiff/)
-- [Worked Examples](https://gpena.github.io/Bramble.jl/examples/poisson_linear/)
-  - Linear and Nonlinear Poisson Equations
-  - Convection-Diffusion Equations
-  - Coupled Reaction-Diffusion Systems
+- [Getting started](https://gpena.github.io/Bramble.jl/getting_started/)
+- Discrete foundations: [geometry](https://gpena.github.io/Bramble.jl/tutorials/geometry/), [meshes](https://gpena.github.io/Bramble.jl/tutorials/mesh/), [spaces](https://gpena.github.io/Bramble.jl/tutorials/space/), [operators](https://gpena.github.io/Bramble.jl/tutorials/operators/)
+- Forms and assembly: [forms](https://gpena.github.io/Bramble.jl/tutorials/form/), [coupled systems](https://gpena.github.io/Bramble.jl/tutorials/coupled_systems/)
+- Solvers and scientific computing: [solvers](https://gpena.github.io/Bramble.jl/tutorials/solvers/), [time stepping](https://gpena.github.io/Bramble.jl/tutorials/time_stepping/), [automatic differentiation](https://gpena.github.io/Bramble.jl/tutorials/autodiff/), [backends](https://gpena.github.io/Bramble.jl/tutorials/backend/)
+- Visualization and export: [plotting](https://gpena.github.io/Bramble.jl/tutorials/plotting/), [VTK](https://gpena.github.io/Bramble.jl/tutorials/vtk_export/), [PGFPlots](https://gpena.github.io/Bramble.jl/tutorials/pgfplots_export/)
+- [Worked examples](https://gpena.github.io/Bramble.jl/examples/poisson_linear/): stationary, time-dependent and inverse problems, and solver performance
+- [Benchmarks](https://gpena.github.io/Bramble.jl/benchmarks/)
 
 ---
 

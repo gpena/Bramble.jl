@@ -16,11 +16,11 @@ tuples, since nothing yet asks for the same larger set twice in a hot loop.
 A linear `getindex` converts to a `CartesianIndex` first (one division per axis); a caller
 that already holds the `CartesianIndex` -- an assembly loop over `local_stencil`, for
 instance -- should use it directly and skip that cost. `src/space/inner_product.jl`'s
-`_dot`/`_dot_masked` do this for every weight family alike. `src/operators/inner.jl`'s
-`compute_weight` does it only for `InnerPlusSet` (`|S| ≥ 2`); `InnerH` and `InnerPlus{Dim}`
-still index by linear position, so a symbolic `innerₕ`/`inner₊ₓ`/etc. term inside a form now
-pays that division per point during assembly, not only the two hot paths already routed
-through the `CartesianIndex` -- measured in `docs/src/internals/space.md`.
+`_dot`/`_dot_masked` do this for every weight family alike, and so does
+`src/operators/inner.jl`'s `compute_weight` for `InnerH`, `InnerPlus{Dim}` and
+`InnerPlusSet` (`|S| ≥ 2`): a symbolic `innerₕ`/`inner₊ₓ`/etc. term inside a form reads its
+weight by the `CartesianIndex` the assembly loop already holds, with no division per point
+(gpena/Bramble.jl#428).
 
 On device-backed `factors` (gpena/Bramble.jl#310), `getindex` raises an error naming
 [`host_weights`](@ref) rather than letting `GPUArraysCore` throw its own scalar-indexing

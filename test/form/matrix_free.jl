@@ -2,7 +2,8 @@ module TestFormMatrixFree
 
 using Test
 using Bramble
-using Bramble: MatrixFreeOperator, VectorElement, trial_space, test_space, restrict_to, πₕ, jumpₓ, M₊ₓ, D₋ₓ, D₋ᵧ, D₊ᵧ
+using Bramble: MatrixFreeOperator, VectorElement, trial_space, test_space, restrict_to, πₕ, jumpₓ, M₊ₓ, D₋ₓ, D₊ₓ, D₋ᵧ,
+               D₊ᵧ
 using LinearAlgebra: mul!, norm, dot
 using Random
 using ..TestUtils: WITH_SLOW_TESTS
@@ -73,6 +74,14 @@ function _mf_cases(be = backend())
             form(V2, V2, (u, v) -> innerₕ(D₋ₓ(u(1)), v(2)) + innerₕ(u(2), D₋ₓ(v(1))) + innerₕ(u(2), v(2))),
             (:west, :boundary)))
     return out
+end
+
+# A graded mesh as benchmark/operator_routes.jl builds one: uniform, then moved by
+# `change_points!` to `t^(1 + d/4)` along axis `d`, so every axis of length > 2 is non-uniform.
+function _mf_graded_space(n::NTuple{D, Int}) where {D}
+    Ωₕ = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n, ntuple(_ -> true, D))
+    Bramble.change_points!(Ωₕ, ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
+    return gridspace(Ωₕ)
 end
 
 _mf_op(a, dl) = dl === nothing ? matrix_free_operator(a) : matrix_free_operator(a; dirichlet = dl)
@@ -293,6 +302,128 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
             return minimum(_mf_alloc3(y, op, xn) for _ in 1:5)
         end
         @test bytes[1] == bytes[2]
+    end
+
+    # An action sink's unit gathers each interior row from the points it reads, carrying a
+    # point's stencil along axis 1 (`D₋ₓ` and `D₊ₓ` read the previous row's point, a pair's
+    # transposed half by its trial offsets), and scatters only the shell. Grids wide enough
+    # for unguarded lines (at least `4 * margin + 1` points; 3D is in the cases above), and
+    # the fallbacks: a region restriction and an interpolation scatter, a short axis guards
+    # every row, an axis of `2 * margin` points has no interior box, one narrower than that
+    # does not peel, and a long stencil or a nested tap scatters. `gathers` is whether every
+    # term of the form takes the gather. Each must agree with `assemble`, allocate nothing
+    # (but the boxed sum, as it did scattered), and stay bitwise equal under the fused
+    # threaded sweep, whose bands cut a 1D grid along the lines themselves.
+    @testset "matrix-free: gathered interior" begin
+        Random.seed!(MF_SEED)
+        sq = interval(0.0, 1.0) × interval(0.0, 1.0)
+        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 19, false))
+        W2 = gridspace(mesh(domain(sq, :west => :left), (13, 12), (false, false)))
+        Ws = gridspace(mesh(domain(sq), (8, 3), (false, false)))
+        Wt = gridspace(mesh(domain(sq), (9, 2), (false, false)))
+        Wf = gridspace(mesh(domain(sq), (15, 14), (false, false)))
+        κ1 = Rₕ(W1, x -> 1 + x^2)
+        κ2 = Rₕ(W2, x -> 1 + sum(abs2, x))
+        V = W2 × W2
+        dform(W, κ) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v)))
+        lap(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        cases = (
+            ("1D diffusion", dform(W1, κ1), :boundary, true),
+            ("2D diffusion", dform(W2, κ2), :boundary, true),
+            ("forward", form(W2, W2, (u, v) -> innerₕ(D₊ₓ(u), D₊ₓ(v)) + innerₕ(D₋ᵧ(u), v)), nothing, true),
+            ("pair", form(W2, W2, (u, v) -> innerₕ(D₋ₓ(u), v) + 2.0 * innerₕ(u, D₋ₓ(v))), (:west,), true),
+            ("composite pair",
+                form(V,
+                    V,
+                    (u, v) -> innerₕ(D₋ₓ(u(1)), v(2)) + 3.0 * innerₕ(u(2), D₋ₓ(v(1))) +
+                              inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + 100.0 * innerₕ(u(2), v(2))),
+                :boundary, true),
+            ("restricted", form(W2, W2, (u, v) -> innerₕ(D₋ₓ(u), v) + innerₕ(κ2 * u, restrict_to(:boundary, v))),
+                nothing, false),
+            ("test interpolation", form(W2, Wf, (u, v) -> innerₕ(D₋ₓ(πₕ(u)), v) + innerₕ(u, πₕ(v))), nothing, false),
+            ("short axis", lap(Ws), :boundary, true),
+            ("empty interior box", lap(Wt), :boundary, true),
+            ("no peel", form(Ws, Ws, (u, v) -> innerₕ(u, D₋ᵧ(D₋ᵧ(v))) + innerₕ(D₋ₓ(u), v)), :boundary, false),
+            # These scatter: a sum under the product (boxed), 16 nested entries, and a tap over
+            # anything but a (scaled) leaf, however few its entries.
+            ("sum under product", form(W2, W2, (u, v) -> innerₕ(D₋ₓ(u) + u, D₋ₓ(v) + v)), nothing, false),
+            ("16 entries", form(W2, W2, (u, v) -> innerₕ(D₋ₓ(D₊ₓ(u)), D₋ᵧ(D₊ᵧ(v)))), :boundary, false),
+            ("nested tap", form(W2, W2, (u, v) -> innerₕ(D₋ₓ(D₊ₓ(u)), D₋ₓ(v))), nothing, false),
+            ("scaled nested tap", form(W2, W2, (u, v) -> innerₕ(D₋ᵧ(κ2 * D₊ᵧ(u)), v)), :boundary, false),
+            ("triple tap", form(W2, W2, (u, v) -> innerₕ(D₋ₓ(D₊ₓ(D₋ᵧ(u))), v)), nothing, false),
+            ("tap over scaled leaf", form(W2, W2, (u, v) -> innerₕ(D₋ₓ(κ2 * u), D₋ₓ(v))), nothing, true)
+        )
+        for (name, a, dl, gathers) in cases
+            @testset "$name" begin
+                @test Bramble._mf_gathers(a.ast) == gathers
+                A = _mf_mat(a, dl)
+                op = _mf_op(a, dl)
+                x = randn(size(A, 2))
+                y0 = randn(size(A, 1))
+                @test !iszero(A * x)
+                ref = op * x
+                @test _mf_agree(ref, A * x)
+                y = copy(y0)
+                mul!(y, op, x, 0.5, 2.0)
+                @test _mf_agree(y, 0.5 * (A * x) + 2.0 * y0)
+                name == "sum under product" || @test _mf_alloc5(y, op, x) == 0
+                opt = dl === nothing ? matrix_free_operator(a; policy = Parallel()) :
+                      matrix_free_operator(a; dirichlet = dl, policy = Parallel())
+                @test opt.plan isa Bramble._MFFusedPlan
+                same = name == "test interpolation" ? _mf_agree : (==)
+                yt = similar(ref)
+                @test all(1:20) do _
+                    mul!(yt, opt, x)
+                    return same(yt, ref)
+                end
+            end
+        end
+    end
+
+    # The zero-byte cases above are small and carry a coefficient κ, so they never reach the
+    # cached geometry, which only a constant-coefficient `inner₊(D₋ᵢu, D₋ᵢv)` reads, nor a
+    # large gathered interior. #428's form on graded meshes: one with an empty interior box
+    # (an axis of 2 points) and one large, in 2D and 3D. Besides the bytes, the asserts check
+    # that every condition the serial walk tests to choose its route holds on the units it
+    # walks (`_mf_apply!` to `_mf_walk!`): no unit is paired, each gathers and is peelable,
+    # and both `inner₊(D₋ᵢu, D₋ᵢv)` units are answered by the cached geometry the sink
+    # carries (`_mf_whole`). They do not prove the branch bodies run the gather and the cache.
+    @testset "matrix-free: zero bytes at scale" begin
+        for n in ((9, 2), (257, 257), (5, 4, 2), (33, 33, 33))
+            W = _mf_graded_space(n)
+            @test !Bramble.is_uniform(mesh(W)(1))
+            a = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+            for dl in (nothing, :boundary)
+                @testset "$(join(n, '×')) $(something(dl, :none))" begin
+                    op = _mf_op(a, dl)
+                    @test op.policy === Bramble.CpuSerial()
+                    @test Bramble._mf_gathers(a.ast)
+                    @test op.geom isa Bramble._MFGeometry
+                    @test op.geom.version == Bramble._mesh_version(mesh(W))
+                    @test Bramble._mf_sink_geom(op.policy, op.geom) === op.geom
+                    # The units and walked space `_mf_apply!` hands to `_mf_walk!`.
+                    bound = Bramble._bind_interp_spaces(a.ast, W, W)
+                    sp = Bramble.host_weights(Bramble._walked_leaf(bound, W, W))
+                    units = Bramble._summands(bound)
+                    @test all(p -> p[2] == 0, Bramble._pair_plan(fieldtypes(typeof(units))))
+                    ax = axes(Bramble.indices(mesh(sp)))
+                    @test all(t -> Bramble._mf_gathers(t), units)
+                    @test all(t -> Bramble._peelable(ax, Bramble._stencil_margin(t)), units)
+                    sep = filter(t -> t isa Bramble._MFSeparableTerm, units)
+                    @test length(sep) == length(n)
+                    @test all(t -> Bramble._mf_whole(op.geom, t, sp), sep)
+                    A = _mf_mat(a, dl)
+                    x = randn(size(A, 2))
+                    y0 = randn(size(A, 1))
+                    @test _mf_agree(op * x, A * x)
+                    y = copy(y0)
+                    mul!(y, op, x, 0.5, 2.0)
+                    @test _mf_agree(y, 0.5 * (A * x) + 2.0 * y0)
+                    @test _mf_alloc3(y, op, x) == 0
+                    @test _mf_alloc5(y, op, x) == 0
+                end
+            end
+        end
     end
 
     # The form call `a(u, v)` sums `vᴴ A u` through the same walk, storing neither `A` nor

@@ -1,10 +1,10 @@
 [meta]
 arch = "aarch64"
-commit = "dfd9a2c2"
+commit = "86e058eb-dirty"
 cpu = "Apple M2"
-date = "2026-10-02T17:38:56"
+date = "2026-10-03T22:22:32"
 julia = "1.13.1"
-load1 = 8.12
+load1 = 5.85
 os = "Darwin"
 power = "ac"
 script = "operator_routes.jl"
@@ -18,7 +18,7 @@ mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "assembled"
-time_s = 0.000100833
+time_s = 9.3959e-5
 [[tables.construction]]
 bytes_alloc = 26704
 dim = 2
@@ -26,23 +26,23 @@ mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "kronecker"
-time_s = 4.625e-6
+time_s = 4.875e-6
 [[tables.construction]]
-bytes_alloc = 720
+bytes_alloc = 2128
 dim = 2
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "matrix_free_serial"
-time_s = 4.1e-8
+time_s = 2.92e-7
 [[tables.construction]]
-bytes_alloc = 2736
+bytes_alloc = 3920
 dim = 2
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "matrix_free_threaded"
-time_s = 1.708e-6
+time_s = 1.958e-6
 [[tables.construction]]
 bytes_alloc = 2378704
 dim = 2
@@ -50,7 +50,7 @@ mesh = "non-uniform"
 n = 64
 ndofs = 4096
 route = "assembled"
-time_s = 0.000519542
+time_s = 0.000608958
 [[tables.construction]]
 bytes_alloc = 45984
 dim = 2
@@ -58,23 +58,23 @@ mesh = "non-uniform"
 n = 64
 ndofs = 4096
 route = "kronecker"
-time_s = 9.125e-6
+time_s = 9.417e-6
 [[tables.construction]]
-bytes_alloc = 720
+bytes_alloc = 2640
 dim = 2
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 route = "matrix_free_serial"
-time_s = 4.1e-8
+time_s = 3.33e-7
 [[tables.construction]]
-bytes_alloc = 2736
+bytes_alloc = 4432
 dim = 2
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 route = "matrix_free_threaded"
-time_s = 1.667e-6
+time_s = 2.125e-6
 [[tables.construction]]
 bytes_alloc = 9259984
 dim = 2
@@ -82,7 +82,7 @@ mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "assembled"
-time_s = 0.002007833
+time_s = 0.001892208
 [[tables.construction]]
 bytes_alloc = 85152
 dim = 2
@@ -90,31 +90,31 @@ mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "kronecker"
-time_s = 1.8041e-5
+time_s = 1.5792e-5
 [[tables.construction]]
-bytes_alloc = 720
+bytes_alloc = 3728
 dim = 2
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "matrix_free_serial"
-time_s = 4.2e-8
+time_s = 5.0e-7
 [[tables.construction]]
-bytes_alloc = 2736
+bytes_alloc = 5520
 dim = 2
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "matrix_free_threaded"
-time_s = 1.75e-6
+time_s = 2.458e-6
 [[tables.construction]]
-bytes_alloc = 36785104
+bytes_alloc = 37833680
 dim = 2
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "assembled"
-time_s = 0.007187708
+time_s = 0.006182833
 [[tables.construction]]
 bytes_alloc = 166560
 dim = 2
@@ -122,31 +122,31 @@ mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "kronecker"
-time_s = 3.0708e-5
+time_s = 2.95e-5
 [[tables.construction]]
-bytes_alloc = 720
+bytes_alloc = 5712
 dim = 2
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "matrix_free_serial"
-time_s = 4.1e-8
+time_s = 1.208e-6
 [[tables.construction]]
-bytes_alloc = 2736
+bytes_alloc = 7504
 dim = 2
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "matrix_free_threaded"
-time_s = 1.916e-6
+time_s = 3.25e-6
 [[tables.construction]]
-bytes_alloc = 161975248
+bytes_alloc = 161467344
 dim = 2
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "assembled"
-time_s = 0.048486042
+time_s = 0.0321905
 [[tables.construction]]
 bytes_alloc = 326304
 dim = 2
@@ -154,23 +154,23 @@ mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "kronecker"
-time_s = 9.6125e-5
+time_s = 7.2666e-5
 [[tables.construction]]
-bytes_alloc = 720
+bytes_alloc = 9808
 dim = 2
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "matrix_free_serial"
-time_s = 8.3e-8
+time_s = 2.042e-6
 [[tables.construction]]
-bytes_alloc = 2736
+bytes_alloc = 11600
 dim = 2
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "matrix_free_threaded"
-time_s = 2.625e-6
+time_s = 4.375e-6
 [[tables.construction]]
 bytes_alloc = 396256
 dim = 3
@@ -178,7 +178,7 @@ mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "assembled"
-time_s = 9.1916e-5
+time_s = 7.8084e-5
 [[tables.construction]]
 bytes_alloc = 16912
 dim = 3
@@ -186,23 +186,23 @@ mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "kronecker"
-time_s = 4.167e-6
+time_s = 3.875e-6
 [[tables.construction]]
-bytes_alloc = 1184
+bytes_alloc = 2864
 dim = 3
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "matrix_free_serial"
-time_s = 8.4e-8
+time_s = 2.08e-7
 [[tables.construction]]
-bytes_alloc = 4256
+bytes_alloc = 5312
 dim = 3
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "matrix_free_threaded"
-time_s = 2.542e-6
+time_s = 2.583e-6
 [[tables.construction]]
 bytes_alloc = 3265504
 dim = 3
@@ -210,7 +210,7 @@ mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "assembled"
-time_s = 0.000891792
+time_s = 0.000660042
 [[tables.construction]]
 bytes_alloc = 24720
 dim = 3
@@ -218,31 +218,31 @@ mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "kronecker"
-time_s = 6.25e-6
+time_s = 6.709e-6
 [[tables.construction]]
-bytes_alloc = 1184
+bytes_alloc = 3056
 dim = 3
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "matrix_free_serial"
-time_s = 8.3e-8
+time_s = 2.5e-7
 [[tables.construction]]
-bytes_alloc = 4256
+bytes_alloc = 5504
 dim = 3
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "matrix_free_threaded"
-time_s = 2.792e-6
+time_s = 2.375e-6
 [[tables.construction]]
-bytes_alloc = 25580512
+bytes_alloc = 25875424
 dim = 3
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "assembled"
-time_s = 0.0078695
+time_s = 0.005746291
 [[tables.construction]]
 bytes_alloc = 39952
 dim = 3
@@ -250,31 +250,31 @@ mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "kronecker"
-time_s = 1.2208e-5
+time_s = 8.125e-6
 [[tables.construction]]
-bytes_alloc = 1184
+bytes_alloc = 3440
 dim = 3
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "matrix_free_serial"
-time_s = 1.25e-7
+time_s = 3.75e-7
 [[tables.construction]]
-bytes_alloc = 4256
+bytes_alloc = 5888
 dim = 3
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "matrix_free_threaded"
-time_s = 4.0e-6
+time_s = 3.0e-6
 [[tables.construction]]
-bytes_alloc = 86528992
+bytes_alloc = 98604000
 dim = 3
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "assembled"
-time_s = 0.031243084
+time_s = 0.026399
 [[tables.construction]]
 bytes_alloc = 55504
 dim = 3
@@ -282,31 +282,31 @@ mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "kronecker"
-time_s = 1.4334e-5
+time_s = 1.075e-5
 [[tables.construction]]
-bytes_alloc = 1184
+bytes_alloc = 3920
 dim = 3
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "matrix_free_serial"
-time_s = 1.25e-7
+time_s = 5.0e-7
 [[tables.construction]]
-bytes_alloc = 4256
+bytes_alloc = 6368
 dim = 3
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "matrix_free_threaded"
-time_s = 3.834e-6
+time_s = 3.417e-6
 [[tables.construction]]
-bytes_alloc = 212145120
+bytes_alloc = 216454112
 dim = 3
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "assembled"
-time_s = 0.079886667
+time_s = 0.060614709
 [[tables.construction]]
 bytes_alloc = 68608
 dim = 3
@@ -314,23 +314,23 @@ mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "kronecker"
-time_s = 2.35e-5
+time_s = 1.5625e-5
 [[tables.construction]]
-bytes_alloc = 1184
+bytes_alloc = 4208
 dim = 3
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "matrix_free_serial"
-time_s = 1.67e-7
+time_s = 6.25e-7
 [[tables.construction]]
-bytes_alloc = 4256
+bytes_alloc = 6656
 dim = 3
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "matrix_free_threaded"
-time_s = 3.541e-6
+time_s = 3.375e-6
 
 [[tables.correctness]]
 dim = 2
@@ -351,14 +351,14 @@ dim = 2
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
-rel_error = 2.188579081896376e-16
+rel_error = 2.5175583045330717e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 2
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
-rel_error = 2.188579081896376e-16
+rel_error = 2.5175583045330717e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 2
@@ -379,14 +379,14 @@ dim = 2
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
-rel_error = 2.0938099861815598e-16
+rel_error = 2.42966013103878e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 2
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
-rel_error = 2.0938099861815598e-16
+rel_error = 2.42966013103878e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 2
@@ -407,14 +407,14 @@ dim = 2
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
-rel_error = 2.2667712815641056e-16
+rel_error = 2.6445970018016244e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 2
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
-rel_error = 2.2667712815641056e-16
+rel_error = 2.6445970018016244e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 2
@@ -435,14 +435,14 @@ dim = 2
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
-rel_error = 2.1517954732942856e-16
+rel_error = 2.457938051988746e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 2
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
-rel_error = 2.1517954732942856e-16
+rel_error = 2.457938051988746e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 2
@@ -463,14 +463,14 @@ dim = 2
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
-rel_error = 2.1321593267723965e-16
+rel_error = 2.6013219932916136e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 2
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
-rel_error = 2.1321593267723965e-16
+rel_error = 2.6013219932916136e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 3
@@ -491,14 +491,14 @@ dim = 3
 mesh = "non-uniform"
 n = 8
 ndofs = 512
-rel_error = 2.097442148064822e-16
+rel_error = 2.4048351767347463e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 3
 mesh = "non-uniform"
 n = 8
 ndofs = 512
-rel_error = 2.097442148064822e-16
+rel_error = 2.4048351767347463e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 3
@@ -519,14 +519,14 @@ dim = 3
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
-rel_error = 2.30748598974725e-16
+rel_error = 2.3510858380084154e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 3
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
-rel_error = 2.30748598974725e-16
+rel_error = 2.3510858380084154e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 3
@@ -547,14 +547,14 @@ dim = 3
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
-rel_error = 2.235255774367268e-16
+rel_error = 2.5715653606873816e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 3
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
-rel_error = 2.235255774367268e-16
+rel_error = 2.5715653606873816e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 3
@@ -575,14 +575,14 @@ dim = 3
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
-rel_error = 2.301964828906515e-16
+rel_error = 2.4811286575553674e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 3
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
-rel_error = 2.301964828906515e-16
+rel_error = 2.4811286575553674e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 3
@@ -603,14 +603,14 @@ dim = 3
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
-rel_error = 2.2983802613383186e-16
+rel_error = 2.558452301047318e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 3
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
-rel_error = 2.2983802613383186e-16
+rel_error = 2.558452301047318e-16
 route = "matrix_free_threaded"
 
 [[tables.product]]
@@ -620,7 +620,7 @@ mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "assembled"
-time_s = 3.542e-6
+time_s = 3.334e-6
 [[tables.product]]
 bytes_held = 5136
 dim = 2
@@ -628,23 +628,23 @@ mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "kronecker"
-time_s = 1.458e-6
+time_s = 1.417e-6
 [[tables.product]]
-bytes_held = 88
+bytes_held = 712
 dim = 2
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "matrix_free_serial"
-time_s = 6.916e-6
+time_s = 1.792e-6
 [[tables.product]]
-bytes_held = 128
+bytes_held = 1088
 dim = 2
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "matrix_free_threaded"
-time_s = 1.0208e-5
+time_s = 5.333e-6
 [[tables.product]]
 bytes_held = 356520
 dim = 2
@@ -662,21 +662,21 @@ ndofs = 4096
 route = "kronecker"
 time_s = 5.333e-6
 [[tables.product]]
-bytes_held = 88
+bytes_held = 1224
 dim = 2
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 route = "matrix_free_serial"
-time_s = 2.6042e-5
+time_s = 6.041e-6
 [[tables.product]]
-bytes_held = 128
+bytes_held = 1600
 dim = 2
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 route = "matrix_free_threaded"
-time_s = 1.1167e-5
+time_s = 9.0e-6
 [[tables.product]]
 bytes_held = 1433768
 dim = 2
@@ -684,7 +684,7 @@ mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "assembled"
-time_s = 6.1e-5
+time_s = 6.1166e-5
 [[tables.product]]
 bytes_held = 18960
 dim = 2
@@ -692,23 +692,23 @@ mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "kronecker"
-time_s = 2.125e-5
+time_s = 2.1083e-5
 [[tables.product]]
-bytes_held = 88
+bytes_held = 2248
 dim = 2
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "matrix_free_serial"
-time_s = 0.000106542
+time_s = 2.5e-5
 [[tables.product]]
-bytes_held = 128
+bytes_held = 2624
 dim = 2
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "matrix_free_threaded"
-time_s = 7.8625e-5
+time_s = 2.225e-5
 [[tables.product]]
 bytes_held = 5750952
 dim = 2
@@ -716,7 +716,7 @@ mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "assembled"
-time_s = 0.000289375
+time_s = 0.000287375
 [[tables.product]]
 bytes_held = 37392
 dim = 2
@@ -724,23 +724,23 @@ mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "kronecker"
-time_s = 9.0583e-5
+time_s = 8.8208e-5
 [[tables.product]]
-bytes_held = 88
+bytes_held = 4296
 dim = 2
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "matrix_free_serial"
-time_s = 0.000441334
+time_s = 9.55e-5
 [[tables.product]]
-bytes_held = 128
+bytes_held = 4672
 dim = 2
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "matrix_free_threaded"
-time_s = 0.00028
+time_s = 7.7e-5
 [[tables.product]]
 bytes_held = 23036072
 dim = 2
@@ -748,7 +748,7 @@ mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "assembled"
-time_s = 0.001036083
+time_s = 0.000974458
 [[tables.product]]
 bytes_held = 74256
 dim = 2
@@ -756,23 +756,23 @@ mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "kronecker"
-time_s = 0.00065525
+time_s = 0.000375958
 [[tables.product]]
-bytes_held = 88
+bytes_held = 8392
 dim = 2
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "matrix_free_serial"
-time_s = 0.002631167
+time_s = 0.0004105
 [[tables.product]]
-bytes_held = 128
+bytes_held = 8768
 dim = 2
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "matrix_free_threaded"
-time_s = 0.001142292
+time_s = 0.000307708
 [[tables.product]]
 bytes_held = 55464
 dim = 3
@@ -780,7 +780,7 @@ mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "assembled"
-time_s = 2.208e-6
+time_s = 1.958e-6
 [[tables.product]]
 bytes_held = 2456
 dim = 3
@@ -788,23 +788,23 @@ mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "kronecker"
-time_s = 2.292e-6
+time_s = 2.0e-6
 [[tables.product]]
-bytes_held = 88
+bytes_held = 440
 dim = 3
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "matrix_free_serial"
-time_s = 1.3e-5
+time_s = 3.292e-6
 [[tables.product]]
-bytes_held = 136
+bytes_held = 1056
 dim = 3
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "matrix_free_threaded"
-time_s = 6.083e-6
+time_s = 6.709e-6
 [[tables.product]]
 bytes_held = 467112
 dim = 3
@@ -812,7 +812,7 @@ mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "assembled"
-time_s = 2.1625e-5
+time_s = 1.8542e-5
 [[tables.product]]
 bytes_held = 4120
 dim = 3
@@ -820,23 +820,23 @@ mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "kronecker"
-time_s = 1.475e-5
+time_s = 1.2416e-5
 [[tables.product]]
-bytes_held = 88
+bytes_held = 632
 dim = 3
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "matrix_free_serial"
-time_s = 9.5291e-5
+time_s = 1.6125e-5
 [[tables.product]]
-bytes_held = 136
+bytes_held = 1248
 dim = 3
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "matrix_free_threaded"
-time_s = 2.975e-5
+time_s = 1.7583e-5
 [[tables.product]]
 bytes_held = 3834024
 dim = 3
@@ -844,7 +844,7 @@ mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "assembled"
-time_s = 0.000231083
+time_s = 0.0001595
 [[tables.product]]
 bytes_held = 7448
 dim = 3
@@ -852,23 +852,23 @@ mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "kronecker"
-time_s = 0.000135583
+time_s = 8.3167e-5
 [[tables.product]]
-bytes_held = 88
+bytes_held = 1016
 dim = 3
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "matrix_free_serial"
-time_s = 0.000932417
+time_s = 0.000105167
 [[tables.product]]
-bytes_held = 136
+bytes_held = 1632
 dim = 3
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "matrix_free_threaded"
-time_s = 0.000398708
+time_s = 8.0375e-5
 [[tables.product]]
 bytes_held = 13050024
 dim = 3
@@ -876,7 +876,7 @@ mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "assembled"
-time_s = 0.000786834
+time_s = 0.000580792
 [[tables.product]]
 bytes_held = 10776
 dim = 3
@@ -884,23 +884,23 @@ mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "kronecker"
-time_s = 0.000358166
+time_s = 0.000261125
 [[tables.product]]
-bytes_held = 88
+bytes_held = 1400
 dim = 3
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "matrix_free_serial"
-time_s = 0.002702625
+time_s = 0.000325
 [[tables.product]]
-bytes_held = 136
+bytes_held = 2016
 dim = 3
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "matrix_free_threaded"
-time_s = 0.001092625
+time_s = 0.000235625
 [[tables.product]]
 bytes_held = 31064232
 dim = 3
@@ -908,7 +908,7 @@ mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "assembled"
-time_s = 0.001869791
+time_s = 0.001263333
 [[tables.product]]
 bytes_held = 14104
 dim = 3
@@ -916,23 +916,23 @@ mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "kronecker"
-time_s = 0.001036333
+time_s = 0.000690834
 [[tables.product]]
-bytes_held = 88
+bytes_held = 1784
 dim = 3
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "matrix_free_serial"
-time_s = 0.00966375
+time_s = 0.000807875
 [[tables.product]]
-bytes_held = 136
+bytes_held = 2400
 dim = 3
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "matrix_free_threaded"
-time_s = 0.002592292
+time_s = 0.000508292
 
 [[tables.solve]]
 dim = 2
@@ -942,7 +942,7 @@ n = 32
 ndofs = 1024
 rel_residual = 8.240673952037983e-9
 route = "assembled"
-time_s = 0.001904667
+time_s = 0.00190275
 [[tables.solve]]
 dim = 2
 iterations = 431
@@ -951,25 +951,25 @@ n = 32
 ndofs = 1024
 rel_residual = 8.871579088344353e-9
 route = "kronecker"
-time_s = 0.000927625
+time_s = 0.000901167
 [[tables.solve]]
 dim = 2
 iterations = 432
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
-rel_residual = 9.389527603720415e-9
+rel_residual = 9.106859762290778e-9
 route = "matrix_free_serial"
-time_s = 0.003278208
+time_s = 0.001240042
 [[tables.solve]]
 dim = 2
 iterations = 432
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
-rel_residual = 9.389527603720415e-9
+rel_residual = 9.106859762290778e-9
 route = "matrix_free_threaded"
-time_s = 0.006614375
+time_s = 0.004090708
 [[tables.solve]]
 dim = 2
 iterations = 0
@@ -978,7 +978,7 @@ n = 32
 ndofs = 1024
 rel_residual = 3.51122484385106e-12
 route = "fdm_solve"
-time_s = 0.000187833
+time_s = 0.000238042
 [[tables.solve]]
 dim = 2
 iterations = 0
@@ -987,7 +987,7 @@ n = 32
 ndofs = 1024
 rel_residual = 1.2593315463363596e-12
 route = "direct"
-time_s = 0.000525375
+time_s = 0.00052325
 [[tables.solve]]
 dim = 2
 iterations = 1251
@@ -996,7 +996,7 @@ n = 64
 ndofs = 4096
 rel_residual = 9.751704552703919e-9
 route = "assembled"
-time_s = 0.025812292
+time_s = 0.025577291
 [[tables.solve]]
 dim = 2
 iterations = 1253
@@ -1005,25 +1005,25 @@ n = 64
 ndofs = 4096
 rel_residual = 9.30678696966512e-9
 route = "kronecker"
-time_s = 0.011402334
+time_s = 0.011346541
 [[tables.solve]]
 dim = 2
-iterations = 1253
+iterations = 1256
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
-rel_residual = 9.086020438578138e-9
+rel_residual = 8.858139445235783e-9
 route = "matrix_free_serial"
-time_s = 0.036475333
+time_s = 0.013784208
 [[tables.solve]]
 dim = 2
-iterations = 1253
+iterations = 1256
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
-rel_residual = 9.086020438578138e-9
+rel_residual = 8.858139445235783e-9
 route = "matrix_free_threaded"
-time_s = 0.049382417
+time_s = 0.036585084
 [[tables.solve]]
 dim = 2
 iterations = 0
@@ -1032,7 +1032,7 @@ n = 64
 ndofs = 4096
 rel_residual = 2.7871686499909822e-11
 route = "fdm_solve"
-time_s = 0.000796083
+time_s = 0.000802292
 [[tables.solve]]
 dim = 2
 iterations = 0
@@ -1041,7 +1041,7 @@ n = 64
 ndofs = 4096
 rel_residual = 7.303841226522867e-12
 route = "direct"
-time_s = 0.002594583
+time_s = 0.00260575
 [[tables.solve]]
 dim = 2
 iterations = 3604
@@ -1050,7 +1050,7 @@ n = 128
 ndofs = 16384
 rel_residual = 9.951914454411401e-9
 route = "assembled"
-time_s = 0.265563833
+time_s = 0.269587125
 [[tables.solve]]
 dim = 2
 iterations = 3614
@@ -1059,25 +1059,25 @@ n = 128
 ndofs = 16384
 rel_residual = 9.998572970052841e-9
 route = "kronecker"
-time_s = 0.124123375
+time_s = 0.128371209
 [[tables.solve]]
 dim = 2
-iterations = 3601
+iterations = 3616
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
-rel_residual = 9.727388521435436e-9
+rel_residual = 9.890051856501784e-9
 route = "matrix_free_serial"
-time_s = 0.430608792
+time_s = 0.162040834
 [[tables.solve]]
 dim = 2
-iterations = 3601
+iterations = 3616
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
-rel_residual = 9.727388521435436e-9
+rel_residual = 9.890051856501784e-9
 route = "matrix_free_threaded"
-time_s = 0.436544708
+time_s = 0.215464875
 [[tables.solve]]
 dim = 2
 iterations = 0
@@ -1086,7 +1086,7 @@ n = 128
 ndofs = 16384
 rel_residual = 1.8066021568905533e-10
 route = "fdm_solve"
-time_s = 0.003017166
+time_s = 0.003026084
 [[tables.solve]]
 dim = 2
 iterations = 0
@@ -1095,7 +1095,7 @@ n = 128
 ndofs = 16384
 rel_residual = 2.9159243952153834e-11
 route = "direct"
-time_s = 0.009373083
+time_s = 0.009546208
 [[tables.solve]]
 dim = 2
 iterations = 10646
@@ -1104,7 +1104,7 @@ n = 256
 ndofs = 65536
 rel_residual = 1.2080956913649667e-8
 route = "assembled"
-time_s = 3.532983125
+time_s = 3.542777291
 [[tables.solve]]
 dim = 2
 iterations = 10634
@@ -1113,25 +1113,25 @@ n = 256
 ndofs = 65536
 rel_residual = 1.2424195534593387e-8
 route = "kronecker"
-time_s = 1.423980875
+time_s = 1.343132291
 [[tables.solve]]
 dim = 2
-iterations = 10655
+iterations = 10633
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
-rel_residual = 1.2348916199062904e-8
+rel_residual = 1.1843196725896663e-8
 route = "matrix_free_serial"
-time_s = 5.20995875
+time_s = 1.6964055
 [[tables.solve]]
 dim = 2
-iterations = 10655
+iterations = 10633
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
-rel_residual = 1.2348916199062904e-8
+rel_residual = 1.1843196725896663e-8
 route = "matrix_free_threaded"
-time_s = 4.313187208
+time_s = 2.102586791
 [[tables.solve]]
 dim = 2
 iterations = 0
@@ -1140,7 +1140,7 @@ n = 256
 ndofs = 65536
 rel_residual = 1.475507032375214e-9
 route = "fdm_solve"
-time_s = 0.016691791
+time_s = 0.015453167
 [[tables.solve]]
 dim = 2
 iterations = 0
@@ -1149,7 +1149,7 @@ n = 256
 ndofs = 65536
 rel_residual = 1.6042545969389015e-10
 route = "direct"
-time_s = 0.046657958
+time_s = 0.042586458
 [[tables.solve]]
 dim = 2
 iterations = 30328
@@ -1158,7 +1158,7 @@ n = 512
 ndofs = 262144
 rel_residual = 7.187534049121831e-8
 route = "assembled"
-time_s = 69.730788833
+time_s = 39.671728417
 [[tables.solve]]
 dim = 2
 iterations = 30335
@@ -1167,25 +1167,25 @@ n = 512
 ndofs = 262144
 rel_residual = 7.048656681002804e-8
 route = "kronecker"
-time_s = 25.342180583
+time_s = 16.464396958
 [[tables.solve]]
 dim = 2
-iterations = 30330
+iterations = 30334
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
-rel_residual = 7.04969863147642e-8
+rel_residual = 6.954691384878896e-8
 route = "matrix_free_serial"
-time_s = 73.385091917
+time_s = 17.802258167
 [[tables.solve]]
 dim = 2
-iterations = 30330
+iterations = 30334
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
-rel_residual = 7.04969863147642e-8
+rel_residual = 6.954691384878896e-8
 route = "matrix_free_threaded"
-time_s = 54.267684208
+time_s = 26.464018375
 [[tables.solve]]
 dim = 2
 iterations = 0
@@ -1194,7 +1194,7 @@ n = 512
 ndofs = 262144
 rel_residual = 1.5735016222584023e-8
 route = "fdm_solve"
-time_s = 0.146319875
+time_s = 0.106034625
 [[tables.solve]]
 dim = 2
 iterations = 0
@@ -1203,7 +1203,7 @@ n = 512
 ndofs = 262144
 rel_residual = 8.962462240083875e-10
 route = "direct"
-time_s = 0.31838625
+time_s = 0.245985625
 [[tables.solve]]
 dim = 3
 iterations = 151
@@ -1212,7 +1212,7 @@ n = 8
 ndofs = 512
 rel_residual = 9.32199286565725e-9
 route = "assembled"
-time_s = 0.000400208
+time_s = 0.000366792
 [[tables.solve]]
 dim = 3
 iterations = 151
@@ -1221,25 +1221,25 @@ n = 8
 ndofs = 512
 rel_residual = 9.198457829518148e-9
 route = "kronecker"
-time_s = 0.000412875
+time_s = 0.000361959
 [[tables.solve]]
 dim = 3
 iterations = 151
 mesh = "non-uniform"
 n = 8
 ndofs = 512
-rel_residual = 8.867621223076144e-9
+rel_residual = 8.763007268548564e-9
 route = "matrix_free_serial"
-time_s = 0.002044709
+time_s = 0.000554042
 [[tables.solve]]
 dim = 3
 iterations = 151
 mesh = "non-uniform"
 n = 8
 ndofs = 512
-rel_residual = 8.867621223076144e-9
+rel_residual = 8.763007268548564e-9
 route = "matrix_free_threaded"
-time_s = 0.002509167
+time_s = 0.001389083
 [[tables.solve]]
 dim = 3
 iterations = 0
@@ -1248,7 +1248,7 @@ n = 8
 ndofs = 512
 rel_residual = 2.0781281075204373e-13
 route = "fdm_solve"
-time_s = 0.000176708
+time_s = 0.000153417
 [[tables.solve]]
 dim = 3
 iterations = 0
@@ -1257,7 +1257,7 @@ n = 8
 ndofs = 512
 rel_residual = 6.545379026797818e-14
 route = "direct"
-time_s = 0.000572167
+time_s = 0.000534458
 [[tables.solve]]
 dim = 3
 iterations = 380
@@ -1266,7 +1266,7 @@ n = 16
 ndofs = 4096
 rel_residual = 9.509337776266595e-9
 route = "assembled"
-time_s = 0.010250208
+time_s = 0.008795542
 [[tables.solve]]
 dim = 3
 iterations = 380
@@ -1275,25 +1275,25 @@ n = 16
 ndofs = 4096
 rel_residual = 9.904245911622582e-9
 route = "kronecker"
-time_s = 0.007330333
+time_s = 0.006125
 [[tables.solve]]
 dim = 3
 iterations = 380
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
-rel_residual = 9.880318081591662e-9
+rel_residual = 9.728213058996648e-9
 route = "matrix_free_serial"
-time_s = 0.037710125
+time_s = 0.00730425
 [[tables.solve]]
 dim = 3
 iterations = 380
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
-rel_residual = 9.880318081591662e-9
+rel_residual = 9.728213058996648e-9
 route = "matrix_free_threaded"
-time_s = 0.028429666
+time_s = 0.0145725
 [[tables.solve]]
 dim = 3
 iterations = 0
@@ -1302,7 +1302,7 @@ n = 16
 ndofs = 4096
 rel_residual = 5.125273743621812e-12
 route = "fdm_solve"
-time_s = 0.000866375
+time_s = 0.000560917
 [[tables.solve]]
 dim = 3
 iterations = 0
@@ -1311,7 +1311,7 @@ n = 16
 ndofs = 4096
 rel_residual = 3.5370665552852837e-13
 route = "direct"
-time_s = 0.0081815
+time_s = 0.005759334
 [[tables.solve]]
 dim = 3
 iterations = 993
@@ -1320,7 +1320,7 @@ n = 32
 ndofs = 32768
 rel_residual = 9.77239637975456e-9
 route = "assembled"
-time_s = 0.315664208
+time_s = 0.181998292
 [[tables.solve]]
 dim = 3
 iterations = 993
@@ -1329,25 +1329,25 @@ n = 32
 ndofs = 32768
 rel_residual = 9.885458680860451e-9
 route = "kronecker"
-time_s = 0.190256958
+time_s = 0.111453916
 [[tables.solve]]
 dim = 3
 iterations = 993
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
-rel_residual = 9.999881844607255e-9
+rel_residual = 9.595038465121347e-9
 route = "matrix_free_serial"
-time_s = 1.002994542
+time_s = 0.127420625
 [[tables.solve]]
 dim = 3
 iterations = 993
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
-rel_residual = 9.999881844607255e-9
+rel_residual = 9.595038465121347e-9
 route = "matrix_free_threaded"
-time_s = 0.47882225
+time_s = 0.152101042
 [[tables.solve]]
 dim = 3
 iterations = 0
@@ -1356,7 +1356,7 @@ n = 32
 ndofs = 32768
 rel_residual = 6.306348048510847e-12
 route = "fdm_solve"
-time_s = 0.004397459
+time_s = 0.002691917
 [[tables.solve]]
 dim = 3
 iterations = 0
@@ -1365,7 +1365,7 @@ n = 32
 ndofs = 32768
 rel_residual = 1.8282562884501393e-12
 route = "direct"
-time_s = 0.21260075
+time_s = 0.1452255
 [[tables.solve]]
 dim = 3
 iterations = 1796
@@ -1374,7 +1374,7 @@ n = 48
 ndofs = 110592
 rel_residual = 9.991251575885269e-9
 route = "assembled"
-time_s = 1.688303708
+time_s = 1.20778525
 [[tables.solve]]
 dim = 3
 iterations = 1795
@@ -1383,25 +1383,25 @@ n = 48
 ndofs = 110592
 rel_residual = 9.971136943191023e-9
 route = "kronecker"
-time_s = 0.865873292
+time_s = 0.625174209
 [[tables.solve]]
 dim = 3
-iterations = 1795
+iterations = 1794
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
-rel_residual = 9.942151607758497e-9
+rel_residual = 9.964374258229792e-9
 route = "matrix_free_serial"
-time_s = 5.17905775
+time_s = 0.732425167
 [[tables.solve]]
 dim = 3
-iterations = 1795
+iterations = 1794
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
-rel_residual = 9.942151607758497e-9
+rel_residual = 9.964374258229792e-9
 route = "matrix_free_threaded"
-time_s = 2.646445167
+time_s = 0.922995708
 [[tables.solve]]
 dim = 3
 iterations = 0
@@ -1410,7 +1410,7 @@ n = 48
 ndofs = 110592
 rel_residual = 2.6775445044992784e-11
 route = "fdm_solve"
-time_s = 0.010509375
+time_s = 0.008886459
 [[tables.solve]]
 dim = 3
 iterations = 0
@@ -1419,7 +1419,7 @@ n = 48
 ndofs = 110592
 rel_residual = 4.868309746463715e-12
 route = "direct"
-time_s = 2.104413375
+time_s = 1.469591834
 [[tables.solve]]
 dim = 3
 iterations = 2753
@@ -1428,7 +1428,7 @@ n = 64
 ndofs = 262144
 rel_residual = 1.0001480109605434e-8
 route = "assembled"
-time_s = 7.176103792
+time_s = 5.086857834
 [[tables.solve]]
 dim = 3
 iterations = 2752
@@ -1437,25 +1437,25 @@ n = 64
 ndofs = 262144
 rel_residual = 1.0000934602351888e-8
 route = "kronecker"
-time_s = 3.537018375
+time_s = 2.368935959
 [[tables.solve]]
 dim = 3
-iterations = 2753
+iterations = 2752
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
-rel_residual = 9.89965066004087e-9
+rel_residual = 9.936042462489643e-9
 route = "matrix_free_serial"
-time_s = 17.975487166
+time_s = 2.672765125
 [[tables.solve]]
 dim = 3
-iterations = 2753
+iterations = 2752
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
-rel_residual = 9.89965066004087e-9
+rel_residual = 9.936042462489643e-9
 route = "matrix_free_threaded"
-time_s = 10.033744666
+time_s = 3.034832125
 [[tables.solve]]
 dim = 3
 iterations = 0
@@ -1464,7 +1464,7 @@ n = 64
 ndofs = 262144
 rel_residual = 5.453738471487181e-11
 route = "fdm_solve"
-time_s = 0.025399541
+time_s = 0.020269416
 [[tables.solve]]
 dim = 3
 iterations = 0
@@ -1473,4 +1473,4 @@ n = 64
 ndofs = 262144
 rel_residual = 1.0530375304575314e-11
 route = "direct"
-time_s = 13.003549083
+time_s = 8.080564

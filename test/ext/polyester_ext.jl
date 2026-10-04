@@ -70,6 +70,15 @@ end
 # allocates (measured at -O1), and a setup taking (grid points per axis, policy) on a
 # non-uniform 2D grid and returning the call to measure, a function reading its result, and
 # the number of multigrid levels (0 elsewhere).
+# The paths that allocate nothing at all under `CpuPolyester` (gpena/Bramble.jl#433): their
+# loops capture only plain arrays and isbits values, so Polyester's argument box stays on the
+# stack. Every other path keeps the 512 B box bound, since its loop captures a form or another
+# struct holding a GC reference (follow-up: gpena/Bramble.jl#437).
+const _PA_ZERO_PATHS = (
+    "difference D₋ₓ!", "average Mₓ!", "avgₕ!", "shift S₊ₓ!", "divₕ!", "curlₕ!", "εₕ!",
+    "broadcast", "innerₕ", "inner₊ₓ", "innerₕ masked", "Kronecker mul!"
+)
+
 # BEGIN _pa paths
 using Bramble: CpuPolyester, CpuSerial, CpuThreaded, change_points!, semidiscretize_rhs,
                allocate_system_matrix, D₋ₓ, inner₊ₓ, S₊ₓ!
@@ -142,14 +151,14 @@ function _pa_paths()
     push!(P,
         ("εₕ!",
             true,
-            2,
+            0,
             (n, p) -> begin
                 W = _pa_space(n, p)
                 u = (Rₕ(W, _pa_g), Rₕ(W, _pa_h))
                 e = ntuple(_ -> ntuple(_ -> similar(u[1]), 2), 2)
                 _pa_case(() -> Bramble.εₕ!(e, u), () -> _pa_flat(e))
             end))
-    push!(P, ("broadcast", true, 1, (n, p) -> begin
+    push!(P, ("broadcast", true, 0, (n, p) -> begin
         W = _pa_space(n, p)
         u = Rₕ(W, _pa_g)
         w = Rₕ(W, x -> x[1])
@@ -215,7 +224,7 @@ function _pa_paths()
             y = similar(b)
             _pa_case(() -> ldiv!(y, Pc, b), () -> copy(y); levels = length(Pc.ops))
         end))
-    push!(P, ("Kronecker mul!", false, 1, (n, p) -> begin
+    push!(P, ("Kronecker mul!", false, 0, (n, p) -> begin
         K = kronecker_operator(_pa_poisson(_pa_space(n, p)))
         x = randn(Xoshiro(4), size(K, 2))
         y = similar(x)
@@ -509,7 +518,8 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
 
     # Per path, a warm CpuPolyester call allocates the same bytes on a small and a large
     # non-uniform grid (a multigrid cycle per coarsening level, since it runs every level's
-    # loops), nothing but `@batch` argument boxes of at most 512 B each, reaches no Threads
+    # loops), nothing but `@batch` argument boxes (0 B on the `_PA_ZERO_PATHS`, at most 512 B
+    # each on the rest), reaches no Threads
     # entry point, and gives the CpuSerial result: bitwise for the operators asserted bitwise
     # elsewhere in this file, to rounding for reductions, assembly and solvers. Silent on a
     # single thread, where `@batch` runs serially.
@@ -529,7 +539,7 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
                 @test bs == bl
                 for case in (small, large)
                     box, other, nval = _pa_allocations(case.call)
-                    @test box <= 512
+                    @test name in _PA_ZERO_PATHS ? box == 0 : box <= 512
                     @test isempty(other)
                     @test nval == nrefs
                 end
@@ -887,6 +897,22 @@ end
 # Broadcast under CpuPolyester equals Serial.
 @testset "broadcast equals Serial, n=$n" for n in _BC357_SIZES
     _bc357_check_equal(n)
+end
+
+# A 0-dimensional array leaf stays inside its `Extruded` when `_batch_broadcast!` hands the
+# tree to `@batch` (`_bc_host_raw`, src/space/vectorelement.jl): bare, it threw on the first
+# call in a session, since `StrideArraysCore` cannot make a `PtrArray` of it. The function
+# is fresh to this testset, so the `CpuPolyester` call below is that broadcast's first.
+@testset "broadcast, 0-dim leaf, equals Serial" begin
+    times0d(a, c) = 2.0 * a * c + 1.0
+    res = map((Serial(), CpuPolyester())) do policy
+        Wₕ = _bc357_space((9, 9), policy)
+        uₕ = Rₕ(Wₕ, x -> sin(3sum(x)) + prod(x))
+        v = similar(uₕ)
+        v .= times0d.(uₕ, fill(1.5))
+        return copy(parent(v))
+    end
+    @test res[2] == res[1]
 end
 
 # Silent on a single thread: there is nothing to band across.
