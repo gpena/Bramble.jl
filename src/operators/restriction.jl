@@ -90,8 +90,7 @@ end
 @inline _rule_component(rule::PointValue, k) = PointValue(pt -> rule.f(pt)[k])
 
 #------------------------------------------------------------------------------------------#
-# Device kernel launch stubs (gpena/Bramble.jl#94, #174, S2.3 of
-# .agents/plans/metal-and-apple-silicon-acceleration.md)
+# Device kernel launch stubs (gpena/Bramble.jl#94, #174)
 #
 # `PointValue`'s side of the `_device_project!`/`_device_scatter_project!` contract
 # (`operators/projection.jl`), keyed on `DeviceLocality` so `project!`'s locality-based
@@ -185,7 +184,7 @@ end
     _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::ScalarGridSpace{D}, sel = nothing) where {D} -> Bool
 
 Fills `raw` with `rule.f` evaluated at every point of the mesh `mesh(sp)`, via a device
-kernel (gpena/Bramble.jl#94, #174, S2.3). The 1D method reads the mesh's own coordinate
+kernel (gpena/Bramble.jl#94, #174). The 1D method reads the mesh's own coordinate
 vector directly; the `D`-dimensional method (`D` here is never `1`, since the method above
 is strictly more specific and wins dispatch for it) builds each point from the `D` per-axis
 coordinate vectors instead. `rule.f` runs on the device either way: see [`_gpu_for!`](@ref)
@@ -308,7 +307,7 @@ end
 
 # `point(Ωₕ, idx)` (src/mesh/mesh1d.jl) is `points(Ωₕ)[idx]`, a scalar `getindex` that
 # `GPUArraysCore` disallows outside a kernel once `points(Ωₕ)` is device-backed
-# (gpena/Bramble.jl#94, #174, S2.3 of .agents/plans/metal-and-apple-silicon-acceleration.md).
+# (gpena/Bramble.jl#94, #174).
 # `Rₕ`/`avgₕ` (never `Rₕ!`/`avgₕ!`) reach this once per call, on the host, purely to sample
 # `f`'s return type -- not a hot path -- so the fix is a single-element array-to-array copy
 # rather than teaching `point` itself about the backend.

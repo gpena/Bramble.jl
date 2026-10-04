@@ -297,7 +297,7 @@ sum(index_in_marker(Ωₕ_marked, :walls)), sum(index_in_marker(Ωₕ_marked, :o
 
 ## Refinement
 
-[`iterative_refinement!`](@ref) inserts a point at every cell midpoint, updating indices and reapplying the domain's markers. Refinement is uniform and dyadic: `N` points become `2N - 1` along every axis.
+[`iterative_refinement!`](@ref) inserts a point at every cell midpoint, updating indices and reapplying the domain's markers. Refinement is uniform and dyadic: `N` points become `2N - 1` along every axis. Above 1D, refine the whole mesh rather than one submesh: `iterative_refinement!(Ωₕ(1))` leaves the mesh's index set and markers sized for the old grid, and `gridspace` refuses it.
 
 ```@raw html
 <figure>

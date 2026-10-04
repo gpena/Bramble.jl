@@ -208,8 +208,7 @@ end
 @inline _rule_component(rule::CellAverage, k) = CellAverage(pt -> rule.f(pt)[k], rule.nq)
 
 #------------------------------------------------------------------------------------------#
-# Device kernel launch stubs (gpena/Bramble.jl#94, #174, S2.3 of
-# .agents/plans/metal-and-apple-silicon-acceleration.md)
+# Device kernel launch stubs (gpena/Bramble.jl#94, #174)
 #
 # `CellAverage`'s side of the `_device_project!`/`_device_scatter_project!` contract
 # (`operators/projection.jl`), keyed on `DeviceLocality` so `project!`'s locality-based
@@ -297,7 +296,7 @@ end
 
 Fills `raw` with the cell average of `rule.f` over every cell of the mesh `mesh(sp)`, via a
 device kernel that calls the same [`_cell_average`](@ref) quadrature the CPU sweep uses
-(gpena/Bramble.jl#94, #174, S2.3) -- the 1D method reads `half_points(Ωₕ)` directly, the
+(gpena/Bramble.jl#94, #174) -- the 1D method reads `half_points(Ωₕ)` directly, the
 `D`-dimensional one (never reached for `D == 1`, since the method above is strictly more
 specific) hands it the per-axis tuple `_cell_average`'s own 2D/3D methods already expect.
 `rule.f` runs on the device either way: see [`_gpu_for!`](@ref) for what that requires of it.

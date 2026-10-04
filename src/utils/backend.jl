@@ -883,7 +883,7 @@ function gpu_backend(T::Type = Float32; policy::ExecutionPolicy = GpuKernel())
     return _throw_no_gpu_backend()
 end
 
-# Kept distinct from `_throw_no_gpu_backend` below on purpose (gpena/Bramble.jl#192, S1.4):
+# Kept distinct from `_throw_no_gpu_backend` below on purpose (gpena/Bramble.jl#192):
 # a functional-device failure is a driver, hardware or virtualisation problem, which no
 # `using` statement fixes, so it must not share a message with the "nothing loaded" case.
 @noinline function _throw_metal_not_functional()

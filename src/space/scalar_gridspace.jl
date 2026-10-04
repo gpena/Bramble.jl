@@ -5,13 +5,13 @@ A lazy, separable weight vector over a `D`-dimensional grid: entry `I` (linear o
 `CartesianIndex{D}`) is ``\\prod_{d=1}^D`` `factors[d][I[d]]`, computed on every access
 rather than stored once for the whole grid.
 
-Every family [`SpaceWeights`](@ref) offers is one of these (gpena/Bramble.jl#115, #234,
-#115 again for the 100³-under-1MB target S6.8 set): `innerh` and each entry of
-`innerplus` are built once, when the space is constructed, from the per-axis `aligned`
-and `cellfactor` factors, and stored on `SpaceWeights` -- so reading them costs no more
-than the field access plus whatever the caller's own indexing does. [`weights`](@ref)`(Wₕ,
-Val(S))` for `|S| ≥ 2` builds a fresh one on every call instead, from those same two
-tuples, since nothing yet asks for the same larger set twice in a hot loop.
+Every family [`SpaceWeights`](@ref) offers is one of these (gpena/Bramble.jl#115, #234;
+under 1 MB of weights on a 100³ mesh): `innerh` and each entry of `innerplus` are built
+once, when the space is constructed, from the per-axis `aligned` and `cellfactor` factors,
+and stored on `SpaceWeights` -- so reading them costs no more than the field access plus
+whatever the caller's own indexing does. [`weights`](@ref)`(Wₕ, Val(S))` for `|S| ≥ 2`
+builds a fresh one on every call instead, from those same two tuples, since nothing yet asks
+for the same larger set twice in a hot loop.
 
 A linear `getindex` converts to a `CartesianIndex` first (one division per axis); a caller
 that already holds the `CartesianIndex` -- an assembly loop over `local_stencil`, for
@@ -237,11 +237,12 @@ true
 ```
 """
 function gridspace(Ωₕ::AbstractMeshType{D}) where {D}
+    _check_submesh_sizes(Ωₕ)
     return _gridspace(Ωₕ, space_weights(Ωₕ))
 end
 
 # Split out so `T`/`VT` are read off `weights`' own concrete type parameters (gpena/Bramble.jl#94,
-# #174, S2.2 of .agents/plans/metal-and-apple-silicon-acceleration.md) rather than from
+# #174) rather than from
 # `backend_types(backend(Ωₕ))`: on a Metal backend, `Backend{VT, MT, EP}`'s own `VT` (e.g.
 # `MtlVector{Float32}`) leaves the storage-mode parameter free, but `vector`/`space_weights`
 # allocate the concretely-typed `MtlVector{Float32, <storage>}` -- a different, invariant type
@@ -257,7 +258,7 @@ end
 @inline __vector(Ωₕ::AbstractMeshType) = vector(backend(Ωₕ), npoints(Ωₕ))
 
 # `innerh`/`innerplus` are lazy `SeparableWeights` for every `D`, including `D = 1`
-# (gpena/Bramble.jl#115, #234, S6.8), rather than one dense `O(n)` vector for one dimension
+# (gpena/Bramble.jl#115, #234), rather than one dense `O(n)` vector for one dimension
 # and a lazy `O(D)`-factor product from `D = 2` on: `SpaceWeights{D, T, VT}` fixes the
 # field type at `SeparableWeights{D, T, VT}` for every `D`, and a second, dense-vector
 # variant of that field would need a further type parameter on `SpaceWeights` (and, since
@@ -438,20 +439,20 @@ end
     )
 end
 
-# --- Host mirror for the form assembly pattern walk (gpena/Bramble.jl#94 S4.0) ------- #
+# --- Host mirror for the form assembly pattern walk (gpena/Bramble.jl#94) ------- #
 #
-# The third instance of one recurring shape (`_probe_point`/`_restriction_eltype` -> S2.3,
-# `spacing`/`forward_spacing` -> S2.10's `host_spacings`, this one): a host-side accessor
+# The third instance of one recurring shape (`_probe_point`/`_restriction_eltype`,
+# `spacing`/`forward_spacing` with its `host_spacings`, and this one): a host-side accessor
 # left alone when the layer below it landed, blocking the next layer up.
 # `_pattern_size_hint`/`allocate_system_matrix` (`form/bilinear_pattern.jl`) walk a form's
 # AST through `local_stencil`, which reads a `ScalarGridSpace` through `weights(space,
 # ...)[i]` (`SeparableWeights`'s `getindex` -> `__prod` just below) for an `innerₕ`/
 # `inner₊*` node, and through `spacing`/`forward_spacing`
 # (`mesh(space)`, `mesh/mesh1d.jl`) for a difference/average/jump node
-# (`operators/difference.jl` and siblings). Both scalar-index a device array, and
-# neither `operators/inner.jl` nor `operators/difference.jl`/`mesh/mesh1d.jl` is
-# owned by this subplan, so the fix has to happen at the pattern walk's own call site
-# instead of inside either accessor.
+# (`operators/difference.jl` and siblings). Both scalar-index a device array. Every host
+# caller reads those accessors (`operators/inner.jl`, `operators/difference.jl`,
+# `mesh/mesh1d.jl`) one point at a time, so the fix happens once, at the pattern walk's own
+# call site, instead of inside either accessor.
 #
 # `host_weights` hands that walk a host-resident mirror of the *whole* space it would
 # otherwise scalar-index -- mesh included, not only the weight vectors the name might
@@ -512,7 +513,7 @@ end
     host_weights(w::SeparableWeights) -> SeparableWeights
 
 Return a host-resident mirror of `Wₕ`/`w`, one bulk transfer per underlying array rather
-than one scalar read per grid point (gpena/Bramble.jl#94 S4.0, #310).
+than one scalar read per grid point (gpena/Bramble.jl#94, #310).
 
 On a `ScalarGridSpace`, mesh and weights alike come along: [`allocate_system_matrix`](@ref)'s
 sparsity-pattern walk evaluates a form's AST through `local_stencil` and so reads both this
@@ -524,7 +525,7 @@ owns; `Array(w)` calls this first and then forms the tensor product on the host.
 
 A no-op on a space or weight that already lives on the host: `host_weights(Wc) === Wc` /
 `host_weights(w) === w`, not a copy, the same guarantee [`host_spacings`](@ref) gives on a
-CPU mesh (S2.10's own fixed bug -- `Array(v) === v` is `false` for a `Vector`, so a
+CPU mesh (a bug `host_spacings` once had -- `Array(v) === v` is `false` for a `Vector`, so a
 copy-on-host would silently repeat it here).
 
 See also: [`host_spacings`](@ref), [`weights`](@ref), [`SeparableWeights`](@ref).
@@ -617,8 +618,7 @@ function _innerh_weights!(u::Array, Ωₕ::AbstractMeshType{1})
     return nothing
 end
 
-# Device counterpart (gpena/Bramble.jl#94, #174, S2.2 of
-# .agents/plans/metal-and-apple-silicon-acceleration.md): `cell_measure(Ωₕ, i)` is
+# Device counterpart (gpena/Bramble.jl#94, #174): `cell_measure(Ωₕ, i)` is
 # `_apply_hs_logic(half_spacing(Ωₕ, i))` (src/mesh/mesh1d.jl:292-296), the same formula at
 # every index with no boundary special case, so it needs no `@kernel` of its own -- it is
 # `_apply_hs_logic` broadcast over the mesh's own `half_spacings` vector, which dispatches
@@ -628,7 +628,7 @@ function _innerh_weights!(u::AbstractVector, Ωₕ::AbstractMeshType{1})
     return nothing
 end
 
-# No longer called by `space_weights` for `D ≥ 2` (gpena/Bramble.jl#115, S6.8): the
+# No longer called by `space_weights` for `D ≥ 2` (gpena/Bramble.jl#115): the
 # `SeparableWeights` `innerh` there is `cellfactor` itself, needing no full-grid fill.
 # Kept as the tested, directly-callable building block it always was.
 function _innerh_weights!(u, Ωₕ::AbstractMeshType{D}) where {D}

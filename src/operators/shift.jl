@@ -60,7 +60,7 @@ See also: [`shift`](@ref)
     fill(one(T), nz)))
 # The generic fallback (gpena/Bramble.jl#94): `nz` scalar `setindex!` calls straight into a
 # device array error outright under Metal.jl's scalar-indexing guard, rather than merely
-# running slowly -- measured, not assumed, in the plan's S2.6 subplan. Built on the host,
+# running slowly -- measured on a Metal device, not assumed. Built on the host,
 # where `setindex!` is a plain memory write, and handed to `MT` in one `copyto!` instead.
 function _shift_ones(::Type{MT}, npts::Int, i::Int, nz::Int) where {T, MT <: AbstractMatrix{T}}
     host = zeros(T, npts, npts)
@@ -175,11 +175,12 @@ family (gpena/Bramble.jl#185): `op` is one of the public per-axis aliases (`D₋
 `M₂`, ...) and this returns the same matrix built the old way, out of [`shift`](@ref) and
 its combinations (`difference_shift`, `add_half_shift`).
 
-Kept as the retained oracle [`stencil_matrix`](@ref) is checked against, per the plan's own
-departure note on gpena/Bramble.jl#185: the equality test needs an independent
-construction, not a deprecated one. Declared here; a dispatch method is added next to each
-family's own implementation (`difference.jl`, `average.jl`, `jump.jl`), mapping its public
-aliases to the `_kron_*` construction that family kept.
+Kept, rather than removed with the rest of the Kronecker construction
+(gpena/Bramble.jl#185), as the oracle [`stencil_matrix`](@ref) is checked against: the
+equality test needs an independent construction, not a deprecated one. Declared here; a
+dispatch method is added next to each family's own implementation (`difference.jl`,
+`average.jl`, `jump.jl`), mapping its public aliases to the `_kron_*` construction that
+family kept.
 """
 function kronecker_operator_matrix end
 

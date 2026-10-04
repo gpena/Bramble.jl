@@ -442,15 +442,15 @@ end
 # the per-axis factors directly instead of dividing by each axis length in turn.
 #
 # No separate `CpuPolyester` override is needed here: `inner₊(uₕ, vₕ, Val(S))` calls the
-# policy-dispatched `_dot`/`_dot_masked(policy, u, v, w[, mask])` (S7.1,
-# `src/utils/linear_algebra.jl`), whose `CpuSerial` method falls through to the plain
+# policy-dispatched `_dot`/`_dot_masked(policy, u, v, w[, mask])`
+# (`src/utils/linear_algebra.jl`), whose `CpuSerial` method falls through to the plain
 # three/four-argument methods below -- where ordinary dispatch on the weight argument's
 # runtime type reaches this specialization -- and whose `CpuThreaded` method likewise falls
 # through to `_threaded_dot`/`_threaded_dot_masked`, reaching the `CpuThreaded`
-# specializations of those two names declared further below (gpena/Bramble.jl#301 S2.2)
+# specializations of those two names declared further below (gpena/Bramble.jl#301)
 # rather than the dense `_threaded_dot`/`_threaded_dot_masked` in `src/utils/linear_algebra.jl`.
 # Its `CpuPolyester` method calls `_batch_dot`/`_batch_dot_masked` directly, before the
-# weight's type is ever consulted, so a `CpuPolyester` policy reaches S7.1's Polyester hook
+# weight's type is ever consulted, so a `CpuPolyester` policy reaches the Polyester hook
 # (or its "not loaded" error) regardless of whether the weight is dense or a
 # `SeparableWeights`, never this loop.
 @inline function _dot(
@@ -511,8 +511,8 @@ end
     return s
 end
 
-# `CpuThreaded` specializations of the three serial methods above (gpena/Bramble.jl#301 S2.2,
-# #288). `_dot`/`_dot_masked(policy, u, w, v[, mask])` (S7.1, `src/utils/linear_algebra.jl`)
+# `CpuThreaded` specializations of the three serial methods above (gpena/Bramble.jl#301,
+# #288). `_dot`/`_dot_masked(policy, u, w, v[, mask])` (`src/utils/linear_algebra.jl`)
 # dispatch `CpuThreaded` to `_threaded_dot`/`_threaded_dot_masked`, and ordinary dispatch on
 # the weight argument's runtime type reaches these rather than the dense
 # `_threaded_dot(u::AbstractVector, v::AbstractVector, w::AbstractVector)` in
@@ -678,9 +678,8 @@ end
     return s
 end
 
-# Device counterparts of the three specializations above (gpena/Bramble.jl#94, #174, S2.5 of
-# .agents/plans/metal-and-apple-silicon-acceleration.md). A device-backed space's
-# `SeparableWeights.factors` are themselves device arrays (S2.2), so the
+# Device counterparts of the three specializations above (gpena/Bramble.jl#94, #174).
+# A device-backed space's `SeparableWeights.factors` are themselves device arrays, so the
 # `CartesianIndices`/scalar-`getindex` walk above would scalar-index the device once per
 # grid point -- not merely slow, an error under `GPUArrays`' default scalar-indexing guard.
 #
@@ -690,7 +689,7 @@ end
 # factors together broadcasts out to the full `dims` shape, exactly `SeparableWeights`'s own
 # `__prod`, computed once for the whole grid instead of once per point. `reshape(u, dims)`
 # is a view, not a copy, so the reduction below is one `GPUArrays` `sum` over a broadcasted
-# expression (S2.5 notes: reductions need no kernel).
+# expression: reductions need no kernel.
 @inline function _separable_weights_full(w::SeparableWeights{D}) where {D}
     dims = w.dims
     shaped = ntuple(D) do d
@@ -1240,8 +1239,8 @@ end
                                                                           _sum_dirs(
     data, space, Ωₕ, li, Val(d - 1), Val(D))
 
-# Device counterpart of `_seminorm_sq_along`/`_sum_dirs` above (gpena/Bramble.jl#94, #174,
-# S2.5): `data`, `h` and `w`'s factors are all device arrays for a device-backed space, so
+# Device counterpart of `_seminorm_sq_along`/`_sum_dirs` above (gpena/Bramble.jl#94, #174):
+# `data`, `h` and `w`'s factors are all device arrays for a device-backed space, so
 # the scalar `@inbounds @simd` walk above would scalar-index the device once per grid
 # point. `_seminorm_sq_along_device` reshapes `data` to the grid's own `dims` and takes the
 # backward difference along axis `d` as one strided slice minus another -- exactly the
