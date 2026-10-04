@@ -3,8 +3,8 @@ module TestFormKronecker
 using Test
 using Bramble
 using Bramble: is_separable, kronecker_operator, KroneckerLinearOperator
-using LinearAlgebra: Diagonal, issymmetric, mul!
-using SparseArrays: SparseMatrixCSC, sparse
+using LinearAlgebra: Diagonal, issymmetric, kron, mul!
+using SparseArrays: SparseMatrixCSC, sparse, spdiagm
 using Random
 using LinearSolve: LinearProblem, solve, KrylovJL_CG
 using ForwardDiff
@@ -192,9 +192,9 @@ end
         @test any(t -> t.line isa Bramble._KronTridiag, K.terms)
         terms = map(K.terms) do t
             line = t.line isa Bramble._KronTridiag ? t.factors[1] : t.line
-            Bramble.KroneckerTerm{2, typeof(t.scales), typeof(t.factors), typeof(line)}(
-                t.scales, t.factors, line
-            )
+            Bramble.KroneckerTerm{
+                2, typeof(t.scales), typeof(t.factors), typeof(line), typeof(t.rows)
+            }(t.scales, t.factors, line, t.rows, t.symmetric)
         end
         Kcsc = KroneckerLinearOperator{eltype(K), 2, typeof(terms)}(terms, K.dims, K.n)
         x = rand(size(K, 1))
@@ -255,7 +255,7 @@ end
     # Hand-built terms reach what `kronecker_operator` never builds from a valid form: a
     # one-point axis 1 with a finite difference factor (a collapsed axis has zero spacing,
     # so the factor it assembles is `NaN`), a plain-vector mass diagonal, and a term with
-    # two non-diagonal factors.
+    # two non-diagonal factors on one-point-wide axes.
     @testset "fused mul!: hand-built factors" begin
         Random.seed!(KRON_SEED + 7)
         Ωc = mesh(domain(interval(0.5, 0.5) × interval(0.0, 1.0)), (1, 9), (true, false))
@@ -270,19 +270,118 @@ end
         hy = collect(Km.terms[1].factors[2].diag)
         S1 = sparse([3.0;;])
         Dy = Diagonal(hy)
-        line = Bramble._kron_line_operator(S1)
-        @test line isa Bramble._KronTridiag
-        factors = (S1, Dy)
-        term = Bramble.KroneckerTerm{2, Tuple{}, typeof(factors), typeof(line)}((), factors, line)
+        term = Bramble._kron_term((), (S1, Dy))
+        @test term.line isa Bramble._KronTridiag
         K1 = KroneckerLinearOperator{Float64, 2, Tuple{typeof(term)}}((term,), (1, 9), 9)
         @test isapprox(K1 * x, 3.0 .* hy .* x; rtol = 1e-12, atol = 1e-12)
 
-        # Two sparse factors in one term: refused when applied.
+        # Two sparse factors on axes 2 and 3 over a two-point axis 1, and a one-point axis 1
+        # under two sparse factors with a tridiagonal axis-1 sweep.
         S2 = sparse([2.0 -1.0; -1.0 2.0])
         f3 = (Diagonal([1.0, 2.0]), S2, S2)
-        t3 = Bramble.KroneckerTerm{3, Tuple{}, typeof(f3), Nothing}((), f3, nothing)
+        t3 = Bramble._kron_term((), f3)
         K3 = KroneckerLinearOperator{Float64, 3, Tuple{typeof(t3)}}((t3,), (2, 2, 2), 8)
-        @test_throws "more than one non-diagonal factor" K3 * ones(8)
+        x8 = rand(8)
+        @test isapprox(K3 * x8, kron(S2, S2, sparse(f3[1])) * x8; rtol = 1e-12, atol = 1e-12)
+        f1 = (S1, S2, S2)
+        t1 = Bramble._kron_term((Ref(-2.0),), f1)
+        @test t1.line isa Bramble._KronTridiag
+        K1b = KroneckerLinearOperator{Float64, 3, Tuple{typeof(t1)}}((t1,), (1, 2, 2), 4)
+        x4 = rand(4)
+        @test isapprox(K1b * x4, -2.0 * (kron(S2, S2, S1) * x4); rtol = 1e-12, atol = 1e-12)
+    end
+
+    # The line kernels index under `@inbounds`, so sizes are checked at construction: a
+    # non-square factor is refused by `_kron_term`, a factor that does not match the grid
+    # (or `n != prod(dims)`) by the operator constructor, with or without a policy.
+    @testset "Kronecker: size checks" begin
+        I3 = sparse([2.0 -1 0; -1 2 -1; 0 -1 2])
+        rect = sparse([1.0 0 0 0; 0 1 0 0; 0 0 0 1])
+        @test_throws ArgumentError Bramble._kron_term((), (I3, rect))
+        @test_throws "axis-2 factor is 3 × 4" Bramble._kron_term((), (I3, rect))
+        t = Bramble._kron_term((), (I3, Diagonal([1.0, 2.0, 3.0])))
+        T = Tuple{typeof(t)}
+        @test_throws DimensionMismatch KroneckerLinearOperator{Float64, 2, T}((t,), (3, 4), 12)
+        @test_throws "axis-1 factor is 3 × 3" KroneckerLinearOperator{Float64, 2, T}(
+            (t,), (4, 3), 12)
+        @test_throws DimensionMismatch KroneckerLinearOperator{Float64, 2, T}((t,), (3, 3), 10)
+        @test_throws DimensionMismatch KroneckerLinearOperator{
+            Float64, 2, T, Bramble.CpuThreaded}((t,), (3, 4), 12, Bramble.CpuThreaded())
+        @test_throws DimensionMismatch KroneckerLinearOperator{Float64, 3, T}(
+            (t,), (3, 3, 1), 9)
+        @test KroneckerLinearOperator{Float64, 2, T}((t,), (3, 3), 9) * ones(9) ≈
+              kron(Diagonal([1.0, 2.0, 3.0]), I3) * ones(9)
+    end
+
+    # An empty axis 1 under a symmetric (so tridiagonal-stored) 0 × 0 factor: every line has
+    # `m = 0` points and must write nothing. `x` and `y` are empty views into padded
+    # buffers, so a kernel writing or reading past them (under `@inbounds`) changes the
+    # padding instead of going unnoticed.
+    @testset "Kronecker: empty axis 1" begin
+        for f2 in (Diagonal([1.0, 2.0]), sparse([1.0 2; 3 4]))
+            t = Bramble._kron_term((), (sparse(zeros(0, 0)), f2))
+            @test t.line isa Bramble._KronTridiag
+            K = KroneckerLinearOperator{Float64, 2, Tuple{typeof(t)}}((t,), (0, 2), 0)
+            xb = fill(NaN, 3)
+            yb = fill(7.0, 3)
+            y = view(yb, 2:1)
+            @test isempty(mul!(y, K, view(xb, 2:1)))
+            @test isempty(mul!(y, K, view(xb, 2:1), 2.0, 1.0))
+            @test yb == fill(7.0, 3)
+            @test size(K * Float64[]) == (0,)
+        end
+    end
+
+    # `_kron_term` stores a non-symmetric factor's rows as the CSC of its transpose, so the
+    # line kernels gather rows without assuming symmetry, and a term may carry any number of
+    # non-diagonal factors. Oracle: an explicit `kron` of the same factors, last axis
+    # leftmost. Every axis-1 kernel (diagonal, tridiagonal sweep, row gather) meets one and
+    # two neighbour axes; serial and threaded agree bit for bit, and serial allocates 0 B.
+    @testset "Kronecker: general factors" begin
+        rng = Random.MersenneTwister(KRON_SEED + 9)
+        band(m, lo, hi) = spdiagm((k => randn(rng, m - abs(k)) for k in (-lo):hi)...)
+        symtri(m) = (B = band(m, 1, 0); B + B')
+        dg(m) = Diagonal(rand(rng, m) .+ 0.5)
+        coeff(s) = prod(c -> c isa Ref ? c[] : c, s; init = 1.0)
+        oracle(specs) = sum(coeff(s) * kron(map(sparse, reverse(f))...) for (s, f) in specs)
+        cases = (
+            (6, 5) => ((((), (band(6, 1, 1), band(5, 2, 1))), ((), (dg(6), band(5, 0, 2))),
+                ((), (band(6, 0, 1), dg(5))))),
+            (6, 5) => ((((2.0,), (symtri(6), band(5, 1, 0))),)),
+            (5, 4, 6) => ((((), (dg(5), band(4, 1, 1), band(6, 1, 2))),)),
+            (5, 4, 6) => ((((), (symtri(5), band(4, 1, 0), band(6, 0, 1))),)),
+            (5, 4, 6) => ((((Ref(0.5),), (band(5, 2, 0), band(4, 1, 1), Matrix(band(6, 1, 1)))),
+                ((), (dg(5), dg(4), dg(6))))),
+            (5, 4, 6) => ((((), (symtri(5), symtri(4), dg(6))),))
+        )
+        for (dims, specs) in cases
+            terms = map(sp -> Bramble._kron_term(sp[1], sp[2]), specs)
+            A = oracle(specs)
+            N = prod(dims)
+            D = length(dims)
+            Ks, Kt = (KroneckerLinearOperator{Float64, D, typeof(terms), typeof(P)}(
+                          terms, dims, N, P) for P in (Bramble.CpuSerial(), Bramble.CpuThreaded()))
+            x = randn(rng, N)
+            y0 = randn(rng, N)
+            y = mul!(fill(NaN, N), Ks, x)
+            @test isapprox(y, A * x; rtol = 1e-12, atol = 1e-12)
+            y5 = mul!(copy(y0), Ks, x, 0.5, -3.0)
+            @test isapprox(y5, 0.5 * (A * x) - 3.0 * y0; rtol = 1e-12, atol = 1e-12)
+            @test mul!(fill(NaN, N), Kt, x) == y
+            @test mul!(copy(y0), Kt, x, 0.5, -3.0) == y5
+            @test issymmetric(Ks) == issymmetric(Matrix(A))
+            _kron_alloc_no_scratch(y, Ks, x)
+            _kron_alloc5_no_scratch(y5, Ks, x, 0.5, -3.0)
+            @test _kron_alloc_no_scratch(y, Ks, x) == 0
+            @test _kron_alloc5_no_scratch(y5, Ks, x, 0.5, -3.0) == 0
+            for (t, (_, f)) in zip(terms, specs), d in 1:D
+
+                f[d] isa Diagonal && continue
+                R = sparse(f[d])
+                @test sparse(t.rows[d]) == (issymmetric(R) ? R : sparse(transpose(R)))
+                @test !(issymmetric(R) && f[d] isa SparseMatrixCSC) || t.rows[d] === f[d]
+            end
+        end
     end
 
     # LinearSolve agreement (SPD, no Dirichlet).
@@ -312,39 +411,62 @@ end
         @test isapprox(A * sol_K.u, b; rtol = 1e-6, atol = 1e-8)
     end
 
-    # The 0 B above is measured under the default (serial) policy only. `CpuThreaded()` runs
-    # the lines serially too and must stay at 0 B; `CpuPolyester`'s are tested in
-    # test/ext/polyester_ext.jl. Graded meshes, small and large, 2D and 3D, 3- and 5-argument
-    # `mul!`, each measured after a warm call.
-    @testset "Kronecker: zero bytes per policy" begin
-        for P in (Bramble.CpuSerial(), Bramble.CpuThreaded()),
-            n in ((9, 7), (257, 257), (6, 5, 4), (33, 33, 33))
-
-            @testset "$P $(join(n, '×'))" begin
-                W = _kron_graded_space(n, backend(; policy = P))
-                a = form(W, W, (u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)))
-                K = kronecker_operator(a)
-                @test K.policy === P
-                A = assemble(a)
-                N = ndofs(W)
-                x = rand(N)
-                y = similar(x)
-                y0 = rand(N)
-                s = (zeros(N), zeros(N))
-                mul!(y, K, x)
-                @test isapprox(y, A * x; rtol = 1e-12, atol = 1e-12)
-                y5 = copy(y0)
-                mul!(y5, K, x, 0.5, -3.0)
-                @test isapprox(y5, 0.5 * (A * x) - 3.0 * y0; rtol = 1e-12, atol = 1e-12)
-                _kron_alloc_no_scratch(y, K, x)
-                @test _kron_alloc_no_scratch(y, K, x) == 0
-                _kron_alloc_with_scratch(y, K, x, s)
-                @test _kron_alloc_with_scratch(y, K, x, s) == 0
-                _kron_alloc5_no_scratch(y5, K, x, 0.5, -3.0)
-                @test _kron_alloc5_no_scratch(y5, K, x, 0.5, -3.0) == 0
-                _kron_alloc5_with_scratch(y5, K, x, 0.5, -3.0, s)
-                @test _kron_alloc5_with_scratch(y5, K, x, 0.5, -3.0, s) == 0
+    # The 0 B above is measured under the default (serial) policy only. `CpuSerial()` must
+    # stay at 0 B; `CpuThreaded()` runs the lines in one `:static` threaded loop, whose task
+    # launches cost a constant number of bytes, the same on every grid (and 0 B would mean
+    # the lines did not thread); `CpuPolyester`'s are tested in test/ext/polyester_ext.jl.
+    # Graded meshes, small and large, 2D and 3D, 3- and 5-argument `mul!`, each measured
+    # after a warm call; the threaded product must equal the serial one bit for bit, also
+    # when called from inside a user's `Threads.@threads` loop.
+    @testset "Kronecker: warm bytes per policy" begin
+        kform(W) = form(W, W, (u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)))
+        for P in (Bramble.CpuSerial(), Bramble.CpuThreaded())
+            bytes = Dict{Tuple, Int}()
+            for n in ((9, 7), (257, 257), (6, 5, 4), (33, 33, 33))
+                @testset "$P $(join(n, '×'))" begin
+                    W = _kron_graded_space(n, backend(; policy = P))
+                    a = kform(W)
+                    K = kronecker_operator(a)
+                    @test K.policy === P
+                    Ks = kronecker_operator(kform(_kron_graded_space(n, backend())))
+                    @test Ks.policy === Bramble.CpuSerial()
+                    A = assemble(a)
+                    N = ndofs(W)
+                    x = rand(N)
+                    y = similar(x)
+                    y0 = rand(N)
+                    s = (zeros(N), zeros(N))
+                    mul!(y, K, x)
+                    @test isapprox(y, A * x; rtol = 1e-12, atol = 1e-12)
+                    @test y == mul!(similar(x), Ks, x)
+                    y5 = copy(y0)
+                    mul!(y5, K, x, 0.5, -3.0)
+                    @test isapprox(y5, 0.5 * (A * x) - 3.0 * y0; rtol = 1e-12, atol = 1e-12)
+                    @test y5 == mul!(copy(y0), Ks, x, 0.5, -3.0)
+                    yn = [fill(NaN, N) for _ in 1:4]
+                    Threads.@threads :static for k in 1:4
+                        mul!(yn[k], K, x)
+                    end
+                    @test all(==(y), yn)
+                    _kron_alloc_no_scratch(y, K, x)
+                    b3 = _kron_alloc_no_scratch(y, K, x)
+                    _kron_alloc_with_scratch(y, K, x, s)
+                    b3s = _kron_alloc_with_scratch(y, K, x, s)
+                    _kron_alloc5_no_scratch(y5, K, x, 0.5, -3.0)
+                    b5 = _kron_alloc5_no_scratch(y5, K, x, 0.5, -3.0)
+                    _kron_alloc5_with_scratch(y5, K, x, 0.5, -3.0, s)
+                    b5s = _kron_alloc5_with_scratch(y5, K, x, 0.5, -3.0, s)
+                    bytes[n] = b3
+                    if P isa Bramble.CpuSerial
+                        @test b3 == b3s == b5 == b5s == 0
+                    elseif Threads.nthreads() > 1
+                        @test b3 > 0 && b3s > 0 && b5 > 0 && b5s > 0
+                    end
+                end
             end
+            # Constant in grid size: a large grid allocates no more than a small one.
+            @test bytes[(257, 257)] <= bytes[(9, 7)]
+            @test bytes[(33, 33, 33)] <= bytes[(6, 5, 4)]
         end
     end
 

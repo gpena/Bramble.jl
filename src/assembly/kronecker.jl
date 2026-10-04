@@ -143,21 +143,53 @@ end
 # --- KroneckerTerm: one addend's per-axis factors ------------------------------------ #
 
 """
-    KroneckerTerm{D, S <: Tuple, F <: Tuple, L}
+    KroneckerTerm{D, S <: Tuple, F <: Tuple, L, R}
 
 One separable addend's `D` one-dimensional factor matrices and the (possibly still-`Ref`)
 scalar coefficients multiplying it: [`KroneckerLinearOperator`](@ref)'s building block, not
-exported. `factors[d]` is either the assembled 1D difference matrix on the touched axis or
-the diagonal mass matrix on every other axis, in the order [`kronecker_operator`](@ref)
-built them; `scales` is read at `mul!` time through `_kron_coeff` so a `Ref` coefficient
-stays live, matching a `BilinearForm`'s own contract. `line` is the host `mul!`'s own copy
-of a sparse axis-1 factor (see `_kron_line_operator`), `nothing` for every other term and
-on a device-backed operator.
+exported. Build one with `_kron_term`, never directly. `factors[d]` is the axis-`d` factor
+(a `Diagonal`, or any other matrix), in the order the caller gave them; `scales` is read at
+`mul!` time through `_kron_coeff` so a `Ref` coefficient stays live, matching a
+`BilinearForm`'s own contract. The host `mul!` reads only `rows` and `line`: `rows[d]` is
+`factors[d]` itself when it is a `Diagonal` or a symmetric `SparseMatrixCSC`, and otherwise
+a CSC of its transpose (column `i` of `rows[d]` is row `i` of the factor); `line` is the
+axis-1 factor as the line kernels apply it (see `_kron_line_operator`). `symmetric` records
+whether every factor is exactly symmetric. On a device-backed operator `line` and `rows`
+are `nothing`.
 """
-struct KroneckerTerm{D, S <: Tuple, F <: Tuple, L}
+struct KroneckerTerm{D, S <: Tuple, F <: Tuple, L, R}
     scales::S
     factors::F
     line::L
+    rows::R
+    symmetric::Bool
+end
+
+# A factor's rows as the host kernels gather them: a `Diagonal` as it is, a symmetric CSC
+# factor as itself (column `i` is row `i`), any other factor as a CSC of its transpose.
+_kron_rows(F::Diagonal, ::Bool) = F
+_kron_rows(F::SparseMatrixCSC, sym::Bool) = sym ? F : copy(transpose(F))
+_kron_rows(F::AbstractMatrix, sym::Bool) = _kron_rows(sparse(F), sym)
+
+"""
+    _kron_term(scales::Tuple, factors::NTuple{D, AbstractMatrix}) -> KroneckerTerm{D}
+
+The one way to build a host [`KroneckerTerm`](@ref): `scales` times the Kronecker product
+of `factors` (axis 1 first). Each factor is checked for exact symmetry once; a non-diagonal
+factor that is not symmetric gets its rows stored as the CSC of its transpose, so the host
+kernel gathers row `i` without assuming symmetry, and a symmetric tridiagonal axis-1 factor
+becomes a `_KronTridiag`. Any number of factors may be non-diagonal.
+"""
+function _kron_term(scales::Tuple, factors::NTuple{D, AbstractMatrix}) where {D}
+    for d in 1:D
+        size(factors[d], 1) == size(factors[d], 2) || _throw_kron_nonsquare(d, size(factors[d]))
+    end
+    sym = map(F -> F isa Diagonal || issymmetric(F), factors)
+    rows = map(_kron_rows, factors, sym)
+    line = _kron_line_operator(rows[1], sym[1])
+    return KroneckerTerm{D, typeof(scales), typeof(factors), typeof(line), typeof(rows)}(
+        scales, factors, line, rows, all(sym)
+    )
 end
 
 """
@@ -167,9 +199,9 @@ A matrix-free linear operator for a separable [`BilinearForm`](@ref) (see
 [`is_separable`](@ref)): the sum, over its terms, of a Kronecker product of `D`
 one-dimensional factor matrices, applied in one fused pass over the grid
 (`LinearAlgebra.mul!(y, K, x)`, or the five-argument `mul!(y, K, x, α, β)` computing
-`α * K * x + β * y`) rather than ever materialising the `D`-dimensional matrix: every term
-has at most one non-diagonal factor, so each entry of `y` is its own term-weighted
-combination of `x` at that grid point and its neighbours along each axis, written once.
+`α * K * x + β * y`) rather than ever materialising the `D`-dimensional matrix: each entry
+of `y` is its own term-weighted combination of `x` at that grid point and its neighbours
+along the axes where a term's factor is not diagonal, written once.
 For a `200^3` mesh the factors together hold `O(200)` numbers per axis instead of the
 assembled matrix's `O(200^3)` stored entries.
 
@@ -190,9 +222,11 @@ ignored.
 
 `P` is the execution policy of the space the operator was built on
 (`execution_policy(backend(trial_space(a)))`), kept as the `policy` field. On the host, a
-[`CpuPolyester`](@ref) operator runs the grid lines along axis 1 as `Polyester.@batch` tasks
-(`using Polyester` required); every other policy runs them serially. Each line writes its
-own slice of `y`, so both give the same result bit for bit. An operator built directly from
+[`CpuThreaded`](@ref) operator runs the grid lines along axis 1 in one contiguous chunk per
+thread under `Threads.@threads :static` (serially when nested in a threaded loop), a
+[`CpuPolyester`](@ref) one as `Polyester.@batch` tasks (`using Polyester` required); every
+other policy runs them serially. Each line writes its own slice of `y`, so all give the same
+result bit for bit. An operator built directly from
 its terms, `KroneckerLinearOperator{T, D, TermsT}(terms, dims, n)`, is [`CpuSerial`](@ref).
 
 On a device-backed form (gpena/Bramble.jl#323) the factors are built on the host and then
@@ -212,6 +246,42 @@ struct KroneckerLinearOperator{T, D, TermsT <: Tuple, P <: ExecutionPolicy} <: A
     dims::NTuple{D, Int}
     n::Int
     policy::P
+    # The line kernels index under `@inbounds`, trusting that every axis-`d` factor is
+    # `dims[d] × dims[d]` and that `n == prod(dims)`: checked here, once, not in `mul!`.
+    function KroneckerLinearOperator{T, D, TermsT, P}(
+            terms, dims, n, policy
+    ) where {T, D, TermsT <: Tuple, P <: ExecutionPolicy}
+        n == prod(dims) || _throw_kron_size(n, dims)
+        foreach(t -> _kron_check_factors(t.factors, dims), terms)
+        return new{T, D, TermsT, P}(terms, dims, n, policy)
+    end
+end
+
+@noinline function _throw_kron_nonsquare(d::Int, sz)
+    throw(ArgumentError("_kron_term: the axis-$d factor is $(sz[1]) × $(sz[2]); every " *
+                        "Kronecker factor must be square."))
+end
+
+@noinline function _throw_kron_size(n, dims)
+    throw(DimensionMismatch("KroneckerLinearOperator: n = $n does not equal prod(dims) = " *
+                            "$(prod(dims)) for dims = $dims."))
+end
+
+@noinline function _throw_kron_factor_size(d::Int, sz, m)
+    throw(DimensionMismatch("KroneckerLinearOperator: a term's axis-$d factor is " *
+                            "$(sz[1]) × $(sz[2]), but the grid has $m points along axis $d."))
+end
+
+# Every factor `d` of one term is `dims[d] × dims[d]`.
+function _kron_check_factors(factors::Tuple, dims::Tuple)
+    length(factors) == length(dims) ||
+        throw(DimensionMismatch("KroneckerLinearOperator: a term has $(length(factors)) " *
+                                "factors for a $(length(dims))-dimensional grid."))
+    for d in eachindex(dims)
+        sz = _kron_factor_size(factors[d])
+        sz == (dims[d], dims[d]) || _throw_kron_factor_size(d, sz, dims[d])
+    end
+    return nothing
 end
 
 # Without a policy the operator runs serially: what every operator did before the policy was
@@ -320,9 +390,7 @@ function kronecker_operator(a::BilinearForm{D}) where {D}
                 Diagonal(mass_vecs[d])
             end
         end
-        sfactors = map(F -> _kron_to_storage(locality(be), be, F), factors)
-        line = _kron_line_operator(sfactors[1])
-        KroneckerTerm{D, typeof(scales), typeof(sfactors), typeof(line)}(scales, sfactors, line)
+        _kron_to_storage(locality(be), be, _kron_term(scales, factors))
     end
 
     dims = ndofs(Wu, Tuple)
@@ -377,6 +445,15 @@ function _kron_to_storage(::DeviceLocality, be, F::SparseMatrixCSC)
     )
 end
 
+# A host term's factors moved to the device; the host kernels' `line` and `rows` stay
+# behind.
+function _kron_to_storage(loc::DeviceLocality, be, t::KroneckerTerm{D}) where {D}
+    F = map(f -> _kron_to_storage(loc, be, f), t.factors)
+    return KroneckerTerm{D, typeof(t.scales), typeof(F), Nothing, Nothing}(
+        t.scales, F, nothing, nothing, t.symmetric
+    )
+end
+
 @noinline function _throw_kron_device_entry()
     throw(
         ArgumentError(
@@ -388,32 +465,33 @@ end
 end
 
 @inline _kron_entry(F::AbstractMatrix, i::Int, j::Int) = F[i, j]
+
+_kron_factor_size(F::AbstractMatrix) = size(F)
+_kron_factor_size(F::_KronDeviceDiagonal) = (length(F.diag), length(F.diag))
+# Built from a square host factor (`_kron_term` checked it): the column count is the size.
+_kron_factor_size(F::_KronDeviceSparse) = (length(F.colptr) - 1, length(F.colptr) - 1)
 _kron_entry(::Union{_KronDeviceDiagonal, _KronDeviceSparse}, ::Int, ::Int) = _throw_kron_device_entry()
 
 # --- Fused application: one pass over `y` -------------------------------------------- #
 #
-# `kronecker_operator` builds every term with at most one non-diagonal factor: the mass
-# term has a `Diagonal` on every axis, and a directional term along axis `d` has the 1D
-# difference matrix on `d` and a `Diagonal` everywhere else. So entry `I = (i_1, ..., i_D)`
-# of `K * x` is
+# Entry `I = (i_1, ..., i_D)` of `K * x` is
 #
-#     sum_t c_t * prod_{e != d_t} H_e[i_e] * sum_j A_{d_t}[i_{d_t}, j] * x[I with i_{d_t} = j]
+#     sum_t c_t * sum_{j_1, ..., j_D} prod_e A^t_e[i_e, j_e] * x[j_1, ..., j_D]
 #
-# (the inner sum is just `x[I]` for the mass term): one read of `x` around `I` per term,
-# weighted by products of per-axis diagonal entries. `mul!` evaluates that directly and
-# writes each entry of `y` once, instead of sweeping the whole array once per axis per term.
-# Which factor of a term is the sparse one is read off the factor types, so the whole
-# evaluation is resolved at compile time; the tuples are peeled recursively for the same
-# reason `_fold_taps` (`stencil_eval.jl`) peels its taps.
-#
-# Host: one grid line along axis 1 at a time (`off + 1:off + m`, contiguous). Per term, the
-# diagonal factors on axes `2:D` fold into one scalar line weight, and the term adds a
-# `@simd` pass over the line -- one per stored entry of the sparse factor's row when that
-# factor sits on an axis `e >= 2` (reading the neighbouring line `stride_e` away), or one
-# tridiagonal sweep along the line when it sits on axis 1 (`_KronTridiag`). The line is the
-# only part of `y` those passes revisit, so `y` goes through memory once. Every 1D factor
-# is symmetric, so column `j` of the CSC storage is row `j` (the same fact the device kernel
-# relies on).
+# and on the host `mul!` evaluates it one grid line along axis 1 at a time
+# (`off + 1:off + m`, contiguous), writing each entry of `y` once. Per term, the diagonal factors on axes
+# `2:D` fold into one scalar line weight. Each non-diagonal factor on an axis `e >= 2`
+# contributes the stored entries of its row `i_e`: the term loops over the product of those
+# rows, reading the neighbour line `sum_e (j_e - i_e) * stride_e` away with the product of
+# the entries as its weight, and applies the axis-1 factor to each neighbour line with a
+# `@simd` pass (diagonal), a tridiagonal sweep (`_KronTridiag`) or a row gather. The line is
+# the only part of `y` those passes revisit, so `y` goes through memory once and the product
+# needs no scratch. Which factors are non-diagonal is read off the factor types, so the
+# whole evaluation is resolved at compile time; the tuples are peeled recursively for the
+# same reason `_fold_taps` (`stencil_eval.jl`) peels its taps. The mass shape (every factor
+# diagonal) and the single-sparse shapes keep methods of their own. The kernels read a
+# term's `rows`, never its `factors`: column `i` of `rows[e]` is row `i` of the factor
+# whether or not it is symmetric (`_kron_term`).
 
 @inline _kron_diag(F::Diagonal) = F.diag
 # The mass factor's diagonal is a one-axis `SeparableWeights`: index its own vector rather
@@ -432,26 +510,22 @@ end
 const _KronCSCLike = Union{SparseMatrixCSC, _KronCSC}
 
 # One axis `e >= 2` of a term on the line whose axis-`e` index is `i`: a diagonal factor
-# contributes its entry to the line weight; the sparse factor contributes weight one and is
-# returned, with `i` and the axis stride, as the line's neighbour axis.
+# contributes its entry to the line weight; a sparse one contributes weight one and is
+# returned, with `i` and the axis stride, as one of the line's neighbour axes.
 @inline _kron_line_split(F::Diagonal, i::Int, ::Int) = (_kron_diag(F)[i], nothing)
 @inline _kron_line_split(F::_KronCSCLike, i::Int, stride::Int) = (one(eltype(F.nzval)), (F, i, stride))
 
-# At most one sparse factor per term, so at most one side is ever not `nothing`; two sparse
-# factors throw, since `kronecker_operator` never builds such a term.
-@noinline function _throw_kron_two_sparse()
-    throw(
-        ArgumentError(
-        "KroneckerLinearOperator term has more than one non-diagonal factor; " *
-        "kronecker_operator only builds terms with at most one.",
-    ),
-    )
+# Two or more neighbour axes of one term, each an `(F, i, stride)` tuple. One neighbour axis
+# stays a bare tuple so the single-sparse shapes keep their own methods.
+struct _KronNeighbours{T <: Tuple}
+    axes::T
 end
 
 @inline _kron_pick(::Nothing, ::Nothing) = nothing
 @inline _kron_pick(a, ::Nothing) = a
 @inline _kron_pick(::Nothing, b) = b
-_kron_pick(::Tuple, ::Tuple) = _throw_kron_two_sparse()
+@inline _kron_pick(a::Tuple, b::Tuple) = _KronNeighbours((a, b))
+@inline _kron_pick(a::Tuple, b::_KronNeighbours) = _KronNeighbours((a, b.axes...))
 
 @inline _kron_line_fold(::Tuple{}, ::Tuple{}, ::Tuple{}) = (true, nothing)
 @inline function _kron_line_fold(Fs::Tuple, Js::Tuple, ss::Tuple)
@@ -460,27 +534,28 @@ _kron_pick(::Tuple, ::Tuple) = _throw_kron_two_sparse()
     return (w * wr, _kron_pick(sp, spr))
 end
 
-# A host sparse axis-1 factor stored as its diagonal and sub-diagonal when it is
+# A host symmetric axis-1 factor stored as its diagonal and sub-diagonal when it is
 # tridiagonal -- which the `inner₊(D₋ₓ(u), D₋ₓ(v))` matrix `kronecker_operator` builds is --
 # so the axis-1 term runs as a `@simd` loop along the line rather than a CSC row gather,
 # which took 18-20 ms of a 23-26 ms 2D 3000^2 / 3D 200^3 `Float32` `mul!` (2026-09-24). Any
-# other sparsity keeps the CSC matrix itself. `sub[i] = F[i + 1, i]`, which equals
-# `F[i, i + 1]` since every factor is symmetric.
+# other sparsity, and any non-symmetric factor, keeps its rows (`_kron_rows`) for the
+# gather. `sub[i] = F[i + 1, i]`, which equals `F[i, i + 1]` since the factor is symmetric.
 struct _KronTridiag{V <: AbstractVector}
     dg::V
     sub::V
 end
 
-_kron_line_operator(::Any) = nothing
-function _kron_line_operator(F::SparseMatrixCSC)
-    m = size(F, 1)
-    rows = rowvals(F)
+_kron_line_operator(::Diagonal, ::Bool) = nothing
+function _kron_line_operator(R::SparseMatrixCSC, sym::Bool)
+    sym || return R
+    m = size(R, 1)
+    rows = rowvals(R)
     for j in 1:m
-        for k in nzrange(F, j)
-            abs(rows[k] - j) <= 1 || return F
+        for k in nzrange(R, j)
+            abs(rows[k] - j) <= 1 || return R
         end
     end
-    return _KronTridiag([F[i, i] for i in 1:m], [F[i + 1, i] for i in 1:(m - 1)])
+    return _KronTridiag([R[i, i] for i in 1:m], [R[i + 1, i] for i in 1:(m - 1)])
 end
 
 # Mass term: diagonal on axis 1, no neighbour axis.
@@ -512,6 +587,7 @@ end
 # The axis-1 factor itself is never read here or below: `line` carries it.
 @inline function _kron_line!(y, ::Any, L::_KronTridiag, ::Nothing, x, s, off::Int, m::Int)
     dg, sub = L.dg, L.sub
+    m == 0 && return y
     @inbounds if m == 1
         y[off + 1] += s * (dg[1] * x[off + 1])
     else
@@ -538,12 +614,77 @@ end
     return y
 end
 
+# A non-diagonal axis-1 factor with one neighbour axis, or any axis-1 factor with several:
+# the axis-1 factor applied to every neighbour line of the product of the neighbour rows.
+@inline function _kron_line!(
+        y, F1, L::Union{_KronTridiag, _KronCSCLike}, sp::Tuple, x, s, off::Int, m::Int
+)
+    return _kron_line_product!(y, F1, L, (sp,), x, s, off, off, m)
+end
+@inline function _kron_line!(y, F1, L, nb::_KronNeighbours, x, s, off::Int, m::Int)
+    return _kron_line_product!(y, F1, L, nb.axes, x, s, off, off, m)
+end
+
+# Peel one neighbour axis per level: each stored entry of its row `ie` scales the weight and
+# moves the read offset by `(j - ie) * stride`; with none left, apply the axis-1 factor.
+@inline function _kron_line_product!(
+        y, F1, L, ::Tuple{}, x, c, off::Int, xoff::Int, m::Int
+)
+    return _kron_line_apply!(y, F1, L, x, c, off, xoff, m)
+end
+@inline function _kron_line_product!(y, F1, L, nbs::Tuple, x, c, off::Int, xoff::Int, m::Int)
+    F, ie, stride = nbs[1]
+    rows = F.rowval
+    vals = F.nzval
+    @inbounds for k in F.colptr[ie]:(F.colptr[ie + 1] - 1)
+        _kron_line_product!(y, F1, L, Base.tail(nbs), x, c * vals[k], off,
+            xoff + (rows[k] - ie) * stride, m)
+    end
+    return y
+end
+
+# `y[off + i] += c * (A_1 * x[xoff .+ (1:m)])[i]` for the axis-1 factor `A_1`, in the same
+# arithmetic as the single-line methods above.
+@inline function _kron_line_apply!(y, F1::Diagonal, ::Nothing, x, c, off::Int, xoff::Int, m::Int)
+    h = _kron_diag(F1)
+    @inbounds @simd for i in 1:m
+        y[off + i] += (c * h[i]) * x[xoff + i]
+    end
+    return y
+end
+@inline function _kron_line_apply!(y, ::Any, L::_KronTridiag, x, c, off::Int, xoff::Int, m::Int)
+    dg, sub = L.dg, L.sub
+    m == 0 && return y
+    @inbounds if m == 1
+        y[off + 1] += c * (dg[1] * x[xoff + 1])
+    else
+        y[off + 1] += c * (dg[1] * x[xoff + 1] + sub[1] * x[xoff + 2])
+        @simd for i in 2:(m - 1)
+            y[off + i] += c * (sub[i - 1] * x[xoff + i - 1] + dg[i] * x[xoff + i] + sub[i] * x[xoff + i + 1])
+        end
+        y[off + m] += c * (sub[m - 1] * x[xoff + m - 1] + dg[m] * x[xoff + m])
+    end
+    return y
+end
+@inline function _kron_line_apply!(y, ::Any, F1::_KronCSCLike, x, c, off::Int, xoff::Int, m::Int)
+    rows = F1.rowval
+    vals = F1.nzval
+    @inbounds for i in 1:m
+        acc = zero(eltype(y))
+        for k in F1.colptr[i]:(F1.colptr[i + 1] - 1)
+            acc += vals[k] * x[xoff + rows[k]]
+        end
+        y[off + i] += c * acc
+    end
+    return y
+end
+
 @inline _kron_line_terms!(y, ::Tuple{}, ::Tuple{}, x, Js::Tuple, ss::Tuple, off::Int, m::Int) = y
 @inline function _kron_line_terms!(
         y, terms::Tuple{KroneckerTerm, Vararg{KroneckerTerm}}, cs::Tuple, x, Js::Tuple, ss::Tuple,
         off::Int, m::Int
 )
-    F = terms[1].factors
+    F = terms[1].rows
     w, sp = _kron_line_fold(Base.tail(F), Js, ss)
     _kron_line!(y, F[1], terms[1].line, sp, x, cs[1] * w, off, m)
     return _kron_line_terms!(y, Base.tail(terms), Base.tail(cs), x, Js, ss, off, m)
@@ -575,6 +716,32 @@ function _kron_fused!(::HostLocality, y, K::KroneckerLinearOperator, x, cs::Tupl
     return y
 end
 
+# Under `CpuThreaded` the lines are cut into one contiguous chunk per thread, run in one
+# `Threads.@threads :static` loop through `_static_or_serial`, so a call nested in a user's
+# threaded loop runs the same chunks in order on the calling task. Each line writes only its
+# own slice of `y` and reads `x`, so the result is bitwise the serial loop's.
+@noinline function _kron_fused!(
+        ::HostLocality, y, K::KroneckerLinearOperator{<:Any, <:Any, <:Tuple, CpuThreaded}, x,
+        cs::Tuple, β
+)
+    dims = K.dims
+    ss = Base.front(cumprod(dims))::Tuple{Vararg{Int}}
+    lines = CartesianIndices(Base.tail(dims))
+    _static_or_serial(_static_bands!, _serial_bands!, _kron_line_band!, Threads.nthreads(),
+        y, K.terms, cs, x, β, ss, lines, dims[1])
+    return y
+end
+
+# Lines `_band_range(1:length(lines), nbands, b)` of the product: band `b` of `nbands`.
+@inline function _kron_line_band!(y, terms, cs, x, β, ss, lines, m::Int, nbands::Int, b::Int)
+    for o in _band_range(1:length(lines), nbands, b)
+        off = (o - 1) * m
+        _kron_line_init!(y, β, off, m)
+        _kron_line_terms!(y, terms, cs, x, Tuple(@inbounds lines[o]), ss, off, m)
+    end
+    return nothing
+end
+
 # Under `CpuPolyester` the lines run as `Polyester.@batch` tasks (`_batch_kron_lines!`,
 # filled by `BramblePolyesterExt`). Each line writes only its own slice of `y` and reads `x`,
 # so the result is bitwise the serial loop's.
@@ -589,16 +756,17 @@ end
     return y
 end
 
-# What a term's line kernels read, as plain arrays only: a diagonal factor as its vector, a
-# CSC factor as `(colptr, rowval, nzval)`, a `_KronTridiag` as `(dg, sub)`. `@batch` turns
-# every array in these nested tuples into a `PtrArray` under its own `GC.@preserve`, and
-# each task puts the light structs back around them with `_kron_host_rebuild`; the
-# coefficients stay out, since `cs` carries them.
+# What a term's line kernels read (its `rows` and `line`), as plain arrays only: a diagonal
+# as its vector, a CSC as `(colptr, rowval, nzval)`, a `_KronTridiag` as `(dg, sub)`.
+# `@batch` turns every array in these nested tuples into a `PtrArray` under its own
+# `GC.@preserve`, and each task puts the light structs back around them with
+# `_kron_host_rebuild` (its `factors` are the rebuilt rows, which the kernels never read);
+# the coefficients stay out, since `cs` carries them.
 _kron_host_raw(::Nothing) = nothing
 _kron_host_raw(F::Diagonal) = _kron_diag(F)
 _kron_host_raw(F::SparseMatrixCSC) = (F.colptr, F.rowval, F.nzval)
 _kron_host_raw(L::_KronTridiag) = (L.dg, L.sub)
-_kron_host_raw(t::KroneckerTerm) = (map(_kron_host_raw, t.factors), _kron_host_raw(t.line))
+_kron_host_raw(t::KroneckerTerm) = (map(_kron_host_raw, t.rows), _kron_host_raw(t.line))
 
 @inline _kron_host_rebuild(::Nothing) = nothing
 @inline _kron_host_rebuild(v::AbstractVector) = Diagonal(v)
@@ -607,7 +775,7 @@ _kron_host_raw(t::KroneckerTerm) = (map(_kron_host_raw, t.factors), _kron_host_r
 @inline function _kron_host_rebuild(r::Tuple{Tuple, Any})
     F = map(_kron_host_rebuild, r[1])
     L = _kron_host_rebuild(r[2])
-    return KroneckerTerm{length(F), Tuple{}, typeof(F), typeof(L)}((), F, L)
+    return KroneckerTerm{length(F), Tuple{}, typeof(F), typeof(L), typeof(F)}((), F, L, F, false)
 end
 
 """
@@ -760,14 +928,16 @@ end
 """
     issymmetric(K::KroneckerLinearOperator) -> Bool
 
-Always `true`: [`kronecker_operator`](@ref) only ever builds a term from `innerₕ(u, v)` or
-`inner₊` of the *same* backward difference on the trial and the test side, so every
-Kronecker factor -- and therefore every term, and their sum -- is symmetric.
+`true` when every factor of every term is exactly symmetric (checked once, when
+`_kron_term` built the term), so every term and their sum are symmetric. `false` otherwise,
+even in the rare case where non-symmetric terms happen to sum to a symmetric matrix: the
+check reads the factors, never the materialised matrix.
 """
-issymmetric(::KroneckerLinearOperator) = true
+issymmetric(K::KroneckerLinearOperator) = all(t -> t.symmetric, K.terms)
 
 _kron_as_sparse(F::SparseMatrixCSC) = F
 _kron_as_sparse(F::Diagonal) = sparse(F)
+_kron_as_sparse(F::AbstractMatrix) = sparse(F)
 _kron_as_sparse(::Union{_KronDeviceDiagonal, _KronDeviceSparse}) = _throw_kron_device_entry()
 
 """
