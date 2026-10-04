@@ -149,6 +149,29 @@ end
 # `Ωₕ.submeshes` is a `Tuple`, so this unrolls at compile time and allocates nothing.
 @inline _mesh_version(Ωₕ::MeshnD) = sum(_mesh_version, Ωₕ.submeshes)
 
+# Refining or resizing one submesh in place (`iterative_refinement!(Ωₕ(1))`) changes that
+# axis's point count, but the parent's `indices` and `markers` are sized for the whole grid
+# and only `_refine_indices!(::MeshnD)` rebuilds them. A submesh holds no reference to its
+# parent, so the mutation itself cannot be refused; instead `gridspace` checks the parent
+# here, before a space, a form and `assemble` build on a grid that no longer matches its
+# own index set and return a wrong matrix rather than an error.
+@inline function _check_submesh_sizes(Ωₕ::MeshnD)
+    size(indices(Ωₕ)) == npoints(Ωₕ, Tuple) || _throw_submesh_resized(Ωₕ)
+    return nothing
+end
+
+@noinline function _throw_submesh_resized(Ωₕ::MeshnD)
+    throw(
+        ArgumentError(
+        "the $(dim(Ωₕ))D mesh was built with $(size(indices(Ωₕ))) points, but its " *
+        "submeshes now have $(npoints(Ωₕ, Tuple)): one submesh was refined or resized " *
+        "in place (e.g. iterative_refinement!(Ωₕ(1))), which leaves the mesh's indices " *
+        "and markers sized for the old grid. Refine the whole mesh with " *
+        "iterative_refinement!(Ωₕ), or build a new mesh with the points you want.",
+    ),
+    )
+end
+
 #------------------------------------------------------------------------------------------#
 # Macros for Boilerplate Reduction
 #

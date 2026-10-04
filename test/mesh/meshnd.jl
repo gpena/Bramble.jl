@@ -723,6 +723,36 @@ end # Main Testset
         @test length(indices(Ωₕ)) == npoints(Ωₕ)
     end
 
+    @testset "One submesh refined in place" begin
+        # Refining one submesh resizes that axis but not the parent's indices or markers.
+        # A space, form and assemble built on the parent afterward returned a wrong matrix
+        # with no error; gridspace now refuses the inconsistent mesh.
+        for npts in ((7, 6), (3, 4, 5))
+            D = length(npts)
+            Ω = if D == 2
+                domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+            else
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+            end
+            Ωₕ = mesh(Ω, npts, ntuple(_ -> false, D))
+            iterative_refinement!(Ωₕ(1))
+
+            @test_throws ArgumentError gridspace(Ωₕ)
+            err = try
+                gridspace(Ωₕ)
+            catch e
+                e
+            end
+            @test occursin("iterative_refinement!(Ωₕ)", sprint(showerror, err))
+
+            # Refining the whole mesh rebuilds the index set from the submeshes, so the
+            # mesh is consistent again and gridspace accepts it.
+            iterative_refinement!(Ωₕ)
+            @test size(indices(Ωₕ)) == npoints(Ωₕ, Tuple)
+            @test ndofs(gridspace(Ωₕ)) == npoints(Ωₕ)
+        end
+    end
+
     WITH_SLOW_TESTS && @testset "Refinement invariants" begin
         @check function check_refinement_invariants_2d(
                 nx = Data.Integers(3, 8), ny = Data.Integers(3, 8)

@@ -237,6 +237,7 @@ true
 ```
 """
 function gridspace(Ωₕ::AbstractMeshType{D}) where {D}
+    _check_submesh_sizes(Ωₕ)
     return _gridspace(Ωₕ, space_weights(Ωₕ))
 end
 
