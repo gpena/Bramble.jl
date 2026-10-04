@@ -2,18 +2,18 @@
 #
 # Plugs `SparseMatricesCSR.jl`'s `SparseMatrixCSR{1,T,Int}` (the one-based variant, matching
 # Bramble's own indexing) into the matrix-type seam in `src/assembly/`:
-# `_scatter_position`, `_scatter_add!` (bilinear_traversal.jl), `_allocate_from_pattern`
-# (bilinear_pattern.jl) and `_zero_stored!` (bilinear.jl); and into the Dirichlet/symmetrize
-# fast paths `dirichlet_constraints.jl` already carries a `SparseMatrixCSC` specialisation of
-# beside its `AbstractMatrix` fallback.
+# `_scatter_position`, `_scatter_add!`, `_scatter_storage` (bilinear_traversal.jl),
+# `_allocate_from_pattern` (bilinear_pattern.jl) and `_zero_stored!` (bilinear.jl); and into
+# the Dirichlet/symmetrize fast paths `dirichlet_constraints.jl` already carries a
+# `SparseMatrixCSC` specialisation of beside its `AbstractMatrix` fallback.
 #
 # `assemble_parallel!` needs no method here. The band-coloured threaded sweep in
 # `bilinear_execution.jl` is typed `A::AbstractMatrix` and reaches storage only through
-# `_scatter_position` and `_scatter_add!`, so a `SparseMatrixCSR`
-# threads through the two methods below like any other host matrix. A `CpuThreaded` or
-# `CpuPolyester` refill replays the form's recorded `nzval` positions through `_scatter_add!`
-# without calling `_scatter_position`; the recording itself searches once per matrix
-# object, serially.
+# `_scatter_position`, `_scatter_add!` and `_scatter_storage`, so a `SparseMatrixCSR`
+# threads through the three methods below like any other host matrix. A `CpuThreaded` or
+# `CpuPolyester` refill replays the form's recorded `nzval` positions into
+# `_scatter_storage(A)` without calling `_scatter_position`; the recording itself searches
+# once per matrix object, serially.
 #
 # `SparseMatrixCSR`'s own `setindex!` throws on an entry outside the sparsity pattern rather
 # than growing it the way `SparseMatrixCSC`'s does (`A[i,i] = one(T)`), so the Dirichlet and
@@ -139,6 +139,11 @@ end
     @inbounds A.nzval[pos] += val
     return nothing
 end
+
+# The replay sinks write `_scatter_storage(A)` at the positions `_scatter_position`
+# answered, which here are `nzval` indices: without this method the host fallback hands
+# them `A` itself.
+@inline Bramble._scatter_storage(A::SparseMatrixCSR{1}) = A.nzval
 
 @inline function Bramble._zero_stored!(A::SparseMatrixCSR{1})
     fill!(A.nzval, zero(eltype(A)))

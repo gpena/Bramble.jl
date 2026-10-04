@@ -616,19 +616,27 @@ end
 # `DiagonalReplaySink` derives `n` from a counter, which only a serial walk in `interior`'s
 # own order can keep; this carries `n` itself, one fresh immutable sink per point, so any
 # thread can replay any point.
-struct _StrideReplaySink{M <: AbstractMatrix, S}
-    A::M
-    base::Vector{Int}
-    stride::Vector{Int}
+struct _StrideReplaySink{V <: AbstractArray, P <: AbstractVector{Int}, S}
+    nzval::V
+    base::P
+    stride::P
     n::Int
     α::S
+    # Inner for the same reason as `ReplaySink`'s.
+    function _StrideReplaySink{V, P, S}(nzval, base, stride, n, α) where {V, P, S}
+        return new{V, P, S}(nzval, base, stride, n, α)
+    end
+end
+function _StrideReplaySink(A::AbstractMatrix, base::P, stride::P, n::Int, α::S) where {P, S}
+    nzval = _scatter_storage(A)
+    return _StrideReplaySink{typeof(nzval), P, S}(nzval, base, stride, n, α)
 end
 @inline _sink_needs_coordinates(::_StrideReplaySink) = false
 Base.@propagate_inbounds function _sink_entry!(
         sink::_StrideReplaySink, ::Int, ::Int, weight, slot::Int
 )
-    @inbounds _scatter_add!(
-        sink.A, sink.base[slot + 1] + sink.stride[slot + 1] * sink.n, sink.α * weight
+    @inbounds _replay_add!(
+        sink.nzval, sink.base[slot + 1] + sink.stride[slot + 1] * sink.n, sink.α * weight
     )
     return nothing
 end
@@ -636,18 +644,18 @@ end
 # A diagonal `Segment` as a threaded replay target: interior points through
 # `_StrideReplaySink`, the boundary shell through the segment's own (shell-only)
 # `point_ptr`/`positions`, exactly as `_replay_segment!` splits them serially.
-struct _DiagonalReplayTarget{M <: AbstractMatrix, D, S}
-    A::M
-    point_ptr::Vector{Int}
-    positions::Vector{Int}
-    base::Vector{Int}
-    stride::Vector{Int}
+struct _DiagonalReplayTarget{V <: AbstractArray, P <: AbstractVector{Int}, D, S}
+    nzval::V
+    point_ptr::P
+    positions::P
+    base::P
+    stride::P
     interior::CartesianIndices{D, NTuple{D, UnitRange{Int}}}
     α::S
 end
-function _DiagonalReplayTarget(A, s::Segment, α)
+function _DiagonalReplayTarget(A::AbstractMatrix, s::Segment, α)
     _DiagonalReplayTarget(
-        A, s.point_ptr, s.positions, s.base, s.stride, s.interior, α)
+        _scatter_storage(A), s.point_ptr, s.positions, s.base, s.stride, s.interior, α)
 end
 
 """
@@ -691,9 +699,9 @@ See also: [`_ReplayTarget`](@ref), [`_batch_bilinear_band_replay!`](@ref).
 end
 
 @inline function _replay_point!(
-        t::_DiagonalReplayTarget, term::TERM, sp, I::CartesianIndex, lin_indices,
+        t::_DiagonalReplayTarget{V, P, D, S}, term::TERM, sp, I::CartesianIndex, lin_indices,
         mesh_markers, row_offset::Int, col_offset::Int
-) where {TERM}
+) where {V, P, D, S, TERM}
     @inbounds begin
         lin_idx = lin_indices[I]
         stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
@@ -703,10 +711,10 @@ end
             # as a position within the box, not as a grid index.
             rel = Tuple(I) .- Tuple(first(t.interior)) .+ 1
             n = LinearIndices(size(t.interior))[rel...] - 1
-            sink = _StrideReplaySink(t.A, t.base, t.stride, n, t.α)
+            sink = _StrideReplaySink{V, P, S}(t.nzval, t.base, t.stride, n, t.α)
             _visit_entries(sink, stencil, lin_indices, I, row_offset, col_offset, 0)
         else
-            shell = ReplaySink(t.A, t.point_ptr, t.positions, t.α)
+            shell = ReplaySink{V, P, S}(t.nzval, t.point_ptr, t.positions, t.α)
             slot = _sink_point!(shell, lin_idx, I)
             _visit_entries(shell, stencil, lin_indices, I, row_offset, col_offset, slot)
         end
