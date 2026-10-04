@@ -8,7 +8,7 @@ blocks. Everything else lives here:
 
 - **Pages moved whole**, at the path they had under `docs/src`: `tutorials/solvers.md`,
   `solvers_by_problem.md`, `time_stepping.md`, `backend.md`, `plotting.md`,
-  `vtk_export.md`, `pgfplots_export.md`, `autodiff.md`; `internals/autodiff.md`,
+  `vtk_export.md`, `pgfplots_export.md`, `autodiff.md`, `operator_accuracy.md`, `interpolation.md`; `internals/autodiff.md`,
   `internals/gpu.md`; and `benchmarks.md` (still written by `docs/generate_benchmarks.jl`,
   which `docs/make.jl` no longer calls).
 - **Internals prose**: `internals/<page>.md` holds each internals page as it stood before

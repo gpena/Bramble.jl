@@ -57,9 +57,7 @@ foundations = "Discrete foundations" => [
     "tutorials/geometry.md",
     "tutorials/mesh.md",
     "tutorials/space.md",
-    "tutorials/operators.md",
-    "tutorials/operator_accuracy.md",
-    "tutorials/interpolation.md"
+    "tutorials/operators.md"
 ]
 forms = "Forms and assembly" => [
     "tutorials/form.md",
