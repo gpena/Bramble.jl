@@ -151,7 +151,7 @@ methods_of_op = filter(
 
 # - **Real work per product.** It recomputes each entry from the mesh and the coefficient,
 #   where a sparse product reads stored entries; the section "Kronecker or matrix-free?"
-#   compares the times of the routes at one size. It also recomputes a coefficient that was
+#   compares the routes form class by form class. It also recomputes a coefficient that was
 #   updated in place, which is a feature of the design, not a cost.
 # - **Forms.** The docstring of [`matrix_free_operator`](@ref) says it takes any form
 #   `assemble` accepts, on scalar or composite spaces, and this page knows of no form it
@@ -232,13 +232,25 @@ rel_err(u) = norm(u - x_direct) / norm(x_direct)
 
 # ## Kronecker or matrix-free?
 #
-# For a separable form [`kronecker_operator`](@ref) is a third route beside the assembled
-# matrix and the matrix-free operator above. The script `benchmark/operator_routes.jl`
-# times all three on the same form, on graded non-uniform meshes of the square and the
-# cube, and saves the tables to `benchmark/results/operator_routes.toml`. The
-# [benchmarks page](../benchmarks.md) charts the same file. This page reads it directly, so
-# no figure below is copied by hand. The run's description comes first; the solve ratios
-# below depend on the machine, so read the load and the thread count before the numbers:
+# For a separable form, [`kronecker_operator`](@ref) and [`matrix_free_operator`](@ref) are
+# two alternative routes to the same product, and the choice between them is the user's.
+# Neither is built on the other: the Kronecker operator applies one-dimensional factor
+# matrices it builds once, and the matrix-free operator evaluates the form's stencil at every
+# product. Which one is preferred depends on the class of the form. The script
+# `benchmark/operator_routes.jl` times both, with the assembled matrix as the reference, on
+# four separable form classes over graded non-uniform meshes of the square and the cube,
+# and saves the tables to `benchmark/results/operator_routes.toml`. The classes are:
+#
+#   - `laplace`: `innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))`, symmetric positive definite;
+#   - `coefficient`: the same with a grid-function coefficient `c` that varies along one
+#     axis, `inner₊(c * ∇ₕ(u), ∇ₕ(v))`, symmetric positive definite;
+#   - `mixed`: `laplace` plus the mixed-derivative term `innerₕ(c * D₋ₓ(D₋ᵧ(u)), v)`, not
+#     symmetric;
+#   - `advection`: `laplace` plus the first-order term `innerₕ(D₋ₓ(u), v)`, not symmetric.
+#
+# The [benchmarks page](../benchmarks.md) charts the same file. This page reads it
+# directly, so no figure below is copied by hand. The run's description comes first; the
+# ratios depend on the machine, so read the load and the thread count before the numbers:
 
 using TOML
 
@@ -248,12 +260,15 @@ meta = routes["meta"]
 (cpu = meta["cpu"], threads = meta["threads"], power = meta["power"],
     load = meta["load1"], commit = meta["commit"])
 
-# Each table below gives, per dimension and size, the Kronecker route's measurement divided
-# by the same measurement of another route. A ratio under `1` means the Kronecker route is
-# cheaper, and one over `1` means it costs more:
+# Every table of the file has one row per form, route, dimension and size, so a lookup
+# names the `"form"` as well as the route. `route_ratios` divides one route's measurement by
+# another's, for one form class, at every size. The route compared by default is
+# `kronecker_threaded`, the Kronecker operator under `CpuThreaded()`, set against the
+# threaded matrix-free operator, so the two run on the same number of threads. A ratio
+# under `1` means the Kronecker route is cheaper, and one over `1` means it costs more:
 
-function route_ratios(table, column; against, of = "kronecker")
-    rows = routes["tables"][table]
+function route_ratios(table, column, form; against, of = "kronecker_threaded")
+    rows = [r for r in routes["tables"][table] if r["form"] == form]
     value(route, dim, n) = only(r[column] for r in rows
     if r["route"] == route && r["dim"] == dim && r["n"] == n)
     sizes = sort!(unique((r["dim"], r["n"]) for r in rows))
@@ -261,128 +276,208 @@ function route_ratios(table, column; against, of = "kronecker")
             for route in against)...) for (dim, n) in sizes]
 end
 
-# The comparisons below use the ratios as computed, and only the display rounds them:
+# The comparisons below use the ratios as computed, and only the display rounds them.
+# `largest` keeps the square of 512² points and the cube of 64³, both of 262144 unknowns,
+# the biggest problem of each dimension in the file. `at_largest` gathers those rows over
+# the form classes, and `lead` names the route a ratio favours, with a margin of 20% inside
+# which the two count as even:
+
+forms = ["laplace", "coefficient", "mixed", "advection"]
+spd_forms = ["laplace", "coefficient"]
 
 shown(ratios) = [map(x -> x isa Float64 ? round(x; sigdigits = 3) : x, r) for r in ratios]
+largest(ratios) = filter(r -> r.n^r.dim == 262144, ratios)
+function at_largest(table, column; forms = forms, kw...)
+    return reduce(vcat,
+        [[(; form, r...) for r in largest(route_ratios(table, column, form; kw...))]
+         for form in forms])
+end
+lead(ratio) = ratio < 1 / 1.2 ? :kronecker : ratio > 1.2 ? :matrix_free : :even
+with_lead(rows, route) = [(; r..., lead = lead(r[route])) for r in rows]
+not_faster(form, route) = [(r.dim, r.n)
+                           for r in route_ratios("product", "time_s", form; against = [route])
+                           if r[Symbol(route)] >= 1]
 
-# `falls` holds when a route's ratio decreases with `n` inside each dimension:
+# **Product.** One five-argument `mul!`, at 262144 unknowns, the threaded Kronecker product
+# against the threaded matrix-free one and against the assembled one, with the route each
+# ratio favours:
 
-falls(ratios, route) = all(
-    issorted([r[route] for r in ratios if r.dim == d]; rev = true, lt = <=) for d in (2, 3))
+threaded_product = at_largest("product", "time_s";
+    against = ["matrix_free_threaded", "assembled"])
+shown(with_lead(threaded_product, :matrix_free_threaded))
 
-below(ratios, route) = all(r[route] < 1 for r in ratios)
-above(ratios, route) = all(r[route] > 1 for r in ratios)
-not_below(ratios, route) = [(r.dim, r.n) for r in ratios if r[route] >= 1]
+# The same comparison serially, the Kronecker product on the calling task against the serial
+# matrix-free product:
 
-mf_routes = ["assembled", "matrix_free_serial", "matrix_free_threaded"]
+serial_product = at_largest("product", "time_s"; of = "kronecker",
+    against = ["matrix_free_serial"])
+shown(with_lead(serial_product, :matrix_free_serial))
 
-# **Construction.** The time to build the operator from a fresh form:
+# The Kronecker product beats the assembled one in every class, and by a wide margin. Against
+# the matrix-free operator the classes split. In the Laplacian and in the form with a
+# one-axis grid-function coefficient the Kronecker product is the faster one in 2D and 3D, and
+# the coefficient form gains the most: the matrix-free operator evaluates the coefficient
+# again at every product, while the Kronecker factors already contain it. In the advection
+# form the two are even in both dimensions, and in the mixed form they are even in 2D and the
+# Kronecker product leads in 3D. Serially the picture is the same, except that the Laplacian
+# narrows to a lead of under ten percent, which the margin counts as even. Each of those
+# statements is checked against the table on this page:
 
-construction_ratios = route_ratios("construction", "time_s"; against = mf_routes)
-shown(construction_ratios)
+lead_of(form, dim, column = :matrix_free_threaded, rows = threaded_product) = only(
+    lead(r[column]) for r in rows if r.form == form && r.dim == dim)
 
-# The Kronecker route is built faster than the assembled matrix at every size, and the gap
-# widens with the size. It is built more slowly than either matrix-free operator at every
-# size: a matrix-free operator only wraps the form, while the Kronecker route builds the
-# one-dimensional factor matrices.
+@test all(r -> r.assembled < 0.5, threaded_product) #src
+@test all(lead_of(f, d) == :kronecker for f in spd_forms, d in (2, 3)) #src
+@test all(lead_of("advection", d) == :even for d in (2, 3)) #src
+@test lead_of("mixed", 2) == :even #src
+@test lead_of("mixed", 3) == :kronecker #src
+@test all(r -> r.matrix_free_threaded < 0.5, filter(r -> r.form == "coefficient", threaded_product)) #src
+@test all(lead_of("coefficient", d, :matrix_free_serial, serial_product) == :kronecker
+          for d in (2, 3)) #src
+@test lead_of("mixed", 3, :matrix_free_serial, serial_product) == :kronecker #src
+@test lead_of("mixed", 2, :matrix_free_serial, serial_product) == :even #src
+@test all(lead_of("advection", d, :matrix_free_serial, serial_product) == :even
+          for d in (2, 3)) #src
+@test all(r -> 1 / 1.2 < r.matrix_free_serial < 1,
+    filter(r -> r.form == "laplace", serial_product)) #src
 
-@test below(construction_ratios, :assembled) #src
-@test falls(construction_ratios, :assembled) #src
-@test above(construction_ratios, :matrix_free_serial) #src
-@test above(construction_ratios, :matrix_free_threaded) #src
+# The preference above is read at the largest size. Below it, the threaded Kronecker product
+# is not always the faster one. The sizes at which it is not, per form class:
 
-# **Bytes.** The memory the operator holds once built:
+(; (Symbol(f) => not_faster(f, "matrix_free_threaded") for f in forms)...)
 
-bytes_ratios = route_ratios("product", "bytes_held"; against = mf_routes)
-shown(bytes_ratios)
+# Where those sizes are small, the products last tens of microseconds and the choice hardly
+# matters. They are also the sizes at which the threaded Kronecker product is slower than the
+# serial one, because starting the threads costs more than the product does, so the
+# crossover is the thread count's doing and not a property of the form. Both statements
+# are checked at the smallest size of each dimension:
 
-# The Kronecker route holds fewer bytes than the assembled matrix at every size, and the
-# ratio falls as the mesh refines. The matrix-free operators hold fewer still, at every
-# size, so for memory the matrix-free route is the smaller of the two:
+smallest_kron = reduce(vcat,
+    [filter(r -> r.n^r.dim < 2000,
+         [(; form, r...)
+          for r in route_ratios("product", "time_s", form;
+         of = "kronecker_threaded", against = ["kronecker"])])
+     for form in forms])
+shown(smallest_kron)
 
-@test below(bytes_ratios, :assembled) #src
-@test falls(bytes_ratios, :assembled) #src
-@test above(bytes_ratios, :matrix_free_serial) #src
-@test above(bytes_ratios, :matrix_free_threaded) #src
+@test length(smallest_kron) == 2 * length(forms) #src
+@test all(r -> r.kronecker > 1, smallest_kron) #src
+@test all((2, 64) in not_faster(f, "matrix_free_threaded") for f in forms) #src
+@test all((3, 16) in not_faster(f, "matrix_free_threaded") for f in forms) #src
+@test all(r -> (r.dim, r.n) in not_faster(r.form, "matrix_free_threaded"), smallest_kron) #src
 
-# **Product.** One five-argument `mul!`:
+# **Memory.** The bytes each operator holds once built, at 262144 unknowns. The Kronecker
+# operator stores the one-dimensional factors and some scratch, a small fraction of what the
+# assembled matrix stores, and the matrix-free operator stores less still:
 
-product_ratios = route_ratios("product", "time_s"; against = mf_routes)
-shown(product_ratios)
+memory = at_largest("product", "bytes_held";
+    against = ["matrix_free_threaded", "assembled"])
+shown(memory)
 
-# The Kronecker product is faster than the serial matrix-free product at every size, and
-# faster than the assembled product at every size but the smallest cube, where the two are
-# within a few percent. The Kronecker product runs serially, so against the threaded
-# matrix-free product the comparison is one thread to the run's thread count. The Kronecker
-# product is the faster of the two at the small sizes. The threaded matrix-free product is
-# the faster one from `n = 256` in 2D and `n = 32` in 3D on:
+# Read the ratio of the first column as the factor by which the matrix-free operator holds
+# less than the Kronecker one: at least ten at this size, for every class. Against the
+# assembled matrix the Kronecker operator holds under one percent. The Kronecker route is
+# therefore a memory saving over the assembled matrix, but not over the matrix-free
+# operator:
 
-@test below(product_ratios, :matrix_free_serial) #src
-@test not_below(product_ratios, :matrix_free_threaded) == #src
-      [(2, 256), (2, 512), (3, 32), (3, 48), (3, 64)] #src
-@test not_below(product_ratios, :assembled) == [(3, 8)] #src
-@test only(r.assembled for r in product_ratios if r.dim == 3 && r.n == 8) < 1.1 #src
+@test all(r -> r.matrix_free_threaded > 10, memory) #src
+@test all(r -> r.assembled < 0.01, memory) #src
+@test all(r -> r.matrix_free_threaded > 1 && r.assembled < 1,
+    reduce(vcat, [route_ratios("product", "bytes_held", f; against = ["matrix_free_threaded", "assembled"])
+                  for f in forms])) #src
 
-# The tables above divide the Kronecker figure by the other route's. Read the serial
-# matrix-free product the other way round, as its time divided by the assembled product's
-# and by the Kronecker product's, on the square of 512² points and the cube of 64³, both of
-# 262144 unknowns. A ratio under `1` means the matrix-free product is the faster one:
+# **Solve.** Conjugate gradients to the same tolerance with each operator, for the two
+# symmetric positive definite classes only, since CG needs symmetry. The mixed and
+# advection forms are not symmetric and have no solve rows. The ratios are again at 262144
+# unknowns:
 
-serial_ratios = route_ratios("product", "time_s"; of = "matrix_free_serial",
-    against = ["assembled", "kronecker"])
-serial_at_262144 = filter(r -> r.n^r.dim == 262144, serial_ratios)
-shown(serial_at_262144)
+solve_ratios = at_largest("solve", "time_s"; forms = spd_forms,
+    against = ["matrix_free_threaded", "assembled"])
+shown(with_lead(solve_ratios, :matrix_free_threaded))
 
-@test [(r.dim, r.n) for r in serial_at_262144] == [(2, 512), (3, 64)] #src
-@test all(r -> r.assembled < 1 && r.kronecker > 1, serial_at_262144) #src
-@test [round(r.assembled; digits = 1) for r in serial_at_262144] == [0.4, 0.6] #src
-@test [round(r.kronecker; digits = 1) for r in serial_at_262144] == [1.1, 1.2] #src
+# The Kronecker CG solve is the faster one in both classes and both dimensions, against the
+# matrix-free operator as against the assembled matrix. For the Laplacian the file also
+# times [`fdm_solve`](@ref) on the form and a sparse direct solve of the assembled matrix.
+# Neither is an operator route, so each is set against the Kronecker CG solve, not against
+# the other. `fdm_solve` is faster than the Kronecker CG solve at every size. To solve a
+# separable Laplacian, and not to apply the operator inside another iteration, call it. The
+# direct solve wins in the square. In the cube, at this size, the Kronecker CG solve is
+# the faster one:
 
-# At that size the serial matrix-free product takes `0.4×` the time of the assembled
-# product in 2D and `0.6×` in 3D, so it is the faster of the two. It takes `1.1×` the time
-# of the Kronecker product in 2D and `1.2×` in 3D, so the Kronecker route stays the faster
-# serial product. The two routes keep different things. The Kronecker route applies
-# one-dimensional factor matrices it built once. The matrix-free operator stores no entries
-# and forms each row's entries again on every product, from per-axis spacings it caches for
-# the separable terms and from the mesh and the coefficient otherwise. The profile script
-# `benchmark/matrix_free_profile.jl` is where to measure how the time of a product splits.
-# The assembled product reads entries stored at assembly.
+references = at_largest("solve", "time_s"; forms = ["laplace"],
+    against = ["fdm_solve", "direct"])
+shown(references)
 
-# **Solve.** Conjugate gradients to the same tolerance with each operator. The table adds
-# the two reference rows, [`fdm_solve`](@ref) on the form and the sparse direct solve of
-# the assembled matrix. Neither is an operator route, so they are compared with the
-# Kronecker CG solve rather than with each other:
+@test all(r -> lead(r.matrix_free_threaded) == :kronecker && r.assembled < 1, solve_ratios) #src
+@test all(r -> r.fdm_solve > 1, references) #src
+@test all(r -> r.fdm_solve > 1,
+    route_ratios("solve", "time_s", "laplace"; against = ["fdm_solve"])) #src
+@test only(r.direct for r in references if r.dim == 2) > 1 #src
+@test only(r.direct for r in references if r.dim == 3) < 1 #src
 
-solve_ratios = route_ratios("solve", "time_s"; against = [mf_routes; "fdm_solve"; "direct"])
-shown(solve_ratios)
+# ### Which route for which form
+#
+# The tables settle the preference for each form class at the sizes where the choice
+# matters. They come from the file, so a new run revises them by changing the tests above.
+#
+#   - **Laplacian-like forms** (`laplace`): prefer the Kronecker operator. Its threaded product
+#     is faster than the matrix-free one in 2D and 3D, by a smaller margin serially, its CG
+#     solve is faster, and `fdm_solve` is faster still when the solve is the goal.
+#   - **A one-axis grid-function coefficient** (`coefficient`): prefer the Kronecker
+#     operator, by the widest margin of the four classes, because the matrix-free operator
+#     evaluates the coefficient again at every product. The warning below says what the
+#     Kronecker operator gives up for that.
+#   - **A mixed derivative** (`mixed`): prefer the Kronecker operator in 3D, where it leads.
+#     In 2D the two are even, so prefer the matrix-free operator, which holds less, is built
+#     faster, and sees a coefficient that changes.
+#   - **A first-order term** (`advection`): prefer the matrix-free operator. The Kronecker
+#     product is no faster, in 2D or 3D, so the Kronecker route is justified by memory
+#     alone, and for that the matrix-free operator holds less still. A Kronecker operator
+#     for such a form is worth building only to compare it with the assembled matrix.
+#   - **A form that is not separable**, such as the worked example above with a grid
+#     function varying along both axes: the matrix-free operator is the only one of the two,
+#     as `kronecker_operator` refuses it.
+#
+# Whatever the class, either operator holds a fraction of the assembled matrix and applies
+# it faster, so the choice is between the two and never a reason to assemble.
+#
+# ### A grid-function coefficient is read once
+#
+# The preference for the `coefficient` and `mixed` classes has a price, which the `!!!
+# warning` below states. The demonstration builds both operators on a form with a one-axis
+# grid-function coefficient `c`, edits `c` in place, and compares each operator's product
+# with the matrix assembled from the edited form. The Kronecker operator warns when it
+# reads the coefficient; the page silences that warning, and a hidden test checks that it is
+# raised:
 
-# The Kronecker CG solve is faster than both matrix-free CG solves and than the assembled CG
-# solve at every size, and at the smallest cube it leads the assembled one by under two
-# percent. Against the references it does not win. `fdm_solve` is faster than any CG
-# route at every size. The direct solve is faster in the square at every size and in the
-# cube at `n = 16`, and slower at the other cube sizes:
+using Logging: with_logger, NullLogger
 
-@test below(solve_ratios, :matrix_free_serial) #src
-@test below(solve_ratios, :matrix_free_threaded) #src
-@test below(solve_ratios, :assembled) #src
-@test above([r for r in solve_ratios if r.dim == 2], :direct) #src
-@test not_below([r for r in solve_ratios if r.dim == 3], :direct) == [(3, 16)] #src
-@test above(solve_ratios, :fdm_solve) #src
-@test 0.98 <= only(r.assembled for r in solve_ratios if r.dim == 3 && r.n == 8) < 1 #src
-fdm_ratios = route_ratios("solve", "time_s"; of = "fdm_solve", against = mf_routes) #src
-@test all(below(fdm_ratios, route) for route in (:assembled, :matrix_free_serial, :matrix_free_threaded)) #src
+Wₛ = gridspace(graded_mesh(17))
+c = Rₕ(Wₛ, x -> 1 + x[1])
+snapshot_form() = form(Wₛ, Wₛ, (u, v) -> innerₕ(u, v) + inner₊(c * ∇ₕ(u), ∇ₕ(v)))
 
-# So the Kronecker route is preferred over the assembled matrix whenever the form is
-# separable: it is cheaper to build and to hold at every size, and its solve is faster at
-# every size. Its product is too, except at the smallest cube (3D, n = 8). It is preferred
-# over the matrix-free operator for the CG solve at every size, and for the serial product.
-# The threaded matrix-free product is the faster one from `n = 256` in 2D and `n = 32` in
-# 3D, and the Kronecker product is the faster one below those sizes. When the form is not
-# separable the matrix-free operator is the only one of the three, and at 262144 unknowns
-# its serial product is faster than the assembled one. It also holds fewer bytes than either
-# route and is built faster than the Kronecker route. To solve a separable problem, and not
-# to apply the operator inside another iteration, call `fdm_solve`, which is faster at every
-# size in this file.
+K_snapshot = with_logger(NullLogger()) do
+    kronecker_operator(snapshot_form())
+end
+op_live = matrix_free_operator(snapshot_form())
+xₛ = rand(ndofs(Wₛ))
+Rₕ!(c, x -> 3 + x[1])
+y_reference = assemble(snapshot_form()) * xₛ
+rel_gap(y) = norm(y - y_reference) / norm(y_reference)
+(kronecker_gap = rel_gap(K_snapshot * xₛ), matrix_free_gap = rel_gap(op_live * xₛ))
+
+@test_logs (:warn, r"read once") kronecker_operator(snapshot_form()) #src
+@test rel_gap(op_live * xₛ) <= 1e-12 #src
+@test rel_gap(K_snapshot * xₛ) > 1e-2 #src
+
+# !!! warning "Snapshot against live coefficient"
+#     `kronecker_operator` reads a grid-function coefficient once, when the operator is built,
+#     and copies it into its factors, so a later edit to the coefficient is not seen.
+#     `matrix_free_operator` reads it live, at every product. The demonstration above is
+#     the difference: after `Rₕ!` the matrix-free product matches the assembled one, and
+#     the Kronecker product still applies the old coefficient. For a coefficient that
+#     changes, use a `Ref` scalar with the Kronecker operator, which stays live, or the
+#     matrix-free operator, or rebuild the Kronecker operator after each edit.
 
 # ## Where to go next
 #
