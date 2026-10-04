@@ -30,7 +30,7 @@ import Bramble: cell_measure, change_points!, half_point, half_points, half_spac
 points(Ωₕ)
 ```
 
-The points are equally spaced, ``h = 0.1``, and the largest cell measure confirms it:
+The points are equally spaced, ``h = 0.1``, and the largest spacing confirms it:
 
 ```@example mesh
 hₘₐₓ(Ωₕ), is_uniform(Ωₕ)
@@ -415,7 +415,7 @@ half_points(Ωₕ_fig), half_point(Ωₕ_fig, 3)
 | `forward_spacing(Ωₕ, i)` | forward spacing ``h_{i+1} = x_{i+1} - x_i`` |
 | `half_spacing(Ωₕ, i)` | cell width ``h_{i+1/2} = (h_i + h_{i+1})/2`` |
 | `cell_measure(Ωₕ, idx)` | measure of the control volume at `idx`: the product of the per-axis cell widths |
-| `hₘₐₓ(Ωₕ)` | largest cell measure in the mesh |
+| `hₘₐₓ(Ωₕ)` | largest cell diagonal, the largest spacing in 1D |
 
 A 1D mesh stores its backward spacings, so `spacings` hands back the whole vector and the accessors index it. The cache is rebuilt by `set_points!`, and so by [`iterative_refinement!`](@ref) and [`change_points!`](@ref) as well:
 
