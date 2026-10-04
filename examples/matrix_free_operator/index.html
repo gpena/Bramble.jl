@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>The matrix-free operator — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=f44953e3">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e2e31ae6">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="The matrix-free operator — Bramble.jl">
   <meta property="og:title" content="The matrix-free operator — Bramble.jl">
@@ -41,7 +41,7 @@
     <nav class="md-sidebar">
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Discrete foundations</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
@@ -50,12 +50,12 @@
         <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
         <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,7 +63,7 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
@@ -100,7 +100,7 @@
         </div>
       </div>
       <a href="../../benchmarks/">Benchmarks</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">API reference</span>
@@ -131,7 +131,7 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/matrix_free_operator.jl" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/matrix_free_operator.jl#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="The-matrix-free-operator" class="md-heading">The matrix-free operator<a href="#The-matrix-free-operator" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p><a href="../../api/forms/#Bramble.matrix_free_operator"><code class="md-code-inline">matrix_free_operator</code></a> applies a bilinear form to a vector without ever storing its matrix. This page answers five questions about it: what it is, how a product is computed, what it stores and costs, where it stops, and what it looks like on a form the Kronecker operator of the <a href="../../examples/memory_scaling/">memory scaling</a> page cannot take. Every claim below that can be checked is checked by a line the documentation build hides and the test suite runs.</p>
 <div class="md-multi-output">
@@ -145,11 +145,12 @@ using LinearSolve: LinearProblem, solve, KrylovJL_CG</code></pre>
 <h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>Applying a bilinear form to a vector normally means assembling its <code class="md-code-inline">SparseMatrixCSC</code> first, and that matrix stores one value and one index per nonzero. The problem is to compute the same product <code class="md-code-inline">A * x</code> without storing <code class="md-code-inline">A</code>, for any form <code class="md-code-inline">assemble</code> accepts, including those with a grid-function coefficient, Dirichlet rows or a composite space. The sections below build the operator that does it, measure what it costs, and apply it to such a form.</p>
 <h2 id="What-the-operator-is" class="md-heading">What the operator is<a href="#What-the-operator-is" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>For a form <code class="md-code-inline">a</code>, <code class="md-code-inline">op = matrix_free_operator(a)</code> stands for the matrix <code class="md-code-inline">assemble(a)</code>: <code class="md-code-inline">mul!(y, op, x, α, β)</code> computes <code class="md-code-inline">α * A * x + β * y</code>, and <code class="md-code-inline">op * x</code> is <code class="md-code-inline">A * x</code>. Assembly walks the form&#39;s stencil over the mesh and stores each entry it meets as a nonzero; <code class="md-code-inline">op</code> walks the same stencil, through the same <code class="md-code-inline">visit_bilinear_stencil</code>, and adds each entry&#39;s contribution <code class="md-code-inline">weight * x[col]</code> into <code class="md-code-inline">y[row]</code> instead of storing it. That is why the walk accumulates into <code class="md-code-inline">y</code>, and why <code class="md-code-inline">mul!</code> with <code class="md-code-inline">β = 0</code> overwrites it rather than adding to what was there.</p>
-<p>Nothing in that walk asks for a tensor structure. The Kronecker operator needs the matrix to be a sum of Kronecker products of one-dimensional factors, so it refuses a grid-function coefficient, a Dirichlet row or a composite space. The matrix-free operator has no such factorisation to find: it evaluates the coefficient at the stencil&#39;s points, writes the identity into a Dirichlet row, and walks the blocks of a composite space one after another. It takes every form <code class="md-code-inline">assemble</code> takes because it reuses the assembly&#39;s own walk rather than a second evaluator of the stencil.</p>
+<p>For a form <code class="md-code-inline">a</code>, <code class="md-code-inline">op = matrix_free_operator(a)</code> stands for the matrix <code class="md-code-inline">assemble(a)</code>: <code class="md-code-inline">mul!(y, op, x, α, β)</code> computes <code class="md-code-inline">α * A * x + β * y</code>, and <code class="md-code-inline">op * x</code> is <code class="md-code-inline">A * x</code>. Assembly walks the form&#39;s stencil over the mesh and stores each entry it meets as a nonzero; <code class="md-code-inline">op</code> evaluates the same stencil, through the same <code class="md-code-inline">visit_bilinear_stencil</code> and <code class="md-code-inline">local_stencil</code>, and adds each entry&#39;s contribution <code class="md-code-inline">weight * x[col]</code> into <code class="md-code-inline">y[row]</code> instead of storing it. That is why a product accumulates into <code class="md-code-inline">y</code>, and why <code class="md-code-inline">mul!</code> with <code class="md-code-inline">β = 0</code> overwrites it rather than adding to what was there.</p>
+<p>Nothing in that evaluation asks for a tensor structure. The Kronecker operator needs the matrix to be a sum of Kronecker products of one-dimensional factors, so it refuses a grid-function coefficient, a Dirichlet row or a composite space. The matrix-free operator has no such factorisation to find: it evaluates the coefficient at the stencil&#39;s points, writes the identity into a Dirichlet row, and walks the blocks of a composite space one after another. It takes every form <code class="md-code-inline">assemble</code> takes because it reuses the assembly&#39;s own stencil rather than a second evaluator of it.</p>
 <h2 id="How-a-product-is-computed" class="md-heading">How a product is computed<a href="#How-a-product-is-computed" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>A product walks the form&#39;s terms and blocks in the order the serial assembly replays them. A scalar form is walked one summand at a time, a composite form block by block. A pair of transposed terms, <span class="md-math md-math-inline">\(\langle A u, B v\rangle + \langle B u, A v\rangle\)</span>, is walked once: an entry found for the first term also stands for the entry of the second at the mirrored position, so the stencil is not evaluated twice.</p>
-<p>On a serial policy that is the whole product. On a threaded one the grid is cut into one band per thread along its <strong>last axis</strong>, and the product is one parallel region however many terms the form has: each thread walks every term over its own band and adds only into the rows of that band&#39;s points. Because no two threads add into the same entry of <code class="md-code-inline">y</code>, the threaded product needs no atomics and its result does not depend on scheduling. A form whose leaves walk grids of different sizes, or carry different policies, falls back to sweeping one term at a time, each in the colour bands the threaded <code class="md-code-inline">assemble!</code> uses, which is what keeps that fallback race-free as well. A term with a test-side interpolation runs serially inside the product.</p>
+<p>A product visits the form&#39;s terms and blocks in the order the serial assembly replays them. A scalar form is taken one summand at a time, a composite form block by block. Each unit (a term on a block) has two kinds of point. The interior is the points whose stencil lies wholly inside the grid, which is most of them. For most units it is <strong>gathered</strong>. Each row <code class="md-code-inline">y[row]</code> sums its own entries, read from the same <code class="md-code-inline">local_stencil</code> as assembly, and is written once, in a loop along the first axis. A row&#39;s neighbours along that axis share stencil points, so the loop evaluates each point once and carries it to the next row. The boundary shell is <strong>scattered</strong>: the walk visits each point, through <code class="md-code-inline">visit_bilinear_stencil</code>, and adds each entry into its row. (A unit whose per-axis spacings the operator caches gathers its shell as well.) A unit the gather cannot take scatters whole. That covers a stencil of more than nine entries, a nested stencil, a region restriction, a test-side interpolation, a shift, and a grid too small to have an interior.</p>
+<p>A pair of transposed terms, <span class="md-math md-math-inline">\(\langle A u, B v\rangle + \langle B u, A v\rangle\)</span>, is scattered once. An entry found for the first term also stands for the entry of the second at the mirrored position, so the stencil is not evaluated twice there. Its interior is gathered in two passes, the first term&#39;s rows and then the transposed term&#39;s, each from the same <code class="md-code-inline">local_stencil</code>.</p>
+<p>On a serial policy that is the whole product. On a threaded one the grid is cut into one band per thread along its <strong>last axis</strong>, and the product is one parallel region however many terms the form has: each thread takes every term over its own band and adds only into the rows of that band. Because no two threads add into the same entry of <code class="md-code-inline">y</code>, the threaded product needs no atomics and its result does not depend on scheduling. A form whose leaves walk grids of different sizes, or carry different policies, falls back to sweeping one term at a time, each in the colour bands the threaded <code class="md-code-inline">assemble!</code> uses, which is what keeps that fallback race-free as well. A term with a test-side interpolation runs serially inside the product.</p>
 <p>The order in which a thread adds the entries of a row is the serial order, but this page does not rely on that: the products below are compared to the assembled one with <code class="md-code-inline">≈</code>, not <code class="md-code-inline">==</code>.</p>
 <h2 id="What-it-stores-and-costs" class="md-heading">What it stores and costs<a href="#What-it-stores-and-costs" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>The operator keeps the <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> and, through it, the mesh and the coefficient data the form holds, plus a mask of the Dirichlet rows and, on a threaded policy, a small plan of the bands. It stores no entries. The assembled <code class="md-code-inline">SparseMatrixCSC</code> stores one value and one row index per nonzero, and the number of nonzeros grows with the number of unknowns. The comparison below is computed on the page, on the form of the worked example. The operator gets a form of its own: <code class="md-code-inline">assemble</code> fills the form it is given with the scatter tables of the CSR route, which a product never reads, so measuring the operator on an assembled form would count memory it does not need.</p>
@@ -196,10 +197,10 @@ a₁ = form(W₁, W₁, (u, v) -&gt; innerₕ(u, v))
 try
     matrix_free_operator(a₁; policy = Bramble.GpuKernel())
 catch err
-    err
+    showerror(stdout, err)
 end</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError(&quot;matrix_free_operator does not run on a GpuPolicy (Bramble.GpuKernel): a device matrix-free mul! is tracked on milestone v4.4.0. Use a CPU policy, or assemble the matrix with `assemble`.&quot;)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError: matrix_free_operator does not run on a GpuPolicy (Bramble.GpuKernel): a device matrix-free mul! is tracked on milestone v4.4.0. Use a CPU policy, or assemble the matrix with `assemble`.</code></pre>
 </div>
 <ul class="md-list-tight">
 <li><p><strong>Only the five-argument <code class="md-code-inline">mul!</code>.</strong> The operator defines <code class="md-code-inline">mul!(y, op, x, α, β)</code>. The three-argument <code class="md-code-inline">mul!</code> and <code class="md-code-inline">*</code> reach it through <code class="md-code-inline">LinearAlgebra</code>&#39;s own methods, with <code class="md-code-inline">α = true</code> and <code class="md-code-inline">β = false</code>, so they work, but the operator defines no method of its own for them. <code class="md-code-inline">getindex</code> is supported for inspection and costs one product per entry.</p>
@@ -213,11 +214,11 @@ end</code></pre>
     collect(methods(mul!)))</code></pre>
 </div>
 <div class="md-output md-output-html">
-1-element Vector{Method}:<ul><li> mul!(y::<b>AbstractVector</b>, op::<b>Bramble.MatrixFreeOperator</b>, x::<b>AbstractVector</b>, α::<b>Number</b>, β::<b>Number</b>) in Bramble at <a href="https://github.com/gpena/Bramble.jl/tree/ea0c693b53464e476b13ba8665a0d2e58a6afcda//src/assembly/matrix_free.jl#L279" target="_blank">/home/runner/work/Bramble.jl/Bramble.jl/src/assembly/matrix_free.jl:279</a></ul>
+1-element Vector{Method}:<ul><li> mul!(y::<b>AbstractVector</b>, op::<b>Bramble.MatrixFreeOperator</b>, x::<b>AbstractVector</b>, α::<b>Number</b>, β::<b>Number</b>) in Bramble at <a href="https://github.com/gpena/Bramble.jl/tree/26a1f9d719f06ade92f35641ae29371979b12984//src/assembly/matrix_free.jl#L301" target="_blank">/home/runner/work/Bramble.jl/Bramble.jl/src/assembly/matrix_free.jl:301</a></ul>
 </div>
 </div>
 <ul class="md-list-tight">
-<li><p><strong>Real work per product.</strong> It recomputes each entry from the mesh and the coefficient, so a serial product is slower than a serial sparse product; the tutorial&#39;s table puts numbers on that. It also recomputes a coefficient that was updated in place, which is a feature of the design, not a cost.</p>
+<li><p><strong>Real work per product.</strong> It recomputes each entry from the mesh and the coefficient, where a sparse product reads stored entries; the section &quot;Kronecker or matrix-free?&quot; compares the times of the routes at one size. It also recomputes a coefficient that was updated in place, which is a feature of the design, not a cost.</p>
 </li>
 <li><p><strong>Forms.</strong> The docstring of <a href="../../api/forms/#Bramble.matrix_free_operator"><code class="md-code-inline">matrix_free_operator</code></a> says it takes any form <code class="md-code-inline">assemble</code> accepts, on scalar or composite spaces, and this page knows of no form it refuses. A form with a region restriction (<code class="md-code-inline">restrict_to</code>) allocates inside the product, as it does in <code class="md-code-inline">assemble!</code>; every other form allocates nothing on a serial policy, which the test <code class="md-code-inline">matrix-free: allocation-free mul!</code> in <code class="md-code-inline">test/form/matrix_free.jl</code> pins.</p>
 </li>
@@ -251,7 +252,7 @@ y_assembled = A * x
 (serial = norm(y_serial - y_assembled) / norm(y_assembled),
     threaded = norm(y_threaded - y_assembled) / norm(y_assembled))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(serial = 1.92520380633661e-16, threaded = 1.92520380633661e-16)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(serial = 1.8338859958807812e-16, threaded = 1.8338859958807812e-16)</code></pre>
 </div>
 <p>Now solve. The mass-plus-diffusion matrix is symmetric positive definite away from the Dirichlet rows. An identity row keeps its column entries, so the matrix is symmetric only on vectors that vanish on those rows, and CG needs a right-hand side that vanishes there. <code class="md-code-inline">b = A * x_exact</code> with an exact vector that is zero on the boundary is one:</p>
 <div class="md-multi-output">
@@ -277,7 +278,7 @@ sol_prec = solve_cg(Pl = P)
 rel_err(u) = norm(u - x_direct) / norm(x_direct)
 (plain_error = rel_err(sol_plain.u), preconditioned_error = rel_err(sol_prec.u))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(plain_error = 1.8048193969966193e-10, preconditioned_error = 2.6153143498179475e-10)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(plain_error = 1.7969184359892453e-10, preconditioned_error = 2.615314520966634e-10)</code></pre>
 </div>
 <p>The solve is the same one the solvers tutorial runs under <a href="../../tutorials/solvers/#Jacobi-and-Chebyshev-preconditioning">Jacobi and Chebyshev preconditioning</a>, here with Dirichlet rows. <a href="../../api_sciml/#Bramble.gmg_preconditioner"><code class="md-code-inline">gmg_preconditioner</code></a> is the third matrix-free preconditioner; the tutorial&#39;s multigrid section shows it and states where its point smoothers stop.</p>
 <h2 id="Kronecker-or-matrix-free?" class="md-heading">Kronecker or matrix-free?<a href="#Kronecker-or-matrix-free?" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -293,7 +294,7 @@ meta = routes[&quot;meta&quot;]
 (cpu = meta[&quot;cpu&quot;], threads = meta[&quot;threads&quot;], power = meta[&quot;power&quot;],
     load = meta[&quot;load1&quot;], commit = meta[&quot;commit&quot;])</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(cpu = &quot;Apple M2&quot;, threads = 4, power = &quot;ac&quot;, load = 8.12, commit = &quot;dfd9a2c2&quot;)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(cpu = &quot;Apple M2&quot;, threads = 4, power = &quot;ac&quot;, load = 5.85, commit = &quot;86e058eb-dirty&quot;)</code></pre>
 </div>
 <p>Each table below gives, per dimension and size, the Kronecker route&#39;s measurement divided by the same measurement of another route. A ratio under <code class="md-code-inline">1</code> means the Kronecker route is cheaper, and one over <code class="md-code-inline">1</code> means it costs more:</p>
 <div class="md-multi-output">
@@ -344,16 +345,16 @@ mf_routes = [&quot;assembled&quot;, &quot;matrix_free_serial&quot;, &quot;matrix
 shown(construction_ratios)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">10-element Vector{@NamedTuple{dim::Int64, n::Int64, assembled::Float64, matrix_free_serial::Float64, matrix_free_threaded::Float64}}:
- (dim = 2, n = 32, assembled = 0.0459, matrix_free_serial = 113.0, matrix_free_threaded = 2.71)
- (dim = 2, n = 64, assembled = 0.0176, matrix_free_serial = 223.0, matrix_free_threaded = 5.47)
- (dim = 2, n = 128, assembled = 0.00899, matrix_free_serial = 430.0, matrix_free_threaded = 10.3)
- (dim = 2, n = 256, assembled = 0.00427, matrix_free_serial = 749.0, matrix_free_threaded = 16.0)
- (dim = 2, n = 512, assembled = 0.00198, matrix_free_serial = 1160.0, matrix_free_threaded = 36.6)
- (dim = 3, n = 8, assembled = 0.0453, matrix_free_serial = 49.6, matrix_free_threaded = 1.64)
- (dim = 3, n = 16, assembled = 0.00701, matrix_free_serial = 75.3, matrix_free_threaded = 2.24)
- (dim = 3, n = 32, assembled = 0.00155, matrix_free_serial = 97.7, matrix_free_threaded = 3.05)
- (dim = 3, n = 48, assembled = 0.000459, matrix_free_serial = 115.0, matrix_free_threaded = 3.74)
- (dim = 3, n = 64, assembled = 0.000294, matrix_free_serial = 141.0, matrix_free_threaded = 6.64)</code></pre>
+ (dim = 2, n = 32, assembled = 0.0519, matrix_free_serial = 16.7, matrix_free_threaded = 2.49)
+ (dim = 2, n = 64, assembled = 0.0155, matrix_free_serial = 28.3, matrix_free_threaded = 4.43)
+ (dim = 2, n = 128, assembled = 0.00835, matrix_free_serial = 31.6, matrix_free_threaded = 6.42)
+ (dim = 2, n = 256, assembled = 0.00477, matrix_free_serial = 24.4, matrix_free_threaded = 9.08)
+ (dim = 2, n = 512, assembled = 0.00226, matrix_free_serial = 35.6, matrix_free_threaded = 16.6)
+ (dim = 3, n = 8, assembled = 0.0496, matrix_free_serial = 18.6, matrix_free_threaded = 1.5)
+ (dim = 3, n = 16, assembled = 0.0102, matrix_free_serial = 26.8, matrix_free_threaded = 2.82)
+ (dim = 3, n = 32, assembled = 0.00141, matrix_free_serial = 21.7, matrix_free_threaded = 2.71)
+ (dim = 3, n = 48, assembled = 0.000407, matrix_free_serial = 21.5, matrix_free_threaded = 3.15)
+ (dim = 3, n = 64, assembled = 0.000258, matrix_free_serial = 25.0, matrix_free_threaded = 4.63)</code></pre>
 </div>
 <p>The Kronecker route is built faster than the assembled matrix at every size, and the gap widens with the size. It is built more slowly than either matrix-free operator at every size: a matrix-free operator only wraps the form, while the Kronecker route builds the one-dimensional factor matrices.</p>
 <p><strong>Bytes.</strong> The memory the operator holds once built:</p>
@@ -364,16 +365,16 @@ shown(construction_ratios)</code></pre>
 shown(bytes_ratios)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">10-element Vector{@NamedTuple{dim::Int64, n::Int64, assembled::Float64, matrix_free_serial::Float64, matrix_free_threaded::Float64}}:
- (dim = 2, n = 32, assembled = 0.0582, matrix_free_serial = 58.4, matrix_free_threaded = 40.1)
- (dim = 2, n = 64, assembled = 0.0273, matrix_free_serial = 111.0, matrix_free_threaded = 76.1)
- (dim = 2, n = 128, assembled = 0.0132, matrix_free_serial = 215.0, matrix_free_threaded = 148.0)
- (dim = 2, n = 256, assembled = 0.0065, matrix_free_serial = 425.0, matrix_free_threaded = 292.0)
- (dim = 2, n = 512, assembled = 0.00322, matrix_free_serial = 844.0, matrix_free_threaded = 580.0)
- (dim = 3, n = 8, assembled = 0.0443, matrix_free_serial = 27.9, matrix_free_threaded = 18.1)
- (dim = 3, n = 16, assembled = 0.00882, matrix_free_serial = 46.8, matrix_free_threaded = 30.3)
- (dim = 3, n = 32, assembled = 0.00194, matrix_free_serial = 84.6, matrix_free_threaded = 54.8)
- (dim = 3, n = 48, assembled = 0.000826, matrix_free_serial = 122.0, matrix_free_threaded = 79.2)
- (dim = 3, n = 64, assembled = 0.000454, matrix_free_serial = 160.0, matrix_free_threaded = 104.0)</code></pre>
+ (dim = 2, n = 32, assembled = 0.0582, matrix_free_serial = 7.21, matrix_free_threaded = 4.72)
+ (dim = 2, n = 64, assembled = 0.0273, matrix_free_serial = 7.96, matrix_free_threaded = 6.09)
+ (dim = 2, n = 128, assembled = 0.0132, matrix_free_serial = 8.43, matrix_free_threaded = 7.23)
+ (dim = 2, n = 256, assembled = 0.0065, matrix_free_serial = 8.7, matrix_free_threaded = 8.0)
+ (dim = 2, n = 512, assembled = 0.00322, matrix_free_serial = 8.85, matrix_free_threaded = 8.47)
+ (dim = 3, n = 8, assembled = 0.0443, matrix_free_serial = 5.58, matrix_free_threaded = 2.33)
+ (dim = 3, n = 16, assembled = 0.00882, matrix_free_serial = 6.52, matrix_free_threaded = 3.3)
+ (dim = 3, n = 32, assembled = 0.00194, matrix_free_serial = 7.33, matrix_free_threaded = 4.56)
+ (dim = 3, n = 48, assembled = 0.000826, matrix_free_serial = 7.7, matrix_free_threaded = 5.35)
+ (dim = 3, n = 64, assembled = 0.000454, matrix_free_serial = 7.91, matrix_free_threaded = 5.88)</code></pre>
 </div>
 <p>The Kronecker route holds fewer bytes than the assembled matrix at every size, and the ratio falls as the mesh refines. The matrix-free operators hold fewer still, at every size, so for memory the matrix-free route is the smaller of the two:</p>
 <p><strong>Product.</strong> One five-argument <code class="md-code-inline">mul!</code>:</p>
@@ -384,18 +385,32 @@ shown(bytes_ratios)</code></pre>
 shown(product_ratios)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">10-element Vector{@NamedTuple{dim::Int64, n::Int64, assembled::Float64, matrix_free_serial::Float64, matrix_free_threaded::Float64}}:
- (dim = 2, n = 32, assembled = 0.412, matrix_free_serial = 0.211, matrix_free_threaded = 0.143)
- (dim = 2, n = 64, assembled = 0.348, matrix_free_serial = 0.205, matrix_free_threaded = 0.478)
- (dim = 2, n = 128, assembled = 0.348, matrix_free_serial = 0.199, matrix_free_threaded = 0.27)
- (dim = 2, n = 256, assembled = 0.313, matrix_free_serial = 0.205, matrix_free_threaded = 0.324)
- (dim = 2, n = 512, assembled = 0.632, matrix_free_serial = 0.249, matrix_free_threaded = 0.574)
- (dim = 3, n = 8, assembled = 1.04, matrix_free_serial = 0.176, matrix_free_threaded = 0.377)
- (dim = 3, n = 16, assembled = 0.682, matrix_free_serial = 0.155, matrix_free_threaded = 0.496)
- (dim = 3, n = 32, assembled = 0.587, matrix_free_serial = 0.145, matrix_free_threaded = 0.34)
- (dim = 3, n = 48, assembled = 0.455, matrix_free_serial = 0.133, matrix_free_threaded = 0.328)
- (dim = 3, n = 64, assembled = 0.554, matrix_free_serial = 0.107, matrix_free_threaded = 0.4)</code></pre>
+ (dim = 2, n = 32, assembled = 0.425, matrix_free_serial = 0.791, matrix_free_threaded = 0.266)
+ (dim = 2, n = 64, assembled = 0.348, matrix_free_serial = 0.883, matrix_free_threaded = 0.593)
+ (dim = 2, n = 128, assembled = 0.345, matrix_free_serial = 0.843, matrix_free_threaded = 0.948)
+ (dim = 2, n = 256, assembled = 0.307, matrix_free_serial = 0.924, matrix_free_threaded = 1.15)
+ (dim = 2, n = 512, assembled = 0.386, matrix_free_serial = 0.916, matrix_free_threaded = 1.22)
+ (dim = 3, n = 8, assembled = 1.02, matrix_free_serial = 0.608, matrix_free_threaded = 0.298)
+ (dim = 3, n = 16, assembled = 0.67, matrix_free_serial = 0.77, matrix_free_threaded = 0.706)
+ (dim = 3, n = 32, assembled = 0.521, matrix_free_serial = 0.791, matrix_free_threaded = 1.03)
+ (dim = 3, n = 48, assembled = 0.45, matrix_free_serial = 0.803, matrix_free_threaded = 1.11)
+ (dim = 3, n = 64, assembled = 0.547, matrix_free_serial = 0.855, matrix_free_threaded = 1.36)</code></pre>
 </div>
-<p>The Kronecker product is faster than both matrix-free products at every size, and faster than the assembled product at every size but the smallest cube, where the two are within a few percent:</p>
+<p>The Kronecker product is faster than the serial matrix-free product at every size, and faster than the assembled product at every size but the smallest cube, where the two are within a few percent. The Kronecker product runs serially, so against the threaded matrix-free product the comparison is one thread to the run&#39;s thread count. The Kronecker product is the faster of the two at the small sizes. The threaded matrix-free product is the faster one from <code class="md-code-inline">n = 256</code> in 2D and <code class="md-code-inline">n = 32</code> in 3D on:</p>
+<p>The tables above divide the Kronecker figure by the other route&#39;s. Read the serial matrix-free product the other way round, as its time divided by the assembled product&#39;s and by the Kronecker product&#39;s, on the square of 512² points and the cube of 64³, both of 262144 unknowns. A ratio under <code class="md-code-inline">1</code> means the matrix-free product is the faster one:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">serial_ratios = route_ratios(&quot;product&quot;, &quot;time_s&quot;; of = &quot;matrix_free_serial&quot;,
+    against = [&quot;assembled&quot;, &quot;kronecker&quot;])
+serial_at_262144 = filter(r -&gt; r.n^r.dim == 262144, serial_ratios)
+shown(serial_at_262144)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{@NamedTuple{dim::Int64, n::Int64, assembled::Float64, kronecker::Float64}}:
+ (dim = 2, n = 512, assembled = 0.421, kronecker = 1.09)
+ (dim = 3, n = 64, assembled = 0.639, kronecker = 1.17)</code></pre>
+</div>
+<p>At that size the serial matrix-free product takes <code class="md-code-inline">0.4×</code> the time of the assembled product in 2D and <code class="md-code-inline">0.6×</code> in 3D, so it is the faster of the two. It takes <code class="md-code-inline">1.1×</code> the time of the Kronecker product in 2D and <code class="md-code-inline">1.2×</code> in 3D, so the Kronecker route stays the faster serial product. The two routes keep different things. The Kronecker route applies one-dimensional factor matrices it built once. The matrix-free operator stores no entries and forms each row&#39;s entries again on every product, from per-axis spacings it caches for the separable terms and from the mesh and the coefficient otherwise. The profile script <code class="md-code-inline">benchmark/matrix_free_profile.jl</code> is where to measure how the time of a product splits. The assembled product reads entries stored at assembly.</p>
 <p><strong>Solve.</strong> Conjugate gradients to the same tolerance with each operator. The table adds the two reference rows, <a href="../../api/forms/#Bramble.fdm_solve"><code class="md-code-inline">fdm_solve</code></a> on the form and the sparse direct solve of the assembled matrix. Neither is an operator route, so they are compared with the Kronecker CG solve rather than with each other:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -404,19 +419,19 @@ shown(product_ratios)</code></pre>
 shown(solve_ratios)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">10-element Vector{@NamedTuple{dim::Int64, n::Int64, assembled::Float64, matrix_free_serial::Float64, matrix_free_threaded::Float64, fdm_solve::Float64, direct::Float64}}:
- (dim = 2, n = 32, assembled = 0.487, matrix_free_serial = 0.283, matrix_free_threaded = 0.14, fdm_solve = 4.94, direct = 1.77)
- (dim = 2, n = 64, assembled = 0.442, matrix_free_serial = 0.313, matrix_free_threaded = 0.231, fdm_solve = 14.3, direct = 4.39)
- (dim = 2, n = 128, assembled = 0.467, matrix_free_serial = 0.288, matrix_free_threaded = 0.284, fdm_solve = 41.1, direct = 13.2)
- (dim = 2, n = 256, assembled = 0.403, matrix_free_serial = 0.273, matrix_free_threaded = 0.33, fdm_solve = 85.3, direct = 30.5)
- (dim = 2, n = 512, assembled = 0.363, matrix_free_serial = 0.345, matrix_free_threaded = 0.467, fdm_solve = 173.0, direct = 79.6)
- (dim = 3, n = 8, assembled = 1.03, matrix_free_serial = 0.202, matrix_free_threaded = 0.165, fdm_solve = 2.34, direct = 0.722)
- (dim = 3, n = 16, assembled = 0.715, matrix_free_serial = 0.194, matrix_free_threaded = 0.258, fdm_solve = 8.46, direct = 0.896)
- (dim = 3, n = 32, assembled = 0.603, matrix_free_serial = 0.19, matrix_free_threaded = 0.397, fdm_solve = 43.3, direct = 0.895)
- (dim = 3, n = 48, assembled = 0.513, matrix_free_serial = 0.167, matrix_free_threaded = 0.327, fdm_solve = 82.4, direct = 0.411)
- (dim = 3, n = 64, assembled = 0.493, matrix_free_serial = 0.197, matrix_free_threaded = 0.353, fdm_solve = 139.0, direct = 0.272)</code></pre>
+ (dim = 2, n = 32, assembled = 0.474, matrix_free_serial = 0.727, matrix_free_threaded = 0.22, fdm_solve = 3.79, direct = 1.72)
+ (dim = 2, n = 64, assembled = 0.444, matrix_free_serial = 0.823, matrix_free_threaded = 0.31, fdm_solve = 14.1, direct = 4.35)
+ (dim = 2, n = 128, assembled = 0.476, matrix_free_serial = 0.792, matrix_free_threaded = 0.596, fdm_solve = 42.4, direct = 13.4)
+ (dim = 2, n = 256, assembled = 0.379, matrix_free_serial = 0.792, matrix_free_threaded = 0.639, fdm_solve = 86.9, direct = 31.5)
+ (dim = 2, n = 512, assembled = 0.415, matrix_free_serial = 0.925, matrix_free_threaded = 0.622, fdm_solve = 155.0, direct = 66.9)
+ (dim = 3, n = 8, assembled = 0.987, matrix_free_serial = 0.653, matrix_free_threaded = 0.261, fdm_solve = 2.36, direct = 0.677)
+ (dim = 3, n = 16, assembled = 0.696, matrix_free_serial = 0.839, matrix_free_threaded = 0.42, fdm_solve = 10.9, direct = 1.06)
+ (dim = 3, n = 32, assembled = 0.612, matrix_free_serial = 0.875, matrix_free_threaded = 0.733, fdm_solve = 41.4, direct = 0.767)
+ (dim = 3, n = 48, assembled = 0.518, matrix_free_serial = 0.854, matrix_free_threaded = 0.677, fdm_solve = 70.4, direct = 0.425)
+ (dim = 3, n = 64, assembled = 0.466, matrix_free_serial = 0.886, matrix_free_threaded = 0.781, fdm_solve = 117.0, direct = 0.293)</code></pre>
 </div>
-<p>The Kronecker CG solve is faster than both matrix-free CG solves at every size, and faster than the assembled CG solve at every size but the smallest cube, again within a few percent. Against the references it does not win. <code class="md-code-inline">fdm_solve</code> is faster than any CG route at every size, and the direct solve is faster in the square at every size and slower in the cube:</p>
-<p>So the Kronecker route is preferred over the assembled matrix whenever the form is separable: it is cheaper to build and to hold at every size, and its product and solve are faster at every size except the smallest cube (3D, n = 8). It is preferred over the matrix-free operator for the product and the CG solve, which it runs faster at every size. The matrix-free operator keeps two advantages, construction time and bytes held, and it is the only route of the three when the form is not separable. When the aim is to solve a separable problem, and not to apply the operator inside another iteration, <code class="md-code-inline">fdm_solve</code> is the faster call at every size in this file.</p>
+<p>The Kronecker CG solve is faster than both matrix-free CG solves and than the assembled CG solve at every size, and at the smallest cube it leads the assembled one by under two percent. Against the references it does not win. <code class="md-code-inline">fdm_solve</code> is faster than any CG route at every size. The direct solve is faster in the square at every size and in the cube at <code class="md-code-inline">n = 16</code>, and slower at the other cube sizes:</p>
+<p>So the Kronecker route is preferred over the assembled matrix whenever the form is separable: it is cheaper to build and to hold at every size, and its solve is faster at every size. Its product is too, except at the smallest cube (3D, n = 8). It is preferred over the matrix-free operator for the CG solve at every size, and for the serial product. The threaded matrix-free product is the faster one from <code class="md-code-inline">n = 256</code> in 2D and <code class="md-code-inline">n = 32</code> in 3D, and the Kronecker product is the faster one below those sizes. When the form is not separable the matrix-free operator is the only one of the three, and at 262144 unknowns its serial product is faster than the assembled one. It also holds fewer bytes than either route and is built faster than the Kronecker route. To solve a separable problem, and not to apply the operator inside another iteration, call <code class="md-code-inline">fdm_solve</code>, which is faster at every size in this file.</p>
 <h2 id="Where-to-go-next" class="md-heading">Where to go next<a href="#Where-to-go-next" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <ul class="md-list-tight">
 <li><p><a href="../../examples/memory_scaling/">Memory scaling</a> builds the Kronecker operator that this page compares against, and the fast-diagonalisation solve that beats both on a separable form.</p>
@@ -459,6 +474,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=f44953e3"></script>
+  <script src="../../assets/materialdocs.js?v=e2e31ae6"></script>
 </body>
 </html>

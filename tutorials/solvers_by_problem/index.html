@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Solvers by problem — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=c8f806e7">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=846f5666">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Solvers by problem — Bramble.jl">
   <meta property="og:title" content="Solvers by problem — Bramble.jl">
@@ -41,7 +41,7 @@
     <nav class="md-sidebar">
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Discrete foundations</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
@@ -50,7 +50,7 @@
         <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
         <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
@@ -63,13 +63,13 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
         <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">Stationary problems</span>
@@ -100,7 +100,7 @@
         </div>
       </div>
       <a href="../../benchmarks/">Benchmarks</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">API reference</span>
@@ -131,7 +131,7 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/solvers_by_problem.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/solvers_by_problem.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="tutorial_solvers_by_problem" class="md-heading">Solvers by problem<a href="#tutorial_solvers_by_problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p><strong>What you will learn.</strong> Which solver suits a symmetric positive-definite, an unsymmetric, a coupled and a hyperbolic problem, shown by running each.</p>
 <p><strong>What you need first.</strong> The <a href="../../tutorials/form/#form_dirichlet">form tutorial</a> for assembling a system with Dirichlet conditions, and the <a href="../../tutorials/solvers/">solver choices</a> these examples put to work. The elasticity example reads <a href="../../tutorials/space/#space_composite">composite spaces</a>.</p>
@@ -297,7 +297,7 @@ norm(u_direct_el - sol_el.u) / norm(u_direct_el),
 norm(u_direct_el - sol_el_amg.u) / norm(u_direct_el),
 sol_el.iters, sol_el_amg.iters</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.2533646083605796e-8, 4.471004940674217e-9, 117, 55)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.2404330064535373e-8, 4.47097249421526e-9, 117, 55)</code></pre>
 </div>
 <p>The three solutions agree to about <code class="md-code-inline">1e-8</code>, within the solver tolerances, and AMG still cuts the iteration count sharply, although its hierarchy is built from the graph of the coupled <code class="md-code-inline">1836 x 1836</code> matrix with no knowledge of the three components. The SPD argument transfers unchanged; only the assembled operator differs. This is a correctness check on one modest mesh. Whether AMG keeps its <code class="md-code-inline">O(1)</code> advantage at the scale of the elasticity example&#39;s cantilever meshes has not been measured.</p>
 <h2 id="A-hyperbolic-system:-the-acoustic-wave-equation" class="md-heading">A hyperbolic system: the acoustic wave equation<a href="#A-hyperbolic-system:-the-acoustic-wave-equation" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -394,6 +394,6 @@ norm(Kw_assembled * xrand - Kw_kron * xrand) / norm(Kw_assembled * xrand)</code>
   <script>hljs.highlightAll();</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=c8f806e7"></script>
+  <script src="../../assets/materialdocs.js?v=846f5666"></script>
 </body>
 </html>

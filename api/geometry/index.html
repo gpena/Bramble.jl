@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=574130d4">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=cd539a67">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -41,7 +41,7 @@
     <nav class="md-sidebar">
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Discrete foundations</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
@@ -50,12 +50,12 @@
         <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
         <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,13 +63,13 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
         <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">Stationary problems</span>
@@ -131,14 +131,14 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/api/geometry.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/api/geometry.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Geometry" class="md-heading">Geometry<a href="#Geometry" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <h2 id="Sets-and-intervals" class="md-heading">Sets and intervals<a href="#Sets-and-intervals" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><code class="md-code-inline">is_collapsed</code>, <code class="md-code-inline">point_type</code> and <code class="md-code-inline">set</code> are private; see the <a href="../../internals/geometry/">geometry internals page</a>.</p>
 <div class="md-docstring" id="Bramble.interval">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.interval</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/geometry/set.jl#L55-L79" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L55-L79" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -175,7 +175,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.point">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.point</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/mesh/interface.jl#L314-L322" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L314-L322" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -195,7 +195,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.box">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.box</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/geometry/set.jl#L105-L112" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L105-L112" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -210,7 +210,7 @@ box(a::NTuple{D}, b::NTuple{D}) -&gt; CartesianProduct{D, T}</code></pre>
 <div class="md-docstring" id="LinearAlgebra.:×">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>LinearAlgebra.:×</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/geometry/set.jl#L195-L201" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L195-L201" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -232,7 +232,7 @@ box(a::NTuple{D}, b::NTuple{D}) -&gt; CartesianProduct{D, T}</code></pre>
 <div class="md-docstring" id="Bramble.dim">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.dim</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/space/gridspace.jl#L258-L263" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L258-L263" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -246,7 +246,7 @@ dim(::Type{&lt;:AbstractSpaceType}) -&gt; Int</code></pre>
 <div class="md-docstring" id="Bramble.topo_dim">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.topo_dim</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/geometry/set.jl#L163-L167" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L163-L167" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -274,7 +274,7 @@ dim(::Type{&lt;:AbstractSpaceType}) -&gt; Int</code></pre>
 <div class="md-docstring" id="Base.extrema-Tuple{Bramble.CartesianProduct, Integer}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.extrema</code> — <span class="md-docstring-sig">Tuple{Bramble.CartesianProduct, Integer}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/geometry/set.jl#L175-L181" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L175-L181" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -289,7 +289,7 @@ extrema(X::CartesianProduct{D}) -&gt; NTuple{D, Tuple{T, T}}</code></pre>
 <div class="md-docstring" id="Bramble.center">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.center</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/geometry/set.jl#L123-L127" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L123-L127" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -309,7 +309,7 @@ extrema(X::CartesianProduct{D}) -&gt; NTuple{D, Tuple{T, T}}</code></pre>
 <div class="md-docstring" id="Bramble.projection">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.projection</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/geometry/set.jl#L221-L225" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L221-L225" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -329,7 +329,7 @@ extrema(X::CartesianProduct{D}) -&gt; NTuple{D, Tuple{T, T}}</code></pre>
 <div class="md-docstring" id="Bramble.boundary_symbols">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.boundary_symbols</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/geometry/set.jl#L345-L356" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L345-L356" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -360,7 +360,7 @@ boundary_symbols(D::Integer) -&gt; Tuple{Vararg{Symbol}}</code></pre>
 <div class="md-docstring" id="Bramble.markers">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.markers</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/geometry/marker.jl#L123-L145" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L123-L145" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -408,7 +408,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.domain">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.domain</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/geometry/domain.jl#L79-L105" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L79-L105" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -448,7 +448,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.labels">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.labels</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/geometry/domain.jl#L48-L54" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L48-L54" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -486,6 +486,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=574130d4"></script>
+  <script src="../../assets/materialdocs.js?v=cd539a67"></script>
 </body>
 </html>

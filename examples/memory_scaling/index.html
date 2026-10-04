@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Memory scaling with a matrix-free Kronecker operator — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e4994b21">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=1fa92e05">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Memory scaling with a matrix-free Kronecker operator — Bramble.jl">
   <meta property="og:title" content="Memory scaling with a matrix-free Kronecker operator — Bramble.jl">
@@ -41,7 +41,7 @@
     <nav class="md-sidebar">
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Discrete foundations</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
@@ -50,12 +50,12 @@
         <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
         <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,7 +63,7 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
@@ -100,7 +100,7 @@
         </div>
       </div>
       <a href="../../benchmarks/">Benchmarks</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">API reference</span>
@@ -131,7 +131,7 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/memory_scaling.jl" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/memory_scaling.jl#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Memory-scaling-with-a-matrix-free-Kronecker-operator" class="md-heading">Memory scaling with a matrix-free Kronecker operator<a href="#Memory-scaling-with-a-matrix-free-Kronecker-operator" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p>Every bilinear form assembled so far in this manual becomes one <code class="md-code-inline">SparseMatrixCSC</code>: exact, but its storage grows with the number of nonzeros, which on a Cartesian mesh grows with the number of unknowns. A separable form, one whose assembled matrix is an exact sum of Kronecker products of one-dimensional factors, never needs that matrix at all. Applying it is one fused pass over the per-axis factors, so the storage is <code class="md-code-inline">O(D \cdot n)</code> instead of <code class="md-code-inline">O(n^D)</code> stored nonzeros. This page builds that operator, measures what it actually costs against the matrix it replaces, and checks that it still computes the right answer. Every number below was produced by the code shown.</p>
 <h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -249,7 +249,7 @@ Sₖ = kron(Aₛ, Matrix(1.0I, 3, 3)) + kron(Matrix(1.0I, 2, 2), Bₛ)
 μ = eigvals(Bₛ)
 (sort(eigvals(Sₖ)), sort(vec(λ .+ μ&#39;)))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">([1.9999999999999996, 2.9999999999999982, 3.9999999999999996, 4.999999999999999, 5.0, 6.999999999999999], [2.0, 3.0, 4.0, 5.0, 5.0, 7.0])</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([2.000000000000001, 2.9999999999999982, 4.0, 4.999999999999999, 5.0, 6.999999999999999], [2.0, 3.0, 4.0, 5.0, 5.0, 7.0])</code></pre>
 </div>
 <p>The eigenvector claim is checked the same way, on one pair:</p>
 <div class="md-multi-output">
@@ -260,7 +260,7 @@ Wᵦ = eigvecs(Bₛ)
 v₂ = kron(Vₐ[:, 2], Wᵦ[:, 3])
 norm(Sₖ * v₂ - (λ[2] + μ[3]) * v₂)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">8.881784197001252e-16</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">7.691850745534255e-16</code></pre>
 </div>
 <p>The factors of the operator below are not abstract matrices: each one is a one-dimensional form that Bramble assembles, and the next subsections build the page&#39;s operator from them.</p>
 <h3 id="The-one-dimensional-factors" class="md-heading">The one-dimensional factors<a href="#The-one-dimensional-factors" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
@@ -383,7 +383,7 @@ B₂ = reshape(b₂, 4, 3)
 X₂ = Fx.vectors * ((Fx.vectors&#39; * B₂ * Fy.vectors) ./ Λ₂) * Fy.vectors&#39;
 norm(vec(X₂) - Matrix(A₂) \ b₂)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">4.585065711609581e-13</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4.412235823639328e-13</code></pre>
 </div>
 <p>This agrees with the dense solve to rounding, though only the two small eigenproblems and two small products were used, and no <span class="md-math md-math-inline">\(12 \times 12\)</span> matrix was factorised. On a real grid the saving is the same in kind: <code class="md-code-inline">fdm_solve</code>, used further down, does exactly this with one eigendecomposition per axis and one reshaped product per axis, in any dimension, and without ever assembling the matrix. The derivation needs the form to be a sum of Kronecker products of per-axis factors that share their eigenvectors. That holds for the mass and stiffness terms with constant coefficients, and fails for the grid-function coefficient shown under Separability. A Dirichlet condition is not part of this derivation either: it is handled by restricting each axis to its interior, as described in the section on the operator&#39;s real limit.</p>
 <h2 id="Separability" class="md-heading">Separability<a href="#Separability" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -437,7 +437,7 @@ cg_kwargs = (; reltol = 1e-10, abstol = 1e-10, maxiters = 2000)
 sol_cg = solve(LinearProblem(K, F), KrylovJL_CG(); cg_kwargs...)
 maximum(abs.(sol_cg.u .- xref))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">1.2134526716778282e-10</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">1.2134454552281682e-10</code></pre>
 </div>
 <h2 id="Solving-it:-directly,-by-fast-diagonalisation" class="md-heading">Solving it: directly, by fast diagonalisation<a href="#Solving-it:-directly,-by-fast-diagonalisation" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>A separable, constant-coefficient system like this one also admits a direct solve that never factorises a matrix at all: <code class="md-code-inline">fdm_solve</code> diagonalises each axis&#39;s own generalised eigenproblem once and combines the <code class="md-code-inline">D</code> small eigendecompositions instead. It lives in the <code class="md-code-inline">Kronecker.jl</code> extension rather than in <code class="md-code-inline">Bramble</code> itself, since the fast-diagonalisation solve needs that package&#39;s types. <code class="md-code-inline">Bramble</code> declares the name and exports it, and the extension attaches its methods to it once <code class="md-code-inline">using Kronecker</code> has loaded, so it is spelled plainly here.</p>
@@ -447,7 +447,7 @@ maximum(abs.(sol_cg.u .- xref))</code></pre>
 <pre><code class="language-julia">x_fdm = fdm_solve(a, F)
 maximum(abs.(x_fdm .- xref))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">9.936496070395151e-14</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">9.9253938401489e-14</code></pre>
 </div>
 <h2 id="Error-against-the-manufactured-solution" class="md-heading">Error against the manufactured solution<a href="#Error-against-the-manufactured-solution" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>Both solves above only proved they agree with the ordinary sparse solve. They did not show that any of the three solved the problem posed at the top of the page. That needs the manufactured solution:</p>
@@ -458,7 +458,7 @@ maximum(abs.(x_fdm .- xref))</code></pre>
 uₕ .= x_fdm
 normₕ(uₕ .- Rₕ(Wₕ, sol))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">9.680137334658098e-5</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">9.680137334657838e-5</code></pre>
 </div>
 <h2 id="The-operator&#39;s-real-limit:-no-boundary-constraint-of-its-own" class="md-heading">The operator&#39;s real limit: no boundary constraint of its own<a href="#The-operator&#39;s-real-limit:-no-boundary-constraint-of-its-own" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><code class="md-code-inline">K</code> and <code class="md-code-inline">kronecker_operator</code> carry no Dirichlet handling. A <code class="md-code-inline">KroneckerLinearOperator</code> is built for the whole grid, boundary rows included, because a boundary-restricted term has no tensor structure of its own to factor. The problem above sidesteps this by using an unconstrained (natural) boundary condition instead. Only <code class="md-code-inline">fdm_solve</code> reaches further, through the keyword <code class="md-code-inline">dirichlet = :boundary</code>. A point is interior in the domain iff it is interior along <em>every</em> axis, so restricting each axis&#39;s own factors to its interior (<code class="md-code-inline">2:end-1</code>) and running the same derivation on the restriction gives homogeneous Dirichlet on the whole boundary, still without ever assembling a matrix.</p>
@@ -488,7 +488,7 @@ u_d = element(Wₕ)
 u_d .= x_fdm_d
 normₕ(u_d .- Rₕ(Wₕ, sol_d))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">9.086362117244436e-5</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">9.086362117242859e-5</code></pre>
 </div>
 <p>There is no matching Dirichlet path for <code class="md-code-inline">K</code> itself, because <code class="md-code-inline">LinearSolve</code>&#39;s <code class="md-code-inline">KrylovJL_CG</code> above only ever ran against the unconstrained problem. A reader reaching for the matrix-free operator on a Dirichlet problem meets this limit directly, not as a caveat in a docstring.</p>
 <h2 id="Where-to-go-next" class="md-heading">Where to go next<a href="#Where-to-go-next" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -544,6 +544,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=e4994b21"></script>
+  <script src="../../assets/materialdocs.js?v=1fa92e05"></script>
 </body>
 </html>

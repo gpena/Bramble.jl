@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry tutorial — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=208c52a3">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e3e957c2">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry tutorial — Bramble.jl">
   <meta property="og:title" content="Geometry tutorial — Bramble.jl">
@@ -50,12 +50,12 @@
         <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
         <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,13 +63,13 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
         <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">Stationary problems</span>
@@ -100,7 +100,7 @@
         </div>
       </div>
       <a href="../../benchmarks/">Benchmarks</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">API reference</span>
@@ -131,7 +131,7 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/geometry.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/geometry.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="tutorial_geometry" class="md-heading">Geometry tutorial<a href="#tutorial_geometry" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p><strong>What you will learn.</strong> How to describe where a problem lives: a set, the names of its boundary pieces, and the domain that bundles both.</p>
 <p><strong>What you need first.</strong> Only a working install, see <a href="../../getting_started/">Getting started</a>.</p>
@@ -141,7 +141,7 @@
 <h2 id="A-first-domain:-a-rod" class="md-heading">A first domain: a rod<a href="#A-first-domain:-a-rod" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>Take a rod of length 10, held at a fixed temperature at its left end and insulated at the right end. The geometry is an interval, and the two ends need names so that a condition can later be attached to each:</p>
 <p><figure class="md-figure">
-<img src="assets/geometry_example1_1d_rod.svg" alt="1D Rod Domain" loading="lazy">
+<img src="../../assets/geometry_example1_1d_rod.svg" alt="1D Rod Domain" loading="lazy">
 <figcaption>1D Rod Domain</figcaption>
 </figure>
 </p>
@@ -209,7 +209,7 @@ dim(X), extrema(X), extrema(X, 1), center(X)</code></pre>
 <p>A marker is a <code class="md-code-inline">:label =&gt; identifier</code> pair. The identifier is one boundary symbol, a tuple of them, or a predicate. Boundary symbols are coordinate-aligned (<code class="md-code-inline">:xmin</code>, <code class="md-code-inline">:xmax</code>, <code class="md-code-inline">:ymin</code>, <code class="md-code-inline">:ymax</code>, and so on, with aliases such as <code class="md-code-inline">:left</code> and <code class="md-code-inline">:top</code>), and the <a href="../../tutorials/geometry/#geometry_reference">reference</a> below lists them all.</p>
 <p>A channel with inflow on the left, outflow on the right and no-slip walls on top and bottom:</p>
 <p><figure class="md-figure">
-<img src="assets/geometry_example2_2d_channel.svg" alt="2D Channel Flow Domain" loading="lazy">
+<img src="../../assets/geometry_example2_2d_channel.svg" alt="2D Channel Flow Domain" loading="lazy">
 <figcaption>2D Channel Flow Domain</figcaption>
 </figure>
 </p>
@@ -240,7 +240,7 @@ dim(channel), center(channel), collect(labels(channel))</code></pre>
 <h2 id="A-domain-in-three-dimensions" class="md-heading">A domain in three dimensions<a href="#A-domain-in-three-dimensions" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>The same two ideas, a set and named faces, carry over unchanged. A heat sink, heated below, cooled above and insulated on its four sides:</p>
 <p><figure class="md-figure">
-<img src="assets/geometry_example3_3d_heatsink.svg" alt="3D Heat Sink Domain" loading="lazy">
+<img src="../../assets/geometry_example3_3d_heatsink.svg" alt="3D Heat Sink Domain" loading="lazy">
 <figcaption>3D Heat Sink Domain</figcaption>
 </figure>
 </p>
@@ -427,6 +427,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=208c52a3"></script>
+  <script src="../../assets/materialdocs.js?v=e3e957c2"></script>
 </body>
 </html>

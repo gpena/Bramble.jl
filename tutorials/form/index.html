@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Linear and bilinear forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=de94a1d2">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=7795f224">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Linear and bilinear forms — Bramble.jl">
   <meta property="og:title" content="Linear and bilinear forms — Bramble.jl">
@@ -41,7 +41,7 @@
     <nav class="md-sidebar">
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Discrete foundations</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
@@ -55,7 +55,7 @@
         <a href="../../tutorials/form/" class="md-nav-active">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,13 +63,13 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
         <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">Stationary problems</span>
@@ -100,7 +100,7 @@
         </div>
       </div>
       <a href="../../benchmarks/">Benchmarks</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">API reference</span>
@@ -131,7 +131,7 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/form.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/form.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="tutorial_form" class="md-heading">Linear and bilinear forms<a href="#tutorial_form" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p><strong>What you will learn.</strong> How to write a linear or bilinear form, assemble it into a vector or a matrix, impose Dirichlet conditions and solve a Poisson problem.</p>
 <p><strong>What you need first.</strong> The <a href="../../tutorials/mesh/">mesh tutorial</a>, the <a href="../../tutorials/space/">space tutorial</a> for grid spaces and elements, and the <a href="../../tutorials/operators/">operators tutorial</a> for <code class="md-code-inline">D₋ₓ</code>, <code class="md-code-inline">innerₕ</code> and <code class="md-code-inline">inner₊</code>.</p>
@@ -171,7 +171,7 @@ l = form(Wₕ, v -&gt; innerₕ(fₕ, v))</code></pre>
 <pre><code class="language-julia">b = assemble(l)
 length(b), sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.6361083632808496)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.6361083632808495)</code></pre>
 </div>
 <p>In a time loop the allocation is the part worth avoiding. <code class="md-code-inline">assemble!</code> refills a vector that already exists with zero allocations:</p>
 <div class="md-multi-output">
@@ -180,7 +180,7 @@ length(b), sum(b)</code></pre>
 <pre><code class="language-julia">assemble!(b, l)
 sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808496</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808495</code></pre>
 </div>
 <h3 id="Live-grid-coefficients-and-dynamic-scalars" class="md-heading">Live grid coefficients and dynamic scalars<a href="#Live-grid-coefficients-and-dynamic-scalars" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>A form keeps direct references to its coefficient arrays. Overwrite a grid function in place with <code class="md-code-inline">Rₕ!(fₕ, ...)</code> or <code class="md-code-inline">parent(fₕ) .= ...</code> between steps, and the next <code class="md-code-inline">assemble!(b, l)</code> reads the new values with no allocation and no rebuilt form.</p>
@@ -205,7 +205,7 @@ sum(b_dyn) ≈ 2 * sum(b)</code></pre>
 <pre><code class="language-julia">oneₕ = Rₕ(Wₕ, x -&gt; 1.0)
 l(oneₕ), sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6361083632808495, 0.6361083632808496)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6361083632808495, 0.6361083632808495)</code></pre>
 </div>
 <p>Against the all-ones grid function a linear form is the sum of its assembled vector. The difference is that <code class="md-code-inline">l(oneₕ)</code> builds no vector and allocates nothing, so prefer it when the result is a scalar.</p>
 <p><code class="md-code-inline">evaluate!</code> is the middle case. It takes a scratch vector, fills it with the assembled vector and returns the contraction:</p>
@@ -427,10 +427,10 @@ sum(assemble(l_neumann))</code></pre>
 <pre><code class="language-julia">try
     assemble(form(Wd, Wd, (u, v) -&gt; innerₕ(u, v; markers = (:nope,))))
 catch e
-    println(e)
+    showerror(stdout, e)
 end</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError(&quot;the marker :nope is not defined on the form&#39;s space. Available marker labels on this space are: :boundary, :interior, :left, :right. A marker named in restrict_to or markers = (...) must exist on every space a term reaches; if it is only defined on some of a composite space&#39;s leaves, write the term per component instead, one innerₕ(u(i), v(i)) per leaf with that leaf&#39;s own markers, rather than one term naming a marker not every leaf it reaches has.&quot;)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError: the marker :nope is not defined on the form&#39;s space. Available marker labels on this space are: :boundary, :interior, :left, :right. A marker named in restrict_to or markers = (...) must exist on every space a term reaches; if it is only defined on some of a composite space&#39;s leaves, write the term per component instead, one innerₕ(u(i), v(i)) per leaf with that leaf&#39;s own markers, rather than one term naming a marker not every leaf it reaches has.</code></pre>
 </div>
 <p>On a composite space, a marker used without naming a component reaches every diagonal block and must exist on every leaf. Write the term per component otherwise.</p>
 <h3 id="The-outward-normal" class="md-heading">The outward normal<a href="#The-outward-normal" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
@@ -522,6 +522,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=de94a1d2"></script>
+  <script src="../../assets/materialdocs.js?v=7795f224"></script>
 </body>
 </html>

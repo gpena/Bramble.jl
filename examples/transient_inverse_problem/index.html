@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Recovering parameters from a trajectory (transient adjoint gradients) — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=39368549">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=dd0bf74c">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Recovering parameters from a trajectory (transient adjoint gradients) — Bramble.jl">
   <meta property="og:title" content="Recovering parameters from a trajectory (transient adjoint gradients) — Bramble.jl">
@@ -41,7 +41,7 @@
     <nav class="md-sidebar">
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Discrete foundations</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
@@ -50,12 +50,12 @@
         <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
         <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,7 +63,7 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
@@ -100,7 +100,7 @@
         </div>
       </div>
       <a href="../../benchmarks/">Benchmarks</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">API reference</span>
@@ -131,7 +131,7 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/transient_inverse_problem.jl" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/transient_inverse_problem.jl#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Recovering-parameters-from-a-trajectory-(transient-adjoint-gradients)" class="md-heading">Recovering parameters from a trajectory (transient adjoint gradients)<a href="#Recovering-parameters-from-a-trajectory-(transient-adjoint-gradients)" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p><a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient</a> inverts a <em>steady</em> problem: one solve, one set of point observations, gpena/Bramble.jl#228&#39;s own adjoint rule for <a href="../../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a>. This page inverts a <em>transient</em> one – a handful of noisy observations taken at several different times, of a solution that is itself evolving – which needs a different adjoint: <a href="../../api_sciml/#Bramble.adjoint_sensitivities"><code class="md-code-inline">Bramble.adjoint_sensitivities</code></a>, wrapping <code class="md-code-inline">SciMLSensitivity.adjoint_sensitivities</code> for a <a href="../../api_sciml/#Bramble.Semidiscretization"><code class="md-code-inline">Semidiscretization</code></a>&#39;s solved trajectory (gpena/Bramble.jl#239).</p>
 <p>Two parameters are recovered here, not one, entering the problem two different ways: <code class="md-code-inline">κ</code> scales the initial condition, <code class="md-code-inline">β</code> is the rate of a boundary value ramping up over time. One backward solve gives the gradient with respect to <em>both</em> at once, the same O(1)-in-parameter- count trade the steady page&#39;s adjoint rule makes.</p>
@@ -252,7 +252,7 @@ end
 
 println(&quot;(κ, β) = &quot;, (κ, β))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(κ, β) = (0.6009226524156737, 0.8994152885571883)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(κ, β) = (0.6009226523786035, 0.8994152885572902)</code></pre>
 </div>
 <p>Both parameters recovered to within the noise level the synthetic observations carry, from a starting guess a factor of three away on <code class="md-code-inline">κ</code> and a factor of three on <code class="md-code-inline">β</code>.</p>
 <h2 id="Cost:-independent-of-parameter-count-and-saved-steps" class="md-heading">Cost: independent of parameter count and saved steps<a href="#Cost:-independent-of-parameter-count-and-saved-steps" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -300,6 +300,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=39368549"></script>
+  <script src="../../assets/materialdocs.js?v=dd0bf74c"></script>
 </body>
 </html>

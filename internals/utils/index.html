@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Utilities — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=5c7d2e13">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=df953eb2">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Utilities — Bramble.jl">
   <meta property="og:title" content="Utilities — Bramble.jl">
@@ -41,7 +41,7 @@
     <nav class="md-sidebar">
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Discrete foundations</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
@@ -50,12 +50,12 @@
         <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
         <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,13 +63,13 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
         <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">Stationary problems</span>
@@ -131,13 +131,13 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/internals/utils.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/internals/utils.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Utilities" class="md-heading">Utilities<a href="#Utilities" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <h2 id="Backend" class="md-heading">Backend<a href="#Backend" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-docstring" id="Bramble.Backend">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Backend</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/backend.jl#L363-L385" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L381-L403" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -168,7 +168,7 @@
 <div class="md-docstring" id="Base.eltype-Union{Tuple{Bramble.Backend{VT, MT, EP}}, Tuple{EP}, Tuple{MT}, Tuple{VT}} where {VT, MT, EP}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.eltype</code> — <span class="md-docstring-sig">Union{Tuple{Bramble.Backend{VT, MT, EP}}, Tuple{EP}, Tuple{MT}, Tuple{VT}} where {VT, MT, EP}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/backend.jl#L707-L712" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L725-L730" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -182,7 +182,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.backend_eye-Tuple{Bramble.Backend, Integer}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backend_eye</code> — <span class="md-docstring-sig">Tuple{Bramble.Backend, Integer}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/backend.jl#L679-L683" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L697-L701" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -195,7 +195,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.backend_zeros-Tuple{Bramble.Backend, Integer}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backend_zeros</code> — <span class="md-docstring-sig">Tuple{Bramble.Backend, Integer}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/backend.jl#L696-L700" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L714-L718" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -208,7 +208,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.supports_undef_construction-Tuple{Type{&lt;:AbstractArray}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.supports_undef_construction</code> — <span class="md-docstring-sig">Tuple{Type{&lt;:AbstractArray}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/backend.jl#L562-L585" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L580-L603" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -229,7 +229,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.ka_device">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ka_device</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/device_kernels.jl#L15-L31" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/device_kernels.jl#L15-L31" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -249,7 +249,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.MarkedIndices">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.MarkedIndices</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L563-L574" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L576-L587" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -263,7 +263,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.MarkedIndicesUnion">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.MarkedIndicesUnion</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L596-L606" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L609-L619" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -277,7 +277,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._LastAxisChunks">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._LastAxisChunks</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L400-L409" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L413-L422" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -291,7 +291,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._band_count-Tuple{Int64, Int64, Int64}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._band_count</code> — <span class="md-docstring-sig">Tuple{Int64, Int64, Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L383-L392" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L396-L405" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -305,7 +305,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._band_range-Tuple{AbstractRange, Int64, Int64}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._band_range</code> — <span class="md-docstring-sig">Tuple{AbstractRange, Int64, Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L367-L375" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L380-L388" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -319,7 +319,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._dot-Tuple{AbstractVector, AbstractVector, AbstractVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot</code> — <span class="md-docstring-sig">Tuple{AbstractVector, AbstractVector, AbstractVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L636-L659" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L649-L672" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -351,7 +351,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._dot-Tuple{Bramble.CpuSerial, Any, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot</code> — <span class="md-docstring-sig">Tuple{Bramble.CpuSerial, Any, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L742-L748" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L755-L761" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -364,7 +364,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._dot-Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, AbstractVector, AbstractVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot</code> — <span class="md-docstring-sig">Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, AbstractVector, AbstractVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L970-L979" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L983-L992" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -382,7 +382,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._dot_band-Tuple{Any, Any, Any, Any, Int64, Int64}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot_band</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any, Any, Int64, Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L798-L805" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L811-L818" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -395,7 +395,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._dot_masked-Tuple{AbstractVector, AbstractVector, AbstractVector, BitVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot_masked</code> — <span class="md-docstring-sig">Tuple{AbstractVector, AbstractVector, AbstractVector, BitVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L673-L696" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L686-L709" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -429,7 +429,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._dot_masked-Tuple{Bramble.CpuSerial, Vararg{Any, 4}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot_masked</code> — <span class="md-docstring-sig">Tuple{Bramble.CpuSerial, Vararg{Any, 4}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L753-L759" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L766-L772" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -442,7 +442,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._dot_masked-Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, AbstractVector, AbstractVector, BitVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot_masked</code> — <span class="md-docstring-sig">Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, AbstractVector, AbstractVector, BitVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L988-L997" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L1001-L1010" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -460,7 +460,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._dot_masked-Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, AbstractVector, AbstractVector, Bramble.MarkedIndicesUnion}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot_masked</code> — <span class="md-docstring-sig">Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, AbstractVector, AbstractVector, Bramble.MarkedIndicesUnion}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L1009-L1018" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L1022-L1031" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -478,7 +478,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._dot_masked_band-Tuple{Any, Any, Any, BitVector, Any, Int64, Int64}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot_masked_band</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any, BitVector, Any, Int64, Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L868-L875" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L881-L888" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -492,7 +492,7 @@ _dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -&
 <div class="md-docstring" id="Bramble._effective_parallel_policy-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._effective_parallel_policy</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L217-L226" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L230-L239" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -505,7 +505,7 @@ _dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -&
 <div class="md-docstring" id="Bramble._in_threaded_region-Tuple{}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._in_threaded_region</code> — <span class="md-docstring-sig">Tuple{}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L231-L242" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L244-L255" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -518,7 +518,7 @@ _dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -&
 <div class="md-docstring" id="Bramble._is_static_nesting_error-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._is_static_nesting_error</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L245-L251" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L258-L264" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -531,7 +531,7 @@ _dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -&
 <div class="md-docstring" id="Bramble._last_axis_chunks-Union{Tuple{D}, Tuple{CartesianIndices{D, R} where R&lt;:NTuple{D, OrdinalRange{Int64, Int64}}, Integer}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._last_axis_chunks</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{CartesianIndices{D, R} where R&lt;:NTuple{D, OrdinalRange{Int64, Int64}}, Integer}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L416-L421" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L429-L434" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -544,7 +544,7 @@ _dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -&
 <div class="md-docstring" id="Bramble._serial_for!-Tuple{Any, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._serial_for!</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L350-L359" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L363-L372" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -566,7 +566,7 @@ _dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -&
 <div class="md-docstring" id="Bramble._static_bands!-Union{Tuple{N}, Tuple{F}, Tuple{F, Int64, Vararg{Any, N}}} where {F, N}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._static_bands!</code> — <span class="md-docstring-sig">Union{Tuple{N}, Tuple{F}, Tuple{F, Int64, Vararg{Any, N}}} where {F, N}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L308-L315" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L321-L328" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -580,7 +580,7 @@ _serial_bands!(f, nbands::Int, args...) -&gt; Nothing</code></pre>
 <div class="md-docstring" id="Bramble._static_or_serial-Union{Tuple{N}, Tuple{G}, Tuple{F}, Tuple{F, G, Vararg{Any, N}}} where {F, G, N}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._static_or_serial</code> — <span class="md-docstring-sig">Union{Tuple{N}, Tuple{G}, Tuple{F}, Tuple{F, G, Vararg{Any, N}}} where {F, G, N}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L255-L272" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L268-L285" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -595,7 +595,7 @@ _serial_bands!(f, nbands::Int, args...) -&gt; Nothing</code></pre>
 <div class="md-docstring" id="Bramble._static_partials!-Union{Tuple{N}, Tuple{F}, Tuple{Any, Int64, F, Vararg{Any, N}}} where {F, N}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._static_partials!</code> — <span class="md-docstring-sig">Union{Tuple{N}, Tuple{F}, Tuple{Any, Int64, F, Vararg{Any, N}}} where {F, N}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L285-L293" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L298-L306" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -609,7 +609,7 @@ _serial_partials!(partials, n::Int, band, args...) -&gt; Nothing</code></pre>
 <div class="md-docstring" id="Bramble._sweep_for!-Tuple{Bramble.HostLocality, Bramble.CpuSerial, Any, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._sweep_for!</code> — <span class="md-docstring-sig">Tuple{Bramble.HostLocality, Bramble.CpuSerial, Any, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L17-L42" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L17-L42" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -638,7 +638,7 @@ _sweep_for!(policy::ExecutionPolicy, v::AbstractArray, idxs, f::Function) -&gt; 
 <div class="md-docstring" id="Bramble._sweep_scatter_for!-Tuple{Bramble.HostLocality, Bramble.CpuSerial, Tuple, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._sweep_scatter_for!</code> — <span class="md-docstring-sig">Tuple{Bramble.HostLocality, Bramble.CpuSerial, Tuple, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L479-L502" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L492-L515" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -667,7 +667,7 @@ _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -&g
 <div class="md-docstring" id="Bramble._threaded_axis_for!-Union{Tuple{F}, Tuple{Any, CartesianIndices, F}} where F">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._threaded_axis_for!</code> — <span class="md-docstring-sig">Union{Tuple{F}, Tuple{Any, CartesianIndices, F}} where F</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L443-L448" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L456-L461" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -680,7 +680,7 @@ _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -&g
 <div class="md-docstring" id="Bramble._threaded_dot-Tuple{AbstractVector, AbstractVector, AbstractVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._threaded_dot</code> — <span class="md-docstring-sig">Tuple{AbstractVector, AbstractVector, AbstractVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L764-L784" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L777-L797" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -700,7 +700,7 @@ _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -&g
 <div class="md-docstring" id="Bramble._threaded_dot_masked-Tuple{AbstractVector, AbstractVector, AbstractVector, BitVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._threaded_dot_masked</code> — <span class="md-docstring-sig">Tuple{AbstractVector, AbstractVector, AbstractVector, BitVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L816-L837" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L829-L850" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -720,7 +720,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._threaded_for!-Union{Tuple{F}, Tuple{Any, Any, F}} where F">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._threaded_for!</code> — <span class="md-docstring-sig">Union{Tuple{F}, Tuple{Any, Any, F}} where F</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L330-L338" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L343-L351" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -734,7 +734,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._threaded_scatter_for!-Union{Tuple{G}, Tuple{Tuple, Any, G}} where G">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._threaded_scatter_for!</code> — <span class="md-docstring-sig">Union{Tuple{G}, Tuple{Tuple, Any, G}} where G</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L517-L525" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L530-L538" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -748,7 +748,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._throw_gpu_in_cpu_loop-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._throw_gpu_in_cpu_loop</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L111-L123" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L111-L123" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -771,7 +771,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._throw_locality_mismatch-Tuple{Bramble.HostLocality, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._throw_locality_mismatch</code> — <span class="md-docstring-sig">Tuple{Bramble.HostLocality, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L68-L89" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L68-L89" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -797,7 +797,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._write_components!-Tuple{Tuple{}, Tuple, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._write_components!</code> — <span class="md-docstring-sig">Tuple{Tuple{}, Tuple, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L466-L472" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L479-L485" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -813,7 +813,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._batch_axis_for!-Tuple{Any, CartesianIndices, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_axis_for!</code> — <span class="md-docstring-sig">Tuple{Any, CartesianIndices, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L207-L212" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L220-L225" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -826,7 +826,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._batch_dot-Tuple{Any, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_dot</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L909-L914" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L922-L927" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -839,7 +839,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._batch_dot_masked-NTuple{4, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_dot_masked</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L919-L924" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L932-L937" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -852,7 +852,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._batch_for!-Tuple{Any, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_for!</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L196-L202" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L209-L215" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -865,7 +865,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._batch_scatter_for!-Tuple{Tuple, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_scatter_for!</code> — <span class="md-docstring-sig">Tuple{Tuple, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L543-L548" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L556-L561" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -880,7 +880,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._gpu_for!-NTuple{4, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._gpu_for!</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L148-L165" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L148-L165" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -899,7 +899,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._gpu_scatter_for!-NTuple{4, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._gpu_scatter_for!</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/linear_algebra.jl#L168-L178" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L168-L178" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -918,7 +918,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble.@forward-Tuple{Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.@forward</code> — <span class="md-docstring-sig">Tuple{Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/utils/macros.jl#L1-L28" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/macros.jl#L1-L28" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -982,6 +982,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=5c7d2e13"></script>
+  <script src="../../assets/materialdocs.js?v=df953eb2"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=468eb0f7">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=76e66159">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -41,7 +41,7 @@
     <nav class="md-sidebar">
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Discrete foundations</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
@@ -50,12 +50,12 @@
         <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
         <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,13 +63,13 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
         <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">Stationary problems</span>
@@ -131,14 +131,14 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/api/forms.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/api/forms.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Forms" class="md-heading">Forms<a href="#Forms" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p>Linear and bilinear forms, their assembly, and the boundary conditions applied to an assembled system. See the <a href="../../tutorials/form/">forms tutorial</a>.</p>
 <h2 id="Building-a-form" class="md-heading">Building a form<a href="#Building-a-form" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-docstring" id="Bramble.form">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.form</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/linear.jl#L179-L218" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L179-L218" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -183,7 +183,7 @@ a = form(Vₕ, Vₕ, (u, v) -&gt; inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + in
 <div class="md-docstring" id="Bramble.expression">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.expression</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/ast/expression.jl#L21-L30" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/expression.jl#L21-L30" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -199,7 +199,7 @@ a = form(Vₕ, Vₕ, (u, v) -&gt; inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + in
 <div class="md-docstring" id="Bramble.dirac">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.dirac</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/ast/ast.jl#L147-L205" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/ast.jl#L147-L205" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -280,7 +280,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.assemble">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/linear.jl#L273-L286" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L273-L286" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -325,7 +325,7 @@ u = A \ F</code></pre>
 <div class="md-docstring" id="Bramble.assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/linear.jl#L913-L943" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L965-L995" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -380,7 +380,7 @@ u = A \ F</code></pre>
 <div class="md-docstring" id="Bramble.assemble_parallel!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble_parallel!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/linear.jl#L1131-L1138" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1183-L1190" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -402,7 +402,7 @@ u = A \ F</code></pre>
 <div class="md-docstring" id="Bramble.allocate_system_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.allocate_system_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/bilinear_pattern.jl#L265-L290" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_pattern.jl#L265-L290" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -426,7 +426,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.evaluate!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.evaluate!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/linear.jl#L61-L83" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L61-L83" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -454,7 +454,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.is_separable">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.is_separable</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/kronecker.jl#L97-L129" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L97-L129" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -486,7 +486,7 @@ is_separable(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(fₕ * u, v)))  # false: gri
 <div class="md-docstring" id="Bramble.kronecker_operator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.kronecker_operator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/kronecker.jl#L239-L269" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L254-L284" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -516,16 +516,17 @@ K * x ≈ assemble(a) * x</code></pre>
 <div class="md-docstring" id="Bramble.KroneckerLinearOperator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.KroneckerLinearOperator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/kronecker.jl#L163-L201" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L163-L209" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">KroneckerLinearOperator{T, D, TermsT &lt;: Tuple}</code></pre>
+<pre><code class="language-julia">KroneckerLinearOperator{T, D, TermsT &lt;: Tuple, P &lt;: ExecutionPolicy}</code></pre>
 </div>
 <p>A matrix-free linear operator for a separable <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> (see <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a>): the sum, over its terms, of a Kronecker product of <code class="md-code-inline">D</code> one-dimensional factor matrices, applied in one fused pass over the grid (<code class="md-code-inline">LinearAlgebra.mul!(y, K, x)</code>, or the five-argument <code class="md-code-inline">mul!(y, K, x, α, β)</code> computing <code class="md-code-inline">α * K * x + β * y</code>) rather than ever materialising the <code class="md-code-inline">D</code>-dimensional matrix: every term has at most one non-diagonal factor, so each entry of <code class="md-code-inline">y</code> is its own term-weighted combination of <code class="md-code-inline">x</code> at that grid point and its neighbours along each axis, written once. For a <code class="md-code-inline">200^3</code> mesh the factors together hold <code class="md-code-inline">O(200)</code> numbers per axis instead of the assembled matrix&#39;s <code class="md-code-inline">O(200^3)</code> stored entries.</p>
 <p>Build one with <a href="../../api/forms/#Bramble.kronecker_operator"><code class="md-code-inline">kronecker_operator</code></a>. Subtypes <code class="md-code-inline">AbstractMatrix{T}</code> so it plugs into <code class="md-code-inline">LinearProblem</code>/<code class="md-code-inline">KrylovJL_CG</code> (<code class="md-code-inline">LinearSolve.jl</code>) the same way an assembled matrix does, and supports <code class="md-code-inline">size</code>, <code class="md-code-inline">eltype</code>, <code class="md-code-inline">getindex</code>, <code class="md-code-inline">Base.:*</code>, three- and five-argument <code class="md-code-inline">mul!</code>, <code class="md-code-inline">LinearAlgebra.issymmetric</code>, and <code class="md-code-inline">SparseMatrixCSC(K)</code> (an explicit <code class="md-code-inline">kron</code> of the factors, for testing and inspection – the very matrix this operator avoids forming).</p>
-<p><code class="md-code-inline">K</code> holds no work buffers: it stores only its <code class="md-code-inline">D</code> one-dimensional factors, so it is immutable after construction and safe to share across threads (concurrent <code class="md-code-inline">mul!</code> calls on one <code class="md-code-inline">K</code> never race). The fused pass needs no scratch either: <code class="md-code-inline">mul!</code> allocates nothing on the host, and is generic over the element type, so ForwardDiff <code class="md-code-inline">Dual</code>s pass through. The <code class="md-code-inline">scratch = (b1, b2)</code> keyword that <code class="md-code-inline">mul!(y, K, x; scratch)</code> and <code class="md-code-inline">mul!(y, K, x, α, β; scratch)</code> accept is kept so existing callers still work, and is ignored.</p>
+<p><code class="md-code-inline">K</code> holds no work buffers: it stores only its <code class="md-code-inline">D</code> one-dimensional factors and its execution policy, so it is immutable after construction and safe to share across threads (concurrent <code class="md-code-inline">mul!</code> calls on one <code class="md-code-inline">K</code> never race). The fused pass needs no scratch either. A serial host <code class="md-code-inline">mul!</code> allocates nothing, and so does a <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> product: each task rebuilds the light structs around plain arrays, so Polyester&#39;s argument box stays on the stack. <code class="md-code-inline">mul!</code> is generic over the element type, so ForwardDiff <code class="md-code-inline">Dual</code>s pass through. The <code class="md-code-inline">scratch = (b1, b2)</code> keyword that <code class="md-code-inline">mul!(y, K, x; scratch)</code> and <code class="md-code-inline">mul!(y, K, x, α, β; scratch)</code> accept is kept so existing callers still work, and is ignored.</p>
+<p><code class="md-code-inline">P</code> is the execution policy of the space the operator was built on (<code class="md-code-inline">execution_policy(backend(trial_space(a)))</code>), kept as the <code class="md-code-inline">policy</code> field. On the host, a <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> operator runs the grid lines along axis 1 as <code class="md-code-inline">Polyester.@batch</code> tasks (<code class="md-code-inline">using Polyester</code> required); every other policy runs them serially. Each line writes its own slice of <code class="md-code-inline">y</code>, so both give the same result bit for bit. An operator built directly from its terms, <code class="md-code-inline">KroneckerLinearOperator{T, D, TermsT}(terms, dims, n)</code>, is <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a>.</p>
 <p>On a device-backed form (gpena/Bramble.jl#323) the factors are built on the host and then moved to the space backend&#39;s device storage, so <code class="md-code-inline">mul!</code> with device <code class="md-code-inline">x</code>/<code class="md-code-inline">y</code> runs entirely on the device, as one <code class="md-code-inline">KernelAbstractions</code> kernel with one work item per entry of <code class="md-code-inline">y</code> (<code class="md-code-inline">using KernelAbstractions</code> required). <code class="md-code-inline">getindex</code> and <code class="md-code-inline">SparseMatrixCSC(K)</code> stay host-only and throw an <code class="md-code-inline">ArgumentError</code> on such an operator.</p>
 <p>Dirichlet rows are out of scope: this operator carries no boundary constraint of its own. <code class="md-code-inline">bramble-plan</code>&#39;s v3.3.0 subplan S5.2 layers that on top, through the <code class="md-code-inline">Kronecker.jl</code> extension and its fast-diagonalisation solve.</p>
 <p>See also: <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a>, <a href="../../api/forms/#Bramble.kronecker_operator"><code class="md-code-inline">kronecker_operator</code></a>.</p>
@@ -534,7 +535,7 @@ K * x ≈ assemble(a) * x</code></pre>
 <div class="md-docstring" id="Bramble.fdm_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fdm_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/Bramble.jl#L26-L41" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L26-L41" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -553,7 +554,7 @@ fdm_solve(K::KroneckerLinearOperator, F::AbstractVector) -&gt; Vector</code></pr
 <div class="md-docstring" id="Bramble.matrix_free_operator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.matrix_free_operator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/matrix_free.jl#L175-L222" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/matrix_free.jl#L184-L231" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -608,12 +609,12 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.MatrixFreeOperator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.MatrixFreeOperator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/matrix_free.jl#L108-L153" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/matrix_free.jl#L113-L161" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">MatrixFreeOperator{T, Form, DLabels, EP, Plan} &lt;: AbstractMatrix{T}</code></pre>
+<pre><code class="language-julia">MatrixFreeOperator{T, Form, DLabels, EP, Plan, Geom} &lt;: AbstractMatrix{T}</code></pre>
 </div>
 <p>A <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> as a linear operator: <code class="md-code-inline">mul!(y, op, x)</code> computes <code class="md-code-inline">A * x</code>, and <code class="md-code-inline">mul!(y, op, x, α, β)</code> computes <code class="md-code-inline">α * A * x + β * y</code>, for <code class="md-code-inline">A = assemble(a; dirichlet)</code>, without ever storing <code class="md-code-inline">A</code>. Each product walks the form&#39;s stencil once, evaluated afresh, so a coefficient updated in place (<code class="md-code-inline">Rₕ!</code>, a <code class="md-code-inline">Ref</code>) is seen by the next product. Build one with <a href="../../api/forms/#Bramble.matrix_free_operator"><code class="md-code-inline">matrix_free_operator</code></a>.</p>
 <p><code class="md-code-inline">x</code> and <code class="md-code-inline">y</code> are plain vectors or <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a>s: <code class="md-code-inline">op * x</code> returns a new vector, <code class="md-code-inline">op * uₕ</code> a new element of the form&#39;s test space. <code class="md-code-inline">mul!</code> allocates nothing on a serial policy, except on a form with a region restriction (<code class="md-code-inline">restrict_to</code>), whose stencil evaluation allocates as it does in <code class="md-code-inline">assemble!</code>.</p>
@@ -632,6 +633,8 @@ true</code></pre>
 </li>
 <li><p><code class="md-code-inline">Plan</code>: <code class="md-code-inline">Nothing</code>, or the type of the threaded sweep&#39;s plan (the grid its bands cut and the terms&#39; reach), fixed when the operator is built.</p>
 </li>
+<li><p><code class="md-code-inline">Geom</code>: <code class="md-code-inline">Nothing</code>, or the type of the per-axis mesh geometry cached when the operator is built (<code class="md-code-inline">_MFGeometry</code>, a scalar form&#39;s only). It holds no coefficient, and a product on a mesh moved since reads the mesh afresh, as it would without it.</p>
+</li>
 </ul>
 <p>See also: <a href="../../api/forms/#Bramble.matrix_free_operator"><code class="md-code-inline">matrix_free_operator</code></a>, <a href="../../api/forms/#Bramble.assemble"><code class="md-code-inline">assemble</code></a>, <a href="../../api/forms/#Bramble.KroneckerLinearOperator"><code class="md-code-inline">KroneckerLinearOperator</code></a>.</p>
 </div>
@@ -641,7 +644,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.assemble_add!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble_add!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/assemble_add.jl#L127-L151" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/assemble_add.jl#L127-L151" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -666,7 +669,7 @@ assemble_add!(F, l_source, θ)   # F += θ[] * l_source&#39;s contribution</code
 <div class="md-docstring" id="Bramble.jacobian_pattern">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian_pattern</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/jacobian_pattern.jl#L77-L140" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/jacobian_pattern.jl#L77-L140" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -707,7 +710,7 @@ pattern = jacobian_pattern(a, U -&gt; Mₕ(πₕ(U)))</code></pre>
 <div class="md-docstring" id="Bramble.ast_sparsity_detector">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ast_sparsity_detector</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/jacobian_pattern.jl#L506-L522" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/jacobian_pattern.jl#L506-L522" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -732,7 +735,7 @@ sparse_ad = AutoSparse(AutoForwardDiff();
 <div class="md-docstring" id="Bramble.DirichletConstraint">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DirichletConstraint</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/dirichlet_constraints.jl#L18-L22" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L18-L22" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -745,7 +748,7 @@ sparse_ad = AutoSparse(AutoForwardDiff();
 <div class="md-docstring" id="Bramble.dirichlet_constraints">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.dirichlet_constraints</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/dirichlet_constraints.jl#L33-L41" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L33-L41" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -767,7 +770,7 @@ sparse_ad = AutoSparse(AutoForwardDiff();
 <div class="md-docstring" id="Bramble.dirichlet_bc!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.dirichlet_bc!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/dirichlet_constraints.jl#L267-L276" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L267-L276" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -825,7 +828,7 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only</code></
 <div class="md-docstring" id="Bramble.symmetrize!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.symmetrize!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/dirichlet_constraints.jl#L708-L718" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L708-L718" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -859,7 +862,7 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only</code></
 <div class="md-docstring" id="Bramble.reaction">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/postprocessing/reaction.jl#L344-L383" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L344-L383" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -901,7 +904,7 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
 <div class="md-docstring" id="Bramble.reaction!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/postprocessing/reaction.jl#L415-L425" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L415-L425" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -914,7 +917,7 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
 <div class="md-docstring" id="Bramble.reaction_density">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction_density</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/postprocessing/reaction.jl#L453-L461" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L453-L461" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -934,7 +937,7 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
 <div class="md-docstring" id="Bramble.reaction_density!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction_density!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/postprocessing/reaction.jl#L494-L504" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L494-L504" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -982,6 +985,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=468eb0f7"></script>
+  <script src="../../assets/materialdocs.js?v=76e66159"></script>
 </body>
 </html>

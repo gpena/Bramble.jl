@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Coupled systems — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=226e5d61">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=77ec31df">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Coupled systems — Bramble.jl">
   <meta property="og:title" content="Coupled systems — Bramble.jl">
@@ -41,7 +41,7 @@
     <nav class="md-sidebar">
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Discrete foundations</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
@@ -55,7 +55,7 @@
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/" class="md-nav-active">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,13 +63,13 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
         <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">Stationary problems</span>
@@ -100,7 +100,7 @@
         </div>
       </div>
       <a href="../../benchmarks/">Benchmarks</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">API reference</span>
@@ -131,7 +131,7 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/coupled_systems.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/coupled_systems.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="tutorial_coupled" class="md-heading">Coupled systems<a href="#tutorial_coupled" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p><strong>What you will learn.</strong> How to write a form over several unknowns, constrain one block and not another, and read a value across leaves that live on different meshes.</p>
 <p><strong>What you need first.</strong> The <a href="../../tutorials/form/">form tutorial</a> for assembling and for <a href="../../tutorials/form/#form_dirichlet">Dirichlet conditions</a>, and the <a href="../../tutorials/space/">space tutorial</a> for <a href="../../tutorials/space/#space_composite">composite spaces and vector elements</a>.</p>
@@ -166,7 +166,7 @@ size(Ac)</code></pre>
 <pre><code class="language-julia">try
     form(Vₕ, Vₕ, (u, v) -&gt; innerₕ(u[1], v))
 catch e
-    println(e)
+    showerror(stdout, e)
 end</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi"><span class="sgr36"><span class="sgr1">BilinearForm</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}:
@@ -263,10 +263,10 @@ maximum(abs, bh .- b_plain)</code></pre>
 <pre><code class="language-julia">try
     assemble(form(Vh, Vh, (u, v) -&gt; innerₕ(u(2), v(1))))
 catch e
-    println(e)
+    showerror(stdout, e)
 end</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError(&quot;a bilinear term coupling two leaves over different meshes has no assembly: the trial leaf has (4, 4) points and the test leaf (8, 8), so an index on one names no point on the other. Got Bramble.BilinearProduct{2, Bramble.InnerH, Bramble.IndexedTrialFunction{2}, Bramble.IndexedTestFunction{2}}. Couple leaves that share a mesh, or wrap the trial or the test function in an interpolation operator: `πₕ(u)`, `πₕ(v)`.&quot;)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError: a bilinear term coupling two leaves over different meshes has no assembly: the trial leaf has (4, 4) points and the test leaf (8, 8), so an index on one names no point on the other. Got Bramble.BilinearProduct{2, Bramble.InnerH, Bramble.IndexedTrialFunction{2}, Bramble.IndexedTestFunction{2}}. Couple leaves that share a mesh, or wrap the trial or the test function in an interpolation operator: `πₕ(u)`, `πₕ(v)`.</code></pre>
 </div>
 <p>A coupled block is assembled by walking the test leaf&#39;s grid and reading the trial column out of the same index space, so the two leaves must agree on what an index means. Index <span class="md-math md-math-inline">\((3, 3)\)</span> on an 8-by-8 grid and on a 4-by-4 grid name different points, and nothing in the term says how to get from one to the other. The error is raised when the matrix is built, not when the form is written, because which leaves a term couples is a question about the spaces it is assembled against. <code class="md-code-inline">allocate_system_matrix</code> refuses it too.</p>
 <p>Leaves that <em>share</em> a mesh are unaffected. That covers every space built by repeating one space (<code class="md-code-inline">Wₕ^Val(2)</code>), off-diagonal blocks included.</p>
@@ -299,6 +299,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=226e5d61"></script>
+  <script src="../../assets/materialdocs.js?v=77ec31df"></script>
 </body>
 </html>

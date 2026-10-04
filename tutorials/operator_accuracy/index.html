@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>How accurate are the difference operators — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=12314b02">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=f1200893">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="How accurate are the difference operators — Bramble.jl">
   <meta property="og:title" content="How accurate are the difference operators — Bramble.jl">
@@ -50,12 +50,12 @@
         <a href="../../tutorials/operator_accuracy/" class="md-nav-active">How accurate are the difference operators</a>
         <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,13 +63,13 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
         <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">Stationary problems</span>
@@ -100,7 +100,7 @@
         </div>
       </div>
       <a href="../../benchmarks/">Benchmarks</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">API reference</span>
@@ -131,7 +131,7 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/operator_accuracy.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/operator_accuracy.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="tutorial_operator_accuracy" class="md-heading">How accurate are the difference operators<a href="#tutorial_operator_accuracy" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p><strong>What you will learn.</strong> How to measure the order of a difference operator, why a truncated boundary point halves the observed order, and when to choose the centered, the second-order or the summation-by-parts difference.</p>
 <p><strong>What you need first.</strong> The <a href="../../tutorials/operators/#tutorial_operators">operators tutorial</a>, for applying an operator and for the boundary truncation, and the <a href="../../tutorials/mesh/#tutorial_mesh">mesh tutorial</a> for non-uniform meshes.</p>
@@ -222,7 +222,7 @@ qₕ = Rₕ(Wₛ, x -&gt; sin(2pi * x) * x * (1 - x))        # both zero at both
 
 innerₕ(Dcₓ(pₕ), qₕ), -innerₕ(pₕ, Dcₓ(qₕ))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.2084354544927814, 0.20843545449278142)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.2084354544927814, 0.20843545449278136)</code></pre>
 </div>
 <p>The two numbers agree to machine precision. The weight of <code class="md-code-inline">innerₕ</code> at point <span class="md-math md-math-inline">\(i\)</span> is exactly half the centered denominator, so the weights drop out and shifting the index by one turns what is left into minus the right side.</p>
 <p>The centered difference approximates the derivative at the midpoint of its stencil, which is <span class="md-math md-math-inline">\(x_i\)</span> only when the two spacings match. So it is second order on a uniform grid and first order otherwise, where the one-sided differences are first order on both. Like every other family, <code class="md-code-inline">Dcₓ</code> accepts a mesh or a grid space for the matrix and a grid function to apply it, and <code class="md-code-inline">∇cₕ</code> gives every coordinate at once. Both end rows of the matrix are empty, which is the truncation.</p>
@@ -311,7 +311,7 @@ bₕ = Rₕ(Wₚ, x -&gt; sin(pi * x))           # zero at both ends
 
 innerₕ(D̃ₓ(aₕ), bₕ), -inner₊(aₕ, ∇ₕ(bₕ), :x), innerₕ(D₊ₓ(aₕ), bₕ)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(-0.294639266933171, -0.294639266933171, -0.31969702821672874)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(-0.294639266933171, -0.294639266933171, -0.31969702821672885)</code></pre>
 </div>
 <p>The first two numbers agree to machine precision. The third, with <code class="md-code-inline">D₊ₓ</code>, does not.</p>
 <p>This is why the operator exists. Energy estimates for these schemes are derived by moving a difference from one factor to the other, and that step is exact only with this pairing. With <code class="md-code-inline">D₊ₓ</code> it leaves a residual that does not vanish under refinement, since it is a difference of quadrature weights and not a truncation error. The identity holds per coordinate in two and three dimensions with <code class="md-code-inline">D̃ᵧ</code>, <code class="md-code-inline">D̃₂</code> and their inner products, and <code class="md-code-inline">∇̃ₕ</code> returns all coordinates at once, as <code class="md-code-inline">∇₊ₕ</code> does.</p>
@@ -345,6 +345,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=12314b02"></script>
+  <script src="../../assets/materialdocs.js?v=f1200893"></script>
 </body>
 </html>

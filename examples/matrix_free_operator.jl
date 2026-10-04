@@ -23,37 +23,52 @@ using Test #src
 # ## What the operator is
 #
 # For a form `a`, `op = matrix_free_operator(a)` stands for the matrix `assemble(a)`:
-# `mul!(y, op, x, α, β)` computes `α * A * x + β * y`, and `op * x` is `A * x`. Assembly walks
-# the form's stencil over the mesh and stores each entry it meets as a nonzero; `op` walks the
-# same stencil, through the same `visit_bilinear_stencil`, and adds each entry's contribution
-# `weight * x[col]` into `y[row]` instead of storing it. That is why the walk accumulates
-# into `y`, and why `mul!` with `β = 0` overwrites it rather than adding to what was there.
+# `mul!(y, op, x, α, β)` computes `α * A * x + β * y`, and `op * x` is `A * x`. Assembly
+# walks the form's stencil over the mesh and stores each entry it meets as a nonzero; `op`
+# evaluates the same stencil, through the same `visit_bilinear_stencil` and `local_stencil`,
+# and adds each entry's contribution `weight * x[col]` into `y[row]` instead of storing it.
+# That is why a product accumulates into `y`, and why `mul!` with `β = 0` overwrites it
+# rather than adding to what was there.
 #
-# Nothing in that walk asks for a tensor structure. The Kronecker operator needs the matrix to
-# be a sum of Kronecker products of one-dimensional factors, so it refuses a grid-function
-# coefficient, a Dirichlet row or a composite space. The matrix-free operator has no such
-# factorisation to find: it evaluates the coefficient at the stencil's points, writes the
-# identity into a Dirichlet row, and walks the blocks of a composite space one after another.
-# It takes every form `assemble` takes because it reuses the assembly's own walk rather than
-# a second evaluator of the stencil.
+# Nothing in that evaluation asks for a tensor structure. The Kronecker operator needs the
+# matrix to be a sum of Kronecker products of one-dimensional factors, so it refuses a
+# grid-function coefficient, a Dirichlet row or a composite space. The matrix-free operator
+# has no such factorisation to find: it evaluates the coefficient at the stencil's points,
+# writes the identity into a Dirichlet row, and walks the blocks of a composite space one
+# after another. It takes every form `assemble` takes because it reuses the assembly's own
+# stencil rather than a second evaluator of it.
 #
 # ## How a product is computed
 #
-# A product walks the form's terms and blocks in the order the serial assembly replays them.
-# A scalar form is walked one summand at a time, a composite form block by block. A pair of
-# transposed terms, ``\langle A u, B v\rangle + \langle B u, A v\rangle``, is walked once:
-# an entry found for the first term also stands for the entry of the second at the mirrored
-# position, so the stencil is not evaluated twice.
+# A product visits the form's terms and blocks in the order the serial assembly replays
+# them. A scalar form is taken one summand at a time, a composite form block by block. Each
+# unit (a term on a block) has two kinds of point. The interior is the points whose stencil
+# lies wholly inside the grid, which is most of them. For most units it is **gathered**.
+# Each row `y[row]` sums its own entries, read from the same `local_stencil` as assembly,
+# and is written once, in a loop along the first axis. A row's neighbours along that axis
+# share stencil points, so the loop evaluates each point once and carries it to the next
+# row. The boundary shell is **scattered**: the walk visits each point, through
+# `visit_bilinear_stencil`, and adds each entry into its row. (A unit whose per-axis
+# spacings the operator caches gathers its shell as well.) A unit the gather cannot take
+# scatters whole. That covers a stencil of more than nine entries, a nested stencil, a
+# region restriction, a test-side interpolation, a shift, and a grid too small to have an
+# interior.
+#
+# A pair of transposed terms, ``\langle A u, B v\rangle + \langle B u, A v\rangle``, is
+# scattered once. An entry found for the first term also stands for the entry of the second
+# at the mirrored position, so the stencil is not evaluated twice there. Its interior is
+# gathered in two passes, the first term's rows and then the transposed term's, each from
+# the same `local_stencil`.
 #
 # On a serial policy that is the whole product. On a threaded one the grid is cut into one
-# band per thread along its **last axis**, and the product is one parallel region however many
-# terms the form has: each thread walks every term over its own band and adds only into the
-# rows of that band's points. Because no two threads add into the same entry of `y`, the
-# threaded product needs no atomics and its result does not depend on scheduling. A form whose
-# leaves walk grids of different sizes, or carry different policies, falls back to sweeping
-# one term at a time, each in the colour bands the threaded `assemble!` uses, which is what keeps
-# that fallback race-free as well. A term with a test-side
-# interpolation runs serially inside the product.
+# band per thread along its **last axis**, and the product is one parallel region however
+# many terms the form has: each thread takes every term over its own band and adds only into
+# the rows of that band. Because no two threads add into the same entry of `y`, the threaded
+# product needs no atomics and its result does not depend on scheduling. A form whose leaves
+# walk grids of different sizes, or carry different policies, falls back to sweeping one
+# term at a time, each in the colour bands the threaded `assemble!` uses, which is what
+# keeps that fallback race-free as well. A term with a test-side interpolation runs serially
+# inside the product.
 #
 # The order in which a thread adds the entries of a row is the serial order, but this page
 # does not rely on that: the products below are compared to the assembled one with `≈`, not
@@ -118,7 +133,7 @@ a₁ = form(W₁, W₁, (u, v) -> innerₕ(u, v))
 try
     matrix_free_operator(a₁; policy = Bramble.GpuKernel())
 catch err
-    err
+    showerror(stdout, err)
 end
 
 @test_throws ArgumentError matrix_free_operator(a₁; policy = Bramble.GpuKernel()) #src
@@ -135,9 +150,9 @@ methods_of_op = filter(
 @test length(Base.unwrap_unionall(only(methods_of_op).sig).parameters) == 6 #src
 
 # - **Real work per product.** It recomputes each entry from the mesh and the coefficient,
-#   so a serial product is slower than a serial sparse product; the tutorial's table puts
-#   numbers on that. It also recomputes a coefficient that was updated in place, which is
-#   a feature of the design, not a cost.
+#   where a sparse product reads stored entries; the section "Kronecker or matrix-free?"
+#   compares the times of the routes at one size. It also recomputes a coefficient that was
+#   updated in place, which is a feature of the design, not a cost.
 # - **Forms.** The docstring of [`matrix_free_operator`](@ref) says it takes any form
 #   `assemble` accepts, on scalar or composite spaces, and this page knows of no form it
 #   refuses. A form with a region restriction (`restrict_to`) allocates inside the product,
@@ -295,14 +310,43 @@ shown(bytes_ratios)
 product_ratios = route_ratios("product", "time_s"; against = mf_routes)
 shown(product_ratios)
 
-# The Kronecker product is faster than both matrix-free products at every size, and faster
-# than the assembled product at every size but the smallest cube, where the two are within
-# a few percent:
+# The Kronecker product is faster than the serial matrix-free product at every size, and
+# faster than the assembled product at every size but the smallest cube, where the two are
+# within a few percent. The Kronecker product runs serially, so against the threaded
+# matrix-free product the comparison is one thread to the run's thread count. The Kronecker
+# product is the faster of the two at the small sizes. The threaded matrix-free product is
+# the faster one from `n = 256` in 2D and `n = 32` in 3D on:
 
 @test below(product_ratios, :matrix_free_serial) #src
-@test below(product_ratios, :matrix_free_threaded) #src
+@test not_below(product_ratios, :matrix_free_threaded) == #src
+      [(2, 256), (2, 512), (3, 32), (3, 48), (3, 64)] #src
 @test not_below(product_ratios, :assembled) == [(3, 8)] #src
 @test only(r.assembled for r in product_ratios if r.dim == 3 && r.n == 8) < 1.1 #src
+
+# The tables above divide the Kronecker figure by the other route's. Read the serial
+# matrix-free product the other way round, as its time divided by the assembled product's
+# and by the Kronecker product's, on the square of 512² points and the cube of 64³, both of
+# 262144 unknowns. A ratio under `1` means the matrix-free product is the faster one:
+
+serial_ratios = route_ratios("product", "time_s"; of = "matrix_free_serial",
+    against = ["assembled", "kronecker"])
+serial_at_262144 = filter(r -> r.n^r.dim == 262144, serial_ratios)
+shown(serial_at_262144)
+
+@test [(r.dim, r.n) for r in serial_at_262144] == [(2, 512), (3, 64)] #src
+@test all(r -> r.assembled < 1 && r.kronecker > 1, serial_at_262144) #src
+@test [round(r.assembled; digits = 1) for r in serial_at_262144] == [0.4, 0.6] #src
+@test [round(r.kronecker; digits = 1) for r in serial_at_262144] == [1.1, 1.2] #src
+
+# At that size the serial matrix-free product takes `0.4×` the time of the assembled
+# product in 2D and `0.6×` in 3D, so it is the faster of the two. It takes `1.1×` the time
+# of the Kronecker product in 2D and `1.2×` in 3D, so the Kronecker route stays the faster
+# serial product. The two routes keep different things. The Kronecker route applies
+# one-dimensional factor matrices it built once. The matrix-free operator stores no entries
+# and forms each row's entries again on every product, from per-axis spacings it caches for
+# the separable terms and from the mesh and the coefficient otherwise. The profile script
+# `benchmark/matrix_free_profile.jl` is where to measure how the time of a product splits.
+# The assembled product reads entries stored at assembly.
 
 # **Solve.** Conjugate gradients to the same tolerance with each operator. The table adds
 # the two reference rows, [`fdm_solve`](@ref) on the form and the sparse direct solve of
@@ -312,30 +356,33 @@ shown(product_ratios)
 solve_ratios = route_ratios("solve", "time_s"; against = [mf_routes; "fdm_solve"; "direct"])
 shown(solve_ratios)
 
-# The Kronecker CG solve is faster than both matrix-free CG solves at every size, and
-# faster than the assembled CG solve at every size but the smallest cube, again within a
-# few percent. Against the references it does not win. `fdm_solve` is faster than any CG
-# route at every size, and the direct solve is faster in the square at every size and
-# slower in the cube:
+# The Kronecker CG solve is faster than both matrix-free CG solves and than the assembled CG
+# solve at every size, and at the smallest cube it leads the assembled one by under two
+# percent. Against the references it does not win. `fdm_solve` is faster than any CG
+# route at every size. The direct solve is faster in the square at every size and in the
+# cube at `n = 16`, and slower at the other cube sizes:
 
 @test below(solve_ratios, :matrix_free_serial) #src
 @test below(solve_ratios, :matrix_free_threaded) #src
-@test not_below(solve_ratios, :assembled) == [(3, 8)] #src
+@test below(solve_ratios, :assembled) #src
 @test above([r for r in solve_ratios if r.dim == 2], :direct) #src
-@test below([r for r in solve_ratios if r.dim == 3], :direct) #src
+@test not_below([r for r in solve_ratios if r.dim == 3], :direct) == [(3, 16)] #src
 @test above(solve_ratios, :fdm_solve) #src
-@test only(r.assembled for r in solve_ratios if r.dim == 3 && r.n == 8) < 1.1 #src
+@test 0.98 <= only(r.assembled for r in solve_ratios if r.dim == 3 && r.n == 8) < 1 #src
 fdm_ratios = route_ratios("solve", "time_s"; of = "fdm_solve", against = mf_routes) #src
 @test all(below(fdm_ratios, route) for route in (:assembled, :matrix_free_serial, :matrix_free_threaded)) #src
 
 # So the Kronecker route is preferred over the assembled matrix whenever the form is
-# separable: it is cheaper to build and to hold at every size, and its product and solve
-# are faster at every size except the smallest cube (3D, n = 8). It is preferred over the matrix-free
-# operator for the product and the CG solve, which it runs faster at every size. The
-# matrix-free operator keeps two advantages, construction time and bytes held, and it is
-# the only route of the three when the form is not separable. When the aim is to solve a
-# separable problem, and not to apply the operator inside another iteration, `fdm_solve`
-# is the faster call at every size in this file.
+# separable: it is cheaper to build and to hold at every size, and its solve is faster at
+# every size. Its product is too, except at the smallest cube (3D, n = 8). It is preferred
+# over the matrix-free operator for the CG solve at every size, and for the serial product.
+# The threaded matrix-free product is the faster one from `n = 256` in 2D and `n = 32` in
+# 3D, and the Kronecker product is the faster one below those sizes. When the form is not
+# separable the matrix-free operator is the only one of the three, and at 262144 unknowns
+# its serial product is faster than the assembled one. It also holds fewer bytes than either
+# route and is built faster than the Kronecker route. To solve a separable problem, and not
+# to apply the operator inside another iteration, call `fdm_solve`, which is faster at every
+# size in this file.
 
 # ## Where to go next
 #

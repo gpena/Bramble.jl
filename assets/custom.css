@@ -87,3 +87,39 @@
   background: transparent;
   border-radius: 0;
 }
+
+/* Sidebar: MaterialDocs gives nested sections no indent and hides only the links of a
+   collapsed section, not its child sections. */
+
+.md-nav-section .md-nav-section {
+  margin-top: 0.25rem;
+  padding-left: 0.75rem;
+}
+
+.md-nav-section .md-nav-section > .md-nav-section-title {
+  text-transform: none;
+}
+
+.md-nav-collapsed .md-nav-section {
+  display: none;
+}
+
+.md-nav-section-title::after {
+  font-size: 1.25em;
+}
+
+/* Text output of an `@example` block. MaterialDocs 0.2.0 styles it as `.md-output-text pre`
+   but writes the classes on the <pre> itself, so its size, padding and background never
+   apply and output prints at body size, larger than the code above it. The rule is
+   restated for the element it actually writes. Long lines wrap: `show` output already fits
+   the display width, so this only breaks lines such as a caught error's message, which
+   would otherwise run on as a single line. */
+pre.md-output-text {
+  background: var(--md-sys-color-surface-container);
+  border-radius: var(--md-sys-shape-corner-medium);
+  padding: 1rem;
+  font-family: var(--md-sys-typescale-body-large-code-font);
+  font-size: 0.8125rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

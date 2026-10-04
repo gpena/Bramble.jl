@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scientific computing: SciML, AD and solvers — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=8ebe4387">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=973bd131">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
   <meta property="og:title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
@@ -41,7 +41,7 @@
     <nav class="md-sidebar">
       <a href="../">Home</a>
       <a href="../getting_started/">Getting started</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Discrete foundations</span>
         <a href="../tutorials/geometry/">Geometry tutorial</a>
         <a href="../tutorials/mesh/">Mesh tutorial</a>
@@ -50,12 +50,12 @@
         <a href="../tutorials/operator_accuracy/">How accurate are the difference operators</a>
         <a href="../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../tutorials/form/">Linear and bilinear forms</a>
         <a href="../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,13 +63,13 @@
         <a href="../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../tutorials/plotting/">Plotting directly</a>
         <a href="../tutorials/vtk_export/">Writing VTK files</a>
         <a href="../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">Stationary problems</span>
@@ -131,7 +131,7 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/api_sciml.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/api_sciml.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Scientific-computing:-SciML,-AD-and-solvers" class="md-heading">Scientific computing: SciML, AD and solvers<a href="#Scientific-computing:-SciML,-AD-and-solvers" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p>Time integration, differentiable linear solves, and the sparse and iterative solver backends layered on top of the <a href="../api/">form API</a>.</p>
 <h2 id="Time-dependent-problems-and-the-SciML-stack" class="md-heading">Time-dependent problems and the SciML stack<a href="#Time-dependent-problems-and-the-SciML-stack" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -141,7 +141,7 @@
 <div class="md-docstring" id="Bramble.semidiscretize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.semidiscretize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/semidiscrete.jl#L111-L156" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L111-L156" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -217,7 +217,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 <div class="md-docstring" id="Bramble.Semidiscretization">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Semidiscretization</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/semidiscrete.jl#L59-L81" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L59-L81" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -258,7 +258,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 <div class="md-docstring" id="Bramble.semidiscretize_rhs">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.semidiscretize_rhs</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/semidiscrete_rhs.jl#L90-L115" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_rhs.jl#L95-L134" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -267,6 +267,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 </div>
 <p>Build the matrix-free right-hand side of <code class="md-code-inline">uₕ&#39; = M⁻¹(F(t) - A uₕ)</code> from <code class="md-code-inline">sd</code>, folding <code class="md-code-inline">M</code>&#39;s diagonal into a precomputed scaling instead of leaving <code class="md-code-inline">M</code> for a solver to factorise at every step – valid only because <code class="md-code-inline">M</code> is diagonal and, here, invertible everywhere.</p>
 <p>Requires <code class="md-code-inline">sd</code> to have been built with <code class="md-code-inline">dirichlet = nothing</code>: any Dirichlet label makes the corresponding row of <code class="md-code-inline">M</code> zero by construction (see <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>), which is an algebraic constraint on <code class="md-code-inline">uₕ</code>, not an equation for <code class="md-code-inline">uₕ&#39;</code> – there is no <code class="md-code-inline">uₕ&#39;</code> value that divides it away. Also requires <code class="md-code-inline">mass_matrix(sd)</code> to actually be diagonal: the default <code class="md-code-inline">mass</code> (the discrete <code class="md-code-inline">L²</code> inner product) always assembles diagonally, but a caller-supplied <code class="md-code-inline">mass</code> keyword to <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a> need not.</p>
+<p>When the space&#39;s execution policy is <a href="../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> (<code class="md-code-inline">using Polyester</code> required), <code class="md-code-inline">sd</code> was built with <code class="md-code-inline">reassemble = false</code> and <code class="md-code-inline">A</code> is a <code class="md-code-inline">SparseMatrixCSC</code>, the product <code class="md-code-inline">A u</code> runs one row per <code class="md-code-inline">Polyester.@batch</code> iteration, each row writing its own entry of <code class="md-code-inline">du</code>. That needs <code class="md-code-inline">A</code>&#39;s pattern in compressed-row order, which is built here once. It takes two <code class="md-code-inline">Int</code> arrays of length <code class="md-code-inline">nnz(A)</code> (the column of each entry, and its position in <code class="md-code-inline">nonzeros(A)</code>) and one of length <code class="md-code-inline">size(A, 1) + 1</code>, and costs about three products to build. The values are not copied. They are read from <code class="md-code-inline">A</code> itself at every call, so editing <code class="md-code-inline">nonzeros(operator_matrix(sd))</code> afterwards is seen. A change to <code class="md-code-inline">A</code>&#39;s stored pattern is not seen, and if it changes <code class="md-code-inline">nnz(A)</code> the call falls back to the serial product. The row sums run in a different order than the serial column product, so the result agrees with <a href="../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a>&#39;s to rounding, not bit for bit. With <code class="md-code-inline">reassemble = true</code>, <code class="md-code-inline">A</code> changes at every step and a fresh copy would cost more than the threads save. That case, like every other policy, keeps the serial product.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -282,21 +283,22 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.SemidiscretizeRHS">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.SemidiscretizeRHS</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/semidiscrete_rhs.jl#L24-L38" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_rhs.jl#L24-L42" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">SemidiscretizeRHS{S,V}</code></pre>
+<pre><code class="language-julia">SemidiscretizeRHS{S,V,C}</code></pre>
 </div>
 <p>The right-hand side of <code class="md-code-inline">uₕ&#39; = M⁻¹(F(t) - A uₕ)</code>, <code class="md-code-inline">M</code> folded into a precomputed diagonal scaling rather than solved for – for a <a href="../api_sciml/#Bramble.Semidiscretization"><code class="md-code-inline">Semidiscretization</code></a> with no Dirichlet constraints, where that fold is valid. Built by <a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a>; callable with the <code class="md-code-inline">(du, u, p, t)</code> signature a plain (non-mass-matrix) <code class="md-code-inline">SciMLBase.ODEProblem</code> expects.</p>
 <p>Named <code class="md-code-inline">SemidiscretizeRHS</code>/<a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a> rather than the free function <code class="md-code-inline">semidiscretize_rhs!(du, u, p, t)</code> gpena/Bramble.jl#163 proposes: that signature is exactly <code class="md-code-inline">SciMLBase.ODEFunction</code>&#39;s own, which leaves no argument to pass a <a href="../api_sciml/#Bramble.Semidiscretization"><code class="md-code-inline">Semidiscretization</code></a> or the precomputed scaling through – both have to be closed over somehow, and a callable struct is what every other stateful callable in this package does instead of a closure (<code class="md-code-inline">Semidiscretization</code> itself, <code class="md-code-inline">TypeCachedOperator</code>).</p>
+<p>The <code class="md-code-inline">csr</code> field holds the compressed-row pattern of <code class="md-code-inline">A</code> that a <a href="../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> space with <code class="md-code-inline">reassemble = false</code> multiplies by (see <a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a>), and is <code class="md-code-inline">nothing</code> otherwise.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.mass_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.mass_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/semidiscrete.jl#L97-L101" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L97-L101" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -316,7 +318,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.operator_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.operator_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/semidiscrete.jl#L104-L108" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L104-L108" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -329,7 +331,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.jacobian!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/semidiscrete.jl#L498-L510" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L498-L510" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -344,7 +346,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.jacobian_prototype">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian_prototype</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/semidiscrete.jl#L538-L549" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L538-L549" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -359,7 +361,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.ode_function">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ode_function</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/semidiscrete_problems.jl#L13-L48" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L13-L48" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -392,7 +394,7 @@ ode_function(a::BilinearForm, l::LinearForm; kwargs...) -&gt; ODEFunction</code>
 <div class="md-docstring" id="Bramble.ode_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ode_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/semidiscrete_problems.jl#L68-L108" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L68-L108" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -449,7 +451,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.linear_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.linear_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/semidiscrete_problems.jl#L196-L220" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L196-L220" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -479,7 +481,7 @@ sol = solve(prob, KrylovJL_GMRES())</code></pre>
 <div class="md-docstring" id="Bramble.nonlinear_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.nonlinear_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/nonlinear_problem.jl#L20-L61" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/nonlinear_problem.jl#L20-L61" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -520,7 +522,7 @@ sol = solve(prob, NewtonRaphson())</code></pre>
 <div class="md-docstring" id="Bramble.adjoint_sensitivities">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.adjoint_sensitivities</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/semidiscrete_problems.jl#L175-L188" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L175-L188" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -567,7 +569,7 @@ du0, dp = Bramble.adjoint_sensitivities(sol, FBDF(); t = ts, dgdu_discrete = dgd
 <div class="md-docstring" id="Bramble.semidiscretize_second_order">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.semidiscretize_second_order</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/second_order_semidiscrete.jl#L135-L169" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/second_order_semidiscrete.jl#L135-L169" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -607,7 +609,7 @@ sd = semidiscretize_second_order(K, l)</code></pre>
 <div class="md-docstring" id="Bramble.SecondOrderSemidiscretization">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.SecondOrderSemidiscretization</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/second_order_semidiscrete.jl#L76-L97" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/second_order_semidiscrete.jl#L76-L97" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -646,7 +648,7 @@ sd = semidiscretize_second_order(K, l)</code></pre>
 <div class="md-docstring" id="Bramble.damping_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.damping_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/second_order_semidiscrete.jl#L120-L125" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/second_order_semidiscrete.jl#L120-L125" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -659,7 +661,7 @@ sd = semidiscretize_second_order(K, l)</code></pre>
 <div class="md-docstring" id="Bramble.stiffness_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.stiffness_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/second_order_semidiscrete.jl#L128-L132" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/second_order_semidiscrete.jl#L128-L132" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -672,7 +674,7 @@ sd = semidiscretize_second_order(K, l)</code></pre>
 <div class="md-docstring" id="Bramble.block_mass_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.block_mass_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/second_order_semidiscrete.jl#L227-L234" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/second_order_semidiscrete.jl#L227-L234" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -685,7 +687,7 @@ sd = semidiscretize_second_order(K, l)</code></pre>
 <div class="md-docstring" id="Bramble.second_order_ode_function">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.second_order_ode_function</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/second_order_semidiscrete.jl#L298-L312" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/second_order_semidiscrete.jl#L298-L312" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -702,7 +704,7 @@ second_order_ode_function(K::BilinearForm, l::LinearForm; kwargs...) -&gt; Dynam
 <div class="md-docstring" id="Bramble.second_order_ode_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.second_order_ode_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/problems/second_order_semidiscrete.jl#L329-L355" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/second_order_semidiscrete.jl#L329-L355" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -730,7 +732,7 @@ sol = solve(prob, Rodas5P(); reltol = 1e-11, abstol = 1e-13)</code></pre>
 <div class="md-docstring" id="Bramble.pde_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.pde_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/pde_solve.jl#L41-L112" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/pde_solve.jl#L41-L112" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -774,7 +776,7 @@ u_spd = pde_solve(A, F; solver = :suitesparse, sym = :spd)</code></pre>
 <div class="md-docstring" id="Bramble.amg_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.amg_preconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/amg_preconditioner.jl#L19-L65" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/amg_preconditioner.jl#L19-L65" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -817,7 +819,7 @@ uₕ = solve(a, l; dirichlet = bcs, preconditioner = :amg, solver = KrylovJL_CG(
 <div class="md-docstring" id="Bramble.ilu_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ilu_preconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/ilu_preconditioner.jl#L16-L57" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/ilu_preconditioner.jl#L16-L57" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -852,7 +854,7 @@ uₕ = solve(a, l; dirichlet = bcs, preconditioner = :ilu0, solver = KrylovJL_GM
 <div class="md-docstring" id="Bramble.AbstractMatrixFreePreconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.AbstractMatrixFreePreconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/matrix_free_preconditioners.jl#L7-L20" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L7-L20" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -871,7 +873,7 @@ uₕ = solve(a, l; dirichlet = bcs, preconditioner = :ilu0, solver = KrylovJL_GM
 <div class="md-docstring" id="Bramble.jacobi_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobi_preconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/matrix_free_preconditioners.jl#L52-L93" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L52-L93" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -925,7 +927,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.JacobiPreconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.JacobiPreconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/matrix_free_preconditioners.jl#L30-L45" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L30-L45" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -947,7 +949,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.chebyshev_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.chebyshev_preconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/chebyshev.jl#L57-L117" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/chebyshev.jl#L57-L117" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1011,7 +1013,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.ChebyshevPreconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ChebyshevPreconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/chebyshev.jl#L16-L44" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/chebyshev.jl#L16-L44" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1036,7 +1038,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.max_eigenvalue_estimate">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.max_eigenvalue_estimate</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/chebyshev.jl#L203-L252" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/chebyshev.jl#L203-L252" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1090,7 +1092,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.GeometricMeshHierarchy">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GeometricMeshHierarchy</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_hierarchy.jl#L15-L34" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_hierarchy.jl#L15-L34" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1112,7 +1114,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.prolongate!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.prolongate!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_transfer.jl#L25-L72" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_transfer.jl#L25-L72" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1167,7 +1169,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.coarsen!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.coarsen!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_transfer.jl#L83-L133" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_transfer.jl#L83-L133" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1223,7 +1225,7 @@ xc = coarsen!(zeros(npoints(H[1])), H, 2, xf)
 <div class="md-docstring" id="Bramble.AbstractSmoother">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.AbstractSmoother</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_smoothers.jl#L15-L40" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L15-L40" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1243,7 +1245,7 @@ xc = coarsen!(zeros(npoints(H[1])), H, 2, xf)
 <div class="md-docstring" id="Bramble.JacobiSmoother">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.JacobiSmoother</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_smoothers.jl#L46-L60" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L46-L60" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1266,7 +1268,7 @@ xc = coarsen!(zeros(npoints(H[1])), H, 2, xf)
 <div class="md-docstring" id="Bramble.ChebyshevSmoother">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ChebyshevSmoother</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_smoothers.jl#L69-L87" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L69-L87" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1289,7 +1291,7 @@ xc = coarsen!(zeros(npoints(H[1])), H, 2, xf)
 <div class="md-docstring" id="Bramble.RedBlackGaussSeidel">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.RedBlackGaussSeidel</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_smoothers.jl#L98-L121" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L98-L121" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1314,7 +1316,7 @@ xc = coarsen!(zeros(npoints(H[1])), H, 2, xf)
 <div class="md-docstring" id="Bramble.jacobi_smoother">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobi_smoother</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_smoothers.jl#L132-L193" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L132-L193" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1377,7 +1379,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.chebyshev_smoother">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.chebyshev_smoother</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_smoothers.jl#L217-L280" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L217-L280" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1440,7 +1442,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.red_black_gauss_seidel">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.red_black_gauss_seidel</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_smoothers.jl#L305-L365" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L305-L365" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1500,7 +1502,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.smooth!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.smooth!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_smoothers.jl#L442-L491" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L442-L491" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1557,7 +1559,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.gmg_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.gmg_preconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_cycles.jl#L86-L184" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L86-L184" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1626,7 +1628,7 @@ x, y = rand(33^2), rand(33^2)
 <div class="md-docstring" id="Bramble.GMGPreconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GMGPreconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_cycles.jl#L20-L41" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L20-L41" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1655,7 +1657,7 @@ x, y = rand(33^2), rand(33^2)
 <div class="md-docstring" id="Bramble.gmg_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.gmg_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_cycles.jl#L524-L581" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L524-L581" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1718,7 +1720,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.v_cycle!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.v_cycle!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_cycles.jl#L262-L305" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L262-L305" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1773,7 +1775,7 @@ v_cycle!(x, P, b)
 <div class="md-docstring" id="Bramble.w_cycle!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.w_cycle!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_cycles.jl#L312-L347" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L312-L347" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1822,7 +1824,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.fmg!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fmg!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/gmg_cycles.jl#L354-L395" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L354-L395" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1888,7 +1890,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.sparse_factorize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.sparse_factorize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/sparse_solvers.jl#L7-L44" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/sparse_solvers.jl#L7-L44" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1935,7 +1937,7 @@ u = fact \ F</code></pre>
 <div class="md-docstring" id="Bramble.refactor!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.refactor!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/sparse_solvers.jl#L125-L140" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/sparse_solvers.jl#L125-L140" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1963,7 +1965,7 @@ refactor!(fact::Factorization, a::BilinearForm; dirichlet = nothing, dirichlet_c
 <div class="md-docstring" id="Bramble.SuiteSparseFactorization">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.SuiteSparseFactorization</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/suitesparse_solver.jl#L7-L13" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/suitesparse_solver.jl#L7-L13" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1976,7 +1978,7 @@ refactor!(fact::Factorization, a::BilinearForm; dirichlet = nothing, dirichlet_c
 <div class="md-docstring" id="Bramble.suitesparse_factorize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.suitesparse_factorize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/suitesparse_solver.jl#L16-L45" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/suitesparse_solver.jl#L16-L45" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2014,7 +2016,7 @@ u = fact \ F</code></pre>
 <div class="md-docstring" id="Bramble.suitesparse_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.suitesparse_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/suitesparse_solver.jl#L60-L70" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/suitesparse_solver.jl#L60-L70" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2031,7 +2033,7 @@ suitesparse_solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet
 <div class="md-docstring" id="Bramble.suitesparse_refactor!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.suitesparse_refactor!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/suitesparse_solver.jl#L87-L95" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/suitesparse_solver.jl#L87-L95" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2047,7 +2049,7 @@ suitesparse_solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet
 <div class="md-docstring" id="Bramble.suitesparse_qr_factorize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.suitesparse_qr_factorize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/suitesparse_solver.jl#L122-L145" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/suitesparse_solver.jl#L122-L145" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2072,7 +2074,7 @@ u = fact \ F</code></pre>
 <div class="md-docstring" id="Bramble.suitesparse_qr_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.suitesparse_qr_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/suitesparse_solver.jl#L159-L169" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/suitesparse_solver.jl#L159-L169" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2095,7 +2097,7 @@ suitesparse_qr_solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirich
 <div class="md-docstring" id="Bramble.AccelerateFactorization">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.AccelerateFactorization</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/accelerate_solver.jl#L15-L21" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/accelerate_solver.jl#L15-L21" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2108,7 +2110,7 @@ suitesparse_qr_solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirich
 <div class="md-docstring" id="Bramble.accelerate_factorize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.accelerate_factorize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/accelerate_solver.jl#L24-L56" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/accelerate_solver.jl#L24-L56" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2170,7 +2172,7 @@ u = fact \ F</code></pre>
 <div class="md-docstring" id="Bramble.accelerate_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.accelerate_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/accelerate_solver.jl#L125-L136" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/accelerate_solver.jl#L125-L136" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2187,7 +2189,7 @@ accelerate_solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_
 <div class="md-docstring" id="Bramble.accelerate_refactor!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.accelerate_refactor!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/accelerate_solver.jl#L159-L167" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/accelerate_solver.jl#L159-L167" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2202,7 +2204,7 @@ accelerate_solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_
 <div class="md-docstring" id="Bramble.MUMPSFactorization">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.MUMPSFactorization</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/mumps_solver.jl#L9-L15" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/mumps_solver.jl#L9-L15" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2215,7 +2217,7 @@ accelerate_solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_
 <div class="md-docstring" id="Bramble.mumps_factorize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.mumps_factorize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/mumps_solver.jl#L18-L54" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/mumps_solver.jl#L18-L54" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2260,7 +2262,7 @@ u = fact \ F</code></pre>
 <div class="md-docstring" id="Bramble.mumps_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.mumps_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/mumps_solver.jl#L69-L96" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/mumps_solver.jl#L69-L96" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2297,7 +2299,7 @@ u = mumps_solve(A, F)</code></pre>
 <div class="md-docstring" id="Bramble.mumps_refactor!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.mumps_refactor!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/mumps_solver.jl#L112-L120" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/mumps_solver.jl#L112-L120" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2312,7 +2314,7 @@ u = mumps_solve(A, F)</code></pre>
 <div class="md-docstring" id="Bramble.SparspakFactorization">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.SparspakFactorization</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/sparspak_solver.jl#L11-L17" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/sparspak_solver.jl#L11-L17" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2325,7 +2327,7 @@ u = mumps_solve(A, F)</code></pre>
 <div class="md-docstring" id="Bramble.sparspak_factorize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.sparspak_factorize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/sparspak_solver.jl#L20-L46" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/sparspak_solver.jl#L20-L46" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2352,7 +2354,7 @@ u = fact \ F</code></pre>
 <div class="md-docstring" id="Bramble.sparspak_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.sparspak_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/sparspak_solver.jl#L60-L82" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/sparspak_solver.jl#L60-L82" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2378,7 +2380,7 @@ u = sparspak_solve(A, F)</code></pre>
 <div class="md-docstring" id="Bramble.sparspak_refactor!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.sparspak_refactor!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/solvers/sparspak_solver.jl#L98-L106" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/sparspak_solver.jl#L98-L106" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2394,7 +2396,7 @@ u = sparspak_solve(A, F)</code></pre>
 <div class="md-docstring" id="Bramble.type_cached_assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.type_cached_assemble!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/assembly/type_cached_assemble.jl#L15-L74" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/type_cached_assemble.jl#L15-L74" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2739,6 +2741,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=8ebe4387"></script>
+  <script src="../assets/materialdocs.js?v=973bd131"></script>
 </body>
 </html>

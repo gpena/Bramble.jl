@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Coupled nonlinear reaction-diffusion system — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=4713dbc5">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=d4419bf2">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Coupled nonlinear reaction-diffusion system — Bramble.jl">
   <meta property="og:title" content="Coupled nonlinear reaction-diffusion system — Bramble.jl">
@@ -41,7 +41,7 @@
     <nav class="md-sidebar">
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Discrete foundations</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
@@ -50,12 +50,12 @@
         <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
         <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,7 +63,7 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
@@ -100,7 +100,7 @@
         </div>
       </div>
       <a href="../../benchmarks/">Benchmarks</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">API reference</span>
@@ -131,7 +131,7 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/coupled_reaction_diffusion.jl" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/coupled_reaction_diffusion.jl#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Coupled-nonlinear-reaction-diffusion-system" class="md-heading">Coupled nonlinear reaction-diffusion system<a href="#Coupled-nonlinear-reaction-diffusion-system" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p>Two species, coupled through a quadratic reaction term, solved with Newton&#39;s method the same way the <a href="../../examples/poisson_nonlinear/">nonlinear Poisson example</a> does, except now the Jacobian differentiates through a <em>composite</em> space&#39;s assembly, not a scalar one. Every number and every plot below was produced by the code shown.</p>
 <h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -218,7 +218,7 @@ for it in 1:20
 end
 length(newton_residuals), newton_residuals</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(4, [2.5762825732242143, 0.02192029918716197, 1.2892755985117513e-6, 4.3604932320433394e-14])</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(4, [2.5762825732242143, 0.02192029918716173, 1.2892755987507398e-6, 4.9583421918330345e-14])</code></pre>
 </div>
 <p>Quadratic convergence, same as the single-species case: the composite space changes what the Jacobian differentiates through, not how well Newton converges once it has a correct one.</p>
 <h2 id="Skipping-the-tracer-here-too" class="md-heading">Skipping the tracer here too<a href="#Skipping-the-tracer-here-too" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -253,9 +253,9 @@ newton_residuals_native</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">4-element Vector{Float64}:
  2.5762825732242143
- 0.02192029918716111
- 1.2892755984228692e-6
- 4.4098248980011264e-14</code></pre>
+ 0.02192029918716133
+ 1.2892755987293357e-6
+ 4.083592084640994e-14</code></pre>
 </div>
 <p>Same quadratic convergence, no tracing pass paid for it: <code class="md-code-inline">v_c0</code>/<code class="md-code-inline">u_c0</code> are read at <code class="md-code-inline">w = 0</code> only to build <em>some</em> concrete <code class="md-code-inline">BilinearForm</code>, since the pattern is a property of <code class="md-code-inline">a</code>&#39;s AST, not of those values. <code class="md-code-inline">SparseConnectivityTracer</code>&#39;s tracer still works here regardless of how <code class="md-code-inline">coupled_matrix</code> was built, composite space and all. The case to reach for it is a residual whose matrix does not come from a <code class="md-code-inline">BilinearForm</code> in the first place, which is not this one.</p>
 <h2 id="NonlinearSolve.jl-on-the-composite-system" class="md-heading">NonlinearSolve.jl on the composite system<a href="#NonlinearSolve.jl-on-the-composite-system" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -280,7 +280,7 @@ prob = nonlinear_problem(residual!, zeros(ndofs(Vₕ)); jac_prototype = J_native
 sol_ns = solve(prob, NewtonRaphson(); abstol = 1e-10)
 sol_ns.retcode, maximum(abs, sol_ns.u .- w_native)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(SciMLBase.ReturnCode.Success, 1.64817048897703e-11)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(SciMLBase.ReturnCode.Success, 1.6482926135097387e-11)</code></pre>
 </div>
 <p>Quadratic convergence over a composite space carries over unchanged to <code class="md-code-inline">NonlinearSolve.jl</code> too – the block sparsity pattern is all a composite residual ever needed to hand it, and <code class="md-code-inline">NewtonRaphson</code> reaches the same solution the hand-written loops above do. See <a href="../../examples/poisson_nonlinear/">the nonlinear Poisson example</a> for a measured Picard-against-NonlinearSolve comparison; the same contrast holds here and is not repeated a second time.</p>
 <div class="md-multi-output">
@@ -292,7 +292,7 @@ uₕ, vₕ = components(wₕ)
 uexact, vexact = Rₕ(Wₕ, u_ex), Rₕ(Wₕ, v_ex)
 norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.01977921473151618, 0.10747520241691728)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.019779214731516854, 0.10747520241691953)</code></pre>
 </div>
 <h2 id="Exploring-the-system-interactively" class="md-heading">Exploring the system interactively<a href="#Exploring-the-system-interactively" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>The panel below is <em>not</em> a replay of the solve above, and does not share its manufactured solution: it poses a different boundary-value problem in the same two unknowns, chosen so every slider has a visible effect rather than being fought back to a fixed answer:</p>
@@ -1193,7 +1193,7 @@ order_u = log(erru[end - 1] / erru[end]) / log(hs[end - 1] / hs[end])
 order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
 (order_u, order_v)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.9980708093155757, 1.9904359603728767)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.9980708093150845, 1.9904359603737625)</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -1270,7 +1270,7 @@ order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
   const data = [{
   name: "u",
   x: [0.7281398631056489,0.3640699315528245,0.18203496577641226,0.09101748288820616,0.045508741444103114],
-  y: [0.13509580614559977,0.03655058875874418,0.0092850144204161,0.0023331110596354187,0.0005840582532908425],
+  y: [0.13509580614559977,0.03655058875874418,0.00928501442041335,0.002333111059630235,0.0005840582532897437],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#5B5FC7", size: 8 },
@@ -1278,7 +1278,7 @@ order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
 {
   name: "v",
   x: [0.7281398631056489,0.3640699315528245,0.18203496577641226,0.09101748288820616,0.045508741444103114],
-  y: [0.80359099964336,0.23130629735192357,0.06228236898218088,0.015954707817457833,0.0040152068791372165],
+  y: [0.80359099964336,0.23130629735192362,0.06228236898218091,0.015954707817459328,0.004015206879135127],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#0E7C86", size: 8 },
@@ -1286,7 +1286,7 @@ order_v = log(errv[end - 1] / errv[end]) / log(hs[end - 1] / hs[end])
 {
   name: "slope 2",
   x: [0.045508741444103114, 0.7281398631056489],
-  y: [0.0005840582532908425, 0.14951891284245533],
+  y: [0.0005840582532897437, 0.14951891284217403],
   mode: 'lines',
   type: 'scatter',
   line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
@@ -1367,6 +1367,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=4713dbc5"></script>
+  <script src="../../assets/materialdocs.js?v=d4419bf2"></script>
 </body>
 </html>

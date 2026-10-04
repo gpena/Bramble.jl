@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Difference, jump and average operators — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b484a874">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=38235b39">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Difference, jump and average operators — Bramble.jl">
   <meta property="og:title" content="Difference, jump and average operators — Bramble.jl">
@@ -41,7 +41,7 @@
     <nav class="md-sidebar">
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Discrete foundations</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
@@ -50,12 +50,12 @@
         <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
         <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,13 +63,13 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
         <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">Stationary problems</span>
@@ -131,7 +131,7 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/api/operators.md" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/api/operators.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Difference,-jump-and-average-operators" class="md-heading">Difference, jump and average operators<a href="#Difference,-jump-and-average-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p>The finite difference, the jump and the average, per coordinate and over every coordinate at once. See the <a href="../../tutorials/operators/">operators tutorial</a>.</p>
 <p>A direction held in a variable indexes the vectorial operator: <code class="md-code-inline">∇ₕ[2]</code>, <code class="md-code-inline">∇ₕ[:y]</code> and <code class="md-code-inline">D₋ᵧ</code> are the same function, so <code class="md-code-inline">sum(innerₕ(∇ₕ[d](uₕ), ∇ₕ[d](uₕ)) for d in 1:D)</code> reads the same in 1D, 2D and 3D. Every family has a stem that takes the direction as an argument: <code class="md-code-inline">Bramble.D₋(uₕ, 2)</code>, <code class="md-code-inline">Bramble.D₋(uₕ, :y)</code> and <code class="md-code-inline">Bramble.D₋(uₕ, Val(2))</code> are all <code class="md-code-inline">D₋ᵧ(uₕ)</code>. The stems <code class="md-code-inline">D₋</code>, <code class="md-code-inline">D₊</code>, <code class="md-code-inline">Dc</code>, <code class="md-code-inline">D̃</code> and <code class="md-code-inline">jump</code> are <code class="md-code-inline">public</code> but not exported. The averages use <code class="md-code-inline">Mₕ</code>/<code class="md-code-inline">M₊ₕ</code> rather than a bare <code class="md-code-inline">M</code>; <code class="md-code-inline">Mₕ(uₕ)</code> is the tuple over every coordinate and <code class="md-code-inline">Mₕ(uₕ, 2)</code> is the <code class="md-code-inline">y</code> average.</p>
@@ -141,7 +141,7 @@
 <div class="md-docstring" id="Bramble.D₋ₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₋ₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L802-L814" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L802-L814" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -164,7 +164,7 @@
 <div class="md-docstring" id="Bramble.D₋ₓ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₋ₓ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L802-L818" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L802-L818" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -180,7 +180,7 @@
 <div class="md-docstring" id="Bramble.D₋ᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₋ᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L802-L814" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L802-L814" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -203,7 +203,7 @@
 <div class="md-docstring" id="Bramble.D₋ᵧ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₋ᵧ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L802-L818" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L802-L818" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -219,7 +219,7 @@
 <div class="md-docstring" id="Bramble.D₋₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₋₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L802-L814" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L802-L814" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -242,7 +242,7 @@
 <div class="md-docstring" id="Bramble.D₋₂!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₋₂!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L802-L818" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L802-L818" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -258,7 +258,7 @@
 <div class="md-docstring" id="Bramble.∇ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.∇ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L802-L815" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L802-L815" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -295,7 +295,7 @@
 <div class="md-docstring" id="Bramble.D₊ₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₊ₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L780-L792" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L780-L792" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -318,7 +318,7 @@
 <div class="md-docstring" id="Bramble.D₊ₓ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₊ₓ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L780-L796" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L780-L796" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -334,7 +334,7 @@
 <div class="md-docstring" id="Bramble.D₊ᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₊ᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L780-L792" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L780-L792" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -357,7 +357,7 @@
 <div class="md-docstring" id="Bramble.D₊ᵧ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₊ᵧ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L780-L796" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L780-L796" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -373,7 +373,7 @@
 <div class="md-docstring" id="Bramble.D₊₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₊₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L780-L792" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L780-L792" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -396,7 +396,7 @@
 <div class="md-docstring" id="Bramble.D₊₂!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₊₂!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L780-L796" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L780-L796" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -412,7 +412,7 @@
 <div class="md-docstring" id="Bramble.∇₊ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.∇₊ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L780-L793" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L780-L793" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -448,7 +448,7 @@
 <div class="md-docstring" id="Bramble.D₋">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₋</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L802-L822" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L802-L822" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -473,7 +473,7 @@
 <div class="md-docstring" id="Bramble.D₊">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₊</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L780-L800" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L780-L800" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -499,7 +499,7 @@
 <div class="md-docstring" id="Bramble.D̃ₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̃ₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L831-L843" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L831-L843" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -522,7 +522,7 @@
 <div class="md-docstring" id="Bramble.D̃ₓ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̃ₓ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L831-L847" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L831-L847" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -538,7 +538,7 @@
 <div class="md-docstring" id="Bramble.D̃ᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̃ᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L831-L843" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L831-L843" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -561,7 +561,7 @@
 <div class="md-docstring" id="Bramble.D̃ᵧ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̃ᵧ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L831-L847" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L831-L847" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -577,7 +577,7 @@
 <div class="md-docstring" id="Bramble.D̃₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̃₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L831-L843" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L831-L843" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -600,7 +600,7 @@
 <div class="md-docstring" id="Bramble.D̃₂!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̃₂!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L831-L847" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L831-L847" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -616,7 +616,7 @@
 <div class="md-docstring" id="Bramble.D̃ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̃ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L831-L844" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L831-L844" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -638,7 +638,7 @@
 <div class="md-docstring" id="Bramble.D̃">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̃</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L831-L851" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L831-L851" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -664,7 +664,7 @@
 <div class="md-docstring" id="Bramble.Dcₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Dcₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L866-L878" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L866-L878" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -687,7 +687,7 @@
 <div class="md-docstring" id="Bramble.Dcₓ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Dcₓ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L866-L882" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L866-L882" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -703,7 +703,7 @@
 <div class="md-docstring" id="Bramble.Dcᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Dcᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L866-L878" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L866-L878" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -726,7 +726,7 @@
 <div class="md-docstring" id="Bramble.Dcᵧ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Dcᵧ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L866-L882" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L866-L882" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -742,7 +742,7 @@
 <div class="md-docstring" id="Bramble.Dc₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Dc₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L866-L878" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L866-L878" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -765,7 +765,7 @@
 <div class="md-docstring" id="Bramble.Dc₂!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Dc₂!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L866-L882" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L866-L882" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -781,7 +781,7 @@
 <div class="md-docstring" id="Bramble.Dcₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Dcₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L866-L879" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L866-L879" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -803,7 +803,7 @@
 <div class="md-docstring" id="Bramble.Dc">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Dc</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L866-L886" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L866-L886" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -829,7 +829,7 @@
 <div class="md-docstring" id="Bramble.D̽ₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̽ₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L903-L915" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L903-L915" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -852,7 +852,7 @@
 <div class="md-docstring" id="Bramble.D̽ₓ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̽ₓ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L903-L919" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L903-L919" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -868,7 +868,7 @@
 <div class="md-docstring" id="Bramble.D̽ᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̽ᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L903-L915" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L903-L915" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -891,7 +891,7 @@
 <div class="md-docstring" id="Bramble.D̽ᵧ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̽ᵧ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L903-L919" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L903-L919" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -907,7 +907,7 @@
 <div class="md-docstring" id="Bramble.D̽₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̽₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L903-L915" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L903-L915" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -930,7 +930,7 @@
 <div class="md-docstring" id="Bramble.D̽₂!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̽₂!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L903-L919" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L903-L919" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -946,7 +946,7 @@
 <div class="md-docstring" id="Bramble.D̽ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D̽ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L903-L923" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L903-L923" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -988,7 +988,7 @@
 <div class="md-docstring" id="Bramble.divₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.divₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L1583-L1599" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1583-L1599" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1020,7 +1020,7 @@ divₕ(vₕ, uₕ) -&gt; VectorElement</code></pre>
 <div class="md-docstring" id="Bramble.divₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.divₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L260-L270" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L260-L270" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1035,7 +1035,7 @@ divₕ(vₕ, uₕ) -&gt; VectorElement</code></pre>
 <div class="md-docstring" id="Bramble.div₊ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.div₊ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L281-L291" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L281-L291" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1051,7 +1051,7 @@ div₊ₕ!(vₕ::VectorElement, uₕ) -&gt; VectorElement</code></pre>
 <div class="md-docstring" id="Bramble.div₊ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.div₊ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L281-L291" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L281-L291" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1067,7 +1067,7 @@ div₊ₕ!(vₕ::VectorElement, uₕ) -&gt; VectorElement</code></pre>
 <div class="md-docstring" id="Bramble.divcₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.divcₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L1632-L1647" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1632-L1647" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1101,7 +1101,7 @@ divcₕ!(vₕ::VectorElement, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.divcₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.divcₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L1632-L1647" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1632-L1647" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1119,7 +1119,7 @@ divcₕ!(vₕ::VectorElement, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.div̽ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.div̽ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L1731-L1746" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1731-L1746" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1153,7 +1153,7 @@ div̽ₕ!(vₕ::VectorElement, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.div̽ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.div̽ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L1731-L1746" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1731-L1746" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1171,7 +1171,7 @@ div̽ₕ!(vₕ::VectorElement, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curlₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curlₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L349-L375" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L349-L375" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1194,7 +1194,7 @@ curlₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curlₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curlₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L349-L375" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L349-L375" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1217,7 +1217,7 @@ curlₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curl₊ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curl₊ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L378-L385" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L378-L385" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1232,7 +1232,7 @@ curl₊ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curl₊ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curl₊ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L378-L385" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L378-L385" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1247,7 +1247,7 @@ curl₊ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curlcₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curlcₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L952-L974" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L952-L974" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1269,7 +1269,7 @@ curlcₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curlcₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curlcₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L952-L974" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L952-L974" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1291,7 +1291,7 @@ curlcₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curl̽ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curl̽ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L1467-L1490" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1467-L1490" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1314,7 +1314,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curl̽ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curl̽ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L1467-L1490" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1467-L1490" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1337,7 +1337,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Δₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Δₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L472-L503" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L472-L503" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1365,7 +1365,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Δₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Δₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L472-L503" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L472-L503" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1393,7 +1393,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.εₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.εₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L1522-L1539" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1522-L1539" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1431,7 +1431,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.εₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.εₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L779-L789" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L779-L789" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1446,7 +1446,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.εcₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.εcₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L1670-L1686" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1670-L1686" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1483,7 +1483,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.εcₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.εcₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L1670-L1686" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1670-L1686" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1503,7 +1503,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.ε̽ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ε̽ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L1751-L1769" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1751-L1769" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1542,7 +1542,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.ε̽ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ε̽ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/difference.jl#L1751-L1769" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1751-L1769" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1563,7 +1563,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.∇cₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.∇cₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L856-L875" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L856-L875" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1584,7 +1584,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.∇cₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.∇cₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L878-L885" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L878-L885" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1598,7 +1598,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.∇̽ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.∇̽ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L1342-L1365" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1342-L1365" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1621,7 +1621,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.∇̽ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.∇̽ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L1406-L1413" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1406-L1413" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1635,7 +1635,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.∇̃ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.∇̃ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L1096-L1115" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1096-L1115" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1656,7 +1656,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.∇̃ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.∇̃ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L1118-L1125" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1118-L1125" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1670,7 +1670,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.diṽₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diṽₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L1145-L1169" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1145-L1169" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1693,7 +1693,7 @@ diṽₕ!(vₕ::VectorElement, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.diṽₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diṽₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L1145-L1169" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1145-L1169" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1716,7 +1716,7 @@ diṽₕ!(vₕ::VectorElement, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curl̃ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curl̃ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L1187-L1210" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1187-L1210" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1739,7 +1739,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curl̃ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curl̃ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L1187-L1210" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1187-L1210" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1762,7 +1762,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.ε₊ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ε₊ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L1285-L1306" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1285-L1306" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1785,7 +1785,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.ε₊ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ε₊ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/vector_calculus.jl#L1285-L1306" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1285-L1306" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1809,7 +1809,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.jumpₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jumpₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/jump.jl#L92-L104" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/jump.jl#L92-L104" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1832,7 +1832,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.jumpₓ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jumpₓ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/jump.jl#L92-L108" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/jump.jl#L92-L108" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1848,7 +1848,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.jumpᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jumpᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/jump.jl#L92-L104" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/jump.jl#L92-L104" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1871,7 +1871,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.jumpᵧ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jumpᵧ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/jump.jl#L92-L108" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/jump.jl#L92-L108" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1887,7 +1887,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.jump₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jump₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/jump.jl#L92-L104" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/jump.jl#L92-L104" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1910,7 +1910,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.jump₂!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jump₂!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/jump.jl#L92-L108" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/jump.jl#L92-L108" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1926,7 +1926,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.jumpₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jumpₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/jump.jl#L92-L105" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/jump.jl#L92-L105" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1948,7 +1948,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.jump">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jump</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/jump.jl#L57-L67" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/jump.jl#L57-L67" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1983,7 +1983,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L573-L585" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L574-L586" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2006,7 +2006,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mₓ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mₓ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L573-L589" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L574-L590" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2022,7 +2022,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L573-L585" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L574-L586" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2045,7 +2045,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mᵧ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mᵧ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L573-L589" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L574-L590" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2061,7 +2061,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L573-L585" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L574-L586" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2084,7 +2084,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₂!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₂!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L573-L589" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L574-L590" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2100,7 +2100,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L573-L593" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L574-L594" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2141,7 +2141,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mcₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mcₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L585-L597" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L586-L598" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2164,7 +2164,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mcₓ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mcₓ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L585-L601" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L586-L602" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2180,7 +2180,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mcᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mcᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L585-L597" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L586-L598" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2203,7 +2203,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mcᵧ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mcᵧ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L585-L601" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L586-L602" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2219,7 +2219,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mc₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mc₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L585-L597" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L586-L598" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2242,7 +2242,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mc₂!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mc₂!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L585-L601" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L586-L602" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2258,7 +2258,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mcₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mcₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L585-L605" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L586-L606" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2299,7 +2299,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₊ₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₊ₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L563-L575" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L564-L576" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2322,7 +2322,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₊ₓ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₊ₓ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L563-L579" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L564-L580" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2338,7 +2338,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₊ᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₊ᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L563-L575" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L564-L576" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2361,7 +2361,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₊ᵧ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₊ᵧ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L563-L579" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L564-L580" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2377,7 +2377,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₊₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₊₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L563-L575" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L564-L576" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2400,7 +2400,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₊₂!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₊₂!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L563-L579" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L564-L580" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2416,7 +2416,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₊ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₊ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/average.jl#L563-L583" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L564-L584" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2458,7 +2458,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.S₊ₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₊ₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L396-L408" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L396-L408" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2473,7 +2473,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.S₊ₓ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₊ₓ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L396-L412" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L396-L412" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2489,7 +2489,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.S₊ᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₊ᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L396-L408" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L396-L408" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2504,7 +2504,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.S₊ᵧ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₊ᵧ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L396-L412" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L396-L412" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2520,7 +2520,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.S₊₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₊₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L396-L408" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L396-L408" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2535,7 +2535,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.S₊₂!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₊₂!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L396-L412" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L396-L412" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2551,7 +2551,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.S₊ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₊ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L396-L409" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L396-L409" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2566,7 +2566,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.S₊">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₊</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L396-L416" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L396-L416" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2582,7 +2582,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.forward_shift">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.forward_shift</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L292-L341" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L292-L341" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2635,7 +2635,7 @@ parent(forward_shift(uₕ, Val(1)))
 <div class="md-docstring" id="Bramble.S₋ₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₋ₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L410-L422" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L410-L422" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2650,7 +2650,7 @@ parent(forward_shift(uₕ, Val(1)))
 <div class="md-docstring" id="Bramble.S₋ₓ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₋ₓ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L410-L426" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L410-L426" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2666,7 +2666,7 @@ parent(forward_shift(uₕ, Val(1)))
 <div class="md-docstring" id="Bramble.S₋ᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₋ᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L410-L422" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L410-L422" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2681,7 +2681,7 @@ parent(forward_shift(uₕ, Val(1)))
 <div class="md-docstring" id="Bramble.S₋ᵧ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₋ᵧ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L410-L426" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L410-L426" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2697,7 +2697,7 @@ parent(forward_shift(uₕ, Val(1)))
 <div class="md-docstring" id="Bramble.S₋₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₋₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L410-L422" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L410-L422" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2712,7 +2712,7 @@ parent(forward_shift(uₕ, Val(1)))
 <div class="md-docstring" id="Bramble.S₋₂!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₋₂!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L410-L426" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L410-L426" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2728,7 +2728,7 @@ parent(forward_shift(uₕ, Val(1)))
 <div class="md-docstring" id="Bramble.S₋ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₋ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L410-L423" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L410-L423" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2743,7 +2743,7 @@ parent(forward_shift(uₕ, Val(1)))
 <div class="md-docstring" id="Bramble.S₋">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.S₋</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L410-L430" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L410-L430" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2759,7 +2759,7 @@ parent(forward_shift(uₕ, Val(1)))
 <div class="md-docstring" id="Bramble.backward_shift">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backward_shift</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/ea0c693b53464e476b13ba8665a0d2e58a6afcda/src/operators/shift.jl#L345-L392" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L345-L392" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2834,6 +2834,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=b484a874"></script>
+  <script src="../../assets/materialdocs.js?v=38235b39"></script>
 </body>
 </html>

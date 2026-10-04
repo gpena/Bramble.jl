@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Graded meshes for a boundary layer — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=3295ef38">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e4a91f17">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Graded meshes for a boundary layer — Bramble.jl">
   <meta property="og:title" content="Graded meshes for a boundary layer — Bramble.jl">
@@ -41,7 +41,7 @@
     <nav class="md-sidebar">
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Discrete foundations</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
@@ -50,12 +50,12 @@
         <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
         <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,7 +63,7 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
@@ -100,7 +100,7 @@
         </div>
       </div>
       <a href="../../benchmarks/">Benchmarks</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">API reference</span>
@@ -131,7 +131,7 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/boundary_layer_graded.jl" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/boundary_layer_graded.jl#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Graded-meshes-for-a-boundary-layer" class="md-heading">Graded meshes for a boundary layer<a href="#Graded-meshes-for-a-boundary-layer" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p>Bramble&#39;s schemes are built for non-uniform grids, and this is the problem that makes that worth having: a solution with a thin layer, where the points a uniform mesh spends in the smooth region are wasted and the ones it spends in the layer are too few.</p>
 <p>This page is generated from <code class="md-code-inline">docs/src/examples/boundary_layer_graded.jl</code> by Literate.jl, and the same file runs under <code class="md-code-inline">test/examples/pages.jl</code>, where the <code class="md-code-inline">#src</code> assertions execute.</p>
@@ -378,7 +378,7 @@ collect(zip(σs, errors_by_σ))</code></pre>
  (3.0, 0.0010440184275933278)
  (4.0, 0.0001611149587800358)
  (6.0, 0.0001932098712388316)
- (8.0, 0.00034497330750233804)</code></pre>
+ (8.0, 0.000344973307502338)</code></pre>
 </div>
 <p>The best value here is around 4, where the finest cells are comparable with <code class="md-code-inline">ε</code>, and the curve is flat enough on either side that the choice is not delicate. There is nothing sacred about <code class="md-code-inline">tanh</code>: a geometric or piecewise-linear grading does the same job, and the mesh only ever sees the point vector.</p>
 <h2 id="Where-to-go-next" class="md-heading">Where to go next<a href="#Where-to-go-next" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -419,6 +419,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=3295ef38"></script>
+  <script src="../../assets/materialdocs.js?v=e4a91f17"></script>
 </body>
 </html>

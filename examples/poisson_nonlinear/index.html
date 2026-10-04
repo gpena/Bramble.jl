@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Nonlinear Poisson equation — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b7fcf984">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=3ba5f693">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Nonlinear Poisson equation — Bramble.jl">
   <meta property="og:title" content="Nonlinear Poisson equation — Bramble.jl">
@@ -41,7 +41,7 @@
     <nav class="md-sidebar">
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Discrete foundations</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
@@ -50,12 +50,12 @@
         <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
         <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Solvers and scientific computing</span>
         <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
         <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
@@ -63,7 +63,7 @@
         <a href="../../tutorials/autodiff/">Automatic differentiation</a>
         <a href="../../tutorials/backend/">Backends and execution policies</a>
       </div>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Visualization and export</span>
         <a href="../../tutorials/plotting/">Plotting directly</a>
         <a href="../../tutorials/vtk_export/">Writing VTK files</a>
@@ -100,7 +100,7 @@
         </div>
       </div>
       <a href="../../benchmarks/">Benchmarks</a>
-      <div class="md-nav-section">
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
           <span class="md-nav-section-title">API reference</span>
@@ -131,7 +131,7 @@
     </nav>
     <main class="md-content">
       <article class="md-article">
-      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/poisson_nonlinear.jl" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/poisson_nonlinear.jl#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Nonlinear-Poisson-equation" class="md-heading">Nonlinear Poisson equation<a href="#Nonlinear-Poisson-equation" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p>Two ways to solve the same nonlinear problem, fixed-point (Picard) iteration and Newton&#39;s method, so the difference between linear and quadratic convergence is something measured, not just asserted. Every number and every plot below was produced by the code shown.</p>
 <h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -194,7 +194,7 @@ for it in 1:200
 end
 length(picard_steps), picard_steps[[1, 2, 3, end]]</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(9, [2.718281828459045, 0.05862611946851515, 0.0005965799435587726, 9.14823772291129e-14])</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(9, [2.718281828459045, 0.05862611946851448, 0.0005965799435467822, 6.039613253960852e-14])</code></pre>
 </div>
 <p>The step size drops by one to two orders of magnitude each time here, reaching machine precision in 9 iterations, still only linear convergence (a roughly constant per-step ratio, not the per-step squaring Newton gets below), just a fast-converging instance of it for this particular coefficient and mesh.</p>
 <h2 id="Newton&#39;s-method" class="md-heading">Newton&#39;s method<a href="#Newton&#39;s-method" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -249,7 +249,7 @@ uₕ_newton .= u
 uexact = Rₕ(Wₕ, sol)
 norm₁ₕ(uₕ_newton .- uexact), norm₁ₕ(uₙ .- uexact)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.00029131009520692186, 0.0002913100951331481)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.00029131009520692186, 0.0002913100951362921)</code></pre>
 </div>
 <h2 id="Closing-the-gap:-caching-the-diffusion-matrix-by-element-type" class="md-heading">Closing the gap: caching the diffusion matrix by element type<a href="#Closing-the-gap:-caching-the-diffusion-matrix-by-element-type" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><code class="md-code-inline">diffusion_matrix</code> rebuilds its pattern on every call for a real reason, since <code class="md-code-inline">T</code> differs between a plain call and a <code class="md-code-inline">jacobian!</code> sweep and a <code class="md-code-inline">Float64</code> matrix cannot hold a <code class="md-code-inline">Dual</code>. The <em>pattern</em> itself is exactly as fixed across element types as it is across Newton iterations, though. Only <code class="md-code-inline">α</code>&#39;s values differ, and only because they were evaluated at a different <code class="md-code-inline">T</code>. <a href="../../api_sciml/#Bramble.type_cached_assemble!"><code class="md-code-inline">type_cached_assemble!</code></a> gives that pattern a place to live per type it is ever reached at, instead of rebuilding it from nothing every time. <code class="md-code-inline">build_diffusion</code> is named and defined once, the same reason <code class="md-code-inline">a</code> above is built once outside the Picard loop rather than inside it; <code class="md-code-inline">refill!</code> reaches for <code class="md-code-inline">Mₓ!</code> rather than <code class="md-code-inline">Mₕ</code>, which would allocate a fresh result every call and reintroduce exactly the cost this is meant to stop paying:</p>
@@ -405,7 +405,7 @@ b_picard = @allocated run_picard()
 b_ns = @allocated run_nonlinearsolve()
 (picard_ms = 1000t_picard, nonlinearsolve_ms = 1000t_ns, picard_bytes = b_picard, nonlinearsolve_bytes = b_ns)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(picard_ms = 0.300003, nonlinearsolve_ms = 0.227316, picard_bytes = 554544, nonlinearsolve_bytes = 242560)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(picard_ms = 0.231093, nonlinearsolve_ms = 0.163222, picard_bytes = 554432, nonlinearsolve_bytes = 242640)</code></pre>
 </div>
 <p>A single machine, single process, <code class="md-code-inline">ntrials</code>-sample minimum of each, informative as a ratio between the two methods measured together, not as an absolute number to compare against a different run (bramble-benchmarks is the formal, commit-indexed baseline for that, and this machine was on battery power when these numbers were taken, which a same-run ratio cancels but an absolute number would not). <code class="md-code-inline">nonlinear_problem</code> came out both faster and lighter than the hand-written Picard loop here – 0.156 ms against 0.237 ms (0.66x), 321,232 B against 595,792 B (0.54x) – <code class="md-code-inline">NewtonRaphson</code>&#39;s quadratic convergence reaching machine precision in fewer steps than Picard&#39;s linear rate needs, each step no more expensive than Picard&#39;s own <code class="md-code-inline">assemble!</code>/solve now that the sparse AD Jacobian is exactly as targeted as the hand-built one above.</p>
 <h2 id="Convergence-of-the-Newton-solution" class="md-heading">Convergence of the Newton solution<a href="#Convergence-of-the-Newton-solution" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -421,7 +421,7 @@ order2 = log(errs2[end - 1] / errs2[end]) / log(hs2[end - 1] / hs2[end])
 order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 (order1, order2, order3)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.9999463779198852, 1.9959056157400157, 1.9217474793256721)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.999946784465622, 1.9959056158379607, 1.921747479337009)</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -502,7 +502,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
   const data = [{
   name: "1D",
   x: [0.4537346574443589,0.22686732872217952,0.11343366436108976,0.05671683218054491,0.028358416090272454,0.014179208045136282,0.007089604022568197],
-  y: [0.0038632486241389746,0.0010046880088576495,0.00025353087509887695,6.352911783712144e-5,1.5891413612284777e-5,3.973423873723539e-6,9.933928901653738e-7],
+  y: [0.0038632486241389746,0.0010046880088576495,0.0002535308751847424,6.352911783712144e-5,1.5891413612284777e-5,3.973424993418774e-6,9.933928901653738e-7],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#5B5FC7", size: 8 },
@@ -510,7 +510,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 {
   name: "2D",
   x: [0.7281398631056489,0.3640699315528245,0.18203496577641226,0.09101748288820616,0.045508741444103114],
-  y: [0.033591338643167684,0.00921005687409368,0.002370760002510309,0.0005981775775629383,0.0001499694058212106],
+  y: [0.033591338643167684,0.00921005687409368,0.0023707600025152107,0.0005981775776590475,0.00014996940583512472],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#0E7C86", size: 8 },
@@ -518,7 +518,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 {
   name: "3D",
   x: [0.918047411794347,0.4590237058971735,0.22951185294858678,0.1147559264742934],
-  y: [0.04984357792276794,0.022594049568900636,0.006657103524337601,0.001757040108287076],
+  y: [0.04984357792276507,0.022594049568899995,0.006657103524333661,0.0017570401082722287],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#B26A00", size: 8 },
@@ -609,6 +609,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=b7fcf984"></script>
+  <script src="../../assets/materialdocs.js?v=3ba5f693"></script>
 </body>
 </html>
