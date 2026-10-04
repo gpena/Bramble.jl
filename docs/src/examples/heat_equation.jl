@@ -122,9 +122,7 @@ spacetime_surface_plot(points(Ωₕ), collect(ts), Z; title = "Heat equation, x-
 
 # `sol` is also a ParaView time series waiting to happen: one `.pvd` collection, one `.vtr`
 # per step, with a working time slider once opened. `Wₕ` (not just the mesh) is what turns
-# each raw solution vector back into a properly shaped field. See the
-# [VTK export tutorial](../tutorials/vtk_export.md#5.-Time-series-for-ParaView) for the
-# hand-written-loop form this is shorthand for.
+# each raw solution vector back into a properly shaped field.
 
 using WriteVTK
 
@@ -376,10 +374,6 @@ u_end = sol_drive.u[end]
 #
 #   - [`semidiscretize`](@ref), [`ode_problem`](@ref), [`ode_function`](@ref), [`assemble_add!`](@ref)
 #     in the [API reference](../api.md).
-#   - [Solving at every time step](@ref tutorial_time_stepping) for the linear-solve strategies a
-#     hand-written loop like the one above can choose between.
 #   - [Linear and bilinear forms](@ref tutorial_form) for the forms and the
 #     [Dirichlet conditions](@ref form_dirichlet) used throughout.
 #   - [Linear Poisson](poisson_linear.md) for the steady version of the same spatial operator.
-#   - [Coupled reaction-diffusion](coupled_reaction_diffusion.md) for systems on a composite
-#     space, which `semidiscretize` accepts unchanged.

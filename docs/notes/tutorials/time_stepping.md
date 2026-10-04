@@ -131,9 +131,7 @@ previous solution is a good but imperfect guess.
 ## Which to use
 
 For a fixed-pattern time loop, factorize once and call `refactor!`. It is the simplest
-correct choice, with no iteration count and no preconditioner to manage. The
-[form tutorial](@ref tutorial_form)'s solver note measured direct reuse an order of
-magnitude faster per step than iterative AMG-CG or GMRES on repeated solves.
+correct choice, with no iteration count and no preconditioner to manage.
 
 Warm-started iteration is for matrices too large to factorize at all. That is the memory
 argument of [solvers by problem](solvers_by_problem.md), applied at every step, and the warm

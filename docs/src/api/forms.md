@@ -76,9 +76,7 @@ fdm_solve
 without building its matrix: `mul!(y, op, x)` walks the form's stencil and agrees with
 `assemble(a) * x`, Dirichlet rows included, on vectors and `VectorElement`s. Its execution
 policy comes from the trial space, as for assembly. Preconditioners and multigrid built on it
-are in [Scientific computing](../api_sciml.md), and the
-[solvers tutorial](../tutorials/solvers.md) has measured time and memory against sparse
-matrix-vector products.
+are in [Scientific computing](../api_sciml.md).
 
 ```@docs
 matrix_free_operator
@@ -99,7 +97,7 @@ assemble_add!
 ## Jacobian sparsity
 
 For a Newton residual built from a [`BilinearForm`](@ref) with a live nonlinear
-coefficient (see [the nonlinear Poisson example](../examples/poisson_nonlinear.md)),
+coefficient,
 `jacobian_pattern` reads the Jacobian's sparsity pattern directly off the form's AST,
 without AD tracing. `ast_sparsity_detector` wraps it as an
 `ADTypes.AbstractSparsityDetector`, ready to hand `AutoSparse` directly (requires

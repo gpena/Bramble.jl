@@ -607,7 +607,7 @@ end
 # type of its own so `mul!` dispatches on the factor, never on a GPU array type (this file
 # names no GPU package). The sparse factor keeps its CSC arrays separately
 # (`Int32` indices) because a kernel is handed the raw arrays, never a struct nesting a
-# device array -- see `docs/src/internals/gpu.md`. `_kron_check_device` admits only a
+# device array -- see `docs/notes/internals/gpu.md`. `_kron_check_device` admits only a
 # symmetric sparse factor, so column `j` of the CSC storage is also row `j`: the kernel
 # gathers row `j` from column `j` without a transpose.
 
@@ -996,7 +996,7 @@ end
 # Device: one work item per entry of `y`, in `BrambleKernelAbstractionsExt`. The kernel is
 # handed raw arrays -- a diagonal factor as its vector, a sparse one as its
 # `(colptr, rowval, nzval)` tuple -- because a struct nesting a device array fails
-# `KernelAbstractions` kernel compilation (`docs/src/internals/gpu.md`).
+# `KernelAbstractions` kernel compilation (`docs/notes/internals/gpu.md`).
 @inline _kron_raw(F::_KronDeviceDiagonal) = F.diag
 @inline _kron_raw(F::_KronDeviceSparse) = (F.colptr, F.rowval, F.nzval)
 

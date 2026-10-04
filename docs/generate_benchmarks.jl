@@ -1,4 +1,6 @@
-# Generator for docs/src/benchmarks.md from saved benchmark JSON files.
+# Generator for docs/notes/benchmarks.md from saved benchmark JSON files. The page is kept
+# out of the published documentation (its figures are machine dependent), so `docs/make.jl`
+# does not call this; run `generate_benchmarks_markdown()` by hand to refresh it.
 
 using BenchmarkTools
 using Dates
@@ -906,7 +908,7 @@ end
 # `results_dir` is where the standalone scripts' saved tables live.
 function generate_benchmarks_markdown(
         benchmark_dir = normpath(joinpath(@__DIR__, "..", "benchmark", "baselines")),
-        output_path = normpath(joinpath(@__DIR__, "src", "benchmarks.md")),
+        output_path = normpath(joinpath(@__DIR__, "notes", "benchmarks.md")),
         results_dir = normpath(joinpath(@__DIR__, "..", "benchmark", "results"))
 )
     json_files = String[]

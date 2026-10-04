@@ -2,10 +2,8 @@ name: Docs
 
 # The only thing that deploys the documentation site. Two ways in:
 #
-#   * a release tag (`v*`) -- the normal path. The release procedure records this version's
-#     benchmark baseline *before* the tag, so the tag commit already carries its own data
-#     point and this build publishes a complete `benchmarks.md`. Nothing has to be
-#     dispatched by hand afterwards.
+#   * a release tag (`v*`) -- the normal path. Nothing has to be dispatched by hand
+#     afterwards.
 #   * `workflow_dispatch` -- for a docs-only fix, a re-run of a failed deploy, or a
 #     backfill of an older version's docs.
 #

@@ -29,9 +29,9 @@ CurrentModule = Bramble
 <div class="bramble-card">
 ```
 
-**[Non-uniform meshes](examples/boundary_layer_graded.md)**
+**[Non-uniform meshes](tutorials/mesh.md)**
 
-Put the grid points where the solution changes. On a boundary-layer problem, a graded mesh with 41 points is more accurate than a uniform one with 641.
+Put the grid points where the solution changes: a mesh's points can take any non-uniform spacing.
 
 ```@raw html
 </div>
@@ -50,15 +50,6 @@ Write a problem as bilinear and linear forms built from discrete operators. `ass
 **[Time-dependent problems](examples/heat_equation.md)**
 
 Discretise in space with Bramble and pass the resulting system of ODEs to a time stepper from the SciML ecosystem.
-
-```@raw html
-</div>
-<div class="bramble-card">
-```
-
-**[Automatic differentiation](tutorials/autodiff.md)**
-
-Differentiate a discrete solution with respect to the parameters that produced it, in forward or reverse mode, through DifferentiationInterface.jl.
 
 ```@raw html
 </div>

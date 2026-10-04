@@ -15,7 +15,7 @@ using ..TestUtils: _fd
 # gradient chained by hand from real `assemble` output. Not checked against `ForwardDiff`
 # here, even though it is known-good through `assemble` in general (#107/#122): UMFPACK's
 # sparse factorisation only accepts `Float64`/`ComplexF64`, so `A \ F` fails for a `Dual`-
-# valued `F` regardless of this issue (`docs/src/tutorials/autodiff.md` §5 documents this and
+# valued `F` regardless of this issue (`docs/notes/tutorials/autodiff.md` §5 documents this and
 # recommends a dense conversion or an iterative solver as the forward-mode workaround) -- the
 # adjoint rule sidesteps it entirely since its math is hand-written, not generic-`\`-through-
 # Duals, so central differences are the reference instead.
@@ -83,7 +83,7 @@ using ..TestUtils: _fd
     # here, even though it is known-good through `assemble` in general (#107/#122): UMFPACK's
     # sparse factorisation only accepts `Float64`/`ComplexF64`, so `A \ F` for a `Float64`
     # sparse `A` and a `Dual`-valued `F` fails regardless of this issue --
-    # `docs/src/tutorials/autodiff.md` §5 documents this exact limitation and recommends
+    # `docs/notes/tutorials/autodiff.md` §5 documents this exact limitation and recommends
     # `Matrix(A) \ F` or an iterative solver as the forward-mode workaround. The adjoint rule
     # sidesteps it entirely (its own math is hand-written, not generic-`\`-through-Duals), so
     # central differences -- and the rrule's pullback chained by hand -- are the references.

@@ -19,7 +19,7 @@ using ..TestUtils: _fd, _have
 # actually *reaches* that rule and gets the right answer end to end, through
 # `assemble(...; dirichlet = θ) -> pde_solve -> J`, including the Dirichlet-value case
 # `chainrules_ext.jl` could not check against `ForwardDiff` (UMFPACK's `Float64`-only sparse
-# factorisation, documented in `docs/src/tutorials/autodiff.md` §5) -- reverse-mode through
+# factorisation, documented in `docs/notes/tutorials/autodiff.md` §5) -- reverse-mode through
 # the hand-written adjoint has no such restriction, since it never asks UMFPACK to factor
 # anything but a plain `Float64` matrix.
 #

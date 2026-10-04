@@ -241,7 +241,7 @@ A = ∇ₕ(Wₕ)
 typeof(A), A * parent(uₕ) ≈ parent(∇ₕ(uₕ))
 ```
 
-Both routes give the same answer. Applying the operator to `uₕ` is the fast path and what a time-stepping loop should use. The matrix is what to reach for when assembling a linear system, and it is how the test suite checks the fast path. The [backend tutorial](@ref tutorial_backend) covers the storage choices behind the matrix type.
+Both routes give the same answer. Applying the operator to `uₕ` is the fast path and what a time-stepping loop should use. The matrix is what to reach for when assembling a linear system, and it is how the test suite checks the fast path.
 
 ---
 

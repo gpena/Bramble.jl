@@ -6,7 +6,7 @@
 # `Enzyme` -- can differentiate through `\\` itself: it dispatches into compiled
 # BLAS/SuiteSparse code, opaque to every one of them, the same reason none can differentiate
 # through any other library call written in C or Fortran. Everything *around* the solve --
-# `assemble`, `dirichlet_bc!` -- is already reverse-mode-differentiable (`docs/src/internals/
+# `assemble`, `dirichlet_bc!` -- is already reverse-mode-differentiable (`docs/notes/internals/
 # autodiff.md`), so this one function is the entire gap between "Bramble can be forward-mode
 # differentiated" (true today) and "Bramble can be used inside a gradient-based inverse
 # problem or a PDE-constrained training loop without paying one factorisation per parameter"
@@ -58,10 +58,9 @@ chain differentiable.
   default), or trusted outright from an explicit `sym = :spd`/`:definite`/`:symmetric` (and
   conversely `:unsymmetric` skips straight to `A \\ F`) -- the caller has already asserted the
   property, so it is not checked again. The narrowing exists because Accelerate is only a win
-  on the symmetric factorisations it reaches (SPD/Cholesky, LDLᵀ): measured on this host against
-  forms assembled on real 2D grid spaces, `:default` was a 1.2-1.3x win on a symmetric
-  Poisson-plus-mass system and a 2.3-3.6x **loss** on an unsymmetric convection-diffusion one
-  (gpena/Bramble.jl#246). This only ever narrows which solver runs on macOS; Linux and Windows
+  on the symmetric factorisations it reaches (SPD/Cholesky, LDLᵀ): on forms assembled on 2D
+  grid spaces it won on a symmetric Poisson-plus-mass system and lost on an unsymmetric
+  convection-diffusion one (gpena/Bramble.jl#246). This only ever narrows which solver runs on macOS; Linux and Windows
   are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws from
   `accelerate_solve` exactly as `solver = :accelerate` would -- `:default` never silently falls
   back to `\\` after picking Accelerate. `:suitesparse` (CHOLMOD/UMFPACK), `:spqr` (sparse QR,

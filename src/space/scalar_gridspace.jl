@@ -6,7 +6,7 @@ A lazy, separable weight vector over a `D`-dimensional grid: entry `I` (linear o
 rather than stored once for the whole grid.
 
 Every family [`SpaceWeights`](@ref) offers is one of these (gpena/Bramble.jl#115, #234;
-under 1 MB of weights on a 100³ mesh): `innerh` and each entry of `innerplus` are built
+`O(nD)` storage rather than `O(n^D)`): `innerh` and each entry of `innerplus` are built
 once, when the space is constructed, from the per-axis `aligned` and `cellfactor` factors,
 and stored on `SpaceWeights` -- so reading them costs no more than the field access plus
 whatever the caller's own indexing does. [`weights`](@ref)`(Wₕ, Val(S))` for `|S| ≥ 2`

@@ -134,7 +134,7 @@ P = interpolation_matrix(Wbig, Wsmall)
 size(P), P * parent(src) ≈ parent(dest)
 ```
 
-Each row of `P` has at most ``2^D`` nonzero entries, one destination point's corner weights, so it is sparse. It is always a `SparseMatrixCSC`, whatever matrix type either space's [backend](@ref tutorial_backend) uses. A destination point's source cell has no regular diagonal structure to exploit, so `P` is assembled directly from `locate_cell` rather than composed from shifts, unlike the operator matrices.
+Each row of `P` has at most ``2^D`` nonzero entries, one destination point's corner weights, so it is sparse. It is always a `SparseMatrixCSC`, whatever matrix type either space's backend uses. A destination point's source cell has no regular diagonal structure to exploit, so `P` is assembled directly from `locate_cell` rather than composed from shifts, unlike the operator matrices.
 
 `πₕ!(dest, src)` locates every destination point's cell on every call. That is wasted work when the same two meshes are interpolated between repeatedly, for example in a time loop that moves a coefficient across two composite leaves. Build `P` once and pass it to `πₕ!`: no cell search, no allocation, just a matrix-vector product. It is the same "build the pattern once" split that [`allocate_system_matrix`](@ref) and [`assemble!`](@ref) use.
 

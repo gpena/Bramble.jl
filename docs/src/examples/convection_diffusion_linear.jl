@@ -145,7 +145,5 @@ convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), 
 # ## Where to go next
 #
 #   - [Linear Poisson](poisson_linear.md) for the pure-diffusion case this one extends.
-#   - [Graded meshes for a boundary layer](boundary_layer_graded.md) for the convection-dominated
-#     regime, where the cell Péclet number is large and a uniform mesh oscillates.
 #   - The [operator accuracy tutorial](@ref tutorial_operator_accuracy) for how accurate the
 #     staggered averages and differences used here are on non-uniform meshes.

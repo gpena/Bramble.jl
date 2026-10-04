@@ -87,7 +87,7 @@ loss(κ::Real) = sum(abs2, forward(κ)[obs_idx[k]] - u_obs[k] for k in eachindex
 # with no error at all (`pde_solve`'s own docstring, gpena/Bramble.jl#240).
 #
 # `loss` closes over `Wₕ`/`l`, which Enzyme cannot prove read-only on its own, so the function
-# argument is wrapped `Const` -- the same annotation `docs/src/tutorials/autodiff.md` and
+# argument is wrapped `Const` -- the same annotation `docs/notes/tutorials/autodiff.md` and
 # `test/space/autodiff_heavy.jl` already document for the ordinary (non-solve) path.
 
 using Enzyme
@@ -119,7 +119,7 @@ end
 # a naive `ForwardDiff`-through-the-solve baseline is not run on this page, because that
 # baseline fails outright here for an unrelated reason. UMFPACK's sparse factorisation only
 # accepts `Float64`/`ComplexF64`, so `A \ F` for a `Dual`-valued `F` errors regardless of this
-# scaling question; `docs/src/tutorials/autodiff.md` §5 documents this and recommends a dense
+# scaling question; `docs/notes/tutorials/autodiff.md` §5 documents this and recommends a dense
 # conversion or an iterative solver as the forward-mode workaround. See
 # `test/ext/chainrules_ext.jl` for the scaling measurement itself, which compares the adjoint
 # rule's own pullback cost against `nθ` separate forward solves, the per-parameter cost a
