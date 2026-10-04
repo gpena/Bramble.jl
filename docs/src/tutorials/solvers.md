@@ -23,7 +23,7 @@ produced by code on the page or cited from a named, committed benchmark.
 |---|---|---|
 | `SparseMatrixCSC` (default) | Everything below. Direct solves go straight into SuiteSparse, Accelerate or MUMPS with no conversion. | Never wrong as a default. |
 | `SparseMatrixCSR` ([`csr_backend`](@ref), needs `using SparseMatricesCSR`) | 3D problems where matrix memory binds: the same 3D Poisson system takes 24.4 MiB against CSC's 59.1 MiB (commit `7c901266`). Assembly cost is about the same. | A direct solve, measured 2.4x to 4.2x **slower** than CSC in the same benchmark. `SparseMatricesCSR.jl` has no native CSR solve, so `\` goes through a transposed factorization of a reinterpreted LU. |
-| [`KroneckerLinearOperator`](@ref) ([`kronecker_operator`](@ref), for separable forms, see [`is_separable`](@ref)) | A separable operator on a tensor-product mesh: `O(n)` storage per axis instead of `O(n^D)`. | Any form with a grid-function coefficient, a region restriction, an interpolation, or a mixed, forward, centered, averaged or jump operator: `kronecker_operator` throws. No memory or time crossover against CSC has been measured for it. |
+| [`KroneckerLinearOperator`](@ref) ([`kronecker_operator`](@ref), for separable forms, see [`is_separable`](@ref)) | A separable operator on a tensor-product mesh: `O(n)` storage per axis instead of `O(n^D)`. | A form with a coefficient varying along several axes, a region restriction other than `:interior`, an interpolation, a 1D mesh, or a star or cross-weighted difference: `kronecker_operator` throws. A grid-function coefficient is read once, at construction; use a `Ref`, or a matrix-free operator, for one that changes. No memory or time crossover against CSC has been measured for it. |
 
 ### Execution policies
 
@@ -70,7 +70,7 @@ flowchart TD
 
 | Leaf | Backend and solver | Why |
 |---|---|---|
-| Kronecker operator with CG | [`KroneckerLinearOperator`](@ref) from [`kronecker_operator`](@ref), solved with `KrylovJL_CG`. | A separable form needs `O(n)` storage per axis instead of `O(n^D)`. |
+| Kronecker operator with CG | [`KroneckerLinearOperator`](@ref) from [`kronecker_operator`](@ref), solved with `KrylovJL_CG` when `issymmetric` holds for it, and with `KrylovJL_GMRES` when it does not (a form with advection, say). | A separable form needs `O(n)` storage per axis instead of `O(n^D)`. |
 | Cholesky factorization | `SparseMatrixCSC` with `sparse_factorize` and `sym = :spd` (SuiteSparse CHOLMOD). | Exact to round-off, with no tolerance to pick. |
 | Factorize once, refactor each step | `SparseMatrixCSC`: factorize once, then `refactor!` at each step. | The sparsity pattern is fixed, so the symbolic analysis is reused. See [time stepping](time_stepping.md). |
 | CG with an AMG preconditioner | `SparseMatrixCSC` with `KrylovJL_CG` and [`amg_preconditioner`](@ref). | In 3D memory is the limit, and AMG needs `O(1)` iterations instead of `O(h^-1)`. |

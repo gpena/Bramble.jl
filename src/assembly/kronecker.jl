@@ -5,30 +5,30 @@
 # (gpena/Bramble.jl#162), so a 200^3 problem stores `3 * 200` numbers per factor instead of
 # an `8_000_000^2`-entry sparse matrix.
 #
-# What this file recognises is deliberately narrow: a term is separable here only when it is
-# `innerₕ(u, v)` (identity, i.e. a mass factor, on every axis) or `inner₊` of a backward
-# difference along one axis on both sides (what `∇ₕ(u)`/`∇ₕ(v)` expand into, one term per
-# axis, once `form` has resolved and simplified the AST -- see `simplifier.jl` and
-# `operators/inner.jl`'s `inner_plus`). Both shapes factor as `H_D ⊗ ... ⊗ A_d ⊗ ... ⊗ H_1`:
-# a difference/mass matrix on the touched axis, the plain mass (cell-measure) matrix on
-# every other axis. A scalar coefficient (literal or `Ref`) wrapping a term does not break
-# this -- it factors out of the whole Kronecker product -- so it is stripped and carried
-# separately rather than being part of the shape match.
+# What factors: a term is separable when the walk in `kronecker_projection.jl`
+# (`_kron_project`) projects every node of it onto each axis of the mesh. That covers the
+# difference, average, jump and shift nodes along any axis and chains of them, so mixed
+# derivatives and advection; an `:interior` restriction; `innerₕ`, `inner₊` and `inner_Γ`
+# weights (one Kronecker term per face for the last); grid-function coefficients varying
+# along one axis; and plain numbers inside a side. Each factor is the 1D form assembled on
+# that axis's own submesh, so a factor need be neither symmetric nor diagonal, and a term
+# may have several non-diagonal factors. A scalar coefficient (literal or `Ref`) wrapping a
+# term factors out of the whole Kronecker product, so it is stripped and carried separately
+# (`_kron_leaves`) and a `Ref` stays live. `kronecker_block.jl` extends this to composite
+# spaces whose leaves share one mesh.
 #
-# Everything else is refused rather than approximated: a `GridFunctionScale` coefficient (no
-# tensor structure), a `RegionRestriction` (Dirichlet rows included -- S5.2 handles
-# constraints through the `Kronecker.jl` extension, not here), an `InterpolationNode`
-# (cross-mesh, no per-axis submesh), an `InnerGamma` surface weight (a `(D-1)`-dimensional
-# integral, no full-`D` factorisation), a composite space whose leaves have different
-# meshes (`kronecker_block.jl` takes the rest, one block at a time), a 1D mesh (nothing to
-# factor), and any node this file does not explicitly
-# recognise (forward/centered/star/cross-weighted differences, averages, jumps, a mixed
-# multi-axis composition). A false negative here only forgoes the fast path; a false
-# positive would build an operator that silently computes the wrong matrix-vector product.
+# What does not factor is a grid-function coefficient varying along several axes or living
+# on another mesh, a `Ref` merged inside a side, a region other than `:interior` (Dirichlet
+# rows included; `fdm_solve`'s `dirichlet` keyword handles those, not this operator), an
+# `InterpolationNode`, a 1D mesh (nothing to factor), a trial and test space on different
+# meshes, and the star and cross-weighted differences. Anything the walk has no method for
+# is refused rather than approximated. A false negative only forgoes the fast path, while a
+# false positive would build an operator that silently computes the wrong matrix-vector
+# product.
 #
 # Dirichlet rows are out of scope for this operator: it has no boundary constraint of its
-# own. `bramble-plan`'s v3.3.0 subplan S5.2 layers that on top, through the `Kronecker.jl`
-# extension.
+# own. The `Kronecker.jl` extension adds homogeneous Dirichlet conditions on the whole
+# boundary to `fdm_solve`, through its `dirichlet = :boundary` keyword.
 
 # --- Flattening a sum into (coefficient, term) pairs -------------------------------- #
 
@@ -114,13 +114,33 @@ of one-dimensional factors over a `MeshnD`: every addend, its constant (literal 
 scalar coefficients stripped, has a projection onto the mesh's axes (`_kron_project`).
 
 `a`'s trial and test space must both be a [`ScalarGridSpace`](@ref) sharing one mesh, at
-least two-dimensional (a 1D mesh has nothing to factor). On a composite space every leaf
-must live on that one mesh and every (test leaf, trial leaf) block of `a` must be separable
-in this sense; leaves on different meshes answer `false`. A grid-function
-coefficient varying along more than one axis, a region restriction other than `:interior`,
-an interpolation, or any node without a projection answers `false`: a false negative only
-forgoes the Kronecker fast path, so this never claims separability it cannot back up with
-factors.
+least two-dimensional (a 1D mesh has nothing to factor), or composite spaces whose leaves
+all live on one such mesh; every (test leaf, trial leaf) block of `a` must then be
+separable in this sense.
+
+What factors:
+
+  - the difference, average, jump and shift families along any axis, and chains of them
+    (`D₋ₓ(D₋ᵧ(u))`), so mixed derivatives and advection terms, whose factors need not be
+    symmetric;
+  - `innerₕ`, `inner₊` and `inner_Γ` weights, the last as one term per face;
+  - a restriction to `:interior`, provided the mesh's `:interior` marker is the geometric
+    one (the product of its axes' own interiors);
+  - a grid-function coefficient that varies along one axis only, and a plain number inside a
+    side;
+  - a scalar or `Ref` coefficient around a term.
+
+What does not, and answers `false`:
+
+  - a grid-function coefficient varying along several axes, or living on another mesh;
+  - a `Ref` merged inside a side with other terms;
+  - a region restriction other than `:interior`, including Dirichlet rows;
+  - an interpolation, a 1D mesh, trial and test spaces on different meshes, composite
+    leaves on different meshes;
+  - the star and cross-weighted differences, and any node without a projection.
+
+A false negative only forgoes the Kronecker fast path, so this never claims separability it
+cannot back up with factors.
 
 Stale spaces throw. If `a`'s spaces were built before an in-place mutation of their mesh,
 `is_separable`, [`kronecker_operator`](@ref) and `fdm_solve(a, F)` throw the space's
@@ -132,6 +152,9 @@ stale-weights `ArgumentError`, exactly as `assemble(a)` does, rather than answer
 Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 7), (false, false))
 Wₕ = gridspace(Ωₕ)
 is_separable(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))))  # true
+
+gₕ = Rₕ(Wₕ, x -> 1 + x[1])
+is_separable(form(Wₕ, Wₕ, (u, v) -> innerₕ(gₕ * u, v)))  # true: varies along one axis
 
 fₕ = Rₕ(Wₕ, x -> 1 + x[1] * x[2])
 is_separable(form(Wₕ, Wₕ, (u, v) -> innerₕ(fₕ * u, v)))  # false: varies along both axes
@@ -219,11 +242,21 @@ along the axes where a term's factor is not diagonal, written once.
 For a `200^3` mesh the factors together hold `O(200)` numbers per axis instead of the
 assembled matrix's `O(200^3)` stored entries.
 
+A term's factors need be neither diagonal nor symmetric, and a term may have non-diagonal
+factors on several axes. A mixed derivative `D₋ₓ(D₋ᵧ(u))` has non-diagonal factors on two
+axes, and an advection term has a non-symmetric one. A factor that is not symmetric is
+applied through the CSC of its transpose, so the product is exact for it. Which forms have
+such factors is [`is_separable`](@ref)'s list.
+
 Build one with [`kronecker_operator`](@ref). Subtypes `AbstractMatrix{T}` so it plugs into
 `LinearProblem`/`KrylovJL_CG` (`LinearSolve.jl`) the same way an assembled matrix does, and
-supports `size`, `eltype`, `getindex`, `Base.:*`, three- and five-argument `mul!`, `LinearAlgebra.issymmetric`, and
-`SparseMatrixCSC(K)` (an explicit `kron` of the factors, for testing and inspection -- the
-very matrix this operator avoids forming).
+supports `size`, `eltype`, `getindex`, `Base.:*`, three- and five-argument `mul!`,
+`LinearAlgebra.issymmetric`, and `SparseMatrixCSC(K)` (an explicit `kron` of the factors,
+for testing and inspection: the very matrix this operator avoids forming). `issymmetric(K)`
+is computed from the factors, not assumed: it is `false` as soon as one factor of one term
+is not symmetric, even for a form whose matrix happens to be symmetric. `mul!` refuses
+vectors that are not 1-based (an `OffsetArray`, say), which would otherwise give a wrong
+product silently.
 
 `K` holds no work buffers: it stores only its `D` one-dimensional factors and its execution
 policy, so it is immutable after construction and safe to share across threads (concurrent
@@ -246,7 +279,10 @@ its terms, `KroneckerLinearOperator{T, D, TermsT}(terms, dims, n)`, is [`CpuSeri
 On a device-backed form (gpena/Bramble.jl#323) the factors are built on the host and then
 moved to the space backend's device storage, so `mul!` with device `x`/`y` runs entirely on
 the device, as one `KernelAbstractions` kernel with one work item per entry of `y`
-(`using KernelAbstractions` required). `getindex` and `SparseMatrixCSC(K)` stay host-only
+(`using KernelAbstractions` required). The kernel reads at most one non-diagonal factor
+per term and that factor's columns as its rows, so `kronecker_operator` refuses, on such a
+form, a term with non-diagonal factors on several axes and a term with a non-symmetric
+factor: build those on a host backend. `getindex` and `SparseMatrixCSC(K)` stay host-only
 and throw an `ArgumentError` on such an operator.
 
 The factors are read from the mesh once, when the operator is built (gpena/Bramble.jl#442):
@@ -258,8 +294,8 @@ mesh. An operator built directly from
 its terms has no mesh (`M` is `Nothing`) and never goes stale.
 
 Dirichlet rows are out of scope: this operator carries no boundary constraint of its own.
-`bramble-plan`'s v3.3.0 subplan S5.2 layers that on top, through the `Kronecker.jl`
-extension and its fast-diagonalisation solve.
+The `Kronecker.jl` extension's fast-diagonalisation solve, `fdm_solve`, imposes homogeneous
+Dirichlet conditions on the whole boundary through its `dirichlet = :boundary` keyword.
 
 See also: [`is_separable`](@ref), [`kronecker_operator`](@ref).
 """
@@ -458,8 +494,19 @@ axis's cell measures `weights(gridspace(Ωₕ(d)), Innerh())` themselves for a m
 and terms sharing a factor on an axis share one matrix. Factors are always built on the host
 (a device mesh through its host mirror) and then converted to the storage
 `backend(trial_space(a))` uses, so a device-backed form yields device-resident factors. A
-grid-function coefficient is read once, here, and a warning says so; a scalar or `Ref`
-coefficient stays live.
+scalar or `Ref` coefficient around a term stays live, read at every `mul!`.
+
+!!! warning
+
+    A grid-function coefficient (an `Rₕ` multiplying a side, varying along one axis) is
+    read once, when the operator is built, and copied into the factors; a warning says so.
+    A later edit to it is not seen. Use a `Ref` for a coefficient that changes, or
+    [`matrix_free_operator`](@ref), which reads the coefficient live at every product. On a
+    device-backed form a coefficient stored on the device is refused, since the factors are
+    built on the host.
+
+The factors also describe the mesh as it is now: if the mesh is mutated in place after this
+call, the operator throws instead of applying (see [`KroneckerLinearOperator`](@ref)).
 
 On a composite trial or test space whose leaves all share one mesh, the result is a
 `Bramble.KroneckerBlockOperator` (not exported): one `KroneckerLinearOperator` per nonzero
@@ -1126,6 +1173,10 @@ times the Kronecker product of its `D` one-dimensional factors, last axis leftmo
 (`A_2D = H_y ⊗ A_x + A_y ⊗ H_x`, matching gpena/Bramble.jl#162's own formula). For testing
 and inspection only -- this is exactly the `D`-dimensional matrix [`kronecker_operator`](@ref)
 is built to avoid forming.
+
+The stored pattern is the one `dropzeros` leaves of `assemble(a)`: `assemble` keeps the
+explicit zeros of its stencil, this matrix does not, so the two agree entry for entry but
+their `nnz` can differ.
 
 Built as a single `sparse(I, J, V, n, n)` call over every term's `findnz` triplets (`V`
 pre-scaled by that term's coefficient) rather than summing each term's Kronecker product
