@@ -95,8 +95,7 @@ function _average_engine!(
 end
 
 #------------------------------------------------------------------------------------------#
-# Device kernel launch stub (gpena/Bramble.jl#94, #174, S2.4 of
-# .agents/plans/metal-and-apple-silicon-acceleration.md)
+# Device kernel launch stub (gpena/Bramble.jl#94, #174)
 #
 # `_apply_averaged!` reaches this once `execution_policy` names a `GpuPolicy`, instead of
 # `_average_engine!`'s scalar-indexing CPU sweep above. `ext/BrambleKernelAbstractionsExt.jl`
@@ -417,12 +416,12 @@ function _average_weights!(
     return nothing
 end
 
-# The `GpuPolicy` branch above (S2.4 of
-# .agents/plans/metal-and-apple-silicon-acceleration.md): every entry is one except a
-# single boundary slice along `DIFF_DIM`, which is exactly a broadcast fill followed by a
-# bulk zero over a `view` of that one slice -- no per-element kernel needed, matching S2.2's
-# "reach for a broadcast before a kernel" precedent. `reshape` and `view` both work on a
-# device array without scalar indexing, unlike the `li[I]`-indexed CPU loop above.
+# The `GpuPolicy` branch above: every entry is one except a single boundary slice along
+# `DIFF_DIM`, which is exactly a broadcast fill followed by a bulk zero over a `view` of
+# that one slice -- no per-element kernel needed, matching the "reach for a broadcast before
+# a kernel" precedent of the device cell-measure fill (`scalar_gridspace.jl`). `reshape` and
+# `view` both work on a device array without scalar indexing, unlike the `li[I]`-indexed
+# CPU loop above.
 @inline function _device_average_weights!(
         v::AbstractVector, dims::NTuple{D, Int}, ::Forward, ::Val{DIFF_DIM}
 ) where {D, DIFF_DIM}

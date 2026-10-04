@@ -14,8 +14,8 @@ Where entry `(row, col)` lives in `A`'s own storage, or `0` for a matrix type th
 answer "not stored" (only `SparseMatrixCSC` does; every dense fallback below always
 answers a valid position).
 
-The seam a new backend's matrix type implements to plug into assembly (S1.1,
-gpena/Bramble.jl#12): `ReplaySink`, `DiagonalReplaySink`, the positions search of the
+The seam a new backend's matrix type implements to plug into assembly
+(gpena/Bramble.jl#12): `ReplaySink`, `DiagonalReplaySink`, the positions search of the
 coordinate walk (`_coordinates_to_positions!`) and [`add_to_sparse!`](@ref) reduce to this and [`_scatter_add!`](@ref) once the raw `nzval`/
 linear-index field access each used to do directly is factored out here.
 
@@ -78,7 +78,7 @@ end
 end
 
 # --- device-resident CSR: search and scatter without scalar indexing (gpena/Bramble.jl#94,
-# S4.2, gpena/Bramble.jl#313) --------------------------------------------------------------- #
+# gpena/Bramble.jl#313) --------------------------------------------------------------- #
 #
 # A Bramble-owned device CSR (`BrambleMetalExt.MetalSparseMatrixCSR` today, a future
 # `CuSparseMatrixCSR`/etc. tomorrow) is not a `SparseMatrixCSC`, so unmodified it fell into
@@ -145,11 +145,11 @@ Copy `A`'s own host-staged mirror (`A.mirror.nzval`) back to its device storage 
 A no-op for a host matrix. `bilinear_execution.jl` calls this exactly once, after its
 band-coloured sweep returns.
 
-One `copyto!` of the whole array per assembly, not one per entry (S4.2's first round
+One `copyto!` of the whole array per assembly, not one per entry (the first version
 scattered each entry straight to `A.nzVal` piecemeal; correct, but hundreds of thousands of
 4-byte device transfers on a real matrix).
 
-The `copyto!` alone was not enough either (S4.2, round 4): a device write queues
+The `copyto!` alone was not enough either: a device write queues
 asynchronously exactly like a `@kernel` launch does, and every kernel launch in this
 milestone is followed by a `synchronize` -- this one was not, so `assemble`/`assemble!` could
 return before the copy had actually landed, and a caller reading `A` right after got
@@ -243,17 +243,17 @@ end
 # wrong for any sparse matrix, not only a device one, and the reason this needs to be its own
 # method.
 #
-# This DOES need a `DeviceLocality` split, unlike the first two rounds assumed (S4.2, round
-# 5): `nonzeros(A)` resolves to `A.nzVal` on a device matrix, and `fill!` on an `MtlVector` is
-# an asynchronous device kernel -- a second, unordered writer racing
-# `_flush_device_scatter!`'s `copyto!` at the end of the same assembly. Nothing orders "queue
-# the zeroing kernel" against "sweep the host mirror, then blit it over `A.nzVal`", so the
-# zero-fill could land *after* the flush and silently wipe entries the sweep had just written
-# correctly -- reproduced at `n = 1025` (2-3 wrong matrices per 40, worst element error
-# `2048.0`, matching `2/h` at `h = 1/1024`), invisible at small `n` only because the fill
-# kernel happens to finish before the host-side sweep does. `ka_synchronize` after the flush
-# does not touch this: the corruption is already committed to `A.nzVal` before anything reads
-# it, so no amount of synchronising a *read* afterwards helps.
+# This DOES need a `DeviceLocality` split, unlike the first two attempts at the device
+# scatter assumed: `nonzeros(A)` resolves to `A.nzVal` on a device matrix, and `fill!` on an
+# `MtlVector` is an asynchronous device kernel -- a second, unordered writer racing
+# `_flush_device_scatter!`'s `copyto!` at the end of the same assembly. Nothing orders
+# "queue the zeroing kernel" against "sweep the host mirror, then blit it over `A.nzVal`",
+# so the zero-fill could land *after* the flush and silently wipe entries the sweep had just
+# written correctly -- reproduced at `n = 1025` (2-3 wrong matrices per 40, worst element
+# error `2048.0`, matching `2/h` at `h = 1/1024`), invisible at small `n` only because the
+# fill kernel happens to finish before the host-side sweep does. `ka_synchronize` after the
+# flush does not touch this: the corruption is already committed to `A.nzVal` before
+# anything reads it, so no amount of synchronising a *read* afterwards helps.
 #
 # The fix removes the second writer instead of ordering the two: `_flush_device_scatter!`
 # unconditionally overwrites every stored entry of `A.nzVal` from `mirror.nzval`, so zeroing

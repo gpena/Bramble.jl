@@ -30,7 +30,7 @@ Build the `nrows × ncols` matrix a form's sparsity pattern describes, from the 
 triplet `(I, J, V)` the coordinate walk (`_form_coordinates`) collected -- summing `V[k]` into
 any `(row, col)` that `I`/`J` name more than once, matching `sparse!`'s own combiner.
 
-The one place a fresh system matrix is born (S1.1, gpena/Bramble.jl#12): every backend's
+The one place a fresh system matrix is born (gpena/Bramble.jl#12): every backend's
 matrix type implements exactly this to be usable with [`allocate_system_matrix`](@ref).
 `SparseMatrixCSC`'s method is `sparse!` itself, consuming `I`/`J` in place. The generic
 `AbstractMatrix` fallback -- the dense `Matrix{Float64}` positive control among them --
@@ -68,7 +68,7 @@ end
 # point than at this representative interior one, so this can undercount. Cheap to get
 # wrong, since the only cost is a reallocation of the coordinate vectors.
 #
-# `host_weights` (gpena/Bramble.jl#94 S4.0): `local_stencil` reads `sp`'s weights and its
+# `host_weights` (gpena/Bramble.jl#94): `local_stencil` reads `sp`'s weights and its
 # mesh's spacings one grid point at a time, which a device-backed `sp` refuses outright --
 # a no-op on a host-backed `sp`, so the CPU path pays one locality check and nothing else.
 #
@@ -270,7 +270,7 @@ pattern, and stored zeros throughout, in `matrix_type(backend(test_space(form)))
 `SparseMatrixCSC{Float64,Int}` by default, or whatever [`backend`](@ref) the space's mesh was
 built with (see [`_allocate_from_pattern`](@ref)). On a [`metal_backend`](@ref) space this
 returns a device-resident `BrambleMetalExt.MetalSparseMatrixCSR{Float32,Int64}`, not a host
-`SparseMatrixCSC` -- verified against real triplets (gpena/Bramble.jl#94 S4.1).
+`SparseMatrixCSC` -- verified against real triplets (gpena/Bramble.jl#94).
 
 The pattern follows from the stencil rather than coefficient values, remaining invariant while the mesh
 and expression structure are unchanged. Preallocating the matrix once outside loops allows zero-allocation

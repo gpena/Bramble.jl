@@ -132,8 +132,7 @@ reaches, since it is only called once locality has already been checked to agree
 end
 
 #===========================================================================#
-# The GpuPolicy device sweep seam (gpena/Bramble.jl#94, #174, #298, S2.3 of
-# .agents/plans/metal-and-apple-silicon-acceleration.md).
+# The GpuPolicy device sweep seam (gpena/Bramble.jl#94, #174, #298).
 #
 # `_sweep_for!`/`_sweep_scatter_for!` hand a `(DeviceLocality, GpuPolicy)` pair to
 # `_gpu_for!`/`_gpu_scatter_for!` rather than refusing it outright. Both are declared here
@@ -179,7 +178,7 @@ GPU-compilability requirement on `g` as [`_gpu_for!`](@ref).
 @noinline _gpu_scatter_for!(policy, mats, idxs, g) = _throw_gpu_in_cpu_loop(policy)
 
 # The message every `CpuPolyester` hook gives without `Polyester` loaded (gpena/Bramble.jl#190).
-# `CpuPolyester`'s own sweeps have no `src/` implementation -- `BramblePolyesterExt` (S7.2) adds
+# `CpuPolyester`'s own sweeps have no `src/` implementation -- `BramblePolyesterExt` adds
 # it -- so a `CpuPolyester` backend used without that extension loaded stops here, named, rather
 # than silently falling through to `CpuThreaded`'s `Threads.@threads` code (which would
 # defeat the whole point of choosing `CpuPolyester`) or a bare `MethodError`. Mirrors
@@ -740,7 +739,7 @@ end
     return s
 end
 
-# --- Execution-policy-dispatched reduction entries (gpena/Bramble.jl#190, S7.1, #301 S2.1) #
+# --- Execution-policy-dispatched reduction entries (gpena/Bramble.jl#190, #301) #
 #
 # `inner₊` (`src/space/inner_product.jl`) does pass a policy into `_dot`/`_dot_masked`.
 # `CpuSerial` falls through to today's single (already vectorised) serial implementation.
@@ -940,8 +939,7 @@ end
 end
 
 #===========================================================================#
-# Device reductions (gpena/Bramble.jl#94, #174, S2.5 of
-# .agents/plans/metal-and-apple-silicon-acceleration.md).
+# Device reductions (gpena/Bramble.jl#94, #174).
 #
 # `CpuSerial`/`CpuThreaded`/`CpuPolyester` above are each a concrete `CpuPolicy`, so a
 # `GpuPolicy` (`GpuKernel`) never matches one of them and falls through to the generic

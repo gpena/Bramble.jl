@@ -44,9 +44,8 @@ struct CrossWeighted <: CenteredStencil end
 end
 @inline _get_h_val(h::F, i::Int) where {F <: Function} = h(i)
 
-# The device kernels in `ext/BrambleKernelAbstractionsExt.jl` (S2.4 of
-# .agents/plans/metal-and-apple-silicon-acceleration.md) need, per grid point, exactly the
-# boundary test `_stencil_ranges` (operators/stencil.jl) already encodes as index
+# The device kernels in `ext/BrambleKernelAbstractionsExt.jl` need, per grid point, exactly
+# the boundary test `_stencil_ranges` (operators/stencil.jl) already encodes as index
 # ranges: a forward stencil has no neighbour at the last point along the direction, a
 # backward one at the first. Read here as a single index comparison instead of re-deriving a
 # `CartesianIndices` split inside the kernel body. Shared by the difference and average
@@ -186,15 +185,14 @@ width gives half of it, the boundary cell being a half cell.
 """
 @inline star_spacings(Ωₕ::Mesh1D) = StarSpacings(spacings(Ωₕ))
 
-# The device kernels below (S2.4 of .agents/plans/metal-and-apple-silicon-acceleration.md)
-# take `h` as a plain top-level array or `nothing`, never as a wrapper struct: a struct
-# nesting a device array fails kernel compilation even as a top-level kernel argument
-# (`ext/BrambleKernelAbstractionsExt.jl`'s module comment explains why, gpena/Bramble.jl#94,
-# #174). `StarSpacings` is exactly such a wrapper, so its lazy averaging is materialized
-# into a plain vector once, with the same two-array bulk arithmetic S2.2's device kernels
-# use for the mesh's own O(n) setup, before any difference kernel launches. Every other
-# shape `_apply_spaced!` ever derives -- `nothing`, or a plain vector/view of cached
-# spacings -- is already kernel-safe and passes through unchanged.
+# The device kernels below take `h` as a plain top-level array or `nothing`, never as a
+# wrapper struct: a struct nesting a device array fails kernel compilation even as a
+# top-level kernel argument (`ext/BrambleKernelAbstractionsExt.jl`'s module comment explains
+# why, gpena/Bramble.jl#94, #174). `StarSpacings` is exactly such a wrapper, so its lazy
+# averaging is materialized into a plain vector once, with the same two-array bulk
+# arithmetic the device kernels for the mesh's own O(n) setup use, before any difference
+# kernel launches. Every other shape `_apply_spaced!` ever derives -- `nothing`, or a plain
+# vector/view of cached spacings -- is already kernel-safe and passes through unchanged.
 @inline _resolve_device_spacing(::Nothing) = nothing
 @inline _resolve_device_spacing(h::AbstractVector) = h
 @inline function _resolve_device_spacing(h::StarSpacings)
@@ -500,8 +498,7 @@ end
     out, in_ref, h, dims, dir, dim_val)
 
 #------------------------------------------------------------------------------------------#
-# Device kernel launch stubs (gpena/Bramble.jl#94, #174, S2.4 of
-# .agents/plans/metal-and-apple-silicon-acceleration.md)
+# Device kernel launch stubs (gpena/Bramble.jl#94, #174)
 #
 # `_apply_stencil!` reaches these once `execution_policy` names a `GpuPolicy`, instead of
 # `_difference_engine!`'s scalar-indexing CPU sweep above, which a device array refuses.

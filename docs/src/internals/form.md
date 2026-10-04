@@ -359,7 +359,7 @@ well below the ~50% duplicated share, so most of that share is not recovered by 
 the operand stencils once. The replay stays term-outer, one unit at a time as described in
 [One setup walk per term](@ref), and the prototype was not merged.
 
-## The matrix-type seam (S1.1)
+## The matrix-type seam
 
 Assembly used to name `SparseMatrixCSC` in every signature between `allocate_system_matrix`
 and the sinks that scatter into it, 20 methods across `bilinear_execution.jl` alone. The

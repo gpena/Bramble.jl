@@ -51,36 +51,34 @@ the whole grid.
 
 ### The four pre-existing families stop being eagerly dense
 
-That last sentence was not always true. S6.2, which first wrote this section, kept
-`innerh` and `innerplus` themselves as dense, full-grid vectors on purpose: the two
-places that read a weight in a hot loop -- `_dot`/`_dot_masked`
+That last sentence was not always true. The change that added the per-axis factors, and
+first wrote this section, kept `innerh` and `innerplus` themselves as dense, full-grid
+vectors on purpose: the two places that read a weight in a hot loop -- `_dot`/`_dot_masked`
 (`src/space/inner_product.jl`) for the numeric `innerₕ`/`inner₊`, and `compute_weight`
-(`src/operators/inner.jl`) for the symbolic ones inside a form -- belonged to
-subplans S6.3 and S6.4, outside S6.2's own file ownership, and neither yet had a way to
-read a `SeparableWeights` without paying a division per axis on every point. Keeping
-`innerh`/`innerplus` densely materialised was the only way to guarantee those two hot
-paths were unaffected by the per-axis-factor change at the time.
+(`src/operators/inner.jl`) for the symbolic ones inside a form -- had no way yet to read a
+`SeparableWeights` without paying a division per axis on every point. Keeping
+`innerh`/`innerplus` densely materialised was the only way to guarantee those two hot paths
+were unaffected by the per-axis-factor change at the time.
 
-S6.3 then gave `_dot`/`_dot_masked` a `SeparableWeights` specialization that walks
-`CartesianIndices(w.dims)` directly instead of converting a flat index; S6.4 gave
-`compute_weight` a matching `CartesianIndex` read, for the `InnerPlusSet` node built for
-`|S| ≥ 2`. Once both existed, keeping `innerh`/`innerplus` dense had nothing left to
-protect, and this subplan (S6.8, gpena/Bramble.jl#115) removes it: `space_weights` now
-builds them the same way as every other `S`, from `aligned`/`cellfactor` alone, with no
+`_dot`/`_dot_masked` then gained a `SeparableWeights` specialization that walks
+`CartesianIndices(w.dims)` directly instead of converting a flat index, and
+`compute_weight` gained a matching `CartesianIndex` read, for the `InnerPlusSet` node
+built for `|S| ≥ 2`. Once both existed, keeping `innerh`/`innerplus` dense had nothing
+left to protect, and gpena/Bramble.jl#115 removed it: `space_weights` now builds them
+the same way as every other `S`, from `aligned`/`cellfactor` alone, with no
 full-grid vector filled anywhere in the function. `SpaceWeights` has no dense branch left
 -- every weight it returns, for every `S`, is a `SeparableWeights`.
 
-S6.8 left one asymmetry, which gpena/Bramble.jl#428 has since removed. At S6.8, `InnerH`
-and `InnerPlus{Dim}`'s own `compute_weight` read their weight by *linear* index, not by
-the `CartesianIndex` the assembly loop already had in hand, so a symbolic `innerₕ(u, v)`
-or `inner₊ₓ(u, v)` term paid the division-per-axis of a linear `SeparableWeights` access
-once per point; the S6.8 refill below was measured with that cost in. Today all three
+That change left one asymmetry, which gpena/Bramble.jl#428 has since removed. At the time,
+`InnerH` and `InnerPlus{Dim}`'s own `compute_weight` read their weight by *linear* index,
+not by the `CartesianIndex` the assembly loop already had in hand, so a symbolic `innerₕ(u,
+v)` or `inner₊ₓ(u, v)` term paid the division-per-axis of a linear `SeparableWeights` access
+once per point; the refill timings below were measured with that cost in. Today all three
 nodes, `InnerH`, `InnerPlus{Dim}` and `InnerPlusSet`, read a `SeparableWeights` by
-`CartesianIndex` (`_weight_at` in `src/operators/inner.jl`); a dense weight vector, which
-no current `weights` method returns, would still be read by linear index. Removing the
-division speeds up the serial matrix-free product most, since there the weight read is a
-larger share of each point's work than in assembly; the measured figures are in
-gpena/Bramble.jl#428.
+`CartesianIndex` (`_weight_at` in `src/operators/inner.jl`); a dense weight vector, which no
+current `weights` method returns, would still be read by linear index. Removing the division
+speeds up the serial matrix-free product most, since there the weight read is a larger share
+of each point's work than in assembly; the measured figures are in gpena/Bramble.jl#428.
 
 ### The one-dimensional case
 
@@ -120,17 +118,17 @@ conditions are not trustworthy alone; every figure below is a same-process,
 back-to-back, minimum-of-`N` measurement (`N ≥ 5`, warmed up first), and the ratios
 between paired measurements are the load-bearing numbers, not the raw times.
 
-`Base.summarysize(weights(Wₕ))` on the `100³` mesh this subplan's `CHECK` targets:
+`Base.summarysize(weights(Wₕ))` on the `100³` mesh, whose weights were to fit in under 1 MB:
 
 | stage | summarysize |
 |---|---|
 | before #115 (4 dense vectors) | 32,000,000 B |
-| after S6.2 (per-axis factors added, 4 families still dense) | 32,005,288 B |
-| after S6.8 (no family left dense) | 5,288 B |
+| per-axis factors added, 4 families still dense | 32,005,288 B |
+| no family left dense | 5,288 B |
 
-The `CHECK` script reproduces the last row directly (`summarysize(weights) on 100^3:
-5288 B`). That is a ~6,053x reduction from the S6.2 figure, and a ~6,053x reduction from
-the original dense one as well, since the twelve small per-axis vectors S6.2 added cost
+Measuring the last row directly prints `summarysize(weights) on 100^3: 5288 B`. That is a
+~6,053x reduction from the per-axis-factor figure, and a ~6,053x reduction from
+the original dense one as well, since the twelve small per-axis vectors cost
 the same fixed handful of kilobytes regardless.
 
 `innerₕ(u, u)` and `inner₊ₓ(u, u)` on the same `100³` space, against a dense-vector
@@ -151,7 +149,7 @@ vector. The ratio was 4.81-4.90. `@which` confirmed dispatch reached the `Cartes
 specialization (`src/space/inner_product.jl:333`), not the generic `AbstractVector`
 method (`src/utils/linear_algebra.jl:408`) -- so this was the intended path, not the
 linear-`getindex` fallback. The ratio measured here sat near that fallback's own ≈4.9x
-figure rather than nearer the ≈2.475x S6.3 recorded for this same specialization; the
+figure rather than nearer the ≈2.475x recorded when this specialization was added; the
 likely reason, from reading the loop as it stood then: it carried no `@simd`
 annotation. The load and power state moved during this session (above), so a second
 contributor could not be ruled out; both figures were reported rather than one silently
@@ -160,11 +158,11 @@ preferred, per `bramble-verification`.
 **Reconciled for gpena/Bramble.jl#273** (2026-09-22, Julia 1.13.0, this machine,
 `--threads=4`, battery power at 76-77%, load average ~2.2 on 8 cores -- not the quiet
 machine `bramble-verification` asks for, but the same caveat the paragraph above already
-carries). Re-running the exact 100³/`weights(Wₕ, Val((1,2)))` case from this page's own
-`CHECK` script, `_dot` against that `SeparableWeights` versus the same weights `collect`ed
+carries). Re-running the exact 100³/`weights(Wₕ, Val((1,2)))` case measured
+above, `_dot` against that `SeparableWeights` versus the same weights `collect`ed
 to a dense vector, `@belapsed`, four independent process runs gave 2.43-2.49x -- not the
 4.81-4.90x above, but squarely the ≈2.4x the source comment then carried and the ≈2.475x
-S6.3 recorded for this same specialization. At the time the loop was unchanged (`@simd`
+recorded when this specialization was added. At the time the loop was unchanged (`@simd`
 had been tried and reverted: on a deterministic-seed mesh it changed the reduction at the
 bit level, not only its speed, so it failed the correctness bar this figure was measured
 under). Nothing else had moved either -- same specialization, same `@which` dispatch,
@@ -183,17 +181,17 @@ The 3.6-3.8x, 4.81-4.90x and 2.4-2.5x figures above are the pre-rewrite history;
 them is the current cost.
 
 One `assemble!` refill of `innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))` on the uniform `60³` mesh
-S6.2 used (`ndofs = 216,000`, `nnz(A) = 1,490,400`), warmed up, minimum of 5, at 4
-threads (this repository's standard, `bramble-benchmarks` §1):
+the per-axis-factor change was measured on (`ndofs = 216,000`, `nnz(A) = 1,490,400`),
+warmed up, minimum of 5, at 4 threads (this repository's standard, `bramble-benchmarks` §1):
 
 | stage | min time | range | allocation |
 |---|---|---|---|
-| S6.2 (4 dense families) | 4.04 ms | 4.04-4.97 ms | 0 B, all 5 runs |
-| S6.8 (no dense families) | 3.16-3.19 ms | 3.16-4.58 ms | 0 B, all 5 runs |
+| 4 dense families | 4.04 ms | 4.04-4.97 ms | 0 B, all 5 runs |
+| no dense families | 3.16-3.19 ms | 3.16-4.58 ms | 0 B, all 5 runs |
 
-No regression: the refill sits at or below S6.2's own range, and allocation is still zero
-on every run, matching the documented zero-allocation `assemble!` contract. The
-division-per-axis `InnerH`/`InnerPlus{Dim}`'s `compute_weight` paid at S6.8 (previous
+No regression: the refill sits at or below the dense-family range, and allocation is still
+zero on every run, matching the documented zero-allocation `assemble!` contract. The
+division-per-axis `InnerH`/`InnerPlus{Dim}`'s `compute_weight` paid at the time (previous
 section, since removed) did not show up here -- it was a small fraction of everything
 else one assembled point costs.
 
@@ -212,7 +210,7 @@ Eliminating the last `O(n^D)` storage now costs nothing extra: after the 2026-09
 line-walk rewrite, `innerₕ`/`inner₊` cost **0.74-0.78x** a dense whole-vector reduction --
 faster than dense, not slower -- against weights that no longer scale with the grid at
 all: 5,288 B instead of 32,005,288 B on `100³`, a figure that would only have grown had
-the `2^D` staggered family S6.3/S6.4 added stayed dense alongside it. Before that
+the `2^D` staggered family stayed dense alongside it. Before that
 rewrite the same reduction cost roughly 3.6-3.8x dense (measured above); that history no
 longer applies. The one path that matters for a typical solve, `assemble!`, is unaffected
 -- it does not move outside the range already on record.
@@ -309,8 +307,7 @@ Machine state, per `bramble-verification`: on battery (72%, discharging), load a
 concurrent session in this same worktree active during the measurement (an unrelated
 `inner₊` check). The absolute times above should be read with that in mind; the ratios
 are what this record relies on, and they land in the same range (4-6x, 9 flat
-allocations against 54-116) that S10.2's own evidence already reported from a separate
-run.
+allocations against 54-116) that an earlier, separate run already reported.
 
 ### What unification was and was not achieved
 
