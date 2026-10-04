@@ -44,14 +44,15 @@ stored zero.
 # count along one axis, and the element type. For a device-backed mesh (Metal.jl), reading
 # spacing straight off the mesh scalar-indexes a device array and is refused outright by the
 # scalar-indexing guard -- not merely slow, an error before the dense fallback (below,
-# `_stencil_matrix`) ever gets to write anything (gpena/Bramble.jl#94, measured in S2.6). The
-# dense fallback only ever needs `op`'s own axis, so this mirrors *that axis alone* to the
-# host once per `_stencil_matrix` call, via `host_spacings` (`mesh1d.jl`, gpena/Bramble.jl#94
-# S2.10) -- one bulk transfer, not one scalar read per point, and free on a host-backed mesh
-# since `host_spacings` returns the existing array there instead of copying it.
+# `_stencil_matrix`) ever gets to write anything (gpena/Bramble.jl#94, measured on a Metal
+# device). The dense fallback only ever needs `op`'s own axis, so this mirrors *that axis
+# alone* to the host once per `_stencil_matrix` call, via `host_spacings` (`mesh1d.jl`,
+# gpena/Bramble.jl#94) -- one bulk transfer, not one scalar read per point, and free on a
+# host-backed mesh since `host_spacings` returns the existing array there instead of copying
+# it.
 #
 # It neither subtypes `AbstractMeshType` nor overloads `spacing`/`forward_spacing`/
-# `npoints`/`eltype` (gpena/Bramble.jl#94, JET cleanup, S2.6): a first attempt did both, and
+# `npoints`/`eltype` (gpena/Bramble.jl#94, JET cleanup): a first attempt did both, and
 # `report_package` flagged it twice over, in two different ways. Subtyping `AbstractMeshType`
 # while answering only four of its methods made every `AbstractMeshType`-typed function in
 # the package -- not just `_stencil_weights` below -- pick this mirror up in a union split
@@ -218,10 +219,9 @@ end
 # `_stencil_taps`/`_stencil_weights`, keyed on AST node types such as `BackwardDifference`
 # and `JumpNode`). Calling those directly would mean constructing a `LazyOp` tree from this
 # file to stand in for the node's `inner_op` field, which `src/space/` has no business
-# doing: forms are built on top of the space layer's operators, not the other way around,
-# and `src/ast/` is out of scope for this subplan besides. The two are proved equal by the
-# equality test against `kronecker_operator_matrix` below instead of by sharing code --
-# reported as the duplication the plan anticipated rather than resolved.
+# doing: forms are built on top of the space layer's operators, not the other way around.
+# The two are proved equal by the equality test against `kronecker_operator_matrix` below
+# instead of by sharing code, so the duplication is checked rather than removed.
 
 # --- Diagonal scaling of an operator matrix ----------------------------------------- #
 # Every weighted operator in this subsystem is a diagonal scaling of an unscaled one: build

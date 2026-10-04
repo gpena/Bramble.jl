@@ -592,9 +592,9 @@ function Base.show(
     end
 end
 
-# `nonzeros` only exists for a `SparseMatrixCSC`; a dense-backend matrix (S1.2's extension of
-# the matrix-type seam, gpena/Bramble.jl#12) has no separate notion of "stored" entries, so
-# every entry counts.
+# `nonzeros` only exists for a `SparseMatrixCSC`; a dense-backend matrix (the matrix-type
+# seam, gpena/Bramble.jl#12) has no separate notion of "stored" entries, so every entry
+# counts.
 @inline _stored_count(A::SparseMatrixCSC) = length(nonzeros(A))
 @inline _stored_count(A::AbstractMatrix) = length(A)
 

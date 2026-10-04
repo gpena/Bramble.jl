@@ -1183,14 +1183,14 @@ function _assemble_blocks_parallel!(
     for blk in blocks(term, trial_leaves, test_leaves)
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
-        # `host_weights` (gpena/Bramble.jl#94, S4.2): the mirror of S4.0's own fix to the
+        # `host_weights` (gpena/Bramble.jl#94): the mirror of the same fix to the
         # *pattern* walk (`bilinear_pattern.jl`), now applied to the walk that *refills* the
         # matrix. `local_stencil` below reads this leaf's weights and its mesh's spacings one
         # grid point at a time (`compute_weight`, `operators/inner.jl`); on a device
         # backend those are `MtlVector`s, and reading them element-by-element is exactly the
         # `Scalar indexing is disallowed` this milestone has hit three times already
-        # (`_probe_point` -> S2.3, `spacing`/`forward_spacing` -> S2.10, the pattern walk's own
-        # `SeparableWeights.__prod` -> S4.0). A no-op on a host leaf (`host_weights(Wc) === Wc`).
+        # (`_probe_point`, `spacing`/`forward_spacing`, and the pattern walk's own
+        # `SeparableWeights.__prod`). A no-op on a host leaf (`host_weights(Wc) === Wc`).
         sp = host_weights(_walked_leaf(bound, blk.trial_leaf, blk.test_leaf))
         if _has_test_interp(bound)
             _sweep_bilinear_serial!(A, sp, bound, blk.row_offset, blk.col_offset, α)
@@ -1209,15 +1209,16 @@ function _assemble_blocks_parallel!(
     return A
 end
 
-# Matrix-type generic since S7.1 (gpena/Bramble.jl#190): the band-coloured sweep above
+# Matrix-type generic (gpena/Bramble.jl#190): the band-coloured sweep above
 # (`_scatter_point!`/`_sweep_bilinear!`/`_assemble_blocks_parallel!`) only ever calls
-# `add_to_sparse!`, itself matrix-type generic since S1.1 (`bilinear_traversal.jl`), so
-# nothing here races any differently for a dense `Matrix` than for `SparseMatrixCSC` --
-# verified equal to the serial record/replay pass on a dense backend (S7.1's own check).
-# `_sweep_bilinear!` reads the space's effective policy itself (`_effective_parallel_policy`)
-# and only `Threads.@threads`es under `CpuThreaded`; a `CpuPolyester` backend reaches its own
-# hook instead of silently threading with the wrong mechanism, so this function no longer
-# needs a separate non-threading fallback for a matrix type it cannot thread.
+# `add_to_sparse!`, itself matrix-type generic (`bilinear_traversal.jl`,
+# gpena/Bramble.jl#12), so nothing here races any differently for a dense `Matrix` than for
+# `SparseMatrixCSC` -- verified equal to the serial record/replay pass on a dense backend.
+# `_sweep_bilinear!` reads the space's effective policy itself
+# (`_effective_parallel_policy`) and only `Threads.@threads`es under `CpuThreaded`; a
+# `CpuPolyester` backend reaches its own hook instead of silently threading with the wrong
+# mechanism, so this function no longer needs a separate non-threading fallback for a matrix
+# type it cannot thread.
 function _assemble_bilinear_parallel_core!(
         A::AbstractMatrix, trial_space, test_space, ast::AST_TYPE, α = true
 ) where {AST_TYPE}
@@ -1235,7 +1236,7 @@ function _assemble_bilinear_parallel_core!(
     end
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
-    # `host_weights` (gpena/Bramble.jl#94, S4.2) -- see `_assemble_blocks_parallel!` above for why.
+    # `host_weights` (gpena/Bramble.jl#94): see `_assemble_blocks_parallel!` above for why.
     sp = host_weights(_walked_leaf(bound, trial_space, test_space))
     if _has_test_interp(bound)
         _sweep_bilinear_serial!(A, sp, bound, 0, 0, α)

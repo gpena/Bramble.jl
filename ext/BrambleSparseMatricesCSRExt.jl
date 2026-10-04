@@ -42,7 +42,7 @@ using Bramble:
 using SparseMatricesCSR: SparseMatricesCSR, SparseMatrixCSR, sparsecsr
 using PrecompileTools: @setup_workload, @compile_workload
 
-# --- backend construction (S1.4's stub) -------------------------------------------- #
+# --- backend construction (the stub in `backend.jl`) -------------------------------- #
 
 # `T <: Number` (rather than an unconstrained `T`) so this is a genuine specialisation of
 # the stub in `backend.jl` -- `::Type` there means `Type{T} where T`, so an unconstrained

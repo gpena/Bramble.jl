@@ -508,7 +508,7 @@ end
 # for it, via `_seed_mesh1d_rng!`, keeps every existing `Random.seed!(N)` call working
 # exactly as before (`_MESH1D_RNG_ARMED` stays `false`, so the `else` branch below runs,
 # unchanged from the original code) while still giving device-mesh-reproducibility code
-# (gpena/Bramble.jl#320's S1.2) a way to opt out of the global stream entirely.
+# (gpena/Bramble.jl#320) a way to opt out of the global stream entirely.
 const _MESH1D_RNG = Random.Xoshiro()
 const _MESH1D_RNG_ARMED = Ref(false)
 
@@ -566,8 +566,7 @@ end
 end
 
 #------------------------------------------------------------------------------------------#
-# Device kernel launch stubs (gpena/Bramble.jl#94, #174, S2.1 of
-# .agents/plans/metal-and-apple-silicon-acceleration.md)
+# Device kernel launch stubs (gpena/Bramble.jl#94, #174)
 #
 # Every filler below (`_points!`, `half_points!`, `spacing!`, `half_spacing!`,
 # `_refine_indices!`) keeps its `x isa Array` method exactly as it always was -- a CPU loop

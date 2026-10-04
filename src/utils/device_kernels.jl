@@ -1,6 +1,5 @@
 # src/utils/device_kernels.jl: the seam between a Bramble `Backend` and a
-# `KernelAbstractions.jl` device (gpena/Bramble.jl#174, S0.1 of
-# .agents/plans/metal-and-apple-silicon-acceleration.md). No `KernelAbstractions` dependency
+# `KernelAbstractions.jl` device (gpena/Bramble.jl#174). No `KernelAbstractions` dependency
 # here -- only the generic fallback, same idiom as `metal_backend`/`_metal_backend`
 # (`src/utils/backend.jl:403-409`) and `export_vtk`/`_export_vtk`
 # (`src/exporters/vtk_export.jl:41-52`): a helpful error naming the packages to load, not a
@@ -47,8 +46,8 @@ end
 Block the calling thread until every `KernelAbstractions.jl` kernel and device transfer
 already queued against `x`'s device backend has completed.
 
-Through gpena/Bramble.jl#94's S4.2, every `@kernel` launch in `BrambleKernelAbstractionsExt`
-called this right after launching, unconditionally. gpena/Bramble.jl#302/#306 (S11) removed
+Through gpena/Bramble.jl#94, every `@kernel` launch in `BrambleKernelAbstractionsExt`
+called this right after launching, unconditionally. gpena/Bramble.jl#302/#306 removed
 that: under [`GpuKernel`](@ref) -- the only [`GpuPolicy`](@ref) there is -- a kernel launch
 now only enqueues onto the device's own command queue and returns, so a chain of operators
 (`D₋ₓ` into `D₋ᵧ`, say) pipelines instead of paying a host round-trip after each step.
@@ -66,8 +65,8 @@ between chained device calls, only at a genuine host boundary:
     (`src/assembly/bilinear_traversal.jl`) is this function's first caller for exactly that
     reason: it ends a device-resident matrix's assembly with
     `copyto!(A.nzVal, mirror.nzval)`, and calling this right after is what keeps
-    `assemble`/`assemble!` from returning before that write lands (S4.2's race, found at
-    `n = 513` over repeated assemblies, invisible at a small `CHECK` size);
+    `assemble`/`assemble!` from returning before that write lands (a race found at
+    `n = 513` over repeated assemblies, invisible at a small test size);
   - an explicit call from user code that needs a hard barrier before doing something this
     package cannot see, such as timing a device computation in isolation.
 
