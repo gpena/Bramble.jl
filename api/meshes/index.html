@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Meshes — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=a94dfbc5">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=7149991f">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Meshes — Bramble.jl">
   <meta property="og:title" content="Meshes — Bramble.jl">
@@ -47,8 +47,6 @@
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
-        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
@@ -56,50 +54,11 @@
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and scientific computing</span>
-        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
-        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
-        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
-        <a href="../../tutorials/backend/">Backends and execution policies</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Visualization and export</span>
-        <a href="../../tutorials/plotting/">Plotting directly</a>
-        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
-        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Stationary problems</span>
-          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
-          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
-          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
-          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
-          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
-          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Time-dependent problems</span>
-          <a href="../../examples/heat_equation/">Heat equation</a>
-          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
-          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Inverse problems</span>
-          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
-          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Solvers and performance</span>
-          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
-          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
-          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
-        </div>
+        <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/heat_equation/">Heat equation</a>
       </div>
-      <a href="../../benchmarks/">Benchmarks</a>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section">
@@ -122,9 +81,7 @@
           <a href="../../internals/mesh/">Mesh</a>
           <a href="../../internals/space/">Spaces</a>
           <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/autodiff/">Automatic differentiation</a>
           <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/gpu/">GPU acceleration</a>
           <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
         </div>
       </div>
@@ -251,7 +208,7 @@ point(Ωₕ, (10, 15))  # returns (x₁₀, y₁₅)</code></pre>
 <div class="md-docstring" id="Bramble.npoints">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.npoints</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L379-L385" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L382-L388" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -265,7 +222,7 @@ npoints(Ωₕ::AbstractMeshType, ::Type{Tuple}) -&gt; NTuple{D, Int}</code></pre
 <div class="md-docstring" id="Bramble.points">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.points</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L303-L311" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L306-L314" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -285,7 +242,7 @@ npoints(Ωₕ::AbstractMeshType, ::Type{Tuple}) -&gt; NTuple{D, Int}</code></pre
 <div class="md-docstring" id="Bramble.half_points">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.half_points</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L325-L332" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L328-L335" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -301,7 +258,7 @@ npoints(Ωₕ::AbstractMeshType, ::Type{Tuple}) -&gt; NTuple{D, Int}</code></pre
 <div class="md-docstring" id="Bramble.half_point">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.half_point</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L335-L339" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L338-L342" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -314,7 +271,7 @@ npoints(Ωₕ::AbstractMeshType, ::Type{Tuple}) -&gt; NTuple{D, Int}</code></pre
 <div class="md-docstring" id="Bramble.spacing">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.spacing</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L342-L349" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L345-L352" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -328,7 +285,7 @@ spacing(Ωₕ::AbstractMeshType, idx, dim::Int)</code></pre>
 <div class="md-docstring" id="Bramble.forward_spacing">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.forward_spacing</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L352-L359" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L355-L362" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -342,7 +299,7 @@ forward_spacing(Ωₕ::AbstractMeshType, idx, dim::Int)</code></pre>
 <div class="md-docstring" id="Bramble.half_spacing">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.half_spacing</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L372-L376" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L375-L379" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -376,7 +333,7 @@ forward_spacing(Ωₕ::AbstractMeshType, idx, dim::Int)</code></pre>
 <div class="md-docstring" id="Bramble.hₘₐₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.hₘₐₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L388-L395" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L391-L398" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -392,7 +349,7 @@ forward_spacing(Ωₕ::AbstractMeshType, idx, dim::Int)</code></pre>
 <div class="md-docstring" id="Bramble.hₘᵢₙ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.hₘᵢₙ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L398-L412" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L401-L415" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -491,7 +448,7 @@ nₕ = Bramble.normal_vector(Wₕ, :ymin)
 <div class="md-docstring" id="Bramble.cell_measure">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.cell_measure</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L415-L422" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L418-L425" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -593,7 +550,7 @@ is_boundary_index(Ωₕ::AbstractMeshType, idx) -&gt; Bool</code></pre>
 <div class="md-docstring" id="Bramble.iterative_refinement!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.iterative_refinement!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L425-L442" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L428-L450" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -602,6 +559,7 @@ is_boundary_index(Ωₕ::AbstractMeshType, idx) -&gt; Bool</code></pre>
 </div>
 <p>Refine the mesh <code class="md-code-inline">Ωₕ</code> in-place by halving each existing cell (inserting new points at midpoints). If domain markers are supplied, they are re-evaluated onto the refined grid points.</p>
 <p>Without <code class="md-code-inline">domain_markers</code>, any custom marker <code class="md-code-inline">Ωₕ</code> carries beyond <code class="md-code-inline">:boundary</code>/<code class="md-code-inline">:interior</code> has no domain here to re-derive it from, so this throws an <code class="md-code-inline">ArgumentError</code> rather than silently dropping it. Pass <code class="md-code-inline">domain_markers</code> (the same ones the mesh was built with, or equivalent) to keep them.</p>
+<p>On a multi-dimensional mesh, refine the whole mesh, not one of its submeshes: <code class="md-code-inline">iterative_refinement!(Ωₕ(1))</code> changes that axis&#39;s point count but not the parent&#39;s index set or markers, and <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a><code class="md-code-inline">(Ωₕ)</code> then throws an <code class="md-code-inline">ArgumentError</code> instead of building on the inconsistent grid.</p>
 <div class="md-admonition md-admonition-warning">
 <p class="md-admonition-title">Invalidates every ScalarGridSpace already built on Ωₕ</p>
 <div class="md-admonition-body">
@@ -613,7 +571,7 @@ is_boundary_index(Ωₕ::AbstractMeshType, idx) -&gt; Bool</code></pre>
 <div class="md-docstring" id="Bramble.change_points!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.change_points!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L445-L457" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L453-L465" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -672,6 +630,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=a94dfbc5"></script>
+  <script src="../../assets/materialdocs.js?v=7149991f"></script>
 </body>
 </html>

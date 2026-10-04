@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=994f25c0">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=f926c895">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -47,8 +47,6 @@
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
-        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
@@ -56,50 +54,11 @@
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and scientific computing</span>
-        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
-        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
-        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
-        <a href="../../tutorials/backend/">Backends and execution policies</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Visualization and export</span>
-        <a href="../../tutorials/plotting/">Plotting directly</a>
-        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
-        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Stationary problems</span>
-          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
-          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
-          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
-          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
-          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
-          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Time-dependent problems</span>
-          <a href="../../examples/heat_equation/">Heat equation</a>
-          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
-          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Inverse problems</span>
-          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
-          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Solvers and performance</span>
-          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
-          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
-          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
-        </div>
+        <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/heat_equation/">Heat equation</a>
       </div>
-      <a href="../../benchmarks/">Benchmarks</a>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
@@ -122,9 +81,7 @@
           <a href="../../internals/mesh/">Mesh</a>
           <a href="../../internals/space/">Spaces</a>
           <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/autodiff/">Automatic differentiation</a>
           <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/gpu/">GPU acceleration</a>
           <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
         </div>
       </div>
@@ -1034,6 +991,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=994f25c0"></script>
+  <script src="../../assets/materialdocs.js?v=f926c895"></script>
 </body>
 </html>

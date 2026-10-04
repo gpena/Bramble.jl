@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Getting started — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=6d083068">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=62e96bf1">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Getting started — Bramble.jl">
   <meta property="og:title" content="Getting started — Bramble.jl">
@@ -47,8 +47,6 @@
         <a href="../tutorials/mesh/">Mesh tutorial</a>
         <a href="../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../tutorials/operators/">Difference, jump and average operators</a>
-        <a href="../tutorials/operator_accuracy/">How accurate are the difference operators</a>
-        <a href="../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
@@ -56,50 +54,11 @@
         <a href="../tutorials/coupled_systems/">Coupled systems</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and scientific computing</span>
-        <a href="../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
-        <a href="../tutorials/solvers_by_problem/">Solvers by problem</a>
-        <a href="../tutorials/time_stepping/">Solving at every time step</a>
-        <a href="../tutorials/autodiff/">Automatic differentiation</a>
-        <a href="../tutorials/backend/">Backends and execution policies</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Visualization and export</span>
-        <a href="../tutorials/plotting/">Plotting directly</a>
-        <a href="../tutorials/vtk_export/">Writing VTK files</a>
-        <a href="../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Stationary problems</span>
-          <a href="../examples/poisson_linear/">Linear Poisson equation</a>
-          <a href="../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-          <a href="../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
-          <a href="../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
-          <a href="../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
-          <a href="../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
-          <a href="../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Time-dependent problems</span>
-          <a href="../examples/heat_equation/">Heat equation</a>
-          <a href="../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
-          <a href="../examples/transient_inplace/">A transient loop that allocates nothing</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Inverse problems</span>
-          <a href="../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
-          <a href="../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Solvers and performance</span>
-          <a href="../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
-          <a href="../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
-          <a href="../examples/matrix_free_operator/">The matrix-free operator</a>
-        </div>
+        <a href="../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../examples/heat_equation/">Heat equation</a>
       </div>
-      <a href="../benchmarks/">Benchmarks</a>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
@@ -122,9 +81,7 @@
           <a href="../internals/mesh/">Mesh</a>
           <a href="../internals/space/">Spaces</a>
           <a href="../internals/form/">Forms</a>
-          <a href="../internals/autodiff/">Automatic differentiation</a>
           <a href="../internals/exporters/">Exporters</a>
-          <a href="../internals/gpu/">GPU acceleration</a>
           <a href="../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
         </div>
       </div>
@@ -215,7 +172,7 @@ uₕ .= A \ F
 
 normₕ(uₕ .- Rₕ(Wₕ, uexact))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0004017888396870854</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0004017888396867575</code></pre>
 </div>
 <p>Four parts in ten thousand. Halving the spacing should cut that by four, since the scheme is second order:</p>
 <div class="md-multi-output">
@@ -239,7 +196,7 @@ e₁, e₂ = poisson_error(33), poisson_error(65)
 
 e₁, e₂, log2(e₁ / e₂)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0004017888396870854, 0.00010041090485689163, 2.0005215336974485)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0004017888396867575, 0.00010041090485595501, 2.0005215337097284)</code></pre>
 </div>
 <h2 id="What-each-step-gives-you" class="md-heading">What each step gives you<a href="#What-each-step-gives-you" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>The form is the step worth dwelling on. <code class="md-code-inline">a</code> and <code class="md-code-inline">l</code> are expressions in the trial and test functions, not matrices: <code class="md-code-inline">form</code> stores the expression, and <code class="md-code-inline">assemble</code> is what walks the mesh. That separation is what lets the same <code class="md-code-inline">a</code> be refilled every step of a time loop, handed to a nonlinear solver, or differentiated.</p>
@@ -249,7 +206,7 @@ e₁, e₂, log2(e₁ / e₂)</code></pre>
 </li>
 <li><p><a href="../tutorials/form/">Linear and bilinear forms</a> covers the last three: writing a form, assembling it, imposing conditions, and coupled systems.</p>
 </li>
-<li><p>The <a href="../examples/poisson_linear/">worked examples</a> run the whole chain on real problems, from nonlinear Poisson to 3D elasticity, a heat equation and an inverse problem.</p>
+<li><p>The <a href="../examples/poisson_linear/">worked examples</a> run the whole chain on real problems, a Poisson problem, a convection-diffusion problem and a heat equation.</p>
 </li>
 </ul>
 <h2 id="Reading-order" class="md-heading">Reading order<a href="#Reading-order" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -263,29 +220,9 @@ e₁, e₂, log2(e₁ / e₂)</code></pre>
 </li>
 <li><p><a href="../tutorials/operators/">Difference, jump and average operators</a>: Apply differences, jumps and averages, see what each does at the grid edge, and get the matrix.</p>
 </li>
-<li><p><a href="../tutorials/operator_accuracy/">How accurate are the difference operators</a>: Measure the order of a difference operator and choose between the centered, second-order and summation-by-parts forms.</p>
-</li>
-<li><p><a href="../tutorials/interpolation/">Interpolation between meshes</a>: Move a grid function between meshes, see what error that costs, and get the interpolation as a matrix.</p>
-</li>
 <li><p><a href="../tutorials/form/">Linear and bilinear forms</a>: Write, assemble and solve a linear or bilinear form, with Dirichlet conditions, for a Poisson problem.</p>
 </li>
 <li><p><a href="../tutorials/coupled_systems/">Coupled systems</a>: Write a form over several unknowns, constrain one block, and read values across different meshes.</p>
-</li>
-<li><p><a href="../tutorials/solvers/">Choosing a solver, backend and execution policy</a>: Choose a matrix backend, an execution policy and a linear solver.</p>
-</li>
-<li><p><a href="../tutorials/solvers_by_problem/">Solvers by problem</a>: Match the solver to the problem: symmetric positive-definite, unsymmetric, coupled or hyperbolic.</p>
-</li>
-<li><p><a href="../tutorials/time_stepping/">Solving at every time step</a>: Solve the same sparse system at every implicit step by refactoring once or warm-starting.</p>
-</li>
-<li><p><a href="../tutorials/autodiff/">Automatic differentiation</a>: Differentiate a discrete quantity with respect to a parameter and choose an AD backend.</p>
-</li>
-<li><p><a href="../tutorials/backend/">Backends and execution policies</a>: Choose serial or threaded execution and find the size where threading pays off.</p>
-</li>
-<li><p><a href="../tutorials/plotting/">Plotting directly</a>: Plot a grid function inside Julia, as a curve in 1D or a colour map in 2D.</p>
-</li>
-<li><p><a href="../tutorials/vtk_export/">Writing VTK files</a>: Write a grid function or a time series to a file that ParaView opens.</p>
-</li>
-<li><p><a href="../tutorials/pgfplots_export/">Writing PGFPlots data files</a>: Write a curve or surface as a table that <code class="md-code-inline">pgfplots</code> plots in LaTeX.</p>
 </li>
 </ul>
       </article>
@@ -317,6 +254,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=6d083068"></script>
+  <script src="../assets/materialdocs.js?v=62e96bf1"></script>
 </body>
 </html>

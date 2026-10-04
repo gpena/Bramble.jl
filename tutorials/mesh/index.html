@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mesh tutorial — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=3a5cbaac">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=db19f012">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Mesh tutorial — Bramble.jl">
   <meta property="og:title" content="Mesh tutorial — Bramble.jl">
@@ -47,8 +47,6 @@
         <a href="../../tutorials/mesh/" class="md-nav-active">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
-        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
@@ -56,50 +54,11 @@
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and scientific computing</span>
-        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
-        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
-        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
-        <a href="../../tutorials/backend/">Backends and execution policies</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Visualization and export</span>
-        <a href="../../tutorials/plotting/">Plotting directly</a>
-        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
-        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Stationary problems</span>
-          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
-          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
-          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
-          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
-          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
-          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Time-dependent problems</span>
-          <a href="../../examples/heat_equation/">Heat equation</a>
-          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
-          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Inverse problems</span>
-          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
-          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Solvers and performance</span>
-          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
-          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
-          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
-        </div>
+        <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/heat_equation/">Heat equation</a>
       </div>
-      <a href="../../benchmarks/">Benchmarks</a>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
@@ -122,9 +81,7 @@
           <a href="../../internals/mesh/">Mesh</a>
           <a href="../../internals/space/">Spaces</a>
           <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/autodiff/">Automatic differentiation</a>
           <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/gpu/">GPU acceleration</a>
           <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
         </div>
       </div>
@@ -166,7 +123,7 @@ points(Ωₕ)</code></pre>
  0.9
  1.0</code></pre>
 </div>
-<p>The points are equally spaced, <span class="md-math md-math-inline">\(h = 0.1\)</span>, and the largest cell measure confirms it:</p>
+<p>The points are equally spaced, <span class="md-math md-math-inline">\(h = 0.1\)</span>, and the largest spacing confirms it:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -204,7 +161,7 @@ points(Ωₕ_graded), hₘₐₓ(Ωₕ_graded)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.010000000000000002, 0.04000000000000001, 0.09, 0.16000000000000003, 0.25, 0.36, 0.48999999999999994, 0.6400000000000001, 0.81, 1.0], 0.18999999999999995)</code></pre>
 </div>
-<p>Squaring the uniform points packs them near <span class="md-math md-math-inline">\(x = 0\)</span> and stretches the cells near <span class="md-math md-math-inline">\(x = 1\)</span>, so <code class="md-code-inline">hₘₐₓ</code> is no longer <span class="md-math md-math-inline">\(0.1\)</span>. <code class="md-code-inline">Bramble.set_points!</code> is the variant that also accepts a different point count. The <a href="../../examples/boundary_layer_graded/">graded boundary layer example</a> builds such a mesh for a real problem.</p>
+<p>Squaring the uniform points packs them near <span class="md-math md-math-inline">\(x = 0\)</span> and stretches the cells near <span class="md-math md-math-inline">\(x = 1\)</span>, so <code class="md-code-inline">hₘₐₓ</code> is no longer <span class="md-math md-math-inline">\(0.1\)</span>. <code class="md-code-inline">Bramble.set_points!</code> is the variant that also accepts a different point count.</p>
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
 <div class="md-admonition-body">
@@ -466,7 +423,7 @@ sum(index_in_marker(Ωₕ_marked, :walls)), sum(index_in_marker(Ωₕ_marked, :o
 </div>
 <hr class="md-hr">
 <h2 id="Refinement" class="md-heading">Refinement<a href="#Refinement" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a> inserts a point at every cell midpoint, updating indices and reapplying the domain&#39;s markers. Refinement is uniform and dyadic: <code class="md-code-inline">N</code> points become <code class="md-code-inline">2N - 1</code> along every axis.</p>
+<p><a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a> inserts a point at every cell midpoint, updating indices and reapplying the domain&#39;s markers. Refinement is uniform and dyadic: <code class="md-code-inline">N</code> points become <code class="md-code-inline">2N - 1</code> along every axis. Above 1D, refine the whole mesh rather than one submesh: <code class="md-code-inline">iterative_refinement!(Ωₕ(1))</code> leaves the mesh&#39;s index set and markers sized for the old grid, and <code class="md-code-inline">gridspace</code> refuses it.</p>
 <figure>
 <svg viewBox="0 0 740 210" width="100%" style="max-width:740px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
      xmlns="http://www.w3.org/2000/svg" role="img"
@@ -605,7 +562,7 @@ npoints(Ωₕ_ref, Tuple), sum(index_in_marker(Ωₕ_ref, :obstacle))</code></pr
 </tr>
 <tr>
 <td style="text-align:right"><code class="md-code-inline">hₘₐₓ(Ωₕ)</code></td>
-<td style="text-align:right">largest cell measure in the mesh</td>
+<td style="text-align:right">largest cell diagonal, the largest spacing in 1D</td>
 </tr>
 </tbody>
 </table>
@@ -661,6 +618,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=3a5cbaac"></script>
+  <script src="../../assets/materialdocs.js?v=db19f012"></script>
 </body>
 </html>

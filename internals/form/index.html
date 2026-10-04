@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=2805a26e">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b6db2d90">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -47,8 +47,6 @@
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
-        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
@@ -56,50 +54,11 @@
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and scientific computing</span>
-        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
-        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
-        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
-        <a href="../../tutorials/backend/">Backends and execution policies</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Visualization and export</span>
-        <a href="../../tutorials/plotting/">Plotting directly</a>
-        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
-        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Stationary problems</span>
-          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
-          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
-          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
-          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
-          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
-          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Time-dependent problems</span>
-          <a href="../../examples/heat_equation/">Heat equation</a>
-          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
-          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Inverse problems</span>
-          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
-          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Solvers and performance</span>
-          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
-          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
-          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
-        </div>
+        <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/heat_equation/">Heat equation</a>
       </div>
-      <a href="../../benchmarks/">Benchmarks</a>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
@@ -122,9 +81,7 @@
           <a href="../../internals/mesh/">Mesh</a>
           <a href="../../internals/space/">Spaces</a>
           <a href="../../internals/form/" class="md-nav-active">Forms</a>
-          <a href="../../internals/autodiff/">Automatic differentiation</a>
           <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/gpu/">GPU acceleration</a>
           <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
         </div>
       </div>
@@ -133,332 +90,7 @@
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/internals/form.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Forms" class="md-heading">Forms<a href="#Forms" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
-<h2 id="Lock-free-parallel-assembly" class="md-heading">Lock-free parallel assembly<a href="#Lock-free-parallel-assembly" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>Threaded assembly needs no locks, and no per-thread buffers to reduce afterwards. It partitions the grid by <em>stride</em>, so that two points written at the same time cannot touch the same entry.</p>
-<p><code class="md-code-inline">_colour_strides</code> reads the offsets an operator&#39;s stencil reaches and returns, per dimension, <code class="md-code-inline">hi - lo + 1</code>: the width of the footprint one grid point writes. Two points of the same colour differ by a multiple of that stride in some dimension, so by at least <code class="md-code-inline">span + 1</code> there, while each writes a footprint <code class="md-code-inline">span</code> wide about itself. More than a width apart, the footprints cannot overlap, so no two points in a colour ever target the same row and the sweep needs no coordination of any kind.</p>
-<p>The number of colours is <code class="md-code-inline">prod(strides)</code>, and the common case is one:</p>
-<div class="md-table-wrap">
-<table class="md-table">
-<thead>
-<tr>
-<th style="text-align:left">form</th>
-<th style="text-align:left">offsets reached</th>
-<th style="text-align:left">strides</th>
-<th style="text-align:left">colours</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">innerₕ(fₕ, v)</code></td>
-<td style="text-align:left"><code class="md-code-inline">(0, 0)</code></td>
-<td style="text-align:left"><code class="md-code-inline">(1, 1)</code></td>
-<td style="text-align:left">1</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">innerₕ(fₕ, D₋ₓ(v))</code></td>
-<td style="text-align:left"><code class="md-code-inline">(-1, 0)</code>, <code class="md-code-inline">(0, 0)</code></td>
-<td style="text-align:left"><code class="md-code-inline">(2, 1)</code></td>
-<td style="text-align:left">2</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">inner₊(∇ₕ(fₕ), ∇ₕ(v))</code></td>
-<td style="text-align:left"><code class="md-code-inline">(-1, 0)</code>, <code class="md-code-inline">(0, -1)</code>, <code class="md-code-inline">(0, 0)</code></td>
-<td style="text-align:left"><code class="md-code-inline">(2, 2)</code></td>
-<td style="text-align:left">4</td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>Any form whose test argument carries no difference strides by 1 in every dimension, and is swept as a single flat parallel loop with no phases at all: both <code class="md-code-inline">_sweep_parallel!</code> and <code class="md-code-inline">_sweep_bilinear!</code> check <code class="md-code-inline">prod(strides) == 1</code> and take that path directly.</p>
-<p>A colour is a strided sub-grid, not a materialised list of indices:</p>
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_colour_subgrid(grid_inds, c, strides) =
-    CartesianIndices(ntuple(d -&gt; c[d]:strides[d]:last(axes(grid_inds, d)), D))</code></pre>
-</div>
-<p>so a colour costs nothing to build, and the writes within one still run in ascending order. The implementation this replaced binned every index into a vector of vectors.</p>
-<h3 id="Matrix-assembly-colours-on-the-test-side-alone" class="md-heading">Matrix assembly colours on the test side alone<a href="#Matrix-assembly-colours-on-the-test-side-alone" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>A bilinear stencil writes to <code class="md-code-inline">(I + off_v, I + off_u)</code>, so two points collide on an entry only if their <em>row</em> footprints overlap: rows disjoint implies entries disjoint whatever the columns do. Matrix assembly colours from <code class="md-code-inline">_colour_strides(stencil_offsets(ast))</code> too, the same function and the same quantity a vector assembly colours from (<a href="https://github.com/gpena/Bramble.jl/issues/54">gpena/Bramble.jl#54</a>): <code class="md-code-inline">stencil_offsets</code> reduces a <code class="md-code-inline">BilinearProduct</code> to its test factor&#39;s reach, since that is the only side colouring ever needs, so there is one static answer to &quot;what does this reach&quot; rather than a second one re-derived from a sample stencil evaluation.</p>
-<p>The colouring is what makes the matrix sweep correct rather than merely fast: whether a point&#39;s entries are found by <code class="md-code-inline">add_to_sparse!</code> searching a column, or read from a replayed recording (below), two threads landing on the same entry would race on the value, not just on the structure.</p>
-<figure>
-<svg viewBox="0 0 740 290" width="100%" style="max-width:740px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
-     xmlns="http://www.w3.org/2000/svg" role="img"
-     aria-label="A grid partitioned into four colours by a stride of two in each dimension, for lock-free parallel form assembly.">
-  <!-- Grid of 6x6 colored squares -->
-  <g transform="translate(50, 40)">
-    <text x="105" y="-15" font-size="13" font-weight="bold" fill="currentColor" text-anchor="middle">Four colours of a (2, 2) stride</text>
-    <!-- 6x6 grid cells of size 35x35 -->
-    <!-- Row 1 -->
-    <rect x="0"   y="0" width="35" height="35" fill="#ef4444" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="35"  y="0" width="35" height="35" fill="#3b82f6" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="70"  y="0" width="35" height="35" fill="#ef4444" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="105" y="0" width="35" height="35" fill="#3b82f6" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="140" y="0" width="35" height="35" fill="#ef4444" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="175" y="0" width="35" height="35" fill="#3b82f6" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-
-    <!-- Row 2 -->
-    <rect x="0"   y="35" width="35" height="35" fill="#10b981" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="35"  y="35" width="35" height="35" fill="#f59e0b" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="70"  y="35" width="35" height="35" fill="#10b981" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="105" y="35" width="35" height="35" fill="#f59e0b" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="140" y="35" width="35" height="35" fill="#10b981" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="175" y="35" width="35" height="35" fill="#f59e0b" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-
-    <!-- Row 3 -->
-    <rect x="0"   y="70" width="35" height="35" fill="#ef4444" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="35"  y="70" width="35" height="35" fill="#3b82f6" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="70"  y="70" width="35" height="35" fill="#ef4444" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="105" y="70" width="35" height="35" fill="#3b82f6" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="140" y="70" width="35" height="35" fill="#ef4444" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="175" y="70" width="35" height="35" fill="#3b82f6" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-
-    <!-- Row 4 -->
-    <rect x="0"   y="105" width="35" height="35" fill="#10b981" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="35"  y="105" width="35" height="35" fill="#f59e0b" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="70"  y="105" width="35" height="35" fill="#10b981" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="105" y="105" width="35" height="35" fill="#f59e0b" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="140" y="105" width="35" height="35" fill="#10b981" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="175" y="105" width="35" height="35" fill="#f59e0b" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-
-    <!-- Row 5 -->
-    <rect x="0"   y="140" width="35" height="35" fill="#ef4444" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="35"  y="140" width="35" height="35" fill="#3b82f6" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="70"  y="140" width="35" height="35" fill="#ef4444" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="105" y="140" width="35" height="35" fill="#3b82f6" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="140" y="140" width="35" height="35" fill="#ef4444" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="175" y="140" width="35" height="35" fill="#3b82f6" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-
-    <!-- Row 6 -->
-    <rect x="0"   y="175" width="35" height="35" fill="#10b981" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="35"  y="175" width="35" height="35" fill="#f59e0b" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="70"  y="175" width="35" height="35" fill="#10b981" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="105" y="175" width="35" height="35" fill="#f59e0b" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="140" y="175" width="35" height="35" fill="#10b981" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-    <rect x="175" y="175" width="35" height="35" fill="#f59e0b" fill-opacity="0.7" stroke="currentColor" stroke-width="0.8"/>
-  </g>
-
-  <!-- Explanation Panel -->
-  <g transform="translate(320, 30)">
-    <rect x="0" y="0" width="380" height="230" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.2" stroke-width="1"/>
-    <text x="190" y="25" font-size="14" font-weight="bold" fill="currentColor" text-anchor="middle">One colour at a time, in parallel</text>
-
-    <!-- Step 1: Color sync -->
-    <circle cx="25" cy="55" r="10" fill="#ef4444"/>
-    <text x="25" y="59" font-size="11" font-weight="bold" fill="#ffffff" text-anchor="middle">1</text>
-    <text x="45" y="54" font-size="12" font-weight="bold" fill="currentColor">Color phase 1 (Red cells)</text>
-    <text x="45" y="70" font-size="11" fill="currentColor" opacity="0.8">Every red point is swept in parallel across threads.</text>
-    <text x="45" y="84" font-size="11" fill="currentColor" opacity="0.8">Footprints cannot overlap, so there is nothing to coordinate.</text>
-
-    <!-- Step 2 -->
-    <circle cx="25" cy="110" r="10" fill="#3b82f6"/>
-    <text x="25" y="114" font-size="11" font-weight="bold" fill="#ffffff" text-anchor="middle">2</text>
-    <text x="45" y="109" font-size="12" font-weight="bold" fill="currentColor">Color phase 2 (Blue cells)</text>
-    <text x="45" y="125" font-size="11" fill="currentColor" opacity="0.8">The threaded loop joins, then the next colour proceeds.</text>
-
-    <!-- Step 3 & 4 -->
-    <circle cx="25" cy="165" r="10" fill="#10b981"/>
-    <text x="25" y="169" font-size="11" font-weight="bold" fill="#ffffff" text-anchor="middle">3</text>
-    <text x="45" y="164" font-size="12" font-weight="bold" fill="currentColor">Color phases 3 &amp; 4 (Green &amp; Amber)</text>
-    <text x="45" y="180" font-size="11" fill="currentColor" opacity="0.8">Four colours complete the grid, for this stencil.</text>
-
-    <text x="190" y="215" font-size="11" font-weight="bold" fill="#10b981" text-anchor="middle">No locks, and each colour is a range rather than a list</text>
-  </g>
-</svg>
-</figure>
-<h3 id="Threaded-refill-replays-the-recording" class="md-heading">Threaded refill replays the recording<a href="#Threaded-refill-replays-the-recording" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>A <code class="md-code-inline">CpuThreaded</code> refill (<code class="md-code-inline">assemble!</code> on a <code class="md-code-inline">Parallel()</code> form, and <code class="md-code-inline">assemble_parallel!</code> from any policy) used to search every tap&#39;s slot through <code class="md-code-inline">_scatter_position</code> on every call. It now shares the same recording a serial fill builds (&quot;One setup walk per term&quot;, below): the first fill against a new matrix records, and every fill after it, threaded or serial, sweeps the same band colours but reads each entry&#39;s position from the recording instead of searching for it. <code class="md-code-inline">ReplaySink</code> addresses a point through <code class="md-code-inline">point_ptr[lin_idx]</code>, not a running counter, so one recording serves any visit order and any thread. The colouring above still keeps two concurrently-swept points off the same entry, but nothing else about the sweep needs to change.</p>
-<p><code class="md-code-inline">_replay_unit!</code>/<code class="md-code-inline">_replay_pair_unit!</code> (<code class="md-code-inline">bilinear_execution.jl</code>) take a <code class="md-code-inline">_ReplayMode</code> argument, <code class="md-code-inline">_SerialReplay</code> or <code class="md-code-inline">_ThreadedReplay</code>, so the walk that matches a recording&#39;s units to its <code class="md-code-inline">Segment</code>s is the same code for both; only the leaf-level replay differs. A pair term <code class="md-code-inline">⟨Au, Bv⟩ + ⟨Bu, Av⟩</code> writes each entry twice, at <code class="md-code-inline">(row, col)</code> and at its transpose, so its colouring takes the union of both terms&#39; row reach rather than one term&#39;s alone. In 1D, a difference term&#39;s interior has a constant per-tap stride, so its diagonal segment replays through its own target (<code class="md-code-inline">_DiagonalReplayTarget</code>) instead of a positions vector; from 2D up no interior stride is constant, so every segment there is the general, position-list kind.</p>
-<p>Whether a unit replays or searches is decided per unit, from the leaf its sweep walks (<code class="md-code-inline">_leaf_replays</code>): a host matrix and a host leaf, under an effective policy whose sweeps can replay (<code class="md-code-inline">CpuThreaded</code> in <code class="md-code-inline">src/</code>; <code class="md-code-inline">CpuPolyester</code> once <code class="md-code-inline">BramblePolyesterExt</code> fills its own replay batch functions). A device matrix, a device leaf, or a policy with no replay hook keeps searching that unit, beside other units of the same form that do replay.</p>
-<h2 id="Algebraic-simplification-of-the-sum-and-product-layer" class="md-heading">Algebraic simplification of the sum and product layer<a href="#Algebraic-simplification-of-the-sum-and-product-layer" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">form(Wₕ, Vₕ, f)</code>/<code class="md-code-inline">form(Wₕ, f)</code> call <a href="../../internals/form/#Bramble.simplify_ast-Tuple{Bramble.LazyOp}"><code class="md-code-inline">Bramble.simplify_ast</code></a> on the resolved expression before storing it (<code class="md-code-inline">ast/simplifier.jl</code>, <a href="https://github.com/gpena/Bramble.jl/issues/159">gpena/Bramble.jl#159</a>). Most of it rewrites three node types: <code class="md-code-inline">OperatorAdd</code>, <code class="md-code-inline">OperatorScale</code> and <code class="md-code-inline">GridFunctionScale</code>. They are exactly what <code class="md-code-inline">ast.jl</code>&#39;s <code class="md-code-inline">+</code>, <code class="md-code-inline">*</code> and <code class="md-code-inline">/</code> overloads build. Every other node (differences, averages, jumps, restrictions, interpolation, and every leaf) is semantic rather than algebraic, and is left as it is. Two exceptions reach one layer deeper, into <code class="md-code-inline">BilinearProduct</code>/<code class="md-code-inline">LinearProduct</code> (what <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">inner₊</code>/... build) and into <code class="md-code-inline">ShiftNode</code>: leaving them untouched would mean either a correctness gap (§&quot;Component distribution&quot; below) or a documented dead end (a hidden scalar defeating <code class="md-code-inline">symmetry.jl</code>&#39;s structural shape check).</p>
-<p>The rules matter here rather than only in the tutorial because of where the router splits work: <code class="md-code-inline">_visit_operator_add*</code> (<code class="md-code-inline">stencil_eval.jl</code>) recurses on <code class="md-code-inline">OperatorAdd</code> alone, so every other node is one routed term and one mesh sweep, however large the subtree underneath it. Fewer top-level <code class="md-code-inline">OperatorAdd</code> nodes is therefore not a cosmetic rewrite of the tree but a smaller number of sweeps for the same matrix or vector:</p>
-<div class="md-table-wrap">
-<table class="md-table">
-<thead>
-<tr>
-<th style="text-align:left">Input</th>
-<th style="text-align:left">Simplifies to</th>
-<th style="text-align:left">Effect on routing</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">0 * A</code></td>
-<td style="text-align:left">a <code class="md-code-inline">ZeroOperator</code></td>
-<td style="text-align:left">an empty stencil: no pattern entries instead of <code class="md-code-inline">A</code>&#39;s full stencil</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">A + 0</code>, <code class="md-code-inline">0 + A</code></td>
-<td style="text-align:left"><code class="md-code-inline">A</code></td>
-<td style="text-align:left">the zero term is not a term at all</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">1 * A</code></td>
-<td style="text-align:left"><code class="md-code-inline">A</code></td>
-<td style="text-align:left">no wrapper node to route through</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">c1 * (c2 * A)</code>, both static</td>
-<td style="text-align:left"><code class="md-code-inline">(c1 * c2) * A</code></td>
-<td style="text-align:left">unchanged term count, one multiply instead of two</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">A + A</code>, <code class="md-code-inline">A</code> a singleton node</td>
-<td style="text-align:left"><code class="md-code-inline">2 * A</code></td>
-<td style="text-align:left">two routed terms become one</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">c1 * A + c2 * A</code>, same singleton <code class="md-code-inline">A</code></td>
-<td style="text-align:left"><code class="md-code-inline">(c1 + c2) * A</code></td>
-<td style="text-align:left">two routed terms become one</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">c * A + c * B</code>, same <code class="md-code-inline">c</code></td>
-<td style="text-align:left"><code class="md-code-inline">c * (A + B)</code></td>
-<td style="text-align:left">two routed terms become one</td>
-</tr>
-</tbody>
-</table>
-</div>
-<p><code class="md-code-inline">ZeroOperator{D,Nothing}(nothing)</code> is synthesized for the zero case rather than reusing a concrete space, because a <code class="md-code-inline">LazyOp{D}</code> subtree in general carries no space to read back. <code class="md-code-inline">space(op)</code> is only ever implemented for <code class="md-code-inline">IdentityOperator</code>/<code class="md-code-inline">ZeroOperator</code> themselves. Every consumer of <code class="md-code-inline">ZeroOperator</code> (<code class="md-code-inline">local_stencil</code>, <code class="md-code-inline">stencil_offsets</code>, <code class="md-code-inline">component</code>) reads only its <code class="md-code-inline">D</code> type parameter; the one exception, <code class="md-code-inline">symmetry.jl</code>&#39;s <code class="md-code-inline">_same_operator_shape</code> comparing <code class="md-code-inline">a.space === b.space</code>, settles <code class="md-code-inline">nothing === nothing</code> the same way two zero operators over the same space would.</p>
-<p>&quot;Same <code class="md-code-inline">A</code>&quot; is two predicates, not one. <code class="md-code-inline">_ast_equal</code> (<code class="md-code-inline">ast/simplifier.jl</code>) is the <em>definition</em>: a structural equality over <code class="md-code-inline">LazyOp</code> subtrees. It asks for the same concrete node type and every field equal, recursively for a field that is itself a <code class="md-code-inline">LazyOp</code>, by <code class="md-code-inline">===</code> otherwise. <code class="md-code-inline">===</code> rather than <code class="md-code-inline">==</code> for a leaf field (a grid function, a closure, a component index) is deliberate: two arrays holding equal values right now are not the same operator once one of them is mutated in place and the other is not, and two independently built closures are never &quot;the same&quot; scaling function merely because they compute the same thing. Missing an equal-but-distinct pair only forgoes a rewrite; treating two different subtrees as equal would change what an assembled form computes, silently, which none of these rules may ever do. Every rewrite here is an algebraic identity, so the assembled matrix or vector is unaffected up to floating-point association (folding <code class="md-code-inline">2 * x + 3 * x</code> into <code class="md-code-inline">5 * x</code> can move the last bit; not folding it does too, in the other direction).</p>
-<p><code class="md-code-inline">_statically_equal</code> is the <em>gate</em>, and it is what the like-term rule actually branches on: whether <code class="md-code-inline">_ast_equal</code>&#39;s answer is settled by the two types alone, which is <code class="md-code-inline">Base.issingletontype</code>. The rule has to be gated this way because its two outcomes return different node types (an <code class="md-code-inline">OperatorScale</code> when it fires, an <code class="md-code-inline">OperatorAdd</code> when it does not), so an answer inference cannot fold makes <code class="md-code-inline">form</code>&#39;s return type a <code class="md-code-inline">Union</code> of both, costing every caller a dynamic dispatch into the assembly engine and drawing <code class="md-code-inline">IllegalTypeAnalysisException</code> from Enzyme (gpena/Bramble.jl#240). That bit every sum of two same-shaped terms carrying runtime data, not just the duplicate expressions it was first thought to: <code class="md-code-inline">innerₕ(g₁ * u, v) + innerₕ(g₂ * u, v)</code> for distinct grid functions <code class="md-code-inline">g₁ ≠ g₂</code>, or two source vectors in a linear form.</p>
-<p>In practice the gate is generous, because the trees <code class="md-code-inline">form</code> builds out of pure operators <em>are</em> singletons: a <code class="md-code-inline">BilinearProduct</code> over <code class="md-code-inline">TrialFunction</code>/<code class="md-code-inline">TestFunction</code>, wrapped in any stack of difference or average nodes, has singleton fields all the way down. What it excludes is a node carrying data, such as a <code class="md-code-inline">GridFunctionScale</code> holding an array, a <code class="md-code-inline">SourceVector</code>, a <code class="md-code-inline">DiracSource</code>, or an <code class="md-code-inline">IndexedTrialFunction</code> whose <code class="md-code-inline">component_idx</code> is a field rather than a type parameter. Those sums assemble as the two terms they were written as, which means one extra routed term and the same numbers.</p>
-<p>A <code class="md-code-inline">Base.RefValue</code> coefficient (§2&#39;s dynamic scalar coefficients) is never dereferenced by the pass and never combined with a static number, or with a different <code class="md-code-inline">Ref</code>, only recognized as the same coefficient when it is the same <code class="md-code-inline">Ref</code> object on both sides. The whole point of a <code class="md-code-inline">Ref</code> coefficient is that its value can change after the form is built, so folding its current value into a static number would bake in a snapshot the rest of the design goes out of its way to avoid.</p>
-<h3 id="Reaching-one-layer-deeper:-inner-products-and-shifts" class="md-heading">Reaching one layer deeper: inner products and shifts<a href="#Reaching-one-layer-deeper:-inner-products-and-shifts" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<div class="md-table-wrap">
-<table class="md-table">
-<thead>
-<tr>
-<th style="text-align:left">Input</th>
-<th style="text-align:left">Simplifies to</th>
-<th style="text-align:left">Why</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">⟨c * u, v⟩</code>, <code class="md-code-inline">⟨u, c * v⟩</code></td>
-<td style="text-align:left"><code class="md-code-inline">c * ⟨u, v⟩</code></td>
-<td style="text-align:left">exposes <code class="md-code-inline">c</code> to the rules above, and to <code class="md-code-inline">symmetry.jl</code></td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">⟨u, v(i) + v(j)⟩</code>, <code class="md-code-inline">i ≠ j</code> (or the trial-side mirror)</td>
-<td style="text-align:left"><code class="md-code-inline">⟨u, v(i)⟩ + ⟨u, v(j)⟩</code></td>
-<td style="text-align:left">the combined shape has no valid single-term routing at all</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">u_h * (v_h * A)</code></td>
-<td style="text-align:left"><code class="md-code-inline">(u_h .* v_h) * A</code></td>
-<td style="text-align:left">one elementwise multiply at construction, not two scalings per point per assembly</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">⟨Au, Bv⟩ + ⟨Au, Cv⟩</code> (or <code class="md-code-inline">⟨Au, Bv⟩ + ⟨Cu, Bv⟩</code>), shared <code class="md-code-inline">A</code> a singleton node, anywhere in the sum</td>
-<td style="text-align:left"><code class="md-code-inline">⟨Au, (B + C)v⟩</code> (or <code class="md-code-inline">⟨(A + C)u, Bv⟩</code>)</td>
-<td style="text-align:left">one product, one compiled term, instead of two</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">⟨f, Av⟩ + ⟨f, Bv⟩</code>, shared source a singleton node</td>
-<td style="text-align:left"><code class="md-code-inline">⟨f, (A + B)v⟩</code></td>
-<td style="text-align:left">as above, for a linear form</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">Shift₀(u)</code></td>
-<td style="text-align:left"><code class="md-code-inline">u</code></td>
-<td style="text-align:left">a zero shift is the identity</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">Shift_a(Shift_b(u))</code>, same dimension, <code class="md-code-inline">a</code> and <code class="md-code-inline">b</code> of one sign</td>
-<td style="text-align:left"><code class="md-code-inline">Shift_{a+b}(u)</code></td>
-<td style="text-align:left">additive only then: a shift reads 0 off the grid, so <code class="md-code-inline">Shift_k(Shift_{-k}(u))</code> is not <code class="md-code-inline">u</code> at the boundary and stays nested</td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>Factoring a shared argument uses the like-term rule&#39;s gate: the shared argument must pass <code class="md-code-inline">_statically_equal</code>. Whether the rule fires is settled by the argument types, and a data-carrying argument (a grid-function scaling, a <code class="md-code-inline">SourceVector</code>) is never shared. The unshared arguments are not compared at all, so they may carry data: <code class="md-code-inline">⟨g₁u, v⟩ + ⟨g₂u, v⟩</code> becomes <code class="md-code-inline">⟨g₁u + g₂u, v⟩</code>. Each term&#39;s coefficient moves onto its own unshared argument, <code class="md-code-inline">c⟨Au, Bv⟩ = ⟨Au, c Bv⟩</code>, so coefficients are never compared either, and two distinct <code class="md-code-inline">Ref</code> coefficients still factor. Only products naming no component on either side factor, so the rule never builds a component-mixing sum. <code class="md-code-inline">simplify_ast(::OperatorAdd)</code> searches the already simplified left operand for a summand sharing an argument with the right one (<code class="md-code-inline">_absorb</code>), so a left-deep sum of many terms factors every match, not only adjacent ones. Fewer products means fewer compiled terms. The 3D scalar form of 27 distinct <code class="md-code-inline">innerₕ</code> terms in <code class="md-code-inline">nterm-form.jl</code>, whose pairs share trial operators three at a time, compiles its first assemble in 6.6–6.7 s factored against 16.4–17.1 s unfactored (two interleaved runs each, 2 threads).</p>
-<p>Scalar lifting matters beyond routing: <code class="md-code-inline">_same_operator_shape</code> (<code class="md-code-inline">symmetry.jl</code>) recognises <code class="md-code-inline">⟨L(u), L(v)⟩</code>, the same operator chain on both sides, structurally, by comparing the concrete node types down both arguments. <code class="md-code-inline">innerₕ(2 * D₋ₓ(u), D₋ₓ(v))</code>&#39;s trial side used to be an <code class="md-code-inline">OperatorScale</code> and its test side a bare <code class="md-code-inline">BackwardDifference</code>. Those are different types, so the check answered <code class="md-code-inline">false</code> even though <code class="md-code-inline">2 * ⟨Lu, Lv⟩</code> is exactly the symmetric, positive-semidefinite shape it exists to recognise. Lifting the <code class="md-code-inline">2</code> out removes the mismatch.</p>
-<p>Component distribution exists because a term naming two different components inside one product has no other way to assemble: <code class="md-code-inline">test_component_or_nothing</code>/ <code class="md-code-inline">trial_component_or_nothing</code> (<code class="md-code-inline">block_extract.jl</code>) <em>throw</em> when the two sides of a sum they walk into name different components, since the router needs exactly one block (or none) per routed term and a mixed sum inside one product answers neither. Distributing it into two clean products, each naming one component, is the only routing-safe shape. So, unlike every other rule here, this one can turn a single sweep back into two. It is guarded accordingly: a same-component sum (<code class="md-code-inline">v(1) + D₋ₓ(v(1))</code>, or no component at all) is left as the single term it already is, and only fires when the two sides actually disagree.</p>
-<p>That guard, <code class="md-code-inline">_mixes_components(a, b)</code>, has to be checked again wherever an <code class="md-code-inline">OperatorAdd</code> could end up hidden inside an <code class="md-code-inline">OperatorScale</code>/<code class="md-code-inline">GridFunctionScale</code> wrapper, because hiding one there reintroduces exactly the unroutable shape: <code class="md-code-inline">2 * (A + B)</code> for <code class="md-code-inline">A</code>/<code class="md-code-inline">B</code> naming different components would throw at assembly the same way the un-lifted `innerₕ(fₕ, v(1)</p>
-<ul class="md-list-tight">
-<li><p>v(2))<code class="md-code-inline">above did. So rule 2&#39;s factoring step (</code>c * A + c * B -&gt; c * (A + B)`) refuses to</p>
-</li>
-</ul>
-<p>fire when <code class="md-code-inline">A</code>/<code class="md-code-inline">B</code> mix components, and <code class="md-code-inline">simplify_ast(::OperatorScale)</code>/ <code class="md-code-inline">simplify_ast(::GridFunctionScale)</code> distribute their own coefficient over an inner sum that mixes, rather than wrapping it, whenever <code class="md-code-inline">BilinearProduct</code>&#39;s/<code class="md-code-inline">LinearProduct</code>&#39;s own distribution produces one and something still wraps it from outside.</p>
-<h2 id="One-setup-walk-per-term" class="md-heading">One setup walk per term<a href="#One-setup-walk-per-term" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>A bilinear form is assembled one (term, block) unit at a time: every summand of a scalar form, every block a composite form&#39;s term routes to, and one unit for a transposed pair ⟨Au, Bv⟩ + ⟨Bu, Av⟩ (<code class="md-code-inline">_pair_plan</code>, <code class="md-code-inline">symmetry.jl</code>). <code class="md-code-inline">_foreach_unit</code> (<code class="md-code-inline">bilinear_execution.jl</code>) enumerates the units in the order the replay consumes segments. Before the first fill each unit is walked once by <code class="md-code-inline">_coord_walk!</code> (<code class="md-code-inline">bilinear_pattern.jl</code>), in two passes over one sink type (<code class="md-code-inline">_CoordSink</code>). A counting pass sizes the coordinate vectors and fills the unit&#39;s <code class="md-code-inline">point_ptr</code>, a filling pass writes every entry&#39;s <code class="md-code-inline">(row, col)</code>, and for a pair also the transposed entry <code class="md-code-inline">(col + dr, row + dc)</code> its second term writes. Those coordinates are the sparsity pattern (<code class="md-code-inline">sparse!</code>, keeping <code class="md-code-inline">I</code>/<code class="md-code-inline">J</code>), and, searched in the new matrix, the replay positions, one <code class="md-code-inline">Segment</code> per unit. For a <code class="md-code-inline">SparseMatrixCSC</code> under <code class="md-code-inline">CpuSerial</code>, <code class="md-code-inline">allocate_system_matrix</code> stores that recording in <code class="md-code-inline">form.cache</code>, so the first fill of <code class="md-code-inline">assemble</code> is already the replay. Any other <code class="md-code-inline">A</code> records the same way on its first <code class="md-code-inline">assemble!</code>.</p>
-<p>So a term&#39;s stencil is compiled for two walks, the coordinate walk and the replay, and no fused stencil of the whole sum is compiled anywhere (pattern, size hint and element-type probe included: the element type is promoted one summand at a time). The coordinate walk visits the interior box and the boundary slabs through one <code class="md-code-inline">@noinline</code> <code class="md-code-inline">_visit_guarded_region!</code>, every region the same <code class="md-code-inline">CartesianIndices</code> type, so the guarded stencil is one copy shared with the replay&#39;s boundary shell. Diagonal (stride) replay is compiled in 1D only (<code class="md-code-inline">_diagonal_replay</code>): from 2D up no difference term&#39;s interior has a constant per-tap stride, so every such segment came out flat.</p>
-<p>A pair whose two blocks sit on different leaf objects is two units, <code class="md-code-inline">half = 1</code> (the first term&#39;s entries, on its own leaf) and <code class="md-code-inline">half = 2</code> (the transposed entries, on the second term&#39;s leaf); the half a unit does not write is neither in the pattern nor searched. <code class="md-code-inline">test/form/coordinate_walk.jl</code> checks the coordinates against the assembled matrix for scalar, coefficient, restricted, composite, coupled, shift, pair and 1D forms.</p>
-<h2 id="Shared-sub-operators-across-terms" class="md-heading">Shared sub-operators across terms<a href="#Shared-sub-operators-across-terms" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>A composite form such as the symmetric gradient ⟨ε(u), ε(v)⟩ over a vector space repeats the same operand sub-operators across its summands (gpena/Bramble.jl#347). Could warm assembly evaluate each shared operand stencil once per point? <code class="md-code-inline">benchmark/shared_suboperators.jl</code> (three runs, 4 threads) bounds the saving: in 3D εc, 48–54% of warm evaluation (2.5–4.4 ms, 15 replay units) is duplicated; in a 2D scalar form, 28–35% of 0.62–0.76 ms (3 units). A prototype grouped consecutive term-outer units that share an operand type (at most 4 per group; 3D εc gave three groups of 3 units), checked once per fill that the operands are identical, the members write disjoint blocks and share a walked leaf, then evaluated each distinct operand stencil and quadrature weight once per point and fed every member&#39;s product. It covered serial composite replay from 2D up; its matrices were bitwise identical to the unshared evaluation and refills allocated 0 B. The rule, set before measuring, was to adopt it iff the εc warm ratio is ≤ 0.90, the scalar warm ratio ≤ 1.02 and both first-assemble ratios ≤ 1.05. Interleaved ratios (after/before, run alone):</p>
-<div class="md-table-wrap">
-<table class="md-table">
-<thead>
-<tr>
-<th style="text-align:left">form</th>
-<th style="text-align:left"><code class="md-code-inline">assemble</code> (first)</th>
-<th style="text-align:left"><code class="md-code-inline">assemble!</code> (warm)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left">εc, 3D</td>
-<td style="text-align:left">1.133 (7.07 s → 8.01 s)</td>
-<td style="text-align:left">0.907 (3.64 ms → 3.30 ms)</td>
-</tr>
-<tr>
-<td style="text-align:left">scalar, 2D</td>
-<td style="text-align:left">0.994</td>
-<td style="text-align:left">0.995</td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>The decision is not to adopt it. It fails on εc first assembly (13.3% slower) and narrowly on εc warm assembly (9.3% faster, short of 10%). Compile cost rose because term-outer units of equal type share one compiled kernel. Grouping gives each group its own sweep and member preparation, which breaks that sharing. The warm gain of about 9% is well below the ~50% duplicated share, so most of that share is not recovered by evaluating the operand stencils once. The replay stays term-outer, one unit at a time as described in <a href="../../internals/form/#One-setup-walk-per-term">One setup walk per term</a>, and the prototype was not merged.</p>
-<h2 id="The-matrix-type-seam-(S1.1)" class="md-heading">The matrix-type seam (S1.1)<a href="#The-matrix-type-seam-(S1.1)" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>Assembly used to name <code class="md-code-inline">SparseMatrixCSC</code> in every signature between <code class="md-code-inline">allocate_system_matrix</code> and the sinks that scatter into it, 20 methods across <code class="md-code-inline">bilinear_execution.jl</code> alone. The milestone that made a <code class="md-code-inline">Matrix{Float64}</code> backend assemble the same values as CSC (<a href="https://github.com/gpena/Bramble.jl/issues/12">gpena/Bramble.jl#12</a>) narrowed that down to four primitives, each with a <code class="md-code-inline">SparseMatrixCSC</code> method and a generic <code class="md-code-inline">AbstractMatrix</code> fallback. A new backend&#39;s matrix type implements exactly these to plug into the shared traversal (<code class="md-code-inline">visit_bilinear_stencil</code>, above) and into <code class="md-code-inline">allocate_system_matrix</code>:</p>
-<div class="md-table-wrap">
-<table class="md-table">
-<thead>
-<tr>
-<th style="text-align:left">Primitive</th>
-<th style="text-align:left">Where</th>
-<th style="text-align:left"><code class="md-code-inline">SparseMatrixCSC</code></th>
-<th style="text-align:left">Generic <code class="md-code-inline">AbstractMatrix</code> fallback</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">_scatter_position(A, row, col) -&gt; Int</code></td>
-<td style="text-align:left"><code class="md-code-inline">bilinear_traversal.jl</code></td>
-<td style="text-align:left">search <code class="md-code-inline">colptr</code>/<code class="md-code-inline">rowval</code>, <code class="md-code-inline">0</code> if absent</td>
-<td style="text-align:left"><code class="md-code-inline">LinearIndices(A)[row, col]</code>, never <code class="md-code-inline">0</code></td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">_scatter_add!(A, pos, val)</code></td>
-<td style="text-align:left"><code class="md-code-inline">bilinear_traversal.jl</code></td>
-<td style="text-align:left"><code class="md-code-inline">A.nzval[pos] += val</code></td>
-<td style="text-align:left"><code class="md-code-inline">A[pos] += val</code> (linear indexing)</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">_allocate_from_pattern(::Type{MT}, nrows, ncols, I, J, V) -&gt; MT</code></td>
-<td style="text-align:left"><code class="md-code-inline">bilinear_pattern.jl</code></td>
-<td style="text-align:left"><code class="md-code-inline">sparse!(I, J, V, nrows, ncols, +)</code></td>
-<td style="text-align:left"><code class="md-code-inline">Array{T}(undef, nrows, ncols)</code> filled with zeros, scattered from <code class="md-code-inline">(I, J, V)</code> with <code class="md-code-inline">+=</code></td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">_zero_stored!(A)</code></td>
-<td style="text-align:left"><code class="md-code-inline">bilinear.jl</code></td>
-<td style="text-align:left"><code class="md-code-inline">fill!(nonzeros(A), 0)</code></td>
-<td style="text-align:left"><code class="md-code-inline">fill!(A, 0)</code></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p><code class="md-code-inline">ReplaySink</code>, <code class="md-code-inline">DiagonalReplaySink</code> and <code class="md-code-inline">_PairReplaySink</code> (<code class="md-code-inline">bilinear_traversal.jl</code>) reduce to the first two: their <code class="md-code-inline">_sink_entry!</code> methods call <code class="md-code-inline">_scatter_position</code>/<code class="md-code-inline">_scatter_add!</code> instead of reading <code class="md-code-inline">nzval</code>/<code class="md-code-inline">rowval</code> directly, and the positions search that builds the replay cache (<code class="md-code-inline">_coordinates_to_positions!</code>) is <code class="md-code-inline">_scatter_position</code> again, so recording and replay go through the seam rather than around it. <code class="md-code-inline">add_to_sparse!</code> (the threaded path&#39;s per-point scatter) is the same two calls. <code class="md-code-inline">allocate_system_matrix</code> (<code class="md-code-inline">bilinear_pattern.jl</code>) reads <code class="md-code-inline">matrix_type(backend(test_space(form)))</code> and hands the coordinates the setup walk collected (below) to <code class="md-code-inline">_allocate_from_pattern</code>, duplicates included, which every method combines; <code class="md-code-inline">assemble</code>/<code class="md-code-inline">assemble!</code> (<code class="md-code-inline">bilinear.jl</code>) then just operate on whatever concrete <code class="md-code-inline">A</code> that returned, dispatching through the same four primitives via ordinary Julia method dispatch, not by inspecting the type themselves.</p>
-<p><code class="md-code-inline">dirichlet_constraints.jl</code> needed none of this: <code class="md-code-inline">dirichlet_bc!</code>, <code class="md-code-inline">_dirichlet_bc_rows!</code>, <code class="md-code-inline">_dirichlet_bc_indices!</code> and <code class="md-code-inline">symmetrize!</code> already carried a <code class="md-code-inline">SparseMatrixCSC</code> fast path beside a dense <code class="md-code-inline">AbstractMatrix</code> fallback before this milestone, and both agree with each other today (&quot;Dense &amp; sparse agreement&quot;, <code class="md-code-inline">test/form/symmetrize.jl</code>).</p>
-<p>The band-coloured threaded sweep (<code class="md-code-inline">_scatter_point!</code>, <code class="md-code-inline">_sweep_bilinear!</code>, <code class="md-code-inline">_assemble_blocks_parallel!</code>, all in <code class="md-code-inline">bilinear_execution.jl</code>) stays <code class="md-code-inline">SparseMatrixCSC</code>-only: it already calls the now-generic <code class="md-code-inline">add_to_sparse!</code>, so nothing about it is unsafe for another matrix type, but nobody has measured whether threading it buys anything over the serial record/replay pass for a dense or future banded/tridiagonal layout. <code class="md-code-inline">assemble_parallel!</code> on any other matrix type falls back to the ordinary serial assembly instead (<code class="md-code-inline">_assemble_bilinear_parallel_core!(A::AbstractMatrix, ...)</code>), documented in a comment there rather than silently. Threading a non-CSC backend is future work.</p>
-<p><code class="md-code-inline">test/form/bilinear.jl</code>&#39;s &quot;Dense backend&quot; testset is the regression check: a <code class="md-code-inline">backend(matrix_type = Matrix{Float64})</code> mesh assembles to a <code class="md-code-inline">Matrix{Float64}</code> equal to the default CSC assembly, with and without <code class="md-code-inline">dirichlet</code>/<code class="md-code-inline">symmetrize!</code>, and <code class="md-code-inline">assemble!</code> refills it, while the CSC path&#39;s own <code class="md-code-inline">assemble!</code> keeps allocating zero bytes.</p>
 <h2 id="The-extension-contract" class="md-heading">The extension contract<a href="#The-extension-contract" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>The eight names below are private since gpena/Bramble.jl#339, but an extension still has to reach them by their qualified <code class="md-code-inline">Bramble.</code> names to implement a storage type or a threading policy. That makes them a contract rather than an internal, so they get a section of their own: the block after this one filters them out.</p>
 <div class="md-docstring" id="Bramble._batch_linear_band_sweep!-NTuple{11, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_linear_band_sweep!</code> — <span class="md-docstring-sig">NTuple{11, Any}</span></h4>
@@ -496,7 +128,7 @@
 <pre><code class="language-julia">_zero_stored!(A::AbstractMatrix) -&gt; AbstractMatrix</code></pre>
 </div>
 <p>Zero every value a refill will touch, before <code class="md-code-inline">_assemble_bilinear_core_cached!</code>/ <code class="md-code-inline">_assemble_bilinear_parallel_core!</code> add each term&#39;s contribution back in.</p>
-<p>Part of the matrix-type seam (S1.1, gpena/Bramble.jl#12): <code class="md-code-inline">SparseMatrixCSC</code> only has to zero its stored <code class="md-code-inline">nzval</code> entries (the sparsity pattern itself never changes between refills), while a dense <code class="md-code-inline">Matrix</code> – the seam&#39;s positive control – has no such distinction and zeros the whole backing array. A future backend (tridiagonal, banded, ...) implements whichever of the two shapes its own storage has.</p>
+<p>Part of the matrix-type seam (gpena/Bramble.jl#12): <code class="md-code-inline">SparseMatrixCSC</code> only has to zero its stored <code class="md-code-inline">nzval</code> entries (the sparsity pattern itself never changes between refills), while a dense <code class="md-code-inline">Matrix</code> – the seam&#39;s positive control – has no such distinction and zeros the whole backing array. A future backend (tridiagonal, banded, ...) implements whichever of the two shapes its own storage has.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._scatter_add!-Tuple{SparseArrays.SparseMatrixCSC, Int64, Any}">
@@ -524,7 +156,7 @@
 <pre><code class="language-julia">_scatter_position(A::AbstractMatrix, row::Int, col::Int) -&gt; Int</code></pre>
 </div>
 <p>Where entry <code class="md-code-inline">(row, col)</code> lives in <code class="md-code-inline">A</code>&#39;s own storage, or <code class="md-code-inline">0</code> for a matrix type that can answer &quot;not stored&quot; (only <code class="md-code-inline">SparseMatrixCSC</code> does; every dense fallback below always answers a valid position).</p>
-<p>The seam a new backend&#39;s matrix type implements to plug into assembly (S1.1, gpena/Bramble.jl#12): <code class="md-code-inline">ReplaySink</code>, <code class="md-code-inline">DiagonalReplaySink</code>, the positions search of the coordinate walk (<code class="md-code-inline">_coordinates_to_positions!</code>) and <a href="../../internals/form/#Bramble.add_to_sparse!-Tuple{AbstractMatrix, Int64, Int64, Number, Any}"><code class="md-code-inline">add_to_sparse!</code></a> reduce to this and <a href="../../internals/form/#Bramble._scatter_add!-Tuple{SparseArrays.SparseMatrixCSC, Int64, Any}"><code class="md-code-inline">_scatter_add!</code></a> once the raw <code class="md-code-inline">nzval</code>/ linear-index field access each used to do directly is factored out here.</p>
+<p>The seam a new backend&#39;s matrix type implements to plug into assembly (gpena/Bramble.jl#12): <code class="md-code-inline">ReplaySink</code>, <code class="md-code-inline">DiagonalReplaySink</code>, the positions search of the coordinate walk (<code class="md-code-inline">_coordinates_to_positions!</code>) and <a href="../../internals/form/#Bramble.add_to_sparse!-Tuple{AbstractMatrix, Int64, Int64, Number, Any}"><code class="md-code-inline">add_to_sparse!</code></a> reduce to this and <a href="../../internals/form/#Bramble._scatter_add!-Tuple{SparseArrays.SparseMatrixCSC, Int64, Any}"><code class="md-code-inline">_scatter_add!</code></a> once the raw <code class="md-code-inline">nzval</code>/ linear-index field access each used to do directly is factored out here.</p>
 <p>The <code class="md-code-inline">SparseMatrixCSC</code> method is exactly the position search this file always ran: a linear scan of the column when it holds few entries, a binary search otherwise – both rely on <code class="md-code-inline">SparseMatrixCSC</code>&#39;s own invariant that <code class="md-code-inline">rowval</code> is sorted within each column. The generic <code class="md-code-inline">AbstractMatrix</code> fallback needs no search at all: every <code class="md-code-inline">(row, col)</code> inside the matrix&#39;s bounds is &quot;stored&quot; for a dense backend, at <code class="md-code-inline">LinearIndices(A)[row, col]</code>.</p>
 </div>
 </div>
@@ -539,7 +171,7 @@
 <pre><code class="language-julia">_allocate_from_pattern(::Type{MT}, nrows::Int, ncols::Int, I::Vector{Int}, J::Vector{Int}, V::AbstractVector) -&gt; MT</code></pre>
 </div>
 <p>Build the <code class="md-code-inline">nrows × ncols</code> matrix a form&#39;s sparsity pattern describes, from the coordinate triplet <code class="md-code-inline">(I, J, V)</code> the coordinate walk (<code class="md-code-inline">_form_coordinates</code>) collected – summing <code class="md-code-inline">V[k]</code> into any <code class="md-code-inline">(row, col)</code> that <code class="md-code-inline">I</code>/<code class="md-code-inline">J</code> name more than once, matching <code class="md-code-inline">sparse!</code>&#39;s own combiner.</p>
-<p>The one place a fresh system matrix is born (S1.1, gpena/Bramble.jl#12): every backend&#39;s matrix type implements exactly this to be usable with <a href="../../api/forms/#Bramble.allocate_system_matrix"><code class="md-code-inline">allocate_system_matrix</code></a>. <code class="md-code-inline">SparseMatrixCSC</code>&#39;s method is <code class="md-code-inline">sparse!</code> itself, consuming <code class="md-code-inline">I</code>/<code class="md-code-inline">J</code> in place. The generic <code class="md-code-inline">AbstractMatrix</code> fallback – the dense <code class="md-code-inline">Matrix{Float64}</code> positive control among them – allocates zeros and scatters into it, since a dense matrix has no sparsity pattern to build.</p>
+<p>The one place a fresh system matrix is born (gpena/Bramble.jl#12): every backend&#39;s matrix type implements exactly this to be usable with <a href="../../api/forms/#Bramble.allocate_system_matrix"><code class="md-code-inline">allocate_system_matrix</code></a>. <code class="md-code-inline">SparseMatrixCSC</code>&#39;s method is <code class="md-code-inline">sparse!</code> itself, consuming <code class="md-code-inline">I</code>/<code class="md-code-inline">J</code> in place. The generic <code class="md-code-inline">AbstractMatrix</code> fallback – the dense <code class="md-code-inline">Matrix{Float64}</code> positive control among them – allocates zeros and scatters into it, since a dense matrix has no sparsity pattern to build.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._batch_bilinear_band_sweep!-NTuple{12, Any}">
@@ -1815,7 +1447,7 @@ true</code></pre>
 <pre><code class="language-julia">_DeviceSparseMirror{Tv, Ti}(rowptr::Vector{Ti}, colval::Vector{Ti}, nzval::Vector{Tv})</code></pre>
 </div>
 <p>The host staging area behind a device sparse matrix&#39;s own <code class="md-code-inline">mirror</code> field.</p>
-<p><code class="md-code-inline">rowptr</code>/<code class="md-code-inline">colval</code> are host copies of the matrix&#39;s CSR structure, carried in the matrix&#39;s own index type <code class="md-code-inline">Ti</code> rather than widened to <code class="md-code-inline">Int</code>: on a device where the index and value arrays share physical memory with the host (Apple Silicon&#39;s unified DRAM), a mirror hardcoded to <code class="md-code-inline">Int</code> costs more host memory than the device arrays it mirrors the moment <code class="md-code-inline">Ti</code> is narrower than <code class="md-code-inline">Int</code> (<code class="md-code-inline">Int32</code>, say – half the footprint per index). <code class="md-code-inline">nzval</code> is what every scatter into that matrix actually accumulates into – the device array itself is left untouched until <a href="../../internals/form/#Bramble._flush_device_scatter!-Tuple{AbstractMatrix}"><code class="md-code-inline">_flush_device_scatter!</code></a> copies <code class="md-code-inline">nzval</code> across in one bulk <code class="md-code-inline">copyto!</code>. Any device sparse matrix type that wants to plug into assembly carries exactly this shape in a field named <code class="md-code-inline">mirror</code>: <a href="../../internals/form/#Bramble._scatter_position-Tuple{SparseArrays.SparseMatrixCSC, Int64, Int64}"><code class="md-code-inline">_scatter_position</code></a>/<a href="../../internals/form/#Bramble._scatter_add!-Tuple{SparseArrays.SparseMatrixCSC, Int64, Any}"><code class="md-code-inline">_scatter_add!</code></a> below duck-type it off <code class="md-code-inline">A.mirror</code> directly, so no file under <code class="md-code-inline">src/</code> needs to name the concrete matrix type (<code class="md-code-inline">BrambleMetalExt.MetalSparseMatrixCSR</code> today). See <code class="md-code-inline">docs/src/internals/gpu.md</code>.</p>
+<p><code class="md-code-inline">rowptr</code>/<code class="md-code-inline">colval</code> are host copies of the matrix&#39;s CSR structure, carried in the matrix&#39;s own index type <code class="md-code-inline">Ti</code> rather than widened to <code class="md-code-inline">Int</code>: on a device where the index and value arrays share physical memory with the host (Apple Silicon&#39;s unified DRAM), a mirror hardcoded to <code class="md-code-inline">Int</code> costs more host memory than the device arrays it mirrors the moment <code class="md-code-inline">Ti</code> is narrower than <code class="md-code-inline">Int</code> (<code class="md-code-inline">Int32</code>, say – half the footprint per index). <code class="md-code-inline">nzval</code> is what every scatter into that matrix actually accumulates into – the device array itself is left untouched until <a href="../../internals/form/#Bramble._flush_device_scatter!-Tuple{AbstractMatrix}"><code class="md-code-inline">_flush_device_scatter!</code></a> copies <code class="md-code-inline">nzval</code> across in one bulk <code class="md-code-inline">copyto!</code>. Any device sparse matrix type that wants to plug into assembly carries exactly this shape in a field named <code class="md-code-inline">mirror</code>: <a href="../../internals/form/#Bramble._scatter_position-Tuple{SparseArrays.SparseMatrixCSC, Int64, Int64}"><code class="md-code-inline">_scatter_position</code></a>/<a href="../../internals/form/#Bramble._scatter_add!-Tuple{SparseArrays.SparseMatrixCSC, Int64, Any}"><code class="md-code-inline">_scatter_add!</code></a> below duck-type it off <code class="md-code-inline">A.mirror</code> directly, so no file under <code class="md-code-inline">src/</code> needs to name the concrete matrix type (<code class="md-code-inline">BrambleMetalExt.MetalSparseMatrixCSR</code> today). See <code class="md-code-inline">docs/notes/internals/gpu.md</code>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._PairReplaySink">
@@ -1865,8 +1497,8 @@ true</code></pre>
 </div>
 <p>Copy <code class="md-code-inline">A</code>&#39;s own host-staged mirror (<code class="md-code-inline">A.mirror.nzval</code>) back to its device storage in one bulk <code class="md-code-inline">copyto!</code>, and block until that copy has actually landed.</p>
 <p>A no-op for a host matrix. <code class="md-code-inline">bilinear_execution.jl</code> calls this exactly once, after its band-coloured sweep returns.</p>
-<p>One <code class="md-code-inline">copyto!</code> of the whole array per assembly, not one per entry (S4.2&#39;s first round scattered each entry straight to <code class="md-code-inline">A.nzVal</code> piecemeal; correct, but hundreds of thousands of 4-byte device transfers on a real matrix).</p>
-<p>The <code class="md-code-inline">copyto!</code> alone was not enough either (S4.2, round 4): a device write queues asynchronously exactly like a <code class="md-code-inline">@kernel</code> launch does, and every kernel launch in this milestone is followed by a <code class="md-code-inline">synchronize</code> – this one was not, so <code class="md-code-inline">assemble</code>/<code class="md-code-inline">assemble!</code> could return before the copy had actually landed, and a caller reading <code class="md-code-inline">A</code> right after got whatever was there so far. <a href="../../internals/gpu/#Bramble.ka_synchronize-Tuple{Any}"><code class="md-code-inline">ka_synchronize</code></a> is the fix, following that same kernel-launch idiom for a caller that has a device array but no kernel of its own.</p>
+<p>One <code class="md-code-inline">copyto!</code> of the whole array per assembly, not one per entry (the first version scattered each entry straight to <code class="md-code-inline">A.nzVal</code> piecemeal; correct, but hundreds of thousands of 4-byte device transfers on a real matrix).</p>
+<p>The <code class="md-code-inline">copyto!</code> alone was not enough either: a device write queues asynchronously exactly like a <code class="md-code-inline">@kernel</code> launch does, and every kernel launch in this milestone is followed by a <code class="md-code-inline">synchronize</code> – this one was not, so <code class="md-code-inline">assemble</code>/<code class="md-code-inline">assemble!</code> could return before the copy had actually landed, and a caller reading <code class="md-code-inline">A</code> right after got whatever was there so far. <a href="../../internals/utils/#Bramble.ka_synchronize"><code class="md-code-inline">ka_synchronize</code></a> is the fix, following that same kernel-launch idiom for a caller that has a device array but no kernel of its own.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._sink_dedups-Tuple{Any}">
@@ -2164,7 +1796,6 @@ visit_bilinear_stencil(interior_sink, boundary_sink, term, sp, row_offset::Int, 
 </div>
 </div>
 <h3 id="Point-sources,-bandwidth-analysis-and-structural-properties" class="md-heading">Point sources, bandwidth analysis and structural properties<a href="#Point-sources,-bandwidth-analysis-and-structural-properties" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p><code class="md-code-inline">DiracSource</code> is filtered out of the block above since its docstring&#39;s <code class="md-code-inline">@ref</code>s point here rather than the autodocs entry. <code class="md-code-inline">issymmetric(::BilinearForm)</code>/<code class="md-code-inline">isposdef(::BilinearForm)</code> extend <code class="md-code-inline">LinearAlgebra</code>&#39;s generic functions; the block above filters them out so they are listed here, beside the other structural properties. <code class="md-code-inline">bandwidths</code>/<code class="md-code-inline">blockbandwidths</code> are already picked up by the block above once its <code class="md-code-inline">Pages</code> point at the real <code class="md-code-inline">ast/stencil_pattern.jl</code> file.</p>
 <div class="md-docstring" id="Bramble.DiracSource">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DiracSource</code></h4>
@@ -2243,14 +1874,6 @@ issymmetric(Matrix(assemble(a; dirichlet = :boundary)))   # false: rows zeroed, 
     <aside class="md-toc">
       <div class="md-toc-inner">
         <p class="md-toc-title">On this page</p>
-          <a class="md-toc-link md-toc-h2" href="#Lock-free-parallel-assembly">Lock-free parallel assembly</a>
-            <a class="md-toc-link md-toc-h3" href="#Matrix-assembly-colours-on-the-test-side-alone">Matrix assembly colours on the test side alone</a>
-            <a class="md-toc-link md-toc-h3" href="#Threaded-refill-replays-the-recording">Threaded refill replays the recording</a>
-          <a class="md-toc-link md-toc-h2" href="#Algebraic-simplification-of-the-sum-and-product-layer">Algebraic simplification of the sum and product layer</a>
-            <a class="md-toc-link md-toc-h3" href="#Reaching-one-layer-deeper:-inner-products-and-shifts">Reaching one layer deeper: inner products and shifts</a>
-          <a class="md-toc-link md-toc-h2" href="#One-setup-walk-per-term">One setup walk per term</a>
-          <a class="md-toc-link md-toc-h2" href="#Shared-sub-operators-across-terms">Shared sub-operators across terms</a>
-          <a class="md-toc-link md-toc-h2" href="#The-matrix-type-seam-(S1.1)">The matrix-type seam (S1.1)</a>
           <a class="md-toc-link md-toc-h2" href="#The-extension-contract">The extension contract</a>
             <a class="md-toc-link md-toc-h3" href="#Point-sources,-bandwidth-analysis-and-structural-properties">Point sources, bandwidth analysis and structural properties</a>
       </div>
@@ -2270,6 +1893,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=2805a26e"></script>
+  <script src="../../assets/materialdocs.js?v=b6db2d90"></script>
 </body>
 </html>

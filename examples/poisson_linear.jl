@@ -143,9 +143,6 @@ convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), 
 #
 # ## Where to go next
 #
-#   - [Nonlinear Poisson](poisson_nonlinear.md) for the same problem with a coefficient that
-#     depends on the solution, solved by Picard and by Newton.
 #   - [Convection-diffusion](convection_diffusion_linear.md) for a non-symmetric operator on
 #     the same grids.
-#   - The [forms tutorial](@ref tutorial_form) for the pieces this page assembles, and
-#     [Choosing a solver](@ref tutorial_solvers) for other ways to solve `A \ F`.
+#   - The [forms tutorial](@ref tutorial_form) for the pieces this page assembles.

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Heat equation — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=fd74ee43">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=17721c40">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Heat equation — Bramble.jl">
   <meta property="og:title" content="Heat equation — Bramble.jl">
@@ -47,59 +47,18 @@
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
-        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and scientific computing</span>
-        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
-        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
-        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
-        <a href="../../tutorials/backend/">Backends and execution policies</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Visualization and export</span>
-        <a href="../../tutorials/plotting/">Plotting directly</a>
-        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
-        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
-      </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Examples</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Stationary problems</span>
-          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
-          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
-          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
-          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
-          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
-          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
-        </div>
-        <div class="md-nav-section">
-          <span class="md-nav-section-title">Time-dependent problems</span>
-          <a href="../../examples/heat_equation/" class="md-nav-active">Heat equation</a>
-          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
-          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Inverse problems</span>
-          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
-          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Solvers and performance</span>
-          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
-          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
-          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
-        </div>
+        <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/heat_equation/" class="md-nav-active">Heat equation</a>
       </div>
-      <a href="../../benchmarks/">Benchmarks</a>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
@@ -122,9 +81,7 @@
           <a href="../../internals/mesh/">Mesh</a>
           <a href="../../internals/space/">Spaces</a>
           <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/autodiff/">Automatic differentiation</a>
           <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/gpu/">GPU acceleration</a>
           <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
         </div>
       </div>
@@ -210,7 +167,7 @@ uₕ = element(Wₕ)
 parent(uₕ) .= sol.u[end]
 normₕ(Rₕ(Wₕ, x -&gt; uexact(x, 1.0)) - uₕ)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">2.3805047580463986e-5</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2.380504758046399e-5</code></pre>
 </div>
 <p>A surface plot of the whole time evolution, <code class="md-code-inline">x</code> and <code class="md-code-inline">t</code> the two horizontal axes, <code class="md-code-inline">u</code> as height and colour, needs no new solve: <code class="md-code-inline">sol</code> already interpolates continuously in <code class="md-code-inline">t</code>, so sampling it at a uniform grid of times is enough to lay one out. The white curve traces <code class="md-code-inline">u(x, t)</code> at the current instant and loops on its own:</p>
 <div class="md-multi-output">
@@ -393,7 +350,7 @@ spacetime_surface_plot(points(Ωₕ), collect(ts), Z; title = &quot;Heat equatio
 
 </div>
 </div>
-<p><code class="md-code-inline">sol</code> is also a ParaView time series waiting to happen: one <code class="md-code-inline">.pvd</code> collection, one <code class="md-code-inline">.vtr</code> per step, with a working time slider once opened. <code class="md-code-inline">Wₕ</code> (not just the mesh) is what turns each raw solution vector back into a properly shaped field. See the <a href="../../tutorials/vtk_export/#5.-Time-series-for-ParaView">VTK export tutorial</a> for the hand-written-loop form this is shorthand for.</p>
+<p><code class="md-code-inline">sol</code> is also a ParaView time series waiting to happen: one <code class="md-code-inline">.pvd</code> collection, one <code class="md-code-inline">.vtr</code> per step, with a working time slider once opened. <code class="md-code-inline">Wₕ</code> (not just the mesh) is what turns each raw solution vector back into a properly shaped field.</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -431,7 +388,7 @@ uₕ_r = element(Wₕ)
 parent(uₕ_r) .= sol_rosenbrock.u[end]
 normₕ(Rₕ(Wₕ, x -&gt; uexact(x, 1.0)) - uₕ_r)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">2.3805036993673634e-5</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2.3805036993673637e-5</code></pre>
 </div>
 <p>No <code class="md-code-inline">AutoFiniteDiff()</code> and no BDF fallback: the default forward-mode <code class="md-code-inline">autodiff</code> differentiates the Jacobian through <code class="md-code-inline">u</code> only, and <code class="md-code-inline">tgrad</code> supplies the <code class="md-code-inline">t</code>-derivative directly.</p>
 <h2 id="A-time-dependent-operator" class="md-heading">A time-dependent operator<a href="#A-time-dependent-operator" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -457,7 +414,7 @@ sol_t_rosenbrock = solve(prob_t, Rodas5P(); reltol = 1e-11, abstol = 1e-13)
 sol_t_fbdf = solve(prob_t, FBDF(); reltol = 1e-11, abstol = 1e-13)
 maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end]))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">1.852989983675002e-12</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4.1046610554928975e-12</code></pre>
 </div>
 <p>The same <code class="md-code-inline">ODEProblem</code>, one stepper differentiating through <code class="md-code-inline">t</code> by default and the other needing no <code class="md-code-inline">∂f/∂t</code> at all, land on the same answer – neither <code class="md-code-inline">AutoFiniteDiff()</code> nor a hand-written <code class="md-code-inline">tgrad</code> was needed for the operator itself.</p>
 <h2 id="Hand-rolled-backward-Euler" class="md-heading">Hand-rolled backward Euler<a href="#Hand-rolled-backward-Euler" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -515,7 +472,7 @@ end
 
 maximum(abs.(u_be .- sol_t_fbdf.u[end]))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0005879630938767921</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0005879630916251211</code></pre>
 </div>
 <p><code class="md-code-inline">assemble_add!</code>&#39;s row is <code class="md-code-inline">nonzeros(A_be)</code>, not <code class="md-code-inline">A_be</code> itself: refilling every entry the pattern holds costs the stored nonzeros, where <code class="md-code-inline">fill!(A_be, 0)</code> would walk the whole dense <code class="md-code-inline">m × n</code> index space <code class="md-code-inline">SparseMatrixCSC</code>&#39;s generic <code class="md-code-inline">AbstractArray</code> fallback covers. <code class="md-code-inline">dirichlet_bc!</code> runs <em>after</em> both accumulations, never between them – accumulating a second piece into an already-constrained row would add its own contribution on top of the identity <code class="md-code-inline">dirichlet_bc!</code> wrote there.</p>
 <p>Backward Euler at <span class="md-math md-math-inline">\(\Delta t = 1/200\)</span> against the adaptive, high-accuracy <code class="md-code-inline">FBDF</code> solve above: first order in time, so the two are close but not equal – the discrepancy this checks is bounded well above round-off and well below a scheme that regressed to a wrong answer entirely.</p>
@@ -554,9 +511,9 @@ orders = [log(errs[i] / errs[i + 1]) / log(hs[i] / hs[i + 1]) for i in 1:(length
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">4-element Vector{Float64}:
  2.006346455253545
- 2.0015836287997586
- 2.0003956970539947
- 2.000098852704134</code></pre>
+ 2.001583630249058
+ 2.00039571445426
+ 2.0000988732060128</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -600,13 +557,9 @@ sol = solve(prob, KrylovJL_GMRES())</code></pre>
 <ul class="md-list-tight">
 <li><p><a href="../../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>, <a href="../../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">ode_problem</code></a>, <a href="../../api_sciml/#Bramble.ode_function"><code class="md-code-inline">ode_function</code></a>, <a href="../../api/forms/#Bramble.assemble_add!"><code class="md-code-inline">assemble_add!</code></a> in the <a href="../../api/">API reference</a>.</p>
 </li>
-<li><p><a href="../../tutorials/time_stepping/#tutorial_time_stepping">Solving at every time step</a> for the linear-solve strategies a hand-written loop like the one above can choose between.</p>
-</li>
 <li><p><a href="../../tutorials/form/#tutorial_form">Linear and bilinear forms</a> for the forms and the <a href="../../tutorials/form/#form_dirichlet">Dirichlet conditions</a> used throughout.</p>
 </li>
 <li><p><a href="../../examples/poisson_linear/">Linear Poisson</a> for the steady version of the same spatial operator.</p>
-</li>
-<li><p><a href="../../examples/coupled_reaction_diffusion/">Coupled reaction-diffusion</a> for systems on a composite space, which <code class="md-code-inline">semidiscretize</code> accepts unchanged.</p>
 </li>
 </ul>
       </article>
@@ -645,6 +598,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=fd74ee43"></script>
+  <script src="../../assets/materialdocs.js?v=17721c40"></script>
 </body>
 </html>

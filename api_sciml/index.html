@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scientific computing: SciML, AD and solvers — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=973bd131">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=cef8f80b">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
   <meta property="og:title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
@@ -47,8 +47,6 @@
         <a href="../tutorials/mesh/">Mesh tutorial</a>
         <a href="../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../tutorials/operators/">Difference, jump and average operators</a>
-        <a href="../tutorials/operator_accuracy/">How accurate are the difference operators</a>
-        <a href="../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
@@ -56,50 +54,11 @@
         <a href="../tutorials/coupled_systems/">Coupled systems</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and scientific computing</span>
-        <a href="../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
-        <a href="../tutorials/solvers_by_problem/">Solvers by problem</a>
-        <a href="../tutorials/time_stepping/">Solving at every time step</a>
-        <a href="../tutorials/autodiff/">Automatic differentiation</a>
-        <a href="../tutorials/backend/">Backends and execution policies</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Visualization and export</span>
-        <a href="../tutorials/plotting/">Plotting directly</a>
-        <a href="../tutorials/vtk_export/">Writing VTK files</a>
-        <a href="../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Stationary problems</span>
-          <a href="../examples/poisson_linear/">Linear Poisson equation</a>
-          <a href="../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-          <a href="../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
-          <a href="../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
-          <a href="../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
-          <a href="../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
-          <a href="../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Time-dependent problems</span>
-          <a href="../examples/heat_equation/">Heat equation</a>
-          <a href="../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
-          <a href="../examples/transient_inplace/">A transient loop that allocates nothing</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Inverse problems</span>
-          <a href="../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
-          <a href="../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Solvers and performance</span>
-          <a href="../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
-          <a href="../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
-          <a href="../examples/matrix_free_operator/">The matrix-free operator</a>
-        </div>
+        <a href="../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../examples/heat_equation/">Heat equation</a>
       </div>
-      <a href="../benchmarks/">Benchmarks</a>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
@@ -122,9 +81,7 @@
           <a href="../internals/mesh/">Mesh</a>
           <a href="../internals/space/">Spaces</a>
           <a href="../internals/form/">Forms</a>
-          <a href="../internals/autodiff/">Automatic differentiation</a>
           <a href="../internals/exporters/">Exporters</a>
-          <a href="../internals/gpu/">GPU acceleration</a>
           <a href="../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
         </div>
       </div>
@@ -518,7 +475,6 @@ sol = solve(prob, NewtonRaphson())</code></pre>
 </div>
 </div>
 <h2 id="Adjoint-sensitivities-for-a-transient-solve" class="md-heading">Adjoint sensitivities for a transient solve<a href="#Adjoint-sensitivities-for-a-transient-solve" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><a href="../api_sciml/#Bramble.adjoint_sensitivities"><code class="md-code-inline">Bramble.adjoint_sensitivities</code></a> is the transient counterpart of <a href="../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a>&#39;s steady-state adjoint rule (see <a href="../api/">the API reference</a>): the gradient of a scalar functional of a <a href="../api_sciml/#Bramble.Semidiscretization"><code class="md-code-inline">Semidiscretization</code></a>&#39;s solved trajectory with respect to its initial condition and its <code class="md-code-inline">p</code>, from one backward solve regardless of how many parameters or how many saved steps. It wraps <code class="md-code-inline">SciMLSensitivity.adjoint_sensitivities</code> and requires <a href="https://github.com/SciML/SciMLSensitivity.jl">SciMLSensitivity.jl</a> – see <a href="../examples/transient_inverse_problem/">the worked example</a>.</p>
 <div class="md-docstring" id="Bramble.adjoint_sensitivities">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.adjoint_sensitivities</code></h4>
@@ -727,12 +683,10 @@ sol = solve(prob, Rodas5P(); reltol = 1e-11, abstol = 1e-13)</code></pre>
 </div>
 </div>
 <h2 id="Differentiable-linear-solve-(adjoint-gradients)" class="md-heading">Differentiable linear solve (adjoint gradients)<a href="#Differentiable-linear-solve-(adjoint-gradients)" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">pde_solve(A, F)</code> is <code class="md-code-inline">A \ F</code> under a name <code class="md-code-inline">ChainRulesCore.rrule</code> can attach an adjoint rule to – no source-level AD tool, forward or reverse, can differentiate through <code class="md-code-inline">\</code> itself, since it dispatches into compiled BLAS/SuiteSparse code. <code class="md-code-inline">assemble</code>/<code class="md-code-inline">dirichlet_bc!</code> are already reverse-mode-differentiable on their own (see the <a href="../tutorials/autodiff/">automatic differentiation tutorial</a>), so wrapping only this one function is enough to differentiate an entire <code class="md-code-inline">θ -&gt; assemble(a(θ), l(θ); dirichlet = θ) -&gt; pde_solve -&gt; J(u)</code> chain end to end, including a gradient with respect to a Dirichlet boundary value – the adjoint solves <code class="md-code-inline">Aᵀ λ = ∂J/∂u</code> once, reusing the forward solve&#39;s own LU factorisation, and returns <code class="md-code-inline">∂J/∂A = -λ uᵀ</code> restricted to <code class="md-code-inline">A</code>&#39;s sparsity (never densified) and <code class="md-code-inline">∂J/∂F = λ</code>.</p>
-<p>Requires <a href="https://github.com/JuliaDiff/ChainRulesCore.jl">ChainRulesCore.jl</a>, and serves every <code class="md-code-inline">ChainRulesCore</code> consumer. <code class="md-code-inline">Enzyme</code> instead reaches the same adjoint through <code class="md-code-inline">BrambleEnzymeExt</code>&#39;s own native <code class="md-code-inline">EnzymeRules</code> rule, which <code class="md-code-inline">using Enzyme</code> is enough to load – do not call <code class="md-code-inline">Enzyme.@import_rrule</code>, whose bridge returns a wrong gradient here (see <a href="../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a>&#39;s own docstring). <code class="md-code-inline">Mooncake</code> is not currently supported (a gap in <code class="md-code-inline">Mooncake.jl</code>&#39;s own sparse-array tangent support, also documented there). See the <a href="../examples/inverse_diffusion/">inverse problem worked example</a>.</p>
 <div class="md-docstring" id="Bramble.pde_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.pde_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/pde_solve.jl#L41-L112" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/pde_solve.jl#L41-L111" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -744,7 +698,7 @@ pde_solve(fact::MUMPSFactorization, F::AbstractVector) -&gt; Vector</code></pre>
 <p>With no keyword arguments this is <code class="md-code-inline">A \ F</code>, unless <code class="md-code-inline">AppleAccelerate.jl</code> is loaded on macOS <em>and</em> the system is symmetric (see <code class="md-code-inline">:default</code> below), in which case it is <code class="md-code-inline">accelerate_solve(A, F; sym)</code>. The name exists so that reverse-mode AD tools have one function to attach an adjoint rule to, which is what makes a whole <code class="md-code-inline">θ -&gt; assemble -&gt; pde_solve -&gt; J(u)</code> chain differentiable.</p>
 <p><strong>Keywords</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">solver</code>: <code class="md-code-inline">:default</code> – <code class="md-code-inline">A \ F</code> on Linux, Windows, macOS without <code class="md-code-inline">AppleAccelerate.jl</code> loaded, and macOS on an unsymmetric <code class="md-code-inline">A</code>; on macOS with <code class="md-code-inline">using AppleAccelerate</code> in effect and <code class="md-code-inline">A</code> symmetric, dispatches to <code class="md-code-inline">accelerate_solve</code> instead (same as passing <code class="md-code-inline">solver = :accelerate</code> explicitly). Symmetry is <code class="md-code-inline">issymmetric(A)</code> under <code class="md-code-inline">sym = :auto</code> (the default), or trusted outright from an explicit <code class="md-code-inline">sym = :spd</code>/<code class="md-code-inline">:definite</code>/<code class="md-code-inline">:symmetric</code> (and conversely <code class="md-code-inline">:unsymmetric</code> skips straight to <code class="md-code-inline">A \ F</code>) – the caller has already asserted the property, so it is not checked again. The narrowing exists because Accelerate is only a win on the symmetric factorisations it reaches (SPD/Cholesky, LDLᵀ): measured on this host against forms assembled on real 2D grid spaces, <code class="md-code-inline">:default</code> was a 1.2-1.3x win on a symmetric Poisson-plus-mass system and a 2.3-3.6x <strong>loss</strong> on an unsymmetric convection-diffusion one (gpena/Bramble.jl#246). This only ever narrows which solver runs on macOS; Linux and Windows are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws from <code class="md-code-inline">accelerate_solve</code> exactly as <code class="md-code-inline">solver = :accelerate</code> would – <code class="md-code-inline">:default</code> never silently falls back to <code class="md-code-inline">\</code> after picking Accelerate. <code class="md-code-inline">:suitesparse</code> (CHOLMOD/UMFPACK), <code class="md-code-inline">:spqr</code> (sparse QR, for a least-squares or rectangular <code class="md-code-inline">A</code>), <code class="md-code-inline">:accelerate</code> (Apple <code class="md-code-inline">libSparse</code>, needs <code class="md-code-inline">AppleAccelerate.jl</code>, honoured unconditionally regardless of symmetry), <code class="md-code-inline">:mumps</code> (needs <code class="md-code-inline">MUMPS.jl</code>), <code class="md-code-inline">:sparspak</code> (pure Julia, needs <code class="md-code-inline">Sparspak.jl</code>).</p>
+<li><p><code class="md-code-inline">solver</code>: <code class="md-code-inline">:default</code> – <code class="md-code-inline">A \ F</code> on Linux, Windows, macOS without <code class="md-code-inline">AppleAccelerate.jl</code> loaded, and macOS on an unsymmetric <code class="md-code-inline">A</code>; on macOS with <code class="md-code-inline">using AppleAccelerate</code> in effect and <code class="md-code-inline">A</code> symmetric, dispatches to <code class="md-code-inline">accelerate_solve</code> instead (same as passing <code class="md-code-inline">solver = :accelerate</code> explicitly). Symmetry is <code class="md-code-inline">issymmetric(A)</code> under <code class="md-code-inline">sym = :auto</code> (the default), or trusted outright from an explicit <code class="md-code-inline">sym = :spd</code>/<code class="md-code-inline">:definite</code>/<code class="md-code-inline">:symmetric</code> (and conversely <code class="md-code-inline">:unsymmetric</code> skips straight to <code class="md-code-inline">A \ F</code>) – the caller has already asserted the property, so it is not checked again. The narrowing exists because Accelerate is only a win on the symmetric factorisations it reaches (SPD/Cholesky, LDLᵀ): on forms assembled on 2D grid spaces it won on a symmetric Poisson-plus-mass system and lost on an unsymmetric convection-diffusion one (gpena/Bramble.jl#246). This only ever narrows which solver runs on macOS; Linux and Windows are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws from <code class="md-code-inline">accelerate_solve</code> exactly as <code class="md-code-inline">solver = :accelerate</code> would – <code class="md-code-inline">:default</code> never silently falls back to <code class="md-code-inline">\</code> after picking Accelerate. <code class="md-code-inline">:suitesparse</code> (CHOLMOD/UMFPACK), <code class="md-code-inline">:spqr</code> (sparse QR, for a least-squares or rectangular <code class="md-code-inline">A</code>), <code class="md-code-inline">:accelerate</code> (Apple <code class="md-code-inline">libSparse</code>, needs <code class="md-code-inline">AppleAccelerate.jl</code>, honoured unconditionally regardless of symmetry), <code class="md-code-inline">:mumps</code> (needs <code class="md-code-inline">MUMPS.jl</code>), <code class="md-code-inline">:sparspak</code> (pure Julia, needs <code class="md-code-inline">Sparspak.jl</code>).</p>
 </li>
 <li><p><code class="md-code-inline">sym</code>: symmetry hint for <code class="md-code-inline">:suitesparse</code>, <code class="md-code-inline">:accelerate</code> and <code class="md-code-inline">:mumps</code> (and, on macOS, for <code class="md-code-inline">:default</code>&#39;s own choice of solver – see above). <code class="md-code-inline">:auto</code> (default) detects it; <code class="md-code-inline">:spd</code>/<code class="md-code-inline">:definite</code>/<code class="md-code-inline">1</code>, <code class="md-code-inline">:symmetric</code>/<code class="md-code-inline">2</code> and <code class="md-code-inline">:unsymmetric</code>/<code class="md-code-inline">0</code> state it.</p>
 </li>
@@ -771,8 +725,6 @@ u_spd = pde_solve(A, F; solver = :suitesparse, sym = :spd)</code></pre>
 </div>
 </div>
 <h2 id="Algebraic-multigrid-preconditioning" class="md-heading">Algebraic multigrid preconditioning<a href="#Algebraic-multigrid-preconditioning" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">amg_preconditioner</code> builds an algebraic multigrid hierarchy for a symmetric positive-definite matrix – typically an assembled elliptic <code class="md-code-inline">BilinearForm</code>, whose condition number scales as <code class="md-code-inline">O(h^-2)</code> under refinement – so that an iterative <code class="md-code-inline">LinearSolve</code> solve gets grid-independent, <code class="md-code-inline">O(1)</code> iteration counts instead of the <code class="md-code-inline">O(h^-1)</code> an unpreconditioned Krylov method needs. It returns the bare <code class="md-code-inline">MultiLevel</code> hierarchy; <code class="md-code-inline">AlgebraicMultigrid.aspreconditioner</code> turns that into the object with <code class="md-code-inline">ldiv!</code> that <code class="md-code-inline">Pl</code>/<code class="md-code-inline">Pr</code> expect. <code class="md-code-inline">solve(a::BilinearForm, l::LinearForm; ...)</code> (previous section) takes <code class="md-code-inline">preconditioner = :amg</code> directly, building and applying that preconditioner in one call.</p>
-<p>Requires <a href="https://github.com/JuliaLinearAlgebra/AlgebraicMultigrid.jl">AlgebraicMultigrid.jl</a>.</p>
 <div class="md-docstring" id="Bramble.amg_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.amg_preconditioner</code></h4>
@@ -813,9 +765,6 @@ uₕ = solve(a, l; dirichlet = bcs, preconditioner = :amg, solver = KrylovJL_CG(
 </div>
 </div>
 <h2 id="Zero-fill-ILU-preconditioning-for-convection-dominated-systems" class="md-heading">Zero-fill ILU preconditioning for convection-dominated systems<a href="#Zero-fill-ILU-preconditioning-for-convection-dominated-systems" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><a href="https://github.com/gpena/Bramble.jl/issues/244">gpena/Bramble.jl#244</a> measured classical algebraic multigrid failing to converge on an unsymmetric, convection-dominated system (diffusion <code class="md-code-inline">1e-2</code> against unit advection, <code class="md-code-inline">ruge_stuben</code> capped at 2000 GMRES iterations without converging) – AMG assumes something close to an M-matrix, which strong advection breaks. <code class="md-code-inline">ILUZero.jl</code>&#39;s zero-fill incomplete LU (ILU(0)) does not share that assumption: on the same system, GMRES took 18 iterations against 179 unpreconditioned, at a fraction of AMG&#39;s setup cost, since ILU(0) reuses <code class="md-code-inline">A</code>&#39;s own sparsity pattern with no fill-in parameter to tune. <code class="md-code-inline">ilu_preconditioner</code> mirrors <a href="../api_sciml/#Bramble.amg_preconditioner"><code class="md-code-inline">amg_preconditioner</code></a>&#39;s shape, but returns an object with <code class="md-code-inline">ldiv!</code> directly – <code class="md-code-inline">ILUZero.ilu0</code> needs no <code class="md-code-inline">aspreconditioner</code>-style wrapping the way an AMG hierarchy does. <code class="md-code-inline">solve(a::BilinearForm, l::LinearForm; ...)</code> takes <code class="md-code-inline">preconditioner = :ilu0</code> the same way it takes <code class="md-code-inline">:amg</code>.</p>
-<p><strong>When to prefer which</strong>: AMG&#39;s grid-independent, <code class="md-code-inline">O(1)</code> iteration count wins at scale on elliptic, symmetric positive-definite forms (Poisson, diffusion-dominated), where its M-matrix-like assumption holds. ILU(0) is the better default for unsymmetric, convection-dominated forms, where AMG is this issue&#39;s own worked counter-example for why it should not be the only option offered – see <a href="../api_sciml/#Bramble.amg_preconditioner"><code class="md-code-inline">amg_preconditioner</code></a> for the elliptic case.</p>
-<p>Requires <a href="https://github.com/mohamed82008/ILUZero.jl">ILUZero.jl</a>.</p>
 <div class="md-docstring" id="Bramble.ilu_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ilu_preconditioner</code></h4>
@@ -850,7 +799,6 @@ uₕ = solve(a, l; dirichlet = bcs, preconditioner = :ilu0, solver = KrylovJL_GM
 </div>
 </div>
 <h2 id="Matrix-free-preconditioners" class="md-heading">Matrix-free preconditioners<a href="#Matrix-free-preconditioners" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>AMG and ILU(0) need the assembled matrix. The preconditioners here need only a <a href="../api/forms/#Bramble.matrix_free_operator"><code class="md-code-inline">matrix_free_operator</code></a>, which the <a href="../examples/matrix_free_operator/">matrix-free operator page</a> explains. Each is a subtype of <code class="md-code-inline">Bramble.AbstractMatrixFreePreconditioner</code> with <code class="md-code-inline">ldiv!</code>, so it goes straight to <code class="md-code-inline">Pl</code> in <code class="md-code-inline">LinearSolve</code>. <code class="md-code-inline">jacobi_preconditioner</code> reads the diagonal off one walk of the form&#39;s stencil. <code class="md-code-inline">chebyshev_preconditioner</code> is a fixed polynomial in <code class="md-code-inline">D⁻¹A</code>, Jacobi-scaled, with <code class="md-code-inline">D = diag(A)</code>: unscaled, the top of <code class="md-code-inline">A</code>&#39;s spectrum on a non-uniform mesh is a few small-cell outliers, and the polynomial wastes its degree on them. Its upper bound comes from <code class="md-code-inline">Bramble.max_eigenvalue_estimate</code>, power iteration on the operator. Both need a symmetric positive-definite <code class="md-code-inline">A</code> for conjugate gradients; with <code class="md-code-inline">dirichlet</code>, CG needs a right-hand side that vanishes on the Dirichlet rows.</p>
 <div class="md-docstring" id="Bramble.AbstractMatrixFreePreconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.AbstractMatrixFreePreconditioner</code></h4>
@@ -1087,7 +1035,6 @@ true</code></pre>
 </div>
 </div>
 <h2 id="Geometric-multigrid" class="md-heading">Geometric multigrid<a href="#Geometric-multigrid" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">gmg_preconditioner(W -&gt; form(...), Ωₕ)</code> rediscretises the form on every level of a <code class="md-code-inline">GeometricMeshHierarchy</code>, which coarsens a non-uniform mesh by 2 through every other point, so the levels nest exactly. Multilinear <code class="md-code-inline">prolongate!</code> and its transpose <code class="md-code-inline">coarsen!</code> join the levels, point smoothers smooth them, and the coarsest level is solved directly. Every grid function in the form must be built from <code class="md-code-inline">W</code> inside the builder. On meshes whose cells have bounded aspect ratio, CG preconditioned by a V-cycle took 6 iterations from 2D 33² to 513² and 7 from 3D 17³ to 129³. Point smoothers stall on stretched cells, which <a href="../api_sciml/#Bramble.gmg_preconditioner"><code class="md-code-inline">gmg_preconditioner</code></a> quotes in counts. Line and plane smoothers are planned in <a href="https://github.com/gpena/Bramble.jl/issues/394">gpena/Bramble.jl#394</a>.</p>
 <h3 id="Mesh-hierarchy-and-transfers" class="md-heading">Mesh hierarchy and transfers<a href="#Mesh-hierarchy-and-transfers" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <div class="md-docstring" id="Bramble.GeometricMeshHierarchy">
 <div class="md-docstring-header">
@@ -1883,10 +1830,10 @@ true</code></pre>
 </li>
 <li><p><strong>MUMPS</strong> is a parallel multifrontal direct solver for large 2D/3D systems via <code class="md-code-inline">MUMPS.jl</code>.</p>
 </li>
-<li><p><strong>Sparspak</strong> is a pure-Julia sparse direct LU (George &amp; Liu&#39;s Waterloo package) via <code class="md-code-inline">Sparspak.jl</code> – zero binary dependency, so it factors matrices whose entries are <code class="md-code-inline">Float32</code>, <code class="md-code-inline">BigFloat</code>, or a <code class="md-code-inline">ForwardDiff.Dual</code>, where the other three backends require <code class="md-code-inline">Float64</code>/<code class="md-code-inline">ComplexF64</code>.</p>
+<li><p><strong>Sparspak</strong> is a pure-Julia sparse direct LU (George &amp; Liu&#39;s Waterloo package) via <code class="md-code-inline">Sparspak.jl</code> – zero binary dependency, so it factors matrices whose entries are <code class="md-code-inline">BigFloat</code> or a <code class="md-code-inline">ForwardDiff.Dual</code>, which the other three backends cannot: they take only BLAS floating-point types (MUMPS and Accelerate accept <code class="md-code-inline">Float32</code> as well as <code class="md-code-inline">Float64</code>).</p>
 </li>
 </ul>
-<p>All four solvers support non-allocating symbolic reuse via the unified <a href="../api_sciml/#Bramble.refactor!"><code class="md-code-inline">refactor!</code></a> driver for transient PDE time loops and Newton iterations.</p>
+<p>All four solvers support symbolic reuse via the unified <a href="../api_sciml/#Bramble.refactor!"><code class="md-code-inline">refactor!</code></a> driver for transient PDE time loops and Newton iterations.</p>
 <div class="md-docstring" id="Bramble.sparse_factorize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.sparse_factorize</code></h4>
@@ -2089,9 +2036,9 @@ suitesparse_qr_solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirich
 </div>
 <h3 id="Apple-Accelerate-solver-on-macOS" class="md-heading">Apple Accelerate solver on macOS<a href="#Apple-Accelerate-solver-on-macOS" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p><a href="https://github.com/gpena/Bramble.jl/issues/142">gpena/Bramble.jl#142</a> asked whether <code class="md-code-inline">AppleAccelerate.jl</code> is worth wiring in on macOS. It is, but only for the symmetric factorisations it actually wins on – <a href="../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a>&#39;s own docstring states the narrowed dispatch; this section answers the issue&#39;s four questions from measurement.</p>
-<p><strong>Speedup.</strong> Against <code class="md-code-inline">A \ F</code> – what <code class="md-code-inline">:default</code> did before Accelerate existed – a symmetric Poisson-plus-mass system is a 1.2-1.3x win (0.78-0.83x the runtime, measured at <code class="md-code-inline">n = 80</code> and <code class="md-code-inline">n = 120</code>) and an unsymmetric convection-diffusion system is now exactly 1.00x, because <code class="md-code-inline">:default</code> no longer routes it to Accelerate at all (gpena/Bramble.jl#246, integrator re-measurement). Earlier, broader factorisation-level numbers against <code class="md-code-inline">:suitesparse</code> (not <code class="md-code-inline">A \ F</code>) put sparse SPD Cholesky at 0.75-0.85x and sparse symmetric LDLᵀ at 0.26-0.78x across <code class="md-code-inline">n = 40, 80, 160</code>, while unsymmetric LUTPP was 1.66-4.07x <strong>slower</strong> – the reason <code class="md-code-inline">:default</code> never reaches Accelerate for an unsymmetric system.</p>
-<p><strong>Extension scoping.</strong> Settled: the guard is <code class="md-code-inline">Sys.isapple() &amp;&amp; Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing</code>, so <code class="md-code-inline">using AppleAccelerate</code> on Linux or Windows still resolves <code class="md-code-inline">:default</code> to <code class="md-code-inline">A \ F</code> and Accelerate never becomes a hard dependency of Bramble or of CI on any platform.</p>
-<p><strong>Threading.</strong> <code class="md-code-inline">AppleAccelerate.jl</code> exports <code class="md-code-inline">BLAS_THREADING_MULTI_THREADED</code> and <code class="md-code-inline">BLAS_THREADING_SINGLE_THREADED</code>, the knob for vecLib&#39;s own internal thread pool, alongside a setter that reads vecLib&#39;s threading API directly. No dedicated measurement isolated vecLib threading against Bramble&#39;s own <code class="md-code-inline">Threads.@threads</code>/<code class="md-code-inline">@batch</code> assembly sweeps running concurrently: the benchmarks behind the speedup figures above ran at <code class="md-code-inline">--threads=4</code> (factorisation comparison) and <code class="md-code-inline">--threads=2</code> (dispatch-narrowing check) without symptoms attributable to thread contention, but that is not the same as a study built to detect it. A caller who suspects contention on a heavily loaded machine can force vecLib to <code class="md-code-inline">BLAS_THREADING_SINGLE_THREADED</code> explicitly; Bramble does not set this itself.</p>
+<p><strong>Speedup.</strong> Against <code class="md-code-inline">A \ F</code>, what <code class="md-code-inline">:default</code> did before Accelerate existed, Accelerate wins on symmetric systems (Cholesky and LDLᵀ). Its unsymmetric LUTPP is slower than SuiteSparse, which is why <code class="md-code-inline">:default</code> never routes an unsymmetric system to Accelerate (gpena/Bramble.jl#246). <code class="md-code-inline">benchmark/accelerate_solvers.jl</code> measures both on your machine.</p>
+<p><strong>Extension scoping.</strong> Settled: the guard is <code class="md-code-inline">Sys.isapple() &amp;&amp; Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing</code>, so <code class="md-code-inline">using AppleAccelerate</code> on Linux or Windows still resolves <code class="md-code-inline">:default</code> to <code class="md-code-inline">A \ F</code> and Accelerate never becomes a hard dependency of Bramble. The test environment installs it on every platform but loads it only under <code class="md-code-inline">Sys.isapple()</code>.</p>
+<p><strong>Threading.</strong> <code class="md-code-inline">AppleAccelerate.jl</code> exports <code class="md-code-inline">BLAS_THREADING_MULTI_THREADED</code> and <code class="md-code-inline">BLAS_THREADING_SINGLE_THREADED</code>, the knob for vecLib&#39;s own internal thread pool, alongside a setter that reads vecLib&#39;s threading API directly. No dedicated measurement isolated vecLib threading against Bramble&#39;s own <code class="md-code-inline">Threads.@threads</code>/<code class="md-code-inline">@batch</code> assembly sweeps running concurrently: the benchmarks behind the speedup claim above ran at <code class="md-code-inline">--threads=4</code> (factorisation comparison) and <code class="md-code-inline">--threads=2</code> (dispatch-narrowing check) without symptoms attributable to thread contention, but that is not the same as a study built to detect it. A caller who suspects contention on a heavily loaded machine can force vecLib to <code class="md-code-inline">BLAS_THREADING_SINGLE_THREADED</code> explicitly; Bramble does not set this itself.</p>
 <p><strong>Accuracy vs. OpenBLAS.</strong> Audited against <code class="md-code-inline">LinearAlgebra</code>&#39;s own factorisations across sparse SPD/LDLᵀ/QR/LUTPP and the dense <code class="md-code-inline">accelerate_factorize</code> kinds: the worst observed relative residual was <code class="md-code-inline">3.637...e-14</code> (sparse SPD Cholesky via Accelerate), and a dense QR least-squares case matched to <code class="md-code-inline">0.0</code>. Every <code class="md-code-inline">atol</code> in the test suite guarding a solve is <code class="md-code-inline">1.0e-12</code>, two orders of magnitude looser than that residual, so no tolerance needed tightening or loosening. Two calls into the same factorisation are not always bit-identical – vecLib reorders floating-point reductions across calls – so compare with <code class="md-code-inline">isapprox</code>, never <code class="md-code-inline">==</code>.</p>
 <p><strong>A <code class="md-code-inline">sym</code> caveat.</strong> Under <code class="md-code-inline">:default</code>, an unrecognised <code class="md-code-inline">sym</code> (anything other than <code class="md-code-inline">:auto</code>/<code class="md-code-inline">:spd</code>/<code class="md-code-inline">:definite</code>/<code class="md-code-inline">:symmetric</code>/<code class="md-code-inline">:unsymmetric</code> and their integer aliases) silently falls back to <code class="md-code-inline">A \ F</code> rather than raising, matching <code class="md-code-inline">:default</code>&#39;s pre-Accelerate behaviour of ignoring <code class="md-code-inline">sym</code> entirely. This is looser than <code class="md-code-inline">solver = :accelerate</code>, which validates <code class="md-code-inline">sym</code> and throws on an unrecognised value.</p>
 <div class="md-docstring" id="Bramble.AccelerateFactorization">
@@ -2431,213 +2378,8 @@ diffusion_matrix(uₕ) = type_cached_assemble!(
 </div>
 </div>
 <h2 id="JuliaSparse-ecosystem-evaluation" class="md-heading">JuliaSparse ecosystem evaluation<a href="#JuliaSparse-ecosystem-evaluation" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><a href="https://github.com/gpena/Bramble.jl/issues/244">gpena/Bramble.jl#244</a> asked whether other packages in the <a href="https://github.com/JuliaSparse">JuliaSparse</a> organization and its neighbours are worth adopting for assembly, direct solves, or iterative preconditioning. Each candidate below was installed on Julia 1.12 and measured directly against Bramble&#39;s own functions – never a synthetic microbenchmark standing in for them (see <code class="md-code-inline">bramble-verification</code>) – so a &quot;no&quot; here is a measured &quot;no&quot;, not a guess. Numbers are a single run on one machine, not a tracked baseline; treat them as directional.</p>
-<h3 id="Assembly-and-storage-formats" class="md-heading">Assembly &amp; storage formats<a href="#Assembly-and-storage-formats" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p><strong><code class="md-code-inline">SparseMatricesCOO.jl</code> is not adopted.</strong> Bramble&#39;s own assembly already skips the triplet stage entirely: <code class="md-code-inline">assemble</code> determines the sparsity pattern once (<code class="md-code-inline">PatternSink</code>, the lock-free colouring sweep documented in <a href="../internals/form/">Forms</a>) and every subsequent call writes straight into <code class="md-code-inline">nzval</code> via <code class="md-code-inline">add_to_sparse!</code>, never building <code class="md-code-inline">(I, J, V)</code> at all. Measured on a 2D 60×60 Poisson system (<code class="md-code-inline">n = 3600</code>, <code class="md-code-inline">nnz = 17760</code>):</p>
-<div class="md-table-wrap">
-<table class="md-table">
-<thead>
-<tr>
-<th style="text-align:left">Path</th>
-<th style="text-align:left">Time</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left">Bramble <code class="md-code-inline">assemble</code> (first call, builds the pattern)</td>
-<td style="text-align:left">0.37 ms</td>
-</tr>
-<tr>
-<td style="text-align:left">Bramble <code class="md-code-inline">assemble</code> (repeat call, pattern cached)</td>
-<td style="text-align:left">0.37 ms</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">Base.sparse(I, J, V)</code> on the identical triplets</td>
-<td style="text-align:left">0.06 ms</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">SparseMatricesCOO.jl</code> COO→CSC on the identical triplets</td>
-<td style="text-align:left">203 <strong>seconds</strong></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p><code class="md-code-inline">SparseMatricesCOO.jl</code> defines no specialised <code class="md-code-inline">SparseMatrixCSC(::SparseMatrixCOO)</code> constructor, so the conversion falls through to Julia&#39;s generic dense-iteration <code class="md-code-inline">AbstractMatrix</code> fallback – an <code class="md-code-inline">O(m \cdot n \cdot \mathrm{nnz})</code> scan through every <code class="md-code-inline">getindex</code>, itself an <code class="md-code-inline">O(\mathrm{nnz})</code> linear search of the triplet arrays (confirmed by reading <code class="md-code-inline">SparseMatricesCOO.jl</code>&#39;s source, not assumed from the number alone). The package is designed by <a href="https://github.com/JuliaSmoothOptimizers">JuliaSmoothOptimizers</a> as an NLP-solver interop format (handing Jacobian/Hessian triplets to IPOPT-style solvers that want COO directly), not as a fast intermediate for building a <code class="md-code-inline">SparseMatrixCSC</code> – the wrong tool for what this issue asked it to do here. Bramble&#39;s first assembly is already about as fast as its thousandth, which is the actual bar a triplet library would need to clear.</p>
-<p><strong><code class="md-code-inline">SymRCM.jl</code></strong>: evaluated under reordering, below – not for assembly.</p>
-<h3 id="Tensor-compiler-assembly" class="md-heading">Tensor-compiler assembly<a href="#Tensor-compiler-assembly" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p><strong>Finch.jl: not adopted.</strong> <a href="https://github.com/gpena/Bramble.jl/issues/217">gpena/Bramble.jl#217</a> asked whether a <code class="md-code-inline">@finch</code>-compiled loop nest – <a href="https://github.com/finch-tensor/Finch.jl">Finch.jl</a>&#39;s domain-specific compiler for structured and sparse tensors – beats Bramble&#39;s own record/replay sink assembly by enough to justify a dedicated backend. The issue set its own threshold: greater than 1.5x speedup or greater than 50% memory reduction on the resulting object, at N = 1e6.</p>
-<p><code class="md-code-inline">benchmark/finch_assembly.jl</code> measured 1D, 2D and 3D Poisson and convection-diffusion forms, N from 1e2 to 1e6 on non-uniform (seeded <code class="md-code-inline">rand!</code>) meshes: Bramble&#39;s first <code class="md-code-inline">assemble</code> (pattern discovery plus fill) against Finch&#39;s first <code class="md-code-inline">@finch</code> build, Bramble&#39;s <code class="md-code-inline">assemble!</code> refill against Finch&#39;s refill, <code class="md-code-inline">Base.summarysize</code> of the resulting matrix/tensor, and time to first execution (TTFX). Every one of the 18 (dimension, form, size) cases produced a Finch tensor identical to Bramble&#39;s matrix to <code class="md-code-inline">1e-12</code> – both are built from the same non-uniform-mesh <code class="md-code-inline">(row, col, value)</code> triplets, <code class="md-code-inline">findnz</code> on the CSC matrix Bramble already assembled – which is what makes the timing comparison meaningful rather than a comparison between two different answers. The six N = 1e6 cases, the ones the adoption rule is evaluated against:</p>
-<div class="md-table-wrap">
-<table class="md-table">
-<thead>
-<tr>
-<th style="text-align:left">Dim</th>
-<th style="text-align:left">Form</th>
-<th style="text-align:left">Bramble refill (ms)</th>
-<th style="text-align:left">Bramble size (MiB)</th>
-<th style="text-align:left">Finch refill (ms)</th>
-<th style="text-align:left">Finch size (MiB)</th>
-<th style="text-align:left">Refill speedup</th>
-<th style="text-align:left">Size Δ%</th>
-<th style="text-align:left">Match</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left">1</td>
-<td style="text-align:left">Poisson</td>
-<td style="text-align:left">4.372</td>
-<td style="text-align:left">91.553</td>
-<td style="text-align:left">12.383</td>
-<td style="text-align:left">71.63</td>
-<td style="text-align:left">0.35</td>
-<td style="text-align:left">21.8</td>
-<td style="text-align:left">true</td>
-</tr>
-<tr>
-<td style="text-align:left">1</td>
-<td style="text-align:left">Convection-diffusion</td>
-<td style="text-align:left">6.101</td>
-<td style="text-align:left">129.7</td>
-<td style="text-align:left">10.373</td>
-<td style="text-align:left">71.63</td>
-<td style="text-align:left">0.59</td>
-<td style="text-align:left">44.8</td>
-<td style="text-align:left">true</td>
-</tr>
-<tr>
-<td style="text-align:left">2</td>
-<td style="text-align:left">Poisson</td>
-<td style="text-align:left">7.504</td>
-<td style="text-align:left">175.43</td>
-<td style="text-align:left">13.34</td>
-<td style="text-align:left">135.63</td>
-<td style="text-align:left">0.56</td>
-<td style="text-align:left">22.7</td>
-<td style="text-align:left">true</td>
-</tr>
-<tr>
-<td style="text-align:left">2</td>
-<td style="text-align:left">Convection-diffusion</td>
-<td style="text-align:left">12.711</td>
-<td style="text-align:left">251.709</td>
-<td style="text-align:left">12.239</td>
-<td style="text-align:left">135.63</td>
-<td style="text-align:left">1.04</td>
-<td style="text-align:left">46.1</td>
-<td style="text-align:left">true</td>
-</tr>
-<tr>
-<td style="text-align:left">3</td>
-<td style="text-align:left">Poisson</td>
-<td style="text-align:left">15.008</td>
-<td style="text-align:left">258.713</td>
-<td style="text-align:left">16.19</td>
-<td style="text-align:left">135.63</td>
-<td style="text-align:left">0.93</td>
-<td style="text-align:left">47.6</td>
-<td style="text-align:left">true</td>
-</tr>
-<tr>
-<td style="text-align:left">3</td>
-<td style="text-align:left">Convection-diffusion</td>
-<td style="text-align:left">53.266</td>
-<td style="text-align:left">372.925</td>
-<td style="text-align:left">18.312</td>
-<td style="text-align:left">135.63</td>
-<td style="text-align:left">2.91</td>
-<td style="text-align:left">63.6</td>
-<td style="text-align:left">true</td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>Only one of the six clears the bar, 3D convection-diffusion, with a 2.91x refill speedup and a 63.6% smaller resident tensor. The rule needs at least two qualifying cases out of six, so the table alone already falls short. Finch&#39;s own compilation cost settles it further: time to first execution – the very first <code class="md-code-inline">@finch</code> call in the process, before any warm-up – was about 39 seconds against Bramble&#39;s 0.1 millisecond. A package whose users open a REPL, run one assembly and look at the result cannot pay a 39-second tax on the first call, even for a backend that eventually wins on refills. Nothing in <code class="md-code-inline">ext/</code> was written: <code class="md-code-inline">finch_backend</code> and <code class="md-code-inline">BrambleFinchExt.jl</code> from the issue&#39;s proposed architecture do not exist.</p>
-<p>Two things bound how far this &quot;no&quot; reaches. First, a methodology departure recorded in <code class="md-code-inline">benchmark/finch_assembly.jl</code>&#39;s own header: the script hands Finch the <code class="md-code-inline">(row, col, value)</code> triplets Bramble&#39;s assembly already computed and times only how fast a <code class="md-code-inline">@finch</code> loop nest copies them into a <code class="md-code-inline">Tensor(Dense(SparseList(Element(0.0))))</code> – the insertion half of assembly, not the fused stencil-evaluation-and-insertion Finch&#39;s compiler actually promises and the issue&#39;s own Problem Statement names as the point. That measures an upper bound favouring Finch, and Finch still lost under it. Second, both the Bramble and the Finch runs were made on battery power under heavy concurrent load, so the ratios in the table, not the absolute millisecond figures, carry this decision.</p>
-<p>What would change the answer: a fused evaluate-and-insert extension, where Finch compiles the stencil evaluation itself from Bramble&#39;s own AST rather than consuming triplets Bramble already produced, together with a way to amortise the roughly 39-second TTFX across precompilation rather than a user&#39;s first call.</p>
-<h3 id="Direct-sparse-solvers" class="md-heading">Direct sparse solvers<a href="#Direct-sparse-solvers" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p><strong>Sparspak.jl: done, not re-evaluated here.</strong> Built in <a href="https://github.com/gpena/Bramble.jl/issues/247">gpena/Bramble.jl#247</a>; see <a href="../api_sciml/#Sparspak-sparse-direct-solver-(pure-Julia)">Sparspak sparse direct solver (pure Julia)</a> above.</p>
-<p><strong><code class="md-code-inline">Pardiso.jl</code>: not adopted, for a licensing reason rather than a technical one.</strong> <code class="md-code-inline">Pardiso.jl</code> bridges to one of two backends, and neither is available without something Bramble cannot bundle:</p>
-<ul class="md-list-tight">
-<li><p>Intel MKL PARDISO needs a separately installed MKL; <code class="md-code-inline">Pardiso.mkl_is_available()</code> is <code class="md-code-inline">false</code> on a plain Julia 1.12 environment, and constructing an <code class="md-code-inline">MKLPardisoSolver</code> throws <code class="md-code-inline">&quot;MKL is not available&quot;</code>.</p>
-</li>
-<li><p>Panua (formerly the free academic) PARDISO needs a separately downloaded, licensed shared library; constructing a <code class="md-code-inline">PardisoSolver</code> throws <code class="md-code-inline">&quot;Panua pardiso library was not loaded&quot;</code>.</p>
-</li>
-</ul>
-<p>Both were reproduced directly (not assumed) on a fresh Julia 1.12 environment. This is the same shape of blocker that closed <a href="https://github.com/gpena/Bramble.jl/issues/245">gpena/Bramble.jl#245</a> (<code class="md-code-inline">ThreadedSparseCSR.jl</code>) as won&#39;t-fix: a real, verified dependency the package cannot satisfy on behalf of a user, rather than missing integration work. A user who already holds an MKL or Panua license and wants to use it can still call <code class="md-code-inline">Pardiso.jl</code> directly against <code class="md-code-inline">A</code>/<code class="md-code-inline">F</code> from <a href="../api/forms/#Bramble.assemble"><code class="md-code-inline">assemble</code></a> – nothing in Bramble stands in the way of that – it is just not something this package can wire up as a first-class <code class="md-code-inline">solver</code> option for everyone.</p>
-<h3 id="Iterative-solvers-and-preconditioners" class="md-heading">Iterative solvers &amp; preconditioners<a href="#Iterative-solvers-and-preconditioners" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>Krylov methods are already reachable through <code class="md-code-inline">solve</code> with <code class="md-code-inline">solver = KrylovJL_GMRES()</code> etc. (<code class="md-code-inline">BrambleSciMLExt</code>), and <a href="../api_sciml/#Bramble.amg_preconditioner"><code class="md-code-inline">amg_preconditioner</code></a> already covers algebraic multigrid preconditioning. What #244 asked to evaluate is whether <code class="md-code-inline">ILUZero.jl</code> / <code class="md-code-inline">IncompleteLU.jl</code> add anything beyond that. Measured on an unsymmetric 2D convection-diffusion system (90×90 grid, <code class="md-code-inline">n = 8100</code>, diffusion <code class="md-code-inline">1\mathrm{e}{-2}</code> against unit advection in both directions – the convection-dominated regime the issue named), unrestarted GMRES to <code class="md-code-inline">atol = rtol = 1\mathrm{e}{-10}</code>:</p>
-<div class="md-table-wrap">
-<table class="md-table">
-<thead>
-<tr>
-<th style="text-align:left">Preconditioner</th>
-<th style="text-align:left">Time</th>
-<th style="text-align:left">Iterations</th>
-<th style="text-align:left">Converged</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left">none</td>
-<td style="text-align:left">51.4 ms</td>
-<td style="text-align:left">179</td>
-<td style="text-align:left">yes</td>
-</tr>
-<tr>
-<td style="text-align:left">AMG (<code class="md-code-inline">ruge_stuben</code>)</td>
-<td style="text-align:left">6475.9 ms</td>
-<td style="text-align:left">2000 (capped)</td>
-<td style="text-align:left"><strong>no</strong></td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">IncompleteLU.jl</code> (τ = 0.01)</td>
-<td style="text-align:left">19.6 ms</td>
-<td style="text-align:left">95</td>
-<td style="text-align:left">yes</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">ILUZero.jl</code> (ILU(0))</td>
-<td style="text-align:left">4.5 ms</td>
-<td style="text-align:left">18</td>
-<td style="text-align:left">yes</td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>Classical algebraic multigrid assumes something close to an M-matrix and does not fail gracefully once advection dominates diffusion this strongly – it neither converges nor finishes quickly here, which is a known limitation of <code class="md-code-inline">ruge_stuben</code>-style coarsening on non-symmetric, convection-dominated operators, not a bug in <code class="md-code-inline">AlgebraicMultigrid.jl</code>. <code class="md-code-inline">ILUZero.jl</code>&#39;s zero-fill ILU(0), reusing <code class="md-code-inline">A</code>&#39;s own sparsity pattern, is the clear winner: about 11× fewer iterations and 11× less wall time than no preconditioner, and 4× less than <code class="md-code-inline">IncompleteLU.jl</code>&#39;s drop-tolerance variant, at a fraction of the setup cost either of the others carries. Built as <a href="../api_sciml/#Bramble.ilu_preconditioner"><code class="md-code-inline">ilu_preconditioner</code></a> in <a href="https://github.com/gpena/Bramble.jl/issues/255">gpena/Bramble.jl#255</a>, mirroring <a href="../api_sciml/#Bramble.amg_preconditioner"><code class="md-code-inline">amg_preconditioner</code></a>&#39;s shape – see &quot;Zero-fill ILU preconditioning for convection-dominated systems&quot; above.</p>
-<p><code class="md-code-inline">Metis.jl</code>&#39;s graph partitioning was evaluated under reordering, not as a preconditioner, below.</p>
-<h3 id="Fill-reducing-reordering" class="md-heading">Fill-reducing reordering<a href="#Fill-reducing-reordering" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>Measured on a 3D 24×24×24 Poisson system (<code class="md-code-inline">n = 13824</code>, <code class="md-code-inline">nnz = 93312</code>), CHOLMOD Cholesky factorization with three orderings:</p>
-<div class="md-table-wrap">
-<table class="md-table">
-<thead>
-<tr>
-<th style="text-align:left">Ordering</th>
-<th style="text-align:left">Factor time</th>
-<th style="text-align:left"><code class="md-code-inline">nnz(L)</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left">CHOLMOD default (built-in AMD)</td>
-<td style="text-align:left">25.0 ms</td>
-<td style="text-align:left">2,147,132</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">Metis.jl</code> (nested dissection)</td>
-<td style="text-align:left">20.1 ms</td>
-<td style="text-align:left">1,654,868</td>
-</tr>
-<tr>
-<td style="text-align:left"><code class="md-code-inline">SymRCM.jl</code> (Cuthill-McKee)</td>
-<td style="text-align:left">53.3 ms</td>
-<td style="text-align:left">4,768,508</td>
-</tr>
-</tbody>
-</table>
-</div>
-<p><code class="md-code-inline">Metis.jl</code>&#39;s nested-dissection ordering measurably beats CHOLMOD&#39;s own default AMD here – about 20% less factorization time and 23% less fill – a genuine, reproducible win on a 3D system. <code class="md-code-inline">SymRCM.jl</code> is worse on both counts: Cuthill-McKee minimises bandwidth, not fill, and 3D discretizations are exactly where that distinction costs the most. Both orderings reach <code class="md-code-inline">suitesparse_factorize</code>/<code class="md-code-inline">sparse_factorize</code> <strong>today, with no new extension needed</strong> – <a href="https://github.com/gpena/Bramble.jl/issues/248">gpena/Bramble.jl#248</a> already forwards a <code class="md-code-inline">perm</code> keyword straight to CHOLMOD:</p>
+<p><a href="https://github.com/gpena/Bramble.jl/issues/244">gpena/Bramble.jl#244</a> asked whether other packages in the <a href="https://github.com/JuliaSparse">JuliaSparse</a> organization and its neighbours are worth adopting for assembly, direct solves, or iterative preconditioning. Each candidate was installed and measured directly against Bramble&#39;s own functions. The verdicts are in the summary below.</p>
+<p><code class="md-code-inline">Metis.jl</code>&#39;s nested-dissection ordering gave less fill and a faster CHOLMOD factorization than CHOLMOD&#39;s default AMD on a 3D Poisson system; <code class="md-code-inline">SymRCM.jl</code> (Cuthill-McKee, which minimises bandwidth, not fill) was worse on both. Both orderings reach <code class="md-code-inline">suitesparse_factorize</code>/<code class="md-code-inline">sparse_factorize</code> with no new extension: <a href="https://github.com/gpena/Bramble.jl/issues/248">gpena/Bramble.jl#248</a> forwards a <code class="md-code-inline">perm</code> keyword straight to CHOLMOD:</p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">using Metis
@@ -2645,7 +2387,6 @@ import Bramble: suitesparse_factorize
 perm, _ = Metis.permutation(A)
 fact = suitesparse_factorize(A; sym = :spd, perm = Int.(perm))</code></pre>
 </div>
-<p><code class="md-code-inline">Metis.jl</code> is worth naming explicitly in the ordering documentation rather than building anything further for it.</p>
 <h3 id="Summary" class="md-heading">Summary<a href="#Summary" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <div class="md-table-wrap">
 <table class="md-table">
@@ -2686,7 +2427,7 @@ fact = suitesparse_factorize(A; sym = :spd, perm = Int.(perm))</code></pre>
 </tr>
 <tr>
 <td style="text-align:left"><code class="md-code-inline">SymRCM.jl</code></td>
-<td style="text-align:left">Not adopted – worse fill than the CHOLMOD default on the systems Bramble assembles</td>
+<td style="text-align:left">Not adopted – worse fill than the CHOLMOD default on the 3D Poisson system measured</td>
 </tr>
 </tbody>
 </table>
@@ -2718,11 +2459,6 @@ fact = suitesparse_factorize(A; sym = :spd, perm = Int.(perm))</code></pre>
             <a class="md-toc-link md-toc-h3" href="#Sparspak-sparse-direct-solver-(pure-Julia)">Sparspak sparse direct solver (pure Julia)</a>
           <a class="md-toc-link md-toc-h2" href="#Caching-a-coefficient-dependent-assembly-by-element-type">Caching a coefficient-dependent assembly by element type</a>
           <a class="md-toc-link md-toc-h2" href="#JuliaSparse-ecosystem-evaluation">JuliaSparse ecosystem evaluation</a>
-            <a class="md-toc-link md-toc-h3" href="#Assembly-and-storage-formats">Assembly &amp; storage formats</a>
-            <a class="md-toc-link md-toc-h3" href="#Tensor-compiler-assembly">Tensor-compiler assembly</a>
-            <a class="md-toc-link md-toc-h3" href="#Direct-sparse-solvers">Direct sparse solvers</a>
-            <a class="md-toc-link md-toc-h3" href="#Iterative-solvers-and-preconditioners">Iterative solvers &amp; preconditioners</a>
-            <a class="md-toc-link md-toc-h3" href="#Fill-reducing-reordering">Fill-reducing reordering</a>
             <a class="md-toc-link md-toc-h3" href="#Summary">Summary</a>
       </div>
     </aside>
@@ -2741,6 +2477,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=973bd131"></script>
+  <script src="../assets/materialdocs.js?v=cef8f80b"></script>
 </body>
 </html>

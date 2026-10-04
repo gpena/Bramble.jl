@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SparseMatrixCSR direct solve — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=95c85c93">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b593086e">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="SparseMatrixCSR direct solve — Bramble.jl">
   <meta property="og:title" content="SparseMatrixCSR direct solve — Bramble.jl">
@@ -47,8 +47,6 @@
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
-        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
@@ -56,50 +54,11 @@
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and scientific computing</span>
-        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
-        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
-        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
-        <a href="../../tutorials/backend/">Backends and execution policies</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Visualization and export</span>
-        <a href="../../tutorials/plotting/">Plotting directly</a>
-        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
-        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Stationary problems</span>
-          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
-          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
-          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
-          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
-          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
-          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Time-dependent problems</span>
-          <a href="../../examples/heat_equation/">Heat equation</a>
-          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
-          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Inverse problems</span>
-          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
-          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Solvers and performance</span>
-          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
-          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
-          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
-        </div>
+        <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/heat_equation/">Heat equation</a>
       </div>
-      <a href="../../benchmarks/">Benchmarks</a>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
@@ -122,9 +81,7 @@
           <a href="../../internals/mesh/">Mesh</a>
           <a href="../../internals/space/">Spaces</a>
           <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/autodiff/">Automatic differentiation</a>
           <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/gpu/">GPU acceleration</a>
           <a href="../../internals/csr_solvers/" class="md-nav-active">SparseMatrixCSR direct solve</a>
         </div>
       </div>
@@ -133,88 +90,7 @@
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/internals/csr_solvers.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="SparseMatrixCSR-direct-solve" class="md-heading"><code class="md-code-inline">SparseMatrixCSR</code> direct solve<a href="#SparseMatrixCSR-direct-solve" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
-<p><code class="md-code-inline">Bramble.jl</code>&#39;s sparse direct solvers – <code class="md-code-inline">sparse_factorize</code>, <code class="md-code-inline">pde_solve</code>, <code class="md-code-inline">refactor!</code>/ <code class="md-code-inline">sparse_refactor!</code> – accept a <code class="md-code-inline">SparseMatrixCSR</code> (from <a href="https://github.com/gridap/SparseMatricesCSR.jl"><code class="md-code-inline">SparseMatricesCSR.jl</code></a>, a weak dependency also used for CSR-backed <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a>s, <code class="md-code-inline">csr_backend()</code>) in addition to the <code class="md-code-inline">SparseMatrixCSC</code> every backend is written against. This page records what that support actually is, and, honestly, what it is not: gpena/Bramble.jl#275 named eight solver/preconditioner ecosystems for &quot;CSR support&quot;; only one new code path was built, and the rest are recorded below as evaluated-and-excluded, with reasons, rather than attempted.</p>
-<h2 id="What&#39;s-implemented" class="md-heading">What&#39;s implemented<a href="#What&#39;s-implemented" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><strong>A CSC-conversion fallback, nothing more.</strong> Neither <code class="md-code-inline">SparseMatricesCSR.jl</code> itself nor SuiteSparse, MUMPS, Sparspak, or Apple Accelerate define a native <code class="md-code-inline">ldiv!</code>, <code class="md-code-inline">factorize</code>, or <code class="md-code-inline">\</code> that takes a <code class="md-code-inline">SparseMatrixCSR</code> – confirmed directly by grepping the installed <code class="md-code-inline">SparseMatricesCSR.jl</code> package source (zero such methods). There is no native CSR solve path to integrate anywhere in this dependency stack. What <code class="md-code-inline">sparse_factorize(A::SparseMatrixCSR)</code>, <code class="md-code-inline">pde_solve(A::SparseMatrixCSR, F)</code>, and <code class="md-code-inline">refactor!(fact, A::SparseMatrixCSR)</code> do instead is convert <code class="md-code-inline">A</code> to a <code class="md-code-inline">SparseMatrixCSC</code> and delegate to the existing, unmodified <code class="md-code-inline">SparseMatrixCSC</code> methods – every solver (<code class="md-code-inline">:default</code>/<code class="md-code-inline">:suitesparse</code>, <code class="md-code-inline">:accelerate</code>, <code class="md-code-inline">:mumps</code>, <code class="md-code-inline">:sparspak</code>), every symmetry hint, and every keyword <code class="md-code-inline">sparse_factorize</code>/<code class="md-code-inline">pde_solve</code> already support for <code class="md-code-inline">SparseMatrixCSC</code> therefore works for <code class="md-code-inline">SparseMatrixCSR</code> for free, with no bespoke CSR-native factorization code anywhere.</p>
-<p>The conversion (<code class="md-code-inline">Bramble._csr_to_csc</code>, <code class="md-code-inline">src/solvers/sparse_solvers.jl</code>) is an O(nnz) row-major -&gt; column-major triplet re-layout through <code class="md-code-inline">SparseArrays.sparse</code>, not an O(n²) <code class="md-code-inline">Matrix(A)</code> densification – the same technique <code class="md-code-inline">benchmark/backends.jl</code>&#39;s <code class="md-code-inline">_to_csc</code> already uses for its own correctness oracle. It reads <code class="md-code-inline">A.rowptr</code>, <code class="md-code-inline">A.colval</code>, <code class="md-code-inline">A.nzval</code> directly (duck-typed field access, not a static <code class="md-code-inline">SparseMatrixCSR</code> import) and rebuilds a fresh <code class="md-code-inline">SparseMatrixCSC</code> from those three arrays as a plain <code class="md-code-inline">(I, J, V)</code> triplet.</p>
-<h3 id="Why-the-dispatch-is-reflection-based,-not-a-typed-method" class="md-heading">Why the dispatch is reflection-based, not a typed method<a href="#Why-the-dispatch-is-reflection-based,-not-a-typed-method" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p><code class="md-code-inline">SparseMatricesCSR.jl</code> is a weak dependency (<code class="md-code-inline">Project.toml</code>&#39;s <code class="md-code-inline">[weakdeps]</code>/<code class="md-code-inline">[extensions]</code> entry <code class="md-code-inline">BrambleSparseMatricesCSRExt = &quot;SparseMatricesCSR&quot;</code>), so <code class="md-code-inline">SparseMatrixCSR</code> cannot be named as a compile-time type anywhere under <code class="md-code-inline">src/</code> – Bramble itself never depends on the package that defines it, and a source file that tried would fail to load whenever the weak dependency isn&#39;t present. <code class="md-code-inline">pde_solve</code>&#39;s own <code class="md-code-inline">:default</code> route already reaches an optional backend the same way (<code class="md-code-inline">Base.get_extension(Bramble, :BrambleAppleAccelerateExt)</code>), so the CSR fallback follows that established pattern instead of adding a new one:</p>
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_csr_extension() = Base.get_extension(Bramble, :BrambleSparseMatricesCSRExt)
-
-function _is_csr(A)
-    ext = _csr_extension()
-    return ext !== nothing &amp;&amp; A isa ext.SparseMatrixCSR
-end</code></pre>
-</div>
-<p>When <code class="md-code-inline">ext/BrambleSparseMatricesCSRExt.jl</code> is loaded (i.e. the caller has done <code class="md-code-inline">using SparseMatricesCSR</code>), that extension module&#39;s own <code class="md-code-inline">using SparseMatricesCSR: SparseMatricesCSR, SparseMatrixCSR, sparsecsr</code> leaves <code class="md-code-inline">SparseMatrixCSR</code> bound as a name on the extension module object itself, reachable by reflection (<code class="md-code-inline">ext.SparseMatrixCSR</code>) without Bramble ever importing it. This keeps the new dispatch entirely inside the three files the CSR-solver work owns (<code class="md-code-inline">src/solvers/sparse_solvers.jl</code>, <code class="md-code-inline">src/solvers/pde_solve.jl</code>, <code class="md-code-inline">test/ext/sparse_csr_ext.jl</code>) rather than requiring a change to <code class="md-code-inline">ext/BrambleSparseMatricesCSRExt.jl</code>, which today only covers construction/assembly, not solving.</p>
-<p><code class="md-code-inline">sparse_factorize</code>&#39;s existing catch-all (<code class="md-code-inline">A::AbstractMatrix</code>) already threw <code class="md-code-inline">MethodError</code> for anything that isn&#39;t <code class="md-code-inline">SparseMatrixCSC</code>, deliberately, to keep <code class="md-code-inline">test/form/sparse_solvers.jl</code>&#39;s &quot;Type safety: sparse<em>factorize only accepts SparseMatrixCSC&quot; guarantee for genuinely unsupported types (a dense <code class="md-code-inline">Matrix</code>, say). The CSR fallback narrows that catch-all rather than replacing it: `</em>is<em>csr(A)<code class="md-code-inline">intercepts only a matrix the loaded CSR extension itself recognizes, and everything else still falls straight through to the same</code>MethodError<code class="md-code-inline">.</code>pde</em>solve<code class="md-code-inline">gained the equivalent new</code>AbstractMatrix<code class="md-code-inline">method (it previously had none beyond</code>SparseMatrixCSC<code class="md-code-inline">) with the same shape, and</code>refactor!<code class="md-code-inline">&#39;s existing</code>Factorization, A::Any<code class="md-code-inline">fallback (which threw</code>ArgumentError<code class="md-code-inline">naming</code>SparseMatrixCSC` explicitly) gained the same one-line interception before its throw.</p>
-<h3 id="Entry-points-covered" class="md-heading">Entry points covered<a href="#Entry-points-covered" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<ul class="md-list-tight">
-<li><p><code class="md-code-inline">sparse_factorize(A::SparseMatrixCSR; solver = :default, sym = :auto, kwargs...)</code> – converts, then dispatches through the ordinary <code class="md-code-inline">:default</code>/<code class="md-code-inline">:suitesparse</code>/<code class="md-code-inline">:accelerate</code>/ <code class="md-code-inline">:mumps</code>/<code class="md-code-inline">:sparspak</code> branches.</p>
-</li>
-<li><p><code class="md-code-inline">pde_solve(A::SparseMatrixCSR, F::AbstractVector; kwargs...)</code> – converts, then reuses the <code class="md-code-inline">SparseMatrixCSC</code> method&#39;s own <code class="md-code-inline">:default</code> narrowing (Accelerate on macOS for a symmetric system, <code class="md-code-inline">A \ F</code> otherwise) and every explicit <code class="md-code-inline">solver</code> choice.</p>
-</li>
-<li><p><code class="md-code-inline">refactor!(fact::Factorization, A::SparseMatrixCSR)</code> / <code class="md-code-inline">sparse_refactor!</code> (its alias) – converts, then reuses whichever backend-specific <code class="md-code-inline">refactor!</code> method matches <code class="md-code-inline">fact</code>&#39;s concrete type.</p>
-</li>
-</ul>
-<p>Covered by <code class="md-code-inline">test/ext/sparse_csr_ext.jl</code>&#39;s &quot;sparse<em>factorize/pde</em>solve accept SparseMatrixCSR&quot; and &quot;Factorization reuse and refactoring&quot; testsets, the latter running <code class="md-code-inline">test/ext/SolverContracts.jl</code>&#39;s shared <code class="md-code-inline">refactor_contract</code> (<code class="md-code-inline">size</code>, <code class="md-code-inline">ldiv!</code> in both the out-of-place and in-place forms, the <code class="md-code-inline">VectorElement</code> destination overload, a complex right-hand side, every route to a numeric refactorization, and rejection of a dense matrix) against a CSR-built Poisson system – the same contract every other solver extension (SuiteSparse, MUMPS, Apple Accelerate, Sparspak) is tested against. A further testset confirms the catch-all&#39;s guarantee for a genuinely unsupported type (dense <code class="md-code-inline">Matrix</code>) is unweakened: loading the CSR extension only ever widens dispatch for a <code class="md-code-inline">SparseMatrixCSR</code>, never for anything else.</p>
-<p><code class="md-code-inline">poisson_solve_contract</code> (the other shared contract) is not reused directly: its <code class="md-code-inline">solve</code>/ <code class="md-code-inline">solve_form</code> closures are exercised against the systems <code class="md-code-inline">SolverContracts.poisson_system</code> builds internally, which always use the default <code class="md-code-inline">SparseMatrixCSC</code> backend – there is no parameter to make that fixture CSR-backed. The 1D/2D/3D unified-dispatcher checks it would otherwise provide are therefore written out by hand in <code class="md-code-inline">sparse_csr_ext.jl</code> against CSR-built systems instead.</p>
-<h2 id="Performance:-CSC-vs.-CSR-for-this-fallback-path" class="md-heading">Performance: CSC vs. CSR for this fallback path<a href="#Performance:-CSC-vs.-CSR-for-this-fallback-path" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>The commit <code class="md-code-inline">7c901266</code> figure measured a bare <code class="md-code-inline">A \ F</code> on a raw, unconverted <code class="md-code-inline">SparseMatrixCSR</code> (falling through to a generic, non-CSC-optimized <code class="md-code-inline">\</code> implementation) – a different code path from the one built here, so it is not reused below. This is a fresh measurement of the actual conversion-then-delegate fallback.</p>
-<p><strong>Method</strong>: 2D unit-square Poisson (<code class="md-code-inline">-Δu = f</code>, homogeneous Dirichlet, symmetrized), assembled once via <code class="md-code-inline">Bramble.backend()</code> (CSC) and once via <code class="md-code-inline">csr_backend()</code> (CSR), both solved through <code class="md-code-inline">pde_solve</code>/<code class="md-code-inline">sparse_factorize</code> with <code class="md-code-inline">:default</code> (SuiteSparse). Median of 11 samples per call, both paths warmed (JIT-compiled) before timing, load-gated (<code class="md-code-inline">bramble-verification</code> §9: 1-minute load average confirmed under half <code class="md-code-inline">Sys.CPU_THREADS</code> == 4, both immediately before each run) and run under <code class="md-code-inline">caffeinate -i</code> to prevent idle sleep mid-measurement.</p>
-<p><strong>Date</strong>: 2026-09-22. <strong>Power</strong>: battery (user-approved for this run; the figure would otherwise be re-measured on AC).</p>
-<div class="md-table-wrap">
-<table class="md-table">
-<thead>
-<tr>
-<th style="text-align:right">ndofs</th>
-<th style="text-align:right">nnz (CSC)</th>
-<th style="text-align:right"><code class="md-code-inline">pde_solve</code> CSC</th>
-<th style="text-align:right"><code class="md-code-inline">pde_solve</code> CSR (fallback)</th>
-<th style="text-align:right">ratio</th>
-<th style="text-align:right">bare conversion</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:right">3,600</td>
-<td style="text-align:right">17,760</td>
-<td style="text-align:right">2.270 ms</td>
-<td style="text-align:right">2.383 ms</td>
-<td style="text-align:right"><strong>1.05x</strong></td>
-<td style="text-align:right">0.119 ms</td>
-</tr>
-<tr>
-<td style="text-align:right">22,500</td>
-<td style="text-align:right">111,900</td>
-<td style="text-align:right">13.503 ms</td>
-<td style="text-align:right">13.964 ms</td>
-<td style="text-align:right"><strong>1.03x</strong></td>
-<td style="text-align:right">1.053 ms</td>
-</tr>
-</tbody>
-</table>
-</div>
-<p><code class="md-code-inline">sparse_factorize</code> alone (no solve) shows the same shape: 1.06x and 1.08x respectively. The O(nnz) conversion itself is a small, roughly constant fraction of the total (about 5-8% of the solve time at both sizes measured) – the fallback is not a &quot;convert to dense and hope&quot; tax, it costs close to what the CSC solve costs plus one cheap triplet re-layout. This is consistent with there being no algorithmic reason for CSR to be slower once the matrix reaches an actual solver: SuiteSparse only ever sees a <code class="md-code-inline">SparseMatrixCSC</code> either way.</p>
-<h2 id="Evaluated-and-excluded" class="md-heading">Evaluated and excluded<a href="#Evaluated-and-excluded" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>gpena/Bramble.jl#275 named eight ecosystems. Only the CSC-conversion fallback above was built; the rest, with reasons:</p>
-<ul class="md-list-tight">
-<li><p><strong>Pardiso.jl</strong>: requires a proprietary Intel MKL license and is entirely absent from this repository – no <code class="md-code-inline">ext/</code> file, no <code class="md-code-inline">[weakdeps]</code> entry, no <code class="md-code-inline">Manifest.toml</code> entry. Untestable here without a license this project does not have.</p>
-</li>
-<li><p><strong>MUMPS.jl, Apple Accelerate (<code class="md-code-inline">AppleAccelerate.jl</code>), Sparspak.jl</strong>: each is internally <code class="md-code-inline">SparseMatrixCSC</code>-only (confirmed: <code class="md-code-inline">mumps_solver.jl</code>, <code class="md-code-inline">accelerate_solver.jl</code>, <code class="md-code-inline">sparspak_solver.jl</code> all pin their factorize/refactor methods to <code class="md-code-inline">A::SparseMatrixCSC</code>). A &quot;CSR path&quot; for any of them can only ever be convert-then-delegate – exactly the fallback built here, which already covers all three (and SuiteSparse) uniformly through the <code class="md-code-inline">solver</code> keyword. There is no separate per-backend integration to do.</p>
-</li>
-<li><p><strong>AlgebraicMultigrid.jl, ILUZero.jl</strong>: both already take a generic <code class="md-code-inline">AbstractMatrix</code> (AMG) or <code class="md-code-inline">SparseMatrixCSC</code> with no CSR-specific fast path to add, and neither is a <em>direct</em> solver (this issue&#39;s scope) – they precondition an iterative solve, which is a separate concern from <code class="md-code-inline">sparse_factorize</code>/<code class="md-code-inline">pde_solve</code>. No CSR-specific work applies.</p>
-</li>
-<li><p><strong>Krylov.jl</strong>: reachable today only indirectly, via <code class="md-code-inline">LinearSolve.jl</code>&#39;s <code class="md-code-inline">KrylovJL_CG</code>/ <code class="md-code-inline">KrylovJL_GMRES</code> wrappers – not a direct dependency of Bramble, and, like AMG/ILUZero, an iterative rather than direct solver. Resolvable in principle, out of scope for a <em>direct</em>-solver issue.</p>
-</li>
-<li><p><strong>ThreadedSparseCSR.jl</strong>: zero trace in this repository (no <code class="md-code-inline">ext/</code>, no <code class="md-code-inline">[weakdeps]</code> entry, no <code class="md-code-inline">Manifest.toml</code> entry). Resolvable in principle (a genuinely CSR-native matrix-vector product package, which could matter for an iterative solver&#39;s <code class="md-code-inline">mul!</code>), but out of scope for a <em>direct</em>-solver issue for the same reason as Krylov.jl – and, circularly, only useful once an iterative CSR path exists to plug it into.</p>
-</li>
-</ul>
-<p>None of these are attempted by this change. A future direct or iterative CSR-specific solver path would start from whichever of these is no longer out of scope for its own issue, not from this fallback.</p>
 <h2 id="Refilling-a-VectorElement-from-a-factorization" class="md-heading">Refilling a <code class="md-code-inline">VectorElement</code> from a factorization<a href="#Refilling-a-VectorElement-from-a-factorization" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">ldiv!(::VectorElement, ::Factorization, ::AbstractVector)</code> extends <code class="md-code-inline">LinearAlgebra.ldiv!</code>, so <code class="md-code-inline">Modules = [Bramble]</code> autodocs cannot find its docstring; it is private and documented explicitly here.</p>
 <div class="md-docstring" id="LinearAlgebra.ldiv!-Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>LinearAlgebra.ldiv!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector}</span></h4>
@@ -246,11 +122,6 @@ ldiv!(uₕ, factorize(A), F)</code></pre>
     <aside class="md-toc">
       <div class="md-toc-inner">
         <p class="md-toc-title">On this page</p>
-          <a class="md-toc-link md-toc-h2" href="#What&#39;s-implemented">What&#39;s implemented</a>
-            <a class="md-toc-link md-toc-h3" href="#Why-the-dispatch-is-reflection-based,-not-a-typed-method">Why the dispatch is reflection-based, not a typed method</a>
-            <a class="md-toc-link md-toc-h3" href="#Entry-points-covered">Entry points covered</a>
-          <a class="md-toc-link md-toc-h2" href="#Performance:-CSC-vs.-CSR-for-this-fallback-path">Performance: CSC vs. CSR for this fallback path</a>
-          <a class="md-toc-link md-toc-h2" href="#Evaluated-and-excluded">Evaluated and excluded</a>
           <a class="md-toc-link md-toc-h2" href="#Refilling-a-VectorElement-from-a-factorization">Refilling a VectorElement from a factorization</a>
       </div>
     </aside>
@@ -261,6 +132,6 @@ ldiv!(uₕ, factorize(A), F)</code></pre>
   <script>hljs.highlightAll();</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=95c85c93"></script>
+  <script src="../../assets/materialdocs.js?v=b593086e"></script>
 </body>
 </html>

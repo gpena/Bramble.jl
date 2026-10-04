@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Utilities — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=32bdd324">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=dbe8236c">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Utilities — Bramble.jl">
   <meta property="og:title" content="Utilities — Bramble.jl">
@@ -47,8 +47,6 @@
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
-        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
@@ -56,50 +54,11 @@
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and scientific computing</span>
-        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
-        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
-        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
-        <a href="../../tutorials/backend/">Backends and execution policies</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Visualization and export</span>
-        <a href="../../tutorials/plotting/">Plotting directly</a>
-        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
-        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Stationary problems</span>
-          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
-          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
-          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
-          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
-          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
-          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Time-dependent problems</span>
-          <a href="../../examples/heat_equation/">Heat equation</a>
-          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
-          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Inverse problems</span>
-          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
-          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Solvers and performance</span>
-          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
-          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
-          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
-        </div>
+        <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/heat_equation/">Heat equation</a>
       </div>
-      <a href="../../benchmarks/">Benchmarks</a>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section">
@@ -122,9 +81,7 @@
           <a href="../../internals/mesh/">Mesh</a>
           <a href="../../internals/space/">Spaces</a>
           <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/autodiff/">Automatic differentiation</a>
           <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/gpu/">GPU acceleration</a>
           <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
         </div>
       </div>
@@ -267,7 +224,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.CpuThreaded">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.CpuThreaded</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L137-L187" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L137-L167" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -279,16 +236,14 @@ true</code></pre>
 <p>Spelled <code class="md-code-inline">Parallel()</code> as often as not: <code class="md-code-inline">const Parallel = CpuThreaded</code>.</p>
 <p>A call made from inside another threaded region, such as the body of a user&#39;s own <code class="md-code-inline">Threads.@threads</code> loop, or from a spawned task while another task&#39;s threaded region runs, executes serially on the calling task instead of throwing, and returns exactly what the same call returns at top level.</p>
 <p><code class="md-code-inline">Base.Threads.@threads</code> is the primitive, and naming it that way leaves room for the others that are not this one – Polyester&#39;s <code class="md-code-inline">@batch</code> (gpena/Bramble.jl#190) and MPI. <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> is that Polyester-backed sibling: the policy type ships here, but the sweeps it selects live in the <code class="md-code-inline">BramblePolyesterExt</code> package extension, and requesting one without <code class="md-code-inline">using Polyester</code> errors the way <a href="../../api/utilities/#Bramble.metal_backend"><code class="md-code-inline">metal_backend</code></a> does without <code class="md-code-inline">using Metal</code>.</p>
-<p>Where &quot;small&quot; ends was measured per workload rather than assumed (gpena/Bramble.jl#299, <code class="md-code-inline">benchmark/polyester_crossover.jl</code>, commit 4b76d62b, on the Apple M2 host this milestone&#39;s other measurements were taken on, <code class="md-code-inline">--threads=4</code>, AC power): the smallest grid size at which this policy beats <code class="md-code-inline">CpuSerial</code> twice running is 64-96 points per axis for unmasked <code class="md-code-inline">Rₕ!</code>, 256 for masked <code class="md-code-inline">Rₕ!</code> (an O(perimeter) write against the mesh&#39;s <code class="md-code-inline">:boundary</code> marker, not O(n^D)), and 24-32 for <code class="md-code-inline">avgₕ!</code> at <code class="md-code-inline">nq = 3</code>. Below those sizes <code class="md-code-inline">CpuSerial</code> is faster; the crossover differs by an order of magnitude between workloads, so a number from one does not transfer to another.</p>
-<p><code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">normₕ</code> (<code class="md-code-inline">_dot</code>/<code class="md-code-inline">_dot_masked</code>, <code class="md-code-inline">src/utils/linear_algebra.jl</code>) now thread under this policy too (gpena/Bramble.jl#301, commits ad3ab31a and 237ca306): the crossover against <code class="md-code-inline">CpuSerial</code> was measured the same way (gpena/Bramble.jl#301, <code class="md-code-inline">benchmark/polyester_crossover.jl</code>, commit d6a1fc10, same Apple M2 host, <code class="md-code-inline">--threads=4</code>, AC power) at 100,000-300,000 elements across four runs – the &quot;twice running&quot; confirmation rule held in each run, but the exact crossing point moved within that range from one run to the next (300k, 300k, 100k, 100k), the same run-to-run jitter the other workloads above show near their own crossing point.</p>
-<p><code class="md-code-inline">D₋ₓ!</code> (in-place stencil) and the warmed broadcast axpy <code class="md-code-inline">vₕ .= a .* uₕ .+ wₕ</code> into a <code class="md-code-inline">VectorElement</code> now thread under this policy too (gpena/Bramble.jl#356, #357, commits af19afea, 96e93c02, f7a8798f, 90f262e2): the crossover against <code class="md-code-inline">CpuSerial</code> was measured the same way (<code class="md-code-inline">benchmark/policy_crossover.jl</code>, commit 90f262e2, same Apple M2 host, <code class="md-code-inline">--threads=4</code>, AC power) across two runs. <code class="md-code-inline">D₋ₓ!</code>&#39;s crossover held in both runs at 300,000 DOFs in 1D, 300,304 in 2D, and 300,763 in 3D. Broadcast axpy&#39;s crossover held in both runs at 300,304 DOFs in 2D and 300,763 in 3D, but in 1D it moved between the two runs (100,000 and 300,000 DOFs), the same run-to-run jitter <code class="md-code-inline">innerₕ</code> shows above. Below these sizes <code class="md-code-inline">CpuSerial</code> is faster for both workloads.</p>
+<p>Where &quot;small&quot; ends differs widely between workloads (restriction, cell averaging, the <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">normₕ</code> reductions, <code class="md-code-inline">D₋ₓ!</code>, broadcasts), so a size from one does not transfer to another, and it depends on the machine. <code class="md-code-inline">benchmark/policy_crossover.jl</code> measures it per workload. <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">normₕ</code> (<code class="md-code-inline">_dot</code>/<code class="md-code-inline">_dot_masked</code>, <code class="md-code-inline">src/utils/linear_algebra.jl</code>), <code class="md-code-inline">D₋ₓ!</code> and the warmed broadcast axpy <code class="md-code-inline">vₕ .= a .* uₕ .+ wₕ</code> into a <code class="md-code-inline">VectorElement</code> thread under this policy (gpena/Bramble.jl#301, #356, #357).</p>
 <p>See also: <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a>, <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>, <a href="../../api/utilities/#Bramble.ExecutionPolicy"><code class="md-code-inline">ExecutionPolicy</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.CpuPolyester">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.CpuPolyester</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L190-L247" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L170-L212" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -298,8 +253,7 @@ true</code></pre>
 <p>Polyester-batched execution policy.</p>
 <p>Named for the provider, matching <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a> and <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>: the name makes the <code class="md-code-inline">using Polyester</code> requirement self-evident, where the previous name (<code class="md-code-inline">CpuBatch</code>, now a deprecated alias) named the <code class="md-code-inline">Polyester.@batch</code> primitive instead and gave no hint that a weak dependency was involved (gpena/Bramble.jl#300).</p>
 <p>Directs grid operations and form assembly through <code class="md-code-inline">Polyester.jl</code>&#39;s <code class="md-code-inline">@batch</code>, a primitive whose per-call overhead is low enough to pay off on grids where <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>&#39;s <code class="md-code-inline">Threads.@threads</code> does not (gpena/Bramble.jl#190). The sweeps this policy selects are implemented in the <code class="md-code-inline">BramblePolyesterExt</code> package extension, not here: <code class="md-code-inline">using Polyester</code> must be loaded before this policy reaches one of them, or the call errors naming the package, matching <a href="../../api/utilities/#Bramble.metal_backend"><code class="md-code-inline">metal_backend</code></a>&#39;s precedent. <code class="md-code-inline">Parallel()</code> is untouched and keeps meaning <code class="md-code-inline">Threads.@threads</code>.</p>
-<p>The crossover against <code class="md-code-inline">CpuSerial</code> was measured per workload, closing the last open acceptance criterion of gpena/Bramble.jl#190 (gpena/Bramble.jl#299, <code class="md-code-inline">benchmark/polyester_crossover.jl</code>, commit 4b76d62b, same Apple M2 host, <code class="md-code-inline">--threads=4</code> and AC power as <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>&#39;s figures): the smallest grid size at which this policy beats <code class="md-code-inline">CpuSerial</code> twice running is 8-24 points per axis for unmasked <code class="md-code-inline">Rₕ!</code>, 16 for masked <code class="md-code-inline">Rₕ!</code>, 8 for <code class="md-code-inline">avgₕ!</code> at <code class="md-code-inline">nq = 3</code>, and 1,000 elements for <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">_dot</code>. Every one of these crossovers falls one to two orders of magnitude below <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>&#39;s own crossover for the same workload (gpena/Bramble.jl#301 measured <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>&#39;s <code class="md-code-inline">_dot</code> crossover at 100,000-300,000 elements), and this policy beats <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> at every crossover measured.</p>
-<p><code class="md-code-inline">D₋ₓ!</code> and the warmed broadcast axpy <code class="md-code-inline">vₕ .= a .* uₕ .+ wₕ</code> also thread under this policy (gpena/Bramble.jl#356, #357, commits af19afea, 96e93c02, f7a8798f, 90f262e2), measured the same way (<code class="md-code-inline">benchmark/policy_crossover.jl</code>, commit 90f262e2, same Apple M2 host, <code class="md-code-inline">--threads=4</code>, AC power) across two runs: <code class="md-code-inline">D₋ₓ!</code>&#39;s crossover against <code class="md-code-inline">CpuSerial</code> held at 3,000 DOFs in 1D and 10,648 in 3D in both runs, and moved between 1,024 and 10,000 DOFs in 2D from one run to the next. Broadcast axpy&#39;s crossover held at 10,000 DOFs in 1D, 300,304 in 2D, and 97,336 in 3D in both runs. Against <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> directly, this policy beats it from 100 DOFs in 1D/2D and 125 in 3D for both workloads in both runs, again one to two orders of magnitude below <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>&#39;s own crossover against <code class="md-code-inline">CpuSerial</code> for the same workload.</p>
+<p>Its crossover against <code class="md-code-inline">CpuSerial</code> (gpena/Bramble.jl#299) falls at smaller sizes than <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>&#39;s for every workload measured, <code class="md-code-inline">D₋ₓ!</code> and the warmed broadcast axpy <code class="md-code-inline">vₕ .= a .* uₕ .+ wₕ</code> included (gpena/Bramble.jl#356, #357). <code class="md-code-inline">benchmark/policy_crossover.jl</code> measures both on your machine.</p>
 <p>Most warm calls under this policy allocate 0 bytes. Differences, shifts, averages, divergence, curl, <code class="md-code-inline">εₕ!</code>, <code class="md-code-inline">innerₕ</code>, <code class="md-code-inline">inner₊</code> and the masked dots, broadcasts, <code class="md-code-inline">avgₕ!</code> with a plain-function source, and the <a href="../../api/forms/#Bramble.KroneckerLinearOperator"><code class="md-code-inline">KroneckerLinearOperator</code></a> product all allocate 0 B, on any grid. Their loops pass <code class="md-code-inline">@batch</code> only plain arrays and isbits values, and rebuild any light struct around them inside each task, so Polyester&#39;s argument box stays on the stack. No call reaches <code class="md-code-inline">Threads.@threads</code> or <code class="md-code-inline">Threads.@spawn</code>.</p>
 <p>The paths whose loops capture a form, or any value holding a GC reference, still allocate a small constant amount per call, the same on a 33² grid as on a 513² one, because Polyester then copies the arguments into a heap-allocated <code class="md-code-inline">ManualMemory.Reference</code>. Measured on a 2D non-uniform grid with 4 threads, each box is at most 512 B: linear assembly 256 B, a fused matrix-free product 112 B (2D) or 128 B (3D), a per-unit matrix-free product 1088 B, a bilinear refill 1520 B (five colour sweeps of 304 B), a multigrid V-cycle 1008 B per level, and an explicit right-hand side 256 B. An <code class="md-code-inline">avgₕ!</code> whose source closure captures an array, and a broadcast with a 0-dimensional array leaf, box in the same way. This release keeps the bound for these paths; removing the boxes is gpena/Bramble.jl#437 (gpena/Bramble.jl#400, gpena/Bramble.jl#433).</p>
 <p>See also: <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>, <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a>, <a href="../../api/utilities/#Bramble.ExecutionPolicy"><code class="md-code-inline">ExecutionPolicy</code></a>.</p>
@@ -308,7 +262,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.GpuOffload">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GpuOffload</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L507-L534" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L472-L499" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -331,7 +285,7 @@ GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -&gt; GpuOff
 <div class="md-docstring" id="Bramble.GpuPolicy">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GpuPolicy</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L250-L256" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L215-L221" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -345,7 +299,7 @@ GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -&gt; GpuOff
 <div class="md-docstring" id="Bramble.GpuKernel">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GpuKernel</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L263-L285" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L228-L250" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -361,7 +315,7 @@ GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -&gt; GpuOff
 <div class="md-docstring" id="Bramble.Serial">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Serial</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L288-L293" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L253-L258" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -374,7 +328,7 @@ GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -&gt; GpuOff
 <div class="md-docstring" id="Bramble.Parallel">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Parallel</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L296-L301" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L261-L266" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -387,7 +341,7 @@ GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -&gt; GpuOff
 <div class="md-docstring" id="Bramble.execution_policy">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.execution_policy</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L438-L443" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L403-L408" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -408,7 +362,7 @@ execution_policy(::Type{&lt;:Backend{&lt;:Any, &lt;:Any, EP}}) -&gt; EP</code></
 <div class="md-docstring" id="Bramble.vector">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.vector</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L644-L658" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L609-L623" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -434,7 +388,7 @@ execution_policy(::Type{&lt;:Backend{&lt;:Any, &lt;:Any, EP}}) -&gt; EP</code></
 <div class="md-docstring" id="Bramble.matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L666-L684" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L631-L649" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -463,7 +417,7 @@ execution_policy(::Type{&lt;:Backend{&lt;:Any, &lt;:Any, EP}}) -&gt; EP</code></
 <div class="md-docstring" id="Bramble.vector_type">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.vector_type</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L414-L419" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L379-L384" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -477,7 +431,7 @@ vector_type(::Type{&lt;:Backend{VT}}) -&gt; Type{VT}</code></pre>
 <div class="md-docstring" id="Bramble.matrix_type">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.matrix_type</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L429-L434" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L394-L399" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -491,7 +445,7 @@ matrix_type(::Type{&lt;:Backend{&lt;:Any, MT}}) -&gt; Type{MT}</code></pre>
 <div class="md-docstring" id="Bramble.backend_types">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backend_types</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L571-L576" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L536-L541" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -505,7 +459,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.metal_sparse_csr">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.metal_sparse_csr</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L781-L795" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L746-L760" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -529,7 +483,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.metal_sparse_csc">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.metal_sparse_csc</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L802-L816" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L767-L781" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -553,7 +507,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.gpu_backend">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.gpu_backend</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L850-L877" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L815-L842" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -583,7 +537,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.metal_backend">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.metal_backend</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L742-L771" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L707-L736" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -615,7 +569,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.csr_backend">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.csr_backend</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L922-L939" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L887-L904" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -679,7 +633,7 @@ set_preferences!(Bramble, &quot;precompile_workload&quot; =&gt; false)</code></p
 <div class="md-docstring" id="Bramble.CpuBatch">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.CpuBatch</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L304-L312" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L269-L277" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -693,7 +647,7 @@ set_preferences!(Bramble, &quot;precompile_workload&quot; =&gt; false)</code></p
 <div class="md-docstring" id="Bramble.GpuAsync">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GpuAsync</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L315-L325" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L280-L290" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -723,6 +677,6 @@ set_preferences!(Bramble, &quot;precompile_workload&quot; =&gt; false)</code></p
   <script>hljs.highlightAll();</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=32bdd324"></script>
+  <script src="../../assets/materialdocs.js?v=dbe8236c"></script>
 </body>
 </html>

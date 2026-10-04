@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Difference, jump and average operators — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=d5b0f5de">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=c0271ce0">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Difference, jump and average operators — Bramble.jl">
   <meta property="og:title" content="Difference, jump and average operators — Bramble.jl">
@@ -47,8 +47,6 @@
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/" class="md-nav-active">Difference, jump and average operators</a>
-        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
-        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
@@ -56,50 +54,11 @@
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and scientific computing</span>
-        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
-        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
-        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
-        <a href="../../tutorials/backend/">Backends and execution policies</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Visualization and export</span>
-        <a href="../../tutorials/plotting/">Plotting directly</a>
-        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
-        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Stationary problems</span>
-          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
-          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
-          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
-          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
-          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
-          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Time-dependent problems</span>
-          <a href="../../examples/heat_equation/">Heat equation</a>
-          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
-          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Inverse problems</span>
-          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
-          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Solvers and performance</span>
-          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
-          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
-          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
-        </div>
+        <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/heat_equation/">Heat equation</a>
       </div>
-      <a href="../../benchmarks/">Benchmarks</a>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
@@ -122,9 +81,7 @@
           <a href="../../internals/mesh/">Mesh</a>
           <a href="../../internals/space/">Spaces</a>
           <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/autodiff/">Automatic differentiation</a>
           <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/gpu/">GPU acceleration</a>
           <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
         </div>
       </div>
@@ -135,7 +92,7 @@
 <h1 id="tutorial_operators" class="md-heading">Difference, jump and average operators<a href="#tutorial_operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p><strong>What you will learn.</strong> How to apply a difference, a jump or an average to a discrete function, what each does at the edge of the grid, and how to get the same operator as a matrix.</p>
 <p><strong>What you need first.</strong> The <a href="../../tutorials/mesh/#tutorial_mesh">mesh tutorial</a> and the <a href="../../tutorials/space/#tutorial_space">space tutorial</a>, for meshes, grid spaces and discrete functions.</p>
-<p><strong>Where next.</strong> The <a href="../../tutorials/operator_accuracy/">accuracy tutorial</a> measures how well these operators approximate derivatives.</p>
+<p><strong>Where next.</strong> The <a href="../../tutorials/form/">form tutorial</a> assembles these operators into linear systems.</p>
 <p>Every block below runs when this page is built.</p>
 <hr class="md-hr">
 <h2 id="Apply-an-operator" class="md-heading">Apply an operator<a href="#Apply-an-operator" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -274,7 +231,7 @@ points(Ωₕ), parent(uₕ)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0, 0.0, -1.0)</code></pre>
 </div>
-<p>The last entry is <span class="md-math md-math-inline">\(-u_5 = -1\)</span>, not <span class="md-math md-math-inline">\(0\)</span>. That is what makes the jump agree with its matrix, as the <a href="../../tutorials/operator_accuracy/#operator_accuracy_convergence">accuracy tutorial</a> shows with a convergence study that the truncated point spoils.</p>
+<p>The last entry is <span class="md-math md-math-inline">\(-u_5 = -1\)</span>, not <span class="md-math md-math-inline">\(0\)</span>. That is what makes the jump agree with its matrix.</p>
 <p>The index shifts follow the jump: an off-grid neighbour reads as zero, so <code class="md-code-inline">S₊ₕ</code> is zero at the last point and <code class="md-code-inline">S₋ₕ</code> at the first.</p>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -387,7 +344,7 @@ typeof(A), A * parent(uₕ) ≈ parent(∇ₕ(uₕ))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(SparseArrays.SparseMatrixCSC{Float64, Int64}, true)</code></pre>
 </div>
-<p>Both routes give the same answer. Applying the operator to <code class="md-code-inline">uₕ</code> is the fast path and what a time-stepping loop should use. The matrix is what to reach for when assembling a linear system, and it is how the test suite checks the fast path. The <a href="../../tutorials/backend/#tutorial_backend">backend tutorial</a> covers the storage choices behind the matrix type.</p>
+<p>Both routes give the same answer. Applying the operator to <code class="md-code-inline">uₕ</code> is the fast path and what a time-stepping loop should use. The matrix is what to reach for when assembling a linear system, and it is how the test suite checks the fast path.</p>
 <hr class="md-hr">
 <h2 id="Gradients-in-two-dimensions" class="md-heading">Gradients in two dimensions<a href="#Gradients-in-two-dimensions" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>The <code class="md-code-inline">ₕ</code> suffix applies an operator along every coordinate and returns a tuple with one entry per dimension. On a one-dimensional mesh it returns the single element itself rather than a one-tuple, which is why <code class="md-code-inline">∇ₕ(uₕ)</code> above was not wrapped.</p>
@@ -421,7 +378,7 @@ parent(∇ₕ ⋅ uv) == parent(divₕ(uv)), parent(∇ₕ × uv) == parent(curl
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
 </div>
-<p>The next page, the <a href="../../tutorials/operator_accuracy/">accuracy tutorial</a>, compares the centered and second-order variants of the difference. The <a href="../../tutorials/interpolation/">interpolation tutorial</a> moves a grid function between meshes.</p>
+<p>The next page, the <a href="../../tutorials/form/">form tutorial</a>, assembles these operators into linear systems.</p>
 <hr class="md-hr">
 <h2 id="Reference" class="md-heading">Reference<a href="#Reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <h3 id="operators_names" class="md-heading">How the names are built<a href="#operators_names" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
@@ -473,7 +430,7 @@ parent(∇ₕ ⋅ uv) == parent(divₕ(uv)), parent(∇ₕ × uv) == parent(curl
 <p>So <code class="md-code-inline">D₋ₓ</code> is the backward finite difference along <span class="md-math md-math-inline">\(x\)</span>, <code class="md-code-inline">M₊ᵧ</code> the forward average along <span class="md-math md-math-inline">\(y\)</span>, and <code class="md-code-inline">∇ₕ</code> the backward finite difference in every coordinate, the discrete gradient, which has that extra name. <code class="md-code-inline">jump</code> takes no direction, for the reason given above: it is <code class="md-code-inline">jumpₓ</code>, <code class="md-code-inline">jumpᵧ</code>, <code class="md-code-inline">jump₂</code> and <code class="md-code-inline">jumpₕ</code>. The index shift has a forward and a backward stem: <code class="md-code-inline">S₊ₓ</code> reads the next point along <span class="md-math md-math-inline">\(x\)</span>, <code class="md-code-inline">S₋ₓ</code> the previous one, and <code class="md-code-inline">S₊ₕ</code>/<code class="md-code-inline">S₋ₕ</code> shift along every coordinate.</p>
 <p>The forward difference and the forward average are <code class="md-code-inline">public</code> but not exported. Bramble discretises with the backward operator paired with <code class="md-code-inline">inner₊</code>, so the forward ones are the duals to check against, not the ones to write a form with. This page imports them by name.</p>
 <h3 id="Four-differences-compared" class="md-heading">Four differences compared<a href="#Four-differences-compared" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>Four families combine the same one-sided differences in different ways. The <a href="../../tutorials/operator_accuracy/">accuracy tutorial</a> derives each; this table is the summary.</p>
+<p>Four families combine the same one-sided differences in different ways:</p>
 <div class="md-table-wrap">
 <table class="md-table">
 <thead>
@@ -609,6 +566,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=d5b0f5de"></script>
+  <script src="../../assets/materialdocs.js?v=c0271ce0"></script>
 </body>
 </html>

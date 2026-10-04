@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Linear and bilinear forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=7795f224">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=29f48c53">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Linear and bilinear forms — Bramble.jl">
   <meta property="og:title" content="Linear and bilinear forms — Bramble.jl">
@@ -47,8 +47,6 @@
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
-        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Forms and assembly</span>
@@ -56,50 +54,11 @@
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and scientific computing</span>
-        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
-        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
-        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
-        <a href="../../tutorials/backend/">Backends and execution policies</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Visualization and export</span>
-        <a href="../../tutorials/plotting/">Plotting directly</a>
-        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
-        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Stationary problems</span>
-          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
-          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
-          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
-          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
-          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
-          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Time-dependent problems</span>
-          <a href="../../examples/heat_equation/">Heat equation</a>
-          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
-          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Inverse problems</span>
-          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
-          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Solvers and performance</span>
-          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
-          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
-          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
-        </div>
+        <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/heat_equation/">Heat equation</a>
       </div>
-      <a href="../../benchmarks/">Benchmarks</a>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section md-nav-collapsed">
@@ -122,9 +81,7 @@
           <a href="../../internals/mesh/">Mesh</a>
           <a href="../../internals/space/">Spaces</a>
           <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/autodiff/">Automatic differentiation</a>
           <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/gpu/">GPU acceleration</a>
           <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
         </div>
       </div>
@@ -171,7 +128,7 @@ l = form(Wₕ, v -&gt; innerₕ(fₕ, v))</code></pre>
 <pre><code class="language-julia">b = assemble(l)
 length(b), sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.6361083632808495)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.6361083632808496)</code></pre>
 </div>
 <p>In a time loop the allocation is the part worth avoiding. <code class="md-code-inline">assemble!</code> refills a vector that already exists with zero allocations:</p>
 <div class="md-multi-output">
@@ -180,7 +137,7 @@ length(b), sum(b)</code></pre>
 <pre><code class="language-julia">assemble!(b, l)
 sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808495</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808496</code></pre>
 </div>
 <h3 id="Live-grid-coefficients-and-dynamic-scalars" class="md-heading">Live grid coefficients and dynamic scalars<a href="#Live-grid-coefficients-and-dynamic-scalars" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>A form keeps direct references to its coefficient arrays. Overwrite a grid function in place with <code class="md-code-inline">Rₕ!(fₕ, ...)</code> or <code class="md-code-inline">parent(fₕ) .= ...</code> between steps, and the next <code class="md-code-inline">assemble!(b, l)</code> reads the new values with no allocation and no rebuilt form.</p>
@@ -205,7 +162,7 @@ sum(b_dyn) ≈ 2 * sum(b)</code></pre>
 <pre><code class="language-julia">oneₕ = Rₕ(Wₕ, x -&gt; 1.0)
 l(oneₕ), sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6361083632808495, 0.6361083632808495)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6361083632808495, 0.6361083632808496)</code></pre>
 </div>
 <p>Against the all-ones grid function a linear form is the sum of its assembled vector. The difference is that <code class="md-code-inline">l(oneₕ)</code> builds no vector and allocates nothing, so prefer it when the result is a scalar.</p>
 <p><code class="md-code-inline">evaluate!</code> is the middle case. It takes a scratch vector, fills it with the assembled vector and returns the contraction:</p>
@@ -342,7 +299,7 @@ reaction(ad, ld, uh_elt; marker = :left), reaction(ad, ld, uh_elt; marker = :rig
 </div>
 <p>Both come out near <span class="md-math md-math-inline">\(\pi\)</span>. For <span class="md-math md-math-inline">\(u = \sin(\pi x)\)</span> the flux <span class="md-math md-math-inline">\(-u&#39;\)</span> leaving the domain is <span class="md-math md-math-inline">\(\pi\)</span> at each end, and the two together recover the net source <span class="md-math md-math-inline">\(\int_0^1 \pi^2 \sin(\pi x)\,dx = 2\pi\)</span> to round-off, at any resolution. The sign convention is in the docstring of <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a>; <a href="../../api/forms/#Bramble.reaction_density"><code class="md-code-inline">reaction_density</code></a> gives the pointwise quantity, suitable for <a href="../../api/exporters/#Bramble.export_vtk"><code class="md-code-inline">export_vtk</code></a>.</p>
 <h2 id="Threading" class="md-heading">Threading<a href="#Threading" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>Assembly reads the execution policy off the space it is given. A space whose backend says <code class="md-code-inline">Parallel()</code> assembles on several threads, and nothing about the call changes. The <a href="../../tutorials/backend/">backend tutorial</a> covers choosing the policy and the measured crossovers where threading starts to pay. The <a href="../../internals/form/">internals page</a> describes the colouring that keeps the threads from writing to the same entry.</p>
+<p>Assembly reads the execution policy off the space it is given. A space whose backend says <code class="md-code-inline">Parallel()</code> assembles on several threads, and nothing about the call changes.</p>
 <h2 id="Reference" class="md-heading">Reference<a href="#Reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <h3 id="Point-sources" class="md-heading">Point sources<a href="#Point-sources" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>A continuous source <span class="md-math md-math-inline">\(f(x)\)</span> is a density, integrated over cell volumes as <span class="md-math md-math-inline">\(\ell(v) = (f, v)_h\)</span>. A point source is a singular functional, the Dirac distribution <span class="md-math md-math-inline">\(S\,\delta(x - x_0)\)</span>:</p>
@@ -522,6 +479,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=7795f224"></script>
+  <script src="../../assets/materialdocs.js?v=29f48c53"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=76e66159">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b71fbd80">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -47,8 +47,6 @@
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-        <a href="../../tutorials/operator_accuracy/">How accurate are the difference operators</a>
-        <a href="../../tutorials/interpolation/">Interpolation between meshes</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Forms and assembly</span>
@@ -56,50 +54,11 @@
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and scientific computing</span>
-        <a href="../../tutorials/solvers/">Choosing a solver, backend and execution policy</a>
-        <a href="../../tutorials/solvers_by_problem/">Solvers by problem</a>
-        <a href="../../tutorials/time_stepping/">Solving at every time step</a>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
-        <a href="../../tutorials/backend/">Backends and execution policies</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Visualization and export</span>
-        <a href="../../tutorials/plotting/">Plotting directly</a>
-        <a href="../../tutorials/vtk_export/">Writing VTK files</a>
-        <a href="../../tutorials/pgfplots_export/">Writing PGFPlots data files</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Stationary problems</span>
-          <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
-          <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-          <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
-          <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
-          <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
-          <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
-          <a href="../../examples/elasticity_3d/">Linear elasticity in three dimensions</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Time-dependent problems</span>
-          <a href="../../examples/heat_equation/">Heat equation</a>
-          <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
-          <a href="../../examples/transient_inplace/">A transient loop that allocates nothing</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Inverse problems</span>
-          <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
-          <a href="../../examples/transient_inverse_problem/">Recovering parameters from a trajectory (transient adjoint gradients)</a>
-        </div>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Solvers and performance</span>
-          <a href="../../examples/amg_preconditioning/">Algebraic multigrid preconditioning</a>
-          <a href="../../examples/memory_scaling/">Memory scaling with a matrix-free Kronecker operator</a>
-          <a href="../../examples/matrix_free_operator/">The matrix-free operator</a>
-        </div>
+        <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/heat_equation/">Heat equation</a>
       </div>
-      <a href="../../benchmarks/">Benchmarks</a>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
         <div class="md-nav-section">
@@ -122,9 +81,7 @@
           <a href="../../internals/mesh/">Mesh</a>
           <a href="../../internals/space/">Spaces</a>
           <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/autodiff/">Automatic differentiation</a>
           <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/gpu/">GPU acceleration</a>
           <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
         </div>
       </div>
@@ -296,7 +253,7 @@ end</code></pre>
 <pre><code class="language-julia">assemble(form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -&gt; AbstractMatrix</code></pre>
 </div>
 <p>Allocate a matrix with the form&#39;s sparsity pattern and assemble into it. The matrix type is <code class="md-code-inline">matrix_type(backend(test_space(form)))</code> – <code class="md-code-inline">SparseMatrixCSC{Float64,Int}</code> by default, or whatever <a href="../../api/utilities/#Bramble.backend"><code class="md-code-inline">backend</code></a> the space&#39;s mesh was built with.</p>
-<p><strong>Call this once, then assemble into what it returns.</strong> Building the sparsity pattern is the larger part of the work (at 250,000 degrees of freedom it is 9,700 us and 52 MB against 1,500 us and zero allocations to refill the matrix), and the pattern does not change between assemblies. A time loop or Newton iteration benefits from preallocating the pattern once:</p>
+<p><strong>Call this once, then assemble into what it returns.</strong> Building the sparsity pattern is the larger part of the work (a refill allocates nothing), and the pattern does not change between assemblies. A time loop or Newton iteration benefits from preallocating the pattern once:</p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">A = assemble(a)                        # once: pattern, allocation and initial fill
@@ -370,9 +327,9 @@ u = A \ F</code></pre>
 <p><code class="md-code-inline">assemble!</code> uses the pre-resolved <code class="md-code-inline">form.ast</code> stored directly inside the form.</p>
 <p><strong>Live coefficients</strong></p>
 <ul class="md-list-tight">
-<li><p>Grid functions. The stored AST retains references to source <code class="md-code-inline">VectorElement</code> storage. Mutating values in-place (<code class="md-code-inline">Rₕ!(cₕ, ...)</code> or <code class="md-code-inline">parent(cₕ) .= ...</code>) between steps automatically updates the matrix entries. Nested scales such as <code class="md-code-inline">uₕ * (wₕ * v)</code> stay live too: each grid function is read at assembly time, never fused into a copy when the form is built. On the host this costs 0 allocations; on a device-backed space each fill copies the coefficient to the host anew, so it stays live but is not allocation-free there (see <a href="../../internals/gpu/#GPU-acceleration">GPU acceleration</a>).</p>
+<li><p>Grid functions. The stored AST retains references to source <code class="md-code-inline">VectorElement</code> storage. Mutating values in-place (<code class="md-code-inline">Rₕ!(cₕ, ...)</code> or <code class="md-code-inline">parent(cₕ) .= ...</code>) between steps automatically updates the matrix entries. Nested scales such as <code class="md-code-inline">uₕ * (wₕ * v)</code> stay live too: each grid function is read at assembly time, never fused into a copy when the form is built. On the host this costs 0 allocations; on a device-backed space each fill copies the coefficient to the host anew, so it stays live but is not allocation-free there.</p>
 </li>
-<li><p>Dynamic scalars. Plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a <code class="md-code-inline">Ref(val)</code> (e.g. <code class="md-code-inline">β = Ref(1.0); a = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(β * D₋ₓ(u), D₋ₓ(v)))</code>). Mutating <code class="md-code-inline">β[] = new_val</code> evaluates live during assembly with 0 allocations on the host; the <code class="md-code-inline">Ref</code> itself adds nothing, but a device-backed space&#39;s call still allocates regardless of the scalar (see <a href="../../internals/gpu/#GPU-acceleration">GPU acceleration</a>).</p>
+<li><p>Dynamic scalars. Plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a <code class="md-code-inline">Ref(val)</code> (e.g. <code class="md-code-inline">β = Ref(1.0); a = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(β * D₋ₓ(u), D₋ₓ(v)))</code>). Mutating <code class="md-code-inline">β[] = new_val</code> evaluates live during assembly with 0 allocations on the host; the <code class="md-code-inline">Ref</code> itself adds nothing, but a device-backed space&#39;s call still allocates regardless of the scalar.</p>
 </li>
 </ul>
 </div>
@@ -409,7 +366,7 @@ u = A \ F</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">allocate_system_matrix(form::BilinearForm, ast = resolve_form_ast(form)) -&gt; AbstractMatrix</code></pre>
 </div>
-<p>Build the matrix a <code class="md-code-inline">BilinearForm</code> assembles into: the appropriate size, correct sparsity pattern, and stored zeros throughout, in <code class="md-code-inline">matrix_type(backend(test_space(form)))</code> – <code class="md-code-inline">SparseMatrixCSC{Float64,Int}</code> by default, or whatever <a href="../../api/utilities/#Bramble.backend"><code class="md-code-inline">backend</code></a> the space&#39;s mesh was built with (see <a href="../../internals/form/#Bramble._allocate_from_pattern-Union{Tuple{MT}, Tuple{Type{MT}, Int64, Int64, Vector{Int64}, Vector{Int64}, AbstractVector}} where MT&lt;:SparseArrays.SparseMatrixCSC"><code class="md-code-inline">_allocate_from_pattern</code></a>). On a <a href="../../api/utilities/#Bramble.metal_backend"><code class="md-code-inline">metal_backend</code></a> space this returns a device-resident <code class="md-code-inline">BrambleMetalExt.MetalSparseMatrixCSR{Float32,Int64}</code>, not a host <code class="md-code-inline">SparseMatrixCSC</code> – verified against real triplets (gpena/Bramble.jl#94 S4.1).</p>
+<p>Build the matrix a <code class="md-code-inline">BilinearForm</code> assembles into: the appropriate size, correct sparsity pattern, and stored zeros throughout, in <code class="md-code-inline">matrix_type(backend(test_space(form)))</code> – <code class="md-code-inline">SparseMatrixCSC{Float64,Int}</code> by default, or whatever <a href="../../api/utilities/#Bramble.backend"><code class="md-code-inline">backend</code></a> the space&#39;s mesh was built with (see <a href="../../internals/form/#Bramble._allocate_from_pattern-Union{Tuple{MT}, Tuple{Type{MT}, Int64, Int64, Vector{Int64}, Vector{Int64}, AbstractVector}} where MT&lt;:SparseArrays.SparseMatrixCSC"><code class="md-code-inline">_allocate_from_pattern</code></a>). On a <a href="../../api/utilities/#Bramble.metal_backend"><code class="md-code-inline">metal_backend</code></a> space this returns a device-resident <code class="md-code-inline">BrambleMetalExt.MetalSparseMatrixCSR{Float32,Int64}</code>, not a host <code class="md-code-inline">SparseMatrixCSC</code> – verified against real triplets (gpena/Bramble.jl#94).</p>
 <p>The pattern follows from the stencil rather than coefficient values, remaining invariant while the mesh and expression structure are unchanged. Preallocating the matrix once outside loops allows zero-allocation in-place assembly:</p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -450,26 +407,49 @@ end</code></pre>
 </div>
 </div>
 <h2 id="Matrix-free-Kronecker-operators" class="md-heading">Matrix-free Kronecker operators<a href="#Matrix-free-Kronecker-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>For a separable <code class="md-code-inline">BilinearForm</code> – one whose assembled matrix is an exact sum of Kronecker products of one-dimensional factors over a <code class="md-code-inline">MeshnD</code>, such as <code class="md-code-inline">innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))</code> – <code class="md-code-inline">kronecker_operator</code> builds a <code class="md-code-inline">KroneckerLinearOperator</code> that applies in one fused pass over the grid instead of ever assembling the <code class="md-code-inline">D</code>-dimensional matrix: a <code class="md-code-inline">200^3</code> mesh stores <code class="md-code-inline">O(200)</code> numbers per axis rather than the assembled matrix&#39;s <code class="md-code-inline">O(200^3)</code> stored entries. <code class="md-code-inline">is_separable</code> checks the condition beforehand. <code class="md-code-inline">fdm_solve</code> requires <code class="md-code-inline">using Kronecker</code> (the <code class="md-code-inline">BrambleKroneckerExt</code> extension) and solves a separable, constant-coefficient system by fast diagonalisation instead of a general sparse factorisation.</p>
+<p>For a separable <code class="md-code-inline">BilinearForm</code> (one whose assembled matrix is an exact sum of Kronecker products of one-dimensional factors over a <code class="md-code-inline">MeshnD</code>), <code class="md-code-inline">kronecker_operator</code> builds a <code class="md-code-inline">KroneckerLinearOperator</code> that applies in one fused pass over the grid instead of ever assembling the <code class="md-code-inline">D</code>-dimensional matrix: a <code class="md-code-inline">200^3</code> mesh stores <code class="md-code-inline">O(200)</code> numbers per axis rather than the assembled matrix&#39;s <code class="md-code-inline">O(200^3)</code> stored entries. <code class="md-code-inline">is_separable</code> checks the condition beforehand and lists what factors.</p>
+<p>What factors: the difference, average, jump and shift families along any axis and chains of them, so mixed derivatives and advection terms (whose factors need not be symmetric); <code class="md-code-inline">innerₕ</code>, <code class="md-code-inline">inner₊</code> and <code class="md-code-inline">inner_Γ</code> weights; a restriction to <code class="md-code-inline">:interior</code>; a grid-function coefficient that varies along one axis; and scalar or <code class="md-code-inline">Ref</code> coefficients. A composite space whose leaves share one mesh gives a block operator, one Kronecker operator per block. What does not: a coefficient varying along several axes, other region restrictions (Dirichlet rows included), an interpolation, a 1D mesh, trial and test spaces on different meshes, and the star and cross-weighted differences. A grid-function coefficient is read once, when the operator is built, and warns so; use a <code class="md-code-inline">Ref</code> for a coefficient that changes, or <code class="md-code-inline">matrix_free_operator</code>, which reads it live. Under <code class="md-code-inline">CpuThreaded</code> the product runs threaded, and an operator whose mesh was mutated in place afterwards throws instead of applying.</p>
+<p><code class="md-code-inline">fdm_solve</code> requires <code class="md-code-inline">using Kronecker</code> (the <code class="md-code-inline">BrambleKroneckerExt</code> extension) and solves a separable, constant-coefficient system by fast diagonalisation instead of a general sparse factorisation.</p>
 <div class="md-docstring" id="Bramble.is_separable">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.is_separable</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L97-L129" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L109-L164" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">is_separable(a::BilinearForm) -&gt; Bool</code></pre>
 </div>
-<p>Whether <code class="md-code-inline">a</code>&#39;s resolved AST is a sum of terms each expressible as a Kronecker product of one-dimensional factors, <code class="md-code-inline">H_D ⊗ ... ⊗ A_d ⊗ ... ⊗ H_1</code>, over a <code class="md-code-inline">MeshnD</code>.</p>
-<p><code class="md-code-inline">true</code> requires every one of the following:</p>
+<p>Whether <code class="md-code-inline">a</code>&#39;s resolved AST is a sum of terms each expressible as a sum of Kronecker products of one-dimensional factors over a <code class="md-code-inline">MeshnD</code>: every addend, its constant (literal or <code class="md-code-inline">Ref</code>) scalar coefficients stripped, has a projection onto the mesh&#39;s axes (<code class="md-code-inline">_kron_project</code>).</p>
+<p><code class="md-code-inline">a</code>&#39;s trial and test space must both be a <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a> sharing one mesh, at least two-dimensional (a 1D mesh has nothing to factor), or composite spaces whose leaves all live on one such mesh; every (test leaf, trial leaf) block of <code class="md-code-inline">a</code> must then be separable in this sense.</p>
+<p>What factors:</p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">a</code>&#39;s trial and test space are both a (non-composite) <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a> sharing one mesh, and that mesh is at least two-dimensional (a 1D mesh has nothing to factor).</p>
+<li><p>the difference, average, jump and shift families along any axis, and chains of them (<code class="md-code-inline">D₋ₓ(D₋ᵧ(u))</code>), so mixed derivatives and advection terms, whose factors need not be symmetric;</p>
 </li>
-<li><p>Every addend of the resolved AST, after stripping any constant (literal or <code class="md-code-inline">Ref</code>) scalar coefficient, is <code class="md-code-inline">innerₕ(u, v)</code> or <code class="md-code-inline">inner₊</code> of a <code class="md-code-inline">D₋</code> backward difference along one axis on both sides – what <code class="md-code-inline">innerₕ(u, v)</code> and <code class="md-code-inline">inner₊(∇ₕ(u), ∇ₕ(v))</code> resolve to.</p>
+<li><p><code class="md-code-inline">innerₕ</code>, <code class="md-code-inline">inner₊</code> and <code class="md-code-inline">inner_Γ</code> weights, the last as one term per face;</p>
+</li>
+<li><p>a restriction to <code class="md-code-inline">:interior</code>, provided the mesh&#39;s <code class="md-code-inline">:interior</code> marker is the geometric one (the product of its axes&#39; own interiors);</p>
+</li>
+<li><p>a grid-function coefficient that varies along one axis only, and a plain number inside a side;</p>
+</li>
+<li><p>a scalar or <code class="md-code-inline">Ref</code> coefficient around a term.</p>
 </li>
 </ul>
-<p>A grid-function coefficient, a region restriction (Dirichlet included), an interpolation, a surface (<code class="md-code-inline">InnerGamma</code>) weight, or any operator family this file does not explicitly recognise (forward/centered/star/cross-weighted differences, averages, jumps, a mixed multi-axis composition) all answer <code class="md-code-inline">false</code> – conservatively: a false negative only forgoes the Kronecker fast path, so this never claims separability it cannot back up with factors.</p>
+<p>What does not, and answers <code class="md-code-inline">false</code>:</p>
+<ul class="md-list-tight">
+<li><p>a grid-function coefficient varying along several axes, or living on another mesh;</p>
+</li>
+<li><p>a <code class="md-code-inline">Ref</code> merged inside a side with other terms;</p>
+</li>
+<li><p>a region restriction other than <code class="md-code-inline">:interior</code>, including Dirichlet rows;</p>
+</li>
+<li><p>an interpolation, a 1D mesh, trial and test spaces on different meshes, composite leaves on different meshes;</p>
+</li>
+<li><p>the star and cross-weighted differences, and any node without a projection.</p>
+</li>
+</ul>
+<p>A false negative only forgoes the Kronecker fast path, so this never claims separability it cannot back up with factors.</p>
+<p>Stale spaces throw. If <code class="md-code-inline">a</code>&#39;s spaces were built before an in-place mutation of their mesh, <code class="md-code-inline">is_separable</code>, <a href="../../api/forms/#Bramble.kronecker_operator"><code class="md-code-inline">kronecker_operator</code></a> and <code class="md-code-inline">fdm_solve(a, F)</code> throw the space&#39;s stale-weights <code class="md-code-inline">ArgumentError</code>, exactly as <code class="md-code-inline">assemble(a)</code> does, rather than answer.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -477,8 +457,11 @@ end</code></pre>
 Wₕ = gridspace(Ωₕ)
 is_separable(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))))  # true
 
-fₕ = Rₕ(Wₕ, x -&gt; 1 + x[1])
-is_separable(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(fₕ * u, v)))  # false: grid-function coefficient</code></pre>
+gₕ = Rₕ(Wₕ, x -&gt; 1 + x[1])
+is_separable(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(gₕ * u, v)))  # true: varies along one axis
+
+fₕ = Rₕ(Wₕ, x -&gt; 1 + x[1] * x[2])
+is_separable(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(fₕ * u, v)))  # false: varies along both axes</code></pre>
 </div>
 <p>See also: <a href="../../api/forms/#Bramble.kronecker_operator"><code class="md-code-inline">kronecker_operator</code></a>, <a href="../../api/forms/#Bramble.KroneckerLinearOperator"><code class="md-code-inline">KroneckerLinearOperator</code></a>.</p>
 </div>
@@ -486,18 +469,26 @@ is_separable(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(fₕ * u, v)))  # false: gri
 <div class="md-docstring" id="Bramble.kronecker_operator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.kronecker_operator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L254-L284" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L486-L537" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">kronecker_operator(a::BilinearForm) -&gt; KroneckerLinearOperator</code></pre>
+<pre><code class="language-julia">kronecker_operator(a::BilinearForm) -&gt; Union{KroneckerLinearOperator, KroneckerBlockOperator}</code></pre>
 </div>
 <p>Build a matrix-free <a href="../../api/forms/#Bramble.KroneckerLinearOperator"><code class="md-code-inline">KroneckerLinearOperator</code></a> for the separable bilinear form <code class="md-code-inline">a</code> (see <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a>), without ever assembling the <code class="md-code-inline">D</code>-dimensional matrix.</p>
-<p>For each axis <code class="md-code-inline">d</code>, the per-axis mass factor is the diagonal matrix of <code class="md-code-inline">d</code>&#39;s cell measures (<code class="md-code-inline">weights(gridspace(Ωₕ(d)), Innerh())</code>); the factor on a term&#39;s touched axis is instead the assembled 1D operator <code class="md-code-inline">assemble(form(Wₕd, Wₕd, (u, v) -&gt; inner₊(D₋ₓ(u), D₋ₓ(v))))</code> over <code class="md-code-inline">Wₕd = gridspace(Ωₕ(d))</code>, cached across terms that share an axis. Factors are always built on the host (a device mesh through its host mirror) and then converted to the storage <code class="md-code-inline">backend(trial_space(a))</code> uses, so a device-backed form yields device-resident factors.</p>
+<p>Each term&#39;s factor on axis <code class="md-code-inline">d</code> is the 1D form it projects to there, assembled on <code class="md-code-inline">gridspace(Ωₕ(d))</code> (<code class="md-code-inline">_kron_project</code>): a diagonal factor is stored as a <code class="md-code-inline">Diagonal</code> (the axis&#39;s cell measures <code class="md-code-inline">weights(gridspace(Ωₕ(d)), Innerh())</code> themselves for a mass factor), and terms sharing a factor on an axis share one matrix. Factors are always built on the host (a device mesh through its host mirror) and then converted to the storage <code class="md-code-inline">backend(trial_space(a))</code> uses, so a device-backed form yields device-resident factors. A scalar or <code class="md-code-inline">Ref</code> coefficient around a term stays live, read at every <code class="md-code-inline">mul!</code>.</p>
+<div class="md-admonition md-admonition-warning">
+<p class="md-admonition-title">Warning</p>
+<div class="md-admonition-body">
+<p>A grid-function coefficient (an <code class="md-code-inline">Rₕ</code> multiplying a side, varying along one axis) is read once, when the operator is built, and copied into the factors; a warning says so. A later edit to it is not seen. Use a <code class="md-code-inline">Ref</code> for a coefficient that changes, or <a href="../../api/forms/#Bramble.matrix_free_operator"><code class="md-code-inline">matrix_free_operator</code></a>, which reads the coefficient live at every product. On a device-backed form a coefficient stored on the device is refused, since the factors are built on the host.</p>
+</div>
+</div>
+<p>The factors also describe the mesh as it is now: if the mesh is mutated in place after this call, the operator throws instead of applying (see <a href="../../api/forms/#Bramble.KroneckerLinearOperator"><code class="md-code-inline">KroneckerLinearOperator</code></a>).</p>
+<p>On a composite trial or test space whose leaves all share one mesh, the result is a <code class="md-code-inline">Bramble.KroneckerBlockOperator</code> (not exported): one <code class="md-code-inline">KroneckerLinearOperator</code> per nonzero (test leaf, trial leaf) block, placed at that block&#39;s rows and columns, with the same <code class="md-code-inline">size</code>, <code class="md-code-inline">getindex</code>, <code class="md-code-inline">mul!</code>, <code class="md-code-inline">SparseMatrixCSC</code> and <code class="md-code-inline">issymmetric</code> interface.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">a</code> is not separable, naming the offending term (or dimension, or space) – the same check <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a> runs, made specific.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">a</code> is not separable, naming the offending node and, on a composite space, its block (or the dimension, or the spaces) – the same check <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a> runs, made specific; or <code class="md-code-inline">a</code> is device-backed and a term has more than one non-diagonal factor or a non-symmetric one, which the device kernel cannot apply (<code class="md-code-inline">_kron_check_device</code>).</p>
 </li>
 </ul>
 <p><strong>Examples</strong></p>
@@ -516,19 +507,21 @@ K * x ≈ assemble(a) * x</code></pre>
 <div class="md-docstring" id="Bramble.KroneckerLinearOperator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.KroneckerLinearOperator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L163-L209" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L232-L301" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">KroneckerLinearOperator{T, D, TermsT &lt;: Tuple, P &lt;: ExecutionPolicy}</code></pre>
+<pre><code class="language-julia">KroneckerLinearOperator{T, D, TermsT &lt;: Tuple, P &lt;: ExecutionPolicy, M}</code></pre>
 </div>
-<p>A matrix-free linear operator for a separable <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> (see <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a>): the sum, over its terms, of a Kronecker product of <code class="md-code-inline">D</code> one-dimensional factor matrices, applied in one fused pass over the grid (<code class="md-code-inline">LinearAlgebra.mul!(y, K, x)</code>, or the five-argument <code class="md-code-inline">mul!(y, K, x, α, β)</code> computing <code class="md-code-inline">α * K * x + β * y</code>) rather than ever materialising the <code class="md-code-inline">D</code>-dimensional matrix: every term has at most one non-diagonal factor, so each entry of <code class="md-code-inline">y</code> is its own term-weighted combination of <code class="md-code-inline">x</code> at that grid point and its neighbours along each axis, written once. For a <code class="md-code-inline">200^3</code> mesh the factors together hold <code class="md-code-inline">O(200)</code> numbers per axis instead of the assembled matrix&#39;s <code class="md-code-inline">O(200^3)</code> stored entries.</p>
-<p>Build one with <a href="../../api/forms/#Bramble.kronecker_operator"><code class="md-code-inline">kronecker_operator</code></a>. Subtypes <code class="md-code-inline">AbstractMatrix{T}</code> so it plugs into <code class="md-code-inline">LinearProblem</code>/<code class="md-code-inline">KrylovJL_CG</code> (<code class="md-code-inline">LinearSolve.jl</code>) the same way an assembled matrix does, and supports <code class="md-code-inline">size</code>, <code class="md-code-inline">eltype</code>, <code class="md-code-inline">getindex</code>, <code class="md-code-inline">Base.:*</code>, three- and five-argument <code class="md-code-inline">mul!</code>, <code class="md-code-inline">LinearAlgebra.issymmetric</code>, and <code class="md-code-inline">SparseMatrixCSC(K)</code> (an explicit <code class="md-code-inline">kron</code> of the factors, for testing and inspection – the very matrix this operator avoids forming).</p>
+<p>A matrix-free linear operator for a separable <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> (see <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a>): the sum, over its terms, of a Kronecker product of <code class="md-code-inline">D</code> one-dimensional factor matrices, applied in one fused pass over the grid (<code class="md-code-inline">LinearAlgebra.mul!(y, K, x)</code>, or the five-argument <code class="md-code-inline">mul!(y, K, x, α, β)</code> computing <code class="md-code-inline">α * K * x + β * y</code>) rather than ever materialising the <code class="md-code-inline">D</code>-dimensional matrix: each entry of <code class="md-code-inline">y</code> is its own term-weighted combination of <code class="md-code-inline">x</code> at that grid point and its neighbours along the axes where a term&#39;s factor is not diagonal, written once. For a <code class="md-code-inline">200^3</code> mesh the factors together hold <code class="md-code-inline">O(200)</code> numbers per axis instead of the assembled matrix&#39;s <code class="md-code-inline">O(200^3)</code> stored entries.</p>
+<p>A term&#39;s factors need be neither diagonal nor symmetric, and a term may have non-diagonal factors on several axes. A mixed derivative <code class="md-code-inline">D₋ₓ(D₋ᵧ(u))</code> has non-diagonal factors on two axes, and an advection term has a non-symmetric one. A factor that is not symmetric is applied through the CSC of its transpose, so the product is exact for it. Which forms have such factors is <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a>&#39;s list.</p>
+<p>Build one with <a href="../../api/forms/#Bramble.kronecker_operator"><code class="md-code-inline">kronecker_operator</code></a>. Subtypes <code class="md-code-inline">AbstractMatrix{T}</code> so it plugs into <code class="md-code-inline">LinearProblem</code>/<code class="md-code-inline">KrylovJL_CG</code> (<code class="md-code-inline">LinearSolve.jl</code>) the same way an assembled matrix does, and supports <code class="md-code-inline">size</code>, <code class="md-code-inline">eltype</code>, <code class="md-code-inline">getindex</code>, <code class="md-code-inline">Base.:*</code>, three- and five-argument <code class="md-code-inline">mul!</code>, <code class="md-code-inline">LinearAlgebra.issymmetric</code>, and <code class="md-code-inline">SparseMatrixCSC(K)</code> (an explicit <code class="md-code-inline">kron</code> of the factors, for testing and inspection: the very matrix this operator avoids forming). <code class="md-code-inline">issymmetric(K)</code> is computed from the factors, not assumed: it is <code class="md-code-inline">false</code> as soon as one factor of one term is not symmetric, even for a form whose matrix happens to be symmetric. <code class="md-code-inline">mul!</code> refuses vectors that are not 1-based (an <code class="md-code-inline">OffsetArray</code>, say), which would otherwise give a wrong product silently.</p>
 <p><code class="md-code-inline">K</code> holds no work buffers: it stores only its <code class="md-code-inline">D</code> one-dimensional factors and its execution policy, so it is immutable after construction and safe to share across threads (concurrent <code class="md-code-inline">mul!</code> calls on one <code class="md-code-inline">K</code> never race). The fused pass needs no scratch either. A serial host <code class="md-code-inline">mul!</code> allocates nothing, and so does a <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> product: each task rebuilds the light structs around plain arrays, so Polyester&#39;s argument box stays on the stack. <code class="md-code-inline">mul!</code> is generic over the element type, so ForwardDiff <code class="md-code-inline">Dual</code>s pass through. The <code class="md-code-inline">scratch = (b1, b2)</code> keyword that <code class="md-code-inline">mul!(y, K, x; scratch)</code> and <code class="md-code-inline">mul!(y, K, x, α, β; scratch)</code> accept is kept so existing callers still work, and is ignored.</p>
-<p><code class="md-code-inline">P</code> is the execution policy of the space the operator was built on (<code class="md-code-inline">execution_policy(backend(trial_space(a)))</code>), kept as the <code class="md-code-inline">policy</code> field. On the host, a <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> operator runs the grid lines along axis 1 as <code class="md-code-inline">Polyester.@batch</code> tasks (<code class="md-code-inline">using Polyester</code> required); every other policy runs them serially. Each line writes its own slice of <code class="md-code-inline">y</code>, so both give the same result bit for bit. An operator built directly from its terms, <code class="md-code-inline">KroneckerLinearOperator{T, D, TermsT}(terms, dims, n)</code>, is <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a>.</p>
-<p>On a device-backed form (gpena/Bramble.jl#323) the factors are built on the host and then moved to the space backend&#39;s device storage, so <code class="md-code-inline">mul!</code> with device <code class="md-code-inline">x</code>/<code class="md-code-inline">y</code> runs entirely on the device, as one <code class="md-code-inline">KernelAbstractions</code> kernel with one work item per entry of <code class="md-code-inline">y</code> (<code class="md-code-inline">using KernelAbstractions</code> required). <code class="md-code-inline">getindex</code> and <code class="md-code-inline">SparseMatrixCSC(K)</code> stay host-only and throw an <code class="md-code-inline">ArgumentError</code> on such an operator.</p>
-<p>Dirichlet rows are out of scope: this operator carries no boundary constraint of its own. <code class="md-code-inline">bramble-plan</code>&#39;s v3.3.0 subplan S5.2 layers that on top, through the <code class="md-code-inline">Kronecker.jl</code> extension and its fast-diagonalisation solve.</p>
+<p><code class="md-code-inline">P</code> is the execution policy of the space the operator was built on (<code class="md-code-inline">execution_policy(backend(trial_space(a)))</code>), kept as the <code class="md-code-inline">policy</code> field. On the host, a <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> operator runs the grid lines along axis 1 in one contiguous chunk per thread under <code class="md-code-inline">Threads.@threads :static</code> (serially when nested in a threaded loop), a <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> one as <code class="md-code-inline">Polyester.@batch</code> tasks (<code class="md-code-inline">using Polyester</code> required); every other policy runs them serially. Each line writes its own slice of <code class="md-code-inline">y</code>, so all give the same result bit for bit. An operator built directly from its terms, <code class="md-code-inline">KroneckerLinearOperator{T, D, TermsT}(terms, dims, n)</code>, is <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a>.</p>
+<p>On a device-backed form (gpena/Bramble.jl#323) the factors are built on the host and then moved to the space backend&#39;s device storage, so <code class="md-code-inline">mul!</code> with device <code class="md-code-inline">x</code>/<code class="md-code-inline">y</code> runs entirely on the device, as one <code class="md-code-inline">KernelAbstractions</code> kernel with one work item per entry of <code class="md-code-inline">y</code> (<code class="md-code-inline">using KernelAbstractions</code> required). The kernel reads at most one non-diagonal factor per term and that factor&#39;s columns as its rows, so <code class="md-code-inline">kronecker_operator</code> refuses, on such a form, a term with non-diagonal factors on several axes and a term with a non-symmetric factor: build those on a host backend. <code class="md-code-inline">getindex</code> and <code class="md-code-inline">SparseMatrixCSC(K)</code> stay host-only and throw an <code class="md-code-inline">ArgumentError</code> on such an operator.</p>
+<p>The factors are read from the mesh once, when the operator is built (gpena/Bramble.jl#442): <code class="md-code-inline">K</code> keeps that mesh (<code class="md-code-inline">M</code> is its type) and its version then. After an in-place mutation of the mesh (<code class="md-code-inline">set_points!</code>, <code class="md-code-inline">change_points!</code>, <code class="md-code-inline">iterative_refinement!</code>), <code class="md-code-inline">mul!</code>, <code class="md-code-inline">getindex</code>, <code class="md-code-inline">SparseMatrixCSC(K)</code>, <code class="md-code-inline">fdm_solve(K, F)</code> and <code class="md-code-inline">Kronecker.kronecker(K)</code> throw an <code class="md-code-inline">ArgumentError</code>, as a space&#39;s stale weights do; build the operator again on the mutated mesh. An operator built directly from its terms has no mesh (<code class="md-code-inline">M</code> is <code class="md-code-inline">Nothing</code>) and never goes stale.</p>
+<p>Dirichlet rows are out of scope: this operator carries no boundary constraint of its own. The <code class="md-code-inline">Kronecker.jl</code> extension&#39;s fast-diagonalisation solve, <code class="md-code-inline">fdm_solve</code>, imposes homogeneous Dirichlet conditions on the whole boundary through its <code class="md-code-inline">dirichlet = :boundary</code> keyword.</p>
 <p>See also: <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a>, <a href="../../api/forms/#Bramble.kronecker_operator"><code class="md-code-inline">kronecker_operator</code></a>.</p>
 </div>
 </div>
@@ -550,7 +543,7 @@ fdm_solve(K::KroneckerLinearOperator, F::AbstractVector) -&gt; Vector</code></pr
 </div>
 </div>
 <h2 id="Matrix-free-operators" class="md-heading">Matrix-free operators<a href="#Matrix-free-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">matrix_free_operator</code> applies any <code class="md-code-inline">BilinearForm</code> that <code class="md-code-inline">assemble</code> accepts, separable or not, without building its matrix: <code class="md-code-inline">mul!(y, op, x)</code> walks the form&#39;s stencil and agrees with <code class="md-code-inline">assemble(a) * x</code>, Dirichlet rows included, on vectors and <code class="md-code-inline">VectorElement</code>s. Its execution policy comes from the trial space, as for assembly. Preconditioners and multigrid built on it are in <a href="../../api_sciml/">Scientific computing</a>, and the <a href="../../tutorials/solvers/">solvers tutorial</a> has measured time and memory against sparse matrix-vector products.</p>
+<p><code class="md-code-inline">matrix_free_operator</code> applies any <code class="md-code-inline">BilinearForm</code> that <code class="md-code-inline">assemble</code> accepts, separable or not, without building its matrix: <code class="md-code-inline">mul!(y, op, x)</code> walks the form&#39;s stencil and agrees with <code class="md-code-inline">assemble(a) * x</code>, Dirichlet rows included, on vectors and <code class="md-code-inline">VectorElement</code>s. Its execution policy comes from the trial space, as for assembly. Preconditioners and multigrid built on it are in <a href="../../api_sciml/">Scientific computing</a>.</p>
 <div class="md-docstring" id="Bramble.matrix_free_operator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.matrix_free_operator</code></h4>
@@ -665,18 +658,18 @@ assemble_add!(F, l_source, θ)   # F += θ[] * l_source&#39;s contribution</code
 </div>
 </div>
 <h2 id="Jacobian-sparsity" class="md-heading">Jacobian sparsity<a href="#Jacobian-sparsity" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>For a Newton residual built from a <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> with a live nonlinear coefficient (see <a href="../../examples/poisson_nonlinear/">the nonlinear Poisson example</a>), <code class="md-code-inline">jacobian_pattern</code> reads the Jacobian&#39;s sparsity pattern directly off the form&#39;s AST, without AD tracing. <code class="md-code-inline">ast_sparsity_detector</code> wraps it as an <code class="md-code-inline">ADTypes.AbstractSparsityDetector</code>, ready to hand <code class="md-code-inline">AutoSparse</code> directly (requires <a href="https://github.com/SciML/ADTypes.jl">ADTypes.jl</a>).</p>
+<p>For a Newton residual built from a <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> with a live nonlinear coefficient, <code class="md-code-inline">jacobian_pattern</code> reads the Jacobian&#39;s sparsity pattern directly off the form&#39;s AST, without AD tracing. <code class="md-code-inline">ast_sparsity_detector</code> wraps it as an <code class="md-code-inline">ADTypes.AbstractSparsityDetector</code>, ready to hand <code class="md-code-inline">AutoSparse</code> directly (requires <a href="https://github.com/SciML/ADTypes.jl">ADTypes.jl</a>).</p>
 <div class="md-docstring" id="Bramble.jacobian_pattern">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian_pattern</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/jacobian_pattern.jl#L77-L140" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/jacobian_pattern.jl#L77-L138" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">jacobian_pattern(a::BilinearForm, coefficient_dependencies::Function...) -&gt; SparseMatrixCSC{Bool}</code></pre>
 </div>
-<p>Sparsity pattern of the Jacobian of a Newton residual <code class="md-code-inline">A(u) * u - F</code>, where <code class="md-code-inline">a</code> is the <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> that assembles <code class="md-code-inline">A(u)</code> (e.g. <code class="md-code-inline">diffusion_matrix</code> in <a href="../../examples/poisson_nonlinear/">the nonlinear Poisson example</a>) and each function in <code class="md-code-inline">coefficient_dependencies</code> names, symbolically, the stencil operator one of <code class="md-code-inline">a</code>&#39;s live coefficients was itself computed from – written the same way a form term names an operator, as a function of the trial placeholder. If <code class="md-code-inline">a</code>&#39;s diffusion coefficient was built as <code class="md-code-inline">αvals = α.(Mₕ(uₕ))</code>, pass <code class="md-code-inline">U -&gt; Mₕ(U)</code>.</p>
+<p>Sparsity pattern of the Jacobian of a Newton residual <code class="md-code-inline">A(u) * u - F</code>, where <code class="md-code-inline">a</code> is the <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> that assembles <code class="md-code-inline">A(u)</code> and each function in <code class="md-code-inline">coefficient_dependencies</code> names, symbolically, the stencil operator one of <code class="md-code-inline">a</code>&#39;s live coefficients was itself computed from – written the same way a form term names an operator, as a function of the trial placeholder. If <code class="md-code-inline">a</code>&#39;s diffusion coefficient was built as <code class="md-code-inline">αvals = α.(Mₕ(uₕ))</code>, pass <code class="md-code-inline">U -&gt; Mₕ(U)</code>.</p>
 <p>Derived entirely from <code class="md-code-inline">a</code>&#39;s AST and each dependency&#39;s own stencil reach – no AD tracing, no coefficient values needed. A safe superset of the exact pattern (a pointwise nonlinear <code class="md-code-inline">α</code> can never narrow the reach its argument already has), suitable for <a href="https://github.com/SciML/ADTypes.jl"><code class="md-code-inline">ADTypes.KnownJacobianSparsityDetector</code></a>:</p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -688,7 +681,7 @@ sparse_ad = AutoSparse(AutoForwardDiff();
     coloring_algorithm = GreedyColoringAlgorithm())</code></pre>
 </div>
 <p><strong>Composite trial/test spaces</strong></p>
-<p>A dependency may also name a <em>different</em> leaf, the same way a form term does – <code class="md-code-inline">U -&gt; U(2)</code> for a coefficient that is component 2&#39;s own value (no stencil op, as in <a href="../../examples/coupled_reaction_diffusion/">the coupled reaction-diffusion example</a>&#39;s <code class="md-code-inline">v_c</code>), or <code class="md-code-inline">U -&gt; Mₕ(U(2))</code> for one built from a stencil op applied to that other component. <code class="md-code-inline">nothing</code> named (<code class="md-code-inline">U -&gt; Mₕ(U)</code>, no <code class="md-code-inline">(k)</code>) means the coefficient depends on <em>this block&#39;s own</em> trial leaf, exactly like the non-composite case above. Every dependency still applies to every block the walk visits, whichever leaf it names – a safe superset stays safe however many blocks end up seeing an entry they did not strictly need.</p>
+<p>A dependency may also name a <em>different</em> leaf, the same way a form term does – <code class="md-code-inline">U -&gt; U(2)</code> for a coefficient that is component 2&#39;s own value (no stencil op), or <code class="md-code-inline">U -&gt; Mₕ(U(2))</code> for one built from a stencil op applied to that other component. <code class="md-code-inline">nothing</code> named (<code class="md-code-inline">U -&gt; Mₕ(U)</code>, no <code class="md-code-inline">(k)</code>) means the coefficient depends on <em>this block&#39;s own</em> trial leaf, exactly like the non-composite case above. Every dependency still applies to every block the walk visits, whichever leaf it names – a safe superset stays safe however many blocks end up seeing an entry they did not strictly need.</p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">using Bramble: jacobian_pattern
@@ -710,7 +703,7 @@ pattern = jacobian_pattern(a, U -&gt; Mₕ(πₕ(U)))</code></pre>
 <div class="md-docstring" id="Bramble.ast_sparsity_detector">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ast_sparsity_detector</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/jacobian_pattern.jl#L506-L522" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/jacobian_pattern.jl#L504-L520" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -985,6 +978,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=76e66159"></script>
+  <script src="../../assets/materialdocs.js?v=b71fbd80"></script>
 </body>
 </html>
