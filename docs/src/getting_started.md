@@ -133,7 +133,7 @@ Where to go from here:
 - [Linear and bilinear forms](tutorials/form.md) covers the last three: writing a form,
   assembling it, imposing conditions, and coupled systems.
 - The [worked examples](examples/poisson_linear.md) run the whole chain on real problems,
-  from nonlinear Poisson to 3D elasticity, a heat equation and an inverse problem.
+  a Poisson problem, a convection-diffusion problem and a heat equation.
 
 ## Reading order
 
@@ -147,11 +147,3 @@ Read the tutorials in the order of the sidebar, top to bottom. Each line says wh
 - [Interpolation between meshes](tutorials/interpolation.md): Move a grid function between meshes, see what error that costs, and get the interpolation as a matrix.
 - [Linear and bilinear forms](tutorials/form.md): Write, assemble and solve a linear or bilinear form, with Dirichlet conditions, for a Poisson problem.
 - [Coupled systems](tutorials/coupled_systems.md): Write a form over several unknowns, constrain one block, and read values across different meshes.
-- [Choosing a solver, backend and execution policy](tutorials/solvers.md): Choose a matrix backend, an execution policy and a linear solver.
-- [Solvers by problem](tutorials/solvers_by_problem.md): Match the solver to the problem: symmetric positive-definite, unsymmetric, coupled or hyperbolic.
-- [Solving at every time step](tutorials/time_stepping.md): Solve the same sparse system at every implicit step by refactoring once or warm-starting.
-- [Automatic differentiation](tutorials/autodiff.md): Differentiate a discrete quantity with respect to a parameter and choose an AD backend.
-- [Backends and execution policies](tutorials/backend.md): Choose serial or threaded execution and find the size where threading pays off.
-- [Plotting directly](tutorials/plotting.md): Plot a grid function inside Julia, as a curve in 1D or a colour map in 2D.
-- [Writing VTK files](tutorials/vtk_export.md): Write a grid function or a time series to a file that ParaView opens.
-- [Writing PGFPlots data files](tutorials/pgfplots_export.md): Write a curve or surface as a table that `pgfplots` plots in LaTeX.

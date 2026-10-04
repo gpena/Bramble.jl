@@ -135,7 +135,6 @@ Documentation, tutorials, and the API reference are available at [https://gpena.
 - Solvers and scientific computing: [solvers](https://gpena.github.io/Bramble.jl/tutorials/solvers/), [time stepping](https://gpena.github.io/Bramble.jl/tutorials/time_stepping/), [automatic differentiation](https://gpena.github.io/Bramble.jl/tutorials/autodiff/), [backends](https://gpena.github.io/Bramble.jl/tutorials/backend/)
 - Visualization and export: [plotting](https://gpena.github.io/Bramble.jl/tutorials/plotting/), [VTK](https://gpena.github.io/Bramble.jl/tutorials/vtk_export/), [PGFPlots](https://gpena.github.io/Bramble.jl/tutorials/pgfplots_export/)
 - [Worked examples](https://gpena.github.io/Bramble.jl/examples/poisson_linear/): stationary, time-dependent and inverse problems, and solver performance
-- [Benchmarks](https://gpena.github.io/Bramble.jl/benchmarks/)
 
 ---
 

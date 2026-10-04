@@ -243,10 +243,7 @@ pointwise quantity, suitable for [`export_vtk`](@ref).
 ## Threading
 
 Assembly reads the execution policy off the space it is given. A space whose backend says
-`Parallel()` assembles on several threads, and nothing about the call changes. The
-[backend tutorial](backend.md) covers choosing the policy and the measured crossovers where
-threading starts to pay. The [internals page](../internals/form.md) describes the colouring
-that keeps the threads from writing to the same entry.
+`Parallel()` assembles on several threads, and nothing about the call changes.
 
 ## Reference
 

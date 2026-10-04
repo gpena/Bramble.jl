@@ -46,14 +46,6 @@ nonlinear_problem
 
 ## Adjoint sensitivities for a transient solve
 
-[`Bramble.adjoint_sensitivities`](@ref) is the transient counterpart of [`pde_solve`](@ref)'s
-steady-state adjoint rule (see [the API reference](api.md)): the gradient of a scalar
-functional of a [`Semidiscretization`](@ref)'s solved trajectory with respect to its initial
-condition and its `p`, from one backward solve regardless of how many parameters or how many
-saved steps. It wraps `SciMLSensitivity.adjoint_sensitivities` and requires
-[SciMLSensitivity.jl](https://github.com/SciML/SciMLSensitivity.jl) -- see [the worked
-example](examples/transient_inverse_problem.md).
-
 ```@docs
 Bramble.adjoint_sensitivities
 ```
@@ -82,41 +74,11 @@ second_order_ode_problem
 
 ## Differentiable linear solve (adjoint gradients)
 
-`pde_solve(A, F)` is `A \ F` under a name `ChainRulesCore.rrule` can attach an adjoint rule
-to -- no source-level AD tool, forward or reverse, can differentiate through `\`
-itself, since it dispatches into compiled BLAS/SuiteSparse code. `assemble`/`dirichlet_bc!`
-are already reverse-mode-differentiable on their own (see the
-[automatic differentiation tutorial](tutorials/autodiff.md)), so wrapping only this one
-function is enough to differentiate an entire `θ -> assemble(a(θ), l(θ); dirichlet = θ) ->
-pde_solve -> J(u)` chain end to end, including a gradient with respect to a Dirichlet
-boundary value -- the adjoint solves `Aᵀ λ = ∂J/∂u` once, reusing the forward solve's own LU
-factorisation, and returns `∂J/∂A = -λ uᵀ` restricted to `A`'s sparsity (never densified) and
-`∂J/∂F = λ`.
-
-Requires [ChainRulesCore.jl](https://github.com/JuliaDiff/ChainRulesCore.jl), and serves every
-`ChainRulesCore` consumer. `Enzyme` instead reaches the same adjoint through `BrambleEnzymeExt`'s
-own native `EnzymeRules` rule, which `using Enzyme` is enough to load -- do not call
-`Enzyme.@import_rrule`, whose bridge returns a wrong gradient here (see [`pde_solve`](@ref)'s own
-docstring). `Mooncake` is not currently supported (a gap in `Mooncake.jl`'s own sparse-array
-tangent support, also documented there). See the
-[inverse problem worked example](examples/inverse_diffusion.md).
-
 ```@docs
 pde_solve
 ```
 
 ## Algebraic multigrid preconditioning
-
-`amg_preconditioner` builds an algebraic multigrid hierarchy for a symmetric
-positive-definite matrix -- typically an assembled elliptic `BilinearForm`, whose condition
-number scales as `O(h^-2)` under refinement -- so that an iterative `LinearSolve` solve gets
-grid-independent, `O(1)` iteration counts instead of the `O(h^-1)` an unpreconditioned Krylov
-method needs. It returns the bare `MultiLevel` hierarchy; `AlgebraicMultigrid.aspreconditioner`
-turns that into the object with `ldiv!` that `Pl`/`Pr` expect. `solve(a::BilinearForm,
-l::LinearForm; ...)` (previous section) takes `preconditioner = :amg` directly, building and
-applying that preconditioner in one call.
-
-Requires [AlgebraicMultigrid.jl](https://github.com/JuliaLinearAlgebra/AlgebraicMultigrid.jl).
 
 ```@docs
 amg_preconditioner
@@ -124,42 +86,11 @@ amg_preconditioner
 
 ## Zero-fill ILU preconditioning for convection-dominated systems
 
-[gpena/Bramble.jl#244](https://github.com/gpena/Bramble.jl/issues/244) measured classical
-algebraic multigrid failing to converge on an unsymmetric, convection-dominated system
-(diffusion `1e-2` against unit advection, `ruge_stuben` capped at 2000 GMRES iterations
-without converging) -- AMG assumes something close to an M-matrix, which strong advection
-breaks. `ILUZero.jl`'s zero-fill incomplete LU (ILU(0)) does not share that assumption: on
-the same system, GMRES took 18 iterations against 179 unpreconditioned, at a fraction of
-AMG's setup cost, since ILU(0) reuses `A`'s own sparsity pattern with no fill-in parameter to
-tune. `ilu_preconditioner` mirrors [`amg_preconditioner`](@ref)'s shape, but returns an
-object with `ldiv!` directly -- `ILUZero.ilu0` needs no `aspreconditioner`-style wrapping the
-way an AMG hierarchy does. `solve(a::BilinearForm, l::LinearForm; ...)` takes
-`preconditioner = :ilu0` the same way it takes `:amg`.
-
-**When to prefer which**: AMG's grid-independent, `O(1)` iteration count wins at scale on
-elliptic, symmetric positive-definite forms (Poisson, diffusion-dominated), where its
-M-matrix-like assumption holds. ILU(0) is the better default for unsymmetric,
-convection-dominated forms, where AMG is this issue's own worked counter-example for why it
-should not be the only option offered -- see [`amg_preconditioner`](@ref) for the elliptic
-case.
-
-Requires [ILUZero.jl](https://github.com/mohamed82008/ILUZero.jl).
-
 ```@docs
 ilu_preconditioner
 ```
 
 ## Matrix-free preconditioners
-
-AMG and ILU(0) need the assembled matrix. The preconditioners here need only a
-[`matrix_free_operator`](@ref), which the [matrix-free operator page](examples/matrix_free_operator.md) explains. Each is a subtype of `Bramble.AbstractMatrixFreePreconditioner`
-with `ldiv!`, so it goes straight to `Pl` in `LinearSolve`. `jacobi_preconditioner` reads the
-diagonal off one walk of the form's stencil. `chebyshev_preconditioner` is a fixed polynomial
-in `D⁻¹A`, Jacobi-scaled, with `D = diag(A)`: unscaled, the top of `A`'s spectrum on a
-non-uniform mesh is a few small-cell outliers, and the polynomial wastes its degree on them.
-Its upper bound comes from `Bramble.max_eigenvalue_estimate`, power iteration on the
-operator. Both need a symmetric positive-definite `A` for conjugate gradients; with
-`dirichlet`, CG needs a right-hand side that vanishes on the Dirichlet rows.
 
 ```@docs
 Bramble.AbstractMatrixFreePreconditioner
@@ -171,16 +102,6 @@ Bramble.max_eigenvalue_estimate
 ```
 
 ## Geometric multigrid
-
-`gmg_preconditioner(W -> form(...), Ωₕ)` rediscretises the form on every level of a
-`GeometricMeshHierarchy`, which coarsens a non-uniform mesh by 2 through every other point,
-so the levels nest exactly. Multilinear `prolongate!` and its transpose `coarsen!` join the
-levels, point smoothers smooth them, and the coarsest level is solved directly. Every
-grid function in the form must be built from `W` inside the builder. On meshes whose cells
-have bounded aspect ratio, CG preconditioned by a V-cycle took 6 iterations from 2D 33² to
-513² and 7 from 3D 17³ to 129³. Point smoothers stall on stretched cells, which
-[`gmg_preconditioner`](@ref) quotes in counts. Line and plane smoothers are planned in
-[gpena/Bramble.jl#394](https://github.com/gpena/Bramble.jl/issues/394).
 
 ### Mesh hierarchy and transfers
 
@@ -220,9 +141,9 @@ Bramble provides dedicated, first-class extensions for high-performance sparse l
 - **SuiteSparse** gives CHOLMOD Cholesky for symmetric positive-definite systems and UMFPACK LU for unsymmetric systems via `SuiteSparse.jl`, plus SPQR sparse QR (below) which needs only `SparseArrays`.
 - **Apple Accelerate** gives native macOS `libSparse` Cholesky, $\mathrm{LDL}^T$, and LUTPP via `AppleAccelerate.jl` (on Apple Silicon / darwin).
 - **MUMPS** is a parallel multifrontal direct solver for large 2D/3D systems via `MUMPS.jl`.
-- **Sparspak** is a pure-Julia sparse direct LU (George & Liu's Waterloo package) via `Sparspak.jl` -- zero binary dependency, so it factors matrices whose entries are `Float32`, `BigFloat`, or a `ForwardDiff.Dual`, where the other three backends require `Float64`/`ComplexF64`.
+- **Sparspak** is a pure-Julia sparse direct LU (George & Liu's Waterloo package) via `Sparspak.jl` -- zero binary dependency, so it factors matrices whose entries are `BigFloat` or a `ForwardDiff.Dual`, which the other three backends cannot: they take only BLAS floating-point types (MUMPS and Accelerate accept `Float32` as well as `Float64`).
 
-All four solvers support non-allocating symbolic reuse via the unified [`refactor!`](@ref) driver for transient PDE time loops and Newton iterations.
+All four solvers support symbolic reuse via the unified [`refactor!`](@ref) driver for transient PDE time loops and Newton iterations.
 
 ```@docs
 sparse_factorize
@@ -263,26 +184,22 @@ suitesparse_qr_solve
 factorisations it actually wins on -- [`pde_solve`](@ref)'s own docstring states the
 narrowed dispatch; this section answers the issue's four questions from measurement.
 
-**Speedup.** Against `A \ F` -- what `:default` did before Accelerate existed -- a
-symmetric Poisson-plus-mass system is a 1.2-1.3x win (0.78-0.83x the runtime, measured at
-`n = 80` and `n = 120`) and an unsymmetric convection-diffusion system is now exactly
-1.00x, because `:default` no longer routes it to Accelerate at all
-(gpena/Bramble.jl#246, integrator re-measurement). Earlier, broader factorisation-level
-numbers against `:suitesparse` (not `A \ F`) put sparse SPD Cholesky at 0.75-0.85x and
-sparse symmetric LDLᵀ at 0.26-0.78x across `n = 40, 80, 160`, while unsymmetric LUTPP was
-1.66-4.07x **slower** -- the reason `:default` never reaches Accelerate for an unsymmetric
-system.
+**Speedup.** Against `A \ F`, what `:default` did before Accelerate existed, Accelerate wins
+on symmetric systems (Cholesky and LDLᵀ). Its unsymmetric LUTPP is slower than SuiteSparse,
+which is why `:default` never routes an unsymmetric system to Accelerate
+(gpena/Bramble.jl#246). `benchmark/accelerate_solvers.jl` measures both on your machine.
 
 **Extension scoping.** Settled: the guard is `Sys.isapple() &&
 Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing`, so `using
 AppleAccelerate` on Linux or Windows still resolves `:default` to `A \ F` and Accelerate
-never becomes a hard dependency of Bramble or of CI on any platform.
+never becomes a hard dependency of Bramble. The test environment installs it on every
+platform but loads it only under `Sys.isapple()`.
 
 **Threading.** `AppleAccelerate.jl` exports `BLAS_THREADING_MULTI_THREADED` and
 `BLAS_THREADING_SINGLE_THREADED`, the knob for vecLib's own internal thread pool, alongside
 a setter that reads vecLib's threading API directly. No dedicated measurement isolated
 vecLib threading against Bramble's own `Threads.@threads`/`@batch` assembly sweeps running
-concurrently: the benchmarks behind the speedup figures above ran at `--threads=4`
+concurrently: the benchmarks behind the speedup claim above ran at `--threads=4`
 (factorisation comparison) and `--threads=2` (dispatch-narrowing check) without symptoms
 attributable to thread contention, but that is not the same as a study built to detect it.
 A caller who suspects contention on a heavily loaded machine can force vecLib to
@@ -345,167 +262,15 @@ type_cached_assemble!
 [gpena/Bramble.jl#244](https://github.com/gpena/Bramble.jl/issues/244) asked whether other
 packages in the [JuliaSparse](https://github.com/JuliaSparse) organization and its
 neighbours are worth adopting for assembly, direct solves, or iterative preconditioning.
-Each candidate below was installed on Julia 1.12 and measured directly against Bramble's
-own functions -- never a synthetic microbenchmark standing in for them (see
-`bramble-verification`) -- so a "no" here is a measured "no", not a guess. Numbers are a
-single run on one machine, not a tracked baseline; treat them as directional.
+Each candidate was installed and measured directly against Bramble's own functions. The
+verdicts are in the summary below.
 
-### Assembly & storage formats
-
-**`SparseMatricesCOO.jl` is not adopted.** Bramble's own assembly already skips the triplet
-stage entirely: `assemble` determines the sparsity pattern once (`PatternSink`, the
-lock-free colouring sweep documented in [Forms](internals/form.md)) and every subsequent call writes
-straight into `nzval` via `add_to_sparse!`, never building `(I, J, V)` at all. Measured on
-a 2D 60×60 Poisson system (`n = 3600`, `nnz = 17760`):
-
-| Path | Time |
-|:--- |:--- |
-| Bramble `assemble` (first call, builds the pattern) | 0.37 ms |
-| Bramble `assemble` (repeat call, pattern cached) | 0.37 ms |
-| `Base.sparse(I, J, V)` on the identical triplets | 0.06 ms |
-| `SparseMatricesCOO.jl` COO→CSC on the identical triplets | 203 **seconds** |
-
-`SparseMatricesCOO.jl` defines no specialised `SparseMatrixCSC(::SparseMatrixCOO)`
-constructor, so the conversion falls through to Julia's generic dense-iteration
-`AbstractMatrix` fallback -- an `O(m \cdot n \cdot \mathrm{nnz})` scan through every
-`getindex`, itself an `O(\mathrm{nnz})` linear search of the triplet arrays (confirmed by
-reading `SparseMatricesCOO.jl`'s source, not assumed from the number alone). The package
-is designed by [JuliaSmoothOptimizers](https://github.com/JuliaSmoothOptimizers) as an
-NLP-solver interop format (handing Jacobian/Hessian triplets to IPOPT-style solvers that
-want COO directly), not as a fast intermediate for building a `SparseMatrixCSC` -- the
-wrong tool for what this issue asked it to do here. Bramble's first assembly is already
-about as fast as its thousandth, which is the actual bar a triplet library would need to
-clear.
-
-**`SymRCM.jl`**: evaluated under reordering, below -- not for assembly.
-
-### Tensor-compiler assembly
-
-**Finch.jl: not adopted.** [gpena/Bramble.jl#217](https://github.com/gpena/Bramble.jl/issues/217)
-asked whether a `@finch`-compiled loop nest -- [Finch.jl](https://github.com/finch-tensor/Finch.jl)'s
-domain-specific compiler for structured and sparse tensors -- beats Bramble's own
-record/replay sink assembly by enough to justify a dedicated backend. The issue set its
-own threshold: greater than 1.5x speedup or greater than 50% memory reduction on the resulting
-object, at N = 1e6.
-
-`benchmark/finch_assembly.jl` measured 1D, 2D and 3D Poisson and convection-diffusion forms, N
-from 1e2 to 1e6 on non-uniform (seeded `rand!`) meshes: Bramble's first `assemble` (pattern
-discovery plus fill) against Finch's first `@finch` build, Bramble's `assemble!` refill against
-Finch's refill, `Base.summarysize` of the resulting matrix/tensor, and time to first execution
-(TTFX). Every one of the 18 (dimension, form, size) cases produced a Finch tensor identical to
-Bramble's matrix to `1e-12` -- both are built from the same non-uniform-mesh `(row, col, value)`
-triplets, `findnz` on the CSC matrix Bramble already assembled -- which is what makes the timing
-comparison meaningful rather than a comparison between two different answers. The six N = 1e6
-cases, the ones the adoption rule is evaluated against:
-
-| Dim | Form | Bramble refill (ms) | Bramble size (MiB) | Finch refill (ms) | Finch size (MiB) | Refill speedup | Size Δ% | Match |
-|:--- |:--- |:--- |:--- |:--- |:--- |:--- |:--- |:--- |
-| 1 | Poisson | 4.372 | 91.553 | 12.383 | 71.63 | 0.35 | 21.8 | true |
-| 1 | Convection-diffusion | 6.101 | 129.7 | 10.373 | 71.63 | 0.59 | 44.8 | true |
-| 2 | Poisson | 7.504 | 175.43 | 13.34 | 135.63 | 0.56 | 22.7 | true |
-| 2 | Convection-diffusion | 12.711 | 251.709 | 12.239 | 135.63 | 1.04 | 46.1 | true |
-| 3 | Poisson | 15.008 | 258.713 | 16.19 | 135.63 | 0.93 | 47.6 | true |
-| 3 | Convection-diffusion | 53.266 | 372.925 | 18.312 | 135.63 | 2.91 | 63.6 | true |
-
-Only one of the six clears the bar, 3D convection-diffusion, with a 2.91x refill speedup and a 63.6%
-smaller resident tensor. The rule needs at least two qualifying cases out of six, so the table
-alone already falls short. Finch's own compilation cost settles it further: time to first
-execution -- the very first `@finch` call in the process, before any warm-up -- was about 39
-seconds against Bramble's 0.1 millisecond. A package whose users open a REPL, run one assembly
-and look at the result cannot pay a 39-second tax on the first call, even for a backend that
-eventually wins on refills. Nothing in `ext/` was written: `finch_backend` and
-`BrambleFinchExt.jl` from the issue's proposed architecture do not exist.
-
-Two things bound how far this "no" reaches. First, a methodology departure recorded in
-`benchmark/finch_assembly.jl`'s own header: the script hands Finch the `(row, col, value)`
-triplets Bramble's assembly already computed and times only how fast a `@finch` loop nest copies
-them into a `Tensor(Dense(SparseList(Element(0.0))))` -- the insertion half of assembly, not the
-fused stencil-evaluation-and-insertion Finch's compiler actually promises and the issue's own
-Problem Statement names as the point. That measures an upper bound favouring Finch, and Finch
-still lost under it. Second, both the Bramble and the Finch runs were made on battery power
-under heavy concurrent load, so the ratios in the table, not the absolute millisecond figures,
-carry this decision.
-
-What would change the answer: a fused evaluate-and-insert extension, where Finch compiles the
-stencil evaluation itself from Bramble's own AST rather than consuming triplets Bramble already
-produced, together with a way to amortise the roughly 39-second TTFX across precompilation
-rather than a user's first call.
-
-### Direct sparse solvers
-
-**Sparspak.jl: done, not re-evaluated here.** Built in
-[gpena/Bramble.jl#247](https://github.com/gpena/Bramble.jl/issues/247); see
-[Sparspak sparse direct solver (pure Julia)](@ref) above.
-
-**`Pardiso.jl`: not adopted, for a licensing reason rather than a technical one.**
-`Pardiso.jl` bridges to one of two backends, and neither is available without something
-Bramble cannot bundle:
-- Intel MKL PARDISO needs a separately installed MKL; `Pardiso.mkl_is_available()` is
-  `false` on a plain Julia 1.12 environment, and constructing an `MKLPardisoSolver` throws
-  `"MKL is not available"`.
-- Panua (formerly the free academic) PARDISO needs a separately downloaded, licensed
-  shared library; constructing a `PardisoSolver` throws `"Panua pardiso library was not
-  loaded"`.
-
-Both were reproduced directly (not assumed) on a fresh Julia 1.12 environment. This is the
-same shape of blocker that closed
-[gpena/Bramble.jl#245](https://github.com/gpena/Bramble.jl/issues/245) (`ThreadedSparseCSR.jl`)
-as won't-fix: a real, verified dependency the package cannot satisfy on behalf of a user,
-rather than missing integration work. A user who already holds an MKL or Panua license and
-wants to use it can still call `Pardiso.jl` directly against `A`/`F` from
-[`assemble`](@ref) -- nothing in Bramble stands in the way of that -- it is just not
-something this package can wire up as a first-class `solver` option for everyone.
-
-### Iterative solvers & preconditioners
-
-Krylov methods are already reachable through `solve` with `solver =
-KrylovJL_GMRES()` etc. (`BrambleSciMLExt`), and [`amg_preconditioner`](@ref) already covers
-algebraic multigrid preconditioning. What #244 asked to evaluate is whether `ILUZero.jl` /
-`IncompleteLU.jl` add anything beyond that. Measured on an unsymmetric 2D convection-diffusion
-system (90×90 grid, `n = 8100`, diffusion `1\mathrm{e}{-2}` against unit advection in both
-directions -- the convection-dominated regime the issue named), unrestarted GMRES to
-`atol = rtol = 1\mathrm{e}{-10}`:
-
-| Preconditioner | Time | Iterations | Converged |
-|:--- |:--- |:--- |:--- |
-| none | 51.4 ms | 179 | yes |
-| AMG (`ruge_stuben`) | 6475.9 ms | 2000 (capped) | **no** |
-| `IncompleteLU.jl` (τ = 0.01) | 19.6 ms | 95 | yes |
-| `ILUZero.jl` (ILU(0)) | 4.5 ms | 18 | yes |
-
-Classical algebraic multigrid assumes something close to an M-matrix and does not fail
-gracefully once advection dominates diffusion this strongly -- it neither converges nor
-finishes quickly here, which is a known limitation of `ruge_stuben`-style coarsening on
-non-symmetric, convection-dominated operators, not a bug in `AlgebraicMultigrid.jl`.
-`ILUZero.jl`'s zero-fill ILU(0), reusing `A`'s own sparsity pattern, is the clear winner:
-about 11× fewer iterations and 11× less wall time than no preconditioner, and 4× less than
-`IncompleteLU.jl`'s drop-tolerance variant, at a fraction of the setup cost either of the
-others carries. Built as [`ilu_preconditioner`](@ref) in
-[gpena/Bramble.jl#255](https://github.com/gpena/Bramble.jl/issues/255), mirroring
-[`amg_preconditioner`](@ref)'s shape -- see "Zero-fill ILU preconditioning for convection-dominated
-systems" above.
-
-`Metis.jl`'s graph partitioning was evaluated under reordering, not as a preconditioner,
-below.
-
-### Fill-reducing reordering
-
-Measured on a 3D 24×24×24 Poisson system (`n = 13824`, `nnz = 93312`), CHOLMOD Cholesky
-factorization with three orderings:
-
-| Ordering | Factor time | `nnz(L)` |
-|:--- |:--- |:--- |
-| CHOLMOD default (built-in AMD) | 25.0 ms | 2,147,132 |
-| `Metis.jl` (nested dissection) | 20.1 ms | 1,654,868 |
-| `SymRCM.jl` (Cuthill-McKee) | 53.3 ms | 4,768,508 |
-
-`Metis.jl`'s nested-dissection ordering measurably beats CHOLMOD's own default AMD here --
-about 20% less factorization time and 23% less fill -- a genuine, reproducible win on a 3D
-system. `SymRCM.jl` is worse on both counts: Cuthill-McKee minimises bandwidth, not fill,
-and 3D discretizations are exactly where that distinction costs the most. Both orderings
-reach `suitesparse_factorize`/`sparse_factorize` **today, with no new extension needed** --
-[gpena/Bramble.jl#248](https://github.com/gpena/Bramble.jl/issues/248) already forwards a
-`perm` keyword straight to CHOLMOD:
+`Metis.jl`'s nested-dissection ordering gave less fill and a faster CHOLMOD factorization
+than CHOLMOD's default AMD on a 3D Poisson system; `SymRCM.jl` (Cuthill-McKee, which
+minimises bandwidth, not fill) was worse on both. Both orderings reach
+`suitesparse_factorize`/`sparse_factorize` with no new extension:
+[gpena/Bramble.jl#248](https://github.com/gpena/Bramble.jl/issues/248) forwards a `perm`
+keyword straight to CHOLMOD:
 
 ```julia
 using Metis
@@ -513,9 +278,6 @@ import Bramble: suitesparse_factorize
 perm, _ = Metis.permutation(A)
 fact = suitesparse_factorize(A; sym = :spd, perm = Int.(perm))
 ```
-
-`Metis.jl` is worth naming explicitly in the ordering documentation rather than building
-anything further for it.
 
 ### Summary
 
@@ -528,4 +290,4 @@ anything further for it.
 | `IncompleteLU.jl` | Works, but `ILUZero.jl` dominates it here |
 | `ILUZero.jl` | Done -- [`ilu_preconditioner`](@ref), [#255](https://github.com/gpena/Bramble.jl/issues/255) |
 | `Metis.jl` | **Recommended** -- genuine fill/time win on 3D systems, usable today via existing `perm` forwarding |
-| `SymRCM.jl` | Not adopted -- worse fill than the CHOLMOD default on the systems Bramble assembles |
+| `SymRCM.jl` | Not adopted -- worse fill than the CHOLMOD default on the 3D Poisson system measured |

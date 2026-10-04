@@ -78,8 +78,7 @@ end
     jacobian_pattern(a::BilinearForm, coefficient_dependencies::Function...) -> SparseMatrixCSC{Bool}
 
 Sparsity pattern of the Jacobian of a Newton residual `A(u) * u - F`, where `a` is the
-[`BilinearForm`](@ref) that assembles `A(u)` (e.g. `diffusion_matrix` in
-[the nonlinear Poisson example](../examples/poisson_nonlinear.md)) and each function in
+[`BilinearForm`](@ref) that assembles `A(u)` and each function in
 `coefficient_dependencies` names, symbolically, the stencil operator one of `a`'s live
 coefficients was itself computed from -- written the same way a form term names an
 operator, as a function of the trial placeholder. If `a`'s diffusion coefficient was built
@@ -102,8 +101,7 @@ sparse_ad = AutoSparse(AutoForwardDiff();
 ## Composite trial/test spaces
 
 A dependency may also name a *different* leaf, the same way a form term does --
-`U -> U(2)` for a coefficient that is component 2's own value (no stencil op, as in
-[the coupled reaction-diffusion example](../examples/coupled_reaction_diffusion.md)'s `v_c`),
+`U -> U(2)` for a coefficient that is component 2's own value (no stencil op),
 or `U -> Mₕ(U(2))` for one built from a stencil op applied to that other component.
 `nothing` named (`U -> Mₕ(U)`, no `(k)`) means the coefficient depends on *this block's
 own* trial leaf, exactly like the non-composite case above. Every dependency still applies

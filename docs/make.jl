@@ -11,9 +11,6 @@ using MaterialDocs
 # example page left `api_sciml.md`'s block showing the stub alone).
 using SciMLSensitivity
 
-include("generate_benchmarks.jl")
-generate_benchmarks_markdown()
-
 # Worked-example pages. Each one is written as a runnable script and the
 # markdown Documenter renders is generated from them here, so the page a reader sees and the
 # file the suite runs are the same file. Lines marked `#src` -- the assertions that make the
@@ -23,20 +20,8 @@ generate_benchmarks_markdown()
 # of each page, so a script's `[`name`](@ref)` resolves public-but-unexported names too.
 const LITERATE_EXAMPLES = [
     "poisson_linear.jl",
-    "poisson_nonlinear.jl",
     "convection_diffusion_linear.jl",
-    "coupled_reaction_diffusion.jl",
-    "elasticity_3d.jl",
-    "heat_equation.jl",
-    "amg_preconditioning.jl",
-    "inverse_diffusion.jl",
-    "transient_inverse_problem.jl",
-    "wave_equation_2d.jl",
-    "point_sources_flux.jl",
-    "transient_inplace.jl",
-    "boundary_layer_graded.jl",
-    "memory_scaling.jl",
-    "matrix_free_operator.jl"
+    "heat_equation.jl"
 ]
 
 if Threads.nthreads() == 1
@@ -80,53 +65,18 @@ forms = "Forms and assembly" => [
     "tutorials/form.md",
     "tutorials/coupled_systems.md"
 ]
-scientific = "Solvers and scientific computing" => [
-    "tutorials/solvers.md",
-    "tutorials/solvers_by_problem.md",
-    "tutorials/time_stepping.md",
-    "tutorials/autodiff.md",
-    "tutorials/backend.md"
-]
-visualization = "Visualization and export" => [
-    "tutorials/plotting.md",
-    "tutorials/vtk_export.md",
-    "tutorials/pgfplots_export.md"
-]
 examples = "Examples" => [
-    "Stationary problems" => [
-        "examples/poisson_linear.md",
-        "examples/poisson_nonlinear.md",
-        "examples/convection_diffusion_linear.md",
-        "examples/coupled_reaction_diffusion.md",
-        "examples/point_sources_flux.md",
-        "examples/boundary_layer_graded.md",
-        "examples/elasticity_3d.md"
-    ],
-    "Time-dependent problems" => [
-        "examples/heat_equation.md",
-        "examples/wave_equation_2d.md",
-        "examples/transient_inplace.md"
-    ],
-    "Inverse problems" => [
-        "examples/inverse_diffusion.md",
-        "examples/transient_inverse_problem.md"
-    ],
-    "Solvers and performance" => [
-        "examples/amg_preconditioning.md",
-        "examples/memory_scaling.md",
-        "examples/matrix_free_operator.md"
-    ]
+    "examples/poisson_linear.md",
+    "examples/convection_diffusion_linear.md",
+    "examples/heat_equation.md"
 ]
-benchmarks = "Benchmarks" => "benchmarks.md"
 internals = "Internals" => [
     "internals/utils.md",
     "internals/geometry.md",
     "internals/mesh.md",
     "internals/space.md",
     "internals/form.md",
-    "internals/autodiff.md",
     "internals/exporters.md",
-    "internals/gpu.md",
     "internals/csr_solvers.md"
 ]
 documentation = "Documentation" => [
@@ -147,13 +97,12 @@ documentation = "Documentation" => [
 
 # Every new page needs `CurrentModule = Bramble` in its `@meta` block, or its page-level
 # `@ref`s resolve against `Main` and fail even when the docstring is included
-# (docs/src/internals/gpu.md hit this). Against `Main`, only exported
+# (docs/notes/internals/gpu.md hit this). Against `Main`, only exported
 # names resolve: a name that is `public` but not exported fails there.
 #     ```@meta
 #     CurrentModule = Bramble
 #     ```
-allpages = [home, getting_started, foundations, forms, scientific,
-    visualization, examples, benchmarks, documentation]
+allpages = [home, getting_started, foundations, forms, examples, documentation]
 
 makedocs(;
     format = Material3(;

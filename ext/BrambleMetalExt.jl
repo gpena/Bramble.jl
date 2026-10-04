@@ -119,7 +119,7 @@ else
     `mirror` field ([`_DeviceSparseMirror`](@ref), gpena/Bramble.jl#313): the host staging
     copies of `rowPtr`/`colVal`/`nzVal` that `src/assembly/bilinear_traversal.jl`'s
     `_scatter_position`/`_scatter_add!` search and accumulate into without ever
-    scalar-indexing device memory. See `docs/src/internals/gpu.md` for the contract every
+    scalar-indexing device memory. See `docs/notes/internals/gpu.md` for the contract every
     device sparse matrix type carries this field to satisfy.
 
     A Bramble-owned placeholder for `Metal.MtlSparseMatrixCSR`, which tagged Metal.jl does not

@@ -386,8 +386,8 @@ Allocate a matrix with the form's sparsity pattern and assemble into it. The mat
 whatever [`backend`](@ref) the space's mesh was built with.
 
 **Call this once, then assemble into what it returns.** Building the sparsity pattern is the
-larger part of the work (at 250,000 degrees of freedom it is 9,700 us and 52 MB against 1,500 us
-and zero allocations to refill the matrix), and the pattern does not change between assemblies.
+larger part of the work (a refill allocates nothing), and the pattern does not change between
+assemblies.
 A time loop or Newton iteration benefits from preallocating the pattern once:
 
 ```julia
@@ -426,8 +426,8 @@ ignoring the backend's policy.
 `assemble!` uses the pre-resolved `form.ast` stored directly inside the form.
 
 ## Live coefficients
-- Grid functions. The stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(cₕ, ...)` or `parent(cₕ) .= ...`) between steps automatically updates the matrix entries. Nested scales such as `uₕ * (wₕ * v)` stay live too: each grid function is read at assembly time, never fused into a copy when the form is built. On the host this costs 0 allocations; on a device-backed space each fill copies the coefficient to the host anew, so it stays live but is not allocation-free there (see [GPU acceleration](@ref)).
-- Dynamic scalars. Plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `β = Ref(1.0); a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))`). Mutating `β[] = new_val` evaluates live during assembly with 0 allocations on the host; the `Ref` itself adds nothing, but a device-backed space's call still allocates regardless of the scalar (see [GPU acceleration](@ref)).
+- Grid functions. The stored AST retains references to source `VectorElement` storage. Mutating values in-place (`Rₕ!(cₕ, ...)` or `parent(cₕ) .= ...`) between steps automatically updates the matrix entries. Nested scales such as `uₕ * (wₕ * v)` stay live too: each grid function is read at assembly time, never fused into a copy when the form is built. On the host this costs 0 allocations; on a device-backed space each fill copies the coefficient to the host anew, so it stays live but is not allocation-free there.
+- Dynamic scalars. Plain numbers work directly for constant scalars. To update a scalar dynamically across loop iterations, wrap it in a `Ref(val)` (e.g. `β = Ref(1.0); a = form(Wₕ, Wₕ, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)))`). Mutating `β[] = new_val` evaluates live during assembly with 0 allocations on the host; the `Ref` itself adds nothing, but a device-backed space's call still allocates regardless of the scalar.
 """
 function assemble!(
         A::AbstractMatrix,

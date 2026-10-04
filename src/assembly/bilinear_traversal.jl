@@ -91,7 +91,7 @@ end
 # `Bramble.locality`), never on a concrete backend type. What *is* named here is a field
 # layout, not a type: a device sparse matrix that wants to plug into assembly carries a field
 # named `mirror`, of type [`_DeviceSparseMirror`](@ref) (below), holding the host staging
-# copies the search and the scatter need. `docs/src/internals/gpu.md` states this contract
+# copies the search and the scatter need. `docs/notes/internals/gpu.md` states this contract
 # for a reader without this file open.
 #
 # The mirror is built once, when the matrix itself is (`BrambleMetalExt.metal_sparse_csr`).
@@ -128,7 +128,7 @@ that matrix actually accumulates into -- the device array itself is left untouch
 sparse matrix type that wants to plug into assembly carries exactly this shape in a field
 named `mirror`: [`_scatter_position`](@ref)/[`_scatter_add!`](@ref) below duck-type it off
 `A.mirror` directly, so no file under `src/` needs to name the concrete matrix type
-(`BrambleMetalExt.MetalSparseMatrixCSR` today). See `docs/src/internals/gpu.md`.
+(`BrambleMetalExt.MetalSparseMatrixCSR` today). See `docs/notes/internals/gpu.md`.
 """
 struct _DeviceSparseMirror{Tv, Ti}
     rowptr::Vector{Ti}
