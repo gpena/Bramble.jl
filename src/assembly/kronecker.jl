@@ -41,9 +41,9 @@ already lifts a term's own scalar all the way out (`⟨c * u, v⟩ -> c * ⟨u, 
 shared one out of a sum (`c*A + c*B -> c*(A+B)`), so a coefficient can sit above several
 addends at once; this walk is what puts it back beside each one without rebuilding the AST.
 
-`_separable_axis` classifies `term` alone; [`is_separable`](@ref) and
-[`kronecker_operator`](@ref) multiply by `scales` (via `_kron_coeff`) at `mul!` time, the
-same way a live `Ref` coefficient stays live through `assemble!`.
+`_kron_project` factors `term` alone; [`kronecker_operator`](@ref) multiplies by `scales`
+(via `_kron_coeff`) at `mul!` time, the same way a live `Ref` coefficient stays live
+through `assemble!`.
 """
 @inline _kron_leaves(op::OperatorAdd, scales::Tuple) = (
     _kron_leaves(op.left_op, scales)..., _kron_leaves(op.right_op, scales)...
@@ -61,58 +61,63 @@ same way a live `Ref` coefficient stays live through `assemble!`.
 
 # --- Term classification ------------------------------------------------------------- #
 
-"""
-    _separable_axis(term) -> Union{Nothing, Some{Union{Int, Nothing}}}
-
-The axis a recognised separable `term` acts along, wrapped in `Some` to tell "valid, no
-axis" apart from "not recognised": `Some(nothing)` for a mass term (`innerₕ(u, v)`,
-identity on every axis) and `Some(d)` for a single-direction term (`inner₊` of a backward
-difference along axis `d` on both sides -- what `∇ₕ` expands to, one term per axis). Plain
-`nothing` for anything else.
-
-Conservative by construction: only the two `BilinearProduct` shapes below have a method:
-a bare mass product over plain (non-indexed) trial/test functions, and a directional
-product over a `BackwardDifference` wrapping each. Every other node -- including a
-`GridFunctionScale`, `RegionRestriction`, `InterpolationNode`, an `InnerGamma` weight, an
-indexed (composite) trial or test function, or any other difference/average/jump family --
-falls through to the `LazyOp` fallback and answers `nothing`, never a guess.
-"""
-_separable_axis(::LazyOp) = nothing
-
-@inline function _separable_axis(
-        ::BilinearProduct{D, InnerH, <:TrialFunction{D}, <:TestFunction{D}}
-) where {D}
-    return Some(nothing)
+# Whether a projected term reads a grid function's values, which `_kron_project` copies into
+# the factors once: a later edit to that grid function is not seen. A constant (`Number`)
+# coefficient is not one.
+_kron_reads_coef(op::LazyOp) = hasproperty(op, :inner_op) && _kron_reads_coef(op.inner_op)
+_kron_reads_coef(op::BilinearProduct) = _kron_reads_coef(op.left_op) || _kron_reads_coef(op.right_op)
+_kron_reads_coef(op::OperatorAdd) = _kron_reads_coef(op.left_op) || _kron_reads_coef(op.right_op)
+function _kron_reads_coef(op::GridFunctionScale)
+    return !(op.grid_function isa Number) || _kron_reads_coef(op.inner_op)
 end
 
-@inline function _separable_axis(
-        ::BilinearProduct{
-        D, InnerPlus{Dim}, <:BackwardDifference{D, Dim, <:TrialFunction{D}},
-        <:BackwardDifference{D, Dim, <:TestFunction{D}}
-}
-) where {D, Dim}
-    return Some(Dim)
+# The node of one side of a product that `_kron_split` has no projection for, by name: the
+# innermost node whose own operand still splits.
+function _kron_refused_split(op::OperatorAdd)
+    _kron_split(op.left_op) === nothing && return _kron_refused_split(op.left_op)
+    return _kron_refused_split(op.right_op)
+end
+function _kron_refused_split(op::LazyOp)
+    if hasproperty(op, :inner_op) && _kron_split(op.inner_op) === nothing
+        return _kron_refused_split(op.inner_op)
+    end
+    op isa RegionRestriction && return "RegionRestriction($(repr(op.region)))"
+    return string(nameof(typeof(op)))
+end
+
+"""
+    _kron_refused_node(term, Ωₕ) -> String
+
+What in `term`, a leaf `_kron_project(term, Ωₕ)` answers `nothing` for, has no per-axis
+projection, for the error `kronecker_operator` throws.
+"""
+_kron_refused_node(term::LazyOp, ::Any) = "the node $(nameof(typeof(term)))"
+function _kron_refused_node(term::BilinearProduct{D, I}, Ωₕ) where {D, I}
+    _kron_inners(I, Ωₕ) === nothing && return "the inner-product weight $(nameof(I))"
+    for side in (term.left_op, term.right_op)
+        chains = _kron_split(side)
+        chains === nothing && return "the node $(_kron_refused_split(side))"
+        _kron_coefs(chains, Ωₕ) === nothing &&
+            return "the node GridFunctionScale (a coefficient varying along more than one " *
+                   "axis, or on another mesh)"
+    end
+    return "the node RegionRestriction(:interior) (the mesh's :interior marker is not the " *
+           "product of its axes' own)"
 end
 
 """
     is_separable(a::BilinearForm) -> Bool
 
-Whether `a`'s resolved AST is a sum of terms each expressible as a Kronecker product of
-one-dimensional factors, `H_D ⊗ ... ⊗ A_d ⊗ ... ⊗ H_1`, over a `MeshnD`.
+Whether `a`'s resolved AST is a sum of terms each expressible as a sum of Kronecker products
+of one-dimensional factors over a `MeshnD`: every addend, its constant (literal or `Ref`)
+scalar coefficients stripped, has a projection onto the mesh's axes (`_kron_project`).
 
-`true` requires every one of the following:
-
-  - `a`'s trial and test space are both a (non-composite) [`ScalarGridSpace`](@ref) sharing
-    one mesh, and that mesh is at least two-dimensional (a 1D mesh has nothing to factor).
-  - Every addend of the resolved AST, after stripping any constant (literal or `Ref`)
-    scalar coefficient, is `innerₕ(u, v)` or `inner₊` of a `D₋` backward difference along
-    one axis on both sides -- what `innerₕ(u, v)` and `inner₊(∇ₕ(u), ∇ₕ(v))` resolve to.
-
-A grid-function coefficient, a region restriction (Dirichlet included), an interpolation, a
-surface (`InnerGamma`) weight, or any operator family this file does not explicitly
-recognise (forward/centered/star/cross-weighted differences, averages, jumps, a mixed
-multi-axis composition) all answer `false` -- conservatively: a false negative only forgoes
-the Kronecker fast path, so this never claims separability it cannot back up with factors.
+`a`'s trial and test space must both be a (non-composite) [`ScalarGridSpace`](@ref) sharing
+one mesh, at least two-dimensional (a 1D mesh has nothing to factor). A grid-function
+coefficient varying along more than one axis, a region restriction other than `:interior`,
+an interpolation, or any node without a projection answers `false`: a false negative only
+forgoes the Kronecker fast path, so this never claims separability it cannot back up with
+factors.
 
 # Examples
 
@@ -121,8 +126,8 @@ the Kronecker fast path, so this never claims separability it cannot back up wit
 Wₕ = gridspace(Ωₕ)
 is_separable(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))))  # true
 
-fₕ = Rₕ(Wₕ, x -> 1 + x[1])
-is_separable(form(Wₕ, Wₕ, (u, v) -> innerₕ(fₕ * u, v)))  # false: grid-function coefficient
+fₕ = Rₕ(Wₕ, x -> 1 + x[1] * x[2])
+is_separable(form(Wₕ, Wₕ, (u, v) -> innerₕ(fₕ * u, v)))  # false: varies along both axes
 ```
 
 See also: [`kronecker_operator`](@ref), [`KroneckerLinearOperator`](@ref).
@@ -134,10 +139,8 @@ function is_separable(a::BilinearForm{D}) where {D}
     Wu isa ScalarGridSpace || return false
     Wv isa ScalarGridSpace || return false
     mesh(Wu) === mesh(Wv) || return false
-    for (_, term) in _kron_leaves(resolve_form_ast(a), ())
-        _separable_axis(term) === nothing && return false
-    end
-    return true
+    Ωₕ = _host_mirror_mesh(mesh(Wu))
+    return all(l -> _kron_project(l[2], Ωₕ) !== nothing, _kron_leaves(resolve_form_ast(a), ()))
 end
 
 # --- KroneckerTerm: one addend's per-axis factors ------------------------------------ #
@@ -308,17 +311,73 @@ end
     )
 end
 
-@noinline function _throw_not_separable_term(term)
+@noinline function _throw_not_separable_term(term, Ωₕ)
     throw(
         ArgumentError(
-        "kronecker_operator: the term $(typeof(term)) is not one of the recognised " *
-        "separable shapes (innerₕ(u, v), or inner₊ of a backward difference along one " *
-        "axis on both sides -- what ∇ₕ(u)/∇ₕ(v) expand into). A grid-function " *
-        "coefficient, a region restriction (Dirichlet included), an interpolation, a " *
-        "surface weight, a composite space, or a mixed/forward/centered/averaged/jump " *
-        "operator all fall outside what this file builds Kronecker factors for.",
+        "kronecker_operator: the term $(nameof(typeof(term))) has no Kronecker factors: " *
+        "$(_kron_refused_node(term, Ωₕ)) has no projection onto the mesh's axes. See " *
+        "`is_separable` for what factors.",
     ),
     )
+end
+
+"""
+    _kron_check_device(term::KroneckerTerm) -> Nothing
+
+Throw an `ArgumentError` naming the shape when the device kernel (`_launch_kron_fused!`)
+cannot apply the host-built `term`: it reads at most one non-diagonal factor per term, and
+reads that factor's rows from its columns, so the factor must be symmetric. `nothing`
+otherwise.
+"""
+function _kron_check_device(t::KroneckerTerm)
+    axes = Tuple(d for d in eachindex(t.factors) if !(t.factors[d] isa Diagonal))
+    length(axes) > 1 && throw(
+        ArgumentError(
+        "kronecker_operator: a term has non-diagonal factors on axes $axes; the device " *
+        "kernel applies at most one per term. Build the operator on a host backend.",
+    ),
+    )
+    for d in axes
+        issymmetric(t.factors[d]) || throw(
+            ArgumentError(
+            "kronecker_operator: a term's axis-$d factor is not symmetric; the device " *
+            "kernel reads a factor's rows from its columns. Build the operator on a host " *
+            "backend.",
+        ),
+        )
+    end
+    return nothing
+end
+
+# One projected factor as `kronecker_operator` stores it: a diagonal one as a `Diagonal`,
+# the axis's own mass factor `H` itself when it equals it (so a mass axis keeps the lazy
+# weights it always had), and any other factor as it is.
+function _kron_factor(F::SparseMatrixCSC, H::Diagonal)
+    h = zeros(eltype(F), size(F, 1))
+    rows, vals = rowvals(F), nonzeros(F)
+    for j in axes(F, 2), k in nzrange(F, j)
+        rows[k] == j || return F
+        h[j] = vals[k]
+    end
+    return isequal(h, _kron_diag(H)) ? H : Diagonal(h)
+end
+
+# The first factor in `seen` equal to `F`, or `F` itself, pushed: terms that project to the
+# same 1D matrix on an axis share one object.
+function _kron_cached!(seen::Vector{Any}, F)
+    for G in seen
+        typeof(G) === typeof(F) && G == F && return G
+    end
+    push!(seen, F)
+    return F
+end
+
+@noinline function _warn_kron_coefficient()
+    @warn "kronecker_operator: a grid-function coefficient was read once, now, into the " *
+          "Kronecker factors; a later `Rₕ!` (or any other edit) to it is not seen by this " *
+          "operator. Use a `Ref` scalar for a coefficient that changes, or rebuild the " *
+          "operator."
+    return nothing
 end
 
 """
@@ -327,17 +386,21 @@ end
 Build a matrix-free [`KroneckerLinearOperator`](@ref) for the separable bilinear form `a`
 (see [`is_separable`](@ref)), without ever assembling the `D`-dimensional matrix.
 
-For each axis `d`, the per-axis mass factor is the diagonal matrix of `d`'s cell measures
-(`weights(gridspace(Ωₕ(d)), Innerh())`); the factor on a term's touched axis is instead the
-assembled 1D operator `assemble(form(Wₕd, Wₕd, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v))))` over
-`Wₕd = gridspace(Ωₕ(d))`, cached across terms that share an axis. Factors are always built on
-the host (a device mesh through its host mirror) and then converted to the storage
-`backend(trial_space(a))` uses, so a device-backed form yields device-resident factors.
+Each term's factor on axis `d` is the 1D form it projects to there, assembled on
+`gridspace(Ωₕ(d))` (`_kron_project`): a diagonal factor is stored as a `Diagonal` (the
+axis's cell measures `weights(gridspace(Ωₕ(d)), Innerh())` themselves for a mass factor),
+and terms sharing a factor on an axis share one matrix. Factors are always built on the host
+(a device mesh through its host mirror) and then converted to the storage
+`backend(trial_space(a))` uses, so a device-backed form yields device-resident factors. A
+grid-function coefficient is read once, here, and a warning says so; a scalar or `Ref`
+coefficient stays live.
 
 # Throws
 
-  - `ArgumentError`: `a` is not separable, naming the offending term (or dimension, or
-    space) -- the same check [`is_separable`](@ref) runs, made specific.
+  - `ArgumentError`: `a` is not separable, naming the offending node (or dimension, or
+    space) -- the same check [`is_separable`](@ref) runs, made specific; or `a` is
+    device-backed and a term has more than one non-diagonal factor or a non-symmetric one,
+    which the device kernel cannot apply (`_kron_check_device`).
 
 # Examples
 
@@ -362,40 +425,31 @@ function kronecker_operator(a::BilinearForm{D}) where {D}
     # Factors are always built on the host -- a device-backed mesh's per-axis spaces would
     # otherwise be scalar-indexed by `weights`/`assemble` -- and only then moved to the
     # storage `Wu`'s backend chooses (`_kron_to_storage`). On a host mesh
-    # `_host_mirror_mesh` returns the mesh itself and `_kron_to_storage` is the identity,
-    # so the host operator is the same object graph it always was.
+    # `_host_mirror_mesh` returns the mesh itself and `_kron_to_storage` is the identity.
     be = backend(Wu)
+    loc = locality(be)
     Ωₕ = _host_mirror_mesh(mesh(Wu))
-    axis_spaces = ntuple(d -> gridspace(Ωₕ(d)), Val(D))
-    mass_vecs = ntuple(d -> weights(axis_spaces[d], Innerh()), Val(D))
-
-    # Cached across terms that touch the same axis, since two directional terms along the
-    # same axis (rare, but not disallowed) would otherwise assemble the identical 1D
-    # operator twice.
-    diff_mats = Dict{Int, Any}()
-
-    leaves = _kron_leaves(resolve_form_ast(a), ())
-    terms = map(leaves) do leaf
-        scales, term = leaf
-        axis_opt = _separable_axis(term)
-        axis_opt === nothing && _throw_not_separable_term(term)
-        axis = something(axis_opt)
-        factors = ntuple(Val(D)) do d
-            if axis !== nothing && d == axis
-                get!(diff_mats, d) do
-                    Wd = axis_spaces[d]
-                    assemble(form(Wd, Wd, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v))))
-                end
-            else
-                Diagonal(mass_vecs[d])
-            end
+    mass = ntuple(d -> Diagonal(weights(_kron_axis_space(Ωₕ, d), Innerh())), Val(D))
+    seen = ntuple(_ -> Any[], Val(D))
+    T = eltype(mass[1])
+    reads_coef = false
+    terms = ()
+    for (scales, term) in _kron_leaves(resolve_form_ast(a), ())
+        P = _kron_project(term, Ωₕ)
+        P === nothing && _throw_not_separable_term(term, Ωₕ)
+        reads_coef |= _kron_reads_coef(term)
+        for projected in P
+            factors = ntuple(d -> _kron_cached!(seen[d], _kron_factor(projected[d], mass[d])), Val(D))
+            T = promote_type(T, map(eltype, factors)...)
+            t = _kron_term(scales, factors)
+            loc isa DeviceLocality && _kron_check_device(t)
+            terms = (terms..., _kron_to_storage(loc, be, t))
         end
-        _kron_to_storage(locality(be), be, _kron_term(scales, factors))
     end
+    reads_coef && _warn_kron_coefficient()
 
     dims = ndofs(Wu, Tuple)
     n = ndofs(Wu)
-    T = eltype(mass_vecs[1])
     policy = execution_policy(be)
     return KroneckerLinearOperator{T, D, typeof(terms), typeof(policy)}(terms, dims, n, policy)
 end
@@ -406,9 +460,9 @@ end
 # type of its own so `mul!` dispatches on the factor, never on a GPU array type (this file
 # names no GPU package). The sparse factor keeps its CSC arrays separately
 # (`Int32` indices) because a kernel is handed the raw arrays, never a struct nesting a
-# device array -- see `docs/src/internals/gpu.md`. Every 1D factor here is symmetric, so
-# column `j` of the CSC storage is also row `j`: the kernel gathers row `j` from column `j`
-# without a transpose.
+# device array -- see `docs/src/internals/gpu.md`. `_kron_check_device` admits only a
+# symmetric sparse factor, so column `j` of the CSC storage is also row `j`: the kernel
+# gathers row `j` from column `j` without a transpose.
 
 struct _KronDeviceDiagonal{V <: AbstractVector}
     diag::V

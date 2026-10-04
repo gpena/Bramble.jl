@@ -130,7 +130,8 @@ const KRON_EXT_SEED = 20260919
         Random.seed!(KRON_EXT_SEED + 6)
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 7), (false, false))
         Wₕ = gridspace(Ωₕ)
-        fₕ = Rₕ(Wₕ, x -> 1.0 + x[1])
+        # Varying along both axes: a single-axis coefficient now factors (#427).
+        fₕ = Rₕ(Wₕ, x -> 1.0 + x[1] * x[2])
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(fₕ * u, v))
         @test !is_separable(a)
         @test_throws ArgumentError fdm_solve(a, rand(ndofs(Wₕ)))

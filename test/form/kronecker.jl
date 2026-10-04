@@ -3,8 +3,9 @@ module TestFormKronecker
 using Test
 using Bramble
 using Bramble: is_separable, kronecker_operator, KroneckerLinearOperator
-using LinearAlgebra: Diagonal, issymmetric, kron, mul!
-using SparseArrays: SparseMatrixCSC, sparse, spdiagm
+using Bramble: D₊ₓ, D₋ₓ, D₋ᵧ, Mₓ, jumpₓ, restrict_to
+using LinearAlgebra: I, Diagonal, issymmetric, kron, mul!
+using SparseArrays: SparseMatrixCSC, sparse, spdiagm, nnz, findnz, dropzeros
 using Random
 using LinearSolve: LinearProblem, solve, KrylovJL_CG
 using ForwardDiff
@@ -64,12 +65,16 @@ end
             end
         end
 
-        # A grid-function coefficient has no tensor structure: not separable.
+        # A grid-function coefficient varying along both axes has no tensor structure: not
+        # separable. One varying along a single axis is (see "Kronecker: projected forms").
         Random.seed!(KRON_SEED)
         Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 7), false)
         W2 = gridspace(Ω2)
-        fₕ = Rₕ(W2, x -> 1.0 + x[1])
+        fₕ = Rₕ(W2, x -> 1.0 + x[1] * x[2])
         @test !is_separable(form(W2, W2, (u, v) -> innerₕ(fₕ * u, v)))
+        # Two meshes with the same shape are still two meshes: the factors are built on one.
+        W2b = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 7), false))
+        @test !is_separable(form(W2, W2b, (u, v) -> innerₕ(u, v)))
 
         # A 1D mesh has nothing to factor.
         Ω1 = mesh(domain(interval(0.0, 1.0)), 9, false)
@@ -240,15 +245,20 @@ end
         W2b = gridspace(Ω2b)
         Ω1 = mesh(domain(interval(0.0, 1.0)), 9, false)
         W1 = gridspace(Ω1)
-        fₕ = Rₕ(W2, x -> 1.0 + x[1])
+        fₕ = Rₕ(W2, x -> 1.0 + x[1] * x[2])
 
         @test_throws "got a 1D form" kronecker_operator(
             form(W1, W1, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
         )
         # Two meshes with the same shape are still two meshes.
         @test_throws "sharing one mesh" kronecker_operator(form(W2, W2b, (u, v) -> innerₕ(u, v)))
-        @test_throws "is not one of the recognised separable shapes" kronecker_operator(
+        # The error names the node with no projection.
+        @test_throws ArgumentError kronecker_operator(form(W2, W2, (u, v) -> innerₕ(fₕ * u, v)))
+        @test_throws "the node GridFunctionScale" kronecker_operator(
             form(W2, W2, (u, v) -> innerₕ(fₕ * u, v))
+        )
+        @test_throws "the node RegionRestriction(:boundary)" kronecker_operator(
+            form(W2, W2, (u, v) -> innerₕ(D₋ₓ(restrict_to(:boundary, u)), v) + innerₕ(u, v))
         )
     end
 
@@ -381,6 +391,159 @@ end
                 @test sparse(t.rows[d]) == (issymmetric(R) ? R : sparse(transpose(R)))
                 @test !(issymmetric(R) && f[d] isa SparseMatrixCSC) || t.rows[d] === f[d]
             end
+        end
+    end
+
+    # `is_separable` and `kronecker_operator` go through `_kron_project` (#427): every
+    # family below factors on graded meshes, and `SparseMatrixCSC(K)` is `assemble(a)`,
+    # stored pattern included. A coefficient varying along one axis is a factor too.
+    @testset "Kronecker: projected forms" begin
+        for n in ((9, 7), (6, 5, 7))
+            Wₕ = _kron_graded_space(n, backend())
+            fx = Rₕ(Wₕ, x -> 1 + x[1])
+            fy = Rₕ(Wₕ, x -> 2 + x[2]^2)
+            fams = [
+                (u, v) -> innerₕ(D₊ₓ(u), D₊ₓ(v)),
+                (u, v) -> innerₕ(Mₓ(u), Mₓ(v)),
+                (u, v) -> innerₕ(jumpₓ(u), jumpₓ(v)),
+                (u, v) -> innerₕ(D₋ₓ(Mₓ(u)), D₋ₓ(Mₓ(v))),
+                (u, v) -> innerₕ(D₋ₓ(D₋ᵧ(u)), v),
+                (u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)),
+                (u, v) -> innerₕ(D₋ₓ(u), v) + innerₕ(u, v),
+                (u, v) -> innerₕ(fx * (fy * u), v) + 0.5 * inner₊(∇ₕ(u), ∇ₕ(v)),
+                (u, v) -> innerₕ(restrict_to(:interior, u), v),
+                (u, v) -> inner_Γ(u, v; markers = (:xmin,)) + innerₕ(u, v)
+            ]
+            x = rand(MersenneTwister(KRON_SEED), ndofs(Wₕ))
+            for (i, f) in enumerate(fams)
+                a = form(Wₕ, Wₕ, f)
+                A = assemble(a)
+                @test is_separable(a)
+                K = @test_logs min_level = Base.CoreLogging.Error kronecker_operator(a)
+                B = SparseMatrixCSC(K)
+                @test findnz(B)[1:2] == findnz(A)[1:2]
+                @test maximum(abs, B - A) <= 1e-13 * maximum(abs, A)
+                @test isapprox(K * x, A * x; rtol = 1e-12)
+            end
+        end
+    end
+
+    # Today's forms build the operator they always did: the mass factor is the axis's lazy
+    # weights in a `Diagonal`, shared by every term; the stiffness factor is its own rows;
+    # axis 1's line is the tridiagonal sweep. Diagonal factors that are not the mass (an
+    # `:interior` restriction, a coefficient) become a `Diagonal` too.
+    @testset "Kronecker: today's factor types" begin
+        Wₕ = _kron_graded_space((9, 7), backend())
+        K = kronecker_operator(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))))
+        @test length(K.terms) == 3
+        mass(t, d) = t.factors[d] isa Diagonal{Float64, <:Bramble.SeparableWeights{1}}
+        @test all(d -> mass(K.terms[1], d), 1:2)
+        @test K.terms[2].factors[1] isa SparseMatrixCSC && mass(K.terms[2], 2)
+        @test mass(K.terms[3], 1) && K.terms[3].factors[2] isa SparseMatrixCSC
+        @test all(t -> t.rows === t.factors, K.terms)
+        @test K.terms[2].line isa Bramble._KronTridiag
+        @test K.terms[1].factors[2] === K.terms[2].factors[2]
+        @test K.terms[1].factors[1] === K.terms[3].factors[1]
+
+        Ki = kronecker_operator(form(Wₕ, Wₕ, (u, v) -> innerₕ(restrict_to(:interior, u), v)))
+        @test all(F -> F isa Diagonal{Float64, Vector{Float64}}, only(Ki.terms).factors)
+    end
+
+    # A grid-function coefficient is read once, at construction, and `kronecker_operator`
+    # warns so; a scalar or `Ref` coefficient stays live and warns nothing.
+    @testset "Kronecker: coefficient snapshot" begin
+        Wₕ = _kron_graded_space((9, 7), backend())
+        fx = Rₕ(Wₕ, x -> 1 + x[1])
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(fx * u, v))
+        K = @test_logs (:warn, r"read once") kronecker_operator(a)
+        x = rand(MersenneTwister(KRON_SEED), ndofs(Wₕ))
+        y0 = K * x
+        @test isapprox(y0, assemble(a) * x; rtol = 1e-12)
+        Rₕ!(fx, x -> 5 + x[1])
+        @test K * x == y0
+        @test !isapprox(K * x, assemble(a) * x; rtol = 1e-3)
+
+        c = Ref(2.0)
+        ac = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v)))
+        Kc = @test_logs min_level = Base.CoreLogging.Warn kronecker_operator(ac)
+        c[] = 7.0
+        @test isapprox(Kc * x, assemble(ac) * x; rtol = 1e-12)
+    end
+
+    # Ruling (S2.5): wherever `assemble(a)` stores explicit zeros (a pure `inner_Γ` form on
+    # the interior points of the face rows' diagonal, `inner₊` at its zero-weight points,
+    # an all-zero factor on a two-point axis), `SparseMatrixCSC(K)` stores the pattern of
+    # `dropzeros(assemble(a))`: the values agree, and the factors are not padded to repeat
+    # the zeros.
+    @testset "Kronecker: pure inner_Γ" begin
+        Wₕ = _kron_graded_space((9, 7), backend())
+        a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(u, v; markers = (:boundary,)))
+        A = assemble(a)
+        B = SparseMatrixCSC(kronecker_operator(a))
+        @test B == A
+        @test findnz(B)[1:2] == findnz(dropzeros(A))[1:2]
+        @test nnz(B) < nnz(A)
+    end
+
+    # The device kernel applies at most one non-diagonal factor per term, read as symmetric:
+    # `_kron_check_device` refuses any other term on a device backend, naming the shape.
+    @testset "Kronecker: device term check" begin
+        T3 = sparse([2.0 -1 0; -1 2 -1; 0 -1 2])
+        H4 = Diagonal(ones(4))
+        @test Bramble._kron_check_device(Bramble._kron_term((), (T3, H4))) === nothing
+        @test Bramble._kron_check_device(Bramble._kron_term((), (H4, T3))) === nothing
+        two = Bramble._kron_term((), (T3, sparse(ones(4, 4) + 4I)))
+        @test_throws ArgumentError Bramble._kron_check_device(two)
+        @test_throws "non-diagonal factors on axes (1, 2)" Bramble._kron_check_device(two)
+        up = Bramble._kron_term((), (H4, sparse([1.0 0 0; -1 1 0; 0 -1 1])))
+        @test_throws ArgumentError Bramble._kron_check_device(up)
+        @test_throws "axis-2 factor is not symmetric" Bramble._kron_check_device(up)
+    end
+
+    # The simplifier merges like terms into a constant scalar inside a side
+    # (`innerₕ(D₋ₓ(u), v) + 0.3 * innerₕ(u, v)` becomes `innerₕ(D₋ₓ(u) + 0.3 * u, v)`), which
+    # the projection carries on axis 1. A `Ref` there stays live, so it is refused.
+    @testset "Kronecker: like terms merged" begin
+        for n in ((9, 7), (6, 5, 7))
+            Wₕ = _kron_graded_space(n, backend())
+            fx = Rₕ(Wₕ, x -> 1 + x[1])
+            fams = [
+                (u, v) -> innerₕ(D₋ₓ(D₋ᵧ(u)), v),
+                (u, v) -> innerₕ(D₋ₓ(u), v),
+                (u, v) -> innerₕ(fx * u, v) + inner₊(∇ₕ(u), ∇ₕ(v)),
+                (u, v) -> innerₕ(restrict_to(:interior, u), v)
+            ]
+            x = rand(MersenneTwister(KRON_SEED), ndofs(Wₕ))
+            for f in fams
+                a = form(Wₕ, Wₕ, (u, v) -> f(u, v) + 0.3 * innerₕ(u, v))
+                A = assemble(a)
+                @test is_separable(a)
+                K = @test_logs min_level = Base.CoreLogging.Error kronecker_operator(a)
+                @test maximum(abs, SparseMatrixCSC(K) - A) <= 1e-13 * maximum(abs, A)
+                @test isapprox(K * x, A * x; rtol = 1e-12)
+            end
+        end
+        Wₕ = _kron_graded_space((9, 7), backend())
+        c = Ref(0.3)
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v) + c * innerₕ(u, v))
+        @test !is_separable(a)
+        @test_throws "the node OperatorScale" kronecker_operator(a)
+    end
+
+    # The 1D factors are assembled on a serial host backend whatever the mesh's policy, so
+    # the operator holds the same factors, and the threaded product equals the serial one
+    # bit for bit, on a form whose 1D assembly would otherwise round differently.
+    @testset "Kronecker: factors across policies" begin
+        f = (u, v) -> innerₕ(D₋ₓ(Mₓ(u)), D₋ₓ(Mₓ(v)))
+        for n in ((5, 4), (12, 9, 11))
+            Ks = [kronecker_operator(form(W, W, f))
+                  for W in (_kron_graded_space(n, backend(; policy = P))
+                  for P in (Bramble.CpuSerial(), Bramble.CpuThreaded(), Bramble.CpuPolyester()))]
+            for K in Ks[2:3], (t, ts) in zip(K.terms, Ks[1].terms)
+                @test all(map((F, G) -> F == G && typeof(F) === typeof(G), t.factors, ts.factors))
+            end
+            x = rand(MersenneTwister(KRON_SEED), size(Ks[1], 1))
+            @test Ks[2] * x == Ks[1] * x
         end
     end
 

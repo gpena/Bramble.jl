@@ -97,6 +97,35 @@ end
         @test _proj_refused(a1)
     end
 
+    # A node, shift or `inner₊` weight along an axis the mesh does not have would meet no
+    # axis and project to the identity; `assemble` throws on it, and the projection refuses.
+    @testset "axes the mesh lacks are refused" begin
+        W = _proj_graded_space((7, 6))
+        Ωₕ = mesh(W)
+        u, v = Bramble.TrialFunction{2, 1}(), Bramble.TestFunction{2, 1}()
+        for node in (Bramble.BackwardDifference{2, 3, typeof(u)}(u),
+            Bramble.CenteredAverage{2, 3, typeof(u)}(u),
+            Bramble.ShiftNode{2, 3, typeof(u)}(1, u))
+            @test Bramble._kron_split(node) === nothing
+            @test Bramble._kron_project(innerₕ(node, v), Ωₕ) === nothing
+        end
+        @test Bramble._kron_inners(Bramble.InnerPlus{3}, Ωₕ) === nothing
+        @test Bramble._kron_inners(Bramble.InnerPlus{2}, Ωₕ) !== nothing
+        @test _proj_refused(form(W, W, (u, v) -> innerₕ(Bramble.D₋₂(u), v)))
+        @test_throws BoundsError assemble(form(W, W, (u, v) -> innerₕ(Bramble.D₋₂(u), v)))
+    end
+
+    # A plain number scaling a node inside a side goes into the axis-1 chain; a `Ref` there
+    # is refused, since a factor would read it once.
+    @testset "a number inside a side" begin
+        W = _proj_graded_space((9, 7))
+        a = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + 0.3 * innerₕ(u, v))
+        @test any(l -> occursin("OperatorScale", string(typeof(l[2]))), _proj_leaves(a))
+        @test _proj_matches(a)
+        c = Ref(0.3)
+        @test _proj_refused(form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + c * innerₕ(u, v)))
+    end
+
     @testset "inner_Γ is a sum over its faces" begin
         W2 = _proj_graded_space((9, 7))
         W3 = _proj_graded_space((6, 5, 7))

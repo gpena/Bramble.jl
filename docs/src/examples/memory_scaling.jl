@@ -245,8 +245,8 @@ kron_3d = kron(Mz, My, Mx) + kron(Kz, My, Mx) + kron(Mz, Ky, Mx) + kron(Mz, My, 
 # The assembled matrices equal the Kronecker sums of the one-dimensional factors up to
 # rounding, on meshes whose points are unevenly spaced along every axis. This is the
 # structure `is_separable` looks for term by term: each term of the form must split into one
-# factor per axis. A grid-function coefficient does not split, since its values are not a
-# product of one function of ``x`` and one of ``y``, and that is why it is refused below.
+# factor per axis. A grid-function coefficient varying along both axes does not split, since
+# its values are not a function of one coordinate alone, and that is why it is refused below.
 
 is_separable(a₂) && is_separable(a₃)
 
@@ -321,28 +321,31 @@ norm(vec(X₂) - Matrix(A₂) \ b₂)
 
 # ## Separability
 #
-# `is_separable` walks `a`'s resolved AST and answers whether every term is one of the two
-# shapes a Kronecker product can represent: `innerₕ(u, v)` (the identity on every axis) or
-# `inner₊` of a backward difference along one axis (what `∇ₕ(u)` expands into, one term per
-# axis). `a` above is exactly that sum:
+# `is_separable` walks `a`'s resolved AST and answers whether every term projects onto the
+# axes: each node along one axis becomes its one-dimensional counterpart there and the
+# identity on every other axis, so the term is a sum of Kronecker products of 1D factors.
+# `innerₕ(u, v)` is the identity on every axis and `inner₊` of a backward difference along
+# one axis (what `∇ₕ(u)` expands into, one term per axis) differs from it on that axis
+# alone. `a` above is that sum:
 
 is_separable(a)
 
 @test is_separable(a) #src
 
-# A grid-function coefficient breaks the shape match, because it has no tensor structure to factor
-# out, so `is_separable` refuses it rather than guessing:
+# A grid-function coefficient varying along one axis only is a diagonal factor on that axis,
+# read once when the operator is built (`kronecker_operator` warns so). One varying along
+# several axes has no tensor structure to factor out, so `is_separable` refuses it rather
+# than guessing:
 
-fₕ = Rₕ(Wₕ, x -> 1.0 + x[1])
+fₕ = Rₕ(Wₕ, x -> 1.0 + x[1] * x[2])
 is_separable(form(Wₕ, Wₕ, (u, v) -> innerₕ(fₕ * u, v)))
 
 @test !is_separable(form(Wₕ, Wₕ, (u, v) -> innerₕ(fₕ * u, v))) #src
 
-# The same refusal covers a region restriction, an interpolation node, a surface (`InnerGamma`)
-# weight, a composite space, a 1D mesh (nothing to factor), and any difference family other
-# than the plain backward one `∇ₕ` builds: forward, centered, star, cross-weighted,
-# averages, jumps. Every one of these is a false negative rather than a wrong answer: `a`
-# would still assemble and solve the ordinary way, just without the fast path below.
+# The same refusal covers a region restriction other than `:interior`, an interpolation
+# node, a composite space, a 1D mesh (nothing to factor), and the star and cross-weighted
+# differences. Every one of these is a false negative rather than a wrong answer: `a` would
+# still assemble and solve the ordinary way, just without the fast path below.
 #
 # ## The operator, and what it costs against the matrix it replaces
 #
