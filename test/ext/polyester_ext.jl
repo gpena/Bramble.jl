@@ -76,14 +76,16 @@ end
 # struct holding a GC reference (follow-up: gpena/Bramble.jl#437).
 const _PA_ZERO_PATHS = (
     "difference D₋ₓ!", "average Mₓ!", "avgₕ!", "shift S₊ₓ!", "divₕ!", "curlₕ!", "εₕ!",
-    "broadcast", "innerₕ", "inner₊ₓ", "innerₕ masked", "Kronecker mul!"
+    "broadcast", "innerₕ", "inner₊ₓ", "innerₕ masked", "Kronecker mul!",
+    "Kronecker mul! general"
 )
 
 # BEGIN _pa paths
 using Bramble: CpuPolyester, CpuSerial, CpuThreaded, change_points!, semidiscretize_rhs,
                allocate_system_matrix, D₋ₓ, inner₊ₓ, S₊ₓ!
-using LinearAlgebra: mul!, ldiv!
+using LinearAlgebra: Diagonal, mul!, ldiv!
 using Random: Xoshiro, randn
+using SparseArrays: spdiagm
 
 function _pa_jitter(n, policy; seed = 4321)
     rng = Xoshiro(seed)
@@ -111,6 +113,20 @@ _pa_copy(u) = copy(parent(u))
 _pa_flat(e) = reduce(vcat, [_pa_copy(e[i][j]) for i in 1:2 for j in 1:2])
 _pa_two_leaf(u, v) = innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(2)), D₋ₓ(v(2))) + innerₕ(u(2), v(2))
 _pa_case(call, result; levels = 0) = (; call, result, levels)
+
+# A hand-built two-term Kronecker operator on an `n × n` grid that `kronecker_operator`
+# does not build yet: non-symmetric banded factors on both axes (a row gather on axis 1
+# over the neighbour lines of axis 2), plus a mass-shaped term.
+function _pa_kron_general(n, policy)
+    rng = Xoshiro(6)
+    band(lo, hi) = spdiagm((k => randn(rng, n - abs(k)) for k in (-lo):hi)...)
+    dg() = Diagonal(rand(rng, n) .+ 0.5)
+    terms = (
+        Bramble._kron_term((), (band(1, 2), band(1, 1))), Bramble._kron_term((2.0,), (dg(), dg()))
+    )
+    return Bramble.KroneckerLinearOperator{Float64, 2, typeof(terms), typeof(policy)}(
+        terms, (n, n), n^2, policy)
+end
 
 function _pa_paths()
     P = Tuple{String, Bool, Int, Function}[]
@@ -229,6 +245,12 @@ function _pa_paths()
         x = randn(Xoshiro(4), size(K, 2))
         y = similar(x)
         _pa_case(() -> mul!(y, K, x), () -> copy(y))
+    end))
+    push!(P, ("Kronecker mul! general", true, 0, (n, p) -> begin
+        K = _pa_kron_general(n, p)
+        x = randn(Xoshiro(7), size(K, 2))
+        y = similar(x)
+        _pa_case(() -> mul!(y, K, x, 0.5, 0.0), () -> copy(y))
     end))
     push!(P, ("explicit RHS", false, 0,
         (n, p) -> begin

@@ -1,10 +1,10 @@
 [meta]
 arch = "aarch64"
-commit = "86e058eb-dirty"
+commit = "d5db8fcb"
 cpu = "Apple M2"
-date = "2026-10-03T22:22:32"
+date = "2026-10-04T19:06:29"
 julia = "1.13.1"
-load1 = 5.85
+load1 = 6.63
 os = "Darwin"
 power = "ac"
 script = "operator_routes.jl"
@@ -12,328 +12,1809 @@ smoke = false
 threads = 4
 
 [[tables.construction]]
-bytes_alloc = 644048
+bytes_alloc = 652656
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "assembled"
-time_s = 9.3959e-5
+time_s = 9.9208e-5
 [[tables.construction]]
-bytes_alloc = 26704
+bytes_alloc = 80128
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "kronecker"
-time_s = 4.875e-6
+time_s = 2.9542e-5
 [[tables.construction]]
-bytes_alloc = 2128
+bytes_alloc = 73968
 dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker_threaded"
+time_s = 8.1083e-5
+[[tables.construction]]
+bytes_alloc = 10384
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "matrix_free_serial"
-time_s = 2.92e-7
+time_s = 1.625e-6
 [[tables.construction]]
-bytes_alloc = 3920
+bytes_alloc = 12176
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "matrix_free_threaded"
-time_s = 1.958e-6
+time_s = 3.792e-6
 [[tables.construction]]
-bytes_alloc = 2378704
+bytes_alloc = 657232
 dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "assembled"
+time_s = 8.8875e-5
+[[tables.construction]]
+bytes_alloc = 111072
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker"
+time_s = 4.725e-5
+[[tables.construction]]
+bytes_alloc = 100736
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker_threaded"
+time_s = 9.1041e-5
+[[tables.construction]]
+bytes_alloc = 14848
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_serial"
+time_s = 3.125e-6
+[[tables.construction]]
+bytes_alloc = 17280
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_threaded"
+time_s = 5.25e-6
+[[tables.construction]]
+bytes_alloc = 857936
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "assembled"
+time_s = 0.000137
+[[tables.construction]]
+bytes_alloc = 117184
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker"
+time_s = 4.8208e-5
+[[tables.construction]]
+bytes_alloc = 110672
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker_threaded"
+time_s = 7.2667e-5
+[[tables.construction]]
+bytes_alloc = 11248
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_serial"
+time_s = 1.667e-6
+[[tables.construction]]
+bytes_alloc = 13280
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_threaded"
+time_s = 3.666e-6
+[[tables.construction]]
+bytes_alloc = 750960
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "assembled"
+time_s = 0.000112
+[[tables.construction]]
+bytes_alloc = 101216
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker"
+time_s = 3.9875e-5
+[[tables.construction]]
+bytes_alloc = 95056
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker_threaded"
+time_s = 0.000114375
+[[tables.construction]]
+bytes_alloc = 10384
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_serial"
+time_s = 1.708e-6
+[[tables.construction]]
+bytes_alloc = 12176
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_threaded"
+time_s = 3.542e-6
+[[tables.construction]]
+bytes_alloc = 2411888
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 route = "assembled"
-time_s = 0.000608958
+time_s = 0.000370583
 [[tables.construction]]
-bytes_alloc = 45984
+bytes_alloc = 166992
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 route = "kronecker"
-time_s = 9.417e-6
+time_s = 4.9042e-5
 [[tables.construction]]
-bytes_alloc = 2640
+bytes_alloc = 136256
 dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 0.000139958
+[[tables.construction]]
+bytes_alloc = 35472
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 route = "matrix_free_serial"
-time_s = 3.33e-7
+time_s = 5.291e-6
 [[tables.construction]]
-bytes_alloc = 4432
+bytes_alloc = 37264
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 route = "matrix_free_threaded"
-time_s = 2.125e-6
+time_s = 7.292e-6
 [[tables.construction]]
-bytes_alloc = 9259984
+bytes_alloc = 2416464
 dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "assembled"
+time_s = 0.000348375
+[[tables.construction]]
+bytes_alloc = 249136
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker"
+time_s = 7.1833e-5
+[[tables.construction]]
+bytes_alloc = 214224
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 0.000102833
+[[tables.construction]]
+bytes_alloc = 39424
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 6.916e-6
+[[tables.construction]]
+bytes_alloc = 41856
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 8.583e-6
+[[tables.construction]]
+bytes_alloc = 3264336
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "assembled"
+time_s = 0.000531083
+[[tables.construction]]
+bytes_alloc = 244624
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker"
+time_s = 6.5958e-5
+[[tables.construction]]
+bytes_alloc = 213536
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 0.000110084
+[[tables.construction]]
+bytes_alloc = 36336
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 5.375e-6
+[[tables.construction]]
+bytes_alloc = 38368
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 7.458e-6
+[[tables.construction]]
+bytes_alloc = 2805104
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "assembled"
+time_s = 0.000433875
+[[tables.construction]]
+bytes_alloc = 199152
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker"
+time_s = 5.5583e-5
+[[tables.construction]]
+bytes_alloc = 168416
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 0.000109958
+[[tables.construction]]
+bytes_alloc = 35472
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 5.25e-6
+[[tables.construction]]
+bytes_alloc = 37264
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 7.208e-6
+[[tables.construction]]
+bytes_alloc = 9391472
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "assembled"
-time_s = 0.001892208
+time_s = 0.001888042
 [[tables.construction]]
-bytes_alloc = 85152
+bytes_alloc = 441936
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "kronecker"
-time_s = 1.5792e-5
+time_s = 0.000135542
 [[tables.construction]]
-bytes_alloc = 3728
+bytes_alloc = 312896
 dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker_threaded"
+time_s = 0.000177084
+[[tables.construction]]
+bytes_alloc = 134864
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "matrix_free_serial"
-time_s = 5.0e-7
+time_s = 2.0791e-5
 [[tables.construction]]
-bytes_alloc = 5520
+bytes_alloc = 136656
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "matrix_free_threaded"
-time_s = 2.458e-6
+time_s = 2.9875e-5
 [[tables.construction]]
-bytes_alloc = 37833680
+bytes_alloc = 9396048
 dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "assembled"
+time_s = 0.001407042
+[[tables.construction]]
+bytes_alloc = 727920
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker"
+time_s = 0.000174166
+[[tables.construction]]
+bytes_alloc = 594704
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker_threaded"
+time_s = 0.000292417
+[[tables.construction]]
+bytes_alloc = 137728
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_serial"
+time_s = 2.225e-5
+[[tables.construction]]
+bytes_alloc = 140160
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_threaded"
+time_s = 2.5458e-5
+[[tables.construction]]
+bytes_alloc = 12799824
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "assembled"
+time_s = 0.002239916
+[[tables.construction]]
+bytes_alloc = 650032
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker"
+time_s = 0.000133708
+[[tables.construction]]
+bytes_alloc = 520640
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker_threaded"
+time_s = 0.000226833
+[[tables.construction]]
+bytes_alloc = 135728
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_serial"
+time_s = 6.2208e-5
+[[tables.construction]]
+bytes_alloc = 137760
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_threaded"
+time_s = 2.2917e-5
+[[tables.construction]]
+bytes_alloc = 10964336
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "assembled"
+time_s = 0.0017245
+[[tables.construction]]
+bytes_alloc = 495984
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker"
+time_s = 0.00010175
+[[tables.construction]]
+bytes_alloc = 366944
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker_threaded"
+time_s = 0.000114875
+[[tables.construction]]
+bytes_alloc = 134864
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_serial"
+time_s = 1.9792e-5
+[[tables.construction]]
+bytes_alloc = 136656
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_threaded"
+time_s = 2.1333e-5
+[[tables.construction]]
+bytes_alloc = 38358384
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "assembled"
-time_s = 0.006182833
+time_s = 0.006095959
 [[tables.construction]]
-bytes_alloc = 166560
+bytes_alloc = 1390416
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "kronecker"
-time_s = 2.95e-5
+time_s = 0.000262084
 [[tables.construction]]
-bytes_alloc = 5712
+bytes_alloc = 868160
 dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker_threaded"
+time_s = 0.000274291
+[[tables.construction]]
+bytes_alloc = 530064
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "matrix_free_serial"
-time_s = 1.208e-6
+time_s = 8.0834e-5
 [[tables.construction]]
-bytes_alloc = 7504
+bytes_alloc = 531856
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "matrix_free_threaded"
-time_s = 3.25e-6
+time_s = 8.6792e-5
 [[tables.construction]]
-bytes_alloc = 161467344
+bytes_alloc = 39411536
 dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "assembled"
+time_s = 0.006252083
+[[tables.construction]]
+bytes_alloc = 2489392
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker"
+time_s = 0.000717083
+[[tables.construction]]
+bytes_alloc = 1962960
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker_threaded"
+time_s = 0.000487
+[[tables.construction]]
+bytes_alloc = 530944
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_serial"
+time_s = 8.1708e-5
+[[tables.construction]]
+bytes_alloc = 533376
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_threaded"
+time_s = 8.4333e-5
+[[tables.construction]]
+bytes_alloc = 53481296
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "assembled"
+time_s = 0.0097175
+[[tables.construction]]
+bytes_alloc = 2067984
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker"
+time_s = 0.000361916
+[[tables.construction]]
+bytes_alloc = 1545376
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker_threaded"
+time_s = 0.00037575
+[[tables.construction]]
+bytes_alloc = 530928
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_serial"
+time_s = 8.0959e-5
+[[tables.construction]]
+bytes_alloc = 532960
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_threaded"
+time_s = 8.5917e-5
+[[tables.construction]]
+bytes_alloc = 48762224
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "assembled"
+time_s = 0.008031417
+[[tables.construction]]
+bytes_alloc = 1491888
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker"
+time_s = 0.000263125
+[[tables.construction]]
+bytes_alloc = 969632
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker_threaded"
+time_s = 0.000226042
+[[tables.construction]]
+bytes_alloc = 530064
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_serial"
+time_s = 7.6292e-5
+[[tables.construction]]
+bytes_alloc = 531856
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_threaded"
+time_s = 0.000122333
+[[tables.construction]]
+bytes_alloc = 163564912
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "assembled"
-time_s = 0.0321905
+time_s = 0.032025667
 [[tables.construction]]
-bytes_alloc = 326304
+bytes_alloc = 4852560
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "kronecker"
-time_s = 7.2666e-5
+time_s = 0.0008445
 [[tables.construction]]
-bytes_alloc = 9808
+bytes_alloc = 2757440
 dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.000453417
+[[tables.construction]]
+bytes_alloc = 2107024
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "matrix_free_serial"
-time_s = 2.042e-6
+time_s = 0.000375959
 [[tables.construction]]
-bytes_alloc = 11600
+bytes_alloc = 2108816
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "matrix_free_threaded"
-time_s = 4.375e-6
+time_s = 0.000359792
 [[tables.construction]]
-bytes_alloc = 396256
+bytes_alloc = 165093200
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "assembled"
+time_s = 0.051510292
+[[tables.construction]]
+bytes_alloc = 9199664
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker"
+time_s = 0.001686167
+[[tables.construction]]
+bytes_alloc = 7100368
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.001175125
+[[tables.construction]]
+bytes_alloc = 2103808
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 0.000376542
+[[tables.construction]]
+bytes_alloc = 2106240
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 0.000381958
+[[tables.construction]]
+bytes_alloc = 216878928
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "assembled"
+time_s = 0.073407291
+[[tables.construction]]
+bytes_alloc = 7275024
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker"
+time_s = 0.001313583
+[[tables.construction]]
+bytes_alloc = 5179552
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.000813
+[[tables.construction]]
+bytes_alloc = 2107888
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 0.000377541
+[[tables.construction]]
+bytes_alloc = 2109920
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 0.000359834
+[[tables.construction]]
+bytes_alloc = 199396720
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "assembled"
+time_s = 0.064076834
+[[tables.construction]]
+bytes_alloc = 5045168
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker"
+time_s = 0.000892083
+[[tables.construction]]
+bytes_alloc = 2950048
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.000397166
+[[tables.construction]]
+bytes_alloc = 2107024
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 0.000357166
+[[tables.construction]]
+bytes_alloc = 2108816
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 0.000378208
+[[tables.construction]]
+bytes_alloc = 401008
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "assembled"
-time_s = 7.8084e-5
+time_s = 7.8833e-5
 [[tables.construction]]
-bytes_alloc = 16912
+bytes_alloc = 73952
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "kronecker"
-time_s = 3.875e-6
+time_s = 4.8292e-5
 [[tables.construction]]
-bytes_alloc = 2864
+bytes_alloc = 72592
 dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker_threaded"
+time_s = 0.000102042
+[[tables.construction]]
+bytes_alloc = 7024
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "matrix_free_serial"
-time_s = 2.08e-7
+time_s = 1.667e-6
 [[tables.construction]]
-bytes_alloc = 5312
+bytes_alloc = 9472
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "matrix_free_threaded"
-time_s = 2.583e-6
+time_s = 5.084e-6
 [[tables.construction]]
-bytes_alloc = 3265504
+bytes_alloc = 413088
 dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "assembled"
+time_s = 8.3417e-5
+[[tables.construction]]
+bytes_alloc = 122528
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker"
+time_s = 8.9917e-5
+[[tables.construction]]
+bytes_alloc = 109872
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker_threaded"
+time_s = 0.000150083
+[[tables.construction]]
+bytes_alloc = 20272
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_serial"
+time_s = 6.75e-6
+[[tables.construction]]
+bytes_alloc = 24400
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_threaded"
+time_s = 9.791e-6
+[[tables.construction]]
+bytes_alloc = 508368
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "assembled"
+time_s = 0.000100542
+[[tables.construction]]
+bytes_alloc = 103936
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker"
+time_s = 7.5458e-5
+[[tables.construction]]
+bytes_alloc = 102032
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker_threaded"
+time_s = 0.000126625
+[[tables.construction]]
+bytes_alloc = 8480
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_serial"
+time_s = 1.542e-6
+[[tables.construction]]
+bytes_alloc = 11584
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_threaded"
+time_s = 4.542e-6
+[[tables.construction]]
+bytes_alloc = 491120
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "assembled"
+time_s = 8.9209e-5
+[[tables.construction]]
+bytes_alloc = 92064
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker"
+time_s = 5.4291e-5
+[[tables.construction]]
+bytes_alloc = 90704
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker_threaded"
+time_s = 0.000103208
+[[tables.construction]]
+bytes_alloc = 7024
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_serial"
+time_s = 1.25e-6
+[[tables.construction]]
+bytes_alloc = 9472
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_threaded"
+time_s = 3.833e-6
+[[tables.construction]]
+bytes_alloc = 3298928
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "assembled"
-time_s = 0.000660042
+time_s = 0.000582792
 [[tables.construction]]
-bytes_alloc = 24720
+bytes_alloc = 149088
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "kronecker"
-time_s = 6.709e-6
+time_s = 6.1208e-5
 [[tables.construction]]
-bytes_alloc = 3056
+bytes_alloc = 119056
 dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 9.0208e-5
+[[tables.construction]]
+bytes_alloc = 35888
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "matrix_free_serial"
-time_s = 2.5e-7
+time_s = 8.0e-6
 [[tables.construction]]
-bytes_alloc = 5504
+bytes_alloc = 38336
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "matrix_free_threaded"
-time_s = 2.375e-6
+time_s = 1.0792e-5
 [[tables.construction]]
-bytes_alloc = 25875424
+bytes_alloc = 3311008
 dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "assembled"
+time_s = 0.000730416
+[[tables.construction]]
+bytes_alloc = 287904
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker"
+time_s = 0.00017325
+[[tables.construction]]
+bytes_alloc = 246576
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 0.000256958
+[[tables.construction]]
+bytes_alloc = 48944
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 1.6875e-5
+[[tables.construction]]
+bytes_alloc = 53072
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 1.9416e-5
+[[tables.construction]]
+bytes_alloc = 4151760
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "assembled"
+time_s = 0.001105375
+[[tables.construction]]
+bytes_alloc = 213632
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker"
+time_s = 0.000127167
+[[tables.construction]]
+bytes_alloc = 183056
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 0.000235625
+[[tables.construction]]
+bytes_alloc = 37344
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 9.75e-6
+[[tables.construction]]
+bytes_alloc = 40448
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 3.9291e-5
+[[tables.construction]]
+bytes_alloc = 3692144
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "assembled"
+time_s = 0.000911083
+[[tables.construction]]
+bytes_alloc = 170784
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker"
+time_s = 9.4791e-5
+[[tables.construction]]
+bytes_alloc = 140752
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 0.000135834
+[[tables.construction]]
+bytes_alloc = 35888
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 8.875e-6
+[[tables.construction]]
+bytes_alloc = 38336
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 1.2208e-5
+[[tables.construction]]
+bytes_alloc = 25843312
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "assembled"
-time_s = 0.005746291
+time_s = 0.007789292
 [[tables.construction]]
-bytes_alloc = 39952
+bytes_alloc = 643040
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "kronecker"
-time_s = 8.125e-6
+time_s = 0.000241584
 [[tables.construction]]
-bytes_alloc = 3440
+bytes_alloc = 383632
 dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker_threaded"
+time_s = 0.000152208
+[[tables.construction]]
+bytes_alloc = 265648
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "matrix_free_serial"
-time_s = 3.75e-7
+time_s = 8.6542e-5
 [[tables.construction]]
-bytes_alloc = 5888
+bytes_alloc = 268096
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "matrix_free_threaded"
-time_s = 3.0e-6
+time_s = 7.4792e-5
 [[tables.construction]]
-bytes_alloc = 98604000
+bytes_alloc = 27035040
 dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "assembled"
+time_s = 0.007059375
+[[tables.construction]]
+bytes_alloc = 1502624
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker"
+time_s = 0.0006275
+[[tables.construction]]
+bytes_alloc = 1231920
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker_threaded"
+time_s = 0.00065225
+[[tables.construction]]
+bytes_alloc = 278320
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_serial"
+time_s = 8.6333e-5
+[[tables.construction]]
+bytes_alloc = 282448
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_threaded"
+time_s = 8.375e-5
+[[tables.construction]]
+bytes_alloc = 32479696
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "assembled"
+time_s = 0.00899275
+[[tables.construction]]
+bytes_alloc = 957120
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker"
+time_s = 0.000359875
+[[tables.construction]]
+bytes_alloc = 697168
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker_threaded"
+time_s = 0.000383083
+[[tables.construction]]
+bytes_alloc = 267104
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_serial"
+time_s = 6.6833e-5
+[[tables.construction]]
+bytes_alloc = 270208
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_threaded"
+time_s = 7.0334e-5
+[[tables.construction]]
+bytes_alloc = 28907120
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "assembled"
+time_s = 0.006699667
+[[tables.construction]]
+bytes_alloc = 672064
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker"
+time_s = 0.000197459
+[[tables.construction]]
+bytes_alloc = 412656
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker_threaded"
+time_s = 0.000139375
+[[tables.construction]]
+bytes_alloc = 265648
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_serial"
+time_s = 5.9708e-5
+[[tables.construction]]
+bytes_alloc = 268096
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_threaded"
+time_s = 6.2708e-5
+[[tables.construction]]
+bytes_alloc = 88495728
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "assembled"
-time_s = 0.026399
+time_s = 0.019591459
 [[tables.construction]]
-bytes_alloc = 55504
+bytes_alloc = 1928736
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "kronecker"
-time_s = 1.075e-5
+time_s = 0.000559583
 [[tables.construction]]
-bytes_alloc = 3920
+bytes_alloc = 1046736
 dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker_threaded"
+time_s = 0.000291917
+[[tables.construction]]
+bytes_alloc = 888720
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "matrix_free_serial"
-time_s = 5.0e-7
+time_s = 0.000258125
 [[tables.construction]]
-bytes_alloc = 6368
+bytes_alloc = 891168
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "matrix_free_threaded"
-time_s = 3.417e-6
+time_s = 0.000271125
 [[tables.construction]]
-bytes_alloc = 216454112
+bytes_alloc = 88294816
 dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "assembled"
+time_s = 0.025860917
+[[tables.construction]]
+bytes_alloc = 4748736
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker"
+time_s = 0.001845583
+[[tables.construction]]
+bytes_alloc = 3855440
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker_threaded"
+time_s = 0.001723583
+[[tables.construction]]
+bytes_alloc = 900912
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_serial"
+time_s = 0.000298209
+[[tables.construction]]
+bytes_alloc = 905040
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_threaded"
+time_s = 0.000298625
+[[tables.construction]]
+bytes_alloc = 121248208
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "assembled"
+time_s = 0.039336292
+[[tables.construction]]
+bytes_alloc = 2906528
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker"
+time_s = 0.0009305
+[[tables.construction]]
+bytes_alloc = 2023984
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker_threaded"
+time_s = 0.000583917
+[[tables.construction]]
+bytes_alloc = 890176
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_serial"
+time_s = 0.000210334
+[[tables.construction]]
+bytes_alloc = 893280
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_threaded"
+time_s = 0.0002135
+[[tables.construction]]
+bytes_alloc = 113628784
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "assembled"
+time_s = 0.024781125
+[[tables.construction]]
+bytes_alloc = 1966240
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker"
+time_s = 0.000489583
+[[tables.construction]]
+bytes_alloc = 1084240
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker_threaded"
+time_s = 0.000300167
+[[tables.construction]]
+bytes_alloc = 888720
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_serial"
+time_s = 0.000198625
+[[tables.construction]]
+bytes_alloc = 891168
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_threaded"
+time_s = 0.000201375
+[[tables.construction]]
+bytes_alloc = 227874416
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "assembled"
-time_s = 0.060614709
+time_s = 0.056984
 [[tables.construction]]
-bytes_alloc = 68608
+bytes_alloc = 4381648
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "kronecker"
-time_s = 1.5625e-5
+time_s = 0.001482625
 [[tables.construction]]
-bytes_alloc = 4208
+bytes_alloc = 2287232
 dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.000626541
+[[tables.construction]]
+bytes_alloc = 2101424
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "matrix_free_serial"
-time_s = 6.25e-7
+time_s = 0.000524792
 [[tables.construction]]
-bytes_alloc = 6656
+bytes_alloc = 2103872
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "matrix_free_threaded"
-time_s = 3.375e-6
+time_s = 0.000567917
+[[tables.construction]]
+bytes_alloc = 208717216
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "assembled"
+time_s = 0.077689458
+[[tables.construction]]
+bytes_alloc = 11005072
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker"
+time_s = 0.003980125
+[[tables.construction]]
+bytes_alloc = 8899360
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.003596917
+[[tables.construction]]
+bytes_alloc = 2113328
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 0.000617167
+[[tables.construction]]
+bytes_alloc = 2117456
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 0.000710042
+[[tables.construction]]
+bytes_alloc = 261396944
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "assembled"
+time_s = 0.103657666
+[[tables.construction]]
+bytes_alloc = 6635568
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker"
+time_s = 0.00185775
+[[tables.construction]]
+bytes_alloc = 4540608
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.0009435
+[[tables.construction]]
+bytes_alloc = 2102880
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 0.000537417
+[[tables.construction]]
+bytes_alloc = 2105984
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 0.000551042
+[[tables.construction]]
+bytes_alloc = 273585776
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "assembled"
+time_s = 0.0938165
+[[tables.construction]]
+bytes_alloc = 4425328
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker"
+time_s = 0.001027083
+[[tables.construction]]
+bytes_alloc = 2330912
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.000304584
+[[tables.construction]]
+bytes_alloc = 2101424
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 0.000495208
+[[tables.construction]]
+bytes_alloc = 2103872
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 0.000501125
 
 [[tables.correctness]]
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
@@ -341,6 +1822,7 @@ rel_error = 0.0
 route = "assembled"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
@@ -348,6 +1830,15 @@ rel_error = 2.443293447256306e-16
 route = "kronecker"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.443293447256306e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
@@ -355,6 +1846,7 @@ rel_error = 2.5175583045330717e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
@@ -362,6 +1854,127 @@ rel_error = 2.5175583045330717e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.5506733372258024e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.5506733372258024e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.227751504981278e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.227751504981278e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.4692140364436706e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.4692140364436706e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.507740889031564e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.507740889031564e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.359671141617362e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.359671141617362e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.5272572252058986e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_error = 2.5272572252058986e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
@@ -369,6 +1982,7 @@ rel_error = 0.0
 route = "assembled"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
@@ -376,6 +1990,15 @@ rel_error = 2.650921538881021e-16
 route = "kronecker"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 2.650921538881021e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
@@ -383,6 +2006,7 @@ rel_error = 2.42966013103878e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
@@ -390,6 +2014,127 @@ rel_error = 2.42966013103878e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 2.177453921133051e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 2.177453921133051e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 1.9909394858662166e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 1.9909394858662166e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 2.4639913852216507e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 2.4639913852216507e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 2.3320587889462493e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 2.3320587889462493e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 2.562622359522867e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 2.562622359522867e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 2.4701665070737047e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_error = 2.4701665070737047e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
@@ -397,6 +2142,7 @@ rel_error = 0.0
 route = "assembled"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
@@ -404,6 +2150,15 @@ rel_error = 2.619463990775109e-16
 route = "kronecker"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.619463990775109e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
@@ -411,6 +2166,7 @@ rel_error = 2.6445970018016244e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
@@ -418,6 +2174,127 @@ rel_error = 2.6445970018016244e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.221241120432009e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.221241120432009e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.078495883664439e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.078495883664439e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.580486444329706e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.580486444329706e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.527122489673757e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.527122489673757e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.5985365815558528e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.5985365815558528e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.580721463250425e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_error = 2.580721463250425e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
@@ -425,6 +2302,7 @@ rel_error = 0.0
 route = "assembled"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
@@ -432,6 +2310,15 @@ rel_error = 2.2470952534639143e-16
 route = "kronecker"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.2470952534639143e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
@@ -439,6 +2326,7 @@ rel_error = 2.457938051988746e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
@@ -446,6 +2334,127 @@ rel_error = 2.457938051988746e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.302233361168356e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.302233361168356e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.063196726936337e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.063196726936337e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.3107162728731415e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.3107162728731415e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.557310541874528e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.557310541874528e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.2233219311615796e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.2233219311615796e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.600368189660862e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_error = 2.600368189660862e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
@@ -453,6 +2462,7 @@ rel_error = 0.0
 route = "assembled"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
@@ -460,6 +2470,15 @@ rel_error = 2.274881169054533e-16
 route = "kronecker"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.274881169054533e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
@@ -467,13 +2486,135 @@ rel_error = 2.6013219932916136e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 rel_error = 2.6013219932916136e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.3256084403814034e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.3256084403814034e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.0665107212403941e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.0665107212403941e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.3275812919001444e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.3275812919001444e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.5868600337775365e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.5868600337775365e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.3694224919648354e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.3694224919648354e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.628335304521669e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_error = 2.628335304521669e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 8
 ndofs = 512
@@ -481,6 +2622,7 @@ rel_error = 0.0
 route = "assembled"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 8
 ndofs = 512
@@ -488,6 +2630,15 @@ rel_error = 2.6906535790126164e-16
 route = "kronecker"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.6906535790126164e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 8
 ndofs = 512
@@ -495,6 +2646,7 @@ rel_error = 2.4048351767347463e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 8
 ndofs = 512
@@ -502,6 +2654,127 @@ rel_error = 2.4048351767347463e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.447238147228502e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.447238147228502e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.1358824732115797e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.1358824732115797e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.8156049228991366e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.8156049228991366e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.512342115875476e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.512342115875476e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.588148634037491e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.588148634037491e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.331320459694289e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_error = 2.331320459694289e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
@@ -509,6 +2782,7 @@ rel_error = 0.0
 route = "assembled"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
@@ -516,6 +2790,15 @@ rel_error = 2.552390493316867e-16
 route = "kronecker"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.552390493316867e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
@@ -523,6 +2806,7 @@ rel_error = 2.3510858380084154e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
@@ -530,6 +2814,127 @@ rel_error = 2.3510858380084154e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.647166515200426e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.647166515200426e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.117840478769863e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.117840478769863e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.571619042098182e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.571619042098182e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.3505743802610577e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.3505743802610577e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.5855171834869385e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.5855171834869385e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.386614614728397e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_error = 2.386614614728397e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
@@ -537,6 +2942,7 @@ rel_error = 0.0
 route = "assembled"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
@@ -544,6 +2950,15 @@ rel_error = 2.631127857544581e-16
 route = "kronecker"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.631127857544581e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
@@ -551,6 +2966,7 @@ rel_error = 2.5715653606873816e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
@@ -558,6 +2974,127 @@ rel_error = 2.5715653606873816e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.5819271980509433e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.5819271980509433e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.2020651775343657e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.2020651775343657e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.6297779099891187e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.6297779099891187e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.5368459061386545e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.5368459061386545e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.653599534130099e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.653599534130099e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.575357373715925e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_error = 2.575357373715925e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
@@ -565,6 +3102,7 @@ rel_error = 0.0
 route = "assembled"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
@@ -572,6 +3110,15 @@ rel_error = 2.649582997626935e-16
 route = "kronecker"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.649582997626935e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
@@ -579,6 +3126,7 @@ rel_error = 2.4811286575553674e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
@@ -586,6 +3134,127 @@ rel_error = 2.4811286575553674e-16
 route = "matrix_free_threaded"
 [[tables.correctness]]
 dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.758203012680358e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.758203012680358e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.2386529901604564e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.2386529901604564e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.615319319314924e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.615319319314924e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.4533824620983547e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.4533824620983547e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.6573455490214816e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.6573455490214816e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.4841120380959554e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_error = 2.4841120380959554e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
@@ -593,6 +3262,7 @@ rel_error = 0.0
 route = "assembled"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
@@ -600,6 +3270,15 @@ rel_error = 2.687437089848227e-16
 route = "kronecker"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.687437089848227e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
@@ -607,63 +3286,344 @@ rel_error = 2.558452301047318e-16
 route = "matrix_free_serial"
 [[tables.correctness]]
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 rel_error = 2.558452301047318e-16
 route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.6902524262536713e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.6902524262536713e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.223225833109512e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.223225833109512e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.679143880704618e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.679143880704618e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.5389928982105654e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.5389928982105654e-16
+route = "matrix_free_threaded"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 0.0
+route = "assembled"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.7101414583401943e-16
+route = "kronecker"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.7101414583401943e-16
+route = "kronecker_threaded"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.5940399447297623e-16
+route = "matrix_free_serial"
+[[tables.correctness]]
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_error = 2.5940399447297623e-16
+route = "matrix_free_threaded"
 
 [[tables.product]]
 bytes_held = 88232
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "assembled"
-time_s = 3.334e-6
+time_s = 4.083e-6
 [[tables.product]]
-bytes_held = 5136
+bytes_held = 9816
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "kronecker"
-time_s = 1.417e-6
+time_s = 1.458e-6
+[[tables.product]]
+bytes_held = 9816
+dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker_threaded"
+time_s = 2.375e-5
 [[tables.product]]
 bytes_held = 712
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "matrix_free_serial"
-time_s = 1.792e-6
+time_s = 1.875e-6
 [[tables.product]]
 bytes_held = 1088
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 route = "matrix_free_threaded"
-time_s = 5.333e-6
+time_s = 5.292e-6
+[[tables.product]]
+bytes_held = 88232
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "assembled"
+time_s = 3.875e-6
+[[tables.product]]
+bytes_held = 10096
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker"
+time_s = 1.458e-6
+[[tables.product]]
+bytes_held = 10096
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker_threaded"
+time_s = 2.3333e-5
+[[tables.product]]
+bytes_held = 88
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_serial"
+time_s = 6.125e-6
+[[tables.product]]
+bytes_held = 736
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_threaded"
+time_s = 1.0917e-5
+[[tables.product]]
+bytes_held = 103608
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "assembled"
+time_s = 4.583e-6
+[[tables.product]]
+bytes_held = 15592
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker"
+time_s = 5.042e-6
+[[tables.product]]
+bytes_held = 15592
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker_threaded"
+time_s = 3.1667e-5
+[[tables.product]]
+bytes_held = 712
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_serial"
+time_s = 6.041e-6
+[[tables.product]]
+bytes_held = 1240
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_threaded"
+time_s = 9.416e-6
+[[tables.product]]
+bytes_held = 88232
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "assembled"
+time_s = 3.583e-6
+[[tables.product]]
+bytes_held = 12760
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker"
+time_s = 3.167e-6
+[[tables.product]]
+bytes_held = 12760
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "kronecker_threaded"
+time_s = 2.4208e-5
+[[tables.product]]
+bytes_held = 712
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_serial"
+time_s = 3.208e-6
+[[tables.product]]
+bytes_held = 1088
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+route = "matrix_free_threaded"
+time_s = 6.667e-6
 [[tables.product]]
 bytes_held = 356520
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 route = "assembled"
-time_s = 1.5333e-5
+time_s = 1.4458e-5
 [[tables.product]]
-bytes_held = 9744
+bytes_held = 17240
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 route = "kronecker"
-time_s = 5.333e-6
+time_s = 4.958e-6
+[[tables.product]]
+bytes_held = 17240
+dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 2.2792e-5
 [[tables.product]]
 bytes_held = 1224
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
@@ -672,805 +3632,2885 @@ time_s = 6.041e-6
 [[tables.product]]
 bytes_held = 1600
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 route = "matrix_free_threaded"
-time_s = 9.0e-6
+time_s = 8.958e-6
+[[tables.product]]
+bytes_held = 356520
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "assembled"
+time_s = 1.5417e-5
+[[tables.product]]
+bytes_held = 17776
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker"
+time_s = 5.416e-6
+[[tables.product]]
+bytes_held = 17776
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 2.8167e-5
+[[tables.product]]
+bytes_held = 88
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 1.7083e-5
+[[tables.product]]
+bytes_held = 736
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 2.2209e-5
+[[tables.product]]
+bytes_held = 420024
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "assembled"
+time_s = 1.6541e-5
+[[tables.product]]
+bytes_held = 28136
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker"
+time_s = 1.95e-5
+[[tables.product]]
+bytes_held = 28136
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 3.1167e-5
+[[tables.product]]
+bytes_held = 1224
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 2.0625e-5
+[[tables.product]]
+bytes_held = 1752
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 2.125e-5
+[[tables.product]]
+bytes_held = 356520
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "assembled"
+time_s = 1.4416e-5
+[[tables.product]]
+bytes_held = 22744
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker"
+time_s = 1.2042e-5
+[[tables.product]]
+bytes_held = 22744
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 3.1917e-5
+[[tables.product]]
+bytes_held = 1224
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 1.1416e-5
+[[tables.product]]
+bytes_held = 1600
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 1.3584e-5
 [[tables.product]]
 bytes_held = 1433768
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "assembled"
-time_s = 6.1166e-5
+time_s = 5.7667e-5
 [[tables.product]]
-bytes_held = 18960
+bytes_held = 33656
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "kronecker"
-time_s = 2.1083e-5
+time_s = 2.1458e-5
+[[tables.product]]
+bytes_held = 33656
+dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker_threaded"
+time_s = 3.0291e-5
 [[tables.product]]
 bytes_held = 2248
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "matrix_free_serial"
-time_s = 2.5e-5
+time_s = 2.4958e-5
 [[tables.product]]
 bytes_held = 2624
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 route = "matrix_free_threaded"
-time_s = 2.225e-5
+time_s = 2.1917e-5
+[[tables.product]]
+bytes_held = 1433768
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "assembled"
+time_s = 6.1083e-5
+[[tables.product]]
+bytes_held = 34704
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker"
+time_s = 2.1208e-5
+[[tables.product]]
+bytes_held = 34704
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker_threaded"
+time_s = 3.0417e-5
+[[tables.product]]
+bytes_held = 88
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_serial"
+time_s = 5.8083e-5
+[[tables.product]]
+bytes_held = 736
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_threaded"
+time_s = 5.7791e-5
+[[tables.product]]
+bytes_held = 1691832
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "assembled"
+time_s = 7.0833e-5
+[[tables.product]]
+bytes_held = 54792
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker"
+time_s = 8.1125e-5
+[[tables.product]]
+bytes_held = 54792
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker_threaded"
+time_s = 8.7583e-5
+[[tables.product]]
+bytes_held = 2248
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_serial"
+time_s = 7.9792e-5
+[[tables.product]]
+bytes_held = 2776
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_threaded"
+time_s = 6.6166e-5
+[[tables.product]]
+bytes_held = 1433768
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "assembled"
+time_s = 5.7459e-5
+[[tables.product]]
+bytes_held = 44280
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker"
+time_s = 4.8291e-5
+[[tables.product]]
+bytes_held = 44280
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "kronecker_threaded"
+time_s = 3.5375e-5
+[[tables.product]]
+bytes_held = 2248
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_serial"
+time_s = 4.4083e-5
+[[tables.product]]
+bytes_held = 2624
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+route = "matrix_free_threaded"
+time_s = 1.7417e-5
 [[tables.product]]
 bytes_held = 5750952
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "assembled"
-time_s = 0.000287375
+time_s = 0.000269958
 [[tables.product]]
-bytes_held = 37392
+bytes_held = 72632
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "kronecker"
-time_s = 8.8208e-5
+time_s = 8.7958e-5
+[[tables.product]]
+bytes_held = 72632
+dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker_threaded"
+time_s = 6.65e-5
 [[tables.product]]
 bytes_held = 4296
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "matrix_free_serial"
-time_s = 9.55e-5
+time_s = 9.5708e-5
 [[tables.product]]
 bytes_held = 4672
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 route = "matrix_free_threaded"
-time_s = 7.7e-5
+time_s = 7.65e-5
+[[tables.product]]
+bytes_held = 5750952
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "assembled"
+time_s = 0.00025
+[[tables.product]]
+bytes_held = 74704
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker"
+time_s = 8.8e-5
+[[tables.product]]
+bytes_held = 74704
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker_threaded"
+time_s = 6.4125e-5
+[[tables.product]]
+bytes_held = 88
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_serial"
+time_s = 0.000201208
+[[tables.product]]
+bytes_held = 736
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_threaded"
+time_s = 0.00018875
+[[tables.product]]
+bytes_held = 6791352
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "assembled"
+time_s = 0.000289875
+[[tables.product]]
+bytes_held = 114248
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker"
+time_s = 0.000322958
+[[tables.product]]
+bytes_held = 114248
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker_threaded"
+time_s = 0.000125208
+[[tables.product]]
+bytes_held = 4296
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_serial"
+time_s = 0.0003035
+[[tables.product]]
+bytes_held = 4824
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_threaded"
+time_s = 0.000120959
+[[tables.product]]
+bytes_held = 5750952
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "assembled"
+time_s = 0.0002495
+[[tables.product]]
+bytes_held = 93496
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker"
+time_s = 0.000198
+[[tables.product]]
+bytes_held = 93496
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "kronecker_threaded"
+time_s = 8.3417e-5
+[[tables.product]]
+bytes_held = 4296
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_serial"
+time_s = 0.000169958
+[[tables.product]]
+bytes_held = 4672
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+route = "matrix_free_threaded"
+time_s = 6.3834e-5
 [[tables.product]]
 bytes_held = 23036072
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "assembled"
-time_s = 0.000974458
+time_s = 0.000966292
 [[tables.product]]
-bytes_held = 74256
+bytes_held = 175160
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "kronecker"
-time_s = 0.000375958
+time_s = 0.000391417
+[[tables.product]]
+bytes_held = 175160
+dim = 2
+form = "laplace"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.000244791
 [[tables.product]]
 bytes_held = 8392
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "matrix_free_serial"
-time_s = 0.0004105
+time_s = 0.000427208
 [[tables.product]]
 bytes_held = 8768
 dim = 2
+form = "laplace"
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 route = "matrix_free_threaded"
-time_s = 0.000307708
+time_s = 0.000305583
+[[tables.product]]
+bytes_held = 23036072
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "assembled"
+time_s = 0.001037584
+[[tables.product]]
+bytes_held = 179280
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker"
+time_s = 0.00041225
+[[tables.product]]
+bytes_held = 179280
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.000248416
+[[tables.product]]
+bytes_held = 88
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 0.00083075
+[[tables.product]]
+bytes_held = 736
+dim = 2
+form = "coefficient"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 0.000678959
+[[tables.product]]
+bytes_held = 27214008
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "assembled"
+time_s = 0.001302125
+[[tables.product]]
+bytes_held = 257736
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker"
+time_s = 0.001431042
+[[tables.product]]
+bytes_held = 257736
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.0003915
+[[tables.product]]
+bytes_held = 8392
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 0.001335416
+[[tables.product]]
+bytes_held = 8920
+dim = 2
+form = "mixed"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 0.000374791
+[[tables.product]]
+bytes_held = 23036072
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "assembled"
+time_s = 0.001121875
+[[tables.product]]
+bytes_held = 216504
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker"
+time_s = 0.00090875
+[[tables.product]]
+bytes_held = 216504
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.000257458
+[[tables.product]]
+bytes_held = 8392
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 0.000856291
+[[tables.product]]
+bytes_held = 8768
+dim = 2
+form = "advection"
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 0.000226042
 [[tables.product]]
 bytes_held = 55464
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "assembled"
-time_s = 1.958e-6
+time_s = 2.041e-6
 [[tables.product]]
-bytes_held = 2456
+bytes_held = 6688
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "kronecker"
-time_s = 2.0e-6
+time_s = 2.125e-6
+[[tables.product]]
+bytes_held = 6688
+dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker_threaded"
+time_s = 3.1667e-5
 [[tables.product]]
 bytes_held = 440
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "matrix_free_serial"
-time_s = 3.292e-6
+time_s = 3.917e-6
 [[tables.product]]
 bytes_held = 1056
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 route = "matrix_free_threaded"
-time_s = 6.709e-6
+time_s = 4.417e-6
+[[tables.product]]
+bytes_held = 55464
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "assembled"
+time_s = 2.083e-6
+[[tables.product]]
+bytes_held = 6760
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker"
+time_s = 2.042e-6
+[[tables.product]]
+bytes_held = 6760
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker_threaded"
+time_s = 2.2333e-5
+[[tables.product]]
+bytes_held = 88
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_serial"
+time_s = 1.4333e-5
+[[tables.product]]
+bytes_held = 1456
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_threaded"
+time_s = 6.625e-6
+[[tables.product]]
+bytes_held = 61736
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "assembled"
+time_s = 2.083e-6
+[[tables.product]]
+bytes_held = 8656
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker"
+time_s = 3.791e-6
+[[tables.product]]
+bytes_held = 8656
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker_threaded"
+time_s = 3.0125e-5
+[[tables.product]]
+bytes_held = 440
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_serial"
+time_s = 9.083e-6
+[[tables.product]]
+bytes_held = 1320
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_threaded"
+time_s = 4.916e-6
+[[tables.product]]
+bytes_held = 55464
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "assembled"
+time_s = 1.916e-6
+[[tables.product]]
+bytes_held = 7744
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker"
+time_s = 2.917e-6
+[[tables.product]]
+bytes_held = 7744
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "kronecker_threaded"
+time_s = 2.9917e-5
+[[tables.product]]
+bytes_held = 440
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_serial"
+time_s = 4.166e-6
+[[tables.product]]
+bytes_held = 1056
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+route = "matrix_free_threaded"
+time_s = 2.834e-6
 [[tables.product]]
 bytes_held = 467112
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "assembled"
-time_s = 1.8542e-5
+time_s = 1.8583e-5
 [[tables.product]]
-bytes_held = 4120
+bytes_held = 10016
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "kronecker"
-time_s = 1.2416e-5
+time_s = 1.2583e-5
+[[tables.product]]
+bytes_held = 10016
+dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 3.2541e-5
 [[tables.product]]
 bytes_held = 632
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "matrix_free_serial"
-time_s = 1.6125e-5
+time_s = 1.9042e-5
 [[tables.product]]
 bytes_held = 1248
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 route = "matrix_free_threaded"
-time_s = 1.7583e-5
+time_s = 1.7292e-5
+[[tables.product]]
+bytes_held = 467112
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "assembled"
+time_s = 2.3958e-5
+[[tables.product]]
+bytes_held = 10152
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker"
+time_s = 1.6209e-5
+[[tables.product]]
+bytes_held = 10152
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 3.3833e-5
+[[tables.product]]
+bytes_held = 88
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 9.8833e-5
+[[tables.product]]
+bytes_held = 1456
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 3.0208e-5
+[[tables.product]]
+bytes_held = 524712
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "assembled"
+time_s = 2.8e-5
+[[tables.product]]
+bytes_held = 13264
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker"
+time_s = 3.6875e-5
+[[tables.product]]
+bytes_held = 13264
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 0.000133541
+[[tables.product]]
+bytes_held = 632
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 0.000136083
+[[tables.product]]
+bytes_held = 1512
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 2.8833e-5
+[[tables.product]]
+bytes_held = 467112
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "assembled"
+time_s = 2.575e-5
+[[tables.product]]
+bytes_held = 11712
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker"
+time_s = 2.7208e-5
+[[tables.product]]
+bytes_held = 11712
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "kronecker_threaded"
+time_s = 3.4917e-5
+[[tables.product]]
+bytes_held = 632
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_serial"
+time_s = 3.0042e-5
+[[tables.product]]
+bytes_held = 1248
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+route = "matrix_free_threaded"
+time_s = 1.075e-5
 [[tables.product]]
 bytes_held = 3834024
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "assembled"
-time_s = 0.0001595
+time_s = 0.00018875
 [[tables.product]]
-bytes_held = 7448
+bytes_held = 22048
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "kronecker"
-time_s = 8.3167e-5
+time_s = 0.000111375
+[[tables.product]]
+bytes_held = 22048
+dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker_threaded"
+time_s = 6.6542e-5
 [[tables.product]]
 bytes_held = 1016
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "matrix_free_serial"
-time_s = 0.000105167
+time_s = 0.000160416
 [[tables.product]]
 bytes_held = 1632
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 route = "matrix_free_threaded"
-time_s = 8.0375e-5
+time_s = 7.9041e-5
+[[tables.product]]
+bytes_held = 3834024
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "assembled"
+time_s = 0.000213625
+[[tables.product]]
+bytes_held = 22312
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker"
+time_s = 0.000110791
+[[tables.product]]
+bytes_held = 22312
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker_threaded"
+time_s = 6.1041e-5
+[[tables.product]]
+bytes_held = 88
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_serial"
+time_s = 0.000510875
+[[tables.product]]
+bytes_held = 1456
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_threaded"
+time_s = 0.000295583
+[[tables.product]]
+bytes_held = 4326056
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "assembled"
+time_s = 0.000238167
+[[tables.product]]
+bytes_held = 27856
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker"
+time_s = 0.000264458
+[[tables.product]]
+bytes_held = 27856
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker_threaded"
+time_s = 8.7292e-5
+[[tables.product]]
+bytes_held = 1016
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_serial"
+time_s = 0.000406084
+[[tables.product]]
+bytes_held = 1896
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_threaded"
+time_s = 0.000120667
+[[tables.product]]
+bytes_held = 3834024
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "assembled"
+time_s = 0.000187875
+[[tables.product]]
+bytes_held = 25024
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker"
+time_s = 0.000156208
+[[tables.product]]
+bytes_held = 25024
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "kronecker_threaded"
+time_s = 6.325e-5
+[[tables.product]]
+bytes_held = 1016
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_serial"
+time_s = 0.000166083
+[[tables.product]]
+bytes_held = 1632
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+route = "matrix_free_threaded"
+time_s = 4.9666e-5
 [[tables.product]]
 bytes_held = 13050024
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "assembled"
-time_s = 0.000580792
+time_s = 0.000561417
 [[tables.product]]
-bytes_held = 10776
+bytes_held = 46368
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "kronecker"
-time_s = 0.000261125
+time_s = 0.00032675
+[[tables.product]]
+bytes_held = 46368
+dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker_threaded"
+time_s = 0.000162791
 [[tables.product]]
 bytes_held = 1400
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "matrix_free_serial"
-time_s = 0.000325
+time_s = 0.000390125
 [[tables.product]]
 bytes_held = 2016
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 route = "matrix_free_threaded"
-time_s = 0.000235625
+time_s = 0.000190875
+[[tables.product]]
+bytes_held = 13050024
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "assembled"
+time_s = 0.000719834
+[[tables.product]]
+bytes_held = 46760
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker"
+time_s = 0.000325042
+[[tables.product]]
+bytes_held = 46760
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker_threaded"
+time_s = 0.000202458
+[[tables.product]]
+bytes_held = 88
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_serial"
+time_s = 0.001479208
+[[tables.product]]
+bytes_held = 1456
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_threaded"
+time_s = 0.000461625
+[[tables.product]]
+bytes_held = 14746536
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "assembled"
+time_s = 0.000739875
+[[tables.product]]
+bytes_held = 54736
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker"
+time_s = 0.000746916
+[[tables.product]]
+bytes_held = 54736
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker_threaded"
+time_s = 0.000215458
+[[tables.product]]
+bytes_held = 1400
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_serial"
+time_s = 0.001149083
+[[tables.product]]
+bytes_held = 2280
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_threaded"
+time_s = 0.000322917
+[[tables.product]]
+bytes_held = 13050024
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "assembled"
+time_s = 0.000602625
+[[tables.product]]
+bytes_held = 50624
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker"
+time_s = 0.000492416
+[[tables.product]]
+bytes_held = 50624
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "kronecker_threaded"
+time_s = 0.000148625
+[[tables.product]]
+bytes_held = 1400
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_serial"
+time_s = 0.000506083
+[[tables.product]]
+bytes_held = 2016
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+route = "matrix_free_threaded"
+time_s = 0.000147875
 [[tables.product]]
 bytes_held = 31064232
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "assembled"
-time_s = 0.001263333
+time_s = 0.001382
 [[tables.product]]
-bytes_held = 14104
+bytes_held = 89120
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "kronecker"
-time_s = 0.000690834
+time_s = 0.000744083
+[[tables.product]]
+bytes_held = 89120
+dim = 3
+form = "laplace"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.000372916
 [[tables.product]]
 bytes_held = 1784
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "matrix_free_serial"
-time_s = 0.000807875
+time_s = 0.00081875
 [[tables.product]]
 bytes_held = 2400
 dim = 3
+form = "laplace"
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 route = "matrix_free_threaded"
-time_s = 0.000508292
+time_s = 0.000525875
+[[tables.product]]
+bytes_held = 31064232
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "assembled"
+time_s = 0.001388375
+[[tables.product]]
+bytes_held = 89640
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker"
+time_s = 0.000797791
+[[tables.product]]
+bytes_held = 89640
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.000480958
+[[tables.product]]
+bytes_held = 88
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 0.002776959
+[[tables.product]]
+bytes_held = 1456
+dim = 3
+form = "coefficient"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 0.001235
+[[tables.product]]
+bytes_held = 35128488
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "assembled"
+time_s = 0.001818333
+[[tables.product]]
+bytes_held = 100048
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker"
+time_s = 0.001941709
+[[tables.product]]
+bytes_held = 100048
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.000519667
+[[tables.product]]
+bytes_held = 1784
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 0.002749291
+[[tables.product]]
+bytes_held = 2664
+dim = 3
+form = "mixed"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 0.000798334
+[[tables.product]]
+bytes_held = 31064232
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "assembled"
+time_s = 0.001439333
+[[tables.product]]
+bytes_held = 94656
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker"
+time_s = 0.001167375
+[[tables.product]]
+bytes_held = 94656
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "kronecker_threaded"
+time_s = 0.000334042
+[[tables.product]]
+bytes_held = 1784
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_serial"
+time_s = 0.001224083
+[[tables.product]]
+bytes_held = 2400
+dim = 3
+form = "advection"
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+route = "matrix_free_threaded"
+time_s = 0.000345208
 
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 431
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 rel_residual = 8.240673952037983e-9
 route = "assembled"
-time_s = 0.00190275
+time_s = 0.00213575
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 431
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 rel_residual = 8.871579088344353e-9
 route = "kronecker"
-time_s = 0.000901167
+time_s = 0.000970292
 [[tables.solve]]
 dim = 2
+form = "laplace"
+iterations = 431
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_residual = 8.871579088344353e-9
+route = "kronecker_threaded"
+time_s = 0.026821542
+[[tables.solve]]
+dim = 2
+form = "laplace"
 iterations = 432
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 rel_residual = 9.106859762290778e-9
 route = "matrix_free_serial"
-time_s = 0.001240042
+time_s = 0.001240542
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 432
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 rel_residual = 9.106859762290778e-9
 route = "matrix_free_threaded"
-time_s = 0.004090708
+time_s = 0.00398925
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 rel_residual = 3.51122484385106e-12
 route = "fdm_solve"
-time_s = 0.000238042
+time_s = 0.000243458
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 32
 ndofs = 1024
 rel_residual = 1.2593315463363596e-12
 route = "direct"
-time_s = 0.00052325
+time_s = 0.000521917
 [[tables.solve]]
 dim = 2
+form = "coefficient"
+iterations = 517
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_residual = 8.545008642218638e-9
+route = "assembled"
+time_s = 0.0026095
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 519
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_residual = 8.631230320124757e-9
+route = "kronecker"
+time_s = 0.001115542
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 519
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_residual = 8.631230320124757e-9
+route = "kronecker_threaded"
+time_s = 0.031113375
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 519
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_residual = 7.1274910837890145e-9
+route = "matrix_free_serial"
+time_s = 0.003556833
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 519
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_residual = 7.1274910837890145e-9
+route = "matrix_free_threaded"
+time_s = 0.008034083
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 0
+mesh = "non-uniform"
+n = 32
+ndofs = 1024
+rel_residual = 1.7291738507247903e-12
+route = "direct"
+time_s = 0.000478041
+[[tables.solve]]
+dim = 2
+form = "laplace"
 iterations = 1251
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 rel_residual = 9.751704552703919e-9
 route = "assembled"
-time_s = 0.025577291
+time_s = 0.023737917
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 1253
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 rel_residual = 9.30678696966512e-9
 route = "kronecker"
-time_s = 0.011346541
+time_s = 0.010507666
 [[tables.solve]]
 dim = 2
+form = "laplace"
+iterations = 1253
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_residual = 9.30678696966512e-9
+route = "kronecker_threaded"
+time_s = 0.098465375
+[[tables.solve]]
+dim = 2
+form = "laplace"
 iterations = 1256
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 rel_residual = 8.858139445235783e-9
 route = "matrix_free_serial"
-time_s = 0.013784208
+time_s = 0.011311
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 1256
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 rel_residual = 8.858139445235783e-9
 route = "matrix_free_threaded"
-time_s = 0.036585084
+time_s = 0.035409125
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 rel_residual = 2.7871686499909822e-11
 route = "fdm_solve"
-time_s = 0.000802292
+time_s = 0.000887375
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 64
 ndofs = 4096
 rel_residual = 7.303841226522867e-12
 route = "direct"
-time_s = 0.00260575
+time_s = 0.002597166
 [[tables.solve]]
 dim = 2
+form = "coefficient"
+iterations = 1584
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_residual = 9.030219376442676e-9
+route = "assembled"
+time_s = 0.031461583
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 1583
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_residual = 9.652776645498933e-9
+route = "kronecker"
+time_s = 0.013528708
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 1583
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_residual = 9.652776645498933e-9
+route = "kronecker_threaded"
+time_s = 0.115278417
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 1577
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_residual = 9.893895748305494e-9
+route = "matrix_free_serial"
+time_s = 0.032064208
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 1577
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_residual = 9.893895748305494e-9
+route = "matrix_free_threaded"
+time_s = 0.061153583
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 0
+mesh = "non-uniform"
+n = 64
+ndofs = 4096
+rel_residual = 1.0418072048446067e-11
+route = "direct"
+time_s = 0.002436375
+[[tables.solve]]
+dim = 2
+form = "laplace"
 iterations = 3604
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 rel_residual = 9.951914454411401e-9
 route = "assembled"
-time_s = 0.269587125
+time_s = 0.264274
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 3614
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 rel_residual = 9.998572970052841e-9
 route = "kronecker"
-time_s = 0.128371209
+time_s = 0.124058958
 [[tables.solve]]
 dim = 2
+form = "laplace"
+iterations = 3614
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_residual = 9.998572970052841e-9
+route = "kronecker_threaded"
+time_s = 0.243981916
+[[tables.solve]]
+dim = 2
+form = "laplace"
 iterations = 3616
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 rel_residual = 9.890051856501784e-9
 route = "matrix_free_serial"
-time_s = 0.162040834
+time_s = 0.156632958
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 3616
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 rel_residual = 9.890051856501784e-9
 route = "matrix_free_threaded"
-time_s = 0.215464875
+time_s = 0.188649083
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 rel_residual = 1.8066021568905533e-10
 route = "fdm_solve"
-time_s = 0.003026084
+time_s = 0.003183833
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 128
 ndofs = 16384
 rel_residual = 2.9159243952153834e-11
 route = "direct"
-time_s = 0.009546208
+time_s = 0.009445291
 [[tables.solve]]
 dim = 2
+form = "coefficient"
+iterations = 4513
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_residual = 8.71917834070166e-9
+route = "assembled"
+time_s = 0.333032417
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 4500
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_residual = 9.852190677126481e-9
+route = "kronecker"
+time_s = 0.152635292
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 4500
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_residual = 9.852190677126481e-9
+route = "kronecker_threaded"
+time_s = 0.320389708
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 4514
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_residual = 1.0004868631877592e-8
+route = "matrix_free_serial"
+time_s = 0.315598417
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 4514
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_residual = 1.0004868631877592e-8
+route = "matrix_free_threaded"
+time_s = 0.405305541
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 0
+mesh = "non-uniform"
+n = 128
+ndofs = 16384
+rel_residual = 4.300083027834846e-11
+route = "direct"
+time_s = 0.009276167
+[[tables.solve]]
+dim = 2
+form = "laplace"
 iterations = 10646
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 rel_residual = 1.2080956913649667e-8
 route = "assembled"
-time_s = 3.542777291
+time_s = 3.4419985
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 10634
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 rel_residual = 1.2424195534593387e-8
 route = "kronecker"
-time_s = 1.343132291
+time_s = 1.328286292
 [[tables.solve]]
 dim = 2
+form = "laplace"
+iterations = 10634
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_residual = 1.2424195534593387e-8
+route = "kronecker_threaded"
+time_s = 1.884183916
+[[tables.solve]]
+dim = 2
+form = "laplace"
 iterations = 10633
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 rel_residual = 1.1843196725896663e-8
 route = "matrix_free_serial"
-time_s = 1.6964055
+time_s = 1.711276875
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 10633
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 rel_residual = 1.1843196725896663e-8
 route = "matrix_free_threaded"
-time_s = 2.102586791
+time_s = 1.977486583
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 rel_residual = 1.475507032375214e-9
 route = "fdm_solve"
-time_s = 0.015453167
+time_s = 0.015759291
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 256
 ndofs = 65536
 rel_residual = 1.6042545969389015e-10
 route = "direct"
-time_s = 0.042586458
+time_s = 0.041004042
 [[tables.solve]]
 dim = 2
+form = "coefficient"
+iterations = 13204
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_residual = 1.623782154093602e-8
+route = "assembled"
+time_s = 3.885529333
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 13186
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_residual = 1.6541442394243906e-8
+route = "kronecker"
+time_s = 1.688535375
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 13186
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_residual = 1.6541442394243906e-8
+route = "kronecker_threaded"
+time_s = 2.326029
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 13203
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_residual = 1.5330352770315405e-8
+route = "matrix_free_serial"
+time_s = 3.27722875
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 13203
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_residual = 1.5330352770315405e-8
+route = "matrix_free_threaded"
+time_s = 3.710059958
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 0
+mesh = "non-uniform"
+n = 256
+ndofs = 65536
+rel_residual = 2.6136445467118693e-10
+route = "direct"
+time_s = 0.0423535
+[[tables.solve]]
+dim = 2
+form = "laplace"
 iterations = 30328
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 rel_residual = 7.187534049121831e-8
 route = "assembled"
-time_s = 39.671728417
+time_s = 39.706540583
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 30335
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 rel_residual = 7.048656681002804e-8
 route = "kronecker"
-time_s = 16.464396958
+time_s = 16.069560458
 [[tables.solve]]
 dim = 2
+form = "laplace"
+iterations = 30335
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_residual = 7.048656681002804e-8
+route = "kronecker_threaded"
+time_s = 22.39607575
+[[tables.solve]]
+dim = 2
+form = "laplace"
 iterations = 30334
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 rel_residual = 6.954691384878896e-8
 route = "matrix_free_serial"
-time_s = 17.802258167
+time_s = 17.601767333
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 30334
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 rel_residual = 6.954691384878896e-8
 route = "matrix_free_threaded"
-time_s = 26.464018375
+time_s = 30.027677
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 rel_residual = 1.5735016222584023e-8
 route = "fdm_solve"
-time_s = 0.106034625
+time_s = 0.100861041
 [[tables.solve]]
 dim = 2
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 512
 ndofs = 262144
 rel_residual = 8.962462240083875e-10
 route = "direct"
-time_s = 0.245985625
+time_s = 0.242124125
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 37576
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_residual = 1.1655572735798714e-7
+route = "assembled"
+time_s = 53.6938265
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 37577
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_residual = 1.2156578797739729e-7
+route = "kronecker"
+time_s = 20.48711975
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 37577
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_residual = 1.2156578797739729e-7
+route = "kronecker_threaded"
+time_s = 28.5312025
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 37602
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_residual = 1.1769692480468048e-7
+route = "matrix_free_serial"
+time_s = 37.585152209
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 37602
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_residual = 1.1769692480468048e-7
+route = "matrix_free_threaded"
+time_s = 52.261127667
+[[tables.solve]]
+dim = 2
+form = "coefficient"
+iterations = 0
+mesh = "non-uniform"
+n = 512
+ndofs = 262144
+rel_residual = 1.3540569661465058e-9
+route = "direct"
+time_s = 0.283050167
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 151
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 rel_residual = 9.32199286565725e-9
 route = "assembled"
-time_s = 0.000366792
+time_s = 0.000382125
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 151
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 rel_residual = 9.198457829518148e-9
 route = "kronecker"
-time_s = 0.000361959
+time_s = 0.000382959
 [[tables.solve]]
 dim = 3
+form = "laplace"
+iterations = 151
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_residual = 9.198457829518148e-9
+route = "kronecker_threaded"
+time_s = 0.006486875
+[[tables.solve]]
+dim = 3
+form = "laplace"
 iterations = 151
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 rel_residual = 8.763007268548564e-9
 route = "matrix_free_serial"
-time_s = 0.000554042
+time_s = 0.000647084
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 151
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 rel_residual = 8.763007268548564e-9
 route = "matrix_free_threaded"
-time_s = 0.001389083
+time_s = 0.001465959
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 rel_residual = 2.0781281075204373e-13
 route = "fdm_solve"
-time_s = 0.000153417
+time_s = 0.000225167
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 8
 ndofs = 512
 rel_residual = 6.545379026797818e-14
 route = "direct"
-time_s = 0.000534458
+time_s = 0.0005375
 [[tables.solve]]
 dim = 3
+form = "coefficient"
+iterations = 166
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_residual = 9.490175824834496e-9
+route = "assembled"
+time_s = 0.000413709
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 166
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_residual = 9.250875512593115e-9
+route = "kronecker"
+time_s = 0.000410041
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 166
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_residual = 9.250875512593115e-9
+route = "kronecker_threaded"
+time_s = 0.007629042
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 166
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_residual = 9.302069494766308e-9
+route = "matrix_free_serial"
+time_s = 0.002359917
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 166
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_residual = 9.302069494766308e-9
+route = "matrix_free_threaded"
+time_s = 0.003116875
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 0
+mesh = "non-uniform"
+n = 8
+ndofs = 512
+rel_residual = 1.1351065628081302e-13
+route = "direct"
+time_s = 0.000539209
+[[tables.solve]]
+dim = 3
+form = "laplace"
 iterations = 380
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 rel_residual = 9.509337776266595e-9
 route = "assembled"
-time_s = 0.008795542
+time_s = 0.008750125
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 380
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 rel_residual = 9.904245911622582e-9
 route = "kronecker"
-time_s = 0.006125
+time_s = 0.006111209
 [[tables.solve]]
 dim = 3
+form = "laplace"
+iterations = 380
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_residual = 9.904245911622582e-9
+route = "kronecker_threaded"
+time_s = 0.033774667
+[[tables.solve]]
+dim = 3
+form = "laplace"
 iterations = 380
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 rel_residual = 9.728213058996648e-9
 route = "matrix_free_serial"
-time_s = 0.00730425
+time_s = 0.008981958
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 380
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 rel_residual = 9.728213058996648e-9
 route = "matrix_free_threaded"
-time_s = 0.0145725
+time_s = 0.013756875
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 rel_residual = 5.125273743621812e-12
 route = "fdm_solve"
-time_s = 0.000560917
+time_s = 0.000778041
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 16
 ndofs = 4096
 rel_residual = 3.5370665552852837e-13
 route = "direct"
-time_s = 0.005759334
+time_s = 0.006673208
 [[tables.solve]]
 dim = 3
+form = "coefficient"
+iterations = 432
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_residual = 9.363858231395594e-9
+route = "assembled"
+time_s = 0.012693416
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 432
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_residual = 9.095250566426688e-9
+route = "kronecker"
+time_s = 0.009027042
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 432
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_residual = 9.095250566426688e-9
+route = "kronecker_threaded"
+time_s = 0.039212625
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 432
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_residual = 9.015733904346327e-9
+route = "matrix_free_serial"
+time_s = 0.042038458
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 432
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_residual = 9.015733904346327e-9
+route = "matrix_free_threaded"
+time_s = 0.032256166
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 0
+mesh = "non-uniform"
+n = 16
+ndofs = 4096
+rel_residual = 5.399531440316012e-13
+route = "direct"
+time_s = 0.007229
+[[tables.solve]]
+dim = 3
+form = "laplace"
 iterations = 993
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 rel_residual = 9.77239637975456e-9
 route = "assembled"
-time_s = 0.181998292
+time_s = 0.233119833
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 993
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 rel_residual = 9.885458680860451e-9
 route = "kronecker"
-time_s = 0.111453916
+time_s = 0.142943625
 [[tables.solve]]
 dim = 3
+form = "laplace"
+iterations = 993
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_residual = 9.885458680860451e-9
+route = "kronecker_threaded"
+time_s = 0.128194292
+[[tables.solve]]
+dim = 3
+form = "laplace"
 iterations = 993
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 rel_residual = 9.595038465121347e-9
 route = "matrix_free_serial"
-time_s = 0.127420625
+time_s = 0.158729209
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 993
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 rel_residual = 9.595038465121347e-9
 route = "matrix_free_threaded"
-time_s = 0.152101042
+time_s = 0.138621584
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 rel_residual = 6.306348048510847e-12
 route = "fdm_solve"
-time_s = 0.002691917
+time_s = 0.003995334
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 32
 ndofs = 32768
 rel_residual = 1.8282562884501393e-12
 route = "direct"
-time_s = 0.1452255
+time_s = 0.176679542
 [[tables.solve]]
 dim = 3
+form = "coefficient"
+iterations = 1197
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_residual = 9.89264497497976e-9
+route = "assembled"
+time_s = 0.286751125
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 1198
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_residual = 9.46277800938615e-9
+route = "kronecker"
+time_s = 0.167541208
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 1198
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_residual = 9.46277800938615e-9
+route = "kronecker_threaded"
+time_s = 0.159395125
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 1197
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_residual = 9.626260126684173e-9
+route = "matrix_free_serial"
+time_s = 0.64357725
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 1197
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_residual = 9.626260126684173e-9
+route = "matrix_free_threaded"
+time_s = 0.467094791
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 0
+mesh = "non-uniform"
+n = 32
+ndofs = 32768
+rel_residual = 2.85868658225658e-12
+route = "direct"
+time_s = 0.1705245
+[[tables.solve]]
+dim = 3
+form = "laplace"
 iterations = 1796
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 rel_residual = 9.991251575885269e-9
 route = "assembled"
-time_s = 1.20778525
+time_s = 1.413214167
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 1795
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 rel_residual = 9.971136943191023e-9
 route = "kronecker"
-time_s = 0.625174209
+time_s = 0.784811375
 [[tables.solve]]
 dim = 3
+form = "laplace"
+iterations = 1795
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_residual = 9.971136943191023e-9
+route = "kronecker_threaded"
+time_s = 0.653819083
+[[tables.solve]]
+dim = 3
+form = "laplace"
 iterations = 1794
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 rel_residual = 9.964374258229792e-9
 route = "matrix_free_serial"
-time_s = 0.732425167
+time_s = 0.870774791
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 1794
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 rel_residual = 9.964374258229792e-9
 route = "matrix_free_threaded"
-time_s = 0.922995708
+time_s = 0.74990775
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 rel_residual = 2.6775445044992784e-11
 route = "fdm_solve"
-time_s = 0.008886459
+time_s = 0.010753292
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 48
 ndofs = 110592
 rel_residual = 4.868309746463715e-12
 route = "direct"
-time_s = 1.469591834
+time_s = 1.861208667
 [[tables.solve]]
 dim = 3
+form = "coefficient"
+iterations = 2204
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_residual = 9.810210016883445e-9
+route = "assembled"
+time_s = 1.915371292
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 2205
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_residual = 9.992065114694909e-9
+route = "kronecker"
+time_s = 1.063696125
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 2205
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_residual = 9.992065114694909e-9
+route = "kronecker_threaded"
+time_s = 0.9382445
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 2206
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_residual = 9.787834548859e-9
+route = "matrix_free_serial"
+time_s = 3.543177875
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 2206
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_residual = 9.787834548859e-9
+route = "matrix_free_threaded"
+time_s = 2.369093125
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 0
+mesh = "non-uniform"
+n = 48
+ndofs = 110592
+rel_residual = 7.2197500265703045e-12
+route = "direct"
+time_s = 1.824087666
+[[tables.solve]]
+dim = 3
+form = "laplace"
 iterations = 2753
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 rel_residual = 1.0001480109605434e-8
 route = "assembled"
-time_s = 5.086857834
+time_s = 5.698451375
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 2752
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 rel_residual = 1.0000934602351888e-8
 route = "kronecker"
-time_s = 2.368935959
+time_s = 2.614277542
 [[tables.solve]]
 dim = 3
+form = "laplace"
+iterations = 2752
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_residual = 1.0000934602351888e-8
+route = "kronecker_threaded"
+time_s = 2.396994209
+[[tables.solve]]
+dim = 3
+form = "laplace"
 iterations = 2752
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 rel_residual = 9.936042462489643e-9
 route = "matrix_free_serial"
-time_s = 2.672765125
+time_s = 2.911145167
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 2752
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 rel_residual = 9.936042462489643e-9
 route = "matrix_free_threaded"
-time_s = 3.034832125
+time_s = 2.947954792
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 rel_residual = 5.453738471487181e-11
 route = "fdm_solve"
-time_s = 0.020269416
+time_s = 0.023974333
 [[tables.solve]]
 dim = 3
+form = "laplace"
 iterations = 0
 mesh = "non-uniform"
 n = 64
 ndofs = 262144
 rel_residual = 1.0530375304575314e-11
 route = "direct"
-time_s = 8.080564
+time_s = 9.121207041
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 3423
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_residual = 9.918288052580246e-9
+route = "assembled"
+time_s = 7.348947875
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 3427
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_residual = 9.856269660746244e-9
+route = "kronecker"
+time_s = 3.39636275
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 3427
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_residual = 9.856269660746244e-9
+route = "kronecker_threaded"
+time_s = 3.110621083
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 3422
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_residual = 9.983437978982652e-9
+route = "matrix_free_serial"
+time_s = 10.215066667
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 3422
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_residual = 9.983437978982652e-9
+route = "matrix_free_threaded"
+time_s = 8.151571542
+[[tables.solve]]
+dim = 3
+form = "coefficient"
+iterations = 0
+mesh = "non-uniform"
+n = 64
+ndofs = 262144
+rel_residual = 1.5965988808590554e-11
+route = "direct"
+time_s = 9.412897083

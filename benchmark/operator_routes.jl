@@ -1,28 +1,42 @@
-# The three operator routes on one separable form.
+# The operator routes on four separable forms.
 #
-# For the SPD form innerₕ(u, v) + inner₊(∇ₕu, ∇ₕv), with no Dirichlet rows and
-# `is_separable` true, on graded non-uniform meshes of the unit square and cube, each route
-# builds the same operator:
+# On graded non-uniform meshes of the unit square and cube, with no Dirichlet rows, each
+# route builds the same operator of each form. The forms, with `c` a separable grid
+# function (it varies along the first axis only, `Rₕ(W, x -> 1 + x[1])`):
+#
+#   - `laplace`: `innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))`, SPD;
+#   - `coefficient`: `innerₕ(u, v) + inner₊(c * ∇ₕ(u), ∇ₕ(v))`, SPD;
+#   - `mixed`: `laplace` plus `innerₕ(c * D₋ₓ(D₋ᵧ(u)), v)` (#427's example), not symmetric;
+#   - `advection`: `laplace` plus `innerₕ(D₋ₓ(u), v)`, not symmetric.
+#
+# The routes, the Kronecker and matrix-free operators side by side as alternatives:
 #
 #   - `assembled`: `assemble(a)`, a `SparseMatrixCSC`;
 #   - `kronecker`: `kronecker_operator(a)`, a `KroneckerLinearOperator` (serial product);
+#   - `kronecker_threaded`: the same on a space built with `backend(; policy = CpuThreaded())`
+#     (#439), whose product threads the axis-1 lines;
 #   - `matrix_free_serial`: `matrix_free_operator(a)`;
 #   - `matrix_free_threaded`: `matrix_free_operator(a; policy = CpuThreaded())`.
 #
+# `kronecker_operator` reads a grid-function coefficient once and warns so; the script
+# builds the Kronecker routes with that warning silenced, since it would repeat at every
+# construction, and prints this note instead. Every table has a `form` column.
+#
 # Before any timing, each route's product with a random vector is compared with the
 # assembled one (relative error, the `correctness` table); a route above 1e-10 aborts the run.
-# Then, per route and size:
+# Then, per form, route and size:
 #
 #   - `construction`: wall time (minimum over repeats, each on a fresh form) and the bytes
 #     allocated while building the operator;
 #   - `product`: one five-argument `mul!` (minimum over BenchmarkTools samples) and the bytes
 #     the operator keeps alive (`Base.summarysize`; for the matrix-free routes, minus the form
 #     it captures, as `matrix_free_spmv.jl` reports);
-#   - `solve`: unpreconditioned CG from zero to a relative residual of 1e-8, the same
-#     hand-rolled loop for every route so the solver overhead is identical (IterativeSolvers
-#     would call the three-argument `mul!`, which `MatrixFreeOperator` lacks), with its time
-#     and iteration count. Two reference rows join it: `fdm_solve` (fast diagonalisation,
-#     from the form) and `direct` (sparse `\` on the assembled matrix), with zero iterations.
+#   - `solve`, for the SPD forms only: unpreconditioned CG from zero to a relative residual
+#     of 1e-8, the same hand-rolled loop for every route so the solver overhead is identical
+#     (IterativeSolvers would call the three-argument `mul!`, which `MatrixFreeOperator`
+#     lacks), with its time and iteration count. Reference rows join it: `direct` (sparse `\`
+#     on the assembled matrix), and for `laplace` also `fdm_solve` (fast diagonalisation,
+#     from the form), both with zero iterations.
 #
 # The meshes are built uniform and then moved by `change_points!` onto a cosine-clustered
 # grading along the first axis and a power grading along the others, so every axis is
@@ -34,13 +48,14 @@
 # The full run needs a quiet, AC-powered machine (`.claude/scripts/check_power_load.sh`) and
 # is refused otherwise. `--smoke` runs two tiny sizes per dimension, skips the gate, prefixes
 # every line, and is a structural check only. `--save PATH` writes the four tables through
-# `save_results` (benchmark/results_io.jl). The threaded route needs more than one thread.
+# `save_results` (benchmark/results_io.jl). The threaded routes need more than one thread.
 
 using Bramble
-using Bramble: CpuThreaded
+using Bramble: CpuThreaded, D₋ₓ, D₋ᵧ
 using Kronecker
 using BenchmarkTools
 using LinearAlgebra
+using Logging
 using PrettyTables
 using Random
 using SparseArrays
@@ -56,7 +71,10 @@ const POWER_SCRIPT = joinpath(REPO_ROOT, ".claude", "scripts", "check_power_load
 
 const LADDERS = SMOKE ? (2 => (8, 12), 3 => (5, 6)) :
                 (2 => (32, 64, 128, 256, 512), 3 => (8, 16, 32, 48, 64))
-const ROUTES = ("assembled", "kronecker", "matrix_free_serial", "matrix_free_threaded")
+const ROUTES = ("assembled", "kronecker", "kronecker_threaded", "matrix_free_serial",
+    "matrix_free_threaded")
+const FORMS = ("laplace", "coefficient", "mixed", "advection")
+const SPD_FORMS = ("laplace", "coefficient")
 const CORRECTNESS_TOL = 1e-10
 const CG_RTOL = 1e-8
 const CG_MAXITER = 100_000
@@ -99,7 +117,6 @@ end
 # --- Problem ------------------------------------------------------------------ #
 
 box(D) = reduce(×, ntuple(_ -> interval(0.0, 1.0), D))
-spd(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
 
 # Cosine clustering on the first axis, a power grading on the others.
 function graded_points(n, d)
@@ -107,24 +124,43 @@ function graded_points(n, d)
     return d == 1 ? @.(0.5 * (1 - cos(π * t))) : t .^ (1 + 0.25 * d)
 end
 
-function graded_space(D, n)
-    Ωₕ = mesh(domain(box(D)), ntuple(_ -> n, D), ntuple(_ -> true, D))
+function graded_space(D, n, be)
+    Ωₕ = mesh(domain(box(D)), ntuple(_ -> n, D), ntuple(_ -> true, D); backend = be)
     Bramble.change_points!(Ωₕ, ntuple(d -> graded_points(n, d), D))
     any(d -> Bramble.is_uniform(Ωₕ(d)), 1:D) && error("$(D)D n=$n mesh is still uniform")
     return gridspace(Ωₕ)
 end
 
-new_form(W) = form(W, W, spd)
+# The bilinear function of `kind` on the space `W`; a coefficient is a grid function on `W`.
+function form_function(kind, W)
+    c = Rₕ(W, x -> 1 + x[1])
+    kind == "laplace" && return (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
+    kind == "coefficient" && return (u, v) -> innerₕ(u, v) + inner₊(c * ∇ₕ(u), ∇ₕ(v))
+    kind == "mixed" && return (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                        innerₕ(c * D₋ₓ(D₋ᵧ(u)), v)
+    kind == "advection" && return (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                            innerₕ(D₋ₓ(u), v)
+    error("unknown form $kind")
+end
 
-# Every route keeps its own form: `assemble` fills a form's cache with scatter tables the
-# other routes never need.
-function build(route, W)
-    a = new_form(W)
+new_form(kind, W) = form(W, W, form_function(kind, W))
+
+# `W` serial and `Wt` threaded, on the same mesh points. Every route keeps its own form:
+# `assemble` fills a form's cache with scatter tables the other routes never need.
+function build(kind, route, W, Wt)
+    route == "kronecker_threaded" && return build_kronecker(kind, Wt)
+    a = new_form(kind, W)
     route == "assembled" && return assemble(a), a
-    route == "kronecker" && return kronecker_operator(a), a
+    route == "kronecker" && return build_kronecker(kind, W)
     route == "matrix_free_serial" && return matrix_free_operator(a), a
     route == "matrix_free_threaded" && return matrix_free_operator(a; policy = CpuThreaded()), a
     error("unknown route $route")
+end
+
+# The snapshot warning is silenced here only (see the header).
+function build_kronecker(kind, W)
+    a = new_form(kind, W)
+    return with_logger(() -> kronecker_operator(a), NullLogger()), a
 end
 
 function held_bytes(route, op, a)
@@ -166,20 +202,21 @@ relerr(y, ref) = norm(y - ref) / norm(ref)
 
 # --- One size ----------------------------------------------------------------- #
 
-function row(route, D, n, N; kwargs...)
-    return Dict{String, Any}("route" => route, "dim" => D, "n" => n, "ndofs" => N,
-        "mesh" => "non-uniform", (String(k) => v for (k, v) in kwargs)...)
+function row(kind, route, D, n, N; kwargs...)
+    return Dict{String, Any}("form" => kind, "route" => route, "dim" => D, "n" => n,
+        "ndofs" => N, "mesh" => "non-uniform", (String(k) => v for (k, v) in kwargs)...)
 end
 
-function measure!(tables, D, n)
-    W = graded_space(D, n)
+function measure!(tables, kind, D, n)
+    W = graded_space(D, n, backend())
+    Wt = graded_space(D, n, backend(; policy = CpuThreaded()))
     N = ndofs(W)
     Random.seed!(420)
     x = rand(N)
     b = rand(N)
-    ops = Dict(route => build(route, W) for route in ROUTES)
+    ops = Dict(route => build(kind, route, W, Wt) for route in ROUTES)
     A = first(ops["assembled"])
-    is_separable(new_form(W)) || error("$(D)D n=$n form is not separable")
+    is_separable(new_form(kind, W)) || error("$kind $(D)D n=$n form is not separable")
 
     # Correctness before any timing.
     ref = A * x
@@ -187,41 +224,48 @@ function measure!(tables, D, n)
         y = zeros(N)
         mul!(y, first(ops[route]), x, true, false)
         e = relerr(y, ref)
-        push!(tables["correctness"], row(route, D, n, N; rel_error = e))
+        push!(tables["correctness"], row(kind, route, D, n, N; rel_error = e))
         e < CORRECTNESS_TOL ||
-            error("$route disagrees with the assembled product at $(D)D n=$n: rel error $e")
+            error("$route disagrees with the assembled product at $kind $(D)D n=$n: " *
+                  "rel error $e")
     end
 
     for route in ROUTES
         op, a = ops[route]
-        t_build = min_elapsed(() -> build(route, W), BUILD_REPEATS)
-        bytes_alloc = @allocated build(route, W)
-        push!(tables["construction"], row(route, D, n, N; time_s = t_build, bytes_alloc))
+        t_build = min_elapsed(() -> build(kind, route, W, Wt), BUILD_REPEATS)
+        bytes_alloc = @allocated build(kind, route, W, Wt)
+        push!(tables["construction"],
+            row(kind, route, D, n, N; time_s = t_build, bytes_alloc))
 
         y = zeros(N)
         mul!(y, op, x, true, false)
         trial = run(@benchmarkable(mul!($y, $op, $x, true, false); samples = BENCH_SAMPLES,
             evals = 1, seconds = BENCH_SECONDS))
-        push!(tables["product"], row(route, D, n, N; time_s = minimum(trial.times) / 1e9,
+        push!(tables["product"], row(kind, route, D, n, N; time_s = minimum(trial.times) / 1e9,
             bytes_held = held_bytes(route, op, a)))
 
+        kind in SPD_FORMS || continue
         u = zeros(N)
         t_solve = min_elapsed(() -> cg!(u, op, b), SOLVE_REPEATS)
         _, iterations = cg!(u, op, b)
-        iterations < CG_MAXITER || error("CG did not converge for $route at $(D)D n=$n")
-        push!(tables["solve"], row(route, D, n, N; time_s = t_solve, iterations,
+        iterations < CG_MAXITER || error("CG did not converge for $route at $kind $(D)D n=$n")
+        push!(tables["solve"], row(kind, route, D, n, N; time_s = t_solve, iterations,
             rel_residual = relerr(A * u, b)))
     end
 
-    # Reference solves: fast diagonalisation from the form, and sparse `\`.
-    a_fdm = new_form(W)
-    t_fdm = min_elapsed(() -> fdm_solve(a_fdm, b), SOLVE_REPEATS)
-    u_fdm = fdm_solve(a_fdm, b)
-    push!(tables["solve"], row("fdm_solve", D, n, N; time_s = t_fdm, iterations = 0,
-        rel_residual = relerr(A * u_fdm, b)))
+    kind in SPD_FORMS || return nothing
+    # Reference solves: fast diagonalisation from the form (the plain Laplacian only), and
+    # sparse `\`.
+    if kind == "laplace"
+        a_fdm = new_form(kind, W)
+        t_fdm = min_elapsed(() -> fdm_solve(a_fdm, b), SOLVE_REPEATS)
+        u_fdm = fdm_solve(a_fdm, b)
+        push!(tables["solve"], row(kind, "fdm_solve", D, n, N; time_s = t_fdm, iterations = 0,
+            rel_residual = relerr(A * u_fdm, b)))
+    end
     t_direct = min_elapsed(() -> A \ b, SOLVE_REPEATS)
     u_direct = A \ b
-    push!(tables["solve"], row("direct", D, n, N; time_s = t_direct, iterations = 0,
+    push!(tables["solve"], row(kind, "direct", D, n, N; time_s = t_direct, iterations = 0,
         rel_residual = relerr(A * u_direct, b)))
     return nothing
 end
@@ -235,7 +279,7 @@ function print_tables(tables)
         "product" => ("time_s", "bytes_held"),
         "solve" => ("time_s", "iterations", "rel_residual"))
         rows = tables[name]
-        header = ["route", "dim", "n", "ndofs", cols...]
+        header = ["form", "route", "dim", "n", "ndofs", cols...]
         data = [r[h] isa AbstractFloat ? round(r[h]; sigdigits = 4) : r[h]
                 for r in rows, h in header]
         _out()
@@ -256,17 +300,17 @@ function main()
     end
     set_zero_subnormals(true)
     nt = Threads.nthreads()
-    _out("Operator routes on innerₕ(u, v) + inner₊(∇ₕu, ∇ₕv), non-uniform meshes -- #420")
+    _out("Operator routes on four separable forms, non-uniform meshes -- #420, #427, #439")
     _out("Julia $(VERSION), $nt threads" *
-         (nt == 1 ? "  WARNING: matrix_free_threaded runs on one thread" : "") *
+         (nt == 1 ? "  WARNING: the threaded routes run on one thread" : "") *
          (SMOKE || nt == 4 ? "" : "  WARNING: expected 4 (bramble-benchmarks §1)"))
 
     tables = Dict(name => Dict{String, Any}[]
     for name in ("correctness", "construction", "product", "solve"))
-    for (D, ladder) in LADDERS, n in ladder
-
-        _out("measuring $(D)D n=$n")
-        measure!(tables, D, n)
+    _out("kronecker_operator's snapshot warning for grid-function coefficients is silenced")
+    for (D, ladder) in LADDERS, n in ladder, kind in FORMS
+        _out("measuring $kind $(D)D n=$n")
+        measure!(tables, kind, D, n)
         GC.gc()
     end
     print_tables(tables)

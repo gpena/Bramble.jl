@@ -87,11 +87,11 @@ ENV["BRAMBLE_TEST_TRACE"] = "1"
 if haskey(ENV, "BRAMBLE_TIMING_RUNTESTS")
     Core.eval(Main,
         :(const include = function (path)
-            println("[trace] start ", path)
+            println("▸ ", path)
             flush(stdout)
             t0 = time()
             result = Base.include(Main, path)
-            println("[trace] end ", path, " elapsed=", round(time() - t0; digits = 2), "s")
+            println("✓ ", path, " ", round(time() - t0; digits = 2), " s")
             flush(stdout)
             return result
         end))
@@ -147,13 +147,13 @@ redirect_stdout(ORIG_STDOUT)
 close(wr)
 wait(reader)
 
-# Nested `[trace] start/end` pairs give inclusive times; self time subtracts the children.
+# Nested `▸`/`✓` trace pairs give inclusive times; self time subtracts the children.
 rows = Tuple{String, Int, Float64, Float64}[]
 stack = Vector{Any}[]
 for line in LINES
-    if startswith(line, "[trace] start ")
-        push!(stack, Any[line[(length("[trace] start ") + 1):end], 0.0])
-    elseif (m = match(r"^\[trace\] end (.*) elapsed=([\d.]+)s", line)) !== nothing
+    if (m = match(r"^▸ \s*(\S+)$", line)) !== nothing
+        push!(stack, Any[m[1], 0.0])
+    elseif (m = match(r"^✓ \s*(\S+)\s+([\d.]+) s", line)) !== nothing
         wall = parse(Float64, m[2])
         child = pop!(stack)[2]
         isempty(stack) || (stack[end][2] += wall)

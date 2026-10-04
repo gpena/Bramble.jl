@@ -40,17 +40,28 @@ evaluate!
 
 ## Matrix-free Kronecker operators
 
-For a separable `BilinearForm` -- one whose assembled matrix is an exact sum of Kronecker
-products of one-dimensional factors over a `MeshnD`, such as `innerₕ(u, v) +
-inner₊(∇ₕ(u), ∇ₕ(v))` -- `kronecker_operator` builds a `KroneckerLinearOperator` that
-applies in one fused pass over the grid instead of ever assembling the `D`-dimensional
-matrix: a
-`200^3` mesh stores `O(200)` numbers per axis rather than the assembled matrix's `O(200^3)`
-stored entries. `is_separable`
-checks the condition beforehand. `fdm_solve` requires `using Kronecker` (the
-`BrambleKroneckerExt` extension)
-and solves a separable, constant-coefficient system by fast diagonalisation instead of a
-general sparse factorisation.
+For a separable `BilinearForm` (one whose assembled matrix is an exact sum of Kronecker
+products of one-dimensional factors over a `MeshnD`), `kronecker_operator` builds a
+`KroneckerLinearOperator` that applies in one fused pass over the grid instead of ever
+assembling the `D`-dimensional matrix: a `200^3` mesh stores `O(200)` numbers per axis
+rather than the assembled matrix's `O(200^3)` stored entries. `is_separable` checks the
+condition beforehand and lists what factors.
+
+What factors: the difference, average, jump and shift families along any axis and chains of
+them, so mixed derivatives and advection terms (whose factors need not be symmetric);
+`innerₕ`, `inner₊` and `inner_Γ` weights; a restriction to `:interior`; a grid-function
+coefficient that varies along one axis; and scalar or `Ref` coefficients. A composite space
+whose leaves share one mesh gives a block operator, one Kronecker operator per block. What
+does not: a coefficient varying along several axes, other region restrictions (Dirichlet
+rows included), an interpolation, a 1D mesh, trial and test spaces on different meshes, and
+the star and cross-weighted differences. A grid-function coefficient is read once, when the
+operator is built, and warns so; use a `Ref` for a coefficient that changes, or
+`matrix_free_operator`, which reads it live. Under `CpuThreaded` the product runs threaded,
+and an operator whose mesh was mutated in place afterwards throws instead of applying.
+
+`fdm_solve` requires `using Kronecker` (the `BrambleKroneckerExt` extension) and solves a
+separable, constant-coefficient system by fast diagonalisation instead of a general sparse
+factorisation.
 
 ```@docs
 is_separable

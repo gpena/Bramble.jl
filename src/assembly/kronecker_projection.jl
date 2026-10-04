@@ -14,11 +14,16 @@
 # distributed first, giving one Kronecker product per pair of addends, and an `inner_Γ`
 # weight is a sum over its faces, giving one more per face (`_kron_inners`).
 #
-# Anything without a method here answers `nothing`: a grid-function coefficient (no tensor
-# structure in general), a region other than `:interior`, an indexed (composite) leaf, an
-# interpolation, a scalar inside a side, and the star and cross-weighted differences. A
-# false negative only forgoes the Kronecker fast path; a false positive would be a wrong
-# product.
+# A grid-function coefficient whose values vary along one axis `d` only is the diagonal
+# `I ⊗ ... ⊗ diag(g_d) ⊗ ... ⊗ I`, so it projects to its 1D values on `d`, at the same place
+# in the chain, and to the identity on every other axis (`_kron_coefs`). Its values are
+# read once, when the factors are built.
+#
+# Anything without a method here answers `nothing`: a grid-function coefficient varying
+# along two axes or living on another mesh, a region other than `:interior`, an indexed
+# (composite) leaf, an interpolation, a scalar inside a side, and the star and
+# cross-weighted differences. A false negative only forgoes the Kronecker fast path; a false
+# positive would be a wrong product.
 
 # --- Splitting a side into sum-free chains ------------------------------------------- #
 
@@ -72,22 +77,113 @@ function _kron_axis(op::ShiftNode{D, Dim}, d::Int, leaf::LazyOp{1}) where {D, Di
     return d == Dim ? ShiftNode{1, 1, typeof(x)}(op.shift_amount, x) : x
 end
 
-_kron_split(op::ShiftNode) = _kron_split_wrapped(op)
+_kron_split(op::ShiftNode{D, Dim}) where {D, Dim} = 1 <= Dim <= D ? _kron_split_wrapped(op) : nothing
 _kron_rewrap(op::ShiftNode{D, Dim}, x::LazyOp{D}) where {D, Dim} = ShiftNode{
     D, Dim, typeof(x)}(op.shift_amount, x)
 
 # The node families whose nD node is their 1D node along `Dim` and the identity along every
-# other axis; all share the shape `Node{D, Dim, OpType}(inner_op)` (`node_family.jl`).
+# other axis; all share the shape `Node{D, Dim, OpType}(inner_op)` (`node_family.jl`). A node
+# along an axis the mesh does not have (`Dim > D`) splits to `nothing`: on no axis would it
+# meet `d == Dim`, and it would project to the identity.
 for N in (:BackwardDifference, :ForwardDifference, :CenteredDifference, :BackwardAverage,
     :ForwardAverage, :CenteredAverage, :JumpNode)
     @eval begin
-        _kron_split(op::$N) = _kron_split_wrapped(op)
+        function _kron_split(op::$N{D, Dim}) where {D, Dim}
+            return 1 <= Dim <= D ? _kron_split_wrapped(op) : nothing
+        end
         _kron_rewrap(::$N{D, Dim}, x::LazyOp{D}) where {D, Dim} = $N{D, Dim, typeof(x)}(x)
         function _kron_axis(op::$N{D, Dim}, d::Int, leaf::LazyOp{1}) where {D, Dim}
             x = _kron_axis(op.inner_op, d, leaf)
             return d == Dim ? $N{1, 1, typeof(x)}(x) : x
         end
     end
+end
+
+# --- Constant scalars inside a side ----------------------------------------------- #
+
+# A plain number scaling a node inside a side (what the simplifier leaves when it merges like
+# terms, `D₋ₓ(u) + 1.3 * u`) is the same number times the identity on every axis, so it goes
+# into the 1D chain on axis 1 alone. A `Ref`, or any other scalar, is refused: folded into a
+# factor it would be read once, where a `Ref` coefficient must stay live.
+_kron_split(op::OperatorScale) = op.scalar isa Number ? _kron_split_wrapped(op) : nothing
+function _kron_rewrap(op::OperatorScale{D}, x::LazyOp{D}) where {D}
+    return OperatorScale{D, typeof(op.scalar), typeof(x)}(op.scalar, x)
+end
+function _kron_axis(op::OperatorScale, d::Int, leaf::LazyOp{1})
+    x = _kron_axis(op.inner_op, d, leaf)
+    return d == 1 ? OperatorScale{1, typeof(op.scalar), typeof(x)}(op.scalar, x) : x
+end
+
+# --- Single-axis grid-function coefficients ----------------------------------------- #
+
+# A `GridFunctionScale` coefficient after `_kron_coefs`: the values along `axis`, the only
+# axis the D-dimensional values vary along (any axis for a constant one).
+struct _KronCoef{T}
+    axis::Int
+    values::Vector{T}
+end
+
+_kron_split(op::GridFunctionScale) = _kron_split_wrapped(op)
+function _kron_rewrap(op::GridFunctionScale{D, V}, x::LazyOp{D}) where {D, V}
+    return GridFunctionScale{D, V, typeof(x)}(op.grid_function, x)
+end
+
+function _kron_axis(op::GridFunctionScale{D, <:_KronCoef}, d::Int, leaf::LazyOp{1}) where {D}
+    x = _kron_axis(op.inner_op, d, leaf)
+    c = op.grid_function
+    return d == c.axis ? GridFunctionScale(c.values, x) : x
+end
+
+"""
+    _kron_coef(g, Ωₕ::MeshnD) -> Union{Nothing, _KronCoef}
+
+The 1D coefficient a `GridFunctionScale`'s `g` projects to on `Ωₕ`, or `nothing` when its
+values vary along more than one axis or `g` lives on a mesh other than `Ωₕ`. The test is
+exact: every slice along the other axes must be `isequal` to the first, which
+`Rₕ(Wₕ, x -> f(x[d]))` meets because the points on an axis line share that coordinate
+exactly. A tolerance would turn a near miss into a wrong product.
+"""
+_kron_coef(::Any, ::MeshnD) = nothing
+_kron_coef(g::Number, Ωₕ::MeshnD) = _KronCoef(1, fill(g, npoints(Ωₕ, Tuple)[1]))
+function _kron_coef(g::VectorElement, Ωₕ::MeshnD)
+    space(g) isa ScalarGridSpace && mesh(space(g)) === Ωₕ || return nothing
+    return _kron_coef(parent(g), Ωₕ)
+end
+function _kron_coef(g::AbstractVector, Ωₕ::MeshnD{D}) where {D}
+    np = npoints(Ωₕ, Tuple)
+    length(g) == prod(np) || return nothing
+    A = reshape(collect(g), np)
+    first_slice(e) = selectdim(A, e, 1:1)
+    varying = filter(e -> !all(isequal.(A, first_slice(e))), 1:D)
+    length(varying) > 1 && return nothing
+    d = isempty(varying) ? 1 : only(varying)
+    return _KronCoef(d, A[ntuple(e -> e == d ? Colon() : 1, Val(D))...])
+end
+
+"""
+    _kron_coefs(op::LazyOp, Ωₕ::MeshnD) -> Union{Nothing, LazyOp}
+
+`op`, a sum-free chain from `_kron_split`, with each `GridFunctionScale` coefficient in it
+replaced by its `_KronCoef` on `Ωₕ`; `nothing` when one has none.
+"""
+_kron_coefs(op::Union{TrialFunction, TestFunction}, ::MeshnD) = op
+function _kron_coefs(op::LazyOp, Ωₕ::MeshnD)
+    inner = _kron_coefs(op.inner_op, Ωₕ)
+    inner === nothing && return nothing
+    return _kron_rewrap(op, inner)
+end
+function _kron_coefs(op::GridFunctionScale{D}, Ωₕ::MeshnD) where {D}
+    c = _kron_coef(op.grid_function, Ωₕ)
+    c === nothing && return nothing
+    inner = _kron_coefs(op.inner_op, Ωₕ)
+    inner === nothing && return nothing
+    return GridFunctionScale{D, typeof(c), typeof(inner)}(c, inner)
+end
+
+# Each chain with its coefficients replaced, or `nothing` when one chain has none.
+function _kron_coefs(chains::Tuple, Ωₕ::MeshnD)
+    out = map(op -> _kron_coefs(op, Ωₕ), chains)
+    return any(isnothing, out) ? nothing : out
 end
 
 # --- The 1D inner products on each axis --------------------------------------------- #
@@ -111,6 +207,7 @@ when the form was built, so a domain that redefines `:xmin` does not change it.
 _kron_inners(::Type, ::MeshnD) = nothing
 _kron_inners(::Type{InnerH}, ::MeshnD{D}) where {D} = (ntuple(_ -> innerₕ, Val(D)),)
 function _kron_inners(::Type{InnerPlus{Dim}}, ::MeshnD{D}) where {Dim, D}
+    1 <= Dim <= D || return nothing
     return (ntuple(d -> d == Dim ? inner₊ : innerₕ, Val(D)),)
 end
 
@@ -148,6 +245,21 @@ end
 # --- The projection ------------------------------------------------------------------ #
 
 """
+    _kron_axis_space(Ωₕ::MeshnD, d::Int) -> ScalarGridSpace{1}
+
+The space the axis-`d` factors are assembled on: `gridspace(Ωₕ(d))`, its submesh moved to a
+serial host backend (sharing its arrays) when `Ωₕ` runs another policy. A threaded 1D
+assembly rounds differently, and the factors must be the same whatever policy the operator
+applies them under.
+"""
+function _kron_axis_space(Ωₕ::MeshnD, d::Int)
+    m = Ωₕ(d)
+    execution_policy(backend(m)) isa CpuSerial && return gridspace(m)
+    return gridspace(Mesh1D(m.set, m.markers, m.indices, backend(eltype(m)), m.pts,
+        m.half_pts, m.half_spacings, m.spacings, m.collapsed, m.version))
+end
+
+"""
     _kron_project(term::LazyOp, Ωₕ::MeshnD) -> Union{Nothing, Tuple}
 
 The Kronecker factors of `term`, one addend of `resolve_form_ast` with its scalar
@@ -157,8 +269,10 @@ fastest) is one Kronecker product, so that `term` assembles to their sum. The fa
 `d` is the 1D form on `gridspace(Ωₕ(d))` that `term` projects to there (see this file's
 header); there is one tuple per pair of addends of the two sides and per Kronecker term of
 the weight (several for `inner_Γ`, one per face). `nothing` when `term` has a node with no
-projection, or restricts to `:interior` on a mesh whose `:interior` marker is not the
-product of its axes' own.
+projection, a grid-function coefficient that varies along more than one axis or lives on
+another mesh, or restricts to `:interior` on a mesh whose `:interior` marker is not the
+product of its axes' own. A coefficient's values are read here, once: editing them later
+does not change the factors.
 
 `Ωₕ` must be the mesh both the trial and the test space of `term`'s form live on: the
 factors are built on `Ωₕ`'s axes alone, so another mesh of the same size gives other
@@ -170,13 +284,15 @@ function _kron_project(term::BilinearProduct{D, I}, Ωₕ::MeshnD{D}) where {D, 
     inners = _kron_inners(I, Ωₕ)
     inners === nothing && return nothing
     ls = _kron_split(term.left_op)
+    ls === nothing || (ls = _kron_coefs(ls, Ωₕ))
     ls === nothing && return nothing
     rs = _kron_split(term.right_op)
+    rs === nothing || (rs = _kron_coefs(rs, Ωₕ))
     rs === nothing && return nothing
     if any(_kron_restricts, ls) || any(_kron_restricts, rs)
         _kron_interior_is_tensor(Ωₕ) || return nothing
     end
-    spaces = ntuple(d -> gridspace(Ωₕ(d)), Val(D))
+    spaces = ntuple(d -> _kron_axis_space(Ωₕ, d), Val(D))
     terms = vec([(l, r, w) for l in ls, r in rs, w in inners])
     return Tuple(map(terms) do (l, r, w)
         ntuple(Val(D)) do d
