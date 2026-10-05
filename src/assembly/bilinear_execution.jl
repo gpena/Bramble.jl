@@ -588,7 +588,7 @@ end
 # between it and `_assemble_bilinear_parallel_core!` -- carries the same signature whether
 # `A` is host- or device-resident.
 @inline function _scatter_point!(
-        A::AbstractMatrix,
+        A::Union{AbstractMatrix, _ScatterCSC},
         term::TERM,
         sp,
         I::CartesianIndex,
@@ -725,7 +725,7 @@ end
 # One point of a sweep: a matrix target searches, a replay target replays. `α` is the
 # searching path's scaling; a replay target carries its own.
 @inline _sweep_point!(
-    A::AbstractMatrix, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α) = _scatter_point!(
+    A::Union{AbstractMatrix, _ScatterCSC}, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α) = _scatter_point!(
     A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
 @inline _sweep_point!(
     t::_ReplayTarget, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, _) = _replay_point!(

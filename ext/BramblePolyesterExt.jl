@@ -74,7 +74,8 @@ using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
                _bc_host_rebuild, _AvgKernel, _AvgScatterKernel, _MaskedKernel, __prod,
                ReplaySink, _PairReplaySink, _DiagonalReplayTarget, ActionSink,
                _PairActionSink, _batch_split, _batch_rebuild, _MFFusedPlan, _MFPass,
-               _MF_BAND, _MF_NO_COLLECT, _mf_apply_parts!, _mf_host_ast, _batch_splittable
+               _MF_BAND, _MF_NO_COLLECT, _mf_apply_parts!, _mf_host_ast, _batch_splittable,
+               _ScatterCSC, SparseMatrixCSC
 using Polyester: Polyester, @batch
 using LinearAlgebra: mul!
 using PrecompileTools: @setup_workload, @compile_workload
@@ -320,6 +321,18 @@ end
 # A mismatched arity makes dispatch fall through silently to the `src/` error stub, whose
 # message ("you forgot to load Polyester") is then wrong. Diff against
 # `bilinear_execution.jl` whenever it changes.
+#
+# A `SparseMatrixCSC` does not cross `@batch` whole, since it holds GC references, which put
+# the argument box on the heap. Its `colptr`, `rowval` and `nzval` cross as top-level loop
+# arguments, and each task rebuilds them as a `_ScatterCSC` (bilinear_traversal.jl), whose
+# position search and write are the `SparseMatrixCSC` ones. `sp`, `term` and `mesh_markers`
+# cross as one `_batch_split` (`_split_or_whole` below), as in the replay hooks. The caller
+# (`_sweep_bilinear!`) has already bound the term on the host (`_bind_walk`), so no `Symbol`
+# region reaches the split. A single-iteration `@batch` runs its body inline on the plain
+# `Vector`s, which `_ScatterCSC` and the rebuild accept as well. Any other matrix type (a
+# dense `Matrix`, a device matrix with its mirror) crosses whole, as before. No local is
+# named `cp`, because `@batch` takes a name bound in `Base` for a global and does not pass
+# it, so the loop would close over the local and fail to compile to a `cfunction`.
 
 function Bramble._batch_bilinear_colour_sweep!(
         A::AbstractMatrix, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
@@ -338,6 +351,35 @@ function Bramble._batch_bilinear_band_sweep!(
             _scatter_point!(
                 A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
             )
+        end
+    end
+    return nothing
+end
+
+function Bramble._batch_bilinear_colour_sweep!(
+        A::SparseMatrixCSC, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
+)
+    cptr, rval, nzv = A.colptr, A.rowval, A.nzval
+    skel, arrays = _split_or_whole((sp, term, mesh_markers), cptr, rval, nzv)
+    @batch for I in idxs
+        s, tm, mm = _rejoin(skel, arrays)
+        _scatter_point!(_ScatterCSC(cptr, rval, nzv), tm, s, I, lin_indices, mm, row_offset,
+            col_offset, α)
+    end
+    return nothing
+end
+
+function Bramble._batch_bilinear_band_sweep!(
+        A::SparseMatrixCSC, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers,
+        row_offset, col_offset, α
+)
+    cptr, rval, nzv = A.colptr, A.rowval, A.nzval
+    skel, arrays = _split_or_whole((sp, term, mesh_markers), cptr, rval, nzv)
+    @batch for b in bidx
+        s, tm, mm = _rejoin(skel, arrays)
+        Ab = _ScatterCSC(cptr, rval, nzv)
+        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
+            _scatter_point!(Ab, tm, s, I, lin_indices, mm, row_offset, col_offset, α)
         end
     end
     return nothing

@@ -1327,7 +1327,8 @@ Base.getindex(w::_BfWrapped, i::Int) = w.data[i]
             backend = backend(policy = policy))))
     _bf_close(a, b) = !iszero(b) && isapprox(a, b; rtol = eltype(a) == BigFloat ? 1e-60 : 1e-14)
     hooks = (:_batch_bilinear_band_replay!, :_batch_bilinear_colour_replay!,
-        :_batch_mf_bands!, :_batch_linear_colour_sweep!, :_batch_linear_band_sweep!)
+        :_batch_mf_bands!, :_batch_linear_colour_sweep!, :_batch_linear_band_sweep!,
+        :_batch_bilinear_colour_sweep!, :_batch_bilinear_band_sweep!)
     ext = Base.get_extension(Bramble, :BramblePolyesterExt)
     # How many of the extension's instances of hook `h` take `BigFloat` data.
     bigruns(h) = sum(methods(getfield(Bramble, h)); init = 0) do m
@@ -1363,11 +1364,20 @@ Base.getindex(w::_BfWrapped, i::Int) = w.data[i]
             form(W, v -> big"2.0" * innerₕ(x -> x[1], v)))
             push!(r, assemble(l))
         end
+        # The searching sweep, entered as a form with no replaying leaf enters it: point
+        # colouring on 9×11, bands on 9×33.
+        for Ws in (W, _bf_space((9, 33), policy; seed = 1))
+            a = form(Ws, Ws, (u, v) -> big"2.0" * inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+            A = assemble(a)
+            fill!(nonzeros(A), 0)
+            Bramble._assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast)
+            push!(r, A)
+        end
         return r, (op.plan !== nothing, opv.plan === nothing)
     end
     (serial, _), (batched, (fused, per_unit)) = results
     @test fused && per_unit
-    @test map(eltype, batched) == [BigFloat, BigFloat, Float64, fill(BigFloat, 5)...]
+    @test map(eltype, batched) == [BigFloat, BigFloat, Float64, fill(BigFloat, 7)...]
     @test all(map(_bf_close, batched, serial))
     @testset "$h ran on BigFloat data" for (h, n) in zip(hooks, before)
         @test bigruns(h) > n

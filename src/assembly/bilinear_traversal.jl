@@ -26,14 +26,19 @@ scan of the column when it holds few entries, a binary search otherwise -- both 
 `AbstractMatrix` fallback needs no search at all: every `(row, col)` inside the matrix's
 bounds is "stored" for a dense backend, at `LinearIndices(A)[row, col]`.
 """
-@inline function _scatter_position(A::SparseMatrixCSC, row::Int, col::Int)
-    p1 = @inbounds A.colptr[col]
-    p2 = @inbounds A.colptr[col + 1] - 1
+@inline _scatter_position(A::SparseMatrixCSC, row::Int, col::Int) = _csc_position(
+    A.colptr, A.rowval, row, col)
+
+# The search itself, over a CSC's `colptr` and `rowval`, shared by `SparseMatrixCSC` and
+# `_ScatterCSC` below so the two answer the same position for every entry.
+@inline function _csc_position(colptr, rowval, row::Int, col::Int)
+    p1 = @inbounds colptr[col]
+    p2 = @inbounds colptr[col + 1] - 1
 
     if (p2 - p1) < 32
         idx = p1
         @inbounds while idx <= p2
-            A.rowval[idx] == row && return idx
+            rowval[idx] == row && return idx
             idx += 1
         end
     else
@@ -41,7 +46,7 @@ bounds is "stored" for a dense backend, at `LinearIndices(A)[row, col]`.
         hi = p2
         @inbounds while lo <= hi
             mid = (lo + hi) >>> 1
-            mid_row = A.rowval[mid]
+            mid_row = rowval[mid]
             if mid_row < row
                 lo = mid + 1
             elseif mid_row > row
@@ -101,6 +106,26 @@ same bits as before.
 @inline _scatter_storage(A::SparseMatrixCSC) = A.nzval
 @inline _scatter_storage(A::AbstractMatrix) = _scatter_storage(locality(typeof(A)), A)
 @inline _scatter_storage(::HostLocality, A::AbstractMatrix) = A
+
+# A `SparseMatrixCSC`'s three arrays without the matrix around them, the shape of `_KronCSC`
+# (kronecker.jl): what `CpuPolyester`'s searching sweeps rebuild in each `@batch` task around
+# the arrays it receives, since a captured `SparseMatrixCSC` puts Polyester's argument box on
+# the heap (gpena/Bramble.jl#433). Not an `AbstractMatrix`: only the searching sweep's
+# per-point step (`_scatter_point!`, `_sweep_point!`, `add_to_sparse!`) takes it, and its
+# position, write and storage are the `SparseMatrixCSC` ones, so it stores the same bits.
+struct _ScatterCSC{CP <: AbstractVector, RV <: AbstractVector, NV <: AbstractVector}
+    colptr::CP
+    rowval::RV
+    nzval::NV
+end
+
+@inline _scatter_position(A::_ScatterCSC, row::Int, col::Int) = _csc_position(
+    A.colptr, A.rowval, row, col)
+@inline function _scatter_add!(A::_ScatterCSC, pos::Int, val)
+    @inbounds A.nzval[pos] += val
+    return nothing
+end
+@inline _scatter_storage(A::_ScatterCSC) = A.nzval
 
 """
     _replay_add!(nzval::AbstractArray, pos::Integer, val) -> Nothing
@@ -348,7 +373,8 @@ device-specific branch or parameter.
 See also: [`allocate_system_matrix`](@ref), whose positions search raises the same way on
 the serial path.
 """
-@inline function add_to_sparse!(A::AbstractMatrix, row::Int, col::Int, val::Number, term)
+@inline function add_to_sparse!(
+        A::Union{AbstractMatrix, _ScatterCSC}, row::Int, col::Int, val::Number, term)
     pos = _scatter_position(A, row, col)
     pos == 0 && _throw_missing_pattern_entry(term)
     _scatter_add!(A, pos, val)
