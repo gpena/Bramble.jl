@@ -67,14 +67,14 @@ Stokes are two leaves). Assembly and the Dirichlet path address leaves through
 `leaf_spaces_offsets`.
 _Avoid_: component (the `components` keyword *selects* leaves), field, block
 
-⚠️ **Leaf numbering and `u(i)` differ.** `u(i)` and `components(u)` address *immediate*
-subspaces. They coincide with leaves on a flat composite, not on a nested one
-(`(W × W) × W`): a live defect,
-[#64](https://github.com/gpena/Bramble.jl/issues/64). Say which you mean until it is fixed.
+`u(i)`, `components(u)` and `component_range` number leaves the same way, so on a nested
+`CompositeGridSpace((W × W, W))` `u(2)` is the second leaf, inside the first child, not the
+second child. (`×` flattens: `W × W × W` is one level of three leaves.)
 
 **Backend**:
 Where a space's arrays live and how they are iterated, with the execution policy
-(`CpuSerial()`/`Serial()`, `CpuThreaded()`/`Parallel()`, or `GpuKernel()`) as a trait.
+(`CpuSerial()`/`Serial()`, `CpuThreaded()`/`Parallel()`, `CpuPolyester()`, `GpuKernel()`, ...)
+as a trait.
 _Avoid_: device, mode
 
 ### Operators
