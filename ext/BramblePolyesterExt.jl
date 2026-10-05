@@ -71,7 +71,9 @@ using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
                CpuPolyester, _ReplayTarget, _ActionTarget, _replay_point!, _difference_band!,
                _average_band!, _centered_average_band!, _broadcast_band!, _kron_line_init!,
                _kron_line_terms!, _kron_host_raw, _kron_host_rebuild, _bc_host_raw,
-               _bc_host_rebuild, _AvgKernel, _AvgScatterKernel, _MaskedKernel, __prod
+               _bc_host_rebuild, _AvgKernel, _AvgScatterKernel, _MaskedKernel, __prod,
+               ReplaySink, _PairReplaySink, _DiagonalReplayTarget, ActionSink,
+               _PairActionSink, _batch_split, _batch_rebuild
 using Polyester: Polyester, @batch
 using LinearAlgebra: mul!
 using PrecompileTools: @setup_workload, @compile_workload
@@ -351,15 +353,69 @@ end
 # (`MatrixFreeOperator`, src/assembly/matrix_free.jl) sweeps through
 # the same two hooks with an `_ActionTarget`, the sink adding `α * w * x[col]` into
 # `y[row]`: the colouring and the per-point step (`_replay_point!`) are the same.
+#
+# Neither hook lets `@batch` capture the target, the space or the term whole: each holds GC
+# references (a mesh, a sink's vectors), which put the argument box on the heap. The target's
+# storage, `nzval` for a replay target and `y`, `x` for an action target, crosses as
+# top-level loop arguments (`_replay_parts`): wrapped in a struct, a `PtrArray` ran 1.11×
+# slower in the prototype (benchmark/batch_form_rebuild.jl; gpena/Bramble.jl#437 item 3).
+# The target's other fields cross with `sp`, `term` and `mesh_markers` as one
+# `_batch_split`, and each task rebuilds the four (`_batch_rebuild`) and joins the target
+# back around its storage (`_replay_join`). A single-iteration `@batch` runs its body
+# inline on the plain `Vector`s, which the rebuild and the join accept as well. The caller
+# (`_sweep_bilinear!`) has already bound the term and checked the weights on the host.
 Bramble._threaded_replay_policy(::CpuPolyester) = true
+
+# Which target type `_replay_join` rebuilds, an isbits tag the split keeps as it is.
+struct _Hot{K} end
+
+# A target as its storage vectors (the second `nothing` for a replay target) and the tuple
+# of its other fields, led by its tag.
+@inline function _replay_parts(t::ReplaySink)
+    return t.nzval, nothing, (_Hot{:replay}(), t.point_ptr, t.positions, t.α)
+end
+@inline function _replay_parts(t::_PairReplaySink)
+    cold = (_Hot{:pair}(), t.point_ptr, t.positions, t.positions_t, t.α1, t.α2, t.half)
+    return t.nzval, nothing, cold
+end
+@inline function _replay_parts(t::_DiagonalReplayTarget)
+    cold = (_Hot{:diagonal}(), t.point_ptr, t.positions, t.base, t.stride, t.interior, t.α)
+    return t.nzval, nothing, cold
+end
+@inline _replay_parts(s::ActionSink) = s.y, s.x, (_Hot{:action}(), s.α, s.mask, s.geom)
+@inline function _replay_parts(s::_PairActionSink)
+    cold = (_Hot{:pair_action}(), s.α1, s.α2, s.mask, s.dr, s.dc, s.half, s.geom)
+    return s.y, s.x, cold
+end
+
+# The inverse of `_replay_parts`, around the arrays a task received.
+@inline function _replay_join(h1, _, c::Tuple{_Hot{:replay}, Vararg})
+    _, pp, pos, α = c
+    return ReplaySink{typeof(h1), typeof(pp), typeof(α)}(h1, pp, pos, α)
+end
+@inline function _replay_join(h1, _, c::Tuple{_Hot{:pair}, Vararg})
+    _, pp, pos, pos_t, α1, α2, half = c
+    return _PairReplaySink{typeof(h1), typeof(pp), typeof(α1), typeof(α2)}(
+        h1, pp, pos, pos_t, α1, α2, half)
+end
+@inline _replay_join(h1, _, c::Tuple{_Hot{:diagonal}, Vararg}) = _DiagonalReplayTarget(
+    h1, Base.tail(c)...)
+@inline _replay_join(y, x, c::Tuple{_Hot{:action}, Vararg}) = ActionSink(
+    y, x, Base.tail(c)...)
+@inline _replay_join(y, x, c::Tuple{_Hot{:pair_action}, Vararg}) = _PairActionSink(
+    y, x, Base.tail(c)...)
 
 function Bramble._batch_bilinear_band_replay!(
         target::Union{_ReplayTarget, _ActionTarget}, sp, term, ax, bidx, nbands, rest,
         lin_indices, mesh_markers, row_offset, col_offset
 )
+    h1, h2, cold = _replay_parts(target)
+    skel, arrays = _batch_split((cold, sp, term, mesh_markers))
     @batch for b in bidx
+        c, s, tm, mm = _batch_rebuild(skel, arrays)
+        t = _replay_join(h1, h2, c)
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
-            _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
+            _replay_point!(t, tm, s, I, lin_indices, mm, row_offset, col_offset)
         end
     end
     return nothing
@@ -369,8 +425,12 @@ function Bramble._batch_bilinear_colour_replay!(
         target::Union{_ReplayTarget, _ActionTarget}, sp, term, idxs, lin_indices, mesh_markers,
         row_offset, col_offset
 )
+    h1, h2, cold = _replay_parts(target)
+    skel, arrays = _batch_split((cold, sp, term, mesh_markers))
     @batch for I in idxs
-        _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
+        c, s, tm, mm = _batch_rebuild(skel, arrays)
+        _replay_point!(
+            _replay_join(h1, h2, c), tm, s, I, lin_indices, mm, row_offset, col_offset)
     end
     return nothing
 end

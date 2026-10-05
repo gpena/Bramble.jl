@@ -926,7 +926,10 @@ end
 [`CpuPolyester`](@ref)'s counterpart of the `Threads.@threads` body in
 `_sweep_bilinear_colour!` when it replays (gpena/Bramble.jl#338): the same loop over `idxs`,
 calling [`_replay_point!`](@ref)`(target, term, sp, I, lin_indices, mesh_markers, row_offset,
-col_offset)` per point. `target` is a [`_ReplayTarget`](@ref). Reached only once
+col_offset)` per point. `target` is a [`_ReplayTarget`](@ref) or an action target. The
+loop captures none of them whole: the target's storage vector (`nzval`, or `y` and `x`)
+crosses as a top-level argument, the rest of `target`, `sp`, `term` and `mesh_markers` as one
+[`_batch_split`](@ref), rebuilt in each task (gpena/Bramble.jl#437). Reached only once
 `_threaded_replay_policy(::CpuPolyester)` answers `true`; the only `src/` method errors
 naming Polyester.
 """
@@ -1062,7 +1065,8 @@ end
 [`_sweep_band_colour!`](@ref) when it replays (gpena/Bramble.jl#338): for each band `b` in
 `bidx`, every `I` in `CartesianIndices((rest..., _band_range(ax, nbands, b)))` gets
 [`_replay_point!`](@ref)`(target, term, sp, I, lin_indices, mesh_markers, row_offset,
-col_offset)`. `target` is a [`_ReplayTarget`](@ref). Reached only once
+col_offset)`. `target` is a [`_ReplayTarget`](@ref) or an action target, crossing `@batch`
+as [`_batch_bilinear_colour_replay!`](@ref) describes. Reached only once
 `_threaded_replay_policy(::CpuPolyester)` answers `true`; the only `src/` method errors
 naming Polyester.
 """

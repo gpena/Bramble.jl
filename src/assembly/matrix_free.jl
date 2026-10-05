@@ -600,7 +600,8 @@ end
 
 # `CpuPolyester`'s bands and colours, through the same hooks the threaded replay uses
 # (`_batch_bilinear_band_replay!`, `_batch_bilinear_colour_replay!`), filled by
-# `BramblePolyesterExt` for an action target too.
+# `BramblePolyesterExt` for an action target too: `y` and `x` cross `@batch` as top-level
+# arguments, the sink's other fields with the split space and term.
 @noinline function _sweep_band_colour!(
         ::CpuPolyester, s::_ActionTarget, sp, term::TERM, ax, bidx, nbands::Int, rest,
         lin_indices, mesh_markers, row_offset::Int, col_offset::Int, _
