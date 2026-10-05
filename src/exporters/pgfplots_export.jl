@@ -27,7 +27,7 @@ function _pgf_error_composite(name)
     )
 end
 _pgf_grid(name, uₕ::VectorElement{<:CompositeGridSpace}, dims) = _pgf_error_composite(name)
-_pgf_grid(name, uₕ::VectorElement, dims) = reshape(uₕ)
+_pgf_grid(name, uₕ::VectorElement, dims) = _pgf_grid(name, reshape(uₕ), dims)
 function _pgf_grid(name, a::AbstractMatrix, dims)
     size(a) == dims ||
         throw(ArgumentError("\"$name\" has size $(size(a)), but the mesh has $dims points"))

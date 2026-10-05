@@ -178,6 +178,21 @@ using Bramble
             )
         end
     end
+
+    @testset "2D field of another mesh size" begin
+        # A VectorElement goes through the same size check as a plain matrix.
+        X = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωc = mesh(domain(X), (3, 4), (true, true))
+        Ωf = mesh(domain(X), (5, 6), (true, true))
+        uf = Rₕ(gridspace(Ωf), x -> x[1] + 10x[2])
+
+        mktempdir() do dir
+            @test_throws ArgumentError export_pgfplots(joinpath(dir, "t"), Ωc, "u" => uf)
+            @test_throws "has size (5, 6), but the mesh has (3, 4) points" export_pgfplots(
+                joinpath(dir, "t"), Ωc, "u" => uf
+            )
+        end
+    end
 end
 
 end # module ExportersPgfplotsExportTests
