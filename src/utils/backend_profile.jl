@@ -165,8 +165,9 @@ best of three runs. The candidates are `Serial()`, `Parallel()`, and `CpuPolyest
 `using Polyester` has loaded its extension. With `using Metal` on a functional device a
 `GpuKernel()` row is added, timed on `Float32` vectors (the only element type Metal offers)
 with a device synchronisation, so it is not a drop-in figure for a `Float64` problem. The
-sweep takes a fraction of a second, so it is meant to be called by hand, once per session,
-and is not run by [`backend`](@ref) or `gridspace`.
+host policies take well under a second including compilation; the first call with Metal
+also compiles the GPU kernel and takes a few seconds. It is meant to be called by hand,
+once per session, and is not run by [`backend`](@ref) or `gridspace`.
 
 The result prints as a table of times, the crossover of each policy against `Serial()`
 (the first size from which it stays at least 1.2 times faster to the end of the sweep, or
