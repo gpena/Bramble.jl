@@ -43,6 +43,7 @@ end
 
 function _pgf_check_lengths(cols::Tuple, n)
     for field in cols, (nm, col) in field
+
         length(col) == n || throw(
             ArgumentError(
             "\"$nm\" has length $(length(col)), but the mesh has $n points"
