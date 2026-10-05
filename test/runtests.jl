@@ -200,6 +200,7 @@ if __bramble_with_quality
         # caught here, in parallel with the rest of this group, instead of during every docs
         # build.
         include("quality/doctests.jl")
+        include("quality/claude_plugin.jl")
         # Already run above with the unit group; included here so a `quality`-only run
         # (nightly's second job) still covers it, without running it twice for `all`.
         __bramble_with_unit_tests || include("quality/alloccheck.jl")
@@ -287,5 +288,6 @@ if __bramble_with_examples
     @testset verbose=true "Worked examples" begin
         include("examples/pages.jl")
         include("examples/ext_pages.jl")
+        include("examples/claude_plugin.jl")
     end
 end
