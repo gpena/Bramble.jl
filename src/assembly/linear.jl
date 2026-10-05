@@ -736,7 +736,7 @@ function _sweep_parallel!(
 ) where {TERM}
     Ωsp = mesh(sp)
     lin_indices = LinearIndices(indices(Ωsp))
-    bound, mesh_markers = _bind_walk(term, Ωsp)
+    bound, mesh_markers = _bind_walk(term, sp)
     policy = _effective_parallel_policy(sp)
 
     # Bands before colours, for the reason spelled out in `_sweep_bilinear!`: two slabs
@@ -895,7 +895,7 @@ function _contract_term(
 ) where {TERM, T}
     Ωsp = mesh(sp)
     lin_indices = LinearIndices(indices(Ωsp))
-    bound, mesh_markers = _bind_walk(term, Ωsp)
+    bound, mesh_markers = _bind_walk(term, sp)
     for I in indices(Ωsp)
         lin_idx = lin_indices[I]
         stencil = local_stencil(bound, sp, I, mesh_markers, lin_idx)
@@ -940,7 +940,7 @@ end
 function _scatter_term!(b::AbstractVector, sp, term::TERM, offset::Int, α = true) where {TERM}
     Ωsp = mesh(sp)
     lin_indices = LinearIndices(indices(Ωsp))
-    bound, mesh_markers = _bind_walk(term, Ωsp)
+    bound, mesh_markers = _bind_walk(term, sp)
     for I in indices(Ωsp)
         lin_idx = lin_indices[I]
         stencil = local_stencil(bound, sp, I, mesh_markers, lin_idx)

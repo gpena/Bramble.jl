@@ -273,6 +273,99 @@ using ..TestUtils: alloc_test, @test_allocs
             @test alloc_test(assemble!, b, L) == 0
         end
     end
+
+    # The walk checks a leaf's weights once, where it starts (`_bind_walk`), and the stencil
+    # then reads them unchecked at every point (gpena/Bramble.jl#437). Every entry a user
+    # reaches must still throw the #221 error once the walked mesh has moved, not assemble
+    # silently against the old weights: a scalar form, and a composite whose second leaf
+    # alone moved, so the check runs per leaf and not only on the first. The point count is
+    # unchanged by the move, so nothing else in the walk notices it. `CpuPolyester` needs
+    # `BramblePolyesterExt`, and a later file (test/space/inner_product.jl) asserts Polyester
+    # is not loaded in this process, so its cases run in a child process that loads it.
+    @testset "Assembly entry points throw when stale" begin
+        probe = """
+        using Bramble, Random
+        using Bramble: backend, change_points!, matrix_free_operator, D₋ₓ, D₋ᵧ, inner₊ₓ, inner₊ᵧ
+        using LinearAlgebra: mul!
+        function stale_probe(policy)
+            out = Pair{String, String}[]
+            function run!(name, f)
+                r = try
+                    f()
+                    "OK"
+                catch e
+                    msg = e isa ArgumentError ? e.msg : ""
+                    occursin("weights were computed from its mesh before an in-place", msg) ?
+                    "STALE" : "OTHER " * first(sprint(showerror, e), 200)
+                end
+                push!(out, name => replace(r, '\\n' => ' '))
+            end
+            Random.seed!(437)
+            sq = interval(0.0, 1.0) × interval(0.0, 1.0)
+            Ωa = mesh(domain(sq), (9, 8), (false, false); backend = backend(policy = policy))
+            Ωb = mesh(domain(sq), (7, 10), (false, false); backend = backend(policy = policy))
+            Wa, Wb = gridspace(Ωa), gridspace(Ωb)
+            f = x -> x[1] + 2x[2]
+            cases = (
+                ("scalar", Wb, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(u, v),
+                    v -> innerₕ(f, v)),
+                ("composite", Wa × Wb,
+                    (U, V) -> innerₕ(U(1), V(1)) + inner₊ᵧ(D₋ᵧ(U(2)), D₋ᵧ(V(2))),
+                    V -> innerₕ(f, V(1)) + innerₕ(f, V(2))))
+            built = map(cases) do (name, W, a, l)
+                F, L = form(W, W, a), form(W, l)
+                A, b = assemble(F), assemble(L)
+                op = matrix_free_operator(F)
+                x, y = ones(ndofs(W)), zeros(ndofs(W))
+                run!("\$name fresh assemble!", () -> assemble!(A, F))
+                run!("\$name fresh mul!", () -> mul!(y, op, x))
+                run!("\$name fresh linear assemble!", () -> assemble!(b, L))
+                (name, F, L, A, b, op, x, y)
+            end
+            pts(n) = vcat(0.0, sort(rand(n - 2)), 1.0)
+            change_points!(Ωb, (pts(7), pts(10)))
+            for (name, F, L, A, b, op, x, y) in built
+                run!("\$name assemble", () -> assemble(F))
+                run!("\$name assemble! refill", () -> assemble!(A, F))
+                run!("\$name matrix-free mul!", () -> mul!(y, op, x))
+                run!("\$name linear assemble", () -> assemble(L))
+                run!("\$name linear assemble!", () -> assemble!(b, L))
+            end
+            return out
+        end
+        """
+        function check(out)
+            @test length(out) == 16
+            for (name, r) in out
+                @testset "$name" begin
+                    @test r == (occursin("fresh", name) ? "OK" : "STALE")
+                end
+            end
+        end
+
+        @testset "CpuSerial" begin
+            mod = Module()
+            include_string(mod, probe)
+            check(Base.invokelatest(mod.stale_probe, Bramble.CpuSerial()))
+        end
+
+        @testset "CpuPolyester (child)" begin
+            code = "using Polyester\n" * probe * """
+            println("POLYESTER_LOADED\t", Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing)
+            for (name, r) in stale_probe(Bramble.CpuPolyester())
+                println(name, "\t", r)
+            end
+            """
+            proj = Base.active_project()
+            cmd = `$(Base.julia_cmd()) --project=$proj --startup-file=no --threads=2 -e $code`
+            err = tempname()
+            lines = split(readchomp(pipeline(cmd; stderr = err)), '\n')
+            isfile(err) && (msg = read(err, String); isempty(msg) || @info msg; rm(err))
+            pairs = [String(p[1]) => String(p[2]) for p in split.(lines, '\t'; limit = 2)]
+            @test first(pairs) == ("POLYESTER_LOADED" => "true")
+            check(pairs[2:end])
+        end
+    end
 end
 
 end # module

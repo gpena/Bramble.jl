@@ -1089,7 +1089,7 @@ function _sweep_bilinear_serial!(
     Ωₕ = mesh(sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
-    bound, mesh_markers = _bind_walk(term, Ωₕ)
+    bound, mesh_markers = _bind_walk(term, sp)
 
     @inbounds for I in grid_inds
         _sweep_point!(
@@ -1112,7 +1112,7 @@ function _sweep_bilinear!(
     Ωₕ = mesh(sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
-    bound, mesh_markers = _bind_walk(term, Ωₕ)
+    bound, mesh_markers = _bind_walk(term, sp)
     policy = _effective_parallel_policy(sp)
 
     # Bands first: a colour is then a slab of whole rows, walked contiguously, and there

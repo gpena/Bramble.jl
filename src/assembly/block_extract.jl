@@ -235,6 +235,7 @@ end
 
 """
     _bind_walk(term, Ωₕ::AbstractMeshType) -> Tuple{bound_term, Union{Matrix{UInt64}, Nothing}}
+    _bind_walk(term, sp::ScalarGridSpace) -> Tuple{bound_term, Union{Matrix{UInt64}, Nothing}}
 
 `term` with every `RegionRestriction` it holds bound to `Ωₕ`'s marker ids
 ([`_bind_marker_ids`](@ref)), and the marker table the walk over `Ωₕ` passes to
@@ -245,11 +246,21 @@ Called at every walk entry, once per walk, so the ids are read from `Ωₕ`'s la
 is when the walk runs: `assemble` on a form built before a `markers!` call binds against the
 new table, and a label removed since throws the `ArgumentError` of
 [`_validate_term_markers`](@ref). A label written into `markers(Ωₕ)` in place has no id and
-throws too (`_throw_marker_not_bound`).
+throws too (`_throw_marker_not_bound`). Given the walked leaf `sp` instead, it binds against
+`mesh(sp)` after checking `sp`'s weights ([`weights`](@ref)): the walk's one staleness
+check, since its stencils read the weights unchecked.
 """
 @inline function _bind_walk(term, Ωₕ::AbstractMeshType)
     isempty(_collect_region_labels(term)) && return term, nothing
     return _bind_marker_ids(term, Ωₕ), _marker_words(Ωₕ)
+end
+
+# The form every walk entry calls, with the leaf it walks: `sp`'s weights are checked
+# against its mesh here, once per walk, and the stencil then reads them unchecked at every
+# point (`_stored_weights`, gpena/Bramble.jl#437). A stale `sp` throws `weights`'s error.
+@inline function _bind_walk(term, sp::ScalarGridSpace)
+    weights(sp)
+    return _bind_walk(term, mesh(sp))
 end
 
 """

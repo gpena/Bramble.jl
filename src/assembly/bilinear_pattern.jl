@@ -159,7 +159,7 @@ end
         sink::_CoordSink, term::TERM, sp, row_offset::Int, col_offset::Int
 ) where {TERM}
     Ωₕ = mesh(sp)
-    bound, mesh_markers = _bind_walk(term, Ωₕ)
+    bound, mesh_markers = _bind_walk(term, sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     ax = axes(grid_inds)

@@ -849,7 +849,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
         col_offset::Int
 ) where {SINK1, SINK2, TERM}
     Ωₕ = mesh(sp)
-    bound, mesh_markers = _bind_walk(term, Ωₕ)
+    bound, mesh_markers = _bind_walk(term, sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     margin = _stencil_margin(term)

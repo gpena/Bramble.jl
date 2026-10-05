@@ -698,7 +698,7 @@ end
 # `visit_bilinear_stencil`'s boundary shell alone.
 @noinline function _mf_scatter_shell!(s::SINK, term::TERM, sp, ro::Int, co::Int) where {SINK, TERM}
     Ωₕ = mesh(sp)
-    bound, mesh_markers = _bind_walk(term, Ωₕ)
+    bound, mesh_markers = _bind_walk(term, sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     @inbounds for slab in _boundary_shell_slabs(axes(grid_inds), _stencil_margin(term))
@@ -736,7 +736,7 @@ end
         y, x, α, mask, geom, term::TERM, sp, rs::Int, cs::Int, tr::Val, cut::UnitRange{Int}
 ) where {TERM}
     Ωₕ = mesh(sp)
-    bound, mesh_markers = _bind_walk(term, Ωₕ)
+    bound, mesh_markers = _bind_walk(term, sp)
     grid_inds = indices(Ωₕ)
     lin = LinearIndices(grid_inds)
     margin = _stencil_margin(term)
@@ -1311,7 +1311,7 @@ end
         core::UnitRange{Int}, hi::UnitRange{Int}
 ) where {SINK, OWNED, TERM}
     Ωₕ = mesh(sp)
-    bound, mesh_markers = _bind_walk(term, Ωₕ)
+    bound, mesh_markers = _bind_walk(term, sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     margin = _stencil_margin(term)
@@ -1338,7 +1338,7 @@ end
         core::UnitRange{Int}, hi::UnitRange{Int}
 ) where {SINK, OWNED, TERM}
     Ωₕ = mesh(sp)
-    bound, mesh_markers = _bind_walk(term, Ωₕ)
+    bound, mesh_markers = _bind_walk(term, sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     @inbounds for shell in _boundary_shell_slabs(axes(grid_inds), _stencil_margin(term))

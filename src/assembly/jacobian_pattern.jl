@@ -147,7 +147,7 @@ function jacobian_pattern(
     space = _walked_leaf(ast, form.trial_space, form.test_space)
     Ωₕ = mesh(space)
     _validate_term_markers(ast, markers(Ωₕ), "the form's space")
-    bound, mesh_markers = _bind_walk(ast, Ωₕ)
+    bound, mesh_markers = _bind_walk(ast, space)
     lin_indices = LinearIndices(indices(Ωₕ))
 
     nodes = _dependency_nodes(coefficient_dependencies, TrialFunction{D}())
@@ -383,7 +383,7 @@ function _pattern_term_jacobian!(
     sp = _walked_leaf(term, trial_leaf, test_leaf)
     Ωₕ = mesh(sp)
     _validate_term_markers(term, markers(Ωₕ), "one of the composite space's leaves")
-    bound, mesh_markers = _bind_walk(term, Ωₕ)
+    bound, mesh_markers = _bind_walk(term, sp)
     lin_indices = LinearIndices(indices(Ωₕ))
     dep_ops, point_nodes = deps
 
