@@ -51,13 +51,13 @@
 # Plain arrays become `PtrArray`s, which allocate nothing. Measured on a 2D non-uniform grid
 # with 4 threads, every box is at most 512 B.
 # Differences, shifts, averages, divergence, curl, `εₕ!`, `avgₕ!` (masked and composite
-# too), broadcasts, `innerₕ`, `inner₊`, the weight build and the explicit RHS's CSR product
-# allocate 0 B, and so do a `KroneckerLinearOperator` product, a fused matrix-free product
+# too), broadcasts, `innerₕ`, `inner₊`, the weight build, linear assembly and the explicit
+# RHS allocate 0 B, and so do a `KroneckerLinearOperator` product, a fused matrix-free product
 # and a GMG V-cycle. Their loops capture only plain arrays and isbits values, rebuilding any
 # struct around them inside each task (`_batch_kron_lines!`, `_batch_broadcast!`,
-# `_batch_for!`, `_batch_mf_bands!` below), so the box stays on the stack. Linear assembly
-# allocates 256 B; a bilinear refill 1520 B (five colour sweeps of 304 B each); a per-unit
-# matrix-free product 1088 B, an explicit RHS 256 B. Those loops capture a form or another
+# `_batch_for!`, `_batch_mf_bands!` below), so the box stays on the stack. A bilinear refill
+# allocates 1520 B (five colour sweeps of 304 B each); a per-unit matrix-free product
+# 1088 B. Those loops capture a form or another
 # struct holding a GC reference, which puts the box on the heap; this release keeps the
 # 512 B bound for them and gpena/Bramble.jl#437 follows up. An `avgₕ!` whose source closure
 # captures an array, and a broadcast with a 0-dimensional array leaf, box likewise. The test
@@ -443,10 +443,20 @@ end
 #
 # `b::AbstractVector` (matching the `CpuThreaded` reference signature in linear.jl), for the
 # same reason the bilinear pair above is now constrained on `A`.
+#
+# As the replay hooks do, neither captures the space or the term whole: `b` crosses as a
+# top-level loop argument, and `sp`, `term` and `mesh_markers` as one `_batch_split` that
+# each task rebuilds (`_batch_rebuild`), so the box stays on the stack. The caller
+# (`_sweep_parallel!`) has already bound the term to its leaf's marker ids and checked the
+# weights on the host (`_bind_walk`), so no `Symbol` region reaches the split. A
+# single-iteration `@batch` runs its body inline on the plain `Vector`s, which the rebuild
+# accepts as well.
 
 function Bramble._batch_linear_colour_sweep!(b::AbstractVector, sp, term, idxs, lin_indices, mesh_markers, offset, α)
+    skel, arrays = _batch_split((sp, term, mesh_markers))
     @batch for I in idxs
-        _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
+        s, tm, mm = _batch_rebuild(skel, arrays)
+        _scatter_linear_point!(b, s, tm, I, lin_indices, mm, offset, α)
     end
     return nothing
 end
@@ -454,9 +464,11 @@ end
 function Bramble._batch_linear_band_sweep!(
         b::AbstractVector, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
 )
+    skel, arrays = _batch_split((sp, term, mesh_markers))
     @batch for k in bidx
+        s, tm, mm = _batch_rebuild(skel, arrays)
         for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
-            _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
+            _scatter_linear_point!(b, s, tm, I, lin_indices, mm, offset, α)
         end
     end
     return nothing
