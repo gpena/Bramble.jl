@@ -580,16 +580,33 @@ function _bc_host_raw(bc::Broadcast.Broadcasted{S, A, F}) where {S, A, F}
         _BcHostNode{F}(), bc.style, bc.f, map(_bc_host_raw, bc.args), bc.axes)
 end
 _bc_host_raw(e::Broadcast.Extruded) = (_BcHostExtruded(), e.x, e.keeps, e.defaults)
-# A 0-dimensional array stays inside its `Extruded`, so `@batch` never sees it bare:
-# `StrideArraysCore` throws making a `PtrArray` of a 0-dimensional `Array`. The struct puts
-# Polyester's box on the heap, which costs bytes but not the result.
-_bc_host_raw(e::Broadcast.Extruded{<:AbstractArray{<:Any, 0}}) = e
+# `StrideArraysCore` throws making a `PtrArray` of a 0-dimensional `Array`, but makes one of
+# the one-element `Memory` behind it. So a 0-dimensional `Array` of an isbits element type
+# crosses as that `Memory` and its offset, and each task reads the leaf through
+# `_BcHostZeroDim`, a 0-dimensional view of them. Any other 0-dimensional array stays inside
+# its `Extruded`, which puts Polyester's box on the heap: bytes, never the result.
+struct _BcHostZeroDimTag end
+function _bc_host_raw(e::Broadcast.Extruded{<:AbstractArray{T, 0}}) where {T}
+    e.x isa Array && isbitstype(T) || return e
+    r = e.x.ref
+    return (_BcHostZeroDimTag(), r.mem, Base.memoryrefoffset(r), e.keeps, e.defaults)
+end
 _bc_host_raw(x) = x
+
+struct _BcHostZeroDim{T, M <: AbstractVector{T}} <: AbstractArray{T, 0}
+    mem::M
+    offset::Int
+end
+Base.size(::_BcHostZeroDim) = ()
+Base.@propagate_inbounds Base.getindex(z::_BcHostZeroDim) = z.mem[z.offset]
 
 @inline function _bc_host_rebuild(r::Tuple{_BcHostNode{F}, Any, Any, Tuple, Any}) where {F}
     return Broadcast.Broadcasted(r[2], r[3]::F, map(_bc_host_rebuild, r[4]), r[5])
 end
 @inline _bc_host_rebuild(r::Tuple{_BcHostExtruded, Any, Any, Any}) = Broadcast.Extruded(r[2], r[3], r[4])
+@inline function _bc_host_rebuild(r::Tuple{_BcHostZeroDimTag, M, Int, Any, Any}) where {M}
+    return Broadcast.Extruded(_BcHostZeroDim{eltype(M), M}(r[2], r[3]), r[4], r[5])
+end
 @inline _bc_host_rebuild(x) = x
 
 # Rebuild the same expression tree over each `VectorElement` leaf's own storage. The

@@ -77,8 +77,13 @@ end
 const _PA_ZERO_PATHS = (
     "difference D₋ₓ!", "average Mₓ!", "avgₕ!", "shift S₊ₓ!", "divₕ!", "curlₕ!", "εₕ!",
     "broadcast", "innerₕ", "inner₊ₓ", "innerₕ masked", "Kronecker mul!",
-    "Kronecker mul! general"
+    "Kronecker mul! general", "Rₕ!", "Rₕ! masked", "project! composite Rₕ", "broadcast 0-dim"
 )
+
+# Paths whose box is measured and bounded tighter than 512 B. An `avgₕ!` source closure over
+# an array crosses `@batch` whole, never split (a rebuilt closure would capture a `PtrArray`
+# in place of its `Vector`), so its kernel boxes.
+const _PA_BOX_CEILINGS = Dict("avgₕ! closure" => 176)
 
 # BEGIN _pa paths
 using Bramble: CpuPolyester, CpuSerial, CpuThreaded, change_points!, semidiscretize_rhs,
@@ -691,7 +696,8 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
                 @test bs == bl
                 for case in (small, large)
                     box, other, nval = _pa_allocations(case.call)
-                    @test name in _PA_ZERO_PATHS ? box == 0 : box <= 512
+                    @test name in _PA_ZERO_PATHS ? box == 0 :
+                          box <= get(_PA_BOX_CEILINGS, name, 512)
                     @test isempty(other)
                     @test nval == nrefs
                 end
@@ -1392,6 +1398,118 @@ Base.getindex(w::_BfWrapped, i::Int) = w.data[i]
     @test !Bramble._batch_splittable(typeof(unit(form(W, v -> innerₕ(Rₕ(W, x -> big(x[1])), v)))))
     @test !Bramble._batch_splittable(_BfWrapped{Float64})
     @test Bramble._batch_splittable(Tuple{Vector{Float64}, Base.RefValue{Float64}})
+
+    # `Rₕ!` and `avgₕ!` evaluate the user's function per point inside the task, so a function
+    # capturing what the split cannot take (a `Dict`, a `_BfWrapped`) crosses whole, and so
+    # does a `BigFloat` element, on `_batch_for!`, its masked form and `_batch_scatter_for!`.
+    d, c = Dict(:a => 2.0), _BfWrapped([0.5])
+    f = x -> d[:a] * x[1] + c[1] * sin(x[2])
+    fb = x -> big(x[1]) * x[2] + 1
+    fs = x -> (d[:a] * x[1], c[1] * x[2])
+    W = _bf_space((9, 11), CpuPolyester())
+    k = Bramble._RₕKernel(f, mesh(W), Bramble.indices(mesh(W)))
+    @test !Bramble._batch_splittable(typeof(k))
+    @test !Bramble._batch_splittable(typeof((k, ones(BigFloat, 3))))
+    hits(h, s) = sum(methods(getfield(Bramble, h)); init = 0) do m
+        m.module === ext || return 0
+        return count(mi -> mi !== nothing && occursin(s, string(mi.specTypes)),
+            Base.specializations(m))
+    end
+    before = (hits(:_batch_for!, "BigFloat"), hits(:_batch_for!, "Dict"),
+        hits(:_batch_scatter_for!, "Dict"))
+    rk = map((CpuSerial(), CpuPolyester())) do policy
+        Ws = _bf_space((9, 11), policy)
+        Wd = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0),
+                :top => x -> x[2] ≈ 2.0), (9, 11), (false, false);
+            backend = backend(policy = policy)))
+        u, um, ua = element(Ws), element(Wd), element(Ws)
+        ub = element(Ws, BigFloat)
+        uv = element(Ws × Ws)
+        Rₕ!(u, f)
+        Rₕ!(um, f; markers = (:top,))
+        avgₕ!(ua, f)
+        Rₕ!(ub, fb)
+        Rₕ!(uv, fs)
+        return map(e -> copy(parent(e)), (u, um, ua, ub, uv(1), uv(2)))
+    end
+    @test rk[2] == rk[1]
+    @test eltype(rk[2][4]) == BigFloat && count(!iszero, rk[2][2]) == 9
+    after = (hits(:_batch_for!, "BigFloat"), hits(:_batch_for!, "Dict"),
+        hits(:_batch_scatter_for!, "Dict"))
+    @test all(after .> before)
+end
+
+# A user's function that throws per point (`sqrt` of a negative number past `x₁ = 0.7`) inside
+# the `@batch` tasks of `Rₕ!`, its masked form, the composite scatter and `avgₕ!` reaches the
+# caller as the `DomainError` a serial sweep raises, with the same message, and never crashes
+# the process; the threads the failed sweeps reserved are released. Repeated, since the crash
+# a task's exception caused before (gpena/Bramble.jl#437) was intermittent.
+@testset "throwing user function rethrows" begin
+    _tf_space(policy) = (Random.seed!(433); gridspace(mesh(
+        domain(interval(0.0, 1.0) × interval(0.0, 2.0), :right => x -> x[1] ≈ 1.0),
+        (17, 9), (false, false); backend = backend(policy = policy))))
+    f = x -> x[1] > 0.7 ? sqrt(0.7 - x[1]) : x[1] * x[2]
+    calls = (u -> Rₕ!(u, f), u -> Rₕ!(u, f; markers = (:right,)), u -> avgₕ!(u, f),
+        u -> Rₕ!(u, x -> (f(x), x[2])))
+    _tf_error(call, W) = try
+        call(element(W))
+        nothing
+    catch e
+        e
+    end
+    _tf_elem(k, W) = k == 4 ? W × W : W
+    for (k, call) in enumerate(calls)
+        serial = _tf_error(call, _tf_elem(k, _tf_space(CpuSerial())))
+        @test serial isa DomainError
+        msg = sprint(showerror, serial)
+        W = _tf_elem(k, _tf_space(CpuPolyester()))
+        for _ in 1:8
+            e = _tf_error(call, W)
+            @test e isa DomainError && sprint(showerror, e) == msg
+        end
+    end
+    W, Ws = _tf_space(CpuPolyester()), _tf_space(CpuSerial())
+    g = x -> x[1] * x[2]
+    @test parent(Rₕ!(element(W), g)) == parent(Rₕ!(element(Ws), g))
+end
+
+# A user's closure over a `Vector` reaches `Rₕ!`/`avgₕ!` (plain, masked and composite)
+# whole under `CpuPolyester`, as under `CpuSerial`: a split would rebuild it around a
+# `PtrArray`, so a method typed on `Vector{Float64}` would throw a `MethodError` and an
+# `isa Vector` branch would take the other arm. An index collection other than a unit range
+# (a `Vector{Int}`, a stepped range) takes the per-index sweep.
+_uc_typed(c::Vector{Float64}, x) = c[1] * x[1] + c[2] * x[2]^2
+@testset "user closures over arrays cross whole" begin
+    _uc_space(policy) = (Random.seed!(436); gridspace(mesh(
+        domain(interval(0.0, 1.0) × interval(0.0, 2.0), :right => x -> x[1] ≈ 1.0),
+        (17, 9), (false, false); backend = backend(policy = policy))))
+    c = [0.3, 1.7]
+    typed = x -> _uc_typed(c, x)
+    branch = x -> c isa Vector ? c[1] * x[1] : -1.0
+    res = map((CpuSerial(), CpuPolyester())) do policy
+        W = _uc_space(policy)
+        r = Vector{Float64}[]
+        for f in (typed, branch)
+            u, um, ua = element(W), element(W), element(W)
+            uv = element(W × W)
+            Rₕ!(u, f)
+            Rₕ!(um, f; markers = (:right,))
+            avgₕ!(ua, f)
+            Rₕ!(uv, x -> (f(x), x[2]))
+            append!(r, map(e -> copy(parent(e)), (u, um, ua, uv(1), uv(2))))
+        end
+        return r
+    end
+    @test res[2] == res[1]
+    @test all(v -> all(>=(0), v), res[2][6:10]) && any(!iszero, res[2][6])
+
+    n = 50
+    for idxs in ([3, 1, 7, 50, 22], 2:3:n)
+        vp, vs = zeros(n), zeros(n)
+        Bramble._sweep_for!(CpuPolyester(), vp, idxs, i -> c[1] * i + 1)
+        Bramble._sweep_for!(CpuSerial(), vs, idxs, i -> c[1] * i + 1)
+        @test vp == vs && count(!iszero, vp) == length(idxs)
+    end
 end
 
 # A stencil entry missing from the matrix's pattern throws inside the searching sweep's
