@@ -276,8 +276,19 @@ end
 
     @testset "Time-dependent predicates are probed too" begin
         T = interval(0.0, 1.0)
-        dm = Bramble.markers(S2, T, :moving => (x, t) -> x[1] < t, :still => x -> x[2] < 1.0)
+        dm = Bramble.markers(S2, T, :moving => (x, t) -> x[1] < t, :still => (x, t) -> x[2] < 1.0)
         @test length(Bramble.conditions(dm)) == 2
+
+        # A spatial-only predicate has no t to evaluate at, so the time form refuses it.
+        err_arity = try
+            Bramble.markers(S2, T, :still => x -> x[2] < 1.0)
+            nothing
+        catch e
+            e
+        end
+        @test err_arity isa ArgumentError
+        @test occursin("marker :still", sprint(showerror, err_arity))
+        @test occursin("(x, t)", sprint(showerror, err_arity))
 
         err_call = try
             Bramble.markers(S2, T, :broken => (x, t) -> x[3] < t)
@@ -458,6 +469,36 @@ end
             @test Bramble._surface_weight(Ω3, mz, CartesianIndex(i, j, 2)) == 0.0
         end
     end
+end
+
+@testset "Time domain meshes at its evaluation t" begin
+    X = interval(0.0, 1.0) × interval(0.0, 1.0)
+    T = interval(0.0, 1.0)
+    Ω = domain(X, T, :moving => (x, t) -> x[1] > t, :wall => :left, :sides => (:top, :bottom))
+
+    # 5 × 5 points at x = 0, 0.25, 0.5, 0.75, 1: `x > t` holds for 2 columns at t = 0.5.
+    Ωₕ = mesh(Ω(0.5), (5, 5), (true, true))
+    @test count(Bramble.markers(Ωₕ)[:moving]) == 10
+    @test count(Bramble.markers(Ωₕ)[:wall]) == 5
+    @test count(Bramble.markers(Ωₕ)[:sides]) == 10
+
+    # The predicate follows t: 4 columns at t = 0, none at t = 1.
+    @test count(Bramble.markers(mesh(Ω(0.0), (5, 5), (true, true)))[:moving]) == 20
+    @test count(Bramble.markers(mesh(Ω(1.0), (5, 5), (true, true)))[:moving]) == 0
+
+    # Same marker set as the points-wise evaluation of the predicate.
+    xs, ys = Bramble.host_points(Ωₕ)
+    expected = vec([xi > 0.5 for xi in xs, _ in ys])
+    @test Bramble.markers(Ωₕ)[:moving] == expected
+
+    # 1D mesh through the same path.
+    Ω1 = domain(interval(0.0, 1.0), T, :late => (x, t) -> x > t)
+    @test count(Bramble.markers(mesh(Ω1(0.5), 5, true))[:late]) == 2
+
+    # A time domain needs (x, t) predicates, at construction.
+    @test_throws ArgumentError domain(X, T, :s => x -> x[1] > 0.5)
+    @test_throws ArgumentError markers(X, T, :s => x -> x[1] > 0.5)
+    @test_throws ArgumentError markers(interval(0.0, 1.0), T, :s => x -> x > 0.5)
 end
 
 end # module MeshMarkersTests

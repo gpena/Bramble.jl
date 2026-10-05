@@ -110,14 +110,17 @@ For each label in `set_labels`, assigns a `BitVector` of length `npts` initializ
 end
 
 """
-    _init_mesh_markers(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers) -> MeshMarkers
+    _init_mesh_markers(Ωₕ::AbstractMeshType, domain_markers) -> MeshMarkers
 
 Internal helper function to construct and initialize the [`MeshMarkers`](@ref) dictionary.
 
 Allocates `BitVector` storage initialized to `false` for every symbol, tuple, and condition
-label defined in `domain_markers`.
+label defined in `domain_markers`, a [`DomainMarkers`](@ref) or the `EvaluatedDomainMarkers`
+that `Ω(t)` of a time-dependent domain holds.
 """
-function _init_mesh_markers(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers)
+function _init_mesh_markers(
+        Ωₕ::AbstractMeshType, domain_markers::Union{DomainMarkers, EvaluatedDomainMarkers}
+)
     markers_mesh = MeshMarkers()
     npts = npoints(Ωₕ)
 

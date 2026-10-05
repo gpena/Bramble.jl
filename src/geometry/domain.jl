@@ -91,7 +91,8 @@ When no markers are supplied, defaults to a `:boundary` marker covering all boun
 - `markers`: Explicit [`DomainMarkers`](@ref) container.
 - `pairs`: Variable sequence of `label => identifier` pairs.
 - `space_set`: Spatial bounding set.
-- `time_set`: 1D temporal interval for time-dependent boundary conditions.
+- `time_set`: 1D temporal interval for time-dependent boundary conditions. Predicate
+  identifiers then take `(x, t)`, and an `x -> Bool` predicate throws an `ArgumentError`.
 
 # Examples
 ```jldoctest
@@ -113,6 +114,10 @@ true
     (Ω::Domain)(t::Number) -> Domain
 
 Evaluate a time-dependent [`Domain`](@ref) at timestamp `t`.
+
+The result holds the markers with each `(x, t)` predicate fixed at `t`, so
+`mesh(Ω(t), ...)` marks the points where the predicates hold at `t`. Meshing the unevaluated
+`Ω` of a time-dependent domain is not supported: its `(x, t)` predicates have no time.
 """
 @inline (Ω::Domain)(t::Number) = Domain(set(Ω), markers(Ω)(t))
 

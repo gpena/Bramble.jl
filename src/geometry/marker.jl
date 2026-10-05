@@ -131,15 +131,16 @@ Construct a [`DomainMarkers`](@ref) collection from `label => identifier` pairs.
 
 # Arguments
 - `space_set`: Geometric spatial set.
-- `time_set`: Optional 1D temporal interval for time-dependent boundary conditions.
+- `time_set`: Optional 1D temporal interval for time-dependent boundary conditions. With it,
+  every predicate `Function` takes `(x, t)`; `markers(...)(t)` evaluates them at `t`.
 - `pairs`: Vararg sequence of `label => identifier` pairs where identifier is a `Symbol`,
   a tuple (`NTuple{N, Symbol}`), `AbstractVector{Symbol}` or `AbstractSet{Symbol}` of
-  boundary symbols, or a predicate `Function`.
+  boundary symbols, or a predicate `Function` (`x -> Bool`, or `(x, t) -> Bool` with `time_set`).
 
 # Throws
 - `ArgumentError`: if an identifier is of any other kind (for example a `String`, a `Dict`
-  or a callable object that is not a `Function`), or names a symbol that is not a boundary
-  of `space_set`.
+  or a callable object that is not a `Function`), names a symbol that is not a boundary
+  of `space_set`, or, with `time_set`, is a predicate that does not accept `(x, t)`.
 
 # Examples
 ```jldoctest
@@ -210,12 +211,10 @@ function _validate_marker_pair(
     elseif ident isa Function
         probe_x = D == 1 ? center(space_set)[1] : center(space_set)
         probe_t = first(extrema(time_set))
+        hasmethod(ident, Tuple{typeof(probe_x), typeof(probe_t)}) ||
+            _throw_time_marker_needs_xt(lbl)
         res = try
-            if hasmethod(ident, Tuple{typeof(probe_x), typeof(probe_t)})
-                ident(probe_x, probe_t)
-            else
-                ident(probe_x)
-            end
+            ident(probe_x, probe_t)
         catch err
             _throw_invalid_marker_predicate_call(lbl, D, err)
         end
@@ -226,6 +225,16 @@ function _validate_marker_pair(
         _throw_unsupported_marker_identifier(lbl, ident)
     end
     return nothing
+end
+
+@noinline function _throw_time_marker_needs_xt(lbl::Symbol)
+    throw(
+        ArgumentError(
+        "Predicate for marker :$lbl has no method for (x, t). A time-dependent domain " *
+        "needs (x, t) predicates, evaluated at the time given to `Ω(t)`; write " *
+        "`(x, t) -> ...`, or drop the time set for a spatial-only predicate.",
+    ),
+    )
 end
 
 @noinline function _throw_unsupported_marker_identifier(lbl::Symbol, ident)
