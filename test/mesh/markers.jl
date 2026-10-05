@@ -236,18 +236,16 @@ using ..TestUtils: alloc_test, @test_allocs
 end
 
 # The predicate probes in `markers(space, pairs...)` (src/geometry/marker.jl): a 1D predicate
-# may take the scalar coordinate or a 1-tuple, and one that accepts neither is refused with
-# a message naming the label.
+# takes the scalar coordinate, and one that does not is refused with a message naming the
+# label.
 @testset "Marker predicate probes" begin
     S1 = interval(0.0, 1.0)
     S2 = interval(0.0, 1.0) × interval(0.0, 2.0)
 
-    @testset "1D predicate on a 1-tuple is accepted" begin
-        # The scalar probe throws, the tuple probe succeeds: the fallback is the oracle.
+    @testset "1D predicate on a 1-tuple is refused" begin
+        # The probe passes the bare scalar, as the mesh does, so a tuple-only predicate throws.
         tuple_only = x -> x isa Tuple ? x[1] > 0.5 : throw(DomainError(x))
-        dm = Bramble.markers(S1, :right_half => tuple_only)
-        @test length(Bramble.conditions(dm)) == 1
-        @test Bramble.label(only(Bramble.conditions(dm))) === :right_half
+        @test_throws ArgumentError Bramble.markers(S1, :right_half => tuple_only)
     end
 
     @testset "1D predicate taking neither is refused" begin
@@ -260,7 +258,7 @@ end
         @test err isa ArgumentError
         msg = sprint(showerror, err)
         @test occursin("label :broken", msg)
-        @test occursin("1D coordinate (scalar or 1-tuple)", msg)
+        @test occursin("scalar coordinate", msg)
     end
 
     @testset "2D predicate, wrong arity, is refused" begin

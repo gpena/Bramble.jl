@@ -203,6 +203,19 @@ struct NotAFunctionPredicate end
         end
         @test_throws ArgumentError markers(interval(0.0, 1.0), :r => NotAFunctionPredicate())
 
+        # A 1D predicate is called with the bare scalar coordinate, as the mesh does: one
+        # that accepts only a 1-tuple is refused at construction, not at `mesh`.
+        err = try
+            domain(interval(0.0, 1.0), :r => ((x::Tuple{Float64}) -> x[1] < 0.5))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("scalar coordinate", sprint(showerror, err))
+        Ωₕ1 = mesh(domain(interval(0.0, 1.0), :r => (x -> x < 0.5)), 5, true)
+        @test count(Bramble.markers(Ωₕ1)[:r]) == 2
+
         # The stored vector marker reaches the mesh: it marks the listed face only.
         Ωₕ = @test_logs (:warn, r"boundary.*something other than") mesh(
             domain(X, :boundary => [:xmin]), (5, 5), (true, true)

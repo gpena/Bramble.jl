@@ -189,15 +189,7 @@ function _validate_marker_pair(space_set::CartesianProduct{D}, p::Pair) where {D
         res = try
             ident(probe)
         catch err
-            if D == 1
-                try
-                    ident((probe,))
-                catch
-                    _throw_invalid_marker_predicate_call(lbl, D, err)
-                end
-            else
-                _throw_invalid_marker_predicate_call(lbl, D, err)
-            end
+            _throw_invalid_marker_predicate_call(lbl, D, err)
         end
         if !(res isa Bool)
             _throw_non_bool_marker_predicate(lbl, res)
@@ -260,7 +252,7 @@ end
     throw(
         ArgumentError(
         "Marker predicate for label :$lbl failed when evaluated on sample domain point: " *
-        "expected a function accepting a $(D == 1 ? "1D coordinate (scalar or 1-tuple)" : "$D-element coordinate tuple"). " *
+        "expected a function accepting a $(D == 1 ? "scalar coordinate" : "$D-element coordinate tuple"). " *
         "Underlying error: $err",
     ),
     )
