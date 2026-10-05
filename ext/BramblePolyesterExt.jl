@@ -50,9 +50,10 @@
 # heap-allocated `ManualMemory.Reference` on every call, sized by what the loop captures.
 # Plain arrays become `PtrArray`s, which allocate nothing. Measured on a 2D non-uniform grid
 # with 4 threads, every box is at most 512 B.
-# Differences, shifts, averages, divergence, curl, `εₕ!`, `avgₕ!`, broadcasts, `innerₕ` and
-# `inner₊` allocate 0 B, and so does a `KroneckerLinearOperator` product. Their loops capture
-# only plain arrays and isbits values, rebuilding any struct around them inside each task
+# Differences, shifts, averages, divergence, curl, `εₕ!`, `avgₕ!` (masked and composite
+# too), broadcasts, `innerₕ`, `inner₊`, the weight build and the explicit RHS's CSR product
+# allocate 0 B, and so does a `KroneckerLinearOperator` product. Their loops capture only
+# plain arrays and isbits values, rebuilding any struct around them inside each task
 # (`_batch_kron_lines!`, `_batch_broadcast!`, `_batch_for!` below), so the box stays on the
 # stack. Linear assembly allocates 256 B; a fused matrix-free product 112 B; a bilinear
 # refill 1520 B (five colour sweeps of 304 B each); a per-unit matrix-free product 1088 B, a
@@ -70,7 +71,7 @@ using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
                CpuPolyester, _ReplayTarget, _ActionTarget, _replay_point!, _difference_band!,
                _average_band!, _centered_average_band!, _broadcast_band!, _kron_line_init!,
                _kron_line_terms!, _kron_host_raw, _kron_host_rebuild, _bc_host_raw,
-               _bc_host_rebuild, _AvgKernel, __prod
+               _bc_host_rebuild, _AvgKernel, _AvgScatterKernel, _MaskedKernel, __prod
 using Polyester: Polyester, @batch
 using LinearAlgebra: mul!
 using PrecompileTools: @setup_workload, @compile_workload
@@ -91,19 +92,60 @@ using PrecompileTools: @setup_workload, @compile_workload
 # holds arrays crosses as a tuple of them and each task rebuilds it (`_for_host_rebuild`),
 # as `_batch_kron_lines!` below does for its factors. A struct captured whole holds GC
 # references, which put Polyester's argument box on the heap (160 B per `avgₕ!` call).
-# Only `avgₕ!`'s `_AvgKernel` has a raw form; any other kernel crosses as it is. So does an
-# `_AvgKernel` whose source function holds a GC reference (a closure over an array): the box
-# goes on the heap either way, and the raw tuple is the bigger one (16 B more per call).
+# The kernels with a raw form are `_AvgKernel`, `_AvgScatterKernel`, `Fix1(__prod, factors)`
+# and a `_MaskedKernel` around any of them; any other kernel crosses as it is. So does an
+# average kernel whose source function holds a GC reference (a closure over an array): the
+# box goes on the heap either way, and the raw tuple is the bigger one (16 B more per call).
+#
+# `_batch_axis_for!` and `_batch_scatter_for!` take the same route for the kernels they are
+# handed: the weight build's `Fix1(__prod, factors)` crosses as its tuple of factor vectors,
+# the composite average's `_AvgScatterKernel` as `_AvgKernel`'s fields plus its leaf count,
+# and a `_MaskedKernel` as its inner kernel's raw form, its masks as their word vectors (the
+# `_mask_chunks` route below) and its zero. Each task rebuilds the mask as `_ChunkBits`, a
+# bit test over the words. A single-iteration `@batch` runs its body inline, handing the
+# rebuild plain `Vector`s rather than `PtrArray`s, which every rebuild accepts as well.
+# Their kernel argument is `::F where {F}` because `Base.Fix1 <: Function`: Julia does not
+# specialise on an unannotated `Function` argument it only passes on, so the raw tuple was
+# built from an abstractly typed kernel and boxed (112 B per weight build).
 struct _AvgRaw end
+struct _AvgScatterRaw{NC} end
+struct _ProdRaw end
+struct _MaskedRaw end
+
+# One mask's 64-bit words, indexed as the `BitVector` they came from (`_mask_bit` below).
+struct _ChunkBits{C}
+    chunks::C
+end
+@inline Base.getindex(b::_ChunkBits, i::Int) = _mask_bit((b.chunks,), i)
 
 _for_host_raw(f) = f
 function _for_host_raw(k::_AvgKernel{F}) where {F}
     isbitstype(F) || return k
     return (_AvgRaw(), k.f, k.x, k.idxs, k.nodes, k.wts)
 end
+function _for_host_raw(k::_AvgScatterKernel{F, X, IX, NQ, T, NC}) where {F, X, IX, NQ, T, NC}
+    isbitstype(F) || return k
+    return (_AvgScatterRaw{NC}(), k.f, k.x, k.idxs, k.nodes, k.wts)
+end
+_for_host_raw(f::Base.Fix1{typeof(__prod), <:Tuple{Vararg{AbstractVector}}}) = (_ProdRaw(), f.x)
+# A kernel with no raw form that holds a GC reference (`_RₕKernel` holds the mesh) boxes
+# either way, so the mask stays whole rather than growing the box. The test is on types
+# only, so it folds and the method returns one concrete type.
+function _for_host_raw(k::_MaskedKernel{K, <:Tuple{Vararg{BitVector}}}) where {K}
+    inner = _for_host_raw(k.kernel)
+    inner isa K && !isbitstype(K) && return k
+    return (_MaskedRaw(), inner, map(m -> m.chunks, k.masks), k.zeroval)
+end
 
 @inline _for_host_rebuild(f) = f
 @inline _for_host_rebuild(r::Tuple{_AvgRaw, Vararg}) = _AvgKernel(Base.tail(r)...)
+@inline function _for_host_rebuild(r::Tuple{_AvgScatterRaw{NC}, F, X, IX, NTuple{NQ, T}, NTuple{NQ, T}}) where {
+        NC, F, X, IX, NQ, T}
+    return _AvgScatterKernel{F, X, IX, NQ, T, NC}(Base.tail(r)...)
+end
+@inline _for_host_rebuild(r::Tuple{_ProdRaw, Any}) = Base.Fix1(__prod, r[2])
+@inline _for_host_rebuild(r::Tuple{_MaskedRaw, Any, Any, Any}) = _MaskedKernel(
+    _for_host_rebuild(r[2]), map(_ChunkBits, r[3]), r[4])
 
 function Bramble._batch_for!(v::AbstractArray, idxs, f)
     raw = _for_host_raw(f)
@@ -114,9 +156,11 @@ function Bramble._batch_for!(v::AbstractArray, idxs, f)
     return nothing
 end
 
-function Bramble._batch_axis_for!(v::AbstractArray, idxs::CartesianIndices, f)
+function Bramble._batch_axis_for!(v::AbstractArray, idxs::CartesianIndices, f::F) where {F}
+    raw = _for_host_raw(f)
     @batch for I in idxs
-        @inbounds v[I] = f(I)
+        k = _for_host_rebuild(raw)
+        @inbounds v[I] = k(I)
     end
     return nothing
 end
@@ -130,9 +174,11 @@ end
 # `idxs::AbstractRange` specialises this past the stub's fully unconstrained signature
 # (`_batch_scatter_for!(mats::Tuple, idxs, g)`); the only caller (`project!`,
 # operators/projection.jl) always passes `1:n`.
-function Bramble._batch_scatter_for!(mats::Tuple, idxs::AbstractRange, g)
+function Bramble._batch_scatter_for!(mats::Tuple, idxs::AbstractRange, g::G) where {G}
+    raw = _for_host_raw(g)
     @batch for idx in idxs
-        @inbounds _write_components!(mats, g(idx), idx)
+        k = _for_host_rebuild(raw)
+        @inbounds _write_components!(mats, k(idx), idx)
     end
     return nothing
 end
