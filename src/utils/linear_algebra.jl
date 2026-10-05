@@ -42,8 +42,8 @@ caller actually uses, deriving `loc` from the destination array itself
 """
 @inline _sweep_for!(::HostLocality, ::CpuSerial, v, idxs, f) = _serial_for!(v, idxs, f)
 @inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs, f) = _threaded_for!(v, idxs, f)
-@noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs, f) = _late(_batch_for!, v, idxs, f)
-@noinline _sweep_for!(::DeviceLocality, policy::GpuPolicy, v, idxs, f) = _gpu_for!(policy, v, idxs, f)
+@noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs, f::F) where {F} = _late(_batch_for!, v, idxs, f)
+@noinline _sweep_for!(::DeviceLocality, policy::GpuPolicy, v, idxs, f::F) where {F} = _gpu_for!(policy, v, idxs, f)
 @noinline _sweep_for!(loc::Locality, policy, v, idxs, f) = _throw_locality_mismatch(loc, policy)
 
 @inline _sweep_for!(policy::ExecutionPolicy, v, idxs, f) = _sweep_for!(locality(typeof(v)), policy, v, idxs, f)
@@ -63,7 +63,8 @@ caller actually uses, deriving `loc` from the destination array itself
 # removed index conversion, which is a penalty in every power state; the parallel gain on
 # top of it is the machine's to give.
 @inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs::CartesianIndices, f) = _threaded_axis_for!(v, idxs, f)
-@noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs::CartesianIndices, f) = _late(_batch_axis_for!, v, idxs, f)
+@noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs::CartesianIndices, f::F) where {F} = _late(
+    _batch_axis_for!, v, idxs, f)
 
 """
     _throw_locality_mismatch(loc::Locality, policy)
@@ -519,8 +520,10 @@ so callers pass a policy alone and never compute a locality.
     return nothing
 end
 @inline _sweep_scatter_for!(::HostLocality, ::CpuThreaded, mats::Tuple, idxs, g) = _threaded_scatter_for!(mats, idxs, g)
-@noinline _sweep_scatter_for!(::HostLocality, ::CpuPolyester, mats::Tuple, idxs, g) = _late(_batch_scatter_for!, mats, idxs, g)
-@noinline _sweep_scatter_for!(::DeviceLocality, policy::GpuPolicy, mats::Tuple, idxs, g) = _gpu_scatter_for!(policy, mats, idxs, g)
+@noinline _sweep_scatter_for!(::HostLocality, ::CpuPolyester, mats::Tuple, idxs, g::G) where {G} = _late(
+    _batch_scatter_for!, mats, idxs, g)
+@noinline _sweep_scatter_for!(::DeviceLocality, policy::GpuPolicy, mats::Tuple, idxs, g::G) where {G} = _gpu_scatter_for!(
+    policy, mats, idxs, g)
 @noinline _sweep_scatter_for!(loc::Locality, policy, mats::Tuple, idxs, g) = _throw_locality_mismatch(loc, policy)
 
 @inline _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g) = _sweep_scatter_for!(

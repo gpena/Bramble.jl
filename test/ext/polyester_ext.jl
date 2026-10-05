@@ -79,11 +79,6 @@ const _PA_ZERO_PATHS = (
     "broadcast", "innerₕ", "inner₊ₓ", "innerₕ masked", "Kronecker mul!",
     "Kronecker mul! general"
 )
-# The one path whose kernel crosses `@batch` through the untyped `_late` barrier
-# (gpena/Bramble.jl#460): its `Fix1`, `ReshapedArray` and `CartesianIndices` arguments are
-# boxed on the heap, besides the argument box. Other paths must allocate nothing else.
-const _PA_BOXED_KERNEL_PATHS = ("space weights",)
-const _PA_BOXED_KERNEL_TYPES = Union{Base.Fix1, Base.ReshapedArray, CartesianIndices}
 
 # BEGIN _pa paths
 using Bramble: CpuPolyester, CpuSerial, CpuThreaded, change_points!, semidiscretize_rhs,
@@ -483,6 +478,30 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
         @test ndofs(Wb) == ndofs(gridspace(mesh(Ω, (8, 7), true)))
     end
 
+    # The `@noinline` CpuPolyester arm takes its kernel as `f::F ... where {F}`: an untyped
+    # `f` only passed through is compiled on `::Function`, and `_late` then calls the hook
+    # dynamically (gpena/Bramble.jl#460). The `Fix1` kernel `__innerplus_weights!` builds,
+    # on non-uniform factors, gives the CpuSerial result and specialises the arm on `Fix1`.
+    @testset "Fix1 kernel, CpuPolyester arm (#460)" begin
+        for dims in ((37,), (23, 29), (7, 9, 11))
+            diags = map(n -> sort!(rand(Xoshiro(n), n)), dims)
+            vp, vs = zeros(dims), zeros(dims)
+            Bramble._sweep_for!(CpuPolyester(), vp, CartesianIndices(vp),
+                Base.Fix1(Bramble.__prod, diags))
+            Bramble._sweep_for!(CpuSerial(), vs, CartesianIndices(vs),
+                Base.Fix1(Bramble.__prod, diags))
+            @test vp == vs
+            @test vs[end] == prod(last, diags)
+        end
+        loc = typeof(Bramble.locality(Array{Float64, 2}))
+        arm = which(Bramble._sweep_for!,
+            (loc, CpuPolyester, Matrix{Float64}, CartesianIndices{2}, Function))
+        kslot(mi) = Base.unwrap_unionall(mi.specTypes).parameters[end]
+        mis = collect(Base.specializations(arm))
+        @test !isempty(mis)
+        @test any(mi -> kslot(mi) <: Base.Fix1, mis)
+    end
+
     # Rₕ!/avgₕ! agree with Parallel() and Serial() in 1D, 2D and 3D.
     @testset "Rₕ!/avgₕ!: agree with Parallel()" begin
         for (D, n) in ((1, 21), (2, 11), (3, 6))
@@ -664,11 +683,7 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
                 for case in (small, large)
                     box, other, nval = _pa_allocations(case.call)
                     @test name in _PA_ZERO_PATHS ? box == 0 : box <= 512
-                    if name in _PA_BOXED_KERNEL_PATHS
-                        @test all(o -> o[1] <: _PA_BOXED_KERNEL_TYPES, other)
-                    else
-                        @test isempty(other)
-                    end
+                    @test isempty(other)
                     @test nval == nrefs
                 end
                 @test get(hits, name, -1) == 0
