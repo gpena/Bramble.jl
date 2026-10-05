@@ -337,7 +337,7 @@ end
 # The geometry the product's sink carries: the operator's on a serial policy, `nothing`
 # otherwise. A threaded product's sink crosses into its tasks (`Polyester.@batch` copies it
 # into a heap box), so it stays as small as it was; its band tasks take the geometry from
-# the plan (`_MFFormBox`) instead, and the per-unit sweep does not read it.
+# the plan (`_MFFusedPlan`) instead, and the per-unit sweep does not read it.
 @inline _mf_sink_geom(::CpuSerial, geom) = geom
 @inline _mf_sink_geom(_, _) = nothing
 
@@ -403,8 +403,13 @@ Base.show(io::IO, ::MIME"text/plain", op::MatrixFreeOperator) = show(io, op)
 # under `CpuSerial` only: the threaded sweep (`_sweep_point!` and the Polyester hooks below)
 # has methods for an action target (`_ActionTarget`) alone.
 
-function _mf_apply!(policy, s, a::BilinearForm)
-    Wu, Wv, ast = trial_space(a), test_space(a), a.ast
+_mf_apply!(policy, s, a::BilinearForm) = _mf_apply_parts!(
+    policy, s, trial_space(a), test_space(a), a.ast)
+
+# `_mf_apply!` on the form's walked parts, which a `CpuPolyester` band task rebuilds from
+# their split (`_batch_mf_bands!`): the form itself holds a mutable cache, which no task may
+# capture without putting `Polyester.@batch`'s argument box on the heap.
+function _mf_apply_parts!(policy, s, Wu, Wv, ast)
     if _is_block_pair(Wu, Wv)
         _mf_blocks!(policy, s, ast, leaf_spaces_offsets(Wu), leaf_spaces_offsets(Wv))
         return nothing
@@ -699,7 +704,7 @@ end
 # `visit_bilinear_stencil`'s boundary shell alone.
 @noinline function _mf_scatter_shell!(s::SINK, term::TERM, sp, ro::Int, co::Int) where {SINK, TERM}
     Ωₕ = mesh(sp)
-    bound, mesh_markers = _bind_walk(term, sp)
+    bound, mesh_markers = _mf_bind_walk(term, sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     @inbounds for slab in _boundary_shell_slabs(axes(grid_inds), _stencil_margin(term))
@@ -737,7 +742,7 @@ end
         y, x, α, mask, geom, term::TERM, sp, rs::Int, cs::Int, tr::Val, cut::UnitRange{Int}
 ) where {TERM}
     Ωₕ = mesh(sp)
-    bound, mesh_markers = _bind_walk(term, sp)
+    bound, mesh_markers = _mf_bind_walk(term, sp)
     grid_inds = indices(Ωₕ)
     lin = LinearIndices(grid_inds)
     margin = _stencil_margin(term)
@@ -1097,14 +1102,6 @@ end
 # `locate_cell`, which no offset bounds; they are walked serially after the bands, as in the
 # per-unit sweep.
 
-# The plan's boxed form `form[]` and the operator's cached geometry `geom` (`_MFGeometry` or
-# `nothing`), behind the one pointer the `@batch` box carries (`_MFFusedPlan`).
-mutable struct _MFFormBox{F <: BilinearForm, G}
-    const form::F
-    const geom::G
-end
-Base.getindex(b::_MFFormBox) = b.form
-
 """
     _MFFusedPlan{D, EP, F, G}
 
@@ -1112,15 +1109,14 @@ The fused threaded sweep's plan, fixed when a [`MatrixFreeOperator`](@ref) is bu
 grid size `dims` every fused unit walks, the least and greatest row offset `omin`, `omax`
 of any fused unit along the last axis, the effective parallel policy `policy` every fused
 unit's leaf carries (or the operator's own, when that is [`CpuPolyester`](@ref)), whether
-some unit walks serially (`interp`, a test-side interpolation), and the operator's own form
-`form`, boxed once here with its cached geometry (`_MFFormBox`).
+some unit walks serially (`interp`, a test-side interpolation), the operator's own form
+`form` and its cached geometry `geom` (`_MFGeometry` or `nothing`).
 
-The band tasks read the form through `form` rather than taking it as an argument:
-`Polyester.@batch` copies its arguments into a heap box on every call, and a form stored
-inline (its spaces' weight vectors, a coefficient's grid function) made that box 400-740 B
-per product. The box now holds one pointer to `form`, which is written once, here, and
-only read afterwards, so concurrent products on one operator share it safely, and it keeps
-alive nothing the operator does not already hold.
+No band task captures the plan whole under `CpuPolyester`: `Polyester.@batch` copies its
+arguments into a box, and one GC reference (the form's spaces, its mutable cache) puts that
+box on the heap. `_batch_mf_bands!` passes the plan's isbits fields, `y` and `x` as they
+are, and the form's walked parts with the geometry as one `_batch_split`; the check that
+the plan is `a`'s (`_mf_product!`) runs on the host, before the region.
 """
 struct _MFFusedPlan{D, EP <: CpuPolicy, F <: BilinearForm, G}
     dims::NTuple{D, Int}
@@ -1128,7 +1124,8 @@ struct _MFFusedPlan{D, EP <: CpuPolicy, F <: BilinearForm, G}
     omax::Int
     policy::EP
     interp::Bool
-    form::_MFFormBox{F, G}
+    form::F
+    geom::G
 end
 
 # What the build-time walk collects: every fused unit's row offsets, the grid size and
@@ -1176,12 +1173,17 @@ function _mf_plan(policy::CpuPolicy, a::BilinearForm, geom = _mf_geometry(a))
     T = _matrix_eltype(a, a.ast)
     _mf_apply!(_MFPass(_MF_COLLECT, 1:0, 0, 0, acc), ActionSink(T[], T[], true, nothing), a)
     (acc.agree && acc.dims !== nothing) || return nothing
+    # A `CpuPolyester` band binds the form's regions on the host (`_mf_host_ast`), against
+    # one mesh: a composite's leaves each bind against their own, so such a form walks per
+    # unit, whose hooks bind each unit on the host.
+    (acc.policy isa CpuPolyester && _is_block_pair(trial_space(a), test_space(a)) &&
+     !isempty(_collect_region_labels(a.ast))) && return nothing
     dims = acc.dims::NTuple
     D = length(dims)
     last_offsets = Int[o[D] for o in acc.offsets]
     return _MFFusedPlan(
         dims, minimum(last_offsets; init = 0), maximum(last_offsets; init = 0), acc.policy,
-        acc.interp, _MFFormBox(a, geom)
+        acc.interp, a, geom
     )
 end
 
@@ -1312,7 +1314,7 @@ end
         core::UnitRange{Int}, hi::UnitRange{Int}
 ) where {SINK, OWNED, TERM}
     Ωₕ = mesh(sp)
-    bound, mesh_markers = _bind_walk(term, sp)
+    bound, mesh_markers = _mf_bind_walk(term, sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     margin = _stencil_margin(term)
@@ -1339,7 +1341,7 @@ end
         core::UnitRange{Int}, hi::UnitRange{Int}
 ) where {SINK, OWNED, TERM}
     Ωₕ = mesh(sp)
-    bound, mesh_markers = _bind_walk(term, sp)
+    bound, mesh_markers = _mf_bind_walk(term, sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     @inbounds for shell in _boundary_shell_slabs(axes(grid_inds), _stencil_margin(term))
@@ -1366,12 +1368,12 @@ end
 end
 
 # One product. Without a plan, the unit walk under the operator's own policy: serial, or the
-# per-unit threaded sweep. A plan whose boxed form is not `a` (an operator rebuilt around
+# per-unit threaded sweep. A plan whose form is not `a` (an operator rebuilt around
 # another form) walks per unit too, since its bands would read the wrong form.
 @inline _mf_product!(::Nothing, policy, s, a::BilinearForm) = _mf_apply!(policy, s, a)
 
 function _mf_product!(plan::_MFFusedPlan{D}, policy, s::ActionSink, a::BilinearForm) where {D}
-    plan.form[] === a || return _mf_apply!(policy, s, a)
+    plan.form === a || return _mf_apply!(policy, s, a)
     len = plan.dims[D]
     nbands = min(Threads.nthreads(), len)
     _mf_run_bands!(plan.policy, s, a, plan, nbands)
@@ -1382,12 +1384,12 @@ end
 # Task `k` of `ntasks` (`_run_bands!`'s trailing pair): bands `k`, `k + ntasks`, ... of
 # `nbands`, every unit walked over each. `y` is `s.y`, first for `_run_bands!`'s sake. The
 # form is the plan's (`_MFFusedPlan`); the third argument is ignored, `nothing` under
-# `_run_bands!` so that no `@batch` box carries the form inline.
+# `_run_bands!`. `CpuPolyester` runs `_batch_mf_bands!` instead, which captures no plan.
 @noinline function _mf_band_task!(
         _y, s, _, plan::_MFFusedPlan{D}, nbands::Int, ntasks::Int, k::Int
 ) where {D}
-    a = plan.form[]
-    s = _mf_with_geom(s, plan.form.geom)
+    a = plan.form
+    s = _mf_with_geom(s, plan.geom)
     len = plan.dims[D]
     for b in k:ntasks:nbands
         own = _band_range(1:len, nbands, b)
@@ -1396,11 +1398,69 @@ end
     return nothing
 end
 
+# The AST a `CpuPolyester` band task walks (`_batch_mf_bands!`): `a`'s, with its regions
+# bound on the host to the walked leaf's marker ids (`_bind_walk`, which also checks the
+# leaf's weights), since a task's rebuilt walk state has no label table to bind against. A
+# composite form's AST is returned as it is: with regions, it has no plan under
+# `CpuPolyester` (`_mf_plan`).
+function _mf_host_ast(a::BilinearForm)
+    Wu, Wv = trial_space(a), test_space(a)
+    _is_block_pair(Wu, Wv) && return a.ast
+    sp = host_weights(_walked_leaf(_bind_interp_spaces(a.ast, Wu, Wv), Wu, Wv))
+    return _mf_tag_regions(first(_bind_walk(a.ast, sp)))
+end
+
+# A region `_mf_host_ast` bound on the host: its marker ids, in a type nothing else makes,
+# so a walk entry tells it from a region a user wrote as ids (`restrict_to(1, u)`), which
+# `_bind_walk` refuses as it does on every other route.
+struct _MFBoundRegion{R}
+    ids::R
+end
+@inline _is_marked(words::AbstractMatrix{UInt64}, r::_MFBoundRegion, lin_idx::Int) = _is_marked(
+    words, r.ids, lin_idx)
+
+# `op` with every bound region tagged `_MFBoundRegion`, recursing where `_bind_marker_ids`
+# does.
+_mf_tag_regions(op) = op
+function _mf_tag_regions(op::RegionRestriction{D}) where {D}
+    inner = _mf_tag_regions(op.inner_op)
+    region = _MFBoundRegion(op.region)
+    return RegionRestriction{D, typeof(region), typeof(inner)}(region, inner)
+end
+_mf_tag_regions(op::UnaryWrapper) = _rewrap_inner(op, _mf_tag_regions(op.inner_op))
+function _mf_tag_regions(op::OperatorAdd{D}) where {D}
+    left, right = _mf_tag_regions(op.left_op), _mf_tag_regions(op.right_op)
+    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
+end
+function _mf_tag_regions(op::BilinearProduct{D, W}) where {D, W}
+    left, right = _mf_tag_regions(op.left_op), _mf_tag_regions(op.right_op)
+    return BilinearProduct{D, W, typeof(left), typeof(right)}(left, right)
+end
+
+# A walk entry's `_bind_walk`, but a term `_mf_host_ast` bound passes through, with the
+# marker words of the mesh `sp` walks, which a task's rebuilt walk state carries as the host
+# mesh does. One bind tags every region of a term, so one tagged region means all are.
+@inline function _mf_bind_walk(term, sp)
+    return _mf_prebound(term) ? (term, _marker_words(mesh(sp))) : _bind_walk(term, sp)
+end
+_mf_prebound(::RegionRestriction{D, R}) where {D, R} = R <: _MFBoundRegion
+_mf_prebound(op::UnaryWrapper) = _mf_prebound(op.inner_op)
+_mf_prebound(op::Union{BilinearProduct, LinearProduct, OperatorAdd}) = _mf_prebound(
+    op.left_op) || _mf_prebound(op.right_op)
+_mf_prebound(_) = false
+
+# Band `b` of a `CpuThreaded` fused product, from the sink and plan its spawn shares.
+@noinline function _mf_spawned_band!(shared::Base.RefValue, nbands::Int, b::Int)
+    s, plan = shared[]
+    _mf_band_task!(s.y, s, nothing, plan, nbands, nbands, b)
+    return nothing
+end
+
 # A band task's sink with the plan's geometry, which the sink did not carry across.
 @inline _mf_with_geom(s::ActionSink, geom) = ActionSink(s.y, s.x, s.α, s.mask, geom)
 
-# The region's mechanism. `CpuPolyester` (and any other CPU policy) takes `_run_bands!`, as
-# the engines do. `CpuThreaded` spawns one task per band and walks the first band on the
+# The region's mechanism. `CpuPolyester` takes `_batch_mf_bands!`, any other CPU policy
+# `_run_bands!`, as the engines do. `CpuThreaded` spawns one task per band and walks the first band on the
 # calling task, rather than `_run_bands!`'s `Threads.@threads :static`. On this host a
 # `:static` region costs 25-30 us when it follows another closely (a product repeated in a
 # solver), `:dynamic` about 20 us with the walk, a spawn about 5 us, and at 4096 unknowns the
@@ -1409,16 +1469,33 @@ end
 # spawn nests inside a user's `Threads.@threads` loop, which `:static` cannot
 # (`_static_or_serial`), so no fallback is needed. `@sync` waits by yielding, and the waiting
 # thread runs the bands itself if every other one is busy. Each band writes only its own
-# rows, in the serial order, so the result does not depend on where a band runs.
+# rows, in the serial order, so the result does not depend on where a band runs. The
+# spawned tasks share one `Ref` to the sink and the plan, which holds the form and its
+# geometry inline, so each task's closure holds a pointer rather than a copy of them.
 @inline _mf_run_bands!(policy::CpuPolicy, s, _, plan, nbands::Int) = _run_bands!(
     policy, _mf_band_task!, s.y, s, nothing, plan, nbands)
 
+@noinline _mf_run_bands!(::CpuPolyester, s, _, plan, nbands::Int) = _late(
+    _batch_mf_bands!, s, plan, nbands)
+
+"""
+    _batch_mf_bands!(s::ActionSink, plan::_MFFusedPlan, nbands::Int) -> Nothing
+
+[`CpuPolyester`](@ref)'s fused sweep, filled by `BramblePolyesterExt`: one `Polyester.@batch`
+task per band of `nbands`, each walking every unit of `plan`'s form over its band, as
+`_mf_band_task!` does. The only `src/` method errors naming Polyester.
+"""
+@noinline function _batch_mf_bands!(s, plan, nbands::Int)
+    return _throw_cpubatch_without_polyester(:_batch_mf_bands!)
+end
+
 @noinline function _mf_run_bands!(::CpuThreaded, s, a, plan, nbands::Int)
+    shared = Ref((s, plan))
     @sync begin
         for b in 2:nbands
-            Threads.@spawn _mf_band_task!(s.y, s, a, plan, nbands, nbands, b)
+            Threads.@spawn _mf_spawned_band!(shared, nbands, b)
         end
-        _mf_band_task!(s.y, s, a, plan, nbands, nbands, 1)
+        _mf_band_task!(s.y, s, nothing, plan, nbands, nbands, 1)
     end
     return nothing
 end

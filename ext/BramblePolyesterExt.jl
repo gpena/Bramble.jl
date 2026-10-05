@@ -52,12 +52,12 @@
 # with 4 threads, every box is at most 512 B.
 # Differences, shifts, averages, divergence, curl, `εₕ!`, `avgₕ!` (masked and composite
 # too), broadcasts, `innerₕ`, `inner₊`, the weight build and the explicit RHS's CSR product
-# allocate 0 B, and so does a `KroneckerLinearOperator` product. Their loops capture only
-# plain arrays and isbits values, rebuilding any struct around them inside each task
-# (`_batch_kron_lines!`, `_batch_broadcast!`, `_batch_for!` below), so the box stays on the
-# stack. Linear assembly allocates 256 B; a fused matrix-free product 112 B; a bilinear
-# refill 1520 B (five colour sweeps of 304 B each); a per-unit matrix-free product 1088 B, a
-# GMG V-cycle 1008 B per level, an explicit RHS 256 B. Those loops capture a form or another
+# allocate 0 B, and so do a `KroneckerLinearOperator` product, a fused matrix-free product
+# and a GMG V-cycle. Their loops capture only plain arrays and isbits values, rebuilding any
+# struct around them inside each task (`_batch_kron_lines!`, `_batch_broadcast!`,
+# `_batch_for!`, `_batch_mf_bands!` below), so the box stays on the stack. Linear assembly
+# allocates 256 B; a bilinear refill 1520 B (five colour sweeps of 304 B each); a per-unit
+# matrix-free product 1088 B, an explicit RHS 256 B. Those loops capture a form or another
 # struct holding a GC reference, which puts the box on the heap; this release keeps the
 # 512 B bound for them and gpena/Bramble.jl#437 follows up. An `avgₕ!` whose source closure
 # captures an array, and a broadcast with a 0-dimensional array leaf, box likewise. The test
@@ -73,7 +73,8 @@ using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
                _kron_line_terms!, _kron_host_raw, _kron_host_rebuild, _bc_host_raw,
                _bc_host_rebuild, _AvgKernel, _AvgScatterKernel, _MaskedKernel, __prod,
                ReplaySink, _PairReplaySink, _DiagonalReplayTarget, ActionSink,
-               _PairActionSink, _batch_split, _batch_rebuild
+               _PairActionSink, _batch_split, _batch_rebuild, _MFFusedPlan, _MFPass,
+               _MF_BAND, _MF_NO_COLLECT, _mf_apply_parts!, _mf_host_ast
 using Polyester: Polyester, @batch
 using LinearAlgebra: mul!
 using PrecompileTools: @setup_workload, @compile_workload
@@ -507,6 +508,36 @@ end
 function Bramble._batch_run_bands!(f::F, nbands::Int, out::AbstractVector, rest::Vararg{Any, N}) where {F, N}
     @batch for b in 1:nbands
         f(out, rest..., nbands, b)
+    end
+    return nothing
+end
+
+# --- _batch_mf_bands! (src/assembly/matrix_free.jl) -------------------- #
+#
+# `CpuPolyester`'s fused matrix-free sweep runs one band per `@batch` task, each walking
+# every unit over its band, as `_mf_band_task!` does. No plan, form or sink crosses whole,
+# since each holds GC references (the spaces' meshes, the form's mutable cache), which put
+# the argument box on the heap. `y` and `x` cross as top-level loop arguments, as the replay
+# hooks' do (`_replay_parts`), the plan's band cut as its isbits fields, and the sink's `α`
+# and mask with the form's walked parts and the plan's geometry as one `_batch_split`. Each
+# task rebuilds them and walks `_mf_apply_parts!`. The form's regions are bound on the host
+# (`_mf_host_ast`), because a `Symbol` region would not split and the task's rebuilt walk
+# state has no label table to bind it against. The rebuilt geometry still names its mesh by
+# the walk state's `uid` and version, so it answers the rebuilt space (`_mf_evaluator`). A
+# single-iteration `@batch` runs its body inline on the plain `Vector`s, which the rebuild
+# accepts as well. The caller (`_mf_product!`) has checked on the host that the plan is the
+# product's form's.
+function Bramble._batch_mf_bands!(s::ActionSink, plan::_MFFusedPlan{D}, nbands::Int) where {D}
+    a = plan.form
+    y, x = s.y, s.x
+    skel, arrays = _batch_split(
+        ((s.α, s.mask), a.trial_space, a.test_space, _mf_host_ast(a), plan.geom))
+    len, omin, omax = plan.dims[D], plan.omin, plan.omax
+    @batch for b in 1:nbands
+        (α, mask), Wu, Wv, ast, geom = _batch_rebuild(skel, arrays)
+        own = _band_range(1:len, nbands, b)
+        _mf_apply_parts!(_MFPass(_MF_BAND, own, omin, omax, _MF_NO_COLLECT),
+            ActionSink(y, x, α, mask, geom), Wu, Wv, ast)
     end
     return nothing
 end

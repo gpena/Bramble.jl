@@ -82,7 +82,7 @@ const _PA_ZERO_PATHS = (
 
 # BEGIN _pa paths
 using Bramble: CpuPolyester, CpuSerial, CpuThreaded, change_points!, semidiscretize_rhs,
-               allocate_system_matrix, D₋ₓ, inner₊ₓ, S₊ₓ!
+               allocate_system_matrix, D₋ₓ, inner₊ₓ, S₊ₓ!, restrict_to
 using LinearAlgebra: Diagonal, mul!, ldiv!
 using Random: Xoshiro, randn
 using SparseArrays: nonzeros, spdiagm
@@ -358,6 +358,15 @@ function _pa_paths()
         y0 = randn(Xoshiro(11), size(op, 1))
         y = similar(y0)
         _pa_case(() -> (copyto!(y, y0); mul!(y, op, x, 2.5, 0.7)), () -> copy(y))
+    end))
+    push!(P, ("matrix-free fused restricted", false, 0, (n, p) -> begin
+        W = _pa_space(n, p)
+        op = matrix_free_operator(form(W, W, (u, v) -> innerₕ(u, v) +
+                                                         inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                                         innerₕ(u, restrict_to(:dir, v))))
+        x = randn(Xoshiro(12), size(op, 2))
+        y = similar(x)
+        _pa_case(() -> mul!(y, op, x), () -> copy(y))
     end))
     return P
 end
@@ -1148,6 +1157,21 @@ end
     @test !iszero(A * x)
     @test isapprox(op * x, A * x; rtol = 1e-12, atol = 1e-12 * maximum(abs, A * x))
     @test isapprox(op * x, assemble(form(Vb, Vb, f); dirichlet = :boundary) * x; rtol = 1e-12)
+end
+
+# A region written as an id (`restrict_to(1, u)`) is refused by the walk's bind on every
+# route. The fused bands bind on the host and let only the regions they bound skip the
+# in-task bind, so a user's id must not read marker column 1 there either.
+@testset "integer region throws on every policy" begin
+    X = interval(0.0, 1.0) × interval(0.0, 1.0)
+    W = gridspace(mesh(domain(X, :dir => boundary_symbols(X)), (13, 11), (true, true)))
+    a = form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(restrict_to(1, u), v))
+    x = ones(ndofs(W))
+    for policy in (CpuSerial(), CpuThreaded(), CpuPolyester())
+        op = matrix_free_operator(a; policy)
+        @test (op.plan === nothing) == (policy isa CpuSerial)
+        @test_throws MethodError op * x
+    end
 end
 
 # Mixed leaf policies, CpuThreaded beside CpuPolyester (the Threaded + Serial case
