@@ -85,16 +85,17 @@ function MeshnD(
 end
 
 """
-    MeshnDState{D, BT, CI, SM, T} <: AbstractMeshType{D}
+    MeshnDState{D, BT, CI, SM, T, WT} <: AbstractMeshType{D}
 
 The immutable walk state of a [`MeshnD`](@ref) (gpena/Bramble.jl#437), built on demand by
 [`_walk_mesh`](@ref): the set, parent indices and backend, the tuple of its submeshes'
 [`Mesh1DState`](@ref)s, its marker word matrix, its version (the sum of the submeshes') and
 its identity. Plain arrays and isbits values only. It answers every geometric accessor a
-`MeshnD` does, through its submesh states.
+`MeshnD` does, through its submesh states. The word matrix's type `WT` is a parameter so a
+rebuilt state can hold another array type ([`_batch_rebuild`](@ref)).
 """
-struct MeshnDState{D, BT <: Backend, CI <: CartesianIndices{D}, SM <: Tuple, T} <:
-       AbstractMeshType{D}
+struct MeshnDState{D, BT <: Backend, CI <: CartesianIndices{D}, SM <: Tuple, T,
+    WT <: AbstractMatrix{UInt64}} <: AbstractMeshType{D}
     "the D-dimensional CartesianProduct (hyperrectangle) defining the geometric domain."
     set::CartesianProduct{D, T}
     "the `CartesianIndices` for the full D-dimensional grid."
@@ -104,7 +105,7 @@ struct MeshnDState{D, BT <: Backend, CI <: CartesianIndices{D}, SM <: Tuple, T} 
     "the tuple of the submeshes' `Mesh1DState`s."
     submeshes::SM
     "the marker bits, one column of `BitVector` chunks per label (`_marker_id`)."
-    words::Matrix{UInt64}
+    words::WT
     "the mesh version when this state was built: the sum of the submeshes'."
     version::Int
     "the identity of the `MeshnD` this state was built from."

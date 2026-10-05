@@ -1,5 +1,5 @@
 """
-    Mesh1DState{BT, CI, VT, T} <: AbstractMeshType{1}
+    Mesh1DState{BT, CI, VT, T, WT} <: AbstractMeshType{1}
 
 The immutable state of a [`Mesh1D`](@ref): its geometry, version, uniformity flag and
 marker words, held as plain arrays and isbits values only (gpena/Bramble.jl#437), so it can
@@ -27,11 +27,13 @@ only its `version` tells it is stale. The marker `Dict` stays on the `Mesh1D`
     [`_mesh_version`](@ref).
   - `uniform`: the default-tolerance [`is_uniform`](@ref) answer for these points,
     computed whenever the points change (gpena/Bramble.jl#332).
-  - `words`: `Matrix{UInt64}`, one column of `BitVector` chunks per marker label.
+  - `words`: one column of `BitVector` chunks per marker label, a `Matrix{UInt64}` on a
+    mesh; its type `WT` is a parameter so a rebuilt state can hold another array type
+    ([`_batch_rebuild`](@ref)).
   - `uid`: an identity unique to the owning mesh, kept across its mutations.
 """
-struct Mesh1DState{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVector, T} <:
-       AbstractMeshType{1}
+struct Mesh1DState{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVector, T,
+    WT <: AbstractMatrix{UInt64}} <: AbstractMeshType{1}
     "the geometric domain, a 1D CartesianProduct (interval), over which the mesh is defined."
     set::CartesianProduct{1, T}
     "the `CartesianIndices` of the grid, for array-like iteration and indexing over the points."
@@ -53,7 +55,7 @@ struct Mesh1DState{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVecto
     "the default-tolerance `is_uniform` answer for these points."
     uniform::Bool
     "the marker bits, one column of `BitVector` chunks per label (`_marker_id`)."
-    words::Matrix{UInt64}
+    words::WT
     "an identity unique to the owning mesh, kept across its mutations."
     uid::UInt64
 end
@@ -85,7 +87,7 @@ mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVe
     "the column of each marker label in the state's word matrix."
     marker_ids::Dict{Symbol, Int}
     "the immutable geometry, version, uniformity flag and marker words."
-    state::Mesh1DState{BT, CI, VT, T}
+    state::Mesh1DState{BT, CI, VT, T, Matrix{UInt64}}
 end
 
 # The mesh over `s` with `markers`, the label table and the state's words built together.
