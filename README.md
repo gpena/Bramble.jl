@@ -138,6 +138,23 @@ Documentation, tutorials, and the API reference are available at [https://gpena.
 
 ---
 
+## Coding with Claude
+
+The repository ships a [Claude Code](https://code.claude.com) plugin that teaches Claude the
+public API, the rules that keep finite-difference code correct and fast, and a set of worked,
+checked examples (linear and nonlinear Poisson, convection-diffusion, heat, wave,
+elasticity, coupled systems, point sources). In Claude Code:
+
+```text
+/plugin marketplace add gpena/Bramble.jl
+/plugin install bramble@bramble
+```
+
+Claude then uses it whenever your code calls Bramble. The plugin's version follows the
+package's; update it with `/plugin marketplace update bramble` after upgrading Bramble.
+
+---
+
 ## Mathematical foundations
 
 `Bramble.jl` implements discrete operators and inner products that reflect the supraconvergence theory developed in:

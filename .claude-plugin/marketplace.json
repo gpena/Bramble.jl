@@ -1,0 +1,12 @@
+{
+  "name": "bramble",
+  "owner": { "name": "Gonçalo Pena" },
+  "description": "Claude Code plugins for Bramble.jl.",
+  "plugins": [
+    {
+      "name": "bramble",
+      "source": "./plugins/bramble",
+      "description": "Write correct Bramble.jl code: API by task, rules and checked examples."
+    }
+  ]
+}
