@@ -16,8 +16,9 @@ The matrix-free sink: an entry `(row, col, weight)` of the form's stencil adds
 
 `mask` is `nothing` for a form with no Dirichlet rows, or a `BitVector` over the rows whose
 set entries are skipped: those rows are identity rows, written after the walk (the
-[`dirichlet_bc!`](@ref) contract). `geom` is the operator's cached per-axis geometry
-(`_MFGeometry`), or `nothing`; only the gathered interior reads it.
+[`dirichlet_bc!`](@ref) contract). The sink keeps the `BitVector`'s chunk words
+(`_MFMask`). `geom` is the operator's cached per-axis geometry (`_MFGeometry`), or
+`nothing`; only the gathered interior reads it.
 """
 struct ActionSink{Y <: AbstractVector, X <: AbstractVector, S, M, G}
     y::Y
@@ -27,10 +28,24 @@ struct ActionSink{Y <: AbstractVector, X <: AbstractVector, S, M, G}
     geom::G
 end
 ActionSink(y::AbstractVector, x::AbstractVector, α, mask) = ActionSink(y, x, α, mask, nothing)
+function ActionSink(y::AbstractVector, x::AbstractVector, α, mask::BitVector, geom)
+    return ActionSink(y, x, α, _MFMask(mask.chunks), geom)
+end
 
-# Whether row `row` takes stencil entries: always without a mask, off Γ_D with one.
+# A Dirichlet row mask as the sinks hold it: a `BitVector`'s 64-bit words, with no
+# `BitArray` left for a task that rebuilds the sink to wrap again. No length: every row the
+# walk tests lies in the matrix, and one field keeps a task's sink copy as small as before.
+struct _MFMask{C <: AbstractVector{UInt64}}
+    chunks::C
+end
+
+# Whether row `row` takes stencil entries: always without a mask, off Γ_D with one. Bit
+# `row` of the mask is bit `(row - 1) & 63` of word `(row - 1) >> 6 + 1`, as in `BitVector`.
 @inline _mf_live(::Nothing, ::Int) = true
-@inline _mf_live(mask::BitVector, row::Int) = !@inbounds(mask[row])
+@inline function _mf_live(mask::_MFMask, row::Int)
+    word = @inbounds mask.chunks[((row - 1) >> 6) + 1]
+    return iszero((word >> ((row - 1) & 63)) & 0x1)
+end
 
 # `row` and `col` land inside the matrix (the walk's guard), and `mul!` checked `y` and `x`
 # against the matrix's size, so both reads are in bounds.
@@ -897,17 +912,19 @@ end
 # the shell too: the shell's 9% of the points had cost 0.19 ms of each `D₋` unit's 0.45.
 
 """
-    _MFGeometry{D, T, M}
+    _MFGeometry{D, S}
 
-The per-axis geometry of a scalar form's mesh `mesh`, cached when a
-[`MatrixFreeOperator`](@ref) is built: `scaled[d][i]` is the space's aligned weight factor
-along `d` over the squared spacing `h_d(i)²` (zero at `i = 1`, where `D₋` has no stencil),
-valid while `_mesh_version(mesh) == version`.
+The per-axis geometry of a scalar form's mesh, cached when a [`MatrixFreeOperator`](@ref) is
+built: `scaled[d][i]` is the space's aligned weight factor along `d` over the squared spacing
+`h_d(i)²` (zero at `i = 1`, where `D₋` has no stencil). It names its mesh by the walk
+state's `uid` (`_walk_mesh`) and is valid while that mesh's version is `version`. Both are
+plain integers, so a space rebuilt around a copy of the same state (as a `Polyester.@batch`
+task does) still matches, where `===` on the rebuilt mesh would not.
 """
-struct _MFGeometry{D, T, M}
-    mesh::M
+struct _MFGeometry{D, S <: NTuple{D, AbstractVector}}
+    uid::UInt64
     version::Int
-    scaled::NTuple{D, Vector{T}}
+    scaled::S
 end
 
 # The geometry of `a`'s mesh, or `nothing`: only a scalar form with a term the cache answers,
@@ -921,7 +938,8 @@ function _mf_geometry(a::BilinearForm, Wu::ScalarGridSpace, Wv::ScalarGridSpace)
     m = mesh(sp)
     (m === mesh(host_weights(Wv)) && sp.weights.built_version == _mesh_version(m)) ||
         return nothing
-    return _MFGeometry(m, _mesh_version(m), _mf_scaled(m, sp.weights.aligned))
+    scaled = _mf_scaled(m, sp.weights.aligned)
+    return _MFGeometry(_walk_mesh(m).uid, _mesh_version(m), scaled)
 end
 
 # `aligned[d][i] / h_d(i)²` per axis `d`, zero at `i = 1`; `h_d(i)` is read at the point
@@ -956,13 +974,13 @@ _mf_reads_geometry(::_MFSeparableTerm) = true
 _mf_reads_geometry(_) = false
 
 # How the gather evaluates `term`'s weights: `nothing` live, or from the cached geometry
-# when `geom` is the walked mesh's at its current version.
+# when `geom` is the walked mesh's (same uid) at its current version.
 @inline _mf_evaluator(_, _, _) = nothing
 @inline function _mf_evaluator(
         geom::_MFGeometry{D}, ::_MFSeparableTerm{D, Dim}, sp
 ) where {D, Dim}
-    m = mesh(sp)
-    (m === geom.mesh && geom.version == _mesh_version(m) &&
+    w = _walk_mesh(mesh(sp))
+    (w.uid == geom.uid && geom.version == _mesh_version(w) &&
      sp.weights.built_version == geom.version) || return nothing
     cf = sp.weights.cellfactor
     return _MFSeparable{Dim, D, typeof(geom.scaled[Dim]), typeof(cf)}(geom.scaled[Dim], cf)

@@ -467,6 +467,40 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         @test _mf_agree(matrix_free_operator(a; dirichlet = :boundary => 1.0) * x, op * x)
     end
 
+    # The sinks hold the Dirichlet mask as `BitVector` chunk words, and the cached geometry
+    # names its mesh by the walk state's uid and version: a space rebuilt around a copy of
+    # the state (as an in-task rebuild does) hits, a copied or other mesh, or a moved one,
+    # misses. A 70-point axis puts mask bits past the first 64-bit word.
+    @testset "sink mask words, geometry identity" begin
+        W = _mf_graded_space((70, 5))
+        a = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        op = _mf_op(a, :boundary)
+        bm = Bramble.index_in_marker(mesh(W), :boundary)
+        @test 0 < count(bm) < length(bm) && length(bm) > 64
+        n = length(bm)
+        s = Bramble.ActionSink(zeros(n), zeros(n), 1.0, Bramble._mf_mask(op))
+        @test s.mask isa Bramble._MFMask{Vector{UInt64}}
+        ps = Bramble._pair_action_sink(s, 1.0, 1.0, 0, 0, 0)
+        live(m, r) = Bramble._mf_live(m, r)
+        @test all(r -> live(s.mask, r) == live(ps.mask, r) == !bm[r], 1:n)
+        @test op.geom isa Bramble._MFGeometry
+        @test op.geom.uid == Bramble._walk_mesh(mesh(W)).uid
+        term = first(filter(t -> t isa Bramble._MFSeparableTerm, Bramble._summands(a.ast)))
+        sp = Bramble.host_weights(W)
+        st = deepcopy(Bramble._walk_mesh(mesh(sp)))
+        rebuilt = Bramble.ScalarGridSpace(st, deepcopy(sp.weights))
+        @test Bramble._mf_evaluator(op.geom, term, sp) !== nothing
+        @test Bramble._mf_evaluator(op.geom, term, rebuilt) !== nothing
+        @test Bramble._mf_evaluator(op.geom, term, deepcopy(sp)) === nothing
+        other = Bramble.host_weights(_mf_graded_space((70, 5)))
+        @test Bramble._mf_evaluator(op.geom, term, other) === nothing
+        x = randn(n)
+        @test _mf_agree(op * x, _mf_mat(a, :boundary) * x)
+        moved = (range(0.0, 1.0; length = 70) .^ 1.1, range(0.0, 1.0; length = 5))
+        Bramble.change_points!(mesh(W), moved)
+        @test Bramble._mf_evaluator(op.geom, term, Bramble.host_weights(W)) === nothing
+    end
+
     # More test rows than trial columns: a row in Γ_D past the last column has no diagonal,
     # so the assembled matrix leaves it zero and `x` must not be read there. `x` is a view
     # into a longer buffer, so an out-of-range read would pick up the `1e6` past its end.
