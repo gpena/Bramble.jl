@@ -86,6 +86,9 @@ end
 Dictionary mapping semantic marker symbols to boolean indicator vectors across mesh points.
 
 For each label, a `BitVector` indicates whether the corresponding mesh point satisfies the marker.
+
+The dictionary [`markers`](@ref)`(Ωₕ)` returns is a read-only view; see there for how to
+change labels.
 """
 const MeshMarkers = Dict{Symbol, BitVector}
 

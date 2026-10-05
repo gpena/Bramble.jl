@@ -146,8 +146,8 @@ function jacobian_pattern(
     _check_block_meshes(ast, form.trial_space, form.test_space)
     space = _walked_leaf(ast, form.trial_space, form.test_space)
     Ωₕ = mesh(space)
-    mesh_markers = markers(Ωₕ)
-    _validate_term_markers(ast, mesh_markers, "the form's space")
+    _validate_term_markers(ast, markers(Ωₕ), "the form's space")
+    bound, mesh_markers = _bind_walk(ast, Ωₕ)
     lin_indices = LinearIndices(indices(Ωₕ))
 
     nodes = _dependency_nodes(coefficient_dependencies, TrialFunction{D}())
@@ -159,12 +159,12 @@ function jacobian_pattern(
 
     I_vec = Int[]
     J_vec = Int[]
-    hint = _pattern_size_hint(ast, space, mesh_markers, lin_indices) *
+    hint = _pattern_size_hint(bound, space, mesh_markers, lin_indices) *
            (1 + length(coeff_offsets))
     sizehint!(I_vec, hint)
     sizehint!(J_vec, hint)
     _scalar_jacobian_walk!(
-        I_vec, J_vec, ast, space, mesh_markers, lin_indices, coeff_offsets, point_deps
+        I_vec, J_vec, bound, space, mesh_markers, lin_indices, coeff_offsets, point_deps
     )
 
     n = ndofs(form.test_space)
@@ -382,8 +382,8 @@ function _pattern_term_jacobian!(
 ) where {TERM, D}
     sp = _walked_leaf(term, trial_leaf, test_leaf)
     Ωₕ = mesh(sp)
-    mesh_markers = markers(Ωₕ)
-    _validate_term_markers(term, mesh_markers, "one of the composite space's leaves")
+    _validate_term_markers(term, markers(Ωₕ), "one of the composite space's leaves")
+    bound, mesh_markers = _bind_walk(term, Ωₕ)
     lin_indices = LinearIndices(indices(Ωₕ))
     dep_ops, point_nodes = deps
 
@@ -401,7 +401,7 @@ function _pattern_term_jacobian!(
     end
 
     @inbounds for I in indices(Ωₕ)
-        stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
+        stencil = local_stencil(bound, sp, I, mesh_markers, lin_indices[I])
 
         for k in eachindex(stencil)
             off_u, off_v, _ = stencil[k]

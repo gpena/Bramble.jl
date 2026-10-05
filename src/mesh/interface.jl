@@ -86,6 +86,10 @@ Return the [`ExecutionPolicy`](@ref) ([`Serial`](@ref) or [`Parallel`](@ref)) of
     markers(Ωₕ::AbstractMeshType) -> MeshMarkers
 
 Return the [`MeshMarkers`](@ref) dictionary associated with mesh `Ωₕ`.
+
+The dictionary and its `BitVector`s are read-only views of the mesh's labels. Change labels
+with `markers!` or `set_markers!`, which rebuild the marker state assembly reads; an edit
+made in place is not seen by assembly.
 """
 @inline markers(Ωₕ::AbstractMeshType) = Ωₕ.markers
 
@@ -97,6 +101,10 @@ Return the `BitVector` indicator associated with marker `label` in mesh `Ωₕ`.
 If `label` is not directly found in the mesh markers, its coordinate-aligned
 or viewpoint boundary alias (e.g. `:xmin` ↔ `:left` in 2D, `:xmin` ↔ `:back` in 3D) is
 consulted if available.
+
+The `BitVector` is a read-only view of the mesh's labels. Change labels with `markers!` or
+`set_markers!`, which rebuild the marker state assembly reads; an edit made in place is not
+seen by assembly.
 """
 @inline function index_in_marker(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
     m = markers(Ωₕ)

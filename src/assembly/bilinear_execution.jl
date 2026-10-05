@@ -1089,11 +1089,11 @@ function _sweep_bilinear_serial!(
     Ωₕ = mesh(sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
-    mesh_markers = markers(Ωₕ)
+    bound, mesh_markers = _bind_walk(term, Ωₕ)
 
     @inbounds for I in grid_inds
         _sweep_point!(
-            A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
+            A, bound, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
         )
     end
     return nothing
@@ -1112,7 +1112,7 @@ function _sweep_bilinear!(
     Ωₕ = mesh(sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
-    mesh_markers = markers(Ωₕ)
+    bound, mesh_markers = _bind_walk(term, Ωₕ)
     policy = _effective_parallel_policy(sp)
 
     # Bands first: a colour is then a slab of whole rows, walked contiguously, and there
@@ -1136,7 +1136,7 @@ function _sweep_bilinear!(
                 policy,
                 A,
                 sp,
-                term,
+                bound,
                 ax,
                 bidx,
                 nbands,
@@ -1155,7 +1155,7 @@ function _sweep_bilinear!(
     # colouring has no width requirement.
     if prod(strides) == 1
         _sweep_bilinear_colour!(
-            policy, A, sp, term, grid_inds, lin_indices, mesh_markers, row_offset, col_offset, α
+            policy, A, sp, bound, grid_inds, lin_indices, mesh_markers, row_offset, col_offset, α
         )
         return A
     end
@@ -1165,7 +1165,7 @@ function _sweep_bilinear!(
             policy,
             A,
             sp,
-            term,
+            bound,
             _colour_subgrid(grid_inds, c, strides),
             lin_indices,
             mesh_markers,

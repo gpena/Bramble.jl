@@ -849,7 +849,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
         col_offset::Int
 ) where {SINK1, SINK2, TERM}
     Ωₕ = mesh(sp)
-    mesh_markers = markers(Ωₕ)
+    bound, mesh_markers = _bind_walk(term, Ωₕ)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     margin = _stencil_margin(term)
@@ -864,7 +864,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
         interior = CartesianIndices(map(r -> _interior_range(r, margin), ax))
         _visit_interior!(
             interior_sink,
-            term,
+            bound,
             sp,
             mesh_markers,
             lin_indices,
@@ -875,7 +875,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
         @inbounds for slab in _boundary_shell_slabs(ax, margin)
             _visit_guarded_region!(
                 boundary_sink,
-                term,
+                bound,
                 sp,
                 mesh_markers,
                 lin_indices,
@@ -887,7 +887,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
     else
         _visit_guarded_region!(
             boundary_sink,
-            term,
+            bound,
             sp,
             mesh_markers,
             lin_indices,

@@ -33,6 +33,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("skew.jl")
     include("symmetry.jl")
     include("markers.jl")
+    # Restricted terms bound to marker ids, the walk reading word bits (#437).
+    include("marker_ids.jl")
     include("extended_operators.jl")
     include("symmetrize.jl")
     TestUtils.WITH_AD_TESTS && include("autodiff.jl")

@@ -683,11 +683,11 @@ end
 # `visit_bilinear_stencil`'s boundary shell alone.
 @noinline function _mf_scatter_shell!(s::SINK, term::TERM, sp, ro::Int, co::Int) where {SINK, TERM}
     Ωₕ = mesh(sp)
-    mesh_markers = markers(Ωₕ)
+    bound, mesh_markers = _bind_walk(term, Ωₕ)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     @inbounds for slab in _boundary_shell_slabs(axes(grid_inds), _stencil_margin(term))
-        _visit_guarded_region!(s, term, sp, mesh_markers, lin_indices, slab, ro, co)
+        _visit_guarded_region!(s, bound, sp, mesh_markers, lin_indices, slab, ro, co)
     end
     return nothing
 end
@@ -721,7 +721,7 @@ end
         y, x, α, mask, geom, term::TERM, sp, rs::Int, cs::Int, tr::Val, cut::UnitRange{Int}
 ) where {TERM}
     Ωₕ = mesh(sp)
-    mesh_markers = markers(Ωₕ)
+    bound, mesh_markers = _bind_walk(term, Ωₕ)
     grid_inds = indices(Ωₕ)
     lin = LinearIndices(grid_inds)
     margin = _stencil_margin(term)
@@ -732,19 +732,19 @@ end
         box = CartesianIndices(map(r -> _interior_range(r, margin), ax))
         isempty(box) && return nothing
         I0 = first(box)
-        offs = entry_offsets(local_stencil(term, sp, I0, mesh_markers, lin[I0]))
+        offs = entry_offsets(local_stencil(bound, sp, I0, mesh_markers, lin[I0]))
         inner = map(r -> _interior_range(r, 2 * margin), ax)
         _mf_gather_rows!(
-            (y, x, α, mask, term, sp, mesh_markers, lin, offs, rs, cs, tr, nothing), box,
+            (y, x, α, mask, bound, sp, mesh_markers, lin, offs, rs, cs, tr, nothing), box,
             rows, inner)
     else
         box = _mf_whole_box(ev, ax)
         isempty(box) && return nothing
         I0 = first(box)
-        offs = entry_offsets(local_stencil(term, sp, I0, mesh_markers, lin[I0]))
+        offs = entry_offsets(local_stencil(bound, sp, I0, mesh_markers, lin[I0]))
         inner = _mf_unguarded_rows(box, offs, tr)
         _mf_gather_rows!(
-            (y, x, α, mask, term, sp, mesh_markers, lin, offs, rs, cs, tr, ev), box, rows,
+            (y, x, α, mask, bound, sp, mesh_markers, lin, offs, rs, cs, tr, ev), box, rows,
             inner)
     end
     return nothing
@@ -1293,7 +1293,7 @@ end
         core::UnitRange{Int}, hi::UnitRange{Int}
 ) where {SINK, OWNED, TERM}
     Ωₕ = mesh(sp)
-    mesh_markers = markers(Ωₕ)
+    bound, mesh_markers = _bind_walk(term, Ωₕ)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     margin = _stencil_margin(term)
@@ -1301,15 +1301,15 @@ end
     if _peelable(ax, margin)
         interior = map(r -> _interior_range(r, margin), ax)
         front, r = Base.front(interior), last(interior)
-        _mf_piece!(owned, term, sp, mesh_markers, lin_indices, front, r, lo, ro, co, true)
-        _mf_piece!(s, term, sp, mesh_markers, lin_indices, front, r, core, ro, co, true)
-        _mf_piece!(owned, term, sp, mesh_markers, lin_indices, front, r, hi, ro, co, true)
+        _mf_piece!(owned, bound, sp, mesh_markers, lin_indices, front, r, lo, ro, co, true)
+        _mf_piece!(s, bound, sp, mesh_markers, lin_indices, front, r, core, ro, co, true)
+        _mf_piece!(owned, bound, sp, mesh_markers, lin_indices, front, r, hi, ro, co, true)
         _mf_visit_shell!(s, owned, term, sp, ro, co, lo, core, hi)
     else
         front, r = map(_full_range, Base.front(ax)), _full_range(last(ax))
-        _mf_piece!(owned, term, sp, mesh_markers, lin_indices, front, r, lo, ro, co, false)
-        _mf_piece!(s, term, sp, mesh_markers, lin_indices, front, r, core, ro, co, false)
-        _mf_piece!(owned, term, sp, mesh_markers, lin_indices, front, r, hi, ro, co, false)
+        _mf_piece!(owned, bound, sp, mesh_markers, lin_indices, front, r, lo, ro, co, false)
+        _mf_piece!(s, bound, sp, mesh_markers, lin_indices, front, r, core, ro, co, false)
+        _mf_piece!(owned, bound, sp, mesh_markers, lin_indices, front, r, hi, ro, co, false)
     end
     return nothing
 end
@@ -1320,14 +1320,14 @@ end
         core::UnitRange{Int}, hi::UnitRange{Int}
 ) where {SINK, OWNED, TERM}
     Ωₕ = mesh(sp)
-    mesh_markers = markers(Ωₕ)
+    bound, mesh_markers = _bind_walk(term, Ωₕ)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     @inbounds for shell in _boundary_shell_slabs(axes(grid_inds), _stencil_margin(term))
         front, r = Base.front(shell.indices), last(shell.indices)
-        _mf_piece!(owned, term, sp, mesh_markers, lin_indices, front, r, lo, ro, co, false)
-        _mf_piece!(s, term, sp, mesh_markers, lin_indices, front, r, core, ro, co, false)
-        _mf_piece!(owned, term, sp, mesh_markers, lin_indices, front, r, hi, ro, co, false)
+        _mf_piece!(owned, bound, sp, mesh_markers, lin_indices, front, r, lo, ro, co, false)
+        _mf_piece!(s, bound, sp, mesh_markers, lin_indices, front, r, core, ro, co, false)
+        _mf_piece!(owned, bound, sp, mesh_markers, lin_indices, front, r, hi, ro, co, false)
     end
     return nothing
 end
