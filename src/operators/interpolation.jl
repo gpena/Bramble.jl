@@ -122,6 +122,27 @@ end
 end
 @inline _validate_outside_linear(outside) = _throw_outside_domain_linear(outside)
 
+# The three named policies as an isbits value, for the nodes that store one (`GridInterpolant`,
+# `InterpolationNode`): a `Symbol` field would make those nodes non-isbits. The public keyword
+# stays a `Symbol` (or a fill `Number`); the internals above keep reading it as one, so the
+# nodes convert on the way in and back on the way out.
+@enum OutsidePolicy::UInt8 OutsideError OutsideClamp OutsideExtrapolate
+
+@inline function _outside_policy(outside::Symbol)
+    outside === :error && return OutsideError
+    outside === :clamp && return OutsideClamp
+    outside === :extrapolate && return OutsideExtrapolate
+    return _throw_invalid_outside(outside)
+end
+@inline _outside_policy(outside::Number) = outside
+
+@inline function _outside_symbol(policy::OutsidePolicy)
+    policy === OutsideError && return :error
+    policy === OutsideClamp && return :clamp
+    return :extrapolate
+end
+@inline _outside_symbol(outside::Number) = outside
+
 # One coordinate against one axis's domain `[lo, hi]`, already known not to need the
 # fill-value short-circuit (that is decided one layer up, in `_interp_cell_frac`, before
 # any axis is visited, so this only ever sees the three symbols). A near-boundary point is
@@ -579,13 +600,14 @@ throws an `ArgumentError` once `uₕ`'s mesh has moved (see [`interpolate_at`](@
 """
 function πₕ(uₕ::VectorElement{<:ScalarGridSpace{D}}; outside = :error) where {D}
     _validate_outside(outside)
-    return source_function(GridInterpolant(uₕ, outside), Val(D))
+    return source_function(GridInterpolant(uₕ, _outside_policy(outside)), Val(D))
 end
 
 # The function inside `πₕ(uₕ)`'s `SourceFunction`: a named callable rather than a closure,
 # so `form` can tell it apart from a plain function source and leave it unsampled
 # (`_lower_sources` below). Its type depends on `uₕ`'s and `outside`'s types only, as the
-# closure's did, so a new `πₕ(uₕ)` recompiles nothing.
+# closure's did, so a new `πₕ(uₕ)` recompiles nothing. `outside` is an `OutsidePolicy` or a
+# fill `Number`, never a `Symbol`, so the callable is isbits apart from `uₕ`.
 struct GridInterpolant{E <: VectorElement, O} <: Function
     uₕ::E
     outside::O
@@ -596,7 +618,7 @@ end
 # call return a `Union`, evaluated at every point of every fill, which allocates there.
 @inline function (f::GridInterpolant)(x)
     R = _interpolant_type(f, eltype(x))
-    return convert(R, interpolate_at(f.uₕ, x; outside = f.outside))::R
+    return convert(R, interpolate_at(f.uₕ, x; outside = _outside_symbol(f.outside)))::R
 end
 
 # The blend is `eltype(uₕ)` weighted by fractions of `x` against `uₕ`'s mesh; a `Number`
@@ -605,7 +627,7 @@ end
 @inline _interpolant_type(f::GridInterpolant, ::Type{X}) where {X} = promote_type(
     eltype(f.uₕ), float(promote_type(X, eltype(space(f.uₕ)))), _fill_type(f.outside))
 @inline _fill_type(outside::Number) = typeof(outside)
-@inline _fill_type(::Symbol) = Union{}
+@inline _fill_type(::OutsidePolicy) = Union{}
 
 # Read at every fill instead of sampled once into a `SourceVector`:
 # sampling would keep `uₕ`'s old values after `uₕ .= ...`, and never see its mesh move.
@@ -651,15 +673,17 @@ Distinct from the source wrapper `πₕ(uₕ)`, which carries a grid function's 
 carries no values; it carries the map, and its stencil names degrees of freedom of the space
 it interpolates from.
 
-`outside` is one of `:error`, `:clamp` or `:extrapolate` -- never a
-fill value, since this node's stencil is a *linear* map (weighted trial columns), and a
-constant independent of the trial unknowns cannot be written that way; see
-[`interpolation_matrix`](@ref)'s docstring for the same restriction.
+`outside` is one of `:error`, `:clamp` or `:extrapolate` -- never a fill value -- and is
+stored as an isbits `OutsidePolicy` enum rather than the `Symbol` given to `πₕ`, so the
+node holds no `Symbol`. A fill value is refused since this node's stencil is a *linear* map
+(weighted trial columns), and a constant independent of the trial unknowns cannot be
+written that way; see [`interpolation_matrix`](@ref)'s docstring for the same
+restriction.
 """
 struct InterpolationNode{D, S, OpType <: LazyOp{D}, Side} <: LazyOp{D}
     src_space::S
     inner_op::OpType
-    outside::Symbol
+    outside::OutsidePolicy
 end
 
 """
@@ -743,7 +767,7 @@ function πₕ(op::LazyOp{D}; outside = :error) where {D}
     _is_interp_leaf(op) || _throw_interp_inner(op)
     _validate_outside_linear(outside)
     return InterpolationNode{D, Nothing, typeof(op), _interp_side_of(op)}(
-        nothing, op, outside
+        nothing, op, _outside_policy(outside)
     )
 end
 
@@ -757,7 +781,8 @@ end
         lin_idx::Int
 ) where {D, S, OpType, Side}
     return _interp_stencil(
-        mesh(op.src_space), point(mesh(space), I), Val(D), op.outside, _interp_slot(Side)
+        mesh(op.src_space), point(mesh(space), I), Val(D), _outside_symbol(op.outside),
+        _interp_slot(Side)
     )
 end
 
