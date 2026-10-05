@@ -7,10 +7,14 @@
 # `gridspace`: both are on hot internal paths and must stay measurement-free.
 #
 # Extension point, for a device extension (the Metal one adds a `GpuKernel` row):
-#   - `_profile_time(policy, n)`: seconds for the best of three sweeps over `n` points,
-#     after one warm run. The host method serves every `CpuPolicy`; a device extension
-#     adds a method for its own policy type that allocates the device vector, runs the
-#     sweep through `_sweep_for!` and synchronises before reading the clock.
+#   - `_profile_eltype(policy)`: the widest element type the policy can sweep, `Float64`
+#     by default. Every row is timed on the declared type of smallest `sizeof`, so the
+#     rows compare (`Float32` for all of them once the Metal row is present).
+#   - `_profile_time(policy, T, n)`: seconds for the best of three sweeps over `n` points
+#     of a vector of `T`, after one warm run. The host method serves every `CpuPolicy`; a
+#     device extension adds a method for its own policy type that allocates the device
+#     vector, runs the sweep through `_sweep_for!` and synchronises before reading the
+#     clock.
 #   - `_profile_label(policy)`: the row label, e.g. `"Parallel()"`.
 #   - `_profile_spelling(policy)`: the expression to type to get that policy.
 #   - `_profile_available(policy)`: whether `_profile_candidates` lists the policy. `false`
@@ -40,18 +44,26 @@ const _PROFILE_SPEEDUP = 1.2
 const _PROFILE_SIZES = 2 .^ (10:2:22)
 
 """
-    _profile_time(policy::ExecutionPolicy, n::Integer) -> Float64
+    _profile_eltype(policy::ExecutionPolicy) -> Type{<:AbstractFloat}
 
-Seconds taken by the fastest of three sweeps of `_ProfileKernel` over `1:n` of a
-`Vector{Float64}` under `policy`, after one warm run that compiles and faults the pages in.
+The widest element type `policy` can sweep. `Float64` unless a device extension says
+otherwise; `profile_backends` times every row on the narrowest of the declared types.
+"""
+_profile_eltype(::ExecutionPolicy) = Float64
+
+"""
+    _profile_time(policy::ExecutionPolicy, ::Type{T}, n::Integer) -> Float64
+
+Seconds taken by the fastest of three sweeps of `_ProfileKernel{T}` over `1:n` of a
+`Vector{T}` under `policy`, after one warm run that compiles and faults the pages in.
 The vector is allocated inside the call, so the timed region holds the sweep alone.
 
 Device extensions add a method for their own policy type; see the note at the top of
 `src/utils/backend_profile.jl`.
 """
-function _profile_time(policy::CpuPolicy, n::Integer)
-    v = Vector{Float64}(undef, n)
-    k = _ProfileKernel(1.0, 0.5)
+function _profile_time(policy::CpuPolicy, ::Type{T}, n::Integer) where {T <: AbstractFloat}
+    v = Vector{T}(undef, n)
+    k = _ProfileKernel(T(1), T(0.5))
     idxs = 1:n
     _sweep_for!(policy, v, idxs, k)
     best = typemax(UInt64)
@@ -89,12 +101,14 @@ Result of `profile_backends`: plain data, printed as a
 table.
 
 # Fields
+- `eltype::DataType`: Element type every policy was timed on.
 - `sizes::Vector{Int}`: Number of points of each sweep.
 - `labels::Vector{String}`: One label per policy; the first is the `Serial()` baseline.
 - `spellings::Vector{String}`: The expression that selects each policy.
 - `times::Matrix{Float64}`: Seconds, `times[i, j]` for `sizes[i]` under policy `j`.
 """
 struct BackendProfile
+    eltype::DataType
     sizes::Vector{Int}
     labels::Vector{String}
     spellings::Vector{String}
@@ -124,7 +138,7 @@ function show(io::IO, ::MIME"text/plain", p::BackendProfile)
     cell(t) = string(round(t * 1.0e6; sigdigits = 3))
     cols = [vcat(p.labels[j], [cell(t) for t in view(p.times, :, j)]) for j in eachindex(p.labels)]
     ncol = vcat("n", string.(p.sizes))
-    println(io, "Backend profile: one sweep kernel over n points, best of 3, ",
+    println(io, "Backend profile: one sweep kernel over n points of ", p.eltype, ", best of 3, ",
         Threads.nthreads(), " thread(s). Times in microseconds.")
     println(io)
     for r in eachindex(ncol)
@@ -159,24 +173,30 @@ end
 Time one sweep kernel under each execution policy this session can run on the host, for
 sizes `2^10, 2^12, ..., 2^22`, and report where each policy overtakes `Serial()`.
 
-Each policy sweeps a `Vector{Float64}` through the same loop the package's own weight and
-scatter builds use, with an `isbits` kernel (`i -> sqrt(i) * a + b`): one warm run, then the
-best of three runs. The candidates are `Serial()`, `Parallel()`, and `CpuPolyester()` once
+Each policy sweeps a vector through the same loop the package's own weight and scatter
+builds use, with an `isbits` kernel (`i -> sqrt(i) * a + b`): one warm run, then the best of
+three runs. The candidates are `Serial()`, `Parallel()`, and `CpuPolyester()` once
 `using Polyester` has loaded its extension. With `using Metal` on a functional device a
-`GpuKernel()` row is added, timed on `Float32` vectors (the only element type Metal offers)
-with a device synchronisation, so it is not a drop-in figure for a `Float64` problem. The
-host policies take well under a second including compilation; the first call with Metal
-also compiles the GPU kernel and takes a few seconds. It is meant to be called by hand,
-once per session, and is not run by [`backend`](@ref) or `gridspace`.
+`GpuKernel()` row is added, timed with a device synchronisation. Every row is timed on the
+same element type, so the rows compare: `Float64`, or `Float32` for all of them once the
+Metal row is present (the only element type Metal offers), in which case the figures are
+not drop-in figures for a `Float64` problem. The header of the table names the type. The
+host policies take well under a second including compilation. With Metal loaded, the first
+call is slow because it is often the session's first GPU operation, which compiles Metal's
+own code as well as the sweep kernel; loading Polyester before Metal makes that first GPU
+operation markedly slower (an upstream interaction), and loading it after Metal reduces it.
+Later calls take well under a second. It is meant to be called by hand, once per session,
+and is not run by [`backend`](@ref) or `gridspace`.
 
 The result prints as a table of times, the crossover of each policy against `Serial()`
 (the first size from which it stays at least 1.2 times faster to the end of the sweep, or
 `never`) and the `backend(policy = ...)` spelling to use. The table times one sweep kernel,
 not assembly: a policy that wins here is a good first choice, not a guarantee for your
-form. The times are plain data in the `sizes`, `labels` and `times` fields.
+form. The times are plain data in the `eltype`, `sizes`, `labels` and `times` fields.
 
 # Returns
-- `BackendProfile`: `sizes`, policy `labels`, `spellings` and the `times` matrix in seconds.
+- `BackendProfile`: `eltype`, `sizes`, policy `labels`, `spellings` and the `times` matrix
+  in seconds.
 
 # Examples
 ```julia
@@ -211,12 +231,13 @@ See also: [`backend`](@ref), [`csr_backend`](@ref), [`Parallel`](@ref).
 function profile_backends()
     policies = _profile_candidates()
     sizes = collect(_PROFILE_SIZES)
+    T = argmin(sizeof, map(_profile_eltype, policies))
     times = Matrix{Float64}(undef, length(sizes), length(policies))
     for (j, policy) in enumerate(policies), (i, n) in enumerate(sizes)
 
-        times[i, j] = _profile_time(policy, n)
+        times[i, j] = _profile_time(policy, T, n)
     end
     return BackendProfile(
-        sizes, String[_profile_label(p) for p in policies],
+        T, sizes, String[_profile_label(p) for p in policies],
         String[_profile_spelling(p) for p in policies], times)
 end

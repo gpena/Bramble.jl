@@ -73,17 +73,20 @@ end
 # profile_backends. The `GpuKernel` row
 # ---------------------------------------------------------------------------
 #
-# The seam is documented at the top of `src/utils/backend_profile.jl`. The row is timed on
-# `Float32`, the only element type Metal offers, and says so in its label so a `Float64`
-# user does not read it as a drop-in figure. A launch only enqueues, so the clock is read
+# The seam is documented at the top of `src/utils/backend_profile.jl`. Metal declares
+# `Float32`, the only element type it offers, so every row of the profile is timed on
+# `Float32` and the table header says so. A launch only enqueues, so the clock is read
 # after `Metal.synchronize()`. The first launch compiles the kernel on the GPU: that cost
 # belongs to the warm run, outside the best of three.
 
 Bramble._profile_available(::Bramble.GpuKernel) = Metal.functional()
 
-function Bramble._profile_time(policy::Bramble.GpuKernel, n::Integer)
-    v = MtlVector{Float32}(undef, n)
-    k = Bramble._ProfileKernel(1.0f0, 0.5f0)
+Bramble._profile_eltype(::Bramble.GpuKernel) = Float32
+
+function Bramble._profile_time(policy::Bramble.GpuKernel, ::Type{T},
+        n::Integer) where {T <: AbstractFloat}
+    v = MtlVector{T}(undef, n)
+    k = Bramble._ProfileKernel(T(1), T(0.5))
     idxs = 1:n
     Bramble._sweep_for!(policy, v, idxs, k)
     Metal.synchronize()
@@ -97,7 +100,7 @@ function Bramble._profile_time(policy::Bramble.GpuKernel, n::Integer)
     return Float64(best) * 1.0e-9
 end
 
-Bramble._profile_label(::Bramble.GpuKernel) = "GpuKernel() Float32"
+Bramble._profile_label(::Bramble.GpuKernel) = "GpuKernel()"
 
 Bramble._profile_spelling(::Bramble.GpuKernel) = "metal_backend()"
 
