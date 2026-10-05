@@ -427,9 +427,10 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         @testset "Nested composite (#64)" begin
             # `dirichlet_components` is leaf-indexed (via `leaf_spaces_offsets`); `uₕ(i)`
             # used to be indexed by *immediate* child instead. On a flat space like `Vₕ`
-            # above the two coincide, which is why nothing here caught it: `(Wₕ × Wₕ) × Wₕ`
-            # has 2 immediate children but 3 leaves, and before the fix `components = 3`
-            # validated fine while `u(3)` raised a `BoundsError` on the same space.
+            # above the two coincide, which is why nothing here caught it: `Vn` below
+            # has 2 immediate children but 3 leaves (`×` alone would flatten it), and
+            # before the fix `components = 3` validated fine while `u(3)` raised a
+            # `BoundsError` on the same space.
             Vn = CompositeGridSpace((Wₕ × Wₕ, Wₕ))
             nVn = ndofs(Vn)
             @test nVn == 3nW
