@@ -1394,4 +1394,41 @@ Base.getindex(w::_BfWrapped, i::Int) = w.data[i]
     @test Bramble._batch_splittable(Tuple{Vector{Float64}, Base.RefValue{Float64}})
 end
 
+# A stencil entry missing from the matrix's pattern throws inside the searching sweep's
+# `@batch` task. Before the split hooks caught it there, the throw on the host's chunk ended
+# Polyester's `GC.@preserve` while the workers still read the matrix, and the process
+# segfaulted in most runs. Point colouring on 9×11, bands on 9×33; the matrix stores the
+# diagonal only. Repeated, since the crash was intermittent.
+@testset "missing pattern entry rethrows" begin
+    _mp_space(n, policy) = (Random.seed!(437);
+        gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), n, (false, false);
+            backend = backend(policy = policy))))
+    _mp_form(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+    _mp_diag(W) = spdiagm(ones(ndofs(W)))
+    _mp_error(f) = try
+        f()
+        nothing
+    catch e
+        e
+    end
+    for n in ((9, 11), (9, 33))
+        Ws = _mp_space(n, CpuSerial())
+        serial = _mp_error(() -> assemble!(_mp_diag(Ws), _mp_form(Ws)))
+        @test serial isa ArgumentError
+        msg = sprint(showerror, serial)
+        for _ in 1:8
+            W = _mp_space(n, CpuPolyester())
+            a = _mp_form(W)
+            core = _mp_error(() -> Bramble._assemble_bilinear_parallel_core!(
+                _mp_diag(W), a.trial_space, a.test_space, a.ast))
+            whole = _mp_error(() -> assemble!(_mp_diag(W), a))
+            @test core isa ArgumentError && sprint(showerror, core) == msg
+            @test whole isa ArgumentError && sprint(showerror, whole) == msg
+        end
+        # The threads the failed sweeps reserved were released: a sweep still assembles.
+        W = _mp_space(n, CpuPolyester())
+        @test assemble(_mp_form(W)) ≈ assemble(_mp_form(Ws))
+    end
+end
+
 end # module

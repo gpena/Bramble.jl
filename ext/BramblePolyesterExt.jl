@@ -301,6 +301,47 @@ function Bramble._batch_dot_masked(
     return s
 end
 
+# --- Exceptions inside the split hooks' tasks ---------------------------------------- #
+#
+# An exception thrown inside a `@batch` task must not leave it. When the host's own chunk
+# throws, Polyester's `batch.jl` skips waiting on the worker tasks and ends the
+# `GC.@preserve` around their `PtrArray`s while they still run (a segfault in 8 of 12 runs of
+# a missing-pattern sweep), and never frees the threads it reserved. So each split hook's
+# task body catches, records the failure in an isbits `|` reduction (a scalar Polyester
+# keeps in its task buffers, so success allocates nothing, where a flag array would be one
+# allocation per call), and once `@batch` has joined every task the host reruns the same
+# iterations in order on the original arguments. That raises the exception of the first
+# iteration that fails, as a serial sweep of the same colour or band would. Work that threw
+# in a task but not on the host is still refused rather than returned.
+#
+# `@_task function f!(args...) ... end` defines the task's work `f!` and its guard
+# `f_threw(args...)`, both `@noinline`; the guard runs `f!` inside the `try` and returns
+# whether it threw. LLVM compiles a function that calls `setjmp` conservatively, so the walk
+# stays out of it: a `try` around the walk inlined into the `@batch` body ran a 65² fused
+# product 1.2x slower (3.0 against 2.5 µs, 4 threads).
+macro _task(def)
+    call = def.args[1]
+    name, args = call.args[1], call.args[2:end]
+    guard = Symbol(chopsuffix(string(name), "!"), "_threw")
+    return esc(quote
+        @noinline $def
+        @noinline function $guard($(args...))
+            try
+                $name($(args...))
+            catch
+                return true
+            end
+            return false
+        end
+    end)
+end
+
+@noinline function _rerun_on_host(f::F, iter) where {F}
+    foreach(f, iter)
+    throw(ErrorException("a CpuPolyester task threw, but its work did not throw again \
+        when rerun on the host"))
+end
+
 # --- _batch_bilinear_colour_sweep!/_batch_bilinear_band_sweep! (src/assembly/bilinear_execution.jl) --- #
 #
 # Direct translations of `_sweep_bilinear_colour!`/`_sweep_band_colour!`'s `CpuThreaded`
@@ -356,15 +397,36 @@ function Bramble._batch_bilinear_band_sweep!(
     return nothing
 end
 
+@_task function _csc_point!(skel, arrays, cptr, rval, nzv, I, lin_indices, row_offset,
+        col_offset, α)
+    s, tm, mm = _rejoin(skel, arrays)
+    _scatter_point!(_ScatterCSC(cptr, rval, nzv), tm, s, I, lin_indices, mm, row_offset,
+        col_offset, α)
+    return nothing
+end
+
 function Bramble._batch_bilinear_colour_sweep!(
         A::SparseMatrixCSC, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
 )
     cptr, rval, nzv = A.colptr, A.rowval, A.nzval
     skel, arrays = _split_or_whole((sp, term, mesh_markers), cptr, rval, nzv)
-    @batch for I in idxs
-        s, tm, mm = _rejoin(skel, arrays)
-        _scatter_point!(_ScatterCSC(cptr, rval, nzv), tm, s, I, lin_indices, mm, row_offset,
-            col_offset, α)
+    failed = false
+    @batch reduction=((|, failed),) for I in idxs
+        failed |= _csc_point_threw(skel, arrays, cptr, rval, nzv, I, lin_indices,
+            row_offset, col_offset, α)
+    end
+    failed && _rerun_on_host(idxs) do I
+        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
+    end
+    return nothing
+end
+
+@_task function _csc_band!(skel, arrays, cptr, rval, nzv, rest, ax, nbands, b,
+        lin_indices, row_offset, col_offset, α)
+    s, tm, mm = _rejoin(skel, arrays)
+    Ab = _ScatterCSC(cptr, rval, nzv)
+    for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
+        _scatter_point!(Ab, tm, s, I, lin_indices, mm, row_offset, col_offset, α)
     end
     return nothing
 end
@@ -375,11 +437,15 @@ function Bramble._batch_bilinear_band_sweep!(
 )
     cptr, rval, nzv = A.colptr, A.rowval, A.nzval
     skel, arrays = _split_or_whole((sp, term, mesh_markers), cptr, rval, nzv)
-    @batch for b in bidx
-        s, tm, mm = _rejoin(skel, arrays)
-        Ab = _ScatterCSC(cptr, rval, nzv)
+    failed = false
+    @batch reduction=((|, failed),) for b in bidx
+        failed |= _csc_band_threw(skel, arrays, cptr, rval, nzv, rest, ax, nbands, b,
+            lin_indices, row_offset, col_offset, α)
+    end
+    failed && _rerun_on_host(bidx) do b
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
-            _scatter_point!(Ab, tm, s, I, lin_indices, mm, row_offset, col_offset, α)
+            _scatter_point!(
+                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
         end
     end
     return nothing
@@ -466,19 +532,40 @@ end
 @inline _replay_join(y, x, c::Tuple{_Hot{:pair_action}, Vararg}) = _PairActionSink(
     y, x, Base.tail(c)...)
 
+@_task function _replay_band!(skel, arrays, h1, h2, rest, ax, nbands, b, lin_indices,
+        row_offset, col_offset)
+    c, s, tm, mm = _rejoin(skel, arrays)
+    t = _replay_join(h1, h2, c)
+    for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
+        _replay_point!(t, tm, s, I, lin_indices, mm, row_offset, col_offset)
+    end
+    return nothing
+end
+
 function Bramble._batch_bilinear_band_replay!(
         target::Union{_ReplayTarget, _ActionTarget}, sp, term, ax, bidx, nbands, rest,
         lin_indices, mesh_markers, row_offset, col_offset
 )
     h1, h2, cold = _replay_parts(target)
     skel, arrays = _split_or_whole((cold, sp, term, mesh_markers), h1, h2)
-    @batch for b in bidx
-        c, s, tm, mm = _rejoin(skel, arrays)
-        t = _replay_join(h1, h2, c)
+    failed = false
+    @batch reduction=((|, failed),) for b in bidx
+        failed |= _replay_band_threw(skel, arrays, h1, h2, rest, ax, nbands, b,
+            lin_indices, row_offset, col_offset)
+    end
+    failed && _rerun_on_host(bidx) do b
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
-            _replay_point!(t, tm, s, I, lin_indices, mm, row_offset, col_offset)
+            _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset,
+                col_offset)
         end
     end
+    return nothing
+end
+
+@_task function _replay_one!(skel, arrays, h1, h2, I, lin_indices, row_offset, col_offset)
+    c, s, tm, mm = _rejoin(skel, arrays)
+    _replay_point!(
+        _replay_join(h1, h2, c), tm, s, I, lin_indices, mm, row_offset, col_offset)
     return nothing
 end
 
@@ -488,10 +575,13 @@ function Bramble._batch_bilinear_colour_replay!(
 )
     h1, h2, cold = _replay_parts(target)
     skel, arrays = _split_or_whole((cold, sp, term, mesh_markers), h1, h2)
-    @batch for I in idxs
-        c, s, tm, mm = _rejoin(skel, arrays)
-        _replay_point!(
-            _replay_join(h1, h2, c), tm, s, I, lin_indices, mm, row_offset, col_offset)
+    failed = false
+    @batch reduction=((|, failed),) for I in idxs
+        failed |= _replay_one_threw(skel, arrays, h1, h2, I, lin_indices, row_offset,
+            col_offset)
+    end
+    failed && _rerun_on_host(idxs) do I
+        _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
     end
     return nothing
 end
@@ -512,10 +602,27 @@ end
 # single-iteration `@batch` runs its body inline on the plain `Vector`s, which the rebuild
 # accepts as well. Parts that do not split cross whole (`_split_or_whole` above).
 
+@_task function _linear_point!(skel, arrays, b, I, lin_indices, offset, α)
+    s, tm, mm = _rejoin(skel, arrays)
+    _scatter_linear_point!(b, s, tm, I, lin_indices, mm, offset, α)
+    return nothing
+end
+
 function Bramble._batch_linear_colour_sweep!(b::AbstractVector, sp, term, idxs, lin_indices, mesh_markers, offset, α)
     skel, arrays = _split_or_whole((sp, term, mesh_markers), b)
-    @batch for I in idxs
-        s, tm, mm = _rejoin(skel, arrays)
+    failed = false
+    @batch reduction=((|, failed),) for I in idxs
+        failed |= _linear_point_threw(skel, arrays, b, I, lin_indices, offset, α)
+    end
+    failed && _rerun_on_host(idxs) do I
+        _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
+    end
+    return nothing
+end
+
+@_task function _linear_band!(skel, arrays, b, rest, ax, nbands, k, lin_indices, offset, α)
+    s, tm, mm = _rejoin(skel, arrays)
+    for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
         _scatter_linear_point!(b, s, tm, I, lin_indices, mm, offset, α)
     end
     return nothing
@@ -525,10 +632,14 @@ function Bramble._batch_linear_band_sweep!(
         b::AbstractVector, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
 )
     skel, arrays = _split_or_whole((sp, term, mesh_markers), b)
-    @batch for k in bidx
-        s, tm, mm = _rejoin(skel, arrays)
+    failed = false
+    @batch reduction=((|, failed),) for k in bidx
+        failed |= _linear_band_threw(skel, arrays, b, rest, ax, nbands, k, lin_indices,
+            offset, α)
+    end
+    failed && _rerun_on_host(bidx) do k
         for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
-            _scatter_linear_point!(b, s, tm, I, lin_indices, mm, offset, α)
+            _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
         end
     end
     return nothing
@@ -600,17 +711,29 @@ end
 # accepts as well. The caller (`_mf_product!`) has checked on the host that the plan is the
 # product's form's. Parts that do not split cross whole, the host-bound AST among them
 # (`_split_or_whole` above).
+@_task function _mf_band!(skel, arrays, y, x, len, nbands, b, omin, omax)
+    (α, mask), Wu, Wv, ast, geom = _rejoin(skel, arrays)
+    own = _band_range(1:len, nbands, b)
+    _mf_apply_parts!(_MFPass(_MF_BAND, own, omin, omax, _MF_NO_COLLECT),
+        ActionSink(y, x, α, mask, geom), Wu, Wv, ast)
+    return nothing
+end
+
 function Bramble._batch_mf_bands!(s::ActionSink, plan::_MFFusedPlan{D}, nbands::Int) where {D}
     a = plan.form
     y, x = s.y, s.x
     skel, arrays = _split_or_whole(
         ((s.α, s.mask), a.trial_space, a.test_space, _mf_host_ast(a), plan.geom), y, x)
     len, omin, omax = plan.dims[D], plan.omin, plan.omax
-    @batch for b in 1:nbands
-        (α, mask), Wu, Wv, ast, geom = _rejoin(skel, arrays)
-        own = _band_range(1:len, nbands, b)
-        _mf_apply_parts!(_MFPass(_MF_BAND, own, omin, omax, _MF_NO_COLLECT),
-            ActionSink(y, x, α, mask, geom), Wu, Wv, ast)
+    failed = false
+    @batch reduction=((|, failed),) for b in 1:nbands
+        failed |= _mf_band_threw(skel, arrays, y, x, len, nbands, b, omin, omax)
+    end
+    failed && _rerun_on_host(1:nbands) do b
+        _mf_apply_parts!(
+            _MFPass(_MF_BAND, _band_range(1:len, nbands, b), omin, omax, _MF_NO_COLLECT),
+            ActionSink(y, x, s.α, s.mask, plan.geom), a.trial_space, a.test_space,
+            _mf_host_ast(a))
     end
     return nothing
 end
