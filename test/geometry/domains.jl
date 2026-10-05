@@ -29,6 +29,10 @@ using Bramble:
 using StaticArrays
 using ..TestUtils: alloc_test, @test_allocs
 
+# A callable that is not a `Function`: no marker kind accepts it.
+struct NotAFunctionPredicate end
+(::NotAFunctionPredicate)(x) = true
+
 @testset "Computational domains" begin
     # Test data setup: Cartesian products and coordinate indicator predicates.
     I1D = interval(0.0, 1.0)
@@ -160,6 +164,65 @@ using ..TestUtils: alloc_test, @test_allocs
         @test isconcretetype(only(Base.return_types(_mk, (typeof(I2D), typeof(func1)))))
     end
 
+    # Invariant: every identifier kind `markers` receives is either stored or rejected with
+    # an `ArgumentError`; none is silently dropped (a dropped marker marks nothing).
+    @testset "Marker identifier kinds" begin
+        X = interval(0.0, 1.0) × interval(0.0, 1.0)
+        T = interval(0.0, 1.0)
+
+        # Vectors and sets of symbols are stored with the tuple markers, as `Set{Symbol}`.
+        for ident in ([:top, :bottom], Set([:top, :bottom]), (:top, :bottom))
+            dm = markers(X, :walls => ident)
+            @test length(tuples(dm)) == 1
+            @test length(symbols(dm)) == 0
+            @test length(conditions(dm)) == 0
+            @test label(only(tuples(dm))) === :walls
+            @test identifier(only(tuples(dm))) == Set([:top, :bottom])
+        end
+
+        # The time-dependent method forwards them to the spatial validation.
+        for ident in ([:top], Set([:top]))
+            dm = markers(X, T, :w => ident)
+            @test length(tuples(dm)) == 1
+            @test identifier(only(tuples(dm))) == Set([:top])
+        end
+
+        # The container stays concrete with a vector marker in the mix.
+        _mkv(Y) = markers(Y, :a => :left, :b => [:top, :bottom], :c => (x -> true))
+        @test isconcretetype(only(Base.return_types(_mkv, (typeof(X),))))
+
+        # Unknown symbols inside a vector or set are rejected like those in a tuple.
+        @test_throws ArgumentError markers(X, :w => [:nowhere])
+        @test_throws ArgumentError markers(X, :w => Set([:top, :nowhere]))
+        @test_throws ArgumentError markers(X, T, :w => [:nowhere])
+
+        # Any other identifier kind is rejected instead of dropped.
+        for bad in (NotAFunctionPredicate(), "left", Dict(:top => 1), 1, [1, 2], [:top, "x"])
+            @test_throws ArgumentError markers(X, :r => bad)
+            @test_throws ArgumentError markers(X, T, :r => bad)
+        end
+        @test_throws ArgumentError markers(interval(0.0, 1.0), :r => NotAFunctionPredicate())
+
+        # A 1D predicate is called with the bare scalar coordinate, as the mesh does: one
+        # that accepts only a 1-tuple is refused at construction, not at `mesh`.
+        err = try
+            domain(interval(0.0, 1.0), :r => ((x::Tuple{Float64}) -> x[1] < 0.5))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("scalar coordinate", sprint(showerror, err))
+        Ωₕ1 = mesh(domain(interval(0.0, 1.0), :r => (x -> x < 0.5)), 5, true)
+        @test count(Bramble.markers(Ωₕ1)[:r]) == 2
+
+        # The stored vector marker reaches the mesh: it marks the listed face only.
+        Ωₕ = @test_logs (:warn, r"boundary.*something other than") mesh(
+            domain(X, :boundary => [:xmin]), (5, 5), (true, true)
+        )
+        @test count(Bramble.markers(Ωₕ)[:boundary]) == 5
+    end
+
     # Invariant: Domain constructors preserve geometric traits including
     # spatial dimension, element type, topological dimension, and point type.
     @testset "Domain construction and geometric traits" begin
@@ -221,6 +284,26 @@ using ..TestUtils: alloc_test, @test_allocs
         @test lbls == Set([:bnd_left, :corners, :region1, :boundary])
 
         @test length(collect(marker_identifiers(Ω))) == 4
+
+        # `marker_identifiers` is a concretely typed tuple holding one `Symbol`, one
+        # `Set{Symbol}` and one `Function`, in symbols, tuples, conditions order.
+        Ω_ids = domain(
+            interval(0.0, 1.0) × interval(0.0, 1.0),
+            :s => :left,
+            :t => (:top, :right),
+            :f => x -> true
+        )
+        ids = marker_identifiers(Ω_ids)
+        @test length(ids) == 3
+        @test count(id -> id isa Symbol, ids) == 1
+        @test count(id -> id isa Set{Symbol}, ids) == 1
+        @test count(id -> id isa Function, ids) == 1
+        @test ids[1] === :left
+        @test ids[2] == Set([:top, :right])
+        @test ids[3] isa Function
+        @test ids isa Tuple
+        @test (@inferred marker_identifiers(Ω_ids)) isa Tuple
+        @test isconcretetype(typeof(ids))
 
         @test Set(label_symbols(Ω)) == Set([:bnd_left, :boundary])
         @test Set(label_tuples(Ω)) == Set([:corners])

@@ -55,19 +55,26 @@ Zero-allocation; see [`label_identifiers`](@ref).
 @inline labels(Ω::Domain) = labels(markers(Ω))
 
 """
-    marker_identifiers(Ω::Domain)
+    marker_identifiers(Ω::Domain) -> Tuple
 
-Return an iterator yielding the identifying symbols, symbol sets, or predicate functions of all markers in domain `Ω`.
+Return a tuple of the identifying symbols, symbol sets, or predicate functions of all
+markers in domain `Ω`.
+
+The tuple lists the identifiers of [`symbols`](@ref), then [`tuples`](@ref), then
+[`conditions`](@ref). It is built as a compile-time-unrolled tuple, like
+[`label_identifiers`](@ref), so its type is concrete even when the three kinds are mixed.
 
 !!! note
-    Iterating [`symbols`](@ref), [`tuples`](@ref), or [`conditions`](@ref) directly, or
-    through [`label_symbols`](@ref)/[`label_tuples`](@ref)/[`label_conditions`](@ref),
+    Building the tuple, like iterating [`symbols`](@ref), [`tuples`](@ref), or
+    [`conditions`](@ref) directly, or through
+    [`label_symbols`](@ref)/[`label_tuples`](@ref)/[`label_conditions`](@ref),
     allocates 0 bytes.
 """
 @inline function marker_identifiers(Ω::Domain)
     return (
-        identifier(marker) for
-    marker in Iterators.flatten((symbols(Ω), tuples(Ω), conditions(Ω)))
+        map(identifier, symbols(Ω))...,
+        map(identifier, tuples(Ω))...,
+        map(identifier, conditions(Ω))...
     )
 end
 
@@ -91,7 +98,8 @@ When no markers are supplied, defaults to a `:boundary` marker covering all boun
 - `markers`: Explicit [`DomainMarkers`](@ref) container.
 - `pairs`: Variable sequence of `label => identifier` pairs.
 - `space_set`: Spatial bounding set.
-- `time_set`: 1D temporal interval for time-dependent boundary conditions.
+- `time_set`: 1D temporal interval for time-dependent boundary conditions. Predicate
+  identifiers then take `(x, t)`, and an `x -> Bool` predicate throws an `ArgumentError`.
 
 # Examples
 ```jldoctest
@@ -113,6 +121,10 @@ true
     (Ω::Domain)(t::Number) -> Domain
 
 Evaluate a time-dependent [`Domain`](@ref) at timestamp `t`.
+
+The result holds the markers with each `(x, t)` predicate fixed at `t`, so
+`mesh(Ω(t), ...)` marks the points where the predicates hold at `t`. Meshing the unevaluated
+`Ω` of a time-dependent domain is not supported: its `(x, t)` predicates have no time.
 """
 @inline (Ω::Domain)(t::Number) = Domain(set(Ω), markers(Ω)(t))
 

@@ -100,6 +100,18 @@ products each have their own), so a figure for one does not transfer to another,
 depends on the machine, the thread count and the power state. `CpuPolyester`, whose threads
 start more cheaply, crosses over at smaller sizes than `CpuThreaded`.
 
+### See where each policy wins here
+
+[`Bramble.profile_backends`](@ref) gives a quick first answer for your machine and thread count. It times one sweep kernel, the loop that the weight and scatter builds go through, under each policy at sizes from `2^10` to `2^22`. It does not time assembly, so a policy that wins there is a good first choice, not a guarantee for your form. It lists `Serial()` and `Parallel()`, adds `CpuPolyester()` once `using Polyester` has loaded its extension, and adds a `GpuKernel()` row after `using Metal` on a functional device. All rows are timed on the same element type so that they compare. That type is `Float64`, or `Float32` for every row once the Metal row is present, since `Float32` is the only type Metal offers. The table header names the type. The sweep takes well under a second on the CPU policies. With Metal loaded, the first call is slow because it is often the session's first GPU operation, which compiles Metal's own code as well as the sweep kernel. Loading Polyester before Metal makes that first GPU operation markedly slower, an upstream interaction with no Bramble code involved (measured on one machine at about 9 s, against about 1.3 s without Polyester), and loading Polyester after Metal reduces it. Later calls take well under a second. Call it by hand, once per session: neither `backend` nor `gridspace` calls it. The block is not run when this page is built, because the figures differ from machine to machine:
+
+```julia
+using Bramble
+
+Bramble.profile_backends()
+```
+
+The result prints a table of times, the size from which each policy stays clearly faster than `Serial()`, and the `backend(policy = ...)` expression that selects it.
+
 ### Measure your own crossovers
 
 To get these figures for your own machine, at the thread count you plan to use, run the crossover script from a checkout of the repository:
@@ -154,6 +166,10 @@ A finite-difference stencil is assembled row by row, which CSR storage reaches w
 - **CSR loses the direct solve**, because `SparseMatricesCSR.jl` has no native CSR solve: `\` goes through a transposed factorization of a reinterpreted LU.
 
 Reach for CSR when memory is the constraint and assembly dominates. Keep CSC when `A \ F` is on the critical path. `benchmark/backends.jl` measures both on your machine.
+
+[`Bramble.profile_backends`](@ref) does not cover this choice: it times execution policies,
+not matrix storage. Its docstring shows how to time `assemble!` under both storages on your
+own form.
 
 ### A Polyester policy
 

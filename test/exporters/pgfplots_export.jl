@@ -34,6 +34,19 @@ using Bramble
         end
     end
 
+    @testset "1D mixed field types" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
+        uₕ = Rₕ(gridspace(Ωₕ), x -> 2x)
+        mktempdir() do dir
+            f = export_pgfplots(
+                joinpath(dir, "t"), Ωₕ, "u" => uₕ, "w" => collect(points(Ωₕ))
+            )
+            @test readlines(f) == [
+                "x u w", "0.0 0.0 0.0", "0.25 0.5 0.25", "0.5 1.0 0.5",
+                "0.75 1.5 0.75", "1.0 2.0 1.0"]
+        end
+    end
+
     @testset "1D composite" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 4, true)
         Wₕ = gridspace(Ωₕ)
@@ -175,6 +188,21 @@ using Bramble
             )
             @test_throws "has length 11, but the mesh has 12 points" export_pgfplots(
                 joinpath(dir, "bad2"), Ωₕ, "u" => vec(Z)[1:11]
+            )
+        end
+    end
+
+    @testset "2D field of another mesh size" begin
+        # A VectorElement goes through the same size check as a plain matrix.
+        X = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωc = mesh(domain(X), (3, 4), (true, true))
+        Ωf = mesh(domain(X), (5, 6), (true, true))
+        uf = Rₕ(gridspace(Ωf), x -> x[1] + 10x[2])
+
+        mktempdir() do dir
+            @test_throws ArgumentError export_pgfplots(joinpath(dir, "t"), Ωc, "u" => uf)
+            @test_throws "has size (5, 6), but the mesh has (3, 4) points" export_pgfplots(
+                joinpath(dir, "t"), Ωc, "u" => uf
             )
         end
     end

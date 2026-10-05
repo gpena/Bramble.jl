@@ -7,6 +7,8 @@ Labeled geometric region or boundary marker on a computational domain.
 - `label`: Region identifier (e.g. `:inlet`, `:wall`, `:boundary`).
 - `identifier`: Location specification, either a predefined boundary `Symbol` (e.g. `:left`),
   a `Set{Symbol}` of boundary names, or a boolean spatial predicate function `f(x)`.
+  [`markers`](@ref) builds a `Marker` from a tuple, vector or set of boundary symbols by
+  storing it as a `Set{Symbol}`.
 """
 struct Marker{F}
     label::Symbol
@@ -48,7 +50,8 @@ are each an unrolled, zero-allocation sweep to iterate.
 
 # Fields
 - `symbols`: Tuple of markers identified by a single predefined boundary `Symbol` (e.g. `:left`).
-- `tuples`: Tuple of markers identified by collections of predefined boundary symbols (e.g. `Set([:top, :right])`).
+- `tuples`: Tuple of markers identified by collections of predefined boundary symbols,
+  given as a tuple, vector or set (e.g. `(:top, :right)`, `[:top, :right]`), stored as `Set{Symbol}`.
 - `conditions`: Statically typed tuple of predicate function markers `f(x)` or `f(x, t)`.
 
 See also: [`markers`](@ref), [`symbols`](@ref), [`tuples`](@ref), [`conditions`](@ref).
@@ -128,9 +131,16 @@ Construct a [`DomainMarkers`](@ref) collection from `label => identifier` pairs.
 
 # Arguments
 - `space_set`: Geometric spatial set.
-- `time_set`: Optional 1D temporal interval for time-dependent boundary conditions.
+- `time_set`: Optional 1D temporal interval for time-dependent boundary conditions. With it,
+  every predicate `Function` takes `(x, t)`; `markers(...)(t)` evaluates them at `t`.
 - `pairs`: Vararg sequence of `label => identifier` pairs where identifier is a `Symbol`,
-  `NTuple{N, Symbol}`, or predicate `Function`.
+  a tuple (`NTuple{N, Symbol}`), `AbstractVector{Symbol}` or `AbstractSet{Symbol}` of
+  boundary symbols, or a predicate `Function` (`x -> Bool`, or `(x, t) -> Bool` with `time_set`).
+
+# Throws
+- `ArgumentError`: if an identifier is of any other kind (for example a `String`, a `Dict`
+  or a callable object that is not a `Function`), names a symbol that is not a boundary
+  of `space_set`, or, with `time_set`, is a predicate that does not accept `(x, t)`.
 
 # Examples
 ```jldoctest
@@ -159,6 +169,9 @@ end
     return _create_generic_markers(pairs...)
 end
 
+# Identifier kinds that name several boundary symbols; stored as `Marker{Set{Symbol}}`.
+const _SymbolCollection = Union{NTuple{N, Symbol} where {N}, AbstractVector{Symbol}, AbstractSet{Symbol}}
+
 function _validate_marker_pair(space_set::CartesianProduct{D}, p::Pair) where {D}
     lbl = p.first
     ident = p.second
@@ -166,7 +179,7 @@ function _validate_marker_pair(space_set::CartesianProduct{D}, p::Pair) where {D
         if !(ident in _all_boundary_symbols(space_set))
             _throw_unknown_boundary_symbol_for_domain(lbl, ident, space_set)
         end
-    elseif ident isa NTuple{N, Symbol} where {N}
+    elseif ident isa _SymbolCollection
         for s in ident
             if !(s in _all_boundary_symbols(space_set))
                 _throw_unknown_boundary_symbol_for_domain(lbl, s, space_set)
@@ -177,19 +190,13 @@ function _validate_marker_pair(space_set::CartesianProduct{D}, p::Pair) where {D
         res = try
             ident(probe)
         catch err
-            if D == 1
-                try
-                    ident((probe,))
-                catch
-                    _throw_invalid_marker_predicate_call(lbl, D, err)
-                end
-            else
-                _throw_invalid_marker_predicate_call(lbl, D, err)
-            end
+            _throw_invalid_marker_predicate_call(lbl, D, err)
         end
         if !(res isa Bool)
             _throw_non_bool_marker_predicate(lbl, res)
         end
+    else
+        _throw_unsupported_marker_identifier(lbl, ident)
     end
     return nothing
 end
@@ -199,25 +206,45 @@ function _validate_marker_pair(
 ) where {D}
     lbl = p.first
     ident = p.second
-    if ident isa Symbol || ident isa NTuple{N, Symbol} where {N}
+    if ident isa Symbol || ident isa _SymbolCollection
         _validate_marker_pair(space_set, p)
     elseif ident isa Function
         probe_x = D == 1 ? center(space_set)[1] : center(space_set)
         probe_t = first(extrema(time_set))
+        hasmethod(ident, Tuple{typeof(probe_x), typeof(probe_t)}) ||
+            _throw_time_marker_needs_xt(lbl)
         res = try
-            if hasmethod(ident, Tuple{typeof(probe_x), typeof(probe_t)})
-                ident(probe_x, probe_t)
-            else
-                ident(probe_x)
-            end
+            ident(probe_x, probe_t)
         catch err
             _throw_invalid_marker_predicate_call(lbl, D, err)
         end
         if !(res isa Bool)
             _throw_non_bool_marker_predicate(lbl, res)
         end
+    else
+        _throw_unsupported_marker_identifier(lbl, ident)
     end
     return nothing
+end
+
+@noinline function _throw_time_marker_needs_xt(lbl::Symbol)
+    throw(
+        ArgumentError(
+        "Predicate for marker :$lbl has no method for (x, t). A time-dependent domain " *
+        "needs (x, t) predicates, evaluated at the time given to `Ω(t)`; write " *
+        "`(x, t) -> ...`, or drop the time set for a spatial-only predicate.",
+    ),
+    )
+end
+
+@noinline function _throw_unsupported_marker_identifier(lbl::Symbol, ident)
+    throw(
+        ArgumentError(
+        "Unsupported identifier of type $(typeof(ident)) for marker :$lbl. " *
+        "Accepted identifiers are a boundary Symbol, a tuple, vector or set of boundary " *
+        "Symbols, or a predicate Function.",
+    ),
+    )
 end
 
 @noinline function _throw_non_bool_marker_predicate(lbl::Symbol, res)
@@ -234,7 +261,7 @@ end
     throw(
         ArgumentError(
         "Marker predicate for label :$lbl failed when evaluated on sample domain point: " *
-        "expected a function accepting a $(D == 1 ? "1D coordinate (scalar or 1-tuple)" : "$D-element coordinate tuple"). " *
+        "expected a function accepting a $(D == 1 ? "scalar coordinate" : "$D-element coordinate tuple"). " *
         "Underlying error: $err",
     ),
     )
@@ -251,7 +278,7 @@ end
     )
 end
 
-# Parse identifier-based markers (Symbols and Tuples of Symbols) from input pairs.
+# Parse identifier-based markers (Symbols and tuples, vectors or sets of Symbols) from input pairs.
 #
 # `filter` on the tuple, not a `Set` collected into one. `pairs` is a statically-typed tuple
 # of `Pair`s at every call site, and the two predicates are pure type tests, so `Base.filter`
@@ -273,7 +300,7 @@ end
 # overlapping node) and already came from this same order-preserving `filter`.
 @inline function _extract_identifier_markers(pairs::Tuple)
     symbol_pairs = filter(p -> p.second isa Symbol, pairs)
-    tuple_pairs = filter(p -> p.second isa NTuple{N, Symbol} where {N}, pairs)
+    tuple_pairs = filter(p -> p.second isa _SymbolCollection, pairs)
 
     return map(p -> Marker(p.first, p.second), symbol_pairs),
     map(p -> Marker(p.first, Set(p.second)), tuple_pairs)

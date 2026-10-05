@@ -38,6 +38,7 @@ metal_sparse_csc
 gpu_backend
 metal_backend
 csr_backend
+profile_backends
 sparse_refactor!
 PRECOMPILE_WORKLOAD
 ```
