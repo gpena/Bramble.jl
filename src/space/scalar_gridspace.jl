@@ -466,28 +466,20 @@ end
 @inline _host_mirror_mesh(Ωₕ::AbstractMeshType) = _host_mirror_mesh(locality(backend(Ωₕ)), Ωₕ)
 @inline _host_mirror_mesh(::HostLocality, Ωₕ::AbstractMeshType) = Ωₕ
 
-function _host_mirror_mesh(::DeviceLocality, Ωₕ::Mesh1D)
-    return Mesh1D(
-        Ωₕ.set,
-        Ωₕ.markers,
-        Ωₕ.indices,
-        backend(eltype(Ωₕ)),
-        Array(Ωₕ.pts),
-        Array(Ωₕ.half_pts),
-        Array(Ωₕ.half_spacings),
-        Array(Ωₕ.spacings),
-        Ωₕ.collapsed,
-        Ωₕ.version
-    )
-end
+# The mirror is read from the mesh's state and keeps its version, uniformity flag and marker
+# table; it is a mesh of its own, with its own identity.
+_host_mirror_mesh(::DeviceLocality, Ωₕ::Mesh1D) = _rebackend(Ωₕ, backend(eltype(Ωₕ)), Array)
 
 function _host_mirror_mesh(::DeviceLocality, Ωₕ::MeshnD{D}) where {D}
     return MeshnD(
-        Ωₕ.set,
-        Ωₕ.markers,
-        Ωₕ.indices,
+        set(Ωₕ),
+        markers(Ωₕ),
+        indices(Ωₕ),
         backend(eltype(Ωₕ)),
-        ntuple(k -> _host_mirror_mesh(DeviceLocality(), Ωₕ.submeshes[k]), Val(D))
+        ntuple(k -> _host_mirror_mesh(DeviceLocality(), Ωₕ(k)), Val(D)),
+        _marker_ids(Ωₕ),
+        _marker_words(Ωₕ),
+        _next_mesh_uid()
     )
 end
 

@@ -42,6 +42,13 @@ See also: [`Mesh1D`](@ref), [`MeshnD`](@ref), [`Domain`](@ref)
 """
 abstract type AbstractMeshType{D} end
 
+# Each mesh's identity, `uid` (gpena/Bramble.jl#437): an isbits stand-in for `===` on the mesh
+# that a state carries across a task boundary, kept across the mesh's mutations. Every new
+# mutable mesh gets a fresh one: a constructed mesh, a `copy`, a `deepcopy` and a host
+# mirror alike. Only a copy of an immutable walk state keeps it.
+const _MESH_UID = Threads.Atomic{UInt64}(0)
+@inline _next_mesh_uid() = Threads.atomic_add!(_MESH_UID, one(UInt64)) + one(UInt64)
+
 #------------------------------------------------------------------------------------------#
 # Field Getters & Index Delegation
 #------------------------------------------------------------------------------------------#
@@ -125,9 +132,9 @@ Override the grid indices in `Ωₕ`. Used internally during mesh refinement.
 
 Override the markers dictionary in `Ωₕ`. Used internally during mesh refinement, where
 the old dictionary is sized for the old grid and is replaced outright rather than merged
-into.
+into. The label table and the marker word matrix are rebuilt with it.
 """
-@inline markers!(Ωₕ::AbstractMeshType, mesh_markers) = (Ωₕ.markers = mesh_markers; return nothing)
+@inline markers!(Ωₕ::AbstractMeshType, mesh_markers) = (_store_markers!(Ωₕ, mesh_markers); return nothing)
 
 """
     is_collapsed(Ωₕ::AbstractMeshType) -> Bool

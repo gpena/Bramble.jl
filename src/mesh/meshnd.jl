@@ -25,6 +25,12 @@ are evaluated on demand from the tensor-product submeshes.
   - `indices`: Multi-dimensional `CartesianIndices{D}` for the grid.
   - `backend`: Linear algebra [`Backend`](@ref).
   - `submeshes`: Tuple of `D` [`Mesh1D`](@ref) objects along each coordinate axis.
+  - `marker_ids`: `Dict{Symbol, Int}`, the column of each label in `words`.
+  - `words`: `Matrix{UInt64}`, the marker bits, one column of `BitVector` chunks per label.
+  - `uid`: an identity unique to this mesh, kept across its mutations.
+
+A `MeshnD` stores no state of its own: its submeshes can be mutated directly, so the
+[`MeshnDState`](@ref) the walk reads is built on demand by [`_walk_mesh`](@ref).
 
 # Examples
 
@@ -56,6 +62,76 @@ mutable struct MeshnD{D, BT <: Backend, CI <: CartesianIndices{D}, SM <: Tuple, 
     backend::BT
     "a tuple of `D` 1D mesh objects, representing the grid along each spatial dimension."
     submeshes::SM
+    "the column of each marker label in `words`."
+    marker_ids::Dict{Symbol, Int}
+    "the marker bits, one column of `BitVector` chunks per label (`_marker_id`)."
+    words::Matrix{UInt64}
+    "an identity unique to this mesh, kept across its mutations."
+    uid::UInt64
+end
+
+"""
+    MeshnD(set, markers, indices, backend, submeshes) -> MeshnD
+
+A mesh over the given submeshes, with the marker table and words built from `markers` and a
+fresh identity.
+"""
+function MeshnD(
+        set::CartesianProduct{D}, markers::MeshMarkers, indices::CartesianIndices{D},
+        backend::Backend, submeshes::Tuple
+) where {D}
+    ids, words = _marker_table(markers, length(indices))
+    return MeshnD(set, markers, indices, backend, submeshes, ids, words, _next_mesh_uid())
+end
+
+"""
+    MeshnDState{D, BT, CI, SM, T} <: AbstractMeshType{D}
+
+The immutable walk state of a [`MeshnD`](@ref) (gpena/Bramble.jl#437), built on demand by
+[`_walk_mesh`](@ref): the set, parent indices and backend, the tuple of its submeshes'
+[`Mesh1DState`](@ref)s, its marker word matrix, its version (the sum of the submeshes') and
+its identity. Plain arrays and isbits values only. It answers every geometric accessor a
+`MeshnD` does, through its submesh states.
+"""
+struct MeshnDState{D, BT <: Backend, CI <: CartesianIndices{D}, SM <: Tuple, T} <:
+       AbstractMeshType{D}
+    "the D-dimensional CartesianProduct (hyperrectangle) defining the geometric domain."
+    set::CartesianProduct{D, T}
+    "the `CartesianIndices` for the full D-dimensional grid."
+    indices::CI
+    "the computational backend used for linear algebra operations."
+    backend::BT
+    "the tuple of the submeshes' `Mesh1DState`s."
+    submeshes::SM
+    "the marker bits, one column of `BitVector` chunks per label (`_marker_id`)."
+    words::Matrix{UInt64}
+    "the mesh version when this state was built: the sum of the submeshes'."
+    version::Int
+    "the identity of the `MeshnD` this state was built from."
+    uid::UInt64
+end
+
+@inline function _walk_mesh(Ωₕ::MeshnD)
+    return MeshnDState(Ωₕ.set, Ωₕ.indices, Ωₕ.backend, map(_walk_mesh, Ωₕ.submeshes),
+        Ωₕ.words, _mesh_version(Ωₕ), Ωₕ.uid)
+end
+@inline _walk_mesh(s::MeshnDState) = s
+
+# Both a `MeshnD` and its state answer the geometric accessors below, through `Ωₕ(i)`.
+const _MeshnDLike{D} = Union{MeshnD{D}, MeshnDState{D}}
+
+@inline _marker_words(Ωₕ::_MeshnDLike) = Ωₕ.words
+@inline _marker_ids(Ωₕ::MeshnD) = Ωₕ.marker_ids
+
+# Replaces the marker dictionary, its label table and the word matrix together (O6: a label
+# set may change after construction; the word matrix is rebuilt, never resized).
+function _store_markers!(Ωₕ::MeshnD, mesh_markers)
+    mm = convert(MeshMarkers, mesh_markers)
+    ids, words = _marker_table(mm, npoints(Ωₕ))
+    Ωₕ.markers = mm
+    Ωₕ.marker_ids = ids
+    Ωₕ.words = words
+    return nothing
 end
 
 """
@@ -130,7 +206,9 @@ function _mesh(
 end
 
 @inline eltype(::MeshnD{D, BT}) where {D, BT} = eltype(BT)
+@inline eltype(::MeshnDState{D, BT}) where {D, BT} = eltype(BT)
 @inline eltype(::Type{<:MeshnD{D, BT}}) where {D, BT} = eltype(BT)
+@inline eltype(::Type{<:MeshnDState{D, BT}}) where {D, BT} = eltype(BT)
 
 """
     (Ωₕ::MeshnD)(i::Integer) -> Mesh1D
@@ -142,12 +220,18 @@ Return the `i`-th 1D submesh of `Ωₕ` along coordinate axis `i`.
     return @inbounds Ωₕ.submeshes[i]
 end
 
+@inline function (s::MeshnDState{D})(i) where {D}
+    @boundscheck 1 <= i <= D || throw(BoundsError(s.submeshes, i))
+    return @inbounds s.submeshes[i]
+end
+
 # See `_mesh_version`'s own docstring (mesh1d.jl): a `MeshnD` has no point storage of its
 # own, so its version is the sum of its submeshes' -- strictly increasing whenever any one
 # axis is mutated (`change_points!(Ωₕ::MeshnD, ...)` delegates per-axis, so this stays
 # correct however many axes actually change), with no second counter to keep in sync.
 # `Ωₕ.submeshes` is a `Tuple`, so this unrolls at compile time and allocates nothing.
 @inline _mesh_version(Ωₕ::MeshnD) = sum(_mesh_version, Ωₕ.submeshes)
+@inline _mesh_version(s::MeshnDState) = s.version
 
 # Refining or resizing one submesh in place (`iterative_refinement!(Ωₕ(1))`) changes that
 # axis's point count, but the parent's `indices` and `markers` are sized for the whole grid
@@ -190,7 +274,7 @@ end
 macro generate_mesh_ntuple_func(fname)
     return esc(
         quote
-        @inline $fname(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> $fname(Ωₕ(i)), Val(D))
+        @inline $fname(Ωₕ::_MeshnDLike{D}) where {D} = ntuple(i -> $fname(Ωₕ(i)), Val(D))
     end
     )
 end
@@ -199,7 +283,7 @@ end
 macro generate_mesh_ntuple_func_with_idx(fname)
     return esc(
         quote
-        @inline $fname(Ωₕ::MeshnD{D}, idx) where {D} = ntuple(i -> $fname(Ωₕ(i), idx[i]), Val(D))
+        @inline $fname(Ωₕ::_MeshnDLike{D}, idx) where {D} = ntuple(i -> $fname(Ωₕ(i), idx[i]), Val(D))
     end,
     )
 end
@@ -236,10 +320,10 @@ See also: [`half_spacings`](@ref), [`cell_measures`](@ref).
 
 # Single-axis spacings, queried straight from submesh `dim` instead of building the full
 # `D`-tuple above and discarding the other `D - 1` entries (gpena/Bramble.jl#111).
-@inline spacing(Ωₕ::MeshnD, idx, dim::Int) = spacing(Ωₕ(dim), idx[dim])
-@inline forward_spacing(Ωₕ::MeshnD, idx, dim::Int) = forward_spacing(Ωₕ(dim), idx[dim])
+@inline spacing(Ωₕ::_MeshnDLike, idx, dim::Int) = spacing(Ωₕ(dim), idx[dim])
+@inline forward_spacing(Ωₕ::_MeshnDLike, idx, dim::Int) = forward_spacing(Ωₕ(dim), idx[dim])
 
-@inline half_spacing(Ωₕ::MeshnD{D}, idx) where {D} = ntuple(i -> _apply_hs_logic(half_spacing(Ωₕ(i), idx[i])), Val(D))
+@inline half_spacing(Ωₕ::_MeshnDLike{D}, idx) where {D} = ntuple(i -> _apply_hs_logic(half_spacing(Ωₕ(i), idx[i])), Val(D))
 
 """
     cell_measures(Ωₕ::MeshnD{D}) -> NTuple{D, AbstractVector}
@@ -247,10 +331,10 @@ See also: [`half_spacings`](@ref), [`cell_measures`](@ref).
 Return the per-axis cell widths as an `NTuple{D}` of vectors. The measure of an
 individual cell is the product of its per-axis widths; see [`cell_measure`](@ref).
 """
-@inline cell_measures(Ωₕ::MeshnD{D}) where {D} = ntuple(i -> cell_measures(Ωₕ(i)), Val(D))
+@inline cell_measures(Ωₕ::_MeshnDLike{D}) where {D} = ntuple(i -> cell_measures(Ωₕ(i)), Val(D))
 
-@inline npoints(Ωₕ::MeshnD) = prod(npoints(Ωₕ, Tuple))
-@inline npoints(Ωₕ::MeshnD{D}, ::Type{Tuple}) where {D} = ntuple(i -> npoints(Ωₕ(i)), Val(D))
+@inline npoints(Ωₕ::_MeshnDLike) = prod(npoints(Ωₕ, Tuple))
+@inline npoints(Ωₕ::_MeshnDLike{D}, ::Type{Tuple}) where {D} = ntuple(i -> npoints(Ωₕ(i)), Val(D))
 
 # The diagonal of the largest cell. On a tensor-product mesh the spacing along axis d does
 # not depend on the other coordinates, and `hypot` is increasing in each argument, so the
@@ -261,7 +345,7 @@ individual cell is the product of its per-axis widths; see [`cell_measure`](@ref
 #
 # Each submesh reads its own maximum off its cached spacings, which turns a pass over
 # prod(Nd) cells into D lookups.
-@inline hₘₐₓ(Ωₕ::MeshnD{D}) where {D} = hypot(ntuple(i -> hₘₐₓ(Ωₕ(i)), Val(D))...)
+@inline hₘₐₓ(Ωₕ::_MeshnDLike{D}) where {D} = hypot(ntuple(i -> hₘₐₓ(Ωₕ(i)), Val(D))...)
 
 # The diagonal of the smallest cell, the counterpart of `hₘₐₓ` above and computed the same
 # way: `hypot` is increasing in each argument and the per-axis index sets are independent,
@@ -271,9 +355,9 @@ individual cell is the product of its per-axis widths; see [`cell_measure`](@ref
 # which made hₘₐₓ and hₘᵢₙ measure two different things: on a 33x33 grid over
 # [0,1]x[0,1e-8] the pair read 0.031 and 3.1e-10, one a diagonal and one an edge. For a
 # per-axis extent, ask a submesh: `hₘᵢₙ(Ωₕ(i))`.
-@inline hₘᵢₙ(Ωₕ::MeshnD{D}) where {D} = hypot(ntuple(i -> hₘᵢₙ(Ωₕ(i)), Val(D))...)
+@inline hₘᵢₙ(Ωₕ::_MeshnDLike{D}) where {D} = hypot(ntuple(i -> hₘᵢₙ(Ωₕ(i)), Val(D))...)
 
-@inline function cell_measure(Ωₕ::MeshnD{D}, idx) where {D}
+@inline function cell_measure(Ωₕ::_MeshnDLike{D}, idx) where {D}
     # Routed through the coerced, tuple-returning `half_spacing(::MeshnD, idx)` above
     # (not the raw per-submesh `half_spacing(Ωₕ(i), idx[i])`), so a collapsed axis's
     # zero half-spacing is replaced by `_apply_hs_logic` before the product, not left
@@ -281,10 +365,10 @@ individual cell is the product of its per-axis widths; see [`cell_measure`](@ref
     return prod(half_spacing(Ωₕ, idx))
 end
 
-@inline Base.getindex(Ωₕ::MeshnD, idx::CartesianIndex) = point(Ωₕ, idx)
-@inline Base.getindex(Ωₕ::MeshnD, idx...) = point(Ωₕ, idx)
+@inline Base.getindex(Ωₕ::_MeshnDLike, idx::CartesianIndex) = point(Ωₕ, idx)
+@inline Base.getindex(Ωₕ::_MeshnDLike, idx...) = point(Ωₕ, idx)
 
-function locate_cell(Ωₕ::MeshnD{D}, x::NTuple{D, Real}) where {D}
+function locate_cell(Ωₕ::_MeshnDLike{D}, x::NTuple{D, Real}) where {D}
     indices_tuple = ntuple(i -> locate_cell(Ωₕ(i), x[i]), Val(D))
     return CartesianIndex(indices_tuple)
 end
@@ -295,7 +379,7 @@ end
 # actually produced by the public `mesh()` constructor (`_mesh` routes `D == 1` to
 # `Mesh1D` instead), so this exists only to make the method table unambiguous, with the
 # same body the generic method above would have run for `D == 1`.
-@inline function locate_cell(Ωₕ::MeshnD{1}, x::NTuple{1, Real})
+@inline function locate_cell(Ωₕ::_MeshnDLike{1}, x::NTuple{1, Real})
     return CartesianIndex(locate_cell(Ωₕ(1), x[1]))
 end
 
@@ -335,12 +419,21 @@ end
 
 Create a copy of mesh `Ωₕ`. The copy is shallow with respect to immutable fields
 (`set`, `indices`, `backend`), but deep with respect to mutable data fields
-(`submeshes`, `markers`).
+(`submeshes`, `markers`). The copy and each of its submeshes get an identity of their own.
 """
 function Base.copy(Ωₕ::MeshnD{D}) where {D}
     return MeshnD(
         Ωₕ.set, deepcopy(Ωₕ.markers), Ωₕ.indices, Ωₕ.backend, map(copy, Ωₕ.submeshes)
     )
+end
+
+# A deepcopy is an independent mutable mesh with a fresh identity; its submeshes get theirs
+# through the `Mesh1D` method, and its version stays the sum of theirs (each keeps its own).
+function Base.deepcopy_internal(Ωₕ::MeshnD, dict::IdDict)
+    haskey(dict, Ωₕ) && return dict[Ωₕ]::typeof(Ωₕ)
+    c = invoke(Base.deepcopy_internal, Tuple{Any, IdDict}, Ωₕ, dict)::typeof(Ωₕ)
+    c.uid = _next_mesh_uid()
+    return c
 end
 
 """

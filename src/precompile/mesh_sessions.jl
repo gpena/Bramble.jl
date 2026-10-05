@@ -65,6 +65,20 @@ function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
     index_in_marker(Ωₕ, label)
     boundary_symbol_to_dict(indices(Ωₕ))
 
+    # The immutable state the assembly walk reads (gpena/Bramble.jl#437), and the same
+    # queries through it.
+    s = _walk_mesh(Ωₕ)
+    _pc_indexed(s, Tuple(idx))
+    points(s)
+    spacings(s)
+    half_spacings(s)
+    cell_measures(s)
+    npoints(s)
+    is_uniform(s)
+    _mesh_version(s)
+    _marker_words(s)
+    _marker_id(Ωₕ, label)
+
     # gpena/Bramble.jl#75: warms the plain accessors and the mesh's own iteration
     # protocol, not the deprecated `*_iterator` aliases these replace.
     for iter in (
@@ -112,5 +126,6 @@ function _pc_mesh_mutation(Ωₕ::AbstractMeshType, dm)
     pts = points(Ωₕ)
     change_points!(deepcopy(Ωₕ), pts)
     change_points!(deepcopy(Ωₕ), dm, pts)
+    markers!(deepcopy(Ωₕ), copy(markers(Ωₕ)))
     return nothing
 end
