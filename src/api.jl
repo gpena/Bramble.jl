@@ -10,6 +10,7 @@ public GpuPolicy, GpuKernel, GpuAsync
 public locality, Locality, HostLocality, DeviceLocality
 public vector, matrix, metal_sparse_csr, metal_sparse_csc
 public vector_type, matrix_type, backend_types, execution_policy
+public profile_backends
 
 # Read by every package extension's own `@compile_workload` gate (gpena/Bramble.jl#196), so
 # a user's `set_preferences!(Bramble, "precompile_workload" => false)` disables the

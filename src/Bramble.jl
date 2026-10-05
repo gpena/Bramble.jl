@@ -90,6 +90,7 @@ include("utils/macros.jl")
 include("utils/backend.jl")
 include("utils/device_kernels.jl")
 include("utils/linear_algebra.jl")
+include("utils/backend_profile.jl")
 
 include("geometry/pretty_print.jl")
 include("geometry/set.jl")
