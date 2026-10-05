@@ -41,6 +41,47 @@ function _pgf_grid_len(name, a, n)
     return a
 end
 
+function _pgf_check_lengths(cols::Tuple, n)
+    for field in cols, (nm, col) in field
+        length(col) == n || throw(
+            ArgumentError(
+            "\"$nm\" has length $(length(col)), but the mesh has $n points"
+        ),
+        )
+    end
+    return nothing
+end
+
+# Writes the 1D table behind a function barrier: `cols` is a tuple of per-field collections,
+# each concretely typed, and the recursion over it is unrolled by the compiler.
+function _pgf_write_1d(io::IO, x, cols::Tuple)
+    print(io, 'x')
+    _pgf_write_names(io, cols...)
+    println(io)
+    for i in eachindex(x)
+        print(io, x[i])
+        _pgf_write_row(io, i, cols...)
+        println(io)
+    end
+    return nothing
+end
+
+_pgf_write_names(io::IO) = nothing
+function _pgf_write_names(io::IO, field, rest...)
+    for (nm, _) in field
+        print(io, ' ', nm)
+    end
+    return _pgf_write_names(io, rest...)
+end
+
+_pgf_write_row(io::IO, i) = nothing
+function _pgf_write_row(io::IO, i, field, rest...)
+    for (_, col) in field
+        print(io, ' ', col[i])
+    end
+    return _pgf_write_row(io, i, rest...)
+end
+
 """
     export_pgfplots(filename::AbstractString, Ωₕ::AbstractMeshType{1}, fields::Pair...) -> String
     export_pgfplots(filename::AbstractString, Ωₕ::AbstractMeshType{2}, field::Pair) -> String
@@ -88,30 +129,14 @@ function export_pgfplots(filename::AbstractString, Ωₕ::AbstractMeshType{1}, f
     x = points(Ωₕ)
     n = length(x)
 
-    names = String[]
-    cols = Vector[]
-    for (name, data) in fields
-        for (nm, col) in _pgf_columns(name, data)
-            length(col) == n || throw(
-                ArgumentError(
-                "\"$nm\" has length $(length(col)), but the mesh has $n points"
-            ),
-            )
-            push!(names, nm)
-            push!(cols, col)
-        end
-    end
+    # One concretely typed collection of `(name, column)` pairs per field, so the row loop
+    # below can infer every `col[i]` and reshaped views are never copied into one eltype.
+    cols = map(((name, data),) -> _pgf_columns(name, data), fields)
+    _pgf_check_lengths(cols, n)
 
     out = _pgf_filename(filename)
     open(out, "w") do io
-        println(io, join(("x", names...), ' '))
-        for i in 1:n
-            print(io, x[i])
-            for col in cols
-                print(io, ' ', col[i])
-            end
-            println(io)
-        end
+        _pgf_write_1d(io, x, cols)
     end
     return out
 end

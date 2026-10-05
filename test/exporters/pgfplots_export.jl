@@ -34,6 +34,19 @@ using Bramble
         end
     end
 
+    @testset "1D mixed field types" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
+        uₕ = Rₕ(gridspace(Ωₕ), x -> 2x)
+        mktempdir() do dir
+            f = export_pgfplots(
+                joinpath(dir, "t"), Ωₕ, "u" => uₕ, "w" => collect(points(Ωₕ))
+            )
+            @test readlines(f) == [
+                "x u w", "0.0 0.0 0.0", "0.25 0.5 0.25", "0.5 1.0 0.5",
+                "0.75 1.5 0.75", "1.0 2.0 1.0"]
+        end
+    end
+
     @testset "1D composite" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 4, true)
         Wₕ = gridspace(Ωₕ)
