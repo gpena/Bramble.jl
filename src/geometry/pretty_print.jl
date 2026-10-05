@@ -1,7 +1,7 @@
 # Pretty printing utilities for geometry types
 
 """
-    PrettyPrinter(io::IO, indent_level::Int)
+    PrettyPrinter(io::I, indent_level::Int) where {I <: IO}
 
 Helper struct managing visual formatting, indentation, and styled console output.
 
@@ -11,8 +11,8 @@ the detailed block, rather than by a runtime flag every renderer had to branch o
 (gpena/Bramble.jl#45). A `PrettyPrinter` is therefore only ever built inside a detailed
 renderer.
 """
-struct PrettyPrinter
-    io::IO
+struct PrettyPrinter{I <: IO}
+    io::I
     indent_level::Int
 end
 

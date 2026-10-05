@@ -444,6 +444,11 @@ using ..TestUtils: alloc_test, @test_allocs
         pp1 = with_indent(pp0, 1)
         pp2 = with_indent(pp0, 2)
 
+        # The `io` field is concrete, so reading it in a renderer does not box.
+        @test isconcretetype(fieldtype(typeof(pp0), :io))
+        @test isconcretetype(fieldtype(typeof(pp2), :io))
+        @test isconcretetype(fieldtype(typeof(PrettyPrinter(IOBuffer())), :io))
+
         print_indent(pp0)
         @test isempty(String(take!(io)))
 
