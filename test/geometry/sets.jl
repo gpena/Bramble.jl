@@ -71,6 +71,23 @@ using ..TestUtils: alloc_test, @test_allocs
         @test cp_box_2d isa CartesianProduct{2, Float64}
         @test cp_box_2d.box == cp_int_2d.box
 
+        # box(corner, corner) - mixed element types promote every axis to one type
+        cp_mixed = box((0.0f0, 0.0), (1.0f0, 0.1))
+        @test cp_mixed isa CartesianProduct{2, Float64}
+        @test cp_mixed(1) == (0.0, 1.0)
+        @test cp_mixed(2) == (0.0, 0.1)
+        # reversed corners and an Int/Float32 mix still order each axis
+        cp_mixed_rev = box((1, 2.0f0), (0.0f0, 1))
+        @test cp_mixed_rev isa CartesianProduct{2, Float64}
+        @test cp_mixed_rev.box == ((0.0, 1.0), (1.0, 2.0))
+        # collapsed flags come from the promoted pairs
+        cp_mixed_col = box((0.0f0, 1.0), (1.0f0, 1.0 + 1e-9))
+        @test cp_mixed_col.collapsed == (false, true)
+        @test cp_mixed_col.collapsed ==
+              map(c -> Bramble.is_collapsed(c...), cp_mixed_col.box)
+        # homogeneous Float32 corners keep their type
+        @test box((0.0f0, 0.0f0), (1.0f0, 1.0f0)) isa CartesianProduct{2, Float32}
+
         # Point constructor (collapsed 1D set)
         P_f64 = point(3.5)
         @test P_f64 isa CartesianProduct{1, Float64}
@@ -277,6 +294,7 @@ using ..TestUtils: alloc_test, @test_allocs
         @inferred point(0.5)
         @inferred box(0.0, 1.0)
         @inferred box((0.0, 1.0), (2.0, 3.0))
+        @inferred box((0.0f0, 0.0), (1.0f0, 0.1))
         @inferred center(cp2)
         @inferred center(cp3)
         @inferred dim(cp3)

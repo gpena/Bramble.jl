@@ -104,20 +104,31 @@ end
 
 """
     box(a::Number, b::Number) -> CartesianProduct{1, T}
-    box(a::NTuple{D}, b::NTuple{D}) -> CartesianProduct{D, T}
+    box(a::Tuple{Vararg{Number, D}}, b::Tuple{Vararg{Number, D}}) -> CartesianProduct{D, T}
 
 Construct a [`CartesianProduct`](@ref) from two opposing corner points `a` and `b`.
+
+The corners may mix element types: every coordinate is floated and all axes are promoted to
+one type `T`, so `box((0.0f0, 0.0), (1.0f0, 0.1))` is a `CartesianProduct{2, Float64}`.
+Homogeneous corners keep their type.
 
 Interval bounds for each dimension `i` are defined by ``[\\min(a_i, b_i), \\max(a_i, b_i)]``.
 """
 @inline box(a::Number, b::Number) = interval(min(a, b), max(a, b))
 
-@inline function box(a::NTuple{D}, b::NTuple{D}) where {D}
-    box_coords = ntuple(i -> (float(min(a[i], b[i])), float(max(a[i], b[i]))), Val(D))
+@inline function box(
+        a::Tuple{Vararg{Number, D}}, b::Tuple{Vararg{Number, D}}
+) where {D}
+    fa = map(float, a)
+    fb = map(float, b)
+    T = typeof(first(promote(fa..., fb...)))
+    box_coords = ntuple(Val(D)) do i
+        x, y = T(fa[i]), T(fb[i])
+        (min(x, y), max(x, y))
+    end
     collapsed_flags = ntuple(i -> is_collapsed(box_coords[i]...), Val(D))
-    FloatT = typeof(box_coords[1][1])
 
-    return CartesianProduct{D, FloatT}(box_coords, collapsed_flags)
+    return CartesianProduct{D, T}(box_coords, collapsed_flags)
 end
 
 """
