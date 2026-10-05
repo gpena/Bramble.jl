@@ -285,6 +285,26 @@ struct NotAFunctionPredicate end
 
         @test length(collect(marker_identifiers(Ω))) == 4
 
+        # `marker_identifiers` is a concretely typed tuple holding one `Symbol`, one
+        # `Set{Symbol}` and one `Function`, in symbols, tuples, conditions order.
+        Ω_ids = domain(
+            interval(0.0, 1.0) × interval(0.0, 1.0),
+            :s => :left,
+            :t => (:top, :right),
+            :f => x -> true
+        )
+        ids = marker_identifiers(Ω_ids)
+        @test length(ids) == 3
+        @test count(id -> id isa Symbol, ids) == 1
+        @test count(id -> id isa Set{Symbol}, ids) == 1
+        @test count(id -> id isa Function, ids) == 1
+        @test ids[1] === :left
+        @test ids[2] == Set([:top, :right])
+        @test ids[3] isa Function
+        @test ids isa Tuple
+        @test (@inferred marker_identifiers(Ω_ids)) isa Tuple
+        @test isconcretetype(typeof(ids))
+
         @test Set(label_symbols(Ω)) == Set([:bnd_left, :boundary])
         @test Set(label_tuples(Ω)) == Set([:corners])
         @test Set(label_conditions(Ω)) == Set([:region1])

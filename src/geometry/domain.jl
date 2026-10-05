@@ -55,19 +55,26 @@ Zero-allocation; see [`label_identifiers`](@ref).
 @inline labels(Ω::Domain) = labels(markers(Ω))
 
 """
-    marker_identifiers(Ω::Domain)
+    marker_identifiers(Ω::Domain) -> Tuple
 
-Return an iterator yielding the identifying symbols, symbol sets, or predicate functions of all markers in domain `Ω`.
+Return a tuple of the identifying symbols, symbol sets, or predicate functions of all
+markers in domain `Ω`.
+
+The tuple lists the identifiers of [`symbols`](@ref), then [`tuples`](@ref), then
+[`conditions`](@ref). It is built as a compile-time-unrolled tuple, like
+[`label_identifiers`](@ref), so its type is concrete even when the three kinds are mixed.
 
 !!! note
-    Iterating [`symbols`](@ref), [`tuples`](@ref), or [`conditions`](@ref) directly, or
-    through [`label_symbols`](@ref)/[`label_tuples`](@ref)/[`label_conditions`](@ref),
+    Building the tuple, like iterating [`symbols`](@ref), [`tuples`](@ref), or
+    [`conditions`](@ref) directly, or through
+    [`label_symbols`](@ref)/[`label_tuples`](@ref)/[`label_conditions`](@ref),
     allocates 0 bytes.
 """
 @inline function marker_identifiers(Ω::Domain)
     return (
-        identifier(marker) for
-    marker in Iterators.flatten((symbols(Ω), tuples(Ω), conditions(Ω)))
+        map(identifier, symbols(Ω))...,
+        map(identifier, tuples(Ω))...,
+        map(identifier, conditions(Ω))...
     )
 end
 
