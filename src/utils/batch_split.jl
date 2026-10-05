@@ -132,6 +132,58 @@ function _batch_ptype(T, sub)
     return T.name.wrapper{P...}
 end
 
+# Whether `_batch_split_expr!` takes a value of type `T` apart without reaching
+# `_throw_batch_resistor`, by the same leaf rules, recording in `sub` a stand-in for the
+# array type each slot rebuilds as.
+function _batch_splits!(sub, T)
+    if _batch_is_slot(T)
+        sub[T] = _BatchStandIn{eltype(T), ndims(T)}
+        return true
+    end
+    (_batch_is_ref(T) || isbitstype(T)) && return true
+    _batch_is_mesh(T) && return _batch_splits!(sub, _batch_state_type(T))
+    _batch_is_node(T) || return false
+    return all(i -> _batch_splits!(sub, fieldtype(T, i)), 1:fieldcount(T))
+end
+
+# An array type no struct field names: a field typed as a concrete `Array` does not take it,
+# as it does not take the `PtrArray` a task receives.
+struct _BatchStandIn{T, N} <: AbstractArray{T, N} end
+
+# Whether `_batch_rebuild_expr` rebuilds `T` without reaching `_throw_batch_misfit` when its
+# arrays come back as the stand-ins `sub`: every rebuilt field fits its declared type.
+function _batch_fits(T, sub)
+    _batch_is_mesh(T) && return _batch_fits(_batch_state_type(T), sub)
+    _batch_is_node(T) || return true
+    # A type parameter bound the stand-in breaks (`S{V <: Vector}`) breaks the rebuild too.
+    T′ = try
+        _batch_ptype(T, sub)
+    catch e
+        e isa TypeError || rethrow()
+        return false
+    end
+    return all(1:fieldcount(T)) do i
+        F = fieldtype(T, i)
+        return (T <: Tuple || _batch_ptype(F, sub) <: fieldtype(T′, i)) && _batch_fits(F, sub)
+    end
+end
+
+_batch_splits(T) = (sub = IdDict{Any, Any}(); _batch_splits!(sub, T) && _batch_fits(T, sub))
+
+"""
+    _batch_splittable(::Type{T}) -> Bool
+
+Whether [`_batch_split`](@ref) takes a value of type `T` apart and [`_batch_rebuild`](@ref)
+puts it back together around the arrays a `Polyester.@batch` task receives, rather than
+either throwing: `true` when every leaf of `T` takes one of the split's rules and every
+struct field's declared type accepts any array in place of the one it held (a field typed
+`Vector{T}` does not). Generated, so the answer is a constant of the type and a branch on it
+costs the caller nothing. A split hook that meets `false` (an array of `BigFloat`s, a
+`BigFloat` coefficient, a struct holding a `Vector{Float64}` field) captures its arguments
+whole instead.
+"""
+@generated _batch_splittable(::Type{T}) where {T} = _batch_splits(T)
+
 # The expression rebuilding the skeleton piece `ex` of type `S`, and its type; `A` is the
 # arrays tuple's type.
 function _batch_rebuild_expr(S, ex, A, sub)

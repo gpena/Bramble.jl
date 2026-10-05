@@ -1309,4 +1309,79 @@ _mg_spd(W) = (κ = Rₕ(W, x -> 1 + sum(abs2, x)); form(W, W, (u, v) -> innerₕ
     end
 end
 
+
+# Data `_batch_split` cannot take apart (`BigFloat` sources, coefficients and grid functions)
+# makes every split hook capture its parts whole, as before gpena/Bramble.jl#437, instead of
+# throwing. Each hook must have run on `BigFloat` data, and every result equal the serial one
+# on the same jittered mesh. `_BfWrapped` is a user's array type whose field names `Vector`:
+# it splits, but cannot be rebuilt around the `PtrArray` a task receives.
+struct _BfWrapped{T} <: AbstractVector{T}
+    data::Vector{T}
+end
+Base.size(w::_BfWrapped) = size(w.data)
+Base.getindex(w::_BfWrapped, i::Int) = w.data[i]
+
+@testset "unsplittable data falls back" begin
+    _bf_space(n, policy; seed = 4370) = (Random.seed!(seed);
+        gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), n, (false, false);
+            backend = backend(policy = policy))))
+    _bf_close(a, b) = !iszero(b) && isapprox(a, b; rtol = eltype(a) == BigFloat ? 1e-60 : 1e-14)
+    hooks = (:_batch_bilinear_band_replay!, :_batch_bilinear_colour_replay!,
+        :_batch_mf_bands!, :_batch_linear_colour_sweep!, :_batch_linear_band_sweep!)
+    ext = Base.get_extension(Bramble, :BramblePolyesterExt)
+    # How many of the extension's instances of hook `h` take `BigFloat` data.
+    bigruns(h) = sum(methods(getfield(Bramble, h)); init = 0) do m
+        m.module === ext || return 0
+        return count(mi -> mi !== nothing && occursin("BigFloat", string(mi.specTypes)),
+            Base.specializations(m))
+    end
+    before = map(bigruns, hooks)
+    results = map((CpuSerial(), CpuPolyester())) do policy
+        W = _bf_space((9, 11), policy)
+        g = Rₕ(W, x -> big(x[1] + 1))
+        c = _BfWrapped(collect(range(1.0, 2.0; length = ndofs(W))))
+        bilinear = (form(W, W, (u, v) -> big"2.0" * inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v)),
+            form(W, W, (u, v) -> inner₊(g * ∇ₕ(u), ∇ₕ(v))),
+            form(W, W, (u, v) -> inner₊(c * ∇ₕ(u), ∇ₕ(v))))
+        r = Any[]
+        for a in bilinear
+            A = assemble(a)
+            for _ in 1:2
+                fill!(nonzeros(A), 0)
+                assemble!(A, a)
+            end
+            push!(r, A)
+        end
+        op = matrix_free_operator(bilinear[1])
+        push!(r, op * big.(range(-1.0, 2.0; length = size(op, 2))))
+        V = _bf_space((9, 33), policy; seed = 1) × _bf_space((13, 3), policy; seed = 2)
+        opv = matrix_free_operator(form(V, V,
+            (u, v) -> big"2.0" * inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(u(2), v(2))))
+        push!(r, opv * big.(range(-1.0, 2.0; length = size(opv, 2))))
+        f = Rₕ(W, x -> big(x[1]))
+        for l in (form(W, v -> innerₕ(x -> big(x[1] + x[2]), v)), form(W, v -> innerₕ(f, v)),
+            form(W, v -> big"2.0" * innerₕ(x -> x[1], v)))
+            push!(r, assemble(l))
+        end
+        return r, (op.plan !== nothing, opv.plan === nothing)
+    end
+    (serial, _), (batched, (fused, per_unit)) = results
+    @test fused && per_unit
+    @test map(eltype, batched) == [BigFloat, BigFloat, Float64, fill(BigFloat, 5)...]
+    @test all(map(_bf_close, batched, serial))
+    @testset "$h ran on BigFloat data" for (h, n) in zip(hooks, before)
+        @test bigruns(h) > n
+    end
+
+    W = _bf_space((9, 11), CpuPolyester())
+    unit(l) = (l.test_space, Bramble._bind_walk(l.ast, l.test_space)...)
+    @test Bramble._batch_splittable(typeof(unit(form(W, v -> innerₕ(x -> x[1], v)))))
+    big_unit = unit(form(W, v -> big"2.0" * innerₕ(x -> x[1], v)))
+    @test !Bramble._batch_splittable(typeof(big_unit))
+    @test_throws ArgumentError Bramble._batch_split(big_unit)
+    @test !Bramble._batch_splittable(typeof(unit(form(W, v -> innerₕ(Rₕ(W, x -> big(x[1])), v)))))
+    @test !Bramble._batch_splittable(_BfWrapped{Float64})
+    @test Bramble._batch_splittable(Tuple{Vector{Float64}, Base.RefValue{Float64}})
+end
+
 end # module

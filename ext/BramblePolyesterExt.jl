@@ -74,7 +74,7 @@ using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
                _bc_host_rebuild, _AvgKernel, _AvgScatterKernel, _MaskedKernel, __prod,
                ReplaySink, _PairReplaySink, _DiagonalReplayTarget, ActionSink,
                _PairActionSink, _batch_split, _batch_rebuild, _MFFusedPlan, _MFPass,
-               _MF_BAND, _MF_NO_COLLECT, _mf_apply_parts!, _mf_host_ast
+               _MF_BAND, _MF_NO_COLLECT, _mf_apply_parts!, _mf_host_ast, _batch_splittable
 using Polyester: Polyester, @batch
 using LinearAlgebra: mul!
 using PrecompileTools: @setup_workload, @compile_workload
@@ -365,7 +365,25 @@ end
 # back around its storage (`_replay_join`). A single-iteration `@batch` runs its body
 # inline on the plain `Vector`s, which the rebuild and the join accept as well. The caller
 # (`_sweep_bilinear!`) has already bound the term and checked the weights on the host.
+#
+# A value `_batch_split` cannot take apart (a `BigFloat` coefficient, an array of
+# `BigFloat`s) does not throw: `_split_or_whole` decides from the types, at compile time,
+# that the split does not apply, and the loop captures the parts whole, which boxes as every
+# hook did before gpena/Bramble.jl#437. The storage vectors join the test (`hot`), so a
+# `BigFloat` matrix or vector falls back too.
 Bramble._threaded_replay_policy(::CpuPolyester) = true
+
+# The skeleton of parts that cross `@batch` whole (`_split_or_whole`).
+struct _Whole end
+
+# `parts` as `_batch_split` gives them when every leaf of `parts` and `hot` splits, otherwise
+# `parts` itself behind `_Whole`; `_rejoin` is the inverse in each task.
+@inline function _split_or_whole(parts, hot...)
+    _batch_splittable(typeof((parts, hot))) && return _batch_split(parts)
+    return _Whole(), parts
+end
+@inline _rejoin(skel, arrays) = _batch_rebuild(skel, arrays)
+@inline _rejoin(::_Whole, parts) = parts
 
 # Which target type `_replay_join` rebuilds, an isbits tag the split keeps as it is.
 struct _Hot{K} end
@@ -411,9 +429,9 @@ function Bramble._batch_bilinear_band_replay!(
         lin_indices, mesh_markers, row_offset, col_offset
 )
     h1, h2, cold = _replay_parts(target)
-    skel, arrays = _batch_split((cold, sp, term, mesh_markers))
+    skel, arrays = _split_or_whole((cold, sp, term, mesh_markers), h1, h2)
     @batch for b in bidx
-        c, s, tm, mm = _batch_rebuild(skel, arrays)
+        c, s, tm, mm = _rejoin(skel, arrays)
         t = _replay_join(h1, h2, c)
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
             _replay_point!(t, tm, s, I, lin_indices, mm, row_offset, col_offset)
@@ -427,9 +445,9 @@ function Bramble._batch_bilinear_colour_replay!(
         row_offset, col_offset
 )
     h1, h2, cold = _replay_parts(target)
-    skel, arrays = _batch_split((cold, sp, term, mesh_markers))
+    skel, arrays = _split_or_whole((cold, sp, term, mesh_markers), h1, h2)
     @batch for I in idxs
-        c, s, tm, mm = _batch_rebuild(skel, arrays)
+        c, s, tm, mm = _rejoin(skel, arrays)
         _replay_point!(
             _replay_join(h1, h2, c), tm, s, I, lin_indices, mm, row_offset, col_offset)
     end
@@ -450,12 +468,12 @@ end
 # (`_sweep_parallel!`) has already bound the term to its leaf's marker ids and checked the
 # weights on the host (`_bind_walk`), so no `Symbol` region reaches the split. A
 # single-iteration `@batch` runs its body inline on the plain `Vector`s, which the rebuild
-# accepts as well.
+# accepts as well. Parts that do not split cross whole (`_split_or_whole` above).
 
 function Bramble._batch_linear_colour_sweep!(b::AbstractVector, sp, term, idxs, lin_indices, mesh_markers, offset, α)
-    skel, arrays = _batch_split((sp, term, mesh_markers))
+    skel, arrays = _split_or_whole((sp, term, mesh_markers), b)
     @batch for I in idxs
-        s, tm, mm = _batch_rebuild(skel, arrays)
+        s, tm, mm = _rejoin(skel, arrays)
         _scatter_linear_point!(b, s, tm, I, lin_indices, mm, offset, α)
     end
     return nothing
@@ -464,9 +482,9 @@ end
 function Bramble._batch_linear_band_sweep!(
         b::AbstractVector, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
 )
-    skel, arrays = _batch_split((sp, term, mesh_markers))
+    skel, arrays = _split_or_whole((sp, term, mesh_markers), b)
     @batch for k in bidx
-        s, tm, mm = _batch_rebuild(skel, arrays)
+        s, tm, mm = _rejoin(skel, arrays)
         for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
             _scatter_linear_point!(b, s, tm, I, lin_indices, mm, offset, α)
         end
@@ -538,15 +556,16 @@ end
 # the walk state's `uid` and version, so it answers the rebuilt space (`_mf_evaluator`). A
 # single-iteration `@batch` runs its body inline on the plain `Vector`s, which the rebuild
 # accepts as well. The caller (`_mf_product!`) has checked on the host that the plan is the
-# product's form's.
+# product's form's. Parts that do not split cross whole, the host-bound AST among them
+# (`_split_or_whole` above).
 function Bramble._batch_mf_bands!(s::ActionSink, plan::_MFFusedPlan{D}, nbands::Int) where {D}
     a = plan.form
     y, x = s.y, s.x
-    skel, arrays = _batch_split(
-        ((s.α, s.mask), a.trial_space, a.test_space, _mf_host_ast(a), plan.geom))
+    skel, arrays = _split_or_whole(
+        ((s.α, s.mask), a.trial_space, a.test_space, _mf_host_ast(a), plan.geom), y, x)
     len, omin, omax = plan.dims[D], plan.omin, plan.omax
     @batch for b in 1:nbands
-        (α, mask), Wu, Wv, ast, geom = _batch_rebuild(skel, arrays)
+        (α, mask), Wu, Wv, ast, geom = _rejoin(skel, arrays)
         own = _band_range(1:len, nbands, b)
         _mf_apply_parts!(_MFPass(_MF_BAND, own, omin, omax, _MF_NO_COLLECT),
             ActionSink(y, x, α, mask, geom), Wu, Wv, ast)
