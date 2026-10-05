@@ -29,6 +29,10 @@ using Bramble:
 using StaticArrays
 using ..TestUtils: alloc_test, @test_allocs
 
+# A callable that is not a `Function`: no marker kind accepts it.
+struct NotAFunctionPredicate end
+(::NotAFunctionPredicate)(x) = true
+
 @testset "Computational domains" begin
     # Test data setup: Cartesian products and coordinate indicator predicates.
     I1D = interval(0.0, 1.0)
@@ -158,6 +162,52 @@ using ..TestUtils: alloc_test, @test_allocs
         # dynamically on a marker container (gpena/Bramble.jl#240).
         _mk(I, f) = markers(I, :a => :left, :b => (:top, :bottom), :c => f)
         @test isconcretetype(only(Base.return_types(_mk, (typeof(I2D), typeof(func1)))))
+    end
+
+    # Invariant: every identifier kind `markers` receives is either stored or rejected with
+    # an `ArgumentError`; none is silently dropped (a dropped marker marks nothing).
+    @testset "Marker identifier kinds" begin
+        X = interval(0.0, 1.0) × interval(0.0, 1.0)
+        T = interval(0.0, 1.0)
+
+        # Vectors and sets of symbols are stored with the tuple markers, as `Set{Symbol}`.
+        for ident in ([:top, :bottom], Set([:top, :bottom]), (:top, :bottom))
+            dm = markers(X, :walls => ident)
+            @test length(tuples(dm)) == 1
+            @test length(symbols(dm)) == 0
+            @test length(conditions(dm)) == 0
+            @test label(only(tuples(dm))) === :walls
+            @test identifier(only(tuples(dm))) == Set([:top, :bottom])
+        end
+
+        # The time-dependent method forwards them to the spatial validation.
+        for ident in ([:top], Set([:top]))
+            dm = markers(X, T, :w => ident)
+            @test length(tuples(dm)) == 1
+            @test identifier(only(tuples(dm))) == Set([:top])
+        end
+
+        # The container stays concrete with a vector marker in the mix.
+        _mkv(Y) = markers(Y, :a => :left, :b => [:top, :bottom], :c => (x -> true))
+        @test isconcretetype(only(Base.return_types(_mkv, (typeof(X),))))
+
+        # Unknown symbols inside a vector or set are rejected like those in a tuple.
+        @test_throws ArgumentError markers(X, :w => [:nowhere])
+        @test_throws ArgumentError markers(X, :w => Set([:top, :nowhere]))
+        @test_throws ArgumentError markers(X, T, :w => [:nowhere])
+
+        # Any other identifier kind is rejected instead of dropped.
+        for bad in (NotAFunctionPredicate(), "left", Dict(:top => 1), 1, [1, 2], [:top, "x"])
+            @test_throws ArgumentError markers(X, :r => bad)
+            @test_throws ArgumentError markers(X, T, :r => bad)
+        end
+        @test_throws ArgumentError markers(interval(0.0, 1.0), :r => NotAFunctionPredicate())
+
+        # The stored vector marker reaches the mesh: it marks the listed face only.
+        Ωₕ = @test_logs (:warn, r"boundary.*something other than") mesh(
+            domain(X, :boundary => [:xmin]), (5, 5), (true, true)
+        )
+        @test count(Bramble.markers(Ωₕ)[:boundary]) == 5
     end
 
     # Invariant: Domain constructors preserve geometric traits including
