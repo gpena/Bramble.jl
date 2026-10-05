@@ -1,0 +1,10 @@
+{
+  "name": "bramble",
+  "version": "3.23.0",
+  "description": "Teaches Claude to write correct Bramble.jl code: the public API by task, the rules that keep finite-difference code right and fast, and worked, checked examples (linear and nonlinear Poisson, convection-diffusion, heat, wave, elasticity, coupled systems, point sources).",
+  "author": { "name": "Gonçalo Pena" },
+  "homepage": "https://github.com/gpena/Bramble.jl",
+  "repository": "https://github.com/gpena/Bramble.jl",
+  "license": "MIT",
+  "keywords": ["julia", "pde", "finite-differences", "numerical-methods"]
+}

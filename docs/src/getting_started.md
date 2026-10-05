@@ -135,6 +135,14 @@ Where to go from here:
 - The [worked examples](examples/poisson_linear.md) run the whole chain on real problems,
   a Poisson problem, a convection-diffusion problem and a heat equation.
 
+## Coding with Claude
+
+The repository includes a [Claude Code](https://code.claude.com) plugin with the API by task,
+the rules that keep Bramble code correct (exported versus `public` names, seeding random
+meshes, literal integer coefficients in forms) and worked examples whose results are checked.
+Install it from Claude Code with `/plugin marketplace add gpena/Bramble.jl`, then
+`/plugin install bramble@bramble`.
+
 ## Reading order
 
 Read the tutorials in the order of the sidebar, top to bottom. Each line says what the page teaches.
