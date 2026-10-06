@@ -234,19 +234,20 @@ end
 end
 
 """
-    _bind_walk(term, Ωₕ::AbstractMeshType) -> Tuple{bound_term, Union{Matrix{UInt64}, Nothing}}
-    _bind_walk(term, sp::ScalarGridSpace) -> Tuple{bound_term, Union{Matrix{UInt64}, Nothing}}
+    _bind_walk(term, Ωₕ::AbstractMeshType) -> Tuple{bound_term, Union{AbstractMatrix{UInt64}, Nothing}}
+    _bind_walk(term, sp::ScalarGridSpace) -> Tuple{bound_term, Union{AbstractMatrix{UInt64}, Nothing}}
 
 `term` with every `RegionRestriction` it holds bound to `Ωₕ`'s marker ids
 ([`_bind_marker_ids`](@ref)), and the marker table the walk over `Ωₕ` passes to
-`local_stencil`: `Ωₕ`'s word matrix ([`_marker_words`](@ref)), or `nothing` when `term`
-restricts nothing, decided from its type.
+`local_stencil`: `Ωₕ`'s word matrix, any `AbstractMatrix{UInt64}` ([`_marker_words`](@ref)),
+or `nothing` when `term` restricts nothing, decided from its type.
 
 Called at every walk entry, once per walk, so the ids are read from `Ωₕ`'s label table as it
 is when the walk runs: `assemble` on a form built before a `markers!` call binds against the
 new table, and a label removed since throws the `ArgumentError` of
-[`_validate_term_markers`](@ref). A label written into `markers(Ωₕ)` in place has no id and
-throws too (`_throw_marker_not_bound`). Given the walked leaf `sp` instead, it binds against
+[`_validate_term_markers`](@ref). Editing `markers(Ωₕ)` in place is unsupported, and `markers!`
+changes the labels. A label written in place has no id and throws too
+(`_throw_marker_not_bound`). Given the walked leaf `sp` instead, it binds against
 `mesh(sp)` after checking `sp`'s weights ([`weights`](@ref)): the walk's one staleness
 check, since its stencils read the weights unchecked.
 """

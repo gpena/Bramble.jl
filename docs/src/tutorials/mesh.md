@@ -275,7 +275,7 @@ is_boundary_index(Ωₕ_prod, CartesianIndex(1, 2)),
 is_boundary_index(Ωₕ_prod, CartesianIndex(2, 2))
 ```
 
-Building a mesh over a labelled domain projects each marker onto the grid points as a `BitVector`, so membership is one lookup. Here the domain has an inlet, an outlet, walls, and a disc-shaped obstacle given by a predicate:
+Building a mesh over a labelled domain projects each marker onto the grid points as a `BitVector`, so membership is one lookup. Treat them as read-only: assembly does not see an edit made to one in place. Here the domain has an inlet, an outlet, walls, and a disc-shaped obstacle given by a predicate:
 
 ```@example mesh
 I = interval(0.0, 1.0)

@@ -1,41 +1,52 @@
 # ext/BramblePolyesterExt.jl: the Polyester-batched sweeps behind `CpuPolyester`.
 #
-# Nine hooks in `src/` are `@noinline` methods that error naming Polyester
-# (`src/utils/linear_algebra.jl`, `src/assembly/bilinear_execution.jl`, `src/assembly/linear.jl`):
-# `_batch_for!`, `_batch_axis_for!`, `_batch_scatter_for!`, `_batch_dot`, `_batch_dot_masked`,
-# `_batch_bilinear_colour_sweep!`, `_batch_bilinear_band_sweep!`, `_batch_linear_colour_sweep!`
-# and `_batch_linear_band_sweep!`. Every one of them is the `Polyester.@batch` counterpart of
-# an existing `Threads.@threads` body, called from the identical call site once `execution_policy`
-# resolves to `CpuPolyester()` instead of `CpuThreaded()` -- so the colouring, the band splitting and,
-# critically, the matrix/vector zeroing that happens in the *callers* (`_assemble_bilinear!`,
-# `assemble_parallel!`, `_assemble_linear!`) are untouched by this file: this only supplies what
-# runs once the caller has already zeroed and dispatched.
+# Nineteen hooks in `src/` are `@noinline` methods that error naming Polyester. This file
+# defines each of them, as the `Polyester.@batch` counterpart of an existing
+# `Threads.@threads` body, called from the identical call site once `execution_policy`
+# resolves to `CpuPolyester()` instead of `CpuThreaded()`. The colouring, the band splitting
+# and, critically, the matrix/vector zeroing that happens in the *callers*
+# (`_assemble_bilinear!`, `assemble_parallel!`, `_assemble_linear!`) are untouched by this
+# file: it only supplies what runs once the caller has already zeroed and dispatched.
 #
-# Three more hooks have the same shape in
-# `src/operators/difference.jl`/`src/operators/average.jl`: `_batch_difference_engine!`,
-# `_batch_average_engine!` and `_batch_centered_average_engine!`, each the `@batch` counterpart of
-# `_threaded_difference_engine!`/`_threaded_average_engine!`/`_threaded_centered_average_engine!`,
-# running one `_difference_band!`/`_average_band!`/`_centered_average_band!` per band.
+# `src/utils/linear_algebra.jl`: `_batch_for!`, `_batch_axis_for!`, `_batch_scatter_for!`,
+# `_batch_dot` and `_batch_dot_masked`.
+#
+# `src/assembly/bilinear_execution.jl`: `_batch_bilinear_colour_sweep!` and
+# `_batch_bilinear_band_sweep!`, and their warmed-refill counterparts
+# `_batch_bilinear_colour_replay!` and `_batch_bilinear_band_replay!`.
+#
+# `src/assembly/linear.jl`: `_batch_linear_colour_sweep!` and `_batch_linear_band_sweep!`.
+#
+# `src/operators/difference.jl` and `src/operators/average.jl`: `_batch_difference_engine!`,
+# `_batch_average_engine!` and `_batch_centered_average_engine!`, each the `@batch`
+# counterpart of `_threaded_difference_engine!`/`_threaded_average_engine!`/
+# `_threaded_centered_average_engine!`, running one
+# `_difference_band!`/`_average_band!`/`_centered_average_band!` per band.
+#
+# `src/operators/vector_calculus.jl`: `_batch_run_bands!`, the `@batch` counterpart of
+# `_run_bands!`'s `CpuThreaded` arm, reached by the divergence, curl and strain-average
+# engines. Unlike the three engine hooks, it stays generic over the band function `f`.
+#
+# `src/assembly/matrix_free.jl`: `_batch_mf_bands!`, the fused matrix-free product, one band
+# per `@batch` task.
+#
+# `src/space/vectorelement.jl`: `_batch_broadcast!`, one `_broadcast_band!` per band of a
+# fused broadcast.
+#
+# `src/assembly/kronecker.jl`: `_batch_kron_lines!`, which runs a `KroneckerLinearOperator`
+# product's grid lines under `@batch` when the operator's own policy is `CpuPolyester`.
+#
+# `src/problems/semidiscrete_rhs.jl`: `_batch_csr_spmv!`, which runs the explicit
+# right-hand side's product `du .-= A u` one compressed row per `@batch` iteration.
 #
 # A warmed refill replays recorded `nzval` positions instead of searching, gated per unit by
 # `_threaded_replay_policy`; only `CpuThreaded` answers `true` in `src/`.
 # This file's `_threaded_replay_policy(::CpuPolyester) = true` opts `CpuPolyester` in, and
 # `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` are the `@batch` counterparts
-# of `_batch_bilinear_band_sweep!`/`_batch_bilinear_colour_sweep!` above, reached instead of
+# of `_batch_bilinear_band_sweep!`/`_batch_bilinear_colour_sweep!`, reached instead of
 # them once a unit's leaf can replay (`_leaf_replays`, bilinear_execution.jl): the colouring is
 # identical, only `_replay_point!` (reads the recording) stands in for `_scatter_point!`
 # (searches).
-#
-# One more hook lives in `src/operators/vector_calculus.jl`:
-# `_batch_run_bands!`, the `@batch` counterpart of `_run_bands!`'s `CpuThreaded` arm, reached
-# by the divergence, curl and strain-average engines. Unlike the three hooks above, it stays
-# generic over the band function `f` instead of naming one.
-#
-# `src/assembly/kronecker.jl` has `_batch_kron_lines!`, which runs a `KroneckerLinearOperator`
-# product's grid lines under `@batch` when the operator's own policy is `CpuPolyester`.
-#
-# `src/problems/semidiscrete_rhs.jl` has `_batch_csr_spmv!`, which runs the explicit
-# right-hand side's product `du .-= A u` one compressed row per `@batch` iteration.
 #
 # `Polyester.@batch` accepts a `CartesianIndices` directly (`closure.jl`'s own `splitloop`
 # already splits it along its last axis, the same trick `_threaded_axis_for!` hand-rolls for
@@ -44,26 +55,30 @@
 # cannot avoid on its own) but hurts `@batch`, which already does the equivalent split
 # internally -- chunking on top would split twice.
 #
-# Allocation bound: a warm `CpuPolyester` call allocates a small constant amount per call,
-# independent of the grid (the same on a 33² and a 513² grid). The cause is
-# Polyester's argument box: `@batch` copies the arguments its loop captures into a
-# heap-allocated `ManualMemory.Reference` on every call, sized by what the loop captures.
-# Plain arrays become `PtrArray`s, which allocate nothing. Measured on a 2D non-uniform grid
-# with 4 threads, every box is at most 512 B.
-# Differences, shifts, averages, divergence, curl, `εₕ!`, `Rₕ!` and `avgₕ!` (masked and
-# composite too), broadcasts (a 0-dimensional array leaf too), `innerₕ`, `inner₊`, the
-# weight build, linear assembly and the explicit RHS
-# allocate 0 B, and so do a `KroneckerLinearOperator` product, a fused matrix-free product
-# and a GMG V-cycle. Their loops capture only plain arrays and isbits values, rebuilding any
-# struct around them inside each task (`_batch_kron_lines!`, `_batch_broadcast!`,
-# `_batch_for!`, `_batch_mf_bands!` below), so the box stays on the stack. A bilinear refill
-# allocates 1520 B (five colour sweeps of 304 B each); a per-unit matrix-free product
-# 1088 B. Those loops capture a form or another
-# struct holding a GC reference, which puts the box on the heap; this release keeps the
-# 512 B bound for them and gpena/Bramble.jl#437 follows up. An `Rₕ!` or `avgₕ!` whose
-# function is a closure over an array boxes likewise, since the closure crosses whole
-# (`_splits_kernel` below). The test file's `_PA_ZERO_PATHS` asserts 0 B for the first
-# group. No `CpuPolyester` call reaches `Threads.@threads` or `Threads.@spawn`
+# Allocation. A warm `CpuPolyester` call allocates 0 B, on any grid, with one exception
+# (below). Polyester's argument box is the only source. `@batch` copies the arguments its
+# loop captures into a `ManualMemory.Reference` on every call. The box is on the stack
+# when it holds only plain arrays and isbits values (arrays become `PtrArray`s), and on the
+# heap when it holds one GC reference. So no loop captures a form, a space, a mesh, a sink or
+# a `SparseMatrixCSC` whole. Bramble's own kernels and walk arguments go through
+# `_batch_split` (`src/utils/batch_split.jl`): the arrays cross as top-level loop arguments,
+# the rest as an isbits skeleton, and each task calls `_batch_rebuild` on them
+# (`_batch_for!`, the replay, linear and bilinear sweeps, `_batch_mf_bands!`). The loops
+# that never held a struct (the engines, `_batch_run_bands!`, `_batch_dot`,
+# `_batch_csr_spmv!`) capture only arrays and isbits values, and `_batch_broadcast!` and
+# `_batch_kron_lines!` rebuild their light structs inside each task (`_bc_host_rebuild`,
+# `_kron_host_rebuild`). The test file's "allocation under CpuPolyester" testset asserts
+# 0 B for each path.
+#
+# The exception is a user closure that captures an array, or holds data the split cannot
+# take. It crosses `@batch` whole and boxes, as it did before the split, so that a method
+# typed on `Vector` and an `isa Vector` branch in user code still see the `Vector` and not a
+# `PtrArray` (`_splits_kernel` below); an `avgₕ!` over such a closure measures 160 B, the
+# bound `_PA_BOX_CEILINGS` in that testset gives it. A
+# `BigFloat`, a `Dict` or a `String` in a form falls back to boxing the same way
+# (`_batch_splittable`). A task body runs under an exception guard (`@_task` below), so a
+# throw inside a task reaches the caller with `CpuSerial`'s exception type and text, never
+# as a crash. No `CpuPolyester` call reaches `Threads.@threads` or `Threads.@spawn`
 # (gpena/Bramble.jl#400).
 module BramblePolyesterExt
 
@@ -272,7 +287,7 @@ end
 #
 # The kernel argument is `::F where {F}` because `Base.Fix1 <: Function`: Julia does not
 # specialise on an unannotated `Function` argument it only passes on, so the split was
-# built from an abstractly typed kernel and boxed (112 B per weight build).
+# built from an abstractly typed kernel and boxed on the heap on every weight build.
 
 # One mask's 64-bit words, indexed as the `BitVector` they came from (`_mask_bit` below).
 struct _ChunkBits{C}
@@ -358,15 +373,13 @@ end
 
 # A whole kernel's loop runs one guarded slab per iteration, not one guarded index: a
 # guarded call per index ran an `avgₕ!` closure over an array 5% slower than the parent
-# of gpena/Bramble.jl#433. Its box must stay no bigger than the parent's, which captured
+# of gpena/Bramble.jl#433. Its box should stay no bigger than the parent's, which captured
 # `v`, the kernel and `idxs`. When `idxs` covers `v` (every `Rₕ!`/`avgₕ!` sweep), the loop
 # runs over `Base.OneTo(Threads.nthreads())` and each task rebuilds its slab from `v`'s own
-# indices (`_full`), so it captures `v`, the kernel and that 8 B range, 8 B less than the
-# parent. Any other `idxs` crosses as `_Slabs`, the slabs as one loop range: that captures
-# `idxs` plus the 8 B index range `@batch` takes of any array it loops over, 8 B more than
-# the parent, which an `Rₕ!` box's size class rounds up to 16 B (64 against 80 B for a
-# closure over a `Vector`) and an `avgₕ!` box's does not. Looping over `1:n` with `idxs`
-# captured would add 16 B to both.
+# indices (`_full`), so it captures `v`, the kernel and that range, and no `idxs`. Any other
+# `idxs` crosses as `_Slabs`, the slabs as one loop range: that captures `idxs` plus the
+# index range `@batch` takes of any array it loops over, which makes the box larger than the
+# parent's. Looping over `1:n` with `idxs` captured would make it larger still.
 struct _Lin end
 struct _Cart end
 @inline _cover(v, idxs::AbstractUnitRange) = !Base.has_offset_axes(v) &&
@@ -661,7 +674,7 @@ end
 # references (a mesh, a sink's vectors), which put the argument box on the heap. The target's
 # storage, `nzval` for a replay target and `y`, `x` for an action target, crosses as
 # top-level loop arguments (`_replay_parts`): wrapped in a struct, a `PtrArray` ran 1.11×
-# slower in the prototype (benchmark/batch_form_rebuild.jl; gpena/Bramble.jl#437 item 3).
+# slower in the prototype (commit f0f2d538; gpena/Bramble.jl#437 item 3).
 # The target's other fields cross with `sp`, `term` and `mesh_markers` as one
 # `_batch_split`, and each task rebuilds the four (`_batch_rebuild`) and joins the target
 # back around its storage (`_replay_join`). A single-iteration `@batch` runs its body

@@ -9,8 +9,8 @@
 #
 # Both are one generated function whose body is the whole walk, written out from the type: a
 # generated function recursing through itself per node hits inference's recursion limit and
-# leaves the inner calls dynamic (benchmark/batch_form_rebuild.jl, the S2.3 prototype). The
-# arrays are numbered in the same depth-first field order by both walks.
+# leaves the inner calls dynamic (the prototype of commit f0f2d538). The arrays are numbered
+# in the same depth-first field order by both walks.
 #===========================================================================#
 
 # Slot `K` of the arrays tuple; `A` is the type of the array split out of it.
@@ -100,7 +100,9 @@ takes one rule:
 
 # Throws
 - `ArgumentError`: naming the type and the path of any other value (a `Dict`, a `Symbol`, a
-  mutable struct, a field of abstract type), so a new value that would box fails loudly.
+  mutable struct, a field of abstract type), so a new value that would box fails loudly. A hook
+  that must accept such a value asks [`_batch_splittable`](@ref) first and, on `false`,
+  captures it whole, which boxes.
 """
 @generated function _batch_split(x)
     pre, leaves = Any[], Any[]
