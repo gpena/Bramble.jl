@@ -143,6 +143,30 @@ end
 
 ldiv!(P::JacobiPreconditioner, x::AbstractVector) = ldiv!(x, P, x)
 
+"""
+    FDMPreconditioner{T, F} <: AbstractMatrixFreePreconditioner{T}
+
+The fast-diagonalisation preconditioner of a separable [`BilinearForm`](@ref): `ldiv!(y, P,
+x)` applies the exact inverse of the form's Laplacian-like part (every term that differs
+from one mass per axis on at most one axis), factorised once, and allocates nothing on host
+vectors. Under `dirichlet = :boundary` it is the identity on the boundary rows. Build one
+with [`fdm_preconditioner`](@ref), which needs `using Kronecker`.
+
+# Type parameters
+- `T`: The element type of the form's Kronecker operator.
+- `F`: The type of the stored factorisation, the one `BrambleKroneckerExt` builds.
+
+See also: [`fdm_preconditioner`](@ref), [`AbstractMatrixFreePreconditioner`](@ref).
+"""
+struct FDMPreconditioner{T, F} <: AbstractMatrixFreePreconditioner{T}
+    factorization::F
+end
+
+# The factorisation (`BrambleKroneckerExt`) supplies `size` and the three-argument `ldiv!`.
+Base.size(P::FDMPreconditioner) = size(P.factorization)
+
+ldiv!(P::FDMPreconditioner, x::AbstractVector) = ldiv!(x, P, x)
+
 # --- The diagonal walk ------------------------------------------------------------------ #
 
 """

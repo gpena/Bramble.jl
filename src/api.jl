@@ -117,6 +117,7 @@ export gmg_preconditioner, gmg_solve
 
 public KroneckerLinearOperator, MatrixFreeOperator, ode_function, second_order_ode_function
 public AbstractMatrixFreePreconditioner, JacobiPreconditioner, ChebyshevPreconditioner
+public FDMPreconditioner
 public max_eigenvalue_estimate
 public AbstractSmoother, JacobiSmoother, ChebyshevSmoother, RedBlackGaussSeidel
 public GMGPreconditioner, v_cycle!, w_cycle!, fmg!
@@ -138,3 +139,4 @@ export export_pgfplots
 
 # --- Extension Stubs ---
 export fdm_solve
+export fdm_preconditioner

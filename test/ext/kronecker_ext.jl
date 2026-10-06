@@ -6,6 +6,7 @@ using Bramble: is_separable, kronecker_operator, KroneckerLinearOperator
 using Kronecker: kronecker
 using LinearAlgebra: mul!, issymmetric, ldiv!, lu, norm
 using SparseArrays: SparseMatrixCSC
+using LinearSolve: LinearProblem, solve, KrylovJL_GMRES
 using Random
 
 # `Kronecker.jl` interop and fast diagonalisation for a separable `BilinearForm`
@@ -448,6 +449,99 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
         @test occursin(r"does not support this form: it is posed on a composite space",
             refusal(() -> fdm_solve(b, G)))
         @test occursin("composite space", refusal(() -> fdm_solve(kronecker_operator(b), G)))
+    end
+
+    # `fdm_preconditioner` inverts the Laplacian-like part `K_L` exactly and leaves the
+    # two-axis terms (`K_R`) to the Krylov solver: GMRES with `Pl = P` matches the sparse
+    # direct solve on mixed-derivative forms, with advection too (the Schur route), in fewer
+    # iterations than without, while an application allocates nothing. `P` is the
+    # preconditioner of the form without its mixed term, whose `K_R` is empty, and that one
+    # inverts its own interior block; on the boundary rows (identity rows in `assemble`
+    # under `dirichlet = :boundary`) it is the identity.
+    @testset "fdm_preconditioner: mixed derivatives" begin
+        gmres(A, F; kw...) = solve(LinearProblem(A, F), KrylovJL_GMRES(); reltol = 1e-12,
+            abstol = 0.0, maxiters = 5000, kw...)
+        ldiv_bytes(y, P, x) = (ldiv!(y, P, x); @allocated ldiv!(y, P, x))
+        lap(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
+        # `c * innerₕ(D₋ᵧ(u), v)` puts `c` into its axis-1 mass factor: still a one-axis term,
+        # which `P` must keep (only the up-to-a-scalar matching reads it as one).
+        advs = ("none" => lap,
+            "x" => (u, v) -> lap(u, v) + innerₕ(D₋ₓ(u), v),
+            "0.5 y" => (u, v) -> lap(u, v) + 0.5 * innerₕ(D₋ᵧ(u), v),
+            "x + 50.0 y" => (u, v) -> lap(u, v) + innerₕ(D₋ₓ(u), v) +
+                                     50.0 * innerₕ(D₋ᵧ(u), v))
+        for n in ((33, 25), (9, 8, 7)), dir in (nothing, :boundary), (name, L) in advs
+            adv = name != "none"
+            @testset "$n, dirichlet = $dir, advection = $name" begin
+                Wₕ = graded_space(n)
+                a = form(Wₕ, Wₕ, (u, v) -> L(u, v) + 0.25 * innerₕ(D₋ₓ(D₋ᵧ(u)), v))
+                b = form(Wₕ, Wₕ, L)
+                P = fdm_preconditioner(a; dirichlet = dir)
+                @test P isa Bramble.FDMPreconditioner{Float64}
+                @test P isa Bramble.AbstractMatrixFreePreconditioner{Float64}
+                @test size(P) == (ndofs(Wₕ), ndofs(Wₕ))
+                @test (P.factorization isa KronExt._SchurFactorization) == adv
+
+                bd = Bramble._combined_mask(mesh(Wₕ), (:boundary,))
+                G = rand(MersenneTwister(KRON_EXT_SEED), ndofs(Wₕ))
+                G0 = copy(G)
+                dir === :boundary && (G0[bd] .= 0)
+                y = fill(NaN, length(G))
+                @test ldiv_bytes(y, P, G) == 0
+                @test y == fdm_preconditioner(b; dirichlet = dir) \ G
+                @test ldiv!(P, copy(G)) == y  # in place: `x` aliases `y`
+                if dir === :boundary
+                    @test y[bd] == G[bd]
+                    @test (P \ G0)[.!bd] == y[.!bd]
+                end
+                @test isapprox(P \ G0, assemble(b; dirichlet = dir) \ G0; rtol = 1e-10)
+
+                A = assemble(a; dirichlet = dir)
+                xref = A \ G0
+                s0 = gmres(A, G0)
+                s1 = gmres(A, G0; Pl = P)
+                @test norm(s1.u - xref) <= 1e-8 * norm(xref)
+                @test s1.iters < s0.iters
+            end
+        end
+    end
+
+    # The preconditioner refuses what `fdm_solve` refuses, a two-axis term apart, worded for
+    # itself; a form whose terms all differ from the masses on two axes or none has no
+    # Laplacian-like part.
+    @testset "fdm_preconditioner: refusals" begin
+        refusal(f) =
+            try
+                f()
+                "no error"
+            catch e
+                e isa ArgumentError ? sprint(showerror, e) : "wrong error $(typeof(e))"
+            end
+        Wₕ = graded_space((9, 7))
+        L(u, v) = inner₊(∇ₕ(u), ∇ₕ(v))
+        fxy = Rₕ(Wₕ, x -> (1 + x[1]) * (2 + x[2]^2))
+        refused = [
+            "no Laplacian-like part" => ((u, v) -> innerₕ(u, v) + innerₕ(D₋ₓ(D₋ᵧ(u)), v),
+                r"axis 1 has no term of its own.*no Laplacian-like part"),
+            "singular mass" => ((u, v) -> innerₕ(Bramble.restrict_to(:interior, u), v),
+                r"mass is not symmetric positive definite"),
+            "gradient and mixed only" => ((u, v) -> L(u, v) + innerₕ(D₋ₓ(D₋ᵧ(u)), v),
+                r"the Laplacian-like part is singular"),
+            "not separable" => ((u, v) -> innerₕ(fxy * u, v) + L(u, v), r"it is not separable")
+        ]
+        for (name, (f, why)) in refused
+            m = refusal(() -> fdm_preconditioner(form(Wₕ, Wₕ, f)))
+            @test occursin("fdm_preconditioner does not support this form", m)
+            @test occursin(why, m)
+            @test occursin("jacobi_preconditioner(a)", m)
+        end
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + L(u, v))
+        @test_throws "fdm_preconditioner only supports" fdm_preconditioner(a; dirichlet = :left)
+        Vₕ = gridspace(mesh(Wₕ), Val(2))
+        b = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)) +
+                                   L(u(1), v(1)) + L(u(2), v(2)))
+        @test occursin(r"fdm_preconditioner does not support this form: it is posed on a composite",
+            refusal(() -> fdm_preconditioner(b)))
     end
 
     # Well conditioned in Float32 (eigenvalue ratio about 8e3): the singularity test must

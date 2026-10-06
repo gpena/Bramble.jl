@@ -42,6 +42,58 @@ See also: [`kronecker_operator`](@ref), [`KroneckerLinearOperator`](@ref), [`is_
 function fdm_solve end
 
 """
+    fdm_preconditioner(a::BilinearForm; dirichlet = nothing) -> FDMPreconditioner
+
+A preconditioner for `assemble(a; dirichlet)` that applies the fast-diagonalisation inverse
+of `a`'s Laplacian-like part, factorised once, without assembling `a`'s matrix. The
+Laplacian-like part keeps the terms [`fdm_solve`](@ref) can solve: with one mass per axis,
+every term that differs from the masses on at most one axis. Every term differing on two or
+more axes (a mixed derivative such as `innerₕ(D₋ₓ(D₋ᵧ(u)), v)`, or a coefficient varying
+along two axes) is left out of the preconditioner, though the Krylov solver still sees it in
+`assemble(a)`. For a form `fdm_solve` accepts, the preconditioner is the exact inverse.
+
+Use it for a mixed-derivative form whose cross term the diffusion dominates, so that what
+it leaves out is small beside what it inverts. The larger the cross term, the more work it
+leaves to the Krylov solver. A form `fdm_solve` accepts needs no Krylov solver at all.
+
+`dirichlet` is `nothing` (the unconstrained system) or `:boundary` (homogeneous Dirichlet on
+the whole mesh boundary): there the boundary rows of `assemble(a; dirichlet = :boundary)`
+are identity rows, so the preconditioner is the identity on them and the interior
+factorisation inside. Construction costs `O(n_d^3)` per axis; an `ldiv!` on host vectors
+costs `O(N Σ_d n_d)` and allocates nothing. The preconditioner is host-only.
+
+Requires [Kronecker.jl](https://github.com/MichielStock/Kronecker.jl); call `using Kronecker`
+before calling this function.
+
+# Throws
+
+  - `ArgumentError` saying `fdm_preconditioner` does not support the form, with the reason,
+    for a form with no usable Laplacian-like part: `a` is not separable, it is posed on a
+    composite space, a mass is not symmetric positive definite, an axis has no term of its
+    own once the two-axis terms are left out (the form has no Laplacian-like part), or that
+    part is singular. These are `fdm_solve`'s refusals, a two-axis term apart.
+  - `ArgumentError`: `dirichlet` is neither `nothing` nor `:boundary`.
+
+# Examples
+
+```julia
+using Bramble, Kronecker, LinearSolve
+using Bramble: D₋ₓ, D₋ᵧ
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (33, 25), (false, false))
+Wₕ = gridspace(Ωₕ)
+a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+                           0.25 * innerₕ(D₋ₓ(D₋ᵧ(u)), v))
+P = fdm_preconditioner(a)
+A = assemble(a)
+F = rand(ndofs(Wₕ))
+sol = solve(LinearProblem(A, F), KrylovJL_GMRES(); Pl = P)
+```
+
+See also: [`FDMPreconditioner`](@ref), [`fdm_solve`](@ref), [`jacobi_preconditioner`](@ref).
+"""
+function fdm_preconditioner end
+
+"""
     _launch_spmv_csr!(y, rowPtr, colVal, nzVal, x, α, β) -> Nothing
 
 Row-parallel sparse matrix-vector product `y .= α .* (A * x) .+ β .* y`, where `A`'s

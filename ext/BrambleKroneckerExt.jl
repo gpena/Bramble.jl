@@ -166,7 +166,17 @@ const _FDM_KRYLOV = "`kronecker_operator(a)` and a Krylov solver (for instance "
 
 # Every refusal says `fdm_solve` does not support the form, names `reason`, and points to the
 # Krylov route that solves any separable form (`krylov = false` for a form that is not).
-@noinline function _throw_fdm_unsupported(reason::AbstractString; krylov::Bool = true)
+# With `precond`, it is `fdm_preconditioner` that refuses, and it points to the other
+# preconditioners instead.
+@noinline function _throw_fdm_unsupported(reason::AbstractString; krylov::Bool = true,
+        precond::Bool = false)
+    precond && throw(
+        ArgumentError(
+        "fdm_preconditioner does not support this form: $reason. It needs a form with a " *
+        "Laplacian-like part (see its docstring); precondition this one with " *
+        "`jacobi_preconditioner(a)` or `ilu_preconditioner(assemble(a))` instead.",
+    ),
+    )
     throw(
         ArgumentError(
         "fdm_solve does not support this form: $reason. It solves only Laplacian-like " *
@@ -176,24 +186,25 @@ const _FDM_KRYLOV = "`kronecker_operator(a)` and a Krylov solver (for instance "
     )
 end
 
-function _throw_fdm_not_separable(a)
+function _throw_fdm_not_separable(a; precond::Bool = false)
     _throw_fdm_unsupported(
         "it is not separable (see `is_separable`): a grid-function coefficient varying along " *
         "two or more axes (spell a product of one-axis coefficients `fx * (fy * u)`), a " *
         "region restriction, an interpolation, or a 1D mesh has no Kronecker factors";
-        krylov = false)
+        krylov = false, precond = precond)
 end
 
-function _throw_fdm_composite()
+function _throw_fdm_composite(; precond::Bool = false)
     _throw_fdm_unsupported(
         "it is posed on a composite space, whose `kronecker_operator` is a block operator " *
-        "(`KroneckerBlockOperator`); fast diagonalisation needs one scalar Kronecker sum")
+        "(`KroneckerBlockOperator`); fast diagonalisation needs one scalar Kronecker sum";
+        precond = precond)
 end
 
-@noinline function _throw_fdm_bad_dirichlet(dirichlet)
+@noinline function _throw_fdm_bad_dirichlet(dirichlet; precond::Bool = false)
     throw(
         ArgumentError(
-        "fdm_solve only supports dirichlet = nothing (unconstrained) or " *
+        "$(precond ? "fdm_preconditioner" : "fdm_solve") only supports dirichlet = nothing (unconstrained) or " *
         "dirichlet = :boundary (homogeneous Dirichlet on the whole mesh boundary); got " *
         "$(repr(dirichlet)).",
     ),
@@ -207,32 +218,39 @@ end
 # The reason the furthest-reaching choice of masses failed at, by stage (see
 # `_fdm_axis_data`): 1 no choice fits, 2 a mass is not SPD, 3 an axis has no term; 5 (from
 # `_fdm_factorize`) the system is singular; 6 the same, judged in an eltype narrower than
-# Float64, where an ill-conditioned system can look singular.
-function _throw_fdm_stage(stage::Int, d::Int)
+# Float64, where an ill-conditioned system can look singular. With `precond` (stage 1 cannot
+# occur: the preconditioner leaves two-axis terms out), the system is the Laplacian-like part.
+function _throw_fdm_stage(stage::Int, d::Int; precond::Bool = false)
     stage == 1 && _throw_fdm_unsupported(
         "a term has non-mass factors on two axes (a mixed derivative, or a coefficient " *
         "varying along two axes), so no choice of one mass per axis leaves every term " *
-        "differing from the masses on at most one axis")
+        "differing from the masses on at most one axis"; precond = precond)
     stage == 2 && _throw_fdm_unsupported(
         "the axis-$d mass is not symmetric positive definite (a zero or negative weight, " *
-        "for instance from an :interior restriction without dirichlet = :boundary)")
+        "for instance from an :interior restriction without dirichlet = :boundary)";
+        precond = precond)
+    stage == 3 && precond && _throw_fdm_unsupported(
+        "axis $d has no term of its own (every term equals the mass along it, or differs " *
+        "from the masses on two or more axes and is left out), so the form has no " *
+        "Laplacian-like part"; precond = true)
     stage == 3 && _throw_fdm_unsupported(
         "axis $d has no term of its own (every term equals the mass along it), so it has no " *
         "1D operator to diagonalise")
+    system = precond ? "the Laplacian-like part" : "the system"
     stage == 6 && _throw_fdm_unsupported(
-        "the system is singular to the rounding of an eltype narrower than Float64, so an " *
+        "$system is singular to the rounding of an eltype narrower than Float64, so an " *
         "ill-conditioned system may only look singular: assemble in Float64, where it may " *
-        "be solvable, or add a mass term")
+        "be solvable, or add a mass term"; precond = precond)
     _throw_fdm_unsupported(
-        "the system is singular: its generalised eigenvalues sum to zero somewhere, for " *
+        "$system is singular: its generalised eigenvalues sum to zero somewhere, for " *
         "instance a pure-Neumann operator with no mass term; add a mass term or use " *
-        "dirichlet = :boundary")
+        "dirichlet = :boundary"; precond = precond)
 end
 
 # The global singularity test on `Λ_total` (or its Schur analogue), in `T`'s arithmetic.
-function _fdm_check_global(Λ, ::Type{T}, D::Int) where {T}
+function _fdm_check_global(Λ, ::Type{T}, D::Int; precond::Bool = false) where {T}
     minimum(abs, Λ) <= D * eps(T) * maximum(abs, Λ) || return nothing
-    return _throw_fdm_stage(eps(T) > eps(Float64) ? 6 : 5, 0)
+    return _throw_fdm_stage(eps(T) > eps(Float64) ? 6 : 5, 0; precond = precond)
 end
 
 # The structural singularity test, in Float64 on the factors (gpena/Bramble.jl#443). The
@@ -302,7 +320,15 @@ _fdm_spd(M::SparseMatrixCSC) = issymmetric(M) && isposdef(Symmetric(Matrix(M)))
 # symmetric, or throws the reason no choice works. A first pass matches factors exactly;
 # only when no choice fits there does a second pass match them up to a scalar multiple, so
 # a form the exact pass solves keeps its results bit for bit.
-function _fdm_axis_data(K::KroneckerLinearOperator{T, D}, rng::NTuple{D}) where {T, D}
+#
+# With `precond`, when both fail, the same two passes run again splitting `K = K_L + K_R`.
+# A term differing from the masses on two or more axes goes to `K_R` and is left out, so
+# `M`, `A`, `c_m` describe `K_L` alone. Both split passes run, and the one leaving out fewer
+# terms wins (the exact one on a tie), since the exact pass reads a one-axis term with a
+# literal folded into its mass factor, `50 * innerₕ(D₋ᵧ(u), v)`, as a two-axis term. So `K_L`
+# is the form without its two-axis terms, factorised as `fdm_solve` factorises that form.
+function _fdm_axis_data(K::KroneckerLinearOperator{T, D}, rng::NTuple{D};
+        precond::Bool = false) where {T, D}
     cs = T[]
     fs = NTuple{D, SparseMatrixCSC{T, Int}}[]
     for term in K.terms
@@ -313,14 +339,21 @@ function _fdm_axis_data(K::KroneckerLinearOperator{T, D}, rng::NTuple{D}) where 
         push!(cs, c)
         push!(fs, f)
     end
-    exact = _fdm_classify(cs, fs, Val(D), false)
+    exact = _fdm_classify(cs, fs, Val(D), false, false)
     exact isa Tuple{Int, Int} || return exact
-    scaled = _fdm_classify(cs, fs, Val(D), true)
+    scaled = _fdm_classify(cs, fs, Val(D), true, false)
     scaled isa Tuple{Int, Int} || return scaled
-    return _throw_fdm_stage(max(exact, scaled)...)
+    precond || return _throw_fdm_stage(max(exact, scaled)...)
+    es = _fdm_classify(cs, fs, Val(D), false, true)
+    ss = _fdm_classify(cs, fs, Val(D), true, true)
+    es isa Tuple{Int, Int} && ss isa Tuple{Int, Int} &&
+        return _throw_fdm_stage(max(es, ss)...; precond = true)
+    pick = es isa Tuple{Int, Int} ? ss : ss isa Tuple{Int, Int} ? es : es[5] <= ss[5] ? es : ss
+    return pick[1:4]
 end
 
-# One classification pass: `(M, A, c_m, symmetric)`, or the furthest `(stage, axis)` reached.
+# One classification pass: `(M, A, c_m, symmetric)` (with `split`, the number of terms left
+# out appended), or the furthest `(stage, axis)` reached.
 # The candidate masses on axis `d` are the distinct axis-`d` factors, tried most frequent
 # first. With `proportional`, factors are distinct only up to a scalar multiple: a class is
 # represented with a nonnegative trace, so a negative multiple of a mass seen first does not
@@ -330,9 +363,13 @@ end
 # factor is a multiple of the mass, so there, and only in this pass, the axis may carry no
 # term of its own (`A_d = 0`). Every choice that fits is exact; the first that passes the
 # SPD, every-axis and symmetry checks is used, else the first that passes the first two
-# (the Schur route).
+# (the Schur route). With `split`, every choice fits, since a term differing from the
+# masses on a second axis is marked `-1` and left out of `A` and `c_m` (it belongs to
+# `K_R`). The choice leaving out the fewest terms is used, a symmetric one first among
+# those. Preferring symmetry alone would take a Neumann stiffness (positive definite to
+# rounding) for the mass of an advection form, leaving out the advection and the true mass.
 function _fdm_classify(cs::Vector{T}, fs::Vector{NTuple{D, SparseMatrixCSC{T, Int}}},
-        ::Val{D}, proportional::Bool) where {T, D}
+        ::Val{D}, proportional::Bool, split::Bool) where {T, D}
     same(R, F) = proportional ? _fdm_ratio(R, F) !== nothing : _fdm_same(R, F)
     reps = ntuple(_ -> SparseMatrixCSC{T, Int}[], Val(D))
     cls = [ntuple(Val(D)) do d
@@ -346,9 +383,10 @@ function _fdm_classify(cs::Vector{T}, fs::Vector{NTuple{D, SparseMatrixCSC{T, In
     order = ntuple(d -> sort(eachindex(reps[d]); by = k -> -count(c -> c[d] == k, cls)), Val(D))
     stage, axis = 1, 0
     fallback = nothing
+    best, bestkey = nothing, (typemax(Int), true)
     for choice in Iterators.product(order...)
         M = ntuple(d -> reps[d][choice[d]], Val(D))
-        on = zeros(Int, length(fs))  # the one axis term `i` differs on, 0 if none
+        on = zeros(Int, length(fs))  # the one axis term `i` differs on, 0 if none, -1 if more
         coef = copy(cs)  # `cs[i]` times the ratios of term `i`'s mass factors to `M`
         fits = true
         for i in eachindex(fs)
@@ -356,7 +394,7 @@ function _fdm_classify(cs::Vector{T}, fs::Vector{NTuple{D, SparseMatrixCSC{T, In
                 r = proportional ? _fdm_ratio(M[d], fs[i][d]) :
                     (cls[i][d] == choice[d] ? one(T) : nothing)
                 if r === nothing
-                    on[i] == 0 || (fits = false; break)
+                    on[i] == 0 || (split ? (on[i] = -1) : (fits = false); break)
                     on[i] = d
                 else
                     coef[i] *= r
@@ -372,9 +410,16 @@ function _fdm_classify(cs::Vector{T}, fs::Vector{NTuple{D, SparseMatrixCSC{T, In
         A = ntuple(d -> sum((coef[i] * fs[i][d] for i in eachindex(fs) if on[i] == d);
                 init = zero(M[d])), Val(D))
         c_m = sum((coef[i] for i in eachindex(fs) if on[i] == 0); init = zero(T))
-        all(issymmetric, A) && return M, A, c_m, true
+        symmetric = all(issymmetric, A)
+        if split
+            key = (count(==(-1), on), !symmetric)
+            key < bestkey && ((best, bestkey) = ((M, A, c_m, symmetric, key[1]), key))
+            continue
+        end
+        symmetric && return M, A, c_m, true
         fallback === nothing && (fallback = (M, A, c_m))
     end
+    best === nothing || return best
     fallback === nothing || return (fallback..., false)
     return (stage, axis)
 end
@@ -420,8 +465,12 @@ function _fdm_slabs(v::Vector, dims::NTuple{D, Int}) where {D}
             prod(dims[(d + 1):end]; init = 1)), Val(D))
 end
 
-function _fdm_factorize(K::KroneckerLinearOperator{T, D}, dirichlet) where {T, D}
-    (dirichlet === nothing || dirichlet === :boundary) || _throw_fdm_bad_dirichlet(dirichlet)
+# `precond`: factorise the Laplacian-like part `K_L` of `K` (see `_fdm_axis_data`), and word
+# every refusal for `fdm_preconditioner`.
+function _fdm_factorize(K::KroneckerLinearOperator{T, D}, dirichlet;
+        precond::Bool = false) where {T, D}
+    (dirichlet === nothing || dirichlet === :boundary) ||
+        _throw_fdm_bad_dirichlet(dirichlet; precond = precond)
     dims_full = K.dims
     boundary = dirichlet === :boundary
     rng = ntuple(d -> boundary ? (2:(dims_full[d] - 1)) : (1:dims_full[d]), Val(D))
@@ -432,14 +481,15 @@ function _fdm_factorize(K::KroneckerLinearOperator{T, D}, dirichlet) where {T, D
         Q = ntuple(d -> zeros(T, dims[d], dims[d]), Val(D))
         Λ = zeros(T, dims)
     else
-        M, A, c_m, symmetric = _fdm_axis_data(K, rng)
+        M, A, c_m, symmetric = _fdm_axis_data(K, rng; precond = precond)
         ϵ = _fdm_data_eps(K)
         # In a narrower precision, an SPD axis whose boundary rows are tiny against its
         # largest (a mesh fine in the middle, coarse at both ends) also passes for one with
         # a constant kernel: the refusal then names Float64 too.
         iszero(c_m) && all(d -> _fdm_constant_kernel(A[d], ϵ), 1:D) &&
-            _throw_fdm_stage(ϵ > eps(Float64) ? 6 : 5, 0)
-        symmetric || return _schur_factorize(K.n, boundary, interior, M, A, c_m, dims)
+            _throw_fdm_stage(ϵ > eps(Float64) ? 6 : 5, 0; precond = precond)
+        symmetric ||
+            return _schur_factorize(K.n, boundary, interior, M, A, c_m, dims; precond = precond)
         Q, Λ = _fdm_eigendecompose(M, A, c_m, dims)
         # A zero (to rounding) of `Λ_total` is a zero eigenvalue of the system: dividing by
         # it would return a huge `x` that does not solve it. `Λ_total` sums `D` per-axis
@@ -448,7 +498,7 @@ function _fdm_factorize(K::KroneckerLinearOperator{T, D}, dirichlet) where {T, D
         # `0.07 eps(T) * maximum(abs, Λ)`, and a nonsingular Float32 one with condition 2e4
         # sits at 15 eps, so the bound is `D eps`, not more. A cancellation test per entry
         # misses the zero of a pure-Neumann operator, which is one per-axis eigenvalue.
-        _fdm_check_global(Λ, T, D)
+        _fdm_check_global(Λ, T, D; precond = precond)
     end
     u = Vector{T}(undef, prod(dims))
     w = similar(u)
@@ -472,10 +522,15 @@ function _fdm_mode!(f, inu::Bool, d::Int, R::AbstractMatrix)
 end
 
 # `x = K \ F` on full-length host vectors: gather the solved unknowns, apply every `Q_d'`,
-# divide by `Λ_total`, apply every `Q_d`, scatter back (zero on the boundary). `2D` mode
-# products, an even number, so the result always ends in `u`. `x` may alias `F`.
-function LinearAlgebra.ldiv!(x::AbstractVector, f::_FDMFactorization{T, D},
-        F::AbstractVector) where {T, D}
+# divide by `Λ_total`, apply every `Q_d`, scatter back (zero on the boundary, or with `keep`
+# `F`'s own boundary values, the identity rows `fdm_preconditioner` applies there). `2D`
+# mode products, an even number, so the result always ends in `u`. `x` may alias `F`, as the
+# gather reads `F` before `x` is written.
+LinearAlgebra.ldiv!(x::AbstractVector, f::_FDMFactorization, F::AbstractVector) =
+    _fdm_ldiv!(x, f, F, false)
+
+function _fdm_ldiv!(x::AbstractVector, f::_FDMFactorization{T, D}, F::AbstractVector,
+        keep::Bool) where {T, D}
     # `interior` holds 1-based positions, used under `@inbounds` below.
     Base.require_one_based_indexing(x, F)
     length(F) == f.n || _throw_fdm_length_mismatch(f.n, length(F))
@@ -499,7 +554,7 @@ function LinearAlgebra.ldiv!(x::AbstractVector, f::_FDMFactorization{T, D},
         end
     end
     if f.boundary
-        fill!(x, zero(eltype(x)))
+        keep ? (x === F || copyto!(x, F)) : fill!(x, zero(eltype(x)))
         @inbounds for (i, j) in enumerate(f.interior)
             x[j] = u[i]
         end
@@ -570,7 +625,7 @@ struct _SchurFactorization{T, D, C <: Complex{T}}
 end
 
 function _schur_factorize(n::Int, boundary::Bool, interior::Vector{Int}, M, A, c_m::T,
-        dims::NTuple{D, Int}) where {T, D}
+        dims::NTuple{D, Int}; precond::Bool = false) where {T, D}
     C = Complex{T}
     gs = ntuple(d -> schur(Matrix{C}(A[d]), Matrix{C}(M[d])), Val(D))
     S = ntuple(d -> gs[d].S, Val(D))
@@ -582,7 +637,7 @@ function _schur_factorize(n::Int, boundary::Bool, interior::Vector{Int}, M, A, c
         shape = ntuple(k -> k == d ? dims[d] : 1, Val(D))
         Λ .+= reshape([S[d][j, j] / Tr[d][j, j] for j in 1:dims[d]], shape)
     end
-    _fdm_check_global(Λ, T, D)
+    _fdm_check_global(Λ, T, D; precond = precond)
     stride = [prod(dims[1:(k - 1)]; init = 1) for k in 1:(D + 1)]
     u = Vector{C}(undef, prod(dims))
     w = similar(u)
@@ -643,10 +698,15 @@ function _schur_solve!(y::Vector, f::_SchurFactorization, k::Int, off::Int, α, 
     return y
 end
 
+Base.size(f::Union{_FDMFactorization, _SchurFactorization}) = (f.n, f.n)
+
 # `x = K \ F` on full-length host vectors, the `_FDMFactorization` method's contract: gather,
 # apply every `Q_d'`, back-substitute, apply every `Z_d`, scatter the real part.
-function LinearAlgebra.ldiv!(x::AbstractVector, f::_SchurFactorization{T, D},
-        F::AbstractVector) where {T, D}
+LinearAlgebra.ldiv!(x::AbstractVector, f::_SchurFactorization, F::AbstractVector) =
+    _fdm_ldiv!(x, f, F, false)
+
+function _fdm_ldiv!(x::AbstractVector, f::_SchurFactorization{T, D}, F::AbstractVector,
+        keep::Bool) where {T, D}
     # `interior` holds 1-based positions, used under `@inbounds` below.
     Base.require_one_based_indexing(x, F)
     length(F) == f.n || _throw_fdm_length_mismatch(f.n, length(F))
@@ -670,7 +730,7 @@ function LinearAlgebra.ldiv!(x::AbstractVector, f::_SchurFactorization{T, D},
         end
     end
     if f.boundary
-        fill!(x, zero(eltype(x)))
+        keep ? (x === F || copyto!(x, F)) : fill!(x, zero(eltype(x)))
         @inbounds for (i, j) in enumerate(f.interior)
             x[j] = real(u[i])
         end
@@ -864,6 +924,23 @@ end
 # A composite space's operator is a block of Kronecker sums, not one: refused by name.
 Bramble.fdm_solve(::Bramble.KroneckerBlockOperator, ::AbstractVector) = _throw_fdm_composite()
 
+# The preconditioner (`Bramble.FDMPreconditioner`, src/solvers/matrix_free_preconditioners.jl)
+# holds the factorisation `_fdm_factorize` returns for `K_L`, applied with `keep`: the
+# identity on the boundary rows `assemble(a; dirichlet = :boundary)` makes identity rows.
+function Bramble.fdm_preconditioner(a::BilinearForm; dirichlet = nothing)
+    (Bramble.trial_space(a) isa Bramble.CompositeGridSpace ||
+     Bramble.test_space(a) isa Bramble.CompositeGridSpace) && _throw_fdm_composite(; precond = true)
+    is_separable(a) || _throw_fdm_not_separable(a; precond = true)
+    K = kronecker_operator(a)
+    f = _fdm_factorize(K, dirichlet; precond = true)
+    return Bramble.FDMPreconditioner{eltype(K), typeof(f)}(f)
+end
+
+function LinearAlgebra.ldiv!(y::AbstractVector, P::Bramble.FDMPreconditioner,
+        x::AbstractVector)
+    return _fdm_ldiv!(y, P.factorization, x, true)
+end
+
 # Warms this extension's entry points -- `Kronecker.kronecker` and both `fdm_solve` calls
 # (unconstrained and `dirichlet = :boundary`) -- on a 2D separable, constant-coefficient
 # form, and the Schur route on that form plus an advection term. They are only reachable
@@ -887,6 +964,7 @@ if Bramble.PRECOMPILE_WORKLOAD
             Bramble.fdm_solve(a, F)
             Bramble.fdm_solve(a, F; dirichlet = :boundary)
             Bramble.fdm_solve(b, F)
+            Bramble.fdm_preconditioner(a; dirichlet = :boundary)
         end
     end
 end
