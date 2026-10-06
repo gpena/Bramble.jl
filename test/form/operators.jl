@@ -85,6 +85,10 @@ const _ORIGIN_2D = (0, 0)
     lin = LinearIndices(Bramble.indices(Ωₕ))
     interior = CartesianIndex(3, 3)
     mk = markers(Ωₕ)
+    # A walk passes restriction nodes the mesh's marker word matrix and the region bound to
+    # its label ids (`_bind_walk`), so the stencils below are evaluated the same way.
+    words = Bramble._marker_words(Ωₕ)
+    bind(op) = Bramble._bind_marker_ids(op, Ωₕ)
 
     # a point that really is on the bottom edge, found rather than assumed
     bottom_idx = first(I for I in Bramble.indices(Ωₕ) if mk[:bottom][lin[I]])
@@ -157,20 +161,20 @@ const _ORIGIN_2D = (0, 0)
         @test restrict_to(:bottom, id) isa RegionRestriction
         @test resolve_ast(restrict_to(:bottom, id)) isa RegionRestriction
 
-        inner_st = local_stencil(id, Wₕ, bottom_idx, mk, lin[bottom_idx])
+        inner_st = local_stencil(id, Wₕ, bottom_idx, words, lin[bottom_idx])
 
         @testset "Stencil retention" begin
-            r = restrict_to(:bottom, id)
-            @test local_stencil(r, Wₕ, bottom_idx, mk, lin[bottom_idx]) == inner_st
-            @test local_stencil(r, Wₕ, interior, mk, lin[interior]) == ()
+            r = bind(restrict_to(:bottom, id))
+            @test local_stencil(r, Wₕ, bottom_idx, words, lin[bottom_idx]) == inner_st
+            @test local_stencil(r, Wₕ, interior, words, lin[interior]) == ()
         end
 
         @testset ":interior vs :boundary" begin
-            r = restrict_to(:interior, id)
-            @test local_stencil(r, Wₕ, interior, mk, lin[interior]) ==
+            r = bind(restrict_to(:interior, id))
+            @test local_stencil(r, Wₕ, interior, words, lin[interior]) ==
                   local_stencil(id, Wₕ, interior, nothing, lin[interior])
             if haskey(mk, :boundary)
-                @test local_stencil(r, Wₕ, bottom_idx, mk, lin[bottom_idx]) == ()
+                @test local_stencil(r, Wₕ, bottom_idx, words, lin[bottom_idx]) == ()
             end
         end
 
@@ -189,10 +193,9 @@ const _ORIGIN_2D = (0, 0)
                 restrict_to(:nosuchregion, id), Wₕ, interior, nothing, lin[interior]
             ) == ()
 
-            # and a table without the key behaves the same way
-            @test local_stencil(
-                restrict_to(:nosuchregion, id), Wₕ, interior, mk, lin[interior]
-            ) == ()
+            # With a real table, a label the mesh lacks is refused when the walk binds it,
+            # naming the labels the mesh has, rather than read as an empty region.
+            @test_throws ArgumentError bind(restrict_to(:nosuchregion, id))
         end
 
         # A custom :interior marker is honoured, not overridden by !:boundary.
@@ -228,10 +231,10 @@ const _ORIGIN_2D = (0, 0)
         end
 
         @testset "Operator composition" begin
-            r = restrict_to(:bottom, D₋ₓ(id))
-            @test local_stencil(r, Wₕ, bottom_idx, mk, lin[bottom_idx]) ==
-                  local_stencil(D₋ₓ(id), Wₕ, bottom_idx, mk, lin[bottom_idx])
-            @test local_stencil(r, Wₕ, interior, mk, lin[interior]) == ()
+            r = bind(restrict_to(:bottom, D₋ₓ(id)))
+            @test local_stencil(r, Wₕ, bottom_idx, words, lin[bottom_idx]) ==
+                  local_stencil(D₋ₓ(id), Wₕ, bottom_idx, words, lin[bottom_idx])
+            @test local_stencil(r, Wₕ, interior, words, lin[interior]) == ()
         end
     end
 
