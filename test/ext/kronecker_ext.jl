@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: is_separable, kronecker_operator, KroneckerLinearOperator
 using Kronecker: kronecker
-using LinearAlgebra: mul!, issymmetric, ldiv!
+using LinearAlgebra: mul!, issymmetric, ldiv!, lu, norm
 using SparseArrays: SparseMatrixCSC
 using Random
 
@@ -328,6 +328,66 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
         G = ones(Float32, ndofs(Wₕ))
         @test_throws ArgumentError fdm_solve(a, G)
         @test_throws "the system is singular" fdm_solve(a, G)
+    end
+
+    # A singular form is refused in every precision (gpena/Bramble.jl#443). G1, Neumann plus
+    # strong advection, has a zero eigenvalue Float32 arithmetic returns far from zero, so the
+    # structural test (a constant kernel on every axis, no mass) refuses it. Uniform-mesh
+    # advection without a mass, or pure advection, has no constant kernel once Dirichlet rows
+    # go and must still be solved. An ill-conditioned Float32 system the eigenvalue test
+    # refuses names Float64 as the way out.
+    @testset "fdm_solve: singular in every precision" begin
+        # `p === 1` is a uniform mesh; `unif = false` alone would draw random points.
+        function space_t(T, n, p)
+            Ω = mesh(domain(reduce(×, ntuple(_ -> interval(zero(T), one(T)), length(n)))), n,
+                ntuple(_ -> p === 1, length(n)))
+            p === 1 && return gridspace(Ω)
+            Bramble.change_points!(Ω, ntuple(d -> T.(range(0.0, 1.0; length = n[d]) .^
+                                                     (p === :g ? (1 + 0.25d) : p)),
+                length(n)))
+            return gridspace(Ω)
+        end
+        G(u, v) = inner₊(∇ₕ(u), ∇ₕ(v))
+        for n in ((9, 7), (65, 33), (7, 6, 5))
+            Wₕ = space_t(Float32, n, :g)
+            adv(u, v) = G(u, v) + sum(1e3 * innerₕ(Bramble.D₊(u, Val(d)), v) for d in 1:length(n))
+            F = ones(Float32, ndofs(Wₕ))
+            @test_throws ArgumentError fdm_solve(form(Wₕ, Wₕ, adv), F)
+            @test_throws "the system is singular" fdm_solve(form(Wₕ, Wₕ, adv), F)
+        end
+        Dm(u, d) = Bramble.D₋(u, Val(d))
+        f1(T, Pe, D) = (u, v) -> T(1 / Pe) * G(u, v) + sum(innerₕ(Dm(u, d), v) for d in 1:D)
+        f2(u, v) = innerₕ(D₋ₓ(u), v) + innerₕ(D₋ᵧ(u), v)
+        for (T, n, f) in ((Float64, (65, 17), f1(Float64, 1e6, 2)),
+            (Float64, (17, 17, 17), f1(Float64, 1e6, 3)), (Float32, (33, 33), f1(Float32, 1e3, 2)),
+            (Float64, (33, 17), f2), (Float32, (33, 17), f2))
+            Wₕ = space_t(T, n, 1)
+            a = form(Wₕ, Wₕ, f)
+            A = assemble(a; dirichlet = :boundary)
+            F = rand(MersenneTwister(KRON_EXT_SEED), T, size(A, 1))
+            F[Bramble._combined_mask(mesh(Wₕ), (:boundary,))] .= 0
+            x = fdm_solve(a, F; dirichlet = :boundary)
+            @test eltype(x) === T
+            if T == Float64
+                @test isapprox(x, A \ F; rtol = 1e-10)
+            else  # within 10x of a dense Float32 LU's residual
+                resid(z) = norm(Float64.(A) * Float64.(z) - F) / norm(F)
+                @test resid(x) <= 10 * resid(lu(Matrix(A)) \ F) + 10 * eps(Float32)
+            end
+        end
+        Wₕ = space_t(Float32, (129, 9), 2.0)
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + G(u, v) + innerₕ(D₋ₓ(u), v))
+        @test_throws r"singular.*assemble in Float64" fdm_solve(a, ones(Float32, ndofs(Wₕ));
+            dirichlet = :boundary)
+        # No mass, Dirichlet, points `0.5 + 0.5 sign(s)|s|^6`: both boundary rows sum to
+        # almost nothing against the fine middle, so in Float32 the structural test fires on
+        # a nonsingular system, and the refusal must still name Float64.
+        Ω = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (17, 17), (true, true))
+        c = Float32.(0.5 .+ 0.5 .* sign.(range(-1, 1; length = 17)) .* abs.(range(-1, 1; length = 17)) .^ 6)
+        Bramble.change_points!(Ω, (c, c))
+        Wₕ = gridspace(Ω)
+        @test_throws r"singular.*assemble in Float64" fdm_solve(form(Wₕ, Wₕ, G),
+            zeros(Float32, ndofs(Wₕ)); dirichlet = :boundary)
     end
 
     # Every other form throws, naming the reason, and is never solved wrongly.

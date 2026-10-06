@@ -206,7 +206,8 @@ end
 
 # The reason the furthest-reaching choice of masses failed at, by stage (see
 # `_fdm_axis_data`): 1 no choice fits, 2 a mass is not SPD, 3 an axis has no term; 5 (from
-# `_fdm_factorize`) the system is singular.
+# `_fdm_factorize`) the system is singular; 6 the same, judged in an eltype narrower than
+# Float64, where an ill-conditioned system can look singular.
 function _throw_fdm_stage(stage::Int, d::Int)
     stage == 1 && _throw_fdm_unsupported(
         "a term has non-mass factors on two axes (a mixed derivative, or a coefficient " *
@@ -218,10 +219,45 @@ function _throw_fdm_stage(stage::Int, d::Int)
     stage == 3 && _throw_fdm_unsupported(
         "axis $d has no term of its own (every term equals the mass along it), so it has no " *
         "1D operator to diagonalise")
+    stage == 6 && _throw_fdm_unsupported(
+        "the system is singular to the rounding of an eltype narrower than Float64, so an " *
+        "ill-conditioned system may only look singular: assemble in Float64, where it may " *
+        "be solvable, or add a mass term")
     _throw_fdm_unsupported(
         "the system is singular: its generalised eigenvalues sum to zero somewhere, for " *
         "instance a pure-Neumann operator with no mass term; add a mass term or use " *
         "dirichlet = :boundary")
+end
+
+# The global singularity test on `Λ_total` (or its Schur analogue), in `T`'s arithmetic.
+function _fdm_check_global(Λ, ::Type{T}, D::Int) where {T}
+    minimum(abs, Λ) <= D * eps(T) * maximum(abs, Λ) || return nothing
+    return _throw_fdm_stage(eps(T) > eps(Float64) ? 6 : 5, 0)
+end
+
+# The structural singularity test, in Float64 on the factors (gpena/Bramble.jl#443). The
+# global test alone misses the zero eigenvalue of a non-normal pencil (Neumann plus strong
+# advection), which Float32 arithmetic returns far from zero. Difference operators annihilate
+# constants, so axis `d` has a constant kernel (in its right or left null space) when
+# `‖A_d 1‖∞ <= n_d ϵ ‖A_d‖∞` or `‖A_d' 1‖∞ <= n_d ϵ ‖A_d‖∞`, `ϵ` the rounding of the data;
+# a Dirichlet restriction leaves boundary-adjacent rows whose sums are of order `‖A_d‖∞`.
+# With no mass term (`c_m == 0`) and a constant kernel on every axis, the constant (or its
+# left analogue) is in the kernel of the whole Kronecker sum: the system is singular.
+# `ϵ` is the eps of the least precise factor: a Float64 literal coefficient makes `K` Float64,
+# yet the stiffness of a Float32 mesh keeps its Float32 rounding.
+_fdm_data_eps(K::KroneckerLinearOperator{T}) where {T} =
+    maximum(f -> eps(real(_fdm_factor_eltype(f))), (f for t in K.terms for f in t.factors);
+        init = eps(real(T)))
+_fdm_factor_eltype(F) = eltype(F)
+_fdm_factor_eltype(F::Bramble._KronDeviceDiagonal) = eltype(F.diag)
+_fdm_factor_eltype(F::Bramble._KronDeviceSparse) = eltype(F.nzval)
+
+function _fdm_constant_kernel(A::SparseMatrixCSC, ϵ::Real)
+    Aw = SparseMatrixCSC{Float64, Int}(A)
+    o = ones(size(Aw, 2))
+    bound = size(Aw, 1) * ϵ * maximum(abs, sum(abs, Aw; dims = 2); init = 0.0)
+    return maximum(abs, Aw * o; init = 0.0) <= bound ||
+           maximum(abs, transpose(Aw) * o; init = 0.0) <= bound
 end
 
 # A device-backed `K` holds `_KronDeviceDiagonal`/`_KronDeviceSparse`
@@ -397,6 +433,12 @@ function _fdm_factorize(K::KroneckerLinearOperator{T, D}, dirichlet) where {T, D
         Λ = zeros(T, dims)
     else
         M, A, c_m, symmetric = _fdm_axis_data(K, rng)
+        ϵ = _fdm_data_eps(K)
+        # In a narrower precision, an SPD axis whose boundary rows are tiny against its
+        # largest (a mesh fine in the middle, coarse at both ends) also passes for one with
+        # a constant kernel: the refusal then names Float64 too.
+        iszero(c_m) && all(d -> _fdm_constant_kernel(A[d], ϵ), 1:D) &&
+            _throw_fdm_stage(ϵ > eps(Float64) ? 6 : 5, 0)
         symmetric || return _schur_factorize(K.n, boundary, interior, M, A, c_m, dims)
         Q, Λ = _fdm_eigendecompose(M, A, c_m, dims)
         # A zero (to rounding) of `Λ_total` is a zero eigenvalue of the system: dividing by
@@ -406,7 +448,7 @@ function _fdm_factorize(K::KroneckerLinearOperator{T, D}, dirichlet) where {T, D
         # `0.07 eps(T) * maximum(abs, Λ)`, and a nonsingular Float32 one with condition 2e4
         # sits at 15 eps, so the bound is `D eps`, not more. A cancellation test per entry
         # misses the zero of a pure-Neumann operator, which is one per-axis eigenvalue.
-        minimum(abs, Λ) <= D * eps(T) * maximum(abs, Λ) && _throw_fdm_stage(5, 0)
+        _fdm_check_global(Λ, T, D)
     end
     u = Vector{T}(undef, prod(dims))
     w = similar(u)
@@ -540,7 +582,7 @@ function _schur_factorize(n::Int, boundary::Bool, interior::Vector{Int}, M, A, c
         shape = ntuple(k -> k == d ? dims[d] : 1, Val(D))
         Λ .+= reshape([S[d][j, j] / Tr[d][j, j] for j in 1:dims[d]], shape)
     end
-    minimum(abs, Λ) <= D * eps(T) * maximum(abs, Λ) && _throw_fdm_stage(5, 0)
+    _fdm_check_global(Λ, T, D)
     stride = [prod(dims[1:(k - 1)]; init = 1) for k in 1:(D + 1)]
     u = Vector{C}(undef, prod(dims))
     w = similar(u)
@@ -756,14 +798,19 @@ the solution back once.
     zero on the boundary. A mesh with a 2-point axis has no interior, so the solution is
     zero.
 
+A singular system is refused: one with no mass term whose 1D operators all annihilate
+constants (a pure-Neumann operator, with or without advection), or one whose eigenvalue
+sums vanish to rounding. A nearly singular non-symmetric form can still be solved
+inaccurately, as with a sparse LU. In Float32 the refusal may come from Float32 rounding
+alone; the message then says so, and the same form assembled in Float64 may be solvable.
+
 # Throws
 
   - `ArgumentError` saying `fdm_solve` does not support the form, with the reason, for
     every form that is not Laplacian-like: `a` is not separable, it is posed on a composite
     space, a term has non-mass factors on two axes (a mixed derivative, or a coefficient
     varying along two axes), a mass is not symmetric positive definite, an axis has no term
-    of its own, or the system is singular (a pure-Neumann operator with no mass term).
-    Solve a separable one with
+    of its own, or the system is singular (see below). Solve a separable one with
     `kronecker_operator(a)` and a Krylov solver.
   - `ArgumentError`: `dirichlet` is neither `nothing` nor `:boundary`.
   - `DimensionMismatch`: `F`'s length does not match `a`'s number of degrees of freedom.
@@ -801,7 +848,8 @@ Dirichlet. `K` must be Laplacian-like, as that method describes.
 # Throws
 
   - `ArgumentError` saying `fdm_solve` does not support the operator, with the reason,
-    when `K` is not Laplacian-like, or is a composite space's block operator.
+    when `K` is not Laplacian-like, is a composite space's block operator, or is singular
+    (as the `BilinearForm` method describes, Float32 included).
   - `DimensionMismatch`: `F`'s length does not match `K`'s size.
   - `ArgumentError` naming `change_points!`: `K`'s mesh was mutated in place after `K` was
     built (see [`KroneckerLinearOperator`](@ref)); build the operator again.
