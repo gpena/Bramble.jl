@@ -47,7 +47,8 @@ using Bramble:
                ∇ₕ,
                innerₕ
 using Kronecker: Kronecker, ⊗
-using LinearAlgebra: Diagonal, Symmetric, eigen, isposdef, issymmetric, mul!
+using LinearAlgebra: LinearAlgebra, Diagonal, Symmetric, eigen, isposdef, issymmetric, ldiv!,
+                     mul!
 using SparseArrays: SparseMatrixCSC, dropzeros!, nonzeros, nnz, sparse
 using PrecompileTools: @setup_workload, @compile_workload
 
@@ -310,26 +311,106 @@ function _fdm_eigendecompose(M, A, c_m::T, dims::NTuple{D, Int}) where {T, D}
     return Q, Λ
 end
 
-# `Y = M *_d X`: dense matrix `M` applied along axis `d` of the `D`-array `X`, viewed as
-# `(pre, dims[d], post)` (`pre = prod(dims[1:d-1])`, `post = prod(dims[d+1:end])`) and
-# right-multiplying each `pre x dims[d]` slab by `M'`, so `Y[i, j, k] = Σ_l M[j, l]
-# X[i, l, k]`. Dense `reshape`/matrix-multiply rather than anything like `kronecker.jl`'s
-# fused `mul!`: `Q_d` is a full (not diagonal or sparse) matrix here, and this runs once per
-# `fdm_solve` call, not once per Krylov iteration, so it is not on the path whose `mul!` is
-# measured allocation-free.
-function _fdm_apply_mode(X::Array{T}, M::AbstractMatrix, d::Int) where {T}
-    dims = size(X)
-    pre = prod(dims[1:(d - 1)]; init = 1)
-    m = dims[d]
-    post = prod(dims[(d + 1):end]; init = 1)
-    X3 = reshape(X, pre, m, post)
-    Y3 = Array{T}(undef, pre, size(M, 1), post)
-    Mt = transpose(M)
-    for k in 1:post
-        @views Y3[:, :, k] = X3[:, :, k] * Mt
+# The factorisation `fdm_solve` applies: everything before the apply, done once
+# (classification, restriction, per-axis `eigen`, `Λ_total`, singularity refusal), plus the
+# workspace that lets `ldiv!` on host vectors allocate nothing. `u`/`w` are the two
+# ping-pong buffers of the solved (interior, under `:boundary`) unknowns; `u3[d]`/`w3[d]`
+# are the same memory viewed as `(pre, n_d, post)` for the axis-`d` mode product, built
+# here because a `reshape` per application would allocate. `interior` holds the linear
+# indices of the solved unknowns in the full vector (empty for `dirichlet = nothing`).
+struct _FDMFactorization{T, D}
+    n::Int
+    boundary::Bool
+    interior::Vector{Int}
+    Q::NTuple{D, Matrix{T}}
+    Λ::Array{T, D}
+    λ::Vector{T}
+    u::Vector{T}
+    w::Vector{T}
+    u3::NTuple{D, Array{T, 3}}
+    w3::NTuple{D, Array{T, 3}}
+end
+
+_fdm_slabs(v::Vector, dims::NTuple{D, Int}) where {D} =
+    ntuple(d -> reshape(v, prod(dims[1:(d - 1)]; init = 1), dims[d],
+            prod(dims[(d + 1):end]; init = 1)), Val(D))
+
+function _fdm_factorize(K::KroneckerLinearOperator{T, D}, dirichlet) where {T, D}
+    (dirichlet === nothing || dirichlet === :boundary) || _throw_fdm_bad_dirichlet(dirichlet)
+    dims_full = K.dims
+    boundary = dirichlet === :boundary
+    rng = ntuple(d -> boundary ? (2:(dims_full[d] - 1)) : (1:dims_full[d]), Val(D))
+    dims = map(length, rng)
+    interior = boundary ? vec(LinearIndices(dims_full)[rng...]) : Int[]
+    if prod(dims) == 0
+        # A 2-point axis leaves no interior: every unknown is a Dirichlet one, and zero.
+        Q = ntuple(d -> zeros(T, dims[d], dims[d]), Val(D))
+        Λ = zeros(T, dims)
+    else
+        M, A, c_m = _fdm_axis_data(K, rng)
+        Q, Λ = _fdm_eigendecompose(M, A, c_m, dims)
+        # A zero (to rounding) of `Λ_total` is a zero eigenvalue of the system: dividing by
+        # it would return a huge `x` that does not solve it. `Λ_total` sums `D` per-axis
+        # eigenvalues, each off by about `eps(T) * maximum(abs, Λ)`, whatever the grid size.
+        minimum(abs, Λ) <= 16 * D * eps(T) * maximum(abs, Λ) && _throw_fdm_stage(5, 0)
     end
-    newdims = ntuple(i -> i == d ? size(M, 1) : dims[i], length(dims))
-    return reshape(Y3, newdims)
+    u = Vector{T}(undef, prod(dims))
+    w = similar(u)
+    return _FDMFactorization{T, D}(K.n, boundary, interior, Q, Λ, vec(Λ), u, w,
+        _fdm_slabs(u, dims), _fdm_slabs(w, dims))
+end
+
+# One mode product `Y = R' *_d X` between the ping-pong buffers, `X` in `u` when `inu`:
+# `Y[i, :, k] = X[i, :, k] * R`, a `mul!` per `pre x n_d` slab (one `mul!` on the
+# `n_d x post` matricisation when `pre == 1`). Returns where the result now lives.
+function _fdm_mode!(f::_FDMFactorization, inu::Bool, d::Int, R::AbstractMatrix)
+    X, Y = inu ? (f.u3[d], f.w3[d]) : (f.w3[d], f.u3[d])
+    if size(X, 1) == 1
+        mul!(view(Y, 1, :, :), transpose(R), view(X, 1, :, :))
+    else
+        for k in axes(X, 3)
+            mul!(view(Y, :, :, k), view(X, :, :, k), R)
+        end
+    end
+    return !inu
+end
+
+# `x = K \ F` on full-length host vectors: gather the solved unknowns, apply every `Q_d'`,
+# divide by `Λ_total`, apply every `Q_d`, scatter back (zero on the boundary). `2D` mode
+# products, an even number, so the result always ends in `u`. `x` may alias `F`.
+function LinearAlgebra.ldiv!(x::AbstractVector, f::_FDMFactorization{T, D},
+        F::AbstractVector) where {T, D}
+    # `interior` holds 1-based positions, used under `@inbounds` below.
+    Base.require_one_based_indexing(x, F)
+    length(F) == f.n || _throw_fdm_length_mismatch(f.n, length(F))
+    length(x) == f.n || _throw_fdm_length_mismatch(f.n, length(x))
+    u = f.u
+    if f.boundary
+        @inbounds for (i, j) in enumerate(f.interior)
+            u[i] = F[j]
+        end
+    else
+        copyto!(u, F)
+    end
+    if !isempty(u)
+        inu = true
+        for d in 1:D
+            inu = _fdm_mode!(f, inu, d, f.Q[d])
+        end
+        (inu ? f.u : f.w) ./= f.λ
+        for d in 1:D
+            inu = _fdm_mode!(f, inu, d, transpose(f.Q[d]))
+        end
+    end
+    if f.boundary
+        fill!(x, zero(eltype(x)))
+        @inbounds for (i, j) in enumerate(f.interior)
+            x[j] = u[i]
+        end
+    else
+        copyto!(x, u)
+    end
+    return x
 end
 
 # Device path. `X` and `M` are both device arrays, so the mode
@@ -386,32 +467,23 @@ end
 
 function _fdm_solve_core(K::KroneckerLinearOperator{T, D}, F::AbstractVector, dirichlet) where {T, D}
     length(F) == K.n || _throw_fdm_length_mismatch(K.n, length(F))
-    (dirichlet === nothing || dirichlet === :boundary) || _throw_fdm_bad_dirichlet(dirichlet)
+    f = _fdm_factorize(K, dirichlet)
+    F isa Array && return ldiv!(Vector{T}(undef, K.n), f, F)
 
+    # Device `F`: the same factorisation, applied with device mode products.
     dims_full = K.dims
+    dims_solve = size(f.Λ)
+    prod(dims_solve) == 0 && return fill!(similar(F, T, K.n), zero(T))
     if dirichlet === :boundary
         rng = ntuple(d -> 2:(dims_full[d] - 1), Val(D))
-        dims_solve = ntuple(d -> dims_full[d] - 2, Val(D))
         # A view plus broadcast, not `getindex` with ranges: no scalar indexing on a
-        # device `F`, and the same values on the host.
+        # device `F`.
         Fint = similar(F, T, prod(dims_solve))
         reshape(Fint, dims_solve) .= view(reshape(F, dims_full), rng...)
     else
-        rng = ntuple(d -> 1:dims_full[d], Val(D))
-        dims_solve = dims_full
         Fint = F
     end
-
-    # A 2-point axis leaves no interior: every unknown is a Dirichlet one, and zero.
-    prod(dims_solve) == 0 && return fill!(similar(F, T, K.n), zero(T))
-
-    M, A, c_m = _fdm_axis_data(K, rng)
-    Q, Λ = _fdm_eigendecompose(M, A, c_m, dims_solve)
-    # A zero (to rounding) of `Λ_total` is a zero eigenvalue of the system: dividing by it
-    # would return a huge `x` that does not solve it. `Λ_total` sums `D` per-axis
-    # eigenvalues, each off by about `eps(T) * maximum(abs, Λ)`, whatever the grid size.
-    minimum(abs, Λ) <= 16 * D * eps(T) * maximum(abs, Λ) && _throw_fdm_stage(5, 0)
-    xint = _fdm_apply(Q, Λ, Fint, dims_solve)
+    xint = _fdm_apply(f.Q, f.Λ, Fint, dims_solve)
 
     dirichlet === nothing && return xint
 

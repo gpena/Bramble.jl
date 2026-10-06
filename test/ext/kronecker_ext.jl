@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: is_separable, kronecker_operator, KroneckerLinearOperator
 using Kronecker: kronecker
-using LinearAlgebra: mul!, issymmetric
+using LinearAlgebra: mul!, issymmetric, ldiv!
 using SparseArrays: SparseMatrixCSC
 using Random
 
@@ -32,6 +32,15 @@ function graded_space(n::NTuple{D, Int}) where {D}
     Bramble.change_points!(Ω, ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
     return gridspace(Ω)
 end
+
+# A vector indexed `0:n-1`, for the factorisation's refusal of a non-1-based one.
+struct ZeroBasedVector <: AbstractVector{Float64}
+    p::Vector{Float64}
+end
+Base.size(z::ZeroBasedVector) = size(z.p)
+Base.axes(z::ZeroBasedVector) = (Base.IdentityUnitRange(0:(length(z.p) - 1)),)
+Base.getindex(z::ZeroBasedVector, i::Int) = z.p[i + 1]
+Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
 
 @testset "Kronecker extension" begin
     @testset "Kronecker.jl object equals CSC" begin
@@ -182,6 +191,33 @@ end
                 @test isapprox(fdm_solve(a, F; dirichlet = dir), xref; rtol = 1e-9)
                 dir === nothing && @test isapprox(fdm_solve(K, F), xref; rtol = 1e-9)
             end
+        end
+    end
+
+    # `_fdm_factorize` once, then `ldiv!` per right-hand side (the preconditioner's use):
+    # each matches the sparse direct solve and allocates nothing after a warm-up, on graded
+    # 2D and 3D meshes (every mode-product branch: a first axis, a middle one, a last one).
+    @testset "fdm factorisation: ldiv! vs \\, 0 bytes" begin
+        ldiv_bytes(x, f, F) = (ldiv!(x, f, F); @allocated ldiv!(x, f, F))
+        for n in ((13, 9), (7, 6, 8)), dir in (nothing, :boundary)
+            Wₕ = graded_space(n)
+            fx = Rₕ(Wₕ, x -> 1 + x[1])
+            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(fx * u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)))
+            A = assemble(a; dirichlet = dir)
+            f = KronExt._fdm_factorize(kronecker_operator(a), dir)
+            x = fill(NaN, size(A, 1))
+            for seed in 1:2
+                F = rand(MersenneTwister(KRON_EXT_SEED + seed), size(A, 1))
+                dir === :boundary && (F[Bramble._combined_mask(mesh(Wₕ), (:boundary,))] .= 0)
+                @test ldiv_bytes(x, f, F) == 0
+                @test isapprox(x, A \ F; rtol = 1e-10)
+                y = copy(F)
+                @test ldiv!(y, f, y) == x  # `x` may alias `F`
+            end
+            @test_throws DimensionMismatch ldiv!(x, f, zeros(length(x) + 1))
+            # `f.interior` holds 1-based positions: a 0-based vector is refused, not misread.
+            @test_throws ArgumentError ldiv!(x, f, ZeroBasedVector(zeros(length(x))))
+            @test_throws ArgumentError ldiv!(ZeroBasedVector(copy(x)), f, zeros(length(x)))
         end
     end
 
