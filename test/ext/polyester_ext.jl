@@ -70,19 +70,12 @@ end
 # allocates (measured at -O1), and a setup taking (grid points per axis, policy) on a
 # non-uniform 2D grid and returning the call to measure, a function reading its result, and
 # the number of multigrid levels (0 elsewhere).
-# The paths that allocate nothing at all under `CpuPolyester` (gpena/Bramble.jl#433): their
-# loops capture only plain arrays and isbits values, so Polyester's argument box stays on the
-# stack. Every other path keeps the 512 B box bound, since its loop captures a form or another
-# struct holding a GC reference (follow-up: gpena/Bramble.jl#437).
-const _PA_ZERO_PATHS = (
-    "difference D₋ₓ!", "average Mₓ!", "avgₕ!", "shift S₊ₓ!", "divₕ!", "curlₕ!", "εₕ!",
-    "broadcast", "innerₕ", "inner₊ₓ", "innerₕ masked", "Kronecker mul!",
-    "Kronecker mul! general", "Rₕ!", "Rₕ! masked", "project! composite Rₕ", "broadcast 0-dim"
-)
-
-# Paths whose box is measured and bounded tighter than 512 B. An `avgₕ!` source closure over
-# an array crosses `@batch` whole, never split (a rebuilt closure would capture a `PtrArray`
-# in place of its `Vector`), so its kernel boxes.
+# Every path allocates nothing at all under `CpuPolyester` (gpena/Bramble.jl#433,
+# gpena/Bramble.jl#437): what its loop captures crosses `@batch` as plain arrays and isbits
+# values, so Polyester's argument box stays on the stack. The one exception is listed here
+# with its bound: an `avgₕ!` source closure over an array crosses `@batch` whole, never split
+# (a rebuilt closure would capture a `PtrArray` in place of its `Vector`), so its kernel
+# boxes.
 const _PA_BOX_CEILINGS = Dict("avgₕ! closure" => 160)
 
 # BEGIN _pa paths
@@ -675,11 +668,11 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
 
     # Per path, a warm CpuPolyester call allocates the same bytes on a small and a large
     # non-uniform grid (a multigrid cycle per coarsening level, since it runs every level's
-    # loops), nothing but `@batch` argument boxes (0 B on the `_PA_ZERO_PATHS`, at most 512 B
-    # each on the rest), reaches no Threads
-    # entry point, and gives the CpuSerial result: bitwise for the operators asserted bitwise
-    # elsewhere in this file, to rounding for reductions, assembly and solvers. Silent on a
-    # single thread, where `@batch` runs serially.
+    # loops), nothing at all (no `@batch` argument box either, except on the paths in
+    # `_PA_BOX_CEILINGS`, each within its bound), reaches no Threads entry point, and gives
+    # the CpuSerial result: bitwise for the operators asserted bitwise elsewhere in this
+    # file, to rounding for reductions, assembly and solvers. Silent on a single thread,
+    # where `@batch` runs serially.
     if Threads.nthreads() >= 2
         @testset "allocation under CpuPolyester" begin
             hits = _pa_threads_hits()
@@ -696,8 +689,7 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
                 @test bs == bl
                 for case in (small, large)
                     box, other, nval = _pa_allocations(case.call)
-                    @test name in _PA_ZERO_PATHS ? box == 0 :
-                          box <= get(_PA_BOX_CEILINGS, name, 512)
+                    @test box <= get(_PA_BOX_CEILINGS, name, 0)
                     @test isempty(other)
                     @test nval == nrefs
                 end
