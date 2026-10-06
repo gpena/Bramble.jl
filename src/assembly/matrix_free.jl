@@ -1445,8 +1445,10 @@ end
 end
 _mf_prebound(::RegionRestriction{D, R}) where {D, R} = R <: _MFBoundRegion
 _mf_prebound(op::UnaryWrapper) = _mf_prebound(op.inner_op)
-_mf_prebound(op::Union{BilinearProduct, LinearProduct, OperatorAdd}) = _mf_prebound(
-    op.left_op) || _mf_prebound(op.right_op)
+function _mf_prebound(op::Union{BilinearProduct, LinearProduct, OperatorAdd})
+    _mf_prebound(
+        op.left_op) || _mf_prebound(op.right_op)
+end
 _mf_prebound(_) = false
 
 # Band `b` of a `CpuThreaded` fused product, from the sink and plan its spawn shares.

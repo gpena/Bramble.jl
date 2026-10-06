@@ -29,10 +29,13 @@ function words_agree(Ωₕ)
 end
 
 I = interval(0.0, 1.0)
-_meshes() = (Random.seed!(41); (
-    mesh(domain(I, :l => :left, :c => x -> x < 0.4), 70, false),
-    mesh(domain(I × I, :l => :left, :c => x -> x[1] + x[2] < 0.7), (9, 8), (false, false)),
-    mesh(domain(I × I × I, :c => x -> x[1] < 0.5), (5, 4, 6), (false, true, false))))
+function _meshes()
+    (Random.seed!(41);
+        (
+            mesh(domain(I, :l => :left, :c => x -> x < 0.4), 70, false),
+            mesh(domain(I × I, :l => :left, :c => x -> x[1] + x[2] < 0.7), (9, 8), (false, false)),
+            mesh(domain(I × I × I, :c => x -> x[1] < 0.5), (5, 4, 6), (false, true, false))))
+end
 
 @testset "Mesh state (#437)" begin
     @testset "State: plain, immutable, typed" begin

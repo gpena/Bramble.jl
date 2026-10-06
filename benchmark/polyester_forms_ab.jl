@@ -43,7 +43,7 @@
 if !isempty(ARGS) && ARGS[1] == "--first-call"
     length(ARGS) == 3 || error("usage: --first-call <base.txt> <head.txt>")
     function firstcall(file)
-        rows = Dict{String,Tuple{Float64,Int}}()
+        rows = Dict{String, Tuple{Float64, Int}}()
         for m in eachmatch(r"^FIRSTCALL path=(\S+) ms=(\S+) inferred_cpupolyester=(\d+)$"m,
             read(file, String))
             rows[m[1]] = (parse(Float64, m[2]), parse(Int, m[3]))
@@ -69,7 +69,7 @@ if !isempty(ARGS) && ARGS[1] == "--vs-serial"
         return isodd(n) ? w[(n + 1) ÷ 2] : (w[n ÷ 2] + w[n ÷ 2 + 1]) / 2
     end
     # (side, case, policy, n) => round => ns
-    times = Dict{Tuple{String,String,String,Int},Dict{Int,Int}}()
+    times = Dict{Tuple{String, String, String, Int}, Dict{Int, Int}}()
     for f in readdir(ARGS[2])
         m = match(r"^(base|head)-(\d+)$", f)
         m === nothing && continue
@@ -77,7 +77,7 @@ if !isempty(ARGS) && ARGS[1] == "--vs-serial"
             startswith(line, "AB\t") || continue
             _, name, pol, n, ns = split(line, '\t')
             key = (String(m[1]), String(name), String(pol), parse(Int, n))
-            get!(Dict{Int,Int}, times, key)[parse(Int, m[2])] = parse(Int, ns)
+            get!(Dict{Int, Int}, times, key)[parse(Int, m[2])] = parse(Int, ns)
         end
     end
     function ratio(side, name, pol, n)
@@ -89,7 +89,6 @@ if !isempty(ARGS) && ARGS[1] == "--vs-serial"
     end
     for name in sort!(unique(k[2] for k in keys(times))), n in (65, 1025),
         pol in ("polyester", "threaded")
-
         rb, rh = ratio("base", name, pol, n), ratio("head", name, pol, n)
         (rb === nothing || rh === nothing) && continue
         # Speedup over serial is 1 / ratio: it shrank by more than 5% when 1/rh < 0.95/rb.

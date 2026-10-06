@@ -268,46 +268,53 @@ function _pa_paths()
         u = zeros(npoints(Ω))
         _pa_case(() -> Bramble._innerh_weights!(u, Ω), () -> copy(u))
     end))
-    push!(P, ("avgₕ! masked", false, 0, (n, p) -> begin
-        u = element(_pa_space(n, p))
-        _pa_case(() -> avgₕ!(u, _pa_g; markers = (:dir,)), () -> _pa_copy(u))
-    end))
+    push!(P, (
+        "avgₕ! masked", false, 0, (n, p) -> begin
+            u = element(_pa_space(n, p))
+            _pa_case(() -> avgₕ!(u, _pa_g; markers = (:dir,)), () -> _pa_copy(u))
+        end))
     push!(P, ("project! composite avg", false, 0, (n, p) -> begin
         u = element(gridspace(_pa_jitter(n, p), Val(2)))
         _pa_case(() -> avgₕ!(u, _pa_pair), () -> _pa_comps(u))
     end))
-    push!(P, ("csr spmv", false, 0, (n, p) -> begin
-        A = assemble(_pa_poisson(_pa_space(n, p)))
-        csr = Bramble._rhs_csr(p, Val(false), A)
-        u = randn(Xoshiro(8), size(A, 2))
-        du0 = randn(Xoshiro(9), size(A, 1))
-        du = similar(du0)
-        _pa_case(() -> (copyto!(du, du0); Bramble._rhs_spmv!(du, A, csr, u)), () -> copy(du))
-    end))
-    push!(P, ("assemble! restricted", false, 0, (n, p) -> begin
-        W = _pa_space(n, p)
-        a = form(W, W,
-            (u, v) -> innerₕ(u, v; markers = (:dir,)) +
-                      inner₊(∇ₕ(u), ∇ₕ(v); markers = (:interior,)))
-        A = allocate_system_matrix(a)
-        _pa_case(() -> assemble!(A, a), () -> copy(A))
-    end))
-    push!(P, ("assemble! Ref coefficient", false, 0, (n, p) -> begin
-        W = _pa_space(n, p)
-        θ = Ref(2.5)
-        a = form(W, W, (u, v) -> θ * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
-        A = allocate_system_matrix(a)
-        first = similar(nonzeros(A))
-        call = () -> begin
-            θ[] = 2.5
-            assemble!(A, a)
-            copyto!(first, nonzeros(A))
-            θ[] = 4.0
-            assemble!(A, a)
-            return nothing
-        end
-        _pa_case(call, () -> vcat(first, nonzeros(A)))
-    end))
+    push!(P, ("csr spmv", false, 0,
+        (n, p) -> begin
+            A = assemble(_pa_poisson(_pa_space(n, p)))
+            csr = Bramble._rhs_csr(p, Val(false), A)
+            u = randn(Xoshiro(8), size(A, 2))
+            du0 = randn(Xoshiro(9), size(A, 1))
+            du = similar(du0)
+            _pa_case(() -> (copyto!(du, du0); Bramble._rhs_spmv!(du, A, csr, u)), () -> copy(du))
+        end))
+    push!(P,
+        ("assemble! restricted",
+            false,
+            0,
+            (n, p) -> begin
+                W = _pa_space(n, p)
+                a = form(W, W,
+                    (u, v) -> innerₕ(u, v; markers = (:dir,)) +
+                              inner₊(∇ₕ(u), ∇ₕ(v); markers = (:interior,)))
+                A = allocate_system_matrix(a)
+                _pa_case(() -> assemble!(A, a), () -> copy(A))
+            end))
+    push!(P, ("assemble! Ref coefficient", false, 0,
+        (n, p) -> begin
+            W = _pa_space(n, p)
+            θ = Ref(2.5)
+            a = form(W, W, (u, v) -> θ * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+            A = allocate_system_matrix(a)
+            first = similar(nonzeros(A))
+            call = () -> begin
+                θ[] = 2.5
+                assemble!(A, a)
+                copyto!(first, nonzeros(A))
+                θ[] = 4.0
+                assemble!(A, a)
+                return nothing
+            end
+            _pa_case(call, () -> vcat(first, nonzeros(A)))
+        end))
     push!(P, ("assemble! linear interpolation", false, 0, (n, p) -> begin
         W = _pa_space(n, p)
         uc = Rₕ(_pa_leaf(n ÷ 2 + 1, p), _pa_g)
@@ -315,15 +322,19 @@ function _pa_paths()
         b = zeros(ndofs(W))
         _pa_case(() -> assemble!(b, l), () -> copy(b))
     end))
-    push!(P, ("assemble! bilinear (searching)", false, 0, (n, p) -> begin
-        a = _pa_poisson(_pa_space(n, p))
-        A = allocate_system_matrix(a)
-        call = () -> begin
-            Bramble._zero_stored!(A)
-            Bramble._assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast)
-        end
-        _pa_case(call, () -> copy(A))
-    end))
+    push!(P,
+        ("assemble! bilinear (searching)",
+            false,
+            0,
+            (n, p) -> begin
+                a = _pa_poisson(_pa_space(n, p))
+                A = allocate_system_matrix(a)
+                call = () -> begin
+                    Bramble._zero_stored!(A)
+                    Bramble._assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast)
+                end
+                _pa_case(call, () -> copy(A))
+            end))
     push!(P, ("Rₕ!", true, 0, (n, p) -> begin
         u = element(_pa_space(n, p))
         _pa_case(() -> Rₕ!(u, _pa_g), () -> _pa_copy(u))
@@ -332,11 +343,12 @@ function _pa_paths()
         u = element(_pa_space(n, p))
         _pa_case(() -> Rₕ!(u, _pa_g; markers = (:dir,)), () -> _pa_copy(u))
     end))
-    push!(P, ("project! composite Rₕ", true, 0, (n, p) -> begin
-        u = element(gridspace(_pa_jitter(n, p), Val(2)))
-        rule = Bramble.PointValue(_pa_pair)
-        _pa_case(() -> Bramble.project!(u, rule), () -> _pa_comps(u))
-    end))
+    push!(P, (
+        "project! composite Rₕ", true, 0, (n, p) -> begin
+            u = element(gridspace(_pa_jitter(n, p), Val(2)))
+            rule = Bramble.PointValue(_pa_pair)
+            _pa_case(() -> Bramble.project!(u, rule), () -> _pa_comps(u))
+        end))
     push!(P, ("avgₕ! closure", false, 0, (n, p) -> begin
         u = element(_pa_space(n, p))
         c = [0.3, 0.7]
@@ -350,22 +362,28 @@ function _pa_paths()
         c = fill(1.5)
         _pa_case(() -> (v .= _pa_times0d.(u, c)), () -> _pa_copy(v))
     end))
-    push!(P, ("matrix-free fused masked", false, 0, (n, p) -> begin
-        op = matrix_free_operator(_pa_poisson(_pa_space(n, p)); dirichlet = :dir)
-        x = randn(Xoshiro(10), size(op, 2))
-        y0 = randn(Xoshiro(11), size(op, 1))
-        y = similar(y0)
-        _pa_case(() -> (copyto!(y, y0); mul!(y, op, x, 2.5, 0.7)), () -> copy(y))
-    end))
-    push!(P, ("matrix-free fused restricted", false, 0, (n, p) -> begin
-        W = _pa_space(n, p)
-        op = matrix_free_operator(form(W, W, (u, v) -> innerₕ(u, v) +
-                                                         inner₊(∇ₕ(u), ∇ₕ(v)) +
-                                                         innerₕ(u, restrict_to(:dir, v))))
-        x = randn(Xoshiro(12), size(op, 2))
-        y = similar(x)
-        _pa_case(() -> mul!(y, op, x), () -> copy(y))
-    end))
+    push!(P,
+        ("matrix-free fused masked", false, 0,
+            (n, p) -> begin
+                op = matrix_free_operator(_pa_poisson(_pa_space(n, p)); dirichlet = :dir)
+                x = randn(Xoshiro(10), size(op, 2))
+                y0 = randn(Xoshiro(11), size(op, 1))
+                y = similar(y0)
+                _pa_case(() -> (copyto!(y, y0); mul!(y, op, x, 2.5, 0.7)), () -> copy(y))
+            end))
+    push!(P,
+        ("matrix-free fused restricted",
+            false,
+            0,
+            (n, p) -> begin
+                W = _pa_space(n, p)
+                op = matrix_free_operator(form(W, W, (u, v) -> innerₕ(u, v) +
+                                                               inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                                               innerₕ(u, restrict_to(:dir, v))))
+                x = randn(Xoshiro(12), size(op, 2))
+                y = similar(x)
+                _pa_case(() -> mul!(y, op, x), () -> copy(y))
+            end))
     return P
 end
 # END _pa paths
@@ -1307,7 +1325,6 @@ _mg_spd(W) = (κ = Rₕ(W, x -> 1 + sum(abs2, x)); form(W, W, (u, v) -> innerₕ
     end
 end
 
-
 # Data `_batch_split` cannot take apart (`BigFloat` sources, coefficients and grid functions)
 # makes every split hook capture its parts whole, as before gpena/Bramble.jl#437, instead of
 # throwing. Each hook must have run on `BigFloat` data, and every result equal the serial one
@@ -1411,7 +1428,8 @@ Base.getindex(w::_BfWrapped, i::Int) = w.data[i]
         hits(:_batch_scatter_for!, "Dict"))
     rk = map((CpuSerial(), CpuPolyester())) do policy
         Ws = _bf_space((9, 11), policy)
-        Wd = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0),
+        Wd = gridspace(mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0),
                 :top => x -> x[2] ≈ 2.0), (9, 11), (false, false);
             backend = backend(policy = policy)))
         u, um, ua = element(Ws), element(Wd), element(Ws)
@@ -1437,21 +1455,23 @@ end
 # the process; the threads the failed sweeps reserved are released. Repeated, since the crash
 # a task's exception caused before (gpena/Bramble.jl#437) was intermittent.
 @testset "throwing user function rethrows" begin
-    _tf_space(policy) = (Random.seed!(433); gridspace(mesh(
-        domain(interval(0.0, 1.0) × interval(0.0, 2.0), :right => x -> x[1] ≈ 1.0),
-        (17, 9), (false, false); backend = backend(policy = policy))))
+    _tf_space(policy) = (Random.seed!(433);
+        gridspace(mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0), :right => x -> x[1] ≈ 1.0),
+            (17, 9), (false, false); backend = backend(policy = policy))))
     f = x -> x[1] > 0.7 ? sqrt(0.7 - x[1]) : x[1] * x[2]
     # The last two cross whole: a closure over a `Vector` is never split.
     c = [1.0]
     calls = (u -> Rₕ!(u, f), u -> Rₕ!(u, f; markers = (:right,)), u -> avgₕ!(u, f),
         u -> Rₕ!(u, x -> (f(x), x[2])), u -> avgₕ!(u, x -> c[1] * f(x)),
         u -> Rₕ!(u, x -> (c[1] * f(x), x[2])))
-    _tf_error(call, W) = try
-        call(element(W))
-        nothing
-    catch e
-        e
-    end
+    _tf_error(call, W) =
+        try
+            call(element(W))
+            nothing
+        catch e
+            e
+        end
     _tf_elem(k, W) = k in (4, 6) ? W × W : W
     for (k, call) in enumerate(calls)
         serial = _tf_error(call, _tf_elem(k, _tf_space(CpuSerial())))
@@ -1475,9 +1495,10 @@ end
 # (a `Vector{Int}`, a stepped range) takes the per-index sweep.
 _uc_typed(c::Vector{Float64}, x) = c[1] * x[1] + c[2] * x[2]^2
 @testset "user closures over arrays cross whole" begin
-    _uc_space(policy) = (Random.seed!(436); gridspace(mesh(
-        domain(interval(0.0, 1.0) × interval(0.0, 2.0), :right => x -> x[1] ≈ 1.0),
-        (17, 9), (false, false); backend = backend(policy = policy))))
+    _uc_space(policy) = (Random.seed!(436);
+        gridspace(mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0), :right => x -> x[1] ≈ 1.0),
+            (17, 9), (false, false); backend = backend(policy = policy))))
     c = [0.3, 1.7]
     typed = x -> _uc_typed(c, x)
     branch = x -> c isa Vector ? c[1] * x[1] : -1.0
@@ -1511,7 +1532,7 @@ _uc_typed(c::Vector{Float64}, x) = c[1] * x[1] + c[2] * x[2]^2
     O = Base.IdentityUnitRange
     lin(i) = i isa CartesianIndex ? i[1] + 7i[2] : i
     for (mk, idxs) in ((() -> view(zeros(6, 6), O(2:4), O(3:5)), CartesianIndices((O(2:4), O(3:5)))),
-            (() -> view(zeros(6), O(2:4)), O(2:4)))
+        (() -> view(zeros(6), O(2:4)), O(2:4)))
         for f in (i -> c[1] * lin(i), i -> 1.0 + lin(i))
             vp, vs = mk(), mk()
             Bramble._sweep_for!(CpuPolyester(), vp, idxs, f)
@@ -1545,12 +1566,13 @@ end
             backend = backend(policy = policy))))
     _mp_form(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
     _mp_diag(W) = spdiagm(ones(ndofs(W)))
-    _mp_error(f) = try
-        f()
-        nothing
-    catch e
-        e
-    end
+    _mp_error(f) =
+        try
+            f()
+            nothing
+        catch e
+            e
+        end
     for n in ((9, 11), (9, 33))
         Ws = _mp_space(n, CpuSerial())
         serial = _mp_error(() -> assemble!(_mp_diag(Ws), _mp_form(Ws)))

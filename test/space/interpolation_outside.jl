@@ -19,6 +19,7 @@ using Bramble: interpolation_matrix, weights, Innerh, form, assemble, Interpolat
 
     @testset "Node is isbits before and after binding" begin
         for o in (:error, :clamp, :extrapolate), leaf in (u, v)
+
             n = πₕ(leaf; outside = o)
             @test isbitstype(typeof(n))
             b = _bind_interp_spaces((n,), W, W)[1]

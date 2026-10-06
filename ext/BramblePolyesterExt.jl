@@ -337,6 +337,7 @@ end
     ax = c.indices
     inner = CartesianIndices(Base.front(ax))
     for j in last(ax), J in inner
+
         I = CartesianIndex(J, j)
         @inbounds v[I] = k(I)
     end
@@ -383,7 +384,7 @@ end
 struct _Lin end
 struct _Cart end
 @inline _cover(v, idxs::AbstractUnitRange) = !Base.has_offset_axes(v) &&
-                                            idxs == Base.OneTo(length(v)) ? _Lin() : nothing
+                                             idxs == Base.OneTo(length(v)) ? _Lin() : nothing
 @inline _cover(v, idxs::CartesianIndices) = idxs == CartesianIndices(v) ? _Cart() : nothing
 @inline _cover(v, idxs) = nothing
 @inline _full(v, ::_Lin) = Base.OneTo(length(v))
@@ -414,7 +415,7 @@ function _batch_for_cover!(v::AbstractArray, kind, k::K) where {K}
         failed |= _whole_part_threw(v, k, kind, b)
     end
     failed && _rerun_on_host(b -> _fill_slab!(v, k, _slab(_full(v, kind),
-        Threads.nthreads(), b)), 1:Threads.nthreads())
+            Threads.nthreads(), b)), 1:Threads.nthreads())
     return nothing
 end
 
@@ -504,7 +505,7 @@ function _batch_scatter_whole!(mats::Tuple, idxs, k::K) where {K}
             hit |= _scatter_whole_part_threw(mats, k, b)
         end
         hit && _rerun_on_host(b -> _scatter_range!(mats, k,
-            _band_range(Base.OneTo(length(mats[1])), n, b)), 1:n)
+                _band_range(Base.OneTo(length(mats[1])), n, b)), 1:n)
         return nothing
     end
     failed = false

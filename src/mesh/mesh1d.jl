@@ -1162,9 +1162,10 @@ function Base.deepcopy_internal(Ωₕ::Mesh1D, dict::IdDict)
     haskey(dict, Ωₕ) && return dict[Ωₕ]::typeof(Ωₕ)
     c = invoke(Base.deepcopy_internal, Tuple{Any, IdDict}, Ωₕ, dict)::typeof(Ωₕ)
     s = _st(c)
-    _set_state!(c, typeof(s)(s.set, s.indices, s.backend, s.pts, s.half_pts,
-        s.half_spacings, s.spacings, s.collapsed, s.version, s.uniform, s.words,
-        _next_mesh_uid()))
+    _set_state!(c,
+        typeof(s)(s.set, s.indices, s.backend, s.pts, s.half_pts,
+            s.half_spacings, s.spacings, s.collapsed, s.version, s.uniform, s.words,
+            _next_mesh_uid()))
     return c
 end
 
