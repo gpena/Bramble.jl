@@ -200,6 +200,7 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
     @testset "fdm factorisation: ldiv! vs \\, 0 bytes" begin
         ldiv_bytes(x, f, F) = (ldiv!(x, f, F); @allocated ldiv!(x, f, F))
         for n in ((13, 9), (7, 6, 8)), dir in (nothing, :boundary)
+
             Wₕ = graded_space(n)
             fx = Rₕ(Wₕ, x -> 1 + x[1])
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(fx * u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)))
@@ -221,6 +222,114 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
         end
     end
 
+    # Non-symmetric (advection) forms take the generalised Schur route: each matches the
+    # sparse direct solve on graded 2D and 3D meshes, with and without homogeneous Dirichlet,
+    # from `fdm_solve(a, F)`, `fdm_solve(K, F)` and a reused factorisation whose `ldiv!`
+    # allocates nothing. Distinct per-axis scales put a scalar multiple of a mass factor into
+    # a term (`kronecker_operator` folds the scale into another axis), which the
+    # classification must read as the mass. A symmetric form keeps fast diagonalisation.
+    @testset "fdm_solve: advection by Schur form" begin
+        ldiv_bytes(x, f, F) = (ldiv!(x, f, F); @allocated ldiv!(x, f, F))
+        for n in ((13, 9), (7, 6, 8))
+            Wₕ = graded_space(n)
+            D = length(n)
+            fx = Rₕ(Wₕ, x -> 1 + x[1])
+            Dm(u, d) = Bramble.D₋(u, Val(d))
+            L(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
+            forms = [
+                "axis-1 advection" => (u, v) -> L(u, v) + innerₕ(D₋ₓ(u), v),
+                "distinct scales" => (u, v) -> L(u, v) +
+                                               sum((d + 0.5) * innerₕ(Dm(u, d), v) for d in 1:D),
+                "x-coefficient mass" => (u, v) -> innerₕ(fx * u, v) +
+                                                  inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(Dm(u, D), v),
+                "dominant advection" => (u, v) -> innerₕ(u, v) +
+                                                  1e-3 * inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                                  innerₕ(D₋ₓ(u), v)
+            ]
+            for (name, f) in forms, dir in (nothing, :boundary)
+
+                a = form(Wₕ, Wₕ, f)
+                A = assemble(a; dirichlet = dir)
+                @test !issymmetric(A)
+                K = kronecker_operator(a)
+                fact = KronExt._fdm_factorize(K, dir)
+                @test fact isa KronExt._SchurFactorization
+                x = fill(NaN, size(A, 1))
+                for seed in 1:2
+                    F = rand(MersenneTwister(KRON_EXT_SEED + seed), size(A, 1))
+                    dir === :boundary &&
+                        (F[Bramble._combined_mask(mesh(Wₕ), (:boundary,))] .= 0)
+                    xref = A \ F
+                    @test ldiv_bytes(x, fact, F) == 0
+                    @test isapprox(x, xref; rtol = 1e-10)
+                    y = copy(F)
+                    @test ldiv!(y, fact, y) == x  # `x` may alias `F`
+                    @test isapprox(fdm_solve(a, F; dirichlet = dir), xref; rtol = 1e-10)
+                    dir === nothing && @test isapprox(fdm_solve(K, F), xref; rtol = 1e-10)
+                end
+                @test_throws DimensionMismatch ldiv!(x, fact, zeros(length(x) + 1))
+                @test_throws ArgumentError ldiv!(x, fact, ZeroBasedVector(zeros(length(x))))
+            end
+            a = form(Wₕ, Wₕ, L)
+            @test KronExt._fdm_factorize(kronecker_operator(a), nothing) isa
+                  KronExt._FDMFactorization
+        end
+    end
+
+    # A 3-point axis under `dirichlet = :boundary` has a 1x1 interior, where every factor is
+    # a multiple of every other: matching up to a scalar must not merge its stiffness into
+    # its mass. A negative multiple of the mass seen first must not become the mass
+    # candidate. Both solve to the sparse direct solve.
+    @testset "fdm_solve: 3-point axes and signs" begin
+        L(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
+        adv(u, v) = L(u, v) + innerₕ(D₋ₓ(u), v)
+        scaled(u, v) = adv(u, v) + 0.5 * innerₕ(D₋ᵧ(u), v)
+        cases = [
+            ((3, 7), :boundary, L), ((3, 7), :boundary, adv), ((3, 7), :boundary, scaled),
+            ((5, 3, 4), :boundary, L), ((5, 3, 4), :boundary, adv),
+            ((3, 6, 5), :boundary, scaled),
+            ((17, 13), :boundary,
+                (u, v) -> -2.0 * innerₕ(D₋ₓ(u), v) - 3.0 * innerₕ(D₋ᵧ(u), v) + L(u, v)),
+            ((17, 13), nothing,
+                (u, v) -> L(u, v) + (-1.0) * innerₕ(D₋ₓ(u), v) + (-0.5) * innerₕ(D₋ᵧ(u), v)),
+            ((17, 13), :boundary,
+                (u, v) -> -0.1 * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(D₋ₓ(u), v))
+        ]
+        for (n, dir, f) in cases
+            Wₕ = graded_space(n)
+            a = form(Wₕ, Wₕ, f)
+            A = assemble(a; dirichlet = dir)
+            F = rand(MersenneTwister(KRON_EXT_SEED + length(n)), size(A, 1))
+            dir === :boundary && (F[Bramble._combined_mask(mesh(Wₕ), (:boundary,))] .= 0)
+            @test isapprox(fdm_solve(a, F; dirichlet = dir), A \ F; rtol = 1e-10)
+        end
+    end
+
+    # Float32 on a graded mesh (points `t^2`, condition about 2e4): the singularity bound
+    # (`D eps` times the largest entry, measured 15 eps away here) must not refuse it, on
+    # either route, while the pure-Neumann form on the same mesh is still refused.
+    @testset "fdm_solve: Float32 graded" begin
+        Ω = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (65, 9),
+            (false, false))
+        Bramble.change_points!(Ω, (Float32.(range(0, 1; length = 65) .^ 2),
+            Float32.(range(0, 1; length = 9) .^ 2)))
+        Wₕ = gridspace(Ω)
+        L(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
+        for f in (L, (u, v) -> L(u, v) + innerₕ(D₋ₓ(u), v))
+            a = form(Wₕ, Wₕ, f)
+            A = assemble(a; dirichlet = :boundary)
+            F = rand(MersenneTwister(KRON_EXT_SEED), Float32, size(A, 1))
+            F[Bramble._combined_mask(mesh(Wₕ), (:boundary,))] .= 0
+            x = fdm_solve(a, F; dirichlet = :boundary)
+            @test eltype(x) === Float32
+            @test isapprox(x, Float64.(A) \ Float64.(F); rtol = 1e-3)
+        end
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        G = ones(Float32, ndofs(Wₕ))
+        @test_throws ArgumentError fdm_solve(a, G)
+        @test_throws "the system is singular" fdm_solve(a, G)
+    end
+
     # Every other form throws, naming the reason, and is never solved wrongly.
     @testset "fdm_solve: refusals name the reason" begin
         refusal(f) =
@@ -239,8 +348,9 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
         refused = [
             "mixed" => ((u, v) -> innerₕ(D₋ₓ(D₋ᵧ(u)), v) + L(u, v),
                 r"non-mass factors on two axes"),
-            "advection" => ((u, v) -> innerₕ(D₋ₓ(u), v) + L(u, v),
-                r"axis-1 operator is not symmetric"),
+            # Advection takes the Schur route, which refuses a singular system the same way.
+            "advection, no mass" => ((u, v) -> innerₕ(D₋ₓ(u), v) + L(u, v),
+                r"the system is singular"),
             "two-axis coefficient" => ((u, v) -> innerₕ(fx * (fy * u), v) + L(u, v),
                 r"non-mass factors on two axes"),
             "one-axis gradient" => ((u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(u, v),
