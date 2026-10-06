@@ -19,7 +19,87 @@
 # head adds is timed on both sides. Two more cases, "restricted bilinear" and
 # "restricted linear", assemble a form carrying a `markers = (:dir,)` term on
 # the block's jittered non-uniform mesh, warm.
+#
+# Two report modes read files and measure nothing (Base only, no Bramble):
+#
+#     julia benchmark/polyester_forms_ab.jl --first-call <base.txt> <head.txt>
+#     julia benchmark/polyester_forms_ab.jl --vs-serial <dir>
+#
+# `--first-call` takes the stdout of benchmark/polyester_first_call.jl on each
+# tree. For every path in both files it prints
+# `FIRSTCALL-AB<TAB>path<TAB>base_ms<TAB>head_ms<TAB>ms_ratio<TAB>base_n<TAB>head_n`
+# (ms_ratio = head_ms / base_ms; n = inferred_cpupolyester) and
+# `FIRSTCALL-ALARM<TAB>path` when ms_ratio > 2 or head_n > 2 * max(base_n, 1)
+# (the #437 "compiles twice" alarm). It exits 0 either way.
+#
+# `--vs-serial` takes a directory holding the per-round raw outputs of the
+# sides of an A/B, `base-<round>` and `head-<round>`, each holding the `AB`
+# rows of a run with every policy (ab.sh writes them in its temporary
+# directory). Per case and size it prints, from the medians over the rounds,
+# `VS-SERIAL<TAB>case<TAB>n<TAB>policy<TAB>base_pol/serial<TAB>head_pol/serial<TAB>flag`
+# for the polyester and the threaded policy. A row is flagged `SHRANK` when
+# the head's speedup over serial is more than 5% below the base's. No bar.
 #===========================================================================#
+if !isempty(ARGS) && ARGS[1] == "--first-call"
+    length(ARGS) == 3 || error("usage: --first-call <base.txt> <head.txt>")
+    function firstcall(file)
+        rows = Dict{String,Tuple{Float64,Int}}()
+        for m in eachmatch(r"^FIRSTCALL path=(\S+) ms=(\S+) inferred_cpupolyester=(\d+)$"m,
+            read(file, String))
+            rows[m[1]] = (parse(Float64, m[2]), parse(Int, m[3]))
+        end
+        return rows
+    end
+    base, head = firstcall(ARGS[2]), firstcall(ARGS[3])
+    for path in sort!(collect(intersect(keys(base), keys(head))))
+        (bms, bn), (hms, hn) = base[path], head[path]
+        ratio = hms / bms
+        println("FIRSTCALL-AB\t", path, "\t", bms, "\t", hms, "\t", round(ratio; digits = 3),
+            "\t", bn, "\t", hn)
+        (ratio > 2 || hn > 2 * max(bn, 1)) && println("FIRSTCALL-ALARM\t", path)
+    end
+    exit(0)
+end
+
+if !isempty(ARGS) && ARGS[1] == "--vs-serial"
+    length(ARGS) == 2 || error("usage: --vs-serial <dir>")
+    function median(v)
+        w = sort(v)
+        n = length(w)
+        return isodd(n) ? w[(n + 1) ÷ 2] : (w[n ÷ 2] + w[n ÷ 2 + 1]) / 2
+    end
+    # (side, case, policy, n) => round => ns
+    times = Dict{Tuple{String,String,String,Int},Dict{Int,Int}}()
+    for f in readdir(ARGS[2])
+        m = match(r"^(base|head)-(\d+)$", f)
+        m === nothing && continue
+        for line in eachline(joinpath(ARGS[2], f))
+            startswith(line, "AB\t") || continue
+            _, name, pol, n, ns = split(line, '\t')
+            key = (String(m[1]), String(name), String(pol), parse(Int, n))
+            get!(Dict{Int,Int}, times, key)[parse(Int, m[2])] = parse(Int, ns)
+        end
+    end
+    function ratio(side, name, pol, n)
+        a = get(times, (side, name, pol, n), nothing)
+        s = get(times, (side, name, "serial", n), nothing)
+        (a === nothing || s === nothing) && return nothing
+        rounds = sort!(collect(intersect(keys(a), keys(s))))
+        return isempty(rounds) ? nothing : median([a[r] / s[r] for r in rounds])
+    end
+    for name in sort!(unique(k[2] for k in keys(times))), n in (65, 1025),
+        pol in ("polyester", "threaded")
+
+        rb, rh = ratio("base", name, pol, n), ratio("head", name, pol, n)
+        (rb === nothing || rh === nothing) && continue
+        # Speedup over serial is 1 / ratio: it shrank by more than 5% when 1/rh < 0.95/rb.
+        flag = 1 / rh < 0.95 / rb ? "SHRANK" : ""
+        println("VS-SERIAL\t", name, "\t", n, "\t", pol, "\t", round(rb; digits = 3), "\t",
+            round(rh; digits = 3), "\t", flag)
+    end
+    exit(0)
+end
+
 using Bramble, Polyester
 using Bramble: CpuPolyester, CpuSerial, CpuThreaded
 
