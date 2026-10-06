@@ -266,9 +266,9 @@ end
 # `isa Vector` branch reads differently. So does any other kernel, and a kernel the split
 # cannot take apart (a `BigFloat` target). A throwing kernel (a user function evaluated per
 # point) is caught in the task and rerun on the host (`@_task` below), so its exception
-# reaches the caller unchanged. A kernel crossing whole, and an index collection other than
-# a unit range or a `CartesianIndices` (a `Vector{Int}`, a stepped range), take a per-index
-# `@batch` instead (`_batch_for_each!`).
+# reaches the caller unchanged. A kernel crossing whole takes `_batch_for_whole!`, an index
+# collection other than a unit range or a `CartesianIndices` (a `Vector{Int}`, a stepped
+# range) a per-index `@batch`.
 #
 # The kernel argument is `::F where {F}` because `Base.Fix1 <: Function`: Julia does not
 # specialise on an unannotated `Function` argument it only passes on, so the split was
@@ -301,25 +301,33 @@ _splits_kernel(::Type{<:_MaskedKernel{K}}) where {K} = _splits_kernel(K)
     return _Whole(), raw
 end
 
-# `v[i] = k(i)` over band `b` of `n`: a slab of a range, or of a `CartesianIndices`' last
-# axis walked as `Polyester` walks it, a plain loop over that axis around one over the
-# others. A loop over the slab as one `CartesianIndices` ran the weight build 1.3x slower
-# at 1025² (210 against 160 µs, 4 threads).
-@inline function _for_fill!(v, k::K, idxs::AbstractUnitRange, n::Int, b::Int) where {K}
-    for i in _band_range(idxs, n, b)
+# Band `b` of `n` of `idxs`: a slab of a range, or of a `CartesianIndices`' last axis.
+@inline _slab(idxs::AbstractRange, n::Int, b::Int) = _band_range(idxs, n, b)
+@inline function _slab(idxs::CartesianIndices, n::Int, b::Int)
+    ax = idxs.indices
+    return CartesianIndices((Base.front(ax)..., _band_range(last(ax), n, b)))
+end
+
+# `v[i] = k(i)` over a slab, a `CartesianIndices` one walked as `Polyester` walks it, a plain
+# loop over its last axis around one over the others. A loop over the slab as one
+# `CartesianIndices` ran the weight build 1.3x slower at 1025² (210 against 160 µs, 4
+# threads).
+@inline function _fill_slab!(v, k::K, r::AbstractUnitRange) where {K}
+    for i in r
         @inbounds v[i] = k(i)
     end
     return nothing
 end
-@inline function _for_fill!(v, k::K, idxs::CartesianIndices, n::Int, b::Int) where {K}
-    ax = idxs.indices
+@inline function _fill_slab!(v, k::K, c::CartesianIndices) where {K}
+    ax = c.indices
     inner = CartesianIndices(Base.front(ax))
-    for j in _band_range(last(ax), n, b), J in inner
+    for j in last(ax), J in inner
         I = CartesianIndex(J, j)
         @inbounds v[I] = k(I)
     end
     return nothing
 end
+@inline _for_fill!(v, k::K, idxs, n::Int, b::Int) where {K} = _fill_slab!(v, k, _slab(idxs, n, b))
 
 # Each task copies its destination and rebuilt kernel through a local `Ref` before the loop.
 # A task body reads its arguments through pointers, and LLVM reloads a field read that way
@@ -336,8 +344,9 @@ end
 
 function _batch_for_bands!(v::AbstractArray, idxs::Union{AbstractUnitRange, CartesianIndices},
         f::F) where {F}
+    _offset(v, idxs) && return _batch_for_each!(v, idxs, f)
     skel, arrays = _kernel_parts(f, v)
-    skel isa _Whole && return _batch_for_each!(v, idxs, arrays)
+    skel isa _Whole && return _batch_for_whole!(v, idxs, arrays)
     n = Threads.nthreads()
     failed = false
     @batch reduction=((|, failed),) for b in 1:n
@@ -347,16 +356,82 @@ function _batch_for_bands!(v::AbstractArray, idxs::Union{AbstractUnitRange, Cart
     return nothing
 end
 
-# A kernel crossing whole, and any other index collection: one index per iteration with the
-# kernel captured as it is, the loop and captures of gpena/Bramble.jl#433's parent (a
-# banded loop would capture `idxs` and the band count too, 16 B more per box), behind the
-# same guard.
+# A whole kernel's loop runs one guarded slab per iteration, not one guarded index: a
+# guarded call per index ran an `avgₕ!` closure over an array 5% slower than the parent
+# of gpena/Bramble.jl#433. Its box must stay no bigger than the parent's, which captured
+# `v`, the kernel and `idxs`. When `idxs` covers `v` (every `Rₕ!`/`avgₕ!` sweep), the loop
+# runs over `Base.OneTo(Threads.nthreads())` and each task rebuilds its slab from `v`'s own
+# indices (`_full`), so it captures `v`, the kernel and that 8 B range, 8 B less than the
+# parent. Any other `idxs` crosses as `_Slabs`, the slabs as one loop range: that captures
+# `idxs` plus the 8 B index range `@batch` takes of any array it loops over, 8 B more than
+# the parent, which an `Rₕ!` box's size class rounds up to 16 B (64 against 80 B for a
+# closure over a `Vector`) and an `avgₕ!` box's does not. Looping over `1:n` with `idxs`
+# captured would add 16 B to both.
+struct _Lin end
+struct _Cart end
+@inline _cover(v, idxs::AbstractUnitRange) = !Base.has_offset_axes(v) &&
+                                            idxs == Base.OneTo(length(v)) ? _Lin() : nothing
+@inline _cover(v, idxs::CartesianIndices) = idxs == CartesianIndices(v) ? _Cart() : nothing
+@inline _cover(v, idxs) = nothing
+@inline _full(v, ::_Lin) = Base.OneTo(length(v))
+@inline _full(v, ::_Cart) = CartesianIndices(size(v))
+
+struct _Slabs{T, R} <: AbstractVector{T}
+    idxs::R
+end
+_Slabs(idxs) = _Slabs{typeof(_slab(idxs, 1, 1)), typeof(idxs)}(idxs)
+Base.size(::_Slabs) = (Threads.nthreads(),)
+Base.@propagate_inbounds Base.getindex(s::_Slabs, b::Int) = _slab(
+    s.idxs, Threads.nthreads(), b)
+
+@_task function _whole_slab!(v, k, r)
+    _fill_slab!(v, k, r)
+    return nothing
+end
+
+@_task function _whole_part!(v, k, kind, b)
+    _fill_slab!(v, k, _slab(_full(v, kind), Threads.nthreads(), b))
+    return nothing
+end
+
+# `idxs` covering `v`, as `kind` says: the slabs rebuilt from `v` in each task.
+function _batch_for_cover!(v::AbstractArray, kind, k::K) where {K}
+    failed = false
+    @batch reduction=((|, failed),) for b in Base.OneTo(Threads.nthreads())
+        failed |= _whole_part_threw(v, k, kind, b)
+    end
+    failed && _rerun_on_host(b -> _fill_slab!(v, k, _slab(_full(v, kind),
+        Threads.nthreads(), b)), 1:Threads.nthreads())
+    return nothing
+end
+
+# A kernel crossing whole, unsplit, one slab per iteration behind the same guard.
+function _batch_for_whole!(v::AbstractArray, idxs, k::K) where {K}
+    kind = _cover(v, idxs)
+    kind === nothing || return _batch_for_cover!(v, kind, k)
+    failed = false
+    @batch reduction=((|, failed),) for r in _Slabs(idxs)
+        failed |= _whole_slab_threw(v, k, r)
+    end
+    failed && _rerun_on_host(r -> _fill_slab!(v, k, r), _Slabs(idxs))
+    return nothing
+end
+
+# Any other index collection (a `Vector{Int}`, a stepped range), and any destination or
+# index range with offset axes, which the slabs (`_band_range` counts positions from 1) and
+# the covering loop (`_full` rebuilds 1-based indices) would misplace: one index per
+# iteration, the kernel crossing whole, behind the same guard.
+@inline _offset(arrays...) = any(Base.has_offset_axes, arrays)
+
 @_task function _for_one!(v, k, i)
     @inbounds v[i] = k(i)
     return nothing
 end
 
-function _batch_for_each!(v::AbstractArray, idxs, k::K) where {K}
+_batch_for_bands!(v::AbstractArray, idxs, f::F) where {F} = _batch_for_each!(v, idxs, f)
+
+function _batch_for_each!(v::AbstractArray, idxs, f::F) where {F}
+    k = _for_host_raw(f)
     failed = false
     @batch reduction=((|, failed),) for i in idxs
         failed |= _for_one_threw(v, k, i)
@@ -364,9 +439,6 @@ function _batch_for_each!(v::AbstractArray, idxs, k::K) where {K}
     failed && _rerun_on_host(i -> (@inbounds v[i] = k(i)), idxs)
     return nothing
 end
-
-_batch_for_bands!(v::AbstractArray, idxs, f::F) where {F} = _batch_for_each!(
-    v, idxs, _for_host_raw(f))
 
 Bramble._batch_for!(v::AbstractArray, idxs, f::F) where {F} = _batch_for_bands!(v, idxs, f)
 
@@ -393,13 +465,52 @@ end
     return nothing
 end
 
-# A kernel crossing whole: one index per iteration, as `_batch_for_each!` above.
+# A kernel crossing whole: one slab per iteration, as `_batch_for_whole!` above.
+@inline function _scatter_range!(mats, k::K, r) where {K}
+    for i in r
+        @inbounds _write_components!(mats, k(i), i)
+    end
+    return nothing
+end
+
+@_task function _scatter_whole_slab!(mats, k, r)
+    _scatter_range!(mats, k, r)
+    return nothing
+end
+
+@_task function _scatter_whole_part!(mats, k, b)
+    _scatter_range!(mats, k, _band_range(Base.OneTo(length(mats[1])), Threads.nthreads(), b))
+    return nothing
+end
+
+function _batch_scatter_whole!(mats::Tuple, idxs, k::K) where {K}
+    if _cover(mats[1], idxs) isa _Lin
+        n = Threads.nthreads()
+        hit = false
+        @batch reduction=((|, hit),) for b in Base.OneTo(Threads.nthreads())
+            hit |= _scatter_whole_part_threw(mats, k, b)
+        end
+        hit && _rerun_on_host(b -> _scatter_range!(mats, k,
+            _band_range(Base.OneTo(length(mats[1])), n, b)), 1:n)
+        return nothing
+    end
+    failed = false
+    @batch reduction=((|, failed),) for r in _Slabs(idxs)
+        failed |= _scatter_whole_slab_threw(mats, k, r)
+    end
+    failed && _rerun_on_host(r -> _scatter_range!(mats, k, r), _Slabs(idxs))
+    return nothing
+end
+
+# Destinations or an index range with offset axes: one index per iteration, as
+# `_batch_for_each!` above.
 @_task function _scatter_one!(mats, k, i)
     @inbounds _write_components!(mats, k(i), i)
     return nothing
 end
 
-function _batch_scatter_each!(mats::Tuple, idxs, k::K) where {K}
+function _batch_scatter_each!(mats::Tuple, idxs, g::G) where {G}
+    k = _for_host_raw(g)
     failed = false
     @batch reduction=((|, failed),) for i in idxs
         failed |= _scatter_one_threw(mats, k, i)
@@ -409,8 +520,9 @@ function _batch_scatter_each!(mats::Tuple, idxs, k::K) where {K}
 end
 
 function Bramble._batch_scatter_for!(mats::Tuple, idxs::AbstractRange, g::G) where {G}
+    _offset(idxs, mats...) && return _batch_scatter_each!(mats, idxs, g)
     skel, arrays = _kernel_parts(g, mats...)
-    skel isa _Whole && return _batch_scatter_each!(mats, idxs, arrays)
+    skel isa _Whole && return _batch_scatter_whole!(mats, idxs, arrays)
     n = Threads.nthreads()
     failed = false
     @batch reduction=((|, failed),) for b in 1:n

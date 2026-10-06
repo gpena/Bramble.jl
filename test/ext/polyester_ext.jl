@@ -83,7 +83,7 @@ const _PA_ZERO_PATHS = (
 # Paths whose box is measured and bounded tighter than 512 B. An `avgₕ!` source closure over
 # an array crosses `@batch` whole, never split (a rebuilt closure would capture a `PtrArray`
 # in place of its `Vector`), so its kernel boxes.
-const _PA_BOX_CEILINGS = Dict("avgₕ! closure" => 176)
+const _PA_BOX_CEILINGS = Dict("avgₕ! closure" => 160)
 
 # BEGIN _pa paths
 using Bramble: CpuPolyester, CpuSerial, CpuThreaded, change_points!, semidiscretize_rhs,
@@ -1449,15 +1449,18 @@ end
         domain(interval(0.0, 1.0) × interval(0.0, 2.0), :right => x -> x[1] ≈ 1.0),
         (17, 9), (false, false); backend = backend(policy = policy))))
     f = x -> x[1] > 0.7 ? sqrt(0.7 - x[1]) : x[1] * x[2]
+    # The last two cross whole: a closure over a `Vector` is never split.
+    c = [1.0]
     calls = (u -> Rₕ!(u, f), u -> Rₕ!(u, f; markers = (:right,)), u -> avgₕ!(u, f),
-        u -> Rₕ!(u, x -> (f(x), x[2])))
+        u -> Rₕ!(u, x -> (f(x), x[2])), u -> avgₕ!(u, x -> c[1] * f(x)),
+        u -> Rₕ!(u, x -> (c[1] * f(x), x[2])))
     _tf_error(call, W) = try
         call(element(W))
         nothing
     catch e
         e
     end
-    _tf_elem(k, W) = k == 4 ? W × W : W
+    _tf_elem(k, W) = k in (4, 6) ? W × W : W
     for (k, call) in enumerate(calls)
         serial = _tf_error(call, _tf_elem(k, _tf_space(CpuSerial())))
         @test serial isa DomainError
@@ -1509,6 +1512,33 @@ _uc_typed(c::Vector{Float64}, x) = c[1] * x[1] + c[2] * x[2]^2
         Bramble._sweep_for!(CpuPolyester(), vp, idxs, i -> c[1] * i + 1)
         Bramble._sweep_for!(CpuSerial(), vs, idxs, i -> c[1] * i + 1)
         @test vp == vs && count(!iszero, vp) == length(idxs)
+    end
+
+    # Destinations and index ranges with offset axes take the per-index sweep: the slabs
+    # count positions from 1, so they would write other cells of the parent.
+    O = Base.IdentityUnitRange
+    lin(i) = i isa CartesianIndex ? i[1] + 7i[2] : i
+    for (mk, idxs) in ((() -> view(zeros(6, 6), O(2:4), O(3:5)), CartesianIndices((O(2:4), O(3:5)))),
+            (() -> view(zeros(6), O(2:4)), O(2:4)))
+        for f in (i -> c[1] * lin(i), i -> 1.0 + lin(i))
+            vp, vs = mk(), mk()
+            Bramble._sweep_for!(CpuPolyester(), vp, idxs, f)
+            Bramble._sweep_for!(CpuSerial(), vs, idxs, f)
+            @test parent(vp) == parent(vs) && count(!iszero, parent(vp)) == length(idxs)
+        end
+    end
+
+    # The box such a closure's sweep allocates, warm: what it allocated before
+    # gpena/Bramble.jl#433 (64 B plain, 80 B masked or composite), never more. Silent on a
+    # single thread, where `@batch` runs serially.
+    # Fresh names: `u` and `W` are assigned inside the `map` above, so reusing them here
+    # would box them and measure the box.
+    if Threads.nthreads() >= 2
+        wb = _uc_space(CpuPolyester())
+        eb, evb = element(wb), element(wb × wb)
+        @test _pa_bytes(() -> Rₕ!(eb, typed)) <= 64
+        @test _pa_bytes(() -> Rₕ!(eb, typed; markers = (:right,))) <= 80
+        @test _pa_bytes(() -> Rₕ!(evb, x -> (typed(x), x[2]))) <= 80
     end
 end
 
