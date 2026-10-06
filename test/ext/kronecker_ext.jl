@@ -8,6 +8,9 @@ using LinearAlgebra: mul!, issymmetric, ldiv!, lu, norm
 using SparseArrays: SparseMatrixCSC
 using LinearSolve: LinearProblem, solve, KrylovJL_GMRES
 using Random
+# `CpuPolyester` meshes below; test/ext/polyester_ext.jl, next in the ext group, loads it too.
+using Polyester
+using Bramble: CpuPolyester, Serial, execution_policy
 
 # `Kronecker.jl` interop and fast diagonalisation for a separable `BilinearForm`
 # (gpena/Bramble.jl#259), layered on `KroneckerLinearOperator`
@@ -568,6 +571,99 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
             @test length(x) == ndofs(Wₕ)
             @test x == A \ F
         end
+    end
+
+    # `fdm_factorize` once, then `fdm_solve!` per right-hand side: it returns `x`, matches the
+    # sparse direct solve and `ldiv!`, and allocates nothing after a warm-up, for a symmetric
+    # form (fast diagonalisation) and an advection form (Schur), graded 2D and 3D, on Serial
+    # and CpuPolyester meshes. The solve is serial whatever the mesh's policy, so the
+    # CpuPolyester result is bitwise CpuSerial's; `fdm_preconditioner`'s `ldiv!` allocates
+    # nothing on either.
+    @testset "fdm_solve!: 0 bytes, CpuPolyester too" begin
+        function policy_space(n::NTuple{D, Int}, policy) where {D}
+            Ω = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n,
+                ntuple(_ -> false, D); backend = backend(policy = policy))
+            Bramble.change_points!(Ω,
+                ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
+            return gridspace(Ω)
+        end
+        solve_bytes(x, f, F) = (fdm_solve!(x, f, F); fdm_solve!(x, f, F);
+                                @allocated fdm_solve!(x, f, F))
+        ldiv_bytes(x, f, F) = (ldiv!(x, f, F); ldiv!(x, f, F); @allocated ldiv!(x, f, F))
+        forms = ("symmetric" => (u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)),
+            "advection" => (u, v) -> innerₕ(u, v) + 0.1 * inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                     innerₕ(D₋ₓ(u), v))
+        serial = Dict{Any, Vector{Float64}}()
+        for policy in (Serial(), CpuPolyester()), n in ((13, 9), (7, 6, 8)),
+            dir in (nothing, :boundary)
+
+            Wₕ = policy_space(n, policy)
+            @test execution_policy(backend(mesh(Wₕ))) isa typeof(policy)
+            bd = Bramble._combined_mask(mesh(Wₕ), (:boundary,))
+            for (name, L) in forms
+                a = form(Wₕ, Wₕ, L)
+                A = assemble(a; dirichlet = dir)
+                F = rand(MersenneTwister(KRON_EXT_SEED + 9), size(A, 1))
+                dir === :boundary && (F[bd] .= 0)
+                f = fdm_factorize(a; dirichlet = dir)
+                @test size(f) == size(A) && size(f, 1) == size(f, 2) == size(A, 1)
+                @test size(f, 3) == 1
+                @test_throws BoundsError size(f, 0)
+                @test (f isa KronExt._SchurFactorization) == (name == "advection")
+                x = fill(NaN, length(F))
+                @test fdm_solve!(x, f, F) === x
+                @test solve_bytes(x, f, F) == 0
+                @test isapprox(x, A \ F; rtol = 1e-10)
+                @test x == fdm_solve(a, F; dirichlet = dir)
+                dir === :boundary && @test all(iszero, x[bd])
+                y = fill(NaN, length(F))
+                @test ldiv_bytes(y, f, F) == 0
+                @test y == x
+                key = (name, n, dir)
+                policy isa Serial ? (serial[key] = copy(x)) : @test(x == serial[key])
+                # `K` takes `dirichlet` too, though `fdm_solve(K, F)` does not.
+                fK = fdm_factorize(kronecker_operator(a); dirichlet = dir)
+                @test fdm_solve!(fill(NaN, length(F)), fK, F) == x
+                @test_throws DimensionMismatch fdm_solve!(x, f, zeros(length(x) + 1))
+                @test_throws DimensionMismatch fdm_solve!(zeros(length(x) + 1), f, F)
+                @test_throws "x has length $(length(x) - 1)" fdm_solve!(zeros(length(x) - 1), f, F)
+                @test_throws "F has length $(length(x) - 1)" fdm_solve!(x, f, zeros(length(x) - 1))
+            end
+            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                       0.25 * innerₕ(D₋ₓ(D₋ᵧ(u)), v))
+            P = fdm_preconditioner(a; dirichlet = dir)
+            @test size(P, 1) == size(P, 2) == ndofs(Wₕ) && size(P, 3) == 1
+            @test ldiv_bytes(zeros(size(P, 1)), P, rand(size(P, 1))) == 0
+            @test_throws "y has length" ldiv!(zeros(size(P, 1) - 1), P, rand(size(P, 1)))
+        end
+    end
+
+    # `fdm_factorize` refuses what `fdm_solve` refuses, with `fdm_solve`'s message; a K built
+    # before `change_points!` is refused with the stale-weights error.
+    @testset "fdm_factorize: refusals" begin
+        Wₕ = graded_space((9, 7))
+        fxy = Rₕ(Wₕ, x -> (1 + x[1]) * (2 + x[2]^2))
+        b = form(Wₕ, Wₕ, (u, v) -> innerₕ(fxy * u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        @test_throws ArgumentError fdm_factorize(b)
+        @test_throws "fdm_solve does not support this form: it is not separable" fdm_factorize(b)
+        m = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + innerₕ(D₋ₓ(D₋ᵧ(u)), v))
+        @test_throws "fdm_solve does not support this form" fdm_factorize(m)
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        @test_throws "fdm_solve only supports" fdm_factorize(a; dirichlet = :left)
+        @test_throws "fdm_solve only supports" fdm_factorize(kronecker_operator(a);
+            dirichlet = :left)
+        Vₕ = gridspace(mesh(Wₕ), Val(2))
+        c = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
+        @test_throws "posed on a composite" fdm_factorize(c)
+        @test_throws "posed on a composite" fdm_factorize(kronecker_operator(c))
+
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 7), (false, false))
+        Uₕ = gridspace(Ωₕ)
+        K = kronecker_operator(form(Uₕ, Uₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))))
+        @test size(fdm_factorize(K)) == size(K)
+        Bramble.change_points!(Ωₕ,
+            (range(0.0, 1.0; length = 9) .^ 2, range(0.0, 1.0; length = 7) .^ 2))
+        @test_throws "change_points!" fdm_factorize(K)
     end
 
     # gpena/Bramble.jl#442: a K built before `change_points!` refuses `fdm_solve` and the

@@ -94,6 +94,74 @@ See also: [`FDMPreconditioner`](@ref), [`fdm_solve`](@ref), [`jacobi_preconditio
 function fdm_preconditioner end
 
 """
+    fdm_factorize(a::BilinearForm; dirichlet = nothing)
+    fdm_factorize(K::KroneckerLinearOperator; dirichlet = nothing)
+
+Factorise, once, the system [`fdm_solve`](@ref) solves, so that each further right-hand side
+costs only the solve. The result supports [`fdm_solve!`](@ref), `ldiv!(x, f, F)` (the same
+solve) and `size`; its type is internal. `fdm_solve(a, F)` is `fdm_factorize(a)` followed by
+one solve.
+
+`a` must be a form `fdm_solve` accepts, and `fdm_factorize(a; dirichlet)` refuses what
+`fdm_solve(a, F; dirichlet)` refuses. `K` must be Laplacian-like, as for `fdm_solve(K, F)`;
+unlike that method, `fdm_factorize(K)` also takes `dirichlet = :boundary`. With
+`dirichlet = :boundary`, each right-hand side must be zero on the boundary and the solution
+is zero there. The factorisation is built from the mesh and coefficients as they are when
+`fdm_factorize` is called: after [`change_points!`](@ref) or a change of a coefficient (a
+`Ref` one included), call `fdm_factorize` again. Construction costs `O(n_d^3)` per axis; a
+solve on host vectors costs `O(N Σ_d n_d)` and allocates nothing. The factorisation is
+host-only.
+
+Requires [Kronecker.jl](https://github.com/MichielStock/Kronecker.jl); call `using Kronecker`
+before calling this function.
+
+# Throws
+
+  - `ArgumentError` saying `fdm_solve` does not support the form or operator, with the
+    reason, for one that is not Laplacian-like or is singular.
+  - `ArgumentError`: `dirichlet` is neither `nothing` nor `:boundary`.
+  - `ArgumentError` naming `change_points!`: `K`'s mesh was mutated in place after `K` was
+    built; build the operator again.
+
+# Examples
+
+```julia
+using Bramble, Kronecker
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (25, 19), (false, false))
+Wₕ = gridspace(Ωₕ)
+a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+f = fdm_factorize(a)
+x = zeros(ndofs(Wₕ))
+for k in 1:3
+    F = rand(ndofs(Wₕ))
+    fdm_solve!(x, f, F)   # x ≈ assemble(a) \\ F
+end
+```
+
+See also: [`fdm_solve!`](@ref), [`fdm_solve`](@ref), [`fdm_preconditioner`](@ref).
+"""
+function fdm_factorize end
+
+"""
+    fdm_solve!(x::AbstractVector, f, F::AbstractVector) -> x
+
+Solve into `x`, with the factorisation `f` that [`fdm_factorize`](@ref) returned, the system
+it was built for, right-hand side `F`. With `dirichlet = :boundary`, `x` is zero on the
+boundary. `x` may alias `F`. On host vectors it allocates nothing.
+
+Requires [Kronecker.jl](https://github.com/MichielStock/Kronecker.jl); call `using Kronecker`
+before calling this function.
+
+# Throws
+
+  - `DimensionMismatch`: `x` or `F` does not have `size(f, 1)` entries.
+  - `ArgumentError`: `x` or `F` is not 1-based.
+
+See also: [`fdm_factorize`](@ref), [`fdm_solve`](@ref).
+"""
+function fdm_solve! end
+
+"""
     _launch_spmv_csr!(y, rowPtr, colVal, nzVal, x, α, β) -> Nothing
 
 Row-parallel sparse matrix-vector product `y .= α .* (A * x) .+ β .* y`, where `A`'s

@@ -140,3 +140,4 @@ export export_pgfplots
 # --- Extension Stubs ---
 export fdm_solve
 export fdm_preconditioner
+export fdm_factorize, fdm_solve!

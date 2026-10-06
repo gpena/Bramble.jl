@@ -164,6 +164,7 @@ end
 
 # The factorisation (`BrambleKroneckerExt`) supplies `size` and the three-argument `ldiv!`.
 Base.size(P::FDMPreconditioner) = size(P.factorization)
+Base.size(P::FDMPreconditioner, i::Integer) = size(P.factorization, i)
 
 ldiv!(P::FDMPreconditioner, x::AbstractVector) = ldiv!(x, P, x)
 

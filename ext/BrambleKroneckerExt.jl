@@ -211,8 +211,10 @@ end
     )
 end
 
-@noinline function _throw_fdm_length_mismatch(n::Int, m::Int)
-    throw(DimensionMismatch("fdm_solve: F has length $m, the operator needs $n"))
+# `name` is the argument whose length is wrong, as the caller spells it.
+@noinline function _throw_fdm_length_mismatch(n::Int, m::Int, name::String = "F";
+        caller::String = "fdm_solve")
+    throw(DimensionMismatch("$caller: $name has length $m, the operator needs $n"))
 end
 
 # The reason the furthest-reaching choice of masses failed at, by stage (see
@@ -533,8 +535,12 @@ function _fdm_ldiv!(x::AbstractVector, f::_FDMFactorization{T, D}, F::AbstractVe
         keep::Bool) where {T, D}
     # `interior` holds 1-based positions, used under `@inbounds` below.
     Base.require_one_based_indexing(x, F)
-    length(F) == f.n || _throw_fdm_length_mismatch(f.n, length(F))
-    length(x) == f.n || _throw_fdm_length_mismatch(f.n, length(x))
+    # With `keep`, the preconditioner's `ldiv!(y, P, x)`: `x` is its input, `y` its output.
+    caller = keep ? "fdm_preconditioner" : "fdm_solve"
+    length(F) == f.n ||
+        _throw_fdm_length_mismatch(f.n, length(F), keep ? "x" : "F"; caller = caller)
+    length(x) == f.n ||
+        _throw_fdm_length_mismatch(f.n, length(x), keep ? "y" : "x"; caller = caller)
     u = f.u
     if f.boundary
         @inbounds for (i, j) in enumerate(f.interior)
@@ -699,6 +705,8 @@ function _schur_solve!(y::Vector, f::_SchurFactorization, k::Int, off::Int, α, 
 end
 
 Base.size(f::Union{_FDMFactorization, _SchurFactorization}) = (f.n, f.n)
+# As `Base` sizes an `AbstractMatrix`: 1 past the second dimension, a `BoundsError` below 1.
+Base.size(f::Union{_FDMFactorization, _SchurFactorization}, i::Integer) = i <= 2 ? size(f)[i] : 1
 
 # `x = K \ F` on full-length host vectors, the `_FDMFactorization` method's contract: gather,
 # apply every `Q_d'`, back-substitute, apply every `Z_d`, scatter the real part.
@@ -709,8 +717,12 @@ function _fdm_ldiv!(x::AbstractVector, f::_SchurFactorization{T, D}, F::Abstract
         keep::Bool) where {T, D}
     # `interior` holds 1-based positions, used under `@inbounds` below.
     Base.require_one_based_indexing(x, F)
-    length(F) == f.n || _throw_fdm_length_mismatch(f.n, length(F))
-    length(x) == f.n || _throw_fdm_length_mismatch(f.n, length(x))
+    # With `keep`, the preconditioner's `ldiv!(y, P, x)`: `x` is its input, `y` its output.
+    caller = keep ? "fdm_preconditioner" : "fdm_solve"
+    length(F) == f.n ||
+        _throw_fdm_length_mismatch(f.n, length(F), keep ? "x" : "F"; caller = caller)
+    length(x) == f.n ||
+        _throw_fdm_length_mismatch(f.n, length(x), keep ? "y" : "x"; caller = caller)
     u = f.u
     if f.boundary
         @inbounds for (i, j) in enumerate(f.interior)
@@ -924,6 +936,28 @@ end
 # A composite space's operator is a block of Kronecker sums, not one: refused by name.
 Bramble.fdm_solve(::Bramble.KroneckerBlockOperator, ::AbstractVector) = _throw_fdm_composite()
 
+# `fdm_factorize` hands out the factorisation `fdm_solve` builds and applies once;
+# `fdm_solve!` is its `ldiv!`, a solve (zero on the boundary under `:boundary`).
+function Bramble.fdm_factorize(a::BilinearForm; dirichlet = nothing)
+    (Bramble.trial_space(a) isa Bramble.CompositeGridSpace ||
+     Bramble.test_space(a) isa Bramble.CompositeGridSpace) && _throw_fdm_composite()
+    is_separable(a) || _throw_fdm_not_separable(a)
+    return _fdm_factorize(kronecker_operator(a), dirichlet)
+end
+
+function Bramble.fdm_factorize(K::KroneckerLinearOperator; dirichlet = nothing)
+    Bramble._kron_check_fresh(K)
+    return _fdm_factorize(K, dirichlet)
+end
+
+Bramble.fdm_factorize(::Bramble.KroneckerBlockOperator; dirichlet = nothing) = _throw_fdm_composite()
+
+function Bramble.fdm_solve!(x::AbstractVector, f::Union{_FDMFactorization, _SchurFactorization},
+        F::AbstractVector)
+    _fdm_ldiv!(x, f, F, false)
+    return x
+end
+
 # The preconditioner (`Bramble.FDMPreconditioner`, src/solvers/matrix_free_preconditioners.jl)
 # holds the factorisation `_fdm_factorize` returns for `K_L`, applied with `keep`: the
 # identity on the boundary rows `assemble(a; dirichlet = :boundary)` makes identity rows.
@@ -965,6 +999,7 @@ if Bramble.PRECOMPILE_WORKLOAD
             Bramble.fdm_solve(a, F; dirichlet = :boundary)
             Bramble.fdm_solve(b, F)
             Bramble.fdm_preconditioner(a; dirichlet = :boundary)
+            Bramble.fdm_solve!(similar(F), Bramble.fdm_factorize(b), F)
         end
     end
 end
