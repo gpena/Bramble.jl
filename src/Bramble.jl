@@ -27,8 +27,14 @@ include("api.jl")
     fdm_solve(a::BilinearForm, F::AbstractVector; dirichlet = nothing) -> Vector
     fdm_solve(K::KroneckerLinearOperator, F::AbstractVector) -> Vector
 
-Directly solve `assemble(a) \\ F` (or the linear system `K` represents) for a separable,
-constant-coefficient `BilinearForm` by fast diagonalisation, without assembling `a`'s matrix.
+Directly solve `assemble(a) \\ F` (or the linear system `K` represents) for a Laplacian-like
+`BilinearForm`, without assembling `a`'s matrix. A form is Laplacian-like when it is
+separable and every term differs from one mass per axis on at most one axis. Symmetric 1D
+operators are solved by fast diagonalisation; non-symmetric ones (advection terms) by a
+complex generalised Schur factorisation per axis and a triangular back substitution.
+A mixed-derivative form is refused: precondition a Krylov solver with
+[`fdm_preconditioner`](@ref) instead. [`fdm_factorize`](@ref) and [`fdm_solve!`](@ref) split
+the factorisation from the solve.
 
 `dirichlet`, when given, must request homogeneous Dirichlet conditions on the whole mesh
 boundary; `K` alone carries no boundary handling, since a `KroneckerLinearOperator` has no
