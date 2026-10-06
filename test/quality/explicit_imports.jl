@@ -488,7 +488,16 @@ using ExplicitImports
                 # signature a REPL call dispatches to -- otherwise inlined into the
                 # workload's static calls and never cached standalone. The documented
                 # lowering target of a keyword call, but not declared public in `Core`.
-                :kwcall
+                :kwcall,
+                # `Base.deepcopy_internal` (src/mesh/mesh1d.jl): the method `deepcopy`
+                # documents for a type that needs its own deep copy; a deep-copied mesh takes
+                # a fresh identity there.
+                :deepcopy_internal,
+                # `Base.typename`, `Base.unwrap_unionall` (src/assembly/block_extract.jl): a
+                # generated function rebuilds an operator wrapper around a new operand from
+                # the wrapper's own type; Base has no public accessor for a type's wrapper.
+                :typename,
+                :unwrap_unionall
             )
         ) === nothing
     end

@@ -1406,7 +1406,10 @@ end
 function _mf_host_ast(a::BilinearForm)
     Wu, Wv = trial_space(a), test_space(a)
     _is_block_pair(Wu, Wv) && return a.ast
-    sp = host_weights(_walked_leaf(_bind_interp_spaces(a.ast, Wu, Wv), Wu, Wv))
+    # Typed for the reason `_pattern_size_hint` gives (`bilinear_pattern.jl`): an untyped leaf
+    # lets JET reach `_bind_walk(::Any, ::SeparableWeights)` through `host_weights`.
+    leaf = _walked_leaf(_bind_interp_spaces(a.ast, Wu, Wv), Wu, Wv)::ScalarGridSpace
+    sp = host_weights(leaf)
     return _mf_tag_regions(first(_bind_walk(a.ast, sp)))
 end
 

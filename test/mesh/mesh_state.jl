@@ -86,7 +86,9 @@ end
     end
 
     @testset "Point changes: aliasing and version" begin
-        Ωₕ = _meshes()[1]
+        # Asserted: `I` is a non-const global, so inference sees `Mesh1D` or `MeshnD` here,
+        # and `set_points!` has no `MeshnD` method (JET on the test code).
+        Ωₕ = _meshes()[1]::Mesh1D
         s0 = _walk_mesh(Ωₕ)
         p = collect(points(Ωₕ))
         p[2] = (p[1] + p[2]) / 2
@@ -176,7 +178,7 @@ end
     end
 
     @testset "Rebackend shares or copies arrays" begin
-        Ωₕ = _meshes()[1]
+        Ωₕ = _meshes()[1]::Mesh1D   # as above: `_rebackend` has no `MeshnD` method
         be = Bramble.backend(Ωₕ)
         c = Bramble._rebackend(Ωₕ, be, identity)
         @test points(c) === points(Ωₕ) && spacings(c) === spacings(Ωₕ)

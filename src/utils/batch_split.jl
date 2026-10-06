@@ -37,8 +37,14 @@ function _batch_is_node(T)
     return !ismutabletype(T) && !isbitstype(T)
 end
 
-# The type of `_walk_mesh(Ωₕ)` for a mesh `Ωₕ` of type `T`.
-_batch_state_type(::Type{T}) where {T <: Mesh1D} = fieldtype(T, :state)
+# The type of `_walk_mesh(Ωₕ)` for a mesh `Ωₕ` of type `T`. The `Mesh1D` method names the
+# mesh's parameters so `Type{Union{}}` cannot reach its `fieldtype`, and a state is its own,
+# as `_walk_mesh(s::Mesh1DState)` is: inference reaches both from a mesh's state, where
+# `_batch_is_mesh` is false at run time but not to JET.
+function _batch_state_type(::Type{Mesh1D{BT, CI, VT, T}}) where {BT, CI, VT, T}
+    return fieldtype(Mesh1D{BT, CI, VT, T}, :state)
+end
+_batch_state_type(::Type{T}) where {T <: Mesh1DState} = T
 function _batch_state_type(::Type{MeshnD{D, BT, CI, SM, T}}) where {D, BT, CI, SM, T}
     SM′ = Tuple{map(_batch_state_type, fieldtypes(SM))...}
     return MeshnDState{D, BT, CI, SM′, T, fieldtype(MeshnD, :words)}
