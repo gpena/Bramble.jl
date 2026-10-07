@@ -215,7 +215,7 @@ jobs:
     needs: changed
     if: ${{ needs.changed.outputs.run == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45  # a green run takes ~19 min; slower runners (2026-10-07) ran it past 30
     permissions:
       contents: read
       actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
