@@ -23,7 +23,12 @@ const _ROOTS = let r = get(ENV, "BRAMBLE_TEST_ENV_ROOTS", "")
 end
 
 # Dependencies the tests need without a `using`/`import` line, each with its reason.
-const _NEEDED_WITHOUT_USING = Dict{String, String}()
+# CpuId is indirect (Polyester -> PolyesterWeave -> CPUSummary), listed only to hold it at
+# 0.3.1: 0.3.2's precompile workload throws on aarch64, so the Polyester stack loads
+# without cached code on Apple Silicon. Remove it with its compat entry once a CpuId
+# release fixes m-j-w/CpuId.jl#67.
+const _NEEDED_WITHOUT_USING = Dict{String, String}(
+    "CpuId" => "pinned below 0.3.2, which cannot precompile on aarch64 (CpuId.jl#67)")
 
 # Bramble is the package under test, reached through `[sources]`.
 const _SELF = "Bramble"
