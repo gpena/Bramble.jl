@@ -48,8 +48,8 @@ using Bramble:
                ∇ₕ,
                innerₕ
 using Kronecker: Kronecker, ⊗
-using LinearAlgebra: LinearAlgebra, Diagonal, Symmetric, eigen, isposdef, issymmetric, ldiv!,
-                     mul!, schur
+using LinearAlgebra: LinearAlgebra, BlasInt, Diagonal, Symmetric, eigen, isposdef,
+                     issymmetric, ldiv!, mul!, schur
 using SparseArrays: SparseMatrixCSC, dropzeros!, nonzeros, nnz, sparse
 using PrecompileTools: @setup_workload, @compile_workload
 
@@ -631,12 +631,106 @@ struct _SchurFactorization{T, D, C <: Complex{T}}
     w3::NTuple{D, Array{C, 3}}
 end
 
+# The complex QZ comes from OpenBLAS directly, never through libblastrampoline's forwarding:
+# loading AppleAccelerate forwards LAPACK to Accelerate, whose `zgges3` fails to converge on
+# strongly non-normal advection pencils (LAPACKException 63) and whose `dgges3` can crash
+# (gpena/Bramble.jl#443). OpenBLAS stays loaded after the forward is replaced, so its
+# `zgges3`/`cgges3` are found in it by name, in `__init__` (a pointer cached at precompile
+# time would be invalid). `(C_NULL, C_NULL)` means no OpenBLAS: `schur` is used instead.
+const _OPENBLAS_GGES3 = Ref((C_NULL, C_NULL))
+
+function __init__()
+    _OPENBLAS_GGES3[] = _openblas_gges3()
+    return nothing
+end
+
+# `(zgges3, cgges3)` from the OpenBLAS libblastrampoline loaded at start-up, else from the
+# OpenBLAS_jll LinearAlgebra loads it with (an Accelerate forward may drop it from the list).
+function _openblas_gges3()
+    interface = BlasInt === Int64 ? :ilp64 : :lp64
+    openblas(lib) = occursin("openblas", lowercase(basename(lib.libname))) &&
+                    lib.interface === interface
+    libs = [(lib.libname, lib.suffix)
+            for lib in filter(openblas, LinearAlgebra.BLAS.get_config().loaded_libs)]
+    jll = isdefined(LinearAlgebra, :OpenBLAS_jll) ?
+          getfield(LinearAlgebra, :OpenBLAS_jll) : nothing
+    jll !== nothing && isdefined(jll, :libopenblas_path) &&
+        push!(libs, (jll.libopenblas_path, interface === :ilp64 ? "64_" : ""))
+    for (path, suffix) in libs
+        h = Libc.Libdl.dlopen(path; throw_error = false)
+        h === nothing && continue
+        z = Libc.Libdl.dlsym(h, "zgges3_" * suffix; throw_error = false)
+        c = Libc.Libdl.dlsym(h, "cgges3_" * suffix; throw_error = false)
+        z !== nothing && c !== nothing && return (z, c)
+    end
+    return (C_NULL, C_NULL)
+end
+
+# `(S, T, Q, Z)` of the complex generalised Schur form of `(A, B)`, which this overwrites:
+# OpenBLAS's `xgges3` with the workspace query, the call `LinearAlgebra.LAPACK.gges3!` makes
+# (so the factors are the ones `schur` returns under OpenBLAS), against the OpenBLAS handle.
+function _gges3!(A::Matrix{Complex{R}},
+        B::Matrix{Complex{R}}) where {R <: Union{Float64, Float32}}
+    C = Complex{R}
+    fptr = _OPENBLAS_GGES3[][R === Float64 ? 1 : 2]
+    fptr == C_NULL && return _schur_fallback(A, B)
+    n = LinearAlgebra.checksquare(A)
+    size(B) == (n, n) || throw(DimensionMismatch("A is $(size(A)), B is $(size(B))"))
+    sdim = Ref{BlasInt}(0)
+    alpha = Vector{C}(undef, n)
+    beta = Vector{C}(undef, n)
+    ld = max(1, n)
+    vsl = Matrix{C}(undef, ld, n)
+    vsr = Matrix{C}(undef, ld, n)
+    work = Vector{C}(undef, 1)
+    lwork = BlasInt(-1)
+    rwork = Vector{R}(undef, 8n)
+    info = Ref{BlasInt}()
+    for i in 1:2  # the first call returns the optimal `lwork` in `work[1]`
+        ccall(fptr, Cvoid,
+            (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ptr{Cvoid},
+                Ref{BlasInt}, Ptr{Complex{R}}, Ref{BlasInt}, Ptr{Complex{R}},
+                Ref{BlasInt}, Ref{BlasInt}, Ptr{Complex{R}}, Ptr{Complex{R}},
+                Ptr{Complex{R}}, Ref{BlasInt}, Ptr{Complex{R}}, Ref{BlasInt},
+                Ptr{Complex{R}}, Ref{BlasInt}, Ptr{R}, Ptr{Cvoid},
+                Ref{BlasInt}, Clong, Clong, Clong),
+            'V', 'V', 'N', C_NULL,
+            n, A, ld, B,
+            ld, sdim, alpha, beta,
+            vsl, ld, vsr, ld,
+            work, lwork, rwork, C_NULL,
+            info, 1, 1, 1)
+        LinearAlgebra.LAPACK.chklapackerror(info[])
+        if i == 1
+            lwork = BlasInt(real(work[1]))
+            resize!(work, lwork)
+        end
+    end
+    return A, B, vsl, vsr
+end
+_gges3!(A::Matrix, B::Matrix) = _schur_fallback(A, B)
+
+# No OpenBLAS: LinearAlgebra's `schur`, through whatever LAPACK is active. Its failure to
+# converge is a property of that LAPACK, named as such, not a raw LAPACKException.
+function _schur_fallback(A::Matrix{C}, B::Matrix{C}) where {C}
+    g = try
+        schur(A, B)
+    catch e
+        e isa LinearAlgebra.LAPACKException || rethrow()
+        throw(ArgumentError("fdm_solve: the generalised Schur factorisation (`xgges3`, info " *
+                            "$(e.info)) failed in the active LAPACK, " *
+                            "$(LinearAlgebra.BLAS.get_config()), and no OpenBLAS was found " *
+                            "to call instead"))
+    end
+    return g.S, g.T, g.Q, g.Z
+end
+
 function _schur_factorize(n::Int, boundary::Bool, interior::Vector{Int}, M, A, c_m::T,
         dims::NTuple{D, Int}; precond::Bool = false) where {T, D}
     C = Complex{T}
-    gs = ntuple(d -> schur(Matrix{C}(A[d]), Matrix{C}(M[d])), Val(D))
-    S = ntuple(d -> gs[d].S, Val(D))
-    Tr = ntuple(d -> gs[d].T, Val(D))
+    gs = ntuple(d -> _gges3!(Matrix{C}(A[d]), Matrix{C}(M[d])), Val(D))
+    S = ntuple(d -> gs[d][1], Val(D))
+    Tr = ntuple(d -> gs[d][2], Val(D))
     # `c_m + Σ_d S_d[j_d, j_d] / T_d[j_d, j_d]`: zero to rounding is a singular system, the
     # same test (and tolerance) as `Λ_total` on the symmetric route.
     Λ = fill(C(c_m), dims)
@@ -649,7 +743,7 @@ function _schur_factorize(n::Int, boundary::Bool, interior::Vector{Int}, M, A, c
     u = Vector{C}(undef, prod(dims))
     w = similar(u)
     return _SchurFactorization{T, D, C}(n, boundary, interior,
-        ntuple(d -> conj.(gs[d].Q), Val(D)), ntuple(d -> Matrix(transpose(gs[d].Z)), Val(D)),
+        ntuple(d -> conj.(gs[d][3]), Val(D)), ntuple(d -> Matrix(transpose(gs[d][4])), Val(D)),
         S, Tr, C(c_m), dims, stride, [Vector{C}(undef, stride[k]) for k in 1:D],
         [Vector{C}(undef, stride[k]) for k in 1:D], u, w, _fdm_slabs(u, dims),
         _fdm_slabs(w, dims))

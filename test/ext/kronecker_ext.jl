@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: is_separable, kronecker_operator, KroneckerLinearOperator
 using Kronecker: kronecker
-using LinearAlgebra: mul!, issymmetric, ldiv!, lu, norm
+using LinearAlgebra: LinearAlgebra, mul!, issymmetric, ldiv!, lu, norm
 using SparseArrays: SparseMatrixCSC
 using LinearSolve: LinearProblem, solve, KrylovJL_GMRES
 using Random
@@ -277,6 +277,68 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
             a = form(Wₕ, Wₕ, L)
             @test KronExt._fdm_factorize(kronecker_operator(a), nothing) isa
                   KronExt._FDMFactorization
+        end
+    end
+
+    # The Schur route's QZ is OpenBLAS's `zgges3`/`cgges3`, called directly: this file runs
+    # after AppleAccelerate is loaded in the ext group, and Accelerate's `zgges3` fails to
+    # converge on these strongly non-normal pencils (LAPACKException 63, 127, 15 on the
+    # Float64 cases; gpena/Bramble.jl#443). Float64 to 1e-10 of the sparse solve, Float32
+    # within 10x of a dense Float32 LU's residual, 0 bytes per `ldiv!`. Without OpenBLAS the
+    # active LAPACK's failure is an ArgumentError naming it, never a raw LAPACKException.
+    @testset "fdm_solve: Schur route under any LAPACK" begin
+        @test all(!=(C_NULL), KronExt._OPENBLAS_GGES3[])
+        G(u, v) = inner₊(∇ₕ(u), ∇ₕ(v))
+        Dm(u, d) = Bramble.D₋(u, Val(d))
+        ldiv_bytes(x, f, F) = (ldiv!(x, f, F); @allocated ldiv!(x, f, F))
+        space(T, n) = gridspace(mesh(
+            domain(reduce(×, ntuple(_ -> interval(zero(T), one(T)), length(n)))), n,
+            ntuple(_ -> true, length(n))))
+        advection(W, T, Pe, D) = form(W, W, (u, v) -> T(1 / Pe) * G(u, v) +
+                                                      sum(innerₕ(Dm(u, d), v) for d in 1:D))
+        function boundary_rhs(W, T, N)
+            F = rand(MersenneTwister(KRON_EXT_SEED + 9), T, N)
+            F[Bramble._combined_mask(mesh(W), (:boundary,))] .= 0
+            return F
+        end
+        for (T, n, Pe) in ((Float64, (65, 17), 1e6), (Float64, (65, 17), 1e4),
+            (Float64, (129, 33), 1e6), (Float64, (17, 17, 17), 1e6),
+            (Float32, (65, 17), 1e3), (Float32, (33, 33), 1e3))
+            @testset "$T $n Pe = $Pe" begin
+                W = space(T, n)
+                a = advection(W, T, Pe, length(n))
+                A = assemble(a; dirichlet = :boundary)
+                F = boundary_rhs(W, T, size(A, 1))
+                x = fdm_solve(a, F; dirichlet = :boundary)
+                @test eltype(x) == T
+                if T == Float64
+                    @test norm(x - A \ F) <= 1e-10 * norm(A \ F)
+                else
+                    r(z) = norm(Float64.(A) * Float64.(z) - F) / norm(F)
+                    @test r(x) <= 10 * r(lu(Matrix(A)) \ F) + 10 * eps(T)
+                end
+                f = KronExt._fdm_factorize(kronecker_operator(a), :boundary)
+                @test f isa KronExt._SchurFactorization
+                @test ldiv_bytes(zeros(T, length(F)), f, F) == 0
+            end
+        end
+        W = space(Float64, (65, 17))
+        a = advection(W, Float64, 1e6, 2)
+        F = boundary_rhs(W, Float64, ndofs(W))
+        found = KronExt._OPENBLAS_GGES3[]
+        accelerate = occursin("Accelerate", string(LinearAlgebra.BLAS.get_config()))
+        try
+            KronExt._OPENBLAS_GGES3[] = (C_NULL, C_NULL)
+            if accelerate
+                @test_throws ArgumentError fdm_solve(a, F; dirichlet = :boundary)
+                @test_throws "active LAPACK" fdm_solve(a, F; dirichlet = :boundary)
+            else
+                A = assemble(a; dirichlet = :boundary)
+                @test norm(fdm_solve(a, F; dirichlet = :boundary) - A \ F) <=
+                      1e-10 * norm(A \ F)
+            end
+        finally
+            KronExt._OPENBLAS_GGES3[] = found
         end
     end
 
