@@ -159,7 +159,7 @@ end
         sink::_CoordSink, term::TERM, sp, row_offset::Int, col_offset::Int
 ) where {TERM}
     Ωₕ = mesh(sp)
-    mesh_markers = markers(Ωₕ)
+    bound, mesh_markers = _bind_walk(term, sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     ax = axes(grid_inds)
@@ -167,17 +167,17 @@ end
     if _peelable(ax, margin)
         interior = CartesianIndices(map(r -> _interior_range(r, margin), ax))
         _visit_guarded_region!(
-            sink, term, sp, mesh_markers, lin_indices, interior, row_offset, col_offset
+            sink, bound, sp, mesh_markers, lin_indices, interior, row_offset, col_offset
         )
         for slab in _boundary_shell_slabs(ax, margin)
             _visit_guarded_region!(
-                sink, term, sp, mesh_markers, lin_indices, slab, row_offset, col_offset
+                sink, bound, sp, mesh_markers, lin_indices, slab, row_offset, col_offset
             )
         end
     else
         whole = CartesianIndices(map(_full_range, ax))
         _visit_guarded_region!(
-            sink, term, sp, mesh_markers, lin_indices, whole, row_offset, col_offset
+            sink, bound, sp, mesh_markers, lin_indices, whole, row_offset, col_offset
         )
     end
     return nothing

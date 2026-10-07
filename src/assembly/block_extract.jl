@@ -232,3 +232,113 @@ end
     ),
     )
 end
+
+"""
+    _bind_walk(term, Ωₕ::AbstractMeshType) -> Tuple{bound_term, Union{AbstractMatrix{UInt64}, Nothing}}
+    _bind_walk(term, sp::ScalarGridSpace) -> Tuple{bound_term, Union{AbstractMatrix{UInt64}, Nothing}}
+
+`term` with every `RegionRestriction` it holds bound to `Ωₕ`'s marker ids
+([`_bind_marker_ids`](@ref)), and the marker table the walk over `Ωₕ` passes to
+`local_stencil`: `Ωₕ`'s word matrix, any `AbstractMatrix{UInt64}` ([`_marker_words`](@ref)),
+or `nothing` when `term` restricts nothing, decided from its type.
+
+Called at every walk entry, once per walk, so the ids are read from `Ωₕ`'s label table as it
+is when the walk runs: `assemble` on a form built before a `markers!` call binds against the
+new table, and a label removed since throws the `ArgumentError` of
+[`_validate_term_markers`](@ref). Editing `markers(Ωₕ)` in place is unsupported, and `markers!`
+changes the labels. A label written in place has no id and throws too
+(`_throw_marker_not_bound`). Given the walked leaf `sp` instead, it binds against
+`mesh(sp)` after checking `sp`'s weights ([`weights`](@ref)): the walk's one staleness
+check, since its stencils read the weights unchecked.
+"""
+@inline function _bind_walk(term, Ωₕ::AbstractMeshType)
+    isempty(_collect_region_labels(term)) && return term, nothing
+    return _bind_marker_ids(term, Ωₕ), _marker_words(Ωₕ)
+end
+
+# The form every walk entry calls, with the leaf it walks: `sp`'s weights are checked
+# against its mesh here, once per walk, and the stencil then reads them unchecked at every
+# point (`_stored_weights`, gpena/Bramble.jl#437). A stale `sp` throws `weights`'s error.
+@inline function _bind_walk(term, sp::ScalarGridSpace)
+    weights(sp)
+    return _bind_walk(term, mesh(sp))
+end
+
+"""
+    _bind_marker_ids(op, Ωₕ::AbstractMeshType) -> LazyOp
+
+`op` rebuilt with each `RegionRestriction` region replaced by the column of its label in
+`Ωₕ`'s word matrix ([`_marker_id`](@ref)): a `Symbol` becomes an `Int`, a tuple of them an
+`NTuple{N, Int}`. Recurses exactly where [`_collect_region_labels`](@ref) does, so every
+label validated is bound. Labels are read as stored, no boundary alias resolved.
+"""
+_bind_marker_ids(op, Ωₕ::AbstractMeshType) = op
+
+function _bind_marker_ids(op::RegionRestriction{D}, Ωₕ::AbstractMeshType) where {D}
+    inner = _bind_marker_ids(op.inner_op, Ωₕ)
+    region = _region_ids(op.region, Ωₕ)
+    return RegionRestriction{D, typeof(region), typeof(inner)}(region, inner)
+end
+
+function _bind_marker_ids(op::UnaryWrapper, Ωₕ::AbstractMeshType)
+    return _rewrap_inner(op, _bind_marker_ids(op.inner_op, Ωₕ))
+end
+
+function _bind_marker_ids(op::OperatorAdd{D}, Ωₕ::AbstractMeshType) where {D}
+    left = _bind_marker_ids(op.left_op, Ωₕ)
+    right = _bind_marker_ids(op.right_op, Ωₕ)
+    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
+end
+
+function _bind_marker_ids(op::BilinearProduct{D, W}, Ωₕ::AbstractMeshType) where {D, W}
+    left = _bind_marker_ids(op.left_op, Ωₕ)
+    right = _bind_marker_ids(op.right_op, Ωₕ)
+    return BilinearProduct{D, W, typeof(left), typeof(right)}(left, right)
+end
+
+function _bind_marker_ids(op::LinearProduct{D, W}, Ωₕ::AbstractMeshType) where {D, W}
+    left = _bind_marker_ids(op.left_op, Ωₕ)
+    right = _bind_marker_ids(op.right_op, Ωₕ)
+    return LinearProduct{D, W, typeof(left), typeof(right)}(left, right)
+end
+
+@inline function _region_ids(label::Symbol, Ωₕ::AbstractMeshType)
+    id = get(_marker_ids(Ωₕ), label, 0)
+    id == 0 && _throw_marker_not_bound(label, Ωₕ)
+    return id
+end
+
+# A label missing from the id table is either absent from the mesh (removed since the form
+# was built) or present only in the `markers(Ωₕ)` dictionary, written there in place. The
+# dictionary is a read-only view: only `markers!`/`set_markers!` rebuild the table.
+@noinline function _throw_marker_not_bound(label::Symbol, Ωₕ::AbstractMeshType)
+    haskey(markers(Ωₕ), label) || _throw_marker_not_on_space(
+        label, markers(Ωₕ), "the space being assembled")
+    throw(
+        ArgumentError(
+        "the marker :$label was added to markers(Ωₕ) in place, so assembly cannot see it. " *
+        "markers(Ωₕ) and index_in_marker are read-only views of the mesh's labels; " *
+        "add or change a label with markers!(Ωₕ, ...) or set_markers!(Ωₕ, ...), which " *
+        "rebuild the marker state assembly reads.",
+    ),
+    )
+end
+
+@inline _region_ids(labels::NTuple{N, Symbol}, Ωₕ::AbstractMeshType) where {N} = map(
+    label -> _region_ids(label, Ωₕ), labels)
+
+# A `UnaryWrapper` rebuilt around `inner`: the type parameter its `inner_op` field is declared
+# with is replaced by `typeof(inner)`, every other field and parameter kept. Generated from
+# the type alone, so one method serves every wrapper, and an `inner` of the operand's own
+# type returns `op` itself.
+@generated function _rewrap_inner(op::T, inner::I) where {T, I}
+    fieldtype(T, :inner_op) === I && return :op
+    wrapper = Base.typename(T).wrapper
+    decl = fieldtype(Base.unwrap_unionall(wrapper), :inner_op)
+    params = Any[T.parameters...]
+    params[findfirst(p -> p === decl, Base.unwrap_unionall(wrapper).parameters)] = I
+    args = map(fieldnames(T)) do f
+        f === :inner_op ? :inner : :(getfield(op, $(QuoteNode(f))))
+    end
+    return :($(wrapper{params...})($(args...)))
+end

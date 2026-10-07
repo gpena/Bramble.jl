@@ -190,23 +190,22 @@ Its crossover against `CpuSerial` (gpena/Bramble.jl#299) falls at smaller sizes 
 `vₕ .= a .* uₕ .+ wₕ` included (gpena/Bramble.jl#356, #357). `benchmark/policy_crossover.jl`
 measures both on your machine.
 
-Most warm calls under this policy allocate 0 bytes. Differences, shifts, averages, divergence,
-curl, `εₕ!`, `innerₕ`, `inner₊` and the masked dots, broadcasts, `avgₕ!` with a plain-function
-source, and the [`KroneckerLinearOperator`](@ref) product all allocate 0 B, on any grid. Their
-loops pass `@batch` only plain arrays and isbits values, and rebuild any light struct around
-them inside each task, so Polyester's argument box stays on the stack. No call reaches
-`Threads.@threads` or `Threads.@spawn`.
+A warm call under this policy allocates 0 bytes, on any grid. Differences, shifts, averages,
+divergence, curl, `εₕ!`, `Rₕ!`, `avgₕ!` (masked and composite too), `innerₕ`, `inner₊`, the
+broadcasts (a 0-dimensional array leaf too), the weight build, linear and bilinear assembly
+and refill, the matrix-free product, a multigrid V-cycle, the explicit right-hand side
+([`SemidiscretizeRHS`](@ref)) and the [`KroneckerLinearOperator`](@ref) product all allocate
+0 B. Polyester copies what a loop captures into an argument box, and the box stays on the
+stack when it holds only plain arrays and isbits values. So the loops never capture a form, a
+space or a mesh: Bramble splits them into an isbits skeleton and their arrays, and each task
+rebuilds them. No call reaches `Threads.@threads` or `Threads.@spawn`.
 
-The paths whose loops capture a form, or any value holding a GC reference, still allocate a
-small constant amount per call, the same on a 33² grid as on a 513² one, because Polyester
-then copies the arguments into a heap-allocated `ManualMemory.Reference`. Measured on a 2D
-non-uniform grid with 4 threads, each box is at most 512 B: linear assembly 256 B, a fused
-matrix-free product 112 B (2D) or 128 B (3D), a per-unit matrix-free product 1088 B, a bilinear
-refill 1520 B (five colour sweeps of 304 B), a multigrid V-cycle 1008 B per level, and an
-explicit right-hand side 256 B. An `avgₕ!` whose source closure captures an array, and a
-broadcast with a 0-dimensional array leaf, box in the same way. This release keeps the bound
-for these paths; removing the boxes is gpena/Bramble.jl#437 (gpena/Bramble.jl#400,
-gpena/Bramble.jl#433).
+The one exception is a function you supply that captures an array, as in an `avgₕ!` whose
+source is a closure over a `Vector`. It crosses `@batch` whole, so a method typed on `Vector`
+or an `isa Vector` branch in it still sees the `Vector`, and its box is heap-allocated, an
+amount per call that does not grow with the grid. Data the split cannot take apart, such as a
+`BigFloat` coefficient or a `Dict`, falls back to boxing the same way. A task that throws
+rethrows on the caller with the exception type and text [`CpuSerial`](@ref) gives.
 
 See also: [`CpuThreaded`](@ref), [`CpuSerial`](@ref), [`ExecutionPolicy`](@ref).
 """

@@ -53,6 +53,14 @@ Filter = x -> x in (Bramble._gpu_for!, Bramble._gpu_scatter_for!)
 Pages = ["utils/linear_algebra.jl", ]
 ```
 
+## The `@batch` split
+
+```@autodocs
+Modules = [Bramble]
+Public = false
+Pages = ["utils/batch_split.jl", ]
+```
+
 ## Macros
 
 ```@autodocs

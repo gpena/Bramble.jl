@@ -580,16 +580,32 @@ function _bc_host_raw(bc::Broadcast.Broadcasted{S, A, F}) where {S, A, F}
         _BcHostNode{F}(), bc.style, bc.f, map(_bc_host_raw, bc.args), bc.axes)
 end
 _bc_host_raw(e::Broadcast.Extruded) = (_BcHostExtruded(), e.x, e.keeps, e.defaults)
-# A 0-dimensional array stays inside its `Extruded`, so `@batch` never sees it bare:
-# `StrideArraysCore` throws making a `PtrArray` of a 0-dimensional `Array`. The struct puts
-# Polyester's box on the heap, which costs bytes but not the result.
-_bc_host_raw(e::Broadcast.Extruded{<:AbstractArray{<:Any, 0}}) = e
+# A 0-dimensional `Array` of an isbits element type crosses as its one value, read once
+# here: broadcasting a 0-dimensional array is broadcasting that value, and `preprocess`
+# has already unaliased the leaf from the destination, so no task can see it change. Each
+# task reads it back through `_BcHostZeroDim`, an isbits 0-dimensional array holding the
+# value. Any other 0-dimensional array stays inside its `Extruded`, which puts Polyester's
+# box on the heap: bytes, never the result.
+struct _BcHostZeroDimTag end
+function _bc_host_raw(e::Broadcast.Extruded{<:AbstractArray{T, 0}}) where {T}
+    e.x isa Array && isbitstype(T) || return e
+    return (_BcHostZeroDimTag(), e.x[], e.keeps, e.defaults)
+end
 _bc_host_raw(x) = x
+
+struct _BcHostZeroDim{T} <: AbstractArray{T, 0}
+    x::T
+end
+Base.size(::_BcHostZeroDim) = ()
+Base.getindex(z::_BcHostZeroDim) = z.x
 
 @inline function _bc_host_rebuild(r::Tuple{_BcHostNode{F}, Any, Any, Tuple, Any}) where {F}
     return Broadcast.Broadcasted(r[2], r[3]::F, map(_bc_host_rebuild, r[4]), r[5])
 end
 @inline _bc_host_rebuild(r::Tuple{_BcHostExtruded, Any, Any, Any}) = Broadcast.Extruded(r[2], r[3], r[4])
+@inline function _bc_host_rebuild(r::Tuple{_BcHostZeroDimTag, T, Any, Any}) where {T}
+    return Broadcast.Extruded(_BcHostZeroDim{T}(r[2]), r[3], r[4])
+end
 @inline _bc_host_rebuild(x) = x
 
 # Rebuild the same expression tree over each `VectorElement` leaf's own storage. The

@@ -10,4 +10,5 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("markers.jl")
     include("marker_diagnostics.jl")
     include("inference_allocation.jl")
+    include("mesh_state.jl")
 end

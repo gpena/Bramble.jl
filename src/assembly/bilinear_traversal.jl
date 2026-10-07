@@ -15,9 +15,10 @@ answer "not stored" (only `SparseMatrixCSC` does; every dense fallback below alw
 answers a valid position).
 
 The seam a new backend's matrix type implements to plug into assembly
-(gpena/Bramble.jl#12): `ReplaySink`, `DiagonalReplaySink`, the positions search of the
+(gpena/Bramble.jl#12): `DiagonalReplaySink`, the positions search of the
 coordinate walk (`_coordinates_to_positions!`) and [`add_to_sparse!`](@ref) reduce to this and [`_scatter_add!`](@ref) once the raw `nzval`/
-linear-index field access each used to do directly is factored out here.
+linear-index field access each used to do directly is factored out here. `ReplaySink` and
+its kin replay those positions into `_scatter_storage(A)`, the array `_scatter_add!` writes.
 
 The `SparseMatrixCSC` method is exactly the position search this file always ran: a linear
 scan of the column when it holds few entries, a binary search otherwise -- both rely on
@@ -25,14 +26,19 @@ scan of the column when it holds few entries, a binary search otherwise -- both 
 `AbstractMatrix` fallback needs no search at all: every `(row, col)` inside the matrix's
 bounds is "stored" for a dense backend, at `LinearIndices(A)[row, col]`.
 """
-@inline function _scatter_position(A::SparseMatrixCSC, row::Int, col::Int)
-    p1 = @inbounds A.colptr[col]
-    p2 = @inbounds A.colptr[col + 1] - 1
+@inline _scatter_position(A::SparseMatrixCSC, row::Int, col::Int) = _csc_position(
+    A.colptr, A.rowval, row, col)
+
+# The search itself, over a CSC's `colptr` and `rowval`, shared by `SparseMatrixCSC` and
+# `_ScatterCSC` below so the two answer the same position for every entry.
+@inline function _csc_position(colptr, rowval, row::Int, col::Int)
+    p1 = @inbounds colptr[col]
+    p2 = @inbounds colptr[col + 1] - 1
 
     if (p2 - p1) < 32
         idx = p1
         @inbounds while idx <= p2
-            A.rowval[idx] == row && return idx
+            rowval[idx] == row && return idx
             idx += 1
         end
     else
@@ -40,7 +46,7 @@ bounds is "stored" for a dense backend, at `LinearIndices(A)[row, col]`.
         hi = p2
         @inbounds while lo <= hi
             mid = (lo + hi) >>> 1
-            mid_row = A.rowval[mid]
+            mid_row = rowval[mid]
             if mid_row < row
                 lo = mid + 1
             elseif mid_row > row
@@ -77,6 +83,61 @@ end
     return nothing
 end
 
+"""
+    _scatter_storage(A::AbstractMatrix) -> AbstractArray
+
+The array that [`_scatter_add!`](@ref) writes into, indexed by the same positions
+[`_scatter_position`](@ref) answers. Storage and position agree type by type: `A.nzval` for
+a `SparseMatrixCSC` (and for `SparseMatrixCSR{1}`, in its extension), whose position is an
+`nzval` index; `A.mirror.nzval` for a device matrix (gpena/Bramble.jl#313); and `A` itself
+for every other host matrix, whose position is a linear index (`A[pos]`). A backend that
+answers `nzval` indices from its own `_scatter_position` adds its own method here too.
+
+The host fallback returns `A` rather than `vec(A)`: on a `Matrix`, `vec` builds a new array
+header, one allocation per sink. Any other host sparse matrix (`FixedSparseCSC`, say) takes
+that fallback too, since its `_scatter_position` is the linear-index one.
+
+What the replay sinks ([`ReplaySink`](@ref), `_PairReplaySink`, `_StrideReplaySink`,
+`_DiagonalReplayTarget`) hold instead of `A`, so a sparse sink carries plain vectors only and
+a threaded sweep can hand it across a task boundary as is (gpena/Bramble.jl#437). Each sink
+adds through [`_replay_add!`](@ref), the same `+=` as `_scatter_add!`, so a replay stores the
+same bits as before.
+"""
+@inline _scatter_storage(A::SparseMatrixCSC) = A.nzval
+@inline _scatter_storage(A::AbstractMatrix) = _scatter_storage(locality(typeof(A)), A)
+@inline _scatter_storage(::HostLocality, A::AbstractMatrix) = A
+
+# A `SparseMatrixCSC`'s three arrays without the matrix around them, the shape of `_KronCSC`
+# (kronecker.jl): what `CpuPolyester`'s searching sweeps rebuild in each `@batch` task around
+# the arrays it receives, since a captured `SparseMatrixCSC` puts Polyester's argument box on
+# the heap (gpena/Bramble.jl#433). Not an `AbstractMatrix`: only the searching sweep's
+# per-point step (`_scatter_point!`, `_sweep_point!`, `add_to_sparse!`) takes it, and its
+# position, write and storage are the `SparseMatrixCSC` ones, so it stores the same bits.
+struct _ScatterCSC{CP <: AbstractVector, RV <: AbstractVector, NV <: AbstractVector}
+    colptr::CP
+    rowval::RV
+    nzval::NV
+end
+
+@inline _scatter_position(A::_ScatterCSC, row::Int, col::Int) = _csc_position(
+    A.colptr, A.rowval, row, col)
+@inline function _scatter_add!(A::_ScatterCSC, pos::Int, val)
+    @inbounds A.nzval[pos] += val
+    return nothing
+end
+@inline _scatter_storage(A::_ScatterCSC) = A.nzval
+
+"""
+    _replay_add!(nzval::AbstractArray, pos::Integer, val) -> Nothing
+
+Add `val` at `nzval[pos]` (linear indexing), where `nzval` is a matrix's
+[`_scatter_storage`](@ref): the write every replay sink makes.
+"""
+@inline function _replay_add!(nzval::AbstractArray, pos::Integer, val)
+    @inbounds nzval[pos] += val
+    return nothing
+end
+
 # --- device-resident CSR: search and scatter without scalar indexing (gpena/Bramble.jl#94,
 # gpena/Bramble.jl#313) --------------------------------------------------------------- #
 #
@@ -102,8 +163,8 @@ end
 # `assemble!`, and `A.nzVal` on the device side is never touched until
 # `_flush_device_scatter!` copies `nzval` across in one bulk `copyto!`.
 #
-# `visit_bilinear_stencil`'s own sinks (`ReplaySink` and its kin) reduce to exactly
-# `_scatter_position`/`_scatter_add!` too, so they pick up this method for free. A
+# `visit_bilinear_stencil`'s own sinks (`ReplaySink` and its kin) write
+# `_scatter_storage(A)`, which for a device matrix is `A.mirror.nzval`, the same vector. A
 # `GpuPolicy` backend's assembly is forced into the threaded path (see
 # `_coerce_serial_to_threaded` below). Its recording fill searches the mirror once per matrix
 # (`_coordinates_to_positions!`), and every later fill replays those mirror positions through
@@ -233,6 +294,7 @@ end
 end
 
 @inline _scatter_add!(::DeviceLocality, A::AbstractMatrix, pos::Integer, val) = _scatter_add_mirror!(A.mirror, pos, val)
+@inline _scatter_storage(::DeviceLocality, A::AbstractMatrix) = A.mirror.nzval
 
 # The other half of `_zero_stored!`'s matrix-type seam (`bilinear.jl`): any
 # `AbstractSparseMatrix` that is not the concrete `SparseMatrixCSC` above -- a device CSR
@@ -311,7 +373,8 @@ device-specific branch or parameter.
 See also: [`allocate_system_matrix`](@ref), whose positions search raises the same way on
 the serial path.
 """
-@inline function add_to_sparse!(A::AbstractMatrix, row::Int, col::Int, val::Number, term)
+@inline function add_to_sparse!(
+        A::Union{AbstractMatrix, _ScatterCSC}, row::Int, col::Int, val::Number, term)
     pos = _scatter_position(A, row, col)
     pos == 0 && _throw_missing_pattern_entry(term)
     _scatter_add!(A, pos, val)
@@ -812,7 +875,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
         col_offset::Int
 ) where {SINK1, SINK2, TERM}
     Ωₕ = mesh(sp)
-    mesh_markers = markers(Ωₕ)
+    bound, mesh_markers = _bind_walk(term, sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     margin = _stencil_margin(term)
@@ -827,7 +890,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
         interior = CartesianIndices(map(r -> _interior_range(r, margin), ax))
         _visit_interior!(
             interior_sink,
-            term,
+            bound,
             sp,
             mesh_markers,
             lin_indices,
@@ -838,7 +901,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
         @inbounds for slab in _boundary_shell_slabs(ax, margin)
             _visit_guarded_region!(
                 boundary_sink,
-                term,
+                bound,
                 sp,
                 mesh_markers,
                 lin_indices,
@@ -850,7 +913,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
     else
         _visit_guarded_region!(
             boundary_sink,
-            term,
+            bound,
             sp,
             mesh_markers,
             lin_indices,
@@ -984,10 +1047,14 @@ function _sink_entry!(s::_CoordSink, row::Int, col::Int, _, ::Int)
 end
 
 """
-    ReplaySink(A::AbstractMatrix, point_ptr::Vector{Int}, positions::Vector{Int}, α)
+    ReplaySink(A::AbstractMatrix, point_ptr::AbstractVector{Int}, positions::AbstractVector{Int}, α)
 
 Add a term's values to `A` using slots the coordinate walk recorded (`_CoordSink`, searched
 in `A` by `_coordinates_to_positions!`).
+
+Holds `A`'s storage ([`_scatter_storage`](@ref): the `nzval` vector of a sparse matrix) and
+its positions as any `AbstractVector{Int}`, so a sparse sink is plain vectors throughout
+(gpena/Bramble.jl#437).
 
 The same walk and the same fresh stencil evaluation, because weights may be live: a
 coefficient grid function updated in place through `Rₕ!` is seen by the next assembly. Only
@@ -1002,18 +1069,27 @@ sink. Carrying it as a mutable field measured about 20% slower on the cheapest r
 
 See also: [`visit_bilinear_stencil`](@ref).
 """
-struct ReplaySink{M <: AbstractMatrix, S}
-    A::M
-    point_ptr::Vector{Int}
-    positions::Vector{Int}
+struct ReplaySink{V <: AbstractArray, P <: AbstractVector{Int}, S}
+    nzval::V
+    point_ptr::P
+    positions::P
     α::S
+    # Inner, so no untyped storage constructor overlaps the matrix one below: a dense
+    # matrix is both an `AbstractMatrix` and its own storage.
+    function ReplaySink{V, P, S}(nzval, point_ptr, positions, α) where {V, P, S}
+        return new{V, P, S}(nzval, point_ptr, positions, α)
+    end
+end
+function ReplaySink(A::AbstractMatrix, point_ptr::P, positions::P, α::S) where {P, S}
+    nzval = _scatter_storage(A)
+    return ReplaySink{typeof(nzval), P, S}(nzval, point_ptr, positions, α)
 end
 @inline _sink_point!(sink::ReplaySink, lin_idx::Int, ::CartesianIndex) = @inbounds(sink.point_ptr[lin_idx])
 @inline _sink_needs_coordinates(::ReplaySink) = false
 Base.@propagate_inbounds function _sink_entry!(
         sink::ReplaySink, ::Int, ::Int, weight, slot::Int
 )
-    @inbounds _scatter_add!(sink.A, sink.positions[slot], sink.α * weight)
+    @inbounds _replay_add!(sink.nzval, sink.positions[slot], sink.α * weight)
     return nothing
 end
 
@@ -1030,22 +1106,36 @@ a pair whose two blocks sit on different leaf objects walks ⟨Au, Bv⟩ once pe
 each, since the second term's stencil is the first's exchanged only on its own leaf. The
 skipped half's positions are never read.
 """
-struct _PairReplaySink{M <: AbstractMatrix, S1, S2}
-    A::M
-    point_ptr::Vector{Int}
-    positions::Vector{Int}
-    positions_t::Vector{Int}
+struct _PairReplaySink{V <: AbstractArray, P <: AbstractVector{Int}, S1, S2}
+    nzval::V
+    point_ptr::P
+    positions::P
+    positions_t::P
     α1::S1
     α2::S2
     half::Int
+    # Inner for the same reason as `ReplaySink`'s.
+    function _PairReplaySink{V, P, S1, S2}(
+            nzval, point_ptr, positions, positions_t, α1, α2, half
+    ) where {V, P, S1, S2}
+        return new{V, P, S1, S2}(nzval, point_ptr, positions, positions_t, α1, α2, half)
+    end
+end
+function _PairReplaySink(
+        A::AbstractMatrix, point_ptr::P, positions::P, positions_t::P, α1::S1, α2::S2,
+        half::Int
+) where {P, S1, S2}
+    nzval = _scatter_storage(A)
+    return _PairReplaySink{typeof(nzval), P, S1, S2}(
+        nzval, point_ptr, positions, positions_t, α1, α2, half)
 end
 @inline _sink_point!(sink::_PairReplaySink, lin_idx::Int, ::CartesianIndex) = @inbounds(sink.point_ptr[lin_idx])
 @inline _sink_needs_coordinates(::_PairReplaySink) = false
 Base.@propagate_inbounds function _sink_entry!(
         sink::_PairReplaySink, ::Int, ::Int, weight, slot::Int
 )
-    sink.half != 2 && @inbounds _scatter_add!(sink.A, sink.positions[slot], sink.α1 * weight)
-    sink.half != 1 && @inbounds _scatter_add!(sink.A, sink.positions_t[slot], sink.α2 * weight)
+    sink.half != 2 && @inbounds _replay_add!(sink.nzval, sink.positions[slot], sink.α1 * weight)
+    sink.half != 1 && @inbounds _replay_add!(sink.nzval, sink.positions_t[slot], sink.α2 * weight)
     return nothing
 end
 

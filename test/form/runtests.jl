@@ -23,6 +23,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("assemble_add.jl")
     # The threaded refill replays the recorded nzval positions.
     include("threaded_replay.jl")
+    # Replay sinks hold the storage vector and array-parametric positions (#437).
+    include("replay_sinks.jl")
     include("zero_form.jl")
     include("coordinate_walk.jl")
     include("cross_mesh_blocks.jl")
@@ -31,6 +33,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("skew.jl")
     include("symmetry.jl")
     include("markers.jl")
+    # Restricted terms bound to marker ids, the walk reading word bits (#437).
+    include("marker_ids.jl")
     include("extended_operators.jl")
     include("symmetrize.jl")
     TestUtils.WITH_AD_TESTS && include("autodiff.jl")

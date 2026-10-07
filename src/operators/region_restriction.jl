@@ -9,7 +9,8 @@
 AST node representing a spatial restriction of an operator to a specific mesh region or boundary.
 
 # Arguments
-- `region::RegionType`: Identifier for the region (e.g. `:interior`, `:boundary`, `:left`, `:right`, `:top`, `:bottom`).
+- `region::RegionType`: Identifier for the region (e.g. `:interior`, `:boundary`, `:left`, `:right`, `:top`, `:bottom`), or a tuple of them.
+  Assembly binds it to the walked mesh's marker id (`Int`, or `NTuple{N, Int}` for a tuple; see `_bind_marker_ids`).
 - `inner_op::OpType`: Underlying operator being restricted.
 """
 struct RegionRestriction{D, RegionType, OpType <: LazyOp{D}} <: LazyOp{D}
@@ -42,27 +43,38 @@ end
 # `markers` is optional throughout the stencil evaluators. Every other node accepts it and
 # ignores it, and callers with nothing to restrict by pass `nothing`. Only this node reads
 # it, so only this node decides what an absent table means: no point is marked. The
-# `:interior` region is then the whole grid and every other region is empty, as `haskey`
-# returning `false` for a table that lacks the key already implies. `_in_region` below answers the
-# `nothing` case itself, so `_is_marked` only ever sees a real table.
-@inline _is_marked(markers, region::Symbol, lin_idx::Int) = haskey(markers, region) && markers[region][lin_idx]
+# `:interior` region is then the whole grid and every other region is empty. `_in_region`
+# below answers the `nothing` case itself, so `_is_marked` only ever sees a real table.
+#
+# A real table is the walked mesh's marker word matrix (`_marker_words`, word × label), and
+# the region a label id bound at the walk entry (`_bind_walk`, assembly/block_extract.jl):
+# point `lin_idx` of label `id` is one word load and a shift, no `Dict` per point.
+@inline function _is_marked(words::AbstractMatrix{UInt64}, id::Int, lin_idx::Int)
+    i = lin_idx - 1
+    return isodd(@inbounds(words[(i >> 6) + 1, id]) >> (i & 63))
+end
 
 # A tuple of regions represents a union, not an intersection: `restrict_to((:bottom, :left), u)`
 # matches either region, consistent with tuple markers throughout the package (`Rₕ!`,
 # `dirichlet_bc!`, numeric `innerₕ`). Chaining single-region `RegionRestriction`s instead
 # would give the intersection (a different and rarely useful condition).
-@inline _is_marked(markers, regions::NTuple{N, Symbol}, lin_idx::Int) where {N} = any(r -> _is_marked(markers, r, lin_idx), regions)
+@inline function _is_marked(
+        words::AbstractMatrix{UInt64}, ids::NTuple{N, Int}, lin_idx::Int
+) where {N}
+    return any(id -> _is_marked(words, id, lin_idx), ids)
+end
 
 @inline function local_stencil(
         op::RegionRestriction, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D}
     # A real marker table always carries its own `:interior` (`_ensure_geometric_markers!`
-    # guarantees the key, geometric or user-redefined), so it is read directly like every
+    # guarantees the label, geometric or user-redefined), so it is read directly like every
     # other region, no exception for `:interior` here. There is exactly one case that still
     # needs one: `markers === nothing`, the "no marker context at all" sentinel above, where
-    # `:interior` is defined as the whole grid and every other region as empty. Read directly, a real `:interior` used to be silently overridden by
-    # "not :boundary", which discarded a deliberately redefined `:interior` even though the
-    # mesh warns that a custom definition wins (mesh/marker.jl).
+    # `:interior` is defined as the whole grid and every other region as empty. Read
+    # directly, a real `:interior` used to be silently overridden by "not :boundary", which
+    # discarded a deliberately redefined `:interior` even though the mesh warns that a
+    # custom definition wins (mesh/marker.jl).
     if _in_region(op, markers, lin_idx)
         return local_stencil(op.inner_op, space, I, markers, lin_idx)
     else
@@ -70,9 +82,9 @@ end
     end
 end
 
-@inline _in_region(op::RegionRestriction, markers, lin_idx::Int) = markers === nothing ?
-                                                                   (op.region === :interior) :
-                                                                   _is_marked(markers, op.region, lin_idx)
+@inline _in_region(op::RegionRestriction, ::Nothing, ::Int) = op.region === :interior
+@inline _in_region(op::RegionRestriction, words, lin_idx::Int) = _is_marked(
+    words, op.region, lin_idx)
 
 # A tap reaching `delta` points away re-evaluates the restriction at that neighbour. Doing
 # it through `local_stencil` above would return `()` or a full tuple depending on the

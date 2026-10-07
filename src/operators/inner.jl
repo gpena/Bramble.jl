@@ -104,26 +104,29 @@ end
 # `Int` getindex would rebuild `I` from `lin_idx` with D-1 integer divisions per point per
 # term. No current `weights` method reaches the `AbstractVector` method: it is the fallback
 # for a dense weight vector, or a `CartesianIndex` of another dimension, read by `lin_idx`.
+# `compute_weight` reads them through `_stored_weights`, unchecked, since the walk calling
+# it checked the space's staleness once, where it started (`_bind_walk`,
+# gpena/Bramble.jl#437).
 @inline _weight_at(w::SeparableWeights{D}, I::CartesianIndex{D}, ::Int) where {D} = w[I]
 @inline _weight_at(w::AbstractVector, ::CartesianIndex, lin_idx::Int) = w[lin_idx]
 
 @inline compute_weight(
     ::InnerH, space, I::CartesianIndex{D}, lin_idx::Int
-) where {D} = _weight_at(weights(space, Innerh()), I, lin_idx)
+) where {D} = _weight_at(_stored_weights(space, Innerh()), I, lin_idx)
 
 @inline compute_weight(
     ::InnerPlus{ActiveDim}, space, I::CartesianIndex{D}, lin_idx::Int
-) where {ActiveDim, D} = _weight_at(weights(space, Innerplus(), ActiveDim), I, lin_idx)
+) where {ActiveDim, D} = _weight_at(_stored_weights(space, Innerplus(), ActiveDim), I, lin_idx)
 
-# `weights(space, Val(S))` for `length(S) >= 2` is a `SeparableWeights` (scalar_gridspace.jl),
-# a lazy per-axis product with no full-grid vector behind it. It answers a `CartesianIndex`
-# directly, at whatever point this is called for -- the currently-visited one, or a shifted
-# neighbour, whichever `local_stencil` passes in -- with no linear-index division/modulo, so
-# `I` is used here rather than `lin_idx`, as `_weight_at` above does for `InnerH` and
-# `InnerPlus{Dim}`.
+# `_stored_weights(space, Val(S))` for `length(S) >= 2` is a `SeparableWeights`
+# (scalar_gridspace.jl), a lazy per-axis product with no full-grid vector behind it. It
+# answers a `CartesianIndex` directly, at whatever point this is called for -- the
+# currently-visited one, or a shifted neighbour, whichever `local_stencil` passes in -- with
+# no linear-index division/modulo, so `I` is used here rather than `lin_idx`, as
+# `_weight_at` above does for `InnerH` and `InnerPlus{Dim}`.
 @inline compute_weight(
     ::InnerPlusSet{S}, space, I::CartesianIndex{D}, lin_idx::Int
-) where {S, D} = weights(space, Val(S))[I]
+) where {S, D} = _stored_weights(space, Val(S))[I]
 
 # The surface weight is computed from the mesh's live half-spacings rather than read from a
 # stored vector, so `SpaceWeights` grows no family for it and there is no staleness token to

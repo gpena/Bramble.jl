@@ -70,22 +70,20 @@ end
 # allocates (measured at -O1), and a setup taking (grid points per axis, policy) on a
 # non-uniform 2D grid and returning the call to measure, a function reading its result, and
 # the number of multigrid levels (0 elsewhere).
-# The paths that allocate nothing at all under `CpuPolyester` (gpena/Bramble.jl#433): their
-# loops capture only plain arrays and isbits values, so Polyester's argument box stays on the
-# stack. Every other path keeps the 512 B box bound, since its loop captures a form or another
-# struct holding a GC reference (follow-up: gpena/Bramble.jl#437).
-const _PA_ZERO_PATHS = (
-    "difference D₋ₓ!", "average Mₓ!", "avgₕ!", "shift S₊ₓ!", "divₕ!", "curlₕ!", "εₕ!",
-    "broadcast", "innerₕ", "inner₊ₓ", "innerₕ masked", "Kronecker mul!",
-    "Kronecker mul! general"
-)
+# Every path allocates nothing at all under `CpuPolyester` (gpena/Bramble.jl#433,
+# gpena/Bramble.jl#437): what its loop captures crosses `@batch` as plain arrays and isbits
+# values, so Polyester's argument box stays on the stack. The one exception is listed here
+# with its bound: an `avgₕ!` source closure over an array crosses `@batch` whole, never split
+# (a rebuilt closure would capture a `PtrArray` in place of its `Vector`), so its kernel
+# boxes.
+const _PA_BOX_CEILINGS = Dict("avgₕ! closure" => 160)
 
 # BEGIN _pa paths
 using Bramble: CpuPolyester, CpuSerial, CpuThreaded, change_points!, semidiscretize_rhs,
-               allocate_system_matrix, D₋ₓ, inner₊ₓ, S₊ₓ!
+               allocate_system_matrix, D₋ₓ, inner₊ₓ, S₊ₓ!, restrict_to
 using LinearAlgebra: Diagonal, mul!, ldiv!
 using Random: Xoshiro, randn
-using SparseArrays: spdiagm
+using SparseArrays: nonzeros, spdiagm
 
 function _pa_jitter(n, policy; seed = 4321)
     rng = Xoshiro(seed)
@@ -113,6 +111,9 @@ _pa_copy(u) = copy(parent(u))
 _pa_flat(e) = reduce(vcat, [_pa_copy(e[i][j]) for i in 1:2 for j in 1:2])
 _pa_two_leaf(u, v) = innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(2)), D₋ₓ(v(2))) + innerₕ(u(2), v(2))
 _pa_case(call, result; levels = 0) = (; call, result, levels)
+_pa_comps(u) = reduce(vcat, [_pa_copy(c) for c in Bramble.components(u)])
+_pa_pair(x) = (_pa_g(x), _pa_h(x))
+_pa_times0d(a, c) = 2.0 * a * c + 1.0
 
 # A hand-built two-term Kronecker operator on an `n × n` grid that `kronecker_operator`
 # does not build yet: non-symmetric banded factors on both axes (a row gather on axis 1
@@ -262,6 +263,127 @@ function _pa_paths()
             du = similar(u)
             _pa_case(() -> r(du, u, nothing, 0.0), () -> copy(du))
         end))
+    push!(P, ("space weights", true, 0, (n, p) -> begin
+        Ω = _pa_jitter(n, p)
+        u = zeros(npoints(Ω))
+        _pa_case(() -> Bramble._innerh_weights!(u, Ω), () -> copy(u))
+    end))
+    push!(P, (
+        "avgₕ! masked", false, 0, (n, p) -> begin
+            u = element(_pa_space(n, p))
+            _pa_case(() -> avgₕ!(u, _pa_g; markers = (:dir,)), () -> _pa_copy(u))
+        end))
+    push!(P, ("project! composite avg", false, 0, (n, p) -> begin
+        u = element(gridspace(_pa_jitter(n, p), Val(2)))
+        _pa_case(() -> avgₕ!(u, _pa_pair), () -> _pa_comps(u))
+    end))
+    push!(P, ("csr spmv", false, 0,
+        (n, p) -> begin
+            A = assemble(_pa_poisson(_pa_space(n, p)))
+            csr = Bramble._rhs_csr(p, Val(false), A)
+            u = randn(Xoshiro(8), size(A, 2))
+            du0 = randn(Xoshiro(9), size(A, 1))
+            du = similar(du0)
+            _pa_case(() -> (copyto!(du, du0); Bramble._rhs_spmv!(du, A, csr, u)), () -> copy(du))
+        end))
+    push!(P,
+        ("assemble! restricted",
+            false,
+            0,
+            (n, p) -> begin
+                W = _pa_space(n, p)
+                a = form(W, W,
+                    (u, v) -> innerₕ(u, v; markers = (:dir,)) +
+                              inner₊(∇ₕ(u), ∇ₕ(v); markers = (:interior,)))
+                A = allocate_system_matrix(a)
+                _pa_case(() -> assemble!(A, a), () -> copy(A))
+            end))
+    push!(P, ("assemble! Ref coefficient", false, 0,
+        (n, p) -> begin
+            W = _pa_space(n, p)
+            θ = Ref(2.5)
+            a = form(W, W, (u, v) -> θ * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+            A = allocate_system_matrix(a)
+            first = similar(nonzeros(A))
+            call = () -> begin
+                θ[] = 2.5
+                assemble!(A, a)
+                copyto!(first, nonzeros(A))
+                θ[] = 4.0
+                assemble!(A, a)
+                return nothing
+            end
+            _pa_case(call, () -> vcat(first, nonzeros(A)))
+        end))
+    push!(P, ("assemble! linear interpolation", false, 0, (n, p) -> begin
+        W = _pa_space(n, p)
+        uc = Rₕ(_pa_leaf(n ÷ 2 + 1, p), _pa_g)
+        l = form(W, v -> innerₕ(πₕ(uc), v))
+        b = zeros(ndofs(W))
+        _pa_case(() -> assemble!(b, l), () -> copy(b))
+    end))
+    push!(P,
+        ("assemble! bilinear (searching)",
+            false,
+            0,
+            (n, p) -> begin
+                a = _pa_poisson(_pa_space(n, p))
+                A = allocate_system_matrix(a)
+                call = () -> begin
+                    Bramble._zero_stored!(A)
+                    Bramble._assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast)
+                end
+                _pa_case(call, () -> copy(A))
+            end))
+    push!(P, ("Rₕ!", true, 0, (n, p) -> begin
+        u = element(_pa_space(n, p))
+        _pa_case(() -> Rₕ!(u, _pa_g), () -> _pa_copy(u))
+    end))
+    push!(P, ("Rₕ! masked", true, 0, (n, p) -> begin
+        u = element(_pa_space(n, p))
+        _pa_case(() -> Rₕ!(u, _pa_g; markers = (:dir,)), () -> _pa_copy(u))
+    end))
+    push!(P, (
+        "project! composite Rₕ", true, 0, (n, p) -> begin
+            u = element(gridspace(_pa_jitter(n, p), Val(2)))
+            rule = Bramble.PointValue(_pa_pair)
+            _pa_case(() -> Bramble.project!(u, rule), () -> _pa_comps(u))
+        end))
+    push!(P, ("avgₕ! closure", false, 0, (n, p) -> begin
+        u = element(_pa_space(n, p))
+        c = [0.3, 0.7]
+        f = x -> c[1] * sin(3x[1] + 2x[2]) + c[2] * x[1] * x[2]
+        _pa_case(() -> avgₕ!(u, f), () -> _pa_copy(u))
+    end))
+    push!(P, ("broadcast 0-dim", true, 0, (n, p) -> begin
+        W = _pa_space(n, p)
+        u = Rₕ(W, _pa_g)
+        v = similar(u)
+        c = fill(1.5)
+        _pa_case(() -> (v .= _pa_times0d.(u, c)), () -> _pa_copy(v))
+    end))
+    push!(P,
+        ("matrix-free fused masked", false, 0,
+            (n, p) -> begin
+                op = matrix_free_operator(_pa_poisson(_pa_space(n, p)); dirichlet = :dir)
+                x = randn(Xoshiro(10), size(op, 2))
+                y0 = randn(Xoshiro(11), size(op, 1))
+                y = similar(y0)
+                _pa_case(() -> (copyto!(y, y0); mul!(y, op, x, 2.5, 0.7)), () -> copy(y))
+            end))
+    push!(P,
+        ("matrix-free fused restricted",
+            false,
+            0,
+            (n, p) -> begin
+                W = _pa_space(n, p)
+                op = matrix_free_operator(form(W, W, (u, v) -> innerₕ(u, v) +
+                                                               inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                                               innerₕ(u, restrict_to(:dir, v))))
+                x = randn(Xoshiro(12), size(op, 2))
+                y = similar(x)
+                _pa_case(() -> mul!(y, op, x), () -> copy(y))
+            end))
     return P
 end
 # END _pa paths
@@ -379,6 +501,30 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
         # -- it raises naming Polyester without this extension loaded.
         Wb = gridspace(Ωb)
         @test ndofs(Wb) == ndofs(gridspace(mesh(Ω, (8, 7), true)))
+    end
+
+    # The `@noinline` CpuPolyester arm takes its kernel as `f::F ... where {F}`: an untyped
+    # `f` only passed through is compiled on `::Function`, and `_late` then calls the hook
+    # dynamically (gpena/Bramble.jl#460). The `Fix1` kernel `__innerplus_weights!` builds,
+    # on non-uniform factors, gives the CpuSerial result and specialises the arm on `Fix1`.
+    @testset "Fix1 kernel, CpuPolyester arm (#460)" begin
+        for dims in ((37,), (23, 29), (7, 9, 11))
+            diags = map(n -> sort!(rand(Xoshiro(n), n)), dims)
+            vp, vs = zeros(dims), zeros(dims)
+            Bramble._sweep_for!(CpuPolyester(), vp, CartesianIndices(vp),
+                Base.Fix1(Bramble.__prod, diags))
+            Bramble._sweep_for!(CpuSerial(), vs, CartesianIndices(vs),
+                Base.Fix1(Bramble.__prod, diags))
+            @test vp == vs
+            @test vs[end] == prod(last, diags)
+        end
+        loc = typeof(Bramble.locality(Array{Float64, 2}))
+        arm = which(Bramble._sweep_for!,
+            (loc, CpuPolyester, Matrix{Float64}, CartesianIndices{2}, Function))
+        kslot(mi) = Base.unwrap_unionall(mi.specTypes).parameters[end]
+        mis = collect(Base.specializations(arm))
+        @test !isempty(mis)
+        @test any(mi -> kslot(mi) <: Base.Fix1, mis)
     end
 
     # Rₕ!/avgₕ! agree with Parallel() and Serial() in 1D, 2D and 3D.
@@ -540,11 +686,11 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
 
     # Per path, a warm CpuPolyester call allocates the same bytes on a small and a large
     # non-uniform grid (a multigrid cycle per coarsening level, since it runs every level's
-    # loops), nothing but `@batch` argument boxes (0 B on the `_PA_ZERO_PATHS`, at most 512 B
-    # each on the rest), reaches no Threads
-    # entry point, and gives the CpuSerial result: bitwise for the operators asserted bitwise
-    # elsewhere in this file, to rounding for reductions, assembly and solvers. Silent on a
-    # single thread, where `@batch` runs serially.
+    # loops), nothing at all (no `@batch` argument box either, except on the paths in
+    # `_PA_BOX_CEILINGS`, each within its bound), reaches no Threads entry point, and gives
+    # the CpuSerial result: bitwise for the operators asserted bitwise elsewhere in this
+    # file, to rounding for reductions, assembly and solvers. Silent on a single thread,
+    # where `@batch` runs serially.
     if Threads.nthreads() >= 2
         @testset "allocation under CpuPolyester" begin
             hits = _pa_threads_hits()
@@ -561,7 +707,7 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
                 @test bs == bl
                 for case in (small, large)
                     box, other, nval = _pa_allocations(case.call)
-                    @test name in _PA_ZERO_PATHS ? box == 0 : box <= 512
+                    @test box <= get(_PA_BOX_CEILINGS, name, 0)
                     @test isempty(other)
                     @test nval == nrefs
                 end
@@ -1029,6 +1175,21 @@ end
     @test isapprox(op * x, assemble(form(Vb, Vb, f); dirichlet = :boundary) * x; rtol = 1e-12)
 end
 
+# A region written as an id (`restrict_to(1, u)`) is refused by the walk's bind on every
+# route. The fused bands bind on the host and let only the regions they bound skip the
+# in-task bind, so a user's id must not read marker column 1 there either.
+@testset "integer region throws on every policy" begin
+    X = interval(0.0, 1.0) × interval(0.0, 1.0)
+    W = gridspace(mesh(domain(X, :dir => boundary_symbols(X)), (13, 11), (true, true)))
+    a = form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(restrict_to(1, u), v))
+    x = ones(ndofs(W))
+    for policy in (CpuSerial(), CpuThreaded(), CpuPolyester())
+        op = matrix_free_operator(a; policy)
+        @test (op.plan === nothing) == (policy isa CpuSerial)
+        @test_throws MethodError op * x
+    end
+end
+
 # Mixed leaf policies, CpuThreaded beside CpuPolyester (the Threaded + Serial case
 # lives in test/form/threaded_replay.jl): whether a unit replays
 # is decided from the leaf its sweep walks, so a composite's leaves, or a cross-mesh form's two
@@ -1161,6 +1322,274 @@ _mg_spd(W) = (κ = Rₕ(W, x -> 1 + sum(abs2, x)); form(W, W, (u, v) -> innerₕ
             end
         end
         @test isapprox(parent(gmg_solve(_mg_spd, Ωt, b)), parent(gmg_solve(_mg_spd, Ωs, b)); rtol = 1e-10)
+    end
+end
+
+# Data `_batch_split` cannot take apart (`BigFloat` sources, coefficients and grid functions)
+# makes every split hook capture its parts whole, as before gpena/Bramble.jl#437, instead of
+# throwing. Each hook must have run on `BigFloat` data, and every result equal the serial one
+# on the same jittered mesh. `_BfWrapped` is a user's array type whose field names `Vector`:
+# it splits, but cannot be rebuilt around the `PtrArray` a task receives.
+struct _BfWrapped{T} <: AbstractVector{T}
+    data::Vector{T}
+end
+Base.size(w::_BfWrapped) = size(w.data)
+Base.getindex(w::_BfWrapped, i::Int) = w.data[i]
+
+@testset "unsplittable data falls back" begin
+    _bf_space(n, policy; seed = 4370) = (Random.seed!(seed);
+        gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), n, (false, false);
+            backend = backend(policy = policy))))
+    _bf_close(a, b) = !iszero(b) && isapprox(a, b; rtol = eltype(a) == BigFloat ? 1e-60 : 1e-14)
+    hooks = (:_batch_bilinear_band_replay!, :_batch_bilinear_colour_replay!,
+        :_batch_mf_bands!, :_batch_linear_colour_sweep!, :_batch_linear_band_sweep!,
+        :_batch_bilinear_colour_sweep!, :_batch_bilinear_band_sweep!)
+    ext = Base.get_extension(Bramble, :BramblePolyesterExt)
+    # How many of the extension's instances of hook `h` take `BigFloat` data.
+    bigruns(h) = sum(methods(getfield(Bramble, h)); init = 0) do m
+        m.module === ext || return 0
+        return count(mi -> mi !== nothing && occursin("BigFloat", string(mi.specTypes)),
+            Base.specializations(m))
+    end
+    before = map(bigruns, hooks)
+    results = map((CpuSerial(), CpuPolyester())) do policy
+        W = _bf_space((9, 11), policy)
+        g = Rₕ(W, x -> big(x[1] + 1))
+        c = _BfWrapped(collect(range(1.0, 2.0; length = ndofs(W))))
+        bilinear = (form(W, W, (u, v) -> big"2.0" * inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v)),
+            form(W, W, (u, v) -> inner₊(g * ∇ₕ(u), ∇ₕ(v))),
+            form(W, W, (u, v) -> inner₊(c * ∇ₕ(u), ∇ₕ(v))))
+        r = Any[]
+        for a in bilinear
+            A = assemble(a)
+            for _ in 1:2
+                fill!(nonzeros(A), 0)
+                assemble!(A, a)
+            end
+            push!(r, A)
+        end
+        op = matrix_free_operator(bilinear[1])
+        push!(r, op * big.(range(-1.0, 2.0; length = size(op, 2))))
+        V = _bf_space((9, 33), policy; seed = 1) × _bf_space((13, 3), policy; seed = 2)
+        opv = matrix_free_operator(form(V, V,
+            (u, v) -> big"2.0" * inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(u(2), v(2))))
+        push!(r, opv * big.(range(-1.0, 2.0; length = size(opv, 2))))
+        f = Rₕ(W, x -> big(x[1]))
+        for l in (form(W, v -> innerₕ(x -> big(x[1] + x[2]), v)), form(W, v -> innerₕ(f, v)),
+            form(W, v -> big"2.0" * innerₕ(x -> x[1], v)))
+            push!(r, assemble(l))
+        end
+        # The searching sweep, entered as a form with no replaying leaf enters it: point
+        # colouring on 9×11, bands on 9×33.
+        for Ws in (W, _bf_space((9, 33), policy; seed = 1))
+            a = form(Ws, Ws, (u, v) -> big"2.0" * inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+            A = assemble(a)
+            fill!(nonzeros(A), 0)
+            Bramble._assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast)
+            push!(r, A)
+        end
+        return r, (op.plan !== nothing, opv.plan === nothing)
+    end
+    (serial, _), (batched, (fused, per_unit)) = results
+    @test fused && per_unit
+    @test map(eltype, batched) == [BigFloat, BigFloat, Float64, fill(BigFloat, 7)...]
+    @test all(map(_bf_close, batched, serial))
+    @testset "$h ran on BigFloat data" for (h, n) in zip(hooks, before)
+        @test bigruns(h) > n
+    end
+
+    W = _bf_space((9, 11), CpuPolyester())
+    unit(l) = (l.test_space, Bramble._bind_walk(l.ast, l.test_space)...)
+    @test Bramble._batch_splittable(typeof(unit(form(W, v -> innerₕ(x -> x[1], v)))))
+    big_unit = unit(form(W, v -> big"2.0" * innerₕ(x -> x[1], v)))
+    @test !Bramble._batch_splittable(typeof(big_unit))
+    @test_throws ArgumentError Bramble._batch_split(big_unit)
+    @test !Bramble._batch_splittable(typeof(unit(form(W, v -> innerₕ(Rₕ(W, x -> big(x[1])), v)))))
+    @test !Bramble._batch_splittable(_BfWrapped{Float64})
+    @test Bramble._batch_splittable(Tuple{Vector{Float64}, Base.RefValue{Float64}})
+
+    # `Rₕ!` and `avgₕ!` evaluate the user's function per point inside the task, so a function
+    # capturing what the split cannot take (a `Dict`, a `_BfWrapped`) crosses whole, and so
+    # does a `BigFloat` element, on `_batch_for!`, its masked form and `_batch_scatter_for!`.
+    d, c = Dict(:a => 2.0), _BfWrapped([0.5])
+    f = x -> d[:a] * x[1] + c[1] * sin(x[2])
+    fb = x -> big(x[1]) * x[2] + 1
+    fs = x -> (d[:a] * x[1], c[1] * x[2])
+    W = _bf_space((9, 11), CpuPolyester())
+    k = Bramble._RₕKernel(f, mesh(W), Bramble.indices(mesh(W)))
+    @test !Bramble._batch_splittable(typeof(k))
+    @test !Bramble._batch_splittable(typeof((k, ones(BigFloat, 3))))
+    hits(h, s) = sum(methods(getfield(Bramble, h)); init = 0) do m
+        m.module === ext || return 0
+        return count(mi -> mi !== nothing && occursin(s, string(mi.specTypes)),
+            Base.specializations(m))
+    end
+    before = (hits(:_batch_for!, "BigFloat"), hits(:_batch_for!, "Dict"),
+        hits(:_batch_scatter_for!, "Dict"))
+    rk = map((CpuSerial(), CpuPolyester())) do policy
+        Ws = _bf_space((9, 11), policy)
+        Wd = gridspace(mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0),
+                :top => x -> x[2] ≈ 2.0), (9, 11), (false, false);
+            backend = backend(policy = policy)))
+        u, um, ua = element(Ws), element(Wd), element(Ws)
+        ub = element(Ws, BigFloat)
+        uv = element(Ws × Ws)
+        Rₕ!(u, f)
+        Rₕ!(um, f; markers = (:top,))
+        avgₕ!(ua, f)
+        Rₕ!(ub, fb)
+        Rₕ!(uv, fs)
+        return map(e -> copy(parent(e)), (u, um, ua, ub, uv(1), uv(2)))
+    end
+    @test rk[2] == rk[1]
+    @test eltype(rk[2][4]) == BigFloat && count(!iszero, rk[2][2]) == 9
+    after = (hits(:_batch_for!, "BigFloat"), hits(:_batch_for!, "Dict"),
+        hits(:_batch_scatter_for!, "Dict"))
+    @test all(after .> before)
+end
+
+# A user's function that throws per point (`sqrt` of a negative number past `x₁ = 0.7`) inside
+# the `@batch` tasks of `Rₕ!`, its masked form, the composite scatter and `avgₕ!` reaches the
+# caller as the `DomainError` a serial sweep raises, with the same message, and never crashes
+# the process; the threads the failed sweeps reserved are released. Repeated, since the crash
+# a task's exception caused before (gpena/Bramble.jl#437) was intermittent.
+@testset "throwing user function rethrows" begin
+    _tf_space(policy) = (Random.seed!(433);
+        gridspace(mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0), :right => x -> x[1] ≈ 1.0),
+            (17, 9), (false, false); backend = backend(policy = policy))))
+    f = x -> x[1] > 0.7 ? sqrt(0.7 - x[1]) : x[1] * x[2]
+    # The last two cross whole: a closure over a `Vector` is never split.
+    c = [1.0]
+    calls = (u -> Rₕ!(u, f), u -> Rₕ!(u, f; markers = (:right,)), u -> avgₕ!(u, f),
+        u -> Rₕ!(u, x -> (f(x), x[2])), u -> avgₕ!(u, x -> c[1] * f(x)),
+        u -> Rₕ!(u, x -> (c[1] * f(x), x[2])))
+    _tf_error(call, W) =
+        try
+            call(element(W))
+            nothing
+        catch e
+            e
+        end
+    _tf_elem(k, W) = k in (4, 6) ? W × W : W
+    for (k, call) in enumerate(calls)
+        serial = _tf_error(call, _tf_elem(k, _tf_space(CpuSerial())))
+        @test serial isa DomainError
+        msg = sprint(showerror, serial)
+        W = _tf_elem(k, _tf_space(CpuPolyester()))
+        for _ in 1:8
+            e = _tf_error(call, W)
+            @test e isa DomainError && sprint(showerror, e) == msg
+        end
+    end
+    W, Ws = _tf_space(CpuPolyester()), _tf_space(CpuSerial())
+    g = x -> x[1] * x[2]
+    @test parent(Rₕ!(element(W), g)) == parent(Rₕ!(element(Ws), g))
+end
+
+# A user's closure over a `Vector` reaches `Rₕ!`/`avgₕ!` (plain, masked and composite)
+# whole under `CpuPolyester`, as under `CpuSerial`: a split would rebuild it around a
+# `PtrArray`, so a method typed on `Vector{Float64}` would throw a `MethodError` and an
+# `isa Vector` branch would take the other arm. An index collection other than a unit range
+# (a `Vector{Int}`, a stepped range) takes the per-index sweep.
+_uc_typed(c::Vector{Float64}, x) = c[1] * x[1] + c[2] * x[2]^2
+@testset "user closures over arrays cross whole" begin
+    _uc_space(policy) = (Random.seed!(436);
+        gridspace(mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0), :right => x -> x[1] ≈ 1.0),
+            (17, 9), (false, false); backend = backend(policy = policy))))
+    c = [0.3, 1.7]
+    typed = x -> _uc_typed(c, x)
+    branch = x -> c isa Vector ? c[1] * x[1] : -1.0
+    res = map((CpuSerial(), CpuPolyester())) do policy
+        W = _uc_space(policy)
+        r = Vector{Float64}[]
+        for f in (typed, branch)
+            u, um, ua = element(W), element(W), element(W)
+            uv = element(W × W)
+            Rₕ!(u, f)
+            Rₕ!(um, f; markers = (:right,))
+            avgₕ!(ua, f)
+            Rₕ!(uv, x -> (f(x), x[2]))
+            append!(r, map(e -> copy(parent(e)), (u, um, ua, uv(1), uv(2))))
+        end
+        return r
+    end
+    @test res[2] == res[1]
+    @test all(v -> all(>=(0), v), res[2][6:10]) && any(!iszero, res[2][6])
+
+    n = 50
+    for idxs in ([3, 1, 7, 50, 22], 2:3:n)
+        vp, vs = zeros(n), zeros(n)
+        Bramble._sweep_for!(CpuPolyester(), vp, idxs, i -> c[1] * i + 1)
+        Bramble._sweep_for!(CpuSerial(), vs, idxs, i -> c[1] * i + 1)
+        @test vp == vs && count(!iszero, vp) == length(idxs)
+    end
+
+    # Destinations and index ranges with offset axes take the per-index sweep: the slabs
+    # count positions from 1, so they would write other cells of the parent.
+    O = Base.IdentityUnitRange
+    lin(i) = i isa CartesianIndex ? i[1] + 7i[2] : i
+    for (mk, idxs) in ((() -> view(zeros(6, 6), O(2:4), O(3:5)), CartesianIndices((O(2:4), O(3:5)))),
+        (() -> view(zeros(6), O(2:4)), O(2:4)))
+        for f in (i -> c[1] * lin(i), i -> 1.0 + lin(i))
+            vp, vs = mk(), mk()
+            Bramble._sweep_for!(CpuPolyester(), vp, idxs, f)
+            Bramble._sweep_for!(CpuSerial(), vs, idxs, f)
+            @test parent(vp) == parent(vs) && count(!iszero, parent(vp)) == length(idxs)
+        end
+    end
+
+    # The box such a closure's sweep allocates, warm: what it allocated before
+    # gpena/Bramble.jl#433 (64 B plain, 80 B masked or composite), never more. Silent on a
+    # single thread, where `@batch` runs serially.
+    # Fresh names: `u` and `W` are assigned inside the `map` above, so reusing them here
+    # would box them and measure the box.
+    if Threads.nthreads() >= 2
+        wb = _uc_space(CpuPolyester())
+        eb, evb = element(wb), element(wb × wb)
+        @test _pa_bytes(() -> Rₕ!(eb, typed)) <= 64
+        @test _pa_bytes(() -> Rₕ!(eb, typed; markers = (:right,))) <= 80
+        @test _pa_bytes(() -> Rₕ!(evb, x -> (typed(x), x[2]))) <= 80
+    end
+end
+
+# A stencil entry missing from the matrix's pattern throws inside the searching sweep's
+# `@batch` task. Before the split hooks caught it there, the throw on the host's chunk ended
+# Polyester's `GC.@preserve` while the workers still read the matrix, and the process
+# segfaulted in most runs. Point colouring on 9×11, bands on 9×33; the matrix stores the
+# diagonal only. Repeated, since the crash was intermittent.
+@testset "missing pattern entry rethrows" begin
+    _mp_space(n, policy) = (Random.seed!(437);
+        gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), n, (false, false);
+            backend = backend(policy = policy))))
+    _mp_form(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+    _mp_diag(W) = spdiagm(ones(ndofs(W)))
+    _mp_error(f) =
+        try
+            f()
+            nothing
+        catch e
+            e
+        end
+    for n in ((9, 11), (9, 33))
+        Ws = _mp_space(n, CpuSerial())
+        serial = _mp_error(() -> assemble!(_mp_diag(Ws), _mp_form(Ws)))
+        @test serial isa ArgumentError
+        msg = sprint(showerror, serial)
+        for _ in 1:8
+            W = _mp_space(n, CpuPolyester())
+            a = _mp_form(W)
+            core = _mp_error(() -> Bramble._assemble_bilinear_parallel_core!(
+                _mp_diag(W), a.trial_space, a.test_space, a.ast))
+            whole = _mp_error(() -> assemble!(_mp_diag(W), a))
+            @test core isa ArgumentError && sprint(showerror, core) == msg
+            @test whole isa ArgumentError && sprint(showerror, whole) == msg
+        end
+        # The threads the failed sweeps reserved were released: a sweep still assembles.
+        W = _mp_space(n, CpuPolyester())
+        @test assemble(_mp_form(W)) ≈ assemble(_mp_form(Ws))
     end
 end
 

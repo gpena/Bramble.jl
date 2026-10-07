@@ -255,8 +255,7 @@ applies them under.
 function _kron_axis_space(Ωₕ::MeshnD, d::Int)
     m = Ωₕ(d)
     execution_policy(backend(m)) isa CpuSerial && return gridspace(m)
-    return gridspace(Mesh1D(m.set, m.markers, m.indices, backend(eltype(m)), m.pts,
-        m.half_pts, m.half_spacings, m.spacings, m.collapsed, m.version))
+    return gridspace(_rebackend(m, backend(eltype(m)), identity))
 end
 
 """

@@ -25,32 +25,28 @@ keeps today's `1e-10` for `Float64` and widens it for `Float32` (gpena/Bramble.j
 that function for the measurement behind the constant. Passing `tol` explicitly uses it
 verbatim, with no further scaling.
 
-On a [`Mesh1D`](@ref), the default-tolerance (`tol === nothing`) answer is cached against the
-mesh's `version` (gpena/Bramble.jl#332): a repeated call on a mesh that has not mutated since
-the last check is O(1) instead of rescanning every spacing. Passing `tol` explicitly always
-recomputes and never reads or writes the cache.
+On a [`Mesh1D`](@ref), the default-tolerance (`tol === nothing`) answer is the `uniform` flag
+its [`Mesh1DState`](@ref) stores, computed whenever the points change
+(gpena/Bramble.jl#332, #437): O(1), and the mesh is never written. Passing `tol` explicitly
+always rescans the spacings.
 """
 function is_uniform(Ωₕ::AbstractMeshType{1}; tol = nothing)
-    if tol === nothing && Ωₕ._uniform_cache_version == _mesh_version(Ωₕ)
-        return Ωₕ._uniform_cache
-    end
-
+    tol === nothing && return _stored_uniform(Ωₕ)
     h = host_spacings(Ωₕ)
     n = length(h)
-    result = if n <= 1
-        true
-    else
-        h_ref = h[1]
-        atol = tol === nothing ? _default_is_uniform_tol(eltype(Ωₕ), h_ref, n) : tol
-        _uniform_scan(h, h_ref, atol, n)
-    end
+    n <= 1 && return true
+    return _uniform_scan(h, h[1], tol, n)
+end
 
-    if tol === nothing
-        Ωₕ._uniform_cache = result
-        Ωₕ._uniform_cache_version = _mesh_version(Ωₕ)
-    end
+@inline _stored_uniform(Ωₕ::AbstractMeshType{1}) = _walk_mesh(Ωₕ(1)).uniform
 
-    return result
+# The default-tolerance answer for the host spacings `h` of a mesh of element type `T`: what a
+# `Mesh1DState` stores as `uniform`.
+@inline function _uniform_default_tol(h, ::Type{T}) where {T}
+    n = length(h)
+    n <= 1 && return true
+    h_ref = h[1]
+    return _uniform_scan(h, h_ref, _default_is_uniform_tol(T, h_ref, n), n)
 end
 
 @inline function _uniform_scan(h, h_ref, atol, n)
