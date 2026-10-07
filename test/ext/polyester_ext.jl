@@ -1589,7 +1589,8 @@ _se_kernel(c) = i -> c[1] * i + 1
     # Every slot of the type taken: the sweeps cross whole and box (on two or more
     # threads, where `@batch` boxes at all), and allocate nothing again once freed.
     refs = [PE._claim(held) for _ in 1:64]
-    @test all(r -> r.id == id, refs) && allunique(r -> r.key, refs)
+    @test all(r -> r.id == id, refs)
+    @test allunique(r -> r.key, refs)
     @test PE._claim(f).id == 0
     @test sweeps_agree(_se_kernel([0.25]))
     vb = zeros(n)
@@ -1607,7 +1608,9 @@ _se_kernel(c) = i -> c[1] * i + 1
     PE._retire(gone)
     @test PE._slots_quiescent() && PE._take(gone) === held
     rest = [PE._claim(held) for _ in 1:63]
-    @test all(r -> r.id == id && r.key != gone.key, rest) && PE._claim(f).id == 0
+    @test all(r -> r.id == id, rest)
+    @test gone.key ∉ [r.key for r in rest]
+    @test PE._claim(f).id == 0
     @test sweeps_agree(_se_kernel([0.75]))
     foreach(PE._release, rest)
     @test PE._slots_quiescent() && PE._take(gone) === held && sweeps_agree(f)
