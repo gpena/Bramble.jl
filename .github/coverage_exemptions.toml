@@ -120,7 +120,7 @@ methods = [
     "half_points!(x::AbstractVector",
     "spacing!(x::AbstractVector",
     "half_spacing!(x::AbstractVector",
-    "_nonuniform_mesh1d_metrics!(Ωₕ::Mesh1D",
+    "_nonuniform_mesh1d_metrics!(Ωₕ::_Mesh1DLike",
     "_refine_indices_fill!(new_points::AbstractVector",
 ]
 reason = "device-only: each is the non-Array method a host Array never dispatches to, and each calls ka_device and a _launch_* function; no KernelAbstractions or Metal backend is in the test environment."
