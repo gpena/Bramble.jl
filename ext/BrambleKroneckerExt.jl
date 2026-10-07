@@ -717,10 +717,12 @@ function _schur_fallback(A::Matrix{C}, B::Matrix{C}) where {C}
         schur(A, B)
     catch e
         e isa LinearAlgebra.LAPACKException || rethrow()
+        # The libraries by name: `string(get_config())` can print only `LBTConfig(...)`.
+        libs = join((lib.libname for lib in LinearAlgebra.BLAS.get_config().loaded_libs),
+            ", ")
         throw(ArgumentError("fdm_solve: the generalised Schur factorisation (`xgges3`, info " *
-                            "$(e.info)) failed in the active LAPACK, " *
-                            "$(LinearAlgebra.BLAS.get_config()), and no OpenBLAS was found " *
-                            "to call instead"))
+                            "$(e.info)) failed in the active LAPACK, loaded from $libs, " *
+                            "and no OpenBLAS was found to call instead"))
     end
     return g.S, g.T, g.Q, g.Z
 end

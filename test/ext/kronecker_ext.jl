@@ -326,12 +326,16 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
         a = advection(W, Float64, 1e6, 2)
         F = boundary_rhs(W, Float64, ndofs(W))
         found = KronExt._OPENBLAS_GGES3[]
-        accelerate = occursin("Accelerate", string(LinearAlgebra.BLAS.get_config()))
+        # From the libraries' names: inside the suite `string(get_config())` can print only
+        # `LBTConfig(...)`, which would send an Accelerate run down the OpenBLAS branch.
+        accelerate = any(lib -> occursin("Accelerate", lib.libname),
+            LinearAlgebra.BLAS.get_config().loaded_libs)
         try
             KronExt._OPENBLAS_GGES3[] = (C_NULL, C_NULL)
             if accelerate
                 @test_throws ArgumentError fdm_solve(a, F; dirichlet = :boundary)
                 @test_throws "active LAPACK" fdm_solve(a, F; dirichlet = :boundary)
+                @test_throws "Accelerate" fdm_solve(a, F; dirichlet = :boundary)
             else
                 A = assemble(a; dirichlet = :boundary)
                 @test norm(fdm_solve(a, F; dirichlet = :boundary) - A \ F) <=
