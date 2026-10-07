@@ -55,8 +55,8 @@
 # cannot avoid on its own) but hurts `@batch`, which already does the equivalent split
 # internally -- chunking on top would split twice.
 #
-# Allocation. A warm `CpuPolyester` call allocates 0 B, on any grid, with one exception
-# (below). Polyester's argument box is the only source. `@batch` copies the arguments its
+# Allocation. A warm `CpuPolyester` call allocates 0 B, on any grid, bar the limits
+# below. Polyester's argument box is the only source. `@batch` copies the arguments its
 # loop captures into a `ManualMemory.Reference` on every call. The box is on the stack
 # when it holds only plain arrays and isbits values (arrays become `PtrArray`s), and on the
 # heap when it holds one GC reference. So no loop captures a form, a space, a mesh, a sink or
@@ -70,12 +70,20 @@
 # `_kron_host_rebuild`). The test file's "allocation under CpuPolyester" testset asserts
 # 0 B for each path.
 #
-# The exception is a user closure that captures an array, or holds data the split cannot
-# take. It crosses `@batch` whole and boxes, as it did before the split, so that a method
-# typed on `Vector` and an `isa Vector` branch in user code still see the `Vector` and not a
-# `PtrArray` (`_splits_kernel` below); an `avgₕ!` over such a closure measures 160 B, the
-# bound `_PA_BOX_CEILINGS` in that testset gives it. A
-# `BigFloat`, a `Dict` or a `String` in a form falls back to boxing the same way
+# A kernel the split cannot take apart (a user closure over an array, or data it cannot
+# split) crosses `@batch` whole, so that a method typed on `Vector` and an `isa Vector`
+# branch in user code still see the `Vector` and not a `PtrArray` (`_splits_kernel` below).
+# Whole, it would put a GC reference in the box and heap-allocate it. So the host stores the
+# kernel unchanged in a slot kept for its type and the loop captures only an isbits handle
+# to the slot (`_SlotRef`, `_handed` below): `avgₕ!` over such a closure allocates 0 B, and
+# each task reads the kernel back. A call claims its slot atomically, so concurrent calls
+# with one kernel type never share one, and gives it back after the join. A call that the
+# join does not finish normally (a Ctrl-C while the host waits) retires its slot: it stays
+# claimed for the rest of the session, because workers still running may read it.
+#
+# Boxing remains where no slot serves, and never gives a wrong result: an isbits kernel, a
+# kernel type arriving when 256 types already have slots, a call finding all 64 slots of its
+# type taken or retired, and a `BigFloat`, a `Dict` or a `String` in a form
 # (`_batch_splittable`). A task body runs under an exception guard (`@_task` below), so a
 # throw inside a task reaches the caller with `CpuSerial`'s exception type and text, never
 # as a crash. No `CpuPolyester` call reaches `Threads.@threads` or `Threads.@spawn`
