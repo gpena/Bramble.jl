@@ -72,11 +72,11 @@ end
 # the number of multigrid levels (0 elsewhere).
 # Every path allocates nothing at all under `CpuPolyester` (gpena/Bramble.jl#433,
 # gpena/Bramble.jl#437): what its loop captures crosses `@batch` as plain arrays and isbits
-# values, so Polyester's argument box stays on the stack. The one exception is listed here
-# with its bound: an `avgₕ!` source closure over an array crosses `@batch` whole, never split
-# (a rebuilt closure would capture a `PtrArray` in place of its `Vector`), so its kernel
-# boxes.
-const _PA_BOX_CEILINGS = Dict("avgₕ! closure" => 160)
+# values, so Polyester's argument box stays on the stack. An `avgₕ!` source closure over an
+# array is never split (a rebuilt closure would capture a `PtrArray` in place of its
+# `Vector`): its kernel reaches the tasks whole through a typed slot, and allocates nothing
+# either. A path that boxes would be listed here with its bound.
+const _PA_BOX_CEILINGS = Dict{String, Int}()
 
 # BEGIN _pa paths
 using Bramble: CpuPolyester, CpuSerial, CpuThreaded, change_points!, semidiscretize_rhs,
@@ -1541,18 +1541,96 @@ _uc_typed(c::Vector{Float64}, x) = c[1] * x[1] + c[2] * x[2]^2
         end
     end
 
-    # The box such a closure's sweep allocates, warm: what it allocated before
-    # gpena/Bramble.jl#433 (64 B plain, 80 B masked or composite), never more. Silent on a
-    # single thread, where `@batch` runs serially.
+    # Such a closure's sweep allocates nothing warm: its kernel reaches the tasks through a
+    # typed slot, not Polyester's argument box (gpena/Bramble.jl#476). Silent on a single
+    # thread, where `@batch` runs serially.
     # Fresh names: `u` and `W` are assigned inside the `map` above, so reusing them here
     # would box them and measure the box.
     if Threads.nthreads() >= 2
         wb = _uc_space(CpuPolyester())
         eb, evb = element(wb), element(wb × wb)
-        @test _pa_bytes(() -> Rₕ!(eb, typed)) <= 64
-        @test _pa_bytes(() -> Rₕ!(eb, typed; markers = (:right,))) <= 80
-        @test _pa_bytes(() -> Rₕ!(evb, x -> (typed(x), x[2]))) <= 80
+        @test _pa_bytes(() -> Rₕ!(eb, typed)) == 0
+        @test _pa_bytes(() -> Rₕ!(eb, typed; markers = (:right,))) == 0
+        @test _pa_bytes(() -> Rₕ!(evb, x -> (typed(x), x[2]))) == 0
+        @test _pa_bytes(() -> avgₕ!(eb, typed)) == 0
+        @test _pa_bytes(() -> avgₕ!(eb, typed; markers = (:right,))) == 0
+        @test _pa_bytes(() -> avgₕ!(evb, x -> (typed(x), x[2]))) == 0
     end
+end
+
+# A kernel crossing `@batch` whole reaches the tasks through a typed slot
+# (gpena/Bramble.jl#476). The slot table's limits fall back to crossing whole, never to a
+# wrong result: every slot of the kernel's type taken, a slot retired by an interrupted
+# call (never handed out again, still holding its kernel), and a full type table. The
+# covering, slab, per-index and scatter sweeps each equal `CpuSerial`'s in every case.
+_se_kernel(c) = i -> c[1] * i + 1
+@testset "slot exhaustion falls back" begin
+    PE = Base.get_extension(Bramble, :BramblePolyesterExt)
+    n = 200
+    function sweeps_agree(f)
+        ok = true
+        for idxs in (1:n, 3:(n - 2), 2:3:n)
+            vp, vs = zeros(n), zeros(n)
+            Bramble._sweep_for!(CpuPolyester(), vp, idxs, f)
+            Bramble._sweep_for!(CpuSerial(), vs, idxs, f)
+            ok &= vp == vs && count(!iszero, vp) == length(idxs)
+            sp, ss = zeros(n), zeros(n)
+            Bramble._sweep_scatter_for!(CpuPolyester(), (sp,), idxs, i -> (f(i),))
+            Bramble._sweep_scatter_for!(CpuSerial(), (ss,), idxs, i -> (f(i),))
+            ok &= sp == ss && count(!iszero, sp) == length(idxs)
+        end
+        return ok
+    end
+    f, held = _se_kernel([0.5]), _se_kernel([9.0])
+    @test sweeps_agree(f)
+    id = PE._slots_id(typeof(f))
+    @test id > 0 && PE._slots_quiescent()
+
+    # Every slot of the type taken: the sweeps cross whole and box (on two or more
+    # threads, where `@batch` boxes at all), and allocate nothing again once freed.
+    refs = [PE._claim(held) for _ in 1:64]
+    @test all(r -> r.id == id, refs) && allunique(r -> r.key, refs)
+    @test PE._claim(f).id == 0
+    @test sweeps_agree(_se_kernel([0.25]))
+    vb = zeros(n)
+    if Threads.nthreads() >= 2
+        @test _pa_bytes(() -> Bramble._sweep_for!(CpuPolyester(), vb, 1:n, f)) > 0
+    end
+    foreach(PE._release, refs)
+    @test PE._slots_quiescent()
+    if Threads.nthreads() >= 2
+        @test _pa_bytes(() -> Bramble._sweep_for!(CpuPolyester(), vb, 1:n, f)) == 0
+    end
+
+    # A retired slot keeps its kernel and is never claimed again.
+    gone = PE._claim(held)
+    PE._retire(gone)
+    @test PE._slots_quiescent() && PE._take(gone) === held
+    rest = [PE._claim(held) for _ in 1:63]
+    @test all(r -> r.id == id && r.key != gone.key, rest) && PE._claim(f).id == 0
+    @test sweeps_agree(_se_kernel([0.75]))
+    foreach(PE._release, rest)
+    @test PE._slots_quiescent() && PE._take(gone) === held && sweeps_agree(f)
+
+    # A full type table: a new kernel type gets no slots and crosses whole.
+    ids = @atomic PE._SLOT_TABLE.ids
+    full = copy(ids)
+    k = 0
+    while length(full) < PE._SLOT_TYPES
+        k += 1
+        full[Val{(:filler, k)}] = id
+    end
+    fresh = let c = [1.5]
+        i -> c[1] * i - 2
+    end
+    try
+        @atomic PE._SLOT_TABLE.ids = full
+        @test PE._slots_id(typeof(fresh)) == 0
+        @test sweeps_agree(fresh)
+    finally
+        @atomic PE._SLOT_TABLE.ids = ids
+    end
+    @test PE._slot_types() == length(ids) && PE._slots_quiescent()
 end
 
 # A stencil entry missing from the matrix's pattern throws inside the searching sweep's
