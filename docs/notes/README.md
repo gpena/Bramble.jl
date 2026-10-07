@@ -20,6 +20,8 @@ blocks. Everything else lives here:
 - **Machine-dependent figures**: `*.measurements.md` hold the timings, speedup ratios,
   crossover sizes and memory sizes taken out of the page with the same name, and
   `docstrings.measurements.md` those taken out of docstrings.
+- **CI run time**: `ci-run-time.md` profiles the `Forms` testset per file in a warm CI run,
+  gives the cause, the shard boundary and the OpenEXR cache finding (gpena/Bramble.jl#480).
 
 The other worked examples stay in `docs/src/examples/` as `.jl` scripts, where the
 `examples` test group runs them; `docs/make.jl` no longer turns them into pages.

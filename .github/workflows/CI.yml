@@ -47,7 +47,7 @@ jobs:
   test:
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch' }}
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.shard }}
     runs-on: ${{ matrix.os }}
     # One version, and it gates: 1.13, current release since 2026-09-10, is the Julia a
     # push has to pass on. It replaced the `~1.13.0-0` canary leg that sat here while
@@ -59,6 +59,16 @@ jobs:
     # architecture-dependent. Linux runs the same code daily in nightly.yml's `slow` job, on
     # the same Julia 1.13, so a Linux-only break is caught within the day rather than not at
     # all.
+    #
+    # Ubuntu was measured for #480 and not adopted. On PR run 37626129647 (commit e5a1a939)
+    # the shards took 14m03s (forms-1), 11m54s (forms-2) and 14m18s (rest) on macOS, and
+    # 13m49s, 7m25s and 12m59s on ubuntu: the slowest ubuntu shard is 3% under the slowest
+    # macOS one, not the 20% that would justify switching. Nightly's `slow` test step, same
+    # commit on both platforms, took 40m35s on macOS and 36m29s on ubuntu (run
+    # 37318618310), then 40m55s and 41m47s (run 37465825322). Switching needs ubuntu
+    # markedly faster (slowest shard at least 20% under macOS, over the PR run and nightly
+    # both) and no `avgₕ!` allocation failure on nightly's ubuntu leg; otherwise stay.
+    # Detail: docs/notes/ci-run-time.md.
     #
     # There is a specific thing that Linux leg is watching for, and it is the reason it
     # lives on a cadence rather than on the gate: a Linux-only allocation flake in `avgₕ!`
@@ -83,6 +93,12 @@ jobs:
         # `1.13` tracks released 1.13.x and nothing else.
         version: ["1.13"]
         os: [macOS-latest]
+        # The unit group split into three parallel jobs, each running one shard of it (see
+        # BRAMBLE_TEST_SHARD in test/TestUtils.jl), so the gate takes about the longest
+        # shard plus precompile instead of the whole group. Three, not two: two would leave
+        # `Forms` alone near 22 minutes, over the 20-minute bar. `CI result` aggregates
+        # every leg, so the required check is unchanged.
+        shard: [forms-1, forms-2, rest]
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -134,6 +150,12 @@ jobs:
           key: julia-cache;unit-and-slow;julia=1.13;os=${{ runner.os }};
           restore-keys: julia-cache;unit-and-slow;julia=1.13;os=${{ runner.os }};
       # As julia-actions/cache does: a restored registry may be older than a compat bump.
+      # The update also moves a PR off nightly's resolution: no Manifest is committed, so it
+      # resolves to whatever was released after nightly saved the cache (run 37341936090
+      # installed OpenEXR_jll v3.4.16+0 after restoring nightly 37318618310's cache), and
+      # those packages and their dependents precompile again. That is why a warm run can
+      # still precompile a few dependencies. Pinning would need a committed Manifest or a
+      # stale registry, which breaks the first PR after a compat bump, so it stays.
       - name: Update any cached registries
         continue-on-error: true
         run: |
@@ -164,6 +186,7 @@ jobs:
       - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
           BRAMBLE_TEST_GROUP: unit
+          BRAMBLE_TEST_SHARD: ${{ matrix.shard }}
           # 5, below this macOS runner's 7 GB, so a blow-up fails by name (see TestUtils.jl)
           # before the runner just kills the job. Coverage is on here, as it was by default.
           BRAMBLE_TEST_MAXRSS_GB: 5
