@@ -87,6 +87,8 @@ benchmark/*
 !benchmark/operator_routes.jl
 # v3.26.0 Schur vs eigenvector route across a Peclet sweep (gpena/Bramble.jl#443)
 !benchmark/schur_peclet.jl
+# v3.26.0 fdm_preconditioner iteration-count ladder (gpena/Bramble.jl#444)
+!benchmark/fdm_preconditioner_ladder.jl
 # v3.21.0 saved results of the standalone scripts, one TOML per script (gpena/Bramble.jl#372)
 !benchmark/results/
 !benchmark/baselines/
