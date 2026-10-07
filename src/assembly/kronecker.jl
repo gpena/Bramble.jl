@@ -327,11 +327,12 @@ function KroneckerLinearOperator{T, D, TermsT, P}(
     return KroneckerLinearOperator{T, D, TermsT, P, Nothing}(terms, dims, n, policy, nothing, 0)
 end
 
-# Whether `K`'s factors still describe its mesh: one integer comparison against the mesh's
-# current `_mesh_version`, the one a space's `weights` makes (`scalar_gridspace.jl`).
+# Whether `K`'s factors still describe its mesh: one integer comparison against the version
+# of the mesh's current state (`_walk_mesh`), the one a space's `weights` makes
+# (`scalar_gridspace.jl`).
 @inline _kron_is_fresh(K::KroneckerLinearOperator) = _kron_is_fresh(K.mesh, K.version)
 @inline _kron_is_fresh(::Nothing, ::Int) = true
-@inline _kron_is_fresh(Ω::AbstractMeshType, version::Int) = version == _mesh_version(Ω)
+@inline _kron_is_fresh(Ω::AbstractMeshType, version::Int) = version == _mesh_version(_walk_mesh(Ω))
 @inline function _kron_check_fresh(K)
     _kron_is_fresh(K) || _throw_kron_stale()
     return nothing
@@ -563,7 +564,7 @@ end
 # mesh itself and `_kron_to_storage` is the identity.
 function _kron_cache(Ω::AbstractMeshType{D}) where {D}
     Ωₕ = _host_mirror_mesh(Ω)
-    version = _mesh_version(Ω)
+    version = _mesh_version(_walk_mesh(Ω))
     mass = ntuple(d -> Diagonal(weights(_kron_axis_space(Ωₕ, d), Innerh())), Val(D))
     seen = ntuple(_ -> Any[], Val(D))
     return (; Ω, version, Ωₕ, mass, seen)

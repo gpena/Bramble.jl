@@ -1,41 +1,52 @@
 # ext/BramblePolyesterExt.jl: the Polyester-batched sweeps behind `CpuPolyester`.
 #
-# Nine hooks in `src/` are `@noinline` methods that error naming Polyester
-# (`src/utils/linear_algebra.jl`, `src/assembly/bilinear_execution.jl`, `src/assembly/linear.jl`):
-# `_batch_for!`, `_batch_axis_for!`, `_batch_scatter_for!`, `_batch_dot`, `_batch_dot_masked`,
-# `_batch_bilinear_colour_sweep!`, `_batch_bilinear_band_sweep!`, `_batch_linear_colour_sweep!`
-# and `_batch_linear_band_sweep!`. Every one of them is the `Polyester.@batch` counterpart of
-# an existing `Threads.@threads` body, called from the identical call site once `execution_policy`
-# resolves to `CpuPolyester()` instead of `CpuThreaded()` -- so the colouring, the band splitting and,
-# critically, the matrix/vector zeroing that happens in the *callers* (`_assemble_bilinear!`,
-# `assemble_parallel!`, `_assemble_linear!`) are untouched by this file: this only supplies what
-# runs once the caller has already zeroed and dispatched.
+# Nineteen hooks in `src/` are `@noinline` methods that error naming Polyester. This file
+# defines each of them, as the `Polyester.@batch` counterpart of an existing
+# `Threads.@threads` body, called from the identical call site once `execution_policy`
+# resolves to `CpuPolyester()` instead of `CpuThreaded()`. The colouring, the band splitting
+# and, critically, the matrix/vector zeroing that happens in the *callers*
+# (`_assemble_bilinear!`, `assemble_parallel!`, `_assemble_linear!`) are untouched by this
+# file: it only supplies what runs once the caller has already zeroed and dispatched.
 #
-# Three more hooks have the same shape in
-# `src/operators/difference.jl`/`src/operators/average.jl`: `_batch_difference_engine!`,
-# `_batch_average_engine!` and `_batch_centered_average_engine!`, each the `@batch` counterpart of
-# `_threaded_difference_engine!`/`_threaded_average_engine!`/`_threaded_centered_average_engine!`,
-# running one `_difference_band!`/`_average_band!`/`_centered_average_band!` per band.
+# `src/utils/linear_algebra.jl`: `_batch_for!`, `_batch_axis_for!`, `_batch_scatter_for!`,
+# `_batch_dot` and `_batch_dot_masked`.
+#
+# `src/assembly/bilinear_execution.jl`: `_batch_bilinear_colour_sweep!` and
+# `_batch_bilinear_band_sweep!`, and their warmed-refill counterparts
+# `_batch_bilinear_colour_replay!` and `_batch_bilinear_band_replay!`.
+#
+# `src/assembly/linear.jl`: `_batch_linear_colour_sweep!` and `_batch_linear_band_sweep!`.
+#
+# `src/operators/difference.jl` and `src/operators/average.jl`: `_batch_difference_engine!`,
+# `_batch_average_engine!` and `_batch_centered_average_engine!`, each the `@batch`
+# counterpart of `_threaded_difference_engine!`/`_threaded_average_engine!`/
+# `_threaded_centered_average_engine!`, running one
+# `_difference_band!`/`_average_band!`/`_centered_average_band!` per band.
+#
+# `src/operators/vector_calculus.jl`: `_batch_run_bands!`, the `@batch` counterpart of
+# `_run_bands!`'s `CpuThreaded` arm, reached by the divergence, curl and strain-average
+# engines. Unlike the three engine hooks, it stays generic over the band function `f`.
+#
+# `src/assembly/matrix_free.jl`: `_batch_mf_bands!`, the fused matrix-free product, one band
+# per `@batch` task.
+#
+# `src/space/vectorelement.jl`: `_batch_broadcast!`, one `_broadcast_band!` per band of a
+# fused broadcast.
+#
+# `src/assembly/kronecker.jl`: `_batch_kron_lines!`, which runs a `KroneckerLinearOperator`
+# product's grid lines under `@batch` when the operator's own policy is `CpuPolyester`.
+#
+# `src/problems/semidiscrete_rhs.jl`: `_batch_csr_spmv!`, which runs the explicit
+# right-hand side's product `du .-= A u` one compressed row per `@batch` iteration.
 #
 # A warmed refill replays recorded `nzval` positions instead of searching, gated per unit by
 # `_threaded_replay_policy`; only `CpuThreaded` answers `true` in `src/`.
 # This file's `_threaded_replay_policy(::CpuPolyester) = true` opts `CpuPolyester` in, and
 # `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` are the `@batch` counterparts
-# of `_batch_bilinear_band_sweep!`/`_batch_bilinear_colour_sweep!` above, reached instead of
+# of `_batch_bilinear_band_sweep!`/`_batch_bilinear_colour_sweep!`, reached instead of
 # them once a unit's leaf can replay (`_leaf_replays`, bilinear_execution.jl): the colouring is
 # identical, only `_replay_point!` (reads the recording) stands in for `_scatter_point!`
 # (searches).
-#
-# One more hook lives in `src/operators/vector_calculus.jl`:
-# `_batch_run_bands!`, the `@batch` counterpart of `_run_bands!`'s `CpuThreaded` arm, reached
-# by the divergence, curl and strain-average engines. Unlike the three hooks above, it stays
-# generic over the band function `f` instead of naming one.
-#
-# `src/assembly/kronecker.jl` has `_batch_kron_lines!`, which runs a `KroneckerLinearOperator`
-# product's grid lines under `@batch` when the operator's own policy is `CpuPolyester`.
-#
-# `src/problems/semidiscrete_rhs.jl` has `_batch_csr_spmv!`, which runs the explicit
-# right-hand side's product `du .-= A u` one compressed row per `@batch` iteration.
 #
 # `Polyester.@batch` accepts a `CartesianIndices` directly (`closure.jl`'s own `splitloop`
 # already splits it along its last axis, the same trick `_threaded_axis_for!` hand-rolls for
@@ -44,24 +55,31 @@
 # cannot avoid on its own) but hurts `@batch`, which already does the equivalent split
 # internally -- chunking on top would split twice.
 #
-# Allocation bound: a warm `CpuPolyester` call allocates a small constant amount per call,
-# independent of the grid (the same on a 33² and a 513² grid). The cause is
-# Polyester's argument box: `@batch` copies the arguments its loop captures into a
-# heap-allocated `ManualMemory.Reference` on every call, sized by what the loop captures.
-# Plain arrays become `PtrArray`s, which allocate nothing. Measured on a 2D non-uniform grid
-# with 4 threads, every box is at most 512 B.
-# Differences, shifts, averages, divergence, curl, `εₕ!`, `avgₕ!`, broadcasts, `innerₕ` and
-# `inner₊` allocate 0 B, and so does a `KroneckerLinearOperator` product. Their loops capture
-# only plain arrays and isbits values, rebuilding any struct around them inside each task
-# (`_batch_kron_lines!`, `_batch_broadcast!`, `_batch_for!` below), so the box stays on the
-# stack. Linear assembly allocates 256 B; a fused matrix-free product 112 B; a bilinear
-# refill 1520 B (five colour sweeps of 304 B each); a per-unit matrix-free product 1088 B, a
-# GMG V-cycle 1008 B per level, an explicit RHS 256 B. Those loops capture a form or another
-# struct holding a GC reference, which puts the box on the heap; this release keeps the
-# 512 B bound for them and gpena/Bramble.jl#437 follows up. An `avgₕ!` whose source closure
-# captures an array, and a broadcast with a 0-dimensional array leaf, box likewise. The test
-# file's `_PA_ZERO_PATHS` asserts 0 B for the first group. No `CpuPolyester` call reaches
-# `Threads.@threads` or `Threads.@spawn` (gpena/Bramble.jl#400).
+# Allocation. A warm `CpuPolyester` call allocates 0 B, on any grid, with one exception
+# (below). Polyester's argument box is the only source. `@batch` copies the arguments its
+# loop captures into a `ManualMemory.Reference` on every call. The box is on the stack
+# when it holds only plain arrays and isbits values (arrays become `PtrArray`s), and on the
+# heap when it holds one GC reference. So no loop captures a form, a space, a mesh, a sink or
+# a `SparseMatrixCSC` whole. Bramble's own kernels and walk arguments go through
+# `_batch_split` (`src/utils/batch_split.jl`): the arrays cross as top-level loop arguments,
+# the rest as an isbits skeleton, and each task calls `_batch_rebuild` on them
+# (`_batch_for!`, the replay, linear and bilinear sweeps, `_batch_mf_bands!`). The loops
+# that never held a struct (the engines, `_batch_run_bands!`, `_batch_dot`,
+# `_batch_csr_spmv!`) capture only arrays and isbits values, and `_batch_broadcast!` and
+# `_batch_kron_lines!` rebuild their light structs inside each task (`_bc_host_rebuild`,
+# `_kron_host_rebuild`). The test file's "allocation under CpuPolyester" testset asserts
+# 0 B for each path.
+#
+# The exception is a user closure that captures an array, or holds data the split cannot
+# take. It crosses `@batch` whole and boxes, as it did before the split, so that a method
+# typed on `Vector` and an `isa Vector` branch in user code still see the `Vector` and not a
+# `PtrArray` (`_splits_kernel` below); an `avgₕ!` over such a closure measures 160 B, the
+# bound `_PA_BOX_CEILINGS` in that testset gives it. A
+# `BigFloat`, a `Dict` or a `String` in a form falls back to boxing the same way
+# (`_batch_splittable`). A task body runs under an exception guard (`@_task` below), so a
+# throw inside a task reaches the caller with `CpuSerial`'s exception type and text, never
+# as a crash. No `CpuPolyester` call reaches `Threads.@threads` or `Threads.@spawn`
+# (gpena/Bramble.jl#400).
 module BramblePolyesterExt
 
 using Bramble
@@ -70,72 +88,14 @@ using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
                CpuPolyester, _ReplayTarget, _ActionTarget, _replay_point!, _difference_band!,
                _average_band!, _centered_average_band!, _broadcast_band!, _kron_line_init!,
                _kron_line_terms!, _kron_host_raw, _kron_host_rebuild, _bc_host_raw,
-               _bc_host_rebuild, _AvgKernel, __prod
+               _bc_host_rebuild, _MaskedKernel, __prod, _RₕKernel, _AvgKernel, _AvgScatterKernel,
+               ReplaySink, _PairReplaySink, _DiagonalReplayTarget, ActionSink,
+               _PairActionSink, _batch_split, _batch_rebuild, _MFFusedPlan, _MFPass,
+               _MF_BAND, _MF_NO_COLLECT, _mf_apply_parts!, _mf_host_ast, _batch_splittable,
+               _ScatterCSC, SparseMatrixCSC
 using Polyester: Polyester, @batch
 using LinearAlgebra: mul!
 using PrecompileTools: @setup_workload, @compile_workload
-
-# --- _batch_for!/_batch_axis_for! (src/utils/linear_algebra.jl) -------------------- #
-#
-# Direct translations of `_threaded_for!`/`_threaded_axis_for!`'s bodies: `idxs` is whatever
-# `_sweep_for!` was handed (a linear range for `_batch_for!`, a `CartesianIndices` for
-# `_batch_axis_for!`), and `@batch` partitions it without any conversion of its own. 
-
-#
-# `v::AbstractArray` (rather than an unconstrained `v`) so each of these is a genuine
-# specialisation of its `src/` stub, not a redefinition of the identical, fully unconstrained
-# signature -- precompilation refuses that ("Method overwriting is not permitted"), the same
-# reason `ext/BrambleSparseMatricesCSRExt.jl` bounds its own `_csr_backend` with `T <: Number`.
-#
-# `_batch_for!` hands `@batch` the kernel through `_for_host_raw`, so a kernel struct that
-# holds arrays crosses as a tuple of them and each task rebuilds it (`_for_host_rebuild`),
-# as `_batch_kron_lines!` below does for its factors. A struct captured whole holds GC
-# references, which put Polyester's argument box on the heap (160 B per `avgₕ!` call).
-# Only `avgₕ!`'s `_AvgKernel` has a raw form; any other kernel crosses as it is. So does an
-# `_AvgKernel` whose source function holds a GC reference (a closure over an array): the box
-# goes on the heap either way, and the raw tuple is the bigger one (16 B more per call).
-struct _AvgRaw end
-
-_for_host_raw(f) = f
-function _for_host_raw(k::_AvgKernel{F}) where {F}
-    isbitstype(F) || return k
-    return (_AvgRaw(), k.f, k.x, k.idxs, k.nodes, k.wts)
-end
-
-@inline _for_host_rebuild(f) = f
-@inline _for_host_rebuild(r::Tuple{_AvgRaw, Vararg}) = _AvgKernel(Base.tail(r)...)
-
-function Bramble._batch_for!(v::AbstractArray, idxs, f)
-    raw = _for_host_raw(f)
-    @batch for idx in idxs
-        k = _for_host_rebuild(raw)
-        @inbounds v[idx] = k(idx)
-    end
-    return nothing
-end
-
-function Bramble._batch_axis_for!(v::AbstractArray, idxs::CartesianIndices, f)
-    @batch for I in idxs
-        @inbounds v[I] = f(I)
-    end
-    return nothing
-end
-
-# --- _batch_scatter_for! (src/utils/linear_algebra.jl) ------------------------------ #
-#
-# Mirrors `_threaded_scatter_for!`: `g` is evaluated once per index and its tuple of results
-# is unpacked into every destination array in `mats` by `_write_components!` (unrolled at
-# compile time, so this stays a single scalar write per component, not a tuple allocation).
-
-# `idxs::AbstractRange` specialises this past the stub's fully unconstrained signature
-# (`_batch_scatter_for!(mats::Tuple, idxs, g)`); the only caller (`project!`,
-# operators/projection.jl) always passes `1:n`.
-function Bramble._batch_scatter_for!(mats::Tuple, idxs::AbstractRange, g)
-    @batch for idx in idxs
-        @inbounds _write_components!(mats, g(idx), idx)
-    end
-    return nothing
-end
 
 # --- _batch_dot/_batch_dot_masked (src/utils/linear_algebra.jl) -------------------- #
 #
@@ -251,6 +211,345 @@ function Bramble._batch_dot_masked(
     return s
 end
 
+# --- Exceptions inside the split hooks' tasks ---------------------------------------- #
+#
+# An exception thrown inside a `@batch` task must not leave it. When the host's own chunk
+# throws, Polyester's `batch.jl` skips waiting on the worker tasks and ends the
+# `GC.@preserve` around their `PtrArray`s while they still run (a segfault in 8 of 12 runs of
+# a missing-pattern sweep), and never frees the threads it reserved. So each split hook's
+# task body catches, records the failure in an isbits `|` reduction (a scalar Polyester
+# keeps in its task buffers, so success allocates nothing, where a flag array would be one
+# allocation per call), and once `@batch` has joined every task the host reruns the same
+# iterations in order on the original arguments. That raises the exception of the first
+# iteration that fails, as a serial sweep of the same colour or band would. Work that threw
+# in a task but not on the host is still refused rather than returned.
+#
+# `@_task function f!(args...) ... end` defines the task's work `f!` and its guard
+# `f_threw(args...)`, both `@noinline`; the guard runs `f!` inside the `try` and returns
+# whether it threw. LLVM compiles a function that calls `setjmp` conservatively, so the walk
+# stays out of it: a `try` around the walk inlined into the `@batch` body ran a 65² fused
+# product 1.2x slower (3.0 against 2.5 µs, 4 threads).
+macro _task(def)
+    call = def.args[1]
+    name, args = call.args[1], call.args[2:end]
+    guard = Symbol(chopsuffix(string(name), "!"), "_threw")
+    return esc(quote
+        @noinline $def
+        @noinline function $guard($(args...))
+            try
+                $name($(args...))
+            catch
+                return true
+            end
+            return false
+        end
+    end)
+end
+
+@noinline function _rerun_on_host(f::F, iter) where {F}
+    foreach(f, iter)
+    throw(ErrorException("a CpuPolyester task threw, but its work did not throw again \
+        when rerun on the host"))
+end
+
+# --- _batch_for!/_batch_axis_for! (src/utils/linear_algebra.jl) -------------------- #
+#
+# The counterparts of `_threaded_for!`/`_threaded_axis_for!`: `v[i] = f(i)` over `idxs`, a
+# linear range for `_batch_for!` and a `CartesianIndices` for `_batch_axis_for!`, one band of
+# `Threads.nthreads()` per `@batch` task (`_for_fill!`: a slab of the range, or of the last
+# axis of the `CartesianIndices`, as `Polyester` splits it itself).
+#
+# `v::AbstractArray` (rather than an unconstrained `v`) so each of these is a genuine
+# specialisation of its `src/` stub, not a redefinition of the identical, fully unconstrained
+# signature -- precompilation refuses that ("Method overwriting is not permitted"), the same
+# reason `ext/BrambleSparseMatricesCSRExt.jl` bounds its own `_csr_backend` with `T <: Number`.
+#
+# A kernel Bramble defines does not cross `@batch` whole: `_RₕKernel` holds the mesh and a
+# `_MaskedKernel` its `BitVector`s, and any GC reference puts Polyester's argument box on the
+# heap. `v` crosses as a top-level loop argument and the kernel as one `_batch_split`
+# (`_split_or_whole` below), each task rebuilding it around the `PtrArray`s: the mesh as its
+# walk state, the `_AvgKernel`/`_AvgScatterKernel` quadrature arrays and the weight build's
+# `Fix1(__prod, factors)` vectors in place. A `_MaskedKernel`'s masks first become their
+# 64-bit word vectors (`_for_host_raw`), each rebuilt as `_ChunkBits`, a bit test over the
+# words. A single-iteration `@batch` runs its body inline on the plain `Vector`s, which the
+# rebuild accepts as well.
+#
+# Only those kernel types split (`_splits_kernel`), and only around a user function with
+# nothing to split (isbits: no captured arrays). A user closure over an array crosses whole
+# with its kernel and boxes, as before gpena/Bramble.jl#433: rebuilt, it would capture a
+# `PtrArray` in place of its `Vector`, which a method typed on `Vector` rejects and an
+# `isa Vector` branch reads differently. So does any other kernel, and a kernel the split
+# cannot take apart (a `BigFloat` target). A throwing kernel (a user function evaluated per
+# point) is caught in the task and rerun on the host (`@_task` below), so its exception
+# reaches the caller unchanged. A kernel crossing whole takes `_batch_for_whole!`, an index
+# collection other than a unit range or a `CartesianIndices` (a `Vector{Int}`, a stepped
+# range) a per-index `@batch`.
+#
+# The kernel argument is `::F where {F}` because `Base.Fix1 <: Function`: Julia does not
+# specialise on an unannotated `Function` argument it only passes on, so the split was
+# built from an abstractly typed kernel and boxed on the heap on every weight build.
+
+# One mask's 64-bit words, indexed as the `BitVector` they came from (`_mask_bit` below).
+struct _ChunkBits{C}
+    chunks::C
+end
+@inline Base.getindex(b::_ChunkBits, i::Int) = _mask_bit((b.chunks,), i)
+
+_for_host_raw(f) = f
+function _for_host_raw(k::_MaskedKernel{K, <:Tuple{Vararg{BitVector}}}) where {K}
+    return _MaskedKernel(k.kernel, map(m -> _ChunkBits(m.chunks), k.masks), k.zeroval)
+end
+
+# Whether a kernel of type `K` crosses `@batch` split: one Bramble defines, around a user
+# function `F` that is isbits. A type test, so it folds.
+_splits_kernel(::Type) = false
+_splits_kernel(::Type{<:_RₕKernel{F}}) where {F} = isbitstype(F)
+_splits_kernel(::Type{<:_AvgKernel{F}}) where {F} = isbitstype(F)
+_splits_kernel(::Type{<:_AvgScatterKernel{F}}) where {F} = isbitstype(F)
+_splits_kernel(::Type{<:Base.Fix1{typeof(__prod), <:Tuple{Vararg{AbstractVector}}}}) = true
+_splits_kernel(::Type{<:_MaskedKernel{K}}) where {K} = _splits_kernel(K)
+
+# The kernel as the tasks receive it: split when `_splits_kernel` allows it, whole otherwise.
+@inline function _kernel_parts(f::F, hot...) where {F}
+    raw = _for_host_raw(f)
+    _splits_kernel(F) && return _split_or_whole(raw, hot...)
+    return _Whole(), raw
+end
+
+# Band `b` of `n` of `idxs`: a slab of a range, or of a `CartesianIndices`' last axis.
+@inline _slab(idxs::AbstractRange, n::Int, b::Int) = _band_range(idxs, n, b)
+@inline function _slab(idxs::CartesianIndices, n::Int, b::Int)
+    ax = idxs.indices
+    return CartesianIndices((Base.front(ax)..., _band_range(last(ax), n, b)))
+end
+
+# `v[i] = k(i)` over a slab, a `CartesianIndices` one walked as `Polyester` walks it, a plain
+# loop over its last axis around one over the others. A loop over the slab as one
+# `CartesianIndices` ran the weight build 1.3x slower at 1025² (210 against 160 µs, 4
+# threads).
+@inline function _fill_slab!(v, k::K, r::AbstractUnitRange) where {K}
+    for i in r
+        @inbounds v[i] = k(i)
+    end
+    return nothing
+end
+@inline function _fill_slab!(v, k::K, c::CartesianIndices) where {K}
+    ax = c.indices
+    inner = CartesianIndices(Base.front(ax))
+    for j in last(ax), J in inner
+
+        I = CartesianIndex(J, j)
+        @inbounds v[I] = k(I)
+    end
+    return nothing
+end
+@inline _for_fill!(v, k::K, idxs, n::Int, b::Int) where {K} = _fill_slab!(v, k, _slab(idxs, n, b))
+
+# Each task copies its destination and rebuilt kernel through a local `Ref` before the loop.
+# A task body reads its arguments through pointers, and LLVM reloads a field read that way
+# after every store through `v`, which might alias it: the weight build's fill reloaded both
+# vectors' pointers per point and took 163 µs at 1025² (4 threads, -O1), about what the
+# boxed parent took. Copied into the `Ref`, the fields load once and the same build ran in
+# 90 µs. Written out in each task, not behind a helper: inlined through
+# one, the `Ref` was elided and the reloads came back.
+@_task function _for_slab!(skel, arrays, v, idxs, n, b)
+    w, k = Ref((v, _rejoin(skel, arrays)))[]
+    _for_fill!(w, k, idxs, n, b)
+    return nothing
+end
+
+function _batch_for_bands!(v::AbstractArray, idxs::Union{AbstractUnitRange, CartesianIndices},
+        f::F) where {F}
+    _offset(v, idxs) && return _batch_for_each!(v, idxs, f)
+    skel, arrays = _kernel_parts(f, v)
+    skel isa _Whole && return _batch_for_whole!(v, idxs, arrays)
+    n = Threads.nthreads()
+    failed = false
+    @batch reduction=((|, failed),) for b in 1:n
+        failed |= _for_slab_threw(skel, arrays, v, idxs, n, b)
+    end
+    failed && _rerun_on_host(b -> _for_fill!(v, f, idxs, n, b), 1:n)
+    return nothing
+end
+
+# A whole kernel's loop runs one guarded slab per iteration, not one guarded index: a
+# guarded call per index ran an `avgₕ!` closure over an array 5% slower than the parent
+# of gpena/Bramble.jl#433. Its box should stay no bigger than the parent's, which captured
+# `v`, the kernel and `idxs`. When `idxs` covers `v` (every `Rₕ!`/`avgₕ!` sweep), the loop
+# runs over `Base.OneTo(Threads.nthreads())` and each task rebuilds its slab from `v`'s own
+# indices (`_full`), so it captures `v`, the kernel and that range, and no `idxs`. Any other
+# `idxs` crosses as `_Slabs`, the slabs as one loop range: that captures `idxs` plus the
+# index range `@batch` takes of any array it loops over, which makes the box larger than the
+# parent's. Looping over `1:n` with `idxs` captured would make it larger still.
+struct _Lin end
+struct _Cart end
+@inline _cover(v, idxs::AbstractUnitRange) = !Base.has_offset_axes(v) &&
+                                             idxs == Base.OneTo(length(v)) ? _Lin() : nothing
+@inline _cover(v, idxs::CartesianIndices) = idxs == CartesianIndices(v) ? _Cart() : nothing
+@inline _cover(v, idxs) = nothing
+@inline _full(v, ::_Lin) = Base.OneTo(length(v))
+@inline _full(v, ::_Cart) = CartesianIndices(size(v))
+
+struct _Slabs{T, R} <: AbstractVector{T}
+    idxs::R
+end
+_Slabs(idxs) = _Slabs{typeof(_slab(idxs, 1, 1)), typeof(idxs)}(idxs)
+Base.size(::_Slabs) = (Threads.nthreads(),)
+Base.@propagate_inbounds Base.getindex(s::_Slabs, b::Int) = _slab(
+    s.idxs, Threads.nthreads(), b)
+
+@_task function _whole_slab!(v, k, r)
+    _fill_slab!(v, k, r)
+    return nothing
+end
+
+@_task function _whole_part!(v, k, kind, b)
+    _fill_slab!(v, k, _slab(_full(v, kind), Threads.nthreads(), b))
+    return nothing
+end
+
+# `idxs` covering `v`, as `kind` says: the slabs rebuilt from `v` in each task.
+function _batch_for_cover!(v::AbstractArray, kind, k::K) where {K}
+    failed = false
+    @batch reduction=((|, failed),) for b in Base.OneTo(Threads.nthreads())
+        failed |= _whole_part_threw(v, k, kind, b)
+    end
+    failed && _rerun_on_host(b -> _fill_slab!(v, k, _slab(_full(v, kind),
+            Threads.nthreads(), b)), 1:Threads.nthreads())
+    return nothing
+end
+
+# A kernel crossing whole, unsplit, one slab per iteration behind the same guard.
+function _batch_for_whole!(v::AbstractArray, idxs, k::K) where {K}
+    kind = _cover(v, idxs)
+    kind === nothing || return _batch_for_cover!(v, kind, k)
+    failed = false
+    @batch reduction=((|, failed),) for r in _Slabs(idxs)
+        failed |= _whole_slab_threw(v, k, r)
+    end
+    failed && _rerun_on_host(r -> _fill_slab!(v, k, r), _Slabs(idxs))
+    return nothing
+end
+
+# Any other index collection (a `Vector{Int}`, a stepped range), and any destination or
+# index range with offset axes, which the slabs (`_band_range` counts positions from 1) and
+# the covering loop (`_full` rebuilds 1-based indices) would misplace: one index per
+# iteration, the kernel crossing whole, behind the same guard.
+@inline _offset(arrays...) = any(Base.has_offset_axes, arrays)
+
+@_task function _for_one!(v, k, i)
+    @inbounds v[i] = k(i)
+    return nothing
+end
+
+_batch_for_bands!(v::AbstractArray, idxs, f::F) where {F} = _batch_for_each!(v, idxs, f)
+
+function _batch_for_each!(v::AbstractArray, idxs, f::F) where {F}
+    k = _for_host_raw(f)
+    failed = false
+    @batch reduction=((|, failed),) for i in idxs
+        failed |= _for_one_threw(v, k, i)
+    end
+    failed && _rerun_on_host(i -> (@inbounds v[i] = k(i)), idxs)
+    return nothing
+end
+
+Bramble._batch_for!(v::AbstractArray, idxs, f::F) where {F} = _batch_for_bands!(v, idxs, f)
+
+function Bramble._batch_axis_for!(v::AbstractArray, idxs::CartesianIndices, f::F) where {F}
+    return _batch_for_bands!(v, idxs, f)
+end
+
+# --- _batch_scatter_for! (src/utils/linear_algebra.jl) ------------------------------ #
+#
+# Mirrors `_threaded_scatter_for!`: `g` is evaluated once per index and its tuple of results
+# is unpacked into every destination array in `mats` by `_write_components!` (unrolled at
+# compile time, so this stays a single scalar write per component, not a tuple allocation).
+# `mats` crosses as top-level arrays and `g` as `_batch_for!`'s kernels do above.
+
+# `idxs::AbstractRange` specialises this past the stub's fully unconstrained signature
+# (`_batch_scatter_for!(mats::Tuple, idxs, g)`); the only caller (`project!`,
+# operators/projection.jl) always passes `1:n`.
+@_task function _scatter_slab!(skel, arrays, mats, idxs, n, b)
+    # A local `Ref` copy, for the reason `_for_slab!` gives.
+    ms, k = Ref((mats, _rejoin(skel, arrays)))[]
+    for i in _band_range(idxs, n, b)
+        @inbounds _write_components!(ms, k(i), i)
+    end
+    return nothing
+end
+
+# A kernel crossing whole: one slab per iteration, as `_batch_for_whole!` above.
+@inline function _scatter_range!(mats, k::K, r) where {K}
+    for i in r
+        @inbounds _write_components!(mats, k(i), i)
+    end
+    return nothing
+end
+
+@_task function _scatter_whole_slab!(mats, k, r)
+    _scatter_range!(mats, k, r)
+    return nothing
+end
+
+@_task function _scatter_whole_part!(mats, k, b)
+    _scatter_range!(mats, k, _band_range(Base.OneTo(length(mats[1])), Threads.nthreads(), b))
+    return nothing
+end
+
+function _batch_scatter_whole!(mats::Tuple, idxs, k::K) where {K}
+    if _cover(mats[1], idxs) isa _Lin
+        n = Threads.nthreads()
+        hit = false
+        @batch reduction=((|, hit),) for b in Base.OneTo(Threads.nthreads())
+            hit |= _scatter_whole_part_threw(mats, k, b)
+        end
+        hit && _rerun_on_host(b -> _scatter_range!(mats, k,
+                _band_range(Base.OneTo(length(mats[1])), n, b)), 1:n)
+        return nothing
+    end
+    failed = false
+    @batch reduction=((|, failed),) for r in _Slabs(idxs)
+        failed |= _scatter_whole_slab_threw(mats, k, r)
+    end
+    failed && _rerun_on_host(r -> _scatter_range!(mats, k, r), _Slabs(idxs))
+    return nothing
+end
+
+# Destinations or an index range with offset axes: one index per iteration, as
+# `_batch_for_each!` above.
+@_task function _scatter_one!(mats, k, i)
+    @inbounds _write_components!(mats, k(i), i)
+    return nothing
+end
+
+function _batch_scatter_each!(mats::Tuple, idxs, g::G) where {G}
+    k = _for_host_raw(g)
+    failed = false
+    @batch reduction=((|, failed),) for i in idxs
+        failed |= _scatter_one_threw(mats, k, i)
+    end
+    failed && _rerun_on_host(i -> (@inbounds _write_components!(mats, k(i), i)), idxs)
+    return nothing
+end
+
+function Bramble._batch_scatter_for!(mats::Tuple, idxs::AbstractRange, g::G) where {G}
+    _offset(idxs, mats...) && return _batch_scatter_each!(mats, idxs, g)
+    skel, arrays = _kernel_parts(g, mats...)
+    skel isa _Whole && return _batch_scatter_whole!(mats, idxs, arrays)
+    n = Threads.nthreads()
+    failed = false
+    @batch reduction=((|, failed),) for b in 1:n
+        failed |= _scatter_slab_threw(skel, arrays, mats, idxs, n, b)
+    end
+    failed && _rerun_on_host(1:n) do b
+        for i in _band_range(idxs, n, b)
+            @inbounds _write_components!(mats, g(i), i)
+        end
+    end
+    return nothing
+end
+
 # --- _batch_bilinear_colour_sweep!/_batch_bilinear_band_sweep! (src/assembly/bilinear_execution.jl) --- #
 #
 # Direct translations of `_sweep_bilinear_colour!`/`_sweep_band_colour!`'s `CpuThreaded`
@@ -271,6 +570,18 @@ end
 # A mismatched arity makes dispatch fall through silently to the `src/` error stub, whose
 # message ("you forgot to load Polyester") is then wrong. Diff against
 # `bilinear_execution.jl` whenever it changes.
+#
+# A `SparseMatrixCSC` does not cross `@batch` whole, since it holds GC references, which put
+# the argument box on the heap. Its `colptr`, `rowval` and `nzval` cross as top-level loop
+# arguments, and each task rebuilds them as a `_ScatterCSC` (bilinear_traversal.jl), whose
+# position search and write are the `SparseMatrixCSC` ones. `sp`, `term` and `mesh_markers`
+# cross as one `_batch_split` (`_split_or_whole` below), as in the replay hooks. The caller
+# (`_sweep_bilinear!`) has already bound the term on the host (`_bind_walk`), so no `Symbol`
+# region reaches the split. A single-iteration `@batch` runs its body inline on the plain
+# `Vector`s, which `_ScatterCSC` and the rebuild accept as well. Any other matrix type (a
+# dense `Matrix`, a device matrix with its mirror) crosses whole, as before. No local is
+# named `cp`, because `@batch` takes a name bound in `Base` for a global and does not pass
+# it, so the loop would close over the local and fail to compile to a `cfunction`.
 
 function Bramble._batch_bilinear_colour_sweep!(
         A::AbstractMatrix, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
@@ -294,6 +605,60 @@ function Bramble._batch_bilinear_band_sweep!(
     return nothing
 end
 
+@_task function _csc_point!(skel, arrays, cptr, rval, nzv, I, lin_indices, row_offset,
+        col_offset, α)
+    s, tm, mm = _rejoin(skel, arrays)
+    _scatter_point!(_ScatterCSC(cptr, rval, nzv), tm, s, I, lin_indices, mm, row_offset,
+        col_offset, α)
+    return nothing
+end
+
+function Bramble._batch_bilinear_colour_sweep!(
+        A::SparseMatrixCSC, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
+)
+    cptr, rval, nzv = A.colptr, A.rowval, A.nzval
+    skel, arrays = _split_or_whole((sp, term, mesh_markers), cptr, rval, nzv)
+    failed = false
+    @batch reduction=((|, failed),) for I in idxs
+        failed |= _csc_point_threw(skel, arrays, cptr, rval, nzv, I, lin_indices,
+            row_offset, col_offset, α)
+    end
+    failed && _rerun_on_host(idxs) do I
+        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
+    end
+    return nothing
+end
+
+@_task function _csc_band!(skel, arrays, cptr, rval, nzv, rest, ax, nbands, b,
+        lin_indices, row_offset, col_offset, α)
+    s, tm, mm = _rejoin(skel, arrays)
+    Ab = _ScatterCSC(cptr, rval, nzv)
+    for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
+        _scatter_point!(Ab, tm, s, I, lin_indices, mm, row_offset, col_offset, α)
+    end
+    return nothing
+end
+
+function Bramble._batch_bilinear_band_sweep!(
+        A::SparseMatrixCSC, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers,
+        row_offset, col_offset, α
+)
+    cptr, rval, nzv = A.colptr, A.rowval, A.nzval
+    skel, arrays = _split_or_whole((sp, term, mesh_markers), cptr, rval, nzv)
+    failed = false
+    @batch reduction=((|, failed),) for b in bidx
+        failed |= _csc_band_threw(skel, arrays, cptr, rval, nzv, rest, ax, nbands, b,
+            lin_indices, row_offset, col_offset, α)
+    end
+    failed && _rerun_on_host(bidx) do b
+        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
+            _scatter_point!(
+                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
+        end
+    end
+    return nothing
+end
+
 # --- _threaded_replay_policy/_batch_bilinear_band_replay!/_batch_bilinear_colour_replay! ---- #
 # (src/assembly/bilinear_execution.jl)
 #
@@ -305,17 +670,110 @@ end
 # (`MatrixFreeOperator`, src/assembly/matrix_free.jl) sweeps through
 # the same two hooks with an `_ActionTarget`, the sink adding `α * w * x[col]` into
 # `y[row]`: the colouring and the per-point step (`_replay_point!`) are the same.
+#
+# Neither hook lets `@batch` capture the target, the space or the term whole: each holds GC
+# references (a mesh, a sink's vectors), which put the argument box on the heap. The target's
+# storage, `nzval` for a replay target and `y`, `x` for an action target, crosses as
+# top-level loop arguments (`_replay_parts`): wrapped in a struct, a `PtrArray` ran 1.11×
+# slower in the prototype (commit f0f2d538; gpena/Bramble.jl#437 item 3).
+# The target's other fields cross with `sp`, `term` and `mesh_markers` as one
+# `_batch_split`, and each task rebuilds the four (`_batch_rebuild`) and joins the target
+# back around its storage (`_replay_join`). A single-iteration `@batch` runs its body
+# inline on the plain `Vector`s, which the rebuild and the join accept as well. The caller
+# (`_sweep_bilinear!`) has already bound the term and checked the weights on the host.
+#
+# A value `_batch_split` cannot take apart (a `BigFloat` coefficient, an array of
+# `BigFloat`s) does not throw: `_split_or_whole` decides from the types, at compile time,
+# that the split does not apply, and the loop captures the parts whole, which boxes as every
+# hook did before gpena/Bramble.jl#437. The storage vectors join the test (`hot`), so a
+# `BigFloat` matrix or vector falls back too.
 Bramble._threaded_replay_policy(::CpuPolyester) = true
+
+# The skeleton of parts that cross `@batch` whole (`_split_or_whole`).
+struct _Whole end
+
+# `parts` as `_batch_split` gives them when every leaf of `parts` and `hot` splits, otherwise
+# `parts` itself behind `_Whole`; `_rejoin` is the inverse in each task.
+@inline function _split_or_whole(parts, hot...)
+    _batch_splittable(typeof((parts, hot))) && return _batch_split(parts)
+    return _Whole(), parts
+end
+@inline _rejoin(skel, arrays) = _batch_rebuild(skel, arrays)
+@inline _rejoin(::_Whole, parts) = parts
+
+# Which target type `_replay_join` rebuilds, an isbits tag the split keeps as it is.
+struct _Hot{K} end
+
+# A target as its storage vectors (the second `nothing` for a replay target) and the tuple
+# of its other fields, led by its tag.
+@inline function _replay_parts(t::ReplaySink)
+    return t.nzval, nothing, (_Hot{:replay}(), t.point_ptr, t.positions, t.α)
+end
+@inline function _replay_parts(t::_PairReplaySink)
+    cold = (_Hot{:pair}(), t.point_ptr, t.positions, t.positions_t, t.α1, t.α2, t.half)
+    return t.nzval, nothing, cold
+end
+@inline function _replay_parts(t::_DiagonalReplayTarget)
+    cold = (_Hot{:diagonal}(), t.point_ptr, t.positions, t.base, t.stride, t.interior, t.α)
+    return t.nzval, nothing, cold
+end
+@inline _replay_parts(s::ActionSink) = s.y, s.x, (_Hot{:action}(), s.α, s.mask, s.geom)
+@inline function _replay_parts(s::_PairActionSink)
+    cold = (_Hot{:pair_action}(), s.α1, s.α2, s.mask, s.dr, s.dc, s.half, s.geom)
+    return s.y, s.x, cold
+end
+
+# The inverse of `_replay_parts`, around the arrays a task received.
+@inline function _replay_join(h1, _, c::Tuple{_Hot{:replay}, Vararg})
+    _, pp, pos, α = c
+    return ReplaySink{typeof(h1), typeof(pp), typeof(α)}(h1, pp, pos, α)
+end
+@inline function _replay_join(h1, _, c::Tuple{_Hot{:pair}, Vararg})
+    _, pp, pos, pos_t, α1, α2, half = c
+    return _PairReplaySink{typeof(h1), typeof(pp), typeof(α1), typeof(α2)}(
+        h1, pp, pos, pos_t, α1, α2, half)
+end
+@inline _replay_join(h1, _, c::Tuple{_Hot{:diagonal}, Vararg}) = _DiagonalReplayTarget(
+    h1, Base.tail(c)...)
+@inline _replay_join(y, x, c::Tuple{_Hot{:action}, Vararg}) = ActionSink(
+    y, x, Base.tail(c)...)
+@inline _replay_join(y, x, c::Tuple{_Hot{:pair_action}, Vararg}) = _PairActionSink(
+    y, x, Base.tail(c)...)
+
+@_task function _replay_band!(skel, arrays, h1, h2, rest, ax, nbands, b, lin_indices,
+        row_offset, col_offset)
+    c, s, tm, mm = _rejoin(skel, arrays)
+    t = _replay_join(h1, h2, c)
+    for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
+        _replay_point!(t, tm, s, I, lin_indices, mm, row_offset, col_offset)
+    end
+    return nothing
+end
 
 function Bramble._batch_bilinear_band_replay!(
         target::Union{_ReplayTarget, _ActionTarget}, sp, term, ax, bidx, nbands, rest,
         lin_indices, mesh_markers, row_offset, col_offset
 )
-    @batch for b in bidx
+    h1, h2, cold = _replay_parts(target)
+    skel, arrays = _split_or_whole((cold, sp, term, mesh_markers), h1, h2)
+    failed = false
+    @batch reduction=((|, failed),) for b in bidx
+        failed |= _replay_band_threw(skel, arrays, h1, h2, rest, ax, nbands, b,
+            lin_indices, row_offset, col_offset)
+    end
+    failed && _rerun_on_host(bidx) do b
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
-            _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
+            _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset,
+                col_offset)
         end
     end
+    return nothing
+end
+
+@_task function _replay_one!(skel, arrays, h1, h2, I, lin_indices, row_offset, col_offset)
+    c, s, tm, mm = _rejoin(skel, arrays)
+    _replay_point!(
+        _replay_join(h1, h2, c), tm, s, I, lin_indices, mm, row_offset, col_offset)
     return nothing
 end
 
@@ -323,7 +781,14 @@ function Bramble._batch_bilinear_colour_replay!(
         target::Union{_ReplayTarget, _ActionTarget}, sp, term, idxs, lin_indices, mesh_markers,
         row_offset, col_offset
 )
-    @batch for I in idxs
+    h1, h2, cold = _replay_parts(target)
+    skel, arrays = _split_or_whole((cold, sp, term, mesh_markers), h1, h2)
+    failed = false
+    @batch reduction=((|, failed),) for I in idxs
+        failed |= _replay_one_threw(skel, arrays, h1, h2, I, lin_indices, row_offset,
+            col_offset)
+    end
+    failed && _rerun_on_host(idxs) do I
         _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
     end
     return nothing
@@ -336,10 +801,37 @@ end
 #
 # `b::AbstractVector` (matching the `CpuThreaded` reference signature in linear.jl), for the
 # same reason the bilinear pair above is now constrained on `A`.
+#
+# As the replay hooks do, neither captures the space or the term whole: `b` crosses as a
+# top-level loop argument, and `sp`, `term` and `mesh_markers` as one `_batch_split` that
+# each task rebuilds (`_batch_rebuild`), so the box stays on the stack. The caller
+# (`_sweep_parallel!`) has already bound the term to its leaf's marker ids and checked the
+# weights on the host (`_bind_walk`), so no `Symbol` region reaches the split. A
+# single-iteration `@batch` runs its body inline on the plain `Vector`s, which the rebuild
+# accepts as well. Parts that do not split cross whole (`_split_or_whole` above).
+
+@_task function _linear_point!(skel, arrays, b, I, lin_indices, offset, α)
+    s, tm, mm = _rejoin(skel, arrays)
+    _scatter_linear_point!(b, s, tm, I, lin_indices, mm, offset, α)
+    return nothing
+end
 
 function Bramble._batch_linear_colour_sweep!(b::AbstractVector, sp, term, idxs, lin_indices, mesh_markers, offset, α)
-    @batch for I in idxs
+    skel, arrays = _split_or_whole((sp, term, mesh_markers), b)
+    failed = false
+    @batch reduction=((|, failed),) for I in idxs
+        failed |= _linear_point_threw(skel, arrays, b, I, lin_indices, offset, α)
+    end
+    failed && _rerun_on_host(idxs) do I
         _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
+    end
+    return nothing
+end
+
+@_task function _linear_band!(skel, arrays, b, rest, ax, nbands, k, lin_indices, offset, α)
+    s, tm, mm = _rejoin(skel, arrays)
+    for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
+        _scatter_linear_point!(b, s, tm, I, lin_indices, mm, offset, α)
     end
     return nothing
 end
@@ -347,7 +839,13 @@ end
 function Bramble._batch_linear_band_sweep!(
         b::AbstractVector, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
 )
-    @batch for k in bidx
+    skel, arrays = _split_or_whole((sp, term, mesh_markers), b)
+    failed = false
+    @batch reduction=((|, failed),) for k in bidx
+        failed |= _linear_band_threw(skel, arrays, b, rest, ax, nbands, k, lin_indices,
+            offset, α)
+    end
+    failed && _rerun_on_host(bidx) do k
         for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
             _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
         end
@@ -401,6 +899,49 @@ end
 function Bramble._batch_run_bands!(f::F, nbands::Int, out::AbstractVector, rest::Vararg{Any, N}) where {F, N}
     @batch for b in 1:nbands
         f(out, rest..., nbands, b)
+    end
+    return nothing
+end
+
+# --- _batch_mf_bands! (src/assembly/matrix_free.jl) -------------------- #
+#
+# `CpuPolyester`'s fused matrix-free sweep runs one band per `@batch` task, each walking
+# every unit over its band, as `_mf_band_task!` does. No plan, form or sink crosses whole,
+# since each holds GC references (the spaces' meshes, the form's mutable cache), which put
+# the argument box on the heap. `y` and `x` cross as top-level loop arguments, as the replay
+# hooks' do (`_replay_parts`), the plan's band cut as its isbits fields, and the sink's `α`
+# and mask with the form's walked parts and the plan's geometry as one `_batch_split`. Each
+# task rebuilds them and walks `_mf_apply_parts!`. The form's regions are bound on the host
+# (`_mf_host_ast`), because a `Symbol` region would not split and the task's rebuilt walk
+# state has no label table to bind it against. The rebuilt geometry still names its mesh by
+# the walk state's `uid` and version, so it answers the rebuilt space (`_mf_evaluator`). A
+# single-iteration `@batch` runs its body inline on the plain `Vector`s, which the rebuild
+# accepts as well. The caller (`_mf_product!`) has checked on the host that the plan is the
+# product's form's. Parts that do not split cross whole, the host-bound AST among them
+# (`_split_or_whole` above).
+@_task function _mf_band!(skel, arrays, y, x, len, nbands, b, omin, omax)
+    (α, mask), Wu, Wv, ast, geom = _rejoin(skel, arrays)
+    own = _band_range(1:len, nbands, b)
+    _mf_apply_parts!(_MFPass(_MF_BAND, own, omin, omax, _MF_NO_COLLECT),
+        ActionSink(y, x, α, mask, geom), Wu, Wv, ast)
+    return nothing
+end
+
+function Bramble._batch_mf_bands!(s::ActionSink, plan::_MFFusedPlan{D}, nbands::Int) where {D}
+    a = plan.form
+    y, x = s.y, s.x
+    skel, arrays = _split_or_whole(
+        ((s.α, s.mask), a.trial_space, a.test_space, _mf_host_ast(a), plan.geom), y, x)
+    len, omin, omax = plan.dims[D], plan.omin, plan.omax
+    failed = false
+    @batch reduction=((|, failed),) for b in 1:nbands
+        failed |= _mf_band_threw(skel, arrays, y, x, len, nbands, b, omin, omax)
+    end
+    failed && _rerun_on_host(1:nbands) do b
+        _mf_apply_parts!(
+            _MFPass(_MF_BAND, _band_range(1:len, nbands, b), omin, omax, _MF_NO_COLLECT),
+            ActionSink(y, x, s.α, s.mask, plan.geom), a.trial_space, a.test_space,
+            _mf_host_ast(a))
     end
     return nothing
 end

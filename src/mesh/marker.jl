@@ -86,6 +86,9 @@ end
 Dictionary mapping semantic marker symbols to boolean indicator vectors across mesh points.
 
 For each label, a `BitVector` indicates whether the corresponding mesh point satisfies the marker.
+
+The dictionary [`markers`](@ref)`(Ωₕ)` returns is a read-only view; see there for how to
+change labels.
 """
 const MeshMarkers = Dict{Symbol, BitVector}
 
@@ -164,7 +167,7 @@ Also seeds the default geometric markers `:boundary` and `:interior` if not alre
            :walls => (:top, :bottom),
            :obstacle => x -> norm(x .- 0.5) < 0.2)
 Ωₕ = mesh(Ω, (20, 20), (true, true))
-# Ωₕ.markers contains BitVectors for :inlet, :outlet, :walls, :obstacle, :boundary, :interior
+# markers(Ωₕ) contains BitVectors for :inlet, :outlet, :walls, :obstacle, :boundary, :interior
 ```
 
 See also: [`DomainMarkers`](@ref), [`MeshMarkers`](@ref).
@@ -179,8 +182,62 @@ function set_markers!(Ωₕ::AbstractMeshType, domain_markers; warn_marker_misma
     # `:boundary`/`:interior` are reserved, always-available markers; see note above _ensure_geometric_markers!.
     _ensure_geometric_markers!(mesh_markers, Ωₕ; warn_marker_mismatch)
 
-    Ωₕ.markers = mesh_markers
+    _store_markers!(Ωₕ, mesh_markers)
     return nothing
+end
+
+#=
+The marker word matrix (gpena/Bramble.jl#437). A mesh keeps its public `MeshMarkers`
+dictionary, whose `BitVector`s `markers(Ωₕ)` and `index_in_marker` return as they are, and
+beside it a label-to-column table and one `Matrix{UInt64}` holding the same bits: column
+`_marker_id(Ωₕ, label)` is that label's `BitVector` chunks. Only the matrix and the integer
+ids cross a task boundary. All three are built together by `_marker_table`, whenever the
+label set is stored (`set_markers!`, `markers!`); the matrix is never resized in place.
+=#
+
+"""
+    _marker_table(mesh_markers::MeshMarkers, npts::Int) -> Tuple{Dict{Symbol, Int}, Matrix{UInt64}}
+
+The label-to-column table of `mesh_markers`, labels sorted, and the word matrix holding
+each label's `BitVector` chunks in its column, `cld(npts, 64)` words per column.
+"""
+function _marker_table(mesh_markers::MeshMarkers, npts::Int)
+    labels = sort!(collect(keys(mesh_markers)))
+    nwords = cld(npts, 64)
+    ids = Dict{Symbol, Int}()
+    words = zeros(UInt64, nwords, length(labels))
+    for (j, label) in enumerate(labels)
+        ids[label] = j
+        chunks = mesh_markers[label].chunks
+        copyto!(words, (j - 1) * nwords + 1, chunks, 1, min(nwords, length(chunks)))
+    end
+    return ids, words
+end
+
+# The word matrix of a mesh with no labels yet.
+@inline _no_marker_words(npts::Int) = zeros(UInt64, cld(npts, 64), 0)
+
+"""
+    _marker_words(Ωₕ::AbstractMeshType) -> Matrix{UInt64}
+
+The marker word matrix of `Ωₕ` (or of its state): word × label, column
+[`_marker_id`](@ref)`(Ωₕ, label)` holding the chunks of `markers(Ωₕ)[label]`.
+"""
+function _marker_words end
+
+"""
+    _marker_id(Ωₕ::AbstractMeshType, label::Symbol) -> Int
+
+The column of `label` in [`_marker_words`](@ref)`(Ωₕ)`. Reads the label exactly as stored:
+no boundary alias is resolved, unlike [`index_in_marker`](@ref).
+
+# Throws
+- `KeyError`: `Ωₕ` has no marker `label`.
+"""
+@inline function _marker_id(Ωₕ::AbstractMeshType, label::Symbol)
+    id = get(_marker_ids(Ωₕ), label, 0)
+    id == 0 && _throw_unknown_marker_label(Ωₕ, label)
+    return id
 end
 
 #=

@@ -85,7 +85,7 @@ function _pc_form_stencils(
     idx = indices(Ωₕ)
     lin = LinearIndices(idx)
     I = first(idx)
-    mk = markers(Ωₕ)
+    mk = _marker_words(Ωₕ)
 
     # Bilinear and linear products for each weight kind.
     for prod in (innerₕ(D₋ₓ(id), D₋ₓ(id)), inner₊ₓ(Mₓ(id), Mₓ(id)), innerₕ(id, D₋ₓ(id)))
@@ -95,7 +95,8 @@ function _pc_form_stencils(
     end
 
     # Every node kind evaluated once, with and without a marker table: restriction is
-    # the only node that reads it, and `nothing` is a separate method there.
+    # the only node that reads it, and `nothing` is a separate method there. With the
+    # table, a restriction is evaluated bound to `Ωₕ`'s marker ids, as every walk does.
     for op in (
         id,
         D₋ₓ(id),
@@ -112,7 +113,7 @@ function _pc_form_stencils(
         restrict_to(label, id)
     )
         local_stencil(op, Wₕ, I, nothing, lin[I])
-        local_stencil(op, Wₕ, I, mk, lin[I])
+        local_stencil(_bind_marker_ids(op, Ωₕ), Wₕ, I, mk, lin[I])
     end
 
     # Symbolic inner products over trial and test leaves, including tuple forms.

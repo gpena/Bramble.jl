@@ -107,7 +107,8 @@ on every call.
     were computed (gpena/Bramble.jl#221) -- [`weights`](@ref) re-checks it against the
     mesh's current version on every access, so a space built before an in-place mutation
     (`set_points!`, `change_points!`, `iterative_refinement!`) throws naming the mismatch
-    rather than silently returning weights for a mesh that no longer exists.
+    rather than silently returning weights for a mesh that no longer exists. A form's
+    assembly walk checks it once, where the walk starts, not at every point.
 
 For a detailed explanation of the mathematical formulas corresponding to these weights, please refer to the documentation for [`ScalarGridSpace`](@ref).
 """
@@ -395,6 +396,11 @@ exists. Call [`gridspace`](@ref) again to get a space that reads the mutated mes
 `CompositeGridSpace` this is checked per leaf, the moment `innerₕ`/etc. recurse into it --
 there is no separate composite-level check to keep in step.
 
+Form assembly checks once per walk rather than at every point: each walk entry (`assemble`,
+an `assemble!` refill, a matrix-free product, a linear form's assembly, once per leaf of a
+composite) checks the leaf it walks before its first point, with the same error, and the
+per-point stencil then reads the stored weights unchecked (gpena/Bramble.jl#437).
+
 See also: [`SpaceWeights`](@ref), [`SeparableWeights`](@ref), [`Innerh`](@ref), [`Innerplus`](@ref), `innerₕ`
 """
 @inline function weights(Wₕ::ScalarGridSpace)
@@ -410,13 +416,25 @@ end
 @inline weights(Wₕ::ScalarGridSpace, ::Val{()}) = weights(Wₕ, Innerh())
 
 @inline function weights(Wₕ::ScalarGridSpace, ::Val{S}) where {S}
-    return _weights_val(Wₕ, Val(S), Val(length(S)))
+    return _weights_val(weights(Wₕ), Wₕ, Val(S), Val(length(S)))
 end
 
-@inline _weights_val(Wₕ::ScalarGridSpace{D}, ::Val{S}, ::Val{1}) where {D, S} = weights(Wₕ, Innerplus(), only(S))
+# The per-point reads of an assembly walk (`compute_weight`, `operators/inner.jl`): the same
+# families as `weights` above, read from `Wₕ`'s stored `SpaceWeights` with no staleness
+# check. The walk checks once, where it starts (`_bind_walk`, `assembly/block_extract.jl`),
+# so the check is not repeated at every point of every product term (gpena/Bramble.jl#437).
+@inline _stored_weights(Wₕ::ScalarGridSpace, ::Innerh) = Wₕ.weights.innerh
+@inline _stored_weights(Wₕ::ScalarGridSpace, ::Innerplus, i) = Wₕ.weights.innerplus[i]
+@inline _stored_weights(Wₕ::ScalarGridSpace, ::Val{()}) = Wₕ.weights.innerh
+@inline function _stored_weights(Wₕ::ScalarGridSpace, ::Val{S}) where {S}
+    return _weights_val(Wₕ.weights, Wₕ, Val(S), Val(length(S)))
+end
 
-@inline function _weights_val(Wₕ::ScalarGridSpace{D}, ::Val{S}, ::Val{K}) where {D, S, K}
-    w = weights(Wₕ)
+@inline _weights_val(w::SpaceWeights, ::ScalarGridSpace, ::Val{S}, ::Val{1}) where {S} = w.innerplus[only(S)]
+
+@inline function _weights_val(
+        w::SpaceWeights, Wₕ::ScalarGridSpace{D}, ::Val{S}, ::Val{K}
+) where {D, S, K}
     factors = ntuple(d -> (d in S ? w.aligned[d] : w.cellfactor[d]), Val(D))
     VT = typeof(w.aligned[1])
     return SeparableWeights{D, eltype(VT), VT}(
@@ -466,28 +484,20 @@ end
 @inline _host_mirror_mesh(Ωₕ::AbstractMeshType) = _host_mirror_mesh(locality(backend(Ωₕ)), Ωₕ)
 @inline _host_mirror_mesh(::HostLocality, Ωₕ::AbstractMeshType) = Ωₕ
 
-function _host_mirror_mesh(::DeviceLocality, Ωₕ::Mesh1D)
-    return Mesh1D(
-        Ωₕ.set,
-        Ωₕ.markers,
-        Ωₕ.indices,
-        backend(eltype(Ωₕ)),
-        Array(Ωₕ.pts),
-        Array(Ωₕ.half_pts),
-        Array(Ωₕ.half_spacings),
-        Array(Ωₕ.spacings),
-        Ωₕ.collapsed,
-        Ωₕ.version
-    )
-end
+# The mirror is read from the mesh's state and keeps its version, uniformity flag and marker
+# table; it is a mesh of its own, with its own identity.
+_host_mirror_mesh(::DeviceLocality, Ωₕ::Mesh1D) = _rebackend(Ωₕ, backend(eltype(Ωₕ)), Array)
 
 function _host_mirror_mesh(::DeviceLocality, Ωₕ::MeshnD{D}) where {D}
     return MeshnD(
-        Ωₕ.set,
-        Ωₕ.markers,
-        Ωₕ.indices,
+        set(Ωₕ),
+        markers(Ωₕ),
+        indices(Ωₕ),
         backend(eltype(Ωₕ)),
-        ntuple(k -> _host_mirror_mesh(DeviceLocality(), Ωₕ.submeshes[k]), Val(D))
+        ntuple(k -> _host_mirror_mesh(DeviceLocality(), Ωₕ(k)), Val(D)),
+        _marker_ids(Ωₕ),
+        _marker_words(Ωₕ),
+        _next_mesh_uid()
     )
 end
 

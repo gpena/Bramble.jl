@@ -213,9 +213,9 @@ built.
 
 Under [`CpuSerial`](@ref) it allocates nothing (**0 bytes**) under the same condition the
 underlying [`Semidiscretization`](@ref) residual does: `eltype(du)` and `typeof(t)`
-matching the assembled element type. Under [`CpuPolyester`](@ref) each call allocates a
-small constant amount, the same on every grid, for the argument boxes Polyester sends to
-its threads.
+matching the assembled element type. Under [`CpuPolyester`](@ref) a warm call allocates
+nothing either: its sweeps pass `@batch` only plain arrays and isbits values, so Polyester's
+argument box stays on the stack.
 """
 function (rhs::SemidiscretizeRHS)(du::AbstractVector, u::AbstractVector, p, t)
     sd = rhs.sd

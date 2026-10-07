@@ -36,13 +36,31 @@ function _mf_spaces(be = backend())
     )
 end
 
+function _mf_diffusion_case(W, κ = Rₕ(W, x -> 1 + sum(abs2, x)))
+    (
+        "$(dim(W))D diffusion", form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))), :boundary)
+end
+
+function _mf_composite_case(W)
+    V = W × W
+    return ("composite",
+        form(V, V, (u, v) -> innerₕ(u(1), v(1)) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) + innerₕ(u(1), v(2))), :boundary)
+end
+
+function _mf_two_leaf_case(W)
+    V2 = W × gridspace(mesh(W))
+    return ("two-leaf pair",
+        form(V2, V2, (u, v) -> innerₕ(D₋ₓ(u(1)), v(2)) + innerₕ(u(2), D₋ₓ(v(1))) + innerₕ(u(2), v(2))),
+        (:west, :boundary))
+end
+
 # One space's four cases. A function of its own so each call is compiled for one concrete
 # space type: looping over the 1D/2D/3D tuple inline makes inference pair a trial function of
 # one dimension with a test function of another, which never happens.
 function _mf_push_dim_cases!(out, W)
     D = dim(W)
     κ = Rₕ(W, x -> 1 + sum(abs2, x))
-    push!(out, ("$(D)D diffusion", form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))), :boundary))
+    push!(out, _mf_diffusion_case(W, κ))
     push!(out, ("$(D)D jump-avg", form(W, W, (u, v) -> innerₕ(jumpₓ(u), M₊ₓ(v)) + innerₕ(D₋ₓ(u), v)), nothing))
     push!(out, (
         "$(D)D restricted", form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(κ * u, restrict_to(:boundary, v))), nothing))
@@ -54,26 +72,26 @@ end
 # a transposed pair, per dimension; then composite spaces with crossed components, one on a
 # single leaf object and one on two, so both halves of the pair walk run.
 function _mf_cases(be = backend())
-    out = Tuple{String, Bramble.BilinearForm, Union{Nothing, Symbol, Tuple{Vararg{Symbol}}}}[]
+    out = Any[]  # Any: each form is its own type, and each Dirichlet label set too
     spaces = _mf_spaces(be)
     for W in spaces
         _mf_push_dim_cases!(out, W)
     end
     W = spaces[2]
     V = W × W
-    push!(out, ("composite",
-        form(V, V, (u, v) -> innerₕ(u(1), v(1)) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) + innerₕ(u(1), v(2))), :boundary))
+    push!(out, _mf_composite_case(W))
     push!(out,
         ("composite pair",
             form(V, V, (u, v) -> innerₕ(D₋ᵧ(u(1)), v(2)) + 3.0 * innerₕ(u(2), D₋ᵧ(v(1))) + innerₕ(u(1), v(1))),
             nothing))
-    W2 = gridspace(mesh(W))
-    V2 = W × W2
-    push!(out,
-        ("two-leaf pair",
-            form(V2, V2, (u, v) -> innerₕ(D₋ₓ(u(1)), v(2)) + innerₕ(u(2), D₋ₓ(v(1))) + innerₕ(u(2), v(2))),
-            (:west, :boundary)))
+    push!(out, _mf_two_leaf_case(W))
     return out
+end
+
+# The threaded check's `unit` cases, built alone so the others are not compiled for `Parallel`.
+function _mf_threaded_cases(be)
+    W = _mf_spaces(be)[2]
+    return Any[_mf_diffusion_case(W), _mf_composite_case(W), _mf_two_leaf_case(W)]
 end
 
 # A graded mesh as benchmark/operator_routes.jl builds one: uniform, then moved by
@@ -155,9 +173,10 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         # `unit` keeps one case per plan that differs under `Parallel`: Dirichlet rows on a
         # single leaf, a composite on one leaf object, and one on two leaves (the fused sweep
         # below covers 3D and the other composite). `slow` runs all of them.
-        pcases = _mf_cases(backend(policy = Parallel()))
-        for ((name, a, dl), (_, at, _)) in zip(cases, pcases)
-            (WITH_SLOW_TESTS || name in ("2D diffusion", "composite", "two-leaf pair")) || continue
+        pbe = backend(policy = Parallel())
+        pcases = WITH_SLOW_TESTS ? _mf_cases(pbe) : _mf_threaded_cases(pbe)
+        for (name, at, dl) in pcases
+            a = cases[findfirst(c -> c[1] == name, cases)][2]
             @testset "$name" begin
                 op = _mf_op(a, dl)
                 opt = _mf_op(at, dl)
@@ -224,7 +243,7 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         Wc, Wf, Ws, W3 = gridspace(Ωc), gridspace(Ωf), gridspace(Ωs), gridspace(Ω3)
         κ = Rₕ(Wc, x -> 1 + sum(abs2, x))
         V = Wc × Wc
-        cases = (
+        cases = Any[  # Any: each form is its own type, and each Dirichlet label set too
             ("union", form(Wc, Wc, (u, v) -> innerₕ(u, D₊ᵧ(v)) + innerₕ(u, D₋ᵧ(v))), nothing, (-1, 1)),
             ("wide", form(Wc, Wc, (u, v) -> innerₕ(u, D₋ᵧ(D₋ᵧ(v))) + innerₕ(D₊ᵧ(u), v)), :boundary, (-2, 0)),
             ("pair", form(Wc, Wc, (u, v) -> innerₕ(D₊ᵧ(u), v) + 2.0 * innerₕ(u, D₊ᵧ(v))), (:west,), (0, 1)),
@@ -240,7 +259,7 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
                                      inner₊(∇ₕ(u(1)), ∇ₕ(v(1)))),
                 :boundary, (-1, 0)),
             ("test interpolation", form(Wc, Wf, (u, v) -> innerₕ(πₕ(u), v) + innerₕ(u, πₕ(v))), nothing, (0, 0))
-        )
+        ]
         for (name, a, dl, reach) in cases
             @testset "$name" begin
                 op = _mf_op(a, dl)
@@ -327,7 +346,7 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         V = W2 × W2
         dform(W, κ) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v)))
         lap(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
-        cases = (
+        cases = Any[  # Any: each form is its own type, and each Dirichlet label set too
             ("1D diffusion", dform(W1, κ1), :boundary, true),
             ("2D diffusion", dform(W2, κ2), :boundary, true),
             ("forward", form(W2, W2, (u, v) -> innerₕ(D₊ₓ(u), D₊ₓ(v)) + innerₕ(D₋ᵧ(u), v)), nothing, true),
@@ -352,7 +371,7 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
             ("scaled nested tap", form(W2, W2, (u, v) -> innerₕ(D₋ᵧ(κ2 * D₊ᵧ(u)), v)), :boundary, false),
             ("triple tap", form(W2, W2, (u, v) -> innerₕ(D₋ₓ(D₊ₓ(D₋ᵧ(u))), v)), nothing, false),
             ("tap over scaled leaf", form(W2, W2, (u, v) -> innerₕ(D₋ₓ(κ2 * u), D₋ₓ(v))), nothing, true)
-        )
+        ]
         for (name, a, dl, gathers) in cases
             @testset "$name" begin
                 @test Bramble._mf_gathers(a.ast) == gathers
@@ -465,6 +484,40 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         @test_throws DimensionMismatch mul!(zeros(3), op, x)
         # Only the matrix's rows are read from a `dirichlet` pair; the values are not.
         @test _mf_agree(matrix_free_operator(a; dirichlet = :boundary => 1.0) * x, op * x)
+    end
+
+    # The sinks hold the Dirichlet mask as `BitVector` chunk words, and the cached geometry
+    # names its mesh by the walk state's uid and version: a space rebuilt around a copy of
+    # the state (as an in-task rebuild does) hits, a copied or other mesh, or a moved one,
+    # misses. A 70-point axis puts mask bits past the first 64-bit word.
+    @testset "sink mask words, geometry identity" begin
+        W = _mf_graded_space((70, 5))
+        a = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        op = _mf_op(a, :boundary)
+        bm = Bramble.index_in_marker(mesh(W), :boundary)
+        @test 0 < count(bm) < length(bm) && length(bm) > 64
+        n = length(bm)
+        s = Bramble.ActionSink(zeros(n), zeros(n), 1.0, Bramble._mf_mask(op))
+        @test s.mask isa Bramble._MFMask{Vector{UInt64}}
+        ps = Bramble._pair_action_sink(s, 1.0, 1.0, 0, 0, 0)
+        live(m, r) = Bramble._mf_live(m, r)
+        @test all(r -> live(s.mask, r) == live(ps.mask, r) == !bm[r], 1:n)
+        @test op.geom isa Bramble._MFGeometry
+        @test op.geom.uid == Bramble._walk_mesh(mesh(W)).uid
+        term = first(filter(t -> t isa Bramble._MFSeparableTerm, Bramble._summands(a.ast)))
+        sp = Bramble.host_weights(W)
+        st = deepcopy(Bramble._walk_mesh(mesh(sp)))
+        rebuilt = Bramble.ScalarGridSpace(st, deepcopy(sp.weights))
+        @test Bramble._mf_evaluator(op.geom, term, sp) !== nothing
+        @test Bramble._mf_evaluator(op.geom, term, rebuilt) !== nothing
+        @test Bramble._mf_evaluator(op.geom, term, deepcopy(sp)) === nothing
+        other = Bramble.host_weights(_mf_graded_space((70, 5)))
+        @test Bramble._mf_evaluator(op.geom, term, other) === nothing
+        x = randn(n)
+        @test _mf_agree(op * x, _mf_mat(a, :boundary) * x)
+        moved = (range(0.0, 1.0; length = 70) .^ 1.1, range(0.0, 1.0; length = 5))
+        Bramble.change_points!(mesh(W), moved)
+        @test Bramble._mf_evaluator(op.geom, term, Bramble.host_weights(W)) === nothing
     end
 
     # More test rows than trial columns: a row in Γ_D past the last column has no diagonal,

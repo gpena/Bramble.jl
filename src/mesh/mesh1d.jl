@@ -1,39 +1,41 @@
 """
-    Mesh1D{BT, CI, VT, T} <: AbstractMeshType{1}
+    Mesh1DState{BT, CI, VT, T, WT} <: AbstractMeshType{1}
 
-One-dimensional grid discretizing a 1D [`CartesianProduct`](@ref) interval.
+The immutable state of a [`Mesh1D`](@ref): its geometry, version, uniformity flag and
+marker words, held as plain arrays and isbits values only (gpena/Bramble.jl#437), so it can
+cross a task boundary (`Polyester.@batch`) where a mutable mesh holding a `Dict` cannot.
 
-Stores grid point coordinates `pts`, underlying geometric interval `set`, semantic markers `markers`,
-Cartesian indices `indices`, and computational backend `backend`. Also precomputes and caches cell centers
-(`half_pts`), cell measures (`half_spacings`), and backward spacings (`spacings`).
+[`_walk_mesh`](@ref)`(Ωₕ)` returns it. It implements every geometric accessor a `Mesh1D`
+does (`points`, `point`, `spacing`, `half_spacing`, `cell_measure`, `npoints`,
+`_mesh_version`, `is_uniform`, ...), reading the same arrays: a state taken before
+[`set_points!`](@ref) with an unchanged point count still aliases the mutated arrays, and
+only its `version` tells it is stale. The marker `Dict` stays on the `Mesh1D`
+([`markers`](@ref)); the state carries the same bits as one word matrix
+([`_marker_words`](@ref)), column [`_marker_id`](@ref)`(Ωₕ, label)` per label.
 
 # Fields
 
-  - `set`: 1D geometric [`CartesianProduct`](@ref) interval over which the mesh is defined.
-  - `markers`: [`MeshMarkers`](@ref) dictionary mapping symbols to `BitVector` indicators.
+  - `set`: the 1D [`CartesianProduct`](@ref) interval the mesh discretises.
   - `indices`: `CartesianIndices{1}` of the grid points.
-  - `backend`: Linear algebra [`Backend`](@ref) for memory management and operations.
-  - `pts`: Coordinate vector storing grid points ``x_i`` for ``i = 1, \\dots, N``.
-  - `half_pts`: Precomputed cell centers (midpoints) ``x_{i+1/2}`` for ``i = 1, \\dots, N+1``.
-  - `half_spacings`: Precomputed cell widths (control volume measures) ``h_{i+1/2}`` for ``i = 1, \\dots, N``.
-  - `spacings`: Precomputed backward grid spacings ``h_i = x_i - x_{i-1}``, with ``h_1 = x_2 - x_1``.
-  - `collapsed`: Boolean flag indicating whether the interval is degenerate (a single point).
-  - `version`: Monotone counter bumped by every in-place point mutation (gpena/Bramble.jl#221);
-    see [`set_points!`](@ref) and [`_mesh_version`](@ref).
-  - `_uniform_cache`: Cached result of the last default-tolerance [`is_uniform`](@ref) check
-    (gpena/Bramble.jl#332).
-  - `_uniform_cache_version`: The [`_mesh_version`](@ref) the cached `_uniform_cache` was
-    computed at; a mismatch means the cache is stale and must be recomputed. Starts at `-1`,
-    which never matches a real version, so the first call always computes fresh.
-
-See also: [`MeshnD`](@ref), [`mesh`](@ref), [`AbstractMeshType`](@ref).
+  - `backend`: the linear algebra [`Backend`](@ref).
+  - `pts`: grid points ``x_i``, ``i = 1, \\dots, N``.
+  - `half_pts`: cell centers ``x_{i+1/2}``, ``i = 1, \\dots, N+1``.
+  - `half_spacings`: cell widths ``h_{i+1/2}``, ``i = 1, \\dots, N``.
+  - `spacings`: backward spacings ``h_i = x_i - x_{i-1}``, with ``h_1 = x_2 - x_1``.
+  - `collapsed`: whether the interval is degenerate (a single point).
+  - `version`: the mesh version when this state was built (gpena/Bramble.jl#221); see
+    [`_mesh_version`](@ref).
+  - `uniform`: the default-tolerance [`is_uniform`](@ref) answer for these points,
+    computed whenever the points change (gpena/Bramble.jl#332).
+  - `words`: one column of `BitVector` chunks per marker label, a `Matrix{UInt64}` on a
+    mesh; its type `WT` is a parameter so a rebuilt state can hold another array type
+    ([`_batch_rebuild`](@ref)).
+  - `uid`: an identity unique to the owning mesh, kept across its mutations.
 """
-mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVector, T} <:
-               AbstractMeshType{1}
+struct Mesh1DState{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVector, T,
+    WT <: AbstractMatrix{UInt64}} <: AbstractMeshType{1}
     "the geometric domain, a 1D CartesianProduct (interval), over which the mesh is defined."
     set::CartesianProduct{1, T}
-    "a dictionary mapping `Symbol` labels to `BitVector`s, marking specific points on the mesh."
-    markers::MeshMarkers
     "the `CartesianIndices` of the grid, for array-like iteration and indexing over the points."
     indices::CI
     "the computational backend used for linear algebra operations."
@@ -48,43 +50,121 @@ mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVe
     spacings::VT
     "a boolean flag indicating if the domain is degenerate (a single point)."
     collapsed::Bool
-    "monotone counter bumped by every in-place point mutation; see `_mesh_version`."
+    "the mesh version this state was built at; see `_mesh_version`."
     version::Int
-    "cached result of the last default-tolerance `is_uniform` check; see `_uniform_cache_version`."
-    _uniform_cache::Bool
-    "the `_mesh_version` the cached `_uniform_cache` was computed at; `-1` never matches a real version."
-    _uniform_cache_version::Int
-
-    function Mesh1D(
-            set::CartesianProduct{1, T},
-            markers::MeshMarkers,
-            indices::CI,
-            backend::BT,
-            pts::VT,
-            half_pts::VT,
-            half_spacings::VT,
-            spacings::VT,
-            collapsed::Bool,
-            version::Int,
-            uniform_cache::Bool = false,
-            uniform_cache_version::Int = -1
-    ) where {BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVector, T}
-        return new{BT, CI, VT, T}(
-            set,
-            markers,
-            indices,
-            backend,
-            pts,
-            half_pts,
-            half_spacings,
-            spacings,
-            collapsed,
-            version,
-            uniform_cache,
-            uniform_cache_version
-        )
-    end
+    "the default-tolerance `is_uniform` answer for these points."
+    uniform::Bool
+    "the marker bits, one column of `BitVector` chunks per label (`_marker_id`)."
+    words::WT
+    "an identity unique to the owning mesh, kept across its mutations."
+    uid::UInt64
 end
+
+"""
+    Mesh1D{BT, CI, VT, T} <: AbstractMeshType{1}
+
+One-dimensional grid discretizing a 1D [`CartesianProduct`](@ref) interval.
+
+The geometry lives in an immutable [`Mesh1DState`](@ref) (points, cell centers
+`half_pts`, cell measures `half_spacings`, backward `spacings`, indices, set, backend,
+version, uniformity flag and marker words); every mutation (`set_points!`,
+`set_markers!`, refinement) replaces it whole. The mesh itself keeps the public marker
+dictionary and the label-to-column table of the state's marker words.
+
+# Fields
+
+  - `markers`: [`MeshMarkers`](@ref) dictionary mapping symbols to `BitVector` indicators.
+  - `marker_ids`: `Dict{Symbol, Int}`, the column of each label in the state's word matrix.
+  - `state`: the [`Mesh1DState`](@ref) holding everything else, read through the
+    accessors ([`points`](@ref), [`spacings`](@ref), ...).
+
+See also: [`MeshnD`](@ref), [`mesh`](@ref), [`AbstractMeshType`](@ref).
+"""
+mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVector, T} <:
+               AbstractMeshType{1}
+    "a dictionary mapping `Symbol` labels to `BitVector`s, marking specific points on the mesh."
+    markers::MeshMarkers
+    "the column of each marker label in the state's word matrix."
+    marker_ids::Dict{Symbol, Int}
+    "the immutable geometry, version, uniformity flag and marker words."
+    state::Mesh1DState{BT, CI, VT, T, Matrix{UInt64}}
+end
+
+# The mesh over `s` with `markers`, the label table and the state's words built together.
+function _mesh1d_with_markers(markers::MeshMarkers, s::Mesh1DState)
+    ids, words = _marker_table(markers, length(s.pts))
+    return Mesh1D(markers, ids, _restate(s; words))
+end
+
+"""
+    _rebackend(Ωₕ::Mesh1D, be::Backend, f) -> Mesh1D
+
+A mesh over the same markers, label table, version and uniformity flag as `Ωₕ`, on backend
+`be`, with `f` applied to each of its four arrays (`Array` for a host mirror, `identity` to
+share them), and an identity of its own.
+"""
+function _rebackend(Ωₕ::Mesh1D, be::Backend, f::F) where {F}
+    s = _st(Ωₕ)
+    r = Mesh1DState(s.set, s.indices, be, f(s.pts), f(s.half_pts), f(s.half_spacings),
+        f(s.spacings), s.collapsed, s.version, s.uniform, s.words, _next_mesh_uid())
+    return Mesh1D(markers(Ωₕ), _marker_ids(Ωₕ), r)
+end
+
+# Both a `Mesh1D` and its state answer the geometric accessors below, reading the state.
+const _Mesh1DLike{BT, CI, VT, T} = Union{Mesh1D{BT, CI, VT, T}, Mesh1DState{BT, CI, VT, T}}
+
+@inline _st(Ωₕ::Mesh1D) = getfield(Ωₕ, :state)
+@inline _st(s::Mesh1DState) = s
+
+"""
+    _walk_mesh(Ωₕ::AbstractMeshType) -> AbstractMeshType
+
+The immutable state the assembly walk reads `Ωₕ` through: a [`Mesh1D`](@ref)'s stored
+[`Mesh1DState`](@ref), or for a [`MeshnD`](@ref) a [`MeshnDState`](@ref) built on demand
+from its submeshes' states. A state is its own walk state.
+"""
+@inline _walk_mesh(Ωₕ::Mesh1D) = _st(Ωₕ)
+@inline _walk_mesh(s::Mesh1DState) = s
+
+@inline _set_state!(Ωₕ::Mesh1D, s::Mesh1DState) = (setfield!(Ωₕ, :state, s); return nothing)
+
+# `s` with the named fields replaced; `set`, `backend`, `collapsed` and `uid` never change.
+@inline function _restate(
+        s::Mesh1DState;
+        indices = s.indices,
+        pts = s.pts,
+        half_pts = s.half_pts,
+        half_spacings = s.half_spacings,
+        spacings = s.spacings,
+        version = s.version,
+        uniform = s.uniform,
+        words = s.words
+)
+    return typeof(s)(s.set, indices, s.backend, pts, half_pts, half_spacings, spacings,
+        s.collapsed, version, uniform, words, s.uid)
+end
+
+# The default-tolerance uniformity of `s`'s current spacings: what `uniform` stores.
+@inline _computed_uniform(s::Mesh1DState) = _uniform_default_tol(host_spacings(s), eltype(s))
+
+@inline _marker_words(Ωₕ::_Mesh1DLike) = _st(Ωₕ).words
+@inline _marker_ids(Ωₕ::Mesh1D) = getfield(Ωₕ, :marker_ids)
+
+# Replaces the marker dictionary, its label table and the state's words together (O6: a
+# label set may change after construction; the word matrix is rebuilt, never resized).
+function _store_markers!(Ωₕ::Mesh1D, mesh_markers)
+    mm = convert(MeshMarkers, mesh_markers)
+    ids, words = _marker_table(mm, npoints(Ωₕ))
+    setfield!(Ωₕ, :markers, mm)
+    setfield!(Ωₕ, :marker_ids, ids)
+    _set_state!(Ωₕ, _restate(_st(Ωₕ); words))
+    return nothing
+end
+
+@inline set(Ωₕ::Mesh1D) = _st(Ωₕ).set
+@inline indices(Ωₕ::Mesh1D) = _st(Ωₕ).indices
+@inline backend(Ωₕ::Mesh1D) = _st(Ωₕ).backend
+@inline set_indices!(Ωₕ::Mesh1D, idxs) = _set_state!(Ωₕ, _restate(_st(Ωₕ); indices = idxs))
 
 @noinline _throw_point_count_mismatch(expected::Int, got::Int) = throw(
     DimensionMismatch(
@@ -92,7 +172,7 @@ end
 ),
 )
 
-@inline is_collapsed(Ωₕ::Mesh1D) = Ωₕ.collapsed
+@inline is_collapsed(Ωₕ::_Mesh1DLike) = _st(Ωₕ).collapsed
 
 """
     _mesh_version(Ωₕ::AbstractMeshType) -> Int
@@ -102,14 +182,15 @@ The monotone counter `set_points!` bumps every in-place point mutation
 at construction and every discrete inner product/norm re-checks against, to catch weights
 computed from a mesh that has since been mutated underneath them.
 
-A `Mesh1D` reads its own stored counter directly. A `MeshnD` has no coordinates of its own
--- only [`submeshes`](@ref), each independently mutated by `change_points!(Ωₕ::MeshnD, ...)`
--- so its version is the sum of theirs: strictly increasing whenever any one axis changes,
-regardless of which, with no second counter of its own to keep in sync.
+A `Mesh1D` reads the counter stored in its [`Mesh1DState`](@ref). A `MeshnD` has no
+coordinates of its own -- only [`submeshes`](@ref), each independently mutated by
+`change_points!(Ωₕ::MeshnD, ...)` -- so its version is the sum of theirs: strictly
+increasing whenever any one axis changes, regardless of which, with no second counter of
+its own to keep in sync. A state answers the version it was built at.
 """
-@inline _mesh_version(Ωₕ::Mesh1D) = Ωₕ.version
+@inline _mesh_version(Ωₕ::_Mesh1DLike) = _st(Ωₕ).version
 
-@inline points(Ωₕ::Mesh1D) = Ωₕ.pts
+@inline points(Ωₕ::_Mesh1DLike) = _st(Ωₕ).pts
 
 # `point` is the choke point every mesh iteration (`Base.iterate`, `Ωₕ[i]`, and `MeshnD`'s
 # per-submesh `point`) goes through one index at a time. A host-backed mesh reads straight
@@ -117,14 +198,14 @@ regardless of which, with no second counter of its own to keep in sync.
 # sequential scalar reads that its own scalar-indexing guard would refuse one at a time
 # anyway (gpena/Bramble.jl#308) -- call [`host_points`](@ref) once and index or iterate that
 # `Array` instead.
-@inline function point(Ωₕ::Mesh1D, i)
+@inline function point(Ωₕ::_Mesh1DLike, i)
     idx = _extract_linear_index(i)
     _check_point_bounds(Ωₕ, idx, "point")
     return _point(locality(typeof(points(Ωₕ))), Ωₕ, idx)
 end
 
-@inline _point(::HostLocality, Ωₕ::Mesh1D, idx) = @inbounds points(Ωₕ)[idx]
-@noinline _point(::DeviceLocality, Ωₕ::Mesh1D, idx) = _throw_no_scalar_point()
+@inline _point(::HostLocality, Ωₕ::_Mesh1DLike, idx) = @inbounds points(Ωₕ)[idx]
+@noinline _point(::DeviceLocality, Ωₕ::_Mesh1DLike, idx) = _throw_no_scalar_point()
 
 # Kept out of `point` itself so its success path -- one type-level `locality` check the
 # compiler folds away -- is all that is ever compiled inline there, matching
@@ -155,10 +236,10 @@ no copy -- `host_points(Ωₕ) === points(Ωₕ)`; only a device-backed mesh pay
 
 See also: [`host_spacings`](@ref), [`points`](@ref), [`point`](@ref).
 """
-@inline host_points(Ωₕ::Mesh1D) = _host_points(locality(typeof(points(Ωₕ))), Ωₕ)
+@inline host_points(Ωₕ::_Mesh1DLike) = _host_points(locality(typeof(points(Ωₕ))), Ωₕ)
 
-@inline _host_points(::HostLocality, Ωₕ::Mesh1D) = points(Ωₕ)
-@inline _host_points(::DeviceLocality, Ωₕ::Mesh1D) = Array(points(Ωₕ))
+@inline _host_points(::HostLocality, Ωₕ::_Mesh1DLike) = points(Ωₕ)
+@inline _host_points(::DeviceLocality, Ωₕ::_Mesh1DLike) = Array(points(Ωₕ))
 
 """
     locate_cell(Ωₕ::Mesh1D, x::Real) -> Int
@@ -182,12 +263,12 @@ there; see gpena/Bramble.jl#308 (round 2) for the measured Float64 disagreement 
 A non-uniform mesh has no formula to fall back on and searches [`host_points`](@ref)`(Ωₕ)`
 instead of the raw, possibly device-resident `points(Ωₕ)`.
 """
-function locate_cell(Ωₕ::Mesh1D, x::Real)
+function locate_cell(Ωₕ::_Mesh1DLike, x::Real)
     n = npoints(Ωₕ)
     n <= 1 && return 1
 
     if is_uniform(Ωₕ)
-        a, b = extrema(Ωₕ.set)
+        a, b = extrema(_st(Ωₕ).set)
         h = (b - a) / (n - 1)
         idx = floor(Int, (x - a) / h) + 1
 
@@ -220,8 +301,8 @@ function locate_cell(Ωₕ::Mesh1D, x::Real)
     return clamp(idx, 1, n - 1)
 end
 
-@inline half_points(Ωₕ::Mesh1D) = Ωₕ.half_pts
-@inline half_spacings(Ωₕ::Mesh1D) = Ωₕ.half_spacings
+@inline half_points(Ωₕ::_Mesh1DLike) = _st(Ωₕ).half_pts
+@inline half_spacings(Ωₕ::_Mesh1DLike) = _st(Ωₕ).half_spacings
 
 """
     spacings(Ωₕ::Mesh1D) -> AbstractVector
@@ -230,8 +311,8 @@ Return the cached vector of backward spacings, where `spacings(Ωₕ)[i]` is
 [`spacing`](@ref)`(Ωₕ, i)`. Recomputed by [`set_points!`](@ref) whenever the
 grid points change.
 """
-@inline spacings(Ωₕ::Mesh1D) = Ωₕ.spacings
-@inline spacings!(Ωₕ::Mesh1D, v) = (Ωₕ.spacings = v; return nothing)
+@inline spacings(Ωₕ::_Mesh1DLike) = _st(Ωₕ).spacings
+@inline spacings!(Ωₕ::Mesh1D, v) = _set_state!(Ωₕ, _restate(_st(Ωₕ); spacings = v))
 
 """
     host_spacings(Ωₕ::Mesh1D) -> Vector
@@ -251,10 +332,10 @@ no copy; only a device-backed mesh pays the one bulk `Array(...)` transfer.
 
 See also: [`spacings`](@ref), [`spacing`](@ref), [`forward_spacing`](@ref).
 """
-@inline host_spacings(Ωₕ::Mesh1D) = _host_spacings(locality(typeof(spacings(Ωₕ))), Ωₕ)
+@inline host_spacings(Ωₕ::_Mesh1DLike) = _host_spacings(locality(typeof(spacings(Ωₕ))), Ωₕ)
 
-@inline _host_spacings(::HostLocality, Ωₕ::Mesh1D) = spacings(Ωₕ)
-@inline _host_spacings(::DeviceLocality, Ωₕ::Mesh1D) = Array(spacings(Ωₕ))
+@inline _host_spacings(::HostLocality, Ωₕ::_Mesh1DLike) = spacings(Ωₕ)
+@inline _host_spacings(::DeviceLocality, Ωₕ::_Mesh1DLike) = Array(spacings(Ωₕ))
 
 """
     host_half_spacings(Ωₕ::Mesh1D) -> Vector
@@ -268,10 +349,10 @@ directly with no copy; only a device-backed mesh pays the one bulk `Array(...)` 
 
 See also: [`host_spacings`](@ref), [`half_spacings`](@ref), [`half_spacing`](@ref).
 """
-@inline host_half_spacings(Ωₕ::Mesh1D) = _host_half_spacings(locality(typeof(half_spacings(Ωₕ))), Ωₕ)
+@inline host_half_spacings(Ωₕ::_Mesh1DLike) = _host_half_spacings(locality(typeof(half_spacings(Ωₕ))), Ωₕ)
 
-@inline _host_half_spacings(::HostLocality, Ωₕ::Mesh1D) = half_spacings(Ωₕ)
-@inline _host_half_spacings(::DeviceLocality, Ωₕ::Mesh1D) = Array(half_spacings(Ωₕ))
+@inline _host_half_spacings(::HostLocality, Ωₕ::_Mesh1DLike) = half_spacings(Ωₕ)
+@inline _host_half_spacings(::DeviceLocality, Ωₕ::_Mesh1DLike) = Array(half_spacings(Ωₕ))
 
 """
     forward_spacings(Ωₕ::Mesh1D) -> AbstractVector
@@ -282,7 +363,7 @@ Return the forward spacings of `Ωₕ`, where `forward_spacings(Ωₕ)[i]` is
 
 See also: [`forward_spacing_for_derivative`](@ref).
 """
-@inline forward_spacings(Ωₕ::Mesh1D) = _spacing_generator(Ωₕ, forward_spacing)
+@inline forward_spacings(Ωₕ::_Mesh1DLike) = _spacing_generator(Ωₕ, forward_spacing)
 
 # A single-point mesh (n == 1, whether from a topologically collapsed domain or simply a
 # one-point request) has no adjacent interval, so `half_spacings` is the honest raw zero
@@ -292,7 +373,7 @@ See also: [`forward_spacing_for_derivative`](@ref).
 # a collapsed axis silently gets a zero weight everywhere (gpena/Bramble.jl#89): the zero
 # case is only ever the single-element one, so this stays the same zero-copy array in
 # every other case and only allocates on that one rare, one-element path.
-@inline function cell_measures(Ωₕ::Mesh1D)
+@inline function cell_measures(Ωₕ::_Mesh1DLike)
     hs = half_spacings(Ωₕ)
     return length(hs) == 1 ? [_apply_hs_logic(hs[1])] : hs
 end
@@ -301,7 +382,9 @@ end
     set_points!(Ωₕ::Mesh1D, pts::AbstractVector) -> Nothing
 
 Override the grid coordinates in `Ωₕ`. Recalculates cached [`spacings`](@ref),
-[`half_points`](@ref), and [`half_spacings`](@ref).
+[`half_points`](@ref), and [`half_spacings`](@ref), in place when the point count is
+unchanged, then replaces the mesh's [`Mesh1DState`](@ref) with one carrying the new version
+and the uniformity of the new points.
 
 Bumps `Ωₕ`'s mesh version (gpena/Bramble.jl#221): every [`ScalarGridSpace`](@ref) already
 built on `Ωₕ` -- via [`gridspace`](@ref), directly or as a leaf of a
@@ -312,17 +395,18 @@ mutated mesh. This is also what [`change_points!`](@ref) and [`iterative_refinem
 go through, so the same applies to both.
 """
 @inline function set_points!(Ωₕ::Mesh1D, pts)
-    Ωₕ.version += 1
+    s = _st(Ωₕ)
     n = length(pts)
 
-    if length(Ωₕ.pts) == n
-        Ωₕ.pts .= pts
+    if length(s.pts) == n
+        # Same length: the arrays are updated in place, so a state taken earlier still
+        # aliases them and only its `version` tells it is stale.
+        s.pts .= pts
     else
-        Ωₕ.pts = pts
-        set_indices!(Ωₕ, generate_indices(n))
-        half_points!(Ωₕ, vector(backend(Ωₕ), n + 1))
-        half_spacings!(Ωₕ, vector(backend(Ωₕ), n))
-        spacings!(Ωₕ, vector(backend(Ωₕ), n))
+        be = s.backend
+        _set_state!(Ωₕ,
+            _restate(s; indices = generate_indices(n), pts, half_pts = vector(be, n + 1),
+                half_spacings = vector(be, n), spacings = vector(be, n)))
     end
 
     # A device-backed mesh with at least two points fills its three derived arrays in the
@@ -344,6 +428,9 @@ go through, so the same applies to both.
         half_spacing!(half_spacings(Ωₕ), Ωₕ)
     end
 
+    # The new state: one version on, with the uniformity of the new spacings.
+    s = _st(Ωₕ)
+    _set_state!(Ωₕ, _restate(s; version = s.version + 1, uniform = _computed_uniform(s)))
     return nothing
 end
 
@@ -352,17 +439,18 @@ end
 
 Override the precomputed cell center cache in `Ωₕ`.
 """
-@inline half_points!(Ωₕ::Mesh1D, pts) = (Ωₕ.half_pts = pts; return nothing)
+@inline half_points!(Ωₕ::Mesh1D, pts) = _set_state!(Ωₕ, _restate(_st(Ωₕ); half_pts = pts))
 
 """
     half_spacings!(Ωₕ::Mesh1D, pts::AbstractVector) -> Nothing
 
 Override the precomputed cell width cache in `Ωₕ`.
 """
-@inline half_spacings!(Ωₕ::Mesh1D, pts) = (Ωₕ.half_spacings = pts; return nothing)
+@inline half_spacings!(Ωₕ::Mesh1D, pts) = _set_state!(Ωₕ, _restate(_st(Ωₕ); half_spacings = pts))
 
-@inline eltype(::Mesh1D{BT}) where {BT} = eltype(BT)
+@inline eltype(::_Mesh1DLike{BT}) where {BT} = eltype(BT)
 @inline eltype(::Type{<:Mesh1D{BT}}) where {BT} = eltype(BT)
+@inline eltype(::Type{<:Mesh1DState{BT}}) where {BT} = eltype(BT)
 
 """
     (Ωₕ::Mesh1D)(i::Integer) -> Mesh1D
@@ -371,12 +459,13 @@ Return the `i`-th submesh of `Ωₕ`. A 1D mesh is its own only submesh, returni
 `Ωₕ` itself; provided for uniform indexing in multi-dimensional generic algorithms.
 """
 @inline (Ωₕ::Mesh1D)(::Integer) = Ωₕ
+@inline (s::Mesh1DState)(::Integer) = s
 
-@inline npoints(Ωₕ::Mesh1D) = length(points(Ωₕ))
-@inline npoints(Ωₕ::Mesh1D, ::Type{Tuple}) = (npoints(Ωₕ),)
+@inline npoints(Ωₕ::_Mesh1DLike) = length(points(Ωₕ))
+@inline npoints(Ωₕ::_Mesh1DLike, ::Type{Tuple}) = (npoints(Ωₕ),)
 
-@inline hₘₐₓ(Ωₕ::Mesh1D) = maximum(spacings(Ωₕ))
-@inline hₘᵢₙ(Ωₕ::Mesh1D) = minimum(spacings(Ωₕ))
+@inline hₘₐₓ(Ωₕ::_Mesh1DLike) = maximum(spacings(Ωₕ))
+@inline hₘᵢₙ(Ωₕ::_Mesh1DLike) = minimum(spacings(Ωₕ))
 
 # On a device-backed mesh, indexing `spacings(Ωₕ)` here scalar-indexes a device array and
 # is refused by that array type's own scalar-indexing guard (gpena/Bramble.jl#94) -- left as
@@ -385,16 +474,16 @@ Return the `i`-th submesh of `Ωₕ`. A 1D mesh is its own only submesh, returni
 # locality check in the single most-called accessor in this file for a message this array
 # type already gives; a caller that hits it once should stop calling this per point and call
 # `host_spacings(Ωₕ)` once instead, as `stencil.jl` now does.
-@inline function spacing(Ωₕ::Mesh1D, i::Int)
+@inline function spacing(Ωₕ::_Mesh1DLike, i::Int)
     _check_point_bounds(Ωₕ, i, "spacing")
     return @inbounds spacings(Ωₕ)[i]
 end
 
-@inline spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = spacing(Ωₕ, _extract_linear_index(i))
+@inline spacing(Ωₕ::_Mesh1DLike, i::CartesianIndex{1}) = spacing(Ωₕ, _extract_linear_index(i))
 
 # D == 1, so dim is always 1: a plain passthrough matching the MeshnD 3-arg accessor
 # (gpena/Bramble.jl#111), so mesh-generic callers can use one signature regardless of D.
-@inline spacing(Ωₕ::Mesh1D, i, dim::Int) = spacing(Ωₕ, i)
+@inline spacing(Ωₕ::_Mesh1DLike, i, dim::Int) = spacing(Ωₕ, i)
 """
     spacing_for_derivative(Ωₕ::Mesh1D, idx) -> eltype(Ωₕ)
 
@@ -404,7 +493,7 @@ no stencil and this is zero.
 
 See also: [`forward_spacing_for_derivative`](@ref), [`spacings`](@ref).
 """
-@inline function spacing_for_derivative(Ωₕ::Mesh1D, idx)
+@inline function spacing_for_derivative(Ωₕ::_Mesh1DLike, idx)
     i = idx isa CartesianIndex{1} ? _extract_linear_index(idx) : idx
     if i == 1
         zero(eltype(Ωₕ))
@@ -419,7 +508,7 @@ end
 Return a vector `h` with `h[i] == `[`spacing_for_derivative`](@ref)`(Ωₕ, i)` for every
 `i > 1`. Entry 1 is zero: the backward difference has no stencil at the first point.
 """
-@inline backward_spacings_for_derivative(Ωₕ::Mesh1D) = spacings(Ωₕ)
+@inline backward_spacings_for_derivative(Ωₕ::_Mesh1DLike) = spacings(Ωₕ)
 
 """
     forward_spacings_for_derivative(Ωₕ::Mesh1D) -> AbstractVector
@@ -428,7 +517,7 @@ Return a vector `h` with `h[i] == `[`forward_spacing_for_derivative`](@ref)`(Ω�
 every `i < npoints(Ωₕ)`, as a view onto cached spacings. The last entry is omitted because
 the forward difference has no stencil at the right boundary.
 """
-@inline function forward_spacings_for_derivative(Ωₕ::Mesh1D)
+@inline function forward_spacings_for_derivative(Ωₕ::_Mesh1DLike)
     h = spacings(Ωₕ)
     return @inbounds @view h[min(2, length(h)):end]
 end
@@ -436,7 +525,7 @@ end
 # Same device-mesh tradeoff as `spacing` above, and the same choice: this scalar-indexes
 # `spacings(Ωₕ)` and is left to throw the array type's own raw scalar-indexing error rather
 # than a redirect added here. Use `host_spacings(Ωₕ)` for a per-point loop instead.
-@inline function forward_spacing(Ωₕ::Mesh1D, i::Int)
+@inline function forward_spacing(Ωₕ::_Mesh1DLike, i::Int)
     _check_point_bounds(Ωₕ, i, "forward_spacing")
     # forward_spacing(i) is spacing(i + 1) away from the last point, and repeats the
     # final interval at it, which is exactly what the cached vector already holds.
@@ -444,9 +533,9 @@ end
     return @inbounds spacings(Ωₕ)[i == n ? n : i + 1]
 end
 
-@inline forward_spacing(Ωₕ::Mesh1D, i::CartesianIndex{1}) = forward_spacing(Ωₕ, _extract_linear_index(i))
+@inline forward_spacing(Ωₕ::_Mesh1DLike, i::CartesianIndex{1}) = forward_spacing(Ωₕ, _extract_linear_index(i))
 
-@inline forward_spacing(Ωₕ::Mesh1D, i, dim::Int) = forward_spacing(Ωₕ, i)
+@inline forward_spacing(Ωₕ::_Mesh1DLike, i, dim::Int) = forward_spacing(Ωₕ, i)
 """
     forward_spacing_for_derivative(Ωₕ::Mesh1D, idx) -> eltype(Ωₕ)
 
@@ -456,7 +545,7 @@ difference has no stencil and this is zero.
 
 See also: [`spacing_for_derivative`](@ref), [`spacings`](@ref).
 """
-@inline function forward_spacing_for_derivative(Ωₕ::Mesh1D, idx)
+@inline function forward_spacing_for_derivative(Ωₕ::_Mesh1DLike, idx)
     i = idx isa CartesianIndex{1} ? _extract_linear_index(idx) : idx
 
     if i == npoints(Ωₕ)
@@ -466,19 +555,19 @@ See also: [`spacing_for_derivative`](@ref), [`spacings`](@ref).
     end
 end
 
-@inline function half_point(Ωₕ::Mesh1D, i::Int)
+@inline function half_point(Ωₕ::_Mesh1DLike, i::Int)
     _check_half_point_bounds(Ωₕ, i)
-    return Ωₕ.half_pts[i]
+    return _st(Ωₕ).half_pts[i]
 end
 
-@inline function half_spacing(Ωₕ::Mesh1D, i::Int)
+@inline function half_spacing(Ωₕ::_Mesh1DLike, i::Int)
     _check_point_bounds(Ωₕ, i, "half_spacing")
-    return Ωₕ.half_spacings[i]
+    return _st(Ωₕ).half_spacings[i]
 end
 
-@inline half_spacing(Ωₕ::Mesh1D, idx::CartesianIndex{1}) = half_spacing(Ωₕ, _extract_linear_index(idx))
+@inline half_spacing(Ωₕ::_Mesh1DLike, idx::CartesianIndex{1}) = half_spacing(Ωₕ, _extract_linear_index(idx))
 
-@inline function cell_measure(Ωₕ::Mesh1D, i)
+@inline function cell_measure(Ωₕ::_Mesh1DLike, i)
     idx = _extract_linear_index(i)
     _check_point_bounds(Ωₕ, idx, "cell_measure")
     return _apply_hs_logic(half_spacing(Ωₕ, idx))
@@ -792,7 +881,7 @@ end
 # Calculates the "half spacings" (cell widths/measures) for a 1D mesh.
 # Fills `x` with the backward spacings of `Ωₕ`. Must run before half_spacing!, which
 # reads them back through `spacing`.
-@inline function spacing!(x::Array, Ωₕ::Mesh1D)
+@inline function spacing!(x::Array, Ωₕ::_Mesh1DLike)
     pts = points(Ωₕ)
     n = length(pts)
     T = eltype(Ωₕ)
@@ -817,7 +906,7 @@ end
 
 # Device counterpart: the collapsed/short-mesh case is still a plain `fill!`, which is not
 # scalar indexing and needs no kernel; only the general case goes through one.
-function spacing!(x::AbstractVector, Ωₕ::Mesh1D)
+function spacing!(x::AbstractVector, Ωₕ::_Mesh1DLike)
     pts = points(Ωₕ)
     n = length(pts)
     T = eltype(Ωₕ)
@@ -884,7 +973,7 @@ end
 # own 3-point local stencil of `pts`. Dispatched from both `_mesh` (construction) and
 # `set_points!`, for any device-backed mesh with at least two points -- the formula is
 # correct whether or not the points happen to be evenly spaced.
-@inline function _nonuniform_mesh1d_metrics!(Ωₕ::Mesh1D)
+@inline function _nonuniform_mesh1d_metrics!(Ωₕ::_Mesh1DLike)
     n = npoints(Ωₕ)
     pts = points(Ωₕ)
     dev = ka_device(backend(Ωₕ))
@@ -957,20 +1046,11 @@ function _mesh(
     # Generate the CartesianIndices for the grid.
     idxs = generate_indices(n_points)
 
-    # Instantiate the Mesh1D struct with initial (empty) markers.
-    mesh_markers = MeshMarkers()
-    mesh = Mesh1D(
-        set,
-        mesh_markers,
-        idxs,
-        backend,
-        pts,
-        _half_pts,
-        _half_spacings,
-        _spacings,
-        is_collapsed,
-        0
-    )
+    # Instantiate the Mesh1D struct with initial (empty) markers. The uniformity flag is set
+    # below, once the spacings it is read from are filled.
+    state = Mesh1DState(set, idxs, backend, pts, _half_pts, _half_spacings, _spacings,
+        is_collapsed, 0, false, _no_marker_words(n_points), _next_mesh_uid())
+    mesh = Mesh1D(MeshMarkers(), Dict{Symbol, Int}(), state)
 
     # The fused uniform path above already filled spacings/half_pts/half_spacings. A fused
     # non-uniform device mesh has `pts` filled (by `_points!` above) but still needs its
@@ -985,6 +1065,7 @@ function _mesh(
         half_points!(half_points(mesh), mesh)
         half_spacing!(half_spacings(mesh), mesh)
     end
+    _set_state!(mesh, _restate(_st(mesh); uniform = _computed_uniform(_st(mesh))))
 
     # Finally, apply the domain markers to the mesh points.
     set_markers!(mesh, markers; warn_marker_mismatch)
@@ -1063,25 +1144,33 @@ end
 
 Create a copy of mesh `Ωₕ`. The copy is shallow with respect to immutable fields
 (`set`, `indices`, `backend`, `collapsed`), but deep with respect to mutable data fields
-(`pts`, `half_pts`, `half_spacings`, `markers`).
+(`pts`, `half_pts`, `half_spacings`, `spacings`, `markers`). The copy keeps the version and
+gets an identity of its own.
 """
 function Base.copy(Ωₕ::Mesh1D)
-    return Mesh1D(
-        Ωₕ.set,
-        deepcopy(Ωₕ.markers),
-        Ωₕ.indices,
-        Ωₕ.backend,
-        copy(Ωₕ.pts),
-        copy(Ωₕ.half_pts),
-        copy(Ωₕ.half_spacings),
-        copy(Ωₕ.spacings),
-        Ωₕ.collapsed,
-        Ωₕ.version
-    )
+    s = _st(Ωₕ)
+    c = Mesh1DState(s.set, s.indices, s.backend, copy(s.pts), copy(s.half_pts),
+        copy(s.half_spacings), copy(s.spacings), s.collapsed, s.version, s.uniform, s.words,
+        _next_mesh_uid())
+    return _mesh1d_with_markers(deepcopy(markers(Ωₕ)), c)
 end
 
-@inline Base.getindex(Ωₕ::Mesh1D, i::Int) = point(Ωₕ, i)
-@inline Base.getindex(Ωₕ::Mesh1D, i::CartesianIndex{1}) = point(Ωₕ, i)
+# A deepcopy is an independent mutable mesh, so it gets a fresh identity: with the uid
+# copied, the original and the copy would share (uid, version) after one point change each
+# while holding different points.
+function Base.deepcopy_internal(Ωₕ::Mesh1D, dict::IdDict)
+    haskey(dict, Ωₕ) && return dict[Ωₕ]::typeof(Ωₕ)
+    c = invoke(Base.deepcopy_internal, Tuple{Any, IdDict}, Ωₕ, dict)::typeof(Ωₕ)
+    s = _st(c)
+    _set_state!(c,
+        typeof(s)(s.set, s.indices, s.backend, s.pts, s.half_pts,
+            s.half_spacings, s.spacings, s.collapsed, s.version, s.uniform, s.words,
+            _next_mesh_uid()))
+    return c
+end
+
+@inline Base.getindex(Ωₕ::_Mesh1DLike, i::Int) = point(Ωₕ, i)
+@inline Base.getindex(Ωₕ::_Mesh1DLike, i::CartesianIndex{1}) = point(Ωₕ, i)
 
 """
     Base.show(io::IO, Ωₕ::Mesh1D) -> Nothing

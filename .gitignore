@@ -85,6 +85,9 @@ benchmark/*
 !benchmark/results_io.jl
 # v3.21.0 operator-route benchmark behind the benchmarks page (gpena/Bramble.jl#372)
 !benchmark/operator_routes.jl
+# v3.25.0 CpuPolyester form A/B and restricted-form benchmarks (gpena/Bramble.jl#437)
+!benchmark/polyester_forms_ab.jl
+!benchmark/restricted_forms.jl
 # v3.26.0 Schur vs eigenvector route across a Peclet sweep (gpena/Bramble.jl#443)
 !benchmark/schur_peclet.jl
 # v3.26.0 fdm_preconditioner iteration-count ladder (gpena/Bramble.jl#444)

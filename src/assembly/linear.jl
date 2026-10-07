@@ -736,7 +736,7 @@ function _sweep_parallel!(
 ) where {TERM}
     Ωsp = mesh(sp)
     lin_indices = LinearIndices(indices(Ωsp))
-    mesh_markers = markers(Ωsp)
+    bound, mesh_markers = _bind_walk(term, sp)
     policy = _effective_parallel_policy(sp)
 
     # Bands before colours, for the reason spelled out in `_sweep_bilinear!`: two slabs
@@ -752,14 +752,14 @@ function _sweep_parallel!(
         bands = prod(strides) == 1 ? (1:1:nbands,) : (1:2:nbands, 2:2:nbands)
         for bidx in bands
             _sweep_linear_band_colour!(
-                policy, b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
+                policy, b, sp, bound, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
             )
         end
         return b
     end
 
     if prod(strides) == 1
-        _sweep_colour!(policy, b, sp, term, grid_inds, lin_indices, mesh_markers, offset, α)
+        _sweep_colour!(policy, b, sp, bound, grid_inds, lin_indices, mesh_markers, offset, α)
         return b
     end
 
@@ -768,7 +768,7 @@ function _sweep_parallel!(
             policy,
             b,
             sp,
-            term,
+            bound,
             _colour_subgrid(grid_inds, c, strides),
             lin_indices,
             mesh_markers,
@@ -895,10 +895,10 @@ function _contract_term(
 ) where {TERM, T}
     Ωsp = mesh(sp)
     lin_indices = LinearIndices(indices(Ωsp))
-    mesh_markers = markers(Ωsp)
+    bound, mesh_markers = _bind_walk(term, sp)
     for I in indices(Ωsp)
         lin_idx = lin_indices[I]
-        stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
+        stencil = local_stencil(bound, sp, I, mesh_markers, lin_idx)
 
         for (off_v, weight) in stencil
             Iv = I + CartesianIndex(off_v)
@@ -940,10 +940,10 @@ end
 function _scatter_term!(b::AbstractVector, sp, term::TERM, offset::Int, α = true) where {TERM}
     Ωsp = mesh(sp)
     lin_indices = LinearIndices(indices(Ωsp))
-    mesh_markers = markers(Ωsp)
+    bound, mesh_markers = _bind_walk(term, sp)
     for I in indices(Ωsp)
         lin_idx = lin_indices[I]
-        stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
+        stencil = local_stencil(bound, sp, I, mesh_markers, lin_idx)
 
         for (off_v, weight) in stencil
             Iv = I + CartesianIndex(off_v)

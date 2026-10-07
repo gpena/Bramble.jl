@@ -278,23 +278,24 @@ using Bramble:
         Vₕ = gridspace(Ωₕ, Val(2))
         V3 = gridspace(Ωₕ, Val(3))
 
-        for (nm, sp, g) in (
+        # Any: each space and closure is its own type
+        for (nm, sp, g) in Any[
             ("scalar", Wₕ, (u, v) -> innerₕ(u, v)),
             ("scalar with operators", Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v))),
             ("composite, diagonal", Vₕ, (u, v) -> innerₕ(u, v)),
             ("composite, off-diagonal", Vₕ, (u, v) -> innerₕ(u(1), v(2))),
             ("composite, mixed spellings", Vₕ, (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2))),
             (
-            "three components, crossed",
-            V3,
-            (u, v) -> innerₕ(u(1), v(3)) + innerₕ(u(3), v(1))
-        ),
+                "three components, crossed",
+                V3,
+                (u, v) -> innerₕ(u(1), v(3)) + innerₕ(u(3), v(1))
+            ),
             (
-            "blocks with operators",
-            Vₕ,
-            (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(2))
-        )
-        )
+                "blocks with operators",
+                Vₕ,
+                (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(2))
+            )
+        ]
             a = form(sp, sp, g)
             Aser = assemble(a)
             Apar = similar(sparse(Aser))
@@ -679,12 +680,13 @@ using Bramble:
         # Diagonal, off-diagonal, mixed and nested blocks all replay correctly.
         @testset "Composite: every block kind replays" begin
             Vₕ = gridspace(Ωₕ, Val(2))
-            for g in (
+            # Any: each closure is its own type
+            for g in Any[
                 (u, v) -> innerₕ(u, v),
                 (u, v) -> innerₕ(u(1), v(2)),
                 (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2)),
                 (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1))
-            )
+            ]
                 a = form(Vₕ, Vₕ, g)
                 A = assemble(a)
                 reference = copy(A.nzval)

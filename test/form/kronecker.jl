@@ -366,7 +366,7 @@ end
         dg(m) = Diagonal(rand(rng, m) .+ 0.5)
         coeff(s) = prod(c -> c isa Ref ? c[] : c, s; init = 1.0)
         oracle(specs) = sum(coeff(s) * kron(map(sparse, reverse(f))...) for (s, f) in specs)
-        cases = (
+        cases = Any[  # Any: each case's factor tuple is its own type
             (6, 5) => ((((), (band(6, 1, 1), band(5, 2, 1))), ((), (dg(6), band(5, 0, 2))),
                 ((), (band(6, 0, 1), dg(5))))),
             (6, 5) => ((((2.0,), (symtri(6), band(5, 1, 0))),)),
@@ -375,7 +375,7 @@ end
             (5, 4, 6) => ((((Ref(0.5),), (band(5, 2, 0), band(4, 1, 1), Matrix(band(6, 1, 1)))),
                 ((), (dg(5), dg(4), dg(6))))),
             (5, 4, 6) => ((((), (symtri(5), symtri(4), dg(6))),))
-        )
+        ]
         for (dims, specs) in cases
             terms = map(sp -> Bramble._kron_term(sp[1], sp[2]), specs)
             A = oracle(specs)
