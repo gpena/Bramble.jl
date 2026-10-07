@@ -231,10 +231,11 @@ function _throw_fdm_stage(stage::Int, d::Int; precond::Bool = false)
         "the axis-$d mass is not symmetric positive definite (a zero or negative weight, " *
         "for instance from an :interior restriction without dirichlet = :boundary)";
         precond = precond)
-    stage == 3 && precond && _throw_fdm_unsupported(
-        "axis $d has no term of its own (every term equals the mass along it, or differs " *
-        "from the masses on two or more axes and is left out), so the form has no " *
-        "Laplacian-like part"; precond = true)
+    stage == 3 && precond &&
+        _throw_fdm_unsupported(
+            "axis $d has no term of its own (every term equals the mass along it, or differs " *
+            "from the masses on two or more axes and is left out), so the form has no " *
+            "Laplacian-like part"; precond = true)
     stage == 3 && _throw_fdm_unsupported(
         "axis $d has no term of its own (every term equals the mass along it), so it has no " *
         "1D operator to diagonalise")
@@ -265,9 +266,10 @@ end
 # left analogue) is in the kernel of the whole Kronecker sum: the system is singular.
 # `ϵ` is the eps of the least precise factor: a Float64 literal coefficient makes `K` Float64,
 # yet the stiffness of a Float32 mesh keeps its Float32 rounding.
-_fdm_data_eps(K::KroneckerLinearOperator{T}) where {T} =
+function _fdm_data_eps(K::KroneckerLinearOperator{T}) where {T}
     maximum(f -> eps(real(_fdm_factor_eltype(f))), (f for t in K.terms for f in t.factors);
         init = eps(real(T)))
+end
 _fdm_factor_eltype(F) = eltype(F)
 _fdm_factor_eltype(F::Bramble._KronDeviceDiagonal) = eltype(F.diag)
 _fdm_factor_eltype(F::Bramble._KronDeviceSparse) = eltype(F.nzval)
@@ -528,8 +530,7 @@ end
 # `F`'s own boundary values, the identity rows `fdm_preconditioner` applies there). `2D`
 # mode products, an even number, so the result always ends in `u`. `x` may alias `F`, as the
 # gather reads `F` before `x` is written.
-LinearAlgebra.ldiv!(x::AbstractVector, f::_FDMFactorization, F::AbstractVector) =
-    _fdm_ldiv!(x, f, F, false)
+LinearAlgebra.ldiv!(x::AbstractVector, f::_FDMFactorization, F::AbstractVector) = _fdm_ldiv!(x, f, F, false)
 
 function _fdm_ldiv!(x::AbstractVector, f::_FDMFactorization{T, D}, F::AbstractVector,
         keep::Bool) where {T, D}
@@ -710,8 +711,7 @@ Base.size(f::Union{_FDMFactorization, _SchurFactorization}, i::Integer) = i <= 2
 
 # `x = K \ F` on full-length host vectors, the `_FDMFactorization` method's contract: gather,
 # apply every `Q_d'`, back-substitute, apply every `Z_d`, scatter the real part.
-LinearAlgebra.ldiv!(x::AbstractVector, f::_SchurFactorization, F::AbstractVector) =
-    _fdm_ldiv!(x, f, F, false)
+LinearAlgebra.ldiv!(x::AbstractVector, f::_SchurFactorization, F::AbstractVector) = _fdm_ldiv!(x, f, F, false)
 
 function _fdm_ldiv!(x::AbstractVector, f::_SchurFactorization{T, D}, F::AbstractVector,
         keep::Bool) where {T, D}

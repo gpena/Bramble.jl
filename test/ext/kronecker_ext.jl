@@ -472,7 +472,7 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
             "x" => (u, v) -> lap(u, v) + innerₕ(D₋ₓ(u), v),
             "0.5 y" => (u, v) -> lap(u, v) + 0.5 * innerₕ(D₋ᵧ(u), v),
             "x + 50.0 y" => (u, v) -> lap(u, v) + innerₕ(D₋ₓ(u), v) +
-                                     50.0 * innerₕ(D₋ᵧ(u), v))
+                                      50.0 * innerₕ(D₋ᵧ(u), v))
         for n in ((33, 25), (9, 8, 7)), dir in (nothing, :boundary), (name, L) in advs
             adv = name != "none"
             @testset "$n, dirichlet = $dir, advection = $name" begin
@@ -588,7 +588,7 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
             return gridspace(Ω)
         end
         solve_bytes(x, f, F) = (fdm_solve!(x, f, F); fdm_solve!(x, f, F);
-                                @allocated fdm_solve!(x, f, F))
+            @allocated fdm_solve!(x, f, F))
         ldiv_bytes(x, f, F) = (ldiv!(x, f, F); ldiv!(x, f, F); @allocated ldiv!(x, f, F))
         forms = ("symmetric" => (u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)),
             "advection" => (u, v) -> innerₕ(u, v) + 0.1 * inner₊(∇ₕ(u), ∇ₕ(v)) +
@@ -596,7 +596,6 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
         serial = Dict{Any, Vector{Float64}}()
         for policy in (Serial(), CpuPolyester()), n in ((13, 9), (7, 6, 8)),
             dir in (nothing, :boundary)
-
             Wₕ = policy_space(n, policy)
             @test execution_policy(backend(mesh(Wₕ))) isa typeof(policy)
             bd = Bramble._combined_mask(mesh(Wₕ), (:boundary,))

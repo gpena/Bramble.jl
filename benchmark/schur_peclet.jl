@@ -125,6 +125,7 @@ function main()
     println()
     rows = NamedTuple[]
     for D in (2, 3), Pe in PECLETS
+
         r = measure(SIZES[D], Pe)
         push!(rows, r)
         println("PECLET dim=$(r.dim) n=$(r.n) Pe=$(r.Pe) schur=$(r.schur) ",
