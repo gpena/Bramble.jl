@@ -101,19 +101,26 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: "1.13"
 
-      # Shared with CI.yml's `test` job; see the comment there. Keep this job's Julia
-      # version, `--optimize` level and coverage setting the same as that job's.
-      - uses: julia-actions/cache@v2
+      # Shared with CI.yml's `test` job, which restores this entry with a hand-built list
+      # that must match the inputs here: `cache-name`, `include-matrix: "false"`,
+      # `cache-compiled: "true"` and `cache-objcache: "false"`. Julia 1.13 writes no object
+      # cache, so it stays off. `save-always: "false"` saves only from a passing run: v3
+      # saves failed runs by default, and a red nightly would become the cache every PR
+      # restores. Keep this job's Julia version, `--optimize` level and coverage setting
+      # the same as that job's.
+      - uses: julia-actions/cache@v3
         with:
           cache-compiled: "true"
           cache-name: julia-cache;unit-and-slow;julia=1.13
           include-matrix: "false"
+          cache-objcache: "false"
+          save-always: "false"
 
       - uses: julia-actions/julia-buildpkg@v1
 
@@ -136,7 +143,7 @@ jobs:
 
       - uses: julia-actions/julia-processcoverage@v1
         if: matrix.os == 'ubuntu-latest'
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@v7
         if: matrix.os == 'ubuntu-latest'
         with:
           files: lcov.info
@@ -144,7 +151,7 @@ jobs:
           use_oidc: true
           flags: suite
           fail_ci_if_error: false
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && matrix.os == 'ubuntu-latest'
         with:
           name: lcov-suite
@@ -184,13 +191,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: "nightly"
 
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
         with:
           cache-compiled: "true"
 
@@ -224,13 +231,13 @@ jobs:
         # is a quality regression found six days late.
         version: ["1.13"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.version }}
 
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
         with:
           cache-compiled: "true"
 
@@ -272,9 +279,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: "1"
 

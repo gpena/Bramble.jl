@@ -47,14 +47,28 @@ jobs:
       contents: write
       statuses: write
       pull-requests: write
+      # julia-actions/cache@v3 deletes the superseded entries of its own key when it saves.
+      actions: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: "1.13"
+
+      # A depot cache of its own: every docs run spent 20-30 minutes installing and
+      # precompiling from scratch. The `cache-name` keeps this entry apart from the shared
+      # `unit-and-slow` one (CI.yml, nightly.yml), whose `compiled` images are for
+      # `--code-coverage` builds this job never loads, so neither replaces the other.
+      #
+      # Scope: a run restores only entries saved on its own ref or on the default branch. A
+      # tag run can restore what `main` saved, never what another tag saved, so the cache
+      # pays from `main` dispatches onward; a tag's own save is visible to that tag alone.
+      - uses: julia-actions/cache@v3
+        with:
+          cache-name: julia-cache;docs;julia=1.13
 
       - uses: julia-actions/julia-buildpkg@v1
 
