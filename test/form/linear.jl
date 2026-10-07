@@ -313,30 +313,31 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         @testset "Shorthand equivalence" begin
             # Which is the property that makes it a shorthand rather than a second meaning.
             uv = Rₕ(Vf, (x -> x[1], x -> 100 * x[1], x -> x[2]))
-            for (short, long) in (
+            # Any: each closure pair is its own type
+            for (short, long) in Any[
                 (
-                v -> innerₕ(uv, v),
-                v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)) + innerₕ(uv(3), v(3))
-            ),
+                    v -> innerₕ(uv, v),
+                    v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)) + innerₕ(uv(3), v(3))
+                ),
                 (
-                v -> innerₕ(uv, v + D₋ₓ(v)),
-                v -> innerₕ(uv(1), v(1) + D₋ₓ(v(1))) +
-                     innerₕ(uv(2), v(2) + D₋ₓ(v(2))) +
-                     innerₕ(uv(3), v(3) + D₋ₓ(v(3)))
-            ),
+                    v -> innerₕ(uv, v + D₋ₓ(v)),
+                    v -> innerₕ(uv(1), v(1) + D₋ₓ(v(1))) +
+                         innerₕ(uv(2), v(2) + D₋ₓ(v(2))) +
+                         innerₕ(uv(3), v(3) + D₋ₓ(v(3)))
+                ),
                 (
-                v -> innerₕ(uv, v + 2 * D₋ₓ(v) - Mₓ(v)),
-                v -> innerₕ(uv(1), v(1) + 2 * D₋ₓ(v(1)) - Mₓ(v(1))) +
-                     innerₕ(uv(2), v(2) + 2 * D₋ₓ(v(2)) - Mₓ(v(2))) +
-                     innerₕ(uv(3), v(3) + 2 * D₋ₓ(v(3)) - Mₓ(v(3)))
-            ),
+                    v -> innerₕ(uv, v + 2 * D₋ₓ(v) - Mₓ(v)),
+                    v -> innerₕ(uv(1), v(1) + 2 * D₋ₓ(v(1)) - Mₓ(v(1))) +
+                         innerₕ(uv(2), v(2) + 2 * D₋ₓ(v(2)) - Mₓ(v(2))) +
+                         innerₕ(uv(3), v(3) + 2 * D₋ₓ(v(3)) - Mₓ(v(3)))
+                ),
                 (
-                v -> inner₊ₓ(uv, v - M₊ᵧ(v)),
-                v -> inner₊ₓ(uv(1), v(1) - M₊ᵧ(v(1))) +
-                     inner₊ₓ(uv(2), v(2) - M₊ᵧ(v(2))) +
-                     inner₊ₓ(uv(3), v(3) - M₊ᵧ(v(3)))
-            )
-            )
+                    v -> inner₊ₓ(uv, v - M₊ᵧ(v)),
+                    v -> inner₊ₓ(uv(1), v(1) - M₊ᵧ(v(1))) +
+                         inner₊ₓ(uv(2), v(2) - M₊ᵧ(v(2))) +
+                         inner₊ₓ(uv(3), v(3) - M₊ᵧ(v(3)))
+                )
+            ]
                 @test assemble(form(Vf, short)) ≈ assemble(form(Vf, long))
             end
 
@@ -397,10 +398,11 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
             @test prod(wide) == 2
         end
 
-        for (nm, sp, u) in (
+        # Any: each space and source is its own type
+        for (nm, sp, u) in Any[
             ("scalar", Wₕ, uₕ),
             ("composite", Vₕ, Rₕ(Vₕ, (x -> sin(x[1]), x -> cos(x[2])))(1))
-        )
+        ]
             lf = form(sp, v -> innerₕ(u, v))
             bs = assemble(lf)
             bp = similar(bs)
@@ -478,15 +480,16 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
             # group, so the sweep takes the strided path rather than the single flat pass.
             # Every one of these is a distinct arrangement of the routing, and the
             # single-colour cases above exercise none of them.
-            for (cnm, g) in (
+            # Any: each closure is its own type
+            for (cnm, g) in Any[
                 ("one difference", v -> innerₕ(ub, D₋ₓ(v))),
                 ("a linear combination", v -> innerₕ(ub, v + 2 * D₋ₓ(v) - Mₓ(v))),
                 ("innerₕ and inner₊ mixed", v -> innerₕ(ub, v) + inner₊(ub, D₋ₓ(v))),
                 (
-                "differences in both directions",
-                v -> innerₕ(ub, D₋ₓ(v)) + innerₕ(ub, D₋ᵧ(v))
-            )
-            )
+                    "differences in both directions",
+                    v -> innerₕ(ub, D₋ₓ(v)) + innerₕ(ub, D₋ᵧ(v))
+                )
+            ]
                 lfw = form(Wb, g)
                 @test prod(_colour_strides(stencil_offsets(resolve_form_ast(lfw)))) > 1
                 bw = assemble(lfw)
@@ -501,20 +504,21 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
             Vb = gridspace(Ωb, Val(2))
             uv2 = Rₕ(Vb, (x -> x[1], x -> 10 * x[1]))
             cv = components(uv2)
-            for (cnm, g) in (
+            # Any: each closure is its own type
+            for (cnm, g) in Any[
                 ("per component", v -> innerₕ(cv[1], v(1)) + innerₕ(cv[2], v(2))),
                 ("the shorthand", v -> innerₕ(uv2, v)),
                 ("the shorthand with operators", v -> innerₕ(uv2, v + D₋ₓ(v))),
                 (
-                "routed, with operators",
-                v -> innerₕ(cv[1], v(1) + 2 * D₋ₓ(v(1))) + innerₕ(cv[2], v(2))
-            ),
+                    "routed, with operators",
+                    v -> innerₕ(cv[1], v(1) + 2 * D₋ₓ(v(1))) + innerₕ(cv[2], v(2))
+                ),
                 ("crossed components", v -> innerₕ(cv[1], v(2))),
                 (
-                "a routed term beside an unrouted one",
-                v -> innerₕ(cv[1], v(1)) + innerₕ(uv2, v)
-            )
-            )
+                    "a routed term beside an unrouted one",
+                    v -> innerₕ(cv[1], v(1)) + innerₕ(uv2, v)
+                )
+            ]
                 lfc = form(Vb, g)
                 bc = assemble(lfc)
                 bcp = similar(bc)
@@ -530,13 +534,14 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
             )
             Vhet = Bramble.CompositeGridSpace((Wb, gridspace(Ωb_small)))
             uhet = Rₕ(Vhet, (x -> x[1] * x[2] + 1, x -> x[1] - 2x[2]))
-            for (cnm, g) in (
+            # Any: each closure is its own type
+            for (cnm, g) in Any[
                 ("per component", v -> innerₕ(uhet(1), v(1)) + innerₕ(uhet(2), v(2))),
                 (
-                "routed, with operators",
-                v -> innerₕ(uhet(1), v(1) + 2 * D₋ₓ(v(1))) + innerₕ(uhet(2), v(2))
-            )
-            )
+                    "routed, with operators",
+                    v -> innerₕ(uhet(1), v(1) + 2 * D₋ₓ(v(1))) + innerₕ(uhet(2), v(2))
+                )
+            ]
                 lfh = form(Vhet, g)
                 bh = assemble(lfh)
                 bhp = similar(bh)
@@ -655,23 +660,24 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         uc = Rₕ(Vc, (x -> 1.0, x -> 100.0, x -> 10000.0))
         wc = Rₕ(Vc, (x -> 2.0, x -> 3.0, x -> 5.0))
         cc = components(uc)
-        for (nm, g) in (
+        # Any: each closure is its own type
+        for (nm, g) in Any[
             ("scalar, a difference", v -> innerₕ(uₕ, D₋ₓ(v))),
             ("scalar, a linear combination", v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - Mₓ(v))),
             ("scalar, two kinds summed", v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)))
-        )
+        ]
             lfx = form(Wₕ, g)
             @test lfx(uₕ) ≈ sum(assemble(lfx) .* parent(uₕ))
         end
-        for (nm, g) in (
+        for (nm, g) in Any[
             ("composite shorthand", v -> innerₕ(uc, v)),
             ("composite per component", v -> innerₕ(cc[1], v(1)) + innerₕ(cc[2], v(2))),
             (
-            "composite routed with operators",
-            v -> innerₕ(cc[1], v(1) + D₋ₓ(v(1))) + innerₕ(cc[3], v(3))
-        ),
+                "composite routed with operators",
+                v -> innerₕ(cc[1], v(1) + D₋ₓ(v(1))) + innerₕ(cc[3], v(3))
+            ),
             ("composite crossed", v -> innerₕ(cc[1], v(2)))
-        )
+        ]
             lfx = form(Vc, g)
             @test lfx(wc) ≈ sum(assemble(lfx) .* parent(wc))
         end
@@ -795,12 +801,13 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         # bounds and a long one would keep a stale tail. Every linear entry
         # point checks the length before writing anything, so the vector comes back
         # untouched.
-        for (Ωw, dim) in ((mesh(domain(interval(0.0, 1.0)), 13, false), "1D"),
+        # Any: each mesh, space and closure is its own type
+        for (Ωw, dim) in Any[(mesh(domain(interval(0.0, 1.0)), 13, false), "1D"),
             (mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (false, false)),
-            "2D"))
+                "2D")]
             Ww = gridspace(Ωw)
-            for (label, sp, l) in (("scalar", Ww, v -> innerₕ(1.0, v)),
-                ("composite", Ww × Ww, V -> innerₕ(1.0, V[1]) + innerₕ(2.0, V[2])))
+            for (label, sp, l) in Any[("scalar", Ww, v -> innerₕ(1.0, v)),
+                ("composite", Ww × Ww, V -> innerₕ(1.0, V[1]) + innerₕ(2.0, V[2]))]
                 lw = form(sp, l)
                 @test execution_policy(sp) isa Bramble.CpuSerial
                 for m in (ndofs(sp) - 5, ndofs(sp) + 5)
@@ -1204,13 +1211,14 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         uc = Rₕ(Wc, x -> 1 + x[1]^2)
         wc = Rₕ(Wc, x -> sin(3x[1]) + 2)
 
-        for (nm, g, gw, ncolours) in (
+        # Any: each closure is its own type
+        for (nm, g, gw, ncolours) in Any[
             ("one colour", v -> innerₕ(uc, v), w -> innerₕ(uc, w), 1),
             (
-            "strided colours", v -> innerₕ(uc, v + 2 * D₋ₓ(v) - Mₓ(v)),
-            w -> innerₕ(uc, w + 2 * D₋ₓ(w) - Mₓ(w)), 2
-        )
-        )
+                "strided colours", v -> innerₕ(uc, v + 2 * D₋ₓ(v) - Mₓ(v)),
+                w -> innerₕ(uc, w + 2 * D₋ₓ(w) - Mₓ(w)), 2
+            )
+        ]
             lc = form(Wc, g)
             @test prod(_colour_strides(stencil_offsets(resolve_form_ast(lc)))) == ncolours
             bs = assemble(lc)
@@ -1379,8 +1387,9 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         Wm = gridspace(Ωm)
         Vm = Bramble.CompositeGridSpace((Wm, gridspace(Ωₕ)))
         um = Rₕ(Wm, x -> 1 + x[1] - x[2]^2)
-        for (sp, g) in ((Wm, v -> innerₕ(um, v + D₋ₓ(v))),
-            (Vm, v -> innerₕ(um, v(1) + D₋ₓ(v(1))) + innerₕ(100.0, v(2))))
+        # Any: each space and closure is its own type
+        for (sp, g) in Any[(Wm, v -> innerₕ(um, v + D₋ₓ(v))),
+            (Vm, v -> innerₕ(um, v(1) + D₋ₓ(v(1))) + innerₕ(100.0, v(2)))]
             lm = form(sp, g)
             hs = Bramble._host_mirror_space(sp)
             @test ndofs(hs) == ndofs(sp)

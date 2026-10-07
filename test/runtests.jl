@@ -113,70 +113,80 @@ end
 
 if __bramble_with_unit_tests
     @testset verbose=true "Core library" begin
-        include("utils/runtests.jl")
-        include("geometry/runtests.jl")
-        include("mesh/runtests.jl")
+        # `BRAMBLE_TEST_SHARD` (TestUtils) splits this block over CI runners: the form tests
+        # run under `forms-1` and `forms-2` (test/form/runtests.jl divides them), everything
+        # else here under `rest`. Unset, all of it runs.
+        if TestUtils.in_shard("rest")
+            include("utils/runtests.jl")
+            include("geometry/runtests.jl")
+            include("mesh/runtests.jl")
 
-        @testset "Grid spaces" begin
-            include("space/gridspaces.jl")
-            include("space/weights_staleness.jl")
-            include("space/vector_elements.jl")
-            include("space/backend_profile.jl")
-        end
+            @testset "Grid spaces" begin
+                include("space/gridspaces.jl")
+                include("space/weights_staleness.jl")
+                include("space/vector_elements.jl")
+                include("space/backend_profile.jl")
+            end
 
-        @testset "Operators" begin
-            include("space/difference.jl")
-            include("space/star_difference.jl")
-            include("space/star_vector_calculus.jl")
-            include("space/centered_difference.jl")
-            include("space/centered_vector_calculus.jl")
-            include("space/cross_weighted_difference.jl")
-            include("space/sbp_identities.jl")
-            include("space/sobolev_inequalities.jl")
-            include("space/discrete_calculus_identities.jl")
-            include("space/commutation.jl")
-            include("space/jump.jl")
-            include("space/shift.jl")
-            include("space/average.jl")
-            include("space/centered_average.jl")
-            include("space/dimensional_dispatch.jl")
-            include("space/inplace_operators.jl")
-            include("space/threaded_stencils.jl")
-            include("space/threaded_vector_calculus.jl")
-            include("space/threaded_broadcast.jl")
-            include("space/operators.jl")
-            include("space/operator_docstrings.jl")
-            include("space/inner_product.jl")
-            include("space/inner_plus_boundary.jl")
-            include("space/conservation.jl")
-            include("space/composite_operators.jl")
-            include("space/interpolation.jl")
-            include("space/interpolation_bounds.jl")
-            include("space/interpolation_outside.jl")
-            include("space/inference_allocation.jl")
-            include("convergence/runtests.jl")
-            include("space/element_type.jl")
-            if __bramble_with_ad_tests
-                include("space/autodiff.jl")
-                include("space/autodiff_backends.jl")
+            @testset "Operators" begin
+                include("space/difference.jl")
+                include("space/star_difference.jl")
+                include("space/star_vector_calculus.jl")
+                include("space/centered_difference.jl")
+                include("space/centered_vector_calculus.jl")
+                include("space/cross_weighted_difference.jl")
+                include("space/sbp_identities.jl")
+                include("space/sobolev_inequalities.jl")
+                include("space/discrete_calculus_identities.jl")
+                include("space/commutation.jl")
+                include("space/jump.jl")
+                include("space/shift.jl")
+                include("space/average.jl")
+                include("space/centered_average.jl")
+                include("space/dimensional_dispatch.jl")
+                include("space/inplace_operators.jl")
+                include("space/threaded_stencils.jl")
+                include("space/threaded_vector_calculus.jl")
+                include("space/threaded_broadcast.jl")
+                include("space/operators.jl")
+                include("space/operator_docstrings.jl")
+                include("space/inner_product.jl")
+                include("space/inner_plus_boundary.jl")
+                include("space/conservation.jl")
+                include("space/composite_operators.jl")
+                include("space/interpolation.jl")
+                include("space/interpolation_bounds.jl")
+                include("space/interpolation_outside.jl")
+                include("space/inference_allocation.jl")
+                include("convergence/runtests.jl")
+                include("space/element_type.jl")
+                if __bramble_with_ad_tests
+                    include("space/autodiff.jl")
+                    include("space/autodiff_backends.jl")
+                end
             end
         end
 
-        include("form/runtests.jl")
-        include("solvers/runtests.jl")
-        include("exporters/runtests.jl")
+        if TestUtils.in_shard("forms-1") || TestUtils.in_shard("forms-2")
+            include("form/runtests.jl")
+        end
 
-        # Independent full-pipeline tests (mesh -> space -> assemble -> solve) for a path no
-        # docs page reaches, as opposed to the `examples` group below, which runs the pages.
-        include("drivers/runtests.jl")
+        if TestUtils.in_shard("rest")
+            include("solvers/runtests.jl")
+            include("exporters/runtests.jl")
 
-        # Static allocation verification. Lives under `quality/` because that is what
-        # it is, but runs with the unit group because it is the one quality gate cheap enough
-        # to pay on every push (3 s, against minutes for JET), and an allocation regression
-        # is exactly the kind of thing that should not wait for the nightly to surface it.
-        # The `quality` group picks it up too, below, when the unit group is not running.
-        @testset "Static allocations" begin
-            include("quality/alloccheck.jl")
+            # Independent full-pipeline tests (mesh -> space -> assemble -> solve) for a path no
+            # docs page reaches, as opposed to the `examples` group below, which runs the pages.
+            include("drivers/runtests.jl")
+
+            # Static allocation verification. Lives under `quality/` because that is what
+            # it is, but runs with the unit group because it is the one quality gate cheap enough
+            # to pay on every push (3 s, against minutes for JET), and an allocation regression
+            # is exactly the kind of thing that should not wait for the nightly to surface it.
+            # The `quality` group picks it up too, below, when the unit group is not running.
+            @testset "Static allocations" begin
+                include("quality/alloccheck.jl")
+            end
         end
     end
 end

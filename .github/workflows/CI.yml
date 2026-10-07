@@ -47,7 +47,7 @@ jobs:
   test:
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch' }}
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.shard }}
     runs-on: ${{ matrix.os }}
     # One version, and it gates: 1.13, current release since 2026-09-10, is the Julia a
     # push has to pass on. It replaced the `~1.13.0-0` canary leg that sat here while
@@ -59,6 +59,10 @@ jobs:
     # architecture-dependent. Linux runs the same code daily in nightly.yml's `slow` job, on
     # the same Julia 1.13, so a Linux-only break is caught within the day rather than not at
     # all.
+    #
+    # The first run of the PR that added the shards also has an ubuntu leg. It is a #480
+    # measurement of the three shards on Linux, and S5 of the plan removes it again, so the
+    # paragraph above stays true once that PR merges.
     #
     # There is a specific thing that Linux leg is watching for, and it is the reason it
     # lives on a cadence rather than on the gate: a Linux-only allocation flake in `avgₕ!`
@@ -82,7 +86,14 @@ jobs:
         # range would pick up a `1.13.1-rc1` prerelease as soon as one is published.
         # `1.13` tracks released 1.13.x and nothing else.
         version: ["1.13"]
-        os: [macOS-latest]
+        # ubuntu-latest is a #480 measurement for this PR's first run only; S5 removes it.
+        os: [macOS-latest, ubuntu-latest]
+        # The unit group split into three parallel jobs, each running one shard of it (see
+        # BRAMBLE_TEST_SHARD in test/TestUtils.jl), so the gate takes about the longest
+        # shard plus precompile instead of the whole group. Three, not two: two would leave
+        # `Forms` alone near 22 minutes, over the 20-minute bar. `CI result` aggregates
+        # every leg, so the required check is unchanged.
+        shard: [forms-1, forms-2, rest]
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -164,6 +175,7 @@ jobs:
       - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
           BRAMBLE_TEST_GROUP: unit
+          BRAMBLE_TEST_SHARD: ${{ matrix.shard }}
           # 5, below this macOS runner's 7 GB, so a blow-up fails by name (see TestUtils.jl)
           # before the runner just kills the job. Coverage is on here, as it was by default.
           BRAMBLE_TEST_MAXRSS_GB: 5

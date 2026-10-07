@@ -309,11 +309,12 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
             B + transpose(B) - Diagonal(diag(B)))
         for dims in ((0, 3), (3, 0), (2, 0, 3), (1, 0))
             D = length(dims)
-            specsets = (
+            # Any: each spec set and each policy is its own type
+            specsets = Any[
                 ntuple(d -> mkf(dims[d]), D),
                 ntuple(d -> d == 1 ? mksym(dims[d]) : Diagonal(rand(rng, dims[d])), D),
-                ntuple(d -> d == 1 ? mkf(dims[d]) : Diagonal(rand(rng, dims[d])), D))
-            for fs in specsets, P in (CpuSerial(), CpuThreaded(), CpuPolyester())
+                ntuple(d -> d == 1 ? mkf(dims[d]) : Diagonal(rand(rng, dims[d])), D)]
+            for fs in specsets, P in Any[CpuSerial(), CpuThreaded(), CpuPolyester()]
 
                 K = _ke_op(Float64, dims, (((), fs),), P)
                 yb = fill(7.0, 3)
@@ -395,12 +396,14 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
         both_faces(n, mk) = any(
             d -> n[d] == 1 && (d, -1) in named(mk, length(n)) &&
                  (d, 1) in named(mk, length(n)), eachindex(n))
-        masks2 = ((:left, :bottom), (:right, :top), (:xmin, :xmax), (:ymin, :ymax),
-            (:xmin, :left), :boundary, (:boundary, :xmin))
-        masks3 = ((:left, :top, :back), (:right, :bottom, :front), (:back, :front), :boundary)
+        # Any: each mask, and each dimension's sizes and masks, is its own type
+        masks2 = Any[(:left, :bottom), (:right, :top), (:xmin, :xmax), (:ymin, :ymax),
+            (:xmin, :left), :boundary, (:boundary, :xmin)]
+        masks3 = Any[(:left, :top, :back), (:right, :bottom, :front), (:back, :front),
+            :boundary]
         sizes2 = ((9, 7), (1, 5), (5, 1), (2, 5), (3, 3), (2, 2), (3, 1), (1, 1))
         sizes3 = ((6, 5, 7), (1, 4, 3), (4, 1, 3), (3, 4, 1), (2, 3, 2), (1, 1, 4), (1, 1, 1))
-        for (sizes, masks) in ((sizes2, masks2), (sizes3, masks3)), n in sizes
+        for (sizes, masks) in Any[(sizes2, masks2), (sizes3, masks3)], n in sizes
 
             for graded in (true, false)
                 (graded || n == first(sizes)) || continue
@@ -420,10 +423,11 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
 
         # Chains, sums, restrictions, coefficients and several `inner_Γ` in one form, with
         # the masks each `inner_Γ` names.
-        for n in ((9, 7), (1, 5), (5, 1), (6, 5, 7), (1, 4, 3))
+        # Any: each size, form and mask list is its own type
+        for n in Any[(9, 7), (1, 5), (5, 1), (6, 5, 7), (1, 4, 3)]
             W = _ke_space(n)
             fx = Rₕ(W, x -> 1 + x[1])
-            forms = (
+            forms = Any[
                 ((u, v) -> inner_Γ(D₋ₓ(D₋ᵧ(u)), D₊ₓ(Mₓ(v)); markers = :boundary),
                     (:boundary,)),
                 ((u, v) -> inner_Γ(fx * u, restrict_to(:interior, D₋ₓ(v)); markers = :ymin),
@@ -432,7 +436,7 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
                     (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
                               inner_Γ(u, v; markers = (:xmax, :xmin)) +
                               inner_Γ(D₋ₓ(u), v; markers = :xmax),
-                    ((:xmax, :xmin), :xmax)))
+                    ((:xmax, :xmin), :xmax))]
             for (f, masks) in forms
                 a = form(W, W, f)
                 if any(mk -> both_faces(n, mk), masks)
@@ -449,17 +453,18 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
     # face or a scale on such an axis changes nothing about that.
     @testset "edge: one-point axes" begin
         _ke_quiet() do
-            for n in ((1, 4), (4, 1), (2, 1, 3))
+            # Any: each size and form is its own type
+            for n in Any[(1, 4), (4, 1), (2, 1, 3)]
                 W = _ke_space(n)
                 fx = Rₕ(W, x -> 1 + x[1])
                 fy = Rₕ(W, x -> 2 + x[2]^2)
-                forms = (
+                forms = Any[
                     (u, v) -> innerₕ(D₋ₓ(Mₓ(u)), D₋ₓ(Mₓ(v))),
                     (u, v) -> innerₕ(restrict_to(:interior, u), v),
                     (u, v) -> inner_Γ(D₋ₓ(u), v; markers = :xmin),
                     # A coefficient along the one-point axis or the other.
                     (u, v) -> innerₕ(fx * D₋ₓ(u), D₋ₓ(v)),
-                    (u, v) -> innerₕ(D₋ᵧ(fy * u), v))
+                    (u, v) -> innerₕ(D₋ᵧ(fy * u), v)]
                 for f in forms
                     a = form(W, W, f)
                     @test is_separable(a)
@@ -570,15 +575,16 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
         # A number scale inside a side, merged from like terms or written there: Int, Complex,
         # BigFloat, nested, zero, beside a coefficient, a face or a restriction. On a mesh
         # with a one-point axis the NaNs of the differences agree too.
-        for n in ((7, 6), (1, 5), (4, 3, 5))
+        # Any: each size and form is its own type
+        for n in Any[(7, 6), (1, 5), (4, 3, 5)]
             Wn = _ke_space(n)
-            forms = (
+            forms = Any[
                 (u, v) -> innerₕ(2.0 * D₋ₓ(3.0 * u), v),
                 (u, v) -> innerₕ(2.0 * D₋ᵧ(u) + u, 3.0 * v + D₋ₓ(v)),
                 (u, v) -> innerₕ(D₋ₓ(u) + 2 * u, v),
                 (u, v) -> innerₕ(D₋ₓ(u) + (1.0 + 2.0im) * u, v),
                 (u, v) -> innerₕ(D₋ₓ(u) + big"1.25" * u, v),
-                (u, v) -> Ref(2.0) * innerₕ(restrict_to(:interior, D₋ₓ(u) + 1.3 * u), v))
+                (u, v) -> Ref(2.0) * innerₕ(restrict_to(:interior, D₋ₓ(u) + 1.3 * u), v)]
             for f in (length(n) == 2 ? forms : forms[1:1])
                 a = form(Wn, Wn, f)
                 @test is_separable(a)
@@ -718,8 +724,9 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
         # Pure Neumann: constants are in the kernel. Refused from the form and from the
         # operator, whatever the route to the zero eigenvalue; fine with a Dirichlet face.
         W3 = _ke_space((6, 5, 7))
-        singular = ((W, grad), (W3, grad),
-            (W, (u, v) -> 1e-14 * innerₕ(u, v) + grad(u, v)))
+        # Any: each space and form is its own type
+        singular = Any[(W, grad), (W3, grad),
+            (W, (u, v) -> 1e-14 * innerₕ(u, v) + grad(u, v))]
         for (Ws, f) in singular
             a = form(Ws, Ws, f)
             Fs = rand(MersenneTwister(KE_SEED), ndofs(Ws))
@@ -735,7 +742,8 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
         @test isapprox(fdm_solve(a, Fb; dirichlet = :boundary), A \ Fb; rtol = 1e-9)
 
         # A 2-point axis leaves no unknown under `:boundary`: the answer is zeros.
-        for n in ((2, 2), (2, 4), (2, 3, 3), (3, 2, 4))
+        # Any: each size is its own type
+        for n in Any[(2, 2), (2, 4), (2, 3, 3), (3, 2, 4)]
             Wn = _ke_space(n)
             a = form(Wn, Wn, (u, v) -> innerₕ(u, v) + grad(u, v) +
                                        inner_Γ(u, v; markers = (:xmin,)))
@@ -802,17 +810,17 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
             end
         lap(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
         squares = range(0, 1; length = 7) .^ 2
-        mutations = (
+        # Any: each mutation and each policy is its own type
+        mutations = Any[
             :set_points_on_one_axis => Ω -> Bramble.set_points!(Ω(1), collect(squares)),
             :change_points_on_one_axis => Ω -> Bramble.change_points!(Ω(2),
                 collect(range(0, 1; length = 6) .^ 2)),
             :set_the_same_points => Ω -> Bramble.set_points!(Ω(1), copy(Bramble.points(Ω(1)))),
             :refine_the_mesh => Bramble.iterative_refinement!,
             :refine_one_axis => Ω -> Bramble.iterative_refinement!(Ω(1)),
-            :mutate_and_back =>
-                Ω -> (p0 = copy(Bramble.points(Ω(1)));
-                    Bramble.set_points!(Ω(1), p0 .^ 2); Bramble.set_points!(Ω(1), p0)))
-        for (kind, mutate!) in mutations, P in (CpuSerial(), CpuPolyester())
+            :mutate_and_back => Ω -> (p0 = copy(Bramble.points(Ω(1)));
+                Bramble.set_points!(Ω(1), p0 .^ 2); Bramble.set_points!(Ω(1), p0))]
+        for (kind, mutate!) in mutations, P in Any[CpuSerial(), CpuPolyester()]
 
             Ωₕ = _ke_mesh((7, 6), P; graded = false)
             W, V = gridspace(Ωₕ), gridspace(Ωₕ, Val(2))

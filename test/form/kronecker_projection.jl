@@ -53,8 +53,9 @@ end
 
 @testset "Kronecker projection (#427)" begin
     @testset "families match assemble" begin
-        for W in (_proj_graded_space((9, 7)), _proj_graded_space((6, 5, 7)))
-            forms = (
+        # Any: each space is its own type
+        for W in Any[_proj_graded_space((9, 7)), _proj_graded_space((6, 5, 7))]
+            forms = Any[  # Any: each closure is its own type
                 (u, v) -> innerₕ(D₊ₓ(u), D₊ₓ(v)),
                 (u, v) -> innerₕ(Dc(u, Val(1)), Dc(v, Val(1))),
                 (u, v) -> innerₕ(Mₓ(u), Mₓ(v)),
@@ -69,7 +70,7 @@ end
                 (u, v) -> inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(D₋ₓ(v))),
                 (u, v) -> innerₕ(restrict_to(:interior, u), v),
                 (u, v) -> innerₕ(restrict_to(:interior, D₋ₓ(u)), D₋ᵧ(v))
-            )
+            ]
             for f in forms
                 @test _proj_matches(form(W, W, f))
             end
@@ -129,10 +130,10 @@ end
     @testset "inner_Γ is a sum over its faces" begin
         W2 = _proj_graded_space((9, 7))
         W3 = _proj_graded_space((6, 5, 7))
-        cases = (
+        cases = Any[  # Any: each space and marker set is its own type
             (W2, :xmin, 1), (W2, :ymax, 1), (W2, (:xmin, :ymin), 2), (W2, :boundary, 4),
             (W3, :zmax, 1), (W3, (:xmax, :ymin), 2), (W3, (:xmin, :ymax, :zmin), 3),
-            (W3, :boundary, 6))
+            (W3, :boundary, 6)]
         for (W, mk, nfaces) in cases
             a = form(W, W, (u, v) -> inner_Γ(u, v; markers = mk))
             P = Bramble._kron_project(only(_proj_leaves(a))[2], mesh(W))
@@ -155,12 +156,13 @@ end
     end
 
     @testset "single-axis coefficients factor" begin
-        for W in (_proj_graded_space((9, 7)), _proj_graded_space((6, 5, 7)))
+        # Any: each space is its own type
+        for W in Any[_proj_graded_space((9, 7)), _proj_graded_space((6, 5, 7))]
             fx = Rₕ(W, x -> 1 + x[1])
             fy = Rₕ(W, x -> 2 + x[2]^2)
             fl = Rₕ(W, x -> 1 + x[end]^3)  # the last axis: z in 3D
             c = Rₕ(W, x -> 3.0)            # varies along no axis
-            forms = (
+            forms = Any[  # Any: each closure is its own type
                 (u, v) -> innerₕ(fx * (fy * u), v) + inner₊ₓ(fy * D₋ₓ(u), D₋ₓ(v)),
                 (u, v) -> innerₕ(D₋ᵧ(fy * u), fx * D₊ₓ(v)),
                 (u, v) -> innerₕ(D₋ₓ(fx * (fx * u)), Mₓ(fl * v)),
@@ -170,7 +172,7 @@ end
                 (u, v) -> innerₕ(u, v) + inner_Γ(fy * u, fx * v; markers = :boundary),
                 (u, v) -> innerₕ(Vector(fl) * u, v),
                 (u, v) -> innerₕ((() -> 2.5) * u, v)
-            )
+            ]
             for f in forms
                 @test _proj_matches(form(W, W, f))
             end
