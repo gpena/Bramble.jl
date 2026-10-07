@@ -92,9 +92,9 @@ jobs:
         version: ["1.13"]
         os: [ubuntu-latest, macOS-latest]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.version }}
 
@@ -104,7 +104,7 @@ jobs:
       # the packages and the artifacts are still cached; the compile cost (a warm leg ran about
       # half as long) is the price of keeping CI, Nightly and the docs warm. Weekly runs once a
       # week and on demand.
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
         with:
           cache-compiled: "false"
 
@@ -128,7 +128,7 @@ jobs:
 
       - uses: julia-actions/julia-processcoverage@v1
         if: matrix.os == 'ubuntu-latest'
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@v7
         if: matrix.os == 'ubuntu-latest'
         with:
           files: lcov.info
@@ -137,7 +137,7 @@ jobs:
           flags: backends
           fail_ci_if_error: false
       # Kept for the `coverage-floor` job below: each half sees only its own files.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && matrix.os == 'ubuntu-latest'
         with:
           name: lcov-backends
@@ -161,14 +161,14 @@ jobs:
       contents: read
       actions: read  # to download nightly.yml's `lcov-suite` artifact
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: "1.13"
 
       # A leg that died before processing coverage uploads nothing; report on what exists.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           pattern: lcov-*
@@ -247,12 +247,12 @@ jobs:
       OSV_SCANNER_VERSION: v2.5.1
       OSV_SCANNER_SHA256: f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # The current stable release, not the 1.13 the test matrix pins: the
       # question is what an install done today resolves to, and the stdlib JLL versions a
       # manifest pins come from the Julia release that wrote it.
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: "1"
 
@@ -311,7 +311,7 @@ jobs:
                exit "$status" ;;
           esac
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: osv-report

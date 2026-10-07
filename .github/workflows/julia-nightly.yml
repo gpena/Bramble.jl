@@ -28,14 +28,14 @@ jobs:
     runs-on: ${{ inputs.os }}
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: nightly
 
       # Nightly changes daily, and a compiled cache from another build is invalid anyway.
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
         with:
           cache-compiled: "false"
 

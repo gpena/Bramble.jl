@@ -1,0 +1,13 @@
+# A Dependabot PR that bumps `julia-actions/cache` needs the restore path list in
+# CI.yml's `actions/cache/restore` step re-derived; the comment above that step says how.
+# Julia compat bumps are CompatHelper's, so only the github-actions ecosystem is here.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns:
+          - "*"
