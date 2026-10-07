@@ -162,11 +162,10 @@ struct FDMPreconditioner{T, F} <: AbstractMatrixFreePreconditioner{T}
     factorization::F
 end
 
-# The factorisation (`BrambleKroneckerExt`) supplies `size` and the three-argument `ldiv!`.
+# The factorisation's `size` and both `ldiv!` methods come from `BrambleKroneckerExt`, the
+# only place a three-argument `ldiv!` exists for `ldiv!(P, x)` to forward to.
 Base.size(P::FDMPreconditioner) = size(P.factorization)
 Base.size(P::FDMPreconditioner, i::Integer) = size(P.factorization, i)
-
-ldiv!(P::FDMPreconditioner, x::AbstractVector) = ldiv!(x, P, x)
 
 # --- The diagonal walk ------------------------------------------------------------------ #
 

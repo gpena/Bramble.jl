@@ -975,6 +975,8 @@ function LinearAlgebra.ldiv!(y::AbstractVector, P::Bramble.FDMPreconditioner,
     return _fdm_ldiv!(y, P.factorization, x, true)
 end
 
+LinearAlgebra.ldiv!(P::Bramble.FDMPreconditioner, x::AbstractVector) = ldiv!(x, P, x)
+
 # Warms this extension's entry points -- `Kronecker.kronecker` and both `fdm_solve` calls
 # (unconstrained and `dirichlet = :boundary`) -- on a 2D separable, constant-coefficient
 # form, and the Schur route on that form plus an advection term. They are only reachable
