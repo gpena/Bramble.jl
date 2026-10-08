@@ -30,11 +30,25 @@ end
 symmetric_form(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
 advection_form(u, v) = innerₕ(u, v) + 0.1 * inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(D₋ₓ(u), v)
 
+# The refill's forms, each with a live `Ref` coefficient: symmetric; Schur; Schur with the
+# `Ref` on the mass term, so `c_m` changes; and a negative multiple of the axis-1 mass
+# (`-0.5 * innerₕ(D₋ᵧ(u), v)`), which the classification matches proportionally and
+# represents negated.
+const KRON_REFILL_C = Ref(2.5)
+const KRON_REFILL_FORMS = (
+    (u, v) -> innerₕ(u, v) + KRON_REFILL_C * inner₊(∇ₕ(u), ∇ₕ(v)),
+    (u, v) -> innerₕ(u, v) + KRON_REFILL_C * inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(D₋ₓ(u), v),
+    (u, v) -> KRON_REFILL_C * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+              Bramble.inner₊ₓ(D₋ₓ(u), v),
+    (u, v) -> -0.5 * innerₕ(Bramble.D₋ᵧ(u), v) + innerₕ(u, v) +
+              KRON_REFILL_C * inner₊(∇ₕ(u), ∇ₕ(v)))
+
 # The arrays `_fdm_decompose!` writes, so zeroing them first keeps a no-op from passing.
 outputs(f::KronExt._FDMFactorization) = (f.Q..., f.Λ)
 outputs(f::KronExt._SchurFactorization) = (f.Qc..., f.Zt..., f.S..., f.Tr..., f.Λ)
 wipe!(f) = foreach(A -> fill!(A, zero(eltype(A))), outputs(f))
 decompose_bytes(f) = (KronExt._fdm_decompose!(f); @allocated KronExt._fdm_decompose!(f))
+refill_bytes(f, K) = (fdm_factorize!(f, K); @allocated fdm_factorize!(f, K))
 
 function rhs(W, ::Type{T}, dirichlet) where {T}
     F = rand(MersenneTwister(KRON_REFACTOR_SEED), T, ndofs(W))
@@ -97,6 +111,63 @@ end
                 @test norm(Q' * f.M[d] * Z - f.Tr[d]) <= tol * norm(f.M[d]) * size(Q, 1)
             end
         end
+    end
+
+    # `fdm_factorize!(f, K)` after `change_points!` and a new `Ref` value: 0 B once warm,
+    # and the solve bitwise that of a fresh factorisation of the new operator. Both changes
+    # move every buffer, so a refill that wrote nothing would fail the bitwise test.
+    @testset "fdm_factorize!(f, K): 0 B, bitwise" begin
+        for T in (Float64, Float32), p in (Serial(), CpuPolyester()),
+            n in ((17, 13), (7, 6, 5)), (k, L) in enumerate(KRON_REFILL_FORMS),
+            dir in (nothing, :boundary)
+            KRON_REFILL_C[] = 2.5
+            W = graded_space(T, n, p)
+            f = fdm_factorize(kronecker_operator(form(W, W, L)); dirichlet = dir)
+            @test f isa (k == 1 ? KronExt._FDMFactorization : KronExt._SchurFactorization)
+            x(d) = T.(range(0.0, 1.0; length = n[d]) .^ (1 + 0.4d))
+            Bramble.change_points!(mesh(W), ntuple(x, length(n)))
+            W2 = gridspace(mesh(W))
+            a2 = form(W2, W2, L)
+            KRON_REFILL_C[] = 0.7
+            K2 = kronecker_operator(a2)
+            @test fdm_factorize!(f, K2) === f
+            @test refill_bytes(f, K2) == 0
+            F = rhs(W2, T, dir)
+            x2 = fdm_solve!(similar(F), f, F)
+            g = fdm_factorize(K2; dirichlet = dir)
+            @test x2 == fdm_solve!(similar(F), g, F)
+            @test f.M == g.M && f.A == g.A && f.c_m[] == g.c_m[]
+            T === Float64 && @test x2 ≈ assemble(a2; dirichlet = dir) \ F rtol = 1e-10
+        end
+        KRON_REFILL_C[] = 2.5
+    end
+
+    # The recipe of each form: which terms differ on which axis, and how the masses matched.
+    @testset "fdm_factorize!: recorded recipe" begin
+        W = graded_space(Float64, (17, 13), Serial())
+        recipe(L) = fdm_factorize(kronecker_operator(form(W, W, L))).recipe
+        r = map(recipe, KRON_REFILL_FORMS)
+        @test map(q -> q.on, r) == ([0, 1, 2], [0, 1, 1, 2], [0, 1, 1, 2], [2, 0, 1, 2])
+        @test map(q -> q.proportional, r) == (false, false, false, true)
+        @test r[4].mass == (1, 2) && r[4].neg == (true, false)
+        @test all(q -> !any(q.neg), r[1:3])
+    end
+
+    # A stale operator is refused as `fdm_solve(K, F)` refuses it, and an empty interior has
+    # nothing to refill.
+    @testset "fdm_factorize!: stale, empty" begin
+        W = graded_space(Float64, (17, 13), Serial())
+        K = kronecker_operator(form(W, W, symmetric_form))
+        f = fdm_factorize(K)
+        Bramble.change_points!(mesh(W), (range(0.0, 1.0; length = 17) .^ 2,
+            range(0.0, 1.0; length = 13) .^ 3))
+        @test_throws ArgumentError fdm_factorize!(f, K)
+        @test_throws "change_points!" fdm_factorize!(f, K)
+        V = graded_space(Float64, (2, 9), Serial())
+        KV = kronecker_operator(form(V, V, symmetric_form))
+        fV = fdm_factorize(KV; dirichlet = :boundary)
+        @test fdm_factorize!(fV, KV) === fV
+        @test refill_bytes(fV, KV) == 0
     end
 
     # A 2-point axis under `:boundary` leaves no interior: nothing to decompose.

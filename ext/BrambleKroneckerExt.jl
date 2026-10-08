@@ -51,7 +51,7 @@ using Kronecker: Kronecker, ⊗
 using LinearAlgebra: LinearAlgebra, BlasInt, Diagonal, Symmetric, isposdef, issymmetric,
                      ldiv!, mul!
 using LinearAlgebra.BLAS: @blasfunc, libblastrampoline
-using SparseArrays: SparseMatrixCSC, dropzeros!, nonzeros, nnz, sparse
+using SparseArrays: SparseMatrixCSC, dropzeros!, nonzeros, nnz, nzrange, rowvals, sparse
 using PrecompileTools: @setup_workload, @compile_workload
 
 # --- 1. Conversion to a Kronecker.jl object ------------------------------------------ #
@@ -266,21 +266,46 @@ end
 # With no mass term (`c_m == 0`) and a constant kernel on every axis, the constant (or its
 # left analogue) is in the kernel of the whole Kronecker sum: the system is singular.
 # `ϵ` is the eps of the least precise factor: a Float64 literal coefficient makes `K` Float64,
-# yet the stiffness of a Float32 mesh keeps its Float32 rounding.
+# yet the stiffness of a Float32 mesh keeps its Float32 rounding. Mapped over the tuples of
+# terms and factors, so a refill computes it without allocating.
 function _fdm_data_eps(K::KroneckerLinearOperator{T}) where {T}
-    maximum(f -> eps(real(_fdm_factor_eltype(f))), (f for t in K.terms for f in t.factors);
-        init = eps(real(T)))
+    e(F) = eps(real(_fdm_factor_eltype(F)))
+    return foldl(max, map(t -> foldl(max, map(e, t.factors)), K.terms); init = eps(real(T)))
 end
 _fdm_factor_eltype(F) = eltype(F)
 _fdm_factor_eltype(F::Bramble._KronDeviceDiagonal) = eltype(F.diag)
 _fdm_factor_eltype(F::Bramble._KronDeviceSparse) = eltype(F.nzval)
 
-function _fdm_constant_kernel(A::SparseMatrixCSC, ϵ::Real)
-    Aw = SparseMatrixCSC{Float64, Int}(A)
-    o = ones(size(Aw, 2))
-    bound = size(Aw, 1) * ϵ * maximum(abs, sum(abs, Aw; dims = 2); init = 0.0)
-    return maximum(abs, Aw * o; init = 0.0) <= bound ||
-           maximum(abs, transpose(Aw) * o; init = 0.0) <= bound
+# On the dense restricted `A_d` a factorisation keeps, in Float64 loops, so a build and a
+# refill run the same test and a refill allocates nothing.
+function _fdm_constant_kernel(A::Matrix, ϵ::Real)
+    n = size(A, 1)
+    rows, cols, norm∞ = 0.0, 0.0, 0.0
+    for i in 1:n
+        s, sa = 0.0, 0.0
+        for j in 1:n
+            a = Float64(A[i, j])
+            s += a
+            sa += abs(a)
+        end
+        rows, norm∞ = max(rows, abs(s)), max(norm∞, sa)
+    end
+    for j in 1:n
+        s = 0.0
+        for i in 1:n
+            s += Float64(A[i, j])
+        end
+        cols = max(cols, abs(s))
+    end
+    bound = n * ϵ * norm∞
+    return rows <= bound || cols <= bound
+end
+
+# The structural refusal above: no mass term and a constant kernel on every axis.
+function _fdm_check_kernel(A::NTuple{D, Matrix}, c_m, ϵ::Real, precond::Bool) where {D}
+    iszero(c_m) && all(d -> _fdm_constant_kernel(A[d], ϵ), 1:D) &&
+        _throw_fdm_stage(ϵ > eps(Float64) ? 6 : 5, 0; precond = precond)
+    return nothing
 end
 
 # A device-backed `K` holds `_KronDeviceDiagonal`/`_KronDeviceSparse`
@@ -332,33 +357,38 @@ _fdm_spd(M::SparseMatrixCSC) = issymmetric(M) && isposdef(Symmetric(Matrix(M)))
 # terms wins (the exact one on a tie), since the exact pass reads a one-axis term with a
 # literal folded into its mass factor, `50 * innerₕ(D₋ᵧ(u), v)`, as a two-axis term. So `K_L`
 # is the form without its two-axis terms, factorised as `fdm_solve` factorises that form.
+# The fifth value is the recipe `fdm_factorize!` replays (`_FDMRecipe`), empty with `precond`.
 function _fdm_axis_data(K::KroneckerLinearOperator{T, D}, rng::NTuple{D};
         precond::Bool = false) where {T, D}
     cs = T[]
     fs = NTuple{D, SparseMatrixCSC{T, Int}}[]
-    for term in K.terms
+    kept = Int[]  # the index in `K.terms` of each term kept
+    for (k, term) in enumerate(K.terms)
         c = T(Bramble._kron_coeff(term.scales))  # `T`: a Float32 device keeps Float32
         f = ntuple(d -> SparseMatrixCSC{T, Int}(_fdm_factor(term.factors[d], rng[d])), Val(D))
         # A zero term (a zero `Ref`, or a factor that vanishes on the interior) adds nothing.
         (iszero(c) || any(F -> nnz(F) == 0, f)) && continue
         push!(cs, c)
         push!(fs, f)
+        push!(kept, k)
     end
+    nterms = length(K.terms)
     exact = _fdm_classify(cs, fs, Val(D), false, false)
-    exact isa Tuple{Int, Int} || return exact
+    exact isa Tuple{Int, Int} || return _fdm_recorded(exact, fs, kept, nterms, false)
     scaled = _fdm_classify(cs, fs, Val(D), true, false)
-    scaled isa Tuple{Int, Int} || return scaled
+    scaled isa Tuple{Int, Int} || return _fdm_recorded(scaled, fs, kept, nterms, true)
     precond || return _throw_fdm_stage(max(exact, scaled)...)
     es = _fdm_classify(cs, fs, Val(D), false, true)
     ss = _fdm_classify(cs, fs, Val(D), true, true)
     es isa Tuple{Int, Int} && ss isa Tuple{Int, Int} &&
         return _throw_fdm_stage(max(es, ss)...; precond = true)
     pick = es isa Tuple{Int, Int} ? ss : ss isa Tuple{Int, Int} ? es : es[5] <= ss[5] ? es : ss
-    return pick[1:4]
+    return (pick[1:4]..., _fdm_no_recipe(T, Val(D)))
 end
 
-# One classification pass: `(M, A, c_m, symmetric)` (with `split`, the number of terms left
-# out appended), or the furthest `(stage, axis)` reached.
+# One classification pass: `(M, A, c_m, symmetric, on)` (with `split`, the number of terms
+# left out in place of `on`), or the furthest `(stage, axis)` reached. `on[i]` is the one
+# axis term `i` differs on, 0 for a term equal to the masses everywhere.
 # The candidate masses on axis `d` are the distinct axis-`d` factors, tried most frequent
 # first. With `proportional`, factors are distinct only up to a scalar multiple: a class is
 # represented with a nonnegative trace, so a negative multiple of a mass seen first does not
@@ -421,12 +451,50 @@ function _fdm_classify(cs::Vector{T}, fs::Vector{NTuple{D, SparseMatrixCSC{T, In
             key < bestkey && ((best, bestkey) = ((M, A, c_m, symmetric, key[1]), key))
             continue
         end
-        symmetric && return M, A, c_m, true
-        fallback === nothing && (fallback = (M, A, c_m))
+        symmetric && return M, A, c_m, true, on
+        fallback === nothing && (fallback = (M, A, c_m, false, on))
     end
     best === nothing || return best
-    fallback === nothing || return (fallback..., false)
+    fallback === nothing || return fallback
     return (stage, axis)
+end
+
+# What the classification found at build, which `fdm_factorize!(f, K)` replays instead of
+# searching again. Per term of `K`, `on[i]` is -1 (dropped: a zero coefficient, or a factor
+# vanishing on the interior), 0 (equal to the masses everywhere, a `c_m` term) or the one
+# axis it differs on. `proportional`: the factors matched the masses up to a scalar
+# multiple, not exactly. `mass[d]` is the term whose axis-`d` factor is the mass, negated
+# when `neg[d]` (the proportional pass represents a class with a nonnegative trace).
+# `coef` is the refill's scratch for each term's coefficient. Empty (`on == Int[]`) for an
+# empty interior or a preconditioner, which are never refilled from `K`.
+struct _FDMRecipe{T, D}
+    on::Vector{Int}
+    proportional::Bool
+    mass::NTuple{D, Int}
+    neg::NTuple{D, Bool}
+    coef::Vector{T}
+end
+
+function _fdm_no_recipe(::Type{T}, ::Val{D}) where {T, D}
+    return _FDMRecipe{T, D}(Int[], false, ntuple(_ -> 0, Val(D)), ntuple(_ -> false, Val(D)),
+        T[])
+end
+
+# A pass's `(M, A, c_m, symmetric, on)` over the kept terms `fs` (`kept[i]` the index of
+# `fs[i]` in `K.terms`, of which there are `nterms`), with its recipe in place of `on`. The
+# mass of axis `d` is the factor of the term that opened its class, the very object, or
+# that factor negated: then it is the first term not differing on `d`.
+function _fdm_recorded(res, fs::Vector{NTuple{D, SparseMatrixCSC{T, Int}}},
+        kept::Vector{Int}, nterms::Int, proportional::Bool) where {T, D}
+    M, A, c_m, symmetric, on = res
+    on_all = fill(-1, nterms)
+    on_all[kept] = on
+    rep(d) = something(findfirst(i -> fs[i][d] === M[d], eachindex(fs)),
+        findfirst(!=(d), on))
+    mass = ntuple(d -> kept[rep(d)], Val(D))
+    neg = ntuple(d -> fs[rep(d)][d] !== M[d], Val(D))
+    return M, A, c_m, symmetric,
+    _FDMRecipe{T, D}(on_all, proportional, mass, neg, zeros(T, nterms))
 end
 
 # The LAPACK workspace of one axis's symmetric-definite eigenproblem (`xsygvd`), sized by a
@@ -484,6 +552,7 @@ end
 # `dirichlet = nothing`). `M[d]`, `A[d]` are the dense restricted mass and operator of axis
 # `d` and `c_m` the mass coefficient, from which `_fdm_decompose!` recomputes `Q`, `Λ` (and
 # `λ`, `vec(Λ)`) through the LAPACK workspaces `lapack`; `precond` words its refusal.
+# `fdm_factorize!` refills `M`, `A` and `c_m` by replaying `recipe`.
 struct _FDMFactorization{T, D}
     n::Int
     boundary::Bool
@@ -500,6 +569,7 @@ struct _FDMFactorization{T, D}
     c_m::Base.RefValue{T}
     precond::Bool
     lapack::NTuple{D, _SygvdWork{T}}
+    recipe::_FDMRecipe{T, D}
 end
 
 function _fdm_slabs(v::Vector, dims::NTuple{D, Int}) where {D}
@@ -522,35 +592,34 @@ function _fdm_factorize(K::KroneckerLinearOperator{T, D}, dirichlet;
         # A 2-point axis leaves no interior: every unknown is a Dirichlet one, and zero.
         Z = ntuple(d -> zeros(T, dims[d], dims[d]), Val(D))
         return _fdm_symmetric(K.n, boundary, interior, Z, map(copy, Z), zero(T), dims,
-            precond)
+            precond, _fdm_no_recipe(T, Val(D)))
     end
-    M, A, c_m, symmetric = _fdm_axis_data(K, rng; precond = precond)
-    ϵ = _fdm_data_eps(K)
+    M, A, c_m, symmetric, recipe = _fdm_axis_data(K, rng; precond = precond)
+    Md = ntuple(d -> Matrix(M[d]), Val(D))
+    Ad = ntuple(d -> Matrix(A[d]), Val(D))
     # In a narrower precision, an SPD axis whose boundary rows are tiny against its largest
     # (a mesh fine in the middle, coarse at both ends) also passes for one with a constant
     # kernel: the refusal then names Float64 too.
-    iszero(c_m) && all(d -> _fdm_constant_kernel(A[d], ϵ), 1:D) &&
-        _throw_fdm_stage(ϵ > eps(Float64) ? 6 : 5, 0; precond = precond)
-    Md = ntuple(d -> Matrix(M[d]), Val(D))
-    Ad = ntuple(d -> Matrix(A[d]), Val(D))
+    _fdm_check_kernel(Ad, c_m, _fdm_data_eps(K), precond)
     symmetric ||
-        return _schur_factorize(K.n, boundary, interior, Md, Ad, c_m, dims; precond = precond)
+        return _schur_factorize(K.n, boundary, interior, Md, Ad, c_m, dims, recipe;
+            precond = precond)
     return _fdm_decompose!(_fdm_symmetric(K.n, boundary, interior, Md, Ad, c_m, dims,
-        precond))
+        precond, recipe))
 end
 
 # An `_FDMFactorization` holding `M`, `A`, `c_m` and every buffer, its LAPACK workspaces
 # sized (no query on an empty interior), `Q` and `Λ` zero until `_fdm_decompose!` fills them.
 function _fdm_symmetric(n::Int, boundary::Bool, interior::Vector{Int},
         M::NTuple{D, Matrix{T}}, A::NTuple{D, Matrix{T}}, c_m::T, dims::NTuple{D, Int},
-        precond::Bool) where {T, D}
+        precond::Bool, recipe::_FDMRecipe{T, D}) where {T, D}
     Q = map(copy, A)
     lapack = ntuple(d -> _SygvdWork(Q[d], prod(dims) > 0), Val(D))
     Λ = zeros(T, dims)
     u = Vector{T}(undef, prod(dims))
     w = similar(u)
     return _FDMFactorization{T, D}(n, boundary, interior, Q, Λ, vec(Λ), u, w,
-        _fdm_slabs(u, dims), _fdm_slabs(w, dims), M, A, Ref(c_m), precond, lapack)
+        _fdm_slabs(u, dims), _fdm_slabs(w, dims), M, A, Ref(c_m), precond, lapack, recipe)
 end
 
 # Recomputes `f`'s per-axis decompositions from `f.M`, `f.A` and `f.c_m` alone, allocating
@@ -703,8 +772,9 @@ end
 # applying `Q_d'` and `Z_d`. `stride[k]` is `n_1 ... n_{k-1}` (`stride[D + 1]` the total),
 # the length of a level-`k` slab; `r[k]`, `p[k]` are that level's buffers for a slab's
 # right-hand side (then `L y_i`) and `P_{k-1} y_i`. `M[d]`, `A[d]`: axis `d`'s dense
-# restricted mass and operator. `_fdm_decompose!` recomputes every factor from them alone,
-# through the LAPACK workspaces `lapack`; `Λ` serves only the singularity refusal.
+# restricted mass and operator. `_fdm_decompose!` recomputes every factor from them alone
+# and `c_m`, through the LAPACK workspaces `lapack`; `Λ` serves only the singularity
+# refusal. `fdm_factorize!` refills `M`, `A` and `c_m` by replaying `recipe`.
 struct _SchurFactorization{T, D, C <: Complex{T}}
     n::Int
     boundary::Bool
@@ -713,7 +783,7 @@ struct _SchurFactorization{T, D, C <: Complex{T}}
     Zt::NTuple{D, Matrix{C}}
     S::NTuple{D, Matrix{C}}
     Tr::NTuple{D, Matrix{C}}
-    c_m::C
+    c_m::Base.RefValue{C}
     dims::NTuple{D, Int}
     stride::Vector{Int}
     r::Vector{Vector{C}}
@@ -727,6 +797,7 @@ struct _SchurFactorization{T, D, C <: Complex{T}}
     Λ::Array{C, D}
     precond::Bool
     lapack::NTuple{D, _Gges3Work{T, C}}
+    recipe::_FDMRecipe{T, D}
 end
 
 # The complex QZ comes from OpenBLAS directly, never through libblastrampoline's forwarding:
@@ -829,8 +900,8 @@ function _Gges3Work(A::Matrix{C}, B::Matrix{C}) where {R, C <: Complex{R}}
 end
 
 function _schur_factorize(n::Int, boundary::Bool, interior::Vector{Int},
-        M::NTuple{D, Matrix{T}}, A::NTuple{D, Matrix{T}}, c_m::T, dims::NTuple{D, Int};
-        precond::Bool = false) where {T, D}
+        M::NTuple{D, Matrix{T}}, A::NTuple{D, Matrix{T}}, c_m::T, dims::NTuple{D, Int},
+        recipe::_FDMRecipe{T, D}; precond::Bool = false) where {T, D}
     C = Complex{T}
     S = ntuple(d -> Matrix{C}(undef, dims[d], dims[d]), Val(D))
     Tr = map(similar, S)
@@ -839,10 +910,10 @@ function _schur_factorize(n::Int, boundary::Bool, interior::Vector{Int},
     u = Vector{C}(undef, prod(dims))
     w = similar(u)
     f = _SchurFactorization{T, D, C}(n, boundary, interior, map(similar, S),
-        map(similar, S), S, Tr, C(c_m), dims, stride,
+        map(similar, S), S, Tr, Ref(C(c_m)), dims, stride,
         [Vector{C}(undef, stride[k]) for k in 1:D], [Vector{C}(undef, stride[k]) for k in 1:D],
         u, w, _fdm_slabs(u, dims), _fdm_slabs(w, dims), M, A, Array{C}(undef, dims), precond,
-        lapack)
+        lapack, recipe)
     return _fdm_decompose!(f)
 end
 
@@ -868,7 +939,7 @@ function _fdm_decompose!(f::_SchurFactorization{T, D}) where {T, D}
     end
     Λ = f.Λ
     @inbounds for j in CartesianIndices(Λ)
-        s = f.c_m
+        s = f.c_m[]
         for d in 1:D
             s += f.S[d][j[d], j[d]] / f.Tr[d][j[d], j[d]]
         end
@@ -959,7 +1030,7 @@ function _fdm_ldiv!(x::AbstractVector, f::_SchurFactorization{T, D}, F::Abstract
         for d in 1:D
             inu = _fdm_mode!(f, inu, d, f.Qc[d])
         end
-        _schur_solve!(inu ? f.u : f.w, f, D, 0, one(eltype(u)), f.c_m)
+        _schur_solve!(inu ? f.u : f.w, f, D, 0, one(eltype(u)), f.c_m[])
         for d in 1:D
             inu = _fdm_mode!(f, inu, d, f.Zt[d])
         end
@@ -1174,6 +1245,215 @@ function Bramble.fdm_factorize(K::KroneckerLinearOperator; dirichlet = nothing)
 end
 
 Bramble.fdm_factorize(::Bramble.KroneckerBlockOperator; dirichlet = nothing) = _throw_fdm_composite()
+
+# --- 4. Refill ---------------------------------------------------------------------- #
+#
+# `fdm_factorize!(f, K)` replays the classification `f` was built with (`f.recipe`) on `K`'s
+# factors instead of searching again: it reads each term's coefficient now, re-checks every
+# kept term's factors against the recorded masses (within `_fdm_same`'s rounding, or up to
+# the ratio `_fdm_ratio` returns), and writes `M_d`, `A_d` and `c_m` into `f`'s buffers in
+# the order and arithmetic of `_fdm_classify`, so they are bitwise those of a fresh build.
+# Every loop runs over a factor's stored entries, restricted to `2:end-1` under
+# `:boundary`. `K.terms` is a tuple of differently typed terms, and a term's factors a
+# tuple too, so terms are visited by recursion on the tuple and axes as `Val`s: every
+# factor is concretely typed and nothing is allocated.
+
+@noinline function _throw_fdm_refill(reason::AbstractString)
+    throw(ArgumentError("fdm_factorize! cannot refill this factorisation: $reason; build a " *
+                        "new one with `fdm_factorize`"))
+end
+
+@noinline _throw_fdm_refill_mass(d::Int) = _throw_fdm_refill(
+    "a term's axis-$d factor no longer matches the mass it matched when `f` was built")
+
+_fdm_d(::Val{d}) where {d} = d
+_fdm_f(t, ::Val{d}) where {d} = t.factors[d]
+
+# The rows of axis `d` the factorisation solves for: `2:end-1` under `:boundary`.
+_fdm_rng(f, d::Int) = (o = Int(f.boundary); (1 + o):(size(f.M[d], 1) + o))
+
+# `fn(Val(d))` for `d = 1, ..., D` in order.
+@inline _fdm_foreach_axis(::F, ::Val{0}) where {F} = nothing
+@inline function _fdm_foreach_axis(fn::F, ::Val{D}) where {F, D}
+    _fdm_foreach_axis(fn, Val(D - 1))
+    fn(Val(D))
+    return nothing
+end
+
+# `fn(t, i)` for the terms `t` of a tuple, `i` counting from `i`.
+@inline _fdm_foreach_term(::F, ::Tuple{}, ::Int) where {F} = nothing
+@inline function _fdm_foreach_term(fn::F, terms::Tuple, i::Int) where {F}
+    fn(first(terms), i)
+    return _fdm_foreach_term(fn, Base.tail(terms), i + 1)
+end
+
+# `fn(t)` for the `k`-th term `t` of a tuple.
+@inline function _fdm_at(fn::F, terms::Tuple, k::Int) where {F}
+    k == 1 && return fn(first(terms))
+    return _fdm_at(fn, Base.tail(terms), k - 1)
+end
+_fdm_at(::F, ::Tuple{}, k::Int) where {F} = throw(BoundsError((), k))
+
+# Column `j` of a factor: the positions of its stored entries, and each one's row and value.
+_fdm_nzr(F::SparseMatrixCSC, j::Int) = nzrange(F, j)
+_fdm_nzr(::Diagonal, j::Int) = j:j
+_fdm_nzr(F::AbstractMatrix, ::Int) = axes(F, 1)
+_fdm_row(F::SparseMatrixCSC, ::Int, p::Int) = rowvals(F)[p]
+_fdm_row(::AbstractMatrix, ::Int, p::Int) = p
+_fdm_val(F::SparseMatrixCSC, ::Int, p::Int) = nonzeros(F)[p]
+_fdm_val(F::Diagonal, ::Int, p::Int) = F.diag[p]
+_fdm_val(F::AbstractMatrix, j::Int, p::Int) = F[p, j]
+
+# The first position from `p` on, up to `stop`, holding a nonzero in a row of `rng`: the
+# entries `_fdm_factor`'s `dropzeros!(sparse(F)[rng, rng])` keeps.
+@inline function _fdm_next(F, j::Int, p::Int, stop::Int, rng::UnitRange{Int})
+    while p <= stop
+        (_fdm_row(F, j, p) in rng && !iszero(_fdm_val(F, j, p))) && return p
+        p += 1
+    end
+    return p
+end
+
+# `fn(i, j, v)` for every entry `v` of `_fdm_factor(F, rng)`, at local `(i, j)`.
+@inline function _fdm_foreach_entry(fn::Fn, F, rng::UnitRange{Int}) where {Fn}
+    o = first(rng) - 1
+    for j in rng
+        r = _fdm_nzr(F, j)
+        p = _fdm_next(F, j, first(r), last(r), rng)
+        while p <= last(r)
+            fn(_fdm_row(F, j, p) - o, j - o, _fdm_val(F, j, p))
+            p = _fdm_next(F, j, p + 1, last(r), rng)
+        end
+    end
+    return nothing
+end
+
+# `acc = op(acc, x, y, shared)` over the union of the entries of `_fdm_factor(R, rng)` (`x`,
+# negated when `neg`) and `_fdm_factor(F, rng)` (`y`), as `T`, in column-major order: a
+# missing entry is zero, and `shared` says both are stored.
+function _fdm_merge(op::O, acc, R, neg::Bool, F, rng::UnitRange{Int}, ::Type{T}) where {O, T}
+    for j in rng
+        pr, qr = _fdm_nzr(R, j), _fdm_nzr(F, j)
+        p = _fdm_next(R, j, first(pr), last(pr), rng)
+        q = _fdm_next(F, j, first(qr), last(qr), rng)
+        while p <= last(pr) || q <= last(qr)
+            i = p <= last(pr) ? _fdm_row(R, j, p) : typemax(Int)
+            k = q <= last(qr) ? _fdm_row(F, j, q) : typemax(Int)
+            x = i <= k ? T(_fdm_val(R, j, p)) : zero(T)
+            y = k <= i ? T(_fdm_val(F, j, q)) : zero(T)
+            acc = op(acc, neg ? -x : x, y, i == k)
+            i <= k && (p = _fdm_next(R, j, p + 1, last(pr), rng))
+            k <= i && (q = _fdm_next(F, j, q + 1, last(qr), rng))
+        end
+    end
+    return acc
+end
+
+# `_fdm_same(R, F)` on the restricted factors (`R` negated when `neg`).
+function _fdm_same_entries(R, neg::Bool, F, rng::UnitRange{Int}, ::Type{T}) where {T}
+    diff, rmax, fmax = _fdm_merge((0.0, 0.0, 0.0), R, neg, F, rng, T) do acc, x, y, _
+        return (max(acc[1], abs(x - y)), max(acc[2], abs(x)), max(acc[3], abs(y)))
+    end
+    return diff <= 8 * eps(Float64) * max(rmax, fmax)
+end
+
+# `_fdm_ratio(R, F)` on the restricted factors, as `(found, r)`: the same entries, the
+# ratio at the first largest `|R|`, the same tolerance.
+function _fdm_ratio_entries(R, neg::Bool, F, rng::UnitRange{Int}, ::Type{T}) where {T}
+    _fdm_same_entries(R, neg, F, rng, T) && return true, one(T)
+    init = (true, -one(T), zero(T), zero(T), zero(T))
+    same, _, rk, fk, fmax = _fdm_merge(init, R, neg, F, rng, T) do acc, x, y, shared
+        s, big, b, a, m = acc
+        abs(x) > big && ((big, b, a) = (abs(x), x, y))
+        return (s & shared, big, b, a, max(m, abs(y)))
+    end
+    same || return false, zero(T)
+    r = fk / rk
+    err = _fdm_merge((e, x, y, _) -> max(e, abs(y - r * x)), zero(T), R, neg, F, rng, T)
+    return err <= 8 * eps(T) * fmax, r
+end
+
+# The trace of `_fdm_factor(R, rng)`, whose sign `_fdm_classify` represents a class by.
+function _fdm_trace(R, rng::UnitRange{Int}, ::Type{T}) where {T}
+    s = zero(T)
+    for j in rng, p in _fdm_nzr(R, j)
+
+        _fdm_row(R, j, p) == j && (s += T(_fdm_val(R, j, p)))
+    end
+    return s
+end
+
+# Axis `d` of step one: each kept term not differing on `d` matches the mass there, and its
+# coefficient takes the ratio, as `_fdm_classify` multiplies them in, axis by axis.
+function _fdm_refill_ratios!(f, rc::_FDMRecipe{T}, terms::Tuple, v::Val) where {T}
+    d = _fdm_d(v)
+    rng = _fdm_rng(f, d)
+    neg = rc.neg[d]
+    _fdm_at(terms, rc.mass[d]) do tm
+        R = _fdm_f(tm, v)
+        rc.proportional && (_fdm_trace(R, rng, T) < 0) != neg && _throw_fdm_refill_mass(d)
+        _fdm_foreach_term(terms, 1) do t, i
+            (rc.on[i] < 0 || rc.on[i] == d) && return nothing
+            if rc.proportional
+                found, r = _fdm_ratio_entries(R, neg, _fdm_f(t, v), rng, T)
+                found || _throw_fdm_refill_mass(d)
+                rc.coef[i] *= r
+            else
+                _fdm_same_entries(R, false, _fdm_f(t, v), rng, T) || _throw_fdm_refill_mass(d)
+            end
+            return nothing
+        end
+    end
+    return nothing
+end
+
+# Axis `d` of step two: `M_d` is the mass factor (negated when recorded so) and
+# `A_d = Σ coef_i F_i[d]` over the terms differing on `d`, summed in term order from zero.
+function _fdm_refill_axis!(f, rc::_FDMRecipe{T}, terms::Tuple, v::Val) where {T}
+    d = _fdm_d(v)
+    rng = _fdm_rng(f, d)
+    Md, Ad = fill!(f.M[d], zero(T)), fill!(f.A[d], zero(T))
+    neg = rc.neg[d]
+    _fdm_at(terms, rc.mass[d]) do tm
+        _fdm_foreach_entry(_fdm_f(tm, v), rng) do i, j, x
+            Md[i, j] = neg ? -T(x) : T(x)
+        end
+    end
+    _fdm_foreach_term(terms, 1) do t, k
+        rc.on[k] == d || return nothing
+        c = rc.coef[k]
+        _fdm_foreach_entry(_fdm_f(t, v), rng) do i, j, x
+            Ad[i, j] += c * T(x)
+        end
+    end
+    return nothing
+end
+
+function _fdm_refill!(f::Union{_FDMFactorization{T, D}, _SchurFactorization{T, D}},
+        K::KroneckerLinearOperator) where {T, D}
+    rc, terms = f.recipe, K.terms
+    _fdm_foreach_term(terms, 1) do t, i
+        rc.on[i] < 0 || (rc.coef[i] = T(Bramble._kron_coeff(t.scales)))
+        return nothing
+    end
+    _fdm_foreach_axis(v -> _fdm_refill_ratios!(f, rc, terms, v), Val(D))
+    _fdm_foreach_axis(v -> _fdm_refill_axis!(f, rc, terms, v), Val(D))
+    c_m = zero(T)
+    for i in eachindex(rc.on)
+        rc.on[i] == 0 && (c_m += rc.coef[i])
+    end
+    f.c_m[] = c_m
+    _fdm_check_kernel(f.A, c_m, _fdm_data_eps(K), f.precond)
+    return _fdm_decompose!(f)
+end
+
+function Bramble.fdm_factorize!(f::Union{_FDMFactorization, _SchurFactorization},
+        K::KroneckerLinearOperator)
+    Bramble._kron_check_fresh(K)
+    # An empty interior has nothing to refill.
+    isempty(f.Λ) || _fdm_refill!(f, K)
+    return f
+end
 
 function Bramble.fdm_solve!(x::AbstractVector, f::Union{_FDMFactorization, _SchurFactorization},
         F::AbstractVector)
