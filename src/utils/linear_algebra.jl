@@ -834,7 +834,9 @@ end
 The `k`-th of `nchunks` partial sums of [`_threaded_dot`](@ref), over the band
 [`_band_range`](@ref)`(ax, nchunks, k)`. One compiled body serves both the threaded loop and
 the serial one [`_static_or_serial`](@ref) falls back to, so the two return the same partial
-sums bitwise.
+sums bitwise. `BramblePolyesterExt` runs `_dot_band` and keeps a copy of
+[`_dot_masked_band`](@ref) over the mask's words (`_masked_words_band`), so a change here
+must be made there too (gpena/Bramble.jl#473).
 """
 @noinline function _dot_band(u, v, w, ax, nchunks::Int, k::Int)
     T = promote_type(eltype(u), eltype(v), eltype(w))
@@ -904,7 +906,9 @@ end
 
 The `k`-th of `nchunks` partial sums of [`_threaded_dot_masked`](@ref), over the mask words
 [`_band_range`](@ref)`(ax, nchunks, k)`. As [`_dot_band`](@ref), one compiled body serves the
-threaded loop and the serial one.
+threaded loop and the serial one. `BramblePolyesterExt` runs [`_dot_band`](@ref) and keeps a
+copy of `_dot_masked_band` over the mask's words (`_masked_words_band`), so a change here
+must be made there too (gpena/Bramble.jl#473).
 """
 @noinline function _dot_masked_band(u, v, w, mask::BitVector, ax, nchunks::Int, k::Int)
     T = promote_type(eltype(u), eltype(v), eltype(w))

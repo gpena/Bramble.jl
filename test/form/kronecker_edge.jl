@@ -64,8 +64,9 @@ function _ke_project_sum(a)
     for (scales, term) in Bramble._kron_leaves(Bramble.resolve_form_ast(a), ())
         P = Bramble._kron_project(term, Ωₕ)
         P === nothing && return nothing
-        for factors in P
-            B += Bramble._kron_coeff(scales) * foldl(kron, reverse(map(sparse, factors)))
+        for (live, factors) in P
+            B += Bramble._kron_coeff((scales..., live...)) *
+                 foldl(kron, reverse(map(sparse, factors)))
         end
     end
     return B
@@ -547,14 +548,16 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
     # number scale inside a side, refuses a node outside the mesh's axes, and builds the
     # same factors under every host policy.
     @testset "edge: cache and Ref liveness" begin
-        # A Ref on the whole term or on a whole side follows later changes; one inside a
-        # sum or a chain cannot be pulled out of the factors and is refused.
+        # A Ref on the whole term, on a whole side, inside a sum or inside a chain follows
+        # later changes: it is carried beside the factors, never folded into them.
         W = _ke_space((7, 6))
         c = Ref(2.0)
         x = rand(MersenneTwister(KE_SEED), ndofs(W))
         live = (
             (u, v) -> c * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)),
-            (u, v) -> innerₕ(c * D₋ᵧ(u), c * D₋ₓ(v)) + innerₕ(u, v))
+            (u, v) -> innerₕ(c * D₋ᵧ(u), c * D₋ₓ(v)) + innerₕ(u, v),
+            (u, v) -> innerₕ(D₋ₓ(c * u), v) + innerₕ(u, v),
+            (u, v) -> innerₕ(D₋ₓ(u) + c * u, v), (u, v) -> innerₕ(u + c * D₋ₓ(u), v))
         for f in live
             a = form(W, W, f)
             @test is_separable(a)
@@ -564,12 +567,6 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
                 @test isapprox(K * x, assemble(a) * x; rtol = 1e-12, atol = 1e-13)
             end
             c[] = 2.0
-        end
-        for f in ((u, v) -> innerₕ(D₋ₓ(c * u), v) + innerₕ(u, v),
-            (u, v) -> innerₕ(D₋ₓ(u) + c * u, v), (u, v) -> innerₕ(u + c * D₋ₓ(u), v))
-            a = form(W, W, f)
-            @test !is_separable(a)
-            @test_throws ArgumentError kronecker_operator(a)
         end
 
         # A number scale inside a side, merged from like terms or written there: Int, Complex,

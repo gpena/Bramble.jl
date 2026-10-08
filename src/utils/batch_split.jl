@@ -23,16 +23,20 @@ end
 _BatchNode{T}(fields::F) where {T, F <: Tuple} = _BatchNode{T, F}(fields)
 
 # A plain array whose elements `@batch` can pass by pointer.
-_batch_is_slot(T) = T isa DataType && T <: Array && isbitstype(eltype(T))
+_batch_is_slot(@nospecialize(T)) = T isa DataType && T <: Array && isbitstype(eltype(T))
 
 # A mesh the walk reads through `_walk_mesh`: an outer, mutable one.
-_batch_is_mesh(T) = T isa DataType && T <: AbstractMeshType && ismutabletype(T)
+function _batch_is_mesh(@nospecialize(T))
+    return T isa DataType && T <: AbstractMeshType && ismutabletype(T)
+end
 
 # A `Ref` coefficient, read once at split time.
-_batch_is_ref(T) = T isa DataType && T <: Base.RefValue && isbitstype(T.parameters[1])
+function _batch_is_ref(@nospecialize(T))
+    return T isa DataType && T <: Base.RefValue && isbitstype(T.parameters[1])
+end
 
 # A value split field by field: a concrete immutable struct or tuple that is not isbits.
-function _batch_is_node(T)
+function _batch_is_node(@nospecialize(T))
     T isa DataType && isconcretetype(T) && isstructtype(T) || return false
     return !ismutabletype(T) && !isbitstype(T)
 end
@@ -64,22 +68,25 @@ end
 # Appends to `pre` the statements the split needs before its result (one `_walk_mesh` per
 # mesh), to `leaves` the expression of each array, and returns the skeleton's expression for
 # the value `ex` of type `T`; `path` names the value in an error.
-function _batch_split_expr!(pre, leaves, T, ex, path)
+function _batch_split_expr!(pre::Vector{Any}, leaves::Vector{Any}, @nospecialize(T),
+        @nospecialize(ex), path::String)
     if _batch_is_slot(T)
         push!(leaves, ex)
         return :(_BatchSlot{$(length(leaves)), $T}())
     elseif _batch_is_mesh(T)
         s = gensym(:state)
         push!(pre, :($s = _walk_mesh($ex)))
-        return _batch_split_expr!(pre, leaves, _batch_state_type(T), s, path)
+        return _batch_split_expr!(pre, leaves, _batch_state_type(T)::Type, s, path)
     elseif _batch_is_ref(T)
         return :($ex[])
     elseif isbitstype(T)
         return ex
     elseif _batch_is_node(T)
-        fs = map(1:fieldcount(T)) do i
-            p = "$path.$(T <: Tuple ? i : fieldname(T, i))"
-            return _batch_split_expr!(pre, leaves, fieldtype(T, i), :(getfield($ex, $i)), p)
+        fs = Any[]
+        for i in 1:fieldcount(T)
+            p = string(path, ".", T <: Tuple ? i : fieldname(T, i))
+            F, fex = fieldtype(T, i), :(getfield($ex, $i))
+            push!(fs, _batch_split_expr!(pre, leaves, F, fex, p))
         end
         return :(_BatchNode{$T}(($(fs...),)))
     end
@@ -118,32 +125,43 @@ end
 
 # The slots' array types: the type each original array type rebuilds as, for the type
 # parameters; a field a misfit leaves is caught by its declared type.
-function _batch_slot_types!(sub, S, A)
+function _batch_slot_types!(sub::IdDict{Any, Any}, @nospecialize(S), @nospecialize(A))
     if S <: _BatchSlot
         K, old = S.parameters
         sub[old] = fieldtype(A, K)
     elseif S <: _BatchNode
-        foreach(F -> _batch_slot_types!(sub, F, A), fieldtypes(S.parameters[2]))
+        for F in fieldtypes(S.parameters[2])
+            _batch_slot_types!(sub, F, A)
+        end
     end
     return sub
 end
 
 # What a value of type `T` becomes after the round trip, given the slots' array types `sub`.
-function _batch_ptype(T, sub)
+function _batch_ptype(@nospecialize(T), sub::IdDict{Any, Any})
     haskey(sub, T) && return sub[T]
     _batch_is_mesh(T) && return _batch_ptype(_batch_state_type(T), sub)
     _batch_is_ref(T) && return T.parameters[1]
     _batch_is_node(T) || return T
-    T <: Tuple && return Tuple{(_batch_ptype(F, sub) for F in fieldtypes(T))...}
+    if T <: Tuple
+        Fs = Any[]
+        for F in fieldtypes(T)
+            push!(Fs, _batch_ptype(F, sub))
+        end
+        return Tuple{Fs...}
+    end
     isempty(T.parameters) && return T
-    P = map(p -> p isa Type ? _batch_ptype(p, sub) : p, Tuple(T.parameters))
+    P = Any[]
+    for p in T.parameters
+        push!(P, p isa Type ? _batch_ptype(p, sub) : p)
+    end
     return T.name.wrapper{P...}
 end
 
 # Whether `_batch_split_expr!` takes a value of type `T` apart without reaching
 # `_throw_batch_resistor`, by the same leaf rules, recording in `sub` a stand-in for the
 # array type each slot rebuilds as.
-function _batch_splits!(sub, T)
+function _batch_splits!(sub::IdDict{Any, Any}, @nospecialize(T))
     if _batch_is_slot(T)
         sub[T] = _BatchStandIn{eltype(T), ndims(T)}
         return true
@@ -151,7 +169,10 @@ function _batch_splits!(sub, T)
     (_batch_is_ref(T) || isbitstype(T)) && return true
     _batch_is_mesh(T) && return _batch_splits!(sub, _batch_state_type(T))
     _batch_is_node(T) || return false
-    return all(i -> _batch_splits!(sub, fieldtype(T, i)), 1:fieldcount(T))
+    for i in 1:fieldcount(T)
+        _batch_splits!(sub, fieldtype(T, i)) || return false
+    end
+    return true
 end
 
 # An array type no struct field names: a field typed as a concrete `Array` does not take it,
@@ -160,7 +181,7 @@ struct _BatchStandIn{T, N} <: AbstractArray{T, N} end
 
 # Whether `_batch_rebuild_expr` rebuilds `T` without reaching `_throw_batch_misfit` when its
 # arrays come back as the stand-ins `sub`: every rebuilt field fits its declared type.
-function _batch_fits(T, sub)
+function _batch_fits(@nospecialize(T), sub::IdDict{Any, Any})
     _batch_is_mesh(T) && return _batch_fits(_batch_state_type(T), sub)
     _batch_is_node(T) || return true
     # A type parameter bound the stand-in breaks (`S{V <: Vector}`) breaks the rebuild too.
@@ -170,13 +191,18 @@ function _batch_fits(T, sub)
         e isa TypeError || rethrow()
         return false
     end
-    return all(1:fieldcount(T)) do i
+    for i in 1:fieldcount(T)
         F = fieldtype(T, i)
-        return (T <: Tuple || _batch_ptype(F, sub) <: fieldtype(T′, i)) && _batch_fits(F, sub)
+        T <: Tuple || _batch_ptype(F, sub) <: fieldtype(T′, i) || return false
+        _batch_fits(F, sub) || return false
     end
+    return true
 end
 
-_batch_splits(T) = (sub = IdDict{Any, Any}(); _batch_splits!(sub, T) && _batch_fits(T, sub))
+function _batch_splits(@nospecialize(T))
+    sub = IdDict{Any, Any}()
+    return _batch_splits!(sub, T) && _batch_fits(T, sub)
+end
 
 """
     _batch_splittable(::Type{T}) -> Bool
@@ -194,16 +220,20 @@ whole instead.
 
 # The expression rebuilding the skeleton piece `ex` of type `S`, and its type; `A` is the
 # arrays tuple's type.
-function _batch_rebuild_expr(S, ex, A, sub)
+function _batch_rebuild_expr(@nospecialize(S), @nospecialize(ex), @nospecialize(A),
+        sub::IdDict{Any, Any})
     if S <: _BatchSlot
         K = S.parameters[1]
         return :(arrays[$K]), fieldtype(A, K)
     end
     S <: _BatchNode || return ex, S
     T, F = S.parameters
-    rs = [_batch_rebuild_expr(fieldtype(F, i), :(getfield($ex.fields, $i)), A, sub)
-          for i in 1:fieldcount(F)]
-    fs, types = first.(rs), last.(rs)
+    fs, types = Any[], Any[]
+    for i in 1:fieldcount(F)
+        f, t = _batch_rebuild_expr(fieldtype(F, i), :(getfield($ex.fields, $i)), A, sub)
+        push!(fs, f)
+        push!(types, t)
+    end
     T′ = _batch_ptype(T, sub)
     T <: Tuple && return :(($(fs...),)), T′
     for i in eachindex(types)

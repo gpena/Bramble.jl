@@ -31,9 +31,9 @@ function _proj_sum(a)
     for (scales, term) in _proj_leaves(a)
         P = Bramble._kron_project(term, Ωₕ)
         P === nothing && return nothing
-        for factors in P
+        for (live, factors) in P
             @assert all(F -> F isa SparseMatrixCSC, factors)
-            B += Bramble._kron_coeff(scales) * foldl(kron, reverse(factors))
+            B += Bramble._kron_coeff((scales..., live...)) * foldl(kron, reverse(factors))
         end
     end
     return B
@@ -117,14 +117,17 @@ end
     end
 
     # A plain number scaling a node inside a side goes into the axis-1 chain; a `Ref` there
-    # is refused, since a factor would read it once.
+    # is returned beside the factors, since a factor would read it once.
     @testset "a number inside a side" begin
         W = _proj_graded_space((9, 7))
         a = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + 0.3 * innerₕ(u, v))
         @test any(l -> occursin("OperatorScale", string(typeof(l[2]))), _proj_leaves(a))
         @test _proj_matches(a)
         c = Ref(0.3)
-        @test _proj_refused(form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + c * innerₕ(u, v)))
+        a = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + c * innerₕ(u, v))
+        @test _proj_matches(a)
+        P = Bramble._kron_project(only(_proj_leaves(a))[2], mesh(W))
+        @test map(first, P) == ((), (c,))
     end
 
     @testset "inner_Γ is a sum over its faces" begin
@@ -184,7 +187,7 @@ end
         P = Bramble._kron_project(only(_proj_leaves(a))[2], mesh(W))
         Wy = gridspace(mesh(W)(2))
         gy = Rₕ(Wy, x -> 2 + x[1]^2)
-        @test only(P)[2] == assemble(form(Wy, Wy, (u, v) -> innerₕ(D₋ₓ(gy * u), v)))
+        @test only(P)[2][2] == assemble(form(Wy, Wy, (u, v) -> innerₕ(D₋ₓ(gy * u), v)))
     end
 
     @testset "rank-2 or foreign coefficient" begin

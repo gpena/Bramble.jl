@@ -237,8 +237,11 @@ jobs:
         with:
           version: ${{ matrix.version }}
 
+      # release-gate.yml's quality job restores this entry, so the `with:` inputs here and
+      # there must stay equal. The cache-name is the action's own default, written out.
       - uses: julia-actions/cache@v3
         with:
+          cache-name: julia-cache;workflow=Nightly;job=quality
           cache-compiled: "true"
 
       - uses: julia-actions/julia-buildpkg@v1
