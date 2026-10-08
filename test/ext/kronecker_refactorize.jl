@@ -34,7 +34,8 @@ advection_form(u, v) = innerₕ(u, v) + 0.1 * inner₊(∇ₕ(u), ∇ₕ(v)) + i
 # The refill's forms, each with a live `Ref` coefficient: symmetric; Schur; Schur with the
 # `Ref` on the mass term, so `c_m` changes; and a negative multiple of the axis-1 mass
 # (`-0.5 * innerₕ(D₋ᵧ(u), v)`), which the classification matches proportionally and
-# represents negated.
+# represents negated; and a `Ref` on the advection term, which the simplifier merges into
+# a side of the mass (`innerₕ(u + c * D₋ₓ(u), v)`) or of the axis-1 stiffness term.
 const KRON_REFILL_C = Ref(2.5)
 const KRON_REFILL_FORMS = (
     (u, v) -> innerₕ(u, v) + KRON_REFILL_C * inner₊(∇ₕ(u), ∇ₕ(v)),
@@ -42,7 +43,10 @@ const KRON_REFILL_FORMS = (
     (u, v) -> KRON_REFILL_C * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
               Bramble.inner₊ₓ(D₋ₓ(u), v),
     (u, v) -> -0.5 * innerₕ(Bramble.D₋ᵧ(u), v) + innerₕ(u, v) +
-              KRON_REFILL_C * inner₊(∇ₕ(u), ∇ₕ(v)))
+              KRON_REFILL_C * inner₊(∇ₕ(u), ∇ₕ(v)),
+    (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) + KRON_REFILL_C * innerₕ(D₋ₓ(u), v),
+    (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+              KRON_REFILL_C * Bramble.inner₊ₓ(D₋ₓ(u), v))
 
 # The arrays `_fdm_decompose!` writes, so zeroing them first keeps a no-op from passing.
 outputs(f::KronExt._FDMFactorization) = (f.Q..., f.Λ)
@@ -148,10 +152,11 @@ end
         W = graded_space(Float64, (17, 13), Serial())
         recipe(L) = fdm_factorize(kronecker_operator(form(W, W, L))).recipe
         r = map(recipe, KRON_REFILL_FORMS)
-        @test map(q -> q.on, r) == ([0, 1, 2], [0, 1, 1, 2], [0, 1, 1, 2], [2, 0, 1, 2])
-        @test map(q -> q.proportional, r) == (false, false, false, true)
+        @test map(q -> q.on, r) == ([0, 1, 2], [0, 1, 1, 2], [0, 1, 1, 2], [2, 0, 1, 2],
+            [0, 1, 1, 2], [0, 1, 1, 2])
+        @test map(q -> q.proportional, r) == (false, false, false, true, false, false)
         @test r[4].mass == (1, 2) && r[4].neg == (true, false)
-        @test all(q -> !any(q.neg), r[1:3])
+        @test all(q -> !any(q.neg), r[[1:3; 5:6]])
     end
 
     # A stale operator is refused as `fdm_solve(K, F)` refuses it, and an empty interior has
