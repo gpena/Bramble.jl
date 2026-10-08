@@ -127,12 +127,27 @@ end
 # builds the cache where `typeof(ast)` is known. It also sharpens the guard -- a foreign AST
 # of a different type now folds `cache.ast === ast` to `false` at compile time instead of
 # comparing at run time.
+#
+# `stamp` is the recording's `_pattern_stamp`: `markers!` redraws a mesh's marker stamp, so
+# a recording made before it no longer matches and the next fill re-records
+# (gpena/Bramble.jl#465). A restricted term's walk reads the markers, so the recorded
+# positions depend on them as much as on `A`.
 mutable struct _AssemblyCache{D, AST}
     valid::Bool
     A_id::UInt
     ast::AST
     segments::Vector{Segment{D}}
+    stamp::UInt64
 end
+
+# The newest marker stamp among `Wₕ`'s leaf meshes. The stamps come from one global counter,
+# so a `markers!` on any leaf mesh makes it strictly larger, never equal to an older value.
+@inline _marker_stamp(Wₕ::AbstractSpaceType) = maximum(
+    map(((s, _),) -> _marker_stamp(mesh(s)), leaf_spaces_offsets(Wₕ)))
+
+# The stamp a recording over `trial` and `test` is valid for: any `markers!` on either
+# side's meshes changes it.
+@inline _pattern_stamp(trial, test) = max(_marker_stamp(trial), _marker_stamp(test))
 
 # One shared, never-written empty `segments` vector per dimension, so a fresh form's cache
 # costs one allocation -- the mutable struct itself -- rather than two. Sharing is safe
@@ -193,7 +208,7 @@ end
 # same expression tree `BilinearForm` stores -- never `nothing`, which would have made the
 # parameter a lie on the first cache miss.
 function _AssemblyCache{D}(ast::AST) where {D, AST}
-    return _AssemblyCache{D, AST}(false, UInt(0), ast, _no_segments(Val(D)))
+    return _AssemblyCache{D, AST}(false, UInt(0), ast, _no_segments(Val(D)), UInt64(0))
 end
 
 """
@@ -347,6 +362,10 @@ end
     _all_trial_interpolated(term) && return nothing
     _all_test_interpolated(term) && return nothing
 
+    # The walk reads the trial leaf's mesh only here, so a trial leaf on another mesh that
+    # moved in place would pass unnoticed: check its weights, as `_bind_walk` checks the
+    # walked leaf's (gpena/Bramble.jl#466). A few integer loads per walk entry.
+    weights(trial_leaf)
     Ωu = mesh(trial_leaf)
     Ωv = mesh(test_leaf)
     npoints(Ωu, Tuple) == npoints(Ωv, Tuple) || _throw_cross_mesh_block(term, Ωu, Ωv)

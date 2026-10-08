@@ -684,6 +684,33 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
         @test isapprox(Matrix(Apd), Matrix(Abd); atol = 1.0e-12)
     end
 
+    # An `Int32` target through the searching `@batch` sweep stores the same bits as an `Int`
+    # one (gpena/Bramble.jl#469): each task searches `_ScatterCSC` around the `Int32` arrays,
+    # whose positions must be `Int` to reach `nzval[pos]` rather than a missing method.
+    @testset "Int32 target: searching sweep (#469)" begin
+        Random.seed!(469)
+        Ω = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (false, false);
+            backend = backend(policy = CpuPolyester())
+        )
+        scalar(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
+        composite(u, v) = innerₕ(u(1), v(1)) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) +
+                          innerₕ(D₋ₓ(u(1)), v(2))
+        for (W, f) in ((gridspace(Ω), scalar), (gridspace(Ω, Val(2)), composite))
+            a = form(W, W, f)
+            A64 = allocate_system_matrix(a)
+            @assert A64 isa SparseMatrixCSC{Float64, Int}
+            A32 = SparseMatrixCSC{Float64, Int32}(A64)
+            for A in (A64, A32)
+                _fillnz!(A, 0.0)
+                Bramble._assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast)
+            end
+            @test getcolptr(A32) == getcolptr(A64) && rowvals(A32) == rowvals(A64)
+            @test isequal(nonzeros(A32), nonzeros(A64))
+            @test !iszero(nonzeros(A64))
+        end
+    end
+
     # Per path, a warm CpuPolyester call allocates the same bytes on a small and a large
     # non-uniform grid (a multigrid cycle per coarsening level, since it runs every level's
     # loops), nothing at all (no `@batch` argument box either, except on the paths in

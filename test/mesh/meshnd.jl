@@ -548,6 +548,10 @@ using ..TestUtils: alloc_test, @test_allocs
             @test all(idx -> isfinite(cell_measure(Ωₕ_line, idx)), idxs)
             @test all(idx -> cell_measure(Ωₕ_line, idx) > 0.0, idxs)
 
+            # the collapsed axis's own measure vector holds the coerced 1, not the raw zero
+            @test cell_measures(Ωₕ_line(2)) == [1.0]
+            @test @inferred(cell_measures(Ωₕ_line(2))) isa Vector{Float64}
+
             s = innerₕ(uₕ, vₕ)
             @test isfinite(s)
             @test s ≈ sum(

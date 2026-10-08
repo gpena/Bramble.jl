@@ -81,11 +81,7 @@ all boundary points. Dimensions with a length of one or less remain unchanged.
 
     interior_ranges_tuple = ntuple(Val(D)) do i
         @inbounds r = original_ranges[i]
-        if length(r) <= 1
-            return r
-        else
-            (first(r) + 1):(last(r) - 1)
-        end
+        length(r) <= 1 ? UnitRange(r) : (first(r) + 1):(last(r) - 1)
     end
 
     return CartesianIndices(interior_ranges_tuple)

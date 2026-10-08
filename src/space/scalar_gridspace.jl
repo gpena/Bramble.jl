@@ -399,7 +399,8 @@ there is no separate composite-level check to keep in step.
 Form assembly checks once per walk rather than at every point: each walk entry (`assemble`,
 an `assemble!` refill, a matrix-free product, a linear form's assembly, once per leaf of a
 composite) checks the leaf it walks before its first point, with the same error, and the
-per-point stencil then reads the stored weights unchecked (gpena/Bramble.jl#437).
+per-point stencil then reads the stored weights unchecked (gpena/Bramble.jl#437). A bilinear
+walk entry also checks its trial leaf, which may sit on another mesh (gpena/Bramble.jl#466).
 
 See also: [`SpaceWeights`](@ref), [`SeparableWeights`](@ref), [`Innerh`](@ref), [`Innerplus`](@ref), `innerₕ`
 """

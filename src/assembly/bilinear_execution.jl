@@ -534,18 +534,23 @@ function _assemble_bilinear_core_cached!(
         cache::_AssemblyCache{D, CACHED_AST},
         α = true
 ) where {AST_TYPE, D, CACHED_AST}
-    if cache.valid && cache.A_id === objectid(A) && cache.ast === ast
+    stamp = _pattern_stamp(trial_space, test_space)
+    if cache.valid && cache.A_id === objectid(A) && cache.ast === ast &&
+       cache.stamp === stamp
         _replay_bilinear_core!(mode, A, trial_space, test_space, ast, cache.segments, α)
     else
         # A fresh vector, never `empty!` on whatever `cache.segments` currently references.
         #
-        # Replayed with `α`: the cache is keyed on `(A, ast)` alone, never on `α`, since
-        # nzval *positions* never depend on it: an `assemble_add!` caller is free to change
-        # `α` (a `Ref`'s current value, say) on every call and still replay from cache.
+        # Replayed with `α`: the cache is keyed on `(A, ast)` and the marker stamp, never on
+        # `α`, since nzval *positions* never depend on it: an `assemble_add!` caller is free
+        # to change `α` (a `Ref`'s current value, say) on every call and still replay.
+        #
+        # A stamp mismatch (`markers!` since the recording) re-records against the same `A`:
+        # a shrunk pattern refills correctly, a grown one throws the missing-entry error.
         segments = _record_bilinear_core!(
             mode, A, trial_space, test_space, ast, Val(D), α
         )
-        _store_recording!(cache, ast, segments, A)
+        _store_recording!(cache, ast, segments, A, stamp)
     end
     return A
 end
@@ -553,10 +558,12 @@ end
 # Keeps `cache` in step with a recording that just ran, but only for an `ast` of the type the
 # cache was built around -- `form.ast`'s type, since `form` constructs the two together.
 @inline function _store_recording!(
-        cache::_AssemblyCache{D, AST}, ast::AST, segments::Vector{Segment{D}}, A
+        cache::_AssemblyCache{D, AST}, ast::AST, segments::Vector{Segment{D}}, A,
+        stamp::UInt64
 ) where {D, AST}
     cache.segments = segments
     cache.A_id = objectid(A)
+    cache.stamp = stamp
     cache.ast = ast
     cache.valid = true
     return nothing
@@ -570,7 +577,7 @@ end
 # scatter does not change -- so the next ordinary `assemble!` still replays instead of paying
 # for a re-record. Before the cache carried its AST as a type parameter this case overwrote
 # the cache with the substitute tree; now it cannot, and need not.
-@inline _store_recording!(::_AssemblyCache, _ast, _segments, _A) = nothing
+@inline _store_recording!(::_AssemblyCache, _ast, _segments, _A, _stamp) = nothing
 
 # --- Threaded: band-coloured sweeps ------------------------------------------------ #
 #

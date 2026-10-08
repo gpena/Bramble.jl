@@ -472,6 +472,9 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         # an axis with one point cannot lose its boundary, so the range passes through
         Ωc = mesh(domain(interval(0.0, 1.0) × interval(2.0, 2.0)), (5, 1), (true, true))
         ii = interior_indices(Ωc)
+        @test @inferred(interior_indices(Ωc)) isa CartesianIndices{2}
+        @test @inferred(interior_indices(CartesianIndices((5, 4)))) ==
+              CartesianIndices((2:4, 2:3))
         @test size(ii, 2) == 1                 # the collapsed axis is untouched
         @test size(ii, 1) == 3                 # the other axis loses both ends
     end

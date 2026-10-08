@@ -24,10 +24,10 @@ AST as an `OperatorScale` node. Wrapping the AST would build a *new* object on e
 which the replay cache is keyed on by identity (`cache.ast === ast`): every
 `assemble_add!(A, a, α)` call would then miss the cache and re-record, allocating exactly
 the positions array a cache exists to avoid. Threading `α` as a runtime value instead keeps
-the cache keyed on `(A, a.ast)` alone -- entirely unaffected by `α`, since which `nzval`
-slots a term touches never depends on how the term is scaled -- so a caller is free to
-change `α` (typically a `Ref`'s current value) on every call and still replay from cache
-with 0 allocations.
+the cache keyed on `(A, a.ast)` and the form's marker stamp -- entirely unaffected by `α`,
+since which `nzval` slots a term touches never depends on how the term is scaled -- so a
+caller is free to change `α` (typically a `Ref`'s current value) on every call and still
+replay from cache with 0 allocations.
 
 Every internal function this threads `α` through (`_replay_segment!`,
 `_scatter_point!`, `_scatter_term!`, ... ) defaults it to `true`, so `assemble!`/`assemble`'s
