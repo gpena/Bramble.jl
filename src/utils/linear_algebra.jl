@@ -386,10 +386,14 @@ The `b`-th of `nbands` contiguous slabs of `ax`.
 
 Slabs differ in length by at most one, the remainder spread over the first of them rather
 than left on the last. `b` indexes positions within `ax`, not values, so an axis carrying a
-stride keeps it.
+stride keeps it, and so does a descending one.
+
+The positions are `Int` whatever `length(ax)` returns: a `UInt64` range has a `UInt64`
+length, and Base indexes a descending `StepRange` by a `UnitRange{UInt64}` with a wrapped,
+unsigned step (`(UInt(9):-1:UInt(1))[UInt(1):UInt(5)]` is empty).
 """
 @inline function _band_range(ax::AbstractRange, nbands::Int, b::Int)
-    q, r = divrem(length(ax), nbands)
+    q, r = divrem(Int(length(ax)), nbands)
     lo = (b - 1) * q + min(b - 1, r) + 1
     hi = lo + q - 1 + (b <= r ? 1 : 0)
     return @inbounds ax[lo:hi]

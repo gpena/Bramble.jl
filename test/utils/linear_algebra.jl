@@ -412,6 +412,27 @@ using ..TestUtils: alloc_test, @test_allocs
     end
 
     # Invariants tested:
+    # 1. `_band_range` cuts any integer range, ascending or descending, signed or unsigned,
+    #    into slabs that keep its step and, walked in order, visit exactly its points.
+    # 2. Slab lengths differ by at most one, the remainder on the first slabs.
+    # 3. A descending `StepRange{UInt64,Int64}` (whose `length` is a `UInt64`) keeps its
+    #    negative step: indexing it by a `UnitRange{UInt64}` corrupts the step in Base.
+    @testset "Band ranges of any integer range" begin
+        axes_ = (1:9, Base.OneTo(7), 9:-1:1, 9:-2:1, 1:-1:2, UInt(1):UInt(9),
+            UInt(9):-1:UInt(1), UInt(9):-2:UInt(1), Int32(9):Int32(-1):Int32(1),
+            UInt8(9):Int8(-1):UInt8(1))
+        for ax in axes_, nbands in 1:4
+
+            bands = [Bramble._band_range(ax, nbands, b) for b in 1:nbands]
+            @test reduce(vcat, collect.(bands)) == collect(ax)
+            @test all(band -> length(band) < 2 || step(band) == step(ax), bands)
+            @test issorted(length.(bands); rev = true)
+            @test maximum(length, bands) - minimum(length, bands) <= 1
+        end
+        @test Bramble._band_range(UInt(9):-1:UInt(1), 2, 1) == UInt(9):-1:UInt(5)
+    end
+
+    # Invariants tested:
     # 1. A `CpuThreaded` scatter called from inside a user's `Threads.@threads` loop takes
     #    the serial fallback (`_serial_scatter_for!`) and writes what a hand loop writes, on a
     #    strided index set, leaving the other entries untouched.
