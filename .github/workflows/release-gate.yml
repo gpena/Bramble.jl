@@ -57,9 +57,9 @@ jobs:
     permissions:
       contents: read
       actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
-    # 60, not nightly.yml's 30: this workflow runs once per release, so its package cache is
-    # usually cold, and a cold run can spend its first 30 minutes precompiling under
-    # coverage (JET alone takes five). A cancelled job saves no cache for the next run.
+    # 60, not nightly.yml's 45: the cache step restores nightly's entry, but it can be missing
+    # or stale (evicted after 7 days unused, or invalidated by a dependency bump), and a cold
+    # run can spend its first 30 minutes precompiling under coverage (JET alone takes five).
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -73,8 +73,11 @@ jobs:
         with:
           version: ${{ matrix.version }}
 
+      # Restores the entry nightly.yml's quality job saves on main. A restore needs the same
+      # key prefix and cache version, so the `with:` inputs here and there must stay equal.
       - uses: julia-actions/cache@v3
         with:
+          cache-name: julia-cache;workflow=Nightly;job=quality
           cache-compiled: "true"
 
       - uses: julia-actions/julia-buildpkg@v1
@@ -110,9 +113,11 @@ jobs:
         with:
           version: "1.13"
 
+      # Restores the entry docs-on-demand.yml saves on main. A restore needs the same key
+      # prefix and cache version, so the `with:` inputs here and there must stay equal.
       - uses: julia-actions/cache@v3
         with:
-          cache-compiled: "true"
+          cache-name: julia-cache;docs;julia=1.13
 
       - name: Install dependencies
         run: |
