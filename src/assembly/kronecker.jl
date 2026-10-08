@@ -536,7 +536,9 @@ K * x ≈ assemble(a) * x
 
 See also: [`is_separable`](@ref), [`KroneckerLinearOperator`](@ref).
 """
-function kronecker_operator(a::BilinearForm{D}) where {D}
+@noinline function kronecker_operator(a::BilinearForm{D}) where {D}
+    # `@noinline`: a caller compiles one call instead of the whole build inlined, and the
+    # precompile workload's call caches a standalone instance every caller can reuse.
     D == 1 && _throw_not_separable_dim(D)
     return _kron_operator(trial_space(a), test_space(a), a)
 end

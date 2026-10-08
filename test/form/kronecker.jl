@@ -27,6 +27,12 @@ _kron_alloc_no_scratch(y, K, x) = @allocated mul!(y, K, x)
 
 _kron_alloc5_no_scratch(y, K, x, α, β) = @allocated mul!(y, K, x, α, β)
 
+# A user's call site, for `code_typed`: it must invoke `kronecker_operator`, not inline it.
+_kron_call!(y, a, x) = (mul!(y, kronecker_operator(a), x); nothing)
+
+# The method instances `ci` invokes, as strings.
+_kron_invokes(ci) = [string(s.args[1]) for s in ci.code if s isa Expr && s.head === :invoke]
+
 # Whether `f()` throws an `ArgumentError` whose message contains `needle`: the stale-operator
 # error by default (gpena/Bramble.jl#442), or a stale space's with its remedy as `needle`.
 function _kron_stale(f, needle = "KroneckerLinearOperator's factors")
@@ -746,6 +752,21 @@ end
                 @test _kron_stale(() -> kronecker_operator(f), space_error)
                 @test _kron_stale(() -> is_separable(f), space_error)
             end
+        end
+    end
+
+    # `kronecker_operator` is `@noinline`, so a caller compiles one call to it (cached once by
+    # the precompile workload) instead of the whole build; the product is unchanged.
+    @testset "kronecker_operator stays a call" begin
+        for n in ((9, 8), (6, 5, 7))
+            Wₕ = _kron_graded_space(n, backend())
+            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+            x = rand(MersenneTwister(KRON_SEED), ndofs(Wₕ))
+            y = similar(x)
+            ci = first(only(code_typed(_kron_call!, (typeof(y), typeof(a), typeof(x)))))
+            @test any(c -> occursin("kronecker_operator(", c), _kron_invokes(ci))
+            _kron_call!(y, a, x)
+            @test isapprox(y, assemble(a) * x; rtol = 1e-12)
         end
     end
 
