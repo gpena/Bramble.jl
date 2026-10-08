@@ -77,6 +77,8 @@ dictionary and the label-to-column table of the state's marker words.
   - `marker_ids`: `Dict{Symbol, Int}`, the column of each label in the state's word matrix.
   - `state`: the [`Mesh1DState`](@ref) holding everything else, read through the
     accessors ([`points`](@ref), [`spacings`](@ref), ...).
+  - `marker_stamp`: a counter value drawn afresh at construction and at every marker
+    replacement, so a cached marker read can tell the markers changed.
 
 See also: [`MeshnD`](@ref), [`mesh`](@ref), [`AbstractMeshType`](@ref).
 """
@@ -88,6 +90,13 @@ mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVe
     marker_ids::Dict{Symbol, Int}
     "the immutable geometry, version, uniformity flag and marker words."
     state::Mesh1DState{BT, CI, VT, T, Matrix{UInt64}}
+    "a fresh counter value at construction and at every marker replacement."
+    marker_stamp::UInt64
+end
+
+# The mesh over `state` with a fresh marker stamp.
+function Mesh1D(markers::MeshMarkers, marker_ids::Dict{Symbol, Int}, state::Mesh1DState)
+    return Mesh1D(markers, marker_ids, state, _next_mesh_uid())
 end
 
 # The mesh over `s` with `markers`, the label table and the state's words built together.
@@ -150,6 +159,10 @@ end
 @inline _marker_words(Ωₕ::_Mesh1DLike) = _st(Ωₕ).words
 @inline _marker_ids(Ωₕ::Mesh1D) = getfield(Ωₕ, :marker_ids)
 
+# The stamp of `Ωₕ`'s marker words: redrawn by every `_store_markers!`, never by a geometry
+# change, and never equal across meshes or across two stores.
+@inline _marker_stamp(Ωₕ::Mesh1D) = getfield(Ωₕ, :marker_stamp)
+
 # Replaces the marker dictionary, its label table and the state's words together (O6: a
 # label set may change after construction; the word matrix is rebuilt, never resized).
 function _store_markers!(Ωₕ::Mesh1D, mesh_markers)
@@ -158,6 +171,7 @@ function _store_markers!(Ωₕ::Mesh1D, mesh_markers)
     setfield!(Ωₕ, :markers, mm)
     setfield!(Ωₕ, :marker_ids, ids)
     _set_state!(Ωₕ, _restate(_st(Ωₕ); words))
+    setfield!(Ωₕ, :marker_stamp, _next_mesh_uid())
     return nothing
 end
 
