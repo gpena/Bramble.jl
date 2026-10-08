@@ -28,6 +28,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("replay_sinks.jl")
         # A refill after `markers!` re-records instead of replaying stale positions (#465).
         include("replay_markers.jl")
+        # An Int32 sparse target gets Int positions in the searching sweep (#469).
+        include("int32_scatter.jl")
         include("zero_form.jl")
         include("coordinate_walk.jl")
         include("cross_mesh_blocks.jl")

@@ -18,6 +18,7 @@ using Bramble: D₊ₓ, D₊ᵧ
 using SparseArrays
 using SparseMatricesCSR
 using LinearAlgebra: issymmetric, I
+using Random
 
 # `docs/src/internals/csr_solvers.md`: the `sparse_factorize`/
 # `pde_solve`/`refactor!` CSC-conversion fallback for `SparseMatrixCSR`. `refactor_contract`
@@ -187,6 +188,38 @@ end
         symmetrize!(Br, Fr, Vr, :dir)
         @test isapprox(Matrix(Bc), Matrix(Br); atol = 1.0e-12)
         @test isapprox(Fc, Fr)
+    end
+
+    # An `Int32` CSR target scatters into the same entries as an `Int` one
+    # (gpena/Bramble.jl#469): the row search answers an `Int` position for any index type.
+    @testset "Int32 CSR agrees with Int CSR" begin
+        Random.seed!(469)
+        Ω = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (false, false);
+            backend = csr_backend()
+        )
+        W = gridspace(Ω)
+        a = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        A64 = allocate_system_matrix(a)
+        @assert A64 isa SparseMatrixCSR{1, Float64, Int}
+        A32 = SparseMatrixCSR{1}(size(A64)..., Int32.(A64.rowptr), Int32.(A64.colval),
+            copy(A64.nzval))
+        @test @inferred(Bramble._scatter_position(A32, 1, 1)) === 1
+
+        entries = ((1, 1), (2, 1), (5, 6), (99, 99))
+        for A in (A64, A32)
+            fill!(A.nzval, 0.0)
+            for (k, (i, j)) in enumerate(entries)
+                Bramble.add_to_sparse!(A, i, j, Float64(k), nothing)
+            end
+        end
+        @test A32.nzval == A64.nzval && count(!iszero, A32.nzval) == 4
+        @test all(A32[i, j] == k for (k, (i, j)) in enumerate(entries))
+
+        assemble!(A64, a)
+        assemble!(A32, a)
+        @test A32.rowptr == A64.rowptr && A32.colval == A64.colval
+        @test isequal(A32.nzval, A64.nzval)
     end
 
     # assemble! is allocation-free after warm-up.
