@@ -1243,8 +1243,9 @@ end
 # `dirichlet = :boundary`, and the 3- and 5-argument `mul!`; then the other first-call
 # paths of benchmark/polyester_first_call.jl that cost 100 ms or more.
 #
-# The calls of benchmark/polyester_first_call.jl, made from inside functions that take their
-# arguments as ordinary values. Code in a user's function is inferred statically, so its
+# The calls of benchmark/polyester_first_call.jl, except its `_newf` rows, which time a user
+# function no workload can name, made from inside functions that take their arguments as
+# ordinary values. Code in a user's function is inferred statically, so its
 # call sites carry the partly abstract types inference sees there (`<:Tuple{...}`,
 # unbound `_MFFusedPlan` parameters). Calls made at top level are dispatched at run time on
 # the concrete values and cache other instances, which leave the first call to infer these.

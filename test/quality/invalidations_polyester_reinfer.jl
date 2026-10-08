@@ -4,9 +4,10 @@ module QualityInvalidationsPolyesterReinferTests
 # Run in a fresh process with --threads=2 (never `include`d into a session
 # that has already loaded Polyester). After `using Bramble, Polyester`, the
 # extension workload's call forms (the matrix-free product and the
-# other first-call paths of benchmark/polyester_first_call.jl) must not trigger inference of
-# anything CpuPolyester-typed or defined in BramblePolyesterExt: a cached
-# method that Polyester's load invalidated would be re-inferred here.
+# other first-call paths of benchmark/polyester_first_call.jl, but its `_newf` rows)
+# must not trigger inference of anything CpuPolyester-typed or defined in
+# BramblePolyesterExt: a cached method that Polyester's load invalidated would be
+# re-inferred here.
 #
 # Prints `REINFER_POLYESTER=<n>`, then the inferred MethodInstances.
 #===========================================================================#
