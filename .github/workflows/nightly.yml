@@ -91,7 +91,7 @@ jobs:
     needs: changed
     if: ${{ needs.changed.outputs.run == 'true' }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 75  # a warm run takes ~40 min; a cold cache adds ~24 min of precompiling
     permissions:
       contents: read
       actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
