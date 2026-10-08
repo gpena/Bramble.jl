@@ -104,10 +104,11 @@ using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
                ReplaySink, _PairReplaySink, _DiagonalReplayTarget, ActionSink,
                _PairActionSink, _batch_split, _batch_rebuild, _MFFusedPlan, _MFPass,
                _MF_BAND, _MF_NO_COLLECT, _mf_apply_parts!, _mf_host_ast, _batch_splittable,
-               _ScatterCSC, SparseMatrixCSC, _dot_band, _last_axis_chunks,
+               _ScatterCSC, _dot_band, _last_axis_chunks,
                _separable_line_band, _separable_block_band
 using Polyester: Polyester, @batch
 using LinearAlgebra: mul!
+using SparseArrays: SparseMatrixCSC
 using PrecompileTools: @setup_workload, @compile_workload
 
 # --- _batch_dot/_batch_dot_masked (src/utils/linear_algebra.jl) -------------------- #
