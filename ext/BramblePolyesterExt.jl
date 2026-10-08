@@ -610,6 +610,19 @@ end
 # iteration, the kernel crossing whole, behind the same guard.
 @inline _offset(arrays...) = any(Base.has_offset_axes, arrays)
 
+# `@batch` splits its range assuming a positive step: on a descending range (`9:-1:1`) it
+# skips every index, and on a `CartesianIndices` with a descending axis it hangs. Every
+# `@batch ... for x in idxs|bidx` below walks `_ascending(idxs)` instead, the same indices
+# in ascending order. Order does not matter, since each sweep writes distinct entries.
+# `_batch_scatter_for!`'s slabs are cut from `_ascending(idxs)` too: `_band_range` of a
+# descending `StepRange{UInt, Int}` comes back with a corrupt step, which `@batch` reads as
+# empty. `_rerun_on_host` keeps the original collection, so a throwing kernel raises the
+# same first exception as `CpuSerial`.
+@inline _ascending(r::AbstractUnitRange) = r
+@inline _ascending(r::AbstractRange) = step(r) < 0 ? reverse(r) : r
+@inline _ascending(c::CartesianIndices) = CartesianIndices(map(_ascending, c.indices))
+@inline _ascending(idxs) = idxs
+
 @_task function _for_one!(v, h, i)
     @inbounds v[i] = _take(h)(i)
     return nothing
@@ -617,7 +630,7 @@ end
 
 @noinline function _each_run!(v, idxs, h::H) where {H}
     failed = false
-    @batch reduction=((|, failed),) for i in idxs
+    @batch reduction=((|, failed),) for i in _ascending(idxs)
         failed |= _for_one_threw(v, h, i)
     end
     return failed
@@ -700,8 +713,8 @@ function _batch_scatter_whole!(mats::Tuple, idxs, k::K) where {K}
                 _band_range(Base.OneTo(length(mats[1])), n, b)), 1:n)
         return nothing
     end
-    failed = _handed(_scatter_slabs_run!, k, mats, idxs)
-    failed && _rerun_on_host(r -> _scatter_range!(mats, k, r), _Slabs(idxs))
+    failed = _handed(_scatter_slabs_run!, k, mats, _ascending(idxs))
+    failed && _rerun_on_host(i -> (@inbounds _write_components!(mats, k(i), i)), idxs)
     return nothing
 end
 
@@ -714,7 +727,7 @@ end
 
 @noinline function _scatter_each_run!(mats, idxs, h::H) where {H}
     failed = false
-    @batch reduction=((|, failed),) for i in idxs
+    @batch reduction=((|, failed),) for i in _ascending(idxs)
         failed |= _scatter_one_threw(mats, h, i)
     end
     return failed
@@ -731,16 +744,12 @@ function Bramble._batch_scatter_for!(mats::Tuple, idxs::AbstractRange, g::G) whe
     _offset(idxs, mats...) && return _batch_scatter_each!(mats, idxs, g)
     skel, arrays = _kernel_parts(g, mats...)
     skel isa _Whole && return _batch_scatter_whole!(mats, idxs, arrays)
-    n = Threads.nthreads()
+    a, n = _ascending(idxs), Threads.nthreads()
     failed = false
     @batch reduction=((|, failed),) for b in 1:n
-        failed |= _scatter_slab_threw(skel, arrays, mats, idxs, n, b)
+        failed |= _scatter_slab_threw(skel, arrays, mats, a, n, b)
     end
-    failed && _rerun_on_host(1:n) do b
-        for i in _band_range(idxs, n, b)
-            @inbounds _write_components!(mats, g(i), i)
-        end
-    end
+    failed && _rerun_on_host(i -> (@inbounds _write_components!(mats, g(i), i)), idxs)
     return nothing
 end
 
@@ -780,7 +789,7 @@ end
 function Bramble._batch_bilinear_colour_sweep!(
         A::AbstractMatrix, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
 )
-    @batch for I in idxs
+    @batch for I in _ascending(idxs)
         _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
     end
     return nothing
@@ -789,7 +798,7 @@ end
 function Bramble._batch_bilinear_band_sweep!(
         A::AbstractMatrix, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α
 )
-    @batch for b in bidx
+    @batch for b in _ascending(bidx)
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
             _scatter_point!(
                 A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
@@ -813,7 +822,7 @@ function Bramble._batch_bilinear_colour_sweep!(
     cptr, rval, nzv = A.colptr, A.rowval, A.nzval
     skel, arrays = _split_or_whole((sp, term, mesh_markers), cptr, rval, nzv)
     failed = false
-    @batch reduction=((|, failed),) for I in idxs
+    @batch reduction=((|, failed),) for I in _ascending(idxs)
         failed |= _csc_point_threw(skel, arrays, cptr, rval, nzv, I, lin_indices,
             row_offset, col_offset, α)
     end
@@ -840,7 +849,7 @@ function Bramble._batch_bilinear_band_sweep!(
     cptr, rval, nzv = A.colptr, A.rowval, A.nzval
     skel, arrays = _split_or_whole((sp, term, mesh_markers), cptr, rval, nzv)
     failed = false
-    @batch reduction=((|, failed),) for b in bidx
+    @batch reduction=((|, failed),) for b in _ascending(bidx)
         failed |= _csc_band_threw(skel, arrays, cptr, rval, nzv, rest, ax, nbands, b,
             lin_indices, row_offset, col_offset, α)
     end
@@ -951,7 +960,7 @@ function Bramble._batch_bilinear_band_replay!(
     h1, h2, cold = _replay_parts(target)
     skel, arrays = _split_or_whole((cold, sp, term, mesh_markers), h1, h2)
     failed = false
-    @batch reduction=((|, failed),) for b in bidx
+    @batch reduction=((|, failed),) for b in _ascending(bidx)
         failed |= _replay_band_threw(skel, arrays, h1, h2, rest, ax, nbands, b,
             lin_indices, row_offset, col_offset)
     end
@@ -978,7 +987,7 @@ function Bramble._batch_bilinear_colour_replay!(
     h1, h2, cold = _replay_parts(target)
     skel, arrays = _split_or_whole((cold, sp, term, mesh_markers), h1, h2)
     failed = false
-    @batch reduction=((|, failed),) for I in idxs
+    @batch reduction=((|, failed),) for I in _ascending(idxs)
         failed |= _replay_one_threw(skel, arrays, h1, h2, I, lin_indices, row_offset,
             col_offset)
     end
@@ -1013,7 +1022,7 @@ end
 function Bramble._batch_linear_colour_sweep!(b::AbstractVector, sp, term, idxs, lin_indices, mesh_markers, offset, α)
     skel, arrays = _split_or_whole((sp, term, mesh_markers), b)
     failed = false
-    @batch reduction=((|, failed),) for I in idxs
+    @batch reduction=((|, failed),) for I in _ascending(idxs)
         failed |= _linear_point_threw(skel, arrays, b, I, lin_indices, offset, α)
     end
     failed && _rerun_on_host(idxs) do I
@@ -1035,7 +1044,7 @@ function Bramble._batch_linear_band_sweep!(
 )
     skel, arrays = _split_or_whole((sp, term, mesh_markers), b)
     failed = false
-    @batch reduction=((|, failed),) for k in bidx
+    @batch reduction=((|, failed),) for k in _ascending(bidx)
         failed |= _linear_band_threw(skel, arrays, b, rest, ax, nbands, k, lin_indices,
             offset, α)
     end
