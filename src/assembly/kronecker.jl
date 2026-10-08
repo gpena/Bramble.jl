@@ -10,21 +10,21 @@
 # difference, average, jump and shift nodes along any axis and chains of them, so mixed
 # derivatives and advection; an `:interior` restriction; `innerₕ`, `inner₊` and `inner_Γ`
 # weights (one Kronecker term per face for the last); grid-function coefficients varying
-# along one axis; and plain numbers inside a side. Each factor is the 1D form assembled on
-# that axis's own submesh, so a factor need be neither symmetric nor diagonal, and a term
-# may have several non-diagonal factors. A scalar coefficient (literal or `Ref`) wrapping a
-# term factors out of the whole Kronecker product, so it is stripped and carried separately
-# (`_kron_leaves`) and a `Ref` stays live. `kronecker_block.jl` extends this to composite
-# spaces whose leaves share one mesh.
+# along one axis; and plain numbers and `Ref`s inside a side. Each factor is the 1D form
+# assembled on that axis's own submesh, so a factor need be neither symmetric nor diagonal,
+# and a term may have several non-diagonal factors. A scalar coefficient (literal or `Ref`)
+# wrapping a term factors out of the whole Kronecker product, so it is stripped and carried
+# separately (`_kron_leaves`) and a `Ref` stays live; a `Ref` inside a side is carried the
+# same way (`_kron_live`). `kronecker_block.jl` extends this to composite spaces whose
+# leaves share one mesh.
 #
 # What does not factor is a grid-function coefficient varying along several axes or living
-# on another mesh, a `Ref` merged inside a side, a region other than `:interior` (Dirichlet
-# rows included; `fdm_solve`'s `dirichlet` keyword handles those, not this operator), an
-# `InterpolationNode`, a 1D mesh (nothing to factor), a trial and test space on different
-# meshes, and the star and cross-weighted differences. Anything the walk has no method for
-# is refused rather than approximated. A false negative only forgoes the fast path, while a
-# false positive would build an operator that silently computes the wrong matrix-vector
-# product.
+# on another mesh, a region other than `:interior` (Dirichlet rows included; `fdm_solve`'s
+# `dirichlet` keyword handles those, not this operator), an `InterpolationNode`, a 1D mesh
+# (nothing to factor), a trial and test space on different meshes, and the star and
+# cross-weighted differences. Anything the walk has no method for is refused rather than
+# approximated. A false negative only forgoes the fast path, while a false positive would
+# build an operator that silently computes the wrong matrix-vector product.
 #
 # Dirichlet rows are out of scope for this operator: it has no boundary constraint of its
 # own. The `Kronecker.jl` extension adds homogeneous Dirichlet conditions on the whole
@@ -126,14 +126,14 @@ What factors:
   - `innerₕ`, `inner₊` and `inner_Γ` weights, the last as one term per face;
   - a restriction to `:interior`, provided the mesh's `:interior` marker is the geometric
     one (the product of its axes' own interiors);
-  - a grid-function coefficient that varies along one axis only, and a plain number inside a
-    side;
-  - a scalar or `Ref` coefficient around a term.
+  - a grid-function coefficient that varies along one axis only;
+  - a scalar or `Ref` coefficient around a term or inside a side, so the simplifier merging
+    `innerₕ(u, v) + a * innerₕ(D₋ₓ(u), v)` into `innerₕ(u + a * D₋ₓ(u), v)` changes nothing,
+    and a `Ref` is read at every product.
 
 What does not, and answers `false`:
 
   - a grid-function coefficient varying along several axes, or living on another mesh;
-  - a `Ref` merged inside a side with other terms;
   - a region restriction other than `:interior`, including Dirichlet rows;
   - an interpolation, a 1D mesh, trial and test spaces on different meshes, composite
     leaves on different meshes;
@@ -590,10 +590,10 @@ function _kron_build(cache, be, dims::NTuple{D, Int}, leaves, block::String) whe
         P = _kron_project(term, Ωₕ)
         P === nothing && _throw_not_separable_term(term, Ωₕ, block)
         reads_coef |= _kron_reads_coef(term)
-        for projected in P
+        for (live, projected) in P
             factors = ntuple(d -> _kron_cached!(seen[d], _kron_factor(projected[d], mass[d])), Val(D))
             T = promote_type(T, map(eltype, factors)...)
-            t = _kron_term(scales, factors)
+            t = _kron_term((scales..., live...), factors)
             loc isa DeviceLocality && _kron_check_device(t)
             terms = (terms..., _kron_to_storage(loc, be, t))
         end
