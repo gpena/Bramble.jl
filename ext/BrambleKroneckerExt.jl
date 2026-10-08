@@ -48,8 +48,9 @@ using Bramble:
                ∇ₕ,
                innerₕ
 using Kronecker: Kronecker, ⊗
-using LinearAlgebra: LinearAlgebra, BlasInt, Diagonal, Symmetric, eigen, isposdef,
-                     issymmetric, ldiv!, mul!, schur
+using LinearAlgebra: LinearAlgebra, BlasInt, Diagonal, Symmetric, isposdef, issymmetric,
+                     ldiv!, mul!
+using LinearAlgebra.BLAS: @blasfunc, libblastrampoline
 using SparseArrays: SparseMatrixCSC, dropzeros!, nonzeros, nnz, sparse
 using PrecompileTools: @setup_workload, @compile_workload
 
@@ -428,29 +429,61 @@ function _fdm_classify(cs::Vector{T}, fs::Vector{NTuple{D, SparseMatrixCSC{T, In
     return (stage, axis)
 end
 
-# The generalised eigendecomposition per axis and the combined eigenvalue grid
-# `Λ_total[j] = c_m + Σ_d Λ_d[j_d]` the derivation above needs (coefficients are already in
-# `A_d`).
-function _fdm_eigendecompose(M, A, c_m::T, dims::NTuple{D, Int}) where {T, D}
-    decomps = ntuple(Val(D)) do d
-        eigen(Symmetric(Matrix(A[d])), Symmetric(Matrix(M[d])))
+# The LAPACK workspace of one axis's symmetric-definite eigenproblem (`xsygvd`), sized by a
+# query at build so that `_fdm_decompose!` allocates nothing: `B` takes a copy of `M_d` (and
+# then its Cholesky factor), `w` the eigenvalues, `info` LAPACK's status.
+struct _SygvdWork{T}
+    B::Matrix{T}
+    w::Vector{T}
+    work::Vector{T}
+    iwork::Vector{BlasInt}
+    info::Vector{BlasInt}
+end
+
+# `A Q = B Q Λ`, `Q' B Q = I` in place: `A` becomes `Q`, `g.w` the eigenvalues. This is the
+# call `eigen(Symmetric(A), Symmetric(B))` makes (`LAPACK.sygvd!(1, 'V', 'U', A, B)`), with
+# `g`'s stored buffers in place of the ones `sygvd!` allocates. Returns LAPACK's `info`.
+for (sygvd, T) in ((:dsygvd_, :Float64), (:ssygvd_, :Float32))
+    @eval function _sygvd!(A::Matrix{$T}, g::_SygvdWork{$T}, lwork::BlasInt, liwork::BlasInt)
+        n = size(A, 1)
+        ld = max(1, n)
+        ccall((@blasfunc($sygvd), libblastrampoline), Cvoid,
+            (Ref{BlasInt}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
+                Ptr{$T}, Ref{BlasInt}, Ptr{$T}, Ref{BlasInt},
+                Ptr{$T}, Ptr{$T}, Ref{BlasInt}, Ptr{BlasInt},
+                Ref{BlasInt}, Ptr{BlasInt}, Clong, Clong),
+            1, 'V', 'U', n,
+            A, ld, g.B, ld,
+            g.w, g.work, lwork, g.iwork,
+            liwork, g.info, 1, 1)
+        return g.info[1]
     end
-    Q = ntuple(d -> decomps[d].vectors, Val(D))
-    Λ = fill(c_m, dims)
-    for d in 1:D
-        shape = ntuple(k -> k == d ? dims[d] : 1, Val(D))
-        Λ .+= reshape(decomps[d].values, shape)
-    end
-    return Q, Λ
+end
+
+# The workspace for an `n x n` axis, `A` its (unread) input. Only Float32 and Float64 reach
+# the query: no LAPACK takes another eltype, which `fdm_solve` cannot factorise.
+function _SygvdWork(A::Matrix{T}, query::Bool) where {T}
+    n = size(A, 1)
+    g = _SygvdWork{T}(Matrix{T}(undef, n, n), Vector{T}(undef, n), Vector{T}(undef, 1),
+        Vector{BlasInt}(undef, 1), zeros(BlasInt, 1))
+    query || return g
+    # `lwork = liwork = -1` returns the optimal sizes in `work[1]` and `iwork[1]`.
+    LinearAlgebra.LAPACK.chkargsok(_sygvd!(A, g, BlasInt(-1), BlasInt(-1)))
+    resize!(g.work, BlasInt(g.work[1]))
+    resize!(g.iwork, g.iwork[1])
+    return g
 end
 
 # The factorisation `fdm_solve` applies: everything before the apply, done once
-# (classification, restriction, per-axis `eigen`, `Λ_total`, singularity refusal), plus the
-# workspace that lets `ldiv!` on host vectors allocate nothing. `u`/`w` are the two
-# ping-pong buffers of the solved (interior, under `:boundary`) unknowns; `u3[d]`/`w3[d]`
-# are the same memory viewed as `(pre, n_d, post)` for the axis-`d` mode product, built
-# here because a `reshape` per application would allocate. `interior` holds the linear
-# indices of the solved unknowns in the full vector (empty for `dirichlet = nothing`).
+# (classification, restriction, per-axis generalised eigenproblem, `Λ_total`, singularity
+# refusal), plus the workspace that lets `ldiv!` on host vectors allocate nothing. `u`/`w`
+# are the two ping-pong buffers of the solved (interior, under `:boundary`) unknowns;
+# `u3[d]`/`w3[d]` are the same memory viewed as `(pre, n_d, post)` for the axis-`d` mode
+# product, built here because a `reshape` per application would allocate. `interior` holds
+# the linear indices of the solved unknowns in the full vector (empty for
+# `dirichlet = nothing`). `M[d]`, `A[d]` are the dense restricted mass and operator of axis
+# `d` and `c_m` the mass coefficient, from which `_fdm_decompose!` recomputes `Q`, `Λ` (and
+# `λ`, `vec(Λ)`) through the LAPACK workspaces `lapack`; `precond` words its refusal.
 struct _FDMFactorization{T, D}
     n::Int
     boundary::Bool
@@ -462,6 +495,11 @@ struct _FDMFactorization{T, D}
     w::Vector{T}
     u3::NTuple{D, Array{T, 3}}
     w3::NTuple{D, Array{T, 3}}
+    M::NTuple{D, Matrix{T}}
+    A::NTuple{D, Matrix{T}}
+    c_m::Base.RefValue{T}
+    precond::Bool
+    lapack::NTuple{D, _SygvdWork{T}}
 end
 
 function _fdm_slabs(v::Vector, dims::NTuple{D, Int}) where {D}
@@ -482,32 +520,71 @@ function _fdm_factorize(K::KroneckerLinearOperator{T, D}, dirichlet;
     interior = boundary ? vec(LinearIndices(dims_full)[rng...]) : Int[]
     if prod(dims) == 0
         # A 2-point axis leaves no interior: every unknown is a Dirichlet one, and zero.
-        Q = ntuple(d -> zeros(T, dims[d], dims[d]), Val(D))
-        Λ = zeros(T, dims)
-    else
-        M, A, c_m, symmetric = _fdm_axis_data(K, rng; precond = precond)
-        ϵ = _fdm_data_eps(K)
-        # In a narrower precision, an SPD axis whose boundary rows are tiny against its
-        # largest (a mesh fine in the middle, coarse at both ends) also passes for one with
-        # a constant kernel: the refusal then names Float64 too.
-        iszero(c_m) && all(d -> _fdm_constant_kernel(A[d], ϵ), 1:D) &&
-            _throw_fdm_stage(ϵ > eps(Float64) ? 6 : 5, 0; precond = precond)
-        symmetric ||
-            return _schur_factorize(K.n, boundary, interior, M, A, c_m, dims; precond = precond)
-        Q, Λ = _fdm_eigendecompose(M, A, c_m, dims)
-        # A zero (to rounding) of `Λ_total` is a zero eigenvalue of the system: dividing by
-        # it would return a huge `x` that does not solve it. `Λ_total` sums `D` per-axis
-        # eigenvalues, each off by about `eps(T) * maximum(abs, Λ)`, whatever the grid size.
-        # Measured on graded 2D meshes, a singular system's smallest entry is below
-        # `0.07 eps(T) * maximum(abs, Λ)`, and a nonsingular Float32 one with condition 2e4
-        # sits at 15 eps, so the bound is `D eps`, not more. A cancellation test per entry
-        # misses the zero of a pure-Neumann operator, which is one per-axis eigenvalue.
-        _fdm_check_global(Λ, T, D; precond = precond)
+        Z = ntuple(d -> zeros(T, dims[d], dims[d]), Val(D))
+        return _fdm_symmetric(K.n, boundary, interior, Z, map(copy, Z), zero(T), dims,
+            precond)
     end
+    M, A, c_m, symmetric = _fdm_axis_data(K, rng; precond = precond)
+    ϵ = _fdm_data_eps(K)
+    # In a narrower precision, an SPD axis whose boundary rows are tiny against its largest
+    # (a mesh fine in the middle, coarse at both ends) also passes for one with a constant
+    # kernel: the refusal then names Float64 too.
+    iszero(c_m) && all(d -> _fdm_constant_kernel(A[d], ϵ), 1:D) &&
+        _throw_fdm_stage(ϵ > eps(Float64) ? 6 : 5, 0; precond = precond)
+    Md = ntuple(d -> Matrix(M[d]), Val(D))
+    Ad = ntuple(d -> Matrix(A[d]), Val(D))
+    symmetric ||
+        return _schur_factorize(K.n, boundary, interior, Md, Ad, c_m, dims; precond = precond)
+    return _fdm_decompose!(_fdm_symmetric(K.n, boundary, interior, Md, Ad, c_m, dims,
+        precond))
+end
+
+# An `_FDMFactorization` holding `M`, `A`, `c_m` and every buffer, its LAPACK workspaces
+# sized (no query on an empty interior), `Q` and `Λ` zero until `_fdm_decompose!` fills them.
+function _fdm_symmetric(n::Int, boundary::Bool, interior::Vector{Int},
+        M::NTuple{D, Matrix{T}}, A::NTuple{D, Matrix{T}}, c_m::T, dims::NTuple{D, Int},
+        precond::Bool) where {T, D}
+    Q = map(copy, A)
+    lapack = ntuple(d -> _SygvdWork(Q[d], prod(dims) > 0), Val(D))
+    Λ = zeros(T, dims)
     u = Vector{T}(undef, prod(dims))
     w = similar(u)
-    return _FDMFactorization{T, D}(K.n, boundary, interior, Q, Λ, vec(Λ), u, w,
-        _fdm_slabs(u, dims), _fdm_slabs(w, dims))
+    return _FDMFactorization{T, D}(n, boundary, interior, Q, Λ, vec(Λ), u, w,
+        _fdm_slabs(u, dims), _fdm_slabs(w, dims), M, A, Ref(c_m), precond, lapack)
+end
+
+# Recomputes `f`'s per-axis decompositions from `f.M`, `f.A` and `f.c_m` alone, allocating
+# nothing: per axis, `A_d Q_d = M_d Q_d Λ_d` with `Q_d' M_d Q_d = I` (see the derivation),
+# then `Λ_total[j] = c_m + Σ_d Λ_d[j_d]`, summed in the order `fill(c_m) .+= Λ_d` takes,
+# then the singularity refusal. An empty interior has nothing to decompose.
+function _fdm_decompose!(f::_FDMFactorization{T, D}) where {T, D}
+    isempty(f.Λ) && return f
+    for d in 1:D
+        g = f.lapack[d]
+        copyto!(f.Q[d], f.A[d])
+        copyto!(g.B, f.M[d])
+        info = _sygvd!(f.Q[d], g, BlasInt(length(g.work)), BlasInt(length(g.iwork)))
+        # As `LAPACK.sygvd!` reports it: an invalid argument, else `M_d` not definite.
+        LinearAlgebra.LAPACK.chkargsok(info)
+        info > 0 && throw(LinearAlgebra.PosDefException(info))
+    end
+    Λ, c_m = f.Λ, f.c_m[]
+    @inbounds for j in CartesianIndices(Λ)
+        s = c_m
+        for d in 1:D
+            s += f.lapack[d].w[j[d]]
+        end
+        Λ[j] = s
+    end
+    # A zero (to rounding) of `Λ_total` is a zero eigenvalue of the system: dividing by it
+    # would return a huge `x` that does not solve it. `Λ_total` sums `D` per-axis
+    # eigenvalues, each off by about `eps(T) * maximum(abs, Λ)`, whatever the grid size.
+    # Measured on graded 2D meshes, a singular system's smallest entry is below
+    # `0.07 eps(T) * maximum(abs, Λ)`, and a nonsingular Float32 one with condition 2e4 sits
+    # at 15 eps, so the bound is `D eps`, not more. A cancellation test per entry misses the
+    # zero of a pure-Neumann operator, which is one per-axis eigenvalue.
+    _fdm_check_global(Λ, T, D; precond = f.precond)
+    return f
 end
 
 # One mode product `Y = R' *_d X` between the ping-pong buffers, `X` in `u` when `inu`:
@@ -606,12 +683,28 @@ end
 # zero to rounding is refused as singular, as above. `F` and `K` are real, so `x` is the
 # real part of `Z y`.
 
+# The LAPACK workspace of one axis's complex generalised Schur form (`xgges3`), sized by a
+# query at build so that `_fdm_decompose!` allocates nothing: `vsl`, `vsr` receive `Q_d`,
+# `Z_d`; `sdim` and `info` are LAPACK's one-element outputs.
+struct _Gges3Work{R, C}
+    alpha::Vector{C}
+    beta::Vector{C}
+    vsl::Matrix{C}
+    vsr::Matrix{C}
+    work::Vector{C}
+    rwork::Vector{R}
+    sdim::Vector{BlasInt}
+    info::Vector{BlasInt}
+end
+
 # The factorisation the Schur route applies, the `_FDMFactorization` contract (`n`,
 # `boundary`, `interior`, `u`/`w` and their slab views `u3`/`w3`, all complex here). `Qc[d]`
 # is `conj(Q_d)` and `Zt[d]` is `transpose(Z_d)`, the right factors of the mode products
 # applying `Q_d'` and `Z_d`. `stride[k]` is `n_1 ... n_{k-1}` (`stride[D + 1]` the total),
 # the length of a level-`k` slab; `r[k]`, `p[k]` are that level's buffers for a slab's
-# right-hand side (then `L y_i`) and `P_{k-1} y_i`.
+# right-hand side (then `L y_i`) and `P_{k-1} y_i`. `M[d]`, `A[d]`: axis `d`'s dense
+# restricted mass and operator. `_fdm_decompose!` recomputes every factor from them alone,
+# through the LAPACK workspaces `lapack`; `Λ` serves only the singularity refusal.
 struct _SchurFactorization{T, D, C <: Complex{T}}
     n::Int
     boundary::Bool
@@ -629,6 +722,11 @@ struct _SchurFactorization{T, D, C <: Complex{T}}
     w::Vector{C}
     u3::NTuple{D, Array{C, 3}}
     w3::NTuple{D, Array{C, 3}}
+    M::NTuple{D, Matrix{T}}
+    A::NTuple{D, Matrix{T}}
+    Λ::Array{C, D}
+    precond::Bool
+    lapack::NTuple{D, _Gges3Work{T, C}}
 end
 
 # The complex QZ comes from OpenBLAS directly, never through libblastrampoline's forwarding:
@@ -636,7 +734,8 @@ end
 # strongly non-normal advection pencils (LAPACKException 63) and whose `dgges3` can crash
 # (gpena/Bramble.jl#443). OpenBLAS stays loaded after the forward is replaced, so its
 # `zgges3`/`cgges3` are found in it by name, in `__init__` (a pointer cached at precompile
-# time would be invalid). `(C_NULL, C_NULL)` means no OpenBLAS: `schur` is used instead.
+# time would be invalid). `(C_NULL, C_NULL)` means no OpenBLAS: the active LAPACK's
+# `xgges3` is called instead, through libblastrampoline.
 const _OPENBLAS_GGES3 = Ref((C_NULL, C_NULL))
 
 function __init__()
@@ -666,89 +765,117 @@ function _openblas_gges3()
     return (C_NULL, C_NULL)
 end
 
-# `(S, T, Q, Z)` of the complex generalised Schur form of `(A, B)`, which this overwrites:
-# OpenBLAS's `xgges3` with the workspace query, the call `LinearAlgebra.LAPACK.gges3!` makes
-# (so the factors are the ones `schur` returns under OpenBLAS), against the OpenBLAS handle.
-function _gges3!(A::Matrix{Complex{R}},
-        B::Matrix{Complex{R}}) where {R <: Union{Float64, Float32}}
-    C = Complex{R}
-    fptr = _OPENBLAS_GGES3[][R === Float64 ? 1 : 2]
-    fptr == C_NULL && return _schur_fallback(A, B)
-    n = LinearAlgebra.checksquare(A)
-    size(B) == (n, n) || throw(DimensionMismatch("A is $(size(A)), B is $(size(B))"))
-    sdim = Ref{BlasInt}(0)
-    alpha = Vector{C}(undef, n)
-    beta = Vector{C}(undef, n)
+# The `xgges3` to call and whether it is OpenBLAS's: the handle `__init__` found, else the
+# active LAPACK's through libblastrampoline.
+for (gges3, R) in ((:zgges3_, :Float64), (:cgges3_, :Float32))
+    @eval function _gges3_ptr(::Type{$R})
+        fptr = _OPENBLAS_GGES3[][$(R === :Float64 ? 1 : 2)]
+        fptr == C_NULL || return fptr, true
+        return cglobal((@blasfunc($gges3), libblastrampoline)), false
+    end
+end
+
+# `(A, B) = (Q S Z', Q T Z')` in place: `A` becomes `S`, `B` becomes `T`, `g.vsl` `Q` and
+# `g.vsr` `Z`. The call `LinearAlgebra.LAPACK.gges3!` makes (so the factors are the ones
+# `schur` returns under the same LAPACK), with `g`'s stored buffers. Returns LAPACK's `info`.
+function _gges3!(fptr::Ptr{Cvoid}, A::Matrix{C}, B::Matrix{C}, g::_Gges3Work{R, C},
+        lwork::BlasInt) where {R <: Union{Float64, Float32}, C <: Complex{R}}
+    n = size(A, 1)
     ld = max(1, n)
-    vsl = Matrix{C}(undef, ld, n)
-    vsr = Matrix{C}(undef, ld, n)
-    work = Vector{C}(undef, 1)
-    lwork = BlasInt(-1)
-    rwork = Vector{R}(undef, 8n)
-    info = Ref{BlasInt}()
-    for i in 1:2  # the first call returns the optimal `lwork` in `work[1]`
-        ccall(fptr, Cvoid,
-            (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ptr{Cvoid},
-                Ref{BlasInt}, Ptr{Complex{R}}, Ref{BlasInt}, Ptr{Complex{R}},
-                Ref{BlasInt}, Ref{BlasInt}, Ptr{Complex{R}}, Ptr{Complex{R}},
-                Ptr{Complex{R}}, Ref{BlasInt}, Ptr{Complex{R}}, Ref{BlasInt},
-                Ptr{Complex{R}}, Ref{BlasInt}, Ptr{R}, Ptr{Cvoid},
-                Ref{BlasInt}, Clong, Clong, Clong),
-            'V', 'V', 'N', C_NULL,
-            n, A, ld, B,
-            ld, sdim, alpha, beta,
-            vsl, ld, vsr, ld,
-            work, lwork, rwork, C_NULL,
-            info, 1, 1, 1)
-        LinearAlgebra.LAPACK.chklapackerror(info[])
-        if i == 1
-            lwork = BlasInt(real(work[1]))
-            resize!(work, lwork)
-        end
-    end
-    return A, B, vsl, vsr
-end
-_gges3!(A::Matrix, B::Matrix) = _schur_fallback(A, B)
-
-# No OpenBLAS: LinearAlgebra's `schur`, through whatever LAPACK is active. Its failure to
-# converge is a property of that LAPACK, named as such, not a raw LAPACKException.
-function _schur_fallback(A::Matrix{C}, B::Matrix{C}) where {C}
-    g = try
-        schur(A, B)
-    catch e
-        e isa LinearAlgebra.LAPACKException || rethrow()
-        # The libraries by name: `string(get_config())` can print only `LBTConfig(...)`.
-        libs = join((lib.libname for lib in LinearAlgebra.BLAS.get_config().loaded_libs),
-            ", ")
-        throw(ArgumentError("fdm_solve: the generalised Schur factorisation (`xgges3`, info " *
-                            "$(e.info)) failed in the active LAPACK, loaded from $libs, " *
-                            "and no OpenBLAS was found to call instead"))
-    end
-    return g.S, g.T, g.Q, g.Z
+    ccall(fptr, Cvoid,
+        (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ptr{Cvoid},
+            Ref{BlasInt}, Ptr{C}, Ref{BlasInt}, Ptr{C},
+            Ref{BlasInt}, Ptr{BlasInt}, Ptr{C}, Ptr{C},
+            Ptr{C}, Ref{BlasInt}, Ptr{C}, Ref{BlasInt},
+            Ptr{C}, Ref{BlasInt}, Ptr{R}, Ptr{Cvoid},
+            Ptr{BlasInt}, Clong, Clong, Clong),
+        'V', 'V', 'N', C_NULL,
+        n, A, ld, B,
+        ld, g.sdim, g.alpha, g.beta,
+        g.vsl, ld, g.vsr, ld,
+        g.work, lwork, g.rwork, C_NULL,
+        g.info, 1, 1, 1)
+    return g.info[1]
 end
 
-function _schur_factorize(n::Int, boundary::Bool, interior::Vector{Int}, M, A, c_m::T,
-        dims::NTuple{D, Int}; precond::Bool = false) where {T, D}
+# OpenBLAS's failure is LAPACK's own exception. Any other LAPACK's failure to converge is a
+# property of that LAPACK, named as such, not a raw LAPACKException.
+function _gges3_check(info::BlasInt, openblas::Bool)
+    (openblas || info <= 0) && return LinearAlgebra.LAPACK.chklapackerror(info)
+    return _throw_gges3_failed(info)
+end
+
+@noinline function _throw_gges3_failed(info)
+    # The libraries by name: `string(get_config())` can print only `LBTConfig(...)`.
+    libs = join((lib.libname for lib in LinearAlgebra.BLAS.get_config().loaded_libs), ", ")
+    throw(ArgumentError("fdm_solve: the generalised Schur factorisation (`xgges3`, info " *
+                        "$info) failed in the active LAPACK, loaded from $libs, and no " *
+                        "OpenBLAS was found to call instead"))
+end
+
+# The workspace for an `n x n` axis, `A`, `B` its (unread) inputs.
+function _Gges3Work(A::Matrix{C}, B::Matrix{C}) where {R, C <: Complex{R}}
+    n = size(A, 1)
+    ld = max(1, n)
+    g = _Gges3Work{R, C}(Vector{C}(undef, n), Vector{C}(undef, n), Matrix{C}(undef, ld, n),
+        Matrix{C}(undef, ld, n), Vector{C}(undef, 1), Vector{R}(undef, 8n),
+        zeros(BlasInt, 1), zeros(BlasInt, 1))
+    n == 0 && return g
+    # `lwork = -1` returns the optimal size in `work[1]`.
+    fptr, openblas = _gges3_ptr(R)
+    _gges3_check(_gges3!(fptr, A, B, g, BlasInt(-1)), openblas)
+    resize!(g.work, BlasInt(real(g.work[1])))
+    return g
+end
+
+function _schur_factorize(n::Int, boundary::Bool, interior::Vector{Int},
+        M::NTuple{D, Matrix{T}}, A::NTuple{D, Matrix{T}}, c_m::T, dims::NTuple{D, Int};
+        precond::Bool = false) where {T, D}
     C = Complex{T}
-    gs = ntuple(d -> _gges3!(Matrix{C}(A[d]), Matrix{C}(M[d])), Val(D))
-    S = ntuple(d -> gs[d][1], Val(D))
-    Tr = ntuple(d -> gs[d][2], Val(D))
-    # `c_m + Σ_d S_d[j_d, j_d] / T_d[j_d, j_d]`: zero to rounding is a singular system, the
-    # same test (and tolerance) as `Λ_total` on the symmetric route.
-    Λ = fill(C(c_m), dims)
-    for d in 1:D
-        shape = ntuple(k -> k == d ? dims[d] : 1, Val(D))
-        Λ .+= reshape([S[d][j, j] / Tr[d][j, j] for j in 1:dims[d]], shape)
-    end
-    _fdm_check_global(Λ, T, D; precond = precond)
+    S = ntuple(d -> Matrix{C}(undef, dims[d], dims[d]), Val(D))
+    Tr = map(similar, S)
+    lapack = ntuple(d -> _Gges3Work(S[d], Tr[d]), Val(D))
     stride = [prod(dims[1:(k - 1)]; init = 1) for k in 1:(D + 1)]
     u = Vector{C}(undef, prod(dims))
     w = similar(u)
-    return _SchurFactorization{T, D, C}(n, boundary, interior,
-        ntuple(d -> conj.(gs[d][3]), Val(D)), ntuple(d -> Matrix(transpose(gs[d][4])), Val(D)),
-        S, Tr, C(c_m), dims, stride, [Vector{C}(undef, stride[k]) for k in 1:D],
-        [Vector{C}(undef, stride[k]) for k in 1:D], u, w, _fdm_slabs(u, dims),
-        _fdm_slabs(w, dims))
+    f = _SchurFactorization{T, D, C}(n, boundary, interior, map(similar, S),
+        map(similar, S), S, Tr, C(c_m), dims, stride,
+        [Vector{C}(undef, stride[k]) for k in 1:D], [Vector{C}(undef, stride[k]) for k in 1:D],
+        u, w, _fdm_slabs(u, dims), _fdm_slabs(w, dims), M, A, Array{C}(undef, dims), precond,
+        lapack)
+    return _fdm_decompose!(f)
+end
+
+# Recomputes `f`'s per-axis generalised Schur forms from `f.M` and `f.A` alone, allocating
+# nothing (see the derivation), then the `Λ_total` analogue
+# `c_m + Σ_d S_d[j_d, j_d] / T_d[j_d, j_d]`, summed in the order `fill(c_m) .+= ...` takes:
+# zero to rounding is a singular system, the same test (and tolerance) as on the symmetric
+# route. An empty interior has nothing to decompose.
+function _fdm_decompose!(f::_SchurFactorization{T, D}) where {T, D}
+    isempty(f.Λ) && return f
+    fptr, openblas = _gges3_ptr(T)
+    for d in 1:D
+        g, S, Tr = f.lapack[d], f.S[d], f.Tr[d]
+        copyto!(S, f.A[d])
+        copyto!(Tr, f.M[d])
+        _gges3_check(_gges3!(fptr, S, Tr, g, BlasInt(length(g.work))), openblas)
+        Qc, Zt, n = f.Qc[d], f.Zt[d], f.dims[d]
+        @inbounds for j in 1:n, i in 1:n
+
+            Qc[i, j] = conj(g.vsl[i, j])
+            Zt[j, i] = g.vsr[i, j]
+        end
+    end
+    Λ = f.Λ
+    @inbounds for j in CartesianIndices(Λ)
+        s = f.c_m
+        for d in 1:D
+            s += f.S[d][j[d], j[d]] / f.Tr[d][j[d], j[d]]
+        end
+        Λ[j] = s
+    end
+    _fdm_check_global(Λ, T, D; precond = f.precond)
+    return f
 end
 
 # `p = (T_k ⊗ ... ⊗ T_1) p` in place, `p` the first `stride[k + 1]` entries read as an

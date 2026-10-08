@@ -282,6 +282,7 @@ if __bramble_with_ext_backends
         # dependency loaded.
         include("ext/sparse_csr_ext.jl")
         include("ext/kronecker_ext.jl")
+        include("ext/kronecker_refactorize.jl")
         include("ext/polyester_ext.jl")
         include("ext/polyester_parity.jl")
     end
