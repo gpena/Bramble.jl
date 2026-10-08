@@ -222,4 +222,38 @@ end
     end
 end
 
+# Types no other test splits: the generators meet them for the first time below.
+struct FreshInner{V, R}
+    a::V
+    r::R
+end
+struct FreshOuter{I, T}
+    i::I
+    t::T
+end
+
+# The generator helpers, which must take every type unspecialised: a new kernel type that
+# re-infers them costs a user function its first call (gpena/Bramble.jl#471).
+const SPLIT_HELPERS = (Bramble._batch_split_expr!, Bramble._batch_rebuild_expr,
+    Bramble._batch_splits!, Bramble._batch_fits, Bramble._batch_ptype,
+    Bramble._batch_slot_types!)
+
+helper_specializations() = [string(mi.specTypes)
+                            for m in Iterators.flatten(methods.(SPLIT_HELPERS))
+                            for mi in Base.specializations(m) if mi !== nothing]
+
+# The split generators compile once for every type: splitting and rebuilding a value of a
+# new type leaves no helper specialised on it (the round trip itself is the control).
+@testset "split generators compile once per type" begin
+    x = FreshOuter(FreshInner([1.0, 2.0], Ref(3.0)), ([4, 5], 6))
+    @test Bramble._batch_splittable(typeof(x))
+    sk, arrays = _batch_split(x)
+    y = _batch_rebuild(sk, arrays)
+    @test isbits(sk) && length(arrays) == 2
+    @test y isa FreshOuter && y.i.a === x.i.a && y.i.r === 3.0 && y.t[1] === x.t[1]
+    specs = helper_specializations()
+    @test !isempty(specs)
+    @test !any(s -> occursin(r"Fresh(Inner|Outer)", s), specs)
+end
+
 end # module UtilsBatchSplitTests
