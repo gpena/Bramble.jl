@@ -59,6 +59,25 @@ const _PP_RANGES = (9:-1:1, 9:-2:1, 1:-1:2, UInt(9):-1:UInt(1), UInt(9):-2:UInt(
         end
     end
 
+    # Index sets that are no range go through the per-index loop, as the serial sweep does.
+    @testset "scatter over Vector and CartesianIndices" begin
+        c = [3.0]
+        g = i -> (c[1] * i, 2.0 * i)
+        m, s = (fill(-1.0, 9), fill(-1.0, 9)), (fill(-1.0, 9), fill(-1.0, 9))
+        _sweep_scatter_for!(CpuPolyester(), m, [3, 1, 7], g)
+        _sweep_scatter_for!(CpuSerial(), s, [3, 1, 7], g)
+        @test m == s
+        @test count(!=(-1.0), s[1]) == 3
+        h = I -> (c[1] * I[1] + I[2],)
+        for ci in (CartesianIndices((3, 3)), CartesianIndices((1:3, 3:-1:1)))
+            A, B = (fill(-1.0, 3, 3),), (fill(-1.0, 3, 3),)
+            _sweep_scatter_for!(CpuPolyester(), A, ci, h)
+            _sweep_scatter_for!(CpuSerial(), B, ci, h)
+            @test A == B
+            @test !any(==(-1.0), B[1])
+        end
+    end
+
     @testset "_ascending" begin
         E = Base.get_extension(Bramble, :BramblePolyesterExt)
         ci = CartesianIndices((1:3, 3:-1:1))

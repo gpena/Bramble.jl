@@ -658,9 +658,10 @@ end
 # compile time, so this stays a single scalar write per component, not a tuple allocation).
 # `mats` crosses as top-level arrays and `g` as `_batch_for!`'s kernels do above.
 
-# `idxs::AbstractRange` specialises this past the stub's fully unconstrained signature
-# (`_batch_scatter_for!(mats::Tuple, idxs, g)`); the only caller (`project!`,
-# operators/projection.jl) always passes `1:n`.
+# `idxs::AbstractRange` and `idxs::AbstractArray` both specialise the stub's fully
+# unconstrained signature (`_batch_scatter_for!(mats::Tuple, idxs, g)`). The range method
+# serves `project!` (operators/projection.jl), which passes `1:n`; any other index set, a
+# `Vector{Int}` or a `CartesianIndices`, takes the per-index loop of the array method below.
 @_task function _scatter_slab!(skel, arrays, mats, idxs, n, b)
     # A local `Ref` copy, for the reason `_for_slab!` gives.
     ms, k = Ref((mats, _rejoin(skel, arrays)))[]
@@ -751,6 +752,10 @@ function Bramble._batch_scatter_for!(mats::Tuple, idxs::AbstractRange, g::G) whe
     end
     failed && _rerun_on_host(i -> (@inbounds _write_components!(mats, g(i), i)), idxs)
     return nothing
+end
+
+function Bramble._batch_scatter_for!(mats::Tuple, idxs::AbstractArray, g::G) where {G}
+    return _batch_scatter_each!(mats, idxs, g)
 end
 
 # --- _batch_bilinear_colour_sweep!/_batch_bilinear_band_sweep! (src/assembly/bilinear_execution.jl) --- #
