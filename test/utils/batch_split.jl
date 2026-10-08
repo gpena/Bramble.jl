@@ -238,9 +238,11 @@ const SPLIT_HELPERS = (Bramble._batch_split_expr!, Bramble._batch_rebuild_expr,
     Bramble._batch_splits!, Bramble._batch_fits, Bramble._batch_ptype,
     Bramble._batch_slot_types!)
 
-helper_specializations() = [string(mi.specTypes)
-                            for m in Iterators.flatten(methods.(SPLIT_HELPERS))
-                            for mi in Base.specializations(m) if mi !== nothing]
+function helper_specializations()
+    [string(mi.specTypes)
+     for m in Iterators.flatten(methods.(SPLIT_HELPERS))
+     for mi in Base.specializations(m) if mi !== nothing]
+end
 
 # The split generators compile once for every type: splitting and rebuilding a value of a
 # new type leaves no helper specialised on it (the round trip itself is the control).

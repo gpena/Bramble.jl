@@ -143,6 +143,7 @@ end
     grids = (((1001,), false), ((9, 7), true), ((129, 129), true), ((100, 77), false),
         ((13, 11, 7), false), ((3, 2), false))
     @testset "$name on $n" for (n, uniform) in grids, (name, r) in _RED_REDUCTIONS
+
         Wp = _red_space(n, uniform, CpuPolyester())
         up = Rₕ(Wp, _red_f)
         s = r(Rₕ(_red_space(n, uniform, CpuSerial()), _red_f))

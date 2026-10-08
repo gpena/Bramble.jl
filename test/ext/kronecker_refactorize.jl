@@ -344,6 +344,7 @@ end
         sym(c) = (u, v) -> innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v))
         adv(c) = (u, v) -> sym(c)(u, v) + innerₕ(D₋ₓ(u), v)
         for mk in (sym, adv), dir in (nothing, :boundary)
+
             L = mk(Ref(2.5))
             W = graded_space(Float64, (17, 13), Serial())
             a = form(W, W, L)
