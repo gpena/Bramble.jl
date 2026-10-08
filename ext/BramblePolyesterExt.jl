@@ -55,8 +55,8 @@
 # cannot avoid on its own) but hurts `@batch`, which already does the equivalent split
 # internally -- chunking on top would split twice.
 #
-# Allocation. A warm `CpuPolyester` call allocates 0 B, on any grid, with one exception
-# (below). Polyester's argument box is the only source. `@batch` copies the arguments its
+# Allocation. A warm `CpuPolyester` call allocates 0 B, on any grid, bar the limits
+# below. Polyester's argument box is the only source. `@batch` copies the arguments its
 # loop captures into a `ManualMemory.Reference` on every call. The box is on the stack
 # when it holds only plain arrays and isbits values (arrays become `PtrArray`s), and on the
 # heap when it holds one GC reference. So no loop captures a form, a space, a mesh, a sink or
@@ -70,12 +70,20 @@
 # `_kron_host_rebuild`). The test file's "allocation under CpuPolyester" testset asserts
 # 0 B for each path.
 #
-# The exception is a user closure that captures an array, or holds data the split cannot
-# take. It crosses `@batch` whole and boxes, as it did before the split, so that a method
-# typed on `Vector` and an `isa Vector` branch in user code still see the `Vector` and not a
-# `PtrArray` (`_splits_kernel` below); an `avgₕ!` over such a closure measures 160 B, the
-# bound `_PA_BOX_CEILINGS` in that testset gives it. A
-# `BigFloat`, a `Dict` or a `String` in a form falls back to boxing the same way
+# A kernel the split cannot take apart (a user closure over an array, or data it cannot
+# split) crosses `@batch` whole, so that a method typed on `Vector` and an `isa Vector`
+# branch in user code still see the `Vector` and not a `PtrArray` (`_splits_kernel` below).
+# Whole, it would put a GC reference in the box and heap-allocate it. So the host stores the
+# kernel unchanged in a slot kept for its type and the loop captures only an isbits handle
+# to the slot (`_SlotRef`, `_handed` below): `avgₕ!` over such a closure allocates 0 B, and
+# each task reads the kernel back. A call claims its slot atomically, so concurrent calls
+# with one kernel type never share one, and gives it back after the join. A call that the
+# join does not finish normally (a Ctrl-C while the host waits) retires its slot: it stays
+# claimed for the rest of the session, because workers still running may read it.
+#
+# Boxing remains where no slot serves, and never gives a wrong result: an isbits kernel, a
+# kernel type arriving when 256 types already have slots, a call finding all 64 slots of its
+# type taken or retired, and a `BigFloat`, a `Dict` or a `String` in a form
 # (`_batch_splittable`). A task body runs under an exception guard (`@_task` below), so a
 # throw inside a task reaches the caller with `CpuSerial`'s exception type and text, never
 # as a crash. No `CpuPolyester` call reaches `Threads.@threads` or `Threads.@spawn`
@@ -252,6 +260,160 @@ end
         when rerun on the host"))
 end
 
+# --- A whole kernel handed to the tasks through a typed slot ------------------------- #
+#
+# A kernel that crosses `@batch` whole (a user closure over an array, `_splits_kernel`
+# below) would put Polyester's argument box on the heap, since the box holds a GC
+# reference. Instead the host stores the kernel, unchanged, in a slot kept for its type
+# `K`, and the loop captures only an isbits `_SlotRef{K}`, the slot table's index and the
+# slot's. Each task reads the kernel back (`_take`). User code sees its own objects.
+#
+# A slot is a `Vector{K}` that holds the kernel inline or is empty. `push!` fills it within
+# the capacity it keeps and `empty!` clears it, neither allocating, and `empty!` drops the
+# reference so an idle slot keeps no user data alive. A `Vector{Any}` would box the
+# kernel, and so would a `Vector{Union{Nothing, K}}`, whose union-typed store boxes the
+# kernel before copying it in (16 B per call, measured).
+#
+# Each call claims its own slot with an atomic bit swap, so two calls with the same kernel
+# type in flight at once (`Threads.@spawn`, a nested call from inside the user function,
+# recursion) never share one. The slot is cleared and given back only when `@batch`
+# returns, so after its join: a throw inside a task is caught by the `@_task` guard, and
+# the join completes first. Any exception that unwinds out of the join instead (a Ctrl-C
+# while the host waits) leaves workers still running, which may still read the slot, so
+# the slot is retired: it stays claimed and holds its kernel for the rest of the session,
+# and no later call can take it and hand those workers another call's kernel.
+#
+# Limits fall back to boxing, never to a wrong result: an isbits kernel (whose box stays
+# on the stack anyway), a kernel type arriving when 256 types have slots already, and a
+# call finding all 64 slots of its type taken or retired all cross whole as before
+# gpena/Bramble.jl#476.
+#
+# Ordering: the kernel is stored before `@batch` launches its tasks, and Polyester's launch
+# is a release that each task's acquire pairs with; the host clears the slot only after the
+# join. The type table maps each kernel type to its index in `_SLOTS`. It is never mutated
+# once published: registering a type takes `_SLOT_LOCK`, writes the new `_Slots` into
+# `_SLOTS`, and publishes a copy of the table with the type added. So a registered type is
+# found without the lock, and tasks read only `_SLOTS`, which is never resized.
+mutable struct _Slots{K}
+    const v::Vector{Vector{K}}
+    @atomic free::UInt64     # bit `key - 1` set: slot `key` is free
+    @atomic retired::UInt64  # bit `key - 1` set: slot `key` is retired
+end
+_Slots{K}() where {K} = _Slots{K}([sizehint!(K[], 1) for _ in 1:64], typemax(UInt64),
+    UInt64(0))
+
+struct _SlotRef{K}
+    id::Int
+    key::Int
+end
+
+mutable struct _SlotTable
+    @atomic ids::IdDict{Type, Int}
+end
+
+const _SLOT_TYPES = 256
+const _SLOT_LOCK = ReentrantLock()
+const _SLOT_TABLE = _SlotTable(IdDict{Type, Int}())
+const _SLOTS = Vector{Any}(nothing, _SLOT_TYPES)
+
+# The index of `K`'s slots in `_SLOTS`, registered on first use; 0 once the table is full.
+@inline function _slots_id(::Type{K}) where {K}
+    ids = @atomic :acquire _SLOT_TABLE.ids
+    id = get(ids, K, 0)::Int
+    (id != 0 || length(ids) >= _SLOT_TYPES) && return id
+    return _register_slots(K)
+end
+
+@noinline function _register_slots(::Type{K}) where {K}
+    return @lock _SLOT_LOCK begin
+        ids = @atomic :acquire _SLOT_TABLE.ids
+        id = get(ids, K, 0)::Int
+        if id == 0 && length(ids) < _SLOT_TYPES
+            id = length(ids) + 1
+            _SLOTS[id] = _Slots{K}()
+            grown = copy(ids)
+            grown[K] = id
+            @atomic :release _SLOT_TABLE.ids = grown
+        end
+        id
+    end
+end
+
+# A free slot of `k`'s type holding `k`, or `_SlotRef(0, 0)` to cross whole.
+@inline function _claim(k::K) where {K}
+    isbitstype(K) && return _SlotRef{K}(0, 0)
+    id = _slots_id(K)
+    id == 0 && return _SlotRef{K}(0, 0)
+    s = _SLOTS[id]::_Slots{K}
+    free = @atomic :acquire s.free
+    while free != 0
+        key = trailing_zeros(free) + 1
+        bit = UInt64(1) << (key - 1)
+        free, ok = @atomicreplace :acquire_release :acquire s.free free=>(free & ~bit)
+        if ok
+            push!(@inbounds(s.v[key]), k)
+            return _SlotRef{K}(id, key)
+        end
+    end
+    return _SlotRef{K}(0, 0)
+end
+
+function _release(r::_SlotRef{K}) where {K}
+    s = _SLOTS[r.id]::_Slots{K}
+    empty!(@inbounds(s.v[r.key]))
+    @atomic :acquire_release s.free |= UInt64(1) << (r.key - 1)
+    return nothing
+end
+
+function _retire(r::_SlotRef{K}) where {K}
+    s = _SLOTS[r.id]::_Slots{K}
+    @atomic :acquire_release s.retired |= UInt64(1) << (r.key - 1)
+    return nothing
+end
+
+# The kernel a task runs: itself, or read back from its slot.
+@inline _take(k) = k
+@inline _take(r::_SlotRef{K}) where {K} = @inbounds (_SLOTS[r.id]::_Slots{K}).v[r.key][1]
+
+# `run!(args..., h)` with `h` the slot holding `k`, else `k` itself; returns what `run!`
+# returns (whether a task threw). `run!` holds the `@batch`, so the `try` stays out of it.
+@inline function _handed(run!::R, k::K, args...) where {R, K}
+    r = _claim(k)
+    r.id == 0 && return run!(args..., k)
+    failed = try
+        run!(args..., r)
+    catch
+        _retire(r)
+        rethrow()
+    end
+    _release(r)
+    return failed
+end
+
+# The number of kernel types with slots, and whether every slot not retired is free and
+# empty: the checks of the slot tests.
+_slot_types() = length(@atomic :acquire _SLOT_TABLE.ids)
+
+function _slots_quiescent()
+    ids = @atomic :acquire _SLOT_TABLE.ids
+    return all(id -> _quiescent(_SLOTS[id]), values(ids))
+end
+
+function _quiescent(s::_Slots)
+    free, retired = (@atomic :acquire s.free), (@atomic :acquire s.retired)
+    return all(1:length(s.v)) do key
+        bit = UInt64(1) << (key - 1)
+        return free & bit != 0 ? isempty(s.v[key]) : retired & bit != 0
+    end
+end
+
+function __init__()
+    # Start from an empty type table in every session, whatever precompilation left in it.
+    @atomic :release _SLOT_TABLE.ids = IdDict{Type, Int}()
+    fill!(_SLOTS, nothing)
+    return nothing
+end
+
 # --- _batch_for!/_batch_axis_for! (src/utils/linear_algebra.jl) -------------------- #
 #
 # The counterparts of `_threaded_for!`/`_threaded_axis_for!`: `v[i] = f(i)` over `idxs`, a
@@ -276,7 +438,7 @@ end
 #
 # Only those kernel types split (`_splits_kernel`), and only around a user function with
 # nothing to split (isbits: no captured arrays). A user closure over an array crosses whole
-# with its kernel and boxes, as before gpena/Bramble.jl#433: rebuilt, it would capture a
+# with its kernel, through a typed slot (`_handed` above): rebuilt, it would capture a
 # `PtrArray` in place of its `Vector`, which a method typed on `Vector` rejects and an
 # `isa Vector` branch reads differently. So does any other kernel, and a kernel the split
 # cannot take apart (a `BigFloat` target). A throwing kernel (a user function evaluated per
@@ -398,35 +560,46 @@ Base.size(::_Slabs) = (Threads.nthreads(),)
 Base.@propagate_inbounds Base.getindex(s::_Slabs, b::Int) = _slab(
     s.idxs, Threads.nthreads(), b)
 
-@_task function _whole_slab!(v, k, r)
-    _fill_slab!(v, k, r)
+# The whole kernel `h` reaches each task as itself or through its slot (`_handed` above).
+@_task function _whole_slab!(v, h, r)
+    _fill_slab!(v, _take(h), r)
     return nothing
 end
 
-@_task function _whole_part!(v, k, kind, b)
-    _fill_slab!(v, k, _slab(_full(v, kind), Threads.nthreads(), b))
+@_task function _whole_part!(v, h, kind, b)
+    _fill_slab!(v, _take(h), _slab(_full(v, kind), Threads.nthreads(), b))
     return nothing
+end
+
+@noinline function _cover_run!(v, kind, h::H) where {H}
+    failed = false
+    @batch reduction=((|, failed),) for b in Base.OneTo(Threads.nthreads())
+        failed |= _whole_part_threw(v, h, kind, b)
+    end
+    return failed
 end
 
 # `idxs` covering `v`, as `kind` says: the slabs rebuilt from `v` in each task.
 function _batch_for_cover!(v::AbstractArray, kind, k::K) where {K}
-    failed = false
-    @batch reduction=((|, failed),) for b in Base.OneTo(Threads.nthreads())
-        failed |= _whole_part_threw(v, k, kind, b)
-    end
+    failed = _handed(_cover_run!, k, v, kind)
     failed && _rerun_on_host(b -> _fill_slab!(v, k, _slab(_full(v, kind),
             Threads.nthreads(), b)), 1:Threads.nthreads())
     return nothing
+end
+
+@noinline function _slabs_run!(v, idxs, h::H) where {H}
+    failed = false
+    @batch reduction=((|, failed),) for r in _Slabs(idxs)
+        failed |= _whole_slab_threw(v, h, r)
+    end
+    return failed
 end
 
 # A kernel crossing whole, unsplit, one slab per iteration behind the same guard.
 function _batch_for_whole!(v::AbstractArray, idxs, k::K) where {K}
     kind = _cover(v, idxs)
     kind === nothing || return _batch_for_cover!(v, kind, k)
-    failed = false
-    @batch reduction=((|, failed),) for r in _Slabs(idxs)
-        failed |= _whole_slab_threw(v, k, r)
-    end
+    failed = _handed(_slabs_run!, k, v, idxs)
     failed && _rerun_on_host(r -> _fill_slab!(v, k, r), _Slabs(idxs))
     return nothing
 end
@@ -437,19 +610,24 @@ end
 # iteration, the kernel crossing whole, behind the same guard.
 @inline _offset(arrays...) = any(Base.has_offset_axes, arrays)
 
-@_task function _for_one!(v, k, i)
-    @inbounds v[i] = k(i)
+@_task function _for_one!(v, h, i)
+    @inbounds v[i] = _take(h)(i)
     return nothing
+end
+
+@noinline function _each_run!(v, idxs, h::H) where {H}
+    failed = false
+    @batch reduction=((|, failed),) for i in idxs
+        failed |= _for_one_threw(v, h, i)
+    end
+    return failed
 end
 
 _batch_for_bands!(v::AbstractArray, idxs, f::F) where {F} = _batch_for_each!(v, idxs, f)
 
 function _batch_for_each!(v::AbstractArray, idxs, f::F) where {F}
     k = _for_host_raw(f)
-    failed = false
-    @batch reduction=((|, failed),) for i in idxs
-        failed |= _for_one_threw(v, k, i)
-    end
+    failed = _handed(_each_run!, k, v, idxs)
     failed && _rerun_on_host(i -> (@inbounds v[i] = k(i)), idxs)
     return nothing
 end
@@ -487,48 +665,64 @@ end
     return nothing
 end
 
-@_task function _scatter_whole_slab!(mats, k, r)
-    _scatter_range!(mats, k, r)
+@_task function _scatter_whole_slab!(mats, h, r)
+    _scatter_range!(mats, _take(h), r)
     return nothing
 end
 
-@_task function _scatter_whole_part!(mats, k, b)
-    _scatter_range!(mats, k, _band_range(Base.OneTo(length(mats[1])), Threads.nthreads(), b))
+@_task function _scatter_whole_part!(mats, h, b)
+    _scatter_range!(mats, _take(h),
+        _band_range(Base.OneTo(length(mats[1])), Threads.nthreads(), b))
     return nothing
+end
+
+@noinline function _scatter_cover_run!(mats, h::H) where {H}
+    hit = false
+    @batch reduction=((|, hit),) for b in Base.OneTo(Threads.nthreads())
+        hit |= _scatter_whole_part_threw(mats, h, b)
+    end
+    return hit
+end
+
+@noinline function _scatter_slabs_run!(mats, idxs, h::H) where {H}
+    failed = false
+    @batch reduction=((|, failed),) for r in _Slabs(idxs)
+        failed |= _scatter_whole_slab_threw(mats, h, r)
+    end
+    return failed
 end
 
 function _batch_scatter_whole!(mats::Tuple, idxs, k::K) where {K}
     if _cover(mats[1], idxs) isa _Lin
         n = Threads.nthreads()
-        hit = false
-        @batch reduction=((|, hit),) for b in Base.OneTo(Threads.nthreads())
-            hit |= _scatter_whole_part_threw(mats, k, b)
-        end
+        hit = _handed(_scatter_cover_run!, k, mats)
         hit && _rerun_on_host(b -> _scatter_range!(mats, k,
                 _band_range(Base.OneTo(length(mats[1])), n, b)), 1:n)
         return nothing
     end
-    failed = false
-    @batch reduction=((|, failed),) for r in _Slabs(idxs)
-        failed |= _scatter_whole_slab_threw(mats, k, r)
-    end
+    failed = _handed(_scatter_slabs_run!, k, mats, idxs)
     failed && _rerun_on_host(r -> _scatter_range!(mats, k, r), _Slabs(idxs))
     return nothing
 end
 
 # Destinations or an index range with offset axes: one index per iteration, as
 # `_batch_for_each!` above.
-@_task function _scatter_one!(mats, k, i)
-    @inbounds _write_components!(mats, k(i), i)
+@_task function _scatter_one!(mats, h, i)
+    @inbounds _write_components!(mats, _take(h)(i), i)
     return nothing
+end
+
+@noinline function _scatter_each_run!(mats, idxs, h::H) where {H}
+    failed = false
+    @batch reduction=((|, failed),) for i in idxs
+        failed |= _scatter_one_threw(mats, h, i)
+    end
+    return failed
 end
 
 function _batch_scatter_each!(mats::Tuple, idxs, g::G) where {G}
     k = _for_host_raw(g)
-    failed = false
-    @batch reduction=((|, failed),) for i in idxs
-        failed |= _scatter_one_threw(mats, k, i)
-    end
+    failed = _handed(_scatter_each_run!, k, mats, idxs)
     failed && _rerun_on_host(i -> (@inbounds _write_components!(mats, k(i), i)), idxs)
     return nothing
 end

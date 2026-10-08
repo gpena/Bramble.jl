@@ -200,11 +200,13 @@ stack when it holds only plain arrays and isbits values. So the loops never capt
 space or a mesh: Bramble splits them into an isbits skeleton and their arrays, and each task
 rebuilds them. No call reaches `Threads.@threads` or `Threads.@spawn`.
 
-The one exception is a function you supply that captures an array, as in an `avgₕ!` whose
-source is a closure over a `Vector`. It crosses `@batch` whole, so a method typed on `Vector`
-or an `isa Vector` branch in it still sees the `Vector`, and its box is heap-allocated, an
-amount per call that does not grow with the grid. Data the split cannot take apart, such as a
-`BigFloat` coefficient or a `Dict`, falls back to boxing the same way. A task that throws
+A function you supply that captures an array, as in an `avgₕ!` whose source is a closure
+over a `Vector`, allocates nothing either, and sees its own objects: the loop holds a handle
+to a slot that stores the function, not the function. Only a function of a type beyond the
+256 that have slots, a call that finds all 64 slots of its type taken (or retired by an
+interrupted call, for the session), and data the split cannot take apart, such as a
+`BigFloat` coefficient or a `Dict`, fall back to a heap-allocated box. That costs an amount
+per call that does not grow with the grid, and never changes the result. A task that throws
 rethrows on the caller with the exception type and text [`CpuSerial`](@ref) gives.
 
 See also: [`CpuThreaded`](@ref), [`CpuSerial`](@ref), [`ExecutionPolicy`](@ref).
