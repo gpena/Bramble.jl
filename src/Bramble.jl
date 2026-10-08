@@ -158,15 +158,17 @@ the numbers changed: a coefficient that is a scalar or a `Ref` took a new value,
 [`change_points!`](@ref) moved the grid points and `a` is a form on a new `gridspace` (or `K`
 a new [`kronecker_operator`](@ref)) built after it. `f` keeps its `dirichlet`: there is no
 keyword here. Afterwards `fdm_solve!(x, f, F)` solves the new system, and agrees bitwise with
-the solve of a fresh `fdm_factorize`. Only `Float32` and `Float64` are supported.
+the solve of a fresh `fdm_factorize`, unless a term's coefficient is now zero: that term
+keeps its place, and the two agree to rounding. Only `Float32` and `Float64` are supported.
 
 With `K`, a refill allocates nothing once warm. With `a`, it allocates nothing once warm for
 the form `f` was built (or last refilled) from, when only scalar or `Ref` coefficients
 changed. A different form is projected again, and so is one that reads a grid-function
 coefficient, so that an edit made with `Rₕ!` is read and never ignored; both allocate. The
 operator or form must have the structure `f` was built for: the same dimension, sizes,
-eltype, number of terms, mass term on each axis, and symmetric or non-symmetric (Schur)
-solve. Anything else needs a new `fdm_factorize`. A `KroneckerLinearOperator` backed by a
+eltype, number of terms, mass term on each axis, terms left out at build (a zero
+coefficient, or a factor that is zero on the solved points), and symmetric or non-symmetric
+(Schur) solve. Anything else needs a new `fdm_factorize`. A `KroneckerLinearOperator` backed by a
 device is refused: the refill is host-only. An [`FDMPreconditioner`](@ref) is not refilled.
 
 Requires [Kronecker.jl](https://github.com/MichielStock/Kronecker.jl); call `using Kronecker`
@@ -176,8 +178,8 @@ before calling this function.
 
   - `ArgumentError` starting `fdm_factorize! cannot refill this factorisation`, then the
     reason: `a` or `K` differs from `f` in dimension, size, eltype, number of terms, mass
-    term, or whether the solve is symmetric or Schur, or `K` is backed by a device. `f` is
-    left as it was and still solves.
+    term, a term left out at build that is present now, or whether the solve is symmetric
+    or Schur, or `K` is backed by a device. `f` is left as it was and still solves.
   - `ArgumentError`: the refilled system is one `fdm_solve` refuses, singular or with a mass
     that is not symmetric positive definite. `f` then cannot solve, and
     [`fdm_solve!`](@ref) says so, until a later refill succeeds.
