@@ -301,6 +301,7 @@ function allocate_system_matrix(form::BilinearForm{D}, ast = form.ast) where {D}
     keep || return _allocate_from_pattern(MT, nrows, ncols, p.I, p.J, V)
     A = _allocate_keeping(MT, nrows, ncols, p.I, p.J, V)
     _coordinates_to_positions!(A, p, ast)
-    _store_recording!(form.cache, ast, _segments_from_positions(Val(D), p), A)
+    _store_recording!(form.cache, ast, _segments_from_positions(Val(D), p), A,
+        _pattern_stamp(form.trial_space, form.test_space))
     return A
 end

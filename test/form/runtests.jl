@@ -26,6 +26,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("threaded_replay.jl")
         # Replay sinks hold the storage vector and array-parametric positions (#437).
         include("replay_sinks.jl")
+        # A refill after `markers!` re-records instead of replaying stale positions (#465).
+        include("replay_markers.jl")
         include("zero_form.jl")
         include("coordinate_walk.jl")
         include("cross_mesh_blocks.jl")
