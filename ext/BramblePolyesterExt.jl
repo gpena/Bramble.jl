@@ -53,22 +53,25 @@
 # `Threads.@threads`), so none of the manual axis-chunking `src/utils/linear_algebra.jl` uses
 # for the threaded path is reproduced here. Axis-chunking helps `Threads.@threads` (it removes a linear-index conversion `Threads`
 # cannot avoid on its own) but hurts `@batch`, which already does the equivalent split
-# internally -- chunking on top would split twice.
+# internally -- chunking on top would split twice. The reductions are the exception: they
+# run `CpuThreaded`'s own bands (`_last_axis_chunks` included), so their sums equal
+# `CpuThreaded`'s bitwise (gpena/Bramble.jl#473).
 #
 # Allocation. A warm `CpuPolyester` call allocates 0 B, on any grid, bar the limits
-# below. Polyester's argument box is the only source. `@batch` copies the arguments its
-# loop captures into a `ManualMemory.Reference` on every call. The box is on the stack
-# when it holds only plain arrays and isbits values (arrays become `PtrArray`s), and on the
-# heap when it holds one GC reference. So no loop captures a form, a space, a mesh, a sink or
-# a `SparseMatrixCSC` whole. Bramble's own kernels and walk arguments go through
-# `_batch_split` (`src/utils/batch_split.jl`): the arrays cross as top-level loop arguments,
-# the rest as an isbits skeleton, and each task calls `_batch_rebuild` on them
-# (`_batch_for!`, the replay, linear and bilinear sweeps, `_batch_mf_bands!`). The loops
-# that never held a struct (the engines, `_batch_run_bands!`, `_batch_dot`,
-# `_batch_csr_spmv!`) capture only arrays and isbits values, and `_batch_broadcast!` and
-# `_batch_kron_lines!` rebuild their light structs inside each task (`_bc_host_rebuild`,
-# `_kron_host_rebuild`). The test file's "allocation under CpuPolyester" testset asserts
-# 0 B for each path.
+# below. Polyester's argument box is the only source, bar a task's first reduction of an
+# eltype, which allocates that task's `Threads.nthreads()` partial sums once (`_partials`).
+# `@batch` copies the arguments its loop captures into a `ManualMemory.Reference` on every
+# call. The box is on the stack when it holds only plain arrays and isbits values (arrays
+# become `PtrArray`s), and on the heap when it holds one GC reference. So no loop captures a
+# form, a space, a mesh, a sink or a `SparseMatrixCSC` whole. Bramble's own kernels and walk
+# arguments go through `_batch_split` (`src/utils/batch_split.jl`): the arrays cross as
+# top-level loop arguments, the rest as an isbits skeleton, and each task calls
+# `_batch_rebuild` on them (`_batch_for!`, the replay, linear and bilinear sweeps,
+# `_batch_mf_bands!`). The loops that never held a struct (the engines,
+# `_batch_run_bands!`, `_batch_csr_spmv!`) capture only arrays and isbits values, and
+# `_batch_broadcast!`, `_batch_kron_lines!` and `_batch_dot` rebuild their light structs
+# inside each task (`_bc_host_rebuild`, `_kron_host_rebuild`, `_weights`). The test file's
+# "allocation under CpuPolyester" testset asserts 0 B for each path.
 #
 # A kernel the split cannot take apart (a user closure over an array, or data it cannot
 # split) crosses `@batch` whole, so that a method typed on `Vector` and an `isa Vector`
@@ -83,10 +86,11 @@
 #
 # Boxing remains where no slot serves, and never gives a wrong result: an isbits kernel, a
 # kernel type arriving when 256 types already have slots, a call finding all 64 slots of its
-# type taken or retired, and a `BigFloat`, a `Dict` or a `String` in a form
-# (`_batch_splittable`). A task body runs under an exception guard (`@_task` below), so a
-# throw inside a task reaches the caller with `CpuSerial`'s exception type and text, never
-# as a crash. No `CpuPolyester` call reaches `Threads.@threads` or `Threads.@spawn`
+# type taken or retired, a `BigFloat`, a `Dict` or a `String` in a form
+# (`_batch_splittable`), and a reduction over storage other than a dense vector or a
+# contiguous view of one (`_Opaque`). A task body runs under an exception guard (`@_task`
+# below), so a throw inside a task reaches the caller with `CpuSerial`'s exception type and
+# text, never as a crash. No `CpuPolyester` call reaches `Threads.@threads` or `Threads.@spawn`
 # (gpena/Bramble.jl#400).
 module BramblePolyesterExt
 
@@ -100,40 +104,80 @@ using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
                ReplaySink, _PairReplaySink, _DiagonalReplayTarget, ActionSink,
                _PairActionSink, _batch_split, _batch_rebuild, _MFFusedPlan, _MFPass,
                _MF_BAND, _MF_NO_COLLECT, _mf_apply_parts!, _mf_host_ast, _batch_splittable,
-               _ScatterCSC, SparseMatrixCSC
+               _ScatterCSC, SparseMatrixCSC, _dot_band, _last_axis_chunks,
+               _separable_line_band, _separable_block_band
 using Polyester: Polyester, @batch
 using LinearAlgebra: mul!
 using PrecompileTools: @setup_workload, @compile_workload
 
 # --- _batch_dot/_batch_dot_masked (src/utils/linear_algebra.jl) -------------------- #
 #
-# `CpuThreaded` now has its own threaded `_dot`/`_dot_masked` (linear_algebra.jl); this is the
-# Polyester counterpart to that reduction.
-# `@batch reduction=((+, s),)` keeps the running sum as a scalar the macro reduces itself
-# (Polyester's own README: "does not incur any additional allocations"), rather than a
-# per-task buffer this file would have to allocate and reduce by hand.
+# The Polyester counterparts of `CpuThreaded`'s reductions, with the same result. Each cuts
+# the work into `Threads.nthreads()` fixed bands, runs the very band bodies `CpuThreaded`
+# runs (`_dot_band`, `_separable_line_band`, `_separable_block_band`), one band per `@batch`
+# iteration, stores each band's sum in `partials[b]`, and sums `partials` on the host as
+# `CpuThreaded` does. So the result depends on the data and `Threads.nthreads()` only, never
+# on how many workers `@batch` finds free: a reduction nested in another `CpuPolyester`
+# sweep, which runs every band on one worker, returns the top-level value bitwise
+# (gpena/Bramble.jl#473). A `@batch reduction=((+, s),)` would not: it splits the range by
+# the free workers and adds their sums, so a nested call associated differently.
+#
+# `partials` is this task's own `Vector{T}` of `Threads.nthreads()` entries, built on the
+# task's first reduction of eltype `T` and reused after (`_partials`), so a warm call
+# allocates nothing. It is task-local, never shared: two tasks reducing at once (a nested
+# call on every worker of an outer sweep) each write their own, and one task never runs two
+# reductions at once, since a band body calls no user code.
+struct _PartialsKey{T} end
+
+@inline function _partials(::Type{T}) where {T}
+    p = get(task_local_storage(), _PartialsKey{T}(), nothing)
+    p === nothing && return _new_partials(T)
+    return p::Vector{T}
+end
+
+@noinline function _new_partials(::Type{T}) where {T}
+    p = Vector{T}(undef, Threads.nthreads())
+    task_local_storage(_PartialsKey{T}(), p)
+    return p
+end
+
+# The arrays a reduction's bands read cross `@batch` as they are only when the `PtrArray`
+# Polyester turns them into runs the band body's loop as the array itself does: a dense
+# vector or a contiguous view of one. Any other storage (a strided view in a
+# `VectorElement`, say) crosses inside `_Opaque`, which `@batch` passes through untouched,
+# and each band unwraps it (`_take`, whose other methods read back a `_SlotRef` below).
+# Otherwise the top-level call would run the band body on a strided `PtrArray`, and a nested
+# one, which `@batch` runs on the host without converting, on the view itself: the two
+# `@simd` loops associate differently (gpena/Bramble.jl#473). The opaque form costs a
+# heap-boxed argument tuple per call, never a different sum.
+const _PtrAlike = Union{DenseVector, Base.FastContiguousSubArray{<:Any, 1, <:DenseVector}}
+
+struct _Opaque{A}
+    a::A
+end
+
+@inline _hand_arrays(xs::Tuple{Vararg{Union{_PtrAlike, Tuple{Vararg{_PtrAlike}}}}}) = xs
+@inline _hand_arrays(xs::Tuple) = map(_Opaque, xs)
+@inline _take(o::_Opaque) = o.a  # the other `_take`s are with `_SlotRef` below
 
 function Bramble._batch_dot(u::AbstractVector, v::AbstractVector, w::AbstractVector)
     (length(u) == length(v) == length(w)) ||
         _throw_dot_dim_error(length(u), length(v), length(w))
     T = promote_type(eltype(u), eltype(v), eltype(w))
-    s = zero(T)
-    n = length(u)
-    @batch reduction=((+, s),) for i in 1:n
-        @inbounds s += T(u[i]) * T(v[i]) * T(w[i])
+    nb = Threads.nthreads()
+    partials = _partials(T)
+    ax = 1:length(u)
+    hu, hv, hw = _hand_arrays((u, v, w))
+    @batch for b in 1:nb
+        @inbounds partials[b] = _dot_band(_take(hu), _take(hv), _take(hw), ax, nb, b)
     end
-    return s
+    return sum(partials)
 end
 
 # A mask crosses `@batch` as a tuple of its 64-bit word vectors, never as the `BitVector` or
 # `MarkedIndicesUnion` itself: a struct holding a GC reference puts Polyester's argument box
 # on the heap, while each word vector becomes a `PtrArray` (`_mask_chunks`). A `BitVector`
 # is the one-vector case.
-#
-# The `BitVector` mask (a single named region, or `dirichlet_bc!`'s own use) is then a plain
-# `O(1)` bit test, so the batched sweep walks every index and skips the unset ones, rather
-# than reproducing `MarkedIndices`' whole-word skip -- the whole-word skip only pays off
-# walking sequentially, and `@batch` already divides the range across tasks itself.
 @inline _mask_chunks(mask::BitVector) = (mask.chunks,)
 @inline _mask_chunks(mask::MarkedIndicesUnion) = mask.chunks
 
@@ -155,6 +199,40 @@ end
     return ((word >> ((i - 1) & 63)) & 0x1) != 0
 end
 
+# The masked band bodies: `_dot_masked_band` and `_separable_masked_band`
+# (src/utils/linear_algebra.jl, src/space/inner_product.jl) over the mask's words rather
+# than the mask, the same walk and the same `muladd`s in the same order, so the same sums.
+@noinline function _masked_words_band(u, v, w, chunks::Tuple, ax, nb::Int, b::Int)
+    T = promote_type(eltype(u), eltype(v), eltype(w))
+    s = zero(T)
+    @inbounds for widx in _band_range(ax, nb, b)
+        word = _mask_word(chunks, widx)
+        base = (widx - 1) * 64
+        while word != zero(UInt64)
+            i = base + trailing_zeros(word) + 1
+            s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+            word &= word - 1
+        end
+    end
+    return s
+end
+
+@noinline function _separable_masked_words_band(u, w::SeparableWeights, v, cart, chunks::Tuple,
+        ax, nb::Int, b::Int)
+    T = promote_type(eltype(u), eltype(w), eltype(v))
+    s = zero(T)
+    @inbounds for widx in _band_range(ax, nb, b)
+        word = _mask_word(chunks, widx)
+        base = (widx - 1) * 64
+        while word != zero(UInt64)
+            i = base + trailing_zeros(word) + 1
+            s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
+            word &= word - 1
+        end
+    end
+    return s
+end
+
 function Bramble._batch_dot_masked(
         u::AbstractVector, v::AbstractVector, w::AbstractVector,
         mask::Union{BitVector, MarkedIndicesUnion}
@@ -162,41 +240,55 @@ function Bramble._batch_dot_masked(
     (length(u) == length(v) == length(w) == _mask_length(mask)) ||
         _throw_dot_dim_error(length(u), length(v), length(w), _mask_length(mask))
     T = promote_type(eltype(u), eltype(v), eltype(w))
-    s = zero(T)
-    n = length(u)
+    nb = Threads.nthreads()
+    partials = _partials(T)
     chunks = _mask_chunks(mask)
-    @batch reduction=((+, s),) for i in 1:n
-        @inbounds if _mask_bit(chunks, i)
-            s += T(u[i]) * T(v[i]) * T(w[i])
-        end
+    ax = 1:length(first(chunks))
+    hu, hv, hw = _hand_arrays((u, v, w))
+    @batch for b in 1:nb
+        @inbounds partials[b] = _masked_words_band(
+            _take(hu), _take(hv), _take(hw), chunks, ax, nb, b)
     end
-    return s
+    return sum(partials)
 end
 
-# `SeparableWeights` specializations. `inner₊(uₕ, vₕ, Val(S))`
-# passes the weight as the *second* positional argument (space/inner_product.jl), so
-# under `CpuPolyester` it is `_batch_dot`'s own second parameter, not third -- these dispatch on
-# that position, mirroring the `CpuSerial`/`CpuThreaded` specializations in
-# space/inner_product.jl. Same reasoning as those: the weight at `I` multiplies per-axis
-# factors directly (`__prod`, what `w[I]` computes). `w[i]` (linear) divrems `i` back
-# into a `CartesianIndex` first, an `O(n^D)` cost paid on every point, every batch task.
-# The unmasked walk goes straight over `CartesianIndices(w.dims)` (which `@batch` also
-# accepts, see this file's header comment); the masked walks stay over the flat `1:n` mask
-# index space (masks are linear-indexed) and convert only the one index needed for `w`.
-# The weight crosses `@batch` as its factor vectors and `dims`, not as the struct, for the
-# reason the masks do above.
+# `SeparableWeights` specializations. `inner₊(uₕ, vₕ, Val(S))` passes the weight as the
+# *second* positional argument (space/inner_product.jl), so under `CpuPolyester` it is
+# `_batch_dot`'s own second parameter, not third -- these dispatch on that position,
+# mirroring the `CpuThreaded` specializations of `_threaded_dot`/`_threaded_dot_masked` in
+# space/inner_product.jl, whose band bodies they run. The weight crosses `@batch` as its
+# factor vectors and `dims`, not as the struct, for the reason the masks do above, and each
+# band rebuilds it from them (`_weights`).
+@inline _weights(factors::NTuple{D, VT}, dims) where {D, VT} = SeparableWeights{
+    D, eltype(VT), VT}(factors, dims)
+
 function Bramble._batch_dot(u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector) where {D}
     n = length(w)
     (length(u) == n == length(v)) || _throw_dot_dim_error(length(u), n, length(v))
     T = promote_type(eltype(u), eltype(w), eltype(v))
-    s = zero(T)
-    factors = w.factors
-    li = LinearIndices(w.dims)
-    @batch reduction=((+, s),) for I in CartesianIndices(w.dims)
-        @inbounds i = li[I]
-        @inbounds s += T(u[i]) * T(v[i]) * T(__prod(factors, I))
+    nb = Threads.nthreads()
+    partials = _partials(T)
+    dims = w.dims
+    hu, hf, hv = _hand_arrays((u, w.factors, v))
+    if D == 1
+        ax = 1:first(dims)
+        @batch for b in 1:nb
+            @inbounds partials[b] = _separable_line_band(
+                _take(hu), _weights(_take(hf), dims), _take(hv), ax, nb, b)
+        end
+    else
+        # `_last_axis_chunks` clamps the block count to the last axis, as in `CpuThreaded`,
+        # whose surplus partial sums stay zero.
+        tail = Base.tail(dims)
+        lin = LinearIndices(tail)
+        blocks = _last_axis_chunks(CartesianIndices(tail), nb)
+        fill!(partials, zero(T))
+        @batch for b in 1:length(blocks)
+            @inbounds partials[b] = _separable_block_band(
+                _take(hu), _weights(_take(hf), dims), _take(hv), lin, blocks, b)
+        end
     end
-    return s
+    return sum(partials)
 end
 
 function Bramble._batch_dot_masked(
@@ -207,16 +299,18 @@ function Bramble._batch_dot_masked(
     (length(u) == n == length(v) == _mask_length(mask)) ||
         _throw_dot_dim_error(length(u), n, length(v), _mask_length(mask))
     T = promote_type(eltype(u), eltype(w), eltype(v))
-    s = zero(T)
-    factors = w.factors
-    cart = CartesianIndices(w.dims)
+    nb = Threads.nthreads()
+    partials = _partials(T)
+    dims = w.dims
+    hu, hf, hv = _hand_arrays((u, w.factors, v))
+    cart = CartesianIndices(dims)
     chunks = _mask_chunks(mask)
-    @batch reduction=((+, s),) for i in 1:n
-        @inbounds if _mask_bit(chunks, i)
-            s += T(u[i]) * T(v[i]) * T(__prod(factors, cart[i]))
-        end
+    ax = 1:length(first(chunks))
+    @batch for b in 1:nb
+        @inbounds partials[b] = _separable_masked_words_band(
+            _take(hu), _weights(_take(hf), dims), _take(hv), cart, chunks, ax, nb, b)
     end
-    return s
+    return sum(partials)
 end
 
 # --- Exceptions inside the split hooks' tasks ---------------------------------------- #
