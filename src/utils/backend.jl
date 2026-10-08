@@ -190,7 +190,18 @@ Its crossover against `CpuSerial` (gpena/Bramble.jl#299) falls at smaller sizes 
 `vₕ .= a .* uₕ .+ wₕ` included (gpena/Bramble.jl#356, #357). `benchmark/policy_crossover.jl`
 measures both on your machine.
 
-A warm call under this policy allocates 0 bytes, on any grid. Differences, shifts, averages,
+Its reductions, `innerₕ`, `normₕ` and `inner₊` with or without `markers`, split the sum
+into `Threads.nthreads()` fixed bands and add the band sums with `sum`, exactly as
+[`CpuThreaded`](@ref) does, and return [`CpuThreaded`](@ref)'s value bitwise. The value
+depends only on the data and `Threads.nthreads()`, never on how many threads are free, so a
+reduction nested in another sweep, as in `Rₕ!(uₕ, x -> innerₕ(vₕ, vₕ) * x[1])`, returns
+exactly the top-level value. It agrees with [`CpuSerial`](@ref) to rounding, since the bands
+add the terms in another order, and on one thread it is [`CpuSerial`](@ref)'s value bitwise.
+A task's first reduction allocates its band sums once.
+
+A warm call under this policy allocates 0 bytes, on any grid, when the storage is a `Vector`
+or a contiguous view of one; storage that is not, such as a strided view, allocates on every
+call. Differences, shifts, averages,
 divergence, curl, `εₕ!`, `Rₕ!`, `avgₕ!` (masked and composite too), `innerₕ`, `inner₊`, the
 broadcasts (a 0-dimensional array leaf too), the weight build, linear and bilinear assembly
 and refill, the matrix-free product, a multigrid V-cycle, the explicit right-hand side
