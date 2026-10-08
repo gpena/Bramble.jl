@@ -340,6 +340,57 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs _sweep_scatter_for!(Serial(), scatter_targets, 1:50, g_scatter)
     end
 
+    # Invariants tested (#459):
+    # 1. A CpuThreaded() scatter of a tuple-valued closure equals the CpuSerial() scatter.
+    # 2. Closure kernels reached through a dynamic call (a loop over policies, the seams
+    #    with an explicit locality, a linear range or a CartesianIndices) never compile a
+    #    sweep helper with a `Function` kernel: every wrapper takes the kernel as a type
+    #    parameter. Only compiled instances count; code-less ones come from inference and
+    #    the pkgimage. Not thread-gated: the widening happens at one thread as well.
+    @testset "Sweeps specialise on the kernel (#459)" begin
+        n = 64
+        g = i -> (Float64(i), Float64(2i))
+        a_t, b_t = zeros(n), zeros(n)
+        a_s, b_s = zeros(n), zeros(n)
+        _sweep_scatter_for!(CpuThreaded(), (a_t, b_t), 1:n, g)
+        _sweep_scatter_for!(CpuSerial(), (a_s, b_s), 1:n, g)
+        @test a_t == a_s == Float64.(1:n)
+        @test b_t == b_s == Float64.(2 .* (1:n))
+
+        v = zeros(n)
+        Bramble._threaded_for!(v, 1:n, i -> Float64(i))
+        @test v == Float64.(1:n)
+
+        for policy in (CpuSerial(), CpuThreaded())
+            w = zeros(n)
+            _sweep_for!(policy, w, 1:n, i -> 2.0i)
+            @test w == 2.0 .* (1:n)
+            w = zeros(n)
+            _sweep_for!(Bramble.HostLocality(), policy, w, 1:n, i -> 3.0i)
+            @test w == 3.0 .* (1:n)
+            M = zeros(4, 4)
+            _sweep_for!(policy, M, CartesianIndices(M), I -> Float64(I[1] * I[2]))
+            @test M == [Float64(i * j) for i in 1:4, j in 1:4]
+            c, d = zeros(n), zeros(n)
+            _sweep_scatter_for!(policy, (c, d), 1:n, i -> (1.0i, 3.0i))
+            @test c == 1.0 .* (1:n) && d == 3.0 .* (1:n)
+            c, d = zeros(n), zeros(n)
+            _sweep_scatter_for!(Bramble.HostLocality(), policy, (c, d), 1:n, i -> (2.0i, 3.0i))
+            @test c == 2.0 .* (1:n) && d == 3.0 .* (1:n)
+        end
+
+        helpers = (_sweep_for!, _sweep_scatter_for!, Bramble._threaded_for!,
+            Bramble._static_for!, _serial_for!, Bramble._threaded_scatter_for!,
+            Bramble._static_scatter_for!, Bramble._serial_scatter_for!,
+            Bramble._threaded_axis_for!, Bramble._static_bands!, Bramble._serial_bands!,
+            Bramble._static_or_serial)
+        widened = [mi.specTypes for fn in helpers for m in methods(fn)
+                   for mi in Base.specializations(m)
+                   if mi !== nothing && isdefined(mi, :cache) &&
+                          Function in Base.unwrap_unionall(mi.specTypes).parameters]
+        @test isempty(widened)
+    end
+
     # Invariants tested:
     # 1. `_last_axis_chunks` splits the last axis into contiguous blocks, the remainder on
     #    the first blocks, a stride kept, and `firstindex`/`lastindex` bracket the blocks.
