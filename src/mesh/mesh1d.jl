@@ -386,10 +386,12 @@ See also: [`forward_spacing_for_derivative`](@ref).
 # coercion `half_spacing(::MeshnD, idx)` already applies is needed here too, or a mesh with
 # a collapsed axis silently gets a zero weight everywhere (gpena/Bramble.jl#89): the zero
 # case is only ever the single-element one, so this stays the same zero-copy array in
-# every other case and only allocates on that one rare, one-element path.
+# every other case and only allocates on that one rare, one-element path. That copy is
+# `similar(hs)` filled by a broadcast, so it keeps the mesh's own vector type (a device
+# vector stays one) and never reads `hs[1]` as a scalar (gpena/Bramble.jl#497).
 @inline function cell_measures(Ωₕ::_Mesh1DLike)
     hs = half_spacings(Ωₕ)
-    return length(hs) == 1 ? [_apply_hs_logic(hs[1])] : hs
+    return length(hs) == 1 ? (similar(hs) .= _apply_hs_logic.(hs)) : hs
 end
 
 """
