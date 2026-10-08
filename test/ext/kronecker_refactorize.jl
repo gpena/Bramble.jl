@@ -313,6 +313,100 @@ end
         end
     end
 
+    # `fdm_factorize!(f, a)` on the form `f` was built from, after a new `Ref` value: the
+    # refill from the operator `f` recorded, 0 B once warm (projecting `a` again allocates),
+    # and the solve bitwise that of a fresh factorisation, so a refill that wrote nothing
+    # would fail.
+    @testset "fdm_factorize!(f, a): 0 B, bitwise" begin
+        for T in (Float64, Float32), p in (Serial(), CpuPolyester()),
+            n in ((17, 13), (7, 6, 5)), L in KRON_REFILL_FORMS, dir in (nothing, :boundary)
+            KRON_REFILL_C[] = 2.5
+            W = graded_space(T, n, p)
+            a = form(W, W, L)
+            f = fdm_factorize(a; dirichlet = dir)
+            KRON_REFILL_C[] = 0.7
+            @test fdm_factorize!(f, a) === f
+            @test refill_bytes(f, a) == 0
+            F = rhs(W, T, dir)
+            x = fdm_solve!(similar(F), f, F)
+            g = fdm_factorize(a; dirichlet = dir)
+            @test x == fdm_solve!(similar(F), g, F)
+            @test f.M == g.M && f.A == g.A && f.c_m[] == g.c_m[]
+            T === Float64 && @test x ≈ assemble(a; dirichlet = dir) \ F rtol = 1e-10
+        end
+        KRON_REFILL_C[] = 2.5
+    end
+
+    # Any other form is projected again and recorded: after `change_points!` the old form is
+    # refused with the stale-weights error and a form on the new gridspace refills; a form
+    # whose coefficient is another `Ref` is read through that `Ref` from then on.
+    @testset "fdm_factorize!(f, a): new form" begin
+        sym(c) = (u, v) -> innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v))
+        adv(c) = (u, v) -> sym(c)(u, v) + innerₕ(D₋ₓ(u), v)
+        for mk in (sym, adv), dir in (nothing, :boundary)
+            L = mk(Ref(2.5))
+            W = graded_space(Float64, (17, 13), Serial())
+            a = form(W, W, L)
+            f = fdm_factorize(a; dirichlet = dir)
+            Bramble.change_points!(mesh(W), (range(0.0, 1.0; length = 17) .^ 1.4,
+                range(0.0, 1.0; length = 13) .^ 1.8))
+            @test_throws ArgumentError fdm_factorize!(f, a)
+            @test_throws "change_points!" fdm_factorize!(f, a)
+            W2 = gridspace(mesh(W))
+            a2 = form(W2, W2, L)
+            @test fdm_factorize!(f, a2) === f
+            @test refill_bytes(f, a2) == 0
+            F = rhs(W2, Float64, dir)
+            x = fdm_solve!(similar(F), f, F)
+            @test x == fdm_solve!(similar(F), fdm_factorize(a2; dirichlet = dir), F)
+            @test x ≈ assemble(a2; dirichlet = dir) \ F rtol = 1e-10
+            c, c2 = Ref(0.7), Ref(0.3)
+            b, b2 = form(W2, W2, mk(c)), form(W2, W2, mk(c2))
+            @test fdm_factorize!(f, b) === f
+            c[] = 0.3
+            @test refill_bytes(f, b) == 0
+            @test fdm_solve!(similar(F), f, F) ==
+                  fdm_solve!(similar(F), fdm_factorize(b2; dirichlet = dir), F)
+        end
+    end
+
+    # A form reading a grid-function coefficient is projected again on every refill, its
+    # warning with it: an `Rₕ!` edit is re-read, never silently ignored.
+    @testset "fdm_factorize!(f, a): Rₕ! re-read" begin
+        W = graded_space(Float64, (17, 13), Serial())
+        gh = Rₕ(W, x -> 1 + x[1])
+        a = form(W, W, (u, v) -> innerₕ(gh * u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        warning = (:warn, r"grid-function coefficient")
+        f = @test_logs warning fdm_factorize(a)
+        F = rhs(W, Float64, nothing)
+        x = fdm_solve!(similar(F), f, F)
+        Rₕ!(gh, x -> 3 + x[1]^2)
+        @test_logs warning fdm_factorize!(f, a)
+        y = fdm_solve!(similar(F), f, F)
+        @test y ≈ assemble(a) \ F rtol = 1e-10
+        @test !(x ≈ y)
+    end
+
+    # A form `fdm_factorize` refuses is refused by name before anything is written: `f`
+    # solves as before and still refills from the form it was built from without allocating.
+    @testset "fdm_factorize!(f, a): refused form" begin
+        W = graded_space(Float64, (9, 7), Serial())
+        a = form(W, W, symmetric_form)
+        f = fdm_factorize(a)
+        F = rhs(W, Float64, nothing)
+        x = fdm_solve!(similar(F), f, F)
+        fxy = Rₕ(W, x -> (1 + x[1]) * (2 + x[2]^2))
+        b = form(W, W, (u, v) -> innerₕ(fxy * u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        @test_throws ArgumentError fdm_factorize!(f, b)
+        @test_throws "it is not separable" fdm_factorize!(f, b)
+        V = gridspace(mesh(W), Val(2))
+        c = form(V, V, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
+        @test_throws ArgumentError fdm_factorize!(f, c)
+        @test_throws "posed on a composite" fdm_factorize!(f, c)
+        @test fdm_solve!(similar(F), f, F) == x
+        @test refill_bytes(f, a) == 0
+    end
+
     # A 2-point axis under `:boundary` leaves no interior: nothing to decompose.
     @testset "_fdm_decompose!: empty interior" begin
         W = graded_space(Float64, (2, 9), Serial())

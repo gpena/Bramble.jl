@@ -562,7 +562,9 @@ end
 # `λ`, `vec(Λ)`) through the LAPACK workspaces `lapack`; `precond` words its refusal.
 # `fdm_factorize!` refills `M`, `A` and `c_m` by replaying `recipe`; `valid` is false from
 # the moment it starts writing them until it succeeds, and `ldiv!` refuses meanwhile.
-struct _FDMFactorization{T, D}
+# `form` and `op` hold what `fdm_factorize!(f, a)` reuses (`_fdm_record!`), `nothing` until
+# then. Mutable so that the function barrier behind them receives `f` without a box.
+mutable struct _FDMFactorization{T, D}
     n::Int
     boundary::Bool
     interior::Vector{Int}
@@ -580,6 +582,8 @@ struct _FDMFactorization{T, D}
     lapack::NTuple{D, _SygvdWork{T}}
     recipe::_FDMRecipe{T, D}
     valid::Base.RefValue{Bool}
+    form::Base.RefValue{Any}
+    op::Base.RefValue{Any}
 end
 
 function _fdm_slabs(v::Vector, dims::NTuple{D, Int}) where {D}
@@ -629,7 +633,8 @@ function _fdm_symmetric(n::Int, boundary::Bool, interior::Vector{Int},
     u = Vector{T}(undef, prod(dims))
     w = similar(u)
     return _FDMFactorization{T, D}(n, boundary, interior, Q, Λ, vec(Λ), u, w,
-        _fdm_slabs(u, dims), _fdm_slabs(w, dims), M, A, Ref(c_m), precond, lapack, recipe, Ref(true))
+        _fdm_slabs(u, dims), _fdm_slabs(w, dims), M, A, Ref(c_m), precond, lapack, recipe,
+        Ref(true), Ref{Any}(nothing), Ref{Any}(nothing))
 end
 
 # Recomputes `f`'s per-axis decompositions from `f.M`, `f.A` and `f.c_m` alone, allocating
@@ -787,9 +792,9 @@ end
 # right-hand side (then `L y_i`) and `P_{k-1} y_i`. `M[d]`, `A[d]`: axis `d`'s dense
 # restricted mass and operator. `_fdm_decompose!` recomputes every factor from them alone
 # and `c_m`, through the LAPACK workspaces `lapack`; `Λ` serves only the singularity
-# refusal. `fdm_factorize!` refills `M`, `A` and `c_m` by replaying `recipe`, `valid` as in
-# `_FDMFactorization`.
-struct _SchurFactorization{T, D, C <: Complex{T}}
+# refusal. `fdm_factorize!` refills `M`, `A` and `c_m` by replaying `recipe`; `valid`,
+# `form` and `op` as in `_FDMFactorization`, mutable for the same reason.
+mutable struct _SchurFactorization{T, D, C <: Complex{T}}
     n::Int
     boundary::Bool
     interior::Vector{Int}
@@ -813,6 +818,8 @@ struct _SchurFactorization{T, D, C <: Complex{T}}
     lapack::NTuple{D, _Gges3Work{T, C}}
     recipe::_FDMRecipe{T, D}
     valid::Base.RefValue{Bool}
+    form::Base.RefValue{Any}
+    op::Base.RefValue{Any}
 end
 
 # The complex QZ comes from OpenBLAS directly, never through libblastrampoline's forwarding:
@@ -928,7 +935,7 @@ function _schur_factorize(n::Int, boundary::Bool, interior::Vector{Int},
         map(similar, S), S, Tr, Ref(C(c_m)), dims, stride,
         [Vector{C}(undef, stride[k]) for k in 1:D], [Vector{C}(undef, stride[k]) for k in 1:D],
         u, w, _fdm_slabs(u, dims), _fdm_slabs(w, dims), M, A, Array{C}(undef, dims), precond,
-        lapack, recipe, Ref(true))
+        lapack, recipe, Ref(true), Ref{Any}(nothing), Ref{Any}(nothing))
     return _fdm_decompose!(f)
 end
 
@@ -1252,7 +1259,8 @@ function Bramble.fdm_factorize(a::BilinearForm; dirichlet = nothing)
     (Bramble.trial_space(a) isa Bramble.CompositeGridSpace ||
      Bramble.test_space(a) isa Bramble.CompositeGridSpace) && _throw_fdm_composite()
     is_separable(a) || _throw_fdm_not_separable(a)
-    return _fdm_factorize(kronecker_operator(a), dirichlet)
+    K = kronecker_operator(a)
+    return _fdm_record!(_fdm_factorize(K, dirichlet), a, K)
 end
 
 function Bramble.fdm_factorize(K::KroneckerLinearOperator; dirichlet = nothing)
@@ -1602,6 +1610,40 @@ function Bramble.fdm_factorize!(f::Union{_FDMFactorization, _SchurFactorization}
     # An empty interior has nothing to refill.
     isempty(f.Λ) || _fdm_refill!(f, K)
     return f
+end
+
+# Records `a`, the form `f` was built or last refilled from, in `f.form` and its operator
+# `K`, whose scales hold `a`'s live `Ref`s, in `f.op`; `nothing` there when a term of `a`
+# reads a grid-function coefficient, which `K`'s factors hold a copy of.
+function _fdm_record!(f, a::BilinearForm, K::KroneckerLinearOperator)
+    leaves = Bramble._kron_leaves(Bramble.resolve_form_ast(a), ())
+    f.form[] = a
+    f.op[] = any(l -> Bramble._kron_reads_coef(l[2]), leaves) ? nothing : K
+    return f
+end
+
+# The function barrier behind `f.op`'s untyped slot: refills `f` from the recorded operator
+# and returns `true` when there is one and it is not stale; `false`, touching nothing,
+# otherwise.
+_fdm_cached!(f, ::Nothing) = false
+function _fdm_cached!(f, K::KroneckerLinearOperator)
+    Bramble._kron_is_fresh(K) || return false
+    Bramble.fdm_factorize!(f, K)
+    return true
+end
+
+# The form `f` was built or last refilled from, with only scalar or `Ref` coefficients
+# changed, refills from its recorded operator, allocating nothing; any other form is
+# checked as `fdm_factorize(a)` checks it, projected again, and recorded.
+function Bramble.fdm_factorize!(f::Union{_FDMFactorization, _SchurFactorization}, a::BilinearForm)
+    (Bramble.trial_space(a) isa Bramble.CompositeGridSpace ||
+     Bramble.test_space(a) isa Bramble.CompositeGridSpace) && _throw_fdm_composite()
+    f.form[] === a && _fdm_cached!(f, f.op[]) && return f
+    Bramble._kron_check_spaces(a)
+    is_separable(a) || _throw_fdm_not_separable(a)
+    K = kronecker_operator(a)
+    Bramble.fdm_factorize!(f, K)
+    return _fdm_record!(f, a, K)
 end
 
 function Bramble.fdm_solve!(x::AbstractVector, f::Union{_FDMFactorization, _SchurFactorization},
