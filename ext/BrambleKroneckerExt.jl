@@ -218,6 +218,14 @@ end
     throw(DimensionMismatch("$caller: $name has length $m, the operator needs $n"))
 end
 
+# A refill that `fdm_factorize!` refused after it started writing left `f` holding no system.
+@noinline function _throw_fdm_invalid()
+    throw(ArgumentError("fdm_solve: the last `fdm_factorize!` of this factorisation was " *
+                        "refused (a singular system, or a mass that is not symmetric " *
+                        "positive definite), so it holds no system to solve; refill it " *
+                        "with `fdm_factorize!` first"))
+end
+
 # The reason the furthest-reaching choice of masses failed at, by stage (see
 # `_fdm_axis_data`): 1 no choice fits, 2 a mass is not SPD, 3 an axis has no term; 5 (from
 # `_fdm_factorize`) the system is singular; 6 the same, judged in an eltype narrower than
@@ -552,7 +560,8 @@ end
 # `dirichlet = nothing`). `M[d]`, `A[d]` are the dense restricted mass and operator of axis
 # `d` and `c_m` the mass coefficient, from which `_fdm_decompose!` recomputes `Q`, `Λ` (and
 # `λ`, `vec(Λ)`) through the LAPACK workspaces `lapack`; `precond` words its refusal.
-# `fdm_factorize!` refills `M`, `A` and `c_m` by replaying `recipe`.
+# `fdm_factorize!` refills `M`, `A` and `c_m` by replaying `recipe`; `valid` is false from
+# the moment it starts writing them until it succeeds, and `ldiv!` refuses meanwhile.
 struct _FDMFactorization{T, D}
     n::Int
     boundary::Bool
@@ -570,6 +579,7 @@ struct _FDMFactorization{T, D}
     precond::Bool
     lapack::NTuple{D, _SygvdWork{T}}
     recipe::_FDMRecipe{T, D}
+    valid::Base.RefValue{Bool}
 end
 
 function _fdm_slabs(v::Vector, dims::NTuple{D, Int}) where {D}
@@ -619,7 +629,7 @@ function _fdm_symmetric(n::Int, boundary::Bool, interior::Vector{Int},
     u = Vector{T}(undef, prod(dims))
     w = similar(u)
     return _FDMFactorization{T, D}(n, boundary, interior, Q, Λ, vec(Λ), u, w,
-        _fdm_slabs(u, dims), _fdm_slabs(w, dims), M, A, Ref(c_m), precond, lapack, recipe)
+        _fdm_slabs(u, dims), _fdm_slabs(w, dims), M, A, Ref(c_m), precond, lapack, recipe, Ref(true))
 end
 
 # Recomputes `f`'s per-axis decompositions from `f.M`, `f.A` and `f.c_m` alone, allocating
@@ -633,9 +643,11 @@ function _fdm_decompose!(f::_FDMFactorization{T, D}) where {T, D}
         copyto!(f.Q[d], f.A[d])
         copyto!(g.B, f.M[d])
         info = _sygvd!(f.Q[d], g, BlasInt(length(g.work)), BlasInt(length(g.iwork)))
-        # As `LAPACK.sygvd!` reports it: an invalid argument, else `M_d` not definite.
+        # An invalid argument; `M_d` not definite (`info > n_d`, possible only on a refill:
+        # a build checks the mass first), refused as a build refuses it; else no convergence.
         LinearAlgebra.LAPACK.chkargsok(info)
-        info > 0 && throw(LinearAlgebra.PosDefException(info))
+        info > size(f.M[d], 1) && _throw_fdm_stage(2, d; precond = f.precond)
+        info > 0 && throw(LinearAlgebra.LAPACKException(info))
     end
     Λ, c_m = f.Λ, f.c_m[]
     @inbounds for j in CartesianIndices(Λ)
@@ -688,6 +700,7 @@ function _fdm_ldiv!(x::AbstractVector, f::_FDMFactorization{T, D}, F::AbstractVe
         _throw_fdm_length_mismatch(f.n, length(F), keep ? "x" : "F"; caller = caller)
     length(x) == f.n ||
         _throw_fdm_length_mismatch(f.n, length(x), keep ? "y" : "x"; caller = caller)
+    f.valid[] || _throw_fdm_invalid()
     u = f.u
     if f.boundary
         @inbounds for (i, j) in enumerate(f.interior)
@@ -774,7 +787,8 @@ end
 # right-hand side (then `L y_i`) and `P_{k-1} y_i`. `M[d]`, `A[d]`: axis `d`'s dense
 # restricted mass and operator. `_fdm_decompose!` recomputes every factor from them alone
 # and `c_m`, through the LAPACK workspaces `lapack`; `Λ` serves only the singularity
-# refusal. `fdm_factorize!` refills `M`, `A` and `c_m` by replaying `recipe`.
+# refusal. `fdm_factorize!` refills `M`, `A` and `c_m` by replaying `recipe`, `valid` as in
+# `_FDMFactorization`.
 struct _SchurFactorization{T, D, C <: Complex{T}}
     n::Int
     boundary::Bool
@@ -798,6 +812,7 @@ struct _SchurFactorization{T, D, C <: Complex{T}}
     precond::Bool
     lapack::NTuple{D, _Gges3Work{T, C}}
     recipe::_FDMRecipe{T, D}
+    valid::Base.RefValue{Bool}
 end
 
 # The complex QZ comes from OpenBLAS directly, never through libblastrampoline's forwarding:
@@ -913,7 +928,7 @@ function _schur_factorize(n::Int, boundary::Bool, interior::Vector{Int},
         map(similar, S), S, Tr, Ref(C(c_m)), dims, stride,
         [Vector{C}(undef, stride[k]) for k in 1:D], [Vector{C}(undef, stride[k]) for k in 1:D],
         u, w, _fdm_slabs(u, dims), _fdm_slabs(w, dims), M, A, Array{C}(undef, dims), precond,
-        lapack, recipe)
+        lapack, recipe, Ref(true))
     return _fdm_decompose!(f)
 end
 
@@ -1017,6 +1032,7 @@ function _fdm_ldiv!(x::AbstractVector, f::_SchurFactorization{T, D}, F::Abstract
         _throw_fdm_length_mismatch(f.n, length(F), keep ? "x" : "F"; caller = caller)
     length(x) == f.n ||
         _throw_fdm_length_mismatch(f.n, length(x), keep ? "y" : "x"; caller = caller)
+    f.valid[] || _throw_fdm_invalid()
     u = f.u
     if f.boundary
         @inbounds for (i, j) in enumerate(f.interior)
@@ -1429,27 +1445,160 @@ function _fdm_refill_axis!(f, rc::_FDMRecipe{T}, terms::Tuple, v::Val) where {T}
     return nothing
 end
 
+# The structural checks, none of which writes to `f`: `K` must have `f`'s dimension, sizes,
+# eltype and number of terms, and host factors.
+function _fdm_check_shape(f::Union{_FDMFactorization{T, D}, _SchurFactorization{T, D}},
+        K::KroneckerLinearOperator{S, E}) where {T, D, S, E}
+    E == D || _throw_fdm_refill("`K` has dimension $E, `f` was built for dimension $D")
+    sizes = ntuple(d -> length(_fdm_rng(f, d)), Val(D))
+    (K.n == f.n && map(n -> max(n - 2 * f.boundary, 0), K.dims) == sizes) ||
+        _throw_fdm_refill("`K` has size $(K.dims), `f` was built for size " *
+                          "$(f.boundary ? map(n -> n + 2, sizes) : sizes)")
+    S === T || _throw_fdm_refill("`K` has eltype $S, `f` was built for eltype $T")
+    return nothing
+end
+
+_fdm_on_host(F) = true
+_fdm_on_host(::Union{Bramble._KronDeviceDiagonal, Bramble._KronDeviceSparse}) = false
+_fdm_all_on_host(::Tuple{}) = true
+_fdm_all_on_host(terms::Tuple) = all(_fdm_on_host, first(terms).factors) &&
+                                 _fdm_all_on_host(Base.tail(terms))
+
+# Whether `_fdm_factor(F, rng)` has an entry, as `_fdm_axis_data` asks of every factor.
+function _fdm_has_entry(F, rng::UnitRange{Int})
+    for j in rng
+        r = _fdm_nzr(F, j)
+        _fdm_next(F, j, first(r), last(r), rng) <= last(r) && return true
+    end
+    return false
+end
+
+# A term dropped at build (`on == -1`) must still be dropped: its coefficient zero, or a
+# factor vanishing on the rows solved for. Otherwise the replay would leave it out.
+function _fdm_check_dropped(f::Union{_FDMFactorization{T, D}, _SchurFactorization{T, D}},
+        terms::Tuple) where {T, D}
+    rc = f.recipe
+    _fdm_foreach_term(terms, 1) do t, i
+        rc.on[i] < 0 || return nothing
+        iszero(T(Bramble._kron_coeff(t.scales))) && return nothing
+        _fdm_all_axes(v -> _fdm_has_entry(_fdm_f(t, v), _fdm_rng(f, _fdm_d(v))), Val(D)) ||
+            return nothing
+        return _throw_fdm_refill_dropped(i, f isa _FDMFactorization)
+    end
+    return nothing
+end
+
+@noinline _throw_fdm_refill_dropped(i::Int, symmetric::Bool) = _throw_fdm_refill(
+    "term $i of `K` was dropped when `f` was built (a zero coefficient, or a factor " *
+    "vanishing on the interior) and is present now" *
+    (symmetric ? ", so it may need the generalised Schur route, which a symmetric " *
+                 "factorisation cannot take" : ""))
+
+# Entry `(i, j)` of `A_d = Σ coef_k F_k[d]` (`v = Val(d)`), the terms `k` differing on `d`
+# summed in term order from `acc` as `_fdm_refill_axis!` sums them, a zero entry skipped.
+@inline _fdm_sum_entry(acc, ::Tuple{}, rc, ::Val, i::Int, j::Int, k::Int) = acc
+@inline function _fdm_sum_entry(acc::T, terms::Tuple{Any, Vararg}, rc::_FDMRecipe{T},
+        v::Val, i::Int, j::Int, k::Int) where {T}
+    if rc.on[k] == _fdm_d(v)
+        x = _fdm_f(first(terms), v)[i, j]
+        iszero(x) || (acc += rc.coef[k] * T(x))
+    end
+    return _fdm_sum_entry(acc, Base.tail(terms), rc, v, i, j, k + 1)
+end
+
+# Whether the `A_d` the refill would write is exactly symmetric, as `issymmetric` judges it
+# at build, read from the factors so that `f.A` is not written before the route is known.
+function _fdm_axis_symmetric(f, rc::_FDMRecipe{T}, terms::Tuple, v::Val) where {T}
+    rng = _fdm_rng(f, _fdm_d(v))
+    for j in rng, i in first(rng):(j - 1)
+
+        _fdm_sum_entry(zero(T), terms, rc, v, i, j, 1) ==
+        _fdm_sum_entry(zero(T), terms, rc, v, j, i, 1) || return false
+    end
+    return true
+end
+
+# `fn(Val(1)) && ... && fn(Val(D))`.
+@inline _fdm_all_axes(::F, ::Val{0}) where {F} = true
+@inline _fdm_all_axes(fn::F, ::Val{D}) where {F, D} = _fdm_all_axes(fn, Val(D - 1)) &&
+                                                      fn(Val(D))
+
+@noinline function _throw_fdm_refill_route(symmetric::Bool)
+    _throw_fdm_refill(symmetric ?
+                      "an axis operator of `K` is not symmetric, which needs the " *
+                      "generalised Schur route, and `f` is a symmetric factorisation" :
+                      "every axis operator of `K` is symmetric, which a new factorisation " *
+                      "solves by fast diagonalisation, and `f` is a generalised Schur one")
+end
+
+# A refill checks each mass as the build does (`_fdm_spd`): symmetric, and definite. On the
+# symmetric route `sygvd` reports an indefinite mass but reads only the upper triangle, so
+# symmetry is checked here; on the Schur route `_fdm_decompose!` needs neither, so a
+# Cholesky factorisation in `Tr[d]`, which the decomposition overwrites next, checks both.
+function _fdm_check_mass(f::_FDMFactorization{T, D}) where {T, D}
+    for d in 1:D
+        issymmetric(f.M[d]) || _throw_fdm_stage(2, d; precond = f.precond)
+    end
+    return nothing
+end
+function _fdm_check_mass(f::_SchurFactorization{T, D}) where {T, D}
+    for d in 1:D
+        B = copyto!(f.Tr[d], f.M[d])
+        (issymmetric(f.M[d]) && _fdm_potrf!(B) == 0) ||
+            _throw_fdm_stage(2, d; precond = f.precond)
+    end
+    return nothing
+end
+
+# LAPACK's `xpotrf` on `B`'s upper triangle, in place; returns `info` (0: definite).
+for (potrf, C) in ((:zpotrf_, :ComplexF64), (:cpotrf_, :ComplexF32))
+    @eval function _fdm_potrf!(B::Matrix{$C})
+        n = size(B, 1)
+        info = Ref{BlasInt}(0)
+        ccall((@blasfunc($potrf), libblastrampoline), Cvoid,
+            (Ref{UInt8}, Ref{BlasInt}, Ptr{$C}, Ref{BlasInt}, Ptr{BlasInt}, Clong),
+            'U', n, B, max(1, n), info, 1)
+        return info[]
+    end
+end
+
 function _fdm_refill!(f::Union{_FDMFactorization{T, D}, _SchurFactorization{T, D}},
         K::KroneckerLinearOperator) where {T, D}
     rc, terms = f.recipe, K.terms
+    length(terms) == length(rc.on) ||
+        _throw_fdm_refill("`K` has $(length(terms)) terms, `f` was built from " *
+                          "$(length(rc.on))")
+    _fdm_all_on_host(terms) ||
+        _throw_fdm_refill("`K` is backed by a device, and a refill runs on the host")
+    _fdm_check_dropped(f, terms)
     _fdm_foreach_term(terms, 1) do t, i
         rc.on[i] < 0 || (rc.coef[i] = T(Bramble._kron_coeff(t.scales)))
         return nothing
     end
     _fdm_foreach_axis(v -> _fdm_refill_ratios!(f, rc, terms, v), Val(D))
+    symmetric = _fdm_all_axes(v -> _fdm_axis_symmetric(f, rc, terms, v), Val(D))
+    symmetric == (f isa _FDMFactorization) || _throw_fdm_refill_route(!symmetric)
+    # Every structural check passed: from here on `f`'s buffers are overwritten, and a
+    # numerical refusal leaves it invalid until a later refill succeeds.
+    f.valid[] = false
     _fdm_foreach_axis(v -> _fdm_refill_axis!(f, rc, terms, v), Val(D))
     c_m = zero(T)
     for i in eachindex(rc.on)
         rc.on[i] == 0 && (c_m += rc.coef[i])
     end
     f.c_m[] = c_m
+    _fdm_check_mass(f)
     _fdm_check_kernel(f.A, c_m, _fdm_data_eps(K), f.precond)
-    return _fdm_decompose!(f)
+    _fdm_decompose!(f)
+    f.valid[] = true
+    return f
 end
 
+# `K` of any dimension and eltype, so that a mismatch is refused by name, not by dispatch.
 function Bramble.fdm_factorize!(f::Union{_FDMFactorization, _SchurFactorization},
         K::KroneckerLinearOperator)
     Bramble._kron_check_fresh(K)
+    _fdm_check_shape(f, K)
     # An empty interior has nothing to refill.
     isempty(f.Λ) || _fdm_refill!(f, K)
     return f

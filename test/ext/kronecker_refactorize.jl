@@ -5,6 +5,7 @@ using Bramble
 using Bramble: kronecker_operator, D₋ₓ
 using LinearAlgebra: LinearAlgebra, Symmetric, UpperTriangular, eigen, norm
 using Random
+using SparseArrays: sparse
 # `CpuPolyester` meshes below, as in test/ext/kronecker_ext.jl.
 using Polyester
 using Bramble: CpuPolyester, Serial
@@ -168,6 +169,148 @@ end
         fV = fdm_factorize(KV; dirichlet = :boundary)
         @test fdm_factorize!(fV, KV) === fV
         @test refill_bytes(fV, KV) == 0
+    end
+
+    # A different structure is refused before anything is written, each case differing from
+    # `f` in one respect only, so `f` still solves exactly as before.
+    @testset "fdm_factorize!: structure refused" begin
+        c = Ref(2.5)
+        sym = (u, v) -> innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v))
+        adv = (u, v) -> sym(u, v) + innerₕ(D₋ₓ(u), v)
+        W = graded_space(Float64, (17, 13), Serial())
+        K(Wₕ, L) = kronecker_operator(form(Wₕ, Wₕ, L))
+        fs = fdm_factorize(K(W, sym))
+        fa = fdm_factorize(K(W, adv); dirichlet = :boundary)
+        # The advection term's coefficient is zero at build, so it is dropped and `f0` is
+        # symmetric; nonzero, it needs the Schur route.
+        c3 = Ref(0.0)
+        L3 = (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + c3 * innerₕ(D₋ₓ(u), v)
+        f0 = fdm_factorize(K(W, L3); dirichlet = :boundary)
+        @test f0 isa KronExt._FDMFactorization && -1 in f0.recipe.on
+        F = rhs(W, Float64, :boundary)
+        xs, xa, x0 = (fdm_solve!(similar(F), f, F) for f in (fs, fa, f0))
+        c3[] = 1.0
+        W32 = gridspace(mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)),
+            (17, 13), (false, false)))
+        # The mass coefficient varies along axis 1, so term 1 no longer matches the mass
+        # the other terms carry there: same terms, same route.
+        gh = Rₕ(W, x -> 1 + x[1])
+        cases = ((fs, K(W, adv), "has 4 terms"), (fa, K(W, sym), "has 3 terms"),
+            (fs, K(graded_space(Float64, (9, 7), Serial()), sym), "size"),
+            (fs, K(graded_space(Float64, (7, 6, 5), Serial()), sym), "dimension 3"),
+            (fs, K(W32, sym), "eltype Float32"),
+            (fs, K(W, (u, v) -> sym(u, v) + 0.3 * innerₕ(D₋ₓ(u), D₋ₓ(v))), "terms"),
+            (fs, K(W, (u, v) -> innerₕ(gh * u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v))), "mass"),
+            (f0, K(W, L3), "generalised Schur route"))
+        for (f, k, reason) in cases
+            @test_throws ArgumentError fdm_factorize!(f, k)
+            @test_throws "fdm_factorize! cannot refill this factorisation" fdm_factorize!(f, k)
+            @test_throws reason fdm_factorize!(f, k)
+        end
+        @test fdm_solve!(similar(F), fs, F) == xs
+        @test fdm_solve!(similar(F), fa, F) == xa
+        @test fdm_solve!(similar(F), f0, F) == x0
+        # The Schur route needs some axis operator that is not symmetric: with the advection
+        # coefficient zero (a hand-made operator, as a `Ref` cannot scale that term), every
+        # one is.
+        Ka = K(W, adv)
+        terms = map(t -> Bramble._kron_term(t.symmetric ? t.scales : (0.0,), t.factors),
+            Ka.terms)
+        Kz = Bramble.KroneckerLinearOperator{Float64, 2, typeof(terms), typeof(Ka.policy)}(
+            terms, Ka.dims, Ka.n, Ka.policy)
+        @test_throws ArgumentError fdm_factorize!(fa, Kz)
+        @test_throws "every axis operator of `K` is symmetric" fdm_factorize!(fa, Kz)
+        @test fdm_solve!(similar(F), fa, F) == xa
+        # The same operator on device-backed factors (host vectors stand in for device ones).
+        dev(M::LinearAlgebra.Diagonal) = Bramble._KronDeviceDiagonal(collect(M.diag))
+        dev(M) = Bramble._KronDeviceSparse(Int32.(M.colptr), Int32.(M.rowval), M.nzval)
+        Ks = K(W, sym)
+        dterms = map(Ks.terms) do t
+            fd = map(dev, t.factors)
+            return Bramble.KroneckerTerm{2, typeof(t.scales), typeof(fd), Nothing, Nothing}(
+                t.scales, fd, nothing, nothing, t.symmetric)
+        end
+        Kd = Bramble.KroneckerLinearOperator{Float64, 2, typeof(dterms), typeof(Ks.policy)}(
+            dterms, Ks.dims, Ks.n, Ks.policy)
+        @test_throws ArgumentError fdm_factorize!(fs, Kd)
+        @test_throws "backed by a device" fdm_factorize!(fs, Kd)
+        @test fdm_solve!(similar(F), fs, F) == xs
+    end
+
+    # A term dropped at build because a factor vanished on the interior (`gv` is zero at
+    # the one interior node of a 3-point axis) is refused once it is present, not silently
+    # left out; dropped again, it refills at 0 B, as a zero-coefficient one does.
+    @testset "fdm_factorize!: dropped term" begin
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 7), (false, false))
+        Bramble.change_points!(Ω, (collect(range(0.0, 1.0; length = 3)),
+            collect(range(0.0, 1.0; length = 7))))
+        function op()
+            W = gridspace(Ω)
+            gv = Rₕ(W, x -> x[1] - 0.5)
+            return kronecker_operator(form(W, W, (u, v) -> innerₕ(u, v) +
+                                                           inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                                           innerₕ(gv * u, v)))
+        end
+        K = op()
+        f = fdm_factorize(K; dirichlet = :boundary)
+        @test -1 in f.recipe.on
+        @test refill_bytes(f, K) == 0
+        W = graded_space(Float64, (17, 13), Serial())
+        c3 = Ref(0.0)
+        K0 = kronecker_operator(form(W, W,
+            (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + c3 * innerₕ(D₋ₓ(u), v)))
+        f0 = fdm_factorize(K0; dirichlet = :boundary)
+        @test -1 in f0.recipe.on
+        @test refill_bytes(f0, K0) == 0
+        Bramble.change_points!(Ω, (range(0.0, 1.0; length = 3) .^ 1.25,
+            range(0.0, 1.0; length = 7) .^ 1.5))
+        K = op()
+        @test_throws ArgumentError fdm_factorize!(f, K)
+        dropped = r"cannot refill this factorisation: term \d of `K` was dropped"
+        @test_throws dropped fdm_factorize!(f, K)
+    end
+
+    # A refill refused for a numerical reason, after `f` was written, leaves `f` unable to
+    # solve until a refill succeeds: singular (no mass term left), or an axis-1 mass that is
+    # not symmetric positive definite (in a hand-made operator), on both routes: negated, or
+    # not symmetric though its upper triangle, all `sygvd` reads, is definite.
+    @testset "fdm_factorize!: refused refill" begin
+        W = graded_space(Float64, (17, 13), Serial())
+        F = rhs(W, Float64, nothing)
+        c = Ref(2.5)
+        K = kronecker_operator(form(W, W, (u, v) -> c * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))))
+        f = fdm_factorize(K)
+        c[] = 0.0
+        @test_throws ArgumentError fdm_factorize!(f, K)
+        @test_throws "singular" fdm_factorize!(f, K)
+        @test_throws ArgumentError fdm_solve!(similar(F), f, F)
+        @test_throws "fdm_factorize!" fdm_solve!(similar(F), f, F)
+        c[] = 1.0
+        @test fdm_factorize!(f, K) === f
+        @test fdm_solve!(similar(F), f, F) == fdm_solve!(similar(F), fdm_factorize(K), F)
+        for (L, route) in ((symmetric_form, KronExt._FDMFactorization),
+            (advection_form, KronExt._SchurFactorization))
+            Kp = kronecker_operator(form(W, W, L))
+            fp = fdm_factorize(Kp)
+            @test fp isa route
+            m = Kp.terms[1].factors[1]
+            neg = LinearAlgebra.Diagonal(-collect(m.diag))
+            skew = sparse(Matrix(m))
+            skew[1, 2] = 0.3 * skew[1, 1]
+            for bad in (neg, skew)
+                terms = map(t -> Bramble._kron_term(t.scales,
+                        map(M -> M === m ? bad : M, t.factors)), Kp.terms)
+                Kn = Bramble.KroneckerLinearOperator{Float64, 2, typeof(terms),
+                    typeof(Kp.policy)}(terms, Kp.dims, Kp.n, Kp.policy)
+                @test_throws ArgumentError fdm_factorize!(fp, Kn)
+                notspd = "axis-1 mass is not symmetric positive definite"
+                @test_throws notspd fdm_factorize!(fp, Kn)
+                @test_throws "fdm_factorize!" fdm_solve!(similar(F), fp, F)
+                fdm_factorize!(fp, Kp)
+                x = fdm_solve!(similar(F), fp, F)
+                @test x == fdm_solve!(similar(F), fdm_factorize(Kp), F)
+            end
+        end
     end
 
     # A 2-point axis under `:boundary` leaves no interior: nothing to decompose.
