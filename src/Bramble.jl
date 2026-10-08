@@ -27,8 +27,14 @@ include("api.jl")
     fdm_solve(a::BilinearForm, F::AbstractVector; dirichlet = nothing) -> Vector
     fdm_solve(K::KroneckerLinearOperator, F::AbstractVector) -> Vector
 
-Directly solve `assemble(a) \\ F` (or the linear system `K` represents) for a separable,
-constant-coefficient `BilinearForm` by fast diagonalisation, without assembling `a`'s matrix.
+Directly solve `assemble(a) \\ F` (or the linear system `K` represents) for a Laplacian-like
+`BilinearForm`, without assembling `a`'s matrix. A form is Laplacian-like when it is
+separable and every term differs from one mass per axis on at most one axis. Symmetric 1D
+operators are solved by fast diagonalisation; non-symmetric ones (advection terms) by a
+complex generalised Schur factorisation per axis and a triangular back substitution.
+A mixed-derivative form is refused: precondition a Krylov solver with
+[`fdm_preconditioner`](@ref) instead. [`fdm_factorize`](@ref) and [`fdm_solve!`](@ref) split
+the factorisation from the solve.
 
 `dirichlet`, when given, must request homogeneous Dirichlet conditions on the whole mesh
 boundary; `K` alone carries no boundary handling, since a `KroneckerLinearOperator` has no
@@ -40,6 +46,126 @@ before calling this function.
 See also: [`kronecker_operator`](@ref), [`KroneckerLinearOperator`](@ref), [`is_separable`](@ref).
 """
 function fdm_solve end
+
+"""
+    fdm_preconditioner(a::BilinearForm; dirichlet = nothing) -> FDMPreconditioner
+
+A preconditioner for `assemble(a; dirichlet)` that applies the fast-diagonalisation inverse
+of `a`'s Laplacian-like part, factorised once, without assembling `a`'s matrix. The
+Laplacian-like part keeps the terms [`fdm_solve`](@ref) can solve: with one mass per axis,
+every term that differs from the masses on at most one axis. Every term differing on two or
+more axes (a mixed derivative such as `innerₕ(D₋ₓ(D₋ᵧ(u)), v)`, or a coefficient varying
+along two axes) is left out of the preconditioner, though the Krylov solver still sees it in
+`assemble(a)`. For a form `fdm_solve` accepts, the preconditioner is the exact inverse.
+
+Use it for a mixed-derivative form whose cross term the diffusion dominates, so that what
+it leaves out is small beside what it inverts. The larger the cross term, the more work it
+leaves to the Krylov solver. A form `fdm_solve` accepts needs no Krylov solver at all.
+
+`dirichlet` is `nothing` (the unconstrained system) or `:boundary` (homogeneous Dirichlet on
+the whole mesh boundary): there the boundary rows of `assemble(a; dirichlet = :boundary)`
+are identity rows, so the preconditioner is the identity on them and the interior
+factorisation inside. Construction costs `O(n_d^3)` per axis; an `ldiv!` on host vectors
+costs `O(N Σ_d n_d)` and allocates nothing. The preconditioner is host-only.
+
+Requires [Kronecker.jl](https://github.com/MichielStock/Kronecker.jl); call `using Kronecker`
+before calling this function.
+
+# Throws
+
+  - `ArgumentError` saying `fdm_preconditioner` does not support the form, with the reason,
+    for a form with no usable Laplacian-like part: `a` is not separable, it is posed on a
+    composite space, a mass is not symmetric positive definite, an axis has no term of its
+    own once the two-axis terms are left out (the form has no Laplacian-like part), or that
+    part is singular. These are `fdm_solve`'s refusals, a two-axis term apart.
+  - `ArgumentError`: `dirichlet` is neither `nothing` nor `:boundary`.
+
+# Examples
+
+```julia
+using Bramble, Kronecker, LinearSolve
+using Bramble: D₋ₓ, D₋ᵧ
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (33, 25), (false, false))
+Wₕ = gridspace(Ωₕ)
+a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+                           0.25 * innerₕ(D₋ₓ(D₋ᵧ(u)), v))
+P = fdm_preconditioner(a)
+A = assemble(a)
+F = rand(ndofs(Wₕ))
+sol = solve(LinearProblem(A, F), KrylovJL_GMRES(); Pl = P)
+```
+
+See also: [`FDMPreconditioner`](@ref), [`fdm_solve`](@ref), [`jacobi_preconditioner`](@ref).
+"""
+function fdm_preconditioner end
+
+"""
+    fdm_factorize(a::BilinearForm; dirichlet = nothing)
+    fdm_factorize(K::KroneckerLinearOperator; dirichlet = nothing)
+
+Factorise, once, the system [`fdm_solve`](@ref) solves, so that each further right-hand side
+costs only the solve. The result supports [`fdm_solve!`](@ref), `ldiv!(x, f, F)` (the same
+solve) and `size`; its type is internal. `fdm_solve(a, F)` is `fdm_factorize(a)` followed by
+one solve.
+
+`a` must be a form `fdm_solve` accepts, and `fdm_factorize(a; dirichlet)` refuses what
+`fdm_solve(a, F; dirichlet)` refuses. `K` must be Laplacian-like, as for `fdm_solve(K, F)`;
+unlike that method, `fdm_factorize(K)` also takes `dirichlet = :boundary`. With
+`dirichlet = :boundary`, each right-hand side must be zero on the boundary and the solution
+is zero there. The factorisation is built from the mesh and coefficients as they are when
+`fdm_factorize` is called: after [`change_points!`](@ref) or a change of a coefficient (a
+`Ref` one included), call `fdm_factorize` again. Construction costs `O(n_d^3)` per axis; a
+solve on host vectors costs `O(N Σ_d n_d)` and allocates nothing. The factorisation is
+host-only.
+
+Requires [Kronecker.jl](https://github.com/MichielStock/Kronecker.jl); call `using Kronecker`
+before calling this function.
+
+# Throws
+
+  - `ArgumentError` saying `fdm_solve` does not support the form or operator, with the
+    reason, for one that is not Laplacian-like or is singular.
+  - `ArgumentError`: `dirichlet` is neither `nothing` nor `:boundary`.
+  - `ArgumentError` naming `change_points!`: `K`'s mesh was mutated in place after `K` was
+    built; build the operator again.
+
+# Examples
+
+```julia
+using Bramble, Kronecker
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (25, 19), (false, false))
+Wₕ = gridspace(Ωₕ)
+a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+f = fdm_factorize(a)
+x = zeros(ndofs(Wₕ))
+for k in 1:3
+    F = rand(ndofs(Wₕ))
+    fdm_solve!(x, f, F)   # x ≈ assemble(a) \\ F
+end
+```
+
+See also: [`fdm_solve!`](@ref), [`fdm_solve`](@ref), [`fdm_preconditioner`](@ref).
+"""
+function fdm_factorize end
+
+"""
+    fdm_solve!(x::AbstractVector, f, F::AbstractVector) -> x
+
+Solve into `x`, with the factorisation `f` that [`fdm_factorize`](@ref) returned, the system
+it was built for, right-hand side `F`. With `dirichlet = :boundary`, `x` is zero on the
+boundary. `x` may alias `F`. On host vectors it allocates nothing.
+
+Requires [Kronecker.jl](https://github.com/MichielStock/Kronecker.jl); call `using Kronecker`
+before calling this function.
+
+# Throws
+
+  - `DimensionMismatch`: `x` or `F` does not have `size(f, 1)` entries.
+  - `ArgumentError`: `x` or `F` is not 1-based.
+
+See also: [`fdm_factorize`](@ref), [`fdm_solve`](@ref).
+"""
+function fdm_solve! end
 
 """
     _launch_spmv_csr!(y, rowPtr, colVal, nzVal, x, α, β) -> Nothing

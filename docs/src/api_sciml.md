@@ -98,6 +98,8 @@ jacobi_preconditioner
 Bramble.JacobiPreconditioner
 chebyshev_preconditioner
 Bramble.ChebyshevPreconditioner
+fdm_preconditioner
+Bramble.FDMPreconditioner
 Bramble.max_eigenvalue_estimate
 ```
 

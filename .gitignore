@@ -88,6 +88,10 @@ benchmark/*
 # v3.25.0 CpuPolyester form A/B and restricted-form benchmarks (gpena/Bramble.jl#437)
 !benchmark/polyester_forms_ab.jl
 !benchmark/restricted_forms.jl
+# v3.26.0 Schur vs eigenvector route across a Peclet sweep (gpena/Bramble.jl#443)
+!benchmark/schur_peclet.jl
+# v3.26.0 fdm_preconditioner iteration-count ladder (gpena/Bramble.jl#444)
+!benchmark/fdm_preconditioner_ladder.jl
 # v3.33.0 closure-slot before-and-after benchmark (gpena/Bramble.jl#476)
 !benchmark/polyester_closures.jl
 # v3.21.0 saved results of the standalone scripts, one TOML per script (gpena/Bramble.jl#372)
