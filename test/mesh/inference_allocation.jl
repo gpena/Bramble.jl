@@ -35,6 +35,8 @@ using ..TestUtils: alloc_test, @test_allocs
 
 @testset "Inference and allocations" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 64, false)
+    # A Float32 mesh: its normals carry the mesh's element type
+    Ωf = mesh(domain(interval(0.0f0, 1.0f0)), 8, false)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 9), (true, false))
     Ωₕ3 = mesh(
         domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6), (true, false, true)
@@ -94,6 +96,7 @@ using ..TestUtils: alloc_test, @test_allocs
 
         @test @inferred(locate_cell(Ωₕ1, 0.5)) isa Int
         @test @inferred(normal_vector(Ωₕ1, :left)) isa NTuple{1, Float64}
+        @test @inferred(normal_vector(Ωf, :left)) === (-1.0f0,)
         @test @inferred(stepsize(Ωu)) isa Float64
 
         @testset "locate_cell vector/tuple overloads" begin
@@ -134,6 +137,7 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs hₘᵢₙ(Ωₕ1)
         @test_allocs locate_cell(Ωₕ1, 0.5)
         @test_allocs normal_vector(Ωₕ1, :left)
+        @test_allocs normal_vector(Ωf, :left)
         @test_allocs stepsize(Ωu)
 
         # locate_cell's vector/tuple overloads, D = 1, 2, 3, with a pre-built vector
