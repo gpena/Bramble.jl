@@ -282,6 +282,12 @@ using ..TestUtils: alloc_test, @test_allocs
     # unchanged by the move, so nothing else in the walk notices it. `CpuPolyester` needs
     # `BramblePolyesterExt`, and a later file (test/space/inner_product.jl) asserts Polyester
     # is not loaded in this process, so its cases run in a child process that loads it.
+    #
+    # The cross-mesh cases put the trial leaf on the moved mesh `Ωb` and the test leaf on a
+    # third mesh `Ωc` of the same shape. The walk visits the test leaf only, so the trial
+    # leaf needs its own check (gpena/Bramble.jl#466). They are bilinear only. Each mesh has
+    # its own local name, since assigning an outer name inside the closure would rebind it
+    # and both leaves would then go stale together.
     @testset "Assembly entry points throw when stale" begin
         probe = """
         using Bramble, Random
@@ -304,22 +310,31 @@ using ..TestUtils: alloc_test, @test_allocs
             sq = interval(0.0, 1.0) × interval(0.0, 1.0)
             Ωa = mesh(domain(sq), (9, 8), (false, false); backend = backend(policy = policy))
             Ωb = mesh(domain(sq), (7, 10), (false, false); backend = backend(policy = policy))
-            Wa, Wb = gridspace(Ωa), gridspace(Ωb)
+            Ωc = mesh(domain(sq), (7, 10), (false, false); backend = backend(policy = policy))
+            Ωb !== Ωc || error("Ωb and Ωc alias one mesh")
+            Wa, Wb, Wc = gridspace(Ωa), gridspace(Ωb), gridspace(Ωc)
             f = x -> x[1] + 2x[2]
+            # (name, trial, test, bilinear, linear or `nothing`)
             cases = (
-                ("scalar", Wb, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(u, v),
+                ("scalar", Wb, Wb, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(u, v),
                     v -> innerₕ(f, v)),
-                ("composite", Wa × Wb,
+                ("composite", Wa × Wb, Wa × Wb,
                     (U, V) -> innerₕ(U(1), V(1)) + inner₊ᵧ(D₋ᵧ(U(2)), D₋ᵧ(V(2))),
-                    V -> innerₕ(f, V(1)) + innerₕ(f, V(2))))
-            built = map(cases) do (name, W, a, l)
-                F, L = form(W, W, a), form(W, l)
-                A, b = assemble(F), assemble(L)
+                    V -> innerₕ(f, V(1)) + innerₕ(f, V(2))),
+                ("cross-mesh innerₕ", Wb, Wc, (u, v) -> innerₕ(u, v), nothing),
+                ("cross-mesh inner₊ₓ", Wb, Wc, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)), nothing),
+                ("cross-mesh composite", Wc × Wb, Wc × Wc,
+                    (U, V) -> innerₕ(U(1), V(1)) + innerₕ(U(2), V(1)), nothing))
+            built = map(cases) do (name, Wu, Wv, a, l)
+                F = form(Wu, Wv, a)
+                A = assemble(F)
                 op = matrix_free_operator(F)
-                x, y = ones(ndofs(W)), zeros(ndofs(W))
+                x, y = ones(ndofs(Wu)), zeros(ndofs(Wv))
                 run!("\$name fresh assemble!", () -> assemble!(A, F))
                 run!("\$name fresh mul!", () -> mul!(y, op, x))
-                run!("\$name fresh linear assemble!", () -> assemble!(b, L))
+                L = l === nothing ? nothing : form(Wv, l)
+                b = L === nothing ? nothing : assemble(L)
+                L === nothing || run!("\$name fresh linear assemble!", () -> assemble!(b, L))
                 (name, F, L, A, b, op, x, y)
             end
             pts(n) = vcat(0.0, sort(rand(n - 2)), 1.0)
@@ -328,6 +343,7 @@ using ..TestUtils: alloc_test, @test_allocs
                 run!("\$name assemble", () -> assemble(F))
                 run!("\$name assemble! refill", () -> assemble!(A, F))
                 run!("\$name matrix-free mul!", () -> mul!(y, op, x))
+                L === nothing && continue
                 run!("\$name linear assemble", () -> assemble(L))
                 run!("\$name linear assemble!", () -> assemble!(b, L))
             end
@@ -335,7 +351,7 @@ using ..TestUtils: alloc_test, @test_allocs
         end
         """
         function check(out)
-            @test length(out) == 16
+            @test length(out) == 31
             for (name, r) in out
                 @testset "$name" begin
                     @test r == (occursin("fresh", name) ? "OK" : "STALE")

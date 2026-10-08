@@ -347,6 +347,10 @@ end
     _all_trial_interpolated(term) && return nothing
     _all_test_interpolated(term) && return nothing
 
+    # The walk reads the trial leaf's mesh only here, so a trial leaf on another mesh that
+    # moved in place would pass unnoticed: check its weights, as `_bind_walk` checks the
+    # walked leaf's (gpena/Bramble.jl#466). A few integer loads per walk entry.
+    weights(trial_leaf)
     Ωu = mesh(trial_leaf)
     Ωv = mesh(test_leaf)
     npoints(Ωu, Tuple) == npoints(Ωv, Tuple) || _throw_cross_mesh_block(term, Ωu, Ωv)
