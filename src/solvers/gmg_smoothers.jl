@@ -350,7 +350,8 @@ cycle's pre- and post-smoothing counts sweep counts.
 After a sweep the residual vanishes at the black points, whose equations the black half has
 just solved exactly.
 ```jldoctest
-using Bramble
+using Bramble, Random
+Random.seed!(1)
 Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 11, false))
 a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 x, b = rand(ndofs(Wₕ)), rand(ndofs(Wₕ))
