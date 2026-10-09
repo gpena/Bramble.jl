@@ -33,8 +33,14 @@ expression(form) = expression(form.ast)
 # --- Scalar formatting ------------------------------------------------------------- #
 
 # Shared by every node that carries a numeric coefficient: reads through a `Base.RefValue`,
-# and drops a trailing `.0` from integer-valued reals (`2.0` -> `"2"`, `-1.0` -> `"-1"`).
+# and drops a trailing `.0` from integer-valued floats that fit in an `Int` (`2.0` -> `"2"`,
+# `-1.0` -> `"-1"`); larger ones keep their own form (`1e20` -> `"1.0e20"`). The upper bound
+# is strict: `Float64(typemax(Int))` is `2^63`, one past the largest `Int`. Other reals
+# (`Integer`, `Bool`, `Rational`) print through `Integer`, which is exact for any size.
 _format_scalar(c::Base.RefValue) = _format_scalar(c[])
+function _format_scalar(c::AbstractFloat)
+    return isinteger(c) && typemin(Int) <= c < typemax(Int) ? string(Int(c)) : string(c)
+end
 _format_scalar(c::Real) = isinteger(c) ? string(Integer(c)) : string(c)
 _format_scalar(c) = string(c)
 
