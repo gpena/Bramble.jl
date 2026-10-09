@@ -272,7 +272,8 @@ end
         # destination leaf has to be refused -- a short view, a bigger mesh, a
         # permuted shape -- before anything is written to any of them, and a matching
         # destination must stay allocation-free. The source's components are checked against
-        # each other too, and must share one mesh.
+        # each other too, and must share one mesh. No destination leaf may share storage
+        # with a source component.
         Ωs = (
             mesh(domain(interval(0.0, 1.0)), 9, false),
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 5), (true, false)),
@@ -375,6 +376,16 @@ end
                     @test Bramble.host_points(twin[D]) != Bramble.host_points(Ωs[D])
                     @test rejects(f!, build(good, sh),
                         ntuple(k -> Rₕ(k == D ? gridspace(twin[D]) : Wₕ, fs[D]), D))
+                end
+                # A destination leaf sharing storage with a source component -- the
+                # component itself, or a fresh view over its data -- is refused, for the
+                # composite source and its tuple-of-components spelling alike.
+                srcs = src === :field ? components(uₕ) : (uₕ,)
+                for v in (src === :field ? (uₕ, srcs) : (uₕ,)), c in srcs, s in slots(sh)
+
+                    @test rejects(f!, put(build(good, sh), s, c), v)
+                    @test rejects(f!,
+                        put(build(good, sh), s, VectorElement(view(parent(c), 1:n), space(c))), v)
                 end
                 @test alloc_test(f!, build(good, sh), uₕ) == 0
             end
