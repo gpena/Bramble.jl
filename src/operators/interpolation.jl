@@ -213,7 +213,7 @@ function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{1}}, x; outside = 
     frac = _interp_cell_frac(Ωₕ, x, outside)
     frac === nothing && return outside
     i, t = frac
-    return (1 - t) * uₕ[i] + t * uₕ[i + 1]
+    return _interp_lerp(uₕ[i], uₕ[i + 1], t)
 end
 
 function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{D}}, x; outside = :error) where {D}
@@ -226,12 +226,44 @@ function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{D}}, x; outside = 
     idx, ts = frac
     li = LinearIndices(indices(Ωₕ))
 
-    acc = zero(promote_type(eltype(uₕ), typeof(first(ts))))
+    T = promote_type(eltype(uₕ), typeof(first(ts)))
+    # Outside the mesh, fold axis by axis instead (#625): see `_interp_fold`.
+    all(t -> zero(t) <= t <= one(t), ts) ||
+        return _interp_fold(uₕ, li, idx, ts, zero(idx), Val(D), T)
+    acc = zero(T)
     # No far corner along a collapsed axis: it has a single point.
     for corner in CartesianIndices(ntuple(d -> 0:min(1, size(li, d) - 1), Val(D)))
         acc += _interp_corner_weight(ts, corner, Val(D)) * uₕ[li[idx + corner]]
     end
     return acc
+end
+
+# One axis of the blend. Inside the cell (`0 <= t <= 1`) the weighted form, as before.
+# Outside it the difference form: once `|t| > 1/eps`, `1 - t` rounds to `-t` and the two
+# weighted terms cancel, so a constant field extrapolated far out returned zero (#625).
+@inline function _interp_lerp(a, b, t)
+    return zero(t) <= t <= one(t) ? (1 - t) * a + t * b : a + t * (b - a)
+end
+
+# The `2ᴰ` corner values folded axis by axis, axis `d` outermost, `_interp_lerp` on each.
+# Nested rather than expanded into corner weights, which cancel far outside the mesh, and
+# whose `∏ tᵈ` overflows to `Inf` (then `Inf * 0 = NaN`) long before the value does.
+# `offset` holds the corner chosen so far on the axes above `d`. A collapsed axis has no
+# far corner and is skipped. Recursion on `Val`, so it unrolls and allocates nothing.
+@inline function _interp_fold(
+        uₕ, li, idx, ts, offset::CartesianIndex, ::Val{0}, ::Type{T}
+) where {T}
+    return convert(T, uₕ[li[idx + offset]])
+end
+
+@inline function _interp_fold(
+        uₕ, li, idx, ts, offset::CartesianIndex{D}, ::Val{d}, ::Type{T}
+) where {D, d, T}
+    a = _interp_fold(uₕ, li, idx, ts, offset, Val(d - 1), T)
+    size(li, d) == 1 && return a
+    far = CartesianIndex(ntuple(k -> k == d ? 1 : offset[k], Val(D)))
+    b = _interp_fold(uₕ, li, idx, ts, far, Val(d - 1), T)
+    return _interp_lerp(a, b, ts[d])
 end
 
 # --- The corner blend, in one place ------------------------------------------------- #
@@ -536,7 +568,9 @@ the corner weights of the source cell [`locate_cell`](@ref) places that destinat
 and a row that returns a constant regardless of `src` cannot be written as a weighted
 combination of `src`'s own entries unless that constant is exactly zero. Passing a `Number`
 throws, naming this. Agrees entry-for-entry with pointwise `interpolate_at` under each of
-the three policies it does accept.
+the three policies it does accept, except far outside the domain under `:extrapolate`:
+once a cell fraction `t` passes `1/eps`, `1 - t` rounds to `-t` and `P`'s corner weights
+cancel, while `interpolate_at` blends differences there and keeps a constant constant.
 
 Unlike [`D₋ₓ`](@ref)`(Wₕ)` and the other operator matrices, this is always a
 `SparseMatrixCSC`, regardless of either space's own backend `matrix_type`. Those matrices
