@@ -342,7 +342,9 @@ read at the clamped point, so the stencil keeps one length and one type at every
     shifted_inner_stencil(inner_op, inner, space, I, markers, ::Val{Dim}, delta)
 
 The stencil `inner_op` contributes `delta` points away in direction `Dim`, given `inner`, its
-stencil already evaluated at `I`.
+stencil already evaluated at `I`. Called from a [`ShiftNode`](@ref), `inner` is that stencil
+only for a bare `TrialFunction` or `TestFunction`, and `nothing` for any other operand, whose
+paths below re-evaluate it at the shifted point and never read `inner`.
 
 The one place the "shift by relabelling" assumption is made, so the one place a node that
 cannot be relabelled has to be handled. The default dispatches on

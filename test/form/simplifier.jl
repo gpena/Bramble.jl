@@ -263,10 +263,10 @@ end
 end
 
 # Rules 4-7: scalar lifting out of an inner product, component distribution on a
-# component-mixing sum inside one, nested grid-function scales, and shift idempotence. Each reaches
-# one layer deeper than rules 1-3 (into `BilinearProduct`/`LinearProduct`/`ShiftNode`), so
-# every one gets its own structural check plus a numeric check against an independent
-# reference, exactly as rules 1-3 did above.
+# component-mixing sum inside one, nested grid-function scales, and shifts kept as built.
+# Each reaches one layer deeper than rules 1-3 (into `BilinearProduct`/`LinearProduct`/
+# `ShiftNode`), so every one gets its own structural check plus a numeric check against an
+# independent reference, exactly as rules 1-3 did above.
 @testset "Scalar lifting out of inner products" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, true))
     Wₕ = gridspace(Ωₕ)
@@ -392,31 +392,49 @@ end
     end
 end
 
-@testset "Shift idempotence" begin
+# A shift by a runtime amount, along a `Val` direction: `simplify_ast` keeps every shift as
+# built, so the node type never depends on the amount and `form` infers concretely
+# (gpena/Bramble.jl#530).
+_rt_shift(k::Int, W) = form(W, W, (u, v) -> innerₕ(shift_op(u, Val(1), k), v))
+
+@testset "Shift kept as built" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, true))
     Wₕ = gridspace(Ωₕ)
     A = IdentityOperator(Wₕ)
 
-    @test simplify_ast(shift_op(A, 1, 0)) === A
+    # neither `Shift₀` nor nested shifts fold: the amount is a field, not a type parameter
+    for op in (shift_op(A, 1, 0), shift_op(shift_op(A, 1, 2), 1, 3),
+        shift_op(shift_op(A, 1, 2), 1, -2), shift_op(shift_op(A, 1, 2), 2, 3))
+        @test simplify_ast(op) === op
+    end
 
-    s = simplify_ast(shift_op(shift_op(A, 1, 2), 1, 3))
-    @test s isa ShiftNode
-    @test s.shift_amount == 5
-    @test s.inner_op === A
+    u = Bramble.TrialFunction{2, 1}()
+    for op in (S₊ₓ(u), S₊ₓ(S₊ₓ(u)), S₊ₓ(S₋ₓ(u)), shift_op(u, 1, 0))
+        @test isconcretetype(only(Base.return_types(simplify_ast, (typeof(op),))))
+    end
+    @test isconcretetype(only(Base.return_types(_rt_shift, (Int, typeof(Wₕ)))))
 
-    # a shift and its inverse do not collapse: `S₊ₓ(S₋ₓ(u))` is `u` in the interior but 0 at
-    # the last point, where the inner shift's read has left the grid.
-    s0 = simplify_ast(shift_op(shift_op(A, 1, 2), 1, -2))
-    @test s0 isa ShiftNode
-    @test s0.shift_amount == -2
-    @test s0.inner_op isa ShiftNode
-    @test s0.inner_op.shift_amount == 2
-    @test simplify_ast(shift_op(shift_op(A, 1, 3), 1, -1)).inner_op isa ShiftNode
-
-    # shifts along different dimensions never combine into one node
-    s2 = simplify_ast(shift_op(shift_op(A, 1, 2), 2, 3))
-    @test s2 isa ShiftNode
-    @test s2.inner_op isa ShiftNode
+    # values: a zero shift is the identity and nested shifts in one sense are their sum,
+    # bitwise, on a non-uniform mesh, bilinear, under a difference, and over a source
+    Wn = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (false, false)))
+    sf = source_function(x -> 1 + x[1]^2 + x[2], Val(2))
+    bil(f) = Matrix(assemble(form(Wn, Wn, (u, v) -> innerₕ(f(u), v))))
+    lin(f) = assemble(form(Wn, v -> innerₕ(f(sf), v)))
+    @test bil(u -> shift_op(u, 1, 0)) == bil(identity)
+    @test Matrix(assemble(_rt_shift(0, Wn))) == bil(identity)
+    @test Matrix(assemble(_rt_shift(2, Wn))) == bil(u -> S₊ₓ(S₊ₓ(u)))
+    @test lin(f -> shift_op(f, 1, 0)) == lin(identity)
+    for (nested, single) in (
+        (u -> shift_op(shift_op(u, 1, 1), 1, 2), u -> shift_op(u, 1, 3)),
+        (u -> shift_op(shift_op(u, 1, -2), 1, -1), u -> shift_op(u, 1, -3)),
+        (u -> S₊ₓ(S₊ₓ(u)), u -> shift_op(u, 1, 2))
+    )
+        @test bil(nested) == bil(single)
+        @test bil(D₋ₓ ∘ nested) == bil(D₋ₓ ∘ single)
+        @test bil(D₋ᵧ ∘ nested) == bil(D₋ᵧ ∘ single)
+        @test lin(nested) == lin(single)
+    end
+    @test bil(u -> S₊ₓ(S₊ₓ(u))) != bil(u -> S₊ₓ(u))
 
     @testset "combined shift: numeric agreement" begin
         Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 8, true)
@@ -425,11 +443,11 @@ end
 
         b_nested = assemble(form(Wₕ1, v -> innerₕ(shift_op(shift_op(sf, 1, 1), 1, 2), v)))
         b_combined = assemble(form(Wₕ1, v -> innerₕ(shift_op(sf, 1, 3), v)))
-        @test b_nested ≈ b_combined
+        @test b_nested == b_combined
     end
 
     # the bilinear form of a composed shift against the grid-function computation, on a
-    # non-uniform mesh: same-sign shifts merge exactly, opposite-sign ones keep the
+    # non-uniform mesh: same-sign shifts compose to their sum, opposite-sign ones keep the
     # boundary zero of the inner read
     @testset "composed shifts: grid function" begin
         W = gridspace(mesh(domain(interval(0.0, 1.0)), 7, false))
@@ -441,10 +459,11 @@ end
             A = assemble(form(W, W, (u, v) -> innerₕ(f(u), v)))
             @test A * parent(uh) ≈ H * parent(f(uh))
         end
-        # `shift_op`'s amounts beyond one, against the matrix powers
+        # `shift_op`'s amounts beyond one and zero, against the matrix powers
         for (f, M) in (
             (u -> shift_op(shift_op(u, 1, 2), 1, -2), Sm^2 * Sp^2),
-            (u -> shift_op(shift_op(u, 1, 1), 1, 2), Sp^3)
+            (u -> shift_op(shift_op(u, 1, 1), 1, 2), Sp^3),
+            (u -> shift_op(u, 1, 0), Sp^0)
         )
             @test Matrix(assemble(form(W, W, (u, v) -> innerₕ(f(u), v)))) ≈ H * M
         end

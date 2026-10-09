@@ -27,7 +27,7 @@ same matrix or vector:
     know.
 
 Three more rules reach one layer deeper, into `BilinearProduct`/`LinearProduct` (the nodes
-`innerₕ`/`inner₊`/... build) and `ShiftNode`, because leaving them out would mean either a
+`innerₕ`/`inner₊`/... build), because leaving them out would mean either a
 correctness gap (a component-mixing sum inside one inner product currently has no valid
 routing at all) or a documented dead end (a hidden scalar defeating symmetry detection):
 
@@ -46,10 +46,9 @@ routing at all) or a documented dead end (a hidden scalar defeating symmetry det
     for like terms), both products must name no component, and each coefficient moves onto
     its own unshared argument, so no coefficient is compared. Fewer products is fewer
     compiled terms: see `_factor`.
-  - `Shift₀(u) -> u`, and two nested shifts along the *same* dimension and in the same sense
-    combine their amounts, `Shift_a(Shift_b(u)) -> Shift_{a+b}(u)` for `a` and `b` of one
-    sign. Opposite senses stay nested: a shift reads 0 off the grid, so `Shift_k(Shift_{-k}(u))`
-    is not `u` at the boundary.
+
+A `ShiftNode` is simplified inside but kept as built: `Shift₀(u)` stays, and nested shifts
+are not merged, since the amount is a runtime field (gpena/Bramble.jl#530).
 
 What is not attempted: this stops at `BilinearProduct`/`LinearProduct`/`ShiftNode` and does
 not descend into differences, averages, jumps, restrictions or interpolation -- a scalar or
@@ -587,23 +586,16 @@ end
     return LinearProduct{D, W, typeof(a), typeof(ar)}(a, ar)
 end
 
-# --- Stencil shifts: idempotence and additive composition ---------------------------- #
+# --- Stencil shifts: simplified inside, never folded --------------------------------- #
 
+# A shift is kept as built. `Shift₀(u)` used to be elided and two nested shifts in one sense
+# merged into their sum, but the amount is a field, not a type parameter: both rewrites chose
+# the node type from a runtime value, and `form` inferred a `Union` (gpena/Bramble.jl#530).
+# Keeping them costs nothing in value. A zero shift reads the point itself; shifts in one
+# sense leave the grid where their sum does. Opposite senses were never merged, since a shift
+# reads 0 off the grid and `S₊ₓ(S₋ₓ(u))` is 0 at the last point (gpena/Bramble.jl#352).
 function simplify_ast(op::ShiftNode{D, Dim}) where {D, Dim}
     inner = simplify_ast(op.inner_op)
-    op.shift_amount == 0 && return inner  # Shift₀(u) -> u
-
-    if inner isa ShiftNode{D, Dim} && sign(inner.shift_amount) == sign(op.shift_amount)
-        # Shift_a(Shift_b(u)) -> Shift_{a+b}(u), along the *same* dimension and in the same
-        # sense only. A shift along a different dimension is a different operation. Opposite
-        # senses do not cancel at the boundary: a shift reads 0 off the grid, so
-        # `S₊ₓ(S₋ₓ(u))` is `u` in the interior but 0 at the last point, where `S₋ₓ(u)`'s
-        # value there was never read (gpena/Bramble.jl#352). Two reads in the same sense
-        # leave the grid exactly where the merged one does, so that fold is exact.
-        total = op.shift_amount + inner.shift_amount
-        return ShiftNode{D, Dim, typeof(inner.inner_op)}(total, inner.inner_op)
-    end
-
     return if inner === op.inner_op
         op
     else

@@ -178,10 +178,10 @@ storing it (`ast/simplifier.jl`, [gpena/Bramble.jl#159](https://github.com/gpena
 Most of it rewrites three node types: `OperatorAdd`, `OperatorScale` and `GridFunctionScale`.
 They are exactly what `ast.jl`'s `+`, `*` and `/` overloads build. Every other node (differences,
 averages, jumps, restrictions, interpolation, and every leaf) is semantic rather than
-algebraic, and is left as it is. Two exceptions reach one layer deeper, into
-`BilinearProduct`/`LinearProduct` (what `innerₕ`/`inner₊`/... build) and into `ShiftNode`:
-leaving them untouched would mean either a correctness gap (§"Component distribution" below)
-or a documented dead end (a hidden scalar defeating `symmetry.jl`'s structural shape check).
+algebraic, and is left as it is. The exceptions reach one layer deeper, into
+`BilinearProduct`/`LinearProduct` (what `innerₕ`/`inner₊`/... build): leaving them
+untouched would mean either a correctness gap (§"Component distribution" below) or a
+documented dead end (a hidden scalar defeating `symmetry.jl`'s structural shape check).
 
 The rules matter here rather than only in the tutorial because of where the router splits
 work: `_visit_operator_add*` (`stencil_eval.jl`) recurses on `OperatorAdd` alone, so every
@@ -247,7 +247,7 @@ shared-argument rule below factors it; write `β * (A + B)` for one sweep. The w
 current value into a static number would bake in a snapshot the rest of the design goes out
 of its way to avoid.
 
-### Reaching one layer deeper: inner products and shifts
+### Reaching one layer deeper: inner products
 
 | Input | Simplifies to | Why |
 |:--- |:--- |:--- |
@@ -256,8 +256,14 @@ of its way to avoid.
 | `u_h * (v_h * A)` | `(u_h .* v_h) * A` | one elementwise multiply at construction, not two scalings per point per assembly |
 | `⟨Au, Bv⟩ + ⟨Au, Cv⟩` (or `⟨Au, Bv⟩ + ⟨Cu, Bv⟩`), shared `A` a singleton node, anywhere in the sum | `⟨Au, (B + C)v⟩` (or `⟨(A + C)u, Bv⟩`) | one product, one compiled term, instead of two |
 | `⟨f, Av⟩ + ⟨f, Bv⟩`, shared source a singleton node | `⟨f, (A + B)v⟩` | as above, for a linear form |
-| `Shift₀(u)` | `u` | a zero shift is the identity |
-| `Shift_a(Shift_b(u))`, same dimension, `a` and `b` of one sign | `Shift_{a+b}(u)` | additive only then: a shift reads 0 off the grid, so `Shift_k(Shift_{-k}(u))` is not `u` at the boundary and stays nested |
+
+A `ShiftNode` is simplified inside and kept as built. Neither `Shift₀(u)` nor a nest of
+shifts in one sense is folded any more, because the amount is a field rather than a type
+parameter: both rewrites chose the node type from a runtime value, and `form` inferred a
+`Union` ([gpena/Bramble.jl#530](https://github.com/gpena/Bramble.jl/issues/530)). Values do
+not change. Each level of a nest costs one evaluation of its operand, at the shifted point
+(`local_stencil(::ShiftNode)`). A zero shift over a restricted operand now stores explicit
+zeros in the sparsity pattern, since `Shift₀` is no longer elided; the values are the same.
 
 Factoring a shared argument uses the like-term rule's gate: the shared argument must pass
 `_statically_equal`. Whether the rule fires is settled by the argument types, and a

@@ -488,11 +488,26 @@ end
 @inline function local_stencil(
         op::ShiftNode{D, Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D, Dim}
-    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
+    inner = _shift_operand_stencil(op.inner_op, space, I, markers, lin_idx)
     return _shift_node_stencil(
         stencil_shift_trait(op.inner_op), op, inner, space, I, markers
     )
 end
+
+# The operand's stencil at `I` itself, read only where it is used: a bare leaf's is relabelled
+# as it stands. Every other operand is evaluated afresh at the shifted point, so reading it at
+# `I` too doubled the work per level of nested shifts, 2^depth in all, once `simplify_ast`
+# stopped merging them (gpena/Bramble.jl#530). The other paths ignore `nothing`.
+@inline _shift_operand_stencil(op::_BareLeaf, space, I, markers, lin_idx::Int) = local_stencil(
+    op, space, I, markers, lin_idx
+)
+@inline _shift_operand_stencil(op, space, I, markers, lin_idx::Int) = nothing
+
+# A chain of shifts down to a bare leaf is re-evaluated inline, as the leaf itself is
+# (`_wraps_leaf`, `ast/common.jl`): each link has one tap, so inlining grows the code by the
+# chain's length, not taps^depth. Out of line, `S₊ₓ(S₊ₓ(u))` paid a call per link per point.
+@inline _wraps_leaf(::ShiftNode{D, Dim, <:_BareLeaf}) where {D, Dim} = true
+@inline _wraps_leaf(op::ShiftNode{D, Dim, <:ShiftNode}) where {D, Dim} = _wraps_leaf(op.inner_op)
 
 @inline _shift_node_stencil(
     ::TranslationInvariantStencil,
@@ -549,12 +564,12 @@ end
     return scale_stencil(shifted, _in_grid(space, Ishift) ? one(T) : zero(T))
 end
 
-# A source-only operand's stencil at `J`, with one length at every point. It is
-# `local_stencil` except where that returns `()` for "contributes nothing here"
-# ([`RegionRestriction`](@ref) outside its region), which instead scales by the `Bool` test
-# (`operators/region_restriction.jl`). Not `shifted_inner_stencil`: `RegionRestriction`'s
-# override there zeroes with `zero(T)`, so a non-finite value outside the region gives NaN
-# where the empty stencil gave 0.
+# A source-only operand's stencil at `J`: its `local_stencil`, which a
+# [`RegionRestriction`](@ref) overrides (`operators/region_restriction.jl`). Outside its
+# region a bound restriction returns the zero stencil of its probed type, without calling the
+# source, so the stencil keeps one length at every point; an unbound one returns `()`. Not
+# `shifted_inner_stencil`: `RegionRestriction`'s override there zeroes with `zero(T)`, so a
+# non-finite value outside the region gives NaN where the zero stencil gives 0.
 @inline _source_stencil_at(op, space, J::CartesianIndex, markers, lin_idx::Int) = local_stencil(
     op, space, J, markers, lin_idx
 )
