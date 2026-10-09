@@ -104,6 +104,34 @@ import Base: diff
             @test all(pts_nonunif .>= 0.0) && all(pts_nonunif .<= 2.0)
             @test point(Ωₕ_nonunif, 1) ≈ 0.0
             @test point(Ωₕ_nonunif, npts) ≈ 2.0
+
+            # Float32 draws collide, and so does the map onto [a, b]: every point must
+            # still be distinct (gpena/Bramble.jl#494). spacings(Ωf)[1] is x₂ - x₁.
+            for seed in 1:5
+                Random.seed!(seed)
+                Ωf = mesh(create_test_domain(0.0f0, 1.0f0), 10_000, false;
+                    backend = backend(Float32))
+                @test eltype(Ωf) == Float32
+                @test all(>(0), spacings(Ωf))
+            end
+            for seed in 1:3
+                Random.seed!(seed)
+                Ωf = mesh(create_test_domain(1.0f0, 2.0f0), 10_000, false;
+                    backend = backend(Float32))
+                @test eltype(Ωf) == Float32
+                @test all(>(0), spacings(Ωf))
+            end
+            # The device fill method on a host vector: Float64 interval, Float32 storage.
+            for seed in 1:5
+                Random.seed!(seed)
+                x = Vector{Float32}(undef, 10_000)
+                Bramble._points!(x, set(create_test_domain(0.0, 1.0)), false,
+                    backend(Float32))
+                @test all(>(0), diff(x))
+            end
+            # 100000 distinct Float32 points do not fit in (1, 1.01): 83886 values do.
+            @test_throws ArgumentError mesh(create_test_domain(1.0f0, 1.01f0), 100_000,
+                false; backend = backend(Float32))
         end
 
         @testset "set_points! & set_indices!" begin
@@ -383,6 +411,16 @@ import Base: diff
         Ωₕ2 = mesh(create_test_domain(a, b), n, false; backend = backend())
         Random.seed!(seed)
         @test points(Ωₕ2) ≈ a .+ vcat(0.0, sort!(rand(n - 2)), 1.0) .* (b - a)
+
+        # An armed Float32 mesh is redrawn past its ties too (gpena/Bramble.jl#494).
+        Bramble._seed_mesh1d_rng!(1)
+        Ωf = try
+            mesh(create_test_domain(0.0f0, 1.0f0), 10_000, false; backend = backend(Float32))
+        finally
+            Bramble._unseed_mesh1d_rng!()
+        end
+        @test eltype(Ωf) == Float32
+        @test all(>(0), diff(points(Ωf)))
     end
 
     @testset "Additional methods" begin

@@ -713,6 +713,14 @@ function _unseed_mesh1d_rng!()
 end
 
 @inline function _generate_random_points!(v)
+    _draw_random_points!(v)
+    sort!(v)  # In-place sort
+    return nothing
+end
+
+# The unsorted draw behind `_generate_random_points!`, shared with `_redraw_tied_points!`
+# so a redraw consumes the same stream, in the same way, as the first draw.
+@inline function _draw_random_points!(v)
     if _MESH1D_RNG_ARMED[]
         # Canonical `Float64` draws converted to `eltype(v)`, rather than
         # `rand!(_MESH1D_RNG, v)` directly on `v` itself: Julia's `Float32` and `Float64`
@@ -726,8 +734,56 @@ end
     else
         rand!(v)
     end
-    sort!(v)  # In-place sort
     return nothing
+end
+
+# Redraw rounds `_redraw_tied_points!` tries before giving up.
+const _MAX_REDRAW_ROUNDS = 100
+
+# Whether the mapped points `x` fail to increase strictly anywhere.
+@inline function _has_tied_points(x)
+    @inbounds for k in 2:length(x)
+        x[k] <= x[k - 1] && return true
+    end
+    return false
+end
+
+# Interior indices of `x` to redraw: `k` for each tie `x[k] <= x[k - 1]` with `k`
+# interior, and `n - 1` when the last interior point rounded onto `x[n]`.
+function _tied_interior_indices(x)
+    n = length(x)
+    tied = Int[]
+    @inbounds for k in 2:(n - 1)
+        x[k] <= x[k - 1] && push!(tied, k)
+    end
+    if n >= 3 && x[n] <= x[n - 1] && (isempty(tied) || last(tied) != n - 1)
+        push!(tied, n - 1)
+    end
+    return tied
+end
+
+# Random draws on a small eltype collide, and so does the map onto [a, b], which rounds
+# distinct canonical draws onto one stored value (gpena/Bramble.jl#494). Redraw only the
+# tied interior entries, map them, re-sort the interior and repeat, so a collision-free mesh
+# draws nothing extra and a seeded mesh keeps its points. The rounds are bounded: past the
+# values representable in (a, b) no draw can succeed.
+function _redraw_tied_points!(x, a, b)
+    n = length(x)
+    for _ in 1:_MAX_REDRAW_ROUNDS
+        _has_tied_points(x) || return nothing
+        tied = _tied_interior_indices(x)
+        u = Vector{eltype(x)}(undef, length(tied))
+        _draw_random_points!(u)
+        @inbounds for (j, k) in enumerate(tied)
+            x[k] = a + u[j] * (b - a)
+        end
+        sort!(view(x, 2:(n - 1)))
+    end
+    _has_tied_points(x) || return nothing
+    msg = "could not draw $n distinct points in [$a, $b] with eltype $(eltype(x)) " *
+          "after $_MAX_REDRAW_ROUNDS redraw rounds; use fewer points, a wider interval " *
+          "or a wider eltype"
+    throw(ArgumentError(msg))
 end
 
 #------------------------------------------------------------------------------------------#
@@ -889,6 +945,9 @@ _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_
 
         # Scale and shift the points from [0, 1] to the target interval [a, b].
         @. x = a + x * (b - a)
+
+        # Redraw any interior point the draw or the map left equal to a neighbour.
+        _redraw_tied_points!(x, a, b)
     end
     return nothing
 end
@@ -898,29 +957,13 @@ end
 # non-uniform one. `unif` and `backend` are carried to keep this method's signature distinct
 # from the `Array` one above, since with `unif` dropped a three-argument device method would
 # be ambiguous with it. Past the single-point guard `unif` is always `false`. There is no
-# uniform branch to take. The non-uniform fill generates the coordinates on the host with
-# the same routine the `Array` method above uses, into a scratch `Vector`, and transfers
-# them to `x` in one `copyto!`. Device `rand!`/`sort!` exist, but host generation keeps a
-# seeded mesh identical across backends, at a one-time O(n) construction cost.
+# uniform branch to take. The non-uniform fill runs the `Array` method above into a scratch
+# `Vector{eltype(x)}`, so its tie redraw sees exactly the values that reach `x`, and
+# transfers them to `x` in one `copyto!`. Device `rand!`/`sort!` exist, but host generation
+# keeps a seeded mesh identical across backends, at a one-time O(n) construction cost.
 function _points!(x::AbstractVector, I::CartesianProduct{1}, unif::Bool, backend)
-    npts = length(x)
-    T = eltype(I)
-    a, b = extrema(I)
-
-    if npts == 1
-        x .= a
-        return nothing
-    end
-
-    cpu_pts = Vector{T}(undef, npts)
-    cpu_pts[1] = zero(T)
-    cpu_pts[npts] = one(T)
-
-    v = view(cpu_pts, 2:(npts - 1))
-    _generate_random_points!(v)
-
-    @. cpu_pts = a + cpu_pts * (b - a)
-
+    cpu_pts = Vector{eltype(x)}(undef, length(x))
+    _points!(cpu_pts, I, false)
     copyto!(x, cpu_pts)
     return nothing
 end
