@@ -90,6 +90,22 @@ using Bramble:
         ) ≈ H + transpose(Dx) * Hx * Dx
         @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v + 2 * D₋ₓ(v))))) ≈
               transpose(Idm + 2 * Dx) * H
+
+        # unary minus on a whole form, on one operator and on the gradient tuple
+        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> -inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
+              -(transpose(Dx) * Hx * Dx)
+        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(-D₋ₓ(u), v)))) ≈ -(H * Dx)
+        G = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))))
+        @test !iszero(G)
+        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> -inner₊(∇ₕ(u), ∇ₕ(v))))) ≈ -G
+        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(-∇ₕ(u), ∇ₕ(v))))) ≈ -G
+
+        # the `-1` is an Integer literal, so a Float32 space stays Float32
+        Ω32 = mesh(domain(interval(0.0f0, 1.0f0)), 9, false; backend = backend(Float32))
+        W32 = gridspace(Ω32)
+        K32 = assemble(form(W32, W32, (u, v) -> -innerₕ(D₋ₓ(u), D₋ₓ(v))))
+        @test eltype(K32) === Float32
+        @test K32 ≈ -assemble(form(W32, W32, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))))
     end
 
     @testset "Entry point agreement" begin
