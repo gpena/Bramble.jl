@@ -5,7 +5,7 @@ Cartesian product of `D` closed intervals embedded in ``\\mathbb{R}^D`` with sca
 
 # Fields
 - `box`: Tuple of `D` interval endpoint pairs `(min, max)`.
-- `collapsed`: Tuple of `D` boolean flags indicating whether each dimension is degenerate (`min ≈ max`).
+- `collapsed`: Tuple of `D` boolean flags indicating whether each dimension is degenerate (`min == max`).
 
 See also: [`interval`](@ref), [`point`](@ref), [`box`](@ref).
 """
@@ -22,7 +22,7 @@ end
     is_collapsed(X::CartesianProduct) -> Bool
     is_collapsed(X::CartesianProduct, i::Integer) -> Bool
 
-Check whether an interval endpoint pair, a Cartesian set, or a coordinate dimension `i` is degenerate (`min ≈ max`).
+Check whether an interval endpoint pair, a Cartesian set, or a coordinate dimension `i` is degenerate (`min == max`).
 
 For an ``n``-dimensional [`CartesianProduct`](@ref) `X`, `is_collapsed(X)` returns `true` if any
 coordinate dimension is collapsed (`any(X.collapsed)`), equivalently when the topological dimension
@@ -37,8 +37,8 @@ is strictly less than the spatial embedding dimension `D`.
 # Throws
 - `BoundsError`: If `i < 1` or `i > D`.
 """
-@inline is_collapsed(a::T, b::T) where {T <: Number} = isapprox(a, b)
-@inline is_collapsed(a::Number, b::Number) = isapprox(promote(a, b)...)
+@inline is_collapsed(a::T, b::T) where {T <: Number} = a == b
+@inline is_collapsed(a::Number, b::Number) = is_collapsed(promote(a, b)...)
 @inline is_collapsed(X::CartesianProduct) = any(X.collapsed)
 @inline function is_collapsed(X::CartesianProduct{D}, i::Integer) where {D}
     @boundscheck (1 <= i <= D) || _throw_bounds_error(X, i)

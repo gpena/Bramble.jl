@@ -89,6 +89,9 @@ the result into `uₕ`.
   - `markers::NTuple{N, Symbol}`: restrict evaluation to the named marked
     regions, leaving every other entry zero.
 
+On a composite element `f` may also be a tuple holding one function per leaf component
+(depth-first on a nested composite); any other length throws a `DimensionMismatch`.
+
 See also: [`avgₕ`](@ref), [`Rₕ!`](@ref).
 """
 @inline avgₕ!(uₕ::VectorElement{<:ScalarGridSpace{D}}, f::Tuple{Any}) where {D} = avgₕ!(uₕ, f[1])

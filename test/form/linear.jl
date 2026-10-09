@@ -332,6 +332,39 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
                     v -> inner₊ₓ(uv(1), v(1) - M₊ᵧ(v(1))) +
                          inner₊ₓ(uv(2), v(2) - M₊ᵧ(v(2))) +
                          inner₊ₓ(uv(3), v(3) - M₊ᵧ(v(3)))
+                ),
+                # with `markers`, which once routed every call to the scalar overload
+                (
+                    v -> innerₕ(uv, v; markers = (:boundary,)),
+                    v -> innerₕ(uv(1), v(1); markers = (:boundary,)) +
+                         innerₕ(uv(2), v(2); markers = (:boundary,)) +
+                         innerₕ(uv(3), v(3); markers = (:boundary,))
+                ),
+                (
+                    v -> inner₊ₓ(uv, v; markers = (:boundary,)),
+                    v -> inner₊ₓ(uv(1), v(1); markers = (:boundary,)) +
+                         inner₊ₓ(uv(2), v(2); markers = (:boundary,)) +
+                         inner₊ₓ(uv(3), v(3); markers = (:boundary,))
+                ),
+                (
+                    v -> innerₕ(
+                        (x -> x[1], x -> 100 * x[1], x -> x[2]), v; markers = (:boundary,)
+                    ),
+                    v -> innerₕ(x -> x[1], v(1); markers = (:boundary,)) +
+                         innerₕ(x -> 100 * x[1], v(2); markers = (:boundary,)) +
+                         innerₕ(x -> x[2], v(3); markers = (:boundary,))
+                ),
+                (
+                    v -> inner_Γ(uv, v; markers = (:boundary,)),
+                    v -> inner_Γ(uv(1), v(1); markers = (:boundary,)) +
+                         inner_Γ(uv(2), v(2); markers = (:boundary,)) +
+                         inner_Γ(uv(3), v(3); markers = (:boundary,))
+                ),
+                (
+                    v -> inner_Γ(uv, v; markers = :xmax),
+                    v -> inner_Γ(uv(1), v(1); markers = :xmax) +
+                         inner_Γ(uv(2), v(2); markers = :xmax) +
+                         inner_Γ(uv(3), v(3); markers = :xmax)
                 )
             ]
                 @test assemble(form(Vf, short)) ≈ assemble(form(Vf, long))
@@ -343,6 +376,20 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
             b = assemble(form(Vf, v -> innerₕ(uv, v)))
             m = ndofs(Wf)
             @test [sum(b[(k * m + 1):((k + 1) * m)]) for k in 0:2] ≈ [0.5, 50.0, 0.5]
+
+            # likewise with `markers`: the second block holds 100 times the first, not a copy
+            bm = assemble(form(Vf, v -> innerₕ(uv, v; markers = (:boundary,))))
+            @test !iszero(sum(bm[1:m]))
+            @test sum(bm[(m + 1):(2m)]) ≈ 100 * sum(bm[1:m])
+
+            # an empty tuple keeps its own message when `markers` is given
+            err = try
+                form(Vf, v -> innerₕ((), v; markers = (:boundary,)))
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError && occursin("empty tuple", sprint(showerror, err))
         end
 
         @testset "Index distribution" begin

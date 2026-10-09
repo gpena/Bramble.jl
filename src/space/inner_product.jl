@@ -194,7 +194,9 @@ to `:bottom`, against 1.0 here on the same mesh and region, on every mesh.
 viewpoint aliases. A user-defined marker covering part of a face, an interior interface or a
 staircase is a genuinely more general surface -- the weight stops factorising where the
 surface is cut at an interior transverse index, and needs the explicit one-sided face sum --
-and is refused rather than silently given the factorised weight.
+and is refused rather than silently given the factorised weight. A `DimensionMismatch` is
+thrown when the storage of `uₕ` or `vₕ` does not hold one value per point of the mesh of
+`space(uₕ)`.
 
 The symbolic twin, for use inside a form, is `inner_Γ(g, v; markers = …)`
 (`operators/inner.jl`). It takes its regions as a keyword, to sit beside `innerₕ`; this
@@ -226,8 +228,10 @@ function inner_Γ(
     mask = _face_mask(Val(D), labels)
     _no_faces(mask) && _throw_no_surface_labels()
     _check_surface_is_thin(Ωₕ, mask)
+    u, v, n = parent(uₕ), parent(vₕ), npoints(Ωₕ)
+    (length(u) == length(v) == n) || _throw_dot_dim_error(length(u), length(v), n)
     policy = execution_policy(space(uₕ))
-    return _surface_sum(policy, Ωₕ, mask, parent(uₕ), parent(vₕ))
+    return _surface_sum(policy, Ωₕ, mask, u, v)
 end
 
 @noinline function _throw_no_surface_labels()
@@ -782,6 +786,9 @@ reduces against a lazily-computed [`SeparableWeights`](@ref) instead, through th
 `_dot`/`_dot_masked` specializations above, so no `O(n^D)` vector is ever materialised for
 it.
 
+An `S` that is not a repeat-free subset of `1:D` throws an `ArgumentError`, as the symbolic
+`inner₊(p, q, Val(S))` does.
+
 `markers` restricts the sum to the union of the labelled regions' points, as it does for
 [`innerₕ`](@ref) (a masked sum of the weight above, not a surface integral).
 
@@ -1044,6 +1051,15 @@ function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
 
     u_is_tuple = u_type <: NTuple
     v_is_tuple = v_type <: NTuple
+
+    # Two tuples must have the same arity; otherwise the extra entries would be dropped
+    # silently. The check covers every `Tuple`, not only an `NTuple`: a tuple whose
+    # entries differ in type, such as ∇ₕ(u) in 2D, is no `NTuple`. The message is spliced
+    # in as a String, as in the scalar branch below.
+    if u_type <: Tuple && v_type <: Tuple && fieldcount(u_type) != fieldcount(v_type)
+        len_u, len_v = fieldcount(u_type), fieldcount(v_type)
+        return :(throw(DimensionMismatch($("Tuple lengths $len_u and $len_v do not match"))))
+    end
 
     # Prefer tuple arity when tuples are provided (e.g., inner₊((a,b), (c,d)) even in 1D).
     D = if u_type <: NTuple

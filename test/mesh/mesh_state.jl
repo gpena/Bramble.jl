@@ -98,12 +98,26 @@ end
         @test points(s1) === points(s0) && points(s1) == p
         @test _mesh_version(s1) == _mesh_version(s0) + 1
         @test s1.uid == s0.uid
-        # New length: new arrays and indices.
+        # New length, new arrays and indices.
         q = collect(range(0.0, 1.0; length = 9))
+        # The mesh carries the custom labels :l and :c, which a resize has no domain to
+        # re-evaluate, so the refusal comes before anything changes.
+        v1 = _mesh_version(Ωₕ)
+        @test_throws ArgumentError set_points!(Ωₕ, q)
+        @test npoints(Ωₕ) == 70 && _mesh_version(Ωₕ) == v1 && words_agree(Ωₕ)
+        mm = Bramble.MeshMarkers()
+        mm[:boundary] = markers(Ωₕ)[:boundary]
+        mm[:interior] = markers(Ωₕ)[:interior]
+        markers!(Ωₕ, mm)
         set_points!(Ωₕ, q)
         s2 = _walk_mesh(Ωₕ)
         @test points(s2) === q && npoints(s2) == 9 && length(indices(s2)) == 9
         @test points(s0) !== q && length(points(s0)) == 70
+        # The markers and words follow the new grid; `cld(n, 64)` alone would not tell
+        # (70 and 9 points both fit one word), so the lengths are asserted too.
+        @test words_agree(Ωₕ)
+        @test size(_marker_words(Ωₕ), 1) == cld(9, 64)
+        @test length(markers(Ωₕ)[:boundary]) == 9
     end
 
     @testset "Word matrix: build and rebuild" begin

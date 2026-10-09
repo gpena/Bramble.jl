@@ -132,7 +132,8 @@ Construct a [`DomainMarkers`](@ref) collection from `label => identifier` pairs.
 # Arguments
 - `space_set`: Geometric spatial set.
 - `time_set`: Optional 1D temporal interval for time-dependent boundary conditions. With it,
-  every predicate `Function` takes `(x, t)`; `markers(...)(t)` evaluates them at `t`.
+  every predicate `Function` takes `(x, t)`. `markers(...)(t)` fixes `(x, t)` predicates at
+  `t` and keeps spatial `x` predicates, so it also applies to markers built without it.
 - `pairs`: Vararg sequence of `label => identifier` pairs where identifier is a `Symbol`,
   a tuple (`NTuple{N, Symbol}`), `AbstractVector{Symbol}` or `AbstractSet{Symbol}` of
   boundary symbols, or a predicate `Function` (`x -> Bool`, or `(x, t) -> Bool` with `time_set`).
@@ -329,7 +330,9 @@ end
 """
     EvaluatedDomainMarkers(original_markers::DomainMarkers, evaluation_time::Number)
 
-Time-evaluated wrapper representing a time-dependent [`DomainMarkers`](@ref) collection evaluated at timestamp `t`.
+[`DomainMarkers`](@ref) collection evaluated at timestamp `t`. The collection may hold
+`(x, t)` predicates, spatial `x` predicates, or both;
+[`conditions`](@ref conditions(::EvaluatedDomainMarkers)) fixes only the former at `t`.
 
 # Fields
 - `original_markers`: Underlying [`DomainMarkers`](@ref) object.
@@ -357,14 +360,32 @@ Return multi-symbol markers from the underlying domain markers.
 """
     conditions(edm::EvaluatedDomainMarkers) -> Tuple
 
-Return condition markers evaluated at timestamp `edm.evaluation_time`, converting `f(x, t)`
-closures into unary spatial predicates `f(x)` via `Base.Fix2(f, t)`.
+Return condition markers evaluated at timestamp `edm.evaluation_time`, each a spatial
+predicate of `x`.
+
+A predicate `f` with a one-argument method and no two-argument method is spatial and passes
+through unchanged. Any other predicate is fixed at `t` as `Base.Fix2(f, t)`. So
+`(x, t = 0.0) -> ...` is fixed at `t`, not left at its default. A predicate typed on its
+argument (`(x::NTuple{2, Float64}) -> ...`) or a varargs callable (a `ComposedFunction`, a
+user `Base.Fix2`) has no `Tuple{Any}` method or has a `Tuple{Any, Any}` one, so it is also
+wrapped and must accept `(x, t)`.
 """
 function conditions(edm::EvaluatedDomainMarkers)
     t = edm.evaluation_time
     return map(
-        m -> Marker(label(m), Base.Fix2(identifier(m), t)), conditions(edm.original_markers)
+        m -> Marker(label(m), _fix_time(identifier(m), t)), conditions(edm.original_markers)
     )
+end
+
+# `hasmethod` is `@nospecialize` in `f`: called normally it folds only for a singleton `f`,
+# so a capturing closure or a callable struct with fields gives a `Union` per slot and
+# allocates. Inlined at the call site, its `Core._hasmethod(Tuple{F, ...})` folds on the
+# concrete type `F`, so the tuple stays concrete and `conditions` allocates nothing. A
+# method added to `F` later invalidates the folded result, as for any method lookup.
+@inline function _fix_time(f::F, t) where {F}
+    is_spatial = (@inline hasmethod(f, Tuple{Any})) &&
+                 !(@inline hasmethod(f, Tuple{Any, Any}))
+    return is_spatial ? f : Base.Fix2(f, t)
 end
 
 """
@@ -395,7 +416,9 @@ Zero-allocation, like [`label_identifiers`](@ref label_identifiers(::DomainMarke
 """
     (dm::DomainMarkers)(t::Number) -> EvaluatedDomainMarkers
 
-Evaluate time-dependent condition markers at timestamp `t`.
+Evaluate the condition markers of `dm` at timestamp `t`. Each `(x, t)` predicate is fixed at
+`t` and each spatial `x` predicate is kept as it is; see
+[`conditions`](@ref conditions(::EvaluatedDomainMarkers)).
 """
 (dm::DomainMarkers)(t::Number) = EvaluatedDomainMarkers(dm, t)
 

@@ -136,10 +136,15 @@ _launch_average_engine!(out, in_ref, dims, dir, dim_val, dev) = _throw_no_ka_ave
         vₕ::VectorElement{<:ScalarGridSpace},
         uₕ::VectorElement{<:ScalarGridSpace},
         dir::GridDirection,
-        dim_val::Val
-)
+        dim_val::Val{DIM}
+) where {DIM}
     _check_no_alias(vₕ, uₕ)
     _check_same_grid(vₕ, uₕ)
+    # The direction check matters because a `Val` past the mesh dimension would otherwise
+    # make `_stencil_ranges` treat every point as both interior and boundary and return all
+    # zeros.
+    D = length(_grid_dims(uₕ))
+    1 <= DIM <= D || _throw_stencil_dim_error(DIM, D)
     sp = space(uₕ)
     if execution_policy(sp) isa GpuPolicy
         dev = ka_device(backend(sp))
@@ -340,10 +345,15 @@ end
         vₕ::VectorElement{<:ScalarGridSpace},
         uₕ::VectorElement{<:ScalarGridSpace},
         ::Centered,
-        dim_val::Val
-)
+        dim_val::Val{DIM}
+) where {DIM}
     _check_no_alias(vₕ, uₕ)
     _check_same_grid(vₕ, uₕ)
+    # The direction check matters because a `Val` past the mesh dimension would otherwise
+    # make `_stencil_ranges` treat every point as both interior and boundary and return all
+    # zeros.
+    D = length(_grid_dims(uₕ))
+    1 <= DIM <= D || _throw_stencil_dim_error(DIM, D)
     sp = space(uₕ)
     (execution_policy(sp) isa GpuPolicy || locality(typeof(vₕ.data)) isa DeviceLocality ||
      locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_centered_average()

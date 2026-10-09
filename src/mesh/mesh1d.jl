@@ -153,8 +153,13 @@ from its submeshes' states. A state is its own walk state.
         s.collapsed, version, uniform, words, s.uid)
 end
 
-# The default-tolerance uniformity of `s`'s current spacings: what `uniform` stores.
-@inline _computed_uniform(s::Mesh1DState) = _uniform_default_tol(host_spacings(s), eltype(s))
+# The default-tolerance uniformity of `s`'s current spacings: what `uniform` stores. `mag`
+# is read from the points, which `change_points!` keeps current, not from the stale set.
+@inline function _computed_uniform(s::Mesh1DState)
+    p = host_points(s)
+    mag = max(abs(first(p)), abs(last(p)))
+    return _uniform_default_tol(host_spacings(s), eltype(s), mag)
+end
 
 @inline _marker_words(Ωₕ::_Mesh1DLike) = _st(Ωₕ).words
 @inline _marker_ids(Ωₕ::Mesh1D) = getfield(Ωₕ, :marker_ids)
@@ -263,16 +268,26 @@ largest node index `i` with `pts[i] <= x`, clamped to `1:n-1` -- exactly what
 `searchsortedlast` on the point array answers, and what this method must keep answering,
 uniform or not.
 
-A uniform mesh answers with no array read at all, device-backed or not
-(gpena/Bramble.jl#308): a first estimate `clamp(floor(Int, (x - a) / h) + 1, 1, n - 1)` on
-the interval's own endpoint `a` and stepsize `h = (b - a) / (n - 1)`, matching how `_points!`
-built the grid, then one correction step against the closed-form coordinates of that
-estimate's own neighbouring nodes (`a + idx * h`, `a + (idx - 1) * h`) rather than the
-estimate's raw division. `(x - a) / h` rounds to either side of an integer at a node
-coordinate -- worse in `Float32` (Metal's only type, relative error ~1e-7) than in
-`Float64` (~1e-16) -- so the first estimate can land one cell short or one cell over at an
-exact grid point; the correction is what keeps this path agreeing with `searchsortedlast`
-there; see gpena/Bramble.jl#308 (round 2) for the measured Float64 disagreement this fixes.
+A uniform host-backed mesh reads its own end points `pts[1]` and `pts[n]`, an O(1) read,
+and takes a first estimate `clamp(floor(Int, (x - pts[1]) / h) + 1, 1, n - 1)` with
+`h = (pts[n] - pts[1]) / (n - 1)`; it then walks against `pts` until
+`pts[idx] <= x < pts[idx + 1]`, one step at most in practice. That is exactly
+`searchsortedlast`, with no allocation, whatever the points are: [`change_points!`](@ref)
+accepts points that are uniform only within tolerance and need not lie on the domain's set,
+so neither the set nor a closed form `a + (i - 1) * h` may stand in for them
+(gpena/Bramble.jl#495).
+
+A uniform device-backed mesh refuses scalar reads (gpena/Bramble.jl#308). While its version
+is still 0 its points are the ones `_mesh` built from the set, so it answers with no array
+read: the same estimate on the set's endpoints `a`, `b`, then one correction step against
+the closed-form coordinates of that estimate's neighbouring nodes (`a + idx * h`,
+`a + (idx - 1) * h`), since `(x - a) / h` rounds to either side of an integer at a node
+coordinate -- worse in `Float32` (Metal's only type) than in `Float64`. Once
+[`set_points!`](@ref) has replaced its points (version above 0), it searches
+[`host_points`](@ref)`(Ωₕ)` as a non-uniform device mesh does: one bulk transfer, exact.
+
+A point at or past either endpoint, `±Inf` included, returns the boundary cell before any
+division, and `NaN` returns `n - 1` as the search does, so no path throws.
 
 A non-uniform mesh has no formula to fall back on and searches [`host_points`](@ref)`(Ωₕ)`
 instead of the raw, possibly device-resident `points(Ωₕ)`.
@@ -280,31 +295,67 @@ instead of the raw, possibly device-resident `points(Ωₕ)`.
 function locate_cell(Ωₕ::_Mesh1DLike, x::Real)
     n = npoints(Ωₕ)
     n <= 1 && return 1
+    is_uniform(Ωₕ) && return _locate_uniform(locality(typeof(points(Ωₕ))), Ωₕ, x, n)
+    return _locate_search(Ωₕ, x, n)
+end
 
-    if is_uniform(Ωₕ)
-        a, b = extrema(_st(Ωₕ).set)
-        h = (b - a) / (n - 1)
-        idx = floor(Int, (x - a) / h) + 1
+# Host: estimate from the mesh's own end points, then walk against `pts` to the exact
+# `searchsortedlast` answer; the set is never read, so moved points cannot mislead it.
+function _locate_uniform(::HostLocality, Ωₕ::_Mesh1DLike, x::Real, n::Int)
+    pts = points(Ωₕ)
+    a = pts[1]
+    b = pts[n]
+    # answer the ends before `floor(Int, ...)`, which throws on a quotient past
+    # `typemax(Int)`, on ±Inf and on NaN; NaN takes the last cell, as the search
+    # path does (`searchsortedlast` sorts NaN last)
+    x <= a && return 1
+    (x >= b || isnan(x)) && return n - 1
+    h = (b - a) / (n - 1)
+    idx = clamp(floor(Int, (x - a) / h) + 1, 1, n - 1)
 
-        # `idx` is a candidate for the largest node index with node <= x, built from
-        # `(x - a) / h` alone; that division can round either side of an integer at an
-        # exact node coordinate, so re-derive both of `idx`'s neighbouring nodes the same
-        # closed-form way (never by reading `pts`) and shift by one if `x` actually sits
-        # past the upper one or short of the lower one. At most one of the two branches
-        # below can fire, since they move `idx` in opposite directions.
-        upper = a + idx * h
-        if x >= upper
-            idx += 1
-        else
-            lower = a + (idx - 1) * h
-            if x < lower
-                idx -= 1
-            end
+    # here a < x < b, so the walk stops inside 1:n-1 with pts[idx] <= x < pts[idx + 1]
+    while idx < n - 1 && pts[idx + 1] <= x
+        idx += 1
+    end
+    while idx > 1 && pts[idx] > x
+        idx -= 1
+    end
+    return idx
+end
+
+# Device: no scalar reads. A version-0 mesh still holds the points `_mesh` built from the
+# set, so the closed form on `extrema(set)` is valid; after `set_points!` (the only writer
+# that bumps the version) the points may have left the set, so search them exactly.
+function _locate_uniform(::DeviceLocality, Ωₕ::_Mesh1DLike, x::Real, n::Int)
+    _mesh_version(Ωₕ) == 0 || return _locate_search(Ωₕ, x, n)
+
+    # the fill's own arithmetic: endpoints and step in the storage eltype
+    a, b = convert.(eltype(Ωₕ), extrema(_st(Ωₕ).set))
+    x <= a && return 1
+    (x >= b || isnan(x)) && return n - 1
+    h = (b - a) / (n - 1)
+    idx = floor(Int, (x - a) / h) + 1
+
+    # `idx` is a candidate for the largest node index with node <= x, built from
+    # `(x - a) / h` alone; that division can round either side of an integer at an
+    # exact node coordinate, so re-derive both of `idx`'s neighbouring nodes the same
+    # closed-form way (never by reading `pts`) and shift by one if `x` actually sits
+    # past the upper one or short of the lower one. At most one of the two branches
+    # below can fire, since they move `idx` in opposite directions.
+    upper = a + idx * h
+    if x >= upper
+        idx += 1
+    else
+        lower = a + (idx - 1) * h
+        if x < lower
+            idx -= 1
         end
-
-        return clamp(idx, 1, n - 1)
     end
 
+    return clamp(idx, 1, n - 1)
+end
+
+function _locate_search(Ωₕ::_Mesh1DLike, x::Real, n::Int)
     pts = host_points(Ωₕ)
     if x <= pts[1]
         return 1
@@ -373,11 +424,20 @@ See also: [`host_spacings`](@ref), [`half_spacings`](@ref), [`half_spacing`](@re
 
 Return the forward spacings of `Ωₕ`, where `forward_spacings(Ωₕ)[i]` is
 [`forward_spacing`](@ref)`(Ωₕ, i)`. Unlike [`spacings`](@ref), this is not cached: it is
-[`spacing`](@ref)'s vector read one index ahead, computed lazily on iteration.
+[`spacing`](@ref)'s vector read one index ahead, a new vector each call, of the same array
+type as `spacings(Ωₕ)`.
 
 See also: [`forward_spacing_for_derivative`](@ref).
 """
-@inline forward_spacings(Ωₕ::_Mesh1DLike) = _spacing_generator(Ωₕ, forward_spacing)
+@inline function forward_spacings(Ωₕ::_Mesh1DLike)
+    h = spacings(Ωₕ)
+    n = length(h)
+    n == 1 && return copy(h)
+    f = similar(h)
+    copyto!(f, 1, h, 2, n - 1)
+    copyto!(f, n, h, n, 1)
+    return f
+end
 
 # A single-point mesh (n == 1, whether from a topologically collapsed domain or simply a
 # one-point request) has no adjacent interval, so `half_spacings` is the honest raw zero
@@ -402,15 +462,57 @@ Override the grid coordinates in `Ωₕ`. Recalculates cached [`spacings`](@ref)
 unchanged, then replaces the mesh's [`Mesh1DState`](@ref) with one carrying the new version
 and the uniformity of the new points.
 
+A new point count also rebuilds the `:boundary` and `:interior` markers (and the marker
+words assembly reads) for the new grid. A mesh carrying any other label has no domain here
+to re-evaluate it onto the new points, so such a resize throws an `ArgumentError` before
+anything changes. Build `mesh(Ω, length(pts))` and call
+[`change_points!`](@ref)`(Ωₕ, markers(Ω), pts)` instead. A call that keeps the point count
+leaves every marker alone, custom labels included.
+
 Bumps `Ωₕ`'s mesh version (gpena/Bramble.jl#221): every [`ScalarGridSpace`](@ref) already
 built on `Ωₕ` -- via [`gridspace`](@ref), directly or as a leaf of a
 [`CompositeGridSpace`](@ref) -- keeps its own weights, precomputed from the mesh *before*
 this call. Its `innerₕ`/`inner₊*`/norms now throw naming the mismatch instead of silently
 computing against stale weights; call `gridspace(Ωₕ)` again for a space that reads the
-mutated mesh. This is also what [`change_points!`](@ref) and [`iterative_refinement!`](@ref)
-go through, so the same applies to both.
+mutated mesh. This is also what [`change_points!`](@ref) goes through, so the same applies
+to it.
 """
-@inline function set_points!(Ωₕ::Mesh1D, pts)
+function set_points!(Ωₕ::Mesh1D, pts)
+    n = length(pts)
+    if length(_st(Ωₕ).pts) == n
+        _set_points_geometry!(Ωₕ, pts)
+        return nothing
+    end
+
+    # A resize leaves every marker sized for the old grid. `:boundary`/`:interior` are
+    # rebuilt below; any other label has no domain to be re-evaluated from, so it is
+    # refused before the geometry changes, as `iterative_refinement!(Ωₕ)` refuses it
+    # (gpena/Bramble.jl#19).
+    extra_labels = setdiff(keys(markers(Ωₕ)), (:boundary, :interior))
+    isempty(extra_labels) || _throw_resize_drops_markers(extra_labels)
+
+    _set_points_geometry!(Ωₕ, pts)
+    fresh_markers = MeshMarkers()
+    _ensure_geometric_markers!(fresh_markers, Ωₕ)
+    markers!(Ωₕ, fresh_markers)
+    return nothing
+end
+
+@noinline function _throw_resize_drops_markers(extra_labels)
+    throw(
+        ArgumentError(
+        "set_points!(Ωₕ, pts) was asked to change the point count of a mesh carrying " *
+        "custom markers $(Tuple(extra_labels)), and there is no domain here to " *
+        "re-evaluate them onto the new points. Build mesh(Ω, length(pts)) and call " *
+        "change_points!(Ωₕ, markers(Ω), pts) instead.",
+    ),
+    )
+end
+
+# The geometry of `set_points!` alone, with markers left untouched: the public setter adds
+# the marker rebuild for a new point count, and `_refine_indices!` calls this directly
+# because both refinement forms rebuild markers themselves.
+@inline function _set_points_geometry!(Ωₕ::Mesh1D, pts)
     s = _st(Ωₕ)
     n = length(pts)
 
@@ -522,7 +624,8 @@ end
     backward_spacings_for_derivative(Ωₕ::Mesh1D) -> AbstractVector
 
 Return a vector `h` with `h[i] == `[`spacing_for_derivative`](@ref)`(Ωₕ, i)` for every
-`i > 1`. Entry 1 is zero: the backward difference has no stencil at the first point.
+`i > 1`. Entry 1 holds [`spacing`](@ref)`(Ωₕ, 1)`, which no backward stencil reads; the
+scalar [`spacing_for_derivative`](@ref)`(Ωₕ, 1)` is zero.
 """
 @inline backward_spacings_for_derivative(Ωₕ::_Mesh1DLike) = spacings(Ωₕ)
 
@@ -653,6 +756,14 @@ function _unseed_mesh1d_rng!()
 end
 
 @inline function _generate_random_points!(v)
+    _draw_random_points!(v)
+    sort!(v)  # In-place sort
+    return nothing
+end
+
+# The unsorted draw behind `_generate_random_points!`, shared with `_redraw_tied_points!`
+# so a redraw consumes the same stream, in the same way, as the first draw.
+@inline function _draw_random_points!(v)
     if _MESH1D_RNG_ARMED[]
         # Canonical `Float64` draws converted to `eltype(v)`, rather than
         # `rand!(_MESH1D_RNG, v)` directly on `v` itself: Julia's `Float32` and `Float64`
@@ -666,8 +777,56 @@ end
     else
         rand!(v)
     end
-    sort!(v)  # In-place sort
     return nothing
+end
+
+# Redraw rounds `_redraw_tied_points!` tries before giving up.
+const _MAX_REDRAW_ROUNDS = 100
+
+# Whether the mapped points `x` fail to increase strictly anywhere.
+@inline function _has_tied_points(x)
+    @inbounds for k in 2:length(x)
+        x[k] <= x[k - 1] && return true
+    end
+    return false
+end
+
+# Interior indices of `x` to redraw: `k` for each tie `x[k] <= x[k - 1]` with `k`
+# interior, and `n - 1` when the last interior point rounded onto `x[n]`.
+function _tied_interior_indices(x)
+    n = length(x)
+    tied = Int[]
+    @inbounds for k in 2:(n - 1)
+        x[k] <= x[k - 1] && push!(tied, k)
+    end
+    if n >= 3 && x[n] <= x[n - 1] && (isempty(tied) || last(tied) != n - 1)
+        push!(tied, n - 1)
+    end
+    return tied
+end
+
+# Random draws on a small eltype collide, and so does the map onto [a, b], which rounds
+# distinct canonical draws onto one stored value (gpena/Bramble.jl#494). Redraw only the
+# tied interior entries, map them, re-sort the interior and repeat, so a collision-free mesh
+# draws nothing extra and a seeded mesh keeps its points. The rounds are bounded: past the
+# values representable in (a, b) no draw can succeed.
+function _redraw_tied_points!(x, a, b)
+    n = length(x)
+    for _ in 1:_MAX_REDRAW_ROUNDS
+        _has_tied_points(x) || return nothing
+        tied = _tied_interior_indices(x)
+        u = Vector{eltype(x)}(undef, length(tied))
+        _draw_random_points!(u)
+        @inbounds for (j, k) in enumerate(tied)
+            x[k] = a + u[j] * (b - a)
+        end
+        sort!(view(x, 2:(n - 1)))
+    end
+    _has_tied_points(x) || return nothing
+    msg = "could not draw $n distinct points in [$a, $b] with eltype $(eltype(x)) " *
+          "after $_MAX_REDRAW_ROUNDS redraw rounds; use fewer points, a wider interval " *
+          "or a wider eltype"
+    throw(ArgumentError(msg))
 end
 
 #------------------------------------------------------------------------------------------#
@@ -812,11 +971,20 @@ _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_
 
     # Check if the point distribution should be uniform.
     if unif
-        # For a uniform grid, calculate the constant step size `h`.
-        h = (b - a) / (npts - 1)
+        # For a uniform grid, calculate the constant step size `h`. The arithmetic runs in
+        # the wider of the set and storage eltypes, then rounds once into `x`: a narrower
+        # set eltype would tie neighbours that `eltype(x)` keeps apart, and a narrower
+        # storage eltype would drift from the correctly rounded nodes and lose symmetry.
+        # The device kernel computes in the storage eltype instead, since Metal has no
+        # Float64: its nodes may differ from these by about 1-2 eps of the largest
+        # endpoint in absolute terms (many ulp near 0), and a symmetric interval need
+        # not give a symmetric device mesh.
+        S = promote_type(T, eltype(x))
+        aₛ, bₛ = convert(S, a), convert(S, b)
+        h = (bₛ - aₛ) / (npts - 1)
         # Populate the grid points using an arithmetic progression.
         @simd ivdep for i in eachindex(x)
-            x[i] = a + (i - 1) * h
+            x[i] = aₛ + (i - 1) * h
         end
     else
         # For a non-uniform grid, first generate points in the canonical interval [0, 1].
@@ -829,6 +997,9 @@ _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_
 
         # Scale and shift the points from [0, 1] to the target interval [a, b].
         @. x = a + x * (b - a)
+
+        # Redraw any interior point the draw or the map left equal to a neighbour.
+        _redraw_tied_points!(x, a, b)
     end
     return nothing
 end
@@ -838,29 +1009,13 @@ end
 # non-uniform one. `unif` and `backend` are carried to keep this method's signature distinct
 # from the `Array` one above, since with `unif` dropped a three-argument device method would
 # be ambiguous with it. Past the single-point guard `unif` is always `false`. There is no
-# uniform branch to take. The non-uniform fill generates the coordinates on the host with
-# the same routine the `Array` method above uses, into a scratch `Vector`, and transfers
-# them to `x` in one `copyto!`. Device `rand!`/`sort!` exist, but host generation keeps a
-# seeded mesh identical across backends, at a one-time O(n) construction cost.
+# uniform branch to take. The non-uniform fill runs the `Array` method above into a scratch
+# `Vector{eltype(x)}`, so its tie redraw sees exactly the values that reach `x`, and
+# transfers them to `x` in one `copyto!`. Device `rand!`/`sort!` exist, but host generation
+# keeps a seeded mesh identical across backends, at a one-time O(n) construction cost.
 function _points!(x::AbstractVector, I::CartesianProduct{1}, unif::Bool, backend)
-    npts = length(x)
-    T = eltype(I)
-    a, b = extrema(I)
-
-    if npts == 1
-        x .= a
-        return nothing
-    end
-
-    cpu_pts = Vector{T}(undef, npts)
-    cpu_pts[1] = zero(T)
-    cpu_pts[npts] = one(T)
-
-    v = view(cpu_pts, 2:(npts - 1))
-    _generate_random_points!(v)
-
-    @. cpu_pts = a + cpu_pts * (b - a)
-
+    cpu_pts = Vector{eltype(x)}(undef, length(x))
+    _points!(cpu_pts, I, false)
     copyto!(x, cpu_pts)
     return nothing
 end
@@ -997,6 +1152,29 @@ end
     return nothing
 end
 
+# Whether the axis [a, b] meshes to a single point: its endpoints are equal once stored in
+# the backend's eltype. A Float64 interval narrower than a Float32 ulp is a point in Float32
+# storage; both `_mesh` methods (1D here, nD in meshnd.jl) decide collapse through this.
+@inline function _storage_collapsed(a, b, backend)
+    Tb = eltype(backend)
+    return is_collapsed(convert(Tb, a), convert(Tb, b))
+end
+
+# A uniform fill of more points than [a, b] holds in the storage eltype rounds neighbours
+# onto one value: refuse it, as the non-uniform fill does. One O(n) scan on host; a device
+# vector is read once through a host copy.
+function _check_uniform_distinct(pts, set)
+    _has_tied_points(_host_array(pts)) || return nothing
+    a, b = extrema(set)
+    return _throw_uniform_ties(length(pts), a, b, eltype(pts))
+end
+
+@noinline function _throw_uniform_ties(n, a, b, T)
+    msg = "cannot place $n distinct uniform points in [$a, $b] with eltype $T; use " *
+          "fewer points, a wider interval or a wider eltype"
+    throw(ArgumentError(msg))
+end
+
 # Internal constructor function for creating a 1D mesh.
 function _mesh(
         Ω::Domain{CartesianProduct{1, T}},
@@ -1009,8 +1187,8 @@ function _mesh(
     (; set, markers) = Ω
     n_points, = npts
 
-    # Check if the domain is a single point (topological dimension is 0).
-    is_collapsed = topo_dim(set) == 0
+    # Check if the domain is a single point in the storage eltype.
+    is_collapsed = _storage_collapsed(extrema(set)..., backend)
 
     # If the domain is collapsed, force the number of points to be 1.
     if is_collapsed
@@ -1038,7 +1216,10 @@ function _mesh(
     fused_nonuniform_device = !is_uniform && n_points >= 2 && !(pts isa Array)
 
     if fused_uniform_device
-        a, b = extrema(set)
+        # in the storage eltype, unlike the host fill's wider type: a device kernel cannot
+        # take a Float64 `a` or `h` on a Float32-only device such as Metal
+        S = eltype(pts)
+        a, b = convert.(S, extrema(set))
         h = (b - a) / (n_points - 1)
         _uniform_mesh1d_init!(
             pts,
@@ -1058,6 +1239,7 @@ function _mesh(
         # alone does not carry.
         _points!(pts, set, is_uniform, backend)
     end
+    is_uniform && n_points >= 2 && _check_uniform_distinct(pts, set)
 
     # Generate the CartesianIndices for the grid.
     idxs = generate_indices(n_points)
@@ -1136,7 +1318,7 @@ function _refine_indices!(Ωₕ::Mesh1D)
 
     # Update the mesh struct with the new indices and points.
     set_indices!(Ωₕ, new_indices)
-    set_points!(Ωₕ, new_points)
+    _set_points_geometry!(Ωₕ, new_points)
     return nothing
 end
 

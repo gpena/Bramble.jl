@@ -98,12 +98,8 @@ end
                         A = assemble(a)::SparseMatrixCSC
                         @test bandwidths(a) == _true_bandwidths(A)
 
-                        if D == 1
-                            @test blockbandwidths(a) == ((0, 0), bandwidths(a))
-                        else
-                            nsub = prod(n[1:(D - 1)])
-                            @test blockbandwidths(a) == _true_blockbandwidths(A, nsub)
-                        end
+                        nsub = prod(n[1:(D - 1)])
+                        @test blockbandwidths(a) == _true_blockbandwidths(A, nsub)
                     end
                 end
             end

@@ -374,16 +374,22 @@ end
 end
 
 # One rule per leaf: each is already independent. `map` over both tuples rather than
-# `ntuple` indexing a shared count -- it needs no leaf count, stays correct under any
-# nesting, and errors on a length mismatch the way it always did.
+# `ntuple` indexing a shared count -- it needs no leaf count and stays correct under any
+# nesting. Base's tuple `map` truncates to the shorter tuple, so the leaf count is checked
+# first: a short tuple would leave leaves unwritten, a long one drop functions (#506).
 @inline function project!(
         uₕ::VectorElement{<:CompositeGridSpace},
         rules::Tuple,
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {N}
-    map((c, r) -> project!(c, r, markers), components(uₕ), rules)
+    comps = components(uₕ)
+    length(rules) == length(comps) || _throw_rule_count(length(rules), length(comps))
+    map((c, r) -> project!(c, r, markers), comps, rules)
     return uₕ
 end
+
+@noinline _throw_rule_count(nr::Int, nc::Int) = throw(DimensionMismatch(
+    "got $nr functions for $nc components: a tuple holds one function per leaf"))
 
 # A one-component space is a scalar space, so a 1-tuple of rules must still work.
 @inline project!(

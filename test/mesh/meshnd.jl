@@ -429,6 +429,21 @@ using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
             fsp_iter = Iterators.product(forward_spacings(Ωₕ)...)
             @test length(fsp_iter) == 9
 
+            # forward_spacings is an indexable vector agreeing with forward_spacing
+            Random.seed!(559)
+            Ωₕ_nu = mesh(Ω_2d, (6, 7), (false, false))
+            for d in 1:2
+                p = points(Ωₕ_nu(d))
+                @test forward_spacings(Ωₕ_nu(d)) isa AbstractVector
+                @test collect(forward_spacings(Ωₕ_nu(d))) == vcat(diff(p), diff(p)[end])
+                @test all(forward_spacings(Ωₕ_nu)[d][i] == forward_spacing(Ωₕ_nu(d), i)
+                for i in eachindex(p))
+                @test spacings(Ωₕ_nu(d)) == vcat(diff(p)[1], diff(p))
+                @test isapprox(half_spacings(Ωₕ_nu(d)),
+                    vcat(diff(p)[1] / 2, (p[3:end] .- p[1:(end - 2)]) ./ 2, diff(p)[end] / 2);
+                    atol = 1e-12, rtol = 1e-12)
+            end
+
             # Iterators.product(half_spacings(mesh)...)
             hsp_iter = Iterators.product(half_spacings(Ωₕ)...)
             @test length(hsp_iter) == 9
@@ -512,6 +527,18 @@ using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
             Ωₕ_pt = mesh(Ω_pt, (5, 5, 5), (true, true, true); backend = backend())
             @test npoints(Ωₕ_pt, Tuple) == (1, 1, 1)
             @test point(Ωₕ_pt, (1, 1, 1)) == (2.0, 3.0, 4.0)
+
+            # y collapses in Float32 storage only: the index grid and the submesh agree on
+            # one point, and the mesh matches a set-collapsed one on the same backend.
+            Ω_f32 = create_test_nd_domain(((0.0, 1.0), (1.0e6, 1.0e6 + 0.01)))
+            Ωₕ_f32 = mesh(Ω_f32, (4, 4), (true, true); backend = backend(Float32))
+            @test npoints(Ωₕ_f32(2)) == 1
+            @test npoints(Ωₕ_f32) == npoints(Ωₕ_f32(1)) == 4
+            Ω_set = create_test_nd_domain(((0.0, 1.0), (1.0e6, 1.0e6)))
+            Ωₕ_set = mesh(Ω_set, (4, 4), (true, true); backend = backend(Float32))
+            @test npoints(Ωₕ_f32, Tuple) == npoints(Ωₕ_set, Tuple) == (4, 1)
+            @test isequal(points(Ωₕ_f32(1)), points(Ωₕ_set(1)))
+            @test isequal(points(Ωₕ_f32(2)), points(Ωₕ_set(2)))
         end
 
         @testset "Collapsed dimensions, one layer further" begin
@@ -659,20 +686,29 @@ end # Main Testset
     # the one-argument form was affected.
 
     @testset "Index tracking" begin
-        for npts in ((5, 4), (3, 4, 5))
+        # (40, 5) non-uniform: the 40-point axis grows from 1 to 2 to 3 word rows.
+        for (npts, unif) in (((5, 4), true), ((3, 4, 5), false), ((40, 5), false))
             D = length(npts)
             Ω = if D == 2
                 domain(interval(0.0, 1.0) × interval(0.0, 1.0))
             else
                 domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
             end
-            Ωₕ = mesh(Ω, npts, ntuple(_ -> true, D))
+            Ωₕ = mesh(Ω, npts, ntuple(_ -> unif, D))
 
             for _ in 1:2
                 iterative_refinement!(Ωₕ)
                 @test size(indices(Ωₕ)) == npoints(Ωₕ, Tuple)
                 @test length(indices(Ωₕ)) == npoints(Ωₕ)
                 @test npoints(Ωₕ) == prod(npoints(Ωₕ, Tuple))
+                for d in 1:D
+                    n = npoints(Ωₕ(d))
+                    @test length(markers(Ωₕ(d))[:boundary]) == n
+                    @test findall(markers(Ωₕ(d))[:boundary]) == [1, n]
+                    @test markers(Ωₕ(d))[:interior] == .!markers(Ωₕ(d))[:boundary]
+                    @test size(Bramble._marker_words(Ωₕ(d)), 1) == cld(n, 64)
+                end
+                @test Bramble._kron_interior_is_tensor(Ωₕ)
             end
         end
     end
@@ -711,6 +747,34 @@ end # Main Testset
         iterative_refinement!(Ωₕ, markers(Ω))
         @test size(indices(Ωₕ)) == npoints(Ωₕ, Tuple)
         @test length(indices(Ωₕ)) == npoints(Ωₕ)
+        # gpena/Bramble.jl#491: the axis submeshes kept their pre-refinement markers.
+        @test length(markers(Ωₕ(1))[:boundary]) == 9
+        @test markers(Ωₕ(1))[:boundary][9]
+        @test Bramble._kron_interior_is_tensor(Ωₕ)
+
+        # Non-uniform (40, 5): the 40-point axis grows from 1 to 2 to 3 word rows.
+        Ωₕ = mesh(Ω, (40, 5), (false, false))
+        for _ in 1:2
+            iterative_refinement!(Ωₕ, markers(Ω))
+            for d in 1:2
+                n = npoints(Ωₕ(d))
+                @test length(markers(Ωₕ(d))[:boundary]) == n
+                @test findall(markers(Ωₕ(d))[:boundary]) == [1, n]
+                @test markers(Ωₕ(d))[:interior] == .!markers(Ωₕ(d))[:boundary]
+                @test size(Bramble._marker_words(Ωₕ(d)), 1) == cld(n, 64)
+            end
+            @test Bramble._kron_interior_is_tensor(Ωₕ)
+        end
+
+        # A collapsed axis refines as a no-op; reseeding gives back its markers.
+        Ωₖ = mesh(domain(interval(0.0, 1.0) × interval(0.5, 0.5)), (6, 4), (false, true))
+        before = Dict(k => copy(v) for (k, v) in markers(Ωₖ(2)))
+        iterative_refinement!(Ωₖ)
+        @test npoints(Ωₖ(2)) == 1
+        @test Dict(k => copy(v) for (k, v) in markers(Ωₖ(2))) == before
+        @test length(markers(Ωₖ(2))[:boundary]) == 1
+        @test length(markers(Ωₖ(1))[:boundary]) == npoints(Ωₖ(1)) == 11
+        @test Bramble._kron_interior_is_tensor(Ωₖ)
     end
 
     @testset "One submesh refined in place" begin

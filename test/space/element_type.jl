@@ -8,6 +8,9 @@ using Bramble: norminf, spacings
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: diff₋ₓ, diff₊ₓ, D₊ₓ, ∇₊ₕ, M₊ₓ, M₊ᵧ
 using SparseArrays
+using ForwardDiff
+using Bramble: divₕ, div₊ₕ, divcₕ, diṽₕ, div̽ₕ, curlₕ, curl₊ₕ, curlcₕ, curl̃ₕ, curl̽ₕ
+using Bramble: εₕ, εcₕ, ε₊ₕ, ε̽ₕ
 using Bramble: hₘᵢₙ, diff₋ₓ, diff₊ₓ, half_spacings, cell_measures
 
 # The element type of the backend survives the whole library.
@@ -74,6 +77,34 @@ const F32_BACKEND = backend(;
         for op in (∇ₕ, ∇₊ₕ, D̃ₕ, Dcₕ, D̽ₕ, Mₕ, jumpₕ)
             @test all(g -> eltype(parent(g)) === Float32, op(uₕ))
         end
+
+        # The allocating vector-calculus forms promote the components' element types, and
+        # only theirs: an all-Float32 field on a Float64 mesh stays Float32, since this
+        # file's backend is Float32 and only that row tells the two rules apart.
+        leaves(r) = r isa Tuple ? reduce(vcat, map(leaves, collect(r))) : [r]
+        Ω64 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false))
+        a32 = element(gridspace(Ω64), Float32)
+        Rₕ!(a32, x -> x[1])
+        u64 = element(Wₕ, Float64)
+        Rₕ!(u64, x -> x[2]^2)
+        for op in (
+            divₕ, div₊ₕ, divcₕ, diṽₕ, div̽ₕ, curlₕ, curl₊ₕ, curlcₕ, curl̃ₕ, curl̽ₕ,
+            εₕ, εcₕ, ε₊ₕ, ε̽ₕ
+        )
+            @test all(g -> eltype(parent(g)) === Float32, leaves(op((uₕ, uₕ))))
+            @test all(g -> eltype(parent(g)) === Float32, leaves(op((a32, a32))))
+            @test all(g -> eltype(parent(g)) === Float64, leaves(op((uₕ, u64))))
+            @test all(g -> eltype(parent(g)) === Float64, leaves(op((u64, uₕ))))
+        end
+
+        # A partially differentiated field: the Dual component carries the result's type,
+        # and the partials are the divergence of the derivative field.
+        dₕ = Rₕ(Wₕ, x -> ForwardDiff.Dual(x[2]^2, x[2]))
+        r = divₕ((uₕ, dₕ))
+        @test eltype(parent(r)) === eltype(dₕ)
+        @test eltype(r) <: ForwardDiff.Dual
+        @test map(y -> ForwardDiff.partials(y, 1), parent(r)) ≈
+              parent(divₕ((Rₕ(Wₕ, x -> 0.0f0), Rₕ(Wₕ, x -> x[2]))))
     end
 
     @testset "Matrix forms" begin

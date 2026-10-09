@@ -476,6 +476,28 @@ end
     Ω1 = domain(interval(0.0, 1.0), T, :late => (x, t) -> x > t)
     @test count(Bramble.markers(mesh(Ω1(0.5), 5, true))[:late]) == 2
 
+    # A spatial-only domain evaluated at t keeps its x predicates, non-uniform in 2D and 1D.
+    Ωsₕ = mesh(domain(X, :region => x -> x[1] > 0.5)(0.5), (5, 4), (false, false))
+    xs_s, ys_s = Bramble.host_points(Ωsₕ)
+    @test Bramble.markers(Ωsₕ)[:region] == vec([xi > 0.5 for xi in xs_s, _ in ys_s])
+    @test count(Bramble.markers(Ωsₕ)[:region]) > 0
+    Ω1ₕ = mesh(domain(interval(0.0, 1.0), :r => x -> x > 0.5)(0.5), 6, false)
+    oracle1 = [xi > 0.5 for xi in Bramble.host_points(Ω1ₕ)]
+    @test Bramble.markers(Ω1ₕ)[:r] == oracle1
+    @test 0 < count(oracle1) < length(oracle1)
+
+    # A defaulted t and a typed (x, t) are fixed at t, not left at the default or unwrapped.
+    Ωt = domain(
+        X, T, :dflt => (x, t = 0.0) -> x[1] > t,
+        :typed => (x::NTuple{2, Float64}, t::Float64) -> x[1] > t
+    )
+    Ωtₕ = mesh(Ωt(0.25), (5, 4), (false, false))
+    xt, yt = Bramble.host_points(Ωtₕ)
+    oracle_t = vec([xi > 0.25 for xi in xt, _ in yt])
+    @test count(oracle_t) < length(oracle_t)
+    @test Bramble.markers(Ωtₕ)[:dflt] == oracle_t
+    @test Bramble.markers(Ωtₕ)[:typed] == oracle_t
+
     # A time domain needs (x, t) predicates, at construction.
     @test_throws ArgumentError domain(X, T, :s => x -> x[1] > 0.5)
     @test_throws ArgumentError markers(interval(0.0, 1.0), T, :s => x -> x > 0.5)

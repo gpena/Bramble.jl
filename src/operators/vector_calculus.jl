@@ -16,7 +16,8 @@
 # every `!` form allocate nothing without a caller-supplied scratch buffer.
 #
 # The vector field is an `NTuple{D, VectorElement}` -- what `∇ₕ` returns -- or a composite
-# grid function with `D` leaves. Both spellings reach the same kernels.
+# grid function with `D` leaves. Both spellings reach the same kernels. Either way the
+# components must be grid functions of one mesh, which every entry point checks.
 
 # --- Device dispatch for the fused vector-calculus kernels ---------------------------------------------------- #
 #
@@ -202,6 +203,17 @@ end
 
 @inline _field_space(uₕ) = space(first(_field_components(uₕ)))
 
+# The output of an allocating form: a grid function on the first component's space whose
+# element type promotes the components' own, so a Float32 component beside a Float64 one,
+# or a Dual beside a Float64, gives the wider type. It is not promoted against the space's
+# type: like `similar(::VectorElement)`, an all-Float32 field on a Float64 mesh stays
+# Float32. `promote_type` over a tuple constant-folds, so this infers.
+@inline function _field_similar(comps::Tuple)
+    T = promote_type(map(eltype, comps)...)
+    v = similar(parent(first(comps)), T)
+    return VectorElement(v, space(first(comps)))
+end
+
 @noinline function _throw_field_arity(got::Int, D::Int, op::String)
     throw(
         DimensionMismatch(
@@ -215,6 +227,40 @@ end
     return nothing
 end
 
+# Every engine takes its shape and its spacings from the first component's mesh, so each
+# other component must be a grid function of that mesh. Equal point counts are not enough:
+# on another non-uniform mesh of the same shape the differences use the wrong spacings and
+# the answer is silently wrong. The same mesh object, or one with the same points, as
+# `_same_mesh_or_throw` (assembly/jacobian_pattern.jl) accepts. `===` decides the common
+# case, and `host_points` does not copy on a host mesh, so the `!` forms allocate nothing.
+@noinline function _throw_field_grid(k::Int, ck, c1)
+    throw(
+        ArgumentError(
+        "the components of a vector field must be grid functions of one mesh: component " *
+        "$k has $(length(parent(ck))) entries on a grid of $(_grid_dims(ck)) points, " *
+        "component 1 has $(length(parent(c1))) entries on $(_grid_dims(c1)), and the two " *
+        "must share the same mesh points",
+    ),
+    )
+end
+
+@inline function _check_component_grid(c1, ck, k::Int)
+    (_grid_dims(ck) == _grid_dims(c1) && length(parent(ck)) == length(parent(c1))) ||
+        _throw_field_grid(k, ck, c1)
+    Ω1, Ωk = mesh(space(c1)), mesh(space(ck))
+    Ωk === Ω1 || host_points(Ωk) == host_points(Ω1) || _throw_field_grid(k, ck, c1)
+    return nothing
+end
+
+# Recursion over the tuple rather than a loop, so a field whose components differ in type
+# still checks each one with a concrete type.
+@inline _check_field_grid(comps::Tuple) = _check_field_grid(first(comps), Base.tail(comps), 2)
+@inline _check_field_grid(c1, ::Tuple{}, k::Int) = nothing
+@inline function _check_field_grid(c1, rest::Tuple, k::Int)
+    _check_component_grid(c1, first(rest), k)
+    return _check_field_grid(c1, Base.tail(rest), k + 1)
+end
+
 # Every destination leaf must be a grid function of the source's grid:
 # the engines index each one under `@inbounds` with the source's shape. Checked at each
 # public entry point rather than in the shared engines, so host and device refuse alike and
@@ -223,6 +269,20 @@ end
 @inline _check_dest_grid(vₕ::VectorElement, uₕ::VectorElement) = _check_same_grid(vₕ, uₕ)
 @inline function _check_dest_grid(vₕ::Tuple, uₕ::VectorElement)
     map(v -> _check_dest_grid(v, uₕ), vₕ)
+    return nothing
+end
+
+# No destination leaf may share storage with a source component: every stencil reads a
+# neighbour, so a leaf that is also a source would be read after it was overwritten.
+# `_check_no_alias` uses `mightalias`, so a fresh view over a component's data is caught as
+# well as the component itself. `comps` is the field's components, or `(uₕ,)` for a
+# gradient; the tuple method walks a gradient, 3D curl or strain destination with `map`.
+@inline function _check_dest_alias(vₕ::VectorElement, comps::Tuple)
+    map(c -> _check_no_alias(vₕ, c), comps)
+    return nothing
+end
+@inline function _check_dest_alias(vₕ::Tuple, comps::Tuple)
+    map(v -> _check_dest_alias(v, comps), vₕ)
     return nothing
 end
 
@@ -240,7 +300,8 @@ differences:
 ```
 
 `uₕ` is an `NTuple{D, VectorElement}` -- what [`∇ₕ`](@ref) returns -- or a grid function of a
-[`CompositeGridSpace`](@ref) with one leaf per spatial dimension.
+[`CompositeGridSpace`](@ref) with one leaf per spatial dimension. Its components
+must be grid functions of one mesh, or an `ArgumentError` is thrown.
 
 The backward difference is truncated to zero on the first slice of each direction, exactly as
 [`D₋ₓ`](@ref) is, so the divergence there is the sum of the directions that still have a
@@ -255,7 +316,7 @@ LinearAlgebra: ⋅` or Bramble's own re-export). `∇cₕ`, `∇̽ₕ`, `∇̃�
 
 See also: [`div₊ₕ`](@ref), [`curlₕ`](@ref), [`Δₕ`](@ref)
 """
-@inline divₕ(uₕ) = divₕ!(similar(first(_field_components(uₕ))), uₕ)
+@inline divₕ(uₕ) = divₕ!(_field_similar(_field_components(uₕ)), uₕ)
 
 """
     divₕ!(vₕ::VectorElement, uₕ) -> VectorElement
@@ -273,7 +334,9 @@ function divₕ!(vₕ::VectorElement, uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
     _check_field_arity(comps, Val(D), "divₕ")
+    _check_field_grid(comps)
     _check_dest_grid(vₕ, first(comps))
+    _check_dest_alias(vₕ, comps)
     _divergence!(vₕ, comps, Wₕ, Backward(), Val(D))
     return vₕ
 end
@@ -289,7 +352,7 @@ and truncated to zero on the *last* slice of each direction rather than the firs
 
 `∇₊ₕ ⋅ uₕ === div₊ₕ(uₕ)`.
 """
-@inline div₊ₕ(uₕ) = div₊ₕ!(similar(first(_field_components(uₕ))), uₕ)
+@inline div₊ₕ(uₕ) = div₊ₕ!(_field_similar(_field_components(uₕ)), uₕ)
 
 @doc (@doc div₊ₕ)
 function div₊ₕ!(vₕ::VectorElement, uₕ)
@@ -297,7 +360,9 @@ function div₊ₕ!(vₕ::VectorElement, uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
     _check_field_arity(comps, Val(D), "div₊ₕ")
+    _check_field_grid(comps)
     _check_dest_grid(vₕ, first(comps))
+    _check_dest_alias(vₕ, comps)
     _divergence!(vₕ, comps, Wₕ, Forward(), Val(D))
     return vₕ
 end
@@ -365,7 +430,8 @@ and in 3D the three-component field
 curl, and asking for one is an error rather than a zero.
 
 `curlₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
-allocates nothing. [`curl₊ₕ`](@ref) is the forward twin.
+allocates nothing. No destination may alias a component of `uₕ`.
+[`curl₊ₕ`](@ref) is the forward twin.
 
 `∇ₕ × uₕ` is the same call written with `×` (`LinearAlgebra.cross`) in place of the
 function name: `∇ₕ × uₕ === curlₕ(uₕ)`, needing `×` in scope. `∇cₕ`, `∇̽ₕ` and `∇̃ₕ`
@@ -390,12 +456,13 @@ The forward-difference discrete curl, the twin of [`curlₕ`](@ref).
     comps = _field_components(uₕ)
     D = dim(mesh(_field_space(uₕ)))
     _check_field_arity(comps, Val(D), op)
+    _check_field_grid(comps)
     return _curl_alloc(uₕ, comps, dir, op, Val(D))
 end
 
-@inline _curl_alloc(uₕ, comps, dir, op, ::Val{2}) = _curl!(similar(first(comps)), uₕ, dir, op)
+@inline _curl_alloc(uₕ, comps, dir, op, ::Val{2}) = _curl!(_field_similar(comps), uₕ, dir, op)
 @inline _curl_alloc(uₕ, comps, dir, op, ::Val{3}) = _curl!(
-    ntuple(_ -> similar(first(comps)), Val(3)), uₕ, dir, op
+    ntuple(_ -> _field_similar(comps), Val(3)), uₕ, dir, op
 )
 @noinline _curl_alloc(uₕ, comps, dir, op, ::Val{D}) where {D} = throw(
     ArgumentError("the discrete curl is defined in 2D and 3D; this mesh is $(D)D.")
@@ -404,12 +471,14 @@ end
 @doc (@doc curlₕ)
 function curlₕ!(vₕ, uₕ)
     _check_dest_grid(vₕ, first(_field_components(uₕ)))
+    _check_dest_alias(vₕ, _field_components(uₕ))
     return _curl!(vₕ, uₕ, Backward(), "curlₕ!")
 end
 
 @doc (@doc curl₊ₕ)
 function curl₊ₕ!(vₕ, uₕ)
     _check_dest_grid(vₕ, first(_field_components(uₕ)))
+    _check_dest_alias(vₕ, _field_components(uₕ))
     return _curl!(vₕ, uₕ, Forward(), "curl₊ₕ!")
 end
 
@@ -419,6 +488,7 @@ function _curl!(vₕ::VectorElement, uₕ, dir, op::String)
     Ωₕ = mesh(Wₕ)
     dims = npoints(Ωₕ, Tuple)
     _check_field_arity(comps, Val(2), op)
+    _check_field_grid(comps)
 
     out = parent(vₕ)
     if _is_device(out)
@@ -441,6 +511,7 @@ function _curl!(vₕ::NTuple{3, VectorElement}, uₕ, dir, op::String)
     Ωₕ = mesh(Wₕ)
     dims = npoints(Ωₕ, Tuple)
     _check_field_arity(comps, Val(3), op)
+    _check_field_grid(comps)
 
     outs = map(parent, vₕ)
     if _is_device(outs[1])
@@ -731,7 +802,7 @@ end
 @inline _strain_rows!(pol, dest, comps, Ωₕ, dims, ::Val{0}, ::Val{D}) where {D} = nothing
 
 @inline _strain_alloc(comps, ::Val{D}) where {D} = ntuple(
-    _ -> ntuple(_ -> similar(first(comps)), Val(D)), Val(D)
+    _ -> ntuple(_ -> _field_similar(comps), Val(D)), Val(D)
 )
 
 """
@@ -755,7 +826,7 @@ entry by entry
 
 `uₕ` is an `NTuple{D, VectorElement}` -- what [`∇ₕ`](@ref) returns -- or a grid function of a
 [`CompositeGridSpace`](@ref) with one leaf per spatial dimension, exactly as [`divₕ`](@ref)
-takes it.
+takes it, its components on one mesh.
 
 `ε_ii` sits on the face centre a backward difference along `xᵢ` alone reaches; `ε_ij`
 (`i != j`) sits on the edge centre the two averages bring the two halves of the shear term
@@ -772,6 +843,7 @@ function εₕ(uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
     _check_field_arity(comps, Val(D), "εₕ")
+    _check_field_grid(comps)
     dest = _strain_alloc(comps, Val(D))
     return εₕ!(dest, uₕ)
 end
@@ -785,7 +857,8 @@ Allocates nothing, where the allocating form allocates its `D * D` results. Retu
 so it composes.
 
 `dest[i][j]` and `dest[j][i]` end up holding the same values for `i != j` (`εₕ` is symmetric
-by construction); both are written, so either may be read.
+by construction); both are written, so either may be read. No destination may alias a
+component of `uₕ`.
 """
 function εₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     comps = _field_components(uₕ)
@@ -796,7 +869,9 @@ function εₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     ),
     )
     _check_field_arity(comps, Val(D), "εₕ!")
+    _check_field_grid(comps)
     _check_dest_grid(dest, first(comps))
+    _check_dest_alias(dest, comps)
     Ωₕ = mesh(Wₕ)
     dims = npoints(Ωₕ, Tuple)
     _strain_rows!(execution_policy(Wₕ), dest, comps, Ωₕ, dims, Val(D), Val(D))
@@ -890,6 +965,7 @@ function ∇cₕ!(dest, uₕ::VectorElement)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇cₕ!")
     _check_dest_grid(dest, uₕ)
+    _check_dest_alias(dest, (uₕ,))
     _centered_gradient!(
         execution_policy(space(uₕ)), outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), Centered(), Val(D)
     )
@@ -920,7 +996,8 @@ Returns the centered discrete divergence of the vector field `uₕ`:
 
 `uₕ` is spelled as for [`divₕ`](@ref): an `NTuple{D, VectorElement}`, or a grid function of a
 [`CompositeGridSpace`](@ref) with one leaf per spatial dimension (in 1D, a scalar grid
-function). Each centered difference is zero on the first and last slice of its direction.
+function), its components on one mesh. Each centered difference is zero on the first and
+last slice of its direction.
 
 For fields vanishing on the boundary it is minus the adjoint of [`∇cₕ`](@ref),
 ``(\\textrm{div}_{c,h} \\textrm{F}, \\textrm{u})_h = -\\sum_d (\\textrm{F}_d,
@@ -934,7 +1011,7 @@ See also: [`divₕ`](@ref), [`curlcₕ`](@ref), [`εcₕ`](@ref)
 """
 function divcₕ(uₕ)
     _check_centered_host(first(_field_components(uₕ)), "divcₕ")
-    return divcₕ!(similar(first(_field_components(uₕ))), uₕ)
+    return divcₕ!(_field_similar(_field_components(uₕ)), uₕ)
 end
 
 @doc (@doc divcₕ)
@@ -944,7 +1021,9 @@ function divcₕ!(vₕ::VectorElement, uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
     _check_field_arity(comps, Val(D), "divcₕ")
+    _check_field_grid(comps)
     _check_dest_grid(vₕ, first(comps))
+    _check_dest_alias(vₕ, comps)
     _divergence!(vₕ, comps, Wₕ, Centered(), Val(D))
     return vₕ
 end
@@ -966,7 +1045,7 @@ and in 3D the three-component field
 curl, and asking for one is an `ArgumentError`.
 
 `curlcₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
-allocates nothing.
+allocates nothing. No destination may alias a component of `uₕ`.
 
 `∇cₕ × uₕ === curlcₕ(uₕ)`.
 
@@ -981,6 +1060,7 @@ end
 function curlcₕ!(vₕ, uₕ)
     _check_centered_host(vₕ, "curlcₕ!")
     _check_dest_grid(vₕ, first(_field_components(uₕ)))
+    _check_dest_alias(vₕ, _field_components(uₕ))
     return _curl!(vₕ, uₕ, Centered(), "curlcₕ!")
 end
 
@@ -1002,6 +1082,7 @@ relocates the shear terms. `uₕ` is spelled as for [`divcₕ`](@ref). The resul
 by construction: `dest[i][j]` and `dest[j][i]` hold the same values.
 
 `εcₕ!` writes into a preallocated `D`-by-`D` nested tuple and allocates nothing.
+No destination may alias a component of `uₕ`.
 
 See also: [`εₕ`](@ref), [`∇cₕ`](@ref), [`divcₕ`](@ref)
 """
@@ -1010,6 +1091,7 @@ function εcₕ(uₕ)
     _check_centered_host(first(comps), "εcₕ")
     D = dim(mesh(_field_space(uₕ)))
     _check_field_arity(comps, Val(D), "εcₕ")
+    _check_field_grid(comps)
     return εcₕ!(_strain_alloc(comps, Val(D)), uₕ)
 end
 
@@ -1020,7 +1102,9 @@ function εcₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     Ωₕ = mesh(_field_space(uₕ))
     dim(Ωₕ) == D || throw(DimensionMismatch("εcₕ! destination is $(D)x$D but the mesh is $(dim(Ωₕ))D"))
     _check_field_arity(comps, Val(D), "εcₕ!")
+    _check_field_grid(comps)
     _check_dest_grid(dest, first(comps))
+    _check_dest_alias(dest, comps)
     _centered_strain_rows!(
         execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Centered(),
         Val(D), Val(D)
@@ -1130,6 +1214,7 @@ function ∇̃ₕ!(dest, uₕ::VectorElement)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇̃ₕ!")
     _check_dest_grid(dest, uₕ)
+    _check_dest_alias(dest, (uₕ,))
     _star_gradient!(execution_policy(space(uₕ)), outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), Val(D))
     return dest
 end
@@ -1155,7 +1240,8 @@ Returns the tilde discrete divergence of the vector field `uₕ`:
 
 `uₕ` is spelled as for [`divₕ`](@ref): an `NTuple{D, VectorElement}`, or a grid function of a
 [`CompositeGridSpace`](@ref) with one leaf per spatial dimension (in 1D, a scalar grid
-function). Each tilde difference is zero on the last slice of its direction.
+function), its components on one mesh. Each tilde difference is zero on the last slice of
+its direction.
 
 For fields vanishing on the boundary it pairs with the backward difference by summation by
 parts, ``(\\tilde{\\textrm{div}}_h \\textrm{F}, \\textrm{v})_h =
@@ -1169,7 +1255,7 @@ See also: [`divₕ`](@ref), [`curl̃ₕ`](@ref), [`∇̃ₕ`](@ref)
 """
 function diṽₕ(uₕ)
     _check_star_host(first(_field_components(uₕ)), "diṽₕ")
-    return diṽₕ!(similar(first(_field_components(uₕ))), uₕ)
+    return diṽₕ!(_field_similar(_field_components(uₕ)), uₕ)
 end
 
 @doc (@doc diṽₕ)
@@ -1179,7 +1265,9 @@ function diṽₕ!(vₕ::VectorElement, uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
     _check_field_arity(comps, Val(D), "diṽₕ")
+    _check_field_grid(comps)
     _check_dest_grid(vₕ, first(comps))
+    _check_dest_alias(vₕ, comps)
     _divergence!(vₕ, comps, Wₕ, StarForward(), Val(D))
     return vₕ
 end
@@ -1202,7 +1290,7 @@ and in 3D the three-component field
 no 1D curl, and asking for one is an `ArgumentError`.
 
 `curl̃ₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
-allocates nothing.
+allocates nothing. No destination may alias a component of `uₕ`.
 
 `∇̃ₕ × uₕ === curl̃ₕ(uₕ)`.
 
@@ -1217,6 +1305,7 @@ end
 function curl̃ₕ!(vₕ, uₕ)
     _check_star_host(vₕ, "curl̃ₕ!")
     _check_dest_grid(vₕ, first(_field_components(uₕ)))
+    _check_dest_alias(vₕ, _field_components(uₕ))
     return _curl!(vₕ, uₕ, StarForward(), "curl̃ₕ!")
 end
 
@@ -1301,6 +1390,7 @@ the last slice of its direction. The result is symmetric by construction: `dest[
 `dest[j][i]` hold the same values.
 
 `ε₊ₕ!` writes into a preallocated `D`-by-`D` nested tuple and allocates nothing.
+No destination may alias a component of `uₕ`.
 
 See also: [`εₕ`](@ref), [`∇₊ₕ`](@ref), [`div₊ₕ`](@ref)
 """
@@ -1309,6 +1399,7 @@ function ε₊ₕ(uₕ)
     _check_star_host(first(comps), "ε₊ₕ")
     D = dim(mesh(_field_space(uₕ)))
     _check_field_arity(comps, Val(D), "ε₊ₕ")
+    _check_field_grid(comps)
     return ε₊ₕ!(_strain_alloc(comps, Val(D)), uₕ)
 end
 
@@ -1319,7 +1410,9 @@ function ε₊ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     Ωₕ = mesh(_field_space(uₕ))
     dim(Ωₕ) == D || throw(DimensionMismatch("ε₊ₕ! destination is $(D)x$D but the mesh is $(dim(Ωₕ))D"))
     _check_field_arity(comps, Val(D), "ε₊ₕ!")
+    _check_field_grid(comps)
     _check_dest_grid(dest, first(comps))
+    _check_dest_alias(dest, comps)
     _forward_strain_rows!(
         execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Val(D), Val(D)
     )
@@ -1418,6 +1511,7 @@ function ∇̽ₕ!(dest, uₕ::VectorElement)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇̽ₕ!")
     _check_dest_grid(dest, uₕ)
+    _check_dest_alias(dest, (uₕ,))
     _centered_gradient!(
         execution_policy(space(uₕ)), outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), CrossWeighted(), Val(D)
     )
@@ -1437,9 +1531,9 @@ Returns the cross-weighted discrete divergence of the vector field `uₕ`:
 
 `uₕ` is spelled as for [`divₕ`](@ref): an `NTuple{D, VectorElement}`, or a grid function of a
 [`CompositeGridSpace`](@ref) with one leaf per spatial dimension (in 1D, a scalar grid
-function). Each cross-weighted difference is second order on a non-uniform grid and is not
-truncated: on the first and last slice of its direction it is the one-sided difference the
-near side still defines, as for [`D̽ₓ`](@ref).
+function), its components on one mesh. Each cross-weighted difference is second order on a
+non-uniform grid and is not truncated: on the first and last slice of its direction it is
+the one-sided difference the near side still defines, as for [`D̽ₓ`](@ref).
 
 `div̽ₕ!` writes into `vₕ`, which must not be one of the components, and allocates nothing.
 
@@ -1449,7 +1543,7 @@ See also: [`divcₕ`](@ref), [`curl̽ₕ`](@ref), [`ε̽ₕ`](@ref), [`∇̽ₕ`
 """
 function div̽ₕ(uₕ)
     _check_centered_host(first(_field_components(uₕ)), "div̽ₕ")
-    return div̽ₕ!(similar(first(_field_components(uₕ))), uₕ)
+    return div̽ₕ!(_field_similar(_field_components(uₕ)), uₕ)
 end
 
 @doc (@doc div̽ₕ)
@@ -1459,7 +1553,9 @@ function div̽ₕ!(vₕ::VectorElement, uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
     _check_field_arity(comps, Val(D), "div̽ₕ")
+    _check_field_grid(comps)
     _check_dest_grid(vₕ, first(comps))
+    _check_dest_alias(vₕ, comps)
     _divergence!(vₕ, comps, Wₕ, CrossWeighted(), Val(D))
     return vₕ
 end
@@ -1482,7 +1578,7 @@ and in 3D the three-component field
 There is no 1D curl, and asking for one is an `ArgumentError`.
 
 `curl̽ₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
-allocates nothing.
+allocates nothing. No destination may alias a component of `uₕ`.
 
 `∇̽ₕ × uₕ === curl̽ₕ(uₕ)`.
 
@@ -1497,6 +1593,7 @@ end
 function curl̽ₕ!(vₕ, uₕ)
     _check_centered_host(vₕ, "curl̽ₕ!")
     _check_dest_grid(vₕ, first(_field_components(uₕ)))
+    _check_dest_alias(vₕ, _field_components(uₕ))
     return _curl!(vₕ, uₕ, CrossWeighted(), "curl̽ₕ!")
 end
 
@@ -1519,6 +1616,7 @@ average relocates the shear terms. `uₕ` is spelled as for [`div̽ₕ`](@ref). 
 symmetric by construction: `dest[i][j]` and `dest[j][i]` hold the same values.
 
 `ε̽ₕ!` writes into a preallocated `D`-by-`D` nested tuple and allocates nothing.
+No destination may alias a component of `uₕ`.
 
 See also: [`εcₕ`](@ref), [`∇̽ₕ`](@ref), [`div̽ₕ`](@ref)
 """
@@ -1527,6 +1625,7 @@ function ε̽ₕ(uₕ)
     _check_centered_host(first(comps), "ε̽ₕ")
     D = dim(mesh(_field_space(uₕ)))
     _check_field_arity(comps, Val(D), "ε̽ₕ")
+    _check_field_grid(comps)
     return ε̽ₕ!(_strain_alloc(comps, Val(D)), uₕ)
 end
 
@@ -1537,7 +1636,9 @@ function ε̽ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     Ωₕ = mesh(_field_space(uₕ))
     dim(Ωₕ) == D || throw(DimensionMismatch("ε̽ₕ! destination is $(D)x$D but the mesh is $(dim(Ωₕ))D"))
     _check_field_arity(comps, Val(D), "ε̽ₕ!")
+    _check_field_grid(comps)
     _check_dest_grid(dest, first(comps))
+    _check_dest_alias(dest, comps)
     _centered_strain_rows!(
         execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), CrossWeighted(),
         Val(D), Val(D)

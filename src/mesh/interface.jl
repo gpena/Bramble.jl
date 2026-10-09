@@ -138,9 +138,10 @@ Override the grid indices in `Ωₕ`. Used internally during mesh refinement.
 """
     markers!(Ωₕ::AbstractMeshType, mesh_markers::MeshMarkers) -> Nothing
 
-Override the markers dictionary in `Ωₕ`. Used internally during mesh refinement, where
-the old dictionary is sized for the old grid and is replaced outright rather than merged
-into. The label table and the marker word matrix are rebuilt with it.
+Override the markers dictionary in `Ωₕ`. Used internally during mesh refinement and by
+[`set_points!`](@ref) when it changes the point count, where the old dictionary is sized
+for the old grid and is replaced outright rather than merged into. The label table and the
+marker word matrix are rebuilt with it.
 """
 @inline markers!(Ωₕ::AbstractMeshType, mesh_markers) = (_store_markers!(Ωₕ, mesh_markers); return nothing)
 
@@ -269,7 +270,6 @@ end
 
 @inline _extract_linear_index(idx::Int) = idx
 @inline _extract_linear_index(idx::CartesianIndex{1}) = idx[1]
-@inline _spacing_generator(Ωₕ::AbstractMeshType, spacing_func) = (spacing_func(Ωₕ, i) for i in 1:npoints(Ωₕ))
 @inline _apply_hs_logic(value::T) where {T} = ifelse(iszero(value), one(T), value)
 
 #------------------------------------------------------------------------------------------#
@@ -457,9 +457,9 @@ or markers, and [`gridspace`](@ref)`(Ωₕ)` then throws an `ArgumentError` inst
 on the inconsistent grid.
 
 !!! warning "Invalidates every ScalarGridSpace already built on Ωₕ"
-    Bumps `Ωₕ`'s mesh version (gpena/Bramble.jl#221; see [`set_points!`](@ref), which this
-    goes through). A [`ScalarGridSpace`](@ref) built with [`gridspace`](@ref)`(Ωₕ)` before
-    this call keeps weights computed from the *old* grid; `innerₕ`, every `inner₊*`, and
+    Bumps `Ωₕ`'s mesh version (gpena/Bramble.jl#221; see [`set_points!`](@ref), whose
+    geometry update this shares). A [`ScalarGridSpace`](@ref) built with
+    [`gridspace`](@ref)`(Ωₕ)` before this call keeps weights computed from the *old* grid; `innerₕ`, every `inner₊*`, and
     every norm through it now throw naming the mismatch instead of silently computing a
     wrong answer. Call `gridspace(Ωₕ)` again afterward.
 """

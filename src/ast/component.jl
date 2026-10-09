@@ -185,6 +185,12 @@ end
 # whole composite coefficient vector in one `SourceVector`, and assembled it into every
 # block reading the first component's coefficients each time. Silently the wrong answer,
 # which is why these are worth having rather than merely convenient.
+#
+# Every method below takes `markers` and passes it to each component's own product. A call
+# with keywords dispatches only among the methods that declare keywords, so a method without
+# one is invisible to `innerₕ(uₕ, v; markers = m)`, which then fell back to the scalar
+# overload and the wrong answer above. `inner_Γ` gets its own method after the loop, with
+# the keyword untyped as in operators/inner.jl, since a bare `Symbol` is a valid label there.
 
 for (f, W) in (
     (:innerₕ, :InnerH),
@@ -198,10 +204,13 @@ for (f, W) in (
     # leaf `c` (form-level indexing is already leaf-based, see form/block_extract.jl), so
     # this has to walk the same leaves `comps` does, in the same order, for any `r`.
     @eval @inline function $f(
-            l::VectorElement{<:CompositeGridSpace}, r::LazyOp{D}
-    ) where {D}
+            l::VectorElement{<:CompositeGridSpace}, r::LazyOp{D};
+            markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+    ) where {D, N}
         comps = components(l)
-        return foldl(+, ntuple(c -> $f(comps[c], component(r, c)), Val(length(comps))))
+        return foldl(
+            +, ntuple(c -> $f(comps[c], component(r, c); markers), Val(length(comps)))
+        )
     end
 
     # A tuple reads the same way, one entry per component, which is how `Rₕ` already takes
@@ -213,11 +222,18 @@ for (f, W) in (
     # only a claim about how many components the form has. A claim that turns out wrong is
     # caught where the space is known, in `_route_terms!`, which used to drop such a term
     # in silence.
-    @eval @inline function $f(l::NTuple{NC, Any}, r::LazyOp{D}) where {NC, D}
-        return foldl(+, ntuple(c -> $f(l[c], component(r, c)), Val(NC)))
+    @eval @inline function $f(
+            l::NTuple{NC, Any}, r::LazyOp{D};
+            markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+    ) where {NC, D, N}
+        return foldl(+, ntuple(c -> $f(l[c], component(r, c); markers), Val(NC)))
     end
 
-    @eval @noinline function $f(::Tuple{}, ::LazyOp)
+    # The keyword keeps an empty tuple with `markers` here rather than in the method above
+    # with `NC = 0`, where `foldl` would throw a reduction error naming nothing useful.
+    @eval @noinline function $f(
+            ::Tuple{}, ::LazyOp; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+    ) where {N}
         throw(
             ArgumentError(
             "an empty tuple names no components, so there is nothing to sum. Give one " *
@@ -225,4 +241,16 @@ for (f, W) in (
         ),
         )
     end
+end
+
+# `inner_Γ` had no composite method at all, so `inner_Γ(gₕ, v; markers)` took the scalar
+# `VectorElement` one and read the first component into every block. No tuple method: a
+# tuple there is a `MethodError` today, which is loud, and adding one would be new API.
+@inline function inner_Γ(
+        l::VectorElement{<:CompositeGridSpace}, r::LazyOp{D}; markers = ()
+) where {D}
+    comps = components(l)
+    return foldl(
+        +, ntuple(c -> inner_Γ(comps[c], component(r, c); markers), Val(length(comps)))
+    )
 end

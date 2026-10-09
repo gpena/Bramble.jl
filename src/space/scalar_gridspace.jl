@@ -358,7 +358,9 @@ here; the rest are built fresh on each call from the same per-axis factors.
    1/2)`` (gpena/Bramble.jl#115, #234). `S` is an `NTuple{K, Int}` with `K ≤ D` and any
    axis order; `weights(Wₕ, Val(()))` is `weights(Wₕ, Innerh())` and `weights(Wₕ,
    Val((d,)))` is `weights(Wₕ, Innerplus(), d)`, returning the very same object rather than
-   a recomputed copy. Every other `S` returns a freshly-built [`SeparableWeights`](@ref).
+   a recomputed copy. Every other valid `S` returns a freshly-built
+   [`SeparableWeights`](@ref). An `S` that is not a repeat-free subset of `1:D` throws an
+   `ArgumentError`, as the symbolic `inner₊(p, q, Val(S))` does.
 
 # Examples
 
@@ -431,11 +433,17 @@ end
     return _weights_val(Wₕ.weights, Wₕ, Val(S), Val(length(S)))
 end
 
-@inline _weights_val(w::SpaceWeights, ::ScalarGridSpace, ::Val{S}, ::Val{1}) where {S} = w.innerplus[only(S)]
+@inline function _weights_val(
+        w::SpaceWeights, ::ScalarGridSpace{D}, ::Val{S}, ::Val{1}
+) where {D, S}
+    _check_staggered_set(Val(D), Val(S))
+    return w.innerplus[only(S)]
+end
 
 @inline function _weights_val(
         w::SpaceWeights, Wₕ::ScalarGridSpace{D}, ::Val{S}, ::Val{K}
 ) where {D, S, K}
+    _check_staggered_set(Val(D), Val(S))
     factors = ntuple(d -> (d in S ? w.aligned[d] : w.cellfactor[d]), Val(D))
     VT = typeof(w.aligned[1])
     return SeparableWeights{D, eltype(VT), VT}(

@@ -13,7 +13,7 @@ using ..TestUtils: alloc_test, @test_allocs
     # Invariants tested:
     # 1. Interval construction defaults to Float64 when integer bounds are provided.
     # 2. Preserves custom scalar element types (Float32).
-    # 3. Degenerate intervals (min ≈ max) correctly flag collapsed status.
+    # 3. Degenerate intervals (min == max) correctly flag collapsed status.
     # 4. Inverted intervals (x > y) raise an ArgumentError.
     # 5. `×`-composed and `box`-composed multi-dimensional sets promote coordinate types
     #    the same way and agree on layout.
@@ -42,6 +42,9 @@ using ..TestUtils: alloc_test, @test_allocs
         @test I_zero isa CartesianProduct{1, Float64}
         @test all(isapprox.(I_zero.box[1], (5.5, 5.5)))
         @test I_zero.collapsed[1] == true
+        # near-equal endpoints far from the origin or in Float32 are still an interval
+        @test interval(1.0e6, 1.0e6 + 0.01).collapsed[1] == false
+        @test interval(1000.0f0, 1000.3f0).collapsed[1] == false
 
         # Interval constructor assertion: x <= y
         @test_throws ArgumentError interval(10, 1)
@@ -81,10 +84,15 @@ using ..TestUtils: alloc_test, @test_allocs
         @test cp_mixed_rev isa CartesianProduct{2, Float64}
         @test cp_mixed_rev.box == ((0.0, 1.0), (1.0, 2.0))
         # collapsed flags come from the promoted pairs
-        cp_mixed_col = box((0.0f0, 1.0), (1.0f0, 1.0 + 1e-9))
+        cp_mixed_col = box((0.0f0, 1.0f0), (1.0f0, 1.0))
         @test cp_mixed_col.collapsed == (false, true)
         @test cp_mixed_col.collapsed ==
               map(c -> Bramble.is_collapsed(c...), cp_mixed_col.box)
+        # 0.1f0 promoted is not 0.1: the endpoints differ, so the axis is not collapsed
+        cp_mixed_near = box((0.0f0, 0.1f0), (1.0f0, 0.1))
+        @test cp_mixed_near.collapsed == (false, false)
+        @test cp_mixed_near.collapsed ==
+              map(c -> Bramble.is_collapsed(c...), cp_mixed_near.box)
         # homogeneous Float32 corners keep their type
         @test box((0.0f0, 0.0f0), (1.0f0, 1.0f0)) isa CartesianProduct{2, Float32}
 
@@ -181,6 +189,12 @@ using ..TestUtils: alloc_test, @test_allocs
         @test is_collapsed(1.0, 1.0) == true
         @test is_collapsed(1, 1.0) == true
         @test is_collapsed(0.0, 1.0) == false
+        @test !is_collapsed(1.0, nextfloat(1.0))
+        @test !is_collapsed(1_000_000, 1.0e6 + 0.01)
+        @test !is_collapsed(interval(1.0e6, 1.0e6 + 0.01), 1)
+        @test !is_collapsed(interval(1000.0f0, 1000.3f0), 1)
+        @test topo_dim(interval(1000.0f0, 1000.3f0)) == 1
+        @test topo_dim(interval(0.0, 1.0) × interval(1000.0f0, 1000.3f0)) == 2
         @test is_collapsed(R2) == false
         @test is_collapsed(R2, 1) == false
         @test is_collapsed(R2, 2) == false
@@ -580,7 +594,7 @@ end
 # coincide. Each is a statement about every valid `CartesianProduct`, not about a chosen one.
 WITH_SLOW_TESTS && @testset "Geometry properties (Supposition)" begin
     coordinate = Data.Floats{Float64}(;
-        minimum = -10.0, maximum = 10.0, nans = false, infs = false
+        minimum = -1.0e7, maximum = 1.0e7, nans = false, infs = false
     )
     length_ = Data.Floats{Float64}(;
         minimum = 0.01, maximum = 10.0, nans = false, infs = false
@@ -620,19 +634,29 @@ WITH_SLOW_TESTS && @testset "Geometry properties (Supposition)" begin
 
     # A degenerate axis is exactly one whose endpoints coincide, and `topo_dim` counts the
     # axes that are not degenerate.
-    @check function check_collapsed_axes(
-            a1 = coordinate, l1 = length_, a2 = coordinate, l2 = length_,
-            collapse1 = Data.Booleans(), collapse2 = Data.Booleans()
+    # Float32 too: an ulp of 1.0f3 is 6.1e-5, well below the shortest length 0.01f0, so
+    # every drawn interval is non-degenerate (at 1.0f7 the ulp is 1.0 and a1 + l1 == a1).
+    coordinate32 = Data.Floats{Float32}(;
+        minimum = -1.0f3, maximum = 1.0f3, nans = false, infs = false
     )
-        I1 = collapse1 ? interval(a1, a1) : interval(a1, a1 + l1)
-        I2 = collapse2 ? interval(a2, a2) : interval(a2, a2 + l2)
-        X = I1 × I2
+    length32 = Data.Floats{Float32}(;
+        minimum = 0.01f0, maximum = 10.0f0, nans = false, infs = false
+    )
+    for (coord, len) in ((coordinate, length_), (coordinate32, length32))
+        @check function check_collapsed_axes(
+                a1 = coord, l1 = len, a2 = coord, l2 = len,
+                collapse1 = Data.Booleans(), collapse2 = Data.Booleans()
+        )
+            I1 = collapse1 ? interval(a1, a1) : interval(a1, a1 + l1)
+            I2 = collapse2 ? interval(a2, a2) : interval(a2, a2 + l2)
+            X = I1 × I2
 
-        is_collapsed(X, 1) == collapse1 || return false
-        is_collapsed(X, 2) == collapse2 || return false
-        is_collapsed(X) == (collapse1 || collapse2) || return false
-        dim(X) == 2 || return false
-        return topo_dim(X) == 2 - count((collapse1, collapse2))
+            is_collapsed(X, 1) == collapse1 || return false
+            is_collapsed(X, 2) == collapse2 || return false
+            is_collapsed(X) == (collapse1 || collapse2) || return false
+            dim(X) == 2 || return false
+            return topo_dim(X) == 2 - count((collapse1, collapse2))
+        end
     end
 
     # Non-vacuous: the conjunction property would also hold for a membership test that was

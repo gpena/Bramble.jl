@@ -274,6 +274,7 @@ expression(op::DiracSource) = "dirac($(string(op.points)), $(string(op.strengths
 @inline Base.:+(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = OperatorAdd(op1, op2)
 # `-1` promotes against whatever the space's element type is, preserving precision.
 @inline Base.:-(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = op1 + OperatorScale(-1, op2)
+@inline Base.:-(op::LazyOp) = OperatorScale(-1, op)
 
 @inline Base.:*(c::Number, op::LazyOp) = OperatorScale(c, op)
 @inline Base.:*(op::LazyOp, c::Number) = OperatorScale(c, op)
@@ -303,3 +304,4 @@ expression(op::DiracSource) = "dirac($(string(op.points)), $(string(op.strengths
     c::Union{Number, AbstractVector, Function, Base.RefValue{<:Number}}
 ) = c * ops
 @inline Base.:*(coeffs::Tuple, ops::Tuple{LazyOp, Vararg{LazyOp}}) = map((c, op) -> c * op, coeffs, ops)
+@inline Base.:-(ops::Tuple{LazyOp, Vararg{LazyOp}}) = map(-, ops)

@@ -326,6 +326,40 @@ import Bramble:
             @test locate_cell(M1, 0.35) == 4
             @test locate_cell(M1, 1.0) == 10
             @test locate_cell(M1, 1.5) == 10
+            # far, infinite and NaN points take the boundary cell, never throw, and the
+            # uniform and non-uniform paths agree on them
+            M1_nu = mesh(domain(I), 11, false)
+            for M in (M1, M1_nu)
+                @test locate_cell(M, 1e20) == 10
+                @test locate_cell(M, -1e20) == 1
+                @test locate_cell(M, Inf) == 10
+                @test locate_cell(M, -Inf) == 1
+                @test locate_cell(M, NaN) == 10
+            end
+
+            # a uniform mesh moved off its domain's set agrees with searchsortedlast on its
+            # own points at every node, one ulp either side and every midpoint
+            # (gpena/Bramble.jl#495); a copy, so the rest of this testset keeps M1
+            M1m = copy(M1)
+            change_points!(M1m, collect(range(1.0, 2.0; length = 11)))
+            @test is_uniform(M1m)
+            @test locate_cell(M1m, 1.55) == 6
+            # a Float32-backend mesh over a Float64 set: its points are not the set's nodes
+            M1f = mesh(domain(I), 11; backend = backend(Float32))
+            @test is_uniform(M1f)
+            for M in (M1m, M1f)
+                p = points(M)
+                expected(x) = clamp(searchsortedlast(p, x), 1, 10)
+                for i in 1:10
+                    mid = (p[i] + p[i + 1]) / 2
+                    @test locate_cell(M, mid) == expected(mid)
+                end
+                for x in p
+                    @test locate_cell(M, x) == expected(x)
+                    @test locate_cell(M, prevfloat(x)) == expected(prevfloat(x))
+                    @test locate_cell(M, nextfloat(x)) == expected(nextfloat(x))
+                end
+            end
 
             # normal_vector
             @test normal_vector(M1, :xmin) == (-1.0,)
@@ -383,6 +417,7 @@ import Bramble:
             # locate_cell
             @test locate_cell(M2, (0.35, 1.05)) == CartesianIndex(4, 11)
             @test locate_cell(M2, [0.35, 1.05]) == CartesianIndex(4, 11)
+            @test locate_cell(M2, (1e20, -Inf)) == CartesianIndex(10, 1)
         end
 
         @testset "Three-dimensional extended interface" begin
@@ -581,8 +616,12 @@ end
         n = npoints(Ωₕ)
         bwd = backward_spacings_for_derivative(Ωₕ)
         fwd = forward_spacings_for_derivative(Ωₕ)
-        # Entry 1 of bwd and the last of fwd are not meaningful; the engines never read
-        # them, so only the interior stencil is asserted here.
+        # Entry 1 of bwd is spacing(Ωₕ, 1), which no backward stencil reads. The last of
+        # fwd is not meaningful; the engines never read it, so only the interior stencil
+        # is asserted for both.
+        @test bwd[1] == spacing(Ωₕ, 1)
+        @test length(bwd) == n
+        @test length(fwd) == n - 1
         @test all(bwd[i] == Bramble.spacing_for_derivative(Ωₕ, i) for i in 2:n)
         @test all(
             fwd[i] == Bramble.forward_spacing_for_derivative(Ωₕ, i) for i in 1:(n - 1)

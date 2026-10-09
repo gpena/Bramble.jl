@@ -23,6 +23,9 @@ using Bramble: TrialFunction, TestFunction, IdentityOperator, ZeroOperator, Oper
         # testset builds a linear form's source term
         l = form(Wₕ, v -> innerₕ(3.0, v))
         @test expression(l) == "innerₕ(3, v)"
+
+        # an integer-valued source constant outside the Int range keeps its float form
+        @test expression(form(Wₕ, v -> innerₕ(1e20, v))) == "innerₕ(1.0e20, v)"
     end
 
     @testset "2D scalar form" begin
@@ -145,6 +148,14 @@ using Bramble: TrialFunction, TestFunction, IdentityOperator, ZeroOperator, Oper
         @test expression(D₋ₓ(u) * Ref(2.5)) == "2.5 * D₋ₓ(u)"
         @test expression(OperatorScale(Ref(2.0), D₋ₓ(u))) == "2 * D₋ₓ(u)"
         @test expression(D₋ₓ(u) * Ref(-1.0)) == "-D₋ₓ(u)"
+        # integer-valued but outside the Int range: printed as a float, never converted;
+        # 2^63 is the first such value, so it pins the strict upper bound
+        @test expression(1e20 * u) == "1.0e20 * u"
+        @test expression(-1e20 * u) == "-1.0e20 * u"
+        @test expression(2.0^63 * u) == "9.223372036854776e18 * u"
+        # non-float reals print exactly, at any size, as before
+        @test expression(true * u) == "true * u"
+        @test expression(big(2)^70 // 1 * u) == "1180591620717411303424 * u"
         @test expression((1 + 2im) * u) == "1 + 2im * u"
 
         # a grid-function coefficient, a vector or a thunk, from either side
@@ -168,6 +179,9 @@ using Bramble: TrialFunction, TestFunction, IdentityOperator, ZeroOperator, Oper
         l = form(Wₕ, v -> innerₕ(3.0, v))
         sl = sprint(show, MIME"text/plain"(), l)
         @test occursin("Expression: $(expression(l))", sl)
+
+        a30 = form(Wₕ, Wₕ, (u, v) -> 1e30 * innerₕ(u, v))
+        @test occursin("1.0e30", sprint(show, MIME"text/plain"(), a30))
     end
 end
 

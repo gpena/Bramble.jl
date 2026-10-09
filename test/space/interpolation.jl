@@ -2,7 +2,7 @@ module SpaceInterpolationTests
 
 using Test
 using Bramble
-using Bramble: D₋ₓ, Mₓ, interpolation_matrix
+using Bramble: D₋ₓ, Mₓ, interpolation_matrix, change_points!
 using SparseArrays: sparse
 using LinearAlgebra: Diagonal, issymmetric
 using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunction,
@@ -33,6 +33,14 @@ using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunctio
         # a grid point itself is returned exactly, not approximated by its neighbours
         pt = points(Ωₕ)[5]
         @test interpolate_at(uₕ, pt) ≈ 2pt + 3 atol=1e-12
+
+        # a uniform mesh moved off its domain's set by change_points! (gpena/Bramble.jl#495):
+        # 2.405 is the chord (1.5² + 1.6²)/2 of the right cell [1.5, 1.6]. x^2 is not affine
+        # on purpose: a wrong cell extrapolates an affine function exactly, so an affine
+        # check cannot see a wrong cell
+        Ωm = mesh(domain(interval(0.0, 1.0)), 11)
+        change_points!(Ωm, collect(range(1.0, 2.0; length = 11)))
+        @test interpolate_at(Rₕ(gridspace(Ωm), x -> x^2), 1.55) ≈ 2.405
     end
 
     @testset "2D exact on affine" begin

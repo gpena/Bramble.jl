@@ -29,7 +29,9 @@ using Bramble:
                weights,
                VectorGridSpace,
                stepsize,
-               backend
+               backend,
+               Mₓ,
+               πₕ
 
 @testset "Dirac Point Sources (#226)" begin
     @testset "1D point source (uniform, non-uniform)" begin
@@ -134,6 +136,40 @@ using Bramble:
         l1 = form(Wₕ, v -> innerₕ(dirac(pts[1], strengths[1]), v))
         l2 = form(Wₕ, v -> innerₕ(dirac(pts[2], strengths[2]), v))
         @test b_multi ≈ assemble(l1) + assemble(l2)
+
+        # A sum of sources in one inner product: no cell measure on the Dirac terms (#512)
+        δa = dirac(pts[1], strengths[1])
+        δb = dirac(pts[2], strengths[2])
+        l_sum = form(Wₕ, v -> innerₕ(dirac(pts[1], strengths[1]) +
+                                     dirac(pts[2], strengths[2]), v))
+        b_sum = assemble(l_sum)
+        @test sum(b_sum) ≈ sum(strengths)
+        @test b_sum ≈ assemble(l1) + assemble(l2)
+
+        fₕ = Rₕ(Wₕ, x -> 1 + x[1])
+        @test assemble(form(Wₕ, v -> innerₕ(πₕ(fₕ) + δa, v))) ≈
+              assemble(form(Wₕ, v -> innerₕ(πₕ(fₕ), v))) + assemble(l1)
+        @test assemble(form(Wₕ, v -> innerₕ(fₕ * (δa + δb), v))) ≈
+              assemble(form(Wₕ, v -> innerₕ(fₕ * δa, v) + innerₕ(fₕ * δb, v)))
+        @test assemble(form(Wₕ, v -> innerₕ(δa - δb, v))) ≈ assemble(l1) - assemble(l2)
+
+        # The split reads types alone, so `form` stays concrete
+        δs = ntuple(i -> dirac((0.05i, 0.07i), 1.0i), 10)
+        k_sub(W, a, b) = form(W, v -> innerₕ(a - b, v))
+        k_fold(W, δs) = form(W, v -> innerₕ(foldl(+, δs), v))
+        k_mix(W, f, a, b) = form(W, v -> innerₕ(πₕ(f) + a + πₕ(f) + b, v))
+        @test isconcretetype(only(Base.return_types(k_sub, typeof.((Wₕ, δa, δb)))))
+        @test isconcretetype(only(Base.return_types(k_fold, typeof.((Wₕ, δs)))))
+        @test isconcretetype(only(Base.return_types(k_mix, typeof.((Wₕ, fₕ, δa, δb)))))
+        @test sum(assemble(k_fold(Wₕ, δs))) ≈ sum(1.0:10.0)
+
+        # A mixed sum under a wrapper would scale the Dirac term: rejected, not wrong
+        @test_throws ArgumentError form(Wₕ, v -> innerₕ(Mₓ(πₕ(fₕ) + δa), v))
+        @test_throws "dirac" form(Wₕ, v -> innerₕ(Mₓ(πₕ(fₕ) + δa), v))
+
+        buf = similar(b_sum)
+        assemble!(buf, l_sum)
+        @test (@allocated assemble!(buf, l_sum)) == 0
     end
 
     @testset "3D Point Source (Non-Uniform)" begin

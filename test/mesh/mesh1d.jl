@@ -104,6 +104,74 @@ import Base: diff
             @test all(pts_nonunif .>= 0.0) && all(pts_nonunif .<= 2.0)
             @test point(Ωₕ_nonunif, 1) ≈ 0.0
             @test point(Ωₕ_nonunif, npts) ≈ 2.0
+
+            # Float32 draws collide, and so does the map onto [a, b]: every point must
+            # still be distinct (gpena/Bramble.jl#494). spacings(Ωf)[1] is x₂ - x₁.
+            for seed in 1:5
+                Random.seed!(seed)
+                Ωf = mesh(create_test_domain(0.0f0, 1.0f0), 10_000, false;
+                    backend = backend(Float32))
+                @test eltype(Ωf) == Float32
+                @test all(>(0), spacings(Ωf))
+            end
+            for seed in 1:3
+                Random.seed!(seed)
+                Ωf = mesh(create_test_domain(1.0f0, 2.0f0), 10_000, false;
+                    backend = backend(Float32))
+                @test eltype(Ωf) == Float32
+                @test all(>(0), spacings(Ωf))
+            end
+            # The device fill method on a host vector: Float64 interval, Float32 storage.
+            for seed in 1:5
+                Random.seed!(seed)
+                x = Vector{Float32}(undef, 10_000)
+                Bramble._points!(x, set(create_test_domain(0.0, 1.0)), false,
+                    backend(Float32))
+                @test all(>(0), diff(x))
+            end
+            # 100000 distinct Float32 points do not fit in (1, 1.01): 83886 values do.
+            @test_throws ArgumentError mesh(create_test_domain(1.0f0, 1.01f0), 100_000,
+                false; backend = backend(Float32))
+        end
+
+        @testset "Storage-eltype collapse" begin
+            # The interval is a point in Float32 storage: one point, never five copies of
+            # 1f6 with zero spacings.
+            Ωw = create_test_domain(1.0e6, 1.0e6 + 0.01)
+            for unif in (true, false)
+                Ωf = mesh(Ωw, 5, unif; backend = backend(Float32))
+                @test npoints(Ωf) == 1
+                @test is_collapsed(Ωf)
+                @test points(Ωf) == [1.0f6]
+            end
+            # Float64 storage keeps five distinct points.
+            for unif in (true, false)
+                Ωd = mesh(Ωw, 5, unif; backend = backend())
+                @test npoints(Ωd) == 5
+                @test all(>(0), diff(points(Ωd)))
+            end
+            # Five uniform points do not fit in a 1-ulp interval.
+            @test_throws ArgumentError mesh(create_test_domain(1.0, nextfloat(1.0)), 5, true)
+            # Two do: the endpoints themselves.
+            @test points(mesh(create_test_domain(1.0, nextfloat(1.0)), 2, true)) ==
+                  [1.0, nextfloat(1.0)]
+            # The uniform fill runs in the wider of the set and storage eltypes. A
+            # Float64 set on Float32 storage gets the correctly rounded, symmetric nodes.
+            a, b, n = -1.0, 1.0, 11
+            p32 = points(mesh(create_test_domain(a, b), n, true; backend = backend(Float32)))
+            @test p32 == Float32.(a .+ (0:(n - 1)) .* ((b - a) / (n - 1)))
+            @test p32 == -reverse(p32)
+            # A Float32 set on Float64 storage gets nine distinct points that Float32
+            # arithmetic would tie.
+            I32 = create_test_domain(1.0f6, 1.0f6 + 0.25f0)
+            Ω64 = mesh(I32, 9, true; backend = backend(Float64))
+            @test eltype(points(Ω64)) == Float64
+            @test npoints(Ω64) == 9 && all(>(0), diff(points(Ω64)))
+            @test points(Ω64)[1] == 1.0e6
+            # GMG coarsening builds such a uniform mesh from a non-uniform fine one.
+            Ω64n = mesh(I32, 17, false; backend = backend(Float64))
+            H = GeometricMeshHierarchy(Ω64n, 2)
+            @test npoints(H[1]) == 9 && all(>(0), diff(points(H[1])))
         end
 
         @testset "set_points! & set_indices!" begin
@@ -119,6 +187,15 @@ import Base: diff
             @test points(Ωₕ) === new_pts # Check identity for mutable struct
             @test npoints(Ωₕ) == 4
             @test indices(Ωₕ) == new_indices
+
+            # A new point count rebuilds the markers for the new grid (the old ones were
+            # sized for 3 points), and the marker words with them.
+            @test markers(Ωₕ)[:boundary] == BitVector([1, 0, 0, 1])
+            @test markers(Ωₕ)[:interior] == BitVector([0, 1, 1, 0])
+            set_points!(Ωₕ, collect(range(0, 1; length = 100)) .^ 2)
+            @test findall(markers(Ωₕ)[:boundary]) == [1, 100]
+            @test findall(markers(Ωₕ)[:interior]) == 2:99
+            @test size(Bramble._marker_words(Ωₕ), 1) == 2
         end
     end
 
@@ -383,6 +460,16 @@ import Base: diff
         Ωₕ2 = mesh(create_test_domain(a, b), n, false; backend = backend())
         Random.seed!(seed)
         @test points(Ωₕ2) ≈ a .+ vcat(0.0, sort!(rand(n - 2)), 1.0) .* (b - a)
+
+        # An armed Float32 mesh is redrawn past its ties too (gpena/Bramble.jl#494).
+        Bramble._seed_mesh1d_rng!(1)
+        Ωf = try
+            mesh(create_test_domain(0.0f0, 1.0f0), 10_000, false; backend = backend(Float32))
+        finally
+            Bramble._unseed_mesh1d_rng!()
+        end
+        @test eltype(Ωf) == Float32
+        @test all(>(0), diff(points(Ωf)))
     end
 
     @testset "Additional methods" begin
@@ -504,6 +591,36 @@ import Base: diff
             change_points!(Ωₕ, collect(range(0.0, 1.0; length = 10)))
             @test is_uniform(Ωₕ)
             @test stepsize(Ωₕ) ≈ 1 / 9
+
+            # Far from the origin, rounding drift tracks the coordinates' ulp, and the
+            # default tolerance scales with it (gpena/Bramble.jl#492); the magnitude comes
+            # from the points, not the set `change_points!` leaves stale.
+            change_points!(Ωₕ, collect(range(1.0e6, 1.0e6 + 1; length = 10)))
+            @test is_uniform(Ωₕ)
+
+            Ω32 = mesh(domain(interval(10.0f0, 11.0f0)), 11)
+            @test is_uniform(Ω32)
+            @test stepsize(Ω32) ≈ 0.1f0
+            Ω64 = mesh(domain(interval(1.0e6, 1.0e6 + 1)), 11)
+            @test is_uniform(Ω64)
+            @test stepsize(Ω64) ≈ 0.1
+            @test is_uniform(mesh(domain(interval(3.0e7, 3.0e7 + 1)), 11))
+
+            # ...while a perturbed mesh at the same magnitudes, or on a tiny domain where
+            # the 1e-10 floor governs, stays non-uniform.
+            Random.seed!(492)
+            @test !is_uniform(mesh(domain(interval(10.0f0, 11.0f0)), 11, false))
+            Random.seed!(492)
+            @test !is_uniform(mesh(domain(interval(1.0e6, 1.0e6 + 1)), 11, false))
+            Random.seed!(492)
+            @test !is_uniform(mesh(domain(interval(0.0, 1.0e-8)), 11, false))
+
+            # The widened tolerance never admits a spacing of the opposite sign.
+            Ω_back = mesh(domain(interval(0.0f0, 1.0f0)), 5)
+            change_points!(Ω_back, 1.0f6 .+ Float32[0, 0.25, 0.125, 0.375, 0.5])
+            @test !is_uniform(Ω_back)
+            # ...and still clears the 1-ulp drift when the spacing is only 2 ulps wide.
+            @test is_uniform(mesh(domain(interval(1.0f6, 1.0f6 + 400)), 2561))
         end
     end
 end

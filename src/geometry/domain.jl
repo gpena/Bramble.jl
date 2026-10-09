@@ -120,11 +120,13 @@ true
 """
     (Ω::Domain)(t::Number) -> Domain
 
-Evaluate a time-dependent [`Domain`](@ref) at timestamp `t`.
+Evaluate a [`Domain`](@ref) at timestamp `t`.
 
-The result holds the markers with each `(x, t)` predicate fixed at `t`, so
-`mesh(Ω(t), ...)` marks the points where the predicates hold at `t`. Meshing the unevaluated
-`Ω` of a time-dependent domain is not supported: its `(x, t)` predicates have no time.
+The result holds the markers with each `(x, t)` predicate fixed at `t` and each spatial `x`
+predicate unchanged, so `mesh(Ω(t), ...)` marks the points where the predicates hold at `t`.
+A static domain evaluates too: a time-dependent problem on a fixed geometry. Meshing the
+unevaluated `Ω` of a time-dependent domain is not supported: its `(x, t)` predicates have no
+time.
 """
 @inline (Ω::Domain)(t::Number) = Domain(set(Ω), markers(Ω)(t))
 

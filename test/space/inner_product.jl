@@ -217,6 +217,15 @@ end
             expected = sum(parent(u) .* w .* parent(v))
             @test inner₊(u, v, Val(S)) ≈ expected
         end
+
+        # An S that is not a repeat-free subset of 1:D throws the symbolic twin's
+        # ArgumentError, for a pair and a singleton alike.
+        @test_throws ArgumentError inner₊(u, v, Val((1, 3)))
+        @test_throws ArgumentError inner₊(u, v, Val((0, 2)))
+        @test_throws ArgumentError inner₊(u, v, Val((1, 1)))
+        @test_throws ArgumentError inner₊(u, v, Val((1, 2, 3)))
+        @test_throws ArgumentError inner₊(u, v, Val((3,)))
+        @test_throws ArgumentError weights(Wₕ, Val((1, 3)))
     end
 
     @testset "Alias identities" begin
@@ -492,6 +501,24 @@ end
             e
         end
         @test occursin("1", err.msg) && occursin("2", err.msg)
+
+        # Two tuples of different lengths are refused in either order and result form.
+        @test_throws DimensionMismatch inner₊((u2, v2), (u2, v2, u2))
+        @test_throws DimensionMismatch inner₊((u2, v2, u2), (u2, v2))
+        @test_throws DimensionMismatch inner₊((u2, v2), (u2, v2, u2), Tuple)
+        @test_throws DimensionMismatch inner₊((u2, v2, u2), (u2, v2), Tuple)
+        # A tuple whose entries differ in type is no NTuple, and is checked all the same.
+        @test_throws DimensionMismatch inner₊((u2, u1), (u2, v2, u2))
+        @test_throws DimensionMismatch inner₊((u2, v2, u2), (u2, u1), Tuple)
+        @test_throws DimensionMismatch form(W2, W2, (a, b) -> inner₊((D₋ₓ(a),), ∇ₕ(b)))
+        @test_throws DimensionMismatch form(W2, b -> inner₊((v2, v2, v2), ∇ₕ(b)))
+
+        err = try
+            inner₊((u2, v2), (u2, v2, u2))
+        catch e
+            e
+        end
+        @test occursin("2", err.msg) && occursin("3", err.msg)
     end
 
     @testset "_get_h_val" begin
@@ -863,6 +890,16 @@ end
             @test_throws ArgumentError inner_Γ(one_h, one_h, :interior)
             # and no labels at all
             @test_throws ArgumentError inner_Γ(one_h, one_h)
+
+            # storage that is not one value per point of the mesh of `space(uₕ)`: an
+            # element of a non-uniform (5, 5) mesh, on either side, and equal lengths that
+            # are wrong for the mesh
+            u5 = Rₕ(gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5),
+                    (false, true))), x -> 1.0)
+            @test_throws DimensionMismatch inner_Γ(u5, one_h, :ymin)
+            @test_throws DimensionMismatch inner_Γ(one_h, u5, :ymax)
+            ub = Bramble.VectorElement(ones(49), space(u5))
+            @test_throws DimensionMismatch inner_Γ(ub, ub, :ymin)
 
             # a face set that is not (D-1)-dimensional on this mesh: with two points on an
             # axis, both of its faces together cover every grid point

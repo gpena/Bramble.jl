@@ -119,6 +119,19 @@ end
         @test space(u4) === W
         @test all(==(3.0), parent(u4))
         @test eltype(u4) == Float64
+
+        # Offset-axis data is refused at construction, under every policy
+        O = Base.IdentityUnitRange
+        d = view(zeros(6), O(2:5))
+        @test_throws ArgumentError VectorElement(d, W)
+        @test_throws ArgumentError VectorElement{typeof(W), Float64, typeof(d)}(d, W)
+        Wt = gridspace(mesh(domain(box(0, 1)), 4, true; backend = backend(policy = Parallel())))
+        @test_throws ArgumentError VectorElement(d, Wt)
+
+        # One-based views still construct
+        u5 = VectorElement(view(zeros(6), 2:5), W)
+        @test u5 isa VectorElement
+        @test space(u5) === W
     end
 
     @testset "ldiv!" begin
@@ -795,6 +808,10 @@ end
         @test parent(r1(1)) == fill(1.0, 5)
         @test parent(r1(3)) == fill(3.0, 9)
 
+        # Two functions match the child count but not the leaf count (#506).
+        @test_throws DimensionMismatch Rₕ!(element(Wn), (x -> 1.0, x -> 2.0))
+        @test_throws DimensionMismatch avgₕ!(element(Wn), (x -> 1.0, x -> 2.0))
+
         a1 = element(Wn)
         avgₕ!(a1, (x -> 1.0, x -> 2.0, x -> 3.0))
         @test all(≈(1.0), parent(a1(1)))
@@ -923,6 +940,17 @@ end
             avgₕ!(c, fvec)
             avgₕ!(d, ftup)
             @test parent(c) == parent(d)
+
+            # One function per leaf, no more and no fewer (#506): Base's tuple `map`
+            # truncates, so a wrong length must throw rather than skip or drop a leaf.
+            short, long = ftup[1:(NC - 1)], (ftup..., ftup[1])
+            @test_throws DimensionMismatch Rₕ!(element(V), short)
+            @test_throws DimensionMismatch Rₕ!(element(V), long)
+            @test_throws DimensionMismatch avgₕ!(element(V), short)
+            @test_throws DimensionMismatch avgₕ!(element(V), long)
+            @test_throws DimensionMismatch Rₕ(V, short)
+            @test_throws DimensionMismatch avgₕ(V, long)
+            @test_throws DimensionMismatch Rₕ(V, short; markers = (:boundary,))
         end
     end
 

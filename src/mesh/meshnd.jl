@@ -204,8 +204,10 @@ function _mesh(
     _set = set(Ω)
 
     # Adjust the number of points for any collapsed dimensions. For example, if a domain
-    # is a line in 3D space, the two collapsed dimensions will have npts = 1.
-    npts_with_collapsed = ntuple(i -> is_collapsed(_set(i)...) ? 1 : npts[i], Val(D))
+    # is a line in 3D space, the two collapsed dimensions will have npts = 1. Collapse is
+    # judged in the storage eltype, exactly as the 1D `_mesh` building each submesh does.
+    npts_with_collapsed = ntuple(i -> _storage_collapsed(_set(i)..., backend) ? 1 : npts[i],
+        Val(D))
 
     # Generate the CartesianIndices for the full D-dimensional grid.
     idxs = generate_indices(npts_with_collapsed)
@@ -401,12 +403,18 @@ end
     return CartesianIndex(locate_cell(Ωₕ(1), x[1]))
 end
 
-# The geometric refinement alone, with markers left untouched: shared by both public
-# methods below, neither of which wants the *other*'s marker handling as an intermediate
-# step of its own.
+# The geometric refinement, with the parent's markers left untouched. Both public
+# methods below share it, and neither wants the *other*'s marker handling as an
+# intermediate step of its own. Each axis submesh gets its geometric markers reseeded
+# for its refined size, so its marker vectors and words match its points under either
+# form. Submeshes are built from `domain(projection(Ω, i))` and carry only the boundary
+# and interior labels, so a label a user `markers!`'d onto `Ωₕ(i)` is dropped here.
 function _refine_indices!(Ωₕ::MeshnD{D}) where {D}
     @inbounds for i in 1:D
         _refine_indices!(Ωₕ(i))
+        submesh_markers = MeshMarkers()
+        _ensure_geometric_markers!(submesh_markers, Ωₕ(i))
+        markers!(Ωₕ(i), submesh_markers)
     end
 
     # Each submesh regenerated its own indices, but the parent holds a CartesianIndices

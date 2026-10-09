@@ -252,7 +252,10 @@ const _ORIGIN_2D = (0, 0)
 
         @testset "1D inner₊" begin
             # there is only one direction to name
-            for p in (inner₊(u1, v1), inner₊(D₋ₓ(u1), v1), inner₊(D₋ₓ(u1), D₋ₓ(v1)))
+            for p in (
+                inner₊(u1, v1), inner₊(D₋ₓ(u1), v1), inner₊(D₋ₓ(u1), D₋ₓ(v1)),
+                inner₊(x -> 1.0, v1), inner₊(1.0, D₋ₓ(v1))
+            )
                 @test weight(p) === InnerPlus{1}
             end
         end
@@ -269,12 +272,23 @@ const _ORIGIN_2D = (0, 0)
             p, q = IndexedTrialFunction{2}(1), IndexedTestFunction{2}(2)
             @test weight(inner₊(p, D₋ₓ(q))) === InnerPlus{1}
             @test weight(inner₊(D₋ᵧ(p), q)) === InnerPlus{2}
+
+            # a bare source on the left reads the direction as its source node does
+            v3 = TestFunction{3}()
+            for (D, dim, w) in ((D₋ₓ, 1, v2), (D₋ᵧ, 2, v2), (D₋₂, 3, v3)),
+                src in (x -> 1.0, 2.0, Rₕ(Wₕ, x -> x[1] + 1))
+
+                @test weight(inner₊(src, D(w))) === InnerPlus{dim}
+            end
         end
 
         @testset "Missing direction error" begin
             @test_throws ArgumentError inner₊(u2, v2)
             @test_throws ArgumentError inner₊(D₋ₓ(u2), D₋ᵧ(v2))
             @test_throws ArgumentError inner₊(Mₓ(u2), Mₓ(v2))
+            for src in (x -> 1.0, 2.0, Rₕ(Wₕ, x -> x[1]))
+                @test_throws ArgumentError inner₊(src, v2)
+            end
 
             # the message has to name the way out, since the failure is a usage error
             msg = try

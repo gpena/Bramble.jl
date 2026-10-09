@@ -265,6 +265,11 @@ end
         dir::GridDirection,
         dim_val::Val{DIM}
 ) where {F, P, DIM}
+    # The direction check matters because a `Val` past the mesh dimension would otherwise
+    # reach the stencil and fault or return all zeros. It comes before `_op_mesh(uₕ)(DIM)`:
+    # on a 1D mesh `Ωₕ(2) === Ωₕ` passes, and the index `I[DIM]` faults only later.
+    D = length(_grid_dims(uₕ))
+    1 <= DIM <= D || _throw_stencil_dim_error(DIM, D)
     sub = _op_mesh(uₕ)(DIM)
     precheck(sub, DIM)
     _apply_stencil!(vₕ, uₕ, spacing_func(sub), dir, dim_val)
