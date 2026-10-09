@@ -406,8 +406,10 @@ end
 # Half-cell width at node `i` of the points `x`, from the points alone: the oracle against
 # which half spacings and weights on non-uniform meshes are checked, so it must not call the
 # code under test.
-_half_spacing_oracle(x, i) = i == 1 ? (x[2] - x[1]) / 2 :
-                             i == length(x) ? (x[end] - x[end - 1]) / 2 : (x[i + 1] - x[i - 1]) / 2
+function _half_spacing_oracle(x, i)
+    i == 1 ? (x[2] - x[1]) / 2 :
+    i == length(x) ? (x[end] - x[end - 1]) / 2 : (x[i + 1] - x[i - 1]) / 2
+end
 
 # Backward spacing at node `i` of the points `x`, zero at the first node (the weight of a
 # staggered axis).

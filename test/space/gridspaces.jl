@@ -542,7 +542,6 @@ end
 # `CartesianIndices` order. The oracle is built from `points` alone, per axis: the backward
 # spacing (zero at the first node) on a staggered axis, the half-cell width elsewhere.
 @testset "host_weights, SeparableWeights arrays" begin
-
     Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (0.5, 0.6, 0.7))), (4, 5, 6), (false, false, false))
     Wₕ = gridspace(Ωₕ)
     n = npoints(Ωₕ, Tuple)

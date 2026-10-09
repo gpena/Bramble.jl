@@ -597,7 +597,6 @@ struct NotAFunctionPredicate end
         @test length(edm2) == 3
         @test !isempty(edm2)
     end
-
 end
 
 @testset "Higher-D domains and collapsed sets" begin
