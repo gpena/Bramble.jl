@@ -420,6 +420,13 @@ end
         assemble_add!(A, m_form)
         assemble_add!(A, m_form)
         @test Matrix(A) ≈ 2 .* Matrix(assemble(m_form))
+
+        # the constrained assembly replaces the boundary rows, so the raw sums differ from
+        # it there, which is what a Dirichlet step inside `assemble_add!` would have changed
+        Ad = Matrix(assemble(m_form; dirichlet = :boundary))
+        rows = [1, size(A, 1)]
+        @test Ad[rows, :] != Matrix(A)[rows, :]
+        @test Matrix(A)[rows, :] ≈ 2 .* Matrix(assemble(m_form))[rows, :]
     end
 end
 

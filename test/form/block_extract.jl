@@ -65,10 +65,9 @@ using Bramble:
         iu, iv = IndexedTrialFunction{2}(1), IndexedTestFunction{2}(2)
         sf = Bramble.SourceFunction{2, typeof(sin)}(sin)
 
-        # every member of the union, wrapped once, for the two component queries
+        # every member of the union, wrapped once, over an unindexed function (the indexed
+        # queries are looped over above)
         for wrap in (D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, jumpₓ, Mₓ, M₊ₓ)
-            @test test_component_or_nothing(wrap(iv)) == 2
-            @test trial_component_or_nothing(wrap(iu)) == 1
             @test test_component_or_nothing(wrap(v)) === nothing
         end
         # the non-difference wrappers too: scale, grid-function scale, restriction

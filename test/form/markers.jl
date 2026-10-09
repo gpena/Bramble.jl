@@ -100,7 +100,20 @@ using Bramble: dot, D₋ᵧ, D₋ₓ, inner₊ᵧ, inner₊ₓ
         a = form(
             Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1); markers = (:bottom,)) + innerₕ(u(2), v(2))
         )
-        @test size(assemble(a)) == (2 * Bramble.ndofs(Wₕ), 2 * Bramble.ndofs(Wₕ))
+        n = Bramble.ndofs(Wₕ)
+        A = assemble(a)
+        first_leaf, second_leaf = 1:n, (n + 1):(2n)
+        # leaf 1 carries the :bottom-restricted mass, leaf 2 the plain one, and the
+        # off-diagonal blocks are empty
+        @test A[first_leaf, first_leaf] ≈
+              assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v; markers = (:bottom,))))
+        M = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))
+        @test A[second_leaf, second_leaf] ≈ M
+        # the scalar reference above goes through the same `markers` code, so it alone could
+        # not notice the restriction being dropped
+        @test !(A[first_leaf, first_leaf] ≈ M)
+        @test all(iszero, A[first_leaf, second_leaf])
+        @test all(iszero, A[second_leaf, first_leaf])
     end
 
     @testset "Direction mismatch message" begin

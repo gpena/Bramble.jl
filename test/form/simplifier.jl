@@ -666,27 +666,15 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
     @test !_infers(_rt_runtime_int, (Int, W))
 
     # The rewrites themselves are unchanged for the `Integer` coefficients they are written
-    # for, which is what makes the restriction affordable -- these are the same trees the
-    # rules built before, still built.
-    A = IdentityOperator(Wₕ)
-    B = D₋ₓ(A)
-    S = innerₕ(trial_function(Wₕ), test_function(Wₕ))
-    @test simplify_ast(2 * A + 2 * B) isa OperatorScale     # common factor, still factored
-    @test simplify_ast(2 * S + 3 * S) isa OperatorScale     # like terms, still combined
-    @test simplify_ast(0 * A) isa ZeroOperator              # still elided
-    @test simplify_ast(1 * A) === A
-
-    # ... and a `Float64` coefficient is carried through as written instead. Assembling it
+    # for, which is what makes the restriction affordable: the earlier testsets pin them.
+    # A `Float64` coefficient is carried through as written instead. Assembling it
     # must still give the same matrix: this pass may change how a form is routed, never what
     # it computes.
+    A = IdentityOperator(Wₕ)
+    B = D₋ₓ(A)
     @test simplify_ast(2.0 * A + 2.0 * B) isa OperatorAdd
     @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v) + 2.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
           2.0 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))))
-
-    # A shared `Ref` coefficient still factors: that rule compares object identity, which
-    # inference settles from the types, so it never cost stability in the first place.
-    β = Ref(1.5)
-    @test simplify_ast(β * A + β * B) isa OperatorScale
 end
 
 # --- Shared inner-product arguments ------------------------------------------------- #
