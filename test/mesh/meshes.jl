@@ -581,8 +581,12 @@ end
         n = npoints(Ωₕ)
         bwd = backward_spacings_for_derivative(Ωₕ)
         fwd = forward_spacings_for_derivative(Ωₕ)
-        # Entry 1 of bwd and the last of fwd are not meaningful; the engines never read
-        # them, so only the interior stencil is asserted here.
+        # Entry 1 of bwd is spacing(Ωₕ, 1), which no backward stencil reads. The last of
+        # fwd is not meaningful; the engines never read it, so only the interior stencil
+        # is asserted for both.
+        @test bwd[1] == spacing(Ωₕ, 1)
+        @test length(bwd) == n
+        @test length(fwd) == n - 1
         @test all(bwd[i] == Bramble.spacing_for_derivative(Ωₕ, i) for i in 2:n)
         @test all(
             fwd[i] == Bramble.forward_spacing_for_derivative(Ωₕ, i) for i in 1:(n - 1)

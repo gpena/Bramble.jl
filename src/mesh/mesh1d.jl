@@ -531,7 +531,8 @@ end
     backward_spacings_for_derivative(Ωₕ::Mesh1D) -> AbstractVector
 
 Return a vector `h` with `h[i] == `[`spacing_for_derivative`](@ref)`(Ωₕ, i)` for every
-`i > 1`. Entry 1 is zero: the backward difference has no stencil at the first point.
+`i > 1`. Entry 1 holds [`spacing`](@ref)`(Ωₕ, 1)`, which no backward stencil reads; the
+scalar [`spacing_for_derivative`](@ref)`(Ωₕ, 1)` is zero.
 """
 @inline backward_spacings_for_derivative(Ωₕ::_Mesh1DLike) = spacings(Ωₕ)
 
