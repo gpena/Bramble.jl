@@ -92,7 +92,7 @@ struct VectorElement{S, T, VT <: AbstractVector{T}} <: AbstractVector{T}
     "the parent function space to which this vector belongs."
     space::S
 
-    function VectorElement{S, T, VT}(data, space::S) where {S, T, VT <: AbstractVector{T}}
+    function VectorElement{S, T, VT}(data, space) where {S, T, VT <: AbstractVector{T}}
         d = convert(VT, data)
         Base.require_one_based_indexing(d)
         return new{S, T, VT}(d, space)
