@@ -8,6 +8,7 @@ using Bramble: Dcᵧ, Dc₂, Dcₓ, D̃ᵧ, D̃₂, D̃ₓ, D̽ᵧ, D̽₂, D̽�
 using Bramble: index_in_marker, jumpᵧ, jump₂, jumpₓ
 using SparseArrays: SparseMatrixCSC, nnz
 using LinearAlgebra: Diagonal
+using ..TestUtils: MockDeviceArray
 using Bramble: components, restrict_to
 # Internal: defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, D₊₂, D₊, div₊ₕ, curl₊ₕ, forward_star_difference
@@ -294,26 +295,9 @@ end
     end
 end
 
-# A stand-in for a vendor GPU array: host storage that answers `DeviceLocality()`, so the
-# offloaded projection path (`GpuOffload`) can be driven with no GPU.
-# The same idea as `MockGPUArray` in test/utils/backends.jl, kept local so this file runs on
-# its own.
-struct MockDeviceArray{T, N} <: DenseArray{T, N}
-    data::Array{T, N}
-end
-function MockDeviceArray{T, N}(::UndefInitializer, dims::Vararg{Integer, N}) where {T, N}
-    return MockDeviceArray(Array{T, N}(undef, dims...))
-end
-function MockDeviceArray{T, N}(::UndefInitializer, dims::NTuple{N, Integer}) where {T, N}
-    return MockDeviceArray(Array{T, N}(undef, dims))
-end
-Base.size(A::MockDeviceArray) = size(A.data)
-Base.getindex(A::MockDeviceArray, i::Int...) = getindex(A.data, i...)
-Base.setindex!(A::MockDeviceArray, v, i::Int...) = setindex!(A.data, v, i...)
-Base.IndexStyle(::Type{<:MockDeviceArray}) = IndexLinear()
-Base.fill!(A::MockDeviceArray{T}, v) where {T} = (fill!(A.data, v); A)
-Bramble.locality(::Type{<:MockDeviceArray}) = Bramble.DeviceLocality()
-
+# `MockDeviceArray` (test/TestUtils.jl) is a stand-in for a vendor GPU array: host storage that
+# answers `DeviceLocality()`, so the offloaded projection path (`GpuOffload`) can be driven
+# with no GPU.
 # `Rₕ!`/`avgₕ!` share one driver, `project!` (src/operators/projection.jl). These cover the
 # branches the rest of the suite does not reach on a host: the offloaded path, a marked
 # region with no points, the per-leaf rule tuple on a scalar space, the quadrature options

@@ -10,6 +10,7 @@ using LinearSolve: LinearProblem, solve, KrylovJL_GMRES
 using Random
 # `CpuPolyester` meshes below; test/ext/polyester_ext.jl, next in the ext group, loads it too.
 using Polyester
+using ..TestUtils: ZeroBasedVector
 using Bramble: CpuPolyester, Serial, execution_policy
 
 # `Kronecker.jl` interop and fast diagonalisation for a separable `BilinearForm`
@@ -36,15 +37,6 @@ function graded_space(n::NTuple{D, Int}) where {D}
     Bramble.change_points!(Ω, ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
     return gridspace(Ω)
 end
-
-# A vector indexed `0:n-1`, for the factorisation's refusal of a non-1-based one.
-struct ZeroBasedVector <: AbstractVector{Float64}
-    p::Vector{Float64}
-end
-Base.size(z::ZeroBasedVector) = size(z.p)
-Base.axes(z::ZeroBasedVector) = (Base.IdentityUnitRange(0:(length(z.p) - 1)),)
-Base.getindex(z::ZeroBasedVector, i::Int) = z.p[i + 1]
-Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
 
 @testset "Kronecker extension" begin
     @testset "Kronecker.jl object equals CSC" begin

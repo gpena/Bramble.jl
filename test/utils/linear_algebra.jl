@@ -18,7 +18,7 @@ using Bramble:
                GpuKernel
 using LinearAlgebra: dot
 using StaticArrays
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, @test_allocs, MockDeviceArray
 
 @testset "Linear algebra utilities" begin
     # Invariants tested (device and host locality):
@@ -47,19 +47,9 @@ using ..TestUtils: alloc_test, @test_allocs
         @test occursin("GpuKernel", msg)
 
         # Reverse direction (device destination): a device-locality destination
-        # under a CpuPolicy, with no GPU or KernelAbstractions involved -- a small host-backed
-        # array type that claims DeviceLocality() through the trait is enough.
-        struct _FakeDeviceVector{T} <: DenseVector{T}
-            data::Vector{T}
-        end
-        Base.size(v::_FakeDeviceVector) = size(v.data)
-        Base.getindex(v::_FakeDeviceVector, i::Int) = getindex(v.data, i)
-        Base.setindex!(v::_FakeDeviceVector, val, i::Int) = setindex!(v.data, val, i)
-        Base.IndexStyle(::Type{<:_FakeDeviceVector}) = IndexLinear()
-
-        Bramble.locality(::Type{<:_FakeDeviceVector}) = Bramble.DeviceLocality()
-
-        v_dev = _FakeDeviceVector(zeros(4))
+        # under a CpuPolicy, with no GPU or KernelAbstractions involved -- the host-backed
+        # `MockDeviceArray` of test/TestUtils.jl, which claims DeviceLocality(), is enough.
+        v_dev = MockDeviceArray(zeros(4))
         @test_throws ArgumentError _sweep_for!(CpuSerial(), v_dev, 1:4, identity)
         err2 = try
             _sweep_for!(CpuSerial(), v_dev, 1:4, identity)

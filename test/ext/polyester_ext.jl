@@ -18,7 +18,9 @@ using SparseArrays
 using SparseArrays: getcolptr
 using LinearAlgebra: issymmetric, mul!, ldiv!
 using Random
-using ..TestUtils: alloc_test
+using ..TestUtils: alloc_test, _BROADCAST_SIZES, _broadcast_space, _check_broadcast_equal, _check_stencils,
+                   _mg_jitter_mesh, _mg_spd, _mg_transfer_meshes, _reset_seen!, _spy, _STENCIL_F,
+                   _STENCIL_G, _stencil_mesh_pair, _stencil_op!, _threads_seen
 
 const ZERO_BC = :dir => (x -> 0.0)
 
@@ -837,69 +839,8 @@ end
 # computed by the very loop body the serial engine runs, so the answer must equal `Serial()`
 # exactly, not merely to a tolerance -- the meshes are non-uniform for the same reason: on a
 # uniform mesh a band that picked up the wrong spacing index would still give the right
-# number.
-
-# Every family reaching `_apply_stencil!` or `_apply_averaged!`, spelled from the operator's
-# base name so no Unicode is retyped here -- the same set `threaded_stencils.jl` names.
-const _POLY_FAMILIES = (:D₋, :D₊, :diff₋, :diff₊, :jump, :Dc, :D̃, :D̽, :M, :M₊, :Mc)
-const _POLY_CENTERED = (:Dc, :D̽, :Mc)   # need three points along their direction
-const _POLY_SUFFIXES = ("ₓ", "ᵧ", "₂")
-
-_poly_op(fam, d) = getproperty(Bramble, Symbol(fam, _POLY_SUFFIXES[d]))
-_poly_op!(fam, d) = getproperty(Bramble, Symbol(fam, _POLY_SUFFIXES[d], :!))
-
-function _poly_domain(D)
-    D == 1 ? domain(interval(0.0, 1.0)) :
-    D == 2 ? domain(interval(0.0, 1.0) × interval(0.0, 1.0)) :
-    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
-end
-
-# The same non-uniform mesh twice, once per policy: the seed fixes the random points so
-# `CpuPolyester` and `Serial` share every grid point.
-function _poly_mesh_pair(n::NTuple{D, Int}; seed = 356) where {D}
-    dom = _poly_domain(D)
-    npts = D == 1 ? n[1] : n
-    unif = D == 1 ? false : ntuple(_ -> false, D)
-    Random.seed!(seed)
-    Ωs = mesh(dom, npts, unif; backend = backend(policy = Serial()))
-    Random.seed!(seed)
-    Ωb = mesh(dom, npts, unif; backend = backend(policy = CpuPolyester()))
-    return Ωs, Ωb
-end
-
-const _POLY_F = (x -> sin(3x) + x^2, x -> sin(3x[1] + 2x[2]) + x[1] * x[2],
-    x -> sin(3x[1] + 2x[2] - x[3]) + x[1] * x[3])
-const _POLY_G = (x -> cos(2x), x -> exp(x[1]) * x[2], x -> x[1] + x[2]^2 * x[3])
-
-# Every applicable family and direction, in place and allocating, scalar and composite,
-# `CpuPolyester` against `Serial`, exact `==`.
-function _poly_check_all(n::NTuple{D, Int}) where {D}
-    Ωs, Ωb = _poly_mesh_pair(n)
-    Ws, Wb = gridspace(Ωs), gridspace(Ωb)
-    Vs, Vb = gridspace(Ωs, Val(2)), gridspace(Ωb, Val(2))
-    us, ub = Rₕ(Ws, _POLY_F[D]), Rₕ(Wb, _POLY_F[D])
-    vs, vb = Rₕ(Vs, (_POLY_F[D], _POLY_G[D])), Rₕ(Vb, (_POLY_F[D], _POLY_G[D]))
-    @test parent(us) == parent(ub)
-    for d in 1:D, fam in _POLY_FAMILIES
-
-        fam in _POLY_CENTERED && n[d] < 3 && continue
-        f, f! = _poly_op(fam, d), _poly_op!(fam, d)
-        @testset "$(fam)$(_POLY_SUFFIXES[d]) n=$n" begin
-            ws, wb = similar(us), similar(ub)
-            parent(wb) .= NaN               # every point must be written
-            f!(ws, us)
-            @test f!(wb, ub) === wb
-            @test parent(wb) == parent(ws)
-            @test parent(f(ub)) == parent(f(us))
-
-            ws2, wb2 = similar(vs), similar(vb)
-            f!(ws2, vs)
-            f!(wb2, vb)
-            @test parent(wb2) == parent(ws2)
-            @test parent(f(vb)) == parent(f(vs))
-        end
-    end
-end
+# number. The fixtures are test/TestUtils.jl's, shared with the `Parallel()` run of
+# `test/space/threaded_stencils.jl`.
 
 @testset "Stencil engines equal to Serial, $(D)D" for D in 1:3
     sizes = D == 1 ? ((1,), (2,), (3,), (5,), (1001,)) :
@@ -907,17 +848,17 @@ end
             ((5, 4, 1), (5, 4, 2), (4, 3, 5), (9, 8, 13))
     # Banded axes shorter than the thread count, down to a single point, leave some bands
     # empty; the operator must not notice.
-    foreach(_poly_check_all, sizes)
+    foreach(n -> _check_stencils(n, CpuPolyester(); full = true), sizes)
 end
 
 # Warmed in-place allocation of the stencil engines is independent of grid size.
 @testset "stencil engines: allocation size-free" begin
     function _poly_min_bytes(n)
-        _, Ωb = _poly_mesh_pair((n, n))
-        ub = Rₕ(gridspace(Ωb), _POLY_F[2])
+        _, Ωb = _stencil_mesh_pair((n, n), CpuPolyester())
+        ub = Rₕ(gridspace(Ωb), _STENCIL_F[2])
         w = similar(ub)
         return map((:D₋, :D₊, :Dc, :D̃, :D̽, :M, :M₊, :Mc)) do fam
-            minimum(alloc_test(_poly_op!(fam, 2), w, ub) for _ in 1:5)
+            minimum(alloc_test(_stencil_op!(fam, 2), w, ub) for _ in 1:5)
         end
     end
     @test _poly_min_bytes(16) == _poly_min_bytes(160)
@@ -930,20 +871,8 @@ end
 # reach; before S7.5 they had no `CpuPolyester` hook and ran serially regardless of the
 # policy, so an equality check against `Serial()` alone would pass either way -- serial and
 # `@batch` give the same numbers. The load-bearing assertion is the thread count, checked
-# with the same storage-spy trick `test/space/threaded_vector_calculus.jl` uses for
-# `CpuThreaded`.
-const _V356_SEEN = Threads.Atomic{UInt64}(0)
-struct _V356Spy{T} <: AbstractVector{T}
-    x::Vector{T}
-end
-Base.size(s::_V356Spy) = size(s.x)
-Base.IndexStyle(::Type{<:_V356Spy}) = IndexLinear()
-Base.@propagate_inbounds function Base.getindex(s::_V356Spy, i::Int)
-    Threads.atomic_or!(_V356_SEEN, UInt64(1) << ((Threads.threadid() - 1) % 64))
-    return s.x[i]
-end
-_v356_spy(u) = Bramble.VectorElement(_V356Spy(copy(parent(u))), space(u))
-
+# with the storage spy (`_spy`, test/TestUtils.jl) that
+# `test/space/threaded_vector_calculus.jl` uses for `CpuThreaded`.
 const _V356_GRADIENTS = (:∇̃ₕ!, :∇cₕ!, :∇̽ₕ!)
 const _V356_DIVERGENCES = (:divₕ!, :div₊ₕ!, :divcₕ!, :diṽₕ!, :div̽ₕ!)
 const _V356_CURLS = (:curlₕ!, :curl₊ₕ!, :curlcₕ!, :curl̃ₕ!, :curl̽ₕ!)
@@ -954,29 +883,29 @@ if Threads.nthreads() >= 2
     # Divergence, curl and strain-average engines run on several threads and equal Serial.
     @testset "div/curl/strain threaded, $(D)D" for D in 2:3
         n = D == 2 ? (64, 64) : (12, 12, 12)
-        Ωs, Ωb = _poly_mesh_pair(n)
+        Ωs, Ωb = _stencil_mesh_pair(n, CpuPolyester())
         Ws, Wb = gridspace(Ωs), gridspace(Ωb)
-        us, ub = Rₕ(Ws, _POLY_F[D]), Rₕ(Wb, _POLY_F[D])
-        fs = ntuple(d -> (x -> _POLY_G[D](x) + d * sum(x)), D)
+        us, ub = Rₕ(Ws, _STENCIL_F[D]), Rₕ(Wb, _STENCIL_F[D])
+        fs = ntuple(d -> (x -> _STENCIL_G[D](x) + d * sum(x)), D)
         tups_s = ntuple(d -> Rₕ(Ws, fs[d]), D)
         tups_b = ntuple(d -> Rₕ(Wb, fs[d]), D)
-        spies = map(_v356_spy, tups_b)
+        spies = map(_spy, tups_b)
 
         for name in _V356_GRADIENTS
             dest_s, dest_b = ntuple(_ -> similar(us), D), ntuple(_ -> similar(ub), D)
             _v356_op(name)(dest_s, us)
-            _V356_SEEN[] = 0
-            _v356_op(name)(dest_b, _v356_spy(ub))
-            @test count_ones(_V356_SEEN[]) >= 2
+            _reset_seen!()
+            _v356_op(name)(dest_b, _spy(ub))
+            @test _threads_seen() >= 2
             @test all(parent(a) == parent(b) for (a, b) in zip(dest_s, dest_b))
         end
 
         for name in _V356_DIVERGENCES
             vs, vb = similar(us), similar(ub)
             _v356_op(name)(vs, tups_s)
-            _V356_SEEN[] = 0
+            _reset_seen!()
             _v356_op(name)(vb, spies)
-            @test count_ones(_V356_SEEN[]) >= 2
+            @test _threads_seen() >= 2
             @test parent(vs) == parent(vb)
         end
 
@@ -984,9 +913,9 @@ if Threads.nthreads() >= 2
             dest_s = D == 2 ? similar(us) : ntuple(_ -> similar(us), 3)
             dest_b = D == 2 ? similar(ub) : ntuple(_ -> similar(ub), 3)
             _v356_op(name)(dest_s, tups_s)
-            _V356_SEEN[] = 0
+            _reset_seen!()
             _v356_op(name)(dest_b, spies)
-            @test count_ones(_V356_SEEN[]) >= 2
+            @test _threads_seen() >= 2
             ds = dest_s isa Tuple ? dest_s : (dest_s,)
             db = dest_b isa Tuple ? dest_b : (dest_b,)
             @test all(parent(a) == parent(b) for (a, b) in zip(ds, db))
@@ -996,9 +925,9 @@ if Threads.nthreads() >= 2
             dest_s = ntuple(_ -> ntuple(_ -> similar(us), D), D)
             dest_b = ntuple(_ -> ntuple(_ -> similar(ub), D), D)
             _v356_op(name)(dest_s, tups_s)
-            _V356_SEEN[] = 0
+            _reset_seen!()
             _v356_op(name)(dest_b, spies)
-            @test count_ones(_V356_SEEN[]) >= 2
+            @test _threads_seen() >= 2
             @test all(parent(dest_s[i][j]) == parent(dest_b[i][j]) for i in 1:D for j in 1:D)
         end
     end
@@ -1012,86 +941,11 @@ end
 # `Threads.@threads` thread -- mirroring test/space/threaded_broadcast.jl's own `CpuThreaded`
 # check. Every point runs the very loop body the serial broadcast runs, so the answer must
 # equal `Serial()` exactly, not merely to a tolerance; the meshes are non-uniform for the
-# same reason those are.
-
-function _bc357_domain(D)
-    D == 1 ? domain(interval(0.0, 1.0)) :
-    D == 2 ? domain(interval(0.0, 1.0) × interval(0.0, 2.0)) :
-    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
-end
-
-# The same non-uniform mesh under the given policy: the seed fixes the random points.
-function _bc357_space(n::NTuple{D, Int}, policy; seed = 357) where {D}
-    Random.seed!(seed)
-    npts = D == 1 ? n[1] : n
-    unif = D == 1 ? false : ntuple(_ -> false, D)
-    return gridspace(mesh(_bc357_domain(D), npts, unif; backend = backend(policy = policy)))
-end
-
-const _BC357_SIZES = ((1,), (2,), (7,), (1001,), (5, 3), (40, 37), (4, 3, 5), (13, 11, 9))
-
-# A handful of broadcast shapes, each writing into a fresh `NaN` destination (or updating a
-# copy in place, aliasing `dest` on its own right-hand side).
-function _bc357_results(n, policy)
-    Wₕ = _bc357_space(n, policy)
-    uₕ = Rₕ(Wₕ, x -> sin(3sum(x)) + prod(x))
-    wₕ = Rₕ(Wₕ, x -> exp(first(x)) * last(x))
-    plain = [cos(0.3i) for i in eachindex(parent(uₕ))]
-    r = Ref(0.25)
-    α = 1.5
-    fresh() = (v = similar(uₕ); parent(v) .= NaN; v)
-    out = Dict{String, Vector{Float64}}()
-
-    v = fresh()
-    v .= 2.0 .* uₕ .+ wₕ
-    out["axpy"] = copy(parent(v))
-    v = fresh()
-    v .= uₕ .* plain .- r[] .* wₕ .+ 1
-    out["mixed"] = copy(parent(v))
-    v = fresh()
-    v .= α .* sin.(uₕ) ./ (1 .+ wₕ .^ 2)
-    out["nested"] = copy(parent(v))
-    v = fresh()
-    v .= r
-    out["fill"] = copy(parent(v))
-    v = fresh()
-    v .= uₕ
-    out["copy"] = copy(parent(v))
-    a = copy(uₕ)
-    a .= a .+ 0.5 .* wₕ
-    out["self"] = copy(parent(a))
-    a = copy(uₕ)
-    a .= wₕ .- a .* a
-    out["self twice"] = copy(parent(a))
-    a = copy(uₕ)
-    a .*= α
-    out["scale"] = copy(parent(a))
-    return out
-end
-
-function _bc357_check_equal(n)
-    s, p = _bc357_results(n, Serial()), _bc357_results(n, CpuPolyester())
-    for key in keys(s)
-        @test p[key] == s[key]
-    end
-end
-
-# Records which threads read it, to see the bands spread -- its own spy type rather than
-# reusing `_V356Spy` above, since that one is scoped to the divergence/curl/strain testset.
-const _BC357_SEEN = Threads.Atomic{UInt64}(0)
-struct _BC357Spy{T} <: AbstractVector{T}
-    x::Vector{T}
-end
-Base.size(s::_BC357Spy) = size(s.x)
-Base.IndexStyle(::Type{<:_BC357Spy}) = IndexLinear()
-Base.@propagate_inbounds function Base.getindex(s::_BC357Spy, i::Int)
-    Threads.atomic_or!(_BC357_SEEN, UInt64(1) << ((Threads.threadid() - 1) % 64))
-    return s.x[i]
-end
+# same reason those are. The fixtures are test/TestUtils.jl's, shared with that file.
 
 # Broadcast under CpuPolyester equals Serial.
-@testset "broadcast equals Serial, n=$n" for n in _BC357_SIZES
-    _bc357_check_equal(n)
+@testset "broadcast equals Serial, n=$n" for n in _BROADCAST_SIZES
+    _check_broadcast_equal(n, CpuPolyester())
 end
 
 # A 0-dimensional array leaf stays inside its `Extruded` when `_batch_broadcast!` hands the
@@ -1101,7 +955,7 @@ end
 @testset "broadcast, 0-dim leaf, equals Serial" begin
     times0d(a, c) = 2.0 * a * c + 1.0
     res = map((Serial(), CpuPolyester())) do policy
-        Wₕ = _bc357_space((9, 9), policy)
+        Wₕ = _broadcast_space((9, 9), policy)
         uₕ = Rₕ(Wₕ, x -> sin(3sum(x)) + prod(x))
         v = similar(uₕ)
         v .= times0d.(uₕ, fill(1.5))
@@ -1115,13 +969,12 @@ if Threads.nthreads() >= 2
     # Broadcast runs on several threads under CpuPolyester.
     @testset "broadcast is threaded, $(D)D" for D in 1:3
         n = D == 1 ? (200_000,) : D == 2 ? (400, 400) : (60, 60, 60)
-        Wₕ = _bc357_space(n, CpuPolyester())
+        Wₕ = _broadcast_space(n, CpuPolyester())
         uₕ, wₕ = Rₕ(Wₕ, x -> sin(sum(x))), Rₕ(Wₕ, x -> prod(x))
-        spy = Bramble.VectorElement(_BC357Spy(copy(parent(uₕ))), Wₕ)
         v = similar(uₕ)
-        _BC357_SEEN[] = 0
-        v .= 2.0 .* spy .+ wₕ
-        @test count_ones(_BC357_SEEN[]) >= 2
+        _reset_seen!()
+        v .= 2.0 .* _spy(uₕ) .+ wₕ
+        @test _threads_seen() >= 2
         @test parent(v) == 2.0 .* parent(uₕ) .+ parent(wₕ)
     end
 end
@@ -1287,33 +1140,6 @@ end
 # The GMG transfers and cycles under CpuPolyester, against Serial on
 # the same non-uniform meshes as test/solvers/multigrid.jl. The transfers write every point
 # once, so they agree bitwise on every repeat; the cycles agree to rounding.
-function _mg_transfer_meshes(bk = backend())
-    Random.seed!(3291)
-    I(a = 0.0, b = 1.0) = interval(a, b)
-    return (
-        (mesh(domain(I()), 33, false; backend = bk), 4),
-        (mesh(domain(I() × I(0.0, 2.0)), (17, 9), false; backend = bk), 3),
-        (mesh(domain(I() × I(-1.0, 1.0) × I(0.0, 2.0)), (9, 5, 9), false; backend = bk), 3),
-        (mesh(domain(I() × I(0.5, 0.5)), (17, 4), false; backend = bk), 3),
-        (mesh(domain(I() × I(0.5, 0.5) × I()), (9, 4, 5), false; backend = bk), 2)
-    )
-end
-
-function _mg_jitter_mesh(D, n; bk = backend())
-    rng = Random.Xoshiro(3291)
-    Ω = mesh(domain(_unit_cube(Val(D))), ntuple(_ -> n, D), ntuple(_ -> true, D); backend = bk)
-    h = 1 / (n - 1)
-    function pts()
-        x = collect(range(0.0, 1.0; length = n)) .+ 0.3h .* (2 .* rand(rng, n) .- 1)
-        x[1], x[end] = 0.0, 1.0
-        return sort!(x)
-    end
-    change_points!(Ω, ntuple(_ -> pts(), D))
-    return Ω
-end
-
-_mg_spd(W) = (κ = Rₕ(W, x -> 1 + sum(abs2, x)); form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))))
-
 @testset "Multigrid under CpuPolyester" begin
     policy = CpuPolyester()
     Random.seed!(3291)

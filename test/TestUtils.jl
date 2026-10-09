@@ -16,8 +16,10 @@ using Test
 using SparseArrays: spdiagm
 using ForwardDiff
 using Printf: @sprintf
-using Bramble: ×, Rₕ, box, components, domain, element, gridspace, interval, iterative_refinement!,
-               mesh, npoints
+using Random: Random, Xoshiro
+import Bramble
+using Bramble: ×, Rₕ, Serial, VectorElement, backend, box, change_points!, components, domain, element, form,
+               gridspace, inner₊, innerₕ, interval, iterative_refinement!, mesh, npoints, space, ∇ₕ
 using Bramble: indices, point
 
 # The test group, read once here rather than in each entry point, so that a subsystem's own
@@ -418,6 +420,268 @@ _field(u, D) = D == 1 ? u[1] : u
 # overwrite warning pointed at it).
 function _matches_fd(f, a = 1.3; rtol = 1e-5)
     return isapprox(ForwardDiff.derivative(f, a), _fd(f, a); rtol = rtol)
+end
+
+# --- Thread spy ------------------------------------------------------------------------ #
+#
+# A storage vector recording which threads read it: proves a banded or batched path ran on
+# several threads, rather than trusting the dispatch. It was defined six times (the threaded
+# stencil, vector-calculus, broadcast and nested-threading tests, and twice in
+# ext/polyester_ext.jl), one per file, each with its own global counter. A test calls
+# `_reset_seen!()` right before the call it measures and reads `_threads_seen()` after it:
+# the counter is shared, so the reset has to stay at every site.
+const _SEEN = Threads.Atomic{UInt64}(0)
+struct _Spy{T} <: AbstractVector{T}
+    x::Vector{T}
+end
+Base.size(s::_Spy) = size(s.x)
+Base.IndexStyle(::Type{<:_Spy}) = IndexLinear()
+Base.@propagate_inbounds function Base.getindex(s::_Spy, i::Int)
+    Threads.atomic_or!(_SEEN, UInt64(1) << ((Threads.threadid() - 1) % 64))
+    return s.x[i]
+end
+
+# A grid function whose storage is a spy over a copy of `u`'s.
+_spy(u) = VectorElement(_Spy(copy(parent(u))), space(u))
+
+_reset_seen!() = (_SEEN[] = 0)
+
+# How many distinct threads have read a spy since the last reset.
+_threads_seen() = count_ones(_SEEN[])
+
+# --- Device-array mock ------------------------------------------------------------------ #
+
+# Minimal DenseArray mock simulating a vendor GPU array type (MtlArray, CuArray) to check
+# generic backend dispatch with no GPU hardware or optional dependency. It answers
+# `DeviceLocality()` although the storage underneath is a plain host `Array`: that is what
+# makes the `Backend` constructor's locality rejection, the offloaded projection path
+# (`GpuOffload`) and the sweep guard testable on a host. It claims device locality the same
+# way a real vendor array would, so pairing it with a CpuPolicy or a host matrix type must be
+# refused exactly as it would be for MtlVector/MtlMatrix. Defined once for every file that
+# needs one, so the `Bramble.locality` method is added once too.
+struct MockDeviceArray{T, N} <: DenseArray{T, N}
+    data::Array{T, N}
+end
+function MockDeviceArray{T, N}(::UndefInitializer, dims::Vararg{Integer, N}) where {T, N}
+    return MockDeviceArray(Array{T, N}(undef, dims...))
+end
+function MockDeviceArray{T, N}(::UndefInitializer, dims::NTuple{N, Integer}) where {T, N}
+    return MockDeviceArray(Array{T, N}(undef, dims))
+end
+Base.size(A::MockDeviceArray) = size(A.data)
+Base.getindex(A::MockDeviceArray, i::Int...) = getindex(A.data, i...)
+Base.setindex!(A::MockDeviceArray, v, i::Int...) = setindex!(A.data, v, i...)
+Base.IndexStyle(::Type{<:MockDeviceArray}) = IndexLinear()
+Base.fill!(A::MockDeviceArray{T}, v) where {T} = (fill!(A.data, v); A)
+Bramble.locality(::Type{<:MockDeviceArray}) = Bramble.DeviceLocality()
+
+const MockDeviceVector{T} = MockDeviceArray{T, 1}
+const MockDeviceMatrix{T} = MockDeviceArray{T, 2}
+
+# --- Zero-based vector ------------------------------------------------------------------ #
+
+# A `Float64` vector indexed from 0, standing in for an `OffsetVector`: the transfers,
+# smoothers, preconditioners and the Kronecker products must refuse offset axes, and this is
+# the smallest array that has them. `IdentityUnitRange` keeps the axes a valid index set for
+# `Base.require_one_based_indexing` to reject.
+struct ZeroBasedVector <: AbstractVector{Float64}
+    p::Vector{Float64}
+end
+Base.size(z::ZeroBasedVector) = size(z.p)
+Base.axes(z::ZeroBasedVector) = (Base.IdentityUnitRange(0:(length(z.p) - 1)),)
+Base.getindex(z::ZeroBasedVector, i::Int) = z.p[i + 1]
+Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
+
+# --- Multigrid fixtures ----------------------------------------------------------------- #
+#
+# Shared by test/solvers/multigrid.jl and the Polyester multigrid testset of
+# test/ext/polyester_ext.jl, which runs the same meshes and the same form under CpuPolyester
+# and compares with Serial. Non-uniform throughout: on a uniform mesh rebuilding each level
+# from the domain would nest too, and hide a hierarchy that does not take every other point.
+const MG_SEED = 3291
+
+# Non-uniform meshes in 1D, 2D and 3D, and two with a collapsed axis (which also cover
+# `interpolation_matrix` on collapsed axes), with a level count each.
+function _mg_transfer_meshes(bk = backend())
+    Random.seed!(MG_SEED)
+    unit(a = 0.0, b = 1.0) = interval(a, b)
+    return (
+        (mesh(domain(unit()), 33, false; backend = bk), 4),
+        (mesh(domain(unit() × unit(0.0, 2.0)), (17, 9), false; backend = bk), 3),
+        (mesh(domain(unit() × unit(-1.0, 1.0) × unit(0.0, 2.0)), (9, 5, 9), false; backend = bk), 3),
+        (mesh(domain(unit() × unit(0.5, 0.5)), (17, 4), false; backend = bk), 3),
+        (mesh(domain(unit() × unit(0.5, 0.5) × unit()), (9, 4, 5), false; backend = bk), 2)
+    )
+end
+
+# Uniform points jittered by up to ±0.3h along each axis: non-uniform everywhere, with
+# bounded cell aspect ratio.
+function _mg_jitter_mesh(D, n; bk = backend(), seed = MG_SEED)
+    rng = Xoshiro(seed)
+    Ω = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), ntuple(_ -> n, D),
+        ntuple(_ -> true, D); backend = bk)
+    h = 1 / (n - 1)
+    function pts()
+        x = collect(range(0.0, 1.0; length = n)) .+ 0.3h .* (2 .* rand(rng, n) .- 1)
+        x[1], x[end] = 0.0, 1.0
+        return sort!(x)
+    end
+    change_points!(Ω, ntuple(_ -> pts(), D))
+    return Ω
+end
+
+# Mass plus variable diffusion, κ = 1 + |x|²: symmetric positive definite with natural
+# boundary conditions.
+_mg_spd(W) = (κ = Rₕ(W, x -> 1 + sum(abs2, x)); form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))))
+
+# --- Threaded stencil fixtures ----------------------------------------------------------- #
+#
+# Under a threaded policy every CPU stencil engine (the one-sided and centered difference
+# engines and both average engines) runs banded along the grid's last axis, one band per
+# thread or `@batch` task. Every point is still computed by the very loop body the serial
+# engine runs, so the answer must equal the `Serial()` one exactly, not merely to a
+# tolerance. The meshes are non-uniform: on a uniform mesh a band that picked up the wrong
+# spacing index would still give the right number. test/space/threaded_stencils.jl runs this
+# under `Parallel()` and test/ext/polyester_ext.jl under `CpuPolyester()`.
+
+# Every family reaching `_apply_stencil!` or `_apply_averaged!`, spelled from the operator's
+# base name so no Unicode is retyped here.
+const _STENCIL_FAMILIES = (:D₋, :D₊, :diff₋, :diff₊, :jump, :Dc, :D̃, :D̽, :M, :M₊, :Mc)
+# What `unit` runs of them: one per engine (one-sided difference, jump, centered difference,
+# average, centered average); `slow` runs them all.
+const _STENCIL_UNIT_FAMILIES = (:D₋, :diff₊, :jump, :Dc, :M₊, :Mc)
+const _STENCIL_CENTERED = (:Dc, :D̽, :Mc)   # need three points along their direction
+const _STENCIL_SUFFIXES = ("ₓ", "ᵧ", "₂")
+
+_stencil_op(fam, d) = getproperty(Bramble, Symbol(fam, _STENCIL_SUFFIXES[d]))
+_stencil_op!(fam, d) = getproperty(Bramble, Symbol(fam, _STENCIL_SUFFIXES[d], :!))
+
+function _stencil_domain(D)
+    D == 1 ? domain(interval(0.0, 1.0)) :
+    D == 2 ? domain(interval(0.0, 1.0) × interval(0.0, 1.0)) :
+    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+end
+
+# The same non-uniform mesh twice, once per policy: the seed fixes the random points.
+function _stencil_mesh_pair(n::NTuple{D, Int}, policy; seed = 356) where {D}
+    dom = _stencil_domain(D)
+    npts = D == 1 ? n[1] : n
+    unif = D == 1 ? false : ntuple(_ -> false, D)
+    Random.seed!(seed)
+    Ωs = mesh(dom, npts, unif; backend = backend(policy = Serial()))
+    Random.seed!(seed)
+    Ωp = mesh(dom, npts, unif; backend = backend(policy = policy))
+    return Ωs, Ωp
+end
+
+const _STENCIL_F = (x -> sin(3x) + x^2, x -> sin(3x[1] + 2x[2]) + x[1] * x[2],
+    x -> sin(3x[1] + 2x[2] - x[3]) + x[1] * x[3])
+const _STENCIL_G = (x -> cos(2x), x -> exp(x[1]) * x[2], x -> x[1] + x[2]^2 * x[3])
+
+# Compare every applicable family and direction, in place and allocating, scalar and
+# composite, between `Serial()` and `policy`. `full = false` keeps one family per engine and
+# leaves the 3D composite out, the costliest to compile; it is what `unit` runs.
+function _check_stencils(n::NTuple{D, Int}, policy; full::Bool = WITH_SLOW_TESTS) where {D}
+    Ωs, Ωp = _stencil_mesh_pair(n, policy)
+    Ws, Wp = gridspace(Ωs), gridspace(Ωp)
+    Vs, Vp = gridspace(Ωs, Val(2)), gridspace(Ωp, Val(2))
+    us, up = Rₕ(Ws, _STENCIL_F[D]), Rₕ(Wp, _STENCIL_F[D])
+    vs, vp = Rₕ(Vs, (_STENCIL_F[D], _STENCIL_G[D])), Rₕ(Vp, (_STENCIL_F[D], _STENCIL_G[D]))
+    @test parent(us) == parent(up)
+    for d in 1:D, fam in (full ? _STENCIL_FAMILIES : _STENCIL_UNIT_FAMILIES)
+
+        fam in _STENCIL_CENTERED && n[d] < 3 && continue
+        f, f! = _stencil_op(fam, d), _stencil_op!(fam, d)
+        @testset "$(fam)$(_STENCIL_SUFFIXES[d]) n=$n" begin
+            ws, wp = similar(us), similar(up)
+            parent(wp) .= NaN               # every point must be written
+            f!(ws, us)
+            @test f!(wp, up) === wp
+            @test parent(wp) == parent(ws)
+            @test parent(f(up)) == parent(f(us))
+
+            # The composite dispatches the same banded engines whatever the dimension.
+            if full || D < 3
+                ws2, wp2 = similar(vs), similar(vp)
+                f!(ws2, vs)
+                f!(wp2, vp)
+                @test parent(wp2) == parent(ws2)
+                @test parent(f(vp)) == parent(f(vs))
+            end
+        end
+    end
+end
+
+# --- Threaded broadcast fixtures --------------------------------------------------------- #
+#
+# `dest .= expr` into a `VectorElement` runs in static bands of the destination's storage,
+# one per thread or `@batch` task. Every point runs the very loop body the serial broadcast
+# runs, so the answer must equal the `Serial()` one exactly, including when `dest` itself
+# appears on the right-hand side. The meshes are non-uniform, so the operands differ from
+# point to point in a way a uniform mesh would not show. test/space/threaded_broadcast.jl
+# runs this under `Parallel()` and test/ext/polyester_ext.jl under `CpuPolyester()`.
+
+function _broadcast_domain(D)
+    D == 1 ? domain(interval(0.0, 1.0)) :
+    D == 2 ? domain(interval(0.0, 1.0) × interval(0.0, 2.0)) :
+    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+end
+
+# The same non-uniform mesh under the given policy: the seed fixes the random points.
+function _broadcast_space(n::NTuple{D, Int}, policy; seed = 357) where {D}
+    Random.seed!(seed)
+    npts = D == 1 ? n[1] : n
+    unif = D == 1 ? false : ntuple(_ -> false, D)
+    return gridspace(mesh(_broadcast_domain(D), npts, unif; backend = backend(policy = policy)))
+end
+
+const _BROADCAST_SIZES = ((1,), (2,), (7,), (1001,), (5, 3), (40, 37), (4, 3, 5), (13, 11, 9))
+
+# Every broadcast shape, each writing into a fresh `NaN` destination (or
+# updating a copy in place): VectorElements only, a plain vector, literal scalars, a `Ref`
+# and a runtime `Float64`, and `dest` on its own right-hand side.
+function _broadcast_results(n, policy)
+    Wₕ = _broadcast_space(n, policy)
+    uₕ = Rₕ(Wₕ, x -> sin(3sum(x)) + prod(x))
+    wₕ = Rₕ(Wₕ, x -> exp(first(x)) * last(x))
+    plain = [cos(0.3i) for i in eachindex(parent(uₕ))]
+    r = Ref(0.25)
+    α = 1.5
+    fresh() = (v = similar(uₕ); parent(v) .= NaN; v)
+    out = Dict{String, Vector{Float64}}()
+
+    v = fresh()
+    v .= 2.0 .* uₕ .+ wₕ
+    out["axpy"] = copy(parent(v))
+    v = fresh()
+    v .= uₕ .* plain .- r[] .* wₕ .+ 1
+    out["mixed"] = copy(parent(v))
+    v = fresh()
+    v .= α .* sin.(uₕ) ./ (1 .+ wₕ .^ 2)
+    out["nested"] = copy(parent(v))
+    v = fresh()
+    v .= r
+    out["fill"] = copy(parent(v))
+    v = fresh()
+    v .= uₕ
+    out["copy"] = copy(parent(v))
+    a = copy(uₕ)
+    a .= a .+ 0.5 .* wₕ
+    out["self"] = copy(parent(a))
+    a = copy(uₕ)
+    a .= wₕ .- a .* a
+    out["self twice"] = copy(parent(a))
+    a = copy(uₕ)
+    a .*= α
+    out["scale"] = copy(parent(a))
+    return out
+end
+
+function _check_broadcast_equal(n, policy)
+    s, p = _broadcast_results(n, Serial()), _broadcast_results(n, policy)
+    for key in keys(s)
+        @test p[key] == s[key]
+    end
 end
 
 # Runs one worked-example page. The pages under docs/src/examples/ are Literate scripts:

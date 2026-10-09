@@ -8,6 +8,7 @@ using LinearAlgebra: issymmetric, mul!
 using SparseArrays: SparseMatrixCSC, nnz, findnz
 using Random
 using Polyester
+using ..TestUtils: ZeroBasedVector
 
 # `kronecker_operator` on a composite space whose leaves share one mesh: one
 # `KroneckerLinearOperator` per nonzero (test leaf, trial leaf) block, wrapped in a
@@ -35,15 +36,6 @@ function _kb_same_matrix(K, A)
     nnz(B) == nnz(A) && findnz(B)[1:2] == findnz(A)[1:2] || return false
     return maximum(abs, B - A; init = 0.0) <= 1e-13 * maximum(abs, A)
 end
-
-# A vector indexed from 0, standing in for an `OffsetVector` (not a test dependency).
-struct _KBZeroBased <: AbstractVector{Float64}
-    data::Vector{Float64}
-end
-Base.size(v::_KBZeroBased) = size(v.data)
-Base.axes(v::_KBZeroBased) = (0:(length(v.data) - 1),)
-Base.getindex(v::_KBZeroBased, i::Int) = v.data[i + 1]
-Base.setindex!(v::_KBZeroBased, a, i::Int) = (v.data[i + 1] = a)
 
 _kb_alloc5(y, K, x, α, β) = @allocated mul!(y, K, x, α, β)
 _kb_alloc3(y, K, x) = @allocated mul!(y, K, x)
@@ -180,9 +172,9 @@ end
         for K in Ks
             n = size(K, 1)
             x = rand(MersenneTwister(KB_SEED), n)
-            @test_throws ArgumentError mul!(zeros(n), K, _KBZeroBased(x), 1.0, 0.0)
-            @test_throws ArgumentError mul!(_KBZeroBased(zeros(n)), K, x, 1.0, 0.0)
-            @test_throws ArgumentError mul!(zeros(n), K, _KBZeroBased(x))
+            @test_throws ArgumentError mul!(zeros(n), K, ZeroBasedVector(x), 1.0, 0.0)
+            @test_throws ArgumentError mul!(ZeroBasedVector(zeros(n)), K, x, 1.0, 0.0)
+            @test_throws ArgumentError mul!(zeros(n), K, ZeroBasedVector(x))
         end
     end
 

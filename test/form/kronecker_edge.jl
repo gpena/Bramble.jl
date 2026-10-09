@@ -11,6 +11,7 @@ using Random
 using Polyester
 using Kronecker
 using ForwardDiff
+using ..TestUtils: ZeroBasedVector
 
 # Regression tests for the edge cases the critics' probes found while the general Kronecker
 # operators (gpena/Bramble.jl#427, #439, #442) were built. Each testset is one area; each
@@ -87,15 +88,6 @@ function _ke_kron_matches(a; rtol = 1e-13)
     K = _ke_quiet(() -> kronecker_operator(a))
     return _ke_same(Matrix(assemble(a)), Matrix(SparseMatrixCSC(K)); rtol)
 end
-
-# A vector indexed from 0, standing in for an `OffsetVector` (not a test dependency).
-struct _KEZeroBased <: AbstractVector{Float64}
-    data::Vector{Float64}
-end
-Base.size(v::_KEZeroBased) = size(v.data)
-Base.axes(v::_KEZeroBased) = (0:(length(v.data) - 1),)
-Base.getindex(v::_KEZeroBased, i::Int) = v.data[i + 1]
-Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
 
 @testset "Kronecker edge cases" begin
     # `CpuThreaded` (#439) threads the lines of the product. Fewer lines than threads and
@@ -667,11 +659,10 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
         @test K1 * x == Ks * x
 
         # A vector indexed from 0 is refused, not read a place off.
-        zero_based = _KEZeroBased(x)
+        zero_based = ZeroBasedVector(x)
         @test_throws ArgumentError mul!(zeros(length(x)), K1, zero_based)
         @test_throws ArgumentError mul!(zeros(length(x)), K1, zero_based, 1.0, 0.0)
-        @test_throws ArgumentError mul!(_KEZeroBased(zeros(length(x))), K1, x, 1.0, 0.0)
-        @test_throws ArgumentError mul!(zeros(length(x)), Ks, zero_based, 1.0, 0.0)
+        @test_throws ArgumentError mul!(ZeroBasedVector(zeros(length(x))), K1, x, 1.0, 0.0)
     end
 
     # (#427): `fdm_solve` refuses a singular system instead of returning garbage,

@@ -11,8 +11,7 @@ using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff�
 import SparseArrays: issparse, sprand, spdiagm, spzeros, nnz
 using Bramble: forward_star_difference, centered_difference, cross_weighted_difference
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS, _nonuniform_points
-using ..UtilsBackendsTests: MockGPUVector, MockGPUMatrix
+using ..TestUtils: WITH_SLOW_TESTS, _nonuniform_points, MockDeviceMatrix, MockDeviceVector
 using ..SpaceVectorElementsTests: setup_test_grid
 
 # Backward difference operators
@@ -72,18 +71,18 @@ end
 
         # `_shift_ones` dispatches on the backend's own matrix_type: SparseMatrixCSC above,
         # a dense Matrix here, and a generic AbstractMatrix (any vendor array type, e.g. a
-        # GPU array) via the scalar-indexing fallback -- MockGPUMatrix (test/utils/backends.jl,
-        # already in Main by this point) stands in for that without needing real GPU hardware.
-        # MockGPUVector/MockGPUMatrix answer DeviceLocality(), so this Backend now needs a
+        # GPU array) via the scalar-indexing fallback -- MockDeviceMatrix (test/TestUtils.jl)
+        # stands in for that without needing real GPU hardware.
+        # MockDeviceVector/MockDeviceMatrix answer DeviceLocality(), so this Backend now needs a
         # device policy to construct at all.
         be_dense = backend(vector_type = Vector{T}, matrix_type = Matrix{T})
         S_dense = _Eye(be_dense, 5, Val(1))
         @test S_dense isa Matrix{T}
         @test S_dense == Matrix(spdiagm(1 => ones(4)))
 
-        be_generic = backend(vector_type = MockGPUVector{T}, matrix_type = MockGPUMatrix{T}, policy = GpuKernel())
+        be_generic = backend(vector_type = MockDeviceVector{T}, matrix_type = MockDeviceMatrix{T}, policy = GpuKernel())
         S_generic = _Eye(be_generic, 5, Val(-2))
-        @test S_generic isa MockGPUMatrix{T}
+        @test S_generic isa MockDeviceMatrix{T}
         @test S_generic.data == Matrix(spdiagm(-2 => ones(3)))
     end
 
