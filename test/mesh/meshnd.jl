@@ -33,7 +33,9 @@ using Bramble:
                iterative_refinement!,
                change_points!,
                D₋ᵧ,
+               D₊ᵧ,
                D₋ₓ,
+               inner₊ᵧ,
                boundary_indices,
                forward_spacings,
                half_points,
@@ -539,6 +541,34 @@ using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
             @test npoints(Ωₕ_f32, Tuple) == npoints(Ωₕ_set, Tuple) == (4, 1)
             @test isequal(points(Ωₕ_f32(1)), points(Ωₕ_set(1)))
             @test isequal(points(Ωₕ_f32(2)), points(Ωₕ_set(2)))
+
+            # Differences along the collapsed axis assemble finite matrices that match the
+            # runtime zero, instead of 0/0 from the raw zero spacing (gpena/Bramble.jl#622).
+            # The ∇ₕ form must equal the D₋ₓ form alone: its y part contributes nothing.
+            Ωₕ_set64 = mesh(Ω_line, (4, 4), (true, true); backend = backend())
+            @testset "collapsed y, $(eltype(Ωₕ)) $tag" for (tag, Ωₕ) in (
+                ("set", Ωₕ_set64), ("set", Ωₕ_set), ("storage", Ωₕ_f32))
+                Wₕ = gridspace(Ωₕ)
+                uₕ = Rₕ(Wₕ, x -> x[1]^2 + 1)
+                uvals = parent(uₕ)
+                A = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))))
+                Ax = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v))))
+                @test all(isfinite, A)
+                @test A ≈ Ax
+                @test !all(iszero, A * uvals)
+                @test A * uvals ≈ Ax * uvals
+                for op in (D₋ᵧ, D₊ᵧ)
+                    B = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ᵧ(op(u), op(v))))
+                    @test all(isfinite, B)
+                    @test all(iszero, B)
+                    C = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(op(u), v)))
+                    @test all(isfinite, C)
+                    @test all(iszero, C * uvals)
+                    @test all(iszero, parent(op(uₕ)))
+                    @test all(isfinite, op(Wₕ))
+                    @test all(iszero, op(Wₕ))
+                end
+            end
         end
 
         @testset "Collapsed dimensions, one layer further" begin

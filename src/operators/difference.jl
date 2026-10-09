@@ -1192,8 +1192,9 @@ end
         op::BackwardDifference{D, Dim}, space, I::CartesianIndex{D}
 ) where {D, Dim}
     h = spacing(mesh(space), I, Dim)
-    mask = I[Dim] == 1 ? 0 : 1
-    return (mask / h, -mask / h)
+    # select, not `mask / h`: a collapsed axis has h == 0 and only edge points (#622)
+    c = I[Dim] == 1 ? zero(inv(h)) : inv(h)
+    return (c, -c)
 end
 
 @inline function _stencil_weights(
@@ -1201,8 +1202,8 @@ end
 ) where {D, Dim}
     m = mesh(space)
     h = forward_spacing(m, I, Dim)
-    mask = I[Dim] == npoints(m, Tuple)[Dim] ? 0 : 1
-    return (mask / h, -mask / h)
+    c = I[Dim] == npoints(m, Tuple)[Dim] ? zero(inv(h)) : inv(h)
+    return (c, -c)
 end
 
 # ==============================================================================
@@ -1331,8 +1332,9 @@ end
 ) where {D, Dim}
     m = mesh(space)
     # no neighbour on one side at either end
-    mask = (I[Dim] == 1 || I[Dim] == npoints(m, Tuple)[Dim]) ? 0 : 1
-    c = mask / (spacing(m, I, Dim) + forward_spacing(m, I, Dim))
+    s = spacing(m, I, Dim) + forward_spacing(m, I, Dim)
+    edge = I[Dim] == 1 || I[Dim] == npoints(m, Tuple)[Dim]
+    c = edge ? zero(inv(s)) : inv(s)
     return (c, -c)
 end
 
@@ -1340,9 +1342,9 @@ end
         op::StarDifference{D, Dim}, space, I::CartesianIndex{D}
 ) where {D, Dim}
     m = mesh(space)
-    mask = I[Dim] == npoints(m, Tuple)[Dim] ? 0 : 1
-    # the averaged spacing, which is what D̃ divides by
-    c = 2 * mask / (spacing(m, I, Dim) + forward_spacing(m, I, Dim))
+    s = spacing(m, I, Dim) + forward_spacing(m, I, Dim)
+    # the averaged spacing, which is what D̃ divides by; `2 / s` as in `_star_weight`
+    c = I[Dim] == npoints(m, Tuple)[Dim] ? zero(2 / s) : 2 / s
     return (c, -c)
 end
 
@@ -1363,8 +1365,10 @@ end
     if I[Dim] == 1
         # No point behind the first one: D̽ₕ has no truncated-boundary convention of its
         # own, so it collapses to the one-sided difference the near side still gives,
-        # D₊(u)_1 = (u_2 - u_1)/h_1 (gpena/Bramble.jl#183).
-        a = inv(spacing(m, I, Dim))
+        # D₊(u)_1 = (u_2 - u_1)/h_1 (gpena/Bramble.jl#183). A one-point axis has h_1 == 0
+        # and no neighbour at all, so the weights are zero there (#622).
+        h = spacing(m, I, Dim)
+        a = npoints(m, Tuple)[Dim] == 1 ? zero(inv(h)) : inv(h)
         return (a, -a, zero(a))
     elseif I[Dim] == npoints(m, Tuple)[Dim]
         # No point past the last one: collapses to D₋(u)_n = (u_n - u_{n-1})/h_n.

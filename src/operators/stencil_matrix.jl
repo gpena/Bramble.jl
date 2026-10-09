@@ -117,8 +117,9 @@ four without claiming to be a mesh (see its own docstring).
         ::BackwardFiniteDiffOp{Dim}, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
 ) where {Dim}
     h = _axis_spacing(Ωₕ, I, Dim)
-    mask = I[Dim] == 1 ? 0 : 1
-    return (mask / h, -mask / h)
+    # select, not `mask / h`: a collapsed axis has h == 0 and only edge points (#622)
+    c = I[Dim] == 1 ? zero(inv(h)) : inv(h)
+    return (c, -c)
 end
 
 @inline function _stencil_weights(
@@ -126,16 +127,16 @@ end
 ) where {Dim}
     n = _axis_npoints(Ωₕ, Dim)
     h = _axis_forward_spacing(Ωₕ, I, Dim)
-    mask = I[Dim] == n ? 0 : 1
-    return (mask / h, -mask / h)
+    c = I[Dim] == n ? zero(inv(h)) : inv(h)
+    return (c, -c)
 end
 
 @inline function _stencil_weights(
         ::StarDiffOp{Dim}, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
 ) where {Dim}
     n = _axis_npoints(Ωₕ, Dim)
-    mask = I[Dim] == n ? 0 : 1
-    c = 2 * mask / (_axis_spacing(Ωₕ, I, Dim) + _axis_forward_spacing(Ωₕ, I, Dim))
+    s = _axis_spacing(Ωₕ, I, Dim) + _axis_forward_spacing(Ωₕ, I, Dim)
+    c = I[Dim] == n ? zero(2 / s) : 2 / s
     return (c, -c)
 end
 
@@ -143,8 +144,8 @@ end
         ::CenteredDiffOp{Dim}, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
 ) where {Dim}
     n = _axis_npoints(Ωₕ, Dim)
-    mask = (I[Dim] == 1 || I[Dim] == n) ? 0 : 1
-    c = mask / (_axis_spacing(Ωₕ, I, Dim) + _axis_forward_spacing(Ωₕ, I, Dim))
+    s = _axis_spacing(Ωₕ, I, Dim) + _axis_forward_spacing(Ωₕ, I, Dim)
+    c = (I[Dim] == 1 || I[Dim] == n) ? zero(inv(s)) : inv(s)
     return (c, -c)
 end
 
@@ -153,7 +154,8 @@ end
 ) where {Dim}
     n = _axis_npoints(Ωₕ, Dim)
     if I[Dim] == 1
-        a = inv(_axis_spacing(Ωₕ, I, Dim))
+        h = _axis_spacing(Ωₕ, I, Dim)
+        a = n == 1 ? zero(inv(h)) : inv(h)
         return (a, -a, zero(a))
     elseif I[Dim] == n
         b = inv(_axis_spacing(Ωₕ, I, Dim))
