@@ -271,7 +271,8 @@ end
         # functions of the source's grid before indexing them with its shape. Each
         # destination leaf has to be refused -- a short view, a bigger mesh, a
         # permuted shape -- before anything is written to any of them, and a matching
-        # destination must stay allocation-free.
+        # destination must stay allocation-free. The source's components are checked against
+        # each other too, and must share one mesh.
         Ωs = (
             mesh(domain(interval(0.0, 1.0)), 9, false),
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 5), (true, false)),
@@ -286,6 +287,12 @@ end
             nothing,
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (true, false)),
             mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 5, 4), (false, true, false))
+        )
+        # Fresh meshes of the same shape as `Ωs`, with different random non-uniform points.
+        twin = (
+            nothing,
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 5), (true, false)),
+            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 3), (false, true, false))
         )
         fs = (x -> x^2 + 1, x -> x[1] + 2x[2]^2 + 1, x -> x[1] * x[2] + x[3] + 1)
 
@@ -360,8 +367,25 @@ end
 
                     @test rejects(f!, put(build(good, sh), s, nan_dest(len, Xₕ)), uₕ)
                 end
+                # A source whose last component sits on a permuted grid, or on another
+                # non-uniform mesh of the same shape, is refused before anything is written.
+                if src === :field && D >= 2
+                    @test rejects(f!, build(good, sh),
+                        ntuple(k -> Rₕ(k == D ? gridspace(permuted[D]) : Wₕ, fs[D]), D))
+                    @test Bramble.host_points(twin[D]) != Bramble.host_points(Ωs[D])
+                    @test rejects(f!, build(good, sh),
+                        ntuple(k -> Rₕ(k == D ? gridspace(twin[D]) : Wₕ, fs[D]), D))
+                end
                 @test alloc_test(f!, build(good, sh), uₕ) == 0
             end
+        end
+
+        # The allocating forms check a composite source's leaves the same way.
+        @testset "Allocating forms, two grids" begin
+            uₕ = Rₕ(gridspace(Ωs[2]) × gridspace(permuted[2]), (x -> x[1], x -> x[2]))
+            @test_throws ArgumentError Bramble.divₕ(uₕ)
+            @test_throws ArgumentError Bramble.curlₕ(uₕ)
+            @test_throws ArgumentError Bramble.εₕ(uₕ)
         end
 
         # `Δₕ!` also takes composite elements, whose totals agree on a permuted grid, so
