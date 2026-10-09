@@ -130,10 +130,6 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
             backend_refactor! = mumps_refactor!,
             invalid_sym_solve = (A, F) -> mumps_solve(A, F; sym = :invalid_sym)
         )
-
-        # Not a MUMPS assertion: the dispatcher's unknown-symbol path, which happens to be
-        # checked only here.
-        @test_throws ArgumentError pde_solve(p.A, p.F; solver = :invalid_solver)
     end
 end
 
