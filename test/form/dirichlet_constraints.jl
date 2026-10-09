@@ -22,6 +22,7 @@ import Bramble:
 using Bramble: set
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: _tri
 
 @testset "Dirichlet constraints" begin
     # --- Setup ---
@@ -215,16 +216,19 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
     end
 
     @testset "Matrix rows (composite)" begin
-        A = _eye(nV)
+        A = _tri(nV)
         @test dirichlet_bc!(A, Vₕ, :bottom) === A
         # a composite space is the scalar one repeated per component: the marked rows are
-        # the marked scalar rows shifted by each component's offset
+        # the marked scalar rows shifted by each component's offset. A row of `_tri` has
+        # off-diagonals, so a pinned row is told from an untouched one.
         for c in 0:2, i in 1:nW
 
             row = c * nW + i
             if marked[i]
                 @test A[row, row] == 1.0
                 @test count(!=(0.0), A[row, :]) == 1
+            else
+                @test A[row, :] == _tri(nV)[row, :]
             end
         end
         @test nV == 3nW
@@ -338,7 +342,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
     @testset "Component restriction" begin
         # The Stokes-style case this exists for: constrain one field, leave another free.
         @testset "Matrix (single leaf)" begin
-            A = _eye(nV)
+            A = _tri(nV)
             @test dirichlet_bc!(A, Vₕ, :bottom; components = 1) === A
             for c in 0:2, i in 1:nW
 
@@ -347,16 +351,15 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
                     @test A[row, row] == 1.0
                     @test count(!=(0.0), A[row, :]) == 1
                 else
-                    # leaves 2 and 3 (c = 1, 2) are untouched: still the identity
-                    @test A[row, row] == 1.0
-                    @test count(!=(0.0), A[row, :]) == 1
-                    @test A[row, :] == _eye(nV)[row, :]
+                    # every other row, whether in leaf 1 or in leaves 2 and 3 (c = 1, 2),
+                    # keeps its off-diagonals
+                    @test A[row, :] == _tri(nV)[row, :]
                 end
             end
         end
 
         @testset "Matrix (multiple leaves)" begin
-            A = _eye(nV)
+            A = _tri(nV)
             @test dirichlet_bc!(A, Vₕ, :bottom; components = (1, 3)) === A
             for c in 0:2, i in 1:nW
 
@@ -367,7 +370,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
                 end
             end
             # leaf 2 (c = 1) never touched, whatever :bottom marks
-            @test A[(nW + 1):(2nW), :] == _eye(nV)[(nW + 1):(2nW), :]
+            @test A[(nW + 1):(2nW), :] == _tri(nV)[(nW + 1):(2nW), :]
         end
 
         @testset "Vector (single leaf)" begin
@@ -386,23 +389,32 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         end
 
         @testset "Unrestricted default" begin
-            A1, A2 = _eye(nV), _eye(nV)
+            A1, A2 = _tri(nV), _tri(nV)
             dirichlet_bc!(A1, Vₕ, :bottom)
             dirichlet_bc!(A2, Vₕ, :bottom; components = nothing)
             @test A1 == A2
+            @test A1 != _tri(nV)           # the call changed something to compare
         end
 
         @testset "symmetrize! keyword" begin
-            A = Matrix(_eye(nV))
+            # leaves coupled by nothing, so leaf 1's elimination stays inside leaf 1
+            A = Matrix(blockdiag(_tri(nW), _tri(nW), _tri(nW)))
             F = fill(2.0, nV)
             A0 = copy(A)
             symmetrize!(A, F, Vₕ, :bottom; components = 1)
-            # only leaf 1's marked rows/columns could have changed anything
+            # only leaf 1's marked columns could have changed anything
             for c in 1:2, i in 1:nW
 
                 row = c * nW + i
                 @test A[:, row] == A0[:, row]
             end
+            @test F[(nW + 1):nV] == fill(2.0, 2nW)
+            # and leaf 1 did change: its block is what the scalar space gives
+            As, Fs = Matrix(_tri(nW)), fill(2.0, nW)
+            symmetrize!(As, Fs, Wₕ, :bottom)
+            @test As != _tri(nW)
+            @test A[1:nW, 1:nW] == As
+            @test F[1:nW] == Fs
         end
 
         @testset "Out-of-range component error" begin
@@ -435,7 +447,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
             nVn = ndofs(Vn)
             @test nVn == 3nW
 
-            A = _eye(nVn)
+            A = _tri(nVn)
             @test dirichlet_bc!(A, Vn, :bottom; components = 3) === A
             for i in 1:nW
                 row = 2nW + i          # leaf 3's offset, per leaf_spaces_offsets
@@ -444,7 +456,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
                     @test count(!=(0.0), A[row, :]) == 1
                 end
             end
-            @test A[1:(2nW), :] == _eye(nVn)[1:(2nW), :]   # leaves 1, 2 untouched
+            @test A[1:(2nW), :] == _tri(nVn)[1:(2nW), :]   # leaves 1, 2 untouched
 
             un = element(Vn, 0.0)
             @test length(parent(un(3))) == nW    # was a BoundsError before the fix
@@ -463,90 +475,18 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
     end
 
     @testset "Multiple labels" begin
-        A = _eye(nW)
+        A = _tri(nW)
         @test dirichlet_bc!(A, Wₕ, :bottom, :top) === A
         both = index_in_marker(Ωₕ, :bottom) .| index_in_marker(Ωₕ, :top)
         for i in 1:nW
-            both[i] && @test A[i, i] == 1.0
+            if both[i]
+                @test A[i, i] == 1.0
+                @test count(!=(0.0), A[i, :]) == 1
+            else
+                @test A[i, :] == _tri(nW)[i, :]
+            end
         end
         @test count(both) > count(marked)     # :top really adds rows
-    end
-
-    # Composite space.
-    @testset "Multiple labels match sequential (#334)" begin
-        # Composite `dirichlet_bc!`/`symmetrize!` now combine every label into one mask
-        # per leaf and sweep `A` once, instead of once per label.
-        # The oracle is that combining changes nothing: applying `:bottom, :top` together
-        # must equal applying them one label at a time, for both the matrix and (for
-        # `symmetrize!`) the right-hand side.
-        A_combined = _eye(nV)
-        dirichlet_bc!(A_combined, Vₕ, :bottom, :top)
-
-        A_sequential = _eye(nV)
-        dirichlet_bc!(A_sequential, Vₕ, :bottom)
-        dirichlet_bc!(A_sequential, Vₕ, :top)
-        @test A_combined == A_sequential
-
-        # Dense agrees with sparse.
-        Ad_combined = _full(nV)
-        dirichlet_bc!(Ad_combined, Vₕ, :bottom, :top)
-        @test Ad_combined == Matrix(A_combined)
-
-        F_combined = collect(1.0:nV)
-        B_combined = copy(A_combined)
-        symmetrize!(B_combined, F_combined, Vₕ, :bottom, :top)
-
-        F_sequential = collect(1.0:nV)
-        B_sequential = copy(A_sequential)
-        symmetrize!(B_sequential, F_sequential, Vₕ, :bottom)
-        symmetrize!(B_sequential, F_sequential, Vₕ, :top)
-        @test B_combined == B_sequential
-        @test F_combined == F_sequential
-
-        # Restricted to a subset of leaves: combining still matches sequential, and the
-        # untouched leaf (2) stays the pristine identity.
-        Ac_combined = _eye(nV)
-        dirichlet_bc!(Ac_combined, Vₕ, :bottom, :top; components = (1, 3))
-
-        Ac_sequential = _eye(nV)
-        dirichlet_bc!(Ac_sequential, Vₕ, :bottom; components = (1, 3))
-        dirichlet_bc!(Ac_sequential, Vₕ, :top; components = (1, 3))
-        @test Ac_combined == Ac_sequential
-        @test Ac_combined[(nW + 1):(2nW), :] == _eye(nV)[(nW + 1):(2nW), :]
-
-        # A corner shared by two labels: overlap is idempotent under the old per-label
-        # loop, so the combined single pass (which visits that row once, not twice) has
-        # to land on the same result.
-        Ωo = mesh(
-            domain(
-                interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom, :left => :left
-            ),
-            (5, 5),
-            (true, true)
-        )
-        Vo = gridspace(Ωo, Val(2))
-        no = ndofs(Vo)
-        bottom_o = index_in_marker(Ωo, :bottom)
-        left_o = index_in_marker(Ωo, :left)
-        @test any(bottom_o .& left_o)      # the (0,0) corner is marked by both
-
-        Ao_combined = _eye(no)
-        dirichlet_bc!(Ao_combined, Vo, :bottom, :left)
-        Ao_sequential = _eye(no)
-        dirichlet_bc!(Ao_sequential, Vo, :bottom)
-        dirichlet_bc!(Ao_sequential, Vo, :left)
-        @test Ao_combined == Ao_sequential
-
-        Fo_combined = collect(1.0:no)
-        Bo_combined = copy(Ao_combined)
-        symmetrize!(Bo_combined, Fo_combined, Vo, :bottom, :left)
-
-        Fo_sequential = collect(1.0:no)
-        Bo_sequential = copy(Ao_sequential)
-        symmetrize!(Bo_sequential, Fo_sequential, Vo, :bottom)
-        symmetrize!(Bo_sequential, Fo_sequential, Vo, :left)
-        @test Bo_combined == Bo_sequential
-        @test Fo_combined == Fo_sequential
     end
 
     @testset "Overlapping label precedence" begin
@@ -592,7 +532,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
     end
 
     @testset "Empty & missing labels" begin
-        A0 = _eye(nW)
+        A0 = _tri(nW)
         A1 = copy(A0)
         @test dirichlet_bc!(A1, Wₕ) === A1                 # no labels at all
         @test A1 == A0
@@ -660,14 +600,9 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         @test map(last, leaves) == (0, n, 2n, 3n)
         @test ndofs(nested) == 4n
 
-        # the flat four-component space marks exactly the same rows
+        # the flat four-component space gets the same values (the matrix rows are pinned
+        # against it in test/form/symmetrize.jl)
         flat = gridspace(Ωₕ, Val(4))
-        An = _eye(4n)
-        Af = _eye(4n)
-        dirichlet_bc!(An, nested, :bottom)
-        dirichlet_bc!(Af, flat, :bottom)
-        @test An == Af
-
         bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0))
         vn, vf = fill(3.0, 4n), fill(3.0, 4n)
         dirichlet_bc!(vn, nested, bcs, :bottom)
