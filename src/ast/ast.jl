@@ -324,6 +324,19 @@ expression(op::DiracSource) = "dirac($(string(op.points)), $(string(op.strengths
 @inline Base.:*(c::Number, op::LazyOp) = OperatorScale(c, op)
 @inline Base.:*(op::LazyOp, c::Number) = OperatorScale(c, op)
 @inline Base.:/(op::LazyOp, c::Number) = OperatorScale(one(c) / c, op)
+# An integer divisor that fits in an `Int` scales by the exact `Rational` `1 // c`, which
+# promotes against the space's element type as `-1` does above: `one(c) / c` is a `Float64`
+# and would widen a `Float32` form (gpena/Bramble.jl#633). `simplify_ast` never multiplies
+# or adds a `Rational` scale, so no fold can overflow. `op / 0` is `1 // 0`, an `Inf` as
+# before. `typemin(Int)` has no negation in `Int`; `-1 // typemax(Int)` converts to the same
+# `-2.0^-63` in `Float64` and `Float32`. `UInt64`, `Int128`, `UInt128` and `BigInt` divisors
+# keep the `Number` method above. Limitation: a term paired with its transpose, or a product
+# with a scaled argument on each side, multiplies its nested rational scales exactly when
+# assembled, so `(innerₕ(D₋ₓ(u), v) / 2^40) / 2^40 + innerₕ(u, D₋ₓ(v))` throws an
+# `OverflowError` once their denominators pass `typemax(Int)`.
+const _IntDivisor = Union{Bool, Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32}
+@inline _int_reciprocal(c::Int) = c == typemin(Int) ? -1 // typemax(Int) : 1 // c
+@inline Base.:/(op::LazyOp, c::_IntDivisor) = OperatorScale(_int_reciprocal(Int(c)), op)
 
 @inline Base.:*(c::Base.RefValue{<:Number}, op::LazyOp) = OperatorScale(c, op)
 @inline Base.:*(op::LazyOp, c::Base.RefValue{<:Number}) = OperatorScale(c, op)

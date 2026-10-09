@@ -19,6 +19,9 @@ same matrix or vector:
     (gpena/Bramble.jl#527). Nor when `A` or `B` names any component (`_component_free`),
     so a component-mixing sum is never hidden inside the scale (gpena/Bramble.jl#529).
   - `c1 * A + c2 * A` (same `A`) combines to `(c1 + c2) * A`: two routed terms become one.
+    Not when either `c` is a `Rational` (`_folds`): `op / 2` builds `1 // 2`, and checked
+    `Rational` sums and products overflow or throw where the floats they stand for do not
+    (gpena/Bramble.jl#633). Nested scales do not fold across one either.
   - `0 * A` collapses to a zero term with a one-point sparsity pattern instead of `A`'s full
     stencil, and `A + 0` / `0 + A` drops the zero term from the tree entirely. Only for an
     `Integer` coefficient -- `0.0 * A` keeps its term. See `_wrap_scale` below for why
@@ -125,10 +128,18 @@ end
 # A `RefValue` coefficient is never statically zero or one; wrap unconditionally.
 @inline _wrap_scale(c::Base.RefValue, A::LazyOp) = OperatorScale(c, A)
 
+# Whether a coefficient may be multiplied or added into another at simplify time, decided by
+# its type. A `RefValue` may not: its value can change after the form is built. Nor may a
+# `Rational` (`op / 2` is `1 // 2`, gpena/Bramble.jl#633): its arithmetic is checked, so
+# `(1 // 2^40) * (1 // 2^40)` overflows and `1 // 0 - 1 // 0` throws, where the floats it
+# stands for give `2.0^-80` and `NaN`. Left apart, each converts to the space's element type
+# on its own when assembled.
+@inline _folds(c) = c isa Number && !(c isa Rational)
+
 # Two coefficients just lifted out of the two arguments of one inner product, wrapped around
 # the product they were lifted from.
 @inline function _lift_scalars(cl, cr, inner::LazyOp)
-    cl isa Number && cr isa Number && return _wrap_scale(cl * cr, inner)
+    _folds(cl) && _folds(cr) && return _wrap_scale(cl * cr, inner)
     return _wrap_scale(cl, _wrap_scale(cr, inner))
 end
 
@@ -299,8 +310,9 @@ function simplify_ast(op::OperatorScale)
         # `RefValue` on either side can change after construction, so folding through one
         # would bake in whatever value it happened to hold right now. Type-stable whatever
         # the values are: both operands' types are known here, so `_wrap_scale` dispatches
-        # on a known type and the product's type follows from them alone.
-        if inner isa OperatorScale && inner.scalar isa Number
+        # on a known type and the product's type follows from them alone. A `Rational` on
+        # either side does not fold either (`_folds`).
+        if inner isa OperatorScale && _folds(op.scalar) && _folds(inner.scalar)
             return _wrap_scale(op.scalar * inner.scalar, inner.inner_op)
         end
     end
@@ -358,8 +370,8 @@ function simplify_ast(op::OperatorAdd)
         # control falls through to the `OperatorAdd` at the bottom. Not even the same `Ref`
         # on both sides combines: `cl === cr` on two `RefValue`s of one type is object
         # identity, a run-time value, so `form` would infer a `Union`
-        # (gpena/Bramble.jl#527).
-        cl isa Number && cr isa Number && return _wrap_scale(cl + cr, al)
+        # (gpena/Bramble.jl#527). A `Rational` on either side does not combine (`_folds`).
+        _folds(cl) && _folds(cr) && return _wrap_scale(cl + cr, al)
     elseif (left isa OperatorScale || right isa OperatorScale) &&
            cl isa Integer &&
            cr isa Integer &&

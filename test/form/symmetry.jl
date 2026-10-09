@@ -225,6 +225,12 @@ using Bramble:
             Wₕ, Wₕ, (u, v) -> innerₕ(a * D₋ₓ(u), D₊ᵧ(v)) + innerₕ(b * D₊ᵧ(u), D₋ₓ(v))
         ))
 
+        # Integer divisors stay nested rational scalings (#633): a pair matches on the
+        # exact product of its scalings, not factor by factor.
+        @test issymmetric(form(Wₕ, Wₕ, (u, v) -> (g1(u, v) / 2) / 3 + g2(u, v) / 6))
+        @test issymmetric(form(Wₕ, Wₕ, (u, v) -> (g1(u, v) / 2) / 3 + (g2(u, v) / 3) / 2))
+        @test !issymmetric(form(Wₕ, Wₕ, (u, v) -> g1(u, v) / 2 + g2(u, v) / 3))
+
         # Mixed with symmetric terms, anywhere in the sum; a lone partner-less term is not.
         @test issymmetric(form(
             Wₕ, Wₕ, (u, v) -> g1(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)) + g2(u, v)
