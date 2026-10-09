@@ -429,6 +429,21 @@ using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
             fsp_iter = Iterators.product(forward_spacings(Ωₕ)...)
             @test length(fsp_iter) == 9
 
+            # forward_spacings is an indexable vector agreeing with forward_spacing
+            Random.seed!(559)
+            Ωₕ_nu = mesh(Ω_2d, (6, 7), (false, false))
+            for d in 1:2
+                p = points(Ωₕ_nu(d))
+                @test forward_spacings(Ωₕ_nu(d)) isa AbstractVector
+                @test collect(forward_spacings(Ωₕ_nu(d))) == vcat(diff(p), diff(p)[end])
+                @test all(forward_spacings(Ωₕ_nu)[d][i] == forward_spacing(Ωₕ_nu(d), i)
+                for i in eachindex(p))
+                @test spacings(Ωₕ_nu(d)) == vcat(diff(p)[1], diff(p))
+                @test isapprox(half_spacings(Ωₕ_nu(d)),
+                    vcat(diff(p)[1] / 2, (p[3:end] .- p[1:(end - 2)]) ./ 2, diff(p)[end] / 2);
+                    atol = 1e-12, rtol = 1e-12)
+            end
+
             # Iterators.product(half_spacings(mesh)...)
             hsp_iter = Iterators.product(half_spacings(Ωₕ)...)
             @test length(hsp_iter) == 9

@@ -269,7 +269,6 @@ end
 
 @inline _extract_linear_index(idx::Int) = idx
 @inline _extract_linear_index(idx::CartesianIndex{1}) = idx[1]
-@inline _spacing_generator(Ωₕ::AbstractMeshType, spacing_func) = (spacing_func(Ωₕ, i) for i in 1:npoints(Ωₕ))
 @inline _apply_hs_logic(value::T) where {T} = ifelse(iszero(value), one(T), value)
 
 #------------------------------------------------------------------------------------------#

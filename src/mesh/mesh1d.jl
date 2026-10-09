@@ -373,11 +373,20 @@ See also: [`host_spacings`](@ref), [`half_spacings`](@ref), [`half_spacing`](@re
 
 Return the forward spacings of `Ωₕ`, where `forward_spacings(Ωₕ)[i]` is
 [`forward_spacing`](@ref)`(Ωₕ, i)`. Unlike [`spacings`](@ref), this is not cached: it is
-[`spacing`](@ref)'s vector read one index ahead, computed lazily on iteration.
+[`spacing`](@ref)'s vector read one index ahead, a new vector each call, of the same array
+type as `spacings(Ωₕ)`.
 
 See also: [`forward_spacing_for_derivative`](@ref).
 """
-@inline forward_spacings(Ωₕ::_Mesh1DLike) = _spacing_generator(Ωₕ, forward_spacing)
+@inline function forward_spacings(Ωₕ::_Mesh1DLike)
+    h = spacings(Ωₕ)
+    n = length(h)
+    n == 1 && return copy(h)
+    f = similar(h)
+    copyto!(f, 1, h, 2, n - 1)
+    copyto!(f, n, h, n, 1)
+    return f
+end
 
 # A single-point mesh (n == 1, whether from a topologically collapsed domain or simply a
 # one-point request) has no adjacent interval, so `half_spacings` is the honest raw zero
