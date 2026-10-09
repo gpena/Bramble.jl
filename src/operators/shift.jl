@@ -443,13 +443,22 @@ struct ShiftNode{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
 end
 
 """
+    shift_op(op::LazyOp{D}, ::Val{Dim}, amount::Int) where {D, Dim}
     shift_op(op::LazyOp{D}, dim::Int, amount::Int) where D
 
-Shifts the stencil of `op` by `amount` grid points in dimension `dim`.
+Shifts the stencil of `op` by `amount` grid points in dimension `Dim` (or `dim`). A
+direction that is not an `Int` in `1:D` throws an `ArgumentError`. The `Int` direction
+forwards to the `Val` form, so a literal direction still gives a concrete node type.
 """
-function shift_op(op::LazyOp{D}, dim::Int, amount::Int) where {D}
-    return ShiftNode{D, dim, typeof(op)}(amount, op)
+@noinline _throw_shift_dim_type_error(dim) = throw(ArgumentError("the stencil direction must be an Int, got $(repr(dim)) of type $(typeof(dim))"))
+
+@inline function shift_op(op::LazyOp{D}, ::Val{Dim}, amount::Int) where {D, Dim}
+    # `Val(true)` or `Val(1.0)` would pass the range check and fail later, far from here
+    Dim isa Int || _throw_shift_dim_type_error(Dim)
+    1 <= Dim <= D || _throw_stencil_dim_error(Dim, D)
+    return ShiftNode{D, Dim, typeof(op)}(amount, op)
 end
+@inline shift_op(op::LazyOp, dim::Int, amount::Int) = shift_op(op, Val(dim), amount)
 
 # The public shifts on a symbolic operand (gpena/Bramble.jl#352): `S₊ₓ(u)` is
 # `forward_shift(u, Val(1))`, the node `shift_op(u, 1, 1)` builds but with the direction read

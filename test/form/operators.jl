@@ -163,6 +163,25 @@ const _ORIGIN_2D = (0, 0)
         @test local_stencil(shift_op(id, 1, 0), Wₕ, interior, nothing, lin[interior]) ==
               local_stencil(id, Wₕ, interior, nothing, lin[interior])
         @test resolve_ast(shift_op(id, 1, 1)) isa ShiftNode
+
+        # the Int direction forwards to the Val form, so both build the same concrete node
+        @test @inferred(shift_op(id, Val(2), 3)) === shift_op(id, 2, 3)
+        k = 3
+        @test @inferred(shift_op(id, Val(1), k)) isa ShiftNode{2, 1}
+        literal_shift = op -> shift_op(op, 1, 2)
+        @test @inferred(literal_shift(id)) isa ShiftNode{2, 1}
+
+        # a direction outside 1:D throws at build, on a leaf and on a nested operand: the
+        # node would otherwise assemble as the identity (gpena/Bramble.jl#526)
+        u1 = TrialFunction{1, 1}()
+        for op in (u1, D₋ₓ(u1)), d in (0, 2)
+            @test_throws ArgumentError shift_op(op, d, 1)
+            @test_throws ArgumentError shift_op(op, Val(d), 1)
+        end
+        # a direction that is not an Int is refused at build too, not in a later stencil call
+        for d in (true, 1.0, :x)
+            @test_throws ArgumentError shift_op(id, Val(d), 1)
+        end
     end
 
     @testset "Region restriction" begin
