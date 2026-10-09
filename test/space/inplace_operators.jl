@@ -60,8 +60,17 @@ function _agreement_case(::Val{D}, Ωₕ, fun) where {D}
         for (f!, f, nm) in _ops(Val(D))
             @testset "$nm" begin
                 vₕ = similar(uₕ)
+                # Most forms truncate a boundary slice to zero (D̽ instead falls back to a
+                # one-sided difference there, but still writes a real, non-sentinel
+                # value). If a `!` form skipped those entries instead of writing them,
+                # whatever was in the destination would survive (in a fresh `similar` that
+                # is uninitialised memory), so the allocating form would look right while
+                # the in-place form returned garbage at the boundary. Pre-filling with a
+                # value that cannot be a correct answer catches it.
+                parent(vₕ) .= -999.0
                 returned = f!(vₕ, uₕ)
                 @test parent(vₕ) == parent(f(uₕ))
+                @test !any(==(-999.0), parent(vₕ))
                 @test returned === vₕ          # single destination returns it
 
                 # and componentwise over a composite space
@@ -94,30 +103,6 @@ end
         _agreement_case(Val(1), Ωs[1], fs[1])
         _agreement_case(Val(2), Ωs[2], fs[2])
         _agreement_case(Val(3), Ωs[3], fs[3])
-    end
-
-    @testset "Destination overwrite" begin
-        # Most of these truncate a boundary slice to zero (D̽ instead falls back to a
-        # one-sided difference there, but still writes a real,
-        # non-sentinel value). If a `!` form skipped those entries instead of writing
-        # them, whatever was in the destination would survive (with a fresh `similar`
-        # that is uninitialised memory), so the allocating form would look right while
-        # the in-place form returned garbage at the boundary. Pre-filling with a value
-        # that cannot be a correct answer catches it.
-        Random.seed!(20260831)
-        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false))
-        Wₕ = gridspace(Ωₕ)
-        uₕ = Rₕ(Wₕ, x -> exp(x[1]) * (x[2]^2 + 1))
-
-        for (f!, f, nm) in _ops(Val(2))
-            @testset "$nm" begin
-                vₕ = similar(uₕ)
-                parent(vₕ) .= -999.0
-                f!(vₕ, uₕ)
-                @test parent(vₕ) == parent(f(uₕ))
-                @test !any(==(-999.0), parent(vₕ))
-            end
-        end
     end
 
     @testset "Zero allocations" begin

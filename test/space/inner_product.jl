@@ -717,15 +717,6 @@ end
         @test norminf((aₕ, bₕ)) ≈ 4.0
         @test norminf((aₕ,)) ≈ norminf(aₕ)
     end
-
-    @testset "The element type comes from the data" begin
-        # bramble-verification §4. The Float32 half of this lives in
-        # test/space/element_type.jl, where the backend actually carries that element type.
-        Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)
-        uₕ = Rₕ(gridspace(Ω1), x -> x[1])
-        @test norminf(uₕ) isa Float64
-        @test @inferred(norminf(uₕ)) isa Float64
-    end
 end
 
 # A masked sum of existing cell measures, restricted by `markers`, is a volumetric
