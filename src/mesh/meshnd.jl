@@ -68,6 +68,18 @@ mutable struct MeshnD{D, BT <: Backend, CI <: CartesianIndices{D}, SM <: Tuple, 
     words::Matrix{UInt64}
     "an identity unique to this mesh, kept across its mutations."
     uid::UInt64
+    "a fresh counter value at construction and at every marker replacement."
+    marker_stamp::UInt64
+end
+
+# The mesh over the given marker table and words, with a fresh identity and marker stamp.
+function MeshnD(
+        set::CartesianProduct{D}, markers::MeshMarkers, indices::CartesianIndices{D},
+        backend::Backend, submeshes::Tuple, marker_ids::Dict{Symbol, Int},
+        words::Matrix{UInt64}, uid::UInt64
+) where {D}
+    return MeshnD(set, markers, indices, backend, submeshes, marker_ids, words, uid,
+        _next_mesh_uid())
 end
 
 """
@@ -124,6 +136,10 @@ const _MeshnDLike{D} = Union{MeshnD{D}, MeshnDState{D}}
 @inline _marker_words(Ωₕ::_MeshnDLike) = Ωₕ.words
 @inline _marker_ids(Ωₕ::MeshnD) = Ωₕ.marker_ids
 
+# The stamp of `Ωₕ`'s marker words: redrawn by every `_store_markers!`, never by a geometry
+# change, and never equal across meshes or across two stores.
+@inline _marker_stamp(Ωₕ::MeshnD) = Ωₕ.marker_stamp
+
 # Replaces the marker dictionary, its label table and the word matrix together (O6: a label
 # set may change after construction; the word matrix is rebuilt, never resized).
 function _store_markers!(Ωₕ::MeshnD, mesh_markers)
@@ -132,6 +148,7 @@ function _store_markers!(Ωₕ::MeshnD, mesh_markers)
     Ωₕ.markers = mm
     Ωₕ.marker_ids = ids
     Ωₕ.words = words
+    Ωₕ.marker_stamp = _next_mesh_uid()
     return nothing
 end
 

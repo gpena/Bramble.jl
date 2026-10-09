@@ -110,20 +110,6 @@ using Bramble:
         Vtwin = CompositeGridSpace((Wbig, gridspace(Ωtwin)))
         @test size(assemble(form(Vtwin, Vtwin, (u, v) -> innerₕ(u(2), v(1))))) ==
               (ndofs(Vtwin), ndofs(Vtwin))
-
-        # and a plain scalar form, where trial and test are one space
-        Wₕ = gridspace(Ωbig)
-        @test size(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))) == (ndofs(Wₕ), ndofs(Wₕ))
-    end
-
-    @testset "Row and column dimensions" begin
-        # equal here, because the check above is what allows the form at all: asserted so
-        # that cross-mesh operators have a well-defined baseline
-        Wₕ = gridspace(Ωbig)
-        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
-        A = allocate_system_matrix(a)
-        @test size(A, 1) == ndofs(Bramble.test_space(a))
-        @test size(A, 2) == ndofs(Bramble.trial_space(a))
     end
 end
 

@@ -27,6 +27,7 @@ using Bramble: refactor!, sparse_factorize, sparse_refactor!
 import Bramble: D₊ₓ, D₊ᵧ
 using LinearAlgebra: ldiv!
 using SparseArrays: SparseMatrixCSC, spzeros
+using ..TestUtils: _grid, _sine_source, _unit_cube
 
 export ZERO_BC, poisson_system, convection_diffusion_system,
        poisson_solve_contract, refactor_contract, unsymmetric_refactor_contract,
@@ -42,14 +43,6 @@ const ZERO_BC = :boundary => (x -> 0.0)
 @inline if_supported(body, capability) = body(capability)
 
 # ---------------------------------------------------------------------- fixtures
-
-_unit_cube(::Val{D}) where {D} = reduce(×, ntuple(_ -> interval(0.0, 1.0), Val(D)))
-
-_sine_source(::Val{1}) = x -> sin(π * x)
-_sine_source(::Val{D}) where {D} = x -> prod(sin(π * xᵢ) for xᵢ in x)
-
-_grid(::Val{1}, Ωd, n) = mesh(Ωd, n, true)
-_grid(::Val{D}, Ωd, n) where {D} = mesh(Ωd, ntuple(_ -> n, Val(D)), ntuple(_ -> true, Val(D)))
 
 """
     poisson_system(Val(D), n; source, symmetrize = true)
@@ -193,9 +186,13 @@ function refactor_contract(
     @test isapprox(imag(u_complex), A \ (2 .* F); atol = atol)
 
     # same sparsity pattern, different values, through the unique `refactor!` driver
+    # The perturbed entry is an interior diagonal: the first row is a Dirichlet identity
+    # row with a zero right-hand side, so changing it leaves the solution as it was.
+    k = argmax(abs.(F))
     A_mod = copy(A)
-    A_mod[1, 1] += 5.0
+    A_mod[k, k] += 5.0
     u_mod = A_mod \ F
+    @test !isapprox(u_mod, p.u_ref; atol = atol)
     refactor!(fact, A_mod)
     @test isapprox(fact \ F, u_mod; atol = atol)
 
@@ -205,13 +202,14 @@ function refactor_contract(
     refactor!(fact_unified, A_mod)
     @test isapprox(fact_unified \ F, u_mod; atol = atol)
 
+    # `fact` already holds `A_mod`, so refactor back to `A` first: a `backend_refactor!`
+    # that does nothing would otherwise pass.
+    refactor!(fact, A)
+    @test isapprox(fact \ F, p.u_ref; atol = atol)
     backend_refactor!(fact, A_mod)
     @test isapprox(fact \ F, u_mod; atol = atol)
-    sparse_refactor!(fact_unified, A_mod)
-    @test isapprox(fact_unified \ F, u_mod; atol = atol)
 
     @test_throws ArgumentError refactor!(fact, Matrix(A_mod))
-    @test_throws ArgumentError sparse_refactor!(fact, Matrix(A_mod))
     return nothing
 end
 
@@ -237,15 +235,15 @@ function unsymmetric_refactor_contract(p; atol::Real, factorize)
     fact = factorize(A_u)
     @test isapprox(fact \ F_u, u_ref_u; atol = atol)
 
+    k = argmax(abs.(F_u))    # interior diagonal; row 1 is a Dirichlet identity row
     A_u_mod = copy(A_u)
-    A_u_mod[1, 1] += 3.0
+    A_u_mod[k, k] += 3.0
+    @test !isapprox(A_u_mod \ F_u, u_ref_u; atol = atol)
     refactor!(fact, A_u_mod)
     @test isapprox(fact \ F_u, A_u_mod \ F_u; atol = atol)
 
-    # straight from the BilinearForm, and through the alias
+    # straight from the BilinearForm
     refactor!(fact, p.a; dirichlet = ZERO_BC)
-    @test isapprox(fact \ F_u, u_ref_u; atol = atol)
-    sparse_refactor!(fact, p.a; dirichlet = ZERO_BC)
     @test isapprox(fact \ F_u, u_ref_u; atol = atol)
     return nothing
 end

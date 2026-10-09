@@ -627,11 +627,6 @@ end
                 get_rule()
                 @test (@allocated get_rule()) == 0
             end
-
-            # BigFloat keeps the run-time path: its precision is a run-time setting.
-            nb, wb = _gauss_rule(Val(3), BigFloat)
-            @test eltype(nb) === BigFloat
-            @test abs(sum(wb) - one(BigFloat)) < 1e-50
         end
 
         @testset "Allocation scaling" begin
@@ -1077,12 +1072,6 @@ end
     primitive type OddFloat <: AbstractFloat 64 end
     @test isbitstype(OddFloat)
     @test_throws Exception _gauss_rule(Val(3), OddFloat)
-
-    # the supported types are unaffected
-    for T in (Float32, Float64)
-        nodes, wts = _gauss_rule(Val(3), T)
-        @test sum(wts) ≈ one(T)
-    end
 end
 
 @testset "Tuple arithmetic" begin

@@ -5,20 +5,13 @@ using Bramble
 using Bramble: D₊ₓ, D₋ₓ, D₋ᵧ, D₊ᵧ, Dc, Mₓ, M₊ᵧ, Mcₓ, jumpₓ, jumpᵧ, S₊ₓ, S₋ᵧ, inner₊ₓ,
                inner₊ᵧ, restrict_to
 using SparseArrays: SparseMatrixCSC, nnz, nonzeros, spzeros
+using ..TestUtils: _graded_mesh
 
 # `_kron_project` (gpena/Bramble.jl#427): one addend of a resolved form, projected onto
 # each axis of a tensor mesh, gives 1D factors whose summed `kron`s are what `assemble`
 # builds for that addend. Every check compares against `assemble(a)` on a graded mesh,
 # where no two axes share their nodes, so a factor put on the wrong axis or built with the
 # wrong spacing shows.
-
-function _proj_graded_space(n::NTuple{D, Int}) where {D}
-    Ω = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
-    Ωₕ = mesh(Ω, n, ntuple(_ -> false, D))
-    pts = ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D)
-    Bramble.change_points!(Ωₕ, pts)
-    return gridspace(Ωₕ)
-end
 
 _proj_leaves(a) = Bramble._kron_leaves(Bramble.resolve_form_ast(a), ())
 
@@ -31,9 +24,9 @@ function _proj_sum(a)
     for (scales, term) in _proj_leaves(a)
         P = Bramble._kron_project(term, Ωₕ)
         P === nothing && return nothing
-        for factors in P
+        for (live, factors) in P
             @assert all(F -> F isa SparseMatrixCSC, factors)
-            B += Bramble._kron_coeff(scales) * foldl(kron, reverse(factors))
+            B += Bramble._kron_coeff((scales..., live...)) * foldl(kron, reverse(factors))
         end
     end
     return B
@@ -54,21 +47,15 @@ end
 @testset "Kronecker projection (#427)" begin
     @testset "families match assemble" begin
         # Any: each space is its own type
-        for W in Any[_proj_graded_space((9, 7)), _proj_graded_space((6, 5, 7))]
+        for W in Any[gridspace(_graded_mesh((9, 7))), gridspace(_graded_mesh((6, 5, 7)))]
             forms = Any[  # Any: each closure is its own type
-                (u, v) -> innerₕ(D₊ₓ(u), D₊ₓ(v)),
                 (u, v) -> innerₕ(Dc(u, Val(1)), Dc(v, Val(1))),
-                (u, v) -> innerₕ(Mₓ(u), Mₓ(v)),
                 (u, v) -> innerₕ(M₊ᵧ(u), Mcₓ(v)),
                 (u, v) -> innerₕ(jumpₓ(u), jumpᵧ(v)),
                 (u, v) -> innerₕ(S₊ₓ(u), S₋ᵧ(v)),
-                (u, v) -> innerₕ(D₋ₓ(Mₓ(u)), D₋ₓ(Mₓ(v))),
-                (u, v) -> innerₕ(D₋ₓ(D₋ᵧ(u)), v),
                 (u, v) -> innerₕ(D₋ₓ(u), D₊ᵧ(v)),
-                (u, v) -> innerₕ(D₋ₓ(u), v) + innerₕ(u, v),
                 (u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)),
                 (u, v) -> inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(D₋ₓ(v))),
-                (u, v) -> innerₕ(restrict_to(:interior, u), v),
                 (u, v) -> innerₕ(restrict_to(:interior, D₋ₓ(u)), D₋ᵧ(v))
             ]
             for f in forms
@@ -78,7 +65,7 @@ end
     end
 
     @testset "a sum inside a side distributes" begin
-        W = _proj_graded_space((9, 7))
+        W = gridspace(_graded_mesh((9, 7)))
         a = form(W, W, (u, v) -> innerₕ(D₋ₓ(u) + D₋ᵧ(u), v + jumpₓ(v)))
         terms = [Bramble._kron_project(t, mesh(W)) for (_, t) in _proj_leaves(a)]
         @test sum(length, terms) == 4
@@ -86,7 +73,7 @@ end
     end
 
     @testset "untensored terms are refused" begin
-        W = _proj_graded_space((9, 7))
+        W = gridspace(_graded_mesh((9, 7)))
         g = Rₕ(W, x -> x[1] + x[2])
         @test _proj_refused(form(W, W, (u, v) -> innerₕ(g * u, v)))
         @test _proj_refused(form(W, W, (u, v) -> innerₕ(restrict_to(:boundary, u), v)))
@@ -101,7 +88,7 @@ end
     # A node, shift or `inner₊` weight along an axis the mesh does not have would meet no
     # axis and project to the identity; `assemble` throws on it, and the projection refuses.
     @testset "axes the mesh lacks are refused" begin
-        W = _proj_graded_space((7, 6))
+        W = gridspace(_graded_mesh((7, 6)))
         Ωₕ = mesh(W)
         u, v = Bramble.TrialFunction{2, 1}(), Bramble.TestFunction{2, 1}()
         for node in (Bramble.BackwardDifference{2, 3, typeof(u)}(u),
@@ -117,19 +104,22 @@ end
     end
 
     # A plain number scaling a node inside a side goes into the axis-1 chain; a `Ref` there
-    # is refused, since a factor would read it once.
+    # is returned beside the factors, since a factor would read it once.
     @testset "a number inside a side" begin
-        W = _proj_graded_space((9, 7))
+        W = gridspace(_graded_mesh((9, 7)))
         a = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + 0.3 * innerₕ(u, v))
         @test any(l -> occursin("OperatorScale", string(typeof(l[2]))), _proj_leaves(a))
         @test _proj_matches(a)
         c = Ref(0.3)
-        @test _proj_refused(form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + c * innerₕ(u, v)))
+        a = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + c * innerₕ(u, v))
+        @test _proj_matches(a)
+        P = Bramble._kron_project(only(_proj_leaves(a))[2], mesh(W))
+        @test map(first, P) == ((), (c,))
     end
 
     @testset "inner_Γ is a sum over its faces" begin
-        W2 = _proj_graded_space((9, 7))
-        W3 = _proj_graded_space((6, 5, 7))
+        W2 = gridspace(_graded_mesh((9, 7)))
+        W3 = gridspace(_graded_mesh((6, 5, 7)))
         cases = Any[  # Any: each space and marker set is its own type
             (W2, :xmin, 1), (W2, :ymax, 1), (W2, (:xmin, :ymin), 2), (W2, :boundary, 4),
             (W3, :zmax, 1), (W3, (:xmax, :ymin), 2), (W3, (:xmin, :ymax, :zmin), 3),
@@ -157,7 +147,7 @@ end
 
     @testset "single-axis coefficients factor" begin
         # Any: each space is its own type
-        for W in Any[_proj_graded_space((9, 7)), _proj_graded_space((6, 5, 7))]
+        for W in Any[gridspace(_graded_mesh((9, 7))), gridspace(_graded_mesh((6, 5, 7)))]
             fx = Rₕ(W, x -> 1 + x[1])
             fy = Rₕ(W, x -> 2 + x[2]^2)
             fl = Rₕ(W, x -> 1 + x[end]^3)  # the last axis: z in 3D
@@ -177,25 +167,25 @@ end
                 @test _proj_matches(form(W, W, f))
             end
         end
-        W = _proj_graded_space((9, 7))
+        W = gridspace(_graded_mesh((9, 7)))
         fy = Rₕ(W, x -> 2 + x[2]^2)
         # The coefficient sits where the D-dimensional one sits: `D₋ᵧ(fy * u)` on axis 2.
         a = form(W, W, (u, v) -> innerₕ(D₋ᵧ(fy * u), v))
         P = Bramble._kron_project(only(_proj_leaves(a))[2], mesh(W))
         Wy = gridspace(mesh(W)(2))
         gy = Rₕ(Wy, x -> 2 + x[1]^2)
-        @test only(P)[2] == assemble(form(Wy, Wy, (u, v) -> innerₕ(D₋ₓ(gy * u), v)))
+        @test only(P)[2][2] == assemble(form(Wy, Wy, (u, v) -> innerₕ(D₋ₓ(gy * u), v)))
     end
 
     @testset "rank-2 or foreign coefficient" begin
-        W = _proj_graded_space((9, 7))
+        W = gridspace(_graded_mesh((9, 7)))
         # One ulp off at one point is no longer a single-axis coefficient.
         g = Rₕ(W, x -> 1 + x[1])
         parent(g)[12] = nextfloat(parent(g)[12])
         @test _proj_refused(form(W, W, (u, v) -> innerₕ(g * u, v)))
         @test _proj_refused(form(W, W, (u, v) -> innerₕ(u, D₋ₓ(g * v))))
         # A coefficient on another mesh of the same size.
-        Wo = _proj_graded_space((9, 7))
+        Wo = gridspace(_graded_mesh((9, 7)))
         go = Rₕ(Wo, x -> 1 + x[1])
         @test _proj_refused(form(W, W, (u, v) -> innerₕ(go * u, v)))
         # A plain vector of the wrong length.

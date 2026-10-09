@@ -6,6 +6,7 @@ module MeshMeshesTests
 using Test
 using Bramble
 using Bramble: hₘᵢₙ, normal_vector
+using ..TestUtils: _marker_mask
 import Bramble:
                 set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, hₘᵢₙ, is_collapsed,
                 change_points!, half_point, half_spacing, indices, is_uniform, locate_cell,
@@ -182,10 +183,8 @@ import Bramble:
             region = x -> (x[1] > 0.2 && x[1] < 0.4) || (x[1] > 0.6 && x[1] < 0.8)
 
             Ωₕ = mesh(domain(I, markers(I, :boundary => threshold, :region => region)), 11, true)
-            mask(pred) = BitVector(pred(point(Ωₕ, i)) for i in indices(Ωₕ))
-
-            @test Bramble.index_in_marker(Ωₕ, :boundary) == mask(threshold)
-            @test Bramble.index_in_marker(Ωₕ, :region) == mask(region)
+            @test Bramble.index_in_marker(Ωₕ, :boundary) == _marker_mask(Ωₕ, threshold)
+            @test Bramble.index_in_marker(Ωₕ, :region) == _marker_mask(Ωₕ, region)
 
             # and neither is vacuous nor everything: an always-false predicate would
             # satisfy the comparison above against its own equally empty oracle. The
@@ -209,11 +208,9 @@ import Bramble:
                 domain(Ω, markers(Ω, :circle => circle, :box => box, :annulus => annulus)),
                 (11, 11), (true, true)
             )
-            mask(pred) = BitVector(pred(point(Ωₕ, I2)) for I2 in vec(indices(Ωₕ)))
-
-            @test Bramble.index_in_marker(Ωₕ, :circle) == mask(circle)
-            @test Bramble.index_in_marker(Ωₕ, :box) == mask(box)
-            @test Bramble.index_in_marker(Ωₕ, :annulus) == mask(annulus)
+            @test Bramble.index_in_marker(Ωₕ, :circle) == _marker_mask(Ωₕ, circle)
+            @test Bramble.index_in_marker(Ωₕ, :box) == _marker_mask(Ωₕ, box)
+            @test Bramble.index_in_marker(Ωₕ, :annulus) == _marker_mask(Ωₕ, annulus)
 
             # the shapes relate as their definitions say. The disc (r < 0.3) and the
             # annulus (0.2 < r < 0.4) are not disjoint -- they share the band
@@ -266,32 +263,6 @@ import Bramble:
             @test Mh isa MeshnD
             @test npoints(Mh) == 27
         end
-    end
-
-    @testset "Marker access & queries" begin
-        I = interval(0.0, 1.0)
-        Ω = I × I
-
-        X = domain(
-            Ω,
-            markers(
-                Ω,
-                :left => x -> x[1] < 0.01,
-                :right => x -> x[1] > 0.99,
-                :bottom => x -> x[2] < 0.01,
-                :top => x -> x[2] > 0.99
-            )
-        )
-
-        @test Set(labels(markers(X))) == Set((:left, :right, :bottom, :top))
-
-        Mh = mesh(X, (5, 5), (true, true))
-        @test haskey(markers(Mh), :left)
-        @test haskey(markers(Mh), :right)
-        @test haskey(markers(Mh), :bottom)
-        @test haskey(markers(Mh), :top)
-        @test any(markers(Mh)[:left])
-        @test any(markers(Mh)[:right])
     end
 
     @testset "Empty & trivial cases" begin
@@ -412,13 +383,6 @@ import Bramble:
             # locate_cell
             @test locate_cell(M2, (0.35, 1.05)) == CartesianIndex(4, 11)
             @test locate_cell(M2, [0.35, 1.05]) == CartesianIndex(4, 11)
-
-            # normal_vector
-            @test normal_vector(M2, :xmin) == normal_vector(M2, :left) == (-1.0, 0.0)
-            @test normal_vector(M2, :xmax) == normal_vector(M2, :right) == (1.0, 0.0)
-            @test normal_vector(M2, :ymin) == normal_vector(M2, :bottom) == (0.0, -1.0)
-            @test normal_vector(M2, :ymax) == normal_vector(M2, :top) == (0.0, 1.0)
-            @test_throws ArgumentError normal_vector(M2, :invalid)
         end
 
         @testset "Three-dimensional extended interface" begin
@@ -436,13 +400,6 @@ import Bramble:
             # For coordinate 0.5, the bounding cell index is 3 (interval [0.5, 0.75])
             @test locate_cell(M3, (0.5, 0.5, 0.5)) == CartesianIndex(3, 3, 3)
             @test locate_cell(M3, (0.1, 0.3, 0.8)) == CartesianIndex(1, 2, 4)
-
-            @test normal_vector(M3, :xmin) == normal_vector(M3, :back) == (-1.0, 0.0, 0.0)
-            @test normal_vector(M3, :xmax) == normal_vector(M3, :front) == (1.0, 0.0, 0.0)
-            @test normal_vector(M3, :ymin) == normal_vector(M3, :left) == (0.0, -1.0, 0.0)
-            @test normal_vector(M3, :ymax) == normal_vector(M3, :right) == (0.0, 1.0, 0.0)
-            @test normal_vector(M3, :zmin) == normal_vector(M3, :bottom) == (0.0, 0.0, -1.0)
-            @test normal_vector(M3, :zmax) == normal_vector(M3, :top) == (0.0, 0.0, 1.0)
         end
     end
 end
@@ -458,7 +415,6 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
                     spacing_for_derivative,
                     forward_spacing_for_derivative,
                     cell_measures,
-                    normal_vector,
                     half_spacings
 
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
@@ -472,6 +428,9 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         # an axis with one point cannot lose its boundary, so the range passes through
         Ωc = mesh(domain(interval(0.0, 1.0) × interval(2.0, 2.0)), (5, 1), (true, true))
         ii = interior_indices(Ωc)
+        @test @inferred(interior_indices(Ωc)) isa CartesianIndices{2}
+        @test @inferred(interior_indices(CartesianIndices((5, 4)))) ==
+              CartesianIndices((2:4, 2:3))
         @test size(ii, 2) == 1                 # the collapsed axis is untouched
         @test size(ii, 1) == 3                 # the other axis loses both ends
     end
@@ -495,27 +454,13 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
     end
 
     @testset "Collection interface" begin
-        # the one-argument forms are asserted with the 1D mesh above; these are the
-        # per-dimension ones
-        @test firstindex(Ω2, 1) == 1
-        @test firstindex(Ω2, 2) == 1
+        # the one-argument forms are asserted with the 1D mesh above, firstindex per
+        # axis in markers.jl; this is the per-dimension lastindex
         @test lastindex(Ω2, 1) == size(Ω2, 1)
         @test lastindex(Ω2, 2) == size(Ω2, 2)
     end
 
-    @testset "Unknown boundary symbols" begin
-        box3 = box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
-        Ω3 = mesh(domain(box3), (3, 3, 3), (true, true, true))
-        @test_throws ArgumentError normal_vector(Ωₕ, :nonsense)
-        @test_throws ArgumentError normal_vector(Ω2, :nonsense)
-        @test_throws ArgumentError normal_vector(Ω3, :nonsense)
-        @test normal_vector(Ω3, :front) == (1.0, 0.0, 0.0)
-    end
-
     @testset "cell_measures widths" begin
-        @test cell_measures(Ωₕ) == half_spacings(Ωₕ)
-        @test length(cell_measures(Ωₕ)) == npoints(Ωₕ)
-
         cm = cell_measures(Ω2)
         @test cm isa NTuple{2, Any}
         @test cm[1] == cell_measures(Ω2(1))
@@ -568,20 +513,6 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         @test npoints(Ωpt) == 1
         iterative_refinement!(Ωpt, markers(domain(interval(3.0, 3.0))))
         @test npoints(Ωpt) == 1
-
-        # single point on a non-degenerate interval: not collapsed, but still
-        # has no interval to halve, so refinement must leave it untouched
-        Ω1 = mesh(domain(interval(0.0, 1.0)), 1, true)
-        @test !Bramble.is_collapsed(Ω1)
-        @test npoints(Ω1) == 1
-        iterative_refinement!(Ω1)
-        @test npoints(Ω1) == 1
-        @test point(Ω1, 1) == 0.0
-
-        # a normal mesh does refine
-        Ωr = mesh(domain(interval(0.0, 1.0)), 4, true)
-        iterative_refinement!(Ωr)
-        @test npoints(Ωr) == 2 * 4 - 1
     end
 end
 

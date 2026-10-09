@@ -2,9 +2,8 @@ module SpaceThreadedVectorCalculusTests
 
 using Test
 using Bramble
-using Bramble: VectorElement
 using Random
-using ..TestUtils: alloc_test, WITH_SLOW_TESTS
+using ..TestUtils: alloc_test, WITH_SLOW_TESTS, _reset_seen!, _spy, _threads_seen
 
 # Under a `CpuThreaded` (`Parallel()`) backend the in-place vector-calculus operators -- the
 # gradients, divergences, curls and strain tensors of vector_calculus.jl -- reach the banded
@@ -129,20 +128,6 @@ const _SIZES = (((1,), (2,), (3,), (5,), (401,)),
 # still fewer than the band count). The full sweep runs in `slow`.
 const _UNIT_SIZES = (((2,), (3,)), ((9, 2), (3, 3)), ((5, 4, 2), (4, 3, 3)))
 
-# A storage vector recording which threads read it: proves the banded path ran, rather
-# than trusting the dispatch.
-const _SEEN = Threads.Atomic{UInt64}(0)
-struct _Spy{T} <: AbstractVector{T}
-    x::Vector{T}
-end
-Base.size(s::_Spy) = size(s.x)
-Base.IndexStyle(::Type{<:_Spy}) = IndexLinear()
-Base.@propagate_inbounds function Base.getindex(s::_Spy, i::Int)
-    Threads.atomic_or!(_SEEN, UInt64(1) << ((Threads.threadid() - 1) % 64))
-    return s.x[i]
-end
-_spy(u) = VectorElement(_Spy(copy(parent(u))), space(u))
-
 @testset "Threaded vector calculus" begin
     @testset "CpuThreaded equal to Serial, $(D)D" for D in 1:3
         # The composite field dispatches the same banded engines whatever the dimension, so
@@ -165,26 +150,26 @@ _spy(u) = VectorElement(_Spy(copy(parent(u))), space(u))
                 uₕ = Rₕ(Wₕ, _F[D])
                 for name in _ops(D, _GRADIENTS)
                     dest = ntuple(_ -> similar(uₕ), D)
-                    _SEEN[] = 0
+                    _reset_seen!()
                     _op(name)(dest, _spy(uₕ))
-                    @test count_ones(_SEEN[]) >= 2
+                    @test _threads_seen() >= 2
                 end
                 for name in _ops(D, _DIVERGENCES)
-                    _SEEN[] = 0
+                    _reset_seen!()
                     _op(name)(similar(uₕ), spies)
-                    @test count_ones(_SEEN[]) >= 2
+                    @test _threads_seen() >= 2
                 end
                 for name in _ops(D, _CURLS)
                     dest = D == 2 ? similar(uₕ) : ntuple(_ -> similar(uₕ), 3)
-                    _SEEN[] = 0
+                    _reset_seen!()
                     _op(name)(dest, spies)
-                    @test count_ones(_SEEN[]) >= 2
+                    @test _threads_seen() >= 2
                 end
                 for name in _ops(D, _STRAINS)
                     dest = ntuple(_ -> ntuple(_ -> similar(uₕ), D), D)
-                    _SEEN[] = 0
+                    _reset_seen!()
                     _op(name)(dest, spies)
-                    @test count_ones(_SEEN[]) >= 2
+                    @test _threads_seen() >= 2
                 end
             end
         end

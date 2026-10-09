@@ -18,7 +18,7 @@ using Bramble:
                GpuKernel
 using LinearAlgebra: dot
 using StaticArrays
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, @test_allocs, MockDeviceArray
 
 @testset "Linear algebra utilities" begin
     # Invariants tested (device and host locality):
@@ -28,9 +28,8 @@ using ..TestUtils: alloc_test, @test_allocs
     #    both localities, and never advising a CpuPolicy backend rebuild -- that combination
     #    is itself rejected at construction. No GPU is needed to
     #    exercise this: the seam reads locality from the destination array's own type.
-    # 3. Locality-agreeing pairs (a host destination under CpuSerial/CpuThreaded) still
-    #    sweep and produce correct values -- this testset is not throw-only.
-    # 4. The alias spellings still select the same two CPU methods they always did.
+    # 3. Locality-agreeing pairs (a host destination under CpuSerial/CpuThreaded) are swept
+    #    to exact values by the in-place iteration testsets, not by this one.
     @testset "Sweep guard refuses locality mismatches" begin
         v = zeros(4)
         @test_throws ArgumentError _sweep_for!(GpuKernel(), v, 1:4, identity)
@@ -47,29 +46,10 @@ using ..TestUtils: alloc_test, @test_allocs
         @test occursin("claims device locality", msg)
         @test occursin("GpuKernel", msg)
 
-        _sweep_for!(Serial(), v, 1:4, i -> 2.0 * i)
-        @test v == [2.0, 4.0, 6.0, 8.0]
-        fill!(v, 0.0)
-        _sweep_for!(CpuSerial(), v, 1:4, i -> 3.0 * i)
-        @test v == [3.0, 6.0, 9.0, 12.0]
-        fill!(v, 0.0)
-        _sweep_for!(CpuThreaded(), v, 1:4, i -> 4.0 * i)
-        @test v == [4.0, 8.0, 12.0, 16.0]
-
         # Reverse direction (device destination): a device-locality destination
-        # under a CpuPolicy, with no GPU or KernelAbstractions involved -- a small host-backed
-        # array type that claims DeviceLocality() through the trait is enough.
-        struct _FakeDeviceVector{T} <: DenseVector{T}
-            data::Vector{T}
-        end
-        Base.size(v::_FakeDeviceVector) = size(v.data)
-        Base.getindex(v::_FakeDeviceVector, i::Int) = getindex(v.data, i)
-        Base.setindex!(v::_FakeDeviceVector, val, i::Int) = setindex!(v.data, val, i)
-        Base.IndexStyle(::Type{<:_FakeDeviceVector}) = IndexLinear()
-
-        Bramble.locality(::Type{<:_FakeDeviceVector}) = Bramble.DeviceLocality()
-
-        v_dev = _FakeDeviceVector(zeros(4))
+        # under a CpuPolicy, with no GPU or KernelAbstractions involved -- the host-backed
+        # `MockDeviceArray` of test/TestUtils.jl, which claims DeviceLocality(), is enough.
+        v_dev = MockDeviceArray(zeros(4))
         @test_throws ArgumentError _sweep_for!(CpuSerial(), v_dev, 1:4, identity)
         err2 = try
             _sweep_for!(CpuSerial(), v_dev, 1:4, identity)
@@ -209,16 +189,6 @@ using ..TestUtils: alloc_test, @test_allocs
             end
         end
 
-        # Direct equivalence test between Serial() and Parallel()
-        n = 100
-        idxs = 1:n
-        v_serial = zeros(n)
-        v_parallel = zeros(n)
-        f_test = i -> sin(Float64(i)) + cos(Float64(i))
-        _sweep_for!(Serial(), v_serial, idxs, f_test)
-        _sweep_for!(Parallel(), v_parallel, idxs, f_test)
-        @test v_serial ≈ v_parallel
-
         # Zero allocations during Serial() policy execution
         v_serial_alloc = zeros(100)
         f_alloc = i -> Float64(i^2)
@@ -324,20 +294,61 @@ using ..TestUtils: alloc_test, @test_allocs
             @test m2 == [Float64(2i) for i in 1:n]
         end
 
-        # Policy equivalence check
-        n = 64
-        m1_s, m2_s = zeros(n), zeros(n)
-        m1_p, m2_p = zeros(n), zeros(n)
-        g_fn = i -> (sin(Float64(i)), cos(Float64(i)))
-        _sweep_scatter_for!(Serial(), (m1_s, m2_s), 1:n, g_fn)
-        _sweep_scatter_for!(Parallel(), (m1_p, m2_p), 1:n, g_fn)
-        @test m1_s ≈ m1_p
-        @test m2_s ≈ m2_p
-
         # Zero allocations during Serial() component scattering
         scatter_targets = (zeros(50), zeros(50))
         g_scatter = i -> (Float64(i), Float64(2i))
         @test_allocs _sweep_scatter_for!(Serial(), scatter_targets, 1:50, g_scatter)
+    end
+
+    # Invariants tested (#459):
+    # 1. A CpuThreaded() scatter of a tuple-valued closure equals the CpuSerial() scatter.
+    # 2. Closure kernels reached through a dynamic call (a loop over policies, the seams
+    #    with an explicit locality, a linear range or a CartesianIndices) never compile a
+    #    sweep helper with a `Function` kernel: every wrapper takes the kernel as a type
+    #    parameter. Only compiled instances count; code-less ones come from inference and
+    #    the pkgimage. Not thread-gated: the widening happens at one thread as well.
+    @testset "Sweeps specialise on the kernel (#459)" begin
+        n = 64
+        g = i -> (Float64(i), Float64(2i))
+        a_t, b_t = zeros(n), zeros(n)
+        a_s, b_s = zeros(n), zeros(n)
+        _sweep_scatter_for!(CpuThreaded(), (a_t, b_t), 1:n, g)
+        _sweep_scatter_for!(CpuSerial(), (a_s, b_s), 1:n, g)
+        @test a_t == a_s == Float64.(1:n)
+        @test b_t == b_s == Float64.(2 .* (1:n))
+
+        v = zeros(n)
+        Bramble._threaded_for!(v, 1:n, i -> Float64(i))
+        @test v == Float64.(1:n)
+
+        for policy in (CpuSerial(), CpuThreaded())
+            w = zeros(n)
+            _sweep_for!(policy, w, 1:n, i -> 2.0i)
+            @test w == 2.0 .* (1:n)
+            w = zeros(n)
+            _sweep_for!(Bramble.HostLocality(), policy, w, 1:n, i -> 3.0i)
+            @test w == 3.0 .* (1:n)
+            M = zeros(4, 4)
+            _sweep_for!(policy, M, CartesianIndices(M), I -> Float64(I[1] * I[2]))
+            @test M == [Float64(i * j) for i in 1:4, j in 1:4]
+            c, d = zeros(n), zeros(n)
+            _sweep_scatter_for!(policy, (c, d), 1:n, i -> (1.0i, 3.0i))
+            @test c == 1.0 .* (1:n) && d == 3.0 .* (1:n)
+            c, d = zeros(n), zeros(n)
+            _sweep_scatter_for!(Bramble.HostLocality(), policy, (c, d), 1:n, i -> (2.0i, 3.0i))
+            @test c == 2.0 .* (1:n) && d == 3.0 .* (1:n)
+        end
+
+        helpers = (_sweep_for!, _sweep_scatter_for!, Bramble._threaded_for!,
+            Bramble._static_for!, _serial_for!, Bramble._threaded_scatter_for!,
+            Bramble._static_scatter_for!, Bramble._serial_scatter_for!,
+            Bramble._threaded_axis_for!, Bramble._static_bands!, Bramble._serial_bands!,
+            Bramble._static_or_serial)
+        widened = [mi.specTypes for fn in helpers for m in methods(fn)
+                   for mi in Base.specializations(m)
+                   if mi !== nothing && isdefined(mi, :cache) &&
+                          Function in Base.unwrap_unionall(mi.specTypes).parameters]
+        @test isempty(widened)
     end
 
     # Invariants tested:
@@ -358,6 +369,27 @@ using ..TestUtils: alloc_test, @test_allocs
               vec(collect(idxs))
         # more blocks than last-axis values: clamped to one block per value
         @test lastindex(Bramble._last_axis_chunks(idxs, 50)) == 5
+    end
+
+    # Invariants tested:
+    # 1. `_band_range` cuts any integer range, ascending or descending, signed or unsigned,
+    #    into slabs that keep its step and, walked in order, visit exactly its points.
+    # 2. Slab lengths differ by at most one, the remainder on the first slabs.
+    # 3. A descending `StepRange{UInt64,Int64}` (whose `length` is a `UInt64`) keeps its
+    #    negative step: indexing it by a `UnitRange{UInt64}` corrupts the step in Base.
+    @testset "Band ranges of any integer range" begin
+        axes_ = (1:9, Base.OneTo(7), 9:-1:1, 9:-2:1, 1:-1:2, UInt(1):UInt(9),
+            UInt(9):-1:UInt(1), UInt(9):-2:UInt(1), Int32(9):Int32(-1):Int32(1),
+            UInt8(9):Int8(-1):UInt8(1))
+        for ax in axes_, nbands in 1:4
+
+            bands = [Bramble._band_range(ax, nbands, b) for b in 1:nbands]
+            @test reduce(vcat, collect.(bands)) == collect(ax)
+            @test all(band -> length(band) < 2 || step(band) == step(ax), bands)
+            @test issorted(length.(bands); rev = true)
+            @test maximum(length, bands) - minimum(length, bands) <= 1
+        end
+        @test Bramble._band_range(UInt(9):-1:UInt(1), 2, 1) == UInt(9):-1:UInt(5)
     end
 
     # Invariants tested:

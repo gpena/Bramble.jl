@@ -446,6 +446,17 @@ function _pc_form_reaction(Wₕ::ScalarGridSpace)
     precompile(
         Core.kwcall, (typeof(nt), typeof(reaction_density), typeof(A), typeof(F), typeof(uₕ))
     )
+
+    # A constant times the Laplacian, an `OperatorScale` AST no other session builds:
+    # alone and jointly with a Dirichlet value.
+    aκ = form(Wₕ, Wₕ, (u, v) -> 2.0 * inner₊(∇ₕ(u), ∇ₕ(v)))
+    assemble(aκ; dirichlet = :boundary)
+    assemble(aκ, l; dirichlet = :boundary => x -> 0.0)
+
+    # The mass form added into a matrix, the first term of an implicit time step.
+    m = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
+    assemble_add!(A, m, 0.5)
+    precompile(assemble_add!, (typeof(A), typeof(m), Float64))
     return nothing
 end
 

@@ -41,8 +41,7 @@ using Bramble:
 using LinearAlgebra: hypot
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
 
 # --- Test Suite ---
 @testset "Multi-dimensional meshes" begin
@@ -179,17 +178,6 @@ using ..TestUtils: alloc_test, @test_allocs
             @test point(Ωₕ_2d_unif, CartesianIndex(2, 3)) == (1.0, 2.0) # x[2], y[3]
             @test point(Ωₕ_2d_unif, (4, 5)) == (3.0, 4.0) # x[4], y[5]
 
-            # Iterators.product(points(mesh)...)
-            pts_iter = Iterators.product(points(Ωₕ_2d_unif)...)
-            pts = collect(pts_iter)
-
-            @test length(pts_iter) == 20
-            @test first(pts_iter) == (0.0, 0.0)
-            @test last(pts_iter) == (3.0, 4.0)
-            @test collect(pts_iter)[1] == (0.0, 0.0)
-            @test collect(pts_iter)[4] == (3.0, 0.0) # End of first column
-            @test collect(pts_iter)[5] == (0.0, 1.0) # Start of second column
-
             # Spacing (uniform dx=1, dy=1)
             @test spacing(Ωₕ_2d_unif, (2, 3)) == (1.0, 1.0)
             @test spacing(Ωₕ_2d_unif, CartesianIndex(1, 1)) == (1.0, 1.0) # Uses h1 definition
@@ -259,15 +247,14 @@ using ..TestUtils: alloc_test, @test_allocs
             # grid point by point: a mask that merely exists, or has the right count but
             # sits on the wrong face, fails here. In 2D `:left`/`:right` are xmin/xmax and
             # `:bottom`/`:top` are ymin/ymax (src/mesh/marker.jl).
-            idxs_2d = indices(Ωₕ_2d_marked)
-            mask_2d(pred) = BitVector(pred(point(Ωₕ_2d_marked, I)) for I in vec(idxs_2d))
-
-            @test Bramble.index_in_marker(Ωₕ_2d_marked, :LeftWall) == mask_2d(p -> p[1] == 0.0)
-            @test Bramble.index_in_marker(Ωₕ_2d_marked, :RightWall) == mask_2d(p -> p[1] == 3.0)
+            @test Bramble.index_in_marker(Ωₕ_2d_marked, :LeftWall) ==
+                  _marker_mask(Ωₕ_2d_marked, p -> p[1] == 0.0)
+            @test Bramble.index_in_marker(Ωₕ_2d_marked, :RightWall) ==
+                  _marker_mask(Ωₕ_2d_marked, p -> p[1] == 3.0)
             @test Bramble.index_in_marker(Ωₕ_2d_marked, :TopBottom) ==
-                  mask_2d(p -> p[2] == 0.0 || p[2] == 4.0)
+                  _marker_mask(Ωₕ_2d_marked, p -> p[2] == 0.0 || p[2] == 4.0)
             @test Bramble.index_in_marker(Ωₕ_2d_marked, :CenterRegion) ==
-                  mask_2d(p -> 0.8 < p[1] < 2.2 && 1.5 < p[2] < 2.5)
+                  _marker_mask(Ωₕ_2d_marked, p -> 0.8 < p[1] < 2.2 && 1.5 < p[2] < 2.5)
 
             # and the counts those masks imply, spelled out so a silently empty marker
             # cannot pass by agreeing with an equally empty oracle
@@ -402,13 +389,12 @@ using ..TestUtils: alloc_test, @test_allocs
             # Same oracle in 3D, where the viewpoint aliases name different axes than they
             # do in 2D: `:front` is xmax and `:bottom` is zmin (src/mesh/marker.jl). A
             # marker landing on the 2D face instead would pass a count check and fail this.
-            idxs_3d = indices(Ωₕ_3d_marked)
-            mask_3d(pred) = BitVector(pred(point(Ωₕ_3d_marked, I)) for I in vec(idxs_3d))
-
-            @test Bramble.index_in_marker(Ωₕ_3d_marked, :BottomFace) == mask_3d(p -> p[3] == 0.0)
-            @test Bramble.index_in_marker(Ωₕ_3d_marked, :FrontFace) == mask_3d(p -> p[1] == 2.0)
+            @test Bramble.index_in_marker(Ωₕ_3d_marked, :BottomFace) ==
+                  _marker_mask(Ωₕ_3d_marked, p -> p[3] == 0.0)
+            @test Bramble.index_in_marker(Ωₕ_3d_marked, :FrontFace) ==
+                  _marker_mask(Ωₕ_3d_marked, p -> p[1] == 2.0)
             @test Bramble.index_in_marker(Ωₕ_3d_marked, :SmallCorner) ==
-                  mask_3d(p -> p[1] < 0.5 && p[2] < 0.5 && p[3] < 0.5)
+                  _marker_mask(Ωₕ_3d_marked, p -> p[1] < 0.5 && p[2] < 0.5 && p[3] < 0.5)
 
             @test count(Bramble.index_in_marker(Ωₕ_3d_marked, :BottomFace)) ==
                   npts_3d[1] * npts_3d[2]
@@ -547,6 +533,10 @@ using ..TestUtils: alloc_test, @test_allocs
             idxs = indices(Ωₕ_line)
             @test all(idx -> isfinite(cell_measure(Ωₕ_line, idx)), idxs)
             @test all(idx -> cell_measure(Ωₕ_line, idx) > 0.0, idxs)
+
+            # the collapsed axis's own measure vector holds the coerced 1, not the raw zero
+            @test cell_measures(Ωₕ_line(2)) == [1.0]
+            @test @inferred(cell_measures(Ωₕ_line(2))) isa Vector{Float64}
 
             s = innerₕ(uₕ, vₕ)
             @test isfinite(s)
@@ -821,15 +811,6 @@ end
             @test hₘₐₓ(Ωₕ) == brute
             @test hₘₐₓ(Ωₕ) ≈ hypot(ntuple(i -> hₘₐₓ(Ωₕ(i)), D)...)
         end
-    end
-
-    # and it costs nothing, which is the point of computing it this way
-    let
-        Ωₕ = mesh(
-            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (30, 30, 30), (true, true, true)
-        )
-        eval_hmax(m) = hₘₐₓ(m)
-        @test_allocs eval_hmax(Ωₕ)
     end
 end
 

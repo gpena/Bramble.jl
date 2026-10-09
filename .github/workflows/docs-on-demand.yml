@@ -66,6 +66,9 @@ jobs:
       # Scope: a run restores only entries saved on its own ref or on the default branch. A
       # tag run can restore what `main` saved, never what another tag saved, so the cache
       # pays from `main` dispatches onward; a tag's own save is visible to that tag alone.
+      #
+      # release-gate.yml's docs job restores this entry, so the `with:` inputs here and there
+      # must stay equal.
       - uses: julia-actions/cache@v3
         with:
           cache-name: julia-cache;docs;julia=1.13

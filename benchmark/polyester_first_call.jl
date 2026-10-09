@@ -6,9 +6,15 @@
 # environment, which has Polyester and SnoopCompileCore (the benchmark environment has no
 # SnoopCompile).
 #
-#     julia --startup-file=no benchmark/polyester_first_call.jl [--runs N]
+#     julia --startup-file=no benchmark/polyester_first_call.jl [--runs N] [--threads N]
+#                                                               [--project <dir>]
 #
-# Each path runs in its own fresh child (`--project=test --threads=2`), so one path's
+# `--project` names the environment the children run in (default `<tree>/test`). A tree
+# with no Manifest cannot use its own `test`: build a shadow environment for it with
+# .claude/plans/v3-25-0-checks/proj.sh and pass that. `--threads` is the children's thread
+# count (default 2, the count test/quality/invalidations_polyester_reinfer.jl uses).
+#
+# Each path runs in its own fresh child (`--project=<dir> --threads=<N>`), so one path's
 # compilation never pays for another's: the issue's single-process figure (1846 instances)
 # cannot say which path costs. The child builds a CpuPolyester backend on the issue's 9x8
 # non-uniform 2D grid (interior points jittered with a fixed seed), does
@@ -19,26 +25,49 @@
 # test/quality/invalidations_polyester_reinfer.jl. The parent reports the median of `--runs`
 # (default 3) processes per path (bramble-verification §2).
 #
-# Output lines:
-#   FIRSTCALL path=<name> ms=<median> inferred_cpupolyester=<median>
-#   LOAD ms=<median time of `using Bramble, Polyester`>
-#   CACHE bytes=<size of the newest BramblePolyesterExt pkgimage>
+# The `_newf` paths first call the operator warm with another user function, then snoop the
+# call with `g`. They isolate what every new user function pays, which no workload can
+# precompile: `avg` and `Rh` also pay the operator's own cold compile when it is not cached.
 #
-# Run it alone on a quiet machine; the child count of threads is fixed at 2.
+# Output lines:
+#   BRAMBLE path=<directory of the src/Bramble.jl the children loaded>
+#   FIRSTCALL path=<name> ms=<median> inferred_cpupolyester=<median>
+#   LOAD ms=<median time of `using Bramble` then `using Polyester`, together>
+#   LOADEXT ms=<median time of the `using Polyester` that loads the extension>
+#   CACHE bytes=<size of the BramblePolyesterExt image the children loaded>
+#
+# Run it alone on a quiet machine.
 #===========================================================================#
 
-const PATHS = ["avg", "innerh", "broadcast", "assemble", "kronecker", "rhs", "matrix_free"]
+const PATHS = ["avg", "avg_newf", "Rh", "Rh_newf", "innerh", "broadcast", "assemble", "kronecker",
+    "rhs", "matrix_free"]
 const ROOT = dirname(@__DIR__)
 
 # --- child ------------------------------------------------------------------ #
 
 function child(path::AbstractString)
-    t_load = @elapsed @eval using Bramble, Polyester
-    @eval using LinearAlgebra, Random
+    t_bramble = @elapsed @eval using Bramble
+    t_polyester = @elapsed @eval using Polyester
+    @eval using LinearAlgebra, Random, Libdl
     @eval using SnoopCompileCore
     r = Base.invokelatest(child_run, path)
-    println("CHILD load_ms=", 1000t_load, " ms=", r.ms, " n=", r.n)
+    println("CHILD bramble=", Base.invokelatest(() -> pathof(Main.Bramble)))
+    println("CHILD cache_bytes=", Base.invokelatest(loaded_cache_bytes))
+    println("CHILD load_ms=", 1000(t_bramble + t_polyester), " loadext_ms=", 1000t_polyester,
+        " ms=", r.ms, " n=", r.n)
     return nothing
+end
+
+# The size of the extension image this process loaded: the `.ji` it came from, with the
+# library suffix in place of `.ji`. No depot scan, which reports the newest image any tree
+# built.
+function loaded_cache_bytes()
+    ext = Base.get_extension(Main.Bramble, :BramblePolyesterExt)
+    ext === nothing && error("BramblePolyesterExt is not loaded")
+    ji = Base.pkgorigins[Base.PkgId(ext)].cachepath
+    ji === nothing && error("BramblePolyesterExt was not loaded from a cache file")
+    lib = string(first(splitext(ji)), ".", Main.Libdl.dlext)
+    return isfile(lib) ? filesize(lib) : 0
 end
 
 function child_run(path)
@@ -57,6 +86,8 @@ function child_run(path)
     Bramble.change_points!(Ω, (pts(9), pts(8)))
     W = gridspace(Ω)
     g(x) = sin(3x[1] + 2x[2]) + x[1] * x[2]
+    # The user function of the `_newf` paths' warm-up call, a different type from `g`.
+    h(x) = cos(2x[1] - x[2])
     poisson(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
     # Each path's setup is a `let` block, so its variables are fresh locals of the closure it
     # returns and are captured with their concrete types, not in a `Core.Box` (a name
@@ -64,6 +95,20 @@ function child_run(path)
     call = if path == "avg"
         let u = element(W)
             () -> avgₕ!(u, g)
+        end
+    elseif path == "avg_newf"
+        let u = element(W)
+            avgₕ!(u, h)
+            () -> avgₕ!(u, g)
+        end
+    elseif path == "Rh"
+        let u = element(W)
+            () -> Rₕ!(u, g)
+        end
+    elseif path == "Rh_newf"
+        let u = element(W)
+            Rₕ!(u, h)
+            () -> Rₕ!(u, g)
         end
     elseif path == "innerh"
         let u = Rₕ(W, g), w = Rₕ(W, x -> x[1])
@@ -127,44 +172,44 @@ end
 
 median(v) = (s = sort(v); n = length(s); isodd(n) ? s[(n + 1) ÷ 2] : (s[n ÷ 2] + s[n ÷ 2 + 1]) / 2)
 
-function run_child(path)
-    cmd = `$(Base.julia_cmd()) --project=$(joinpath(ROOT, "test")) --threads=2 --startup-file=no $(@__FILE__) --child $path`
+function run_child(path, project, threads)
+    cmd = `$(Base.julia_cmd()) --project=$project --threads=$threads --startup-file=no $(@__FILE__) --child $path`
     out = read(pipeline(cmd; stderr = stderr), String)
-    m = match(r"^CHILD load_ms=([\d.eE+-]+) ms=([\d.eE+-]+) n=(\d+)"m, out)
-    m === nothing && error("child $path printed no result:\n$out")
-    return (load = parse(Float64, m[1]), ms = parse(Float64, m[2]), n = parse(Int, m[3]))
-end
-
-# The size of the newest BramblePolyesterExt pkgimage in the first depot that has one.
-function cache_bytes()
-    best = nothing
-    for depot in DEPOT_PATH
-        dir = joinpath(depot, "compiled", "v$(VERSION.major).$(VERSION.minor)", "BramblePolyesterExt")
-        isdir(dir) || continue
-        for f in readdir(dir; join = true)
-            (endswith(f, ".dylib") || endswith(f, ".so") || endswith(f, ".dll")) || continue
-            (best === nothing || mtime(f) > mtime(best)) && (best = f)
-        end
-        best === nothing || break
-    end
-    return best === nothing ? 0 : filesize(best)
+    m = match(r"^CHILD load_ms=([\d.eE+-]+) loadext_ms=([\d.eE+-]+) ms=([\d.eE+-]+) n=(\d+)"m, out)
+    c = match(r"^CHILD cache_bytes=(\d+)"m, out)
+    b = match(r"^CHILD bramble=(.+)$"m, out)
+    (m === nothing || c === nothing || b === nothing) && error("child $path printed no result:\n$out")
+    return (load = parse(Float64, m[1]), loadext = parse(Float64, m[2]), ms = parse(Float64, m[3]),
+        n = parse(Int, m[4]), cache = parse(Int, c[1]), bramble = String(b[1]))
 end
 
 function main(args)
-    i = findfirst(==("--runs"), args)
-    runs = i === nothing ? 3 : parse(Int, args[i + 1])
+    option(name, default) = (i = findfirst(==(name), args); i === nothing ? default : args[i + 1])
+    runs = parse(Int, option("--runs", "3"))
+    threads = parse(Int, option("--threads", "2"))
+    project = abspath(option("--project", joinpath(ROOT, "test")))
     # Warm-up child: builds any missing pkgimage so no timed child pays for precompilation.
-    run_child("avg")
+    warm = run_child("avg", project, threads)
+    println("BRAMBLE path=", dirname(warm.bramble))
     loads = Float64[]
+    loadexts = Float64[]
+    caches = Int[]
     for p in PATHS
-        rs = [run_child(p) for _ in 1:runs]
+        rs = [run_child(p, project, threads) for _ in 1:runs]
+        for r in rs
+            r.bramble == warm.bramble ||
+                error("child of path $p loaded $(r.bramble), the warm-up child $(warm.bramble)")
+        end
         append!(loads, (r.load for r in rs))
+        append!(loadexts, (r.loadext for r in rs))
+        append!(caches, (r.cache for r in rs))
         println("FIRSTCALL path=", p, " ms=", round(median([r.ms for r in rs]); digits = 1),
             " inferred_cpupolyester=", round(Int, median([r.n for r in rs])))
         flush(stdout)
     end
     println("LOAD ms=", round(median(loads); digits = 1))
-    println("CACHE bytes=", cache_bytes())
+    println("LOADEXT ms=", round(median(loadexts); digits = 1))
+    println("CACHE bytes=", round(Int, median(caches)))
 end
 
 if "--child" in ARGS

@@ -40,13 +40,14 @@ caller actually uses, deriving `loc` from the destination array itself
 - `idxs`: Iterable collection of linear or Cartesian indices.
 - `f`: Kernel mapping each index `idx` to the scalar value stored in `v[idx]`.
 """
-@inline _sweep_for!(::HostLocality, ::CpuSerial, v, idxs, f) = _serial_for!(v, idxs, f)
-@inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs, f) = _threaded_for!(v, idxs, f)
+@inline _sweep_for!(::HostLocality, ::CpuSerial, v, idxs, f::F) where {F} = _serial_for!(v, idxs, f)
+@inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs, f::F) where {F} = _threaded_for!(v, idxs, f)
 @noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs, f::F) where {F} = _late(_batch_for!, v, idxs, f)
 @noinline _sweep_for!(::DeviceLocality, policy::GpuPolicy, v, idxs, f::F) where {F} = _gpu_for!(policy, v, idxs, f)
-@noinline _sweep_for!(loc::Locality, policy, v, idxs, f) = _throw_locality_mismatch(loc, policy)
+@noinline _sweep_for!(loc::Locality, policy, v, idxs, f::F) where {F} = _throw_locality_mismatch(loc, policy)
 
-@inline _sweep_for!(policy::ExecutionPolicy, v, idxs, f) = _sweep_for!(locality(typeof(v)), policy, v, idxs, f)
+@inline _sweep_for!(policy::ExecutionPolicy, v, idxs, f::F) where {F} = _sweep_for!(
+    locality(typeof(v)), policy, v, idxs, f)
 
 # `Threads.@threads` needs an indexable collection, so handed a `CartesianIndices` it
 # linearly indexes it and pays an index conversion per point, where the serial loop
@@ -62,7 +63,8 @@ caller actually uses, deriving `loc` from the destination array itself
 # one core manages 46-55 GB/s and four recover 1.24-1.39x. The point of this method is the
 # removed index conversion, which is a penalty in every power state; the parallel gain on
 # top of it is the machine's to give.
-@inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs::CartesianIndices, f) = _threaded_axis_for!(v, idxs, f)
+@inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs::CartesianIndices, f::F) where {F} = _threaded_axis_for!(
+    v, idxs, f)
 @noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs::CartesianIndices, f::F) where {F} = _late(
     _batch_axis_for!, v, idxs, f)
 
@@ -352,7 +354,7 @@ allocations on paths that execute serially.
 @noinline _threaded_for!(v, idxs, f::F) where {F} = _static_or_serial(
     _static_for!, _serial_for!, v, idxs, f)
 
-@noinline function _static_for!(v, idxs, f)
+@noinline function _static_for!(v, idxs, f::F) where {F}
     # Static partitioning distributes work evenly across available threads
     Threads.@threads :static for idx in idxs
         @inbounds v[idx] = f(idx)
@@ -384,10 +386,14 @@ The `b`-th of `nbands` contiguous slabs of `ax`.
 
 Slabs differ in length by at most one, the remainder spread over the first of them rather
 than left on the last. `b` indexes positions within `ax`, not values, so an axis carrying a
-stride keeps it.
+stride keeps it, and so does a descending one.
+
+The positions are `Int` whatever `length(ax)` returns: a `UInt64` range has a `UInt64`
+length, and Base indexes a descending `StepRange` by a `UnitRange{UInt64}` with a wrapped,
+unsigned step (`(UInt(9):-1:UInt(1))[UInt(1):UInt(5)]` is empty).
 """
 @inline function _band_range(ax::AbstractRange, nbands::Int, b::Int)
-    q, r = divrem(length(ax), nbands)
+    q, r = divrem(Int(length(ax)), nbands)
     lo = (b - 1) * q + min(b - 1, r) + 1
     hi = lo + q - 1 + (b <= r ? 1 : 0)
     return @inbounds ax[lo:hi]
@@ -461,13 +467,22 @@ whole last-axis slices and walks it natively, never converting a linear index.
 """
 @noinline function _threaded_axis_for!(v, idxs::CartesianIndices, f::F) where {F}
     blocks = _last_axis_chunks(idxs, Threads.nthreads())
-    return _static_or_serial(_static_bands!, _serial_bands!, _fill_block!, length(blocks), v, blocks, f)
+    return _static_or_serial(_static_bands!, _serial_bands!, _FillBlock(v, blocks, f), length(blocks))
 end
 
 # The `b`-th block of `_threaded_axis_for!`, in the `f(args..., nbands, b)` shape
-# `_static_bands!` calls.
-@inline function _fill_block!(v, blocks, f, _, b::Int)
-    @inbounds for I in blocks[b]
+# `_static_bands!` calls with no `args`. A callable struct carries the kernel in its type,
+# where a function passed with `v, blocks, f` through the `args...` Vararg would compile
+# the band helpers with a `Function` kernel (gpena/Bramble.jl#459).
+struct _FillBlock{V, B, F}
+    v::V
+    blocks::B
+    f::F
+end
+
+@inline function (k::_FillBlock)(_, b::Int)
+    v, f = k.v, k.f
+    @inbounds for I in k.blocks[b]
         v[I] = f(I)
     end
     return nothing
@@ -513,21 +528,23 @@ so callers pass a policy alone and never compute a locality.
 - `idxs`: Iterable collection of indices.
 - `g`: Kernel mapping each index to a tuple of values matching `length(mats)`.
 """
-@inline function _sweep_scatter_for!(::HostLocality, ::CpuSerial, mats::Tuple, idxs, g)
+@inline function _sweep_scatter_for!(::HostLocality, ::CpuSerial, mats::Tuple, idxs, g::G) where {G}
     @inbounds for idx in idxs
         _write_components!(mats, g(idx), idx)
     end
     return nothing
 end
-@inline _sweep_scatter_for!(::HostLocality, ::CpuThreaded, mats::Tuple, idxs, g) = _threaded_scatter_for!(mats, idxs, g)
+@inline _sweep_scatter_for!(::HostLocality, ::CpuThreaded, mats::Tuple, idxs, g::G) where {G} = _threaded_scatter_for!(
+    mats, idxs, g)
 @noinline _sweep_scatter_for!(::HostLocality, ::CpuPolyester, mats::Tuple, idxs, g::G) where {G} = _late(
     _batch_scatter_for!, mats, idxs, g)
 @noinline _sweep_scatter_for!(
     ::DeviceLocality, policy::GpuPolicy, mats::Tuple, idxs, g::G) where {G} = _gpu_scatter_for!(
     policy, mats, idxs, g)
-@noinline _sweep_scatter_for!(loc::Locality, policy, mats::Tuple, idxs, g) = _throw_locality_mismatch(loc, policy)
+@noinline _sweep_scatter_for!(loc::Locality, policy, mats::Tuple, idxs, g::G) where {G} = _throw_locality_mismatch(
+    loc, policy)
 
-@inline _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g) = _sweep_scatter_for!(
+@inline _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::G) where {G} = _sweep_scatter_for!(
     locality(typeof(mats[1])), policy, mats, idxs, g)
 
 """
@@ -542,7 +559,7 @@ paths that execute serially.
 @noinline _threaded_scatter_for!(mats::Tuple, idxs, g::G) where {G} = _static_or_serial(
     _static_scatter_for!, _serial_scatter_for!, mats, idxs, g)
 
-@noinline function _static_scatter_for!(mats::Tuple, idxs, g)
+@noinline function _static_scatter_for!(mats::Tuple, idxs, g::G) where {G}
     Threads.@threads :static for idx in idxs
         @inbounds _write_components!(mats, g(idx), idx)
     end
@@ -817,7 +834,9 @@ end
 The `k`-th of `nchunks` partial sums of [`_threaded_dot`](@ref), over the band
 [`_band_range`](@ref)`(ax, nchunks, k)`. One compiled body serves both the threaded loop and
 the serial one [`_static_or_serial`](@ref) falls back to, so the two return the same partial
-sums bitwise.
+sums bitwise. `BramblePolyesterExt` runs `_dot_band` and keeps a copy of
+[`_dot_masked_band`](@ref) over the mask's words (`_masked_words_band`), so a change here
+must be made there too (gpena/Bramble.jl#473).
 """
 @noinline function _dot_band(u, v, w, ax, nchunks::Int, k::Int)
     T = promote_type(eltype(u), eltype(v), eltype(w))
@@ -887,7 +906,9 @@ end
 
 The `k`-th of `nchunks` partial sums of [`_threaded_dot_masked`](@ref), over the mask words
 [`_band_range`](@ref)`(ax, nchunks, k)`. As [`_dot_band`](@ref), one compiled body serves the
-threaded loop and the serial one.
+threaded loop and the serial one. `BramblePolyesterExt` runs [`_dot_band`](@ref) and keeps a
+copy of `_dot_masked_band` over the mask's words (`_masked_words_band`), so a change here
+must be made there too (gpena/Bramble.jl#473).
 """
 @noinline function _dot_masked_band(u, v, w, mask::BitVector, ax, nchunks::Int, k::Int)
     T = promote_type(eltype(u), eltype(v), eltype(w))

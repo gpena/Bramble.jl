@@ -22,7 +22,9 @@ its kin replay those positions into `_scatter_storage(A)`, the array `_scatter_a
 
 The `SparseMatrixCSC` method is exactly the position search this file always ran: a linear
 scan of the column when it holds few entries, a binary search otherwise -- both rely on
-`SparseMatrixCSC`'s own invariant that `rowval` is sorted within each column. The generic
+`SparseMatrixCSC`'s own invariant that `rowval` is sorted within each column. It returns `Int`
+whatever the matrix's index type. The column bounds are converted before the search, so an
+`Int32` matrix answers the same `Int` positions as an `Int` one. The generic
 `AbstractMatrix` fallback needs no search at all: every `(row, col)` inside the matrix's
 bounds is "stored" for a dense backend, at `LinearIndices(A)[row, col]`.
 """
@@ -32,8 +34,8 @@ bounds is "stored" for a dense backend, at `LinearIndices(A)[row, col]`.
 # The search itself, over a CSC's `colptr` and `rowval`, shared by `SparseMatrixCSC` and
 # `_ScatterCSC` below so the two answer the same position for every entry.
 @inline function _csc_position(colptr, rowval, row::Int, col::Int)
-    p1 = @inbounds colptr[col]
-    p2 = @inbounds colptr[col + 1] - 1
+    p1 = Int(@inbounds colptr[col])
+    p2 = Int(@inbounds colptr[col + 1]) - 1
 
     if (p2 - p1) < 32
         idx = p1
@@ -69,11 +71,11 @@ Add `val` at the position [`_scatter_position`](@ref) named in `A`'s own storage
 
 `SparseMatrixCSC`'s method writes `nzval[pos]`; the generic `AbstractMatrix` fallback writes
 `A[pos]` directly (linear indexing into the backing array), the other half of the seam
-[`_scatter_position`](@ref) documents. `pos::Integer`, not `::Int`, on the two methods below
-the `SparseMatrixCSC` one: a `DeviceLocality` matrix's own mirror (gpena/Bramble.jl#313)
-searches in its own index type, which need not be `Int`.
+[`_scatter_position`](@ref) documents. `pos::Integer` on every method: a `DeviceLocality`
+matrix's own mirror (gpena/Bramble.jl#313) searches in its own index type, which need not be
+`Int`.
 """
-@inline function _scatter_add!(A::SparseMatrixCSC, pos::Int, val)
+@inline function _scatter_add!(A::SparseMatrixCSC, pos::Integer, val)
     @inbounds A.nzval[pos] += val
     return nothing
 end
@@ -121,7 +123,7 @@ end
 
 @inline _scatter_position(A::_ScatterCSC, row::Int, col::Int) = _csc_position(
     A.colptr, A.rowval, row, col)
-@inline function _scatter_add!(A::_ScatterCSC, pos::Int, val)
+@inline function _scatter_add!(A::_ScatterCSC, pos::Integer, val)
     @inbounds A.nzval[pos] += val
     return nothing
 end

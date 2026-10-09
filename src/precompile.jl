@@ -114,6 +114,12 @@ if PRECOMPILE_WORKLOAD
             _pc_operator_session(e2, c2, Val(2))
             _pc_operator_session(e3, c3, Val(3))
 
+            # Divergence and curl of a 2D composite element, and their `∇ₕ ⋅`/`∇ₕ ×` spellings.
+            divₕ(c2)
+            curlₕ(c2)
+            ∇ₕ ⋅ c2
+            ∇ₕ × c2
+
             # Single-precision Float32 CPU coverage (mirrors GPU element type and single-precision runs)
             be32 = backend(Float32)
             _pc_linear_algebra(be32)
@@ -155,6 +161,15 @@ if PRECOMPILE_WORKLOAD
                 A3 = assemble(f3)
                 assemble!(A3, f3)
             end
+
+            # A 2D and 3D variable-coefficient diffusion, `inner₊(c * ∇ₕ(u), ∇ₕ(v))`, assembled
+            # with a label (and in 2D as a Jacobian pattern); the sessions below carry it in 1D only.
+            W2v = gridspace(Ωₕ2)
+            c2v = element(W2v, 1.0)
+            assemble(form(W2v, W2v, (u, v) -> inner₊(c2v * ∇ₕ(u), ∇ₕ(v))); dirichlet = :wall)
+            jacobian_pattern(form(W2v, W2v, (U, V) -> inner₊(Mₕ(c2v) * ∇ₕ(U), ∇ₕ(V))), U -> Mₕ(U))
+            c3v = element(W3n, 1.0)
+            assemble(form(W3n, W3n, (u, v) -> inner₊(c3v * ∇ₕ(u), ∇ₕ(v))); dirichlet = :boundary)
 
             # Jacobian sparsity from the AST, scalar and composite, and the per-element-type
             # assembly cache (gpena/Bramble.jl#21/#95/#20). Kept to 1D, the same economy the
@@ -204,6 +219,19 @@ if PRECOMPILE_WORKLOAD
                 sprint(show, MIME"text/plain"(), m)
             end
             collect(labels(domain(I1, I_time, :moving => ((x, t) -> x > t))(0.5)))
+
+            # Labelled Float64 2D/3D domains of other shapes: four symbol pairs, two
+            # tuple-valued pairs, and a single 3D face, each meshed where the tutorials mesh it.
+            Ω4 = domain(S2, :left => :xmin, :right => :xmax, :bottom => :ymin, :top => :ymax)
+            mesh(Ω4, (4, 4), (false, false))
+            domain(S2, :dirichlet => (:left, :right), :neumann => (:top, :bottom))
+            mesh(domain(S3, :clamped => :back), (3, 3, 3), (false, false, false))
+
+            # The positional `mesh` methods with no `backend` keyword.
+            mesh(domain(I1), 5)
+            mesh(domain(S2), (4, 4))
+            mesh(Ω1, 5)
+            mesh(I1, 5)
         end
     end
 end

@@ -570,6 +570,9 @@ end
 # of the single line when `D == 1`, one block of lines otherwise. Each is one compiled body
 # shared by the threaded loop and the serial one `_static_or_serial`
 # (src/utils/linear_algebra.jl) falls back to, so both return the same partial sums bitwise.
+# `BramblePolyesterExt`'s `_batch_dot` runs them too, one band per `@batch` iteration, which
+# is what makes a `CpuPolyester` reduction equal `CpuThreaded`'s bitwise
+# (gpena/Bramble.jl#473): a change here changes both policies.
 @noinline function _separable_line_band(u, w::SeparableWeights, v, ax, nchunks::Int, b::Int)
     T = promote_type(eltype(u), eltype(w), eltype(v))
     f₁ = first(w.factors)
@@ -641,6 +644,8 @@ end
 
 # The per-band partial sums of the two masked `SeparableWeights` `_threaded_dot_masked`
 # methods above, shared by their threaded and serial loops as the dense ones are.
+# `BramblePolyesterExt` keeps a copy over the mask's words (`_separable_masked_words_band`),
+# so a change here must be made there too (gpena/Bramble.jl#473).
 @noinline function _separable_masked_band(
         u, w::SeparableWeights, v, cart, mask::BitVector, ax, nchunks::Int, b::Int
 )

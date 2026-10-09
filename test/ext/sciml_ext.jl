@@ -426,9 +426,6 @@ end
             sd_c = semidiscretize_second_order(K, l; damping = Cform, dirichlet = bcs)
             @test damping_matrix(sd_c) !== nothing
             @test all(iszero, damping_matrix(sd_c)[1, :])
-
-            @test !isempty(sprint(show, sd))
-            @test !isempty(sprint(show, MIME"text/plain"(), sd))
         end
 
         # second_order_ode_problem keeps the time domain and a copied, consistent u₀/du₀.

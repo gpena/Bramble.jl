@@ -163,7 +163,7 @@ using ..TestUtils: alloc_test, @test_allocs
 
     # The symbolic form path against the direct path.
     @testset "Form path matches direct, every policy" begin
-        Ωdest = mesh(domain(interval(0.0, 1.0)), 6, true)
+        Ωdest = mesh(domain(interval(0.0, 1.5)), 6, true)
         Ωsrc = mesh(domain(interval(0.0, 1.0)), 5, true)
         Wdest, Wsrc = gridspace(Ωdest), gridspace(Ωsrc)
         src = Rₕ(Wsrc, x -> 4x[1] + 2)
@@ -176,7 +176,10 @@ using ..TestUtils: alloc_test, @test_allocs
                 Href = weights(Wdest, Bramble.Innerh())
                 expected = Href .* parent(direct)
                 if pol isa Number && isnan(pol)
-                    @test all(isnan, via_form) == all(isnan, expected)
+                    @test isnan.(via_form) == isnan.(expected)
+                    @test any(isnan, via_form)
+                    keep = .!isnan.(expected)
+                    @test via_form[keep] ≈ expected[keep]
                 else
                     @test via_form ≈ expected
                 end

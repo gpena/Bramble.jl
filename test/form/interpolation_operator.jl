@@ -404,20 +404,11 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             @test_allocs assemble!(A, a)
         end
 
-        # Serial and parallel assembly agree, and the pattern is exact.
-        @testset "serial vs parallel: exact pattern" begin
+        # The pattern is exact. The threaded sweep of a test-side interpolation is
+        # checked in threaded_replay.jl.
+        @testset "exact pattern" begin
             a = form(Wu, Wv, (u, v) -> innerₕ(u, πₕ(v)) + inner₊ₓ(D₋ₓ(u), D₋ₓ(πₕ(v))))
             As = assemble(a)
-
-            # Colouring reads the *test* reach, and a test-side interpolation has none to
-            # read: its rows come from `locate_cell`, so two colours can land on the same
-            # row. `assemble_parallel!` sweeps such a term on one thread instead, and this is
-            # what would fail if it did not -- a race gives a wrong sum, not an error.
-            Ap = allocate_system_matrix(a)
-            assemble_parallel!(Ap, a)
-            @test As ≈ Ap
-            assemble_parallel!(Ap, a)
-            @test As ≈ Ap
 
             # the pattern reserves exactly what the trial-side twin reserves, transposed:
             # binding or scattering the wrong side would show up as a different count. (Not
@@ -507,12 +498,6 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             form(Wbig, Wsml, (u, v) -> innerₕ(πₕ(u) + u, v))
         )
 
-        # Two interpolations in one term used to be checked one by one, since either could
-        # name the wrong space; both now bind to the same leaf by construction, so the pair
-        # that used to be refused is the pair that assembles. Kept as a positive assertion
-        # rather than deleted: the walk still has to reach *both* nodes.
-        Pb = interpolation_matrix(Wt, Wbig)
-        @test assemble(form(Wbig, Wt, (u, v) -> innerₕ(πₕ(u) + πₕ(u), v))) ≈ 2 * Hh(Wt) * Pb
         A = assemble(
             form(
             Wbig,
@@ -520,11 +505,16 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             (u, v) -> innerₕ(πₕ(u), v) + inner₊ₓ(D₋ₓ(πₕ(u)), D₋ₓ(v))
         ),
         )
-        @test size(A) == (ndofs(Wt), ndofs(Wbig))
+        P = interpolation_matrix(Wt, Wbig)
+        Dx = D₋ₓ(Wt)
+        @test A ≈ Hh(Wt) * P + Dx' * Hp(Wt, 1) * Dx * P
 
         # what must keep working: a sum of interpolations from the *same* space, and a mix on
-        # a single mesh, where the offsets are meaningful and `P` is the identity
-        P = interpolation_matrix(Wt, Wbig)
+        # a single mesh, where the offsets are meaningful and `P` is the identity. Two
+        # interpolations in one term used to be checked one by one, since either could name
+        # the wrong space; both now bind to the same leaf by construction, so the pair that
+        # used to be refused is the pair that assembles: the walk still has to reach *both*
+        # nodes.
         A = assemble(form(Wbig, Wt, (u, v) -> innerₕ(πₕ(u) + πₕ(u), v)))
         @test A ≈ 2 * Hh(Wt) * P
         A = assemble(form(Wt, Wt, (u, v) -> innerₕ(πₕ(u) + u, v)))

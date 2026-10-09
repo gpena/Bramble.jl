@@ -3,14 +3,18 @@ module QualityExplicitImportsTests
 using Test
 using Bramble
 using ExplicitImports
+using Polyester: Polyester
+using Kronecker: Kronecker
 
 # What Bramble and its extensions take from other modules, and how.
 #
 # The package already writes every import as `using X: a, b` rather than bare `using X`, and
 # already has none unused -- so this file is a ratchet, not a cleanup: it fails when a new
 # import drifts from that, not today. Coverage depends on which extensions are loaded when
-# this runs: `test/utils/backends.jl` loads Metal incidentally on Apple Silicon even in the
-# unit group, so `BrambleMetalExt` is usually checked too; the rest -- now including
+# this runs. `BramblePolyesterExt` and `BrambleKroneckerExt` are always checked: this file
+# loads `Polyester` and `Kronecker` itself, then asserts both extensions are there.
+# `test/utils/backends.jl` loads Metal incidentally on Apple Silicon even in the unit group,
+# so `BrambleMetalExt` is usually checked too; the rest -- now including
 # `BrambleSciMLSensitivityExt` -- are reached only when the "ext"/"full" group has loaded
 # their triggers earlier in the same process. Every ignore entry below was verified against
 # all of them loaded together, so the check is exact under "full" and a (harmless) subset of
@@ -23,6 +27,13 @@ using ExplicitImports
 # up in no test. Both are unconditional: nothing here is a deliberately-kept exception.
 
 @testset "Explicit imports" begin
+    # The two lines above load the triggers; this fails the file if either extension is still
+    # not there, so the checks below can never pass vacuously for them.
+    @testset "Polyester and Kronecker are loaded" begin
+        @test Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing
+        @test Base.get_extension(Bramble, :BrambleKroneckerExt) !== nothing
+    end
+
     @testset "No implicit or stale imports" begin
         @test check_no_implicit_imports(Bramble) === nothing
         @test check_no_stale_explicit_imports(Bramble) === nothing
@@ -36,9 +47,14 @@ using ExplicitImports
     # reach it (the same "reached through a re-export" shape as `MPI`/`Init`/`Initialized`
     # below, from MUMPS's own re-export of its MPI submodule); depending on either deeper
     # package directly, just to import one name past what actually uses it, would be worse.
+    #
+    # `libblastrampoline` (BrambleKroneckerExt): `LinearAlgebra.BLAS` re-exports the library
+    # name `ccall` wants from `libblastrampoline_jll`, which Bramble does not depend on and
+    # should not just to spell one `ccall` target; `LinearAlgebra.BLAS` is where the manual
+    # documents it.
     @testset "Imports come from the owning module" begin
         @test check_all_explicit_imports_via_owners(
-            Bramble; ignore = (:BrownFullBasicInit,)
+            Bramble; ignore = (:BrownFullBasicInit, :libblastrampoline)
         ) === nothing
     end
 
@@ -123,6 +139,70 @@ using ExplicitImports
                 # the same body `_threaded_broadcast!` already runs under `Threads.@threads`
                 # (src/space/vectorelement.jl). Neither exported nor public.
                 :_broadcast_band!,
+                # `ReplaySink`, `_PairReplaySink`, `_DiagonalReplayTarget`, `ActionSink`,
+                # `_PairActionSink`, `_ScatterCSC` (BramblePolyesterExt): the sink and target
+                # types the warmed-refill replay and the matrix-free product pass between
+                # Bramble's sweeps and the extension's `@batch` bodies, named in its method
+                # signatures and in `_batch_split`'s skeletons. None is exported or public.
+                :ReplaySink,
+                :_PairReplaySink,
+                :_DiagonalReplayTarget,
+                :ActionSink,
+                :_PairActionSink,
+                :_ScatterCSC,
+                # `_AvgKernel`, `_AvgScatterKernel`, `_MaskedKernel`, `_RₕKernel`, `__prod`:
+                # the per-point kernels of the cell-average, projection and restriction
+                # operators, run by the extension's `@batch` bodies as the `CpuThreaded` sweeps
+                # run them, and the diagonal product the separable weights share.
+                :_AvgKernel,
+                :_AvgScatterKernel,
+                :_MaskedKernel,
+                :_RₕKernel,
+                :__prod,
+                # `_batch_split`, `_batch_rebuild`, `_batch_splittable` (src/utils/batch_split.jl):
+                # `@batch` cannot capture a struct that holds GC references, so the extension
+                # splits one into a bits-only skeleton plus its arrays and rebuilds it inside
+                # the task. Neither these nor the host-side splitters below are public.
+                :_batch_split,
+                :_batch_rebuild,
+                :_batch_splittable,
+                # `_bc_host_raw`, `_kron_host_raw`, `_kron_host_rebuild`, `_bc_host_rebuild`:
+                # the broadcast and Kronecker operands' `@batch`-crossing forms (the same
+                # skeleton idea as above, spelled per operand type). `_kron_line_init!`,
+                # `_kron_line_terms!`: the per-line bodies of the Kronecker product that
+                # `_batch_kron_lines!` runs under `@batch`.
+                :_bc_host_raw,
+                :_bc_host_rebuild,
+                :_kron_host_raw,
+                :_kron_host_rebuild,
+                :_kron_line_init!,
+                :_kron_line_terms!,
+                # `_MFFusedPlan`, `_MFPass`, `_MF_BAND`, `_MF_NO_COLLECT`, `_mf_apply_parts!`,
+                # `_mf_host_ast` (src/assembly/matrix_free.jl): the matrix-free product's fused
+                # plan, its pass kinds and its host-side AST copy, which `_batch_mf_bands!`
+                # runs under `@batch`; `_mf_apply_parts!` is the method it extends.
+                :_MFFusedPlan,
+                :_MFPass,
+                :_MF_BAND,
+                :_MF_NO_COLLECT,
+                :_mf_apply_parts!,
+                :_mf_host_ast,
+                # `_dot_band`, `_last_axis_chunks`, `_separable_line_band`,
+                # `_separable_block_band` (src/utils/linear_algebra.jl,
+                # src/space/inner_product.jl): the per-band bodies and the last-axis chunking of
+                # the dot product and the separable inner product, shared with the
+                # `CpuThreaded` methods so a `CpuPolyester` reduction cuts and sums identically.
+                :_dot_band,
+                :_last_axis_chunks,
+                :_separable_line_band,
+                :_separable_block_band,
+                # `BlasInt`, `@blasfunc`, `libblastrampoline` (BrambleKroneckerExt): the `ccall`
+                # vocabulary of its direct LAPACK bindings (`sygvd`, `potrf`, `gges3`, which
+                # `LinearAlgebra.LAPACK` does not wrap for the shapes the fast diagonalisation
+                # solve needs). `LinearAlgebra` documents none of the three as public.
+                :BlasInt,
+                Symbol("@blasfunc"),
+                :libblastrampoline,
                 # `TrackedArray` (BrambleReverseDiffExt, commit c5ae771f): the argument type of the
                 # `mul!` method that resolves the ambiguity with `KroneckerLinearOperator`
                 #. ReverseDiff exports no public name for it.
@@ -350,6 +430,42 @@ using ExplicitImports
                 # in `src/space/vectorelement.jl`, reached by `_polyester_broadcast!`,
                 # extended here rather than called.
                 :_batch_broadcast!,
+                # `_batch_csr_spmv!` (src/problems/semidiscrete_rhs.jl), `_batch_kron_lines!`
+                # (src/assembly/kronecker.jl), `_batch_mf_bands!` (src/assembly/matrix_free.jl):
+                # the same `Polyester.@batch` counterparts, one per CSR product, Kronecker line
+                # sweep and matrix-free band sweep, extended here rather than called.
+                :_batch_csr_spmv!,
+                :_batch_kron_lines!,
+                :_batch_mf_bands!,
+                # `semidiscretize_rhs` (the precompile workload): called as
+                # `Bramble.semidiscretize_rhs` to warm the right-hand-side closure; not public.
+                :semidiscretize_rhs,
+                # `Base.FastContiguousSubArray` (`_PtrAlike`): the contiguous-view type a
+                # pointer-based reduction accepts; Base has no public spelling for it.
+                :FastContiguousSubArray,
+                # `KroneckerBlockOperator`, `_kron_check_fresh`, `_kron_check_spaces`,
+                # `_kron_is_fresh`, `_kron_leaves`, `_kron_reads_coef`, `resolve_form_ast`,
+                # `test_space`, `trial_space` (BrambleKroneckerExt): the Bramble internals it
+                # reads to turn a separable form into a Kronecker object and to refuse a
+                # stale or mismatched one -- the block-operator type, the freshness and space
+                # checks, the leaf and coefficient walkers over the form's AST. Not public.
+                :KroneckerBlockOperator,
+                :_kron_check_fresh,
+                :_kron_check_spaces,
+                :_kron_is_fresh,
+                :_kron_leaves,
+                :_kron_reads_coef,
+                :resolve_form_ast,
+                :test_space,
+                :trial_space,
+                # `LinearAlgebra.BLAS.get_config`, `LinearAlgebra.LAPACK.chklapackerror`,
+                # `chkargsok`, `Base.Libc.Libdl` (BrambleKroneckerExt): the extension finds
+                # the loaded LAPACK by name and looks up `zgges3_`/`cgges3_` in it, reporting
+                # an error through LAPACK's own checker. None is public.
+                :get_config,
+                :chklapackerror,
+                :chkargsok,
+                :Libdl,
                 # `BrambleKernelAbstractionsExt`: the stencil and
                 # component helpers its `@kernel`s call so the device answer is computed by
                 # the very same quadrature/stencil arithmetic the CPU sweep uses, rather than

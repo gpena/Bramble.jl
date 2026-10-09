@@ -5,6 +5,7 @@ using Bramble
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, D₋ₓ, D₋ᵧ
 using Random
+using ..TestUtils: _observed_orders
 
 # Convergence order of the finite difference operators.
 #
@@ -23,28 +24,6 @@ using Random
 # smallest ratio ranged from 0.948 to 0.991, and an unseeded run occasionally fell below
 # the bound asserted here. Seeding keeps the test reproducible, so a failure is a real
 # regression rather than an unlucky grid.
-
-# Error of `op` against the exact derivative `df`, over the points whose stencil is not
-# truncated. The max norm is used so the result does not depend on the quadrature weights.
-function _interior_error(Ωₕ, op, f, df, drop)
-    Wₕ = gridspace(Ωₕ)
-    e = parent(op(Rₕ(Wₕ, f))) .- parent(Rₕ(Wₕ, df))
-    dims = npoints(Ωₕ, Tuple)
-    return maximum(abs, drop(reshape(e, dims)))
-end
-
-# Successive halvings of the mesh give log2 of the error ratio as the observed order.
-# Returns the per-step ratios alongside the raw errors, so a caller can also fit a slope
-# across every level (`_lsq_order`) rather than only reading the last pair.
-function _orders(Ωₕ, op, f, df, drop; steps = 4)
-    errs = Float64[]
-    for k in 0:steps
-        k > 0 && iterative_refinement!(Ωₕ)
-        push!(errs, _interior_error(Ωₕ, op, f, df, drop))
-    end
-    ords = [log2(errs[k] / errs[k + 1]) for k in 1:(length(errs) - 1)]
-    return ords, errs
-end
 
 # Least-squares order across every refinement level, not just the last pair: since each
 # level halves every spacing, err_k ≈ C·h₀^p·2^(-pk), so log2(err_k) is linear in the level
@@ -70,7 +49,7 @@ end
                 )
                     Random.seed!(20250829)
                     Ωₕ = mesh(domain(interval(0.0, 1.0)), 51, unif)
-                    ords, errs = _orders(Ωₕ, op, sin, cos, drop)
+                    ords, errs = _observed_orders(Ωₕ, op, sin, cos, drop)
                     @test all(>(0.9), ords)
                     @test 0.95 < last(ords) < 1.05
                     @test 0.95 < _lsq_order(errs) < 1.05
@@ -93,7 +72,7 @@ end
                         (17, 17),
                         (unif, unif)
                     )
-                    ords, errs = _orders(Ωₕ, op, f, df, drop; steps = 3)
+                    ords, errs = _observed_orders(Ωₕ, op, f, df, drop; steps = 3)
                     @test all(>(0.9), ords)
                     @test 0.95 < last(ords) < 1.05
                     @test 0.95 < _lsq_order(errs) < 1.05
@@ -125,7 +104,7 @@ end
                     (17, 17),
                     (true, true)
                 )
-                ords, _ = _orders(Ωₕ, op, f, df, drop; steps = 3)
+                ords, _ = _observed_orders(Ωₕ, op, f, df, drop; steps = 3)
                 @test all(>(0.9), ords)
                 @test 0.95 < last(ords) < 1.05
             end
@@ -243,14 +222,14 @@ end
 
     @testset "uniform: second order" begin
         Ωₕ = mesh(Ω, (9, 9), (true, true))
-        _, errs = _orders(Ωₕ, Δₕ, f2, lap2, drop_rim; steps = 3)
+        _, errs = _observed_orders(Ωₕ, Δₕ, f2, lap2, drop_rim; steps = 3)
         @test 1.9 < _lsq_order(errs) < 2.1
     end
 
     @testset "non-uniform: first order pointwise" begin
         Random.seed!(20250829)
         Ωₕ = mesh(Ω, (9, 9), (false, false))
-        _, errs = _orders(Ωₕ, Δₕ, f2, lap2, drop_rim; steps = 3)
+        _, errs = _observed_orders(Ωₕ, Δₕ, f2, lap2, drop_rim; steps = 3)
         @test 0.9 < _lsq_order(errs) < 1.6
     end
 end

@@ -245,12 +245,14 @@ end
 end
 
 """
-    normal_vector(Ωₕ::AbstractMeshType{D}, symbol::Symbol) -> NTuple{D, Float64}
+    normal_vector(Ωₕ::AbstractMeshType{D}, symbol::Symbol) -> NTuple{D, eltype(Ωₕ)}
     normal_vector(::Val{D}, symbol::Symbol) -> NTuple{D, Float64}
 
-Return the outward unit normal vector (as an `NTuple{D, Float64}`) associated with a standard
-boundary facet label (`:xmin`, `:xmax`, `:ymin`, `:ymax`, `:zmin`, `:zmax`) or legacy viewpoint alias
-(`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`).
+Return the outward unit normal vector associated with a standard boundary facet label
+(`:xmin`, `:xmax`, `:ymin`, `:ymax`, `:zmin`, `:zmax`) or legacy viewpoint alias
+(`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`). The mesh form returns the mesh's
+element type, `eltype(Ωₕ)`, and the `Val` form, which has no mesh to take a type from, returns
+`Float64`.
 
 # Conventions
 
@@ -272,7 +274,9 @@ boundary facet label (`:xmin`, `:xmax`, `:ymin`, `:ymax`, `:zmin`, `:zmax`) or l
 
 See also: [`boundary_symbols`](@ref).
 """
-@inline normal_vector(::AbstractMeshType{D}, symbol::Symbol) where {D} = normal_vector(Val(D), symbol)
+@inline function normal_vector(Ωₕ::AbstractMeshType{D}, symbol::Symbol) where {D}
+    return map(eltype(Ωₕ), normal_vector(Val(D), symbol))
+end
 
 @inline function normal_vector(::Val{1}, symbol::Symbol)
     (symbol === :xmin || symbol === :left) && return (-1.0,)

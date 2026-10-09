@@ -8,15 +8,10 @@ using LinearAlgebra: norm
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS
 using ..SpaceVectorElementsTests: setup_test_grid
-using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 # There is one jump, not a forward and a backward pair: the jump belongs to the interface
 # between two cells rather than to a direction of travel across it. It is arithmetically
 # the unscaled forward difference, u_{i+1} - u_i, and forwards to it.
-
-jump_ops(::Val{1}) = (jumpₓ,)
-jump_ops(::Val{2}) = (jumpₓ, jumpᵧ, jump_ops(Val(1))...)
-jump_ops(::Val{3}) = (jumpₓ, jump₂, jump_ops(Val(2))...)
 
 @testset "Jump operators" begin
     for D in 1:3
@@ -90,10 +85,6 @@ jump_ops(::Val{3}) = (jumpₓ, jump₂, jump_ops(Val(2))...)
         for name in (:jumpₓ, :jumpᵧ, :jump₂)
             @test !Base.isexported(Bramble, name)
         end
-    end
-
-    @testset "Operator vs matrix" begin
-        test_operator_matrix_equivalence(jump_ops)
     end
 
     WITH_SLOW_TESTS && @testset "Leibniz product rule" begin

@@ -11,7 +11,7 @@ import SparseArrays
 using SparseArrays: sparse, nnz, nonzeros, rowvals, SparseMatrixCSC
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS, WITH_AD_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, WITH_AD_TESTS, @test_allocs
 using ..TestUtils: _nonuniform_points
 using Bramble:
                BilinearForm,
@@ -95,10 +95,7 @@ using Bramble:
     @testset "Entry point agreement" begin
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
         Apar = assemble(a)
-        Aser = similar(sparse(Apar))
-        assemble!(Aser, a)
 
-        @test Matrix(Aser) ≈ Matrix(Apar)
         @test trial_space(a) === Wₕ
         @test test_space(a) === Wₕ
 
@@ -107,11 +104,7 @@ using Bramble:
         vₕ = Rₕ(Wₕ, x -> x[2] + 1)
         @test a(uₕ, vₕ) ≈ dot(parent(vₕ), Matrix(Apar) * parent(uₕ))
 
-        # re-assembly overwrites rather than accumulating
-        assemble!(Aser, a)
-        @test Matrix(Aser) ≈ Matrix(Apar)
-
-        # and Dirichlet rows are pinned
+        # Dirichlet rows are pinned
         Abc = assemble(a; dirichlet = :walls)
         marked = index_in_marker(Ωₕ, :walls)
         for i in 1:n
@@ -510,60 +503,42 @@ using Bramble:
     @testset "In-place reassembly" begin
         # The pattern is the expensive half and does not change between assemblies, so the
         # intended shape of a loop is `assemble` once and `assemble!` after. This pins that
-        # the second path agrees with the first and costs nothing.
+        # the second path costs nothing.
         cₕ = Rₕ(Wₕ, x -> 1.0)
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(cₕ * u, v))
 
         A = assemble(a)
-        first_sum = sum(A)
-        assemble!(A, a)
-        @test sum(A) ≈ first_sum                     # idempotent, so it overwrites
-
-        # a coefficient written through is seen, and the pattern is untouched by it
-        nnz_before = nnz(A)
-        Rₕ!(cₕ, x -> 3.0)
-        assemble!(A, a)
-        @test sum(A) ≈ 3 * first_sum
-        @test nnz(A) == nnz_before
 
         # assemble! uses the pre-resolved ast stored in the form and allocates 0 bytes.
-        function _loop_bytes(A, a)
-            assemble!(A, a)
-            return @allocated assemble!(A, a)
-        end
-        @test _loop_bytes(A, a) == 0
+        @test_allocs assemble!(A, a)
 
         # Coefficients with operators pre-resolve at form construction time and also allocate 0 bytes during assembly
         dcₕ = D₋ₓ(cₕ)
         aop = form(Wₕ, Wₕ, (u, v) -> innerₕ(dcₕ * u, v))
         Aop = assemble(aop)
-        @test _loop_bytes(Aop, aop) == 0
+        @test_allocs assemble!(Aop, aop)
 
         ainline = form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(cₕ) * u, v))
         Ain = assemble(ainline)
-        @test _loop_bytes(Ain, ainline) == 0
+        @test_allocs assemble!(Ain, ainline)
         @test Matrix(Ain) ≈ Matrix(Aop)              # and the two agree
     end
 
     # In-place reassembly.
     @testset "Composite reassembly allocates nothing" begin
-        # `_loop_bytes` above only exercises the scalar core. The block-routing core (going
-        # through `blocks`) needs its own guard, so a routing change cannot
+        # The checks above only exercise the scalar core. The block-routing core (going through
+        # `blocks`) needs its own guard, so a routing change cannot
         # reintroduce an allocation (e.g. from building an intermediate `Block` per term).
         Vₕ = gridspace(Ωₕ, Val(2))
-        function _loop_bytes(A, a)
-            assemble!(A, a)
-            return @allocated assemble!(A, a)
-        end
 
         a_diag = form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v))          # blk === nothing path
-        @test _loop_bytes(assemble(a_diag), a_diag) == 0
+        @test_allocs assemble!(assemble(a_diag), a_diag)
 
         a_off = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(2)))     # named-block path
-        @test _loop_bytes(assemble(a_off), a_off) == 0
+        @test_allocs assemble!(assemble(a_off), a_off)
 
         a_mixed = form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2))) # both, one term each
-        @test _loop_bytes(assemble(a_mixed), a_mixed) == 0
+        @test_allocs assemble!(assemble(a_mixed), a_mixed)
     end
 
     @testset "Diagonal-segment replay: no allocation" begin
@@ -589,11 +564,7 @@ using Bramble:
         assemble!(A_stiff, a_stiff)
         @test a_stiff.cache.segments[1].is_diagonal
 
-        function _loop_bytes(A, a)
-            assemble!(A, a)
-            return @allocated assemble!(A, a)
-        end
-        @test _loop_bytes(A_stiff, a_stiff) == 0
+        @test_allocs assemble!(A_stiff, a_stiff)
     end
 
     @testset "Restricted in-place reassembly allocs" begin
@@ -643,10 +614,12 @@ using Bramble:
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(cₕ * u, v))
             A = assemble(a)                 # record
             s1 = sum(A)
+            nnz_before = nnz(A)
             for factor in (3.0, -2.0, 5.0)
                 Rₕ!(cₕ, x -> factor)
                 assemble!(A, a)              # replay, each time with a different live value
                 @test sum(A) ≈ factor * s1
+                @test nnz(A) == nnz_before   # the pattern is untouched by it
             end
         end
 

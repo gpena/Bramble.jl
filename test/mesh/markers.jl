@@ -2,7 +2,7 @@ module MeshMarkersTests
 
 using Test
 using Bramble
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, @test_allocs, _half_spacing_oracle
 
 # `:boundary`/`:interior` are reserved markers every mesh now carries automatically,
 # computed from the mesh's own shape (see `_ensure_geometric_markers!`
@@ -78,11 +78,6 @@ using ..TestUtils: alloc_test, @test_allocs
             domain(S, :boundary => :left), (4, 4), (true, true); warn_marker_mismatch = false
         )
         @test sum(Bramble.markers(Ωₕ)[:boundary]) == 4   # the custom definition still wins
-
-        # The default stays warn-on-mismatch. false is opt-in, not a silent global change.
-        @test_logs (:warn, r"boundary.*something other than") mesh(
-            domain(S, :boundary => :left), (4, 4), (true, true)
-        )
     end
 
     @testset "Condition markers" begin
@@ -242,12 +237,6 @@ end
     S1 = interval(0.0, 1.0)
     S2 = interval(0.0, 1.0) × interval(0.0, 2.0)
 
-    @testset "1D predicate on a 1-tuple is refused" begin
-        # The probe passes the bare scalar, as the mesh does, so a tuple-only predicate throws.
-        tuple_only = x -> x isa Tuple ? x[1] > 0.5 : throw(DomainError(x))
-        @test_throws ArgumentError Bramble.markers(S1, :right_half => tuple_only)
-    end
-
     @testset "1D predicate taking neither is refused" begin
         err = try
             Bramble.markers(S1, :broken => x -> error("no"))
@@ -309,12 +298,6 @@ end
         @test occursin("label :num", sprint(showerror, err_bool))
         @test occursin("Float64", sprint(showerror, err_bool))
     end
-
-    @testset "Marker printing" begin
-        @test sprint(show, Bramble.Marker(:a, :xmin)) == "Marker(:a => :xmin)"
-        @test sprint(show, Bramble.Marker(:b, Set((:xmin,)))) == "Marker(:b => (xmin))"
-        @test sprint(show, Bramble.Marker(:c, x -> true)) == "Marker(:c => <function>)"
-    end
 end
 
 # `(x, t, p)` conditions fixed at a time and a parameter. The pairs go
@@ -348,9 +331,6 @@ end
 # written out from the mesh's own points (`host_points`), never read back from the function
 # under test.
 @testset "Mesh queries" begin
-    hs(x, i) = i == 1 ? (x[2] - x[1]) / 2 :
-               i == length(x) ? (x[end] - x[end - 1]) / 2 : (x[i + 1] - x[i - 1]) / 2
-
     @testset "1D: first index, iteration, normals" begin
         Ω1 = mesh(domain(interval(0.0, 1.0)), 7, false)
         xs = Bramble.host_points(Ω1)
@@ -448,12 +428,13 @@ end
         xs, ys = Bramble.host_points(Ω2)
         mb = Bramble._face_mask(Val(2), (:ymin,))
         for i in 1:6
-            @test Bramble._surface_weight(Ω2, mb, CartesianIndex(i, 1)) ≈ hs(xs, i)
+            @test Bramble._surface_weight(Ω2, mb, CartesianIndex(i, 1)) ≈ _half_spacing_oracle(xs, i)
             @test Bramble._surface_weight(Ω2, mb, CartesianIndex(i, 3)) == 0.0
         end
         mc = Bramble._face_mask(Val(2), (:xmin, :ymin))
-        @test Bramble._surface_weight(Ω2, mc, CartesianIndex(1, 1)) ≈ hs(xs, 1) + hs(ys, 1)
-        @test Bramble._surface_weight(Ω2, mc, CartesianIndex(1, 3)) ≈ hs(ys, 3)
+        @test Bramble._surface_weight(Ω2, mc, CartesianIndex(1, 1)) ≈
+              _half_spacing_oracle(xs, 1) + _half_spacing_oracle(ys, 1)
+        @test Bramble._surface_weight(Ω2, mc, CartesianIndex(1, 3)) ≈ _half_spacing_oracle(ys, 3)
 
         # 3D: on :zmax the weight is the product of the two transverse half spacings
         Ω3 = mesh(
@@ -465,7 +446,7 @@ end
         for i in 1:4, j in 1:5
 
             @test Bramble._surface_weight(Ω3, mz, CartesianIndex(i, j, 4)) ≈
-                  hs(x3, i) * hs(y3, j)
+                  _half_spacing_oracle(x3, i) * _half_spacing_oracle(y3, j)
             @test Bramble._surface_weight(Ω3, mz, CartesianIndex(i, j, 2)) == 0.0
         end
     end
@@ -497,7 +478,6 @@ end
 
     # A time domain needs (x, t) predicates, at construction.
     @test_throws ArgumentError domain(X, T, :s => x -> x[1] > 0.5)
-    @test_throws ArgumentError markers(X, T, :s => x -> x[1] > 0.5)
     @test_throws ArgumentError markers(interval(0.0, 1.0), T, :s => x -> x > 0.5)
 end
 

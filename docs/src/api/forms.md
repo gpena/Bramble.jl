@@ -66,7 +66,8 @@ diagonalisation, a non-symmetric one (advection terms) by a Schur-form solve. A 
 mixed derivative is refused; use `fdm_preconditioner` (in
 [Scientific computing](../api_sciml.md)) to precondition a Krylov solver with its
 Laplacian-like part. `fdm_factorize` factorises once, and `fdm_solve!` then solves each
-right-hand side with zero allocations.
+right-hand side with zero allocations; `fdm_factorize!` refills that factorisation after a
+coefficient or the mesh changed, without building it again.
 
 ```@docs
 is_separable
@@ -74,6 +75,7 @@ kronecker_operator
 KroneckerLinearOperator
 fdm_solve
 fdm_factorize
+fdm_factorize!
 fdm_solve!
 ```
 

@@ -21,9 +21,9 @@
 #
 # Anything without a method here answers `nothing`: a grid-function coefficient varying
 # along two axes or living on another mesh, a region other than `:interior`, an indexed
-# (composite) leaf, an interpolation, a scalar inside a side, and the star and
-# cross-weighted differences. A false negative only forgoes the Kronecker fast path; a false
-# positive would be a wrong product.
+# (composite) leaf, an interpolation, a scalar inside a side other than a number or a `Ref`,
+# and the star and cross-weighted differences. A false negative only forgoes the Kronecker
+# fast path; a false positive would be a wrong product.
 
 # --- Splitting a side into sum-free chains ------------------------------------------- #
 
@@ -103,15 +103,35 @@ end
 
 # A plain number scaling a node inside a side (what the simplifier leaves when it merges like
 # terms, `D₋ₓ(u) + 1.3 * u`) is the same number times the identity on every axis, so it goes
-# into the 1D chain on axis 1 alone. A `Ref`, or any other scalar, is refused: folded into a
-# factor it would be read once, where a `Ref` coefficient must stay live.
-_kron_split(op::OperatorScale) = op.scalar isa Number ? _kron_split_wrapped(op) : nothing
+# into the 1D chain on axis 1 alone. A `Ref` there (`u + a * D₋ₓ(u)`, merged from
+# `innerₕ(u, v) + a * innerₕ(D₋ₓ(u), v)`) is a constant too, so it commutes with every node
+# of its chain, but folded into a factor it would be read once, where a `Ref` coefficient
+# must stay live: `_kron_live` takes it out of the chain, and `_kron_project` returns it
+# beside the factors. Any other scalar is refused.
+_kron_split(op::OperatorScale{D, <:Union{Number, Base.RefValue{<:Number}}}) where {D} = _kron_split_wrapped(op)
 function _kron_rewrap(op::OperatorScale{D}, x::LazyOp{D}) where {D}
     return OperatorScale{D, typeof(op.scalar), typeof(x)}(op.scalar, x)
 end
 function _kron_axis(op::OperatorScale, d::Int, leaf::LazyOp{1})
     x = _kron_axis(op.inner_op, d, leaf)
     return d == 1 ? OperatorScale{1, typeof(op.scalar), typeof(x)}(op.scalar, x) : x
+end
+
+"""
+    _kron_live(op::LazyOp) -> Tuple{Tuple, LazyOp}
+
+The `Ref` scalars of `op`, a sum-free chain from `_kron_split`, and the chain without them,
+which no longer reads a `Ref`. The caller multiplies the term by them at `mul!` time, as it
+does a `Ref` that `_kron_leaves` strips from around a whole term.
+"""
+_kron_live(op::Union{TrialFunction, TestFunction}) = ((), op)
+function _kron_live(op::LazyOp)
+    scales, inner = _kron_live(op.inner_op)
+    return scales, _kron_rewrap(op, inner)
+end
+function _kron_live(op::OperatorScale{D, <:Base.RefValue}) where {D}
+    scales, inner = _kron_live(op.inner_op)
+    return (op.scalar, scales...), inner
 end
 
 # --- Single-axis grid-function coefficients ----------------------------------------- #
@@ -263,8 +283,10 @@ end
 
 The Kronecker factors of `term`, one addend of `resolve_form_ast` with its scalar
 coefficients already stripped by `_kron_leaves`, over the host tensor mesh `Ωₕ`: a tuple
-of per-axis factor tuples, each an `NTuple{D, SparseMatrixCSC}` whose `kron` (axis 1
-fastest) is one Kronecker product, so that `term` assembles to their sum. The factor on axis
+of `(scales, factors)` pairs, `factors` an `NTuple{D, SparseMatrixCSC}` whose `kron` (axis 1
+fastest) is one Kronecker product and `scales` the `Ref` scalars inside its sides
+(`_kron_live`), so that `term` assembles to the sum of `_kron_coeff(scales)` times each
+product. The factor on axis
 `d` is the 1D form on `gridspace(Ωₕ(d))` that `term` projects to there (see this file's
 header); there is one tuple per pair of addends of the two sides and per Kronecker term of
 the weight (several for `inner_Γ`, one per face). `nothing` when `term` has a node with no
@@ -292,12 +314,13 @@ function _kron_project(term::BilinearProduct{D, I}, Ωₕ::MeshnD{D}) where {D, 
         _kron_interior_is_tensor(Ωₕ) || return nothing
     end
     spaces = ntuple(d -> _kron_axis_space(Ωₕ, d), Val(D))
-    terms = vec([(l, r, w) for l in ls, r in rs, w in inners])
-    return Tuple(map(terms) do (l, r, w)
-        ntuple(Val(D)) do d
+    terms = vec([(_kron_live(l), _kron_live(r), w) for l in ls, r in rs, w in inners])
+    return Tuple(map(terms) do ((ls_, l), (rs_, r), w)
+        factors = ntuple(Val(D)) do d
             Wd = spaces[d]
             f = (u, v) -> w[d](_kron_axis(l, d, u), _kron_axis(r, d, v))
             assemble(form(Wd, Wd, f))
         end
+        ((ls_..., rs_...), factors)
     end)
 end

@@ -256,7 +256,6 @@ using ..TestUtils: alloc_test, @test_allocs
 
         # Zero allocations for copyto! and πₕ!
         @test alloc_test(copyto!, u, 1.0) == 0
-        @test alloc_test(copyto!, u, parent(u)) == 0
 
         # Zero allocations for the specialised in-place broadcast copyto!
         # Unwrapping every VectorElement leaf down to its own

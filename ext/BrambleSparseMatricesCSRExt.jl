@@ -104,12 +104,13 @@ end
 # (bilinear_traversal.jl): a linear scan of the row's segment when it holds few entries, a
 # binary search otherwise, relying on `SparseMatrixCSR`'s own invariant that `colval` is
 # sorted within each row (guaranteed by how `_allocate_from_pattern` above builds it, through
-# the same `sparse` combine-and-sort `SparseMatrixCSC` gets).
+# the same `sparse` combine-and-sort `SparseMatrixCSC` gets). The row bounds are converted
+# first, so the position is an `Int` for any index type.
 @inline function Bramble._scatter_position(A::SparseMatrixCSR{1}, row::Int, col::Int)
     rowptr = A.rowptr
     colval = A.colval
-    p1 = rowptr[row]
-    p2 = rowptr[row + 1] - 1
+    p1 = Int(rowptr[row])
+    p2 = Int(rowptr[row + 1]) - 1
 
     if (p2 - p1) < 32
         idx = p1
@@ -135,7 +136,7 @@ end
     return 0
 end
 
-@inline function Bramble._scatter_add!(A::SparseMatrixCSR{1}, pos::Int, val)
+@inline function Bramble._scatter_add!(A::SparseMatrixCSR{1}, pos::Integer, val)
     @inbounds A.nzval[pos] += val
     return nothing
 end

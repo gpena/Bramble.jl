@@ -85,7 +85,6 @@ import Base: diff
             @test points(Ωₕ_unif) ≈ [0.0, 0.5, 1.0, 1.5, 2.0]
             @test point(Ωₕ_unif, 3) ≈ 1.0
             @test point(Ωₕ_unif, CartesianIndex(3)) ≈ 1.0
-            @test collect(points(Ωₕ_unif)) ≈ [0.0, 0.5, 1.0, 1.5, 2.0]
         end
 
         @testset "Non-uniform mesh" begin
@@ -105,7 +104,6 @@ import Base: diff
             @test all(pts_nonunif .>= 0.0) && all(pts_nonunif .<= 2.0)
             @test point(Ωₕ_nonunif, 1) ≈ 0.0
             @test point(Ωₕ_nonunif, npts) ≈ 2.0
-            @test collect(points(Ωₕ_nonunif)) ≈ pts_nonunif
         end
 
         @testset "set_points! & set_indices!" begin
@@ -319,6 +317,7 @@ import Base: diff
             markers_before = deepcopy(markers(Ωₕ_one_arg))
             iterative_refinement!(Ωₕ_one_arg)
             @test npoints(Ωₕ_one_arg) == 1
+            @test point(Ωₕ_one_arg, 1) == 2.0
             @test markers(Ωₕ_one_arg) == markers_before
 
             Ωₕ_one_dm = mesh(Ω_one, 1, true; backend = backend())

@@ -248,8 +248,8 @@ new table, and a label removed since throws the `ArgumentError` of
 [`_validate_term_markers`](@ref). Editing `markers(Ωₕ)` in place is unsupported, and `markers!`
 changes the labels. A label written in place has no id and throws too
 (`_throw_marker_not_bound`). Given the walked leaf `sp` instead, it binds against
-`mesh(sp)` after checking `sp`'s weights ([`weights`](@ref)): the walk's one staleness
-check, since its stencils read the weights unchecked.
+`mesh(sp)` after checking `sp`'s weights ([`weights`](@ref)), since its stencils read the
+weights unchecked.
 """
 @inline function _bind_walk(term, Ωₕ::AbstractMeshType)
     isempty(_collect_region_labels(term)) && return term, nothing
@@ -258,7 +258,8 @@ end
 
 # The form every walk entry calls, with the leaf it walks: `sp`'s weights are checked
 # against its mesh here, once per walk, and the stencil then reads them unchecked at every
-# point (`_stored_weights`, gpena/Bramble.jl#437). A stale `sp` throws `weights`'s error.
+# point (`_stored_weights`, gpena/Bramble.jl#437). A stale `sp` throws `weights`'s error;
+# a bilinear walk's trial leaf is checked in `_check_block_meshes` (#466).
 @inline function _bind_walk(term, sp::ScalarGridSpace)
     weights(sp)
     return _bind_walk(term, mesh(sp))

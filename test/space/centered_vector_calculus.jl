@@ -5,41 +5,8 @@ using Bramble
 using Bramble: ∇cₕ!, divcₕ!, curlcₕ!, εcₕ!
 using Bramble: Dc
 using Random
-using Bramble: components
-using ..TestUtils: alloc_test, _zero_boundary!
-
-# Random non-uniform meshes on the unit cube in 1D, 2D and 3D, and one smooth field per
-# spatial dimension on each.
-function _fixture(D)
-    dom = D == 1 ? domain(interval(0.0, 1.0)) :
-          D == 2 ? domain(interval(0.0, 1.0) × interval(0.0, 1.0)) :
-          domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
-    n = (11, 9, 7)
-    Ωₕ = D == 1 ? mesh(dom, n[1], false) : mesh(dom, n[1:D], ntuple(_ -> false, D))
-    Wₕ = gridspace(Ωₕ)
-    fs = (x -> sin(3x[1]) + (D > 1 ? x[2]^2 : 0.0) + (D > 2 ? x[3] : 0.0),
-        x -> cos(2x[D]) + x[1]^3,
-        x -> x[1] * x[D] + sin(x[1]))
-    u = ntuple(k -> Rₕ(Wₕ, D == 1 ? (x -> fs[k]((x,))) : fs[k]), D)
-    return Ωₕ, Wₕ, u, npoints(Ωₕ, Tuple)
-end
-
-# The same field, spelled as a `D`-leaf composite grid function.
-function _composite(Ωₕ, u, D)
-    uc = element(gridspace(Ωₕ, Val(D)), 0.0)
-    for d in 1:D
-        parent(components(uc)[d]) .= parent(u[d])
-    end
-    return uc
-end
-
-function _bubble(u, dims)
-    w = copy(u)
-    _zero_boundary!(reshape(parent(w), dims))
-    return w
-end
-
-_field(u, D) = D == 1 ? u[1] : u
+using ..TestUtils: alloc_test
+using ..TestUtils: _bubble, _composite, _field, _fixture
 
 @testset "Centered vector calculus (#287)" begin
     Random.seed!(287)

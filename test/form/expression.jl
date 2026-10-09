@@ -82,9 +82,6 @@ using Bramble: TrialFunction, TestFunction, IdentityOperator, ZeroOperator, Oper
         l = form(Wₕ, v -> innerₕ(dirac(0.3, 2.0), v))
         s = expression(l)
         @test s == "innerₕ(dirac((0.3,), 2.0), v)"
-        @test occursin("dirac", s)
-        @test occursin("0.3", s)
-        @test occursin("2.0", s)
     end
 
     # Through OperatorAdd subtraction.
@@ -97,9 +94,6 @@ using Bramble: TrialFunction, TestFunction, IdentityOperator, ZeroOperator, Oper
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) - 2 * innerₕ(D₋ₓ(u), D₋ₓ(v)))
         s = expression(a)
         @test s == "innerₕ(u, v) - 2 * innerₕ(D₋ₓ(u), D₋ₓ(v))"
-        @test occursin(" - ", s)
-        @test !occursin(" + -2 * ", s)
-        @test !occursin("+ -", s)
     end
 
     @testset "Product nodes rendered directly" begin
@@ -169,12 +163,10 @@ using Bramble: TrialFunction, TestFunction, IdentityOperator, ZeroOperator, Oper
 
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
         sa = sprint(show, MIME"text/plain"(), a)
-        @test occursin("Expression", sa)
         @test occursin("Expression: $(expression(a))", sa)
 
         l = form(Wₕ, v -> innerₕ(3.0, v))
         sl = sprint(show, MIME"text/plain"(), l)
-        @test occursin("Expression", sl)
         @test occursin("Expression: $(expression(l))", sl)
     end
 end

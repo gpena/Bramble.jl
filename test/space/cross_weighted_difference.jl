@@ -7,7 +7,7 @@ using Bramble: Dcₓ, D̽ᵧ, D̽₂, D̽ₓ, D₋ₓ, VectorElement
 using Random
 using Bramble: components
 using Bramble: div̽ₕ, div̽ₕ!, curl̽ₕ, curl̽ₕ!, ε̽ₕ, ε̽ₕ!, ∇̽ₕ!
-using ..TestUtils: alloc_test
+using ..TestUtils: alloc_test, _observed_orders
 using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 # The cross-weighted centered difference.
@@ -146,17 +146,10 @@ cross_weighted_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
     @testset "Convergence order" begin
         # Second order on both, which is the point: Dc is first order on a non-uniform
         # grid and this is not.
-        function orders(unif; steps = 4)
+        function orders(unif)
             Random.seed!(20260830)
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, unif)
-            errs = Float64[]
-            for k in 0:steps
-                k > 0 && iterative_refinement!(Ωₕ)
-                Wₕ = gridspace(Ωₕ)
-                e = parent(D̽ₓ(Rₕ(Wₕ, sin))) .- parent(Rₕ(Wₕ, cos))
-                push!(errs, maximum(abs, e[2:(end - 1)]))
-            end
-            return [log2(errs[k] / errs[k + 1]) for k in 1:(length(errs) - 1)]
+            return first(_observed_orders(Ωₕ, D̽ₓ, sin, cos, e -> e[2:(end - 1)]))
         end
 
         @test all(o -> abs(o - 2.0) < 0.05, orders(true))
@@ -173,17 +166,6 @@ cross_weighted_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, false))
         Wₕ = gridspace(Ωₕ)
         Vₕ = gridspace(Ωₕ, Val(2))
-        uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
-
-        @test D̽ₕ(uₕ) isa NTuple{2, VectorElement}
-        @test parent(D̽ₕ(uₕ)[1]) == parent(D̽ₓ(uₕ))
-        @test parent(D̽ₕ(uₕ)[2]) == parent(D̽ᵧ(uₕ))
-
-        # in one dimension the tuple and the grid function coincide, as for ∇ₕ
-        Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)
-        u1 = Rₕ(gridspace(Ω1), sin)
-        @test !(D̽ₕ(u1) isa Tuple)
-        @test parent(D̽ₕ(u1)) == parent(D̽ₓ(u1))
 
         # composite grid functions apply componentwise, as the other operators do
         fs = (x -> x[1], x -> x[2]^2)

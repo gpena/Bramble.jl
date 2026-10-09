@@ -10,7 +10,7 @@ using Random
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS
 using Bramble: components
-using ..TestUtils: alloc_test, _nonuniform_points, _zero_boundary!
+using ..TestUtils: alloc_test, _nonuniform_points, _observed_orders, _zero_boundary!
 using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 # The centered difference.
@@ -142,17 +142,10 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
         # Second order on a uniform grid, and first order on a non-uniform one: the
         # centered difference approximates the derivative at the midpoint of its stencil,
         # which coincides with xᵢ only when the two spacings match.
-        function orders(unif; steps = 4)
+        function orders(unif)
             Random.seed!(20260830)
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, unif)
-            errs = Float64[]
-            for k in 0:steps
-                k > 0 && iterative_refinement!(Ωₕ)
-                Wₕ = gridspace(Ωₕ)
-                e = parent(Dcₓ(Rₕ(Wₕ, sin))) .- parent(Rₕ(Wₕ, cos))
-                push!(errs, maximum(abs, e[2:(end - 1)]))
-            end
-            return [log2(errs[k] / errs[k + 1]) for k in 1:(length(errs) - 1)]
+            return first(_observed_orders(Ωₕ, Dcₓ, sin, cos, e -> e[2:(end - 1)]))
         end
 
         ou = orders(true)
@@ -170,17 +163,6 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, false))
         Wₕ = gridspace(Ωₕ)
         Vₕ = gridspace(Ωₕ, Val(2))
-        uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
-
-        @test Dcₕ(uₕ) isa NTuple{2, VectorElement}
-        @test parent(Dcₕ(uₕ)[1]) == parent(Dcₓ(uₕ))
-        @test parent(Dcₕ(uₕ)[2]) == parent(Dcᵧ(uₕ))
-
-        # in one dimension the tuple and the grid function coincide
-        Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)
-        u1 = Rₕ(gridspace(Ω1), sin)
-        @test !(Dcₕ(u1) isa Tuple)
-        @test parent(Dcₕ(u1)) == parent(Dcₓ(u1))
 
         # composite grid functions apply componentwise, as the other operators do
         fs = (x -> x[1], x -> x[2]^2)

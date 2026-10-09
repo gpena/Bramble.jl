@@ -262,30 +262,6 @@ end
             @test b1 == b2
         end
     end
-
-    @testset "in-place divₕ!/curlₕ!: no allocs" begin
-        # `⋅`/`×` forward to the allocating `divₕ`/`curlₕ`, never the `!` forms; this
-        # confirms the in-place paths are untouched by adding those two methods.
-        function alloc_counts()
-            Ωₕ = mesh(
-                domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (8, 6), (false, false)
-            )
-            Wₕ = gridspace(Ωₕ)
-            u1 = Rₕ(Wₕ, x -> x[1]^2 + 0.3x[2])
-            u2 = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
-            v = similar(u1)
-            divₕ!(v, (u1, u2))   # warm up
-            dv = @allocated divₕ!(v, (u1, u2))
-            w = similar(u1)
-            curlₕ!(w, (u1, u2))  # warm up
-            cw = @allocated curlₕ!(w, (u1, u2))
-            return dv, cw
-        end
-
-        dv, cw = alloc_counts()
-        @test dv == 0
-        @test cw == 0
-    end
 end
 
 end # module

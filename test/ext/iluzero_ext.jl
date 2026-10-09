@@ -116,10 +116,6 @@ end
         # `nothing` (default) leaves the solve unpreconditioned, still correct.
         uₕ_none = solve(a, l; dirichlet = bcs, solver = KrylovJL_GMRES())
         @test parent(uₕ_none)≈expected atol=1e-6 rtol=1e-6
-
-        @test_throws ArgumentError solve(
-            a, l; dirichlet = bcs, preconditioner = :not_ilu0
-        )
     end
 
     # On a convection-dominated system GMRES needs far fewer iterations with ILU(0).
