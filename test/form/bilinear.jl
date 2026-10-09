@@ -11,7 +11,7 @@ import SparseArrays
 using SparseArrays: sparse, nnz, nonzeros, rowvals, SparseMatrixCSC
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS, WITH_AD_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, WITH_AD_TESTS, @test_allocs
 using ..TestUtils: _nonuniform_points
 using Bramble:
                BilinearForm,
@@ -510,43 +510,35 @@ using Bramble:
         A = assemble(a)
 
         # assemble! uses the pre-resolved ast stored in the form and allocates 0 bytes.
-        function _loop_bytes(A, a)
-            assemble!(A, a)
-            return @allocated assemble!(A, a)
-        end
-        @test _loop_bytes(A, a) == 0
+        @test_allocs assemble!(A, a)
 
         # Coefficients with operators pre-resolve at form construction time and also allocate 0 bytes during assembly
         dcₕ = D₋ₓ(cₕ)
         aop = form(Wₕ, Wₕ, (u, v) -> innerₕ(dcₕ * u, v))
         Aop = assemble(aop)
-        @test _loop_bytes(Aop, aop) == 0
+        @test_allocs assemble!(Aop, aop)
 
         ainline = form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(cₕ) * u, v))
         Ain = assemble(ainline)
-        @test _loop_bytes(Ain, ainline) == 0
+        @test_allocs assemble!(Ain, ainline)
         @test Matrix(Ain) ≈ Matrix(Aop)              # and the two agree
     end
 
     # In-place reassembly.
     @testset "Composite reassembly allocates nothing" begin
-        # `_loop_bytes` above only exercises the scalar core. The block-routing core (going
-        # through `blocks`) needs its own guard, so a routing change cannot
+        # The checks above only exercise the scalar core. The block-routing core (going through
+        # `blocks`) needs its own guard, so a routing change cannot
         # reintroduce an allocation (e.g. from building an intermediate `Block` per term).
         Vₕ = gridspace(Ωₕ, Val(2))
-        function _loop_bytes(A, a)
-            assemble!(A, a)
-            return @allocated assemble!(A, a)
-        end
 
         a_diag = form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v))          # blk === nothing path
-        @test _loop_bytes(assemble(a_diag), a_diag) == 0
+        @test_allocs assemble!(assemble(a_diag), a_diag)
 
         a_off = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(2)))     # named-block path
-        @test _loop_bytes(assemble(a_off), a_off) == 0
+        @test_allocs assemble!(assemble(a_off), a_off)
 
         a_mixed = form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2))) # both, one term each
-        @test _loop_bytes(assemble(a_mixed), a_mixed) == 0
+        @test_allocs assemble!(assemble(a_mixed), a_mixed)
     end
 
     @testset "Diagonal-segment replay: no allocation" begin
@@ -572,11 +564,7 @@ using Bramble:
         assemble!(A_stiff, a_stiff)
         @test a_stiff.cache.segments[1].is_diagonal
 
-        function _loop_bytes(A, a)
-            assemble!(A, a)
-            return @allocated assemble!(A, a)
-        end
-        @test _loop_bytes(A_stiff, a_stiff) == 0
+        @test_allocs assemble!(A_stiff, a_stiff)
     end
 
     @testset "Restricted in-place reassembly allocs" begin

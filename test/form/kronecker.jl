@@ -10,7 +10,7 @@ using Random
 using LinearSolve: LinearProblem, solve, KrylovJL_CG
 using ForwardDiff
 using Polyester
-using ..TestUtils: WITH_AD_TESTS
+using ..TestUtils: WITH_AD_TESTS, _graded_mesh
 
 # `is_separable`/`kronecker_operator`: a bilinear form whose
 # resolved AST is a sum of `innerₕ(u, v)`/`inner₊(∇ₕ(u), ∇ₕ(v))`-shaped terms over a
@@ -44,15 +44,6 @@ function _kron_stale(f, needle = "KroneckerLinearOperator's factors")
         msg = sprint(showerror, e)
         return e isa ArgumentError && occursin("change_points!", msg) && occursin(needle, msg)
     end
-end
-
-# A graded mesh on backend `be`, as benchmark/operator_routes.jl builds one: uniform, then
-# moved by `change_points!` to `t^(1 + d/4)` along axis `d`.
-function _kron_graded_space(n::NTuple{D, Int}, be) where {D}
-    Ωₕ = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n, ntuple(_ -> true, D);
-        backend = be)
-    Bramble.change_points!(Ωₕ, ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
-    return gridspace(Ωₕ)
 end
 
 @testset "Kronecker" begin
@@ -414,7 +405,7 @@ end
     # stored pattern included. A coefficient varying along one axis is a factor too.
     @testset "Kronecker: projected forms" begin
         for n in ((9, 7), (6, 5, 7))
-            Wₕ = _kron_graded_space(n, backend())
+            Wₕ = gridspace(_graded_mesh(n))
             fx = Rₕ(Wₕ, x -> 1 + x[1])
             fy = Rₕ(Wₕ, x -> 2 + x[2]^2)
             fams = [
@@ -448,7 +439,7 @@ end
     # axis 1's line is the tridiagonal sweep. Diagonal factors that are not the mass (an
     # `:interior` restriction, a coefficient) become a `Diagonal` too.
     @testset "Kronecker: today's factor types" begin
-        Wₕ = _kron_graded_space((9, 7), backend())
+        Wₕ = gridspace(_graded_mesh((9, 7)))
         K = kronecker_operator(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))))
         @test length(K.terms) == 3
         mass(t, d) = t.factors[d] isa Diagonal{Float64, <:Bramble.SeparableWeights{1}}
@@ -467,7 +458,7 @@ end
     # A grid-function coefficient is read once, at construction, and `kronecker_operator`
     # warns so; a scalar or `Ref` coefficient stays live and warns nothing.
     @testset "Kronecker: coefficient snapshot" begin
-        Wₕ = _kron_graded_space((9, 7), backend())
+        Wₕ = gridspace(_graded_mesh((9, 7)))
         fx = Rₕ(Wₕ, x -> 1 + x[1])
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(fx * u, v))
         K = @test_logs (:warn, r"read once") kronecker_operator(a)
@@ -491,7 +482,7 @@ end
     # `dropzeros(assemble(a))`: the values agree, and the factors are not padded to repeat
     # the zeros.
     @testset "Kronecker: pure inner_Γ" begin
-        Wₕ = _kron_graded_space((9, 7), backend())
+        Wₕ = gridspace(_graded_mesh((9, 7)))
         a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(u, v; markers = (:boundary,)))
         A = assemble(a)
         B = SparseMatrixCSC(kronecker_operator(a))
@@ -521,7 +512,7 @@ end
     # at every product.
     @testset "Kronecker: like terms merged" begin
         for n in ((9, 7), (6, 5, 7))
-            Wₕ = _kron_graded_space(n, backend())
+            Wₕ = gridspace(_graded_mesh(n))
             fx = Rₕ(Wₕ, x -> 1 + x[1])
             fams = [
                 (u, v) -> innerₕ(D₋ₓ(D₋ᵧ(u)), v),
@@ -549,7 +540,7 @@ end
         ]
         for n in ((17, 13), (6, 5, 7)), f in advection
 
-            Wₕ = _kron_graded_space(n, backend())
+            Wₕ = gridspace(_graded_mesh(n))
             a = form(Wₕ, Wₕ, f)
             @test is_separable(a)
             K = @test_logs min_level = Base.CoreLogging.Error kronecker_operator(a)
@@ -571,7 +562,7 @@ end
         f = (u, v) -> innerₕ(D₋ₓ(Mₓ(u)), D₋ₓ(Mₓ(v))) + 0.3 * innerₕ(u, v)
         for n in ((5, 4), (12, 9, 11))
             Ks = [kronecker_operator(form(W, W, f))
-                  for W in (_kron_graded_space(n, backend(; policy = P))
+                  for W in (gridspace(_graded_mesh(n; backend = backend(; policy = P)))
             for P in (Bramble.CpuSerial(), Bramble.CpuThreaded(), Bramble.CpuPolyester()))]
             for K in Ks[2:3], (t, ts) in zip(K.terms, Ks[1].terms)
 
@@ -623,11 +614,11 @@ end
             bytes = Dict{Tuple, Int}()
             for n in ((9, 7), (257, 257), (6, 5, 4), (33, 33, 33))
                 @testset "$P $(join(n, '×'))" begin
-                    W = _kron_graded_space(n, backend(; policy = P))
+                    W = gridspace(_graded_mesh(n; backend = backend(; policy = P)))
                     a = kform(W)
                     K = kronecker_operator(a)
                     @test K.policy === P
-                    Ks = kronecker_operator(kform(_kron_graded_space(n, backend())))
+                    Ks = kronecker_operator(kform(gridspace(_graded_mesh(n))))
                     @test Ks.policy === Bramble.CpuSerial()
                     A = assemble(a)
                     N = ndofs(W)
@@ -777,7 +768,7 @@ end
     # the precompile workload) instead of the whole build; the product is unchanged.
     @testset "kronecker_operator stays a call" begin
         for n in ((9, 8), (6, 5, 7))
-            Wₕ = _kron_graded_space(n, backend())
+            Wₕ = gridspace(_graded_mesh(n))
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
             x = rand(MersenneTwister(KRON_SEED), ndofs(Wₕ))
             y = similar(x)

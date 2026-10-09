@@ -27,6 +27,7 @@ using Bramble: refactor!, sparse_factorize, sparse_refactor!
 import Bramble: D₊ₓ, D₊ᵧ
 using LinearAlgebra: ldiv!
 using SparseArrays: SparseMatrixCSC, spzeros
+using ..TestUtils: _grid, _sine_source, _unit_cube
 
 export ZERO_BC, poisson_system, convection_diffusion_system,
        poisson_solve_contract, refactor_contract, unsymmetric_refactor_contract,
@@ -42,14 +43,6 @@ const ZERO_BC = :boundary => (x -> 0.0)
 @inline if_supported(body, capability) = body(capability)
 
 # ---------------------------------------------------------------------- fixtures
-
-_unit_cube(::Val{D}) where {D} = reduce(×, ntuple(_ -> interval(0.0, 1.0), Val(D)))
-
-_sine_source(::Val{1}) = x -> sin(π * x)
-_sine_source(::Val{D}) where {D} = x -> prod(sin(π * xᵢ) for xᵢ in x)
-
-_grid(::Val{1}, Ωd, n) = mesh(Ωd, n, true)
-_grid(::Val{D}, Ωd, n) where {D} = mesh(Ωd, ntuple(_ -> n, Val(D)), ntuple(_ -> true, Val(D)))
 
 """
     poisson_system(Val(D), n; source, symmetrize = true)

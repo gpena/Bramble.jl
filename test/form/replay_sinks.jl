@@ -5,6 +5,7 @@ using Bramble
 using Random
 using SparseArrays
 using Bramble: Serial, Parallel, backend, assemble_parallel!, D₋ₓ
+using ..TestUtils: _fillnz!, alloc_test
 
 # The replay sinks hold the matrix's storage (`_scatter_storage`) and their recorded
 # positions as any `AbstractVector{Int}` (gpena/Bramble.jl#437): a sparse sink is plain
@@ -12,16 +13,6 @@ using Bramble: Serial, Parallel, backend, assemble_parallel!, D₋ₓ
 # write exactly where `_scatter_add!` would: checked entry by entry on a hand-built matrix,
 # on a sparse type whose positions are linear indices, without allocating into a dense
 # matrix, and by a threaded refill against a serial `assemble` on a non-uniform mesh.
-
-# Allocation checks behind a function barrier (bramble-verification §1).
-_alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
-
-# `allocate_system_matrix`-style results infer a union with a dense `Matrix`; the matrices
-# filled here are always `SparseMatrixCSC`.
-function _fillnz!(A, v)
-    @assert A isa SparseMatrixCSC
-    return fill!(nonzeros(A), v)
-end
 
 function _mesh(D, n, policy)
     Random.seed!(437)
@@ -116,7 +107,7 @@ _hasmatrix(T) = any(t -> t isa Type && t <: AbstractMatrix, T.parameters)
         M = Matrix(R)
         assemble!(M, a)                                    # records into `M`
         @test a.cache.A_id == objectid(M)
-        @test _alloc(assemble!, M, a) == 0
+        @test alloc_test(assemble!, M, a) == 0
         @test M == Matrix(R)
     end
 

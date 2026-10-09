@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Random
 using LinearAlgebra: dot
-using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
+using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, _random_element
 import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, Mₓ, M₊ₓ, Mcₓ, jumpₓ, D₋ᵧ, Mcᵧ, D̽ᵧ, restrict_to
 
 # A random non-uniform mesh on the unit square (or interval): the relabelling bug this file
@@ -14,8 +14,6 @@ function _nonuniform_space(D)
     Ωₕ = D == 1 ? mesh(dom, 11, false) : mesh(dom, (11, 9), (false, false))
     return gridspace(Ωₕ)
 end
-
-_random_element(Wₕ) = (uₕ = element(Wₕ); parent(uₕ) .= randn(length(parent(uₕ))); uₕ)
 
 const XOPS = (("D₋ₓ", D₋ₓ), ("D₊ₓ", D₊ₓ), ("Dcₓ", Dcₓ), ("D̃ₓ", D̃ₓ), ("D̽ₓ", D̽ₓ),
     ("Mₓ", Mₓ), ("M₊ₓ", M₊ₓ), ("Mcₓ", Mcₓ), ("jumpₓ", jumpₓ))

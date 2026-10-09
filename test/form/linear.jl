@@ -626,11 +626,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         # allocation free. What it must not do is build a full-length vector, which is what
         # this pins: the bound is a fraction of one, not zero. Behind a barrier, because at
         # top level over globals the call itself reports bytes it does not spend.
-        function _contract_allocs(lf, v)
-            lf(v)
-            return @allocated lf(v)
-        end
-        @test _contract_allocs(lfc, uₕ) < 8 * n ÷ 100
+        @test alloc_test(lfc, uₕ) < 8 * n ÷ 100
         @test assemble(lfc) ≈ b                     # and the vector path still works
 
         # Every arrangement has to agree with assembling and contracting by hand, not just
@@ -664,13 +660,13 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         # A source carrying an operator is evaluated into an element during form construction
         lfd = form(Wₕ, v -> innerₕ(D₋ₓ(uₕ), v))
         @test lfd(uₕ) ≈ sum(assemble(lfd) .* parent(uₕ))
-        @test _contract_allocs(lfd, uₕ) < 8 * n ÷ 100
+        @test alloc_test(lfd, uₕ) < 8 * n ÷ 100
 
         # and hoisting the operator out of the form agrees
         duₕ = D₋ₓ(uₕ)
         lfh = form(Wₕ, v -> innerₕ(duₕ, v))
         @test lfh(uₕ) ≈ lfd(uₕ)
-        @test _contract_allocs(lfh, uₕ) < 8 * n ÷ 100
+        @test alloc_test(lfh, uₕ) < 8 * n ÷ 100
     end
 
     @testset "Live coefficient evaluation" begin

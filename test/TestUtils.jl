@@ -13,7 +13,7 @@
 module TestUtils
 
 using Test
-using SparseArrays: spdiagm
+using SparseArrays: SparseMatrixCSC, nonzeros, spdiagm
 using ForwardDiff
 using Printf: @sprintf
 using Random: Random, Xoshiro
@@ -336,6 +336,40 @@ end
 
 # A symmetric, structurally symmetric operator to constrain.
 _tri(m) = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m - 1))
+
+# `assemble` and `allocate_system_matrix` infer a union that includes a dense `Matrix`, which
+# has no `nonzeros`; the matrices filled here are always `SparseMatrixCSC`, so the assertion
+# narrows the type for JET.
+function _fillnz!(A, v)
+    @assert A isa SparseMatrixCSC
+    return fill!(nonzeros(A), v)
+end
+
+# A grid function with standard normal entries, from the global RNG.
+_random_element(Wₕ) = (uₕ = element(Wₕ); parent(uₕ) .= Random.randn(length(parent(uₕ))); uₕ)
+
+# A box mesh of `n` points on [0, 1]^D on `backend`: uniform, then moved by `change_points!`
+# to `t^(1 + d/4)` along axis `d` (as benchmark/operator_routes.jl builds one), so no two
+# axes share their nodes.
+function _graded_mesh(n::NTuple{D, Int}; backend = backend()) where {D}
+    Ωₕ = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n, ntuple(_ -> true, D);
+        backend = backend)
+    change_points!(Ωₕ, ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
+    return Ωₕ
+end
+
+# The Poisson fixture the ext solver files share: the unit `D`-cube, its sine source and a
+# grid of `n` points per axis on `backend`.
+_unit_cube(::Val{D}) where {D} = reduce(×, ntuple(_ -> interval(0.0, 1.0), Val(D)))
+_sine_source(::Val{1}) = x -> sin(π * x)
+_sine_source(::Val{D}) where {D} = x -> prod(sin(π * xᵢ) for xᵢ in x)
+
+_grid(::Val{1}, Ωd, n; backend = backend()) = mesh(Ωd, n, true; backend = backend)
+function _grid(::Val{D}, Ωd, n; backend = backend()) where {D}
+    return mesh(
+        Ωd, ntuple(_ -> n, Val(D)), ntuple(_ -> true, Val(D)); backend = backend
+    )
+end
 
 # The points of an arbitrary non-uniform partition of [0, 1], from a vector of positive
 # step sizes: cumulative sums, normalised by the last one. Every Supposition check of a

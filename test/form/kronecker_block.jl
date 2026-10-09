@@ -8,7 +8,7 @@ using LinearAlgebra: issymmetric, mul!
 using SparseArrays: SparseMatrixCSC, nnz, findnz
 using Random
 using Polyester
-using ..TestUtils: ZeroBasedVector
+using ..TestUtils: ZeroBasedVector, _graded_mesh
 
 # `kronecker_operator` on a composite space whose leaves share one mesh: one
 # `KroneckerLinearOperator` per nonzero (test leaf, trial leaf) block, wrapped in a
@@ -16,15 +16,6 @@ using ..TestUtils: ZeroBasedVector
 # where a factor built from the wrong axis or offset gives other numbers.
 
 const KB_SEED = 20261004
-
-# Uniform, then moved by `change_points!` to `t^(1 + d/4)` along axis `d`, so no two axes
-# share their nodes.
-function _kb_graded_mesh(n::NTuple{D, Int}, be = backend()) where {D}
-    Ωₕ = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n, ntuple(_ -> false, D);
-        backend = be)
-    Bramble.change_points!(Ωₕ, ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
-    return Ωₕ
-end
 
 # Two diagonal blocks of different families and one advection-type off-diagonal block.
 _kb_coupled(u, v) = innerₕ(u(1), v(1)) + inner₊ₓ(D₋ₓ(u(2)), D₋ₓ(v(2))) + innerₕ(u(2), v(2)) +
@@ -44,7 +35,7 @@ _kb_alloc3(y, K, x) = @allocated mul!(y, K, x)
 # the loop over 2D and 3D sizes, the space is a 2D/3D union and inference pairs a 3D trial
 # function with a 2D test function.
 function _kb_matches_assemble(n::NTuple{D, Int}) where {D}
-    V = gridspace(_kb_graded_mesh(n), Val(2))
+    V = gridspace(_graded_mesh(n), Val(2))
     a = form(V, V, _kb_coupled)
     @test is_separable(a)
     K = kronecker_operator(a)
@@ -75,7 +66,7 @@ end
     # A test leaf no term reaches gets no block, and its rows are still `β * y` (zero for
     # `β = 0`, whatever `y` held).
     @testset "rows no block reaches" begin
-        V = gridspace(_kb_graded_mesh((9, 7)), Val(2))
+        V = gridspace(_graded_mesh((9, 7)), Val(2))
         a = form(V, V, (u, v) -> innerₕ(D₋ᵧ(u(2)), v(1)))
         K = kronecker_operator(a)
         A = assemble(a)
@@ -92,7 +83,7 @@ end
 
     # A term naming no component is the same integrand on every diagonal block.
     @testset "unnamed term on every leaf" begin
-        V = gridspace(_kb_graded_mesh((9, 7)), Val(3))
+        V = gridspace(_graded_mesh((9, 7)), Val(3))
         a = form(V, V, (u, v) -> innerₕ(u, v) + 2.0 * innerₕ(D₋ₓ(u(3)), D₋ₓ(v(3))))
         K = kronecker_operator(a)
         A = assemble(a)
@@ -104,7 +95,7 @@ end
     # Symmetric: every diagonal block symmetric and each off-diagonal block the transpose of
     # its mirror; one coefficient changed in a mirror breaks it.
     @testset "issymmetric" begin
-        V = gridspace(_kb_graded_mesh((9, 7)), Val(2))
+        V = gridspace(_graded_mesh((9, 7)), Val(2))
         sym(c) = (u, v) -> innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(2)), D₋ₓ(v(2))) +
                            innerₕ(D₋ᵧ(u(1)), D₋ᵧ(v(2))) + c * innerₕ(D₋ᵧ(u(2)), D₋ᵧ(v(1)))
         a = form(V, V, sym(1.0))
@@ -117,7 +108,7 @@ end
 
     # The refusals: a block that does not project, and leaves on different meshes.
     @testset "refusals" begin
-        Ωₕ = _kb_graded_mesh((9, 7))
+        Ωₕ = _graded_mesh((9, 7))
         W = gridspace(Ωₕ)
         V = gridspace(Ωₕ, Val(2))
         g = Rₕ(W, x -> x[1] + x[2])
@@ -132,7 +123,7 @@ end
         @test occursin("trial component 2, test component 2", err.msg)
         @test occursin("GridFunctionScale", err.msg)
 
-        W2 = gridspace(_kb_graded_mesh((9, 7)))
+        W2 = gridspace(_graded_mesh((9, 7)))
         U = W × W2
         b = form(U, U, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
         @test !is_separable(b)
@@ -147,7 +138,7 @@ end
 
     # A grid-function coefficient read in two blocks warns once; a `Ref` stays live.
     @testset "coefficients" begin
-        Ωₕ = _kb_graded_mesh((9, 7))
+        Ωₕ = _graded_mesh((9, 7))
         W = gridspace(Ωₕ)
         V = gridspace(Ωₕ, Val(2))
         fx = Rₕ(W, x -> 1 + x[1])
@@ -164,7 +155,7 @@ end
 
     # The kernels index from 1: a vector indexed otherwise is refused, not read wrongly.
     @testset "offset-indexed vectors refused" begin
-        Ωₕ = _kb_graded_mesh((9, 7))
+        Ωₕ = _graded_mesh((9, 7))
         W = gridspace(Ωₕ)
         V = gridspace(Ωₕ, Val(2))
         Ks = (kronecker_operator(form(W, W, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))),
@@ -183,7 +174,7 @@ end
     @testset "policies: bitwise and bytes" begin
         for n in ((9, 7), (6, 5, 7))
             Ks = map((Bramble.CpuSerial(), Bramble.CpuThreaded(), Bramble.CpuPolyester())) do P
-                V = gridspace(_kb_graded_mesh(n, backend(; policy = P)), Val(2))
+                V = gridspace(_graded_mesh(n; backend = backend(; policy = P)), Val(2))
                 return kronecker_operator(form(V, V, _kb_coupled))
             end
             x = rand(MersenneTwister(KB_SEED), size(Ks[1], 2))

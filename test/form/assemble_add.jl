@@ -5,24 +5,12 @@ using Bramble
 using SparseArrays
 using Random
 using Bramble: Serial, Parallel, backend, execution_policy, allocate_system_matrix
+using ..TestUtils: _fillnz!, alloc_test
 
 # `assemble_add!` accumulates a form's contribution into an already
 # filled matrix/vector, in place, without the `fill!` `assemble!` does first. Every check
 # here goes against an independent reference built from `assemble` alone (never against
 # another call to the code under test), following bramble-verification.
-
-# Allocation checks go behind a function barrier (bramble-verification §1): measured at
-# top-level or `@testset` scope, global-variable access alone can report spurious bytes
-# that have nothing to do with the kernel under test.
-_alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
-
-# `assemble` and `allocate_system_matrix` infer a union that includes a dense `Matrix`
-# (their element-type promotion is not inferable here), which has no `nonzeros`; the matrices
-# these tests fill are always `SparseMatrixCSC`, so the assertion narrows the type for JET.
-function _fillnz!(A, v)
-    @assert A isa SparseMatrixCSC
-    return fill!(nonzeros(A), v)
-end
 
 @testset "assemble_add! (#231)" begin
     # Matches assemble-then-add, in 1D, 2D and 3D.
@@ -106,8 +94,8 @@ end
             assemble_add!(A, m_form)      # cold: records
             assemble_add!(A, k_form, θ)   # cold: records
 
-            allocs_unscaled = _alloc(assemble_add!, A, m_form)
-            allocs_scaled = _alloc(assemble_add!, A, k_form, θ)
+            allocs_unscaled = alloc_test(assemble_add!, A, m_form)
+            allocs_scaled = alloc_test(assemble_add!, A, k_form, θ)
             return allocs_unscaled, allocs_scaled
         end
         allocs_unscaled, allocs_scaled = _warm_and_measure()
@@ -321,7 +309,7 @@ end
             F = zeros(ndofs(Wₕ))
             assemble_add!(F, l)  # warm-up
             θ = Ref(1.5)
-            return _alloc(assemble_add!, F, l), _alloc(assemble_add!, F, l, θ)
+            return alloc_test(assemble_add!, F, l), alloc_test(assemble_add!, F, l, θ)
         end
         allocs_unscaled, allocs_scaled = _warm_and_measure()
         @test allocs_unscaled == 0
@@ -379,13 +367,13 @@ end
         function _bilinear_scaled_alloc(A, a, α)
             assemble_add!(A, a, α)             # cold: records
             @inferred assemble_add!(A, a, α)
-            return _alloc(assemble_add!, A, a, α)
+            return alloc_test(assemble_add!, A, a, α)
         end
 
         function _linear_scaled_alloc(F, l, α)
             assemble_add!(F, l, α)             # cold: records
             @inferred assemble_add!(F, l, α)
-            return _alloc(assemble_add!, F, l, α)
+            return alloc_test(assemble_add!, F, l, α)
         end
 
         for (lbl, Ωₕ) in (

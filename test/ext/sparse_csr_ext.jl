@@ -29,19 +29,9 @@ using Random
 # builds), so the 1D/2D/3D unified-dispatcher checks it would otherwise cover are written out
 # by hand against CSR-built systems instead.
 using ..ExtSolverContracts: refactor_contract
+using ..TestUtils: _grid, _sine_source, _unit_cube
 
 const ZERO_BC = :dir => (x -> 0.0)
-
-_unit_cube(::Val{D}) where {D} = reduce(×, ntuple(_ -> interval(0.0, 1.0), Val(D)))
-_sine_source(::Val{1}) = x -> sin(π * x)
-_sine_source(::Val{D}) where {D} = x -> prod(sin(π * xᵢ) for xᵢ in x)
-
-_grid(::Val{1}, Ωd, n; backend) = mesh(Ωd, n, true; backend = backend)
-function _grid(::Val{D}, Ωd, n; backend) where {D}
-    mesh(
-        Ωd, ntuple(_ -> n, Val(D)), ntuple(_ -> true, Val(D)); backend = backend
-    )
-end
 
 # One matched CSC/CSR pair -- same domain, same mesh sizes, same discretisation -- for the
 # Poisson problem every backend file in test/ext/ shares (`SolverContracts.poisson_system`),

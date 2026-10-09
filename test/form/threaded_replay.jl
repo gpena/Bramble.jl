@@ -7,7 +7,7 @@ using SparseArrays
 using SparseArrays: getcolptr
 using Bramble: Serial, Parallel, CpuPolyester, backend, assemble_parallel!,
                allocate_system_matrix, D₋ₓ, D₊ᵧ, πₕ, inner₊ₓ, CompositeGridSpace
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, _fillnz!, alloc_test
 
 # The threaded refill replays the form's recording: `assemble!` on a
 # `Parallel()` form and `assemble_parallel!` from any policy write through the recorded
@@ -16,9 +16,6 @@ using ..TestUtils: WITH_SLOW_TESTS
 # against another threaded fill. That no threaded refill searches at all is pinned by the
 # plan's own check, which makes the search throw; here the evidence is the cache recording
 # the matrix being filled, and agreement to round-off.
-
-# Allocation checks behind a function barrier (bramble-verification §1).
-_alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
 
 const _DOMAINS = (
     domain(interval(0.0, 1.0)),
@@ -32,14 +29,6 @@ function _mesh(D, n, policy; seed = 338)
     return mesh(
         _DOMAINS[D], ntuple(_ -> n, D), ntuple(_ -> false, D); backend = backend(policy = policy)
     )
-end
-
-# `assemble` and `allocate_system_matrix` infer a union that includes a dense `Matrix`
-# (their element-type promotion is not inferable here), which has no `nonzeros`; the matrices
-# these tests fill are always `SparseMatrixCSC`, so the assertion narrows the type for JET.
-function _fillnz!(A, v)
-    @assert A isa SparseMatrixCSC
-    return fill!(nonzeros(A), v)
 end
 
 _same_structure(A, B) = getcolptr(A) == getcolptr(B) && rowvals(A) == rowvals(B)
@@ -407,13 +396,13 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
             Ω = _mesh(D, n, Parallel())
             a = form(gridspace(Ω), gridspace(Ω), _scalar)
             A = assemble(a)
-            _alloc(assemble!, A, a)
+            alloc_test(assemble!, A, a)
         end
         bytes_forced = map(sizes) do n
             Ω = _mesh(D, n, Serial())
             a = form(gridspace(Ω, Val(2)), gridspace(Ω, Val(2)), _block_pair)
             A = assemble(a)
-            _alloc(assemble_parallel!, A, a)
+            alloc_test(assemble_parallel!, A, a)
         end
         @test bytes_par[1] == bytes_par[2]
         @test bytes_forced[1] == bytes_forced[2]

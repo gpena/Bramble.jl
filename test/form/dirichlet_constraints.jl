@@ -21,7 +21,7 @@ import Bramble:
                 indices
 using Bramble: set
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, alloc_test
 using ..TestUtils: _tri
 
 @testset "Dirichlet constraints" begin
@@ -666,11 +666,6 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         # The traversal the composite paths walk is itself free, and type stable. Measured
         # inside a function: read from a non-const global instead, the space boxes at the
         # call boundary and the reading is of that box, not of the traversal.
-        function traversal_bytes(V)
-            Bramble.leaf_spaces_offsets(V)
-            return @allocated Bramble.leaf_spaces_offsets(V)
-        end
-
         Ωt = mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
             (8, 8),
@@ -679,7 +674,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         Vt = gridspace(Ωt, Val(3))
         @test @inferred(Bramble.leaf_spaces_offsets(Vt)) isa Tuple
         @test isconcretetype(typeof(Bramble.leaf_spaces_offsets(Vt)))
-        @test traversal_bytes(Vt) == 0
+        @test alloc_test(Bramble.leaf_spaces_offsets, Vt) == 0
     end
 
     @testset "Marker reads allocate nothing (#99)" begin

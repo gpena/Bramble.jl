@@ -19,21 +19,11 @@ using SparseArrays: getcolptr
 using LinearAlgebra: issymmetric, mul!, ldiv!
 using Random
 using ..TestUtils: alloc_test, _BROADCAST_SIZES, _broadcast_space, _check_broadcast_equal, _check_stencils,
-                   _mg_jitter_mesh, _mg_spd, _mg_transfer_meshes, _reset_seen!, _spy, _STENCIL_F,
-                   _STENCIL_G, _stencil_mesh_pair, _stencil_op!, _threads_seen
+                   _fillnz!, _grid, _mg_jitter_mesh, _mg_spd, _mg_transfer_meshes, _reset_seen!, _sine_source,
+                   _spy, _STENCIL_F, _STENCIL_G, _stencil_mesh_pair, _stencil_op!, _threads_seen,
+                   _unit_cube
 
 const ZERO_BC = :dir => (x -> 0.0)
-
-_unit_cube(::Val{D}) where {D} = reduce(×, ntuple(_ -> interval(0.0, 1.0), Val(D)))
-_sine_source(::Val{1}) = x -> sin(π * x)
-_sine_source(::Val{D}) where {D} = x -> prod(sin(π * xᵢ) for xᵢ in x)
-
-_grid(::Val{1}, Ωd, n; backend) = mesh(Ωd, n, true; backend = backend)
-function _grid(::Val{D}, Ωd, n; backend) where {D}
-    mesh(
-        Ωd, ntuple(_ -> n, Val(D)), ntuple(_ -> true, Val(D)); backend = backend
-    )
-end
 
 # One matched CpuPolyester/Parallel/Serial triple -- same domain, same mesh size, one backend
 # swapped for another -- mirroring test/ext/sparse_csr_ext.jl's own `_poisson_pair`.
@@ -55,14 +45,6 @@ function _poisson_pair(dim::Val{D}, n::Integer; source = _sine_source(dim)) wher
     ab, lb = build(Wb)
     as, ls = build(Ws)
     return (; Wp = Wp, Wb = Wb, Ws = Ws, ap = ap, lp = lp, ab = ab, lb = lb, as = as, ls = ls)
-end
-
-# `assemble` and `allocate_system_matrix` infer a union that includes a dense `Matrix`, which
-# has no `nonzeros`; the matrices filled here are always `SparseMatrixCSC`, so the assertion
-# narrows the type for JET.
-function _fillnz!(A, v)
-    @assert A isa SparseMatrixCSC
-    return fill!(nonzeros(A), v)
 end
 
 # The paths of "allocation under CpuPolyester" below. The child process counting Threads
@@ -818,13 +800,12 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
 
         # Warmed refill allocation is independent of grid size.
         @testset "refill allocation: size-free" begin
-            _alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
             sizes2 = (200, 800)
             bytes = map(sizes2) do n
                 Ω = _replay_mesh(1, n, CpuPolyester(); seed = 338)
                 a = form(gridspace(Ω), gridspace(Ω), _scalar)
                 A = assemble(a)
-                _alloc(assemble!, A, a)
+                alloc_test(assemble!, A, a)
             end
             @test bytes[1] == bytes[2]
         end
@@ -1022,12 +1003,11 @@ end
         @test _mf_close(y, 0.5 * ref + 2.0 * y0)
     end
     @testset "mul! allocation: size-free" begin
-        _alloc(y, op, x) = (mul!(y, op, x); @allocated mul!(y, op, x))
         bytes = map((200, 800)) do n
             W = _mf_space(1, n, CpuPolyester())
             op = matrix_free_operator(form(W, W, _diff); dirichlet = :boundary)
             x = randn(size(op, 2))
-            _alloc(similar(x), op, x)
+            alloc_test(mul!, similar(x), op, x)
         end
         @test bytes[1] == bytes[2]
     end

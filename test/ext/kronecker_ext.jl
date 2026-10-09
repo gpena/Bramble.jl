@@ -10,7 +10,7 @@ using LinearSolve: LinearProblem, solve, KrylovJL_GMRES
 using Random
 # `CpuPolyester` meshes below; test/ext/polyester_ext.jl, next in the ext group, loads it too.
 using Polyester
-using ..TestUtils: ZeroBasedVector
+using ..TestUtils: ZeroBasedVector, _graded_mesh
 using Bramble: CpuPolyester, Serial, execution_policy
 
 # `Kronecker.jl` interop and fast diagonalisation for a separable `BilinearForm`
@@ -30,13 +30,6 @@ const KronExt = Base.get_extension(Bramble, :BrambleKroneckerExt)
 const KRON_EXT_SEED = 20260919
 
 using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
-
-# Uniform, then moved to `t^(1 + d/4)` along axis `d`, so no two axes share their nodes.
-function graded_space(n::NTuple{D, Int}) where {D}
-    Ω = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n, ntuple(_ -> false, D))
-    Bramble.change_points!(Ω, ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
-    return gridspace(Ω)
-end
 
 @testset "Kronecker extension" begin
     @testset "Kronecker.jl object equals CSC" begin
@@ -113,7 +106,7 @@ end
     # operator, with and without homogeneous Dirichlet.
     @testset "fdm_solve: Laplacian-like forms" begin
         for n in ((9, 7), (6, 5, 7))
-            Wₕ = graded_space(n)
+            Wₕ = gridspace(_graded_mesh(n))
             D = length(n)
             fx = Rₕ(Wₕ, x -> 1 + x[1])
             c = Ref(2.5)
@@ -154,7 +147,7 @@ end
         ldiv_bytes(x, f, F) = (ldiv!(x, f, F); @allocated ldiv!(x, f, F))
         for n in ((13, 9), (7, 6, 8)), dir in (nothing, :boundary)
 
-            Wₕ = graded_space(n)
+            Wₕ = gridspace(_graded_mesh(n))
             fx = Rₕ(Wₕ, x -> 1 + x[1])
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(fx * u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)))
             A = assemble(a; dirichlet = dir)
@@ -184,7 +177,7 @@ end
     @testset "fdm_solve: advection by Schur form" begin
         ldiv_bytes(x, f, F) = (ldiv!(x, f, F); @allocated ldiv!(x, f, F))
         for n in ((13, 9), (7, 6, 8))
-            Wₕ = graded_space(n)
+            Wₕ = gridspace(_graded_mesh(n))
             D = length(n)
             fx = Rₕ(Wₕ, x -> 1 + x[1])
             Dm(u, d) = Bramble.D₋(u, Val(d))
@@ -315,7 +308,7 @@ end
                 (u, v) -> -0.1 * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(D₋ₓ(u), v))
         ]
         for (n, dir, f) in cases
-            Wₕ = graded_space(n)
+            Wₕ = gridspace(_graded_mesh(n))
             a = form(Wₕ, Wₕ, f)
             A = assemble(a; dirichlet = dir)
             F = rand(MersenneTwister(KRON_EXT_SEED + length(n)), size(A, 1))
@@ -418,7 +411,7 @@ end
             catch e
                 e isa ArgumentError ? sprint(showerror, e) : "wrong error $(typeof(e))"
             end
-        Wₕ = graded_space((9, 7))
+        Wₕ = gridspace(_graded_mesh((9, 7)))
         fx = Rₕ(Wₕ, x -> 1 + x[1])
         fy = Rₕ(Wₕ, x -> 2 + x[2]^2)
         fxy = Rₕ(Wₕ, x -> (1 + x[1]) * (2 + x[2]^2))
@@ -491,7 +484,7 @@ end
         for n in ((33, 25), (9, 8, 7)), dir in (nothing, :boundary), (name, L) in advs
             adv = name != "none"
             @testset "$n, dirichlet = $dir, advection = $name" begin
-                Wₕ = graded_space(n)
+                Wₕ = gridspace(_graded_mesh(n))
                 a = form(Wₕ, Wₕ, (u, v) -> L(u, v) + 0.25 * innerₕ(D₋ₓ(D₋ᵧ(u)), v))
                 b = form(Wₕ, Wₕ, L)
                 P = fdm_preconditioner(a; dirichlet = dir)
@@ -535,7 +528,7 @@ end
             catch e
                 e isa ArgumentError ? sprint(showerror, e) : "wrong error $(typeof(e))"
             end
-        Wₕ = graded_space((9, 7))
+        Wₕ = gridspace(_graded_mesh((9, 7)))
         L(u, v) = inner₊(∇ₕ(u), ∇ₕ(v))
         fxy = Rₕ(Wₕ, x -> (1 + x[1]) * (2 + x[2]^2))
         refused = [
@@ -582,13 +575,7 @@ end
     # CpuPolyester result is bitwise CpuSerial's; `fdm_preconditioner`'s `ldiv!` allocates
     # nothing on either.
     @testset "fdm_solve!: 0 bytes, CpuPolyester too" begin
-        function policy_space(n::NTuple{D, Int}, policy) where {D}
-            Ω = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n,
-                ntuple(_ -> false, D); backend = backend(policy = policy))
-            Bramble.change_points!(Ω,
-                ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
-            return gridspace(Ω)
-        end
+        policy_space(n, policy) = gridspace(_graded_mesh(n; backend = backend(policy = policy)))
         solve_bytes(x, f, F) = (fdm_solve!(x, f, F); fdm_solve!(x, f, F);
             @allocated fdm_solve!(x, f, F))
         ldiv_bytes(x, f, F) = (ldiv!(x, f, F); ldiv!(x, f, F); @allocated ldiv!(x, f, F))
@@ -642,7 +629,7 @@ end
     # `fdm_factorize` refuses what `fdm_solve` refuses, with `fdm_solve`'s message; a K built
     # before `change_points!` is refused with the stale-weights error.
     @testset "fdm_factorize: refusals" begin
-        Wₕ = graded_space((9, 7))
+        Wₕ = gridspace(_graded_mesh((9, 7)))
         fxy = Rₕ(Wₕ, x -> (1 + x[1]) * (2 + x[2]^2))
         b = form(Wₕ, Wₕ, (u, v) -> innerₕ(fxy * u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
         @test_throws ArgumentError fdm_factorize(b)

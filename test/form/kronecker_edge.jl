@@ -11,7 +11,7 @@ using Random
 using Polyester
 using Kronecker
 using ForwardDiff
-using ..TestUtils: ZeroBasedVector
+using ..TestUtils: ZeroBasedVector, _graded_mesh
 
 # Regression tests for the edge cases the critics' probes found while the general Kronecker
 # operators (gpena/Bramble.jl#427, #439, #442) were built. Each testset is one area; each
@@ -20,15 +20,12 @@ using ..TestUtils: ZeroBasedVector
 
 const KE_SEED = 20261004
 
-# A mesh on the host policy `P`: uniform flags, then (unless `graded` is false, or an axis has
-# one point) moved by `change_points!` to `t^(1 + d/4)` along axis `d`, so no two axes share
-# their nodes.
+# A mesh on the host policy `P`: `TestUtils._graded_mesh`, unless `graded` is false or an axis
+# has one point, when it is uniform.
 function _ke_mesh(n::NTuple{D, Int}, P = CpuSerial(); graded = true) where {D}
-    Ωₕ = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n,
+    graded && all(>(1), n) && return _graded_mesh(n; backend = backend(; policy = P))
+    return mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n,
         ntuple(_ -> true, D); backend = backend(; policy = P))
-    graded && all(>(1), n) && Bramble.change_points!(Ωₕ,
-        ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
-    return Ωₕ
 end
 _ke_space(n, P = CpuSerial(); kw...) = gridspace(_ke_mesh(n, P; kw...))
 
