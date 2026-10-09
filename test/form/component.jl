@@ -164,10 +164,10 @@ using ..TestUtils: alloc_test, @test_allocs
     @testset "Composite shorthand, tuple source" begin
         # `innerₕ((f, g), v)`'s tuple form is already checked in linear.jl; the sibling
         # `inner₊`/`inner₊ₓ`/`inner₊ᵧ`/`inner₊₂` tuple forms are not, anywhere.
-        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 6), (true, true))
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 6), (true, false))
         Vₕ = gridspace(Ωₕ, Val(2))
 
-        for f in (inner₊, inner₊ₓ, inner₊ᵧ)
+        for f in (inner₊ₓ, inner₊ᵧ)
             b = assemble(form(Vₕ, v -> f((1.0, 2.0), v)))
             reference = assemble(form(Vₕ, v -> f(1.0, v(1)) + f(2.0, v(2))))
             @test b ≈ reference
@@ -175,6 +175,15 @@ using ..TestUtils: alloc_test, @test_allocs
 
             @test_throws ArgumentError form(Vₕ, v -> f((), v))
         end
+
+        # bare inner₊ reads its direction off the difference, per component
+        b = assemble(form(Vₕ, v -> inner₊((1.0, 2.0), D₋ᵧ(v))))
+        by = assemble(form(Vₕ, v -> inner₊ᵧ(1.0, D₋ᵧ(v(1))) + inner₊ᵧ(2.0, D₋ᵧ(v(2)))))
+        bx = assemble(form(Vₕ, v -> inner₊ₓ(1.0, D₋ᵧ(v(1))) + inner₊ₓ(2.0, D₋ᵧ(v(2)))))
+        @test b ≈ by
+        @test !(b ≈ bx)
+        @test_throws ArgumentError form(Vₕ, v -> inner₊((1.0, 2.0), v))
+        @test_throws ArgumentError form(Vₕ, v -> inner₊((), v))
     end
 
     @testset "Bracket indexing, destructuring (#153)" begin
@@ -240,11 +249,13 @@ using ..TestUtils: alloc_test, @test_allocs
         a_bracket = form(Vₕ, Vₕ, (p, q) -> inner₊ₓ(D₋ₓ(p[1]), D₋ₓ(q[1])) + innerₕ(p[2], q[1]) +
                                            inner₊ᵧ(D₋ᵧ(p[2]), D₋ᵧ(q[2])))
         a_components = form(Vₕ, Vₕ, (p, q) -> begin
+            local u, v, w, z
             u, v = components(p)
             w, z = components(q)
             inner₊ₓ(D₋ₓ(u), D₋ₓ(w)) + innerₕ(v, w) + inner₊ᵧ(D₋ᵧ(v), D₋ᵧ(z))
         end)
         a_direct = form(Vₕ, Vₕ, (p, q) -> begin
+            local u, v, w, z
             u, v = p
             w, z = q
             inner₊ₓ(D₋ₓ(u), D₋ₓ(w)) + innerₕ(v, w) + inner₊ᵧ(D₋ᵧ(v), D₋ᵧ(z))
@@ -260,10 +271,12 @@ using ..TestUtils: alloc_test, @test_allocs
         l_functor = form(Vₕ, q -> innerₕ(fₕ(1), q(1)) + innerₕ(fₕ(2), q(2)))
         l_bracket = form(Vₕ, q -> innerₕ(fₕ(1), q[1]) + innerₕ(fₕ(2), q[2]))
         l_components = form(Vₕ, q -> begin
+            local w, z
             w, z = components(q)
             innerₕ(fₕ(1), w) + innerₕ(fₕ(2), z)
         end)
         l_direct = form(Vₕ, q -> begin
+            local w, z
             w, z = q
             innerₕ(fₕ(1), w) + innerₕ(fₕ(2), z)
         end)

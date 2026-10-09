@@ -33,6 +33,7 @@ using Bramble:
                half_spacing,
                values,
                D₋ₓ,
+               D₋ᵧ,
                inner₊ᵧ,
                inner₊₂,
                inner₊ₓ
@@ -109,11 +110,19 @@ using Bramble:
         # Each builds a LinearProduct wrapping the left operand in the right source node,
         # which is what lets a right-hand side be assembled.
         for (mk, T) in (((x -> x[1] + 1), SourceFunction), (3.5, SourceConstant), (uₕ, SourceVector))
-            for f in (innerₕ, inner₊, inner₊ₓ, inner₊ᵧ, inner₊₂)
+            for f in (innerₕ, (l, r) -> inner₊(l, D₋ᵧ(r)), inner₊ₓ, inner₊ᵧ, inner₊₂)
                 p = f(mk, v)
                 @test p isa LinearProduct
                 @test p.left_op isa T
             end
+
+            # a bare source is the source node it stands for: the direction comes from
+            # the difference, markers included, and without one 2D inner₊ has none
+            p = inner₊(mk, D₋ᵧ(v))
+            @test typeof(p).parameters[2] === InnerPlus{2}
+            @test typeof(inner₊(mk, D₋ᵧ(v); markers = (:bottom,))) ===
+                  typeof(inner₊(p.left_op, D₋ᵧ(v); markers = (:bottom,)))
+            @test_throws ArgumentError inner₊(mk, v)
         end
 
         # A number becomes a SourceConstant, not a function wrapper or a stored vector:

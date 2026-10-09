@@ -461,6 +461,9 @@ direction off the difference just as an `IndexedTrialFunction` does.
 
 Backward differences only, as everywhere `inner₊` meets a difference.
 
+A `Function`, `Number` or `VectorElement` on the left is the source it stands for and reads
+its direction the same way, so above one dimension `inner₊(f, v)` throws.
+
 A `LinearProduct` if `left` is source-only ([`_is_source_only`](@ref)), a `BilinearProduct`
 otherwise, matching [`innerₕ`](@ref).
 
@@ -713,20 +716,14 @@ function innerₕ(
     return _inner_source(InnerH(), l, r, markers)
 end
 
+# A bare source is the source node it stands for, so the direction comes from the same
+# LazyOp methods that spelling uses: a backward difference on the right names it, and
+# above one dimension nothing else does.
 function inner₊(
-        l::Function, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
+        l::Union{Function, Number, VectorElement}, r::LazyOp{D};
+        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {D, N}
-    return _inner_source(InnerPlus{1}(), l, r, markers)
-end
-function inner₊(
-        l::Number, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {D, N}
-    return _inner_source(InnerPlus{1}(), l, r, markers)
-end
-function inner₊(
-        l::VectorElement, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {D, N}
-    return _inner_source(InnerPlus{1}(), l, r, markers)
+    return inner₊(_as_source(l, Val(D)), r; markers = markers)
 end
 
 function inner₊(
