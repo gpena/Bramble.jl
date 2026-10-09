@@ -293,11 +293,12 @@ end
 @noinline function _foreach_block_unit(
         f::F, term::TERM, trial_leaves, test_leaves
 ) where {F, TERM}
-    for blk in blocks(term, trial_leaves, test_leaves)
+    _foldl_blocks(nothing, blocks(term, trial_leaves, test_leaves)) do _, blk
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
         f(bound, sp, blk.row_offset, blk.col_offset, 0, 0, -1)
+        return nothing
     end
     return nothing
 end
@@ -357,17 +358,17 @@ end
         next::Int,
         α
 ) where {TERM, D}
-    for blk in blocks(term, trial_leaves, test_leaves)
+    return _foldl_blocks(next, blocks(term, trial_leaves, test_leaves)) do n, blk
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         # `host_weights` per block, as the searching sweep's `_assemble_blocks_parallel!` does.
         sp = host_weights(_walked_leaf(bound, blk.trial_leaf, blk.test_leaf))
-        next += 1
+        n += 1
         _replay_unit!(
-            mode, A, bound, sp, blk.row_offset, blk.col_offset, segments[next], α
+            mode, A, bound, sp, blk.row_offset, blk.col_offset, segments[n], α
         )
+        return n
     end
-    return next
 end
 
 # --- Transposed pairs: one kernel for ⟨Au, Bv⟩ + ⟨Bu, Av⟩ ---------------------------- #
@@ -435,7 +436,7 @@ end
     b1 = blocks(p1, trial_leaves, test_leaves)
     b2 = blocks(p2, trial_leaves, test_leaves)
     if _pair_blocks_ok(b1, b2)
-        for (blk, blk2) in map(tuple, b1, b2)
+        _foldl_block_pairs(nothing, b1, b2) do _, blk, blk2
             bound = _bind_interp_spaces(p1, blk.trial_leaf, blk.test_leaf)
             _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
             _check_block_meshes(p2, blk2.trial_leaf, blk2.test_leaf)
@@ -448,6 +449,7 @@ end
                 f(bound, sp, ro, co, dr, dc, 1)
                 f(bound, blk2.test_leaf, ro, co, dr, dc, 2)
             end
+            return nothing
         end
     else
         Base.inferencebarrier(_foreach_block_unit)(f, t1, trial_leaves, test_leaves)
@@ -474,7 +476,7 @@ end
     if _pair_blocks_ok(b1, b2)
         α1 = α * _term_scale(t1)
         α2 = α * _term_scale(t2)
-        for (blk, blk2) in map(tuple, b1, b2)
+        return _foldl_block_pairs(next, b1, b2) do n, blk, blk2
             bound = _bind_interp_spaces(p1, blk.trial_leaf, blk.test_leaf)
             _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
             sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
@@ -483,24 +485,24 @@ end
             # The identity test on the leaves themselves, as `_foreach_pair_block_unit`
             # records it; only the walk takes `host_weights`.
             if sp === blk2.test_leaf
-                next += 1
+                n += 1
                 _replay_pair_unit!(
-                    mode, A, bound, p2, host_weights(sp), ro, co, off2, segments[next],
+                    mode, A, bound, p2, host_weights(sp), ro, co, off2, segments[n],
                     α1, α2, 0
                 )
             else
                 _replay_pair_unit!(
                     mode, A, bound, p2, host_weights(sp), ro, co, off2,
-                    segments[next + 1], α1, α2, 1
+                    segments[n + 1], α1, α2, 1
                 )
                 _replay_pair_unit!(
                     mode, A, bound, p2, host_weights(blk2.test_leaf), ro, co, off2,
-                    segments[next + 2], α1, α2, 2
+                    segments[n + 2], α1, α2, 2
                 )
-                next += 2
+                n += 2
             end
+            return n
         end
-        return next
     end
     next = Base.inferencebarrier(_replay_blocks!)(
         mode, A, t1, trial_leaves, test_leaves, segments, next, α
@@ -1201,7 +1203,7 @@ end
 function _assemble_blocks_parallel!(
         A::AbstractMatrix, term::TERM, trial_leaves, test_leaves, α = true
 ) where {TERM}
-    for blk in blocks(term, trial_leaves, test_leaves)
+    _foldl_blocks(nothing, blocks(term, trial_leaves, test_leaves)) do _, blk
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         # `host_weights` (gpena/Bramble.jl#94): the mirror of the same fix to the
@@ -1226,6 +1228,7 @@ function _assemble_blocks_parallel!(
                 α
             )
         end
+        return nothing
     end
     return A
 end

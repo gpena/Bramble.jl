@@ -562,6 +562,53 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
             as; dirichlet = :boundary, dirichlet_components = 2)
     end
 
+    # Leaves of different types, a Float64 leaf beside a Float32 one on different graded
+    # meshes: every block is reached by a static walk over the leaf tuple, not a runtime
+    # index into it (#553). Each block row of `op * x` is checked against the forms on the
+    # scalar leaf spaces; the Dirichlet rows, on the second leaf only, are the identity.
+    @testset "mixed-type leaves (#553)" begin
+        m = 9
+        Ω1 = mesh(domain(interval(0.0, 1.0)), m, false)
+        Bramble.set_points!(Ω1, collect(range(0.0, 1.0; length = m)) .^ 1.5)
+        Ω2 = mesh(domain(interval(0.0f0, 1.0f0)), m, false; backend = backend(Float32))
+        Bramble.set_points!(Ω2, Float32.(collect(range(0.0, 1.0; length = m)) .^ 2))
+        W1, W2 = gridspace(Ω1), gridspace(Ω2)
+        V = W1 × W2
+        k(u, v) = innerₕ(u, v) + Bramble.inner₊ₓ(D₋ₓ(u), D₋ₓ(v))
+        ref(f, Wu, Wv) = Matrix(assemble(form(Wu, Wv, f)))
+        A11, A22 = ref(k, W1, W1), ref(k, W2, W2)
+        A21, A12 = ref(innerₕ, W1, W2), 3 * ref(innerₕ, W2, W1)
+        pinned = (m + 1, 2m)  # the boundary points of leaf 2
+        # Float32 tolerance: the rows of leaf 2 are computed in its precision.
+        agree32(y, z) = isapprox(y, z; rtol = 1e-6)
+        forms = (
+            ("diagonal", (u, v) -> k(u, v), [A11 zeros(m, m); zeros(m, m) A22]),
+            ("named pair", (u, v) -> innerₕ(u(1), v(2)) + 3 * innerₕ(u(2), v(1)),
+                [zeros(m, m) A12; A21 zeros(m, m)]),
+            ("diagonal and named", (u, v) -> k(u, v) + innerₕ(u(1), v(2)) +
+                                             3 * innerₕ(u(2), v(1)),
+                [A11 A12; A21 A22])
+        )
+        Random.seed!(MF_SEED)
+        for (name, f, R) in forms
+            @testset "$name" begin
+                a = form(V, V, f)
+                x = randn(2m)
+                op = matrix_free_operator(a)
+                @test agree32(op * x, R * x)
+                @test _mf_alloc3(zeros(2m), op, x) == 0
+                @test _mf_alloc5(zeros(2m), op, x) == 0
+
+                opd = matrix_free_operator(a; dirichlet = :boundary, dirichlet_components = 2)
+                y = opd * x
+                free = setdiff(1:(2m), pinned)
+                @test agree32(y[free], (R * x)[free])
+                @test all(r -> y[r] == x[r], pinned)
+                @test _mf_alloc3(zeros(2m), opd, x) == 0
+            end
+        end
+    end
+
     # Both `show` forms print one line, never the dense printer's one product per entry.
     @testset "show is a one-line summary" begin
         W = _mf_spaces()[1]

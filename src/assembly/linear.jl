@@ -175,7 +175,7 @@ end
 function _lower_sources_over_leaves(term::TERM, leaves) where {TERM}
     target = _routed_target(term, length(leaves))
     target === nothing && return term
-    return _lower_sources(term, first(leaves[target]))
+    return _at_leaf(leaf -> _lower_sources(term, first(leaf)), leaves, target)
 end
 
 """
@@ -254,8 +254,9 @@ end
 
 function _check_source_meshes_over_leaves(term::TERM, leaves) where {TERM}
     target = test_component_or_nothing(term)
-    for (c, leaf) in enumerate(leaves)
+    _foldl_leaves(nothing, leaves) do _, c, leaf
         (target === nothing || target == c) && _check_source_mesh(term, mesh(first(leaf)))
+        return nothing
     end
     return nothing
 end
@@ -500,7 +501,7 @@ function _routed_eltype(term, leaves, diagonal, T)
     target = test_component_or_nothing(term)
     _check_component(target, length(leaves))
     target === nothing && return _every_leaf_eltype(term, diagonal, T)
-    return _folded_eltype(term, first(leaves[target]), T)
+    return _at_leaf(leaf -> _folded_eltype(term, first(leaf), T), leaves, target)
 end
 
 # A term naming no component is assembled on every diagonal block, so each of their leaves
@@ -533,7 +534,7 @@ function _trial_routed_eltype(term, leaves, diagonal, T)
     target = trial_component_or_nothing(term)
     _check_component(target, length(leaves))
     target === nothing && return _every_leaf_type(diagonal, T)
-    return promote_type(T, eltype(first(leaves[target])))
+    return _at_leaf(leaf -> promote_type(T, eltype(first(leaf))), leaves, target)
 end
 
 # An unnamed trial function stands on every diagonal block, so each of their leaves' types
@@ -917,9 +918,9 @@ end
 # `f(leaf_space, offset)`, for each leaf the term routes to.
 @inline function each_routed_leaf(f::F, term, leaves) where {F}
     target = _routed_target(term, length(leaves))
-    for (c, leaf) in enumerate(leaves)
-        _goes_to_leaf(target, c) || continue
-        f(first(leaf), last(leaf))
+    _foldl_leaves(nothing, leaves) do _, c, leaf
+        _goes_to_leaf(target, c) && f(first(leaf), last(leaf))
+        return nothing
     end
     return nothing
 end
@@ -929,11 +930,9 @@ end
 # value is what keeps it concretely typed instead of captured and boxed.
 @inline function fold_routed_leaves(f::F, term, leaves, acc::T) where {F, T}
     target = _routed_target(term, length(leaves))
-    for (c, leaf) in enumerate(leaves)
-        _goes_to_leaf(target, c) || continue
-        acc = f(first(leaf), last(leaf), acc)
+    return _foldl_leaves(acc, leaves) do a, c, leaf
+        return _goes_to_leaf(target, c) ? f(first(leaf), last(leaf), a) : a
     end
-    return acc
 end
 
 # --- the three consumers ---------------------------------------------------------- #

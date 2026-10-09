@@ -286,9 +286,10 @@ function _mf_fill_mask!(mask::BitVector, Wv, labels, components)
     else
         _validate_dirichlet_components(components, length(leaves))
     end
-    for (i, (sp, offset)) in enumerate(leaves)
-        _leaf_selected(components, i) || continue
+    _foldl_leaves(nothing, leaves) do _, i, (sp, offset)
+        _leaf_selected(components, i) || return nothing
         mask[(offset + 1):(offset + ndofs(sp))] .= _combined_mask(mesh(sp), labels)
+        return nothing
     end
     return mask
 end
@@ -465,11 +466,12 @@ end
 @noinline function _mf_blocks!(
         policy, s, term::TERM, trial_leaves, test_leaves
 ) where {TERM}
-    for blk in blocks(term, trial_leaves, test_leaves)
+    _foldl_blocks(nothing, blocks(term, trial_leaves, test_leaves)) do _, blk
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         sp = host_weights(_walked_leaf(bound, blk.trial_leaf, blk.test_leaf))
         _mf_visit!(policy, s, bound, sp, blk.row_offset, blk.col_offset)
+        return nothing
     end
     return nothing
 end
@@ -485,7 +487,7 @@ end
     if _pair_blocks_ok(b1, b2)
         α1 = s.α * _term_scale(t1)
         α2 = s.α * _term_scale(t2)
-        for (blk, blk2) in map(tuple, b1, b2)
+        _foldl_block_pairs(nothing, b1, b2) do _, blk, blk2
             bound = _bind_interp_spaces(p1, blk.trial_leaf, blk.test_leaf)
             _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
             _check_block_meshes(p2, blk2.trial_leaf, blk2.test_leaf)
@@ -507,6 +509,7 @@ end
                     host_weights(blk2.test_leaf), ro, co
                 )
             end
+            return nothing
         end
         return nothing
     end
