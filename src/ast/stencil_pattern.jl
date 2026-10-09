@@ -301,7 +301,7 @@ lexicographic index as an outer block along the last axis and an inner lexicogra
 index over the remaining `D - 1` axes -- the layout `BlockBandedMatrices.jl`'s
 `BandedBlockBandedMatrix` expects, `(blockbandwidths, subblockbandwidths)`.
 
-For `D == 1` every block is a single point, so this is `((0, 0), bandwidths(a))`.
+For `D == 1` every block is a single point, so this is `(bandwidths(a), (0, 0))`.
 
 For `D >= 2`, blocks are the `n₁⋯n_{D-1}`-point rectangles indexed by the `D`-th axis:
 `l_blk`/`u_blk` are the largest reach a term's `D`-th-axis offsets carry between a trial
@@ -320,7 +320,7 @@ See also: [`bandwidths`](@ref).
 """
 function blockbandwidths(a)
     D = dim(test_space(a))
-    D == 1 && return ((0, 0), bandwidths(a))
+    D == 1 && return (bandwidths(a), (0, 0))
 
     _check_bandable(a)
     ast = resolve_form_ast(a)
