@@ -222,7 +222,76 @@ function form(Wₕ, f)
     _validate_form_expression(raw_ast, Val(D))
     ast = simplify_ast(resolve_ast(raw_ast))
     ast = _lower_sources_for_space(ast, Wₕ)
+    _check_source_meshes(ast, Wₕ)
     return LinearForm{D, typeof(Wₕ), typeof(ast)}(Wₕ, ast)
+end
+
+# --- A VectorElement source must live on the leaf it is read on --- #
+#
+# `local_stencil(::SourceVector)` reads `op.vec[lin_idx]` at the walked leaf's linear index,
+# so a source from another mesh is read at the wrong points: a finer one silently, a coarser
+# one past its end. Only a source that kept its `VectorElement` (`_as_source`,
+# operators/inner.jl) knows its mesh; a plain vector, from a lowered closure or built by
+# hand, carries none and is skipped. Routed as `each_routed_leaf` routes, so a term naming
+# no component is checked against every leaf; one naming a component outside the space is
+# left to the assembly walks, which report it. The walk reaches what `_host_sources` does.
+# Once, at `form`: points moved later (`change_points!`) are not caught, as in
+# `_same_mesh_or_throw` (jacobian_pattern.jl), whose predicate this is.
+_check_source_meshes(ast, Wₕ) = _check_source_mesh(ast, mesh(Wₕ))
+
+function _check_source_meshes(ast, Wₕ::CompositeGridSpace)
+    return _check_source_meshes_over_leaves(ast, leaf_spaces_offsets(Wₕ))
+end
+
+function _check_source_meshes_over_leaves(op::OperatorAdd, leaves)
+    _check_source_meshes_over_leaves(op.left_op, leaves)
+    _check_source_meshes_over_leaves(op.right_op, leaves)
+    return nothing
+end
+
+function _check_source_meshes_over_leaves(term::TERM, leaves) where {TERM}
+    target = test_component_or_nothing(term)
+    for (c, leaf) in enumerate(leaves)
+        (target === nothing || target == c) && _check_source_mesh(term, mesh(first(leaf)))
+    end
+    return nothing
+end
+
+_check_source_mesh(op, Ωₕ) = nothing
+
+function _check_source_mesh(op::SourceVector{D, <:VectorElement}, Ωₕ) where {D}
+    Ωs = mesh(space(op.vec))
+    Ωs === Ωₕ ||
+        (npoints(Ωs, Tuple) == npoints(Ωₕ, Tuple) && host_points(Ωs) == host_points(Ωₕ)) ||
+        _throw_source_mesh()
+    return nothing
+end
+
+function _check_source_mesh(op::Union{OperatorAdd, LinearProduct}, Ωₕ)
+    _check_source_mesh(op.left_op, Ωₕ)
+    _check_source_mesh(op.right_op, Ωₕ)
+    return nothing
+end
+
+function _check_source_mesh(
+        op::Union{OperatorScale, GridFunctionScale, ShiftNode, RegionRestriction,
+            BackwardDifference, ForwardDifference, CenteredDifference, StarDifference,
+            CrossWeightedDifference, BackwardAverage, ForwardAverage, CenteredAverage,
+            JumpNode},
+        Ωₕ
+)
+    return _check_source_mesh(op.inner_op, Ωₕ)
+end
+
+@noinline function _throw_source_mesh()
+    throw(
+        ArgumentError(
+        "a grid-function source of the linear form lives on another mesh than the test " *
+        "space it is read on. A source is read at the test space's own points, which name " *
+        "other places on another mesh. Interpolate it, as in `innerₕ(πₕ(uₕ), v)`, or build " *
+        "it with `Rₕ` on the test space.",
+    ),
+    )
 end
 
 # --- Assembly implementations ----------------------------------------------------- #

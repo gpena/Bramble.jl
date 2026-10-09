@@ -40,7 +40,7 @@ using Bramble:
                inner₊ₓ,
                jumpₓ,
                weights
-using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
+using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
 
 # Assembling the right-hand side of a system.
 #
@@ -782,6 +782,54 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
 
         # an empty tuple names nothing, and says so
         @test_throws ArgumentError form(Vt, v -> innerₕ((), v))
+
+        # A grid-function source is read at the test space's own linear indices, so one from
+        # another mesh named other points: a finer one was read silently, a coarser one past
+        # its end. `form` now refuses it. Same counts with other (graded) points is the case
+        # a length check would let through.
+        Ωd = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+        uni(n) = gridspace(mesh(Ωd, (n, n), (true, true)))
+        W9 = uni(9)
+        one_on(W) = Rₕ(W, x -> 1.0)
+        elsewhere = "lives on another mesh than the test space"
+        for (label, s) in (("finer", one_on(uni(11))), ("coarser", one_on(uni(5))),
+            ("graded", one_on(gridspace(_graded_mesh((9, 9))))))
+            @testset "$label" begin
+                @test_throws elsewhere form(W9, v -> innerₕ(s, v))
+                @test_throws elsewhere form(W9, v -> inner_Γ(s, v; markers = (:ymin,)))
+                @test_throws elsewhere form(W9, v -> inner₊ₓ(s, v))
+                @test_throws elsewhere form(W9, v -> inner₊((s, s), ∇ₕ(v)))
+                # inside a sum, a scale and a difference too
+                @test_throws elsewhere form(W9, v -> innerₕ(1.0, v) + 2 * innerₕ(s, D₋ₓ(v)))
+            end
+        end
+        @test_throws ArgumentError form(W9, v -> innerₕ(one_on(uni(11)), v))
+
+        # In 1D, where a bare test function in inner₊ reaches the source path
+        Ω1 = domain(interval(0.0, 1.0))
+        W1 = gridspace(mesh(Ω1, 9, true))
+        @test_throws elsewhere form(W1, v -> inner₊(one_on(gridspace(mesh(Ω1, 13, true))), v))
+        @test sum(assemble(form(W1, v -> inner₊(one_on(W1), v)))) ≈ 1.0
+
+        # A composite form checks a source against every leaf it goes to: one naming no
+        # component goes to both, and the second leaf is on another mesh.
+        Vm = W9 × uni(11)
+        s9 = one_on(W9)
+        @test_throws elsewhere form(Vm, v -> innerₕ(s9, v))
+        @test_throws elsewhere form(Vm, v -> innerₕ(s9, v(2)))
+        b9 = assemble(form(Vm, v -> innerₕ(s9, v(1))))
+        @test sum(b9[1:ndofs(W9)]) ≈ 1.0 && iszero(b9[(ndofs(W9) + 1):end])
+        # a composite source, split per leaf, with its second leaf on another mesh
+        @test_throws elsewhere form(W9 × W9, v -> innerₕ(Rₕ(Vm, (x -> 1.0, x -> 1.0)), v))
+        @test_throws elsewhere form(W9 × W9, v -> innerₕ((s9, one_on(uni(11))), v))
+
+        # The same points on a distinct mesh object are the same mesh, uniform or graded,
+        # and the own-mesh value is ∫1 = 1.
+        @test sum(assemble(form(W9, v -> innerₕ(s9, v)))) ≈ 1.0
+        @test sum(assemble(form(W9, v -> innerₕ(one_on(uni(9)), v)))) ≈ 1.0
+        Wg = gridspace(_graded_mesh((9, 9)))
+        @test sum(assemble(form(Wg, v -> innerₕ(one_on(gridspace(_graded_mesh((9, 9)))), v)))) ≈
+              1.0
     end
 
     @testset "Invalid component error" begin
