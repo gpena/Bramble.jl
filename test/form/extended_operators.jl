@@ -271,7 +271,7 @@ end
             (Dcₓ, CenteredDifference),
             (Dcᵧ, CenteredDifference),
             (D̃ₓ, StarDifference),
-            (D̃₂, StarDifference),
+            (D̃ᵧ, StarDifference),
             (D̽ₓ, CrossWeightedDifference),
             (D̽ᵧ, CrossWeightedDifference)
         )
@@ -282,6 +282,10 @@ end
             @test !is_symbolic(node)
             @test is_symbolic(f(u))            # symbolic through the wrapper
         end
+        # a 2D operator has no `z`: the node refuses it when built (gpena/Bramble.jl#624)
+        @test_throws ArgumentError(
+            "the stencil direction must be between 1 and 2, got 3") D̃₂(id)
+        @test_throws ArgumentError D̃₂(u)
 
         # the three without a matrix form are grouped, so anything reading only the
         # direction covers all of them

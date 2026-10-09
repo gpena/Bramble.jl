@@ -99,8 +99,13 @@ end
         end
         @test Bramble._kron_inners(Bramble.InnerPlus{3}, Ωₕ) === nothing
         @test Bramble._kron_inners(Bramble.InnerPlus{2}, Ωₕ) !== nothing
-        @test _proj_refused(form(W, W, (u, v) -> innerₕ(Bramble.D₋₂(u), v)))
-        @test_throws BoundsError assemble(form(W, W, (u, v) -> innerₕ(Bramble.D₋₂(u), v)))
+        # the aliases refuse such a node when it is built (gpena/Bramble.jl#624); the
+        # constructor bypasses that check, so the form below still reaches both refusals
+        @test_throws ArgumentError(
+            "the stencil direction must be between 1 and 2, got 3") Bramble.D₋₂(u)
+        bad(u) = Bramble.BackwardDifference{2, 3, typeof(u)}(u)
+        @test _proj_refused(form(W, W, (u, v) -> innerₕ(bad(u), v)))
+        @test_throws BoundsError assemble(form(W, W, (u, v) -> innerₕ(bad(u), v)))
     end
 
     # A plain number scaling a node inside a side goes into the axis-1 chain; a `Ref` there
