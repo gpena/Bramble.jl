@@ -461,15 +461,57 @@ Override the grid coordinates in `Ωₕ`. Recalculates cached [`spacings`](@ref)
 unchanged, then replaces the mesh's [`Mesh1DState`](@ref) with one carrying the new version
 and the uniformity of the new points.
 
+A new point count also rebuilds the `:boundary` and `:interior` markers (and the marker
+words assembly reads) for the new grid. A mesh carrying any other label has no domain here
+to re-evaluate it onto the new points, so such a resize throws an `ArgumentError` before
+anything changes. Build `mesh(Ω, length(pts))` and call
+[`change_points!`](@ref)`(Ωₕ, markers(Ω), pts)` instead. A call that keeps the point count
+leaves every marker alone, custom labels included.
+
 Bumps `Ωₕ`'s mesh version (gpena/Bramble.jl#221): every [`ScalarGridSpace`](@ref) already
 built on `Ωₕ` -- via [`gridspace`](@ref), directly or as a leaf of a
 [`CompositeGridSpace`](@ref) -- keeps its own weights, precomputed from the mesh *before*
 this call. Its `innerₕ`/`inner₊*`/norms now throw naming the mismatch instead of silently
 computing against stale weights; call `gridspace(Ωₕ)` again for a space that reads the
-mutated mesh. This is also what [`change_points!`](@ref) and [`iterative_refinement!`](@ref)
-go through, so the same applies to both.
+mutated mesh. This is also what [`change_points!`](@ref) goes through, so the same applies
+to it.
 """
-@inline function set_points!(Ωₕ::Mesh1D, pts)
+function set_points!(Ωₕ::Mesh1D, pts)
+    n = length(pts)
+    if length(_st(Ωₕ).pts) == n
+        _set_points_geometry!(Ωₕ, pts)
+        return nothing
+    end
+
+    # A resize leaves every marker sized for the old grid. `:boundary`/`:interior` are
+    # rebuilt below; any other label has no domain to be re-evaluated from, so it is
+    # refused before the geometry changes, as `iterative_refinement!(Ωₕ)` refuses it
+    # (gpena/Bramble.jl#19).
+    extra_labels = setdiff(keys(markers(Ωₕ)), (:boundary, :interior))
+    isempty(extra_labels) || _throw_resize_drops_markers(extra_labels)
+
+    _set_points_geometry!(Ωₕ, pts)
+    fresh_markers = MeshMarkers()
+    _ensure_geometric_markers!(fresh_markers, Ωₕ)
+    markers!(Ωₕ, fresh_markers)
+    return nothing
+end
+
+@noinline function _throw_resize_drops_markers(extra_labels)
+    throw(
+        ArgumentError(
+        "set_points!(Ωₕ, pts) was asked to change the point count of a mesh carrying " *
+        "custom markers $(Tuple(extra_labels)), and there is no domain here to " *
+        "re-evaluate them onto the new points. Build mesh(Ω, length(pts)) and call " *
+        "change_points!(Ωₕ, markers(Ω), pts) instead.",
+    ),
+    )
+end
+
+# The geometry of `set_points!` alone, with markers left untouched: the public setter adds
+# the marker rebuild for a new point count, and `_refine_indices!` calls this directly
+# because both refinement forms rebuild markers themselves.
+@inline function _set_points_geometry!(Ωₕ::Mesh1D, pts)
     s = _st(Ωₕ)
     n = length(pts)
 
@@ -1239,7 +1281,7 @@ function _refine_indices!(Ωₕ::Mesh1D)
 
     # Update the mesh struct with the new indices and points.
     set_indices!(Ωₕ, new_indices)
-    set_points!(Ωₕ, new_points)
+    _set_points_geometry!(Ωₕ, new_points)
     return nothing
 end
 

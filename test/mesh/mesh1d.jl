@@ -147,6 +147,15 @@ import Base: diff
             @test points(Ωₕ) === new_pts # Check identity for mutable struct
             @test npoints(Ωₕ) == 4
             @test indices(Ωₕ) == new_indices
+
+            # A new point count rebuilds the markers for the new grid (the old ones were
+            # sized for 3 points), and the marker words with them.
+            @test markers(Ωₕ)[:boundary] == BitVector([1, 0, 0, 1])
+            @test markers(Ωₕ)[:interior] == BitVector([0, 1, 1, 0])
+            set_points!(Ωₕ, collect(range(0, 1; length = 100)) .^ 2)
+            @test findall(markers(Ωₕ)[:boundary]) == [1, 100]
+            @test findall(markers(Ωₕ)[:interior]) == 2:99
+            @test size(Bramble._marker_words(Ωₕ), 1) == 2
         end
     end
 

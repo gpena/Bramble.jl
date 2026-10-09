@@ -62,7 +62,7 @@ change_points!(Ωₕ_graded, collect(range(0.0, 1.0, length = npoints(Ωₕ_grad
 points(Ωₕ_graded), hₘₐₓ(Ωₕ_graded)
 ```
 
-Squaring the uniform points packs them near ``x = 0`` and stretches the cells near ``x = 1``, so `hₘₐₓ` is no longer ``0.1``. `Bramble.set_points!` is the variant that also accepts a different point count.
+Squaring the uniform points packs them near ``x = 0`` and stretches the cells near ``x = 1``, so `hₘₐₓ` is no longer ``0.1``. `Bramble.set_points!` is the variant that also accepts a different point count: it rebuilds the `:boundary` and `:interior` markers for the new grid, and refuses a mesh carrying custom labels.
 
 !!! tip "Try this"
     Replace the exponent `2` by `3`. The points crowd closer to ``x = 0`` and `hₘₐₓ` grows.
