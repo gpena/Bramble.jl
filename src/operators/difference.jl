@@ -1041,6 +1041,7 @@ Reaches one point either side, so both end rows are empty and the mesh needs at 
 points along the direction.
 """
 function centered_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
+    1 <= DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIM, dim(Ωₕ))
     n = npoints(Ωₕ(DIM))
     n >= 3 || _throw_centered_too_few_points(DIM, n)
 
@@ -1058,6 +1059,7 @@ far side, row 1 agrees with [`D₊ₓ`](@ref)`(Ωₕ, dim_val)` and row `n` with
 cross-weighting. The mesh still needs at least three points along the direction.
 """
 function cross_weighted_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
+    1 <= DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIM, dim(Ωₕ))
     n = npoints(Ωₕ(DIM))
     n >= 3 || _throw_centered_too_few_points(DIM, n)
 
