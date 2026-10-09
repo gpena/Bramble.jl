@@ -119,6 +119,19 @@ end
         @test space(u4) === W
         @test all(==(3.0), parent(u4))
         @test eltype(u4) == Float64
+
+        # Offset-axis data is refused at construction, under every policy
+        O = Base.IdentityUnitRange
+        d = view(zeros(6), O(2:5))
+        @test_throws ArgumentError VectorElement(d, W)
+        @test_throws ArgumentError VectorElement{typeof(W), Float64, typeof(d)}(d, W)
+        Wt = gridspace(mesh(domain(box(0, 1)), 4, true; backend = backend(policy = Parallel())))
+        @test_throws ArgumentError VectorElement(d, Wt)
+
+        # One-based views still construct
+        u5 = VectorElement(view(zeros(6), 2:5), W)
+        @test u5 isa VectorElement
+        @test space(u5) === W
     end
 
     @testset "ldiv!" begin

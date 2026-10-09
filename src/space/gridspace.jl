@@ -79,6 +79,8 @@ Represents a **grid function** (a vector) that belongs to a specific function sp
 
 This is a wrapper that bundles the raw numerical data (the vector `data`) with its parent `space`. The `space` provides the essential context, such as the underlying mesh and associated operators. By subtyping `AbstractVector`, a [`VectorElement`](@ref) can be used just like a regular Julia vector in most operations.
 
+Data with offset axes (for example a view over `Base.IdentityUnitRange(2:11)`) is refused with an `ArgumentError`: the element indexes its data from 1.
+
 # Fields
 
   - `data::VT`: the raw vector data containing the degrees of freedom.
@@ -89,6 +91,16 @@ struct VectorElement{S, T, VT <: AbstractVector{T}} <: AbstractVector{T}
     data::VT
     "the parent function space to which this vector belongs."
     space::S
+
+    function VectorElement{S, T, VT}(data, space::S) where {S, T, VT <: AbstractVector{T}}
+        d = convert(VT, data)
+        Base.require_one_based_indexing(d)
+        return new{S, T, VT}(d, space)
+    end
+end
+
+function VectorElement(data::VT, space::S) where {S, T, VT <: AbstractVector{T}}
+    return VectorElement{S, T, VT}(data, space)
 end
 
 """
