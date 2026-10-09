@@ -155,8 +155,14 @@ import Base: diff
             # Two do: the endpoints themselves.
             @test points(mesh(create_test_domain(1.0, nextfloat(1.0)), 2, true)) ==
                   [1.0, nextfloat(1.0)]
-            # The uniform fill runs in the storage eltype: a Float32 set on Float64
-            # storage gets nine distinct points that Float32 arithmetic would tie.
+            # The uniform fill runs in the wider of the set and storage eltypes. A
+            # Float64 set on Float32 storage gets the correctly rounded, symmetric nodes.
+            a, b, n = -1.0, 1.0, 11
+            p32 = points(mesh(create_test_domain(a, b), n, true; backend = backend(Float32)))
+            @test p32 == Float32.(a .+ (0:(n - 1)) .* ((b - a) / (n - 1)))
+            @test p32 == -reverse(p32)
+            # A Float32 set on Float64 storage gets nine distinct points that Float32
+            # arithmetic would tie.
             I32 = create_test_domain(1.0f6, 1.0f6 + 0.25f0)
             Ω64 = mesh(I32, 9, true; backend = backend(Float64))
             @test eltype(points(Ω64)) == Float64

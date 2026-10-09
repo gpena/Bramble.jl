@@ -972,9 +972,14 @@ _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_
     # Check if the point distribution should be uniform.
     if unif
         # For a uniform grid, calculate the constant step size `h`. The arithmetic runs in
-        # the storage eltype, as the device kernel's does: a narrower set eltype would
-        # round neighbours onto one value that `eltype(x)` could keep apart.
-        S = eltype(x)
+        # the wider of the set and storage eltypes, then rounds once into `x`: a narrower
+        # set eltype would tie neighbours that `eltype(x)` keeps apart, and a narrower
+        # storage eltype would drift from the correctly rounded nodes and lose symmetry.
+        # The device kernel computes in the storage eltype instead, since Metal has no
+        # Float64: its nodes may differ from these by about 1-2 eps of the largest
+        # endpoint in absolute terms (many ulp near 0), and a symmetric interval need
+        # not give a symmetric device mesh.
+        S = promote_type(T, eltype(x))
         aₛ, bₛ = convert(S, a), convert(S, b)
         h = (bₛ - aₛ) / (npts - 1)
         # Populate the grid points using an arithmetic progression.
@@ -1211,8 +1216,8 @@ function _mesh(
     fused_nonuniform_device = !is_uniform && n_points >= 2 && !(pts isa Array)
 
     if fused_uniform_device
-        # in the storage eltype, as the host fill does; a device kernel cannot take a
-        # Float64 `a` or `h` on a Float32-only device such as Metal
+        # in the storage eltype, unlike the host fill's wider type: a device kernel cannot
+        # take a Float64 `a` or `h` on a Float32-only device such as Metal
         S = eltype(pts)
         a, b = convert.(S, extrema(set))
         h = (b - a) / (n_points - 1)
