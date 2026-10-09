@@ -1048,6 +1048,15 @@ function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
     u_is_tuple = u_type <: NTuple
     v_is_tuple = v_type <: NTuple
 
+    # Two tuples must have the same arity; otherwise the extra entries would be dropped
+    # silently. The check covers every `Tuple`, not only an `NTuple`: a tuple whose
+    # entries differ in type, such as ∇ₕ(u) in 2D, is no `NTuple`. The message is spliced
+    # in as a String, as in the scalar branch below.
+    if u_type <: Tuple && v_type <: Tuple && fieldcount(u_type) != fieldcount(v_type)
+        len_u, len_v = fieldcount(u_type), fieldcount(v_type)
+        return :(throw(DimensionMismatch($("Tuple lengths $len_u and $len_v do not match"))))
+    end
+
     # Prefer tuple arity when tuples are provided (e.g., inner₊((a,b), (c,d)) even in 1D).
     D = if u_type <: NTuple
         dim_u

@@ -501,6 +501,24 @@ end
             e
         end
         @test occursin("1", err.msg) && occursin("2", err.msg)
+
+        # Two tuples of different lengths are refused in either order and result form.
+        @test_throws DimensionMismatch inner₊((u2, v2), (u2, v2, u2))
+        @test_throws DimensionMismatch inner₊((u2, v2, u2), (u2, v2))
+        @test_throws DimensionMismatch inner₊((u2, v2), (u2, v2, u2), Tuple)
+        @test_throws DimensionMismatch inner₊((u2, v2, u2), (u2, v2), Tuple)
+        # A tuple whose entries differ in type is no NTuple, and is checked all the same.
+        @test_throws DimensionMismatch inner₊((u2, u1), (u2, v2, u2))
+        @test_throws DimensionMismatch inner₊((u2, v2, u2), (u2, u1), Tuple)
+        @test_throws DimensionMismatch form(W2, W2, (a, b) -> inner₊((D₋ₓ(a),), ∇ₕ(b)))
+        @test_throws DimensionMismatch form(W2, b -> inner₊((v2, v2, v2), ∇ₕ(b)))
+
+        err = try
+            inner₊((u2, v2), (u2, v2, u2))
+        catch e
+            e
+        end
+        @test occursin("2", err.msg) && occursin("3", err.msg)
     end
 
     @testset "_get_h_val" begin
