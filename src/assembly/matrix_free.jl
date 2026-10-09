@@ -266,7 +266,9 @@ end
 # The operator from its parts, each type parameter read off the value passed. Whether
 # `geom` (and so `plan`) is `nothing` depends on the mesh's state, not on a type, so the
 # caller holds a union; this call takes each member on its own, so `Geom` is always the
-# type of `geom`.
+# type of `geom`. `_mf_plan` infers as a Union for the same reason, since `D` and the
+# effective policy are read from runtime values. This barrier resolves both: measured
+# 0 B and ~3 ns per `mul!`, so the Union stays.
 function _mf_operator(
         ::Type{T}, a, labels, mask, policy, plan, nrows, ncols, geom
 ) where {T}
