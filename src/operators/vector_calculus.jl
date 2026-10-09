@@ -203,6 +203,17 @@ end
 
 @inline _field_space(uₕ) = space(first(_field_components(uₕ)))
 
+# The output of an allocating form: a grid function on the first component's space whose
+# element type promotes the components' own, so a Float32 component beside a Float64 one,
+# or a Dual beside a Float64, gives the wider type. It is not promoted against the space's
+# type: like `similar(::VectorElement)`, an all-Float32 field on a Float64 mesh stays
+# Float32. `promote_type` over a tuple constant-folds, so this infers.
+@inline function _field_similar(comps::Tuple)
+    T = promote_type(map(eltype, comps)...)
+    v = similar(parent(first(comps)), T)
+    return VectorElement(v, space(first(comps)))
+end
+
 @noinline function _throw_field_arity(got::Int, D::Int, op::String)
     throw(
         DimensionMismatch(
@@ -305,7 +316,7 @@ LinearAlgebra: ⋅` or Bramble's own re-export). `∇cₕ`, `∇̽ₕ`, `∇̃�
 
 See also: [`div₊ₕ`](@ref), [`curlₕ`](@ref), [`Δₕ`](@ref)
 """
-@inline divₕ(uₕ) = divₕ!(similar(first(_field_components(uₕ))), uₕ)
+@inline divₕ(uₕ) = divₕ!(_field_similar(_field_components(uₕ)), uₕ)
 
 """
     divₕ!(vₕ::VectorElement, uₕ) -> VectorElement
@@ -341,7 +352,7 @@ and truncated to zero on the *last* slice of each direction rather than the firs
 
 `∇₊ₕ ⋅ uₕ === div₊ₕ(uₕ)`.
 """
-@inline div₊ₕ(uₕ) = div₊ₕ!(similar(first(_field_components(uₕ))), uₕ)
+@inline div₊ₕ(uₕ) = div₊ₕ!(_field_similar(_field_components(uₕ)), uₕ)
 
 @doc (@doc div₊ₕ)
 function div₊ₕ!(vₕ::VectorElement, uₕ)
@@ -449,9 +460,9 @@ The forward-difference discrete curl, the twin of [`curlₕ`](@ref).
     return _curl_alloc(uₕ, comps, dir, op, Val(D))
 end
 
-@inline _curl_alloc(uₕ, comps, dir, op, ::Val{2}) = _curl!(similar(first(comps)), uₕ, dir, op)
+@inline _curl_alloc(uₕ, comps, dir, op, ::Val{2}) = _curl!(_field_similar(comps), uₕ, dir, op)
 @inline _curl_alloc(uₕ, comps, dir, op, ::Val{3}) = _curl!(
-    ntuple(_ -> similar(first(comps)), Val(3)), uₕ, dir, op
+    ntuple(_ -> _field_similar(comps), Val(3)), uₕ, dir, op
 )
 @noinline _curl_alloc(uₕ, comps, dir, op, ::Val{D}) where {D} = throw(
     ArgumentError("the discrete curl is defined in 2D and 3D; this mesh is $(D)D.")
@@ -791,7 +802,7 @@ end
 @inline _strain_rows!(pol, dest, comps, Ωₕ, dims, ::Val{0}, ::Val{D}) where {D} = nothing
 
 @inline _strain_alloc(comps, ::Val{D}) where {D} = ntuple(
-    _ -> ntuple(_ -> similar(first(comps)), Val(D)), Val(D)
+    _ -> ntuple(_ -> _field_similar(comps), Val(D)), Val(D)
 )
 
 """
@@ -1000,7 +1011,7 @@ See also: [`divₕ`](@ref), [`curlcₕ`](@ref), [`εcₕ`](@ref)
 """
 function divcₕ(uₕ)
     _check_centered_host(first(_field_components(uₕ)), "divcₕ")
-    return divcₕ!(similar(first(_field_components(uₕ))), uₕ)
+    return divcₕ!(_field_similar(_field_components(uₕ)), uₕ)
 end
 
 @doc (@doc divcₕ)
@@ -1244,7 +1255,7 @@ See also: [`divₕ`](@ref), [`curl̃ₕ`](@ref), [`∇̃ₕ`](@ref)
 """
 function diṽₕ(uₕ)
     _check_star_host(first(_field_components(uₕ)), "diṽₕ")
-    return diṽₕ!(similar(first(_field_components(uₕ))), uₕ)
+    return diṽₕ!(_field_similar(_field_components(uₕ)), uₕ)
 end
 
 @doc (@doc diṽₕ)
@@ -1532,7 +1543,7 @@ See also: [`divcₕ`](@ref), [`curl̽ₕ`](@ref), [`ε̽ₕ`](@ref), [`∇̽ₕ`
 """
 function div̽ₕ(uₕ)
     _check_centered_host(first(_field_components(uₕ)), "div̽ₕ")
-    return div̽ₕ!(similar(first(_field_components(uₕ))), uₕ)
+    return div̽ₕ!(_field_similar(_field_components(uₕ)), uₕ)
 end
 
 @doc (@doc div̽ₕ)
