@@ -86,6 +86,16 @@ end
 @inline _in_region(op::RegionRestriction, words, lin_idx::Int) = _is_marked(
     words, op.region, lin_idx)
 
+# The source read a `ShiftNode` makes (`operators/shift.jl`): the restricted source at `J`,
+# scaled by the region test as a `Bool`, a strong zero, so a value that is not finite outside
+# the region still contributes exactly 0, as the empty stencil `local_stencil` returns there.
+@inline function _source_stencil_at(
+        op::RegionRestriction, space, J::CartesianIndex, markers, lin_idx::Int
+)
+    at = _source_stencil_at(op.inner_op, space, J, markers, lin_idx)
+    return scale_stencil(at, _in_region(op, markers, lin_idx))
+end
+
 # A tap reaching `delta` points away re-evaluates the restriction at that neighbour. Doing
 # it through `local_stencil` above would return `()` or a full tuple depending on the
 # neighbour's marker, so the tap's tuple length would vary from point to point and the

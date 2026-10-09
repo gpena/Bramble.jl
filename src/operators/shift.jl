@@ -501,10 +501,15 @@ end
 # it, which is what makes `_clamped_shift`'s "clamp now, a zero mask absorbs it" contract safe
 # for them. For an operand with offsets, `_reevaluated_shift` (`ast/common.jl`) supplies that
 # zero itself where the clamp bites. Nothing there would absorb it for a source: a source has
-# already been reduced to a value by the time this runs, with no offset left to relabel. A
-# source shifted off the grid therefore reads as zero here, an empty stencil, the same
-# "missing neighbour is zero" convention the masked stencils use, mirroring how
-# `RegionRestriction` already spells "contributes nothing here".
+# already been reduced to a value by the time this runs, with no offset left to relabel. So
+# the source is read at the clamped point and scaled by `_in_grid` of the true one, and a
+# source shifted off the grid reads as zero, the same "missing neighbour is zero" convention
+# the masked stencils use. The scale is the `Bool` itself. `false` is a strong zero
+# (`Inf * false == 0.0`), so a source that is not finite at the boundary point still
+# contributes exactly zero, and a `Bool` keeps each entry's own type (`Float32`, `Int`, a
+# `Dual`). The stencil keeps its length at every point, so it has one concrete type. An empty
+# stencil off the grid made it a `Union` that a Dirac's `Int` weight carried into the
+# assembly loop (gpena/Bramble.jl#524).
 #
 # An interpolation is not a source: it is re-evaluated at the clamped point like any other
 # operand, which is harmless inside a masked tap. A shift has no mask, so off the grid it
@@ -520,23 +525,30 @@ end
         I::CartesianIndex{D},
         markers
 ) where {D, Dim}
+    Ishift = I + _stencil_step(Val(Dim), Val(D)) * op.shift_amount
     if _is_source_only(op.inner_op)
-        Ishift = I + _stencil_step(Val(Dim), Val(D)) * op.shift_amount
-        _in_grid(space, Ishift) || return ()
-        return local_stencil(
-            op.inner_op, space, Ishift, markers, LinearIndices(indices(mesh(space)))[Ishift]
-        )
-    else
-        Ishift = I + _stencil_step(Val(Dim), Val(D)) * op.shift_amount
-        T = eltype(space)
-        return scale_stencil(
-            shifted_inner_stencil(
-                op.inner_op, inner, space, I, markers, Val(Dim), op.shift_amount
-            ),
-            _in_grid(space, Ishift) ? one(T) : zero(T)
-        )
+        m = mesh(space)
+        Iclamped = _clamped_shift(m, I, Val(Dim), _shift_delta(op.shift_amount))
+        lin = LinearIndices(indices(m))[Iclamped]
+        at = _source_stencil_at(op.inner_op, space, Iclamped, markers, lin)
+        return scale_stencil(at, _in_grid(space, Ishift))
     end
+    shifted = shifted_inner_stencil(
+        op.inner_op, inner, space, I, markers, Val(Dim), op.shift_amount
+    )
+    T = eltype(space)
+    return scale_stencil(shifted, _in_grid(space, Ishift) ? one(T) : zero(T))
 end
+
+# A source-only operand's stencil at `J`, with one length at every point. It is
+# `local_stencil` except where that returns `()` for "contributes nothing here"
+# ([`RegionRestriction`](@ref) outside its region), which instead scales by the `Bool` test
+# (`operators/region_restriction.jl`). Not `shifted_inner_stencil`: `RegionRestriction`'s
+# override there zeroes with `zero(T)`, so a non-finite value outside the region gives NaN
+# where the empty stencil gave 0.
+@inline _source_stencil_at(op, space, J::CartesianIndex, markers, lin_idx::Int) = local_stencil(
+    op, space, J, markers, lin_idx
+)
 
 function resolve_ast(op::ShiftNode{D, Dim}) where {D, Dim}
     inner = resolve_ast(op.inner_op)
