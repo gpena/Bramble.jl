@@ -238,7 +238,8 @@ overshoot a little more. Allocates two vectors of length `ndofs`.
 
 # Examples
 ```jldoctest
-using Bramble, LinearAlgebra
+using Bramble, LinearAlgebra, Random
+Random.seed!(1)
 Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 33, false))
 a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 λ = eigmax(Symmetric(Matrix(assemble(a))))
