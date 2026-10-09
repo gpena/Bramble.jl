@@ -131,9 +131,10 @@ using Bramble:
         @test sf isa SourceConstant{2}
         @test only(local_stencil(sf, Wₕ, I, nothing, lin))[2] == 7.25
 
-        # and the grid function's coefficients are carried by reference, read at the point
+        # and the grid function itself is carried by reference, its space kept so `form`
+        # can check the source's mesh, and read at the point
         p = innerₕ(uₕ, v)
-        @test p.left_op.vec === parent(uₕ)
+        @test p.left_op.vec === uₕ
         @test only(local_stencil(p.left_op, Wₕ, I, nothing, lin))[2] == parent(uₕ)[lin]
     end
 

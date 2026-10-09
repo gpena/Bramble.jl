@@ -33,7 +33,9 @@ using Bramble:
                iterative_refinement!,
                change_points!,
                D₋ᵧ,
+               D₊ᵧ,
                D₋ₓ,
+               inner₊ᵧ,
                boundary_indices,
                forward_spacings,
                half_points,
@@ -539,6 +541,34 @@ using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
             @test npoints(Ωₕ_f32, Tuple) == npoints(Ωₕ_set, Tuple) == (4, 1)
             @test isequal(points(Ωₕ_f32(1)), points(Ωₕ_set(1)))
             @test isequal(points(Ωₕ_f32(2)), points(Ωₕ_set(2)))
+
+            # Differences along the collapsed axis assemble finite matrices that match the
+            # runtime zero, instead of 0/0 from the raw zero spacing (gpena/Bramble.jl#622).
+            # The ∇ₕ form must equal the D₋ₓ form alone: its y part contributes nothing.
+            Ωₕ_set64 = mesh(Ω_line, (4, 4), (true, true); backend = backend())
+            @testset "collapsed y, $(eltype(Ωₕ)) $tag" for (tag, Ωₕ) in (
+                ("set", Ωₕ_set64), ("set", Ωₕ_set), ("storage", Ωₕ_f32))
+                Wₕ = gridspace(Ωₕ)
+                uₕ = Rₕ(Wₕ, x -> x[1]^2 + 1)
+                uvals = parent(uₕ)
+                A = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))))
+                Ax = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v))))
+                @test all(isfinite, A)
+                @test A ≈ Ax
+                @test !all(iszero, A * uvals)
+                @test A * uvals ≈ Ax * uvals
+                for op in (D₋ᵧ, D₊ᵧ)
+                    B = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ᵧ(op(u), op(v))))
+                    @test all(isfinite, B)
+                    @test all(iszero, B)
+                    C = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(op(u), v)))
+                    @test all(isfinite, C)
+                    @test all(iszero, C * uvals)
+                    @test all(iszero, parent(op(uₕ)))
+                    @test all(isfinite, op(Wₕ))
+                    @test all(iszero, op(Wₕ))
+                end
+            end
         end
 
         @testset "Collapsed dimensions, one layer further" begin
@@ -804,6 +834,23 @@ end # Main Testset
             iterative_refinement!(Ωₕ)
             @test size(indices(Ωₕ)) == npoints(Ωₕ, Tuple)
             @test ndofs(gridspace(Ωₕ)) == npoints(Ωₕ)
+        end
+    end
+
+    @testset "Tied midpoints on a later axis" begin
+        # Axis 2 spans one ulp, so its refined midpoint rounds onto an endpoint
+        # (gpena/Bramble.jl#621). Every axis is checked before any is refined, so the
+        # refusal leaves axis 1 unrefined and the parent's indices as they were.
+        Ω = domain(interval(0.0, 1.0) × interval(1.0, nextfloat(1.0)))
+        for refine! in (iterative_refinement!, M -> iterative_refinement!(M, markers(Ω)))
+            Ωₕ = mesh(Ω, (3, 2), (true, true))
+            @test_throws ArgumentError refine!(Ωₕ)
+            @test npoints(Ωₕ, Tuple) == (3, 2)
+            @test indices(Ωₕ) == CartesianIndices((3, 2))
+            @test points(Ωₕ(1)) == [0.0, 0.5, 1.0]
+            @test indices(Ωₕ(1)) == CartesianIndices((3,))
+            @test length(markers(Ωₕ(1))[:boundary]) == 3
+            @test points(Ωₕ(2)) == [1.0, nextfloat(1.0)]
         end
     end
 

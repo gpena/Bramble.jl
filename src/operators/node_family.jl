@@ -54,8 +54,10 @@ function _node_dimensional_expr(node_name, alias_name, alias_stem, what; source 
     parameter of the node, so a runtime direction would make the return type a `Union`.
     """
 
-    method = :(@inline $(alias_name)(op::LazyOp{D}, ::Val{Dim}) where {D, Dim} = $(node_name){
-        D, Dim, typeof(op)}(op))
+    method = :(@inline function $(alias_name)(op::LazyOp{D}, ::Val{Dim}) where {D, Dim}
+        1 <= Dim <= D || _throw_stencil_dim_error(Dim, D)
+        return $(node_name){D, Dim, typeof(op)}(op)
+    end)
 
     return Expr[
         _relocate!(

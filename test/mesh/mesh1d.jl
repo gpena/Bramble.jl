@@ -372,14 +372,37 @@ import Base: diff
             Ωₕ = mesh(Ω, npts_initial, true; backend = backend())
             @test_throws ArgumentError iterative_refinement!(Ωₕ)
             @test npoints(Ωₕ) == npts_initial
-            @test points(Ωₕ) ≈ [0.0, 0.5, 1.0]
+            @test points(Ωₕ) == [0.0, 0.5, 1.0]
 
             # Refine *with* marker update
             Ωₕ2 = mesh(Ω, npts_initial, true; backend = backend()) # Start fresh: 0.0, 0.5, 1.0
             iterative_refinement!(Ωₕ2, dm)
             @test npoints(Ωₕ2) == npts_refined2
             @test indices(Ωₕ2) == CartesianIndices((npts_refined2,))
-            @test points(Ωₕ2) ≈ [0.0, 0.25, 0.5, 0.75, 1.0]
+            @test points(Ωₕ2) == [0.0, 0.25, 0.5, 0.75, 1.0]
+
+            # On a 1-ulp interval the midpoint of the two endpoints rounds onto one of
+            # them, so refinement would tie neighbours (gpena/Bramble.jl#621). Both forms
+            # refuse before any mutation: points, indices, markers and version unchanged.
+            Ω_ulp = create_test_domain(1.0, nextfloat(1.0))
+            dm_ulp = markers(Ω_ulp)
+            for refine! in (iterative_refinement!, M -> iterative_refinement!(M, dm_ulp))
+                Ωₜ = mesh(Ω_ulp, 2, true; backend = backend())
+                markers_before = deepcopy(markers(Ωₜ))
+                version_before = Bramble._mesh_version(Ωₜ)
+                @test_throws ArgumentError refine!(Ωₜ)
+                err = try
+                    refine!(Ωₜ)
+                catch e
+                    e
+                end
+                @test occursin("midpoint", sprint(showerror, err))
+                @test points(Ωₜ) == [1.0, nextfloat(1.0)]
+                @test npoints(Ωₜ) == 2
+                @test indices(Ωₜ) == CartesianIndices((2,))
+                @test markers(Ωₜ) == markers_before
+                @test Bramble._mesh_version(Ωₜ) == version_before
+            end
 
             # The two arities have a genuine (not accidental)
             # asymmetry on a single-point, non-collapsed mesh (nothing to refine either

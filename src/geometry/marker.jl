@@ -382,10 +382,21 @@ end
 # allocates. Inlined at the call site, its `Core._hasmethod(Tuple{F, ...})` folds on the
 # concrete type `F`, so the tuple stays concrete and `conditions` allocates nothing. A
 # method added to `F` later invalidates the folded result, as for any method lookup.
-@inline function _fix_time(f::F, t) where {F}
-    is_spatial = (@inline hasmethod(f, Tuple{Any})) &&
-                 !(@inline hasmethod(f, Tuple{Any, Any}))
-    return is_spatial ? f : Base.Fix2(f, t)
+#
+# Both evaluation paths share `_is_spatial`. Every helper here stays `@inline`, or the fold
+# never reaches the `map` closure in `conditions`.
+@inline function _is_spatial(f::F) where {F}
+    return (@inline hasmethod(f, Tuple{Any})) && !(@inline hasmethod(f, Tuple{Any, Any}))
+end
+
+@inline _fix_time(f::F, t) where {F} = _is_spatial(f) ? f : Base.Fix2(f, t)
+
+# The `(t, p)` twin of `_fix_time`: classifies the raw predicate, since the `Fix` wrappers
+# are varargs-callable and would always look non-spatial. A 3-argument method wins over a
+# 1-argument one, as the validators route such an `f` here for its `(x, t, p)` method.
+@inline function _fix_time_param(f::F, t, p) where {F}
+    is_spatial = _is_spatial(f) && !(@inline hasmethod(f, Tuple{Any, Any, Any}))
+    return is_spatial ? f : Base.Fix2(Base.Fix{3}(f, p), t)
 end
 
 """
@@ -451,7 +462,9 @@ end
 """
     (dm::DomainMarkers)(t::Number, p) -> EvaluatedParametricDomainMarkers
 
-Evaluate parameter- and time-dependent condition markers at timestamp `t` and parameter `p`.
+Evaluate the condition markers of `dm` at timestamp `t` and parameter `p`. Each `(x, t, p)`
+predicate is fixed at `(t, p)` and each spatial `x` predicate is kept as it is; see
+[`conditions`](@ref conditions(::EvaluatedParametricDomainMarkers)).
 """
 (dm::DomainMarkers)(t::Number, p) = EvaluatedParametricDomainMarkers(dm, t, p)
 
@@ -461,8 +474,15 @@ Evaluate parameter- and time-dependent condition markers at timestamp `t` and pa
 """
     conditions(edm::EvaluatedParametricDomainMarkers) -> Tuple
 
-Return condition markers evaluated at `edm.evaluation_time` and `edm.p`, converting `f(x, t,
-p)` closures into unary spatial predicates `f(x)`.
+Return condition markers evaluated at `edm.evaluation_time` and `edm.p`, each a spatial
+predicate of `x`.
+
+A predicate `f` with a one-argument method and no two- or three-argument method is spatial
+and passes through unchanged. Any other predicate is fixed at `(t, p)` as `x -> f(x, t, p)`,
+so `(x, t = 0, p = 1) -> ...` is fixed at both. An `(x, t)` predicate is not fixed at `t`
+alone, and its wrapper throws a `MethodError` when called; `dirichlet_constraints` and
+`semidiscretize` never send one here, since they route only uniformly `(x, t, p)` conditions
+to this path.
 
 `Base.Fix{N}` generalizes `Base.Fix1`/`Base.Fix2` to insert its fixed value at position `N`
 of *whatever args a given call supplies*, not at position `N` of `f`'s own argument list
@@ -478,7 +498,7 @@ function conditions(edm::EvaluatedParametricDomainMarkers)
     t = edm.evaluation_time
     p = edm.p
     return map(
-        m -> Marker(label(m), Base.Fix2(Base.Fix{3}(identifier(m), p), t)),
+        m -> Marker(label(m), _fix_time_param(identifier(m), t, p)),
         conditions(edm.original_markers)
     )
 end

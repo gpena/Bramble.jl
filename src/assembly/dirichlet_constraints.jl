@@ -91,7 +91,8 @@ end
 # A time domain `I` promises the evaluation path (`(dm::DomainMarkers)(t)`, which does
 # `Base.Fix2(func, t)`, or `(dm::DomainMarkers)(t, p)`, which composes a `Base.Fix{3}` for
 # `p` with a `Base.Fix2` for `t` -- see `conditions(::EvaluatedParametricDomainMarkers)`,
-# marker.jl, for why that specific order and not the other one) that every `func` here
+# marker.jl, for why that specific order and not the other one; both paths pass a spatial
+# `x -> ...` predicate through unwrapped, but this check rejects one) that every `func` here
 # accepts `(x, t)` or, uniformly, `(x, t, p)`. Nothing downstream
 # checks this: `Fix2` builds regardless of arity and only fails once the resulting closure is
 # called during assembly, far from the mistake. Caught here by arity alone, not by calling

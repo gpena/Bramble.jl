@@ -117,8 +117,13 @@ four without claiming to be a mesh (see its own docstring).
         ::BackwardFiniteDiffOp{Dim}, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
 ) where {Dim}
     h = _axis_spacing(Ωₕ, I, Dim)
-    mask = I[Dim] == 1 ? 0 : 1
-    return (mask / h, -mask / h)
+    # select, not `mask / h`: a collapsed axis has h == 0 and only edge points (#622)
+    if I[Dim] == 1
+        z = zero(inv(h))
+        return (z, z)
+    end
+    c = inv(h)
+    return (c, -c)
 end
 
 @inline function _stencil_weights(
@@ -126,16 +131,24 @@ end
 ) where {Dim}
     n = _axis_npoints(Ωₕ, Dim)
     h = _axis_forward_spacing(Ωₕ, I, Dim)
-    mask = I[Dim] == n ? 0 : 1
-    return (mask / h, -mask / h)
+    if I[Dim] == n
+        z = zero(inv(h))
+        return (z, z)
+    end
+    c = inv(h)
+    return (c, -c)
 end
 
 @inline function _stencil_weights(
         ::StarDiffOp{Dim}, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
 ) where {Dim}
     n = _axis_npoints(Ωₕ, Dim)
-    mask = I[Dim] == n ? 0 : 1
-    c = 2 * mask / (_axis_spacing(Ωₕ, I, Dim) + _axis_forward_spacing(Ωₕ, I, Dim))
+    s = _axis_spacing(Ωₕ, I, Dim) + _axis_forward_spacing(Ωₕ, I, Dim)
+    if I[Dim] == n
+        z = zero(2 / s)
+        return (z, z)
+    end
+    c = 2 / s
     return (c, -c)
 end
 
@@ -143,8 +156,12 @@ end
         ::CenteredDiffOp{Dim}, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex
 ) where {Dim}
     n = _axis_npoints(Ωₕ, Dim)
-    mask = (I[Dim] == 1 || I[Dim] == n) ? 0 : 1
-    c = mask / (_axis_spacing(Ωₕ, I, Dim) + _axis_forward_spacing(Ωₕ, I, Dim))
+    s = _axis_spacing(Ωₕ, I, Dim) + _axis_forward_spacing(Ωₕ, I, Dim)
+    if I[Dim] == 1 || I[Dim] == n
+        z = zero(inv(s))
+        return (z, z)
+    end
+    c = inv(s)
     return (c, -c)
 end
 
@@ -153,8 +170,11 @@ end
 ) where {Dim}
     n = _axis_npoints(Ωₕ, Dim)
     if I[Dim] == 1
-        a = inv(_axis_spacing(Ωₕ, I, Dim))
-        return (a, -a, zero(a))
+        h = _axis_spacing(Ωₕ, I, Dim)
+        a = inv(h)
+        z = zero(a)
+        n == 1 && return (z, z, z)
+        return (a, -a, z)
     elseif I[Dim] == n
         b = inv(_axis_spacing(Ωₕ, I, Dim))
         return (zero(b), b, -b)
@@ -289,7 +309,8 @@ as `mesh(Wₕ)`.
 Checked entrywise, `nnz` included, against [`kronecker_operator_matrix`](@ref), the
 Kronecker-product construction every operator family used before (gpena/Bramble.jl#185).
 """
-@inline function stencil_matrix(Ωₕ::AbstractMeshType, op::StencilOp)
+@inline function stencil_matrix(Ωₕ::AbstractMeshType, op::StencilOp{Dim}) where {Dim}
+    1 <= Dim <= dim(Ωₕ) || _throw_stencil_dim_error(Dim, dim(Ωₕ))
     return _stencil_matrix(matrix_type(backend(Ωₕ)), Ωₕ, op)
 end
 

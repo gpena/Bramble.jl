@@ -409,9 +409,12 @@ end
 # for its refined size, so its marker vectors and words match its points under either
 # form. Submeshes are built from `domain(projection(Ω, i))` and carry only the boundary
 # and interior labels, so a label a user `markers!`'d onto `Ωₕ(i)` is dropped here.
+# Every axis is filled and checked for ties before any is committed, so a tie on a later
+# axis leaves the earlier ones unrefined.
 function _refine_indices!(Ωₕ::MeshnD{D}) where {D}
+    new_points = ntuple(i -> _refined_points(Ωₕ(i)), Val(D))
     @inbounds for i in 1:D
-        _refine_indices!(Ωₕ(i))
+        _commit_refined_points!(Ωₕ(i), new_points[i])
         submesh_markers = MeshMarkers()
         _ensure_geometric_markers!(submesh_markers, Ωₕ(i))
         markers!(Ωₕ(i), submesh_markers)

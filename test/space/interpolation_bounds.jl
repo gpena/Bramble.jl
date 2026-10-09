@@ -2,7 +2,7 @@ module SpaceInterpolationBoundsTests
 
 using Test
 using Bramble
-using Bramble: interpolation_matrix, weights
+using Bramble: interpolation_matrix, locate_cell, weights
 using ..TestUtils: alloc_test, @test_allocs
 
 # `interpolate_at` used to extrapolate silently past the mesh boundary: `locate_cell`
@@ -199,6 +199,115 @@ using ..TestUtils: alloc_test, @test_allocs
         end
     end
 
+    # Far outside the mesh the corner weights grow past 1/eps: `1 - t` rounds to `-t` and
+    # the weighted sum cancels, so a constant field came back as 0.0 (gpena/Bramble.jl#625).
+    # `interpolate_at` now blends differences on an extrapolated axis. The matrix, stencil
+    # and Dirac paths keep the weights and are out of scope.
+    @testset "Far :extrapolate keeps a constant (#625)" begin
+        far(u, x) = interpolate_at(u, x; outside = :extrapolate)
+        signs = (-1, 1)
+
+        @testset "1D" begin
+            u = Rₕ(gridspace(mesh(domain(interval(0.0, 1.0)), 11, true)), x -> 1.0)
+            for s in signs
+                @test far(u, s * 1e20) == 1.0
+            end
+        end
+
+        @testset "2D, uniform and non-uniform" begin
+            dom = domain(box((0.0, 0.0), (1.0, 1.0)))
+            for unif in ((true, true), (false, false))
+                u = Rₕ(gridspace(mesh(dom, (11, 65), unif)), x -> 1.0)
+                for s1 in signs, s2 in signs
+
+                    @test far(u, (s1 * 1e20, s2 * 1e20)) == 1.0
+                end
+                @test far(u, (1e20, 0.5)) == 1.0   # one axis inside
+            end
+        end
+
+        @testset "3D" begin
+            dom = domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+            u = Rₕ(gridspace(mesh(dom, (5, 5, 5), (true, true, true))), x -> 1.0)
+            for s1 in signs, s2 in signs, s3 in signs
+                @test far(u, (s1 * 1e20, s2 * 1e20, s3 * 1e20)) == 1.0
+            end
+            # ∏ tᵈ overflows here: expanded weights would give Inf * 0 = NaN
+            @test far(u, (1e200, -1e200, 1e200)) == 1.0
+        end
+
+        @testset "Float32, moderately far" begin
+            dom = domain(box((0.0f0, 0.0f0), (1.0f0, 1.0f0)))
+            u = Rₕ(gridspace(mesh(dom, (11, 11), (true, true))), x -> 1.0f0)
+            # t ≈ 1e5 per axis: the weights' rounding was ~1e3 times the constant
+            @test far(u, (1.0f4, -1.0f4)) === 1.0f0
+        end
+
+        # Affine on dyadic data, so every corner difference is exact: the mixed
+        # difference is exactly 0 and only rounding of the result itself remains.
+        @testset "Affine, dyadic 5x5" begin
+            dom = domain(box((0.0, 0.0), (1.0, 1.0)))
+            f(x) = 2x[1] - x[2] + 0.5
+            u = Rₕ(gridspace(mesh(dom, (5, 5), (true, true))), f)
+            pts = (
+                (1e6, -1e6), (-1e6, 1e6), (1e12, 1e12), (-3.0, 0.5), (0.25, 7.0),
+                (1e20, -1e20), (1e20, 1e20), (1e16, 1e16)
+            )
+            for p in pts
+                @test isapprox(far(u, p), f(p); rtol = 4eps())
+            end
+        end
+
+        # Two or more axes far out: each axis's slope must survive, not just the first.
+        @testset "Affine, dyadic 5x5x5" begin
+            dom = domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+            g(x) = 2x[1] - x[2] + 4x[3] + 0.5
+            u = Rₕ(gridspace(mesh(dom, (5, 5, 5), (true, true, true))), g)
+            for p in ((1e20, -1e20, 1e20), (1e20, 0.5, -1e20), (0.5, 1e20, 1e20))
+                @test isapprox(far(u, p), g(p); rtol = 4eps())
+            end
+        end
+    end
+
+    # Inside the mesh the weighted form is kept: the result is the same bits as before
+    # #625, checked against that corner-weight sum written out, and exactly the node
+    # value on the upper boundary (where `locate_cell` gives t = 1).
+    @testset "Inside unchanged bitwise (#625)" begin
+        f(x) = sin(3x[1]) + x[2]^2
+        for unif in ((true, true), (false, false))
+            Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (5, 7), unif)
+            u = Rₕ(gridspace(Ωₕ), f)
+            v = reshape(parent(u), 5, 7)
+            p1, p2 = points(Ωₕ(1)), points(Ωₕ(2))
+            for x in ((0.3, 0.6), (0.71, 0.13), (0.5, 0.999))
+                i, j = Tuple(locate_cell(Ωₕ, x))
+                t1 = (x[1] - p1[i]) / (p1[i + 1] - p1[i])
+                t2 = (x[2] - p2[j]) / (p2[j + 1] - p2[j])
+                ref = 0.0
+                ref += (1 - t1) * (1 - t2) * v[i, j]
+                ref += t1 * (1 - t2) * v[i + 1, j]
+                ref += (1 - t1) * t2 * v[i, j + 1]
+                ref += t1 * t2 * v[i + 1, j + 1]
+                for pol in (:error, :clamp, :extrapolate, NaN)
+                    @test interpolate_at(u, x; outside = pol) == ref
+                end
+            end
+            for pol in (:error, :clamp, :extrapolate)
+                @test interpolate_at(u, (1.0, 1.0); outside = pol) == v[5, 7]
+                @test interpolate_at(u, (1.0, p2[3]); outside = pol) == v[5, 3]
+                @test interpolate_at(u, (p1[2], 1.0); outside = pol) == v[2, 7]
+            end
+        end
+        Ω1 = mesh(domain(interval(0.0, 1.0)), 11, false)
+        u1 = Rₕ(gridspace(Ω1), x -> sin(3x[1]))
+        p = points(Ω1)
+        i = locate_cell(Ω1, 0.37)
+        t = (0.37 - p[i]) / (p[i + 1] - p[i])
+        @test interpolate_at(u1, 0.37; outside = :extrapolate) ==
+              (1 - t) * parent(u1)[i] + t * parent(u1)[i + 1]
+        @test interpolate_at(u1, 1.0; outside = :extrapolate) == parent(u1)[end]
+    end
+
     @testset "In-domain path allocates nothing, infers" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 101, true)
         uₕ = Rₕ(gridspace(Ωₕ), x -> x[1]^2)
@@ -209,6 +318,13 @@ using ..TestUtils: alloc_test, @test_allocs
         Ω2 = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (11, 11), (true, true))
         u2 = Rₕ(gridspace(Ω2), x -> x[1] * x[2])
         @test_allocs interpolate_at(u2, (0.3, 0.7))
+        @test alloc_test(interpolate_at, uₕ, 1e20; outside = :extrapolate) == 0
+        @test alloc_test(interpolate_at, u2, (1e20, -1e20); outside = :extrapolate) == 0
+        Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 5, 5), (true, true, true))
+        u3 = Rₕ(gridspace(Ω3), x -> x[1] * x[2])
+        @test alloc_test(interpolate_at, u3, (1e20, 0.5, -1e20); outside = :extrapolate) == 0
+        @test @inferred(interpolate_at(u3, (1e20, 0.5, -1e20); outside = :extrapolate)) isa
+              Float64
 
         @test @inferred(interpolate_at(uₕ, x0)) isa Float64
         @test @inferred(interpolate_at(uₕ, x0; outside = :clamp)) isa Float64

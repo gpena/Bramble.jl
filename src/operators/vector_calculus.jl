@@ -277,6 +277,7 @@ end
 # `_check_no_alias` uses `mightalias`, so a fresh view over a component's data is caught as
 # well as the component itself. `comps` is the field's components, or `(uₕ,)` for a
 # gradient; the tuple method walks a gradient, 3D curl or strain destination with `map`.
+# Destination leaves may not alias each other either: `_check_dest_distinct` below.
 @inline function _check_dest_alias(vₕ::VectorElement, comps::Tuple)
     map(c -> _check_no_alias(vₕ, c), comps)
     return nothing
@@ -285,6 +286,28 @@ end
     map(v -> _check_dest_alias(v, comps), vₕ)
     return nothing
 end
+
+# No two leaves of a gradient, 3D curl or strain destination may share storage: each leaf
+# is written by its own pass, so with a shared leaf the last pass wins (a gradient), two
+# components are summed into it (a 3D curl), or one half of a shear term is lost (a strain,
+# whose `(i, j)` and `(j, i)` slots hold the two halves before they are averaged). Checked
+# with `mightalias`, so a fresh view is caught while disjoint views of one parent (the
+# leaves of `components(w)`) pass. The destination is flattened into its leaves and every
+# pair compared by tuple recursion, so mixed leaf types stay concrete and nothing allocates.
+@noinline _throw_dest_dest_alias() = throw(ArgumentError("destinations must not alias each other"))
+
+@inline _dest_leaves(vₕ::VectorElement) = (vₕ,)
+@inline _dest_leaves(::Tuple{}) = ()
+@inline _dest_leaves(t::Tuple) = (_dest_leaves(first(t))..., _dest_leaves(Base.tail(t))...)
+
+@inline _check_distinct_leaves(::Tuple{}) = nothing
+@inline function _check_distinct_leaves(t::Tuple)
+    a = parent(first(t))
+    map(b -> Base.mightalias(a, parent(b)) && _throw_dest_dest_alias(), Base.tail(t))
+    return _check_distinct_leaves(Base.tail(t))
+end
+
+@inline _check_dest_distinct(dest) = _check_distinct_leaves(_dest_leaves(dest))
 
 # --- Divergence ---------------------------------------------------------------------- #
 
@@ -430,7 +453,7 @@ and in 3D the three-component field
 curl, and asking for one is an error rather than a zero.
 
 `curlₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
-allocates nothing. No destination may alias a component of `uₕ`.
+allocates nothing. No destination may alias a component of `uₕ` or another destination.
 [`curl₊ₕ`](@ref) is the forward twin.
 
 `∇ₕ × uₕ` is the same call written with `×` (`LinearAlgebra.cross`) in place of the
@@ -506,6 +529,7 @@ function _curl!(vₕ::VectorElement, uₕ, dir, op::String)
 end
 
 function _curl!(vₕ::NTuple{3, VectorElement}, uₕ, dir, op::String)
+    _check_dest_distinct(vₕ)
     comps = _field_components(uₕ)
     Wₕ = _field_space(uₕ)
     Ωₕ = mesh(Wₕ)
@@ -831,7 +855,7 @@ takes it, its components on one mesh.
 `ε_ii` sits on the face centre a backward difference along `xᵢ` alone reaches; `ε_ij`
 (`i != j`) sits on the edge centre the two averages bring the two halves of the shear term
 to. The result is a `D`-by-`D` nested tuple of grid functions, symmetric by construction:
-`εₕ(uₕ)[i][j] === εₕ(uₕ)[j][i]`.
+`εₕ(uₕ)[i][j]` and `εₕ(uₕ)[j][i]` are separate grid functions holding the same values.
 
 [`εₕ!`](@ref) writes into a preallocated `D`-by-`D` nested tuple of destinations instead, and
 allocates nothing.
@@ -858,7 +882,7 @@ so it composes.
 
 `dest[i][j]` and `dest[j][i]` end up holding the same values for `i != j` (`εₕ` is symmetric
 by construction); both are written, so either may be read. No destination may alias a
-component of `uₕ`.
+component of `uₕ` or another destination.
 """
 function εₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     comps = _field_components(uₕ)
@@ -872,6 +896,7 @@ function εₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     _check_field_grid(comps)
     _check_dest_grid(dest, first(comps))
     _check_dest_alias(dest, comps)
+    _check_dest_distinct(dest)
     Ωₕ = mesh(Wₕ)
     dims = npoints(Ωₕ, Tuple)
     _strain_rows!(execution_policy(Wₕ), dest, comps, Ωₕ, dims, Val(D), Val(D))
@@ -956,7 +981,7 @@ const ∇cₕ = Dcₕ
 The in-place form of [`∇cₕ`](@ref): the centered gradient of `uₕ`, written into `dest` --
 a grid function in 1D, a `D`-tuple of them above, the shape `∇cₕ` returns.
 
-Allocates nothing. No destination may alias `uₕ`.
+Allocates nothing. No destination may alias `uₕ` or another destination.
 """
 function ∇cₕ!(dest, uₕ::VectorElement)
     _check_centered_host(dest, "∇cₕ!")
@@ -964,6 +989,7 @@ function ∇cₕ!(dest, uₕ::VectorElement)
     D = dim(Ωₕ)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇cₕ!")
+    _check_dest_distinct(outs)
     _check_dest_grid(dest, uₕ)
     _check_dest_alias(dest, (uₕ,))
     _centered_gradient!(
@@ -1045,7 +1071,7 @@ and in 3D the three-component field
 curl, and asking for one is an `ArgumentError`.
 
 `curlcₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
-allocates nothing. No destination may alias a component of `uₕ`.
+allocates nothing. No destination may alias a component of `uₕ` or another destination.
 
 `∇cₕ × uₕ === curlcₕ(uₕ)`.
 
@@ -1082,7 +1108,7 @@ relocates the shear terms. `uₕ` is spelled as for [`divcₕ`](@ref). The resul
 by construction: `dest[i][j]` and `dest[j][i]` hold the same values.
 
 `εcₕ!` writes into a preallocated `D`-by-`D` nested tuple and allocates nothing.
-No destination may alias a component of `uₕ`.
+No destination may alias a component of `uₕ` or another destination.
 
 See also: [`εₕ`](@ref), [`∇cₕ`](@ref), [`divcₕ`](@ref)
 """
@@ -1105,6 +1131,7 @@ function εcₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     _check_field_grid(comps)
     _check_dest_grid(dest, first(comps))
     _check_dest_alias(dest, comps)
+    _check_dest_distinct(dest)
     _centered_strain_rows!(
         execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Centered(),
         Val(D), Val(D)
@@ -1205,7 +1232,7 @@ const ∇̃ₕ = D̃ₕ
 The in-place form of [`∇̃ₕ`](@ref): the tilde gradient of `uₕ`, written into `dest` -- a
 grid function in 1D, a `D`-tuple of them above, the shape `∇̃ₕ` returns.
 
-Allocates nothing. No destination may alias `uₕ`.
+Allocates nothing. No destination may alias `uₕ` or another destination.
 """
 function ∇̃ₕ!(dest, uₕ::VectorElement)
     _check_star_host(dest, "∇̃ₕ!")
@@ -1213,6 +1240,7 @@ function ∇̃ₕ!(dest, uₕ::VectorElement)
     D = dim(Ωₕ)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇̃ₕ!")
+    _check_dest_distinct(outs)
     _check_dest_grid(dest, uₕ)
     _check_dest_alias(dest, (uₕ,))
     _star_gradient!(execution_policy(space(uₕ)), outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), Val(D))
@@ -1290,7 +1318,7 @@ and in 3D the three-component field
 no 1D curl, and asking for one is an `ArgumentError`.
 
 `curl̃ₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
-allocates nothing. No destination may alias a component of `uₕ`.
+allocates nothing. No destination may alias a component of `uₕ` or another destination.
 
 `∇̃ₕ × uₕ === curl̃ₕ(uₕ)`.
 
@@ -1390,7 +1418,7 @@ the last slice of its direction. The result is symmetric by construction: `dest[
 `dest[j][i]` hold the same values.
 
 `ε₊ₕ!` writes into a preallocated `D`-by-`D` nested tuple and allocates nothing.
-No destination may alias a component of `uₕ`.
+No destination may alias a component of `uₕ` or another destination.
 
 See also: [`εₕ`](@ref), [`∇₊ₕ`](@ref), [`div₊ₕ`](@ref)
 """
@@ -1413,6 +1441,7 @@ function ε₊ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     _check_field_grid(comps)
     _check_dest_grid(dest, first(comps))
     _check_dest_alias(dest, comps)
+    _check_dest_distinct(dest)
     _forward_strain_rows!(
         execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Val(D), Val(D)
     )
@@ -1502,7 +1531,7 @@ end
 The in-place form of [`∇̽ₕ`](@ref): the cross-weighted gradient of `uₕ`, written into
 `dest` -- a grid function in 1D, a `D`-tuple of them above, the shape `∇̽ₕ` returns.
 
-Allocates nothing. No destination may alias `uₕ`.
+Allocates nothing. No destination may alias `uₕ` or another destination.
 """
 function ∇̽ₕ!(dest, uₕ::VectorElement)
     _check_centered_host(dest, "∇̽ₕ!")
@@ -1510,6 +1539,7 @@ function ∇̽ₕ!(dest, uₕ::VectorElement)
     D = dim(Ωₕ)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇̽ₕ!")
+    _check_dest_distinct(outs)
     _check_dest_grid(dest, uₕ)
     _check_dest_alias(dest, (uₕ,))
     _centered_gradient!(
@@ -1578,7 +1608,7 @@ and in 3D the three-component field
 There is no 1D curl, and asking for one is an `ArgumentError`.
 
 `curl̽ₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
-allocates nothing. No destination may alias a component of `uₕ`.
+allocates nothing. No destination may alias a component of `uₕ` or another destination.
 
 `∇̽ₕ × uₕ === curl̽ₕ(uₕ)`.
 
@@ -1616,7 +1646,7 @@ average relocates the shear terms. `uₕ` is spelled as for [`div̽ₕ`](@ref). 
 symmetric by construction: `dest[i][j]` and `dest[j][i]` hold the same values.
 
 `ε̽ₕ!` writes into a preallocated `D`-by-`D` nested tuple and allocates nothing.
-No destination may alias a component of `uₕ`.
+No destination may alias a component of `uₕ` or another destination.
 
 See also: [`εcₕ`](@ref), [`∇̽ₕ`](@ref), [`div̽ₕ`](@ref)
 """
@@ -1639,6 +1669,7 @@ function ε̽ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     _check_field_grid(comps)
     _check_dest_grid(dest, first(comps))
     _check_dest_alias(dest, comps)
+    _check_dest_distinct(dest)
     _centered_strain_rows!(
         execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), CrossWeighted(),
         Val(D), Val(D)

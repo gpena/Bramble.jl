@@ -123,6 +123,42 @@ const SYMBOLS = (:x, :y, :z)
             "the stencil direction must be between 1 and 1, got 2") Mcᵧ(uₕ1)
         @test_throws ArgumentError Mc₂(uₕ2)
         @test_throws ArgumentError Mᵧ!(similar(uₕ1), uₕ1)
+        # the matrix forms on spaces and meshes, which reached a raw `BoundsError` before
+        # (gpena/Bramble.jl#624), and the symbolic nodes, which built and failed on assembly
+        for (_, aliases) in FAMILIES
+            @test_throws ArgumentError aliases[2](Wₕ1)
+            @test_throws ArgumentError aliases[2](Ωₕ1)
+            @test_throws ArgumentError aliases[3](Wₕ2)
+            @test_throws ArgumentError aliases[3](Ωₕ2)
+        end
+        @test_throws ArgumentError(
+            "the stencil direction must be between 1 and 1, got 2") Mᵧ(Wₕ1)
+        @test_throws ArgumentError(
+            "the stencil direction must be between 1 and 2, got 3") D₋₂(Ωₕ2)
+        @test_throws ArgumentError(
+            "the stencil direction must be between 1 and 2, got 3") Dc₂(Wₕ2)
+        @test_throws ArgumentError(
+            "the stencil direction must be between 1 and 2, got 3") D̽₂(Ωₕ2)
+        # a 1D mesh too short for a centered stencil still names the direction first
+        Ωₕ1s = mesh(domain(interval(0.0, 1.0)), 2, false)
+        @test_throws ArgumentError(
+            "the stencil direction must be between 1 and 1, got 2") Dcᵧ(Ωₕ1s)
+        @test_throws ArgumentError(
+            "the stencil direction must be between 1 and 1, got 2") D̽ᵧ(Ωₕ1s)
+        @test_throws ArgumentError Mcᵧ(Wₕ1)
+        @test_throws ArgumentError Mcᵧ(Ωₕ1)
+        @test_throws ArgumentError Mc₂(Wₕ2)
+        @test_throws ArgumentError Mc₂(Ωₕ2)
+        vₕ1 = Bramble.test_function(Wₕ1)
+        @test_throws ArgumentError(
+            "the stencil direction must be between 1 and 1, got 2") D₋ᵧ(vₕ1)
+        # `diff₋`/`diff₊` have no symbolic node, so the loop skips the first two families
+        for (_, aliases) in FAMILIES[3:end]
+            @test_throws ArgumentError aliases[2](vₕ1)
+        end
+        # a valid direction still builds the matrix it did
+        @test size(D₋ₓ(Wₕ1)) == (16, 16)
+        @test Mᵧ(Wₕ2) == Bramble.stencil_matrix(Wₕ2, Bramble.BackwardAvgOp{2}())
     end
 
     @testset "Type stability: Int and Symbol entries" begin

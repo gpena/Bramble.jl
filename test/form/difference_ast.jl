@@ -155,6 +155,13 @@ using Bramble:
         @test g_tuple isa NTuple{2, Bramble.GridFunctionScale}
         @test g_tuple[1].grid_function === kx_elem
         @test g_tuple[2].grid_function === ky_elem
+        @test @inferred((kx_elem, ky_elem) * ∇ₕ(id)) isa NTuple{2, Bramble.GridFunctionScale}
+
+        # A coefficient tuple of the wrong length throws at the product
+        @test_throws DimensionMismatch (kx_elem,) * ∇ₕ(id)
+        @test_throws DimensionMismatch (kx_elem, ky_elem, k_elem) * ∇ₕ(id)
+        @test_throws DimensionMismatch () * ∇ₕ(id)
+        @test_throws r"3 coefficients for 2 operators" (1.0, 2.0, 3.0) * ∇ₕ(id)
 
         # Assembly correctness
         a_scaled = form(Wₕ, Wₕ, (u, v) -> inner₊(k_elem * ∇ₕ(u), ∇ₕ(v)))

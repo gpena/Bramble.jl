@@ -1041,6 +1041,7 @@ Reaches one point either side, so both end rows are empty and the mesh needs at 
 points along the direction.
 """
 function centered_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
+    1 <= DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIM, dim(Ωₕ))
     n = npoints(Ωₕ(DIM))
     n >= 3 || _throw_centered_too_few_points(DIM, n)
 
@@ -1058,6 +1059,7 @@ far side, row 1 agrees with [`D₊ₓ`](@ref)`(Ωₕ, dim_val)` and row `n` with
 cross-weighting. The mesh still needs at least three points along the direction.
 """
 function cross_weighted_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
+    1 <= DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIM, dim(Ωₕ))
     n = npoints(Ωₕ(DIM))
     n >= 3 || _throw_centered_too_few_points(DIM, n)
 
@@ -1190,8 +1192,13 @@ end
         op::BackwardDifference{D, Dim}, space, I::CartesianIndex{D}
 ) where {D, Dim}
     h = spacing(mesh(space), I, Dim)
-    mask = I[Dim] == 1 ? 0 : 1
-    return (mask / h, -mask / h)
+    # select, not `mask / h`: a collapsed axis has h == 0 and only edge points (#622)
+    if I[Dim] == 1
+        z = zero(inv(h))
+        return (z, z)
+    end
+    c = inv(h)
+    return (c, -c)
 end
 
 @inline function _stencil_weights(
@@ -1199,8 +1206,12 @@ end
 ) where {D, Dim}
     m = mesh(space)
     h = forward_spacing(m, I, Dim)
-    mask = I[Dim] == npoints(m, Tuple)[Dim] ? 0 : 1
-    return (mask / h, -mask / h)
+    if I[Dim] == npoints(m, Tuple)[Dim]
+        z = zero(inv(h))
+        return (z, z)
+    end
+    c = inv(h)
+    return (c, -c)
 end
 
 # ==============================================================================
@@ -1329,8 +1340,13 @@ end
 ) where {D, Dim}
     m = mesh(space)
     # no neighbour on one side at either end
-    mask = (I[Dim] == 1 || I[Dim] == npoints(m, Tuple)[Dim]) ? 0 : 1
-    c = mask / (spacing(m, I, Dim) + forward_spacing(m, I, Dim))
+    s = spacing(m, I, Dim) + forward_spacing(m, I, Dim)
+    edge = I[Dim] == 1 || I[Dim] == npoints(m, Tuple)[Dim]
+    if edge
+        z = zero(inv(s))
+        return (z, z)
+    end
+    c = inv(s)
     return (c, -c)
 end
 
@@ -1338,9 +1354,13 @@ end
         op::StarDifference{D, Dim}, space, I::CartesianIndex{D}
 ) where {D, Dim}
     m = mesh(space)
-    mask = I[Dim] == npoints(m, Tuple)[Dim] ? 0 : 1
-    # the averaged spacing, which is what D̃ divides by
-    c = 2 * mask / (spacing(m, I, Dim) + forward_spacing(m, I, Dim))
+    s = spacing(m, I, Dim) + forward_spacing(m, I, Dim)
+    # the averaged spacing, which is what D̃ divides by; `2 / s` as in `_star_weight`
+    if I[Dim] == npoints(m, Tuple)[Dim]
+        z = zero(2 / s)
+        return (z, z)
+    end
+    c = 2 / s
     return (c, -c)
 end
 
@@ -1361,9 +1381,13 @@ end
     if I[Dim] == 1
         # No point behind the first one: D̽ₕ has no truncated-boundary convention of its
         # own, so it collapses to the one-sided difference the near side still gives,
-        # D₊(u)_1 = (u_2 - u_1)/h_1 (gpena/Bramble.jl#183).
-        a = inv(spacing(m, I, Dim))
-        return (a, -a, zero(a))
+        # D₊(u)_1 = (u_2 - u_1)/h_1 (gpena/Bramble.jl#183). A one-point axis has h_1 == 0
+        # and no neighbour at all, so the weights are zero there (#622).
+        h = spacing(m, I, Dim)
+        a = inv(h)
+        z = zero(a)
+        npoints(m, Tuple)[Dim] == 1 && return (z, z, z)
+        return (a, -a, z)
     elseif I[Dim] == npoints(m, Tuple)[Dim]
         # No point past the last one: collapses to D₋(u)_n = (u_n - u_{n-1})/h_n.
         b = inv(spacing(m, I, Dim))

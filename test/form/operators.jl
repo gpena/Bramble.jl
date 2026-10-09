@@ -95,13 +95,21 @@ const _ORIGIN_2D = (0, 0)
 
     @testset "Averages" begin
         @testset "Directional nodes" begin
+            # `z` needs a third axis; on the 2D `id` the node refuses it (gpena/Bramble.jl#624)
+            Ω3 = mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 4), (true, false, true)
+            )
+            id3 = IdentityOperator(gridspace(Ω3))
+            @test_throws ArgumentError(
+                "the stencil direction must be between 1 and 2, got 3") M₂(id)
+            @test_throws ArgumentError M₊₂(id)
             for (op, T, dim) in (
                 (Mₓ(id), BackwardAverage, 1),
                 (M₊ₓ(id), ForwardAverage, 1),
                 (Mᵧ(id), BackwardAverage, 2),
                 (M₊ᵧ(id), ForwardAverage, 2),
-                (M₂(id), BackwardAverage, 3),
-                (M₊₂(id), ForwardAverage, 3)
+                (M₂(id3), BackwardAverage, 3),
+                (M₊₂(id3), ForwardAverage, 3)
             )
                 @test op isa T
                 @test typeof(op).parameters[2] == dim
@@ -261,11 +269,14 @@ const _ORIGIN_2D = (0, 0)
         end
 
         @testset "nD inner₊ direction inference" begin
-            for (D, dim) in ((D₋ₓ, 1), (D₋ᵧ, 2), (D₋₂, 3))
-                @test weight(inner₊(D(u2), D(v2))) === InnerPlus{dim}
-                @test weight(inner₊(u2, D(v2))) === InnerPlus{dim}     # the common form
-                @test weight(inner₊(D(u2), v2)) === InnerPlus{dim}
+            # `z` is read on a 3D pair: a 2D one has no third direction to infer
+            u3, v3 = TrialFunction{3}(), TestFunction{3}()
+            for (D, dim, u, v) in ((D₋ₓ, 1, u2, v2), (D₋ᵧ, 2, u2, v2), (D₋₂, 3, u3, v3))
+                @test weight(inner₊(D(u), D(v))) === InnerPlus{dim}
+                @test weight(inner₊(u, D(v))) === InnerPlus{dim}     # the common form
+                @test weight(inner₊(D(u), v)) === InnerPlus{dim}
             end
+            @test_throws ArgumentError D₋₂(u2)
 
             # not restricted to the indexed leaves: a plain trial function reads the
             # direction off the difference exactly as an indexed one does

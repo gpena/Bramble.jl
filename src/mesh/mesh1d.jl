@@ -1288,10 +1288,11 @@ function _refine_indices_fill!(new_points::AbstractVector, old_points, N_old, ba
     return nothing
 end
 
-# The geometric refinement alone, with markers left untouched: shared by both public
-# methods below, neither of which wants the *other*'s marker handling as an intermediate
-# step of its own.
-function _refine_indices!(Ωₕ::Mesh1D)
+# The refined points of `Ωₕ`, filled and checked but not committed, or `nothing` when
+# there is nothing to refine. A midpoint that rounds onto a neighbour in the storage eltype
+# throws here, before any mutation, so a failed refinement leaves the mesh unchanged; a
+# device vector is read once through a host copy.
+function _refined_points(Ωₕ::Mesh1D)
     # Do nothing if the mesh is just a single point.
     if is_collapsed(Ωₕ)
         return nothing
@@ -1313,12 +1314,33 @@ function _refine_indices!(Ωₕ::Mesh1D)
 
     _refine_indices_fill!(new_points, old_points, N_old, backend(Ωₕ))
 
-    # Generate new indices for the refined mesh.
-    new_indices = generate_indices(N_new)
+    if _has_tied_points(_host_array(new_points))
+        a, b = extrema(set(Ωₕ))
+        _throw_refinement_ties(N_new, a, b, eltype(new_points))
+    end
+    return new_points
+end
 
-    # Update the mesh struct with the new indices and points.
-    set_indices!(Ωₕ, new_indices)
+@noinline function _throw_refinement_ties(n, a, b, T)
+    msg = "refining to $n points in [$a, $b] with eltype $T rounds a midpoint onto " *
+          "a neighbouring point; the mesh is left unrefined. Use fewer refinements, a " *
+          "wider interval or a wider eltype"
+    throw(ArgumentError(msg))
+end
+
+# Commit points from `_refined_points`, with new indices to match.
+function _commit_refined_points!(Ωₕ::Mesh1D, new_points)
+    new_points === nothing && return nothing
+    set_indices!(Ωₕ, generate_indices(length(new_points)))
     _set_points_geometry!(Ωₕ, new_points)
+    return nothing
+end
+
+# The geometric refinement alone, with markers left untouched: shared by both public
+# methods below, neither of which wants the *other*'s marker handling as an intermediate
+# step of its own.
+function _refine_indices!(Ωₕ::Mesh1D)
+    _commit_refined_points!(Ωₕ, _refined_points(Ωₕ))
     return nothing
 end
 

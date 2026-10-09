@@ -213,7 +213,7 @@ function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{1}}, x; outside = 
     frac = _interp_cell_frac(Ωₕ, x, outside)
     frac === nothing && return outside
     i, t = frac
-    return (1 - t) * uₕ[i] + t * uₕ[i + 1]
+    return _interp_lerp(uₕ[i], uₕ[i + 1], t)
 end
 
 function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{D}}, x; outside = :error) where {D}
@@ -226,12 +226,55 @@ function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{D}}, x; outside = 
     idx, ts = frac
     li = LinearIndices(indices(Ωₕ))
 
-    acc = zero(promote_type(eltype(uₕ), typeof(first(ts))))
+    T = promote_type(eltype(uₕ), typeof(first(ts)))
+    # Outside the mesh, fold axis by axis instead (#625): see `_interp_fold`.
+    all(t -> zero(t) <= t <= one(t), ts) ||
+        return _interp_fold(uₕ, li, idx, ts, 0, Val(D), T)
+    acc = zero(T)
     # No far corner along a collapsed axis: it has a single point.
     for corner in CartesianIndices(ntuple(d -> 0:min(1, size(li, d) - 1), Val(D)))
         acc += _interp_corner_weight(ts, corner, Val(D)) * uₕ[li[idx + corner]]
     end
     return acc
+end
+
+# One axis of the blend. Inside the cell (`0 <= t <= 1`) the weighted form, as before.
+# Outside it the difference form: once `|t| > 1/eps`, `1 - t` rounds to `-t` and the two
+# weighted terms cancel, so a constant field extrapolated far out returned zero (#625).
+@inline function _interp_lerp(a, b, t)
+    return zero(t) <= t <= one(t) ? (1 - t) * a + t * b : a + t * (b - a)
+end
+
+# The `2ᴰ` corner values folded axis by axis in the difference basis: along axis `d`,
+# `near + tᵈ * diff`, where `near` folds the axes below `d` on the near face and `diff`
+# folds the corner differences across axis `d`. Every subtraction is between corner
+# values (or differences of them), never between values already extrapolated: those are
+# huge far out, and their difference rounds away (#625). A constant field has every
+# difference exactly 0, so it comes back exact, with no `∏ tᵈ` to overflow to `Inf`.
+# `mask` has bit `d - 1` set for each axis `d` already differenced. A collapsed axis has
+# no far corner and is skipped. Recursion on `Val`, so it allocates nothing.
+@inline function _interp_fold(uₕ, li, idx, ts, mask, ::Val{0}, ::Type{T}) where {T}
+    return _interp_mixed_diff(uₕ, li, idx, zero(idx), mask, T)
+end
+
+@inline function _interp_fold(uₕ, li, idx, ts, mask, ::Val{d}, ::Type{T}) where {d, T}
+    size(li, d) == 1 && return _interp_fold(uₕ, li, idx, ts, mask, Val(d - 1), T)
+    near = _interp_fold(uₕ, li, idx, ts, mask, Val(d - 1), T)
+    diff = _interp_fold(uₕ, li, idx, ts, mask | (1 << (d - 1)), Val(d - 1), T)
+    return near + ts[d] * diff
+end
+
+# The mixed difference of the corner values across every axis in `mask`, at the corner
+# `idx + c`: `mask == 0` is that corner's own value.
+function _interp_mixed_diff(
+        uₕ, li, idx, c::CartesianIndex{D}, mask, ::Type{T}
+)::T where {D, T}
+    mask == 0 && return convert(T, uₕ[li[idx + c]])
+    k = trailing_zeros(mask) + 1
+    rest = mask & (mask - 1)
+    far = c + CartesianIndex(ntuple(j -> j == k ? 1 : 0, Val(D)))
+    return _interp_mixed_diff(uₕ, li, idx, far, rest, T) -
+           _interp_mixed_diff(uₕ, li, idx, c, rest, T)
 end
 
 # --- The corner blend, in one place ------------------------------------------------- #
@@ -536,7 +579,9 @@ the corner weights of the source cell [`locate_cell`](@ref) places that destinat
 and a row that returns a constant regardless of `src` cannot be written as a weighted
 combination of `src`'s own entries unless that constant is exactly zero. Passing a `Number`
 throws, naming this. Agrees entry-for-entry with pointwise `interpolate_at` under each of
-the three policies it does accept.
+the three policies it does accept, except far outside the domain under `:extrapolate`:
+once a cell fraction `t` passes `1/eps`, `1 - t` rounds to `-t` and `P`'s corner weights
+cancel, while `interpolate_at` blends differences there and keeps a constant constant.
 
 Unlike [`D₋ₓ`](@ref)`(Wₕ)` and the other operator matrices, this is always a
 `SparseMatrixCSC`, regardless of either space's own backend `matrix_type`. Those matrices

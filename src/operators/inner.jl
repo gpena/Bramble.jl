@@ -222,11 +222,12 @@ end
 
 @inline _inner(w::AbstractInnerProduct, left::LazyOp, right::LazyOp, markers) = _restrict_by_markers(_product(w, left, right), markers)
 
-# `parent` is Julia's own name for the storage a VectorElement delegates to; see
-# `src/space/vectorelement.jl`.
 @inline _as_source(l::Function, ::Val{D}) where {D} = SourceFunction{D, typeof(l)}(l)
 @inline _as_source(l::Number, ::Val{D}) where {D} = source_number(l, Val(D))
-@inline _as_source(l::VectorElement, ::Val{D}) where {D} = SourceVector{D, typeof(parent(l))}(parent(l))
+# The VectorElement itself, not its `parent` storage: its space names the mesh it lives on,
+# which `form` checks against the leaf it is read on (`_check_source_meshes`,
+# assembly/linear.jl). It is an AbstractVector, so `op.vec[lin_idx]` reads it unchanged.
+@inline _as_source(l::VectorElement, ::Val{D}) where {D} = SourceVector{D, typeof(l)}(l)
 @inline _as_source(d::DiracSource{D}, ::Val{D}) where {D} = d
 
 @inline function _linear_source(::W, l, r::LazyOp{D}) where {W <: AbstractInnerProduct, D}

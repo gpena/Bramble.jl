@@ -227,6 +227,33 @@ using ..TestUtils: alloc_test, @test_allocs
             end
         end
 
+        # εₕ off a uniform mesh (#617): each off-diagonal entry matches the symmetrised
+        # oracle, and `[i][j]` and `[j][i]` are separate grid functions holding equal values.
+        @testset "εₕ on a non-uniform mesh (#617)" begin
+            nu_cases = (
+                (mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false)),
+                    vc_cases[1][4]),
+                (mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 4, 6),
+                        (false, false, true)), vc_cases[2][4])
+            )
+            for (Ωₕ, fs) in nu_cases
+                D = length(fs)
+                xs = Bramble.host_points(Ωₕ)[1]
+                @test !(diff(xs) ≈ fill(xs[2] - xs[1], length(xs) - 1)) # really non-uniform
+                scalars = ntuple(k -> Rₕ(gridspace(Ωₕ), fs[k]), D)
+                ε = εₕ(Rₕ(gridspace(Ωₕ, Val(D)), fs))
+                for i in 1:D, j in 1:D
+
+                    i == j && continue
+                    oracle = 0.5 .* (parent(Mm[i](Dm[j](scalars[i]))) .+
+                                     parent(Mm[j](Dm[i](scalars[j]))))
+                    @test parent(ε[i][j]) ≈ oracle
+                    @test parent(ε[i][j]) == parent(ε[j][i])
+                    @test ε[i][j] !== ε[j][i]
+                end
+            end
+        end
+
         @testset "Rejected inputs" begin
             Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
             W2 = gridspace(Ω2)
