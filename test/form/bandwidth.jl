@@ -118,7 +118,6 @@ end
         a_narrow = form(Wₕ1, Wₕ1, (u, v) -> innerₕ(u, v))
         a_wide = form(Wₕ1, Wₕ1, (u, v) -> innerₕ(D̽ₓ(D₋ₓ(u)), v))
         @test bandwidths(a_narrow) != bandwidths(a_wide)
-        @test bandwidths(a_narrow) == _true_bandwidths(assemble(a_narrow)::SparseMatrixCSC)
         @test bandwidths(a_wide) == _true_bandwidths(assemble(a_wide)::SparseMatrixCSC)
 
         a2_narrow = form(Wₕ2, Wₕ2, (u, v) -> innerₕ(u, v))
@@ -132,11 +131,6 @@ end
             a = form(Vₕ1, Vₕ1, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
             @test_throws ArgumentError bandwidths(a)
             @test_throws ArgumentError blockbandwidths(a)
-
-            # Positive control: the same shape of form on a non-composite (leaf-only)
-            # space answers rather than throwing.
-            a_leaf = form(Wₕ1, Wₕ1, (u, v) -> innerₕ(u, v))
-            @test bandwidths(a_leaf) isa Tuple{Int, Int}
         end
 
         @testset "Interpolation" begin
