@@ -118,7 +118,11 @@ four without claiming to be a mesh (see its own docstring).
 ) where {Dim}
     h = _axis_spacing(Ωₕ, I, Dim)
     # select, not `mask / h`: a collapsed axis has h == 0 and only edge points (#622)
-    c = I[Dim] == 1 ? zero(inv(h)) : inv(h)
+    if I[Dim] == 1
+        z = zero(inv(h))
+        return (z, z)
+    end
+    c = inv(h)
     return (c, -c)
 end
 
@@ -127,7 +131,11 @@ end
 ) where {Dim}
     n = _axis_npoints(Ωₕ, Dim)
     h = _axis_forward_spacing(Ωₕ, I, Dim)
-    c = I[Dim] == n ? zero(inv(h)) : inv(h)
+    if I[Dim] == n
+        z = zero(inv(h))
+        return (z, z)
+    end
+    c = inv(h)
     return (c, -c)
 end
 
@@ -136,7 +144,11 @@ end
 ) where {Dim}
     n = _axis_npoints(Ωₕ, Dim)
     s = _axis_spacing(Ωₕ, I, Dim) + _axis_forward_spacing(Ωₕ, I, Dim)
-    c = I[Dim] == n ? zero(2 / s) : 2 / s
+    if I[Dim] == n
+        z = zero(2 / s)
+        return (z, z)
+    end
+    c = 2 / s
     return (c, -c)
 end
 
@@ -145,7 +157,11 @@ end
 ) where {Dim}
     n = _axis_npoints(Ωₕ, Dim)
     s = _axis_spacing(Ωₕ, I, Dim) + _axis_forward_spacing(Ωₕ, I, Dim)
-    c = (I[Dim] == 1 || I[Dim] == n) ? zero(inv(s)) : inv(s)
+    if I[Dim] == 1 || I[Dim] == n
+        z = zero(inv(s))
+        return (z, z)
+    end
+    c = inv(s)
     return (c, -c)
 end
 
@@ -155,8 +171,10 @@ end
     n = _axis_npoints(Ωₕ, Dim)
     if I[Dim] == 1
         h = _axis_spacing(Ωₕ, I, Dim)
-        a = n == 1 ? zero(inv(h)) : inv(h)
-        return (a, -a, zero(a))
+        a = inv(h)
+        z = zero(a)
+        n == 1 && return (z, z, z)
+        return (a, -a, z)
     elseif I[Dim] == n
         b = inv(_axis_spacing(Ωₕ, I, Dim))
         return (zero(b), b, -b)

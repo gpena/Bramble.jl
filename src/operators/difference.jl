@@ -1193,7 +1193,11 @@ end
 ) where {D, Dim}
     h = spacing(mesh(space), I, Dim)
     # select, not `mask / h`: a collapsed axis has h == 0 and only edge points (#622)
-    c = I[Dim] == 1 ? zero(inv(h)) : inv(h)
+    if I[Dim] == 1
+        z = zero(inv(h))
+        return (z, z)
+    end
+    c = inv(h)
     return (c, -c)
 end
 
@@ -1202,7 +1206,11 @@ end
 ) where {D, Dim}
     m = mesh(space)
     h = forward_spacing(m, I, Dim)
-    c = I[Dim] == npoints(m, Tuple)[Dim] ? zero(inv(h)) : inv(h)
+    if I[Dim] == npoints(m, Tuple)[Dim]
+        z = zero(inv(h))
+        return (z, z)
+    end
+    c = inv(h)
     return (c, -c)
 end
 
@@ -1334,7 +1342,11 @@ end
     # no neighbour on one side at either end
     s = spacing(m, I, Dim) + forward_spacing(m, I, Dim)
     edge = I[Dim] == 1 || I[Dim] == npoints(m, Tuple)[Dim]
-    c = edge ? zero(inv(s)) : inv(s)
+    if edge
+        z = zero(inv(s))
+        return (z, z)
+    end
+    c = inv(s)
     return (c, -c)
 end
 
@@ -1344,7 +1356,11 @@ end
     m = mesh(space)
     s = spacing(m, I, Dim) + forward_spacing(m, I, Dim)
     # the averaged spacing, which is what D̃ divides by; `2 / s` as in `_star_weight`
-    c = I[Dim] == npoints(m, Tuple)[Dim] ? zero(2 / s) : 2 / s
+    if I[Dim] == npoints(m, Tuple)[Dim]
+        z = zero(2 / s)
+        return (z, z)
+    end
+    c = 2 / s
     return (c, -c)
 end
 
@@ -1368,8 +1384,10 @@ end
         # D₊(u)_1 = (u_2 - u_1)/h_1 (gpena/Bramble.jl#183). A one-point axis has h_1 == 0
         # and no neighbour at all, so the weights are zero there (#622).
         h = spacing(m, I, Dim)
-        a = npoints(m, Tuple)[Dim] == 1 ? zero(inv(h)) : inv(h)
-        return (a, -a, zero(a))
+        a = inv(h)
+        z = zero(a)
+        npoints(m, Tuple)[Dim] == 1 && return (z, z, z)
+        return (a, -a, z)
     elseif I[Dim] == npoints(m, Tuple)[Dim]
         # No point past the last one: collapses to D₋(u)_n = (u_n - u_{n-1})/h_n.
         b = inv(spacing(m, I, Dim))
