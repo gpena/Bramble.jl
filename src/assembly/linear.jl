@@ -820,11 +820,13 @@ function _sweep_parallel!(
 
     if nbands != 0
         rest = Base.front(inds)
-        # One pass over every band when nothing can collide; see `_sweep_bilinear!`.
-        bands = prod(strides) == 1 ? (1:1:nbands,) : (1:2:nbands, 2:2:nbands)
-        for bidx in bands
+        # One pass over every band when nothing can collide, else odd bands then even; the
+        # colour is a `StepRange` either way (see `_sweep_bilinear!`).
+        step = prod(strides) == 1 ? 1 : 2
+        for start in 1:step
             _sweep_linear_band_colour!(
-                policy, b, sp, bound, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
+                policy, b, sp, bound, ax, start:step:nbands, nbands, rest, lin_indices,
+                mesh_markers, offset, α
             )
         end
         return b

@@ -1140,16 +1140,18 @@ function _sweep_bilinear!(
         rest = Base.front(inds)
         # A term reaching only its own point cannot collide, so one pass takes every band:
         # contiguous slabs without the second barrier, which such a term would otherwise
-        # pay for nothing (it doubled `assemble_parallel!`'s task allocations).
-        bands = prod(strides) == 1 ? (1:1:nbands,) : (1:2:nbands, 2:2:nbands)
-        for bidx in bands
+        # pay for nothing (it doubled `assemble_parallel!`'s task allocations). The colour
+        # is a `StepRange` either way, odd bands before even, so its type never depends on
+        # the runtime test (a tuple of one or two ranges would be a Union, #549).
+        step = prod(strides) == 1 ? 1 : 2
+        for start in 1:step
             _sweep_band_colour!(
                 policy,
                 A,
                 sp,
                 bound,
                 ax,
-                bidx,
+                start:step:nbands,
                 nbands,
                 rest,
                 lin_indices,
