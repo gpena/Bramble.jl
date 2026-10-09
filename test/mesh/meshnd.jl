@@ -527,6 +527,18 @@ using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
             Ωₕ_pt = mesh(Ω_pt, (5, 5, 5), (true, true, true); backend = backend())
             @test npoints(Ωₕ_pt, Tuple) == (1, 1, 1)
             @test point(Ωₕ_pt, (1, 1, 1)) == (2.0, 3.0, 4.0)
+
+            # y collapses in Float32 storage only: the index grid and the submesh agree on
+            # one point, and the mesh matches a set-collapsed one on the same backend.
+            Ω_f32 = create_test_nd_domain(((0.0, 1.0), (1.0e6, 1.0e6 + 0.01)))
+            Ωₕ_f32 = mesh(Ω_f32, (4, 4), (true, true); backend = backend(Float32))
+            @test npoints(Ωₕ_f32(2)) == 1
+            @test npoints(Ωₕ_f32) == npoints(Ωₕ_f32(1)) == 4
+            Ω_set = create_test_nd_domain(((0.0, 1.0), (1.0e6, 1.0e6)))
+            Ωₕ_set = mesh(Ω_set, (4, 4), (true, true); backend = backend(Float32))
+            @test npoints(Ωₕ_f32, Tuple) == npoints(Ωₕ_set, Tuple) == (4, 1)
+            @test isequal(points(Ωₕ_f32(1)), points(Ωₕ_set(1)))
+            @test isequal(points(Ωₕ_f32(2)), points(Ωₕ_set(2)))
         end
 
         @testset "Collapsed dimensions, one layer further" begin

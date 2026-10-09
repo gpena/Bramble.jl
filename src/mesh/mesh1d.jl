@@ -329,7 +329,8 @@ end
 function _locate_uniform(::DeviceLocality, Ωₕ::_Mesh1DLike, x::Real, n::Int)
     _mesh_version(Ωₕ) == 0 || return _locate_search(Ωₕ, x, n)
 
-    a, b = extrema(_st(Ωₕ).set)
+    # the fill's own arithmetic: endpoints and step in the storage eltype
+    a, b = convert.(eltype(Ωₕ), extrema(_st(Ωₕ).set))
     x <= a && return 1
     (x >= b || isnan(x)) && return n - 1
     h = (b - a) / (n - 1)
@@ -970,11 +971,15 @@ _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_
 
     # Check if the point distribution should be uniform.
     if unif
-        # For a uniform grid, calculate the constant step size `h`.
-        h = (b - a) / (npts - 1)
+        # For a uniform grid, calculate the constant step size `h`. The arithmetic runs in
+        # the storage eltype, as the device kernel's does: a narrower set eltype would
+        # round neighbours onto one value that `eltype(x)` could keep apart.
+        S = eltype(x)
+        aₛ, bₛ = convert(S, a), convert(S, b)
+        h = (bₛ - aₛ) / (npts - 1)
         # Populate the grid points using an arithmetic progression.
         @simd ivdep for i in eachindex(x)
-            x[i] = a + (i - 1) * h
+            x[i] = aₛ + (i - 1) * h
         end
     else
         # For a non-uniform grid, first generate points in the canonical interval [0, 1].
@@ -1142,6 +1147,29 @@ end
     return nothing
 end
 
+# Whether the axis [a, b] meshes to a single point: its endpoints are equal once stored in
+# the backend's eltype. A Float64 interval narrower than a Float32 ulp is a point in Float32
+# storage; both `_mesh` methods (1D here, nD in meshnd.jl) decide collapse through this.
+@inline function _storage_collapsed(a, b, backend)
+    Tb = eltype(backend)
+    return is_collapsed(convert(Tb, a), convert(Tb, b))
+end
+
+# A uniform fill of more points than [a, b] holds in the storage eltype rounds neighbours
+# onto one value: refuse it, as the non-uniform fill does. One O(n) scan on host; a device
+# vector is read once through a host copy.
+function _check_uniform_distinct(pts, set)
+    _has_tied_points(_host_array(pts)) || return nothing
+    a, b = extrema(set)
+    return _throw_uniform_ties(length(pts), a, b, eltype(pts))
+end
+
+@noinline function _throw_uniform_ties(n, a, b, T)
+    msg = "cannot place $n distinct uniform points in [$a, $b] with eltype $T; use " *
+          "fewer points, a wider interval or a wider eltype"
+    throw(ArgumentError(msg))
+end
+
 # Internal constructor function for creating a 1D mesh.
 function _mesh(
         Ω::Domain{CartesianProduct{1, T}},
@@ -1154,8 +1182,8 @@ function _mesh(
     (; set, markers) = Ω
     n_points, = npts
 
-    # Check if the domain is a single point (topological dimension is 0).
-    is_collapsed = topo_dim(set) == 0
+    # Check if the domain is a single point in the storage eltype.
+    is_collapsed = _storage_collapsed(extrema(set)..., backend)
 
     # If the domain is collapsed, force the number of points to be 1.
     if is_collapsed
@@ -1183,7 +1211,10 @@ function _mesh(
     fused_nonuniform_device = !is_uniform && n_points >= 2 && !(pts isa Array)
 
     if fused_uniform_device
-        a, b = extrema(set)
+        # in the storage eltype, as the host fill does; a device kernel cannot take a
+        # Float64 `a` or `h` on a Float32-only device such as Metal
+        S = eltype(pts)
+        a, b = convert.(S, extrema(set))
         h = (b - a) / (n_points - 1)
         _uniform_mesh1d_init!(
             pts,
@@ -1203,6 +1234,7 @@ function _mesh(
         # alone does not carry.
         _points!(pts, set, is_uniform, backend)
     end
+    is_uniform && n_points >= 2 && _check_uniform_distinct(pts, set)
 
     # Generate the CartesianIndices for the grid.
     idxs = generate_indices(n_points)

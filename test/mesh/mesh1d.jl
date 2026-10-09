@@ -134,6 +134,40 @@ import Base: diff
                 false; backend = backend(Float32))
         end
 
+        @testset "Storage-eltype collapse" begin
+            # The interval is a point in Float32 storage: one point, never five copies of
+            # 1f6 with zero spacings.
+            Ωw = create_test_domain(1.0e6, 1.0e6 + 0.01)
+            for unif in (true, false)
+                Ωf = mesh(Ωw, 5, unif; backend = backend(Float32))
+                @test npoints(Ωf) == 1
+                @test is_collapsed(Ωf)
+                @test points(Ωf) == [1.0f6]
+            end
+            # Float64 storage keeps five distinct points.
+            for unif in (true, false)
+                Ωd = mesh(Ωw, 5, unif; backend = backend())
+                @test npoints(Ωd) == 5
+                @test all(>(0), diff(points(Ωd)))
+            end
+            # Five uniform points do not fit in a 1-ulp interval.
+            @test_throws ArgumentError mesh(create_test_domain(1.0, nextfloat(1.0)), 5, true)
+            # Two do: the endpoints themselves.
+            @test points(mesh(create_test_domain(1.0, nextfloat(1.0)), 2, true)) ==
+                  [1.0, nextfloat(1.0)]
+            # The uniform fill runs in the storage eltype: a Float32 set on Float64
+            # storage gets nine distinct points that Float32 arithmetic would tie.
+            I32 = create_test_domain(1.0f6, 1.0f6 + 0.25f0)
+            Ω64 = mesh(I32, 9, true; backend = backend(Float64))
+            @test eltype(points(Ω64)) == Float64
+            @test npoints(Ω64) == 9 && all(>(0), diff(points(Ω64)))
+            @test points(Ω64)[1] == 1.0e6
+            # GMG coarsening builds such a uniform mesh from a non-uniform fine one.
+            Ω64n = mesh(I32, 17, false; backend = backend(Float64))
+            H = GeometricMeshHierarchy(Ω64n, 2)
+            @test npoints(H[1]) == 9 && all(>(0), diff(points(H[1])))
+        end
+
         @testset "set_points! & set_indices!" begin
             Ω = create_test_domain(0.0, 1.0)
             Ωₕ = mesh(Ω, 3, true; backend = backend()) # [0.0, 0.5, 1.0]
