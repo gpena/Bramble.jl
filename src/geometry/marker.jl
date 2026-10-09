@@ -366,9 +366,15 @@ predicate of `x`.
 A predicate `f` with a one-argument method and no two-argument method is spatial and passes
 through unchanged. Any other predicate is fixed at `t` as `Base.Fix2(f, t)`. So
 `(x, t = 0.0) -> ...` is fixed at `t`, not left at its default. A predicate typed on its
-argument (`(x::NTuple{2, Float64}) -> ...`) or a varargs callable (a `ComposedFunction`, a
-user `Base.Fix2`) has no `Tuple{Any}` method or has a `Tuple{Any, Any}` one, so it is also
+argument (`(x::NTuple{2, Float64}) -> ...`) has no `Tuple{Any}` method, so it is also
 wrapped and must accept `(x, t)`.
+
+A `ComposedFunction` or a `Base.Fix1`/`Base.Fix2` is classified by what it wraps, not by its
+own varargs call method: a composition by its innermost function, which receives every
+argument, and a `Fix` by the function it fixes, with one more argument since the `Fix`
+supplies one itself. So `(>(0.5)) ∘ first` and `Base.Fix1(<, 0.5)` are spatial and pass
+through. A lone `Base.Fix2(isless, 0.5)` is not, as `isless` has no generic two-argument
+method, so it is wrapped like any typed predicate.
 """
 function conditions(edm::EvaluatedDomainMarkers)
     t = edm.evaluation_time
@@ -385,17 +391,30 @@ end
 #
 # Both evaluation paths share `_is_spatial`. Every helper here stays `@inline`, or the fold
 # never reaches the `map` closure in `conditions`.
+#
+# `_accepts(f, Val(N))` asks whether `f` takes `N` arguments. A `ComposedFunction` and a
+# `Fix` are varargs-callable, so they answer for what they wrap: the innermost function of a
+# composition receives every argument, and a `Fix1`/`Fix2` supplies one itself.
+@inline function _accepts(f::F, ::Val{N}) where {F, N}
+    return @inline hasmethod(f, NTuple{N, Any})
+end
+@inline _accepts(c::ComposedFunction, ::Val{N}) where {N} = _accepts(c.inner, Val(N))
+@inline function _accepts(f::Union{Base.Fix1, Base.Fix2}, ::Val{N}) where {N}
+    return _accepts(f.f, Val(N + 1))
+end
+
 @inline function _is_spatial(f::F) where {F}
-    return (@inline hasmethod(f, Tuple{Any})) && !(@inline hasmethod(f, Tuple{Any, Any}))
+    return _accepts(f, Val(1)) && !_accepts(f, Val(2))
 end
 
 @inline _fix_time(f::F, t) where {F} = _is_spatial(f) ? f : Base.Fix2(f, t)
 
-# The `(t, p)` twin of `_fix_time`: classifies the raw predicate, since the `Fix` wrappers
-# are varargs-callable and would always look non-spatial. A 3-argument method wins over a
-# 1-argument one, as the validators route such an `f` here for its `(x, t, p)` method.
+# The `(t, p)` twin of `_fix_time`: classifies the raw predicate, not the `Fix` wrappers
+# built below. A 3-argument method wins over a 1-argument one, as the validators route such
+# an `f` here for its `(x, t, p)` method. The 3-argument test goes through `_accepts` too,
+# or a wrapper (varargs, so it has a `Tuple{Any, Any, Any}` method) would always be fixed.
 @inline function _fix_time_param(f::F, t, p) where {F}
-    is_spatial = _is_spatial(f) && !(@inline hasmethod(f, Tuple{Any, Any, Any}))
+    is_spatial = _is_spatial(f) && !_accepts(f, Val(3))
     return is_spatial ? f : Base.Fix2(Base.Fix{3}(f, p), t)
 end
 
@@ -478,10 +497,12 @@ Return condition markers evaluated at `edm.evaluation_time` and `edm.p`, each a 
 predicate of `x`.
 
 A predicate `f` with a one-argument method and no two- or three-argument method is spatial
-and passes through unchanged. Any other predicate is fixed at `(t, p)` as `x -> f(x, t, p)`,
-so `(x, t = 0, p = 1) -> ...` is fixed at both. An `(x, t)` predicate is not fixed at `t`
-alone, and its wrapper throws a `MethodError` when called; `dirichlet_constraints` and
-`semidiscretize` never send one here, since they route only uniformly `(x, t, p)` conditions
+and passes through unchanged, a `ComposedFunction` or `Base.Fix1`/`Base.Fix2` being judged
+by what it wraps, as in the method above. Any other predicate is fixed at `(t, p)` as
+`x -> f(x, t, p)`, so `(x, t = 0, p = 1) -> ...` is fixed at both. An `(x, t)` predicate is
+not fixed at `t` alone, and its wrapper throws a `MethodError` when called;
+`dirichlet_constraints` and `semidiscretize` never send one here, since they route only
+uniformly `(x, t, p)` conditions
 to this path.
 
 `Base.Fix{N}` generalizes `Base.Fix1`/`Base.Fix2` to insert its fixed value at position `N`

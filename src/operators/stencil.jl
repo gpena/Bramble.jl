@@ -32,7 +32,8 @@ struct Backward <: GridDirection end
 # --- Argument validation shared by every operator ----------------------------------- #
 # Thrown rather than asserted: these check caller arguments, and an @assert reports a
 # size mismatch as an AssertionError, which is not what a caller should have to catch.
-@noinline _throw_stencil_dim_error(dim::Int, D::Int) = throw(ArgumentError("the stencil direction must be between 1 and $D, got $dim"))
+@noinline _throw_stencil_dim_error(
+    dim::Integer, D::Integer) = throw(ArgumentError("the stencil direction must be between 1 and $D, got $dim"))
 
 @noinline _throw_stencil_symbol_error(d::Symbol) = throw(ArgumentError("the stencil direction must be :x, :y or :z, got :$d"))
 

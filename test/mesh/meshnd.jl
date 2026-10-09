@@ -854,6 +854,30 @@ end # Main Testset
         end
     end
 
+    @testset "Overflowing midpoints on a later axis" begin
+        # On Float16 [40000, 60000] the midpoint sum overflows to Inf. Axis 2 overflows
+        # and axis 1 refines cleanly, so the refusal must leave axis 1 unrefined too.
+        I_big = interval(Float16(40000), Float16(60000))
+        Ω = domain(interval(Float16(0), Float16(1)) × I_big)
+        for refine! in (iterative_refinement!, M -> iterative_refinement!(M, markers(Ω)))
+            Ωₕ = mesh(Ω, (3, 3), (true, true))
+            py = copy(points(Ωₕ(2)))
+            err = try
+                refine!(Ωₕ)
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            @test occursin("overflow", sprint(showerror, err))
+            @test npoints(Ωₕ, Tuple) == (3, 3)
+            @test indices(Ωₕ) == CartesianIndices((3, 3))
+            @test points(Ωₕ(1)) == Float16[0, 0.5, 1]
+            @test indices(Ωₕ(1)) == CartesianIndices((3,))
+            @test length(markers(Ωₕ(1))[:boundary]) == 3
+            @test points(Ωₕ(2)) == py
+        end
+    end
+
     WITH_SLOW_TESTS && @testset "Refinement invariants" begin
         @check function check_refinement_invariants_2d(
                 nx = Data.Integers(3, 8), ny = Data.Integers(3, 8)

@@ -139,6 +139,13 @@ const SYMBOLS = (:x, :y, :z)
             "the stencil direction must be between 1 and 2, got 3") Dc₂(Wₕ2)
         @test_throws ArgumentError(
             "the stencil direction must be between 1 and 2, got 3") D̽₂(Ωₕ2)
+        # a non-`Int` integer direction past the dimension names it the same way
+        vₕ2 = Bramble.test_function(Wₕ2)
+        for v in (Val(Int32(3)), Val(UInt(3))), a in (Wₕ2, Ωₕ2, vₕ2)
+
+            @test_throws ArgumentError(
+                "the stencil direction must be between 1 and 2, got 3") D₋(a, v)
+        end
         # a 1D mesh too short for a centered stencil still names the direction first
         Ωₕ1s = mesh(domain(interval(0.0, 1.0)), 2, false)
         @test_throws ArgumentError(

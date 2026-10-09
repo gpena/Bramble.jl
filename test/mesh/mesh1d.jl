@@ -404,6 +404,34 @@ import Base: diff
                 @test Bramble._mesh_version(Ωₜ) == version_before
             end
 
+            # On Float16 [40000, 60000] the sum `a + b` in the midpoint fill overflows to
+            # Inf. Both forms refuse with an overflow message, not the tie message, and
+            # leave points, indices, markers and version unchanged.
+            Ω_big = create_test_domain(Float16(40000), Float16(60000))
+            dm_big = markers(Ω_big)
+            for refine! in (iterative_refinement!, M -> iterative_refinement!(M, dm_big))
+                Ωₒ = mesh(Ω_big, 3, true; backend = backend(Float16))
+                points_before = copy(points(Ωₒ))
+                markers_before = deepcopy(markers(Ωₒ))
+                version_before = Bramble._mesh_version(Ωₒ)
+                @test_throws ArgumentError refine!(Ωₒ)
+                err = try
+                    refine!(Ωₒ)
+                catch e
+                    e
+                end
+                msg = sprint(showerror, err)
+                @test occursin("overflow", msg)
+                @test occursin("Float16", msg)
+                @test !occursin("rounds a midpoint", msg)
+                @test points(Ωₒ) == points_before
+                @test eltype(points(Ωₒ)) == Float16
+                @test npoints(Ωₒ) == 3
+                @test indices(Ωₒ) == CartesianIndices((3,))
+                @test markers(Ωₒ) == markers_before
+                @test Bramble._mesh_version(Ωₒ) == version_before
+            end
+
             # The two arities have a genuine (not accidental)
             # asymmetry on a single-point, non-collapsed mesh (nothing to refine either
             # way), but the one-argument form must leave existing markers untouched

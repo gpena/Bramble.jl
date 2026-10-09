@@ -631,6 +631,41 @@ struct NotAFunctionPredicate end
         @test_allocs conditions(edm_g)
         @test_allocs label_identifiers(edm_g)
 
+        # A ComposedFunction or a Fix wrapping a spatial predicate is spatial on both
+        # paths, judged by what it wraps (#632). Fix1(<, c) has no 3-arg `<`; first has a
+        # 1-arg and no generic 2-arg method; isless has none, so the composition is fine.
+        for (f, hi, lo) in (
+            ((>(0.5)) ∘ first, (0.8, 0.0), (0.2, 0.0)),
+            (Base.Fix1(<, 0.5), 0.8, 0.2),
+            (Base.Fix2(isless, 0.5) ∘ first, (0.2, 0.0), (0.8, 0.0))
+        )
+            dm_w = Bramble._create_generic_markers(:a => f)
+            for e in (dm_w(3.0), dm_w(3.0, 1.0))
+                g_w = identifier(only(conditions(e)))
+                @test g_w === f
+                @test g_w(hi) === true
+                @test g_w(lo) === false
+            end
+        end
+
+        # Captured data in a wrapped spatial predicate, mixed with an (x, t, p) closure.
+        mk_gt(c) = (>(c)) ∘ first
+        sp_w = mk_gt(0.5)
+        edm_w = Bramble._create_generic_markers(:a => sp_w, :b => mk_xtp(2.0))(0.5, 3.0)
+        cs_w = @inferred conditions(edm_w)
+        @test identifier(cs_w[1]) === sp_w
+        @test identifier(cs_w[1])((0.8, 0.0)) === true
+        @test identifier(cs_w[1])((0.2, 0.0)) === false
+        @test identifier(cs_w[2])((2.9, 0.0)) === true
+        @test identifier(cs_w[2])((3.1, 0.0)) === false
+        @test_allocs conditions(edm_w)
+        @test_allocs label_identifiers(edm_w)
+
+        # A Fix1 of a 3-arg (a, x, t) function stays an (x, t) predicate: it is fixed at t.
+        g_axt(a, x, t) = a * x[1] + t
+        edm_f1 = Bramble._create_generic_markers(:a => Base.Fix1(g_axt, 2.0))(0.5)
+        @test identifier(only(conditions(edm_f1)))((1.0,)) === 2.5
+
         # Labels query on evaluated marker container.
         lbls = collect(labels(edm))
         @test :region ∈ lbls
