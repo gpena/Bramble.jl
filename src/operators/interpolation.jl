@@ -229,7 +229,7 @@ function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{D}}, x; outside = 
     T = promote_type(eltype(uₕ), typeof(first(ts)))
     # Outside the mesh, fold axis by axis instead (#625): see `_interp_fold`.
     all(t -> zero(t) <= t <= one(t), ts) ||
-        return _interp_fold(uₕ, li, idx, ts, zero(idx), Val(D), T)
+        return _interp_fold(uₕ, li, idx, ts, 0, Val(D), T)
     acc = zero(T)
     # No far corner along a collapsed axis: it has a single point.
     for corner in CartesianIndices(ntuple(d -> 0:min(1, size(li, d) - 1), Val(D)))
@@ -245,25 +245,36 @@ end
     return zero(t) <= t <= one(t) ? (1 - t) * a + t * b : a + t * (b - a)
 end
 
-# The `2ᴰ` corner values folded axis by axis, axis `d` outermost, `_interp_lerp` on each.
-# Nested rather than expanded into corner weights, which cancel far outside the mesh, and
-# whose `∏ tᵈ` overflows to `Inf` (then `Inf * 0 = NaN`) long before the value does.
-# `offset` holds the corner chosen so far on the axes above `d`. A collapsed axis has no
-# far corner and is skipped. Recursion on `Val`, so it unrolls and allocates nothing.
-@inline function _interp_fold(
-        uₕ, li, idx, ts, offset::CartesianIndex, ::Val{0}, ::Type{T}
-) where {T}
-    return convert(T, uₕ[li[idx + offset]])
+# The `2ᴰ` corner values folded axis by axis in the difference basis: along axis `d`,
+# `near + tᵈ * diff`, where `near` folds the axes below `d` on the near face and `diff`
+# folds the corner differences across axis `d`. Every subtraction is between corner
+# values (or differences of them), never between values already extrapolated: those are
+# huge far out, and their difference rounds away (#625). A constant field has every
+# difference exactly 0, so it comes back exact, with no `∏ tᵈ` to overflow to `Inf`.
+# `mask` has bit `d - 1` set for each axis `d` already differenced. A collapsed axis has
+# no far corner and is skipped. Recursion on `Val`, so it allocates nothing.
+@inline function _interp_fold(uₕ, li, idx, ts, mask, ::Val{0}, ::Type{T}) where {T}
+    return _interp_mixed_diff(uₕ, li, idx, zero(idx), mask, T)
 end
 
-@inline function _interp_fold(
-        uₕ, li, idx, ts, offset::CartesianIndex{D}, ::Val{d}, ::Type{T}
-) where {D, d, T}
-    a = _interp_fold(uₕ, li, idx, ts, offset, Val(d - 1), T)
-    size(li, d) == 1 && return a
-    far = CartesianIndex(ntuple(k -> k == d ? 1 : offset[k], Val(D)))
-    b = _interp_fold(uₕ, li, idx, ts, far, Val(d - 1), T)
-    return _interp_lerp(a, b, ts[d])
+@inline function _interp_fold(uₕ, li, idx, ts, mask, ::Val{d}, ::Type{T}) where {d, T}
+    size(li, d) == 1 && return _interp_fold(uₕ, li, idx, ts, mask, Val(d - 1), T)
+    near = _interp_fold(uₕ, li, idx, ts, mask, Val(d - 1), T)
+    diff = _interp_fold(uₕ, li, idx, ts, mask | (1 << (d - 1)), Val(d - 1), T)
+    return near + ts[d] * diff
+end
+
+# The mixed difference of the corner values across every axis in `mask`, at the corner
+# `idx + c`: `mask == 0` is that corner's own value.
+function _interp_mixed_diff(
+        uₕ, li, idx, c::CartesianIndex{D}, mask, ::Type{T}
+)::T where {D, T}
+    mask == 0 && return convert(T, uₕ[li[idx + c]])
+    k = trailing_zeros(mask) + 1
+    rest = mask & (mask - 1)
+    far = c + CartesianIndex(ntuple(j -> j == k ? 1 : 0, Val(D)))
+    return _interp_mixed_diff(uₕ, li, idx, far, rest, T) -
+           _interp_mixed_diff(uₕ, li, idx, c, rest, T)
 end
 
 # --- The corner blend, in one place ------------------------------------------------- #

@@ -248,8 +248,22 @@ using ..TestUtils: alloc_test, @test_allocs
             dom = domain(box((0.0, 0.0), (1.0, 1.0)))
             f(x) = 2x[1] - x[2] + 0.5
             u = Rₕ(gridspace(mesh(dom, (5, 5), (true, true))), f)
-            for p in ((1e6, -1e6), (-1e6, 1e6), (1e12, 1e12), (-3.0, 0.5), (0.25, 7.0))
+            pts = (
+                (1e6, -1e6), (-1e6, 1e6), (1e12, 1e12), (-3.0, 0.5), (0.25, 7.0),
+                (1e20, -1e20), (1e20, 1e20), (1e16, 1e16)
+            )
+            for p in pts
                 @test isapprox(far(u, p), f(p); rtol = 4eps())
+            end
+        end
+
+        # Two or more axes far out: each axis's slope must survive, not just the first.
+        @testset "Affine, dyadic 5x5x5" begin
+            dom = domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+            g(x) = 2x[1] - x[2] + 4x[3] + 0.5
+            u = Rₕ(gridspace(mesh(dom, (5, 5, 5), (true, true, true))), g)
+            for p in ((1e20, -1e20, 1e20), (1e20, 0.5, -1e20), (0.5, 1e20, 1e20))
+                @test isapprox(far(u, p), g(p); rtol = 4eps())
             end
         end
     end
