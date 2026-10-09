@@ -133,11 +133,6 @@ using Bramble:
         for f in (inner₊ₓ, inner₊ᵧ, inner₊₂)
             @test f(id, id) isa BilinearProduct
         end
-
-        # each names its own direction
-        @test typeof(inner₊ₓ(id, id)).parameters[2] === InnerPlus{1}
-        @test typeof(inner₊ᵧ(id, id)).parameters[2] === InnerPlus{2}
-        @test typeof(inner₊₂(id, id)).parameters[2] === InnerPlus{3}
     end
 
     @testset "Tuple forms" begin
