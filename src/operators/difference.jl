@@ -1522,7 +1522,7 @@ end
 # means no node here ever mixes components in the first place.
 @inline function _strain_pieces(u, i::Int, j::Int)
     i == j && return (_vc_bwd(u(i), i),)
-    return (0.5 * _vc_avg(_vc_bwd(u(i), j), i), 0.5 * _vc_avg(_vc_bwd(u(j), i), j))
+    return ((1 // 2) * _vc_avg(_vc_bwd(u(i), j), i), (1 // 2) * _vc_avg(_vc_bwd(u(j), i), j))
 end
 
 # One term of the divergence: D_{-i}(u_i), averaged onto the shared cell centre by every
