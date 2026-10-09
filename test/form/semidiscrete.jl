@@ -36,6 +36,7 @@ _sd_src(x, t) = (pi^2 - 1) * exp(-t) * sinpi(x[1])
 # would count the closure the testset body becomes (bramble-verification §1).
 _sd_residual_allocs(sd, du, u, t) = @allocated sd(du, u, nothing, t)
 _sd_jacobian_allocs(J, sd, u, t) = @allocated Bramble.jacobian!(J, sd, u, nothing, t)
+_sd_rhs_allocs(rhs, du, u, t) = @allocated rhs(du, u, nothing, t)
 
 function _sd_problem(n)
     Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), n)
@@ -258,8 +259,9 @@ end
         end
 
         sd = semidiscretize(build_scaled_mass, l)
-        # `build` runs once at construction (probing the `Float64` pattern), and defaults to
-        # `reassemble = true` -- a `build`-based operator exists specifically to be rebuilt.
+        # `build` runs once at construction (probing at the space's element type), and
+        # defaults to `reassemble = true` -- a `build`-based operator exists specifically to
+        # be rebuilt.
         @test build_calls[] == 1
         @test occursin("every step", sprint(show, MIME"text/plain"(), sd))
 
@@ -270,6 +272,34 @@ end
         sd(du64, u0, nothing, 3.0)
         @test operator_matrix(sd) ≈ 4 .* A₀      # α(3.0) = 1 + 3 = 4
         @test build_calls[] == 1                 # same element type: no rebuild, only refill
+
+        # The probe's entry is stored concretely, and its matrix is `operator_matrix(sd)`
+        # itself, so a step at the space's element type infers and allocates nothing (#554).
+        # `dirichlet = :boundary` makes the keyword call carry data, so a dynamically
+        # dispatched `assemble!` could not pass as 0 B by accident.
+        sd_bc = semidiscretize(build_scaled_mass, l; dirichlet = :boundary)
+        @test sd_bc.operator.primary[3] === operator_matrix(sd_bc)
+        @test isempty(sd_bc.operator.cache)
+        R = only(
+            Base.return_types(
+            Bramble._reassemble_operator!,
+            (typeof(sd_bc.operator), typeof(sd_bc), Vector{Float64}, Float64)
+        ),
+        )
+        @test isconcretetype(R)
+        du_bc = zeros(n)
+        J_bc = jacobian_prototype(sd_bc)
+        _sd_residual_allocs(sd_bc, du_bc, u0, 3.0)
+        @test _sd_residual_allocs(sd_bc, du_bc, u0, 3.0) == 0
+        _sd_jacobian_allocs(J_bc, sd_bc, u0, 3.0)
+        @test _sd_jacobian_allocs(J_bc, sd_bc, u0, 3.0) == 0
+        @test J_bc ≈ -operator_matrix(sd_bc)
+        @test operator_matrix(sd_bc)[2, 2] ≈ 4 * A₀[2, 2]   # an interior row, refilled
+        # `semidiscretize_rhs` takes no Dirichlet labels, so the RHS runs on `sd` above.
+        rhs = semidiscretize_rhs(sd)
+        _sd_rhs_allocs(rhs, du_bc, u0, 3.0)
+        @test _sd_rhs_allocs(rhs, du_bc, u0, 3.0) == 0
+        @test isempty(sd.operator.cache)
 
         if WITH_AD_TESTS
             # A `ForwardDiff.Dual` `t` -- the same thing a Rosenbrock stepper's `tgrad` reaches
@@ -293,6 +323,61 @@ end
             @test operator_matrix(sd) ≈ 2 .* A₀      # α(1.0) = 1 + 1 = 2
             @test build_calls[] == 2
         end
+    end
+
+    @testset "type-cached: Float32 space (#555)" begin
+        Ω32 = Bramble.mesh(
+            Bramble.domain(Bramble.interval(0.0f0, 1.0f0)),
+            9,
+            true;
+            backend = backend(Float32)
+        )
+        W32 = gridspace(Ω32)
+        n32 = ndofs(W32)
+        l32 = form(W32, v -> innerₕ(x -> 1.0f0, v))
+        A₀32 = assemble(form(W32, W32, (u, v) -> innerₕ(u, v)))
+        # Nonzero, so `du = F - A u` sees `A`, not the source alone.
+        u32 = collect(range(0.2f0, 1.7f0; length = n32))
+
+        # A build whose coefficient takes the element type of `t`, and one that ignores it:
+        # both are probed once, at `zero(Float32)`, and a Float32 step hits that entry.
+        typed_calls = Ref(0)
+        function build_typed(t)
+            typed_calls[] += 1
+            αₕ = Bramble.element(W32, typeof(t))
+            aα = form(W32, W32, (u, v) -> αₕ * innerₕ(u, v))
+            return aα, s -> (fill!(parent(αₕ), 1 + s); nothing)
+        end
+        fixed_calls = Ref(0)
+        function build_fixed(t)
+            fixed_calls[] += 1
+            αₕ = Bramble.element(W32)
+            aα = form(W32, W32, (u, v) -> αₕ * innerₕ(u, v))
+            return aα, s -> (fill!(parent(αₕ), 1 + s); nothing)
+        end
+
+        for (build_fn, calls) in ((build_typed, typed_calls), (build_fixed, fixed_calls))
+            sd = semidiscretize(build_fn, l32)
+            @test calls[] == 1
+            @test eltype(operator_matrix(sd)) == Float32
+            @test eltype(jacobian_prototype(sd)) == Float32
+            du = zeros(Float32, n32)
+            sd(du, u32, nothing, 3.0f0)
+            @test calls[] == 1                      # same element type: refill, no rebuild
+            @test operator_matrix(sd) ≈ 4 .* A₀32   # α(3) = 1 + 3, not the probe's α(0)
+            @test du ≈ sd.source_vector .- (4 .* A₀32) * u32
+        end
+
+        # The documented mixed case: a Float64 time over a Float32 space reaches a second
+        # element type, so it builds once more (the time span should be Float32).
+        sd = semidiscretize(build_typed, l32)
+        calls_before = typed_calls[]
+        du32 = zeros(Float32, n32)
+        sd(du32, u32, nothing, 3.0f0)
+        du_mixed = zeros(Float32, n32)
+        sd(du_mixed, u32, nothing, 3.0)
+        @test typed_calls[] == calls_before + 1
+        @test du_mixed ≈ du32
     end
 
     @testset "consistent initial conditions" begin

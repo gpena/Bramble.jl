@@ -78,6 +78,12 @@ function _alloc_report(f, types)
     return string(length(allocs), " allocating instruction(s): ", join(lines, "; "))
 end
 
+# The run-time dispatches among `check_allocs`'s reports, for a call whose other reports are
+# cold branches of a callee and so cannot be asserted away.
+function _dispatch_count(f, types)
+    return count(a -> a isa AllocCheck.DynamicDispatch, check_allocs(f, types))
+end
+
 @testset "AllocCheck static verification" begin
     # Uniform meshes throughout: `mesh(Ω, n, false)` draws its points with `rand!`, and
     # nothing here reads a coordinate value, so the random stream would only make the
@@ -235,6 +241,22 @@ end
         u = collect(range(0.25, 1.75; length = ndofs(Wₕ1)))
         du = zeros(ndofs(Wₕ1))
         @test _alloc_report(sd, (typeof(du), typeof(u), Nothing, Float64)) == ""
+
+        # The same residual on a `build`-based operator (#554), reassembled every step: a
+        # step at the probe's element type reaches the typed entry built at construction,
+        # not the untyped cache. Every reassembling residual reports `assemble!`'s cold
+        # pattern-recording branches (listed below), so what is asserted is that none of
+        # the reports is a run-time dispatch; test/form/semidiscrete.jl pins the 0 B.
+        build(t) = (a, s -> nothing)
+        sd_build = semidiscretize(build, l; dirichlet = :boundary)
+        @test _dispatch_count(sd_build, (typeof(du), typeof(u), Nothing, Float64)) == 0
+        rhs = Bramble.semidiscretize_rhs(semidiscretize(build, l))
+        @test _dispatch_count(rhs, (typeof(du), typeof(u), Nothing, Float64)) == 0
+        # The cache's other element types dispatch at run time: the check above has teeth.
+        @test _dispatch_count(
+            Bramble._reassemble_cached!,
+            (typeof(sd_build.operator), Type{Float32}, typeof(sd_build), Float32)
+        ) > 0
     end
 
     # Cold-branch reports, kept as a record of what static checking says about paths whose
