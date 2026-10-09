@@ -41,7 +41,7 @@ using Bramble:
 using LinearAlgebra: hypot
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
 
 # --- Test Suite ---
 @testset "Multi-dimensional meshes" begin
@@ -247,15 +247,14 @@ using ..TestUtils: WITH_SLOW_TESTS
             # grid point by point: a mask that merely exists, or has the right count but
             # sits on the wrong face, fails here. In 2D `:left`/`:right` are xmin/xmax and
             # `:bottom`/`:top` are ymin/ymax (src/mesh/marker.jl).
-            idxs_2d = indices(Ωₕ_2d_marked)
-            mask_2d(pred) = BitVector(pred(point(Ωₕ_2d_marked, I)) for I in vec(idxs_2d))
-
-            @test Bramble.index_in_marker(Ωₕ_2d_marked, :LeftWall) == mask_2d(p -> p[1] == 0.0)
-            @test Bramble.index_in_marker(Ωₕ_2d_marked, :RightWall) == mask_2d(p -> p[1] == 3.0)
+            @test Bramble.index_in_marker(Ωₕ_2d_marked, :LeftWall) ==
+                  _marker_mask(Ωₕ_2d_marked, p -> p[1] == 0.0)
+            @test Bramble.index_in_marker(Ωₕ_2d_marked, :RightWall) ==
+                  _marker_mask(Ωₕ_2d_marked, p -> p[1] == 3.0)
             @test Bramble.index_in_marker(Ωₕ_2d_marked, :TopBottom) ==
-                  mask_2d(p -> p[2] == 0.0 || p[2] == 4.0)
+                  _marker_mask(Ωₕ_2d_marked, p -> p[2] == 0.0 || p[2] == 4.0)
             @test Bramble.index_in_marker(Ωₕ_2d_marked, :CenterRegion) ==
-                  mask_2d(p -> 0.8 < p[1] < 2.2 && 1.5 < p[2] < 2.5)
+                  _marker_mask(Ωₕ_2d_marked, p -> 0.8 < p[1] < 2.2 && 1.5 < p[2] < 2.5)
 
             # and the counts those masks imply, spelled out so a silently empty marker
             # cannot pass by agreeing with an equally empty oracle
@@ -390,13 +389,12 @@ using ..TestUtils: WITH_SLOW_TESTS
             # Same oracle in 3D, where the viewpoint aliases name different axes than they
             # do in 2D: `:front` is xmax and `:bottom` is zmin (src/mesh/marker.jl). A
             # marker landing on the 2D face instead would pass a count check and fail this.
-            idxs_3d = indices(Ωₕ_3d_marked)
-            mask_3d(pred) = BitVector(pred(point(Ωₕ_3d_marked, I)) for I in vec(idxs_3d))
-
-            @test Bramble.index_in_marker(Ωₕ_3d_marked, :BottomFace) == mask_3d(p -> p[3] == 0.0)
-            @test Bramble.index_in_marker(Ωₕ_3d_marked, :FrontFace) == mask_3d(p -> p[1] == 2.0)
+            @test Bramble.index_in_marker(Ωₕ_3d_marked, :BottomFace) ==
+                  _marker_mask(Ωₕ_3d_marked, p -> p[3] == 0.0)
+            @test Bramble.index_in_marker(Ωₕ_3d_marked, :FrontFace) ==
+                  _marker_mask(Ωₕ_3d_marked, p -> p[1] == 2.0)
             @test Bramble.index_in_marker(Ωₕ_3d_marked, :SmallCorner) ==
-                  mask_3d(p -> p[1] < 0.5 && p[2] < 0.5 && p[3] < 0.5)
+                  _marker_mask(Ωₕ_3d_marked, p -> p[1] < 0.5 && p[2] < 0.5 && p[3] < 0.5)
 
             @test count(Bramble.index_in_marker(Ωₕ_3d_marked, :BottomFace)) ==
                   npts_3d[1] * npts_3d[2]

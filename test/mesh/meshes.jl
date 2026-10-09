@@ -6,6 +6,7 @@ module MeshMeshesTests
 using Test
 using Bramble
 using Bramble: hₘᵢₙ, normal_vector
+using ..TestUtils: _marker_mask
 import Bramble:
                 set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, hₘᵢₙ, is_collapsed,
                 change_points!, half_point, half_spacing, indices, is_uniform, locate_cell,
@@ -182,10 +183,8 @@ import Bramble:
             region = x -> (x[1] > 0.2 && x[1] < 0.4) || (x[1] > 0.6 && x[1] < 0.8)
 
             Ωₕ = mesh(domain(I, markers(I, :boundary => threshold, :region => region)), 11, true)
-            mask(pred) = BitVector(pred(point(Ωₕ, i)) for i in indices(Ωₕ))
-
-            @test Bramble.index_in_marker(Ωₕ, :boundary) == mask(threshold)
-            @test Bramble.index_in_marker(Ωₕ, :region) == mask(region)
+            @test Bramble.index_in_marker(Ωₕ, :boundary) == _marker_mask(Ωₕ, threshold)
+            @test Bramble.index_in_marker(Ωₕ, :region) == _marker_mask(Ωₕ, region)
 
             # and neither is vacuous nor everything: an always-false predicate would
             # satisfy the comparison above against its own equally empty oracle. The
@@ -209,11 +208,9 @@ import Bramble:
                 domain(Ω, markers(Ω, :circle => circle, :box => box, :annulus => annulus)),
                 (11, 11), (true, true)
             )
-            mask(pred) = BitVector(pred(point(Ωₕ, I2)) for I2 in vec(indices(Ωₕ)))
-
-            @test Bramble.index_in_marker(Ωₕ, :circle) == mask(circle)
-            @test Bramble.index_in_marker(Ωₕ, :box) == mask(box)
-            @test Bramble.index_in_marker(Ωₕ, :annulus) == mask(annulus)
+            @test Bramble.index_in_marker(Ωₕ, :circle) == _marker_mask(Ωₕ, circle)
+            @test Bramble.index_in_marker(Ωₕ, :box) == _marker_mask(Ωₕ, box)
+            @test Bramble.index_in_marker(Ωₕ, :annulus) == _marker_mask(Ωₕ, annulus)
 
             # the shapes relate as their definitions say. The disc (r < 0.3) and the
             # annulus (0.2 < r < 0.4) are not disjoint -- they share the band

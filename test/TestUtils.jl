@@ -16,7 +16,9 @@ using Test
 using SparseArrays: spdiagm
 using ForwardDiff
 using Printf: @sprintf
-using Bramble: ×, Rₕ, box, components, domain, element, gridspace, interval, mesh, npoints
+using Bramble: ×, Rₕ, box, components, domain, element, gridspace, interval, iterative_refinement!,
+               mesh, npoints
+using Bramble: indices, point
 
 # The test group, read once here rather than in each entry point, so that a subsystem's own
 # `runtests.jl` -- which is a standalone entry point and does not go through
@@ -297,6 +299,37 @@ function _check_eoc(errfn, ns; order = 1.9)
     @test all(>(order), eoc)
     @test issorted(errors; rev = true)
     return eoc
+end
+
+# Error of `op` against the exact derivative `df`, over the points whose stencil is not
+# truncated. The max norm is used so the result does not depend on the quadrature weights.
+function _interior_error(Ωₕ, op, f, df, drop)
+    Wₕ = gridspace(Ωₕ)
+    e = parent(op(Rₕ(Wₕ, f))) .- parent(Rₕ(Wₕ, df))
+    dims = npoints(Ωₕ, Tuple)
+    return maximum(abs, drop(reshape(e, dims)))
+end
+
+# Successive halvings of the mesh give log2 of the error ratio as the observed order. The
+# caller owns the mesh, the seed and the number of `steps`; `drop` selects the interior the
+# error is measured on. Returns the per-step ratios alongside the raw errors, so a caller
+# can also fit a slope across every level rather than only reading the last pair. Mutates
+# `Ωₕ`, which ends refined `steps` times.
+function _observed_orders(Ωₕ, op, f, df, drop; steps = 4)
+    errs = Float64[]
+    for k in 0:steps
+        k > 0 && iterative_refinement!(Ωₕ)
+        push!(errs, _interior_error(Ωₕ, op, f, df, drop))
+    end
+    ords = [log2(errs[k] / errs[k + 1]) for k in 1:(length(errs) - 1)]
+    return ords, errs
+end
+
+# The marker-mask oracle: the predicate `pred` evaluated at every grid point of `Ωₕ`, in
+# index order. `index_in_marker(Ωₕ, label)` is compared against it, with `pred` the function
+# the marker was declared with, so the check does not depend on where the points fall.
+function _marker_mask(Ωₕ, pred)
+    return BitVector(pred(point(Ωₕ, I)) for I in vec(indices(Ωₕ)))
 end
 
 # A symmetric, structurally symmetric operator to constrain.
