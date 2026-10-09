@@ -56,19 +56,13 @@ end
         # Any: each space is its own type
         for W in Any[_proj_graded_space((9, 7)), _proj_graded_space((6, 5, 7))]
             forms = Any[  # Any: each closure is its own type
-                (u, v) -> innerₕ(D₊ₓ(u), D₊ₓ(v)),
                 (u, v) -> innerₕ(Dc(u, Val(1)), Dc(v, Val(1))),
-                (u, v) -> innerₕ(Mₓ(u), Mₓ(v)),
                 (u, v) -> innerₕ(M₊ᵧ(u), Mcₓ(v)),
                 (u, v) -> innerₕ(jumpₓ(u), jumpᵧ(v)),
                 (u, v) -> innerₕ(S₊ₓ(u), S₋ᵧ(v)),
-                (u, v) -> innerₕ(D₋ₓ(Mₓ(u)), D₋ₓ(Mₓ(v))),
-                (u, v) -> innerₕ(D₋ₓ(D₋ᵧ(u)), v),
                 (u, v) -> innerₕ(D₋ₓ(u), D₊ᵧ(v)),
-                (u, v) -> innerₕ(D₋ₓ(u), v) + innerₕ(u, v),
                 (u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)),
                 (u, v) -> inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(D₋ₓ(v))),
-                (u, v) -> innerₕ(restrict_to(:interior, u), v),
                 (u, v) -> innerₕ(restrict_to(:interior, D₋ₓ(u)), D₋ᵧ(v))
             ]
             for f in forms

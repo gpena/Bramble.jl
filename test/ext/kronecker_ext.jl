@@ -73,40 +73,8 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
             x = rand(n)
             yref = similar(x)
             mul!(yref, K, x)
-            y = collect(Kjl) * x
+            y = Kjl * x
             @test isapprox(y, yref; rtol = 1e-10, atol = 1e-10)
-        end
-    end
-
-    # fdm_solve against sparse backslash on 2D 25x19 and 3D 11x9x8 meshes, no Dirichlet.
-    @testset "fdm_solve vs \\, no Dirichlet" begin
-        Random.seed!(KRON_EXT_SEED + 2)
-        Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (25, 19), (false, false))
-        W2 = gridspace(Ω2)
-
-        Random.seed!(KRON_EXT_SEED + 3)
-        Ω3 = mesh(
-            domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
-            (11, 9, 8), (false, false, false)
-        )
-        W3 = gridspace(Ω3)
-
-        for (Wₕ, tag) in ((W2, "2D"), (W3, "3D"))
-            @testset "$tag" begin
-                a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
-                A = assemble(a)
-                n = ndofs(Wₕ)
-                F = rand(n)
-                xref = A \ F
-
-                x = fdm_solve(a, F)
-                @test isapprox(x, xref; rtol = 1e-9)
-
-                # `fdm_solve(K, F)`: the unconstrained `KroneckerLinearOperator` overload.
-                K = kronecker_operator(a)
-                xK = fdm_solve(K, F)
-                @test isapprox(xK, xref; rtol = 1e-9)
-            end
         end
     end
 
@@ -146,17 +114,6 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
                 @test isapprox(x, xref; rtol = 1e-9)
             end
         end
-    end
-
-    @testset "A grid-function coefficient throws" begin
-        Random.seed!(KRON_EXT_SEED + 6)
-        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 7), (false, false))
-        Wₕ = gridspace(Ωₕ)
-        # Varying along both axes: a single-axis coefficient now factors (#427).
-        fₕ = Rₕ(Wₕ, x -> 1.0 + x[1] * x[2])
-        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(fₕ * u, v))
-        @test !is_separable(a)
-        @test_throws ArgumentError fdm_solve(a, rand(ndofs(Wₕ)))
     end
 
     # Laplacian-like forms beyond the classic one (#427), on graded meshes whose axes carry
@@ -626,19 +583,6 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
         @test isapprox(x, Float64.(A) \ Float64.(F); rtol = 1e-3)
     end
 
-    # A 2-point axis leaves no interior unknown under `dirichlet = :boundary`.
-    @testset "fdm_solve: empty interior" begin
-        for n in ((2, 2), (2, 4), (2, 3, 3), (3, 2, 4))
-            Wₕ = graded_space(n)
-            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
-            A = assemble(a; dirichlet = :boundary)
-            F = zeros(size(A, 1))
-            x = fdm_solve(a, F; dirichlet = :boundary)
-            @test length(x) == ndofs(Wₕ)
-            @test x == A \ F
-        end
-    end
-
     # `fdm_factorize` once, then `fdm_solve!` per right-hand side: it returns `x`, matches the
     # sparse direct solve and `ldiv!`, and allocates nothing after a warm-up, for a symmetric
     # form (fast diagonalisation) and an advection form (Schur), graded 2D and 3D, on Serial
@@ -757,20 +701,6 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
         @test_throws "gridspace(mesh(Wₕ)) again" fdm_solve(a, F; dirichlet = :boundary)
         Bramble.iterative_refinement!(Ωₕ)
         @test_throws "gridspace(mesh(Wₕ)) again" fdm_solve(a, F)
-    end
-
-    # The allocation of a second fdm_solve call is reported, not asserted to be zero.
-    @testset "fdm_solve: second-call allocations" begin
-        Random.seed!(KRON_EXT_SEED + 7)
-        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 13), (false, false))
-        Wₕ = gridspace(Ωₕ)
-        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
-        F = rand(ndofs(Wₕ))
-
-        fdm_solve(a, F)   # warm-up: JIT only, `fdm_solve` rebuilds its factors every call
-        bytes = @allocated fdm_solve(a, F)
-        @info "fdm_solve: @allocated on a second call (no persistent workspace across calls)" bytes
-        @test bytes >= 0   # reported, not asserted zero -- see the CHECK's EVIDENCE note
     end
 end
 

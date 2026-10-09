@@ -58,6 +58,7 @@ function _kb_matches_assemble(n::NTuple{D, Int}) where {D}
     K = kronecker_operator(a)
     A = assemble(a)
     @test K isa KroneckerBlockOperator
+    @test length(K.blocks) == 3
     @test size(K) == size(A)
     @test eltype(K) === Float64
     @test _kb_same_matrix(K, A)

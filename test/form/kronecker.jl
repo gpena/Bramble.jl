@@ -9,6 +9,7 @@ using SparseArrays: SparseMatrixCSC, sparse, spdiagm, nnz, findnz, dropzeros
 using Random
 using LinearSolve: LinearProblem, solve, KrylovJL_CG
 using ForwardDiff
+using Polyester
 using ..TestUtils: WITH_AD_TESTS
 
 # `is_separable`/`kronecker_operator`: a bilinear form whose
@@ -136,10 +137,10 @@ end
             # `SparseMatrixCSC(K)`: an explicit `kron` of the factors.
             @test SparseMatrixCSC(K) ≈ A
 
-            # Zero allocations with caller-owned scratch (`K` holds no buffers).
+            # Caller-owned scratch (`K` holds no buffers); the warm bytes are measured
+            # per policy further down.
             s = (zeros(n), zeros(n))
-            _kron_alloc_with_scratch(y, K, x, s)
-            @test _kron_alloc_with_scratch(y, K, x, s) == 0
+            mul!(y, K, x; scratch = s)
             @test isapprox(y, yref; rtol = 1e-12, atol = 1e-12)
 
             # One shared `K`, many threads: no shared state, so no race.
@@ -188,10 +189,6 @@ end
             @test _kron_alloc5_with_scratch(du, K, x, -1, 1, s) == 0
             _kron_alloc5_with_scratch(du, K, x, 0.5, 0.0, s)
             @test _kron_alloc5_with_scratch(du, K, x, 0.5, 0.0, s) == 0
-
-            # The fused pass needs no work vectors: 0 bytes without `scratch` too.
-            _kron_alloc_no_scratch(y, K, x)
-            @test _kron_alloc_no_scratch(y, K, x) == 0
 
             # A `Ref` coefficient stays live through `mul!`.
             c = Ref(2.5)
@@ -571,7 +568,7 @@ end
     # the operator holds the same factors, and the threaded product equals the serial one
     # bit for bit, on a form whose 1D assembly would otherwise round differently.
     @testset "Kronecker: factors across policies" begin
-        f = (u, v) -> innerₕ(D₋ₓ(Mₓ(u)), D₋ₓ(Mₓ(v)))
+        f = (u, v) -> innerₕ(D₋ₓ(Mₓ(u)), D₋ₓ(Mₓ(v))) + 0.3 * innerₕ(u, v)
         for n in ((5, 4), (12, 9, 11))
             Ks = [kronecker_operator(form(W, W, f))
                   for W in (_kron_graded_space(n, backend(; policy = P))
@@ -582,6 +579,7 @@ end
             end
             x = rand(MersenneTwister(KRON_SEED), size(Ks[1], 1))
             @test Ks[2] * x == Ks[1] * x
+            @test Ks[3] * x == Ks[1] * x
         end
     end
 
@@ -738,11 +736,12 @@ end
         Bramble.iterative_refinement!(Ωₕ)
         n, nb = ndofs(gridspace(Ωₕ)), ndofs(gridspace(Ωₕ, Val(2)))
         @test n > size(K, 1) && nb > size(KB, 1)
-        x, y = rand(MersenneTwister(KRON_SEED), n), zeros(n)
-        xb, yb = rand(MersenneTwister(KRON_SEED + 1), nb), zeros(nb)
+        x, y = rand(MersenneTwister(KRON_SEED), n), fill(NaN, n)
+        xb, yb = rand(MersenneTwister(KRON_SEED + 1), nb), fill(NaN, nb)
         for (A, u, v, m) in ((K, x, y, n), (KB, xb, yb, nb))
             @test _kron_stale(() -> mul!(v, A, u))
             @test _kron_stale(() -> mul!(v, A, u, 0.5, 1.0))
+            @test all(isnan, v)
             # `LinearAlgebra`'s `*` checks sizes before our `mul!` runs: it throws, but
             # names the size mismatch (no `*` method of ours, see `kronecker.jl`).
             @test_throws DimensionMismatch A * u

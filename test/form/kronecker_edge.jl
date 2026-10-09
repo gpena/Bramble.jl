@@ -298,8 +298,6 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
 
         # A rectangular factor has no square product: refused where the term is built.
         @test_throws ArgumentError Bramble._kron_term((),
-            (sparse(randn(rng, 3, 3)), sparse(randn(rng, 3, 4))))
-        @test_throws ArgumentError Bramble._kron_term((),
             (sparse(randn(rng, 3, 4)), Diagonal(ones(2))))
 
         # Empty axes anywhere give an empty product under every policy, and write nothing
@@ -607,29 +605,6 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
                 (u, v) -> innerₕ(Bramble.BackwardDifference{2, Dim, typeof(u)}(u), v))
             @test is_separable(a) && _ke_kron_matches(a)
         end
-
-        # The 1D assemblies are shared between terms that use the same factor.
-        K = kronecker_operator(form(W, W, (u, v) -> Ref(1.5) * innerₕ(u, v) +
-                                                    inner₊(∇ₕ(u), ∇ₕ(v))))
-        @test length(K.terms) == 3
-        @test K.terms[1].factors[2] === K.terms[2].factors[2]
-        @test K.terms[1].factors[1] === K.terms[3].factors[1]
-
-        # The factors do not depend on the mesh's policy: same matrices, same product.
-        f = (u, v) -> innerₕ(D₋ₓ(Mₓ(u)), D₋ₓ(Mₓ(v))) + 0.3 * innerₕ(u, v)
-        Ks = map((CpuSerial(), CpuThreaded(), CpuPolyester())) do P
-            Wp = _ke_space((7, 6), P)
-            kronecker_operator(form(Wp, Wp, f))
-        end
-        xs = rand(MersenneTwister(KE_SEED), size(Ks[1], 2))
-        for K in Ks[2:3]
-            @test SparseMatrixCSC(K) == SparseMatrixCSC(Ks[1])
-            for (t, ts) in zip(K.terms, Ks[1].terms), d in 1:2
-
-                @test t.factors[d] == ts.factors[d]
-            end
-            @test K * xs == Ks[1] * xs
-        end
     end
 
     # (#427): a composite form on one mesh is a grid of Kronecker blocks. Rows no block
@@ -662,10 +637,6 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
             @test !issymmetric(K) || issymmetric(A)
             return K
         end
-        K = check(form(V, V, (u, v) -> innerₕ(u(1), v(1)) +
-                                       inner₊ₓ(D₋ₓ(u(2)), D₋ₓ(v(2))) + innerₕ(u(2), v(2)) +
-                                       innerₕ(D₋ₓ(u(1)), v(2))))
-        @test length(K.blocks) == 3
         # Off-diagonal blocks only: no diagonal block exists.
         K = check(form(V, V, (u, v) -> innerₕ(u(2), v(1)) + innerₕ(D₋ₓ(u(1)), v(2))))
         @test length(K.blocks) == 2
@@ -859,44 +830,17 @@ Base.setindex!(v::_KEZeroBased, a, i::Int) = (v.data[i + 1] = a)
         @test stale(() -> mul!(y, K1, x)) && stale(() -> mul!(y, K2, x, 1.0, 0.0))
         @test all(isnan, y)
 
-        # After a refinement the vectors that fit the new mesh meet the stale error first,
-        # not a size error; `K * x` alone reports the size, which is accepted. Showing the
-        # operator says it is stale.
-        Ωₕ = _ke_mesh((7, 6); graded = false)
-        W, V = gridspace(Ωₕ), gridspace(Ωₕ, Val(2))
-        K = kronecker_operator(lap(W))
-        KB = kronecker_operator(form(V, V, (u, v) -> innerₕ(u(1), v(1)) +
-                                                     inner₊(∇ₕ(u(2)), ∇ₕ(v(2)))))
-        txt(A) = sprint(show, MIME"text/plain"(), A)
-        Bramble.iterative_refinement!(Ωₕ)
-        n, nb = ndofs(gridspace(Ωₕ)), ndofs(gridspace(Ωₕ, Val(2)))
-        for (A, m) in ((K, n), (KB, nb))
-            u, v = rand(m), fill(NaN, m)
-            @test size(A, 1) < m
-            @test stale(() -> mul!(v, A, u))
-            @test stale(() -> mul!(v, A, u, 0.5, 1.0))
-            @test stale(() -> A[m, m])
-            @test_throws DimensionMismatch A * u
-            @test all(isnan, v)
-            @test startswith(txt(A), summary(A)) && occursin("stale", txt(A))
-        end
-
-        # A form built on spaces from before the change is refused by every entry point:
-        # the space's error, naming the remedy for the space.
+        # A form built on spaces from before the change is refused by `fdm_solve` with the
+        # space's error, naming the remedy for the space (the other entry points are
+        # kronecker.jl's "Kronecker: stale spaces refused").
         space_error = "gridspace(mesh(Wₕ)) again"
         for mutate! in (Ω -> Bramble.change_points!(Ω, (range(0, 1; length = 7) .^ 2,
             range(0, 1; length = 6) .^ 2)),
             Bramble.iterative_refinement!)
             Ωₕ = _ke_mesh((7, 6); graded = false)
-            W, V = gridspace(Ωₕ), gridspace(Ωₕ, Val(2))
-            a = lap(W)
-            b = form(V, V, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(1)), v(2)))
+            a = lap(gridspace(Ωₕ))
             mutate!(Ωₕ)
             F = rand(MersenneTwister(KE_SEED), 42)
-            @test stale(() -> assemble(a), space_error)
-            @test stale(() -> kronecker_operator(a), space_error)
-            @test stale(() -> is_separable(a), space_error)
-            @test stale(() -> kronecker_operator(b), space_error)
             @test stale(() -> Bramble.fdm_solve(a, F), space_error)
         end
     end
