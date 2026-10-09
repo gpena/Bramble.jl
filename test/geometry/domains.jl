@@ -563,8 +563,8 @@ struct NotAFunctionPredicate end
         @test Ω_2d(2) == (1.0, 3.0)
     end
 
-    # Invariant: `EvaluatedDomainMarkers` handles static condition fallbacks
-    # when evaluating time-dependent marker collections and supports standard iteration.
+    # Invariant: `conditions(edm)` passes a predicate with a one-argument method and no
+    # two-argument method through unchanged, and fixes any other predicate at t.
     @testset "Evaluated domain: markers and traits" begin
         using Bramble:
                        EvaluatedDomainMarkers,
@@ -581,6 +581,29 @@ struct NotAFunctionPredicate end
         dm = markers(I_space, :region => staticfunc)
         edm = dm(0.5)
         @test edm isa EvaluatedDomainMarkers
+        bf = identifier(only(conditions(edm)))
+        @test bf((0.8, 0.5)) && !bf((0.2, 0.5))
+
+        # Spatial and (x, t) predicates in one collection: a concrete tuple, 0 bytes.
+        edm_mixed = Bramble._create_generic_markers(
+            :a => x -> x[1] > 0.5, :b => (x, t) -> x[1] > t
+        )(0.25)
+        cs = @inferred conditions(edm_mixed)
+        @test identifier(cs[1])((0.8, 0.0)) && !identifier(cs[1])((0.3, 0.0))
+        @test identifier(cs[2])((0.3, 0.0)) && !identifier(cs[2])((0.2, 0.0))
+        @test_allocs label_identifiers(edm_mixed)
+
+        # Capturing closures carry data, so the classification must fold on their type.
+        mk_x(c) = x -> x[1] > c
+        mk_xt(c) = (x, t) -> x[1] > c * t
+        edm_cap = Bramble._create_generic_markers(:a => mk_x(0.5), :b => mk_xt(2.0))(0.25)
+        cs_cap = @inferred conditions(edm_cap)
+        @test identifier(cs_cap[1]) === identifier(conditions(edm_cap.original_markers)[1])
+        @test identifier(cs_cap[2]) isa Base.Fix2
+        @test identifier(cs_cap[1])((0.8, 0.0)) && !identifier(cs_cap[1])((0.3, 0.0))
+        @test identifier(cs_cap[2])((0.6, 0.0)) && !identifier(cs_cap[2])((0.4, 0.0))
+        @test_allocs conditions(edm_cap)
+        @test_allocs label_identifiers(edm_cap)
 
         # Labels query on evaluated marker container.
         lbls = collect(labels(edm))
