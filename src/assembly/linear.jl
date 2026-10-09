@@ -149,15 +149,17 @@ end
 
 # --- Eager source lowering across a CompositeGridSpace's leaves --- #
 #
-# A non-composite space has exactly one leaf -- itself -- so `_lower_sources` above runs
-# directly against `Wₕ`, unambiguous. A composite space's terms follow the same routing rule
-# `_route_terms!` assembles by (`_routed_target`, above): a term naming one component lowers
-# against that leaf's own space; a term naming none goes to *every* leaf, which may have
-# different meshes, so there is no single space to sample against and lowering is skipped for
-# it -- the same `SourceFunction` it already was, evaluated fresh per leaf at assembly time
-# exactly as today. Missing this optimisation for that one shape is the safe choice: sampling
-# against the wrong leaf's mesh would silently assemble the wrong numbers, not merely run
-# slower.
+# A non-composite space has exactly one leaf -- itself -- so `_lower_sources` (ast/common.jl,
+# and the methods above) runs directly against `Wₕ`, unambiguous. A composite space's terms
+# follow the routing rule the assembly walks use (`_routed_target`, below): a term naming one
+# component lowers against that leaf's own space; a term naming none goes to *every* leaf,
+# which may have different meshes, so there is no single space to sample against and lowering
+# is skipped for it -- the same `SourceFunction` it already was, evaluated fresh per leaf at
+# assembly time.
+# Missing this optimisation for that one shape is the safe choice: sampling against the wrong
+# leaf's mesh would silently assemble the wrong numbers, not merely run slower. A component
+# outside the space throws here, at `form`, through `_routed_target`'s check; returning the
+# term unchanged for it made the result a Union and deferred the error to assembly.
 _lower_sources_for_space(ast, Wₕ) = _lower_sources(ast, Wₕ)
 
 function _lower_sources_for_space(ast, Wₕ::CompositeGridSpace)
@@ -171,8 +173,8 @@ function _lower_sources_over_leaves(op::OperatorAdd, leaves)
 end
 
 function _lower_sources_over_leaves(term::TERM, leaves) where {TERM}
-    target = test_component_or_nothing(term)
-    (target === nothing || target < 1 || target > length(leaves)) && return term
+    target = _routed_target(term, length(leaves))
+    target === nothing && return term
     return _lower_sources(term, first(leaves[target]))
 end
 
@@ -233,8 +235,9 @@ end
 # one past its end. Only a source that kept its `VectorElement` (`_as_source`,
 # operators/inner.jl) knows its mesh; a plain vector, from a lowered closure or built by
 # hand, carries none and is skipped. Routed as `each_routed_leaf` routes, so a term naming
-# no component is checked against every leaf; one naming a component outside the space is
-# left to the assembly walks, which report it. The walk reaches what `_host_sources` does.
+# no component is checked against every leaf; one naming a component outside the space never
+# reaches here, as `_lower_sources_for_space` runs first in `form` and throws for it. The walk
+# reaches what `_host_sources` does.
 # Once, at `form`: points moved later (`change_points!`) are not caught, as in
 # `_same_mesh_or_throw` (jacobian_pattern.jl), whose predicate this is.
 _check_source_meshes(ast, Wₕ) = _check_source_mesh(ast, mesh(Wₕ))

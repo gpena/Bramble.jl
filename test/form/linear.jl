@@ -859,6 +859,20 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         # and a tuple longer than the space is the same mistake, caught the same way
         @test_throws ArgumentError assemble(form(Vt, v -> innerₕ((1.0, 2.0, 3.0), v)))
 
+        # `v(1)(3)` passes the range check `v(3)` meets when the expression is built, and
+        # names component 3; a function source is lowered per leaf at `form`, so that is
+        # where it throws now. It used to fall through unlowered and throw only at assembly.
+        @test_throws ArgumentError form(Vt, v -> innerₕ(x -> 1.0, v(1)(3)))
+        # Lowering a term naming a component infers one type, not a Union of the lowered and
+        # unlowered term (#551). Built from a runtime AST, not through `form`, whose constants
+        # would fold it away. The term naming no component was already concrete; it stays as
+        # the other branch's guard.
+        vt = Bramble.test_function(Vt)
+        for raw in (innerₕ(x -> 1.0, vt(1)), innerₕ(x -> 1.0, vt))
+            ast = Bramble.simplify_ast(Bramble.resolve_ast(raw))
+            @test @inferred(Bramble._lower_sources_for_space(ast, Vt)) isa Bramble.LazyOp
+        end
+
         # while a valid one still works, so the guard is not simply rejecting everything
         @test sum(assemble(form(Vt, v -> innerₕ(1.0, v(2))))) ≈ 1.0
     end
