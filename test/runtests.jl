@@ -207,10 +207,6 @@ if __bramble_with_quality
         include("quality/test_env.jl")
         include("quality/test_jet.jl")
         include("quality/invalidations.jl")
-        # Decoupled from docs/make.jl (doctest = false there) so a doctest regression is
-        # caught here, in parallel with the rest of this group, instead of during every docs
-        # build.
-        include("quality/doctests.jl")
         include("quality/claude_plugin.jl")
         # Already run above with the unit group; included here so a `quality`-only run
         # (nightly's second job) still covers it, without running it twice for `all`.

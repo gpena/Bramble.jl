@@ -102,6 +102,15 @@ documentation = "Documentation" => [
 #     ```
 allpages = [home, getting_started, foundations, forms, examples, documentation]
 
+# Every `jldoctest` in a docstring, on a page or not; a failure throws and stops the build.
+# Some call internal names bare, which no page's `CurrentModule = Bramble` reaches here.
+DocMeta.setdocmeta!(
+    Bramble, :DocTestSetup,
+    :(using Bramble; using Bramble: boundary_symbol_to_cartesian, symbols, conditions, Backend);
+    recursive = true
+)
+doctest(Bramble; manual = false)
+
 makedocs(;
     format = Material3(;
         # Arctic theme with a light/dark toggle. MaterialDocs replaces Documenter's
@@ -139,12 +148,9 @@ makedocs(;
     # docstring) is enforced in test/quality/exports.jl instead, where it has no false
     # positives. A broken `@ref` is always a real mistake, so that one is an error.
     warnonly = [:missing_docs],
-    # Checked instead by test/quality/doctests.jl, in
-    # parallel with the rest of that group, rather than on every docs build. This only skips
-    # Documenter's own separate "Doctest" pipeline stage (the handful of `@jldoctest` blocks
-    # in `src/`). It does *not* skip executing the worked examples' `@example` blocks, which
-    # "ExpandTemplates" always runs regardless of this setting and is where a slow build's
-    # time actually goes.
+    # Doctests run in `doctest(Bramble; manual = false)` above, which reaches every docstring;
+    # this stage would reach only those on a page. The worked examples' `@example` blocks run
+    # in "ExpandTemplates" regardless of this setting.
     doctest = false
 )
 
