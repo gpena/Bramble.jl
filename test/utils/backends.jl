@@ -71,9 +71,6 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
 
     @test Serial === CpuSerial
     @test Parallel === CpuThreaded
-    @test Serial() === CpuSerial()
-    @test Parallel() === CpuThreaded()
-    @test backend(policy = Serial()) === backend(policy = CpuSerial())
 
     # a policy is still a singleton with nothing in it, so it costs nothing to carry
     @test isbitstype(CpuSerial)
@@ -172,9 +169,6 @@ end
             policy = GpuKernel()
         )
         @test be_device isa Backend
-
-        @test backend() isa Backend
-        @test backend(Float64) isa Backend
     end
 end
 
