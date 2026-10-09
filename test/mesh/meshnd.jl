@@ -807,6 +807,23 @@ end # Main Testset
         end
     end
 
+    @testset "Tied midpoints on a later axis" begin
+        # Axis 2 spans one ulp, so its refined midpoint rounds onto an endpoint
+        # (gpena/Bramble.jl#621). Every axis is checked before any is refined, so the
+        # refusal leaves axis 1 unrefined and the parent's indices as they were.
+        Ω = domain(interval(0.0, 1.0) × interval(1.0, nextfloat(1.0)))
+        for refine! in (iterative_refinement!, M -> iterative_refinement!(M, markers(Ω)))
+            Ωₕ = mesh(Ω, (3, 2), (true, true))
+            @test_throws ArgumentError refine!(Ωₕ)
+            @test npoints(Ωₕ, Tuple) == (3, 2)
+            @test indices(Ωₕ) == CartesianIndices((3, 2))
+            @test points(Ωₕ(1)) == [0.0, 0.5, 1.0]
+            @test indices(Ωₕ(1)) == CartesianIndices((3,))
+            @test length(markers(Ωₕ(1))[:boundary]) == 3
+            @test points(Ωₕ(2)) == [1.0, nextfloat(1.0)]
+        end
+    end
+
     WITH_SLOW_TESTS && @testset "Refinement invariants" begin
         @check function check_refinement_invariants_2d(
                 nx = Data.Integers(3, 8), ny = Data.Integers(3, 8)
