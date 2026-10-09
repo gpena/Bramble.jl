@@ -291,6 +291,10 @@ expression(op::DiracSource) = "dirac($(string(op.points)), $(string(op.strengths
 
 # Operator tuple scaling: c * ∇ₕ(u) and (c1, c2) * ∇ₕ(u)
 #
+# A coefficient tuple (numbers, grid functions, normal components) scales the operator
+# tuple entry by entry, so the two lengths must match: a mismatch throws a
+# `DimensionMismatch` instead of letting `map` cut the result to the shorter tuple.
+#
 # `Tuple{LazyOp, Vararg{LazyOp}}` rather than `Tuple{Vararg{LazyOp}}`: the latter also
 # matches the empty tuple `()`, which is ambiguous with `vectorelement.jl`'s own
 # `NTuple{D, VectorElement}` scaling methods at `D = 0`. Excluding it here is free -- an
@@ -303,5 +307,11 @@ expression(op::DiracSource) = "dirac($(string(op.points)), $(string(op.strengths
     ops::Tuple{LazyOp, Vararg{LazyOp}},
     c::Union{Number, AbstractVector, Function, Base.RefValue{<:Number}}
 ) = c * ops
-@inline Base.:*(coeffs::Tuple, ops::Tuple{LazyOp, Vararg{LazyOp}}) = map((c, op) -> c * op, coeffs, ops)
+@inline function Base.:*(coeffs::Tuple, ops::Tuple{LazyOp, Vararg{LazyOp}})
+    length(coeffs) == length(ops) || _throw_coeff_count(length(coeffs), length(ops))
+    return map((c, op) -> c * op, coeffs, ops)
+end
 @inline Base.:-(ops::Tuple{LazyOp, Vararg{LazyOp}}) = map(-, ops)
+
+@noinline _throw_coeff_count(nc::Int, no::Int) = throw(DimensionMismatch(
+    "got $nc coefficients for $no operators: a coefficient tuple holds one entry per operator"))
