@@ -14,8 +14,9 @@ same matrix or vector:
   - `c * A + c * B` (same `c`, different `A`/`B`) factors to `c * (A + B)`: two routed terms
     become one. Only for an `Integer` `c`, for the same reason the zero collapse below is --
     "same `c`" is decided by comparing the two coefficients, and a comparison of two runtime
-    numbers is not something the compiler can settle. A shared `Ref` still factors: that
-    comparison is object identity.
+    numbers is not something the compiler can settle. Nor does a shared `Ref`: two `Ref`s of
+    one type are told apart only by object identity, which is a run-time value too
+    (gpena/Bramble.jl#527).
   - `c1 * A + c2 * A` (same `A`) combines to `(c1 + c2) * A`: two routed terms become one.
   - `0 * A` collapses to a zero term with a one-point sparsity pattern instead of `A`'s full
     stencil, and `A + 0` / `0 + A` drops the zero term from the tree entirely. Only for an
@@ -179,8 +180,8 @@ end
 #
 # The pure-operator trees `form` actually builds *are* singletons: a `BilinearProduct` over
 # `TrialFunction`/`TestFunction` and any stack of difference or average wrappers has singleton
-# fields all the way down, so `innerₕ(u, v) + innerₕ(u, v)` and every `Ref`-coefficient sum
-# still combine.
+# fields all the way down, so `innerₕ(u, v) + innerₕ(u, v)` and its static-coefficient
+# multiples still combine. `Ref`-coefficient sums do not: see the like-term branch below.
 @inline _statically_equal(::LazyOp, ::LazyOp) = false
 @inline _statically_equal(::T, ::T) where {T <: LazyOp} = Base.issingletontype(T)
 
@@ -340,16 +341,13 @@ function simplify_ast(op::OperatorAdd)
         # sides to disagree on -- `IndexedTrialFunction`/`IndexedTestFunction` carry theirs as
         # a field, so they are never singletons and never reach here.
         #
-        # Three exits, not two: with a `RefValue` on one side and a number on the other,
-        # neither `return` fires and control reaches the `OperatorAdd` at the bottom. Under a
-        # statically-`true` guard the compiler folds all three, so the spread costs nothing.
-        #
         # Only when both coefficients are static numbers -- summing across a `RefValue`
-        # would freeze a value meant to keep changing.
+        # would freeze a value meant to keep changing. With a `RefValue` on either side
+        # control falls through to the `OperatorAdd` at the bottom. Not even the same `Ref`
+        # on both sides combines: `cl === cr` on two `RefValue`s of one type is object
+        # identity, a run-time value, so `form` would infer a `Union`
+        # (gpena/Bramble.jl#527).
         cl isa Number && cr isa Number && return _wrap_scale(cl + cr, al)
-        # Same `RefValue` object scaling the same subtree on both sides: `c*A + c*A ==
-        # 2*(c*A)`, true for whatever `c` holds at assembly time.
-        cl === cr && return _wrap_scale(2, left)
     elseif (left isa OperatorScale || right isa OperatorScale) &&
            cl isa Integer &&
            cr isa Integer &&
@@ -369,17 +367,10 @@ function simplify_ast(op::OperatorAdd)
         # `OperatorAdd` at the bottom -- depends on a comparison the compiler cannot make.
         # That is a `Union` in `form`'s return type for every sum of runtime-scaled terms,
         # and `IllegalTypeAnalysisException` under Enzyme. `2 * A + 2 * B` still factors;
-        # `2.0 * A + 2.0 * B` assembles as the two terms it was written as. Shared `Ref`
-        # coefficients are unaffected -- the branch below compares object identity, which
-        # inference settles from the types alone whenever they differ.
+        # `2.0 * A + 2.0 * B` assembles as the two terms it was written as. So does a
+        # shared `Ref`: object identity of two `RefValue`s of one type is just as invisible
+        # to inference (gpena/Bramble.jl#527). Write `β * (A + B)` for one sweep.
         return _wrap_scale(cl, OperatorAdd(al, ar))
-    elseif (left isa OperatorScale || right isa OperatorScale) &&
-           cl isa Base.RefValue &&
-           cr isa Base.RefValue &&
-           cl === cr &&
-           !_mixes_components(al, ar)
-        # Same reasoning, for a shared dynamic coefficient.
-        return OperatorScale(cl, OperatorAdd(al, ar))
     end
 
     # Factor a shared inner-product argument out of `right` and whichever summand of `left`

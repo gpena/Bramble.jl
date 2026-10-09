@@ -197,7 +197,7 @@ smaller number of sweeps for the same matrix or vector:
 | `c1 * (c2 * A)`, both static | `(c1 * c2) * A` | unchanged term count, one multiply instead of two |
 | `A + A`, `A` a singleton node | `2 * A` | two routed terms become one |
 | `c1 * A + c2 * A`, same singleton `A` | `(c1 + c2) * A` | two routed terms become one |
-| `c * A + c * B`, same `c` | `c * (A + B)` | two routed terms become one |
+| `c * A + c * B`, same `Integer` `c` | `c * (A + B)` | two routed terms become one |
 
 `ZeroOperator{D,Nothing}(nothing)` is synthesized for the zero case rather than reusing a
 concrete space, because a `LazyOp{D}` subtree in general carries no space to read back.
@@ -239,8 +239,10 @@ sums assemble as the two terms they were written as, which means one extra route
 numbers.
 
 A `Base.RefValue` coefficient (§2's dynamic scalar coefficients) is never dereferenced by the
-pass and never combined with a static number, or with a different `Ref`, only recognized as
-the same coefficient when it is the same `Ref` object on both sides. The whole point of a
+pass and never combined with a static number or with another `Ref`, not even the same `Ref`
+object on both sides: that identity is a run-time value, so the rule would give `form` a
+`Union` return type (gpena/Bramble.jl#527). `β * A + β * B` assembles as two terms unless the
+shared-argument rule below factors it; write `β * (A + B)` for one sweep. The whole point of a
 `Ref` coefficient is that its value can change after the form is built, so folding its
 current value into a static number would bake in a snapshot the rest of the design goes out
 of its way to avoid.

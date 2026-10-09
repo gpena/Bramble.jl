@@ -162,12 +162,13 @@ using Bramble:
         @test f.inner_op.left_op === A
         @test f.inner_op.right_op === B
 
-        # a shared dynamic coefficient factors the same way
+        # a shared dynamic coefficient does not: `Ref` identity is a run-time value
+        # (gpena/Bramble.jl#527), so the sum keeps both scaled terms
         β = Ref(1.5)
         f = simplify_ast(β * A + β * B)
-        @test f isa OperatorScale
-        @test f.scalar === β
-        @test f.inner_op isa OperatorAdd
+        @test f isa OperatorAdd
+        @test f.left_op.scalar === β
+        @test f.right_op.scalar === β
 
         # different coefficients never factor
         g = simplify_ast(2 * A + 3 * B)
@@ -248,11 +249,12 @@ end
         @test Matrix(assemble(a)) ≈ 2 .* (Ax + Ay)
     end
 
-    # The coefficient is combined at construction and must still track its updates.
+    # The same `Ref` on both terms is not combined (gpena/Bramble.jl#527), and the two
+    # terms must still track its updates.
     @testset "RefValue coefficient tracks updates" begin
         β = Ref(1.0)
         a = form(Wₕ, Wₕ, (u, v) -> β * innerₕ(u, v) + β * innerₕ(u, v))
-        @test resolve_form_ast(a) isa OperatorScale
+        @test resolve_form_ast(a) isa OperatorAdd
 
         @test Matrix(assemble(a)) ≈ 2 .* H
         β[] = 3.0
@@ -640,6 +642,15 @@ _rt_two_sources(W, g₁, g₂) = form(W, v -> innerₕ(g₁, v) + innerₕ(g₂,
 # trade-off has to be a deliberate edit to this test rather than a silent drift either way.
 _rt_runtime_int(n::Int, W) = form(W, W, (u, v) -> n * innerₕ(u, v))
 
+# Sums of `Ref`-scaled terms (gpena/Bramble.jl#527). The like-term and factoring rules used to
+# fire when both sides held the *same* `Ref` object, but `cl === cr` on two `RefValue{Float64}`
+# field loads is a run-time value, so `form` inferred a `Union`. `_rt_ref_two` reached the
+# like-term branch (one singleton product), `_rt_ref_shared` the factoring branch (two
+# different products), `_rt_ref_linear` the factoring branch through a linear form.
+_rt_ref_two(β, γ, W) = form(W, W, (u, v) -> β * innerₕ(u, v) + γ * innerₕ(u, v))
+_rt_ref_shared(β, W) = form(W, W, (u, v) -> β * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + β * innerₕ(u, v))
+_rt_ref_linear(β, W, f, g) = form(W, v -> β * innerₕ(f, v) + β * innerₕ(g, v))
+
 _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
 
 @testset "runtime coefficient: form type-stable" begin
@@ -661,6 +672,12 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
     g₂ = Rₕ(Wₕ, x -> 2.0 - x[2])
     @test _infers(_rt_two_coeffs, (W, typeof(g₁), typeof(g₂)))
     @test _infers(_rt_two_sources, (W, typeof(g₁), typeof(g₂)))
+
+    # `Ref` coefficients, shared or not: see `_rt_ref_two`'s comment.
+    R = Base.RefValue{Float64}
+    @test _infers(_rt_ref_two, (R, R, W))
+    @test _infers(_rt_ref_shared, (R, W))
+    @test _infers(_rt_ref_linear, (R, W, typeof(g₁), typeof(g₂)))
 
     # ... and the deliberate hole, asserted as such: see `_rt_runtime_int`'s comment.
     @test !_infers(_rt_runtime_int, (Int, W))
@@ -730,6 +747,15 @@ _rt_factor(θ::Float64, W) = form(W, W,
     @test Matrix(assemble(coef)) ≈
           5.0 .* M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) +
           3.0 .* M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)))
+
+    # The same `Ref` on both terms no longer factors by identity (gpena/Bramble.jl#527), but
+    # a shared argument still merges the two products into one.
+    shared = bf((u, v) -> a * innerₕ(D₋ₓ(u), D₊ₓ(v)) + a * innerₕ(D₋ₓ(u), D₋ᵧ(v)))
+    @test _nprod(shared.ast, BilinearProduct) == 1
+    a[] = 7.0
+    @test Matrix(assemble(shared)) ≈
+          7.0 .* (M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) + M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v))))
+    @test simplify_ast(shared.ast) == shared.ast
 
     # Component-indexed products never factor, so no component-mixing sum is formed.
     V2 = Wₕ × Wₕ
