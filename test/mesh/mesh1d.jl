@@ -404,6 +404,67 @@ import Base: diff
                 @test Bramble._mesh_version(Ωₜ) == version_before
             end
 
+            # On Float16 [40000, 60000] the sum `a + b` overflows to Inf, so even the
+            # 2-point mesh is refused at construction: its one half-point overflows.
+            Ω_big = create_test_domain(Float16(40000), Float16(60000))
+            for n in (2, 3)
+                err = try
+                    mesh(Ω_big, n, true; backend = backend(Float16))
+                catch e
+                    e
+                end
+                @test err isa ArgumentError
+                msg = sprint(showerror, err)
+                @test occursin("half-point overflow", msg)
+                @test occursin("Float16", msg)
+                @test occursin("$n points", msg)
+            end
+
+            # On Float16 [0, 50000] the 3-point mesh is refused at construction: the
+            # half-point (25000 + 50000) * 0.5 overflows (gpena/Bramble.jl#636).
+            Ω_half = create_test_domain(Float16(0), Float16(50000))
+            err = try
+                mesh(Ω_half, 3, true; backend = backend(Float16))
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            msg = sprint(showerror, err)
+            @test occursin("half-point overflow", msg)
+            @test occursin("Float16", msg)
+            @test occursin("3 points", msg)
+
+            # The 2-point mesh is fine, and refining it adds the finite midpoint 25000
+            # whose half-point overflows. Both forms refuse with an overflow message, not
+            # the tie message, and leave points, half-points, indices, markers and version
+            # unchanged.
+            dm_half = markers(Ω_half)
+            for refine! in (iterative_refinement!, M -> iterative_refinement!(M, dm_half))
+                Ωₒ = mesh(Ω_half, 2, true; backend = backend(Float16))
+                @test all(isfinite, Bramble.half_points(Ωₒ))
+                half_before = copy(Bramble.half_points(Ωₒ))
+                points_before = copy(points(Ωₒ))
+                markers_before = deepcopy(markers(Ωₒ))
+                version_before = Bramble._mesh_version(Ωₒ)
+                @test_throws ArgumentError refine!(Ωₒ)
+                err = try
+                    refine!(Ωₒ)
+                catch e
+                    e
+                end
+                msg = sprint(showerror, err)
+                @test occursin("half-point overflow", msg)
+                @test occursin("Float16", msg)
+                @test !occursin("rounds a midpoint", msg)
+                @test points(Ωₒ) == points_before == Float16[0, 50000]
+                @test Bramble.half_points(Ωₒ) == half_before
+                @test eltype(points(Ωₒ)) == Float16
+                @test npoints(Ωₒ) == 2
+                @test indices(Ωₒ) == CartesianIndices((2,))
+                @test markers(Ωₒ) == markers_before
+                @test Bramble._mesh_version(Ωₒ) == version_before
+            end
+
             # The two arities have a genuine (not accidental)
             # asymmetry on a single-point, non-collapsed mesh (nothing to refine either
             # way), but the one-argument form must leave existing markers untouched

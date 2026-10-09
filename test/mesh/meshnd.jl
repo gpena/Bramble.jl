@@ -854,6 +854,45 @@ end # Main Testset
         end
     end
 
+    @testset "Overflowing half-points on a later axis" begin
+        # On Float16 [0, 50000] the half-point (25000 + 50000) * 0.5 overflows to Inf, so
+        # the (3, 3) mesh is refused at construction (gpena/Bramble.jl#636).
+        I_big = interval(Float16(0), Float16(50000))
+        Ω = domain(interval(Float16(0), Float16(1)) × I_big)
+        err = try
+            mesh(Ω, (3, 3), (true, true))
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("half-point overflow", sprint(showerror, err))
+        @test occursin("Float16", sprint(showerror, err))
+
+        # The (3, 2) mesh is fine, but refining axis 2 adds a half-point that overflows.
+        # Axis 1 refines cleanly, so the refusal must leave axis 1 unrefined too.
+        for refine! in (iterative_refinement!, M -> iterative_refinement!(M, markers(Ω)))
+            Ωₕ = mesh(Ω, (3, 2), (true, true))
+            py = copy(points(Ωₕ(2)))
+            hy = copy(Bramble.half_points(Ωₕ(2)))
+            version_before = Bramble._mesh_version(Ωₕ)
+            err = try
+                refine!(Ωₕ)
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            @test occursin("half-point overflow", sprint(showerror, err))
+            @test npoints(Ωₕ, Tuple) == (3, 2)
+            @test indices(Ωₕ) == CartesianIndices((3, 2))
+            @test points(Ωₕ(1)) == Float16[0, 0.5, 1]
+            @test indices(Ωₕ(1)) == CartesianIndices((3,))
+            @test length(markers(Ωₕ(1))[:boundary]) == 3
+            @test points(Ωₕ(2)) == py == Float16[0, 50000]
+            @test Bramble.half_points(Ωₕ(2)) == hy
+            @test Bramble._mesh_version(Ωₕ) == version_before
+        end
+    end
+
     WITH_SLOW_TESTS && @testset "Refinement invariants" begin
         @check function check_refinement_invariants_2d(
                 nx = Data.Integers(3, 8), ny = Data.Integers(3, 8)

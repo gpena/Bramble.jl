@@ -1265,9 +1265,22 @@ function _mesh(
     end
     _set_state!(mesh, _restate(_st(mesh); uniform = _computed_uniform(_st(mesh))))
 
+    # A half-point `(a + b) * 0.5` overflows when `a + b` does, even with both points finite
+    # (gpena/Bramble.jl#636); `all` reduces on the device for a device vector.
+    if !all(isfinite, half_points(mesh))
+        a, b = extrema(set)
+        _throw_half_point_overflow(n_points, a, b, eltype(pts))
+    end
+
     # Finally, apply the domain markers to the mesh points.
     set_markers!(mesh, markers; warn_marker_mismatch)
     return mesh
+end
+
+@noinline function _throw_half_point_overflow(n, a, b, T)
+    msg = "a mesh of $n points in [$a, $b] with eltype $T makes a half-point overflow " *
+          "$T. Use a wider eltype"
+    throw(ArgumentError(msg))
 end
 
 # The refinement fill itself, split out so it can dispatch on the destination's array type:
@@ -1289,9 +1302,10 @@ function _refine_indices_fill!(new_points::AbstractVector, old_points, N_old, ba
 end
 
 # The refined points of `Ωₕ`, filled and checked but not committed, or `nothing` when
-# there is nothing to refine. A midpoint that rounds onto a neighbour in the storage eltype
-# throws here, before any mutation, so a failed refinement leaves the mesh unchanged; a
-# device vector is read once through a host copy.
+# there is nothing to refine. A midpoint or half-point that overflows, or a midpoint that
+# rounds onto a neighbour, in the storage eltype throws here, before any mutation, so a
+# failed refinement leaves the mesh unchanged; a device vector is read once through a host
+# copy.
 function _refined_points(Ωₕ::Mesh1D)
     # Do nothing if the mesh is just a single point.
     if is_collapsed(Ωₕ)
@@ -1314,11 +1328,24 @@ function _refined_points(Ωₕ::Mesh1D)
 
     _refine_indices_fill!(new_points, old_points, N_old, backend(Ωₕ))
 
-    if _has_tied_points(_host_array(new_points))
+    host_points = _host_array(new_points)
+    # the half-points `half_points!` will fill on commit, by the same formula
+    if !all(isfinite, host_points) ||
+       any(i -> !isfinite((host_points[i] + host_points[i - 1]) * 0.5), 2:N_new)
+        a, b = extrema(set(Ωₕ))
+        _throw_refinement_overflow(N_new, a, b, eltype(new_points))
+    end
+    if _has_tied_points(host_points)
         a, b = extrema(set(Ωₕ))
         _throw_refinement_ties(N_new, a, b, eltype(new_points))
     end
     return new_points
+end
+
+@noinline function _throw_refinement_overflow(n, a, b, T)
+    msg = "refining to $n points in [$a, $b] with eltype $T makes a midpoint or " *
+          "half-point overflow $T; the mesh is left unrefined. Use a wider eltype"
+    throw(ArgumentError(msg))
 end
 
 @noinline function _throw_refinement_ties(n, a, b, T)
