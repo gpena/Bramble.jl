@@ -217,6 +217,15 @@ end
             expected = sum(parent(u) .* w .* parent(v))
             @test inner₊(u, v, Val(S)) ≈ expected
         end
+
+        # An S that is not a repeat-free subset of 1:D throws the symbolic twin's
+        # ArgumentError, for a pair and a singleton alike.
+        @test_throws ArgumentError inner₊(u, v, Val((1, 3)))
+        @test_throws ArgumentError inner₊(u, v, Val((0, 2)))
+        @test_throws ArgumentError inner₊(u, v, Val((1, 1)))
+        @test_throws ArgumentError inner₊(u, v, Val((1, 2, 3)))
+        @test_throws ArgumentError inner₊(u, v, Val((3,)))
+        @test_throws ArgumentError weights(Wₕ, Val((1, 3)))
     end
 
     @testset "Alias identities" begin

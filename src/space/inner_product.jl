@@ -782,6 +782,9 @@ reduces against a lazily-computed [`SeparableWeights`](@ref) instead, through th
 `_dot`/`_dot_masked` specializations above, so no `O(n^D)` vector is ever materialised for
 it.
 
+An `S` that is not a repeat-free subset of `1:D` throws an `ArgumentError`, as the symbolic
+`inner₊(p, q, Val(S))` does.
+
 `markers` restricts the sum to the union of the labelled regions' points, as it does for
 [`innerₕ`](@ref) (a masked sum of the weight above, not a surface integral).
 
