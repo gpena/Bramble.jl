@@ -7,6 +7,7 @@ using Bramble: AbstractMatrixFreePreconditioner, JacobiPreconditioner, Chebyshev
 using LinearAlgebra: LinearAlgebra, ldiv!, diag, norm, cond, Symmetric, eigmax, isposdef
 using LinearSolve: LinearProblem, KrylovJL_CG, solve
 using Random
+using ..TestUtils: ZeroBasedVector
 
 # Matrix-free preconditioners. Jacobi reads diag(A) off one stencil
 # walk, so every check compares it with `diag(assemble(a; dirichlet))`. Meshes are
@@ -108,15 +109,6 @@ function _pc_cheb_matrix(P, n)
     end
     return M
 end
-
-# A vector indexed from 0, to check that `ldiv!` refuses offset axes.
-struct _PcZeroBased <: AbstractVector{Float64}
-    p::Vector{Float64}
-end
-Base.size(v::_PcZeroBased) = size(v.p)
-Base.axes(v::_PcZeroBased) = (Base.IdentityUnitRange(0:(length(v.p) - 1)),)
-Base.getindex(v::_PcZeroBased, i::Int) = v.p[i + 1]
-Base.setindex!(v::_PcZeroBased, x, i::Int) = (v.p[i + 1] = x)
 
 @testset "matrix-free preconditioners (#327)" begin
     @testset "jacobi: matrix-free diagonal" begin
@@ -261,8 +253,8 @@ Base.setindex!(v::_PcZeroBased, x, i::Int) = (v.p[i + 1] = x)
         P = chebyshev_preconditioner(op)
         n = ndofs(W)
         @test_throws DimensionMismatch ldiv!(zeros(3), P, zeros(n))
-        @test_throws ArgumentError ldiv!(zeros(n), P, _PcZeroBased(zeros(n)))
-        @test_throws ArgumentError ldiv!(_PcZeroBased(zeros(n)), P, zeros(n))
+        @test_throws ArgumentError ldiv!(zeros(n), P, ZeroBasedVector(zeros(n)))
+        @test_throws ArgumentError ldiv!(ZeroBasedVector(zeros(n)), P, zeros(n))
     end
 
     # Power iteration from below, lifted by the documented factor 1.1: it must land above the

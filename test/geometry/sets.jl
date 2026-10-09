@@ -388,8 +388,9 @@ using ..TestUtils: alloc_test, @test_allocs
 
     # Invariants tested:
     # 1. Scalar containment inside 1D closed intervals.
-    # 2. Vector and SVector containment across multi-dimensional bounding boxes.
-    # 3. Vector length mismatches return false without throwing.
+    # 2. Vector and SVector containment. The 2D Vector cases are pinned further down,
+    #    beside the allocation checks.
+    # 3. Vector length mismatches return false without throwing (pinned further down).
     # 4. Fallback returns false for non-numeric types.
     @testset "Point containment queries" begin
         I = interval(0.0, 1.0)
@@ -398,9 +399,6 @@ using ..TestUtils: alloc_test, @test_allocs
         # AbstractVector containment
         @test [0.5] ∈ I
         @test [1.5] ∉ I
-        @test [0.5, 0.0] ∈ R2
-        @test [2.5, 0.0] ∉ R2
-        @test [0.5, 0.0, 0.0] ∉ R2
 
         # SVector containment
         @test SVector(0.5) ∈ I

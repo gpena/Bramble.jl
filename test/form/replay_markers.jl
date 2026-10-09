@@ -6,6 +6,7 @@ using SparseArrays
 using Bramble: CpuSerial, CpuThreaded, backend, assemble_add!, assemble_parallel!,
                allocate_system_matrix, restrict_to, D₋ₓ, set_points!, _marker_stamp,
                _pattern_stamp
+using ..TestUtils: _fillnz!
 
 # A refill after `markers!` never replays stale positions (gpena/Bramble.jl#465). A
 # restricted term's walk reads the mesh markers, so the `nzval` positions a recording holds
@@ -28,13 +29,6 @@ _mesh1(n, pol) = mesh(
 
 _term(u, v) = innerₕ(D₋ₓ(restrict_to(:blob, u)), v)
 _two(u, v) = _term(u(1), v(1)) + _term(u(2), v(2))
-
-# `assemble` and `allocate_system_matrix` infer a union that includes a dense `Matrix`, which
-# has no `nonzeros`; these matrices are always sparse, so the assertion narrows the type.
-function _fillnz!(A, v)
-    @assert A isa SparseMatrixCSC
-    return fill!(nonzeros(A), v)
-end
 
 # The space, the form and the mesh `markers!` acts on. `:cross` is a composite over two
 # meshes of different sizes, re-marking only the second.

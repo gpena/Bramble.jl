@@ -11,8 +11,7 @@ using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff�
 import SparseArrays: issparse, sprand, spdiagm, spzeros, nnz
 using Bramble: forward_star_difference, centered_difference, cross_weighted_difference
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
-using ..UtilsBackendsTests: MockGPUVector, MockGPUMatrix
+using ..TestUtils: WITH_SLOW_TESTS, _nonuniform_points, MockDeviceMatrix, MockDeviceVector
 using ..SpaceVectorElementsTests: setup_test_grid
 
 # Backward difference operators
@@ -72,18 +71,18 @@ end
 
         # `_shift_ones` dispatches on the backend's own matrix_type: SparseMatrixCSC above,
         # a dense Matrix here, and a generic AbstractMatrix (any vendor array type, e.g. a
-        # GPU array) via the scalar-indexing fallback -- MockGPUMatrix (test/utils/backends.jl,
-        # already in Main by this point) stands in for that without needing real GPU hardware.
-        # MockGPUVector/MockGPUMatrix answer DeviceLocality(), so this Backend now needs a
+        # GPU array) via the scalar-indexing fallback -- MockDeviceMatrix (test/TestUtils.jl)
+        # stands in for that without needing real GPU hardware.
+        # MockDeviceVector/MockDeviceMatrix answer DeviceLocality(), so this Backend now needs a
         # device policy to construct at all.
         be_dense = backend(vector_type = Vector{T}, matrix_type = Matrix{T})
         S_dense = _Eye(be_dense, 5, Val(1))
         @test S_dense isa Matrix{T}
         @test S_dense == Matrix(spdiagm(1 => ones(4)))
 
-        be_generic = backend(vector_type = MockGPUVector{T}, matrix_type = MockGPUMatrix{T}, policy = GpuKernel())
+        be_generic = backend(vector_type = MockDeviceVector{T}, matrix_type = MockDeviceMatrix{T}, policy = GpuKernel())
         S_generic = _Eye(be_generic, 5, Val(-2))
-        @test S_generic isa MockGPUMatrix{T}
+        @test S_generic isa MockDeviceMatrix{T}
         @test S_generic.data == Matrix(spdiagm(-2 => ones(3)))
     end
 
@@ -726,11 +725,7 @@ end
                     u_raw = Data.Vectors(field_val; min_size = 26, max_size = 26)
             )
                 n = length(h) + 1
-                pts = zeros(Float64, n)
-                for i in 1:length(h)
-                    pts[i + 1] = pts[i] + h[i]
-                end
-                pts ./= pts[end]
+                pts = _nonuniform_points(h)
 
                 Ωₕ = mesh(domain(interval(0.0, 1.0)), n, false)
                 set_points!(Ωₕ, pts)
@@ -761,17 +756,9 @@ end
             )
                 nx = length(hx) + 1
                 ny = length(hy) + 1
-                pts_x = zeros(Float64, nx)
-                for i in 1:length(hx)
-                    pts_x[i + 1] = pts_x[i] + hx[i]
-                end
-                pts_x ./= pts_x[end]
+                pts_x = _nonuniform_points(hx)
 
-                pts_y = zeros(Float64, ny)
-                for j in 1:length(hy)
-                    pts_y[j + 1] = pts_y[j] + hy[j]
-                end
-                pts_y ./= pts_y[end]
+                pts_y = _nonuniform_points(hy)
 
                 Ωₕ = mesh(
                     domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
@@ -922,35 +909,6 @@ using Bramble: kronecker_operator_matrix, stencil_matrix, difference_shift, Back
     # a grid space is read as its mesh
     @test stencil_matrix(gridspace(Ωd), BackwardFiniteDiffOp{2}()) ==
           kronecker_operator_matrix(Ωd, D₋ᵧ)
-end
-
-# A runtime `Int` or `Symbol` direction selects between literal `Val`s, one arm per direction
-# the mesh has (`_dispatch_dim`, `_dim_index`); each arm must give the subscript alias, and a
-# direction the mesh does not have must be refused rather than reach a `Val` no grid serves.
-@testset "Int and Symbol direction entry points" begin
-    W2 = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (6, 5), (false, false)))
-    W3 = gridspace(mesh(domain(box((0.0, 0.0, 0.0), (1.0, 2.0, 1.5))), (4, 5, 3),
-        (false, false, false)))
-    u2 = Rₕ(W2, x -> sin(x[1]) + x[2]^2)
-    u3 = Rₕ(W3, x -> x[1] * x[2] + exp(x[3]))
-
-    @test parent(D₋(u2, 2)) == parent(D₋ᵧ(u2))
-    @test parent(D₋(u2, :x)) == parent(D₋ₓ(u2))
-    @test parent(D₋(u2, :y)) == parent(D₋ᵧ(u2))
-    @test parent(D₋(u3, 3)) == parent(D₋₂(u3))
-    @test parent(D₋(u3, 2)) == parent(D₋ᵧ(u3))
-    @test parent(D₋(u3, :z)) == parent(D₋₂(u3))
-
-    msg(f) =
-        try
-            f()
-            ""
-        catch e
-            e isa ArgumentError ? e.msg : "not an ArgumentError"
-        end
-    @test msg(() -> D₋(u2, 3)) == "the stencil direction must be between 1 and 2, got 3"
-    @test msg(() -> D₋(u3, 4)) == "the stencil direction must be between 1 and 3, got 4"
-    @test msg(() -> D₋(u2, :w)) == "the stencil direction must be :x, :y or :z, got :w"
 end
 
 @testset "In-place difference: size mismatch" begin

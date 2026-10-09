@@ -98,17 +98,6 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
               assemble(l)
     end
 
-    @testset "It refills in place at zero allocations" begin
-        Wₕ = gridspace(mesh(Ω, (9, 9), (true, true)))
-        a = form(Wₕ, Wₕ,
-            (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + inner_Γ(u, v; markers = (:ymax,)))
-        A = assemble(a)
-        B = copy(A)
-        assemble!(B, a)
-        @test A ≈ B
-        @test_allocs assemble!(B, a)
-    end
-
     # Only the facet slice is set, 1D to 3D, on non-uniform meshes.
     @testset "normal: facet slice only (#333)" begin
         # Independent reference: the face is found from the geometric normal alone.

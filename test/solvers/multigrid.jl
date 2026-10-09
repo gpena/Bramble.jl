@@ -5,18 +5,16 @@ using Bramble
 using Bramble: GeometricMeshHierarchy, set_markers!, spacings, interpolation_matrix
 using Bramble: AbstractSmoother, JacobiSmoother, ChebyshevSmoother, RedBlackGaussSeidel, max_eigenvalue_estimate,
                trial_space, D₋ₓ, D₋ᵧ, M₊ᵧ
-using Bramble: GMGPreconditioner, AbstractMatrixFreePreconditioner, VectorElement, v_cycle!, w_cycle!, fmg!,
-               change_points!
+using Bramble: GMGPreconditioner, AbstractMatrixFreePreconditioner, VectorElement, v_cycle!, w_cycle!, fmg!
 using LinearAlgebra: LinearAlgebra, dot, norm, diag, LowerTriangular, UpperTriangular, ldiv!, Symmetric, eigmin
 using LinearSolve: LinearProblem, KrylovJL_CG, solve
 using ForwardDiff: ForwardDiff
 using Random
+using ..TestUtils: MG_SEED, ZeroBasedVector, _mg_jitter_mesh, _mg_spd, _mg_transfer_meshes
 
 # Geometric multigrid. Meshes are non-uniform throughout: on a uniform
 # mesh rebuilding each level from the domain would nest too, and hide a hierarchy that does
 # not take every other point.
-
-const MG_SEED = 3291
 
 # The markers a mesh gets from `Ω` at its own points, for comparison with the carried ones.
 function _mg_reevaluated_markers(Ωₕ, Ω)
@@ -28,15 +26,6 @@ end
 _mg_axes(p::AbstractVector{<:Number}) = (p,)
 _mg_axes(p::Tuple) = p
 
-# A vector indexed from 0, to check that the transfers refuse offset axes.
-struct _MgZeroBased <: AbstractVector{Float64}
-    p::Vector{Float64}
-end
-Base.size(v::_MgZeroBased) = size(v.p)
-Base.axes(v::_MgZeroBased) = (Base.IdentityUnitRange(0:(length(v.p) - 1)),)
-Base.getindex(v::_MgZeroBased, i::Int) = v.p[i + 1]
-Base.setindex!(v::_MgZeroBased, x, i::Int) = (v.p[i + 1] = x)
-
 # Allocation of a warmed transfer, behind a function barrier.
 _mg_palloc(xf, H, l, xc) = (prolongate!(xf, H, l, xc); @allocated prolongate!(xf, H, l, xc))
 _mg_calloc(xc, H, l, xf) = (coarsen!(xc, H, l, xf); @allocated coarsen!(xc, H, l, xf))
@@ -45,20 +34,6 @@ _mg_calloc(xc, H, l, xf) = (coarsen!(xc, H, l, xf); @allocated coarsen!(xc, H, l
 _mg_oracle(Ωf, Ωc) = interpolation_matrix(gridspace(Ωf), gridspace(Ωc))
 
 _mg_agree(a, b) = isapprox(a, b; rtol = 1e-13, atol = 1e-13)
-
-# Non-uniform meshes in 1D, 2D and 3D, and two with a collapsed axis (which also cover
-# `interpolation_matrix` on collapsed axes), with a level count each.
-function _mg_transfer_meshes(bk = backend())
-    Random.seed!(MG_SEED)
-    unit(a = 0.0, b = 1.0) = interval(a, b)
-    return (
-        (mesh(domain(unit()), 33, false; backend = bk), 4),
-        (mesh(domain(unit() × unit(0.0, 2.0)), (17, 9), false; backend = bk), 3),
-        (mesh(domain(unit() × unit(-1.0, 1.0) × unit(0.0, 2.0)), (9, 5, 9), false; backend = bk), 3),
-        (mesh(domain(unit() × unit(0.5, 0.5)), (17, 4), false; backend = bk), 3),
-        (mesh(domain(unit() × unit(0.5, 0.5) × unit()), (9, 4, 5), false; backend = bk), 2)
-    )
-end
 
 @testset "gmg: nested hierarchy" begin
     Random.seed!(MG_SEED)
@@ -222,10 +197,10 @@ end
         @test_throws ArgumentError prolongate!(zeros(nf), H, l, zeros(nc))
         @test_throws ArgumentError coarsen!(zeros(nc), H, l, zeros(nf))
     end
-    @test_throws ArgumentError prolongate!(_MgZeroBased(zeros(nf)), H, 2, zeros(nc))
-    @test_throws ArgumentError prolongate!(zeros(nf), H, 2, _MgZeroBased(zeros(nc)))
-    @test_throws ArgumentError coarsen!(_MgZeroBased(zeros(nc)), H, 2, zeros(nf))
-    @test_throws ArgumentError coarsen!(zeros(nc), H, 2, _MgZeroBased(zeros(nf)))
+    @test_throws ArgumentError prolongate!(ZeroBasedVector(zeros(nf)), H, 2, zeros(nc))
+    @test_throws ArgumentError prolongate!(zeros(nf), H, 2, ZeroBasedVector(zeros(nc)))
+    @test_throws ArgumentError coarsen!(ZeroBasedVector(zeros(nc)), H, 2, zeros(nf))
+    @test_throws ArgumentError coarsen!(zeros(nc), H, 2, ZeroBasedVector(zeros(nf)))
     buf = zeros(nf + nc)
     @test_throws ArgumentError prolongate!(view(buf, 1:nf), H, 2, view(buf, 4:(3 + nc)))
     @test_throws ArgumentError coarsen!(view(buf, 4:(3 + nc)), H, 2, view(buf, 1:nf))
@@ -430,7 +405,7 @@ _mg_salloc(s, x, b) = (smooth!(s, x, b); @allocated smooth!(s, x, b))
         @test_throws ArgumentError smooth!(sm, x, x)
         buf = zeros(2n)
         @test_throws ArgumentError smooth!(sm, view(buf, 1:n), view(buf, 2:(n + 1)))
-        @test_throws ArgumentError smooth!(sm, _MgZeroBased(zeros(n)), zeros(n))
+        @test_throws ArgumentError smooth!(sm, ZeroBasedVector(zeros(n)), zeros(n))
     end
     @test jacobi_smoother(a) isa JacobiSmoother
     @test chebyshev_smoother(a) isa ChebyshevSmoother
@@ -452,23 +427,6 @@ end
 function _mg_box(D)
     D == 2 ? interval(0.0, 1.0) × interval(0.0, 1.0) :
     interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)
-end
-
-_mg_spd(W) = (κ = Rₕ(W, x -> 1 + sum(abs2, x)); form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))))
-
-# Uniform points jittered by up to ±0.3h along each axis: non-uniform everywhere, with
-# bounded cell aspect ratio.
-function _mg_jitter_mesh(D, n; bk = backend(), seed = MG_SEED)
-    rng = Random.Xoshiro(seed)
-    Ω = mesh(domain(_mg_box(D)), ntuple(_ -> n, D), ntuple(_ -> true, D); backend = bk)
-    h = 1 / (n - 1)
-    function pts()
-        x = collect(range(0.0, 1.0; length = n)) .+ 0.3h .* (2 .* rand(rng, n) .- 1)
-        x[1], x[end] = 0.0, 1.0
-        return sort!(x)
-    end
-    change_points!(Ω, ntuple(_ -> pts(), D))
-    return Ω
 end
 
 function _mg_cg(op, b, P)
@@ -637,12 +595,12 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
     @test size(P) == (n, n) && eltype(P) === Float64
     @test_throws DimensionMismatch ldiv!(zeros(n + 1), P, zeros(n))
     @test_throws DimensionMismatch ldiv!(zeros(n), P, zeros(n - 1))
-    @test_throws ArgumentError ldiv!(_MgZeroBased(zeros(n)), P, zeros(n))
+    @test_throws ArgumentError ldiv!(ZeroBasedVector(zeros(n)), P, zeros(n))
     for f in (v_cycle!, w_cycle!, fmg!)
         @test_throws DimensionMismatch f(zeros(n + 1), P, zeros(n))
         x = zeros(n)
         @test_throws ArgumentError f(x, P, x)
-        @test_throws ArgumentError f(_MgZeroBased(zeros(n)), P, zeros(n))
+        @test_throws ArgumentError f(ZeroBasedVector(zeros(n)), P, zeros(n))
     end
 
     # Default levels coarsen until an axis would drop below three points.

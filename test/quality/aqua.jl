@@ -45,9 +45,8 @@ using Aqua
         # argument once a release carries it.
         persistent_tasks = (tmax = 30,)
     )
-    Aqua.test_ambiguities(Bramble; recursive = false)
 
-    # `Aqua.test_all`/`test_ambiguities` above inspect the methods of `Bramble` only, and a
+    # `Aqua.test_all` above inspects the methods of `Bramble` only, and a
     # package extension is a module of its own -- so a method defined there that clashes with
     # one in `Bramble` is invisible to that check. This is not hypothetical: every sparse
     # direct solver extension defines

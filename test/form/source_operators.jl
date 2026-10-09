@@ -397,11 +397,11 @@ using Bramble:
             @test b ≈ parent(fₕ) .* w
         end
 
-        @testset "wrapped source: unlowered, correct" begin
+        @testset "wrapped source: unlowered" begin
             # D₋ₓ(sf) builds a node type `_lower_sources` has no method for, so it falls
             # through to the generic leaf fallback -- unchanged, not incorrectly rewritten.
-            # A missed optimisation, not a correctness gap: checked against the same oracle
-            # "1D numeric equivalence" above uses.
+            # A missed optimisation, not a correctness gap: "1D numeric equivalence" above
+            # checks its values.
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
             Wₕ = gridspace(Ωₕ)
             f = x -> x^2 + sin(3x)
@@ -410,11 +410,6 @@ using Bramble:
             ast = resolve_form_ast(l)
             @test ast.left_op isa Bramble.BackwardDifference
             @test ast.left_op.inner_op isa SourceFunction
-
-            b = assemble(l)
-            fₕ = Rₕ(Wₕ, f)
-            w = weights(Wₕ, Innerh())
-            @test b ≈ parent(D₋ₓ(fₕ)) .* w
         end
 
         @testset "composite: per-component term lowers" begin

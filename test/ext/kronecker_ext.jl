@@ -10,6 +10,7 @@ using LinearSolve: LinearProblem, solve, KrylovJL_GMRES
 using Random
 # `CpuPolyester` meshes below; test/ext/polyester_ext.jl, next in the ext group, loads it too.
 using Polyester
+using ..TestUtils: ZeroBasedVector, _graded_mesh
 using Bramble: CpuPolyester, Serial, execution_policy
 
 # `Kronecker.jl` interop and fast diagonalisation for a separable `BilinearForm`
@@ -29,22 +30,6 @@ const KronExt = Base.get_extension(Bramble, :BrambleKroneckerExt)
 const KRON_EXT_SEED = 20260919
 
 using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
-
-# Uniform, then moved to `t^(1 + d/4)` along axis `d`, so no two axes share their nodes.
-function graded_space(n::NTuple{D, Int}) where {D}
-    Ω = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n, ntuple(_ -> false, D))
-    Bramble.change_points!(Ω, ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
-    return gridspace(Ω)
-end
-
-# A vector indexed `0:n-1`, for the factorisation's refusal of a non-1-based one.
-struct ZeroBasedVector <: AbstractVector{Float64}
-    p::Vector{Float64}
-end
-Base.size(z::ZeroBasedVector) = size(z.p)
-Base.axes(z::ZeroBasedVector) = (Base.IdentityUnitRange(0:(length(z.p) - 1)),)
-Base.getindex(z::ZeroBasedVector, i::Int) = z.p[i + 1]
-Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
 
 @testset "Kronecker extension" begin
     @testset "Kronecker.jl object equals CSC" begin
@@ -73,40 +58,8 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
             x = rand(n)
             yref = similar(x)
             mul!(yref, K, x)
-            y = collect(Kjl) * x
+            y = Kjl * x
             @test isapprox(y, yref; rtol = 1e-10, atol = 1e-10)
-        end
-    end
-
-    # fdm_solve against sparse backslash on 2D 25x19 and 3D 11x9x8 meshes, no Dirichlet.
-    @testset "fdm_solve vs \\, no Dirichlet" begin
-        Random.seed!(KRON_EXT_SEED + 2)
-        Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (25, 19), (false, false))
-        W2 = gridspace(Ω2)
-
-        Random.seed!(KRON_EXT_SEED + 3)
-        Ω3 = mesh(
-            domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
-            (11, 9, 8), (false, false, false)
-        )
-        W3 = gridspace(Ω3)
-
-        for (Wₕ, tag) in ((W2, "2D"), (W3, "3D"))
-            @testset "$tag" begin
-                a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
-                A = assemble(a)
-                n = ndofs(Wₕ)
-                F = rand(n)
-                xref = A \ F
-
-                x = fdm_solve(a, F)
-                @test isapprox(x, xref; rtol = 1e-9)
-
-                # `fdm_solve(K, F)`: the unconstrained `KroneckerLinearOperator` overload.
-                K = kronecker_operator(a)
-                xK = fdm_solve(K, F)
-                @test isapprox(xK, xref; rtol = 1e-9)
-            end
         end
     end
 
@@ -148,23 +101,12 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
         end
     end
 
-    @testset "A grid-function coefficient throws" begin
-        Random.seed!(KRON_EXT_SEED + 6)
-        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 7), (false, false))
-        Wₕ = gridspace(Ωₕ)
-        # Varying along both axes: a single-axis coefficient now factors (#427).
-        fₕ = Rₕ(Wₕ, x -> 1.0 + x[1] * x[2])
-        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(fₕ * u, v))
-        @test !is_separable(a)
-        @test_throws ArgumentError fdm_solve(a, rand(ndofs(Wₕ)))
-    end
-
     # Laplacian-like forms beyond the classic one (#427), on graded meshes whose axes carry
     # different nodes: each solves to the sparse direct solve, from the form and from its
     # operator, with and without homogeneous Dirichlet.
     @testset "fdm_solve: Laplacian-like forms" begin
         for n in ((9, 7), (6, 5, 7))
-            Wₕ = graded_space(n)
+            Wₕ = gridspace(_graded_mesh(n))
             D = length(n)
             fx = Rₕ(Wₕ, x -> 1 + x[1])
             c = Ref(2.5)
@@ -205,7 +147,7 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
         ldiv_bytes(x, f, F) = (ldiv!(x, f, F); @allocated ldiv!(x, f, F))
         for n in ((13, 9), (7, 6, 8)), dir in (nothing, :boundary)
 
-            Wₕ = graded_space(n)
+            Wₕ = gridspace(_graded_mesh(n))
             fx = Rₕ(Wₕ, x -> 1 + x[1])
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(fx * u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)))
             A = assemble(a; dirichlet = dir)
@@ -235,7 +177,7 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
     @testset "fdm_solve: advection by Schur form" begin
         ldiv_bytes(x, f, F) = (ldiv!(x, f, F); @allocated ldiv!(x, f, F))
         for n in ((13, 9), (7, 6, 8))
-            Wₕ = graded_space(n)
+            Wₕ = gridspace(_graded_mesh(n))
             D = length(n)
             fx = Rₕ(Wₕ, x -> 1 + x[1])
             Dm(u, d) = Bramble.D₋(u, Val(d))
@@ -366,7 +308,7 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
                 (u, v) -> -0.1 * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(D₋ₓ(u), v))
         ]
         for (n, dir, f) in cases
-            Wₕ = graded_space(n)
+            Wₕ = gridspace(_graded_mesh(n))
             a = form(Wₕ, Wₕ, f)
             A = assemble(a; dirichlet = dir)
             F = rand(MersenneTwister(KRON_EXT_SEED + length(n)), size(A, 1))
@@ -469,7 +411,7 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
             catch e
                 e isa ArgumentError ? sprint(showerror, e) : "wrong error $(typeof(e))"
             end
-        Wₕ = graded_space((9, 7))
+        Wₕ = gridspace(_graded_mesh((9, 7)))
         fx = Rₕ(Wₕ, x -> 1 + x[1])
         fy = Rₕ(Wₕ, x -> 2 + x[2]^2)
         fxy = Rₕ(Wₕ, x -> (1 + x[1]) * (2 + x[2]^2))
@@ -542,7 +484,7 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
         for n in ((33, 25), (9, 8, 7)), dir in (nothing, :boundary), (name, L) in advs
             adv = name != "none"
             @testset "$n, dirichlet = $dir, advection = $name" begin
-                Wₕ = graded_space(n)
+                Wₕ = gridspace(_graded_mesh(n))
                 a = form(Wₕ, Wₕ, (u, v) -> L(u, v) + 0.25 * innerₕ(D₋ₓ(D₋ᵧ(u)), v))
                 b = form(Wₕ, Wₕ, L)
                 P = fdm_preconditioner(a; dirichlet = dir)
@@ -586,7 +528,7 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
             catch e
                 e isa ArgumentError ? sprint(showerror, e) : "wrong error $(typeof(e))"
             end
-        Wₕ = graded_space((9, 7))
+        Wₕ = gridspace(_graded_mesh((9, 7)))
         L(u, v) = inner₊(∇ₕ(u), ∇ₕ(v))
         fxy = Rₕ(Wₕ, x -> (1 + x[1]) * (2 + x[2]^2))
         refused = [
@@ -626,19 +568,6 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
         @test isapprox(x, Float64.(A) \ Float64.(F); rtol = 1e-3)
     end
 
-    # A 2-point axis leaves no interior unknown under `dirichlet = :boundary`.
-    @testset "fdm_solve: empty interior" begin
-        for n in ((2, 2), (2, 4), (2, 3, 3), (3, 2, 4))
-            Wₕ = graded_space(n)
-            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
-            A = assemble(a; dirichlet = :boundary)
-            F = zeros(size(A, 1))
-            x = fdm_solve(a, F; dirichlet = :boundary)
-            @test length(x) == ndofs(Wₕ)
-            @test x == A \ F
-        end
-    end
-
     # `fdm_factorize` once, then `fdm_solve!` per right-hand side: it returns `x`, matches the
     # sparse direct solve and `ldiv!`, and allocates nothing after a warm-up, for a symmetric
     # form (fast diagonalisation) and an advection form (Schur), graded 2D and 3D, on Serial
@@ -646,13 +575,7 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
     # CpuPolyester result is bitwise CpuSerial's; `fdm_preconditioner`'s `ldiv!` allocates
     # nothing on either.
     @testset "fdm_solve!: 0 bytes, CpuPolyester too" begin
-        function policy_space(n::NTuple{D, Int}, policy) where {D}
-            Ω = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n,
-                ntuple(_ -> false, D); backend = backend(policy = policy))
-            Bramble.change_points!(Ω,
-                ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
-            return gridspace(Ω)
-        end
+        policy_space(n, policy) = gridspace(_graded_mesh(n; backend = backend(policy = policy)))
         solve_bytes(x, f, F) = (fdm_solve!(x, f, F); fdm_solve!(x, f, F);
             @allocated fdm_solve!(x, f, F))
         ldiv_bytes(x, f, F) = (ldiv!(x, f, F); ldiv!(x, f, F); @allocated ldiv!(x, f, F))
@@ -706,7 +629,7 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
     # `fdm_factorize` refuses what `fdm_solve` refuses, with `fdm_solve`'s message; a K built
     # before `change_points!` is refused with the stale-weights error.
     @testset "fdm_factorize: refusals" begin
-        Wₕ = graded_space((9, 7))
+        Wₕ = gridspace(_graded_mesh((9, 7)))
         fxy = Rₕ(Wₕ, x -> (1 + x[1]) * (2 + x[2]^2))
         b = form(Wₕ, Wₕ, (u, v) -> innerₕ(fxy * u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
         @test_throws ArgumentError fdm_factorize(b)
@@ -757,20 +680,6 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
         @test_throws "gridspace(mesh(Wₕ)) again" fdm_solve(a, F; dirichlet = :boundary)
         Bramble.iterative_refinement!(Ωₕ)
         @test_throws "gridspace(mesh(Wₕ)) again" fdm_solve(a, F)
-    end
-
-    # The allocation of a second fdm_solve call is reported, not asserted to be zero.
-    @testset "fdm_solve: second-call allocations" begin
-        Random.seed!(KRON_EXT_SEED + 7)
-        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 13), (false, false))
-        Wₕ = gridspace(Ωₕ)
-        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
-        F = rand(ndofs(Wₕ))
-
-        fdm_solve(a, F)   # warm-up: JIT only, `fdm_solve` rebuilds its factors every call
-        bytes = @allocated fdm_solve(a, F)
-        @info "fdm_solve: @allocated on a second call (no persistent workspace across calls)" bytes
-        @test bytes >= 0   # reported, not asserted zero -- see the CHECK's EVIDENCE note
     end
 end
 

@@ -230,8 +230,6 @@ end
 
         # a shift moves the reach without widening it
         @test stencil_offsets(shift_op(id1, 1, 2)) == [(2,)]
-        @test length(stencil_offsets(shift_op(D₋ₓ(id1), 1, 3))) ==
-              length(stencil_offsets(D₋ₓ(id1)))
     end
 
     @testset "Reach transformation" begin

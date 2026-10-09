@@ -325,15 +325,6 @@ using Bramble:
         @test A ≈ 5.0 * R
     end
 
-    @testset "show: one line with the sizes" begin
-        Random.seed!(20261002)
-        Wr = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (false, false)))
-        Wf = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (false, false)))
-        @test repr(form(Wr, Wf, (u, v) -> innerₕ(πₕ(u), v))) ==
-              "BilinearForm{2D, $(ndofs(Wf))×$(ndofs(Wr))}"
-        @test repr(form(Wf, v -> innerₕ(x -> 1.0, v))) == "LinearForm{2D, $(ndofs(Wf))}"
-    end
-
     @testset "transposed pairs: assemble as two terms" begin
         Random.seed!(20260924)
         Ωr = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (false, false))

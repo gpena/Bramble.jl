@@ -5,11 +5,11 @@ using Bramble
 using LinearAlgebra: Diagonal, I
 using Random
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
-import Bramble: D₊ₓ, M₊ₓ, M₊ᵧ
+import Bramble: M₊ᵧ
 # S3 (gpena/Bramble.jl#271, O5): the AST accessor and stencil-level entry point needed to
 # assert the point-dependent path infers concretely -- neither is exported.
 import Bramble: local_stencil, resolve_form_ast
-using Bramble: Dcₓ, D₋ᵧ, D₋ₓ, Mᵧ, Mₓ, indices, jumpₓ
+using Bramble: D₋ᵧ, D₋ₓ, Mᵧ, indices
 
 # gpena/Bramble.jl#271: a grid-function coefficient inside a shifting node (a difference,
 # average, jump, or `shift_op`) must be read at the point the tap reaches, not at the point
@@ -23,39 +23,12 @@ using Bramble: Dcₓ, D₋ᵧ, D₋ₓ, Mᵧ, Mₓ, indices, jumpₓ
 # LEFT is the pre-fix reading, so every case below also asserts the two products differ --
 # on a constant coefficient, or an operator the two happen to coincide on, the equality
 # above would pass without the fix being exercised at all.
+#
+# form/operators.jl runs the x-direction taps over a coefficient operand, in 1D to 3D, so
+# only the y-direction taps, a sum and the assembly cost are tested here.
 
 @testset "Coefficient inside a shifting node" begin
     Random.seed!(20260918)
-
-    @testset "1D: every shifting node" begin
-        Ωₕ = mesh(domain(interval(0.0, 1.0)), 7, false)   # non-uniform: false, not true
-        Wₕ = gridspace(Ωₕ)
-        cₕ = Rₕ(Wₕ, x -> 1 + x)                            # varies, so cᵢ ≠ cᵢ₋₁
-        C = Diagonal(collect(parent(cₕ)))
-        asm(f) = Matrix(assemble(form(Wₕ, Wₕ, f)))
-
-        for (nm, op) in (
-            ("D₋ₓ", D₋ₓ),
-            ("D₊ₓ", D₊ₓ),
-            ("Dcₓ", Dcₓ),
-            ("Mₓ", Mₓ),
-            ("M₊ₓ", M₊ₓ),
-            ("jumpₓ", jumpₓ),
-            ("shift_op", u -> Bramble.shift_op(u, 1, 1))
-        )
-            @testset "$nm" begin
-                base = asm((u, v) -> innerₕ(op(u), v))
-                got = asm((u, v) -> innerₕ(op(cₕ * u), v))
-
-                # the oracle: coefficient-inside is H · Op · C
-                @test isapprox(got, base * C; atol = 1e-12)
-                # and it must actually differ from H · C · Op, the pre-fix reading --
-                # otherwise this mesh and coefficient cannot tell the two readings apart
-                # and the check above proves nothing
-                @test !isapprox(base * C, C * base; atol = 1e-12)
-            end
-        end
-    end
 
     @testset "1D: a sum holding a coefficient" begin
         # O4: `_combine_shift_traits` makes a sum point-dependent the moment either summand
@@ -82,7 +55,7 @@ using Bramble: Dcₓ, D₋ᵧ, D₋ₓ, Mᵧ, Mₓ, indices, jumpₓ
         C = Diagonal(collect(parent(cₕ)))
         asm(f) = Matrix(assemble(form(Wₕ, Wₕ, f)))
 
-        for (nm, op) in (("D₋ₓ", D₋ₓ), ("D₋ᵧ", D₋ᵧ), ("Mᵧ", Mᵧ), ("M₊ᵧ", M₊ᵧ))
+        for (nm, op) in (("D₋ᵧ", D₋ᵧ), ("Mᵧ", Mᵧ), ("M₊ᵧ", M₊ᵧ))
             @testset "$nm" begin
                 base = asm((u, v) -> innerₕ(op(u), v))
                 got = asm((u, v) -> innerₕ(op(cₕ * u), v))

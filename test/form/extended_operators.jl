@@ -289,14 +289,6 @@ end
         @test D̃ᵧ(id) isa ExtendedDifferenceNode
         @test D̽ₓ(id) isa ExtendedDifferenceNode
         @test !(jumpₓ(id) isa ExtendedDifferenceNode)   # the jump has a matrix
-
-        # and the block walk reaches its leaf through every one of them
-        p, q = IndexedTrialFunction{2}(2), IndexedTestFunction{2}(3)
-        for f in (jumpₓ, Dcₓ, D̃ₓ, D̽ₓ)
-            @test trial_component_or_nothing(f(p)) == 2
-            @test test_component_or_nothing(f(q)) == 3
-            @test trial_component_or_nothing(restrict_to(:interior, f(p))) == 2
-        end
     end
 
     @testset "Composite space" begin

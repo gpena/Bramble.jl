@@ -4,7 +4,8 @@ using Test
 using Bramble
 using Random
 using SparseArrays
-using Bramble: Serial, Parallel, backend, assemble_parallel!, D₋ₓ, D₊ᵧ
+using Bramble: Serial, Parallel, backend, assemble_parallel!, D₋ₓ
+using ..TestUtils: _fillnz!, alloc_test
 
 # The replay sinks hold the matrix's storage (`_scatter_storage`) and their recorded
 # positions as any `AbstractVector{Int}` (gpena/Bramble.jl#437): a sparse sink is plain
@@ -12,16 +13,6 @@ using Bramble: Serial, Parallel, backend, assemble_parallel!, D₋ₓ, D₊ᵧ
 # write exactly where `_scatter_add!` would: checked entry by entry on a hand-built matrix,
 # on a sparse type whose positions are linear indices, without allocating into a dense
 # matrix, and by a threaded refill against a serial `assemble` on a non-uniform mesh.
-
-# Allocation checks behind a function barrier (bramble-verification §1).
-_alloc(f::F, args...) where {F} = (f(args...); @allocated f(args...))
-
-# `allocate_system_matrix`-style results infer a union with a dense `Matrix`; the matrices
-# filled here are always `SparseMatrixCSC`.
-function _fillnz!(A, v)
-    @assert A isa SparseMatrixCSC
-    return fill!(nonzeros(A), v)
-end
 
 function _mesh(D, n, policy)
     Random.seed!(437)
@@ -32,8 +23,6 @@ end
 
 _space(Ω, c) = c == 1 ? gridspace(Ω) : gridspace(Ω, Val(c))
 _scalar(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(D₋ₓ(u), v)
-_pair(u, v) = innerₕ(D₋ₓ(u), D₊ᵧ(v)) + innerₕ(D₊ᵧ(u), D₋ₓ(v))
-_comp(u, v) = innerₕ(u(1), v(1)) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) + innerₕ(D₋ₓ(u(1)), v(2))
 
 _hasmatrix(T) = any(t -> t isa Type && t <: AbstractMatrix, T.parameters)
 
@@ -118,13 +107,13 @@ _hasmatrix(T) = any(t -> t isa Type && t <: AbstractMatrix, T.parameters)
         M = Matrix(R)
         assemble!(M, a)                                    # records into `M`
         @test a.cache.A_id == objectid(M)
-        @test _alloc(assemble!, M, a) == 0
+        @test alloc_test(assemble!, M, a) == 0
         @test M == Matrix(R)
     end
 
     @testset "Threaded refill matches serial" begin
-        for (nm, D, n, c, f) in (("1D scalar", 1, 41, 1, _scalar),
-            ("2D pair", 2, 13, 1, _pair), ("2D composite", 2, 11, 2, _comp))
+        # The 2D threaded refills are threaded_replay.jl's; its 1D cases run under slow only.
+        for (nm, D, n, c, f) in (("1D scalar", 1, 41, 1, _scalar),)
             R = assemble(form(_space(_mesh(D, n, Serial()), c),
                 _space(_mesh(D, n, Serial()), c), f))
             Ω = _mesh(D, n, Parallel())

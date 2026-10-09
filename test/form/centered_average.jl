@@ -4,6 +4,7 @@ using Test
 using Bramble
 using Random
 import Bramble: Mcₓ, Mcᵧ, Mc₂, Mcₕ, CenteredAverage, D₋ₓ, TrialFunction
+using ..TestUtils: _random_element
 
 # A random non-uniform mesh on the unit cube of dimension `D`.
 function _nonuniform_space(D)
@@ -14,8 +15,6 @@ function _nonuniform_space(D)
     Ωₕ = D == 1 ? mesh(dom, n[1], false) : mesh(dom, n[1:D], ntuple(_ -> false, D))
     return gridspace(Ωₕ)
 end
-
-_random_element(Wₕ) = (uₕ = element(Wₕ); parent(uₕ) .= randn(length(parent(uₕ))); uₕ)
 
 @testset "Centered average in forms (#287)" begin
     Random.seed!(287)

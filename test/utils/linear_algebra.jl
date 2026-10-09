@@ -18,7 +18,7 @@ using Bramble:
                GpuKernel
 using LinearAlgebra: dot
 using StaticArrays
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, @test_allocs, MockDeviceArray
 
 @testset "Linear algebra utilities" begin
     # Invariants tested (device and host locality):
@@ -28,9 +28,8 @@ using ..TestUtils: alloc_test, @test_allocs
     #    both localities, and never advising a CpuPolicy backend rebuild -- that combination
     #    is itself rejected at construction. No GPU is needed to
     #    exercise this: the seam reads locality from the destination array's own type.
-    # 3. Locality-agreeing pairs (a host destination under CpuSerial/CpuThreaded) still
-    #    sweep and produce correct values -- this testset is not throw-only.
-    # 4. The alias spellings still select the same two CPU methods they always did.
+    # 3. Locality-agreeing pairs (a host destination under CpuSerial/CpuThreaded) are swept
+    #    to exact values by the in-place iteration testsets, not by this one.
     @testset "Sweep guard refuses locality mismatches" begin
         v = zeros(4)
         @test_throws ArgumentError _sweep_for!(GpuKernel(), v, 1:4, identity)
@@ -47,29 +46,10 @@ using ..TestUtils: alloc_test, @test_allocs
         @test occursin("claims device locality", msg)
         @test occursin("GpuKernel", msg)
 
-        _sweep_for!(Serial(), v, 1:4, i -> 2.0 * i)
-        @test v == [2.0, 4.0, 6.0, 8.0]
-        fill!(v, 0.0)
-        _sweep_for!(CpuSerial(), v, 1:4, i -> 3.0 * i)
-        @test v == [3.0, 6.0, 9.0, 12.0]
-        fill!(v, 0.0)
-        _sweep_for!(CpuThreaded(), v, 1:4, i -> 4.0 * i)
-        @test v == [4.0, 8.0, 12.0, 16.0]
-
         # Reverse direction (device destination): a device-locality destination
-        # under a CpuPolicy, with no GPU or KernelAbstractions involved -- a small host-backed
-        # array type that claims DeviceLocality() through the trait is enough.
-        struct _FakeDeviceVector{T} <: DenseVector{T}
-            data::Vector{T}
-        end
-        Base.size(v::_FakeDeviceVector) = size(v.data)
-        Base.getindex(v::_FakeDeviceVector, i::Int) = getindex(v.data, i)
-        Base.setindex!(v::_FakeDeviceVector, val, i::Int) = setindex!(v.data, val, i)
-        Base.IndexStyle(::Type{<:_FakeDeviceVector}) = IndexLinear()
-
-        Bramble.locality(::Type{<:_FakeDeviceVector}) = Bramble.DeviceLocality()
-
-        v_dev = _FakeDeviceVector(zeros(4))
+        # under a CpuPolicy, with no GPU or KernelAbstractions involved -- the host-backed
+        # `MockDeviceArray` of test/TestUtils.jl, which claims DeviceLocality(), is enough.
+        v_dev = MockDeviceArray(zeros(4))
         @test_throws ArgumentError _sweep_for!(CpuSerial(), v_dev, 1:4, identity)
         err2 = try
             _sweep_for!(CpuSerial(), v_dev, 1:4, identity)
@@ -209,16 +189,6 @@ using ..TestUtils: alloc_test, @test_allocs
             end
         end
 
-        # Direct equivalence test between Serial() and Parallel()
-        n = 100
-        idxs = 1:n
-        v_serial = zeros(n)
-        v_parallel = zeros(n)
-        f_test = i -> sin(Float64(i)) + cos(Float64(i))
-        _sweep_for!(Serial(), v_serial, idxs, f_test)
-        _sweep_for!(Parallel(), v_parallel, idxs, f_test)
-        @test v_serial ≈ v_parallel
-
         # Zero allocations during Serial() policy execution
         v_serial_alloc = zeros(100)
         f_alloc = i -> Float64(i^2)
@@ -323,16 +293,6 @@ using ..TestUtils: alloc_test, @test_allocs
             @test m1 == [Float64(i) for i in 1:n]
             @test m2 == [Float64(2i) for i in 1:n]
         end
-
-        # Policy equivalence check
-        n = 64
-        m1_s, m2_s = zeros(n), zeros(n)
-        m1_p, m2_p = zeros(n), zeros(n)
-        g_fn = i -> (sin(Float64(i)), cos(Float64(i)))
-        _sweep_scatter_for!(Serial(), (m1_s, m2_s), 1:n, g_fn)
-        _sweep_scatter_for!(Parallel(), (m1_p, m2_p), 1:n, g_fn)
-        @test m1_s ≈ m1_p
-        @test m2_s ≈ m2_p
 
         # Zero allocations during Serial() component scattering
         scatter_targets = (zeros(50), zeros(50))

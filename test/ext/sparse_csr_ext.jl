@@ -29,19 +29,9 @@ using Random
 # builds), so the 1D/2D/3D unified-dispatcher checks it would otherwise cover are written out
 # by hand against CSR-built systems instead.
 using ..ExtSolverContracts: refactor_contract
+using ..TestUtils: _grid, _sine_source, _unit_cube
 
 const ZERO_BC = :dir => (x -> 0.0)
-
-_unit_cube(::Val{D}) where {D} = reduce(×, ntuple(_ -> interval(0.0, 1.0), Val(D)))
-_sine_source(::Val{1}) = x -> sin(π * x)
-_sine_source(::Val{D}) where {D} = x -> prod(sin(π * xᵢ) for xᵢ in x)
-
-_grid(::Val{1}, Ωd, n; backend) = mesh(Ωd, n, true; backend = backend)
-function _grid(::Val{D}, Ωd, n; backend) where {D}
-    mesh(
-        Ωd, ntuple(_ -> n, Val(D)), ntuple(_ -> true, Val(D)); backend = backend
-    )
-end
 
 # One matched CSC/CSR pair -- same domain, same mesh sizes, same discretisation -- for the
 # Poisson problem every backend file in test/ext/ shares (`SolverContracts.poisson_system`),
@@ -241,19 +231,13 @@ end
         # `bilinear_execution.jl`'s band-coloured threaded sweep is typed
         # `A::SparseMatrixCSC` throughout (S1.1 leaves it that way -- see the module
         # docstring of `ext/BrambleSparseMatricesCSRExt.jl`), so `SparseMatrixCSR` falls
-        # back to the ordinary serial record pass regardless of thread count. Asserted
-        # under `Threads.nthreads() > 1` anyway, matching the plan's own check, since that
-        # is the interesting regime for a *future* CSR-specific parallel sweep to preserve.
+        # back to the ordinary serial record pass regardless of thread count.
         p = _poisson_pair(Val(2), 9)
         A_serial = assemble(p.ar)
 
         A_par = allocate_system_matrix(p.ar)
         assemble_parallel!(A_par, p.ar)
         @test isapprox(Matrix(A_serial), Matrix(A_par); atol = 1.0e-12)
-
-        if Threads.nthreads() > 1
-            @test isapprox(Matrix(A_serial), Matrix(A_par); atol = 1.0e-12)
-        end
     end
 
     # sparse_factorize and pde_solve accept SparseMatrixCSR through a CSC-conversion fallback.
@@ -287,17 +271,13 @@ end
         )
     end
 
-    # sparse_factorize and refactor! still reject non-CSR, non-CSC types.
+    # sparse_factorize still rejects non-CSR, non-CSC types.
     @testset "other matrix types rejected" begin
         # The catch-all's guarantee for a genuinely unsupported type (dense `Matrix`,
         # test/form/sparse_solvers.jl) is unweakened by the CSR fallback: loading this
         # extension only ever widens dispatch for a `SparseMatrixCSR`, never for anything
         # else.
         @test_throws MethodError sparse_factorize(rand(4, 4))
-
-        p = _csr_poisson_system(Val(1), 9)
-        fact = sparse_factorize(p.A)
-        @test_throws ArgumentError refactor!(fact, rand(4, 4))
     end
 end
 

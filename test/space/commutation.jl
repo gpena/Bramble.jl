@@ -9,7 +9,7 @@ import Bramble: diff₋ₓ, diff₊ᵧ, D₊ₓ, D₊ᵧ, M₊ₓ
 using Bramble: diff₋ₓ, diff₊ᵧ
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, _nonuniform_points
 
 # Mixed differences commute.
 #
@@ -124,17 +124,9 @@ using ..TestUtils: WITH_SLOW_TESTS
         )
             nx = length(hx) + 1
             ny = length(hy) + 1
-            pts_x = zeros(Float64, nx)
-            for i in 1:length(hx)
-                pts_x[i + 1] = pts_x[i] + hx[i]
-            end
-            pts_x ./= pts_x[end]
+            pts_x = _nonuniform_points(hx)
 
-            pts_y = zeros(Float64, ny)
-            for j in 1:length(hy)
-                pts_y[j + 1] = pts_y[j] + hy[j]
-            end
-            pts_y ./= pts_y[end]
+            pts_y = _nonuniform_points(hy)
 
             Ωₕ = mesh(
                 domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (nx, ny), (false, false)

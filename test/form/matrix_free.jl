@@ -6,7 +6,7 @@ using Bramble: MatrixFreeOperator, VectorElement, trial_space, test_space, restr
                D₊ᵧ
 using LinearAlgebra: mul!, norm, dot
 using Random
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, _graded_mesh
 
 # `matrix_free_operator` applies a bilinear form through the walk the
 # assembly replays, so every check compares it against `assemble(a; dirichlet)` on the same
@@ -92,14 +92,6 @@ end
 function _mf_threaded_cases(be)
     W = _mf_spaces(be)[2]
     return Any[_mf_diffusion_case(W), _mf_composite_case(W), _mf_two_leaf_case(W)]
-end
-
-# A graded mesh as benchmark/operator_routes.jl builds one: uniform, then moved by
-# `change_points!` to `t^(1 + d/4)` along axis `d`, so every axis of length > 2 is non-uniform.
-function _mf_graded_space(n::NTuple{D, Int}) where {D}
-    Ωₕ = mesh(domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D))), n, ntuple(_ -> true, D))
-    Bramble.change_points!(Ωₕ, ntuple(d -> range(0.0, 1.0; length = n[d]) .^ (1 + 0.25d), D))
-    return gridspace(Ωₕ)
 end
 
 _mf_op(a, dl) = dl === nothing ? matrix_free_operator(a) : matrix_free_operator(a; dirichlet = dl)
@@ -409,7 +401,7 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
     # carries (`_mf_whole`). They do not prove the branch bodies run the gather and the cache.
     @testset "matrix-free: zero bytes at scale" begin
         for n in ((9, 2), (257, 257), (5, 4, 2), (33, 33, 33))
-            W = _mf_graded_space(n)
+            W = gridspace(_graded_mesh(n))
             @test !Bramble.is_uniform(mesh(W)(1))
             a = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
             for dl in (nothing, :boundary)
@@ -491,7 +483,7 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
     # the state (as an in-task rebuild does) hits, a copied or other mesh, or a moved one,
     # misses. A 70-point axis puts mask bits past the first 64-bit word.
     @testset "sink mask words, geometry identity" begin
-        W = _mf_graded_space((70, 5))
+        W = gridspace(_graded_mesh((70, 5)))
         a = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
         op = _mf_op(a, :boundary)
         bm = Bramble.index_in_marker(mesh(W), :boundary)
@@ -511,7 +503,7 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         @test Bramble._mf_evaluator(op.geom, term, sp) !== nothing
         @test Bramble._mf_evaluator(op.geom, term, rebuilt) !== nothing
         @test Bramble._mf_evaluator(op.geom, term, deepcopy(sp)) === nothing
-        other = Bramble.host_weights(_mf_graded_space((70, 5)))
+        other = Bramble.host_weights(gridspace(_graded_mesh((70, 5))))
         @test Bramble._mf_evaluator(op.geom, term, other) === nothing
         x = randn(n)
         @test _mf_agree(op * x, _mf_mat(a, :boundary) * x)

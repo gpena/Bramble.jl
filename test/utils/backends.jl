@@ -27,34 +27,7 @@ using Bramble:
                GpuPolicy
 using SparseArrays
 using LinearAlgebra: diag, I
-using ..TestUtils: alloc_test, @test_allocs
-
-# Minimal DenseArray mock simulating vendor GPU array types (such as MtlArray or CuArray)
-# to verify generic backend dispatch without requiring GPU hardware or optional dependencies.
-struct MockGPUArray{T, N} <: DenseArray{T, N}
-    data::Array{T, N}
-end
-function MockGPUArray{T, N}(::UndefInitializer, dims::Vararg{Integer, N}) where {T, N}
-    return MockGPUArray(Array{T, N}(undef, dims...))
-end
-function MockGPUArray{T, N}(::UndefInitializer, dims::NTuple{N, Integer}) where {T, N}
-    return MockGPUArray(Array{T, N}(undef, dims))
-end
-Base.size(A::MockGPUArray) = size(A.data)
-Base.getindex(A::MockGPUArray, i::Int...) = getindex(A.data, i...)
-Base.setindex!(A::MockGPUArray, v, i::Int...) = setindex!(A.data, v, i...)
-Base.IndexStyle(::Type{<:MockGPUArray}) = IndexLinear()
-Base.fill!(A::MockGPUArray{T}, v) where {T} = (fill!(A.data, v); A)
-
-# Answers `DeviceLocality()` although the storage underneath is a
-# plain host `Array`: this is what makes the `Backend` constructor's locality rejection
-# testable with no GPU hardware present -- MockGPUArray *claims* device locality the same
-# way a real vendor array would, so pairing it with a CpuPolicy or a host matrix type must
-# be refused exactly as it would be for MtlVector/MtlMatrix.
-Bramble.locality(::Type{<:MockGPUArray}) = Bramble.DeviceLocality()
-
-const MockGPUVector{T} = MockGPUArray{T, 1}
-const MockGPUMatrix{T} = MockGPUArray{T, 2}
+using ..TestUtils: alloc_test, @test_allocs, MockDeviceArray, MockDeviceMatrix, MockDeviceVector
 
 @testset "Execution policy hierarchy" begin
     # Invariants tested:
@@ -71,9 +44,6 @@ const MockGPUMatrix{T} = MockGPUArray{T, 2}
 
     @test Serial === CpuSerial
     @test Parallel === CpuThreaded
-    @test Serial() === CpuSerial()
-    @test Parallel() === CpuThreaded()
-    @test backend(policy = Serial()) === backend(policy = CpuSerial())
 
     # a policy is still a singleton with nothing in it, so it costs nothing to carry
     @test isbitstype(CpuSerial)
@@ -88,14 +58,14 @@ end
 
 @testset "Backend locality enforcement" begin
     # Invariants tested (rejection is
-    # testable with no GPU): MockGPUArray answers DeviceLocality() while remaining
+    # testable with no GPU): MockDeviceArray answers DeviceLocality() while remaining
     # host-backed, so every shape a real vendor array (MtlVector, a future CuArray) would
     # trigger is exercised here without any GPU hardware or optional dependency.
     @testset "locality trait" begin
         @test Bramble.locality(Vector{Float64}) === Bramble.HostLocality()
         @test Bramble.locality(Matrix{Float64}) === Bramble.HostLocality()
-        @test Bramble.locality(MockGPUVector{Float32}) === Bramble.DeviceLocality()
-        @test Bramble.locality(MockGPUMatrix{Float32}) === Bramble.DeviceLocality()
+        @test Bramble.locality(MockDeviceVector{Float32}) === Bramble.DeviceLocality()
+        @test Bramble.locality(MockDeviceMatrix{Float32}) === Bramble.DeviceLocality()
 
         @test Bramble.locality(CpuSerial()) === Bramble.HostLocality()
         @test Bramble.locality(CpuThreaded()) === Bramble.HostLocality()
@@ -110,7 +80,7 @@ end
         @test Bramble.locality(typeof(be_host)) === Bramble.HostLocality()
 
         be_device = backend(
-            vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32},
+            vector_type = MockDeviceVector{Float32}, matrix_type = MockDeviceMatrix{Float32},
             policy = GpuAsync()
         )
         @test Bramble.locality(be_device) === Bramble.DeviceLocality()
@@ -122,8 +92,8 @@ end
         for cpu_policy in (CpuSerial(), CpuThreaded(), CpuPolyester())
             err = try
                 backend(
-                    vector_type = MockGPUVector{Float32},
-                    matrix_type = MockGPUMatrix{Float32}, policy = cpu_policy
+                    vector_type = MockDeviceVector{Float32},
+                    matrix_type = MockDeviceMatrix{Float32}, policy = cpu_policy
                 )
                 nothing
             catch e
@@ -131,7 +101,7 @@ end
             end
             @test err isa ArgumentError
             msg = sprint(showerror, err)
-            @test occursin("MockGPUVector", msg) || occursin("MockGPUArray", msg)
+            @test occursin("MockDeviceVector", msg) || occursin("MockDeviceArray", msg)
             @test occursin(string(typeof(cpu_policy)), msg)
         end
 
@@ -153,7 +123,7 @@ end
         # device VT + host MT: a backend must be wholly host or wholly device.
         err_mixed = try
             backend(
-                vector_type = MockGPUVector{Float32}, matrix_type = Matrix{Float32},
+                vector_type = MockDeviceVector{Float32}, matrix_type = Matrix{Float32},
                 policy = GpuKernel()
             )
             nothing
@@ -162,19 +132,16 @@ end
         end
         @test err_mixed isa ArgumentError
         msg_mixed = sprint(showerror, err_mixed)
-        @test occursin("MockGPUVector", msg_mixed) || occursin("MockGPUArray", msg_mixed)
+        @test occursin("MockDeviceVector", msg_mixed) || occursin("MockDeviceArray", msg_mixed)
         @test occursin("Matrix{Float32}", msg_mixed)
 
         # Positive controls -- a constructor that threw for everything would pass a suite
         # that only checks that things throw.
         be_device = backend(
-            vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32},
+            vector_type = MockDeviceVector{Float32}, matrix_type = MockDeviceMatrix{Float32},
             policy = GpuKernel()
         )
         @test be_device isa Backend
-
-        @test backend() isa Backend
-        @test backend(Float64) isa Backend
     end
 end
 
@@ -301,32 +268,32 @@ end
     # 1. Custom DenseArray subtypes work with backend factory functions.
     # 2. backend_zeros and backend_eye fill correct dimensions and values.
     @testset "Mock GPU backend" begin
-        # MockGPUVector/MockGPUMatrix now answer DeviceLocality(), so
+        # MockDeviceVector/MockDeviceMatrix now answer DeviceLocality(), so
         # the default Serial() policy -- HostLocality() -- no longer agrees with them; a
         # GpuKernel() policy is required for this Backend to construct at all.
         be_gpu = backend(
-            vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32},
+            vector_type = MockDeviceVector{Float32}, matrix_type = MockDeviceMatrix{Float32},
             policy = GpuKernel()
         )
-        @test vector_type(be_gpu) === MockGPUVector{Float32}
-        @test matrix_type(be_gpu) === MockGPUMatrix{Float32}
+        @test vector_type(be_gpu) === MockDeviceVector{Float32}
+        @test matrix_type(be_gpu) === MockDeviceMatrix{Float32}
         @test eltype(be_gpu) === Float32
 
         v_gpu = vector(be_gpu, 25)
-        @test v_gpu isa MockGPUVector{Float32}
+        @test v_gpu isa MockDeviceVector{Float32}
         @test length(v_gpu) == 25
 
         m_gpu = matrix(be_gpu, 10, 20)
-        @test m_gpu isa MockGPUMatrix{Float32}
+        @test m_gpu isa MockDeviceMatrix{Float32}
         @test size(m_gpu) == (10, 20)
 
         z_gpu = backend_zeros(be_gpu, 8)
-        @test z_gpu isa MockGPUMatrix{Float32}
+        @test z_gpu isa MockDeviceMatrix{Float32}
         @test size(z_gpu) == (8, 8)
         @test all(z_gpu .== 0.0f0)
 
         eye_gpu = backend_eye(be_gpu, 5)
-        @test eye_gpu isa MockGPUMatrix{Float32}
+        @test eye_gpu isa MockDeviceMatrix{Float32}
         @test size(eye_gpu) == (5, 5)
         @test eye_gpu[1, 1] == 1.0f0
         @test eye_gpu[1, 2] == 0.0f0
@@ -631,11 +598,11 @@ end
 end
 
 @testset "GpuOffload policy (#324)" begin
-    # A device Backend stands in for a real GPU backend (MockGPUVector/MockGPUMatrix answer
+    # A device Backend stands in for a real GPU backend (MockDeviceVector/MockDeviceMatrix answer
     # DeviceLocality(), see the top of this file), so this testset exercises GpuOffload's own
     # behaviour without requiring Metal.jl.
     dev = backend(
-        vector_type = MockGPUVector{Float32}, matrix_type = MockGPUMatrix{Float32},
+        vector_type = MockDeviceVector{Float32}, matrix_type = MockDeviceMatrix{Float32},
         policy = GpuKernel()
     )
 

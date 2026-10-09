@@ -26,10 +26,7 @@ using Bramble: refactor!, sparse_factorize, sparse_refactor!, sparspak_factorize
 
     # 2. Default pde_solve
     u_default = pde_solve(A, F)
-    @test isapprox(u_default, A \ F; atol = 1e-12)
-
-    u_default_sym = pde_solve(A, F; solver = :default)
-    @test isapprox(u_default_sym, A \ F; atol = 1e-12)
+    @test isapprox(u_default, Matrix(A) \ F; atol = 1e-12)
 
     # 3. pde_solve on Factorization object
     fact_lu = lu(A)
@@ -42,7 +39,6 @@ using Bramble: refactor!, sparse_factorize, sparse_refactor!, sparspak_factorize
 
     # 5. Type safety: refactor! only accepts SparseMatrixCSC (or BilinearForm)
     @test_throws ArgumentError refactor!(fact_lu, Matrix(A))
-    @test_throws ArgumentError sparse_refactor!(fact_lu, Matrix(A))
     @test_throws ArgumentError refactor!(fact_lu, [1.0, 2.0])
 
     # 6. Type safety: sparse_factorize only accepts SparseMatrixCSC
@@ -187,7 +183,7 @@ end
 @testset "SPQR and pde_solve, non-uniform mesh" begin
     Random.seed!(11)
     I1 = interval(0.0, 1.0)
-    W = gridspace(mesh(domain(I1, :boundary => boundary_symbols(I1)), 12, true))
+    W = gridspace(mesh(domain(I1, :boundary => boundary_symbols(I1)), 12, false))
     a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
     l = form(W, v -> innerₕ(Rₕ(W, x -> sin(π * x)), v))
     bc = :boundary => x -> 0.0

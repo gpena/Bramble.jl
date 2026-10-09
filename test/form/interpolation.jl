@@ -13,6 +13,7 @@ using Bramble:
                resolve_form_ast,
                _is_source_only,
                Innerh,
+               Innerplus,
                OperatorAdd,
                D₋ᵧ,
                D₋ₓ,
@@ -129,14 +130,10 @@ end
 
     # inner₊ₓ/inner₊ᵧ: πₕ(u) as a bare source, and composed with D₋ₓ (same-direction
     # BackwardDifference×BackwardDifference case)
-    lfx = form(Vh, v -> innerₕ(uv(1), v(1)) + inner₊ₓ(πₕ(u_leaf2), v(1)))
     @test resolve_form_ast(form(Vh, v -> inner₊ₓ(πₕ(u_leaf2), v(1)))) isa LinearProduct
     @test resolve_form_ast(form(Vh, v -> inner₊ᵧ(πₕ(u_leaf2), v(1)))) isa LinearProduct
     @test resolve_form_ast(form(Vh, v -> inner₊(D₋ₓ(πₕ(u_leaf2)), D₋ₓ(v(1))))) isa
           LinearProduct
-    bx_all = assemble(lfx)
-    @test all(isfinite, bx_all)
-    @test !all(iszero, bx_all)          # the control: a dropped operator reads as zero
 
     # a 1D source: inner₊'s own D == 1 no-direction branch
     Ω1 = mesh(domain(interval(0.0, 1.0)), 9, false)
@@ -158,11 +155,11 @@ end
     @test all(isfinite, b_grad)
     @test !all(iszero, b_grad)
 
-    # numeric consistency: inner₊ₓ(πₕ(u), v(1)) should agree with innerₕ(πₕ(u), v(1)) in the
-    # 1D-along-x case up to InnerPlus's own directional weight, so just check it is finite and
-    # non-trivial (not silently zero from a misrouted stencil)
+    # numeric consistency: inner₊ₓ(πₕ(u), v(1)) scatters the interpolant times InnerPlus's own
+    # x-direction weight into block 1, an oracle computed without `assemble`
     bx = assemble(form(Vh, v -> inner₊ₓ(πₕ(u_leaf2), v(1))))
-    @test !all(iszero, bx)
+    @test bx[1:ndofs(Wbig)] ≈ parent(πₕ(Wbig, u_leaf2)) .* weights(Wbig, Innerplus(), 1)
+    @test iszero(bx[(ndofs(Wbig) + 1):end])
 
     # regression: an ordinary bilinear inner₊/inner₊ₓ/inner_plus, trial function either
     # wrapped or not, still builds BilinearProduct exactly as before this fix

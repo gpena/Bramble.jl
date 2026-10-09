@@ -150,6 +150,19 @@ using ..TestUtils: _tri, _nonuniform_points
         symmetrize!(Aos, Fos, Vo, :left)
         @test Ao == Aos
         @test Fo == Fos
+
+        # Restricted to a subset of leaves: combining still matches sequential, and the
+        # untouched leaf (2) stays as it was.
+        Ac0 = blockdiag(_tri(n), _tri(n), _tri(n))
+        Ac = copy(Ac0)
+        dirichlet_bc!(Ac, Vₕ, :bottom, :top; components = (1, 3))
+
+        Acs = copy(Ac0)
+        dirichlet_bc!(Acs, Vₕ, :bottom; components = (1, 3))
+        dirichlet_bc!(Acs, Vₕ, :top; components = (1, 3))
+        @test Ac == Acs
+        @test Ac[1:n, :] != Ac0[1:n, :]
+        @test Ac[(n + 1):(2n), :] == Ac0[(n + 1):(2n), :]
     end
 
     @testset "Nested leaf offsets" begin

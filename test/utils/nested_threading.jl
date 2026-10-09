@@ -32,7 +32,7 @@ using Bramble: CpuThreaded, _dot, _in_threaded_region, _is_static_nesting_error,
                _static_or_serial, _serial_for!, _threaded_for!, assemble_add!,
                assemble_parallel!, D₋ₓ!, Mₓ!, divₕ!, εₕ!, εcₕ!, curlₕ!, ∇̃ₕ!
 using SparseArrays: nonzeros
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, _reset_seen!, _Spy, _threads_seen
 
 const _D2 = domain(interval(0.0, 1.0) × interval(0.0, 2.0))
 _mesh(n, policy) = mesh(_D2, (n, n), (false, false); backend = backend(policy = policy))
@@ -44,18 +44,6 @@ function _nested_results(f)
         out[i] = f()
     end
     return out
-end
-
-# A vector that records which threads read it.
-const _SEEN = Threads.Atomic{UInt64}(0)
-struct _Spy{T} <: AbstractVector{T}
-    x::Vector{T}
-end
-Base.size(s::_Spy) = size(s.x)
-Base.IndexStyle(::Type{<:_Spy}) = IndexLinear()
-Base.@propagate_inbounds function Base.getindex(s::_Spy, i::Int)
-    Threads.atomic_or!(_SEEN, UInt64(1) << (Threads.threadid() - 1))
-    return s.x[i]
 end
 
 @testset "Parallel() inside user threaded region" begin
@@ -179,10 +167,10 @@ end
         x, y, z = rand(n), rand(n), rand(n)
         P = CpuThreaded()
 
-        _SEEN[] = 0
+        _reset_seen!()
         ref = _dot(P, _Spy(x), y, z)
         if Threads.nthreads() >= 2
-            @test count_ones(_SEEN[]) >= 2
+            @test _threads_seen() >= 2
         else
             @test_skip "top-level threading needs --threads >= 2"
         end

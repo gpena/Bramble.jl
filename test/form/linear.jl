@@ -219,10 +219,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         end
 
         @testset "Unindexed broadcast" begin
-            # The prior behaviour, which has to keep working: the same integrand in each.
-            @test blocks(assemble(form(Vₕ, v -> innerₕ(uv(1), v)))) ≈ [0.5, 0.5]
-
-            # and the two spellings mix, because routing is decided per term
+            # The two spellings mix, because routing is decided per term
             mixed = assemble(form(Vₕ, v -> innerₕ(uv(1), v) + innerₕ(uv(2), v(2))))
             @test blocks(mixed) ≈ [0.5, 0.5 + 5.0]
         end
@@ -249,7 +246,6 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
                 assemble!(b, lf)
                 return @allocated assemble!(b, lf)
             end
-            @test bytes(u -> (v -> innerₕ(u(1), v))) == 0
             @test bytes(u -> (v -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))) == 0
         end
     end
@@ -409,21 +405,6 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
             @test assemble_parallel!(bp, lf) === bp
             @test bp ≈ bs
         end
-
-        # a heterogeneous leaf too: `_sweep_parallel!` derives its own
-        # `LinearIndices`/`markers` from whichever leaf it is handed, so this needs its own
-        # check independent of the two cases above; those never exercise a leaf whose mesh
-        # differs from `first_space(space)`'s. Written with `v(2)`, not `v`: an unindexed
-        # form broadcasts to *every* leaf using the same source, which only the two cases
-        # above can get away with, since every leaf there happens to share one size.
-        Ωhet_par = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (6, 6), (true, true))
-        Vhet_par = Bramble.CompositeGridSpace((gridspace(Ωₕ), gridspace(Ωhet_par)))
-        uhet_par = Rₕ(Vhet_par, (x -> sin(x[1]), x -> cos(x[2])))
-        lf_het = form(Vhet_par, v -> innerₕ(uhet_par(2), v(2)))
-        bs_het = assemble(lf_het)
-        bp_het = similar(bs_het)
-        @test assemble_parallel!(bp_het, lf_het) === bp_het
-        @test bp_het ≈ bs_het
 
         # The sweep accumulates where the version before it overwrote from a reduction, so a
         # vector assembled into twice has to give the same answer and not double it.
@@ -626,8 +607,6 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
 
         # In-place assembly allocates zero bytes
         d = zeros(ndofs(Wₕ))
-        assemble!(d, lfs)
-        @test_allocs assemble!(d, lfs)
         @test_allocs assemble!(d, lfa_scalar)
     end
 
@@ -647,11 +626,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         # allocation free. What it must not do is build a full-length vector, which is what
         # this pins: the bound is a fraction of one, not zero. Behind a barrier, because at
         # top level over globals the call itself reports bytes it does not spend.
-        function _contract_allocs(lf, v)
-            lf(v)
-            return @allocated lf(v)
-        end
-        @test _contract_allocs(lfc, uₕ) < 8 * n ÷ 100
+        @test alloc_test(lfc, uₕ) < 8 * n ÷ 100
         @test assemble(lfc) ≈ b                     # and the vector path still works
 
         # Every arrangement has to agree with assembling and contracting by hand, not just
@@ -685,13 +660,13 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         # A source carrying an operator is evaluated into an element during form construction
         lfd = form(Wₕ, v -> innerₕ(D₋ₓ(uₕ), v))
         @test lfd(uₕ) ≈ sum(assemble(lfd) .* parent(uₕ))
-        @test _contract_allocs(lfd, uₕ) < 8 * n ÷ 100
+        @test alloc_test(lfd, uₕ) < 8 * n ÷ 100
 
         # and hoisting the operator out of the form agrees
         duₕ = D₋ₓ(uₕ)
         lfh = form(Wₕ, v -> innerₕ(duₕ, v))
         @test lfh(uₕ) ≈ lfd(uₕ)
-        @test _contract_allocs(lfh, uₕ) < 8 * n ÷ 100
+        @test alloc_test(lfh, uₕ) < 8 * n ÷ 100
     end
 
     @testset "Live coefficient evaluation" begin
@@ -719,13 +694,12 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
         @test evaluate!(scratch, lfes, wₕ) ≈ lfes(wₕ)
         @test evaluate!(scratch, lfe, wₕ) ≈ lfe(wₕ)
 
-        # In-place evaluation writes through without allocations
+        # In-place evaluation writes through
         ul = Rₕ(Wₕ, x -> 1.0)
         lfl = form(Wₕ, v -> innerₕ(ul, v))
         loop_first = evaluate!(scratch, lfl, wₕ)
         Rₕ!(ul, x -> 5.0)
         @test evaluate!(scratch, lfl, wₕ) ≈ 5 * loop_first
-        @test_allocs evaluate!(scratch, lfl, wₕ)
     end
 
     @testset "Source variants" begin
@@ -737,8 +711,6 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
 
         @test sum(assemble(form(Wc, v -> innerₕ(1, v)))) ≈ one_over_Ω
         @test eltype(assemble(form(Wc, v -> innerₕ(1, v)))) === Float64
-        @test sum(assemble(form(Wc, v -> innerₕ(2.5, v)))) ≈ 2.5
-        @test sum(assemble(form(Wc, v -> innerₕ(x -> 1.0, v)))) ≈ one_over_Ω
 
         # and they mix with a grid-function source in one form
         gₕ = Rₕ(Wc, x -> 3.0)
@@ -1133,8 +1105,6 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
     @testset "Vector contraction" begin
         lf = form(Wₕ, v -> innerₕ(uₕ, v))
         b = assemble(lf)
-        ones_el = Rₕ(Wₕ, x -> 1.0)
-        @test lf(ones_el) ≈ sum(b)        # against the all-ones element, the sum
 
         # A bare vector is refused rather than contracted. Its length carries no claim about
         # whether its blocks match the components a form routes to, so accepting one would

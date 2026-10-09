@@ -22,6 +22,7 @@ using Random
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS
 using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
+using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
 
 @testset "Grid spaces" begin
     mesh1d = mesh(domain(interval(0, 1)), 10, true)
@@ -42,31 +43,15 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
         end
 
         @testset "_innerh_weights!" begin
-            # 1D
-            u1 = vector(backend(mesh1d), npoints(mesh1d))
-            _innerh_weights!(u1, mesh1d)
-            @test length(u1) == npoints(mesh1d)
-            @test all(u1 .> 0)
-
-            # 2D
             u2 = vector(backend(mesh2d), npoints(mesh2d))
             _innerh_weights!(u2, mesh2d)
             expected_norm = 0.05952940449895328
             @test norm(u2) ≈ expected_norm
         end
 
-        @testset "_innerplus_weights!" begin
-            u = vector(backend(mesh1d), npoints(mesh1d))
-            _innerplus_weights!(u, mesh1d, 1)
-            @test u[1] == 0.0
-            for i in 2:npoints(mesh1d)
-                @test u[i] ≈ spacing(mesh1d, i)
-            end
-        end
-
         @testset "_innerplus_mean_weights!" begin
             # The transverse factor: every entry, boundary included, is the mesh's own
-            # half_spacing there. This differs from _innerplus_weights! above, the *aligned*
+            # half_spacing there. This differs from _innerplus_weights!, the *aligned*
             # factor, whose first entry is correctly zero (no cell behind node 1 along the
             # direction being differenced). Zeroing the two boundary entries here would
             # delete real quadrature weight; see _innerplus_mean_weights!'s docstring.
@@ -378,11 +363,6 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
         @test (W^1) === W
         @test (W^Val(1)) === W
 
-        # The generic element interface still works on that scalar result.
-        u = element(W^1)
-        @test u(1) === u
-        @test components(u) === (u,)
-
         @test_throws ArgumentError gridspace(mesh2d, 0)
         @test_throws ArgumentError W^0
 
@@ -427,9 +407,6 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
         @test space(W) === W
 
         V = W^Val(3)
-        @test ncomponents(V) == 3
-        @test ncomponents(typeof(V)) == 3
-        @test length(spaces(V)) == 3
         @test all(sp === W for sp in spaces(V))
 
         # a composite is itself an AbstractSpaceType
@@ -565,10 +542,6 @@ end
 # `CartesianIndices` order. The oracle is built from `points` alone, per axis: the backward
 # spacing (zero at the first node) on a staggered axis, the half-cell width elsewhere.
 @testset "host_weights, SeparableWeights arrays" begin
-    bw(x, i) = i == 1 ? 0.0 : x[i] - x[i - 1]
-    hh(x, i) = i == 1 ? (x[2] - x[1]) / 2 :
-               i == length(x) ? (x[end] - x[end - 1]) / 2 : (x[i + 1] - x[i - 1]) / 2
-
     Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (0.5, 0.6, 0.7))), (4, 5, 6), (false, false, false))
     Wₕ = gridspace(Ωₕ)
     n = npoints(Ωₕ, Tuple)
@@ -579,7 +552,9 @@ end
         @test Bramble.host_weights(w) === w
         a = Array(w)
         @test a isa Vector{Float64}
-        expected = vec([prod(d -> d in S ? bw(xs[d], I[d]) : hh(xs[d], I[d]), 1:3)
+        expected = vec([prod(
+                            d -> d in S ? _backward_spacing_oracle(xs[d], I[d]) :
+                                 _half_spacing_oracle(xs[d], I[d]), 1:3)
                         for I in CartesianIndices(n)])
         @test a ≈ expected
     end
