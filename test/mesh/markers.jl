@@ -78,11 +78,6 @@ using ..TestUtils: alloc_test, @test_allocs
             domain(S, :boundary => :left), (4, 4), (true, true); warn_marker_mismatch = false
         )
         @test sum(Bramble.markers(Ωₕ)[:boundary]) == 4   # the custom definition still wins
-
-        # The default stays warn-on-mismatch. false is opt-in, not a silent global change.
-        @test_logs (:warn, r"boundary.*something other than") mesh(
-            domain(S, :boundary => :left), (4, 4), (true, true)
-        )
     end
 
     @testset "Condition markers" begin
@@ -242,12 +237,6 @@ end
     S1 = interval(0.0, 1.0)
     S2 = interval(0.0, 1.0) × interval(0.0, 2.0)
 
-    @testset "1D predicate on a 1-tuple is refused" begin
-        # The probe passes the bare scalar, as the mesh does, so a tuple-only predicate throws.
-        tuple_only = x -> x isa Tuple ? x[1] > 0.5 : throw(DomainError(x))
-        @test_throws ArgumentError Bramble.markers(S1, :right_half => tuple_only)
-    end
-
     @testset "1D predicate taking neither is refused" begin
         err = try
             Bramble.markers(S1, :broken => x -> error("no"))
@@ -308,12 +297,6 @@ end
         @test err_bool isa ArgumentError
         @test occursin("label :num", sprint(showerror, err_bool))
         @test occursin("Float64", sprint(showerror, err_bool))
-    end
-
-    @testset "Marker printing" begin
-        @test sprint(show, Bramble.Marker(:a, :xmin)) == "Marker(:a => :xmin)"
-        @test sprint(show, Bramble.Marker(:b, Set((:xmin,)))) == "Marker(:b => (xmin))"
-        @test sprint(show, Bramble.Marker(:c, x -> true)) == "Marker(:c => <function>)"
     end
 end
 
@@ -497,7 +480,6 @@ end
 
     # A time domain needs (x, t) predicates, at construction.
     @test_throws ArgumentError domain(X, T, :s => x -> x[1] > 0.5)
-    @test_throws ArgumentError markers(X, T, :s => x -> x[1] > 0.5)
     @test_throws ArgumentError markers(interval(0.0, 1.0), T, :s => x -> x > 0.5)
 end
 

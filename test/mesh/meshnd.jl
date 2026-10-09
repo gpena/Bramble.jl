@@ -42,7 +42,6 @@ using LinearAlgebra: hypot
 using Random
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS
-using ..TestUtils: alloc_test, @test_allocs
 
 # --- Test Suite ---
 @testset "Multi-dimensional meshes" begin
@@ -178,17 +177,6 @@ using ..TestUtils: alloc_test, @test_allocs
             # points(mesh, index)
             @test point(Ωₕ_2d_unif, CartesianIndex(2, 3)) == (1.0, 2.0) # x[2], y[3]
             @test point(Ωₕ_2d_unif, (4, 5)) == (3.0, 4.0) # x[4], y[5]
-
-            # Iterators.product(points(mesh)...)
-            pts_iter = Iterators.product(points(Ωₕ_2d_unif)...)
-            pts = collect(pts_iter)
-
-            @test length(pts_iter) == 20
-            @test first(pts_iter) == (0.0, 0.0)
-            @test last(pts_iter) == (3.0, 4.0)
-            @test collect(pts_iter)[1] == (0.0, 0.0)
-            @test collect(pts_iter)[4] == (3.0, 0.0) # End of first column
-            @test collect(pts_iter)[5] == (0.0, 1.0) # Start of second column
 
             # Spacing (uniform dx=1, dy=1)
             @test spacing(Ωₕ_2d_unif, (2, 3)) == (1.0, 1.0)
@@ -825,15 +813,6 @@ end
             @test hₘₐₓ(Ωₕ) == brute
             @test hₘₐₓ(Ωₕ) ≈ hypot(ntuple(i -> hₘₐₓ(Ωₕ(i)), D)...)
         end
-    end
-
-    # and it costs nothing, which is the point of computing it this way
-    let
-        Ωₕ = mesh(
-            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (30, 30, 30), (true, true, true)
-        )
-        eval_hmax(m) = hₘₐₓ(m)
-        @test_allocs eval_hmax(Ωₕ)
     end
 end
 

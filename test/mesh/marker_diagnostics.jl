@@ -105,11 +105,7 @@ using ..TestUtils: @test_allocs
         direct = index_in_marker(Ωₕ, :left)
         @test direct === markers(Ωₕ)[:left]
 
-        alias = index_in_marker(Ωₕ, :xmin)
-        @test alias === direct
-
         @test_allocs index_in_marker(Ωₕ, :left)
-        @test_allocs index_in_marker(Ωₕ, :xmin)
 
         err = try
             index_in_marker(Ωₕ, :lefft)

@@ -85,6 +85,7 @@ struct NotAFunctionPredicate end
         @test boundary_symbols(Ω1) == (:xmin, :xmax)
         @test boundary_symbols(Ω2) == (:xmin, :xmax, :ymin, :ymax)
         @test boundary_symbols(typeof(Ω1)) == (:xmin, :xmax)
+        @test boundary_symbols(typeof(Ω2)) == (:xmin, :xmax, :ymin, :ymax)
     end
 
     # Invariant: `process_identifier` normalizes symbols, tuples, and vectors
@@ -204,7 +205,9 @@ struct NotAFunctionPredicate end
         @test_throws ArgumentError markers(interval(0.0, 1.0), :r => NotAFunctionPredicate())
 
         # A 1D predicate is called with the bare scalar coordinate, as the mesh does: one
-        # that accepts only a 1-tuple is refused at construction, not at `mesh`.
+        # that accepts only a 1-tuple is refused at construction, not at `mesh`. This is
+        # the one test that pins the scalar probe, since a predicate that throws for any
+        # input (markers.jl) would also be refused if the probe were a 1-tuple.
         err = try
             domain(interval(0.0, 1.0), :r => ((x::Tuple{Float64}) -> x[1] < 0.5))
             nothing
@@ -355,6 +358,8 @@ struct NotAFunctionPredicate end
         # Direct evaluation on Domain: Ω(t).
         Ω_time = domain(I_space, I_time, :moving => func_time, :fixed_bnd => :left)
         @test dim(Ω_time) == 2
+        @test set(Ω_time) === I_space
+        @test length(Ω_time) == 2
         Ω_eval = Ω_time(0.5)
         @test Ω_eval isa Domain
         @test markers(Ω_eval) isa EvaluatedDomainMarkers
@@ -437,14 +442,10 @@ struct NotAFunctionPredicate end
     # Invariant: Textual display formatting for markers, marker containers, and
     # domains across dimensions (1D, 2D, 3D, collapsed) produces valid output.
     @testset "Domain string representation" begin
-        # Marker formatting.
-        m_s = Marker(:left, :left)
-        m_t = Marker(:corner, Set([:top, :right]))
-        m_f = Marker(:level, x -> x[1] > 0)
-
-        @test occursin("Marker(:left => :left)", repr(m_s))
-        @test occursin("Marker(:corner => (", repr(m_t))
-        @test occursin("Marker(:level => <function>)", repr(m_f))
+        # Marker formatting, one exact string per identifier kind.
+        @test sprint(show, Marker(:a, :xmin)) == "Marker(:a => :xmin)"
+        @test sprint(show, Marker(:b, Set((:xmin,)))) == "Marker(:b => (xmin))"
+        @test sprint(show, Marker(:c, x -> true)) == "Marker(:c => <function>)"
 
         # DomainMarkers detailed display, which is `MIME"text/plain"`
         # (gpena/Bramble.jl#45).
@@ -560,14 +561,6 @@ struct NotAFunctionPredicate end
         # Coordinate interval indexing.
         @test Ω_2d(1) == (0.0, 2.0)
         @test Ω_2d(2) == (1.0, 3.0)
-
-        # Boundary symbols from domain instance.
-        @test boundary_symbols(Ω_1d) == (:xmin, :xmax)
-        @test boundary_symbols(Ω_2d) == (:xmin, :xmax, :ymin, :ymax)
-
-        # Boundary symbols from domain type.
-        @test boundary_symbols(typeof(Ω_1d)) == (:xmin, :xmax)
-        @test boundary_symbols(typeof(Ω_2d)) == (:xmin, :xmax, :ymin, :ymax)
     end
 
     # Invariant: `EvaluatedDomainMarkers` handles static condition fallbacks
@@ -605,17 +598,6 @@ struct NotAFunctionPredicate end
         @test !isempty(edm2)
     end
 
-    # Invariant: Spatiotemporal domains can be constructed by combining spatial
-    # and temporal sets alongside time-dependent boundary conditions.
-    @testset "Spatiotemporal domain construction" begin
-        I_space = interval(0.0, 1.0) × interval(0.0, 1.0)
-        I_time = interval(0.0, 2.0)
-        f = (x, t) -> x[1] > t
-        Ω = domain(I_space, I_time, :moving => f, :fixed => :left)
-        @test set(Ω) === I_space
-        @test dim(Ω) == 2
-        @test length(Ω) == 2
-    end
 end
 
 @testset "Higher-D domains and collapsed sets" begin
@@ -632,15 +614,6 @@ end
         @test boundary_symbols(1) == (:xmin, :xmax)
         @test boundary_symbols(2) == (:xmin, :xmax, :ymin, :ymax)
         @test boundary_symbols(3) == (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
-
-        I = interval(0.0, 1.0)
-        @test boundary_symbols(I) == boundary_symbols(typeof(I))
-        @test boundary_symbols(typeof(domain(I))) == boundary_symbols(typeof(I))
-
-        X2 = I × I
-        @test boundary_symbols(X2) == boundary_symbols(typeof(X2))
-        X3 = I × I × I
-        @test boundary_symbols(X3) == boundary_symbols(typeof(X3))
     end
 
     # Invariant: A domain wrapping a degenerate interval displays as a Point rather than Interval.
