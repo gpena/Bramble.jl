@@ -392,9 +392,11 @@ end
 @inline _fix_time(f::F, t) where {F} = _is_spatial(f) ? f : Base.Fix2(f, t)
 
 # The `(t, p)` twin of `_fix_time`: classifies the raw predicate, since the `Fix` wrappers
-# are varargs-callable and would always look non-spatial.
+# are varargs-callable and would always look non-spatial. A 3-argument method wins over a
+# 1-argument one, as the validators route such an `f` here for its `(x, t, p)` method.
 @inline function _fix_time_param(f::F, t, p) where {F}
-    return _is_spatial(f) ? f : Base.Fix2(Base.Fix{3}(f, p), t)
+    is_spatial = _is_spatial(f) && !(@inline hasmethod(f, Tuple{Any, Any, Any}))
+    return is_spatial ? f : Base.Fix2(Base.Fix{3}(f, p), t)
 end
 
 """
@@ -475,13 +477,12 @@ predicate is fixed at `(t, p)` and each spatial `x` predicate is kept as it is; 
 Return condition markers evaluated at `edm.evaluation_time` and `edm.p`, each a spatial
 predicate of `x`.
 
-A predicate `f` with a one-argument method and no two-argument method is spatial and passes
-through unchanged, classified as in
-[`conditions`](@ref conditions(::EvaluatedDomainMarkers)). Any other predicate is fixed at
-`(t, p)` as `x -> f(x, t, p)`, so `(x, t = 0, p = 1) -> ...` is fixed at both, not left at
-its defaults. An `(x, t)` predicate is not fixed at `t` alone, so its wrapper throws a
-`MethodError` when called. That is safe, as `dirichlet_constraints` and `semidiscretize` send
-only uniformly `(x, t, p)` conditions here.
+A predicate `f` with a one-argument method and no two- or three-argument method is spatial
+and passes through unchanged. Any other predicate is fixed at `(t, p)` as `x -> f(x, t, p)`,
+so `(x, t = 0, p = 1) -> ...` is fixed at both. An `(x, t)` predicate is not fixed at `t`
+alone, and its wrapper throws a `MethodError` when called; `dirichlet_constraints` and
+`semidiscretize` never send one here, since they route only uniformly `(x, t, p)` conditions
+to this path.
 
 `Base.Fix{N}` generalizes `Base.Fix1`/`Base.Fix2` to insert its fixed value at position `N`
 of *whatever args a given call supplies*, not at position `N` of `f`'s own argument list

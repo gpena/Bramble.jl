@@ -620,6 +620,17 @@ struct NotAFunctionPredicate end
         @test_allocs conditions(edm_par)
         @test_allocs label_identifiers(edm_par)
 
+        # A 3-arg method outranks a 1-arg one on this path: fixed at (t, p), not passed.
+        g_par(x) = -100.0
+        g_par(x, t, p) = x[1] + t - p
+        edm_g = Bramble._create_generic_markers(:a => sp, :g => g_par)(0.5, 3.0)
+        cs_g = @inferred conditions(edm_g)
+        @test identifier(cs_g[2]) !== g_par
+        @test identifier(cs_g[2])((1.0,)) === -1.5
+        @test identifier(cs_g[2])((0.0,)) === -2.5
+        @test_allocs conditions(edm_g)
+        @test_allocs label_identifiers(edm_g)
+
         # Labels query on evaluated marker container.
         lbls = collect(labels(edm))
         @test :region ∈ lbls
