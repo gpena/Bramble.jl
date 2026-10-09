@@ -194,7 +194,9 @@ to `:bottom`, against 1.0 here on the same mesh and region, on every mesh.
 viewpoint aliases. A user-defined marker covering part of a face, an interior interface or a
 staircase is a genuinely more general surface -- the weight stops factorising where the
 surface is cut at an interior transverse index, and needs the explicit one-sided face sum --
-and is refused rather than silently given the factorised weight.
+and is refused rather than silently given the factorised weight. A `DimensionMismatch` is
+thrown when the storage of `uₕ` or `vₕ` does not hold one value per point of the mesh of
+`space(uₕ)`.
 
 The symbolic twin, for use inside a form, is `inner_Γ(g, v; markers = …)`
 (`operators/inner.jl`). It takes its regions as a keyword, to sit beside `innerₕ`; this
@@ -226,8 +228,10 @@ function inner_Γ(
     mask = _face_mask(Val(D), labels)
     _no_faces(mask) && _throw_no_surface_labels()
     _check_surface_is_thin(Ωₕ, mask)
+    u, v, n = parent(uₕ), parent(vₕ), npoints(Ωₕ)
+    (length(u) == length(v) == n) || _throw_dot_dim_error(length(u), length(v), n)
     policy = execution_policy(space(uₕ))
-    return _surface_sum(policy, Ωₕ, mask, parent(uₕ), parent(vₕ))
+    return _surface_sum(policy, Ωₕ, mask, u, v)
 end
 
 @noinline function _throw_no_surface_labels()

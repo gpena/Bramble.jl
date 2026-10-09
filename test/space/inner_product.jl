@@ -891,6 +891,16 @@ end
             # and no labels at all
             @test_throws ArgumentError inner_Γ(one_h, one_h)
 
+            # storage that is not one value per point of the mesh of `space(uₕ)`: an
+            # element of a non-uniform (5, 5) mesh, on either side, and equal lengths that
+            # are wrong for the mesh
+            u5 = Rₕ(gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5),
+                (false, true))), x -> 1.0)
+            @test_throws DimensionMismatch inner_Γ(u5, one_h, :ymin)
+            @test_throws DimensionMismatch inner_Γ(one_h, u5, :ymax)
+            ub = Bramble.VectorElement(ones(49), space(u5))
+            @test_throws DimensionMismatch inner_Γ(ub, ub, :ymin)
+
             # a face set that is not (D-1)-dimensional on this mesh: with two points on an
             # axis, both of its faces together cover every grid point
             Wc = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (2, 2),
