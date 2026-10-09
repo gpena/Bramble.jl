@@ -458,6 +458,27 @@ function _absorb(s::OperatorAdd, t::LazyOp)
     return nothing
 end
 
+# --- Dirac sources inside a sum ------------------------------------------------------ #
+
+# `local_stencil(::LinearProduct)` weights a source by the cell measure unless `_is_dirac`
+# holds for the whole source (`operators/inner.jl`, beside the other `_is_dirac` methods;
+# the wrapper method is in `assembly/stencil_eval.jl`). A sum of Dirac sources is a Dirac
+# source too; a sum mixing one with a smooth source is neither, and `simplify_ast` below
+# splits it at the top or rejects it under a wrapper. Both read the type alone.
+@inline _is_dirac(op::OperatorAdd) = _is_dirac(op.left_op) && _is_dirac(op.right_op)
+
+@inline _any_dirac(::DiracSource) = true
+@inline _any_dirac(op::OperatorAdd) = _any_dirac(op.left_op) || _any_dirac(op.right_op)
+@inline _any_dirac(op::UnaryWrapper) = _any_dirac(op.inner_op)
+@inline _any_dirac(::Any) = false
+
+@noinline function _throw_mixed_dirac_source()
+    throw(ArgumentError("a source mixing a dirac term with a non-dirac term under an \
+                         operator or grid-function factor is not supported: the dirac \
+                         term would be scaled by the cell measure. Write the dirac term in \
+                         its own inner product, e.g. `innerₕ(Mₓ(f), v) + innerₕ(Mₓ(δ), v)`."))
+end
+
 # --- Inner products: scalar lifting and component distribution ---------------------- #
 
 function simplify_ast(op::BilinearProduct{D, W}) where {D, W}
@@ -528,8 +549,34 @@ function simplify_ast(op::LinearProduct{D, W}) where {D, W}
 
     cl, al = _scale_parts(left)
     cr, ar = _scale_parts(right)
+    # `⟨a + b, v⟩ -> ⟨a, v⟩ + ⟨b, v⟩` when the sum holds a Dirac source, so each term gets
+    # its own weight (none for the Dirac one).
+    if al isa OperatorAdd && _any_dirac(al)
+        return _lift_scalars(cl, cr, _split_dirac_sum(op, al, ar))
+    end
+    _any_dirac(al) && !_is_dirac(al) && _throw_mixed_dirac_source()
     inner = LinearProduct{D, W, typeof(al), typeof(ar)}(al, ar)
     return _lift_scalars(cl, cr, inner)
+end
+
+# `⟨a, v⟩` distributed over every sum in `a` that holds a Dirac source, keeping each
+# `OperatorScale` as a node around its product. Built from the types alone and never through
+# `_wrap_scale`, whose value branch on a stored `Integer` (the `-1` of `δa - δb`) would leave
+# `form` a `Union`; a sum with no Dirac term stays one product.
+@inline function _split_dirac_sum(op::LinearProduct, a::OperatorAdd, ar)
+    _any_dirac(a) || return _dirac_piece(op, a, ar)
+    l = _split_dirac_sum(op, a.left_op, ar)
+    return OperatorAdd(l, _split_dirac_sum(op, a.right_op, ar))
+end
+@inline function _split_dirac_sum(op::LinearProduct, a::OperatorScale, ar)
+    _any_dirac(a.inner_op) || return _dirac_piece(op, a, ar)
+    return OperatorScale(a.scalar, _split_dirac_sum(op, a.inner_op, ar))
+end
+@inline _split_dirac_sum(op::LinearProduct, a::LazyOp, ar) = _dirac_piece(op, a, ar)
+
+@inline function _dirac_piece(::LinearProduct{D, W}, a, ar) where {D, W}
+    _any_dirac(a) && !_is_dirac(a) && _throw_mixed_dirac_source()
+    return LinearProduct{D, W, typeof(a), typeof(ar)}(a, ar)
 end
 
 # --- Stencil shifts: idempotence and additive composition ---------------------------- #
