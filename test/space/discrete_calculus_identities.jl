@@ -9,7 +9,7 @@ using Random
 using Supposition
 using Bramble: cell_measures, AbstractMeshType, weights, Innerplus
 using ..TestUtils: WITH_SLOW_TESTS
-using ..TestUtils: _nonuniform_points, _zero_boundary!
+using ..TestUtils: _boundary_vanishing, _nonuniform_points, _zero_boundary!
 
 # The discrete calculus identities and inequalities of Propositions 2.1-2.4
 # (gpena/Bramble.jl#188), for grid functions vanishing on the boundary.
@@ -47,11 +47,6 @@ function _wplus_min(Wₕ, D)
         w = weights(Wₕ, Innerplus(), d)
         return minimum(x for x in w if x > 0)
     end
-end
-
-function _boundary_vanishing(Wₕ, raw, dims)
-    a = reshape(copy(raw[1:prod(dims)]), dims)
-    return element(Wₕ, vec(_zero_boundary!(a)))
 end
 
 @testset "Discrete calculus, Propositions 2.1-2.4" begin

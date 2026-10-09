@@ -22,6 +22,7 @@ using Random
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS
 using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
+using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
 
 @testset "Grid spaces" begin
     mesh1d = mesh(domain(interval(0, 1)), 10, true)
@@ -541,9 +542,6 @@ end
 # `CartesianIndices` order. The oracle is built from `points` alone, per axis: the backward
 # spacing (zero at the first node) on a staggered axis, the half-cell width elsewhere.
 @testset "host_weights, SeparableWeights arrays" begin
-    bw(x, i) = i == 1 ? 0.0 : x[i] - x[i - 1]
-    hh(x, i) = i == 1 ? (x[2] - x[1]) / 2 :
-               i == length(x) ? (x[end] - x[end - 1]) / 2 : (x[i + 1] - x[i - 1]) / 2
 
     Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (0.5, 0.6, 0.7))), (4, 5, 6), (false, false, false))
     Wₕ = gridspace(Ωₕ)
@@ -555,7 +553,9 @@ end
         @test Bramble.host_weights(w) === w
         a = Array(w)
         @test a isa Vector{Float64}
-        expected = vec([prod(d -> d in S ? bw(xs[d], I[d]) : hh(xs[d], I[d]), 1:3)
+        expected = vec([prod(
+                            d -> d in S ? _backward_spacing_oracle(xs[d], I[d]) :
+                                 _half_spacing_oracle(xs[d], I[d]), 1:3)
                         for I in CartesianIndices(n)])
         @test a ≈ expected
     end

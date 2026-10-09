@@ -7,7 +7,8 @@ using Bramble: D₋ᵧ, D₋ₓ, cell_measure, indices, inner₊ᵧ, inner₊₂
 using Bramble: set_points!, weights
 using LinearAlgebra: norm
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS, @test_allocs
+using ..TestUtils: WITH_SLOW_TESTS, @test_allocs, _nonuniform_points
+using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
 using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
 
 @testset "Inner products & norms" begin
@@ -552,17 +553,9 @@ end
         )
             nx = length(hx) + 1
             ny = length(hy) + 1
-            pts_x = zeros(Float64, nx)
-            for i in 1:length(hx)
-                pts_x[i + 1] = pts_x[i] + hx[i]
-            end
-            pts_x ./= pts_x[end]
+            pts_x = _nonuniform_points(hx)
 
-            pts_y = zeros(Float64, ny)
-            for j in 1:length(hy)
-                pts_y[j + 1] = pts_y[j] + hy[j]
-            end
-            pts_y ./= pts_y[end]
+            pts_y = _nonuniform_points(hy)
 
             Ωₕ = mesh(
                 domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (nx, ny), (false, false)
@@ -889,12 +882,9 @@ end
 # from `points` alone. The policy-dispatched `_surface_sum` methods and its locality
 # mismatch are checked on the same data.
 @testset "Device reductions on host storage" begin
-    bw(x, i) = i == 1 ? 0.0 : x[i] - x[i - 1]
-    hh(x, i) = i == 1 ? (x[2] - x[1]) / 2 :
-               i == length(x) ? (x[end] - x[end - 1]) / 2 : (x[i + 1] - x[i - 1]) / 2
     axes_of(Ωₕ, D) = D == 1 ? (collect(Bramble.points(Ωₕ)),) :
                      ntuple(d -> collect(Bramble.points(Ωₕ(d))), D)
-    transverse(xs, I, d) = prod((hh(xs[e], I[e]) for e in eachindex(xs) if e != d); init = 1.0)
+    transverse(xs, I, d) = prod((_half_spacing_oracle(xs[e], I[e]) for e in eachindex(xs) if e != d); init = 1.0)
 
     function surface_byhand(xs, mask, u, v)
         n = map(length, xs)
@@ -968,7 +958,9 @@ end
             union = Bramble.MarkedIndicesUnion((first_face, last_face))
             for S in (ntuple(identity, D), (D,), ())
                 w = weights(Wₕ, Val(S))
-                wt(I) = prod(d -> d in S ? bw(xs[d], I[d]) : hh(xs[d], I[d]), 1:D)
+                wt(I) = prod(
+                    d -> d in S ? _backward_spacing_oracle(xs[d], I[d]) :
+                         _half_spacing_oracle(xs[d], I[d]), 1:D)
                 full = sum(wt(I) * u[lin[I]] * v[lin[I]] for I in CartesianIndices(n))
                 on(I) = I[1] == 1 || I[D] == n[D]
                 part = sum(wt(I) * u[lin[I]] * v[lin[I]] for I in CartesianIndices(n) if on(I))

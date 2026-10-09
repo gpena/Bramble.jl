@@ -7,7 +7,7 @@ using Bramble: set_points!
 using Random
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS
-using ..TestUtils: _nonuniform_points, _zero_boundary!
+using ..TestUtils: _boundary_vanishing, _nonuniform_points, _zero_boundary!
 
 # The discrete Poincaré and Sobolev embedding inequalities (gpena/Bramble.jl#187), for grid
 # functions vanishing on the boundary of the unit domain:
@@ -53,12 +53,6 @@ _mixed_derivative(vₕ, ::Val{3}) = D₋₂(D₋ᵧ(D₋ₓ(vₕ)))
 function _mixed_gradient_norm(vₕ, ::Val{D}) where {D}
     w = _mixed_derivative(vₕ, Val(D))
     return sqrt(inner₊(w, w, Val(ntuple(identity, Val(D)))))
-end
-
-# A field on the unit domain vanishing on every boundary plane, from a raw draw.
-function _boundary_vanishing(Wₕ, raw, dims)
-    a = reshape(copy(raw[1:prod(dims)]), dims)
-    return element(Wₕ, vec(_zero_boundary!(a)))
 end
 
 @testset "Discrete Poincaré and Sobolev" begin

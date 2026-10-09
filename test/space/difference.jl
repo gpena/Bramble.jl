@@ -11,7 +11,7 @@ using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff�
 import SparseArrays: issparse, sprand, spdiagm, spzeros, nnz
 using Bramble: forward_star_difference, centered_difference, cross_weighted_difference
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, _nonuniform_points
 using ..UtilsBackendsTests: MockGPUVector, MockGPUMatrix
 using ..SpaceVectorElementsTests: setup_test_grid
 
@@ -726,11 +726,7 @@ end
                     u_raw = Data.Vectors(field_val; min_size = 26, max_size = 26)
             )
                 n = length(h) + 1
-                pts = zeros(Float64, n)
-                for i in 1:length(h)
-                    pts[i + 1] = pts[i] + h[i]
-                end
-                pts ./= pts[end]
+                pts = _nonuniform_points(h)
 
                 Ωₕ = mesh(domain(interval(0.0, 1.0)), n, false)
                 set_points!(Ωₕ, pts)
@@ -761,17 +757,9 @@ end
             )
                 nx = length(hx) + 1
                 ny = length(hy) + 1
-                pts_x = zeros(Float64, nx)
-                for i in 1:length(hx)
-                    pts_x[i + 1] = pts_x[i] + hx[i]
-                end
-                pts_x ./= pts_x[end]
+                pts_x = _nonuniform_points(hx)
 
-                pts_y = zeros(Float64, ny)
-                for j in 1:length(hy)
-                    pts_y[j + 1] = pts_y[j] + hy[j]
-                end
-                pts_y ./= pts_y[end]
+                pts_y = _nonuniform_points(hy)
 
                 Ωₕ = mesh(
                     domain(interval(0.0, 1.0) × interval(0.0, 1.0)),

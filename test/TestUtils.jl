@@ -16,6 +16,7 @@ using Test
 using SparseArrays: spdiagm
 using ForwardDiff
 using Printf: @sprintf
+using Bramble: ×, Rₕ, box, components, domain, element, gridspace, interval, mesh, npoints
 
 # The test group, read once here rather than in each entry point, so that a subsystem's own
 # `runtests.jl` -- which is a standalone entry point and does not go through
@@ -325,6 +326,58 @@ function _zero_boundary!(a::AbstractArray{<:Real, N}) where {N}
     end
     return a
 end
+
+# A field on the unit domain vanishing on every boundary plane, from a raw draw: the first
+# `prod(dims)` entries of `raw`, laid out on the `dims` point grid with the boundary zeroed.
+function _boundary_vanishing(Wₕ, raw, dims)
+    a = reshape(copy(raw[1:prod(dims)]), dims)
+    return element(Wₕ, vec(_zero_boundary!(a)))
+end
+
+# Half-cell width at node `i` of the points `x`, from the points alone: the oracle against
+# which half spacings and weights on non-uniform meshes are checked, so it must not call the
+# code under test.
+_half_spacing_oracle(x, i) = i == 1 ? (x[2] - x[1]) / 2 :
+                             i == length(x) ? (x[end] - x[end - 1]) / 2 : (x[i + 1] - x[i - 1]) / 2
+
+# Backward spacing at node `i` of the points `x`, zero at the first node (the weight of a
+# staggered axis).
+_backward_spacing_oracle(x, i) = i == 1 ? 0.0 : x[i] - x[i - 1]
+
+# Random non-uniform meshes on the unit cube in 1D, 2D and 3D, and one smooth field per
+# spatial dimension on each. Returns the mesh, its grid space, the fields and the point
+# counts. The mesh draws from the global RNG, so the caller seeds it.
+function _fixture(D)
+    dom = D == 1 ? domain(interval(0.0, 1.0)) :
+          D == 2 ? domain(interval(0.0, 1.0) × interval(0.0, 1.0)) :
+          domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+    n = (11, 9, 7)
+    Ωₕ = D == 1 ? mesh(dom, n[1], false) : mesh(dom, n[1:D], ntuple(_ -> false, D))
+    Wₕ = gridspace(Ωₕ)
+    fs = (x -> sin(3x[1]) + (D > 1 ? x[2]^2 : 0.0) + (D > 2 ? x[3] : 0.0),
+        x -> cos(2x[D]) + x[1]^3,
+        x -> x[1] * x[D] + sin(x[1]))
+    u = ntuple(k -> Rₕ(Wₕ, D == 1 ? (x -> fs[k]((x,))) : fs[k]), D)
+    return Ωₕ, Wₕ, u, npoints(Ωₕ, Tuple)
+end
+
+# The same field, spelled as a `D`-leaf composite grid function.
+function _composite(Ωₕ, u, D)
+    uc = element(gridspace(Ωₕ, Val(D)), 0.0)
+    for d in 1:D
+        parent(components(uc)[d]) .= parent(u[d])
+    end
+    return uc
+end
+
+# `u` with its boundary planes zeroed, on the `dims` point grid.
+function _bubble(u, dims)
+    w = copy(u)
+    _zero_boundary!(reshape(parent(w), dims))
+    return w
+end
+
+_field(u, D) = D == 1 ? u[1] : u
 
 # `f` must be a scalar functional of one parameter, evaluated through the library. Checks
 # that the AD derivative is right, not merely that it ran. Was `_matches_finite_difference`
