@@ -273,6 +273,8 @@ coordinate -- worse in `Float32` (Metal's only type, relative error ~1e-7) than 
 `Float64` (~1e-16) -- so the first estimate can land one cell short or one cell over at an
 exact grid point; the correction is what keeps this path agreeing with `searchsortedlast`
 there; see gpena/Bramble.jl#308 (round 2) for the measured Float64 disagreement this fixes.
+A point at or past either endpoint, `±Inf` included, returns the boundary cell before any
+division, and `NaN` returns `n - 1` as the search does, so this path never throws.
 
 A non-uniform mesh has no formula to fall back on and searches [`host_points`](@ref)`(Ωₕ)`
 instead of the raw, possibly device-resident `points(Ωₕ)`.
@@ -283,6 +285,11 @@ function locate_cell(Ωₕ::_Mesh1DLike, x::Real)
 
     if is_uniform(Ωₕ)
         a, b = extrema(_st(Ωₕ).set)
+        # answer the ends before `floor(Int, ...)`, which throws on a quotient past
+        # `typemax(Int)`, on ±Inf and on NaN; NaN takes the last cell, as the search
+        # path below does (`searchsortedlast` sorts NaN last)
+        x <= a && return 1
+        (x >= b || isnan(x)) && return n - 1
         h = (b - a) / (n - 1)
         idx = floor(Int, (x - a) / h) + 1
 

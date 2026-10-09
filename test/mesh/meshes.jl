@@ -326,6 +326,16 @@ import Bramble:
             @test locate_cell(M1, 0.35) == 4
             @test locate_cell(M1, 1.0) == 10
             @test locate_cell(M1, 1.5) == 10
+            # far, infinite and NaN points take the boundary cell, never throw, and the
+            # uniform and non-uniform paths agree on them
+            M1_nu = mesh(domain(I), 11, false)
+            for M in (M1, M1_nu)
+                @test locate_cell(M, 1e20) == 10
+                @test locate_cell(M, -1e20) == 1
+                @test locate_cell(M, Inf) == 10
+                @test locate_cell(M, -Inf) == 1
+                @test locate_cell(M, NaN) == 10
+            end
 
             # normal_vector
             @test normal_vector(M1, :xmin) == (-1.0,)
@@ -383,6 +393,7 @@ import Bramble:
             # locate_cell
             @test locate_cell(M2, (0.35, 1.05)) == CartesianIndex(4, 11)
             @test locate_cell(M2, [0.35, 1.05]) == CartesianIndex(4, 11)
+            @test locate_cell(M2, (1e20, -Inf)) == CartesianIndex(10, 1)
         end
 
         @testset "Three-dimensional extended interface" begin
