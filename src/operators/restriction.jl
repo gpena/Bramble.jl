@@ -59,6 +59,9 @@ Rₕ!(uₕ, (f₁, f₂))                     # one function per component
 Rₕ!(uₕ, x -> (f₁(x), f₂(x)))          # one function returning all components
 ```
 
+A tuple holds one function per leaf component (depth-first on a nested composite); any
+other length throws a `DimensionMismatch`.
+
 See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 """
 @inline Rₕ!(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F} = project!(uₕ, PointValue(f))
