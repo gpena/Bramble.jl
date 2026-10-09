@@ -13,13 +13,19 @@ Bramble.execution_policy(b)                    # the EP instance the backend car
 Bramble.locality(b)                            # HostLocality() or DeviceLocality()
 ```
 
-`ExecutionPolicy` (`public`, like every policy type here except the exported
-`Serial` and `Parallel`) splits into `CpuPolicy` (`CpuSerial`, `CpuThreaded`, and `CpuBatch`,
-which needs `using Polyester`) and `GpuPolicy` (`GpuKernel`; `GpuAsync` is its deprecated alias). `Serial`/`Parallel` alias
-`CpuSerial`/`CpuThreaded`. `metal_backend`/`gpu_backend` build a device backend (need
+`ExecutionPolicy` (`public`, like every policy type here except the exported `Serial` and
+`Parallel`) splits into `CpuPolicy` (`CpuSerial`, `CpuThreaded`, and `CpuPolyester`, which
+needs `using Polyester`; `CpuBatch` is its deprecated alias) and `GpuPolicy` (`GpuKernel`;
+`GpuAsync` is its deprecated alias). `Serial`/`Parallel` alias `CpuSerial`/`CpuThreaded`.
+`GpuOffload(device_backend, inner)` is a `CpuPolicy` for a host backend that sends `Rₕ!` and
+`avgₕ!` to `device_backend`. `metal_backend`/`gpu_backend` build a device backend (need
 `using Metal`); `csr_backend` selects a CSR sparse matrix type.
 
 Vector-type locality and policy locality must agree, or construction raises (`SKILL.md`, rule 9).
+
+`Bramble.profile_backends()` times one sweep kernel under each policy this session can run
+and prints where each overtakes `Serial()`, with the `backend(policy = ...)` to use. Call it
+once by hand; it times a kernel, not assembly or matrix storage.
 
 ## Exporters
 
@@ -63,3 +69,6 @@ sparspak_factorize(A)                        # pure Julia, works with Dual/BigFl
 
 Bramble.type_cached_assemble!(...)                   # one sparsity pattern per coefficient element type
 ```
+
+For a Laplacian-like form on a tensor mesh, the `fdm_*` solvers skip assembly
+(`reference/forms-assembly.md`, Kronecker path).
