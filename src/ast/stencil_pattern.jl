@@ -144,9 +144,9 @@ _stencil_margin(op::ZeroOperator) = 0
 # shift the offset set by one tap.
 _stencil_margin(op::TappedNode) = _stencil_margin(op.inner_op) + 1
 
-# A shift's step is its own field, unlike a tap's, and unbounded: `simplify_ast` folds nested
-# shifts along the same dimension into one (`Shift_a(Shift_b(u)) -> Shift_{a+b}(u)`), so this
-# has to read the value rather than assume magnitude 1.
+# A shift's step is its own field, unlike a tap's, and unbounded: `shift_op` takes any
+# integer amount, and `simplify_ast` keeps a shift as built, so this has to read the value
+# rather than assume magnitude 1.
 _stencil_margin(op::ShiftNode) = _stencil_margin(op.inner_op) + abs(op.shift_amount)
 
 _stencil_margin(op::OperatorScale) = _stencil_margin(op.inner_op)
@@ -218,8 +218,9 @@ end
 
 # The strides a column-major, first-axis-fastest lexicographic index uses: moving one step
 # along axis `d` moves the linear index by `stride[d] = n₁⋯n_{d-1}` (`stride[1] = 1`, the
-# empty product).
-@inline _lex_strides(n::NTuple{D, Int}) where {D} = ntuple(k -> prod(n[1:(k - 1)]), D)
+# empty product). A running product over the tuple, not a `prod` of `n[1:(k - 1)]`: a range
+# slice of a tuple has no inferable length, which left each stride inferred as `Any`.
+@inline _lex_strides(n::NTuple{D, Int}) where {D} = (1, Base.front(accumulate(*, n))...)
 
 # The column-minus-row distance a trial offset `ou` paired with a test offset `ov`
 # contributes, in the ordering `strides` describes.
@@ -248,7 +249,12 @@ end
 _collect_bilinear_terms!(terms, op::UnaryWrapper) = _collect_bilinear_terms!(terms, op.inner_op)
 _collect_bilinear_terms!(terms, ::LazyOp) = terms
 
-_bilinear_terms(ast) = _collect_bilinear_terms!(Tuple{Vector, Vector}[], ast)
+# Typed by `D` because every `stencil_offsets` result is a `Vector{NTuple{D, Int}}`: an
+# abstract `Vector` here would leave every offset read from the terms inferred as `Any`.
+function _bilinear_terms(ast::LazyOp{D}) where {D}
+    terms = Tuple{Vector{NTuple{D, Int}}, Vector{NTuple{D, Int}}}[]
+    return _collect_bilinear_terms!(terms, ast)
+end
 
 """
     bandwidths(a::BilinearForm) -> Tuple{Int, Int}
@@ -337,13 +343,10 @@ function blockbandwidths(a)
             db = last(ou) - last(ov)
             l_blk = max(l_blk, -db)
             u_blk = max(u_blk, db)
-            # `ou`/`ov` come from `stencil_offsets`, documented to return `Vector{NTuple{D, Int}}`
-            # -- always a `Tuple`, never a `NamedTuple` -- but a form built through enough
-            # generic wrapper nodes (`OperatorAdd`, `RegionRestriction`, ...) infers that Vector's
-            # element type no more precisely than `Any`. `Base.front` has methods for both `Tuple`
-            # and `NamedTuple`, so calling it on an `Any` union-splits into both, and only the
-            # `Tuple` branch has a matching `_lex_distance` method. The assertions state what is
-            # already true of every `stencil_offsets` result, not a new constraint on it.
+            # For a concrete form `ou`/`ov` infer as `NTuple{D, Int}` and the assertions are
+            # no-ops. They are for a caller that only knows `a` abstractly (JET's package
+            # analysis): there `ou` is `Any`, `Base.front` splits into its `Tuple` and
+            # `NamedTuple` methods, and only the `Tuple` branch has a `_lex_distance` method.
             ds = _lex_distance(Base.front(ou)::Tuple, Base.front(ov)::Tuple, sub_strides)
             l_sub = max(l_sub, -ds)
             u_sub = max(u_sub, ds)

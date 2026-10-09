@@ -100,6 +100,14 @@ end
 
                         nsub = prod(n[1:(D - 1)])
                         @test blockbandwidths(a) == _true_blockbandwidths(A, nsub)
+
+                        # 1D returns early through `bandwidths`, which infers concretely
+                        # either way; from 2D on, an untyped term container left the
+                        # block reach inferred as `Any` (#528)
+                        if D >= 2
+                            R = only(Base.return_types(blockbandwidths, (typeof(a),)))
+                            @test isconcretetype(R)
+                        end
                     end
                 end
             end
