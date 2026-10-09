@@ -605,6 +605,21 @@ struct NotAFunctionPredicate end
         @test_allocs conditions(edm_cap)
         @test_allocs label_identifiers(edm_cap)
 
+        # The (t, p) path classifies the same way: spatial passes through, (x, t, p) is
+        # fixed at (t, p) as f(x, t, p) (#615).
+        mk_xtp(c) = (x, t, p) -> x[1] < c * t * p
+        sp = mk_x(0.5)
+        dm_par = Bramble._create_generic_markers(:a => sp, :b => mk_xtp(2.0))
+        edm_par = dm_par(0.5, 3.0)
+        cs_par = @inferred conditions(edm_par)
+        @test identifier(cs_par[1]) === sp
+        @test identifier(cs_par[1])((0.8, 0.0)) === true
+        @test identifier(cs_par[1])((0.3, 0.0)) === false
+        @test identifier(cs_par[2])((2.9, 0.0)) === true
+        @test identifier(cs_par[2])((3.1, 0.0)) === false
+        @test_allocs conditions(edm_par)
+        @test_allocs label_identifiers(edm_par)
+
         # Labels query on evaluated marker container.
         lbls = collect(labels(edm))
         @test :region ∈ lbls
