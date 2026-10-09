@@ -642,6 +642,14 @@ _rt_two_sources(W, g₁, g₂) = form(W, v -> innerₕ(g₁, v) + innerₕ(g₂,
 # trade-off has to be a deliberate edit to this test rather than a silent drift either way.
 _rt_runtime_int(n::Int, W) = form(W, W, (u, v) -> n * innerₕ(u, v))
 
+# A runtime component index (gpena/Bramble.jl#529). The `Integer`-factor rule is decided by
+# `_component_free`, a type, so two `2 *` terms on component `i` stay two terms and `form`
+# infers concretely. The distribution gates still read `component_idx` values: whether
+# `v(i) + v(1)` mixes components is known only at run time, so that form's type is a `Union`
+# of the distributed and undistributed trees -- kept on purpose, see `_mixes_components`.
+_rt_comp_factor(i::Int, V) = form(V, V, (u, v) -> 2 * innerₕ(u(i), v(i)) + 2 * innerₕ(D₋ₓ(u(i)), v(i)))
+_rt_comp_mixed(i::Int, V) = form(V, V, (u, v) -> innerₕ(u(i), v(i) + v(1)))
+
 # Sums of `Ref`-scaled terms (gpena/Bramble.jl#527). The like-term and factoring rules used to
 # fire when both sides held the *same* `Ref` object, but `cl === cr` on two `RefValue{Float64}`
 # field loads is a run-time value, so `form` inferred a `Union`. `_rt_ref_two` reached the
@@ -681,6 +689,20 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
 
     # ... and the deliberate hole, asserted as such: see `_rt_runtime_int`'s comment.
     @test !_infers(_rt_runtime_int, (Int, W))
+
+    # Runtime component index: see `_rt_comp_factor`'s comment. The hole is asserted as a
+    # two-member `Union`, so a form that infers `Union{}` (a throwing path) cannot pass it.
+    Ω₁ = mesh(domain(interval(0.0, 1.0)), 11, true)
+    V₂ = gridspace(Ω₁)^Val(2)
+    @test _infers(_rt_comp_factor, (Int, typeof(V₂)))
+    T_mixed = only(Base.return_types(_rt_comp_mixed, (Int, typeof(V₂))))
+    @test T_mixed isa Union && length(Base.uniontypes(T_mixed)) == 2
+    # Same-component terms are no longer factored, but assemble to what was written.
+    M₂(f) = Matrix(assemble(form(V₂, V₂, f)))
+    @test Matrix(assemble(_rt_comp_factor(2, V₂))) ≈
+          2 .* M₂((u, v) -> innerₕ(u(2), v(2))) .+ 2 .* M₂((u, v) -> innerₕ(D₋ₓ(u(2)), v(2)))
+    @test Matrix(assemble(_rt_comp_mixed(2, V₂))) ≈
+          M₂((u, v) -> innerₕ(u(2), v(2))) .+ M₂((u, v) -> innerₕ(u(2), v(1)))
 
     # The rewrites themselves are unchanged for the `Integer` coefficients they are written
     # for, which is what makes the restriction affordable: the earlier testsets pin them.

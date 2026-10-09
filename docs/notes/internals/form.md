@@ -197,7 +197,7 @@ smaller number of sweeps for the same matrix or vector:
 | `c1 * (c2 * A)`, both static | `(c1 * c2) * A` | unchanged term count, one multiply instead of two |
 | `A + A`, `A` a singleton node | `2 * A` | two routed terms become one |
 | `c1 * A + c2 * A`, same singleton `A` | `(c1 + c2) * A` | two routed terms become one |
-| `c * A + c * B`, same `Integer` `c` | `c * (A + B)` | two routed terms become one |
+| `c * A + c * B`, same `Integer` `c`, `A`/`B` name no component | `c * (A + B)` | two routed terms become one |
 
 `ZeroOperator{D,Nothing}(nothing)` is synthesized for the zero case rather than reusing a
 concrete space, because a `LazyOp{D}` subtree in general carries no space to read back.
@@ -294,10 +294,12 @@ That guard, `_mixes_components(a, b)`, has to be checked again wherever an
 because hiding one there reintroduces exactly the unroutable shape: `2 * (A + B)` for `A`/`B`
 naming different components would throw at assembly the same way the un-lifted `innerₕ(fₕ, v(1)
 + v(2))` above did. So rule 2's factoring step (`c * A + c * B -> c * (A + B)`) refuses to
-fire when `A`/`B` mix components, and `simplify_ast(::OperatorScale)`/
-`simplify_ast(::GridFunctionScale)` distribute their own coefficient over an inner sum that
-mixes, rather than wrapping it, whenever `BilinearProduct`'s/`LinearProduct`'s own
-distribution produces one and something still wraps it from outside.
+fire when `A` or `B` names any component (`_component_free`, decided by type, so a runtime
+component index cannot make `form`'s type a `Union` through it; gpena/Bramble.jl#529), and
+`simplify_ast(::OperatorScale)`/`simplify_ast(::GridFunctionScale)` distribute their own
+coefficient over an inner sum that mixes, rather than wrapping it, whenever
+`BilinearProduct`'s/`LinearProduct`'s own distribution produces one and something still wraps
+it from outside.
 
 ## One setup walk per term
 

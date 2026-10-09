@@ -16,7 +16,8 @@ same matrix or vector:
     "same `c`" is decided by comparing the two coefficients, and a comparison of two runtime
     numbers is not something the compiler can settle. Nor does a shared `Ref`: two `Ref`s of
     one type are told apart only by object identity, which is a run-time value too
-    (gpena/Bramble.jl#527).
+    (gpena/Bramble.jl#527). Nor when `A` or `B` names any component (`_component_free`),
+    so a component-mixing sum is never hidden inside the scale (gpena/Bramble.jl#529).
   - `c1 * A + c2 * A` (same `A`) combines to `(c1 + c2) * A`: two routed terms become one.
   - `0 * A` collapses to a zero term with a one-point sparsity pattern instead of `A`'s full
     stencil, and `A + 0` / `0 + A` drops the zero term from the tree entirely. Only for an
@@ -239,6 +240,18 @@ end
 # where `_component_class` on every remaining node is a plain `Int` or `nothing`, never
 # `Mixed()` -- at which point `block_of`'s own throwing query is the one that runs, and only
 # ever on a term that genuinely cannot route (one side named, the other not).
+#
+# The answer is a value, not a type: it compares the two `component_idx::Int` fields. A
+# literal index (`v(1) + v(2)`) constant-folds, but a runtime component index (`v(i)` with
+# `i` an argument) leaves it to run time, so each distribution gate below (`OperatorScale`,
+# `GridFunctionScale`, `BilinearProduct`, `LinearProduct`) makes `form`'s type a `Union` of
+# the distributed and undistributed trees when a sum of runtime-indexed terms sits inside one
+# inner product or under a scalar or grid-function coefficient shared by the whole sum, even
+# when every term names the same `i` (gpena/Bramble.jl#529). Separate inner products, each
+# with its own coefficient, never reach those gates and infer concretely. Kept on purpose:
+# distributing every sum that is not `_component_free` would infer concretely, but costs a
+# sweep for every same-component sum (`v(1) + D₋ₓ(v(1))`). The factor rule in
+# `simplify_ast(::OperatorAdd)` uses `_component_free` instead, which is decided by type.
 @inline function _mixes_components(a::LazyOp, b::LazyOp)
     return _trial_component_class(a) !== _trial_component_class(b) ||
            _test_component_class(a) !== _test_component_class(b)
@@ -352,14 +365,18 @@ function simplify_ast(op::OperatorAdd)
            cl isa Integer &&
            cr isa Integer &&
            cl == cr &&
-           !_mixes_components(al, ar)
+           _component_free(al) &&
+           _component_free(ar)
         # Factor a common static scalar out of two different subtrees: `c*A + c*B ->
         # c*(A+B)`. Neither side is zero here (caught above), so `cl == cr` implies both
         # are nonzero. Guarded on an actual `OperatorScale` being present so two already
         # bare, unrelated terms (`cl == cr == 1` always) are not rebuilt for nothing --
         # otherwise this pass would not be idempotent on its own output. Guarded on
-        # `!_mixes_components` too: factoring `A`/`B` naming different components would
-        # hide the exact shape the router cannot route as one term.
+        # `_component_free` too, the policy `_factor_products` applies: factoring `A`/`B`
+        # naming different components would hide the shape the router cannot route as one
+        # term, and `_component_free` settles that by type. `!_mixes_components` would let
+        # same-component terms factor, but it compares two `Int` fields, so a runtime
+        # component index would make `form` infer a `Union` (gpena/Bramble.jl#529).
         #
         # `Integer`, not `Number`, for the reason `_wrap_scale` gives (gpena/Bramble.jl#240):
         # whether this rule fires is decided by comparing two coefficients, so with `Float64`
