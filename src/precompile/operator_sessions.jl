@@ -107,12 +107,10 @@ end
 # innerₕ and the norms built on it take a grid function of a scalar space; inner₊
 # and norm₊ take the gradient tuple, which in 1D is the bare element.
 #
-# innerₕ, normₕ and _dot are all @inline, so no standalone specialization of
-# them exists to be cached: they are inlined into whatever calls them, and in a
-# user's program that caller is the user's own method. Calling one at top level
-# in a fresh session therefore still costs about 9 ms, and nothing this workload
-# can do removes that; it is the cost of building a specialization for a call
-# that was not inlined into a method.
+# innerₕ, normₕ and _dot are all @inline, so the calls below inline them into this
+# session and leave no standalone specialization behind. A call at top level in a fresh
+# session would then cost about 9 ms of codegen; the explicit `precompile` of each entry
+# signature at the end of `_pc_inner_products` forces that standalone instance to exist.
 #
 # What the calls below do cache is everything non-inline underneath: the
 # directional inner-product kernels, the seminorm machinery, and the operators
@@ -133,6 +131,12 @@ function _pc_inner_products(uₕ, dim_val::Val{D}) where {D}
     inner₊(uₕ, uₕ)
 
     _pc_directional_inner(uₕ, dim_val)
+
+    # Standalone instances of the inlined entry points, for a call from the prompt.
+    precompile(normₕ, (typeof(uₕ),))
+    precompile(norm₁ₕ, (typeof(uₕ),))
+    precompile(snorm₁ₕ, (typeof(uₕ),))
+    precompile(innerₕ, (typeof(uₕ), typeof(uₕ)))
     return nothing
 end
 

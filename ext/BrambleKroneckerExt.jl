@@ -1098,6 +1098,25 @@ if Bramble.PRECOMPILE_WORKLOAD
             Bramble.fdm_solve(b, F)
             Bramble.fdm_preconditioner(a; dirichlet = :boundary)
             Bramble.fdm_solve!(similar(F), Bramble.fdm_factorize(b), F)
+            # The operator's own `*`, in 2D here and in 3D below.
+            kronecker_operator(a) * F
+
+            # 3D, non-uniform: a KroneckerLinearOperator{Float64, 3} is otherwise never built.
+            Ω3 = domain(Bramble.box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+            W3 = gridspace(mesh(Ω3, (4, 3, 3), (false, false, false)))
+            a3 = form(W3, W3, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+            b3 = form(W3, W3, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                        innerₕ(Bramble.D₋ₓ(u), v))
+            a3d = form(W3, W3, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+            F3 = assemble(form(W3, v -> innerₕ(Bramble.element(W3, 1.0), v)))
+            K3 = kronecker_operator(a3)
+            K3 * F3
+            Kronecker.kronecker(K3)
+            Bramble.fdm_solve(a3, F3)
+            Bramble.fdm_solve(a3, F3; dirichlet = :boundary)
+            Bramble.fdm_solve(b3, F3)
+            Bramble.fdm_solve(a3d, F3; dirichlet = :boundary)
+            Bramble.fdm_preconditioner(a3; dirichlet = :boundary)
         end
     end
 end
