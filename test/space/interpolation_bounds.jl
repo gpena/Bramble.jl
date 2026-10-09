@@ -219,6 +219,7 @@ using ..TestUtils: alloc_test, @test_allocs
             for unif in ((true, true), (false, false))
                 u = Rₕ(gridspace(mesh(dom, (11, 65), unif)), x -> 1.0)
                 for s1 in signs, s2 in signs
+
                     @test far(u, (s1 * 1e20, s2 * 1e20)) == 1.0
                 end
                 @test far(u, (1e20, 0.5)) == 1.0   # one axis inside
