@@ -20,9 +20,10 @@
 
 Check whether the mesh has uniform spacing, within a numerical tolerance.
 
-When `tol` is not given, the tolerance is `_default_is_uniform_tol(eltype(Ωₕ), h₁, n)`, which
-keeps today's `1e-10` for `Float64` and widens it for `Float32` (gpena/Bramble.jl#307); see
-that function for the measurement behind the constant. Passing `tol` explicitly uses it
+When `tol` is not given, the tolerance is `_default_is_uniform_tol(eltype(Ωₕ), h₁, n, mag)`,
+with `mag` the larger end-point magnitude, which keeps today's `1e-10` for a `Float64` mesh
+near the origin and widens it for `Float32` or far from the origin (gpena/Bramble.jl#307,
+#492); see that function for the measurement behind the constant. Passing `tol` explicitly uses it
 verbatim, with no further scaling.
 
 On a [`Mesh1D`](@ref), the default-tolerance (`tol === nothing`) answer is the `uniform` flag
@@ -40,13 +41,13 @@ end
 
 @inline _stored_uniform(Ωₕ::AbstractMeshType{1}) = _walk_mesh(Ωₕ(1)).uniform
 
-# The default-tolerance answer for the host spacings `h` of a mesh of element type `T`: what a
-# `Mesh1DState` stores as `uniform`.
-@inline function _uniform_default_tol(h, ::Type{T}) where {T}
+# The default-tolerance answer for the host spacings `h` of a mesh of element type `T` whose
+# end points have magnitude at most `mag`: what a `Mesh1DState` stores as `uniform`.
+@inline function _uniform_default_tol(h, ::Type{T}, mag) where {T}
     n = length(h)
     n <= 1 && return true
     h_ref = h[1]
-    return _uniform_scan(h, h_ref, _default_is_uniform_tol(T, h_ref, n), n)
+    return _uniform_scan(h, h_ref, _default_is_uniform_tol(T, h_ref, n, mag), n)
 end
 
 @inline function _uniform_scan(h, h_ref, atol, n)
@@ -88,14 +89,28 @@ end
 # to ~4.8e-13, so the `1e-10` floor takes over, and a non-uniform mesh's spread there
 # (~3.2e-7) clears it by three orders of magnitude.
 #
+# Far from the origin the drift tracks the coordinates' ulp, not the span: a uniform mesh
+# on [a, a + 1] rounds each point to eps(a), so the eps term scales with the larger of the
+# span estimate and `mag`, the end points' largest magnitude (gpena/Bramble.jl#492).
+# The measured drift sits well under the resulting tolerance (drift vs tolerance): Float32
+# [10, 11] 9.5e-7 vs 5.2e-6, Float32 [1000, 1001] 6.1e-5 vs 4.8e-4, Float64 [1e6, 1e6 + 1]
+# 1.16e-10 vs 8.9e-10, Float64 [3e7, 3e7 + 1] 3.7e-9 vs 2.7e-8. No constant floor clears
+# the last drift and still calls a non-uniform mesh on [0, 1e-8] (spread 2.8e-9)
+# non-uniform. `mag` comes from the points, not the domain's set, which `change_points!`
+# leaves stale. That term is capped at `abs(h_ref)`. The scan rejects `|h - h_ref| >= tol`,
+# so every accepted spacing lies strictly between 0 and `2h_ref` and keeps `h_ref`'s sign.
+# Uncapped, Float32 near 1e6 gives ~0.48, and a non-increasing set would pass as uniform.
+# A cap of `abs(h_ref) / 2` is too tight. At `h_ref` = 2 ulp it leaves a 1-ulp tolerance,
+# which the 1-ulp drift of a uniform Float32 mesh does not clear.
+#
 # Returns `T`, not `Float64`: `1e-10` is a `Float64` literal, and without the `T(...)`
 # conversion every call would promote the per-point comparison in `is_uniform` to `Float64`
 # regardless of `T`. `T(1e-10)` underflows to `0` for `Float16` (below its smallest
 # subnormal), which is harmless here since the `eps(T)` term already dominates at any `T`
 # fine enough to underflow the floor.
-@inline function _default_is_uniform_tol(::Type{T}, h_ref, n) where {T}
+@inline function _default_is_uniform_tol(::Type{T}, h_ref, n, mag) where {T}
     span = n * abs(h_ref)
-    return max(T(1e-10), 4 * eps(T) * span)
+    return max(T(1e-10), min(4 * eps(T) * max(span, mag), abs(h_ref)))
 end
 
 #------------------------------------------------------------------------------------------#

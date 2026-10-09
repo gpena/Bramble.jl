@@ -504,6 +504,36 @@ import Base: diff
             change_points!(Ωₕ, collect(range(0.0, 1.0; length = 10)))
             @test is_uniform(Ωₕ)
             @test stepsize(Ωₕ) ≈ 1 / 9
+
+            # Far from the origin, rounding drift tracks the coordinates' ulp, and the
+            # default tolerance scales with it (gpena/Bramble.jl#492); the magnitude comes
+            # from the points, not the set `change_points!` leaves stale.
+            change_points!(Ωₕ, collect(range(1.0e6, 1.0e6 + 1; length = 10)))
+            @test is_uniform(Ωₕ)
+
+            Ω32 = mesh(domain(interval(10.0f0, 11.0f0)), 11)
+            @test is_uniform(Ω32)
+            @test stepsize(Ω32) ≈ 0.1f0
+            Ω64 = mesh(domain(interval(1.0e6, 1.0e6 + 1)), 11)
+            @test is_uniform(Ω64)
+            @test stepsize(Ω64) ≈ 0.1
+            @test is_uniform(mesh(domain(interval(3.0e7, 3.0e7 + 1)), 11))
+
+            # ...while a perturbed mesh at the same magnitudes, or on a tiny domain where
+            # the 1e-10 floor governs, stays non-uniform.
+            Random.seed!(492)
+            @test !is_uniform(mesh(domain(interval(10.0f0, 11.0f0)), 11, false))
+            Random.seed!(492)
+            @test !is_uniform(mesh(domain(interval(1.0e6, 1.0e6 + 1)), 11, false))
+            Random.seed!(492)
+            @test !is_uniform(mesh(domain(interval(0.0, 1.0e-8)), 11, false))
+
+            # The widened tolerance never admits a spacing of the opposite sign.
+            Ω_back = mesh(domain(interval(0.0f0, 1.0f0)), 5)
+            change_points!(Ω_back, 1.0f6 .+ Float32[0, 0.25, 0.125, 0.375, 0.5])
+            @test !is_uniform(Ω_back)
+            # ...and still clears the 1-ulp drift when the spacing is only 2 ulps wide.
+            @test is_uniform(mesh(domain(interval(1.0f6, 1.0f6 + 400)), 2561))
         end
     end
 end

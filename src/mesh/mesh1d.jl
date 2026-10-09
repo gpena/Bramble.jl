@@ -153,8 +153,13 @@ from its submeshes' states. A state is its own walk state.
         s.collapsed, version, uniform, words, s.uid)
 end
 
-# The default-tolerance uniformity of `s`'s current spacings: what `uniform` stores.
-@inline _computed_uniform(s::Mesh1DState) = _uniform_default_tol(host_spacings(s), eltype(s))
+# The default-tolerance uniformity of `s`'s current spacings: what `uniform` stores. `mag`
+# is read from the points, which `change_points!` keeps current, not from the stale set.
+@inline function _computed_uniform(s::Mesh1DState)
+    p = host_points(s)
+    mag = max(abs(first(p)), abs(last(p)))
+    return _uniform_default_tol(host_spacings(s), eltype(s), mag)
+end
 
 @inline _marker_words(Ωₕ::_Mesh1DLike) = _st(Ωₕ).words
 @inline _marker_ids(Ωₕ::Mesh1D) = getfield(Ωₕ, :marker_ids)
