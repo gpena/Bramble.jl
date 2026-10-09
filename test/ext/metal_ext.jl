@@ -14,7 +14,7 @@ using LinearAlgebra: I, mul!
 using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros, metal_sparse_csr,
                metal_sparse_csc, host_points, host_weights, half_spacings, CpuSerial,
                CpuThreaded, GpuKernel, half_points, index_in_marker, is_uniform,
-               locate_cell, set_points!, spacings, stepsize, weights
+               locate_cell, set_points!, spacings, stepsize, weights, change_points!
 using ..TestUtils: _run_gpu_tests
 
 # BrambleMetalExt's backend allocation primitives
@@ -325,6 +325,24 @@ else
 
             @test locate_cell(Ω, pts[1] - 1.0f0) == 1
             @test locate_cell(Ω, pts[end] + 1.0f0) == n - 1
+        end
+
+        # a uniform device mesh moved off its domain's set by change_points! must search
+        # its own points, not the set's closed form (gpena/Bramble.jl#495)
+        let n = 11, Ω = mesh(domain(interval(0.0f0, 1.0f0)), n; backend = b)
+            change_points!(Ω, Metal.MtlVector(collect(range(1.0f0, 2.0f0; length = n))))
+            @test is_uniform(Ω)
+            pts = host_points(Ω)
+            expected(x) = clamp(searchsortedlast(pts, x), 1, n - 1)
+            for i in 1:(n - 1)
+                mid = (pts[i] + pts[i + 1]) / 2
+                @test locate_cell(Ω, mid) == expected(mid)
+            end
+            for x in pts
+                @test locate_cell(Ω, x) == expected(x)
+                @test locate_cell(Ω, prevfloat(x)) == expected(prevfloat(x))
+                @test locate_cell(Ω, nextfloat(x)) == expected(nextfloat(x))
+            end
         end
     end
 

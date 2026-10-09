@@ -337,6 +337,30 @@ import Bramble:
                 @test locate_cell(M, NaN) == 10
             end
 
+            # a uniform mesh moved off its domain's set agrees with searchsortedlast on its
+            # own points at every node, one ulp either side and every midpoint
+            # (gpena/Bramble.jl#495); a copy, so the rest of this testset keeps M1
+            M1m = copy(M1)
+            change_points!(M1m, collect(range(1.0, 2.0; length = 11)))
+            @test is_uniform(M1m)
+            @test locate_cell(M1m, 1.55) == 6
+            # a Float32-backend mesh over a Float64 set: its points are not the set's nodes
+            M1f = mesh(domain(I), 11; backend = backend(Float32))
+            @test is_uniform(M1f)
+            for M in (M1m, M1f)
+                p = points(M)
+                expected(x) = clamp(searchsortedlast(p, x), 1, 10)
+                for i in 1:10
+                    mid = (p[i] + p[i + 1]) / 2
+                    @test locate_cell(M, mid) == expected(mid)
+                end
+                for x in p
+                    @test locate_cell(M, x) == expected(x)
+                    @test locate_cell(M, prevfloat(x)) == expected(prevfloat(x))
+                    @test locate_cell(M, nextfloat(x)) == expected(nextfloat(x))
+                end
+            end
+
             # normal_vector
             @test normal_vector(M1, :xmin) == (-1.0,)
             @test normal_vector(M1, :xmax) == (1.0,)

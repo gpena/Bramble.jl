@@ -263,18 +263,26 @@ largest node index `i` with `pts[i] <= x`, clamped to `1:n-1` -- exactly what
 `searchsortedlast` on the point array answers, and what this method must keep answering,
 uniform or not.
 
-A uniform mesh answers with no array read at all, device-backed or not
-(gpena/Bramble.jl#308): a first estimate `clamp(floor(Int, (x - a) / h) + 1, 1, n - 1)` on
-the interval's own endpoint `a` and stepsize `h = (b - a) / (n - 1)`, matching how `_points!`
-built the grid, then one correction step against the closed-form coordinates of that
-estimate's own neighbouring nodes (`a + idx * h`, `a + (idx - 1) * h`) rather than the
-estimate's raw division. `(x - a) / h` rounds to either side of an integer at a node
-coordinate -- worse in `Float32` (Metal's only type, relative error ~1e-7) than in
-`Float64` (~1e-16) -- so the first estimate can land one cell short or one cell over at an
-exact grid point; the correction is what keeps this path agreeing with `searchsortedlast`
-there; see gpena/Bramble.jl#308 (round 2) for the measured Float64 disagreement this fixes.
+A uniform host-backed mesh reads its own end points `pts[1]` and `pts[n]`, an O(1) read,
+and takes a first estimate `clamp(floor(Int, (x - pts[1]) / h) + 1, 1, n - 1)` with
+`h = (pts[n] - pts[1]) / (n - 1)`; it then walks against `pts` until
+`pts[idx] <= x < pts[idx + 1]`, one step at most in practice. That is exactly
+`searchsortedlast`, with no allocation, whatever the points are: [`change_points!`](@ref)
+accepts points that are uniform only within tolerance and need not lie on the domain's set,
+so neither the set nor a closed form `a + (i - 1) * h` may stand in for them
+(gpena/Bramble.jl#495).
+
+A uniform device-backed mesh refuses scalar reads (gpena/Bramble.jl#308). While its version
+is still 0 its points are the ones `_mesh` built from the set, so it answers with no array
+read: the same estimate on the set's endpoints `a`, `b`, then one correction step against
+the closed-form coordinates of that estimate's neighbouring nodes (`a + idx * h`,
+`a + (idx - 1) * h`), since `(x - a) / h` rounds to either side of an integer at a node
+coordinate -- worse in `Float32` (Metal's only type) than in `Float64`. Once
+[`set_points!`](@ref) has replaced its points (version above 0), it searches
+[`host_points`](@ref)`(Ωₕ)` as a non-uniform device mesh does: one bulk transfer, exact.
+
 A point at or past either endpoint, `±Inf` included, returns the boundary cell before any
-division, and `NaN` returns `n - 1` as the search does, so this path never throws.
+division, and `NaN` returns `n - 1` as the search does, so no path throws.
 
 A non-uniform mesh has no formula to fall back on and searches [`host_points`](@ref)`(Ωₕ)`
 instead of the raw, possibly device-resident `points(Ωₕ)`.
@@ -282,36 +290,66 @@ instead of the raw, possibly device-resident `points(Ωₕ)`.
 function locate_cell(Ωₕ::_Mesh1DLike, x::Real)
     n = npoints(Ωₕ)
     n <= 1 && return 1
+    is_uniform(Ωₕ) && return _locate_uniform(locality(typeof(points(Ωₕ))), Ωₕ, x, n)
+    return _locate_search(Ωₕ, x, n)
+end
 
-    if is_uniform(Ωₕ)
-        a, b = extrema(_st(Ωₕ).set)
-        # answer the ends before `floor(Int, ...)`, which throws on a quotient past
-        # `typemax(Int)`, on ±Inf and on NaN; NaN takes the last cell, as the search
-        # path below does (`searchsortedlast` sorts NaN last)
-        x <= a && return 1
-        (x >= b || isnan(x)) && return n - 1
-        h = (b - a) / (n - 1)
-        idx = floor(Int, (x - a) / h) + 1
+# Host: estimate from the mesh's own end points, then walk against `pts` to the exact
+# `searchsortedlast` answer; the set is never read, so moved points cannot mislead it.
+function _locate_uniform(::HostLocality, Ωₕ::_Mesh1DLike, x::Real, n::Int)
+    pts = points(Ωₕ)
+    a = pts[1]
+    b = pts[n]
+    # answer the ends before `floor(Int, ...)`, which throws on a quotient past
+    # `typemax(Int)`, on ±Inf and on NaN; NaN takes the last cell, as the search
+    # path does (`searchsortedlast` sorts NaN last)
+    x <= a && return 1
+    (x >= b || isnan(x)) && return n - 1
+    h = (b - a) / (n - 1)
+    idx = clamp(floor(Int, (x - a) / h) + 1, 1, n - 1)
 
-        # `idx` is a candidate for the largest node index with node <= x, built from
-        # `(x - a) / h` alone; that division can round either side of an integer at an
-        # exact node coordinate, so re-derive both of `idx`'s neighbouring nodes the same
-        # closed-form way (never by reading `pts`) and shift by one if `x` actually sits
-        # past the upper one or short of the lower one. At most one of the two branches
-        # below can fire, since they move `idx` in opposite directions.
-        upper = a + idx * h
-        if x >= upper
-            idx += 1
-        else
-            lower = a + (idx - 1) * h
-            if x < lower
-                idx -= 1
-            end
+    # here a < x < b, so the walk stops inside 1:n-1 with pts[idx] <= x < pts[idx + 1]
+    while idx < n - 1 && pts[idx + 1] <= x
+        idx += 1
+    end
+    while idx > 1 && pts[idx] > x
+        idx -= 1
+    end
+    return idx
+end
+
+# Device: no scalar reads. A version-0 mesh still holds the points `_mesh` built from the
+# set, so the closed form on `extrema(set)` is valid; after `set_points!` (the only writer
+# that bumps the version) the points may have left the set, so search them exactly.
+function _locate_uniform(::DeviceLocality, Ωₕ::_Mesh1DLike, x::Real, n::Int)
+    _mesh_version(Ωₕ) == 0 || return _locate_search(Ωₕ, x, n)
+
+    a, b = extrema(_st(Ωₕ).set)
+    x <= a && return 1
+    (x >= b || isnan(x)) && return n - 1
+    h = (b - a) / (n - 1)
+    idx = floor(Int, (x - a) / h) + 1
+
+    # `idx` is a candidate for the largest node index with node <= x, built from
+    # `(x - a) / h` alone; that division can round either side of an integer at an
+    # exact node coordinate, so re-derive both of `idx`'s neighbouring nodes the same
+    # closed-form way (never by reading `pts`) and shift by one if `x` actually sits
+    # past the upper one or short of the lower one. At most one of the two branches
+    # below can fire, since they move `idx` in opposite directions.
+    upper = a + idx * h
+    if x >= upper
+        idx += 1
+    else
+        lower = a + (idx - 1) * h
+        if x < lower
+            idx -= 1
         end
-
-        return clamp(idx, 1, n - 1)
     end
 
+    return clamp(idx, 1, n - 1)
+end
+
+function _locate_search(Ωₕ::_Mesh1DLike, x::Real, n::Int)
     pts = host_points(Ωₕ)
     if x <= pts[1]
         return 1
