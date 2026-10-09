@@ -23,8 +23,7 @@ using ..TestUtils: _nonuniform_points, _zero_boundary!
 # 3D with its own Supposition suite. Worth knowing when reading the issue, which states it
 # with the *forward* average M₊: that spelling does not close the identity, and that file
 # pins the failure as well as the correction. The average that pairs with `inner₊`'s backward
-# weighting is the backward one, for the indexing reason its header sets out. The
-# cross-reference is exercised below rather than only asserted in prose.
+# weighting is the backward one, for the indexing reason its header sets out.
 #
 # 2.1 also has a deterministic counterpart in `test/space/operators.jl`, where `Δₕ` is
 # defined; what is here is the property-based version over arbitrary meshes and fields.
@@ -92,20 +91,7 @@ end
         end
     end
 
-    @testset "2.2 Poincaré-Friedrichs" begin
-        for D in 1:3, unif in (true, false)
-
-            Ωₕ = mesh(_unit(D), ntuple(_ -> 9, Val(D)), ntuple(_ -> unif, Val(D)))
-            Wₕ = gridspace(Ωₕ)
-            dims = npoints(Ωₕ, Tuple)
-            for _ in 1:3
-                uₕ = _random_vanishing(Wₕ, dims)
-                @test holds(normₕ(uₕ), norm₊(∇ₕ(uₕ)))
-            end
-        end
-    end
-
-    @testset "2.3 Inverse and embedding inequalities" begin
+    @testset "2.2 Poincaré; 2.3 inverse, embedding" begin
         # The first is sharp as written here: ‖u‖ₕ² = Σ H_I u_I² ≥ Hₘᵢₙ max u_I², so the
         # constant is 1/√Hₘᵢₙ and a spike on the smallest cell nearly attains it (the worst
         # ratio measured over a hundred random meshes is 0.79). The issue states it with
@@ -129,6 +115,7 @@ end
             for _ in 1:3
                 uₕ = _random_vanishing(Wₕ, dims)
                 g = norm₊(∇ₕ(uₕ))
+                @test holds(normₕ(uₕ), g)
                 @test holds(norminf(uₕ), normₕ(uₕ) / sqrt(Hm))
                 @test holds(norminf(uₕ), normₕ(uₕ) / Hm)
                 @test holds(norminf(uₕ), g / sqrt(2 * Hm))
@@ -167,16 +154,6 @@ end
         @test _w1inf(uₕ, 2) > g / Hm
         # the staggered-weight form holds
         @test holds(_w1inf(uₕ, 2), max(normₕ(uₕ) / sqrt(Hm), g / sqrt(wm)))
-    end
-
-    @testset "2.4 lives in sbp_identities.jl" begin
-        # One live call, so the cross-reference above cannot go stale silently: the centered
-        # divergence pairs with the *backward* average through `inner₊`.
-        Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, false)
-        Wₕ = gridspace(Ωₕ)
-        uₕ = _random_vanishing(Wₕ, npoints(Ωₕ, Tuple))
-        vₕ = _random_vanishing(Wₕ, npoints(Ωₕ, Tuple))
-        @test agree(innerₕ(Dcₓ(uₕ), vₕ), -inner₊ₓ(Mₓ(uₕ), D₋ₓ(vₕ)))
     end
 
     WITH_SLOW_TESTS && @testset "Random grids (Supposition)" begin

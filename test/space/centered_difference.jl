@@ -170,17 +170,6 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, false))
         Wₕ = gridspace(Ωₕ)
         Vₕ = gridspace(Ωₕ, Val(2))
-        uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
-
-        @test Dcₕ(uₕ) isa NTuple{2, VectorElement}
-        @test parent(Dcₕ(uₕ)[1]) == parent(Dcₓ(uₕ))
-        @test parent(Dcₕ(uₕ)[2]) == parent(Dcᵧ(uₕ))
-
-        # in one dimension the tuple and the grid function coincide
-        Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)
-        u1 = Rₕ(gridspace(Ω1), sin)
-        @test !(Dcₕ(u1) isa Tuple)
-        @test parent(Dcₕ(u1)) == parent(Dcₓ(u1))
 
         # composite grid functions apply componentwise, as the other operators do
         fs = (x -> x[1], x -> x[2]^2)

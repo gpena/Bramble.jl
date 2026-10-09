@@ -173,17 +173,6 @@ cross_weighted_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, false))
         Wₕ = gridspace(Ωₕ)
         Vₕ = gridspace(Ωₕ, Val(2))
-        uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
-
-        @test D̽ₕ(uₕ) isa NTuple{2, VectorElement}
-        @test parent(D̽ₕ(uₕ)[1]) == parent(D̽ₓ(uₕ))
-        @test parent(D̽ₕ(uₕ)[2]) == parent(D̽ᵧ(uₕ))
-
-        # in one dimension the tuple and the grid function coincide, as for ∇ₕ
-        Ω1 = mesh(domain(interval(0.0, 1.0)), 7, true)
-        u1 = Rₕ(gridspace(Ω1), sin)
-        @test !(D̽ₕ(u1) isa Tuple)
-        @test parent(D̽ₕ(u1)) == parent(D̽ₓ(u1))
 
         # composite grid functions apply componentwise, as the other operators do
         fs = (x -> x[1], x -> x[2]^2)

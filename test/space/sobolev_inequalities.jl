@@ -33,8 +33,9 @@ using ..TestUtils: _nonuniform_points, _zero_boundary!
 # quantity staggered in every direction at once, weighted by the full-`D` member of the
 # `2^D`-member staggered family (#234): `inner₊(·, ·, Val((1, …, D)))`, now that
 # `src/space/inner_product.jl`'s general `inner₊(u, v, Val(S))` provides it. Asserted below,
-# "The mixed-derivative L^∞ embedding" testset -- including against the same concentrated
-# field that defeats the false per-direction claim just above it.
+# in the "Poincaré, mixed L^∞ embedding (#234)" testset, and against the same
+# concentrated field that defeats the false per-direction claim in "L^∞ bound fails per
+# direction (#187)".
 
 # ‖D₋_d vₕ‖ along direction `d` alone. Spelled with `inner₊ₓ` and its siblings rather than
 # with `norm₊`, which sums over every direction in 2D and 3D.
@@ -66,7 +67,9 @@ end
     # approached from below.
     holds(lhs, rhs) = lhs <= rhs * (1 + 1e-10) + 1e-12
 
-    @testset "Poincaré, per direction, 1D/2D/3D" begin
+    @testset "Poincaré, mixed L^∞ embedding (#234)" begin
+        # Both inequalities share the meshes and the fields: `‖v‖_∞ ≤ ‖∂₁⋯∂_D v‖` is the
+        # generalisation of the L^∞ embedding that is true (see the module header).
         for D in 1:3
             @testset "$(D)D" begin
                 Random.seed!(20260918)
@@ -86,6 +89,7 @@ end
                         for d in 1:D
                             @test holds(normₕ(vₕ), _dir_gradient_norm(vₕ, Val(d)))
                         end
+                        @test holds(norminf(vₕ), _mixed_gradient_norm(vₕ, Val(D)))
                     end
                 end
             end
@@ -139,49 +143,8 @@ end
         end
         # while Poincaré, which is not a line-wise argument, still holds on the same field
         @test holds(normₕ(vₕ), _dir_gradient_norm(vₕ, Val(1)))
-    end
-
-    @testset "Mixed-derivative L^∞ embedding (#234)" begin
-        # `‖v‖_∞ ≤ ‖∂₁⋯∂_D v‖`, the generalisation that is true (see the module header),
-        # weighted by the full-D staggered inner product `inner₊(·, ·, Val((1, …, D)))`.
-        for D in 1:3
-            @testset "$(D)D" begin
-                Random.seed!(20260918)
-                Ω = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), Val(D))))
-                for unif in (true, false)
-                    Ωₕ = mesh(Ω, ntuple(_ -> 9, Val(D)), ntuple(_ -> unif, Val(D)))
-                    Wₕ = gridspace(Ωₕ)
-                    dims = npoints(Ωₕ, Tuple)
-
-                    for f in (
-                        x -> prod(xi * (1 - xi) for xi in x),
-                        x -> sin(π * x[1]) * prod(xi * (1 - xi) for xi in x),
-                        x -> 1000 * prod(xi * (1 - xi) for xi in x)^3
-                    )
-                        vₕ = element(Wₕ, vec(_zero_boundary!(reshape(
-                            copy(parent(Rₕ(Wₕ, f))), dims))))
-                        @test holds(norminf(vₕ), _mixed_gradient_norm(vₕ, Val(D)))
-                    end
-                end
-            end
-        end
-
-        # The same concentrated field that defeats the false per-direction claim just
-        # above: the *mixed* derivative bound still holds where every per-direction one
-        # fails, which is the point of asserting the true generalisation instead.
-        @testset "Holds where per-direction fails (#187)" begin
-            Ωₕ = mesh(
-                domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
-                (9, 9, 9), (true, true, true))
-            Wₕ = gridspace(Ωₕ)
-            vₕ = Rₕ(Wₕ, x -> 1000 * prod(xi * (1 - xi) for xi in x)^3)
-            parent(vₕ)[vec(index_in_marker(Ωₕ, :boundary))] .= 0.0
-
-            for d in 1:3
-                @test norminf(vₕ) > _dir_gradient_norm(vₕ, Val(d))
-            end
-            @test holds(norminf(vₕ), _mixed_gradient_norm(vₕ, Val(3)))
-        end
+        # and so does the mixed-derivative bound, the generalisation that is true
+        @test holds(norminf(vₕ), _mixed_gradient_norm(vₕ, Val(3)))
     end
 
     WITH_SLOW_TESTS && @testset "Random grids (Supposition)" begin

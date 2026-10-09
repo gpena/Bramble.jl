@@ -101,12 +101,15 @@ const SYMBOLS = (:x, :y, :z)
         # the bound is the mesh's own dimension, not 3: a 1D grid has no `y`
         @test_throws ArgumentError D₋(uₕ1, 2)
         @test_throws ArgumentError D₋(uₕ1, :y)
-        @test_throws ArgumentError D₋(uₕ2, 3)
+        @test_throws ArgumentError(
+            "the stencil direction must be between 1 and 2, got 3") D₋(uₕ2, 3)
         @test_throws ArgumentError D₋(uₕ2, :z)
-        @test_throws ArgumentError D₋(uₕ3, 4)
+        @test_throws ArgumentError(
+            "the stencil direction must be between 1 and 3, got 4") D₋(uₕ3, 4)
         @test_throws ArgumentError D₋(uₕ3, 0)
         @test_throws ArgumentError Mₕ(uₕ2, :z)
-        @test_throws ArgumentError D₋(uₕ2, :w)
+        @test_throws ArgumentError(
+            "the stencil direction must be :x, :y or :z, got :w") D₋(uₕ2, :w)
         @test_throws ArgumentError jump(uₕ2, :nope)
     end
 

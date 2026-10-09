@@ -924,35 +924,6 @@ using Bramble: kronecker_operator_matrix, stencil_matrix, difference_shift, Back
           kronecker_operator_matrix(Ωd, D₋ᵧ)
 end
 
-# A runtime `Int` or `Symbol` direction selects between literal `Val`s, one arm per direction
-# the mesh has (`_dispatch_dim`, `_dim_index`); each arm must give the subscript alias, and a
-# direction the mesh does not have must be refused rather than reach a `Val` no grid serves.
-@testset "Int and Symbol direction entry points" begin
-    W2 = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (6, 5), (false, false)))
-    W3 = gridspace(mesh(domain(box((0.0, 0.0, 0.0), (1.0, 2.0, 1.5))), (4, 5, 3),
-        (false, false, false)))
-    u2 = Rₕ(W2, x -> sin(x[1]) + x[2]^2)
-    u3 = Rₕ(W3, x -> x[1] * x[2] + exp(x[3]))
-
-    @test parent(D₋(u2, 2)) == parent(D₋ᵧ(u2))
-    @test parent(D₋(u2, :x)) == parent(D₋ₓ(u2))
-    @test parent(D₋(u2, :y)) == parent(D₋ᵧ(u2))
-    @test parent(D₋(u3, 3)) == parent(D₋₂(u3))
-    @test parent(D₋(u3, 2)) == parent(D₋ᵧ(u3))
-    @test parent(D₋(u3, :z)) == parent(D₋₂(u3))
-
-    msg(f) =
-        try
-            f()
-            ""
-        catch e
-            e isa ArgumentError ? e.msg : "not an ArgumentError"
-        end
-    @test msg(() -> D₋(u2, 3)) == "the stencil direction must be between 1 and 2, got 3"
-    @test msg(() -> D₋(u3, 4)) == "the stencil direction must be between 1 and 3, got 4"
-    @test msg(() -> D₋(u2, :w)) == "the stencil direction must be :x, :y or :z, got :w"
-end
-
 @testset "In-place difference: size mismatch" begin
     err = try
         backward_difference_dim!(zeros(3), zeros(4), (4,), Val(1))
