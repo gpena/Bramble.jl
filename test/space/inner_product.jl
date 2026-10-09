@@ -895,7 +895,7 @@ end
             # element of a non-uniform (5, 5) mesh, on either side, and equal lengths that
             # are wrong for the mesh
             u5 = Rₕ(gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5),
-                (false, true))), x -> 1.0)
+                    (false, true))), x -> 1.0)
             @test_throws DimensionMismatch inner_Γ(u5, one_h, :ymin)
             @test_throws DimensionMismatch inner_Γ(one_h, u5, :ymax)
             ub = Bramble.VectorElement(ones(49), space(u5))

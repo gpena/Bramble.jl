@@ -382,7 +382,6 @@ end
                 # composite source and its tuple-of-components spelling alike.
                 srcs = src === :field ? components(uₕ) : (uₕ,)
                 for v in (src === :field ? (uₕ, srcs) : (uₕ,)), c in srcs, s in slots(sh)
-
                     @test rejects(f!, put(build(good, sh), s, c), v)
                     @test rejects(f!,
                         put(build(good, sh), s, VectorElement(view(parent(c), 1:n), space(c))), v)
