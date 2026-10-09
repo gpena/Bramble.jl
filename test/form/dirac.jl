@@ -435,6 +435,43 @@ using Bramble:
             end
         end
     end
+
+    # Tuples are the inferable spelling; a vector point normalises to the same tuple, and an
+    # empty point or one whose length or kind disagrees with the first is a named error (#531)
+    @testset "dirac: point spellings and checks (#531)" begin
+        @test @inferred(dirac((0.3, 0.4), 2.0)) === DiracSource{2}((0.3, 0.4), 2.0)
+        many = @inferred dirac([(0.3, 0.4), (0.7, 0.2)], [1.0, -1.0])
+        @test many isa DiracSource{2, Vector{NTuple{2, Float64}}, Vector{Float64}}
+        @test many.points == [(0.3, 0.4), (0.7, 0.2)]
+        @test dirac([0.2, 0.7]).points === (0.2, 0.7)
+
+        Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+        Wₕ = gridspace(mesh(Ω, (6, 6), (false, true)))
+        b_vec = assemble(form(Wₕ, v -> innerₕ(dirac([0.3, 0.4], 2.0), v)))
+        b_tup = assemble(form(Wₕ, v -> innerₕ(dirac((0.3, 0.4), 2.0), v)))
+        @test b_vec == b_tup
+        @test count(!iszero, b_tup) > 1
+
+        # an untyped list (a `Vector{Any}`) of tuples and vectors is a list of points; one of
+        # reals only is one point, like a flat real vector
+        mixed = dirac([(0.1, 0.2), [0.3, 0.4]])
+        @test mixed isa DiracSource{2, Vector{NTuple{2, Float64}}, Vector{Float64}}
+        @test mixed.points == [(0.1, 0.2), (0.3, 0.4)]
+        @test dirac(Any[0.2, 0.7]).points === (0.2, 0.7)
+
+        for empty in (Float64[], (), [Float64[]])
+            @test_throws ArgumentError dirac(empty)
+            @test_throws "empty" dirac(empty)
+        end
+        @test_throws ArgumentError dirac(Any[])
+        @test_throws "at least one point location" dirac(Any[])
+        bad = ([[0.1, 0.2], [0.3, 0.4, 0.5]], [[0.1, 0.2, 0.3], [0.4, 0.5]], [(0.1, 0.2), (0.3, 0.4, 0.5)],
+               [(0.1, 0.2), [0.3, 0.4, 0.5]], [(0.1, 0.2), 0.3], [0.1, [0.2, 0.3]])
+        for pts in bad
+            @test_throws ArgumentError dirac(pts)
+            @test_throws "dirac point 2" dirac(pts)
+        end
+    end
 end
 
 end # module

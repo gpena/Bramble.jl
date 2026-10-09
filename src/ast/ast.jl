@@ -151,6 +151,14 @@ end
 Construct a symbolic point (Dirac delta) source term at coordinate `x0` with scalar `strength`,
 or a collection of point sources at `points` with corresponding `strengths`.
 
+Tuples are the type-stable spelling of a point: `dirac((0.3, 0.4))` and
+`dirac([(0.3, 0.4), (0.7, 0.2)])` infer a concrete `DiracSource{2}`. A vector point is accepted,
+but its dimension is read from its length at run time, so `dirac([0.3, 0.4])` and
+`dirac([[0.3, 0.4], [0.7, 0.2]])` are not inferable; they normalise to the same tuples and
+assemble the same load vector. A vector with a real element type (`[0.2, 0.7]`, `Real[0.2, 0.7]`),
+or an untyped `Any[0.2, 0.7]` holding only reals, is one point, here the 2D point `(0.2, 0.7)`;
+two 1D points are spelt `dirac([(0.2,), (0.7,)])`. A list of points may mix tuples and vectors.
+
 # Mathematical formulation
 A point source represents the continuous linear functional:
 ```math
@@ -170,12 +178,16 @@ b_{idx + c} = S \\cdot w_c, \\qquad \\sum_{c \\in \\{0, 1\\}^D} w_c = 1
 - **Contraction**: Contracting the linear form against a discrete grid function ``v_h \\in W_h`` evaluates ``\\ell(v_h) = b \\cdot v_h \\approx S \\cdot v_h(x_0)`` with ``\\mathcal{O}(h^2)`` accuracy.
 
 # Arguments
-- `x0`: Point coordinate, a scalar number (1D), `NTuple{D, Real}`, or `AbstractVector{<:Real}`.
+- `x0`: Point coordinate, a scalar number (1D), `NTuple{D, Real}` (type-stable), or
+  `AbstractVector{<:Real}` (one `D`-dimensional point, not inferable). An empty tuple or vector
+  throws an `ArgumentError`.
 - `strength`: Source intensity (default: `1.0`). Accepts any of the following.
   - A constant `Number` (e.g. `2.5`).
   - A dynamic `Ref(val)`, which enables live in-place updates (`strength[] = new_val`) in time-stepping loops without rebuilding the form and with **0 heap allocations**.
   - A zero-argument function thunk, `() -> f(t)`, for time-dependent sources.
-- `points`: Collection of point coordinates for multiple simultaneous sources.
+- `points`: Collection of point coordinates for multiple simultaneous sources. The first point sets
+  the dimension `D`; a later point with a different number of coordinates, or of a kind that
+  cannot have `D` coordinates, throws an `ArgumentError` naming its index.
 - `strengths`: Matching collection of intensities, or a single scalar broadcast to all points.
 
 # Examples
@@ -213,21 +225,54 @@ function dirac(x0::NTuple{D, Real}, strength = 1.0) where {D}
     return DiracSource{D, typeof(pt), typeof(strength)}(pt, strength)
 end
 
+dirac(::Tuple{}, strength = 1.0) = _dirac_empty_point("tuple")
+
 function dirac(x0::AbstractVector{<:Real}, strength = 1.0)
+    isempty(x0) && _dirac_empty_point("vector")
     D = length(x0)
     pt = ntuple(d -> Float64(x0[d]), D)
     return DiracSource{D, typeof(pt), typeof(strength)}(pt, strength)
 end
 
-@inline _to_tuple_pt(::Val{1}, p::Real) = (Float64(p),)
-@inline _to_tuple_pt(::Val{D}, p::NTuple{D, Real}) where {D} = map(Float64, p)
-@inline _to_tuple_pt(::Val{D}, p::AbstractVector{<:Real}) where {D} = ntuple(d -> Float64(p[d]), Val(D))
+# Normalise point `i` of a multi-point `dirac` to an `NTuple{D, Float64}`; a point whose
+# length or kind does not match the first one's dimension `D` falls to the named error
+@inline _to_tuple_pt(::Val{1}, p::Real, i) = (Float64(p),)
+@inline _to_tuple_pt(::Val{D}, p::NTuple{D, Real}, i) where {D} = map(Float64, p)
+@inline function _to_tuple_pt(::Val{D}, p::AbstractVector{<:Real}, i) where {D}
+    length(p) == D || _dirac_point_mismatch(Val(D), p, i)
+    return ntuple(d -> Float64(p[d]), Val(D))
+end
+_to_tuple_pt(::Val{D}, p, i) where {D} = _dirac_point_mismatch(Val(D), p, i)
 
-function dirac(pts::AbstractVector{<:Union{Real, NTuple, AbstractVector}}, strengths = 1.0)
+@noinline function _dirac_empty_point(kind)
+    throw(ArgumentError("dirac requires a point with at least one coordinate, got an empty $kind"))
+end
+
+@noinline function _dirac_point_mismatch(::Val{D}, p, i) where {D}
+    throw(ArgumentError("dirac point $i is $(repr(p)), but the first point sets the dimension $D: " *
+                        "every point needs $D coordinate(s), all spelt as a number (1D), a tuple or a vector"))
+end
+
+dirac(pts::AbstractVector{<:Union{Real, NTuple, AbstractVector}}, strengths = 1.0) = _dirac_points(pts, strengths)
+
+# A list with no narrower element type, such as `[(0.1, 0.2), [0.3, 0.4]]` (a `Vector{Any}`):
+# one holding only reals is one point, as for a `Vector{<:Real}`, and any other is a list of points
+function dirac(pts::AbstractVector, strengths = 1.0)
+    if !isempty(pts) && all(p -> p isa Real, pts)
+        return dirac(map(Float64, pts), strengths)
+    end
+    return _dirac_points(pts, strengths)
+end
+
+function _dirac_points(pts, strengths)
     isempty(pts) && throw(ArgumentError("dirac requires at least one point location"))
     first_pt = first(pts)
+    first_pt isa Union{Real, Tuple, AbstractVector} || throw(
+        ArgumentError("dirac point 1 is $(repr(first_pt)): a point is a number (1D), a tuple or a vector"),
+    )
     D = first_pt isa Real ? 1 : length(first_pt)
-    normalized_pts = [_to_tuple_pt(Val(D), p) for p in pts]
+    D >= 1 || throw(ArgumentError("dirac point 1 is empty: a point needs at least one coordinate"))
+    normalized_pts = [_to_tuple_pt(Val(D), p, i) for (i, p) in enumerate(pts)]
     normalized_strengths = if strengths isa Number || strengths isa Base.RefValue || strengths isa Function
         fill(strengths, length(pts))
     else
