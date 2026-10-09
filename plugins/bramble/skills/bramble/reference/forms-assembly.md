@@ -31,7 +31,29 @@ bandwidths(a), blockbandwidths(a)                    # storage the assembled mat
 issymmetric(a), isposdef(a)                          # symbolic checks on a BilinearForm
 ```
 
-`kronecker_operator`/`KroneckerLinearOperator`/`is_separable`/`fdm_solve` are a matrix-free
-Kronecker path for a separable `BilinearForm` on a `MeshnD` (`fdm_solve` needs `using
-Kronecker`). `dirac`/`DiracSource` build a point source. `dirichlet_constraints` returns a
+`dirac`/`DiracSource` build a point source. `dirichlet_constraints` returns a
 `DirichletConstraint`, the pairs `assemble`/`dirichlet_bc!` consume.
+
+## Kronecker path
+
+`kronecker_operator(a)` builds a matrix-free `KroneckerLinearOperator` for a separable
+`BilinearForm` on a `MeshnD` (`is_separable(a)`). The `fdm_*` functions need `using
+Kronecker`; `fdm_solve` and `fdm_factorize` need a Laplacian-like form: separable, and every term differs from one mass per axis on at
+most one axis. Symmetric axes are solved by fast diagonalisation, advection terms by a
+generalised Schur factorisation. `dirichlet` is `nothing` or `:boundary` (homogeneous, the
+whole boundary). All of them are host-only.
+
+```julia
+x = fdm_solve(a, F; dirichlet = :boundary)       # the assembled system's solution, no matrix
+fact = fdm_factorize(a; dirichlet = :boundary)   # factorise once...
+fdm_solve!(x, fact, F)                           # ...then each right-hand side, 0 B on host
+fdm_factorize!(fact, a)                          # refill: a scalar or Ref coefficient changed
+P = fdm_preconditioner(a)                        # a Bramble.FDMPreconditioner, for Krylov
+```
+
+`fdm_factorize!` needs the structure `fact` was built for (sizes, eltype, terms, symmetric
+or Schur); otherwise call `fdm_factorize` again. After `Bramble.change_points!`, refill from a
+form built on a new `gridspace`. `fdm_solve` refuses a mixed-derivative form
+(`innerₕ(D₋ₓ(D₋ᵧ(u)), v)`, or a coefficient varying along two axes): assemble it and
+precondition a Krylov solver with `fdm_preconditioner(a)`, which inverts the Laplacian-like
+part and works when diffusion dominates the cross term.

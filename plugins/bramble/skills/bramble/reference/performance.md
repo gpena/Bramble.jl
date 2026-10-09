@@ -55,7 +55,8 @@ arguments there (`@code_warntype f(::Vector{Float64})`).
   efficiency cores can be slower than fewer threads, because static partitions wait for the
   slowest core.
 - `backend(; policy = Parallel())` threads assembly and the operators with `Threads.@threads`;
-  `Bramble.CpuBatch()` uses Polyester (`using Polyester`) for lower overhead on small loops.
+  `Bramble.CpuPolyester()` uses Polyester (`using Polyester`) for lower overhead on small loops.
+  `Bramble.profile_backends()` shows which policy wins at which size on this machine.
 - Never index per-thread buffers by `Threads.threadid()`: tasks migrate. Size them with
   `Threads.maxthreadid()` or give each chunk of work its own buffer.
 
@@ -64,4 +65,7 @@ arguments there (`@code_warntype f(::Vector{Float64})`).
 `A \ F` is fine for moderate sizes. For repeated solves, factorise once and reuse:
 `fact = Bramble.sparse_factorize(A)`, then `Bramble.refactor!(fact, A)` after refilling `A`
 with the same pattern. `amg_preconditioner(A)` and `ilu_preconditioner(A)` (each needs its
-package) feed iterative solvers.
+package) feed iterative solvers. For a Laplacian-like form on a tensor mesh, factorise with
+`fact = fdm_factorize(a)` and solve each right-hand side with `fdm_solve!(x, fact, F)`: no
+matrix is assembled and a solve allocates nothing (`using Kronecker`;
+`reference/forms-assembly.md`).

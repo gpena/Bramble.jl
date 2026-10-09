@@ -82,8 +82,9 @@ Read the one the task needs; each is self-contained.
 - `reference/operators.md`: restriction `Rₕ`, cell averages `avgₕ`, interpolation `πₕ`,
   differences, jumps and averages, vector calculus, inner products and norms.
 - `reference/forms-assembly.md`: bilinear and linear forms, `assemble` and its in-place
-  variants, Dirichlet constraints, symmetrisation, point sources, the Kronecker path.
-- `reference/backends-solvers.md`: execution policies and backends, exporters,
+  variants, Dirichlet constraints, symmetrisation, point sources, the Kronecker path and
+  its `fdm_*` solvers.
+- `reference/backends-solvers.md`: execution policies and backends, profiling them, exporters,
   `semidiscretize` and SciML problems, sparse factorisations and preconditioners.
 - `reference/performance.md`: type stability, allocation measurement, in-place routines,
   scratch buffers, threads.
