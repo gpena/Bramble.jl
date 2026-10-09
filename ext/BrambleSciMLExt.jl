@@ -292,7 +292,18 @@ if Bramble.PRECOMPILE_WORKLOAD
         du0 = Rₕ(Wₕ, x -> 0.0)
 
         @compile_workload begin
-            ode_problem(sd, u0, I_time)
+            # Bare labels (`LabelsOnly`), the Semidiscretization type a user's own call
+            # reaches; a TimeDependentConstraints one carries this file's closure in its type.
+            # With an element and a plain Vector u0, the `p`/`specialize` keywords, and in 2D.
+            ode_problem(semidiscretize(a, l), u0, I_time)
+            sdL = semidiscretize(a, l; dirichlet = :boundary)
+            ode_problem(sdL, u0, I_time)
+            ode_problem(sdL, parent(u0), I_time)
+            ode_problem(sdL, parent(u0), I_time; p = [0.3], specialize = SciMLBase.FullSpecialize)
+            W2 = gridspace(mesh(domain(Bramble.box((0.0, 0.0), (1.0, 1.0))), (4, 4), (false, false)))
+            a2 = form(W2, W2, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+            l2 = form(W2, v -> innerₕ(Bramble.element(W2, 1.0), v))
+            ode_problem(semidiscretize(a2, l2; dirichlet = :boundary), Bramble.element(W2, 0.0), I_time)
             ode_function(sd)
             second_order_ode_problem(sd2, du0, u0, I_time)
             second_order_ode_function(sd2)

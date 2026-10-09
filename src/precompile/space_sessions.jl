@@ -112,6 +112,31 @@ function _pc_space_session(Ωₕ, f, g, marker::Symbol)
     uₕ .= 2
     uₕ .= bₕ ./ 2
 
+    # The same broadcasts from the prompt: the inference barrier makes each `materialize`
+    # its own standalone instance instead of inlining it here. Covers a solve result copied
+    # in (`uₕ .= A \ F`), subtraction, an allocating fused `*`/`+` and a Float64 fill.
+    ub = Base.inferencebarrier(uₕ)
+    ub .= parent(vₕ)
+    ub .- vₕ
+    ub - vₕ
+    3.0 .* ub .+ vₕ
+    ub .= 1.5
+    wb = Base.inferencebarrier(wₕ)
+    wb .= parent(wₕ)
+    wb .- wₕ
+
+    # Standalone instances of the constructors and queries the calls above inline.
+    precompile(element, (typeof(Wₕ),))
+    precompile(element, (typeof(Wₕ), eltype(uₕ)))
+    precompile(element, (typeof(Wₕ), typeof(parent(uₕ))))
+    precompile(Rₕ, (typeof(Wₕ), Function))
+    precompile(^, (typeof(Wₕ), Val{2}))
+    precompile(space, (typeof(uₕ),))
+    precompile(element, (typeof(Vₕ),))
+    precompile(normₕ, (typeof(wₕ),))
+    precompile(ndofs, (typeof(Vₕ), Type{Tuple}))
+    precompile(hₘₐₓ, (typeof(Ωₕ),))
+
     return Wₕ, uₕ, wₕ
 end
 
