@@ -6,6 +6,7 @@ using Bramble: D̽ₕ
 using Bramble: D₋, D̃, Dc, jump
 using Bramble: Dcᵧ, Dc₂, Dcₓ, D̃ᵧ, D̃₂, D̃ₓ, D̽ᵧ, D̽₂, D̽ₓ, D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, M₂, Mₓ
 using Bramble: VectorElement, jumpᵧ, jump₂, jumpₓ
+using Bramble: Mcᵧ, Mc₂, Mᵧ!
 # Internal or `public` since v3.0 (gpena/Bramble.jl#211), entry points included.
 import Bramble: diff₋, diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊, diff₊ₓ, diff₊ᵧ, diff₊₂,
                 D₊, D₊ₓ, D₊ᵧ, D₊₂, M₊ₕ, M₊ₓ, M₊ᵧ, M₊₂
@@ -111,6 +112,17 @@ const SYMBOLS = (:x, :y, :z)
         @test_throws ArgumentError(
             "the stencil direction must be :x, :y or :z, got :w") D₋(uₕ2, :w)
         @test_throws ArgumentError jump(uₕ2, :nope)
+        # the subscript aliases, the in-place forms and the composite recursion skip the
+        # entry points' check, so the applicators carry their own
+        for (_, aliases) in FAMILIES
+            @test_throws ArgumentError aliases[2](uₕ1)
+            @test_throws ArgumentError aliases[3](uₕ2)
+            @test_throws ArgumentError aliases[3](cₕ2)
+        end
+        @test_throws ArgumentError(
+            "the stencil direction must be between 1 and 1, got 2") Mcᵧ(uₕ1)
+        @test_throws ArgumentError Mc₂(uₕ2)
+        @test_throws ArgumentError Mᵧ!(similar(uₕ1), uₕ1)
     end
 
     @testset "Type stability: Int and Symbol entries" begin
