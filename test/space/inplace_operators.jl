@@ -329,6 +329,36 @@ end
             k -> k == s[1] ? put(dest[k], Base.tail(s), x) : dest[k], length(dest)
         )
 
+        # Every pair of slots holding one shared leaf, then that leaf and a fresh view over
+        # its data, is refused. A strain's pairs include its symmetric `(i, j)`/`(j, i)` pair
+        # and a diagonal leaf against an off-diagonal one.
+        function rejects_shared(f!, sh, good, uₕ)
+            ss = slots(sh)
+            refused = 0
+            for a in eachindex(ss), b in (a + 1):lastindex(ss)
+
+                shared = good()
+                over = VectorElement(view(parent(shared), 1:length(shared)), space(shared))
+                base = put(build(good, sh), ss[a], shared)
+                refused += rejects(f!, put(base, ss[b], shared), uₕ)
+                refused += rejects(f!, put(base, ss[b], over), uₕ)
+            end
+            return refused == length(ss) * (length(ss) - 1)
+        end
+        # `cs` as a `k`-by-`k` nested tuple, row by row. `Val(k)` keeps it inferred: a runtime
+        # `ntuple` length over composite leaves did not finish compiling.
+        square(cs, ::Val{k}) where {k} = ntuple(i -> ntuple(j -> cs[(i - 1) * k + j], Val(k)), Val(k))
+        # A destination of shape `sh` built from the leaves of one composite element is
+        # accepted and gives what separate leaves give.
+        function accepts_packed(f!, sh, good, uₕ, Ωₕ, f)
+            m = prod(sh)
+            cs = components(Rₕ(gridspace(Ωₕ, Val(m)), ntuple(_ -> f, m)))
+            packed = length(sh) == 1 ? cs : square(cs, Val(sh[1]))
+            ref = f!(build(good, sh), uₕ)
+            f!(packed, uₕ)
+            return map(parent, leaves(packed)) == map(parent, leaves(ref))
+        end
+
         forms = (
             (Bramble.divₕ!, :scalar, :field, 1:3), (Bramble.div₊ₕ!, :scalar, :field, 1:3),
             (Bramble.divcₕ!, :scalar, :field, 1:3), (Bramble.diṽₕ!, :scalar, :field, 1:3),
@@ -385,6 +415,13 @@ end
                     @test rejects(f!, put(build(good, sh), s, c), v)
                     @test rejects(f!,
                         put(build(good, sh), s, VectorElement(view(parent(c), 1:n), space(c))), v)
+                end
+                # Two destination leaves sharing storage -- one object in both slots, or a
+                # fresh view over the other's data -- are refused too (#616), and the leaves
+                # of one composite element, disjoint views of one parent, are accepted.
+                if length(slots(sh)) > 1
+                    @test rejects_shared(f!, sh, good, uₕ)
+                    @test accepts_packed(f!, sh, good, uₕ, Ωs[D], fs[D])
                 end
                 @test alloc_test(f!, build(good, sh), uₕ) == 0
             end
