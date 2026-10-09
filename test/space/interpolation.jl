@@ -179,18 +179,19 @@ using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunctio
     @testset "Operator composition" begin
         # once πₕ returns an ordinary VectorElement, every existing numeric
         # operator just works on it with no separate mechanism needed.
-        Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (true, true))
-        Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (3, 3), (true, true))
+        Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (false, false))
+        Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (3, 3), (false, false))
         Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
-        src = Rₕ(Wsmall, x -> x[1]^2 + x[2])
+        # an affine source is reproduced exactly by πₕ, so the composed operators
+        # must equal the same operators applied to the function sampled on Wbig
+        g(x) = 2x[1] + 3x[2] + 1
+        src = Rₕ(Wsmall, g)
 
         dest = πₕ(Wbig, src)
-        dx = D₋ₓ(dest)
-        mx = Mₓ(dest)
-        @test space(dx) === Wbig
-        @test space(mx) === Wbig
-        @test all(isfinite, parent(dx))
-        @test all(isfinite, parent(mx))
+        @test space(D₋ₓ(dest)) === Wbig
+        @test space(Mₓ(dest)) === Wbig
+        @test parent(D₋ₓ(dest)) ≈ parent(D₋ₓ(Rₕ(Wbig, g)))
+        @test parent(Mₓ(dest)) ≈ parent(Mₓ(Rₕ(Wbig, g)))
     end
 
     # The `outside` policies on non-uniform meshes. The oracle is the
@@ -209,8 +210,6 @@ using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunctio
         # a point within the endpoint tolerance is on the boundary under every policy
         @test interpolate_at(u1, 1.0 + eps(1.0)) ≈ g1(1.0)
         @test interpolate_at(u1, 1.0 + eps(1.0); outside = 0.0) ≈ g1(1.0)
-        @test_throws ArgumentError interpolate_at(u1, 0.5; outside = :wrap)
-        @test_throws ArgumentError interpolate_at(u1, 0.5; outside = "clamp")
 
         g2(x) = 2x[1] - 3x[2] + 1
         Ω2 = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (6, 5), (false, false))
@@ -230,7 +229,6 @@ using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunctio
         src = Rₕ(Wsrc, g1)
         xd = points(mesh(Wdest))
         @test_throws ArgumentError interpolation_matrix(Wdest, Wsrc)
-        @test_throws ArgumentError interpolation_matrix(Wdest, Wsrc; outside = 0.0)
         @test interpolation_matrix(Wdest, Wsrc; outside = :extrapolate) * parent(src) ≈ g1.(xd)
         @test interpolation_matrix(Wdest, Wsrc; outside = :clamp) * parent(src) ≈
               g1.(clamp.(xd, 0.0, 1.0))

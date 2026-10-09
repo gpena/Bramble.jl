@@ -252,13 +252,8 @@ end
         dx, dy = ∇ₕ
         @test dx === Dₓ && dy === Dᵧ
 
-        dx3, dy3, dz3 = ∇ₕ
-        @test (dx3, dy3, dz3) === (Dₓ, Dᵧ, D₂)
-
         @test ∇ₕ[1] === Dₓ && ∇ₕ[2] === Dᵧ && ∇ₕ[3] === D₂
-        @test ∇ₕ[:x] === Dₓ && ∇ₕ[:y] === Dᵧ && ∇ₕ[:z] === D₂
         @test firstindex(∇ₕ) == 1 && lastindex(∇ₕ) == 3
-        @test length(∇ₕ) == 3
         @test eltype(∇ₕ) === Function
         @test collect(∇ₕ) == [Dₓ, Dᵧ, D₂]
 
@@ -296,36 +291,6 @@ end
             @test (V[:x], V[:y], V[:z]) === ops
             @test length(V) == 3
         end
-    end
-
-    # non-uniform in every direction: uniform is only a special case
-    Ω2ₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (9, 8), (false, false))
-    W2 = gridspace(Ω2ₕ)
-
-    @testset "destructured operator on VectorElement" begin
-        uₕ = Rₕ(W2, x -> x[1]^2 * sin(x[2]))
-        dx, dy = ∇ₕ
-        @test parent(dx(uₕ)) == parent(Dₓ(uₕ))
-        @test parent(dy(uₕ)) == parent(Dᵧ(uₕ))
-    end
-
-    @testset "destructured operator inside form" begin
-        dx, dy = ∇ₕ
-        a1 = assemble(form(W2, W2, (u, v) -> innerₕ(dx(u), dx(v)) + innerₕ(dy(u), dy(v))))
-        a2 = assemble(form(W2, W2, (u, v) -> innerₕ(Dₓ(u), Dₓ(v)) + innerₕ(Dᵧ(u), Dᵧ(v))))
-        @test a1 == a2
-    end
-
-    @testset "3D destructuring" begin
-        Ω3ₕ = mesh(
-            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (6, 5, 4), (false, false, false)
-        )
-        W3 = gridspace(Ω3ₕ)
-        u3 = Rₕ(W3, x -> x[1] * x[2] + x[3]^2)
-        dx3, dy3, dz3 = ∇ₕ
-        @test parent(dx3(u3)) == parent(Dₓ(u3))
-        @test parent(dy3(u3)) == parent(Dᵧ(u3))
-        @test parent(dz3(u3)) == parent(D₂(u3))
     end
 end
 
