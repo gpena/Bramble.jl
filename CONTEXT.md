@@ -129,6 +129,17 @@ A system matrix's sparsity: which entries can be non-zero, fixed by the stencil 
 while mesh and expression are unchanged.
 _Avoid_: stencil, structure
 
+**Separable form**:
+A bilinear form on a `MeshnD` whose matrix is a sum of Kronecker products of one-dimensional
+factors, one per axis (`is_separable`).
+_Avoid_: tensor-product form, factorisable
+
+**Laplacian-like form**:
+A separable form with one mass per axis, every term differing from those masses on at most
+one axis: what `fdm_solve` solves directly. A mixed derivative is separable but not
+Laplacian-like.
+_Avoid_: Poisson-like, elliptic
+
 **Assembly**:
 Filling a matrix or vector from a form. `assemble` allocates and fills; `assemble!` refills an
 existing one, the time-loop call, and must not allocate.

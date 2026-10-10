@@ -93,6 +93,7 @@ _hasmatrix(T) = any(t -> t isa Type && t <: AbstractMatrix, T.parameters)
             R = assemble(a)
             F = SparseArrays.fixed(copy(R))
             for _ in 1:2
+                nonzeros(F) .= NaN                         # a fill that misses F leaves NaN
                 assemble!(F, a)
                 @test a.cache.valid && a.cache.A_id == objectid(F)
                 @test nonzeros(F) == nonzeros(R)

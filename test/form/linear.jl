@@ -152,18 +152,19 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
 
         # non-constant, and different per leaf, so an index mix-up would misread a value
         # rather than merely surviving by coincidence
-        uv = Rₕ(Vh, (x -> x[1] + x[2], x -> 2x[1] - x[2]))
+        uv = Rₕ(Vh, (x -> x[1] + 2x[2], x -> 2x[1] - x[2]))
 
         # leaf 1 alone: already worked before this fix, kept as the reference case
         b1 = assemble(form(Vh, v -> innerₕ(uv(1), v(1))))
-        expected1 = sum(parent(Rₕ(Wbig, x -> x[1] + x[2])) .* weights(Wbig, Innerh()))
-        @test sum(b1) ≈ expected1
+        # entrywise, not summed: a permuted read keeps the sum on these uniform leaves
+        @test b1[1:ndofs(Wbig)] ≈
+              parent(Rₕ(Wbig, x -> x[1] + 2x[2])) .* weights(Wbig, Innerh())
         @test all(iszero, b1[(ndofs(Wbig) + 1):end])   # leaf 2's block untouched
 
         # leaf 2 alone: this is exactly what used to throw BoundsError
         b2 = assemble(form(Vh, v -> innerₕ(uv(2), v(2))))
-        expected2 = sum(parent(Rₕ(Wsmall, x -> 2x[1] - x[2])) .* weights(Wsmall, Innerh()))
-        @test sum(b2[(ndofs(Wbig) + 1):end]) ≈ expected2
+        @test b2[(ndofs(Wbig) + 1):end] ≈
+              parent(Rₕ(Wsmall, x -> 2x[1] - x[2])) .* weights(Wsmall, Innerh())
         @test all(iszero, b2[1:ndofs(Wbig)])            # leaf 1's block untouched
 
         # both together, routed: each block gets its own leaf's own answer

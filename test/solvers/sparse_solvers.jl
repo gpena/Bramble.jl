@@ -215,15 +215,27 @@ end
             A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0, symmetrize = true)
             println(join(repr.(pde_solve(A, F)), ' '))
             println(join(repr.(Matrix(A) \ F), ' '))
+            # The route, not the values: only `accelerate_solve` rejects this `kind`.
+            println(try; pde_solve(A, F; kind = :nonsense); "returned"; catch e; nameof(typeof(e)); end)
+            # The plain call itself, no keywords: it must take the Accelerate route too.
+            println(pde_solve(A, F) == Bramble.accelerate_solve(A, F))
             """
             cmd = `$(Base.julia_cmd()) --project=$(dirname(something(Base.active_project()))) --startup-file=no --threads=1 -e $code`
             lines = split(read(cmd, String), '\n'; keepempty = false)
             u_acc = parse.(Float64, split(lines[1]))
             u_ref = parse.(Float64, split(lines[2]))    # dense LU: not the Accelerate path
             @test u_acc ≈ u_ref rtol = 1e-10
+            @test lines[3] == "ArgumentError"
+            @test lines[4] == "true"
         end
     else
-        @test !Sys.isapple()    # the routing is macOS only; Linux and Windows fall through to `\`
+        # The routing is macOS only; Linux and Windows fall through to `\`, bit for bit.
+        I1 = interval(0.0, 1.0)
+        W = gridspace(mesh(domain(I1, :boundary => boundary_symbols(I1)), 12, true))
+        a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        l = form(W, v -> innerₕ(Rₕ(W, x -> sin(π * x)), v))
+        A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0, symmetrize = true)
+        @test pde_solve(A, F) == A \ F
     end
 end
 

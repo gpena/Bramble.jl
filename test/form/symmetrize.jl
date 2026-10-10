@@ -48,16 +48,27 @@ using ..TestUtils: _tri, _nonuniform_points
     end
 
     @testset "Constrained solve values" begin
-        A = _tri(n)
-        F = collect(1.0:n)
-        dirichlet_bc!(A, Ωₕ, :bottom)
-        symmetrize!(A, F, Ωₕ, :bottom)
+        # the unmarked neighbours lie above the marked indices for `bottom` and below
+        # them for `top`, so the elimination has to reach rows on both sides
+        for label in (:bottom, :top)
+            A0, F0 = _tri(n), collect(1.0:n)
+            Abc = copy(A0)
+            dirichlet_bc!(Abc, Ωₕ, label)
+            A, F = copy(Abc), copy(F0)
+            symmetrize!(A, F, Ωₕ, label)
 
-        x = A \ F
-        marked = index_in_marker(Ωₕ, :bottom)
-        @test any(marked)                  # the test is not vacuous
-        for i in 1:n
-            marked[i] && @test x[i] ≈ F[i]
+            x = A \ F
+            marked = index_in_marker(Ωₕ, label)
+            @test any(marked)                  # the test is not vacuous
+            for i in 1:n
+                marked[i] && @test x[i] ≈ F[i]
+            end
+            # the row-constrained system is the oracle: eliminating the columns moves
+            # their values into F and leaves the solution where it was
+            @test x ≈ Abc \ F0
+            @test F[marked] == F0[marked]
+            @test F[.!marked] ≈ F0[.!marked] - A0[.!marked, marked] * F0[marked]
+            @test F[.!marked] != F0[.!marked]  # the elimination moved something
         end
     end
 

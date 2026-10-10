@@ -4,7 +4,7 @@ using Test
 using Bramble
 using LinearAlgebra: Diagonal, dot, norm
 using Random
-using Bramble: weights, Innerh, Dcₓ, skew_symmetric
+using Bramble: weights, Innerh, Dcₓ, Dcᵧ, Dc₂, skew_symmetric
 using ..TestUtils: @test_allocs
 
 # Skew-symmetric split forms (gpena/Bramble.jl#165).
@@ -36,13 +36,21 @@ using ..TestUtils: @test_allocs
             w2 = (Rₕ(W2, x -> sin(x[2])), Rₕ(W2, x -> cos(x[1])))
             M2 = Matrix(assemble(form(W2, W2, skew_symmetric(w2))))
             @test M2 + M2' == zeros(size(M2))
+            # exactly skew is not enough: a zero matrix, or one direction dropped or paired
+            # with the wrong coefficient, is skew too; ½(N - Nᵀ) of the naive form pins it
+            N2 = Matrix(assemble(form(W2, W2,
+                (u, v) -> innerₕ(w2[1] * Dcₓ(u) + w2[2] * Dcᵧ(u), v))))
+            @test M2 ≈ 0.5 * (N2 - N2')
 
             W3 = gridspace(mesh(
                 domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
-                (7, 6, 5), (true, true, true)))
+                (7, 6, 5), (false, false, false)))
             w3 = (Rₕ(W3, x -> x[2]), Rₕ(W3, x -> x[3]), Rₕ(W3, x -> x[1]))
             M3 = Matrix(assemble(form(W3, W3, skew_symmetric(w3))))
             @test M3 + M3' == zeros(size(M3))
+            N3 = Matrix(assemble(form(W3, W3,
+                (u, v) -> innerₕ(w3[1] * Dcₓ(u) + w3[2] * Dcᵧ(u) + w3[3] * Dc₂(u), v))))
+            @test M3 ≈ 0.5 * (N3 - N3')
         end
 
         @testset "Float32 stays Float32 (#522)" begin
@@ -91,12 +99,14 @@ using ..TestUtils: @test_allocs
         # added to a diffusion term, the symmetric part of the sum is the diffusion alone:
         # the convective part contributes nothing to it, which is the whole point
         W2 = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (11, 9),
-            (true, true)))
+            (false, false)))
         w2 = (Rₕ(W2, x -> sin(x[2])), Rₕ(W2, x -> cos(x[1])))
         a = form(W2, W2, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + skew_symmetric(w2)(u, v))
         A = Matrix(assemble(a))
         diffusion = Matrix(assemble(form(W2, W2, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))))
         @test 0.5 * (A + A') ≈ diffusion
+        # and the skew part survives the sum: dropping it would leave A == diffusion
+        @test A - diffusion ≈ Matrix(assemble(form(W2, W2, skew_symmetric(w2))))
 
         # and it refills in place at zero allocations, like any other form
         Am = assemble(a)

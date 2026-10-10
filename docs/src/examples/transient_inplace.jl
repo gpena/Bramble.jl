@@ -118,14 +118,15 @@ end
 
 allocated = step_allocation(uₕ, F, decay, B, fact, l, Ωₕ, bcs, Δt / 2)
 
-@test allocated < 1024                                                                     #src
+@test allocated == 0                                                                       #src
 
 allocated
 
-# Nothing. The bound the test asserts is looser on purpose: the usual way to lose this is to
-# build a closure inside the loop, `Rₕ!(fₕ, x -> source(x, t))`, which costs a few hundred
-# bytes per step, and the check exists to catch a regression of that size rather than to pin
-# an exact number.
+# Nothing, and the test asserts exactly that zero. A closure built inside the loop,
+# `Rₕ!(fₕ, x -> source(x, t))`, costs nothing here, because `Rₕ!` is compiled for it. A call
+# the compiler cannot specialise does cost: the same closure reaching `Rₕ!` through a value of
+# uninferred type allocates 96 bytes per step, which a bound of a few hundred bytes would let
+# through.
 #
 # ## Running it
 #

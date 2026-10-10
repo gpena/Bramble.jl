@@ -146,8 +146,11 @@ end
         end
     end
 
+    # The fused loops read their own spacing vectors (`_accumulate_backward!`,
+    # `_accumulate_forward!`), so the meshes are non-uniform: on a uniform one an off-by-one
+    # spacing index, or forward spacings where backward ones belong, gives the same numbers.
     @testset "divₕ sums the directional differences" begin
-        Ωₕ = mesh(Ω2, (9, 8), (true, true))
+        Ωₕ = mesh(Ω2, (9, 8), (false, false))
         Wₕ = gridspace(Ωₕ)
         u1 = Rₕ(Wₕ, x -> x[1]^2 + x[2])
         u2 = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
@@ -170,7 +173,7 @@ end
     end
 
     @testset "curlₕ in 2D and 3D" begin
-        Ωₕ = mesh(Ω2, (9, 8), (true, true))
+        Ωₕ = mesh(Ω2, (9, 8), (false, false))
         Wₕ = gridspace(Ωₕ)
         u1 = Rₕ(Wₕ, x -> x[1]^2 + x[2])
         u2 = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
@@ -178,13 +181,15 @@ end
         @test parent(curl₊ₕ((u1, u2))) == parent(D₊ₓ(u2)) .- parent(D₊ᵧ(u1))
 
         # curl of a gradient vanishes where both stencils are untruncated -- a discrete
-        # identity, not an approximation, since both differences are backward
-        w = Rₕ(Wₕ, x -> sin(x[1]) * cos(x[2]))
+        # identity, not an approximation, since both differences are backward. Checked on a
+        # uniform mesh: on a random one, two near-coincident points leave round-off up to
+        # ~1e-11, so no fixed bound is both safe and tight.
+        w = Rₕ(gridspace(mesh(Ω2, (9, 8), (true, true))), x -> sin(x[1]) * cos(x[2]))
         interior = reshape(parent(curlₕ(∇ₕ(w))), (9, 8))[3:end, 3:end]
         @test maximum(abs, interior) < 1e-14
 
         # 3D: three components, each the right combination
-        Ω3ₕ = mesh(Ω3, (8, 7, 6), (true, true, true))
+        Ω3ₕ = mesh(Ω3, (8, 7, 6), (false, false, false))
         W3 = gridspace(Ω3ₕ)
         f = (Rₕ(W3, x -> sin(x[1]) * x[2]), Rₕ(W3, x -> x[3]^2),
             Rₕ(W3, x -> cos(x[2]) * x[1]))
@@ -193,6 +198,11 @@ end
         @test parent(c[1]) == parent(D₋ᵧ(f[3])) .- parent(D₋₂(f[2]))
         @test parent(c[2]) == parent(D₋₂(f[1])) .- parent(D₋ₓ(f[3]))
         @test parent(c[3]) == parent(D₋ₓ(f[2])) .- parent(D₋ᵧ(f[1]))
+        # and the forward curl, whose 3D fused loop nothing else here reaches
+        c₊ = curl₊ₕ(f)
+        @test parent(c₊[1]) == parent(D₊ᵧ(f[3])) .- parent(D₊₂(f[2]))
+        @test parent(c₊[2]) == parent(D₊₂(f[1])) .- parent(D₊ₓ(f[3]))
+        @test parent(c₊[3]) == parent(D₊ₓ(f[2])) .- parent(D₊ᵧ(f[1]))
 
         # the in-place 3D form writes into a 3-tuple
         dest = ntuple(_ -> element(W3), Val(3))

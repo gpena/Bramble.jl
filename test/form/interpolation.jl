@@ -67,7 +67,8 @@ using Bramble:
 end
 
 @testset "innerₕ source dispatch" begin
-    Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (true, true))
+    # Ωbig is non-uniform, so a wrong weight family or a permuted point cannot coincide
+    Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (false, false))
     Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 4), (true, true))
     Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
     Vh = Bramble.CompositeGridSpace((Wbig, Wsmall))
@@ -108,7 +109,8 @@ end
     # block 1, so it must equal the numeric πₕ path times the weights directly
     Ib1 = parent(πₕ(Wbig, u_leaf2))
     w1 = weights(Wbig, Innerh())
-    @test sum(b1[1:ndofs(Wbig)]) ≈ sum(Ib1 .* w1) atol=1e-8
+    @test b1[1:ndofs(Wbig)] ≈ Ib1 .* w1
+    @test iszero(b1[(ndofs(Wbig) + 1):end])
 
     # an ordinary bilinear form is unaffected: a trial function, wrapped or not, still builds
     # a BilinearProduct, exactly as it always has
@@ -121,7 +123,8 @@ end
     # inner_plus/inner₊/inner₊ₓ/inner₊ᵧ/inner₊₂ had the identical structural bug: every one
     # of them built a BilinearProduct unconditionally too. Fixed the same way, checked the
     # same way: each dispatch shape asserted directly, then assembled for real.
-    Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (true, true))
+    # Ωbig is non-uniform, so a wrong weight family or a permuted point cannot coincide
+    Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (false, false))
     Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 4), (true, true))
     Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
     Vh = Bramble.CompositeGridSpace((Wbig, Wsmall))
@@ -142,18 +145,25 @@ end
     @test resolve_form_ast(form(W1, v -> inner₊(πₕ(u1), v))) isa LinearProduct
     b1d = assemble(form(W1, v -> inner₊(πₕ(u1), v)))
     @test all(isfinite, b1d)
-    @test !all(iszero, b1d)
+    # Innerplus's weight, not Innerh's: the two differ on this non-uniform mesh
+    @test b1d ≈ parent(πₕ(W1, u1)) .* weights(W1, Innerplus(), 1)
 
     # inner_plus over a gradient tuple of interpolated sources: each dimension routes
     # independently, so the sum is (LinearProduct + LinearProduct), not a Bilinear mix
-    lf_grad = form(Vh, v -> inner₊((πₕ(u_leaf2), πₕ(u_leaf2)), (v(1), v(1))))
+    # two different sources, so a swap of the directions changes the vector
+    u_leaf1 = uv(1)
+    lf_grad = form(Vh, v -> inner₊((πₕ(u_leaf1), πₕ(u_leaf2)), (v(1), v(1))))
     ast_grad = resolve_form_ast(lf_grad)
     @test ast_grad isa OperatorAdd
     @test ast_grad.left_op isa LinearProduct
     @test ast_grad.right_op isa LinearProduct
     b_grad = assemble(lf_grad)
     @test all(isfinite, b_grad)
-    @test !all(iszero, b_grad)
+    # each direction carries its own source and Innerplus weight, into block 1 only
+    g₊ = parent(πₕ(Wbig, u_leaf1)) .* weights(Wbig, Innerplus(), 1) .+
+         parent(πₕ(Wbig, u_leaf2)) .* weights(Wbig, Innerplus(), 2)
+    @test b_grad[1:ndofs(Wbig)] ≈ g₊
+    @test iszero(b_grad[(ndofs(Wbig) + 1):end])
 
     # numeric consistency: inner₊ₓ(πₕ(u), v(1)) scatters the interpolant times InnerPlus's own
     # x-direction weight into block 1, an oracle computed without `assemble`

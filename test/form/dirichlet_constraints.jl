@@ -367,10 +367,17 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
                 if c in (0, 2) && marked[i]
                     @test A[row, row] == 1.0
                     @test count(!=(0.0), A[row, :]) == 1
+                else
+                    # an unmarked row of a selected leaf keeps its off-diagonals too
+                    @test A[row, :] == _tri(nV)[row, :]
                 end
             end
             # leaf 2 (c = 1) never touched, whatever :bottom marks
             @test A[(nW + 1):(2nW), :] == _tri(nV)[(nW + 1):(2nW), :]
+            # the dense path agrees, so the row checks above cover it too
+            Ad = Matrix(_tri(nV))
+            @test dirichlet_bc!(Ad, Vₕ, :bottom; components = (1, 3)) === Ad
+            @test Ad == Matrix(A)
         end
 
         @testset "Vector (single leaf)" begin
@@ -415,6 +422,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
             @test As != _tri(nW)
             @test A[1:nW, 1:nW] == As
             @test F[1:nW] == Fs
+            @test F[1:nW] != fill(2.0, nW)   # leaf 1's elimination moved F
         end
 
         @testset "Out-of-range component error" begin
@@ -425,8 +433,11 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         end
 
         @testset "Scalar single leaf" begin
-            A = _eye(nW)
-            @test dirichlet_bc!(A, Wₕ, :bottom; components = 1) === A   # a no-op-equivalent ok
+            # components = 1 on a scalar space is its only leaf: the unrestricted call
+            A = _tri(nW)
+            @test dirichlet_bc!(A, Wₕ, :bottom; components = 1) === A
+            @test A == dirichlet_bc!(_tri(nW), Wₕ, :bottom)
+            @test A != _tri(nW)
             @test_throws ArgumentError dirichlet_bc!(_eye(nW), Wₕ, :bottom; components = 2)
         end
 
@@ -454,6 +465,8 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
                 if marked[i]
                     @test A[row, row] == 1.0
                     @test count(!=(0.0), A[row, :]) == 1
+                else
+                    @test A[row, :] == _tri(nVn)[row, :]   # unmarked rows keep theirs
                 end
             end
             @test A[1:(2nW), :] == _tri(nVn)[1:(2nW), :]   # leaves 1, 2 untouched

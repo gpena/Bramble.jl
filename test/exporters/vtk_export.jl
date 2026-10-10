@@ -15,13 +15,19 @@ using WriteVTK
 #
 # `Base.read` on the produced file, rather than opening it in ParaView, is enough: the
 # structural facts under test (extents, field names, component counts) are all in the
-# header, in plain text ahead of the compressed appended data.
+# header, in plain text ahead of the compressed appended data. The values are compressed,
+# so they are checked where Bramble produces them instead: `_vtk_axes` and `_vtk_data`, on
+# a non-uniform mesh, where a uniform range or a zeroed or swapped component would show.
 
 @testset "VTK export" begin
     @testset "1D export" begin
-        Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, false)   # non-uniform, on purpose
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, sin)
+
+        # The values handed to WriteVTK: the compressed appended data is not read back.
+        @test Bramble._vtk_data(uₕ) == sin.(points(Ωₕ))
+        @test Bramble._vtk_axes(Ωₕ) == (points(Ωₕ), [0.0])
 
         mktempdir() do dir
             files = export_vtk(joinpath(dir, "u"), Ωₕ, "u" => uₕ)
@@ -53,10 +59,16 @@ using WriteVTK
     end
 
     @testset "Composite field" begin
-        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (true, true))
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (false, true))
         Wₕ = gridspace(Ωₕ)
         Vₕ = Wₕ^Val(2)
         vₕ = Rₕ(Vₕ, x -> (x[1], x[2]))
+
+        # One array per component, in order, each shaped like the grid; the axes are the
+        # mesh's own (non-uniform in x) points rather than a uniform range.
+        X, Y = points(Ωₕ)
+        @test Bramble._vtk_data(vₕ) == ([x for x in X, y in Y], [y for x in X, y in Y])
+        @test Bramble._vtk_axes(Ωₕ) == (X, Y)
 
         mktempdir() do dir
             f = only(export_vtk(joinpath(dir, "v"), Ωₕ, "velocity" => vₕ))

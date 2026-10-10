@@ -2,7 +2,7 @@ module MeshConstructorsTests
 
 using Test
 using Bramble
-using Bramble: _expand_uniform, Backend, Serial, stepsize, Mesh1D, MeshnD
+using Bramble: _expand_uniform, Backend, Serial, stepsize, Mesh1D, MeshnD, is_uniform
 using ..TestUtils: alloc_test, @test_allocs
 
 @testset "Mesh constructors" begin
@@ -28,6 +28,7 @@ using ..TestUtils: alloc_test, @test_allocs
             M1 = @inferred mesh(I, 11)
             @test M1 isa Mesh1D
             @test size(M1) == (11,)
+            @test is_uniform(M1)
             @test length(M1) == 11
             @test M1[begin] == 0.0
             @test M1[end] == 1.0
@@ -38,21 +39,28 @@ using ..TestUtils: alloc_test, @test_allocs
 
             M1_tup = @inferred mesh(I, (11,))
             @test size(M1_tup) == (11,)
+            @test is_uniform(M1_tup)
             @test points(M1_tup) == points(M1)
 
             M1_nu = @inferred mesh(I, 11, false)
             @test M1_nu isa Mesh1D
             @test size(M1_nu) == (11,)
-            @test !all(diff(points(M1_nu)) .≈ stepsize(M1))
+            @test !all(diff(points(M1_nu)::AbstractVector) .≈ stepsize(M1))
+            @test !is_uniform(M1_nu)
 
             M1_kw = @inferred mesh(I, 11; uniform = false)
             @test size(M1_kw) == (11,)
+            @test !is_uniform(M1_kw)
+
+            M1_kw_u = @inferred mesh(I, 11; uniform = true)
+            @test is_uniform(M1_kw_u)
         end
 
         @testset "2D CartesianProduct" begin
             M2 = @inferred mesh(X2, (11, 21))
             @test M2 isa MeshnD{2}
             @test size(M2) == (11, 21)
+            @test is_uniform(M2(1)) && is_uniform(M2(2))
             @test length(M2) == 231
             @test M2[begin] == (0.0, 0.0)
             @test M2[end] == (1.0, 2.0)
@@ -65,6 +73,7 @@ using ..TestUtils: alloc_test, @test_allocs
             M2_iso = @inferred mesh(X2, 15)
             @test M2_iso isa MeshnD{2}
             @test size(M2_iso) == (15, 15)
+            @test is_uniform(M2_iso(1)) && is_uniform(M2_iso(2))
             @test points(M2_iso) == points(mesh(domain(X2), (15, 15)))
             @test markers(M2_iso)[:boundary] == markers(mesh(domain(X2), (15, 15)))[:boundary]
             @test markers(M2_iso)[:interior] == markers(mesh(domain(X2), (15, 15)))[:interior]
@@ -72,19 +81,36 @@ using ..TestUtils: alloc_test, @test_allocs
             # Positional non-uniform and mixed uniformity
             M2_nu = @inferred mesh(X2, 10, false)
             @test size(M2_nu) == (10, 10)
+            @test !is_uniform(M2_nu(1)) && !is_uniform(M2_nu(2))
+
+            M2_u = @inferred mesh(X2, (10, 15), true)
+            @test is_uniform(M2_u(1)) && is_uniform(M2_u(2))
+
+            M2_pnu = @inferred mesh(X2, (10, 15), false)
+            @test !is_uniform(M2_pnu(1)) && !is_uniform(M2_pnu(2))
 
             M2_mixed = @inferred mesh(X2, (10, 15), (true, false))
             @test size(M2_mixed) == (10, 15)
+            @test is_uniform(M2_mixed(1)) && !is_uniform(M2_mixed(2))
+
+            M2_mixed_rev = @inferred mesh(X2, (10, 15), (false, true))
+            @test !is_uniform(M2_mixed_rev(1)) && is_uniform(M2_mixed_rev(2))
 
             M2_iso_mixed = @inferred mesh(X2, 12, (true, false))
             @test size(M2_iso_mixed) == (12, 12)
+            @test is_uniform(M2_iso_mixed(1)) && !is_uniform(M2_iso_mixed(2))
 
             # Keyword uniformity
             M2_kw_bool = @inferred mesh(X2, (10, 12); uniform = false)
             @test size(M2_kw_bool) == (10, 12)
+            @test !is_uniform(M2_kw_bool(1)) && !is_uniform(M2_kw_bool(2))
+
+            M2_kw_rev = @inferred mesh(X2, (10, 12); uniform = (false, true))
+            @test !is_uniform(M2_kw_rev(1)) && is_uniform(M2_kw_rev(2))
 
             M2_kw_tup = @inferred mesh(X2, 14; uniform = (true, false))
             @test size(M2_kw_tup) == (14, 14)
+            @test is_uniform(M2_kw_tup(1)) && !is_uniform(M2_kw_tup(2))
         end
 
         @testset "3D CartesianProduct" begin
@@ -99,6 +125,16 @@ using ..TestUtils: alloc_test, @test_allocs
             @test M3_iso isa MeshnD{3}
             @test size(M3_iso) == (8, 8, 8)
             @test points(M3_iso) == points(mesh(domain(X3), (8, 8, 8)))
+            @test all(i -> is_uniform(M3(i)) && is_uniform(M3_iso(i)), 1:3)
+
+            M3_mixed = @inferred mesh(X3, (5, 6, 7), (true, false, true))
+            @test size(M3_mixed) == (5, 6, 7)
+            @test is_uniform(M3_mixed(1)) && !is_uniform(M3_mixed(2)) && is_uniform(M3_mixed(3))
+
+            M3_iso_mixed = @inferred mesh(X3, 6, (false, true, false))
+            @test size(M3_iso_mixed) == (6, 6, 6)
+            @test !is_uniform(M3_iso_mixed(1)) && is_uniform(M3_iso_mixed(2)) &&
+                  !is_uniform(M3_iso_mixed(3))
         end
     end
 
@@ -122,6 +158,7 @@ using ..TestUtils: alloc_test, @test_allocs
         m2_int = @inferred mesh(Ω2, 20)
         m2_tup = @inferred mesh(Ω2, (20, 20))
         @test size(m2_int) == (20, 20)
+        @test is_uniform(m2_int(1)) && is_uniform(m2_int(2))
         @test points(m2_int) == points(m2_tup)
         @test stepsize(m2_int) == stepsize(m2_tup)
         @test markers(m2_int)[:boundary] == markers(m2_tup)[:boundary]
@@ -130,10 +167,15 @@ using ..TestUtils: alloc_test, @test_allocs
         # 2D non-uniform isotropic
         m2_int_nu = @inferred mesh(Ω2, 15, false)
         @test size(m2_int_nu) == (15, 15)
+        @test !is_uniform(m2_int_nu(1)) && !is_uniform(m2_int_nu(2))
+
+        m2_int_u = @inferred mesh(Ω2, 15, true)
+        @test is_uniform(m2_int_u(1)) && is_uniform(m2_int_u(2))
 
         # 2D mixed uniformity with isotropic npts
         m2_int_mixed = @inferred mesh(Ω2, 15, (false, true))
         @test size(m2_int_mixed) == (15, 15)
+        @test !is_uniform(m2_int_mixed(1)) && is_uniform(m2_int_mixed(2))
 
         # 3D equivalence
         m3_int = @inferred mesh(Ω3, 6)

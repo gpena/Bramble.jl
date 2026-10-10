@@ -18,7 +18,8 @@ module UtilsThreadedDotTests
 # kernels across 1D/2D/3D non-uniform grids.
 using Test
 using Bramble
-using Bramble: _dot, _dot_masked, _threaded_dot, _threaded_dot_masked, MarkedIndicesUnion, CpuThreaded, weights
+using Bramble: _dot, _dot_masked, _threaded_dot, _threaded_dot_masked, MarkedIndicesUnion, CpuThreaded, weights,
+               SeparableWeights
 
 @testset "CpuThreaded _dot/_dot_masked" begin
     # Invariants tested:
@@ -192,12 +193,35 @@ end
         (3, (9, 7, max(1, nthreads - 1)))  # last axis shorter than nthreads
     )
 
+    # The values alone cannot tell: the dense kernels read `w` through its linear
+    # `getindex` and return the same sum. So each call is also checked to dispatch to a
+    # method whose weight slot is a `SeparableWeights` (read through the type name, since
+    # the dense specialisation's `SeparableWeights{D, <:Any, VT}` leaves `VT` unbounded and
+    # is not `<: SeparableWeights`), and to the same method a call on any `AbstractVector`
+    # `u`/`v`, any `SeparableWeights` and any mask of kind `M` reaches, so that a method
+    # narrowed on any argument and sending these weights to the dense kernel fails too. Such
+    # a method can make the second `which` ambiguous, and `which` throws on that.
+    function _reaches_separable(f, args, M...)
+        m = which(f, typeof(args))
+        slot = Base.typename(Base.unwrap_unionall(m.sig).parameters[3])
+        any_weights = Tuple{AbstractVector, SeparableWeights, AbstractVector, M...}
+        m_any = try
+            which(f, any_weights)
+        catch e
+            e isa ErrorException || rethrow()
+            nothing
+        end
+        return slot === Base.typename(SeparableWeights) && m === m_any
+    end
+
     @testset "D=$D, dims=$dims" for (D, dims) in grids
         w = _separable_weights(D, dims)
+        @test w isa SeparableWeights
         n = length(w)
         u = Float64[0.3 + 0.11 * i for i in 1:n]
         v = Float64[-0.6 + 0.07 * i for i in 1:n]
 
+        @test _reaches_separable(_threaded_dot, (u, w, v))
         expected = _dot(u, w, v)
         got = _threaded_dot(u, w, v)
         @test isapprox(got, expected; rtol = 1.0e-12, atol = 1.0e-12)
@@ -205,6 +229,7 @@ end
 
         mask = falses(n)
         n > 0 && (mask[1:2:n] .= true) # every other index set, exercises both branches
+        @test _reaches_separable(_threaded_dot_masked, (u, w, v, mask), BitVector)
         expected_m = _dot_masked(u, w, v, mask)
         got_m = _threaded_dot_masked(u, w, v, mask)
         @test isapprox(got_m, expected_m; rtol = 1.0e-12, atol = 1.0e-12)
@@ -218,6 +243,8 @@ end
         n > 0 && (mask2[2:3:n] .= true)
         union_mask = MarkedIndicesUnion((mask1, mask2))
         bit_union = mask1 .| mask2
+        @test _reaches_separable(
+            _threaded_dot_masked, (u, w, v, union_mask), MarkedIndicesUnion)
         expected_u = _dot_masked(u, w, v, bit_union)
         got_u = _threaded_dot_masked(u, w, v, union_mask)
         @test isapprox(got_u, expected_u; rtol = 1.0e-12, atol = 1.0e-12)
