@@ -97,6 +97,10 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
             p = poisson_system(Val(2), 8; source = x -> 1.0)
             @test issymmetric(p.A)
             @test isapprox(pde_solve(p.A, p.F), p.u_ref; atol = 1.0e-12)
+            # Routed, not only accurate: `A \ F` gives the same values. `:default` hands a
+            # symmetric `A` to `accelerate_solve` with every keyword, so a `kind` it rejects
+            # throws, where `A \ F` would ignore it.
+            @test_throws ArgumentError pde_solve(p.A, p.F; kind = :nonsense)
 
             cd = convection_diffusion_system(20)
             @test !issymmetric(cd.A)
