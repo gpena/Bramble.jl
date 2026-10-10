@@ -171,6 +171,10 @@ end
             @test isapprox(y5, T(0.5) * (A * x) - 3 * y0; rtol, atol = rtol)
             @test mul!(fill(T(NaN), N), Kt, x) == y
             @test mul!(copy(y0), Kt, x, T(0.5), T(-3)) == y5
+            # (#550) An entry keeps the operator's element type and agrees with the
+            # materialised matrix (to rounding: `kron` multiplies in another order).
+            @test Ks[1, 1] isa T
+            @test isapprox(SparseMatrixCSC(Ks)[1, 1], Ks[1, 1]; rtol, atol = rtol)
             sym = all(sp -> all(f -> f isa Diagonal || issymmetric(f), sp[2]), specs)
             @test issymmetric(Ks) == sym
         end
@@ -208,9 +212,13 @@ end
                 ((2.0, 3.0), (band(5, 0, 1), dg(4), band(6, 2, 2))),
                 ((), (dg(5), band(4, 1, 1), band(6, 1, 0)))))
 
-        check(Float32, (5, 4, 3),
-            (((), (band(5, 1, 1; T = Float32),
-                band(4, 1, 1; T = Float32), band(3, 1, 1; T = Float32))),); rtol = 1e-4)
+        f32 = (((), (band(5, 1, 1; T = Float32),
+            band(4, 1, 1; T = Float32), band(3, 1, 1; T = Float32))),)
+        check(Float32, (5, 4, 3), f32; rtol = 1e-4)
+        @test @inferred(_ke_op(Float32, (5, 4, 3), f32)[1, 1]) isa Float32
+        # A scaled Float32 term (a Rational scale, as `op / 2` makes) stays Float32 too.
+        check(Float32, (5, 4), (((1 // 2, 2.5), (band(5, 1, 1; T = Float32),
+            band(4, 1, 1; T = Float32))),); rtol = 1e-4)
         check(ComplexF64, (5, 4), (((), (band(5, 1, 1; T = ComplexF64),
             band(4, 1, 1; T = ComplexF64))),))
         check(BigFloat, (4, 3), ((
@@ -654,6 +662,18 @@ end
         @test SparseMatrixCSC(K1) == SparseMatrixCSC(Ks)
         x = rand(MersenneTwister(KE_SEED), size(Ks, 2))
         @test K1 * x == Ks * x
+
+        # (#550) A Float32 block operator's entries are Float32, as its blocks' are.
+        Ω32 = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (5, 4),
+            (true, true); backend = backend(Float32))
+        V32 = gridspace(Ω32, Val(2))
+        a32 = form(V32, V32, (u, v) -> 2.5f0 * innerₕ(u(1), v(1)) +
+                                       innerₕ(D₋ₓ(u(2)), v(1)) + innerₕ(u(2), v(2)) / 2)
+        K32, A32 = _ke_quiet(() -> kronecker_operator(a32)), assemble(a32)
+        @test K32 isa KroneckerBlockOperator && eltype(K32) === Float32
+        @test all(i -> K32[i, i] isa Float32, 1:size(K32, 1))
+        @test all(i -> K32[i, i] ≈ A32[i, i], 1:size(K32, 1))
+        @test SparseMatrixCSC(K32)[1, 1] == K32[1, 1]
 
         # A vector indexed from 0 is refused, not read a place off.
         zero_based = ZeroBasedVector(x)
