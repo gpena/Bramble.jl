@@ -101,19 +101,40 @@ end
 @inline _outside_stencil(::Nothing) = ()
 @inline _outside_stencil(z::Tuple) = z
 
-# A probed restriction (`Z <: Tuple`) under a pointwise scale: outside the region the scale
-# is not multiplied into the zero stencil but zeroed with it, so a coefficient not finite
-# there (`u * restrict_to(:interior, f)` with `u` infinite on the boundary) still gives 0,
-# as the empty stencil did, not `Inf * 0 = NaN`. Inside it, the scale is applied as above.
-# The same holds outside a probed restriction nested under it, through any pointwise scales
-# between them (`u * restrict_to(:interior, 2 * restrict_to(:half, f))`): `_probed_chain`.
+# A probed restriction (`Z <: Tuple`) under a chain of pointwise scales: outside the region
+# the scales are not multiplied into the zero stencil but zeroed with it, so a coefficient
+# not finite there (`u * restrict_to(:interior, f)` with `u` infinite on the boundary, or
+# `u * (2 * restrict_to(:interior, f))`) still gives 0, as the empty stencil did, not
+# `Inf * 0 = NaN`. Inside it, the scales are applied as above. The same holds outside a
+# probed restriction nested under it, through any scales between them
+# (`u * restrict_to(:interior, 2 * restrict_to(:half, f))`).
+#
+# The outermost scale of such a chain walks it once with `_probed_chain` and zeroes the
+# result at the top: zeroing at each level would be too late, as an outer `Inf` would
+# already have multiplied an inner zero. Whether a scale heads such a chain is decided by
+# the operand's type (`_reaches_probed`), so the branch folds away at compile time. A chain
+# broken by any other node (a shift, a sum, a difference) is not followed.
 const _ProbedRestriction{D} = RegionRestriction{D, <:Any, <:Any, <:Tuple}
+const _ChainLink{D} = Union{_ProbedRestriction{D}, OperatorScale{D}, GridFunctionScale{D}}
 
-@inline function _scaled_probed(op, c, space, I, markers, lin_idx)
-    s, outside = _probed_chain(op.inner_op, space, I, markers, lin_idx)
-    scaled = scale_stencil(s, c)
-    return outside ? _zero_entries(scaled) : scaled
+# Whether `op` reaches a probed restriction through scales and probed restrictions only.
+@inline _reaches_probed(::_ProbedRestriction) = true
+@inline _reaches_probed(op::Union{OperatorScale, GridFunctionScale}) = _reaches_probed(
+    op.inner_op)
+@inline _reaches_probed(::Any) = false
+
+# A scale whose operand is no such chain is applied as `local_stencil` applies it anywhere.
+@inline function _chain_stencil(op, space, I, markers, lin_idx)
+    _reaches_probed(op.inner_op) || return scale_stencil(
+        local_stencil(op.inner_op, space, I, markers, lin_idx), _scale_value(op, lin_idx))
+    s, outside = _probed_chain(op, space, I, markers, lin_idx)
+    return outside ? _zero_entries(s) : s
 end
+
+@inline _scale_value(op::OperatorScale, ::Int) = op.scalar
+@inline _scale_value(op::OperatorScale{D, <:Base.RefValue}, ::Int) where {D} = op.scalar[]
+@inline _scale_value(op::GridFunctionScale, lin_idx::Int) = _grid_function_value(
+    op.grid_function, lin_idx)
 
 # `op`'s stencil at the point, and whether a probed restriction in the chain of probed
 # restrictions and pointwise scales from `op` down leaves the point outside its region. If
@@ -125,31 +146,27 @@ end
     _in_region(op, markers, lin_idx) || return (op.zero_stencil, true)
     return _probed_chain(op.inner_op, space, I, markers, lin_idx)
 end
-@inline _probed_chain(op::OperatorScale, space, I, markers, lin_idx) = _scaled_chain(
-    op.scalar, op.inner_op, space, I, markers, lin_idx)
-@inline _probed_chain(op::OperatorScale{D, <:Base.RefValue}, space, I, markers,
-    lin_idx) where {D} = _scaled_chain(op.scalar[], op.inner_op, space, I, markers, lin_idx)
-@inline _probed_chain(op::GridFunctionScale, space, I, markers, lin_idx) = _scaled_chain(
-    _grid_function_value(op.grid_function, lin_idx), op.inner_op, space, I, markers, lin_idx)
-
-@inline function _scaled_chain(c, inner, space, I, markers, lin_idx)
-    s, outside = _probed_chain(inner, space, I, markers, lin_idx)
-    return (scale_stencil(s, c), outside)
+@inline function _probed_chain(
+        op::Union{OperatorScale, GridFunctionScale}, space, I, markers, lin_idx
+)
+    s, outside = _probed_chain(op.inner_op, space, I, markers, lin_idx)
+    return (scale_stencil(s, _scale_value(op, lin_idx)), outside)
 end
 
+# A scale over a link of a chain: the `Ref` method only resolves the ambiguity with
+# `local_stencil(::OperatorScale{D, <:Base.RefValue})` (assembly/stencil_eval.jl).
 @inline local_stencil(
-    op::OperatorScale{D, <:Any, <:_ProbedRestriction{D}}, space, I::CartesianIndex{D},
+    op::OperatorScale{D, <:Any, <:_ChainLink{D}}, space, I::CartesianIndex{D}, markers,
+    lin_idx::Int
+) where {D} = _chain_stencil(op, space, I, markers, lin_idx)
+@inline local_stencil(
+    op::OperatorScale{D, <:Base.RefValue, <:_ChainLink{D}}, space, I::CartesianIndex{D},
     markers, lin_idx::Int
-) where {D} = _scaled_probed(op, op.scalar, space, I, markers, lin_idx)
+) where {D} = _chain_stencil(op, space, I, markers, lin_idx)
 @inline local_stencil(
-    op::OperatorScale{D, <:Base.RefValue, <:_ProbedRestriction{D}}, space,
-    I::CartesianIndex{D}, markers, lin_idx::Int
-) where {D} = _scaled_probed(op, op.scalar[], space, I, markers, lin_idx)
-@inline local_stencil(
-    op::GridFunctionScale{D, <:Any, <:_ProbedRestriction{D}}, space, I::CartesianIndex{D},
+    op::GridFunctionScale{D, <:Any, <:_ChainLink{D}}, space, I::CartesianIndex{D},
     markers, lin_idx::Int
-) where {D} = _scaled_probed(
-    op, _grid_function_value(op.grid_function, lin_idx), space, I, markers, lin_idx)
+) where {D} = _chain_stencil(op, space, I, markers, lin_idx)
 
 @inline _in_region(op::RegionRestriction, ::Nothing, ::Int) = op.region === :interior
 @inline _in_region(op::RegionRestriction, words, lin_idx::Int) = _is_marked(
