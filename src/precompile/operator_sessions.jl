@@ -22,8 +22,9 @@
 # way out of the library, and caching them would grow the image for code that
 # is being removed.
 
-# `const` so that each tuple has a concrete type and the loops below stay
-# inferable, the same reason the operator config tables are `const`.
+# `const` so that each tuple has a concrete type, the same reason the operator
+# config tables are `const`. The loops below still dispatch at run time (see
+# `_pc_apply_each`).
 const _PC_OPS_X = (diff₋ₓ, diff₊ₓ, D₋ₓ, D₊ₓ, jumpₓ, Mₓ, M₊ₓ, D̃ₓ, Dcₓ, D̽ₓ)
 const _PC_OPS_Y = (diff₋ᵧ, diff₊ᵧ, D₋ᵧ, D₊ᵧ, jumpᵧ, Mᵧ, M₊ᵧ, D̃ᵧ, Dcᵧ, D̽ᵧ)
 const _PC_OPS_Z = (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₂, M₂, M₊₂, D̃₂, Dc₂, D̽₂)
@@ -32,11 +33,12 @@ const _PC_OPS_Z = (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₂, M₂, M₊
 # so both returns get compiled.
 const _PC_OPS_ALL = (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M₊ₕ, D̃ₕ, Dcₕ, D̽ₕ)
 
-# Applied with a plain loop over the tuple, which inference unrolls into a static
-# call per operator. Going through `foreach` and a closure instead leaves the
-# calls dynamically dispatched, and then only the dispatch site is cached and
-# every alias costs its ~7 ms again on first use: measured 254 ms against
-# 460 ms over the calls in this file.
+# Applied with a plain loop over the tuple. The loop variable `op` is inferred as
+# `Any`, so each call dispatches at run time: deliberate, because every operator is
+# then compiled and cached as a standalone method instance that a user's first call
+# reuses. The `foreach` variant, which afoldl unrolls into a static chain, caches
+# the chain as one instance instead and every alias costs its ~7 ms again on first
+# use: measured 460 ms against 254 ms for the loop over the calls in this file.
 function _pc_apply_each(ops, uₕ)
     for op in ops
         op(uₕ)
