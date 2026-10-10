@@ -74,7 +74,7 @@ function Bramble._ode_function(
         sd::Semidiscretization; jacobian = jacobian!, jac_prototype = nothing, tgrad = nothing
 )
     prototype = jac_prototype === nothing ? jacobian_prototype(sd) : jac_prototype
-    return ODEFunction(
+    return ODEFunction{true}(
         sd;
         mass_matrix = mass_matrix(sd),
         jac_prototype = prototype,
@@ -109,7 +109,7 @@ end
 # does) fails with "No matching function wrapper was found!" rather than differentiating.
 # The type-parameterized `ODEProblem{iip, specialize}` constructor is the only one that
 # accepts a choice of specialization at all -- there is no keyword for it on the plain one.
-function Bramble._ode_problem(
+Base.@constprop :aggressive function Bramble._ode_problem(
         sd::Semidiscretization, u₀, I;
         jacobian = jacobian!, jac_prototype = nothing, tgrad = nothing,
         p = SciMLBase.NullParameters(), specialize = nothing

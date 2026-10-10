@@ -124,6 +124,30 @@ end
         @test ode_problem(a, l, u₀, I; dirichlet = bcs).u0[1] ≈ 5.0
     end
 
+    # The problem type is concrete at the call site, on the default path and with a Type
+    # `specialize`: `ODEFunction{true}` fixes `iip` at compile time, and constprop carries a
+    # literal `specialize` through the keyword NamedTuple. Every value enters the closure as
+    # an argument, so inference sees types and not constants.
+    @testset "ode_problem: concrete inferred type" begin
+        u₀ = Rₕ(Wₕ, x -> sinpi(x[1]))
+        default_closure(sd, u₀, I) = ode_problem(sd, u₀, I)
+        full_closure(sd, u₀, I) = ode_problem(
+            sd, u₀, I; p = [0.7], specialize = SciMLBase.FullSpecialize
+        )
+        argtypes = (typeof(sd), typeof(u₀), typeof(I))
+
+        R_default = only(Base.return_types(default_closure, argtypes))
+        @test isconcretetype(R_default)
+        @test R_default === typeof(default_closure(sd, u₀, I))
+
+        R_full = only(Base.return_types(full_closure, argtypes))
+        @test isconcretetype(R_full)
+        prob = full_closure(sd, u₀, I)
+        @test R_full === typeof(prob)
+        @test SciMLBase.specialization(prob.f) === SciMLBase.FullSpecialize
+        @test prob.f.f isa Bramble.Semidiscretization
+    end
+
     @testset "ode_problem: p reaches residual" begin
         # `θ` scales the boundary value and its rate, `(x, t, θ) -> θ[1] + θ[2] * t`, threaded
         # through the residual's own `p`, so a Dirichlet

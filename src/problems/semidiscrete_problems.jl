@@ -106,11 +106,11 @@ prob = ode_problem(sd, u₀, I; p = [0.7])
 
 See also [`ode_function`](@ref), [`semidiscretize`](@ref).
 """
-function ode_problem(sd::Semidiscretization, u₀, I; kwargs...)
+Base.@constprop :aggressive function ode_problem(sd::Semidiscretization, u₀, I; kwargs...)
     return _ode_problem(sd, u₀, I; kwargs...)
 end
 
-function ode_problem(
+Base.@constprop :aggressive function ode_problem(
         a::BilinearForm,
         l::LinearForm,
         u₀,
