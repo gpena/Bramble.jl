@@ -258,10 +258,19 @@ dirac(pts::AbstractVector{<:Union{Real, NTuple, AbstractVector}}, strengths = 1)
 # A list with no narrower element type, such as `[(0.1, 0.2), [0.3, 0.4]]` (a `Vector{Any}`):
 # one holding only reals is one point, as for a `Vector{<:Real}`, and any other is a list of points
 function dirac(pts::AbstractVector, strengths = 1)
-    if !isempty(pts) && all(p -> p isa Real, pts)
+    if !isempty(pts) && _all_real(pts)
         return dirac(map(Float64, pts), strengths)
     end
     return _dirac_points(pts, strengths)
+end
+
+# Whether every entry is a real, as a loop: `all` over an untyped list can infer wider than
+# `Bool` once an extension adds methods (JET saw `Union{Nothing, Some{Bool}, Bool}`)
+function _all_real(pts)
+    for p in pts
+        p isa Real || return false
+    end
+    return true
 end
 
 function _dirac_points(pts, strengths)
