@@ -145,8 +145,8 @@ end
 @inline DiracSource{D}(points::P, strengths::S) where {D, P, S} = DiracSource{D, P, S}(points, strengths)
 
 """
-    dirac(x0::Union{Real, NTuple{D, Real}, AbstractVector{<:Real}}, strength = 1.0) -> DiracSource{D}
-    dirac(points::AbstractVector, strengths = 1.0) -> DiracSource{D}
+    dirac(x0::Union{Real, NTuple{D, Real}, AbstractVector{<:Real}}, strength = 1) -> DiracSource{D}
+    dirac(points::AbstractVector, strengths = 1) -> DiracSource{D}
 
 Construct a symbolic point (Dirac delta) source term at coordinate `x0` with scalar `strength`,
 or a collection of point sources at `points` with corresponding `strengths`.
@@ -181,7 +181,7 @@ b_{idx + c} = S \\cdot w_c, \\qquad \\sum_{c \\in \\{0, 1\\}^D} w_c = 1
 - `x0`: Point coordinate, a scalar number (1D), `NTuple{D, Real}` (type-stable), or
   `AbstractVector{<:Real}` (one `D`-dimensional point, not inferable). An empty tuple or vector
   throws an `ArgumentError`.
-- `strength`: Source intensity (default: `1.0`). Accepts any of the following.
+- `strength`: Source intensity (default: `1`, which takes the space's element type). Accepts any of the following.
   - A constant `Number` (e.g. `2.5`).
   - A dynamic `Ref(val)`, which enables live in-place updates (`strength[] = new_val`) in time-stepping loops without rebuilding the form and with **0 heap allocations**.
   - A zero-argument function thunk, `() -> f(t)`, for time-dependent sources.
@@ -215,19 +215,19 @@ end
 
 See also: [`DiracSource`](@ref), [`innerₕ`](@ref), [`inner₊`](@ref), [`form`](@ref), [`assemble!`](@ref).
 """
-function dirac(x0::Real, strength = 1.0)
+function dirac(x0::Real, strength = 1)
     pt = (Float64(x0),)
     return DiracSource{1, typeof(pt), typeof(strength)}(pt, strength)
 end
 
-function dirac(x0::NTuple{D, Real}, strength = 1.0) where {D}
+function dirac(x0::NTuple{D, Real}, strength = 1) where {D}
     pt = map(Float64, x0)
     return DiracSource{D, typeof(pt), typeof(strength)}(pt, strength)
 end
 
-dirac(::Tuple{}, strength = 1.0) = _dirac_empty_point("tuple")
+dirac(::Tuple{}, strength = 1) = _dirac_empty_point("tuple")
 
-function dirac(x0::AbstractVector{<:Real}, strength = 1.0)
+function dirac(x0::AbstractVector{<:Real}, strength = 1)
     isempty(x0) && _dirac_empty_point("vector")
     D = length(x0)
     pt = ntuple(d -> Float64(x0[d]), D)
@@ -253,11 +253,11 @@ end
                         "every point needs $D coordinate(s), all spelt as a number (1D), a tuple or a vector"))
 end
 
-dirac(pts::AbstractVector{<:Union{Real, NTuple, AbstractVector}}, strengths = 1.0) = _dirac_points(pts, strengths)
+dirac(pts::AbstractVector{<:Union{Real, NTuple, AbstractVector}}, strengths = 1) = _dirac_points(pts, strengths)
 
 # A list with no narrower element type, such as `[(0.1, 0.2), [0.3, 0.4]]` (a `Vector{Any}`):
 # one holding only reals is one point, as for a `Vector{<:Real}`, and any other is a list of points
-function dirac(pts::AbstractVector, strengths = 1.0)
+function dirac(pts::AbstractVector, strengths = 1)
     if !isempty(pts) && all(p -> p isa Real, pts)
         return dirac(map(Float64, pts), strengths)
     end
