@@ -1559,7 +1559,6 @@ end
     end
 end
 
-
 # A destination that is not a dense array (a strided or reversed view, a reinterpretation)
 # crosses `@batch` field by field. Its fields must decode to their own types: a dense
 # `Vector` inside one, encoded as a `_Raw`, made the rebuild throw before the task's guard,

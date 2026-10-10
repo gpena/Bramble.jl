@@ -251,7 +251,6 @@ const _RH_POLICIES = (CpuSerial(), CpuThreaded(), CpuPolyester())
 @testset "Rₕ! equals f at host points (#503)" begin
     @testset "$(nameof(typeof(p))) $T $(D)D" for p in _RH_POLICIES, T in (Float64, Float32),
         D in 1:3
-
         W = _rh_space(D, T, p)
         f = D == 1 ? (x -> sin(3x) + x^2) : (x -> sin(3x[1]) * cos(x[2]) + sum(x))
         g, h = x -> 2f(x) - 1, x -> 1 - f(x)
