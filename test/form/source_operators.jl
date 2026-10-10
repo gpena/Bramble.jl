@@ -278,7 +278,11 @@ using Bramble:
         # A source may be undefined outside its region; shifting the restriction must not
         # call it there. `g` throws at both boundary points, outside `:interior`.
         Bramble._seed_mesh1d_rng!(7)
-        Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
+        Ωₕ = try
+            mesh(domain(interval(0.0, 1.0)), 9, false)
+        finally
+            Bramble._unseed_mesh1d_rng!()
+        end
         Wₕ = gridspace(Ωₕ)
         w = weights(Wₕ, Innerh())
         x = points(Ωₕ)
