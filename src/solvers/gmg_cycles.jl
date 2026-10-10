@@ -511,11 +511,14 @@ function _gmg_fmg!(P::GMGPreconditioner, x, b)
         coarsen!(P.b[l - 1], H, l, P.b[l])
     end
     _gmg_coarse_solve!(P, P.x[1], P.b[1])
-    for l in 2:L
-        xl, bl = l == L ? (x, b) : (P.x[l], P.b[l])
-        prolongate!(xl, H, l, P.x[l - 1])
-        _gmg_cycle!(P, l, xl, bl, 1)
+    # The finest level is peeled out of the loop so that the caller's `x` and `b`, whose types
+    # may differ from the hierarchy's, never share a variable with `P.x[l]` and `P.b[l]`.
+    for l in 2:(L - 1)
+        prolongate!(P.x[l], H, l, P.x[l - 1])
+        _gmg_cycle!(P, l, P.x[l], P.b[l], 1)
     end
+    prolongate!(x, H, L, P.x[L - 1])
+    _gmg_cycle!(P, L, x, b, 1)
     return x
 end
 

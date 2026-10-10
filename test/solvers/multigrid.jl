@@ -589,6 +589,11 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
             uₕ = element(W, copy(x0))
             @test f(uₕ, P, bₕ) === uₕ && parent(uₕ) == f(copy(x0), P, b)
         end
+        # FMG on a caller's view runs the finest level on the view itself: same result as the
+        # `Vector` call, and nothing allocated.
+        xv = view(copy(x0), 1:n)
+        @test fmg!(xv, P, b) == fmg!(copy(x0), P, b)
+        @test _mg_cycalloc(fmg!, view(copy(x0), 1:n), P, b) == 0
     end
     P = gmg_preconditioner(_mg_spd, Ωf)
     @test sprint(show, P) == "GMGPreconditioner{V(2,2), 5 levels, (3, 3) to (33, 33) pts}"
@@ -653,6 +658,12 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
         @test isapprox(parent(uₕ), xs; rtol = 1e-8)
     end
     @test parent(gmg_solve(_mg_spd, Ωf, element(W, b); tol = 1e-10)) ≈ parent(gmg_solve(_mg_spd, Ωf, b; tol = 1e-10))
+    # A Float32 right-hand side on a Float64 operator: FMG's finest level takes the caller's b.
+    b32 = Float32.(b)
+    u32 = gmg_solve(_mg_spd, Ωf, b32; cycle = :FMG, tol = 1e-10)
+    @test eltype(parent(u32)) === Float64
+    @test norm(A * parent(u32) - b32) <= 1e-10 * norm(b32)
+    @test parent(u32) == parent(gmg_solve(_mg_spd, Ωf, Float64.(b32); cycle = :FMG, tol = 1e-10))
     @test iszero(parent(gmg_solve(_mg_spd, Ωf, zeros(n))))
     @test_throws ErrorException gmg_solve(_mg_spd, Ωf, b; tol = 1e-15, maxiters = 1)
     @test_throws ArgumentError gmg_solve(_mg_spd, Ωf, b; tol = 0)
