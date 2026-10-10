@@ -245,8 +245,9 @@ end
 # it is a kernel argument, however small the wrapper -- only a *direct* array argument (or
 # a `Tuple` of them, which `Adapt.jl` does convert element-wise) is adapted to the device's
 # own array type before the kernel runs. This is why `_rule_kernel`'s `_RₕKernel`/
-# `_AvgKernel` (which close over the whole mesh) are CPU-only, and the device paths below
-# are written from scratch against the mesh's own arrays instead.
+# `_AvgKernel` (wrapper structs over the `points`/`half_points` vectors and the indices)
+# are CPU-only, and the device paths below are written from scratch against the mesh's own
+# arrays instead.
 # ---------------------------------------------------------------------------
 
 # The context every device-kernel launch below adds to whatever the compiler actually

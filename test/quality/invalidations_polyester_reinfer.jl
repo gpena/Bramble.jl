@@ -9,7 +9,15 @@ module QualityInvalidationsPolyesterReinferTests
 # BramblePolyesterExt: a cached method that Polyester's load invalidated would be
 # re-inferred here.
 #
-# Prints `REINFER_POLYESTER=<n>`, then the inferred MethodInstances.
+# A second snoop warms `Rₕ!`, composite `Rₕ!`, masked `Rₕ!` and `avgₕ!` with one function
+# each, then calls them with new ones: the split sweeps' `@batch` loop is typed on nothing
+# that depends on the user function (BramblePolyesterExt's `_erased_run`), so no instance of
+# Polyester or the packages under it may be inferred. It counts by module, not by the
+# `_from_main` rule, which would drop every instance whose type holds the new closure.
+#
+# Prints `REINFER_POLYESTER=<n>`, then the inferred MethodInstances, then
+# `REINFER_NEWF_EXT=<n>` (instances of BramblePolyesterExt, the positive control) and
+# `REINFER_NEWF_POLYESTER=<n>`.
 #===========================================================================#
 
 using Bramble, Polyester, LinearAlgebra
@@ -78,5 +86,32 @@ for mi in mis
     println("  ", first(string(mi), 160))
 end
 println("REINFER_POLYESTER=", length(bad))
+
+Wm = gridspace(mesh(domain(X, :dir => boundary_symbols(X)), n, nu;
+    backend = backend(policy = CpuPolyester())))
+v = element(Wm)
+vc = element(Wm × Wm)
+Rₕ!(v, x -> x[1])
+Rₕ!(vc, x -> (x[1], x[2]))
+Rₕ!(v, x -> x[1] + 1; markers = (:dir,))
+avgₕ!(v, x -> x[2])
+h1 = x -> sin(x[1]) + x[2]
+h2 = x -> (cos(x[1]), x[1] * x[2])
+h3 = x -> x[1] - 2x[2]
+h4 = x -> x[1]^2 - x[2]
+tinf_newf = nothing
+tinf_newf = @snoop_inference begin
+    Rₕ!(v, h1)
+    Rₕ!(vc, h2)
+    Rₕ!(v, h3; markers = (:dir,))
+    avgₕ!(v, h4)
+end
+mods = [string(parentmodule(m.def))
+        for m in map(_mi, flatten(tinf_newf))
+        if m isa Core.MethodInstance && m.def isa Method]
+const POLYESTER_FAMILY = ("Polyester", "PolyesterWeave", "ManualMemory", "StrideArraysCore",
+    "ThreadingUtilities")
+println("REINFER_NEWF_EXT=", count(==("BramblePolyesterExt"), mods))
+println("REINFER_NEWF_POLYESTER=", count(in(POLYESTER_FAMILY), mods))
 
 end # module QualityInvalidationsPolyesterReinferTests
