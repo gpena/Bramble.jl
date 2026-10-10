@@ -48,18 +48,18 @@ using Bramble
     end
 
     @testset "1D composite" begin
-        Ωₕ = mesh(domain(interval(0.0, 1.0)), 4, true)
+        # 5 points, so every value prints exactly. The components differ at every point
+        # (x + 1 against 10x), so a swap or a duplicated component changes every row.
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
         Wₕ = gridspace(Ωₕ)
         Vₕ = Wₕ^Val(2)
-        cₕ = Rₕ(Vₕ, x -> (x, 10x))
+        cₕ = Rₕ(Vₕ, x -> (x + 1, 10x))
 
         mktempdir() do dir
             f = export_pgfplots(joinpath(dir, "t"), Ωₕ, "u" => cₕ)
-            lines = readlines(f)
-            @test lines[1] == "x u_1 u_2"
-            row2 = parse.(Float64, split(lines[2]))
-            @test row2[2] ≈ row2[1]           # u_1 = x
-            @test row2[3] ≈ 10 * row2[1]       # u_2 = 10x
+            @test readlines(f) == [
+                "x u_1 u_2", "0.0 1.0 0.0", "0.25 1.25 2.5", "0.5 1.5 5.0",
+                "0.75 1.75 7.5", "1.0 2.0 10.0"]
         end
     end
 
