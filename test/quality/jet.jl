@@ -13,7 +13,9 @@ using Bramble
             reports = JET.get_reports(jet_report)
             @test length(reports) == 0
         catch e
-            @test_skip "JET not functional on this Julia build: $e"
+            # A JET that cannot analyse the package is a failed gate, not a skip.
+            @error "JET could not analyse Bramble" exception = e
+            @test false
         end
     else
         @test_skip "JET full-package static analysis is skipped on prerelease Julia"
