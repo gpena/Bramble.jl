@@ -19,7 +19,7 @@ module UtilsThreadedDotTests
 using Test
 using Bramble
 using Bramble: _dot, _dot_masked, _threaded_dot, _threaded_dot_masked, MarkedIndicesUnion, CpuThreaded, weights,
-    SeparableWeights
+               SeparableWeights
 
 @testset "CpuThreaded _dot/_dot_masked" begin
     # Invariants tested:

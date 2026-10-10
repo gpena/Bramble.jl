@@ -509,8 +509,9 @@ using Bramble:
         # transposed or mirrored mask keeps the same points; a bottom-left corner block,
         # symmetric under none of them, tells them apart, and a source whose D₋ₓ varies
         # along x tells which neighbour was read
-        Ωₗ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0),
-                         :corner => x -> x[1] < 0.3 && x[2] < 0.5), (6, 6), (true, true))
+        Ωₗ = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0),
+                :corner => x -> x[1] < 0.3 && x[2] < 0.5), (6, 6), (true, true))
         Wₗ = gridspace(Ωₗ)
         sx = source_function(x -> x[1]^2 + 2 * x[2] + 1, Val(2))
         bₗ = assemble(form(Wₗ, v -> innerₕ(restrict_to(:corner, D₋ₓ(sx)), v)))

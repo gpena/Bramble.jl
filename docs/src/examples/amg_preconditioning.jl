@@ -111,7 +111,7 @@ normₕ(uₕ .- Rₕ(space(uₕ), uex))
 @test normₕ(uₕ .- Rₕ(space(uₕ), uex)) < 1.0e-6                                              #src
 # Only a preconditioned solve gets there in 20 iterations: plain CG needs 191 at n = 65.     #src
 @test parent(solve(a, l; dirichlet = bcs, symmetrize = true, solver = KrylovJL_CG(),         #src
-    preconditioner = :amg, maxiters = 20)) ≈ u_direct atol = 1e-6 rtol = 1e-6               #src
+    preconditioner = :amg, maxiters = 20))≈u_direct atol=1e-6 rtol=1e-6               #src
 
 # ## Iteration counts under refinement
 #
