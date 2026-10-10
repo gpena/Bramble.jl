@@ -601,6 +601,10 @@ end
 
     @test du ≈ F - operator_matrix(sd) * u
     @test F[2:(nleaf - 1)] ≈ F[(nleaf + 2):(2nleaf - 1)] ./ 3
+    # cₕ ≡ 1: each interior load entry is its quadrature weight, three times it on leaf 2
+    w = collect(Bramble.weights(Wₕ, Bramble.Innerh()))
+    @test F[2:(nleaf - 1)] ≈ w[2:(nleaf - 1)]
+    @test F[(nleaf + 2):(2nleaf - 1)] ≈ 3 .* w[2:(nleaf - 1)]
     @test _sd_residual_allocs(sd, du, u, 0.0) == 0
 
     M = mass_matrix(sd)
