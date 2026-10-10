@@ -521,15 +521,15 @@ end
 # signature -- precompilation refuses that ("Method overwriting is not permitted"), the same
 # reason `ext/BrambleSparseMatricesCSRExt.jl` bounds its own `_csr_backend` with `T <: Number`.
 #
-# A kernel Bramble defines does not cross `@batch` whole: `_RₕKernel` holds the coordinate
-# vectors and a `_MaskedKernel` its `BitVector`s, and any GC reference puts Polyester's
-# argument box on the heap. `v` crosses as a top-level loop argument and the kernel as one
-# `_batch_split` (`_split_or_whole` below), each task rebuilding it around the `PtrArray`s:
-# the `_RₕKernel` points, the `_AvgKernel`/`_AvgScatterKernel` half points and the weight
-# build's `Fix1(__prod, factors)` vectors in place. A `_MaskedKernel`'s masks first become
-# their 64-bit word vectors (`_for_host_raw`), each rebuilt as `_ChunkBits`, a bit test over
-# the words. A single-iteration `@batch` runs its body inline on the plain `Vector`s, which
-# the rebuild accepts as well.
+# A kernel Bramble defines does not cross `@batch` whole: `_RₕKernel` holds the mesh and a
+# `_MaskedKernel` its `BitVector`s, and any GC reference puts Polyester's argument box on the
+# heap. `v` crosses as a top-level loop argument and the kernel as one `_batch_split`
+# (`_split_or_whole` below), each task rebuilding it around the `PtrArray`s: the mesh as its
+# walk state, the `_AvgKernel`/`_AvgScatterKernel` quadrature arrays and the weight build's
+# `Fix1(__prod, factors)` vectors in place. A `_MaskedKernel`'s masks first become their
+# 64-bit word vectors (`_for_host_raw`), each rebuilt as `_ChunkBits`, a bit test over the
+# words. A single-iteration `@batch` runs its body inline on the plain `Vector`s, which the
+# rebuild accepts as well.
 #
 # Only those kernel types split (`_splits_kernel`), and only around a user function with
 # nothing to split (isbits: no captured arrays). A user closure over an array crosses whole

@@ -189,31 +189,6 @@ const sₕ = Rₕ(Sₕ, x -> exp(x[1]) * x[2])
         @test mesh(roundtrip(Wₕ)).uid == Bramble._walk_mesh(mesh(Wₕ)).uid
     end
 
-    # `Rₕ!`'s kernel holds the coordinate vectors, not the mesh: its skeleton names no mesh
-    # type, its arrays are `points(Ωₕ)` themselves, and the rebuild evaluates bit for bit.
-    @testset "Rₕ kernels split without the mesh (#503)" begin
-        Ω₁ = mesh(domain(interval(0.0, 1.0)), 7, false)
-        change_points!(Ω₁, [0.0, 0.05, 0.2, 0.3, 0.55, 0.8, 1.0])
-        Ω₃ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
-            (5, 4, 3), (false, false, false))
-        rule = Bramble.PointValue(x -> sum(x) + prod(x))
-        rules = Bramble.PointValue(x -> (sum(x), prod(x)))
-        for W in (gridspace(Ω₁), Wₕ, gridspace(Ω₃))
-            for k in (Bramble._rule_kernel(rule, W),
-                Bramble._rule_scatter_kernel(rules, W, Val(2)))
-                @test Bramble._batch_splittable(typeof(k))
-                sk, arrays = _batch_split(k)
-                @test isbits(sk)
-                @test !occursin(r"Mesh(nD|1D)(State)?\{|Mesh(nD|1D)State",
-                    string(typeof(sk)))
-                pts = points(mesh(W))
-                @test all(map(===, arrays, pts isa Tuple ? pts : (pts,)))
-                r = _batch_rebuild(sk, arrays)
-                @test all(i -> isequal(r(i), k(i)), eachindex(indices(mesh(W))))
-            end
-        end
-    end
-
     @testset "split and rebuild allocate nothing" begin
         (unit, _, _), = bilinear_units(form(Wₕ, Wₕ,
             (u, v) -> innerₕ(u, restrict_to(:bottom, v)) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))))

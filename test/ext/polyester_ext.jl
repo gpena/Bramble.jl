@@ -1249,9 +1249,8 @@ Base.getindex(w::_BfWrapped, i::Int) = w.data[i]
     fb = x -> big(x[1]) * x[2] + 1
     fs = x -> (d[:a] * x[1], c[1] * x[2])
     W = _bf_space((9, 11), CpuPolyester())
-    k = Bramble._RₕKernel(f, points(mesh(W)), Bramble.indices(mesh(W)))
+    k = Bramble._RₕKernel(f, mesh(W), Bramble.indices(mesh(W)))
     @test !Bramble._batch_splittable(typeof(k))
-    @test Bramble._batch_splittable(typeof(Bramble._RₕKernel(x -> x[1], k.x, k.idxs)))
     @test !Bramble._batch_splittable(typeof((k, ones(BigFloat, 3))))
     hits(h, s) = sum(methods(getfield(Bramble, h)); init = 0) do m
         m.module === ext || return 0

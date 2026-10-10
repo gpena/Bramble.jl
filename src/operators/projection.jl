@@ -85,10 +85,9 @@ function _rule_component end
 
 # --- the device fast path (gpena/Bramble.jl#94, #174) ------------------------------- #
 #
-# `_rule_kernel`/`_rule_scatter_kernel` build a callable struct closing over the mesh's
-# point vectors (`points`/`half_points`) and indices (`_RₕKernel`, `_AvgKernel`,
-# `_AvgScatterKernel`), which is exactly right for the CPU sweep below but not
-# GPU-compilable: a device array nested in a wrapper struct is not adapted to the device,
+# `_rule_kernel`/`_rule_scatter_kernel` build a callable closing over the mesh itself
+# (`_RₕKernel`, `_AvgKernel`, `_AvgScatterKernel`), which is exactly right for the CPU sweep
+# below but not GPU-compilable: a mesh is a `mutable struct` carrying a `Dict` of markers,
 # and passing one into a `KernelAbstractions.@kernel` fails to compile with "passing
 # non-bitstype argument" the moment the kernel is launched, well before `f` itself is ever
 # reached (confirmed against a real Metal device while designing this). `_device_project!`/
