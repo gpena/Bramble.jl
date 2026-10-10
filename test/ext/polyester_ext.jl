@@ -1249,8 +1249,9 @@ Base.getindex(w::_BfWrapped, i::Int) = w.data[i]
     fb = x -> big(x[1]) * x[2] + 1
     fs = x -> (d[:a] * x[1], c[1] * x[2])
     W = _bf_space((9, 11), CpuPolyester())
-    k = Bramble._RₕKernel(f, mesh(W), Bramble.indices(mesh(W)))
+    k = Bramble._RₕKernel(f, points(mesh(W)), Bramble.indices(mesh(W)))
     @test !Bramble._batch_splittable(typeof(k))
+    @test Bramble._batch_splittable(typeof(Bramble._RₕKernel(x -> x[1], k.x, k.idxs)))
     @test !Bramble._batch_splittable(typeof((k, ones(BigFloat, 3))))
     hits(h, s) = sum(methods(getfield(Bramble, h)); init = 0) do m
         m.module === ext || return 0
@@ -1505,6 +1506,87 @@ end
         W = _mp_space(n, CpuPolyester())
         @test assemble(_mp_form(W)) ≈ assemble(_mp_form(Ws))
     end
+end
+
+# The split sweeps' `@batch` loop captures only an isbits payload: `_enc` turns a dense
+# isbits array (an `Array`, a contiguous view or a reshape of one) into a `_Raw` pointer
+# view, a mutable object into its address and any other immutable into its encoded fields;
+# `_dec` rebuilds the arguments. A `_Raw` must index and write through to its array, and
+# decoding must hand back the very objects encoded.
+struct _EncInner{D}
+    d::D
+    x::Float64
+end
+struct _EncOuter{I}
+    inner::I
+    k::Int
+end
+
+@testset "erased payload: _Raw and _enc/_dec" begin
+    PE = Base.get_extension(Bramble, :BramblePolyesterExt)
+    a = reshape(collect(1.0:12.0), 3, 4)
+    sub = view(a, :, 2:3)
+    rsh = Base.ReshapedArray(collect(1.0:12.0), (4, 3), ())
+    @test sub isa Base.FastContiguousSubArray
+    @testset "$(nameof(typeof(x)))" for x in (a, sub, rsh)
+        GC.@preserve x begin
+            r = PE._enc(x)
+            @test r isa PE._Raw{Float64, 2}
+            @test isbits(r) && PE._dec(r) === r
+            @test size(r) == size(x)
+            @test [r[i] for i in eachindex(r)] == vec(collect(x))
+            @test r[2, 2] == x[2, 2]
+            r[2, 2] = -7.0
+            @test x[2, 2] == -7.0
+            r[end] = -8.0
+            @test x[end] == -8.0
+            @test_throws BoundsError r[length(x) + 1]
+        end
+    end
+
+    m = Ref(1.5)
+    d = Dict(:a => 1)
+    strs = ["p", "q"]
+    pay = (m, _EncOuter(_EncInner(d, 3.0), 2), (1, m, "s", strs))
+    q = PE._enc(pay)
+    @test isbits(q)
+    @test q[1] isa PE._Obj && q[2] isa PE._Fields && q[2].e[1] isa PE._Fields
+    @test q[3][4] isa PE._Obj
+    GC.@preserve pay begin
+        back = PE._dec(q)
+        @test back === pay
+        @test back[1] === m && back[2].inner.d === d && back[3][4] === strs
+    end
+end
+
+# A destination that is not a dense array (a strided or reversed view, a reinterpretation)
+# crosses `@batch` field by field. Its fields must decode to their own types: a dense
+# `Vector` inside one, encoded as a `_Raw`, made the rebuild throw before the task's guard,
+# so no host rerun ran. Non-uniform 1D mesh, scalar sweep and composite scatter.
+@testset "erased payload: non-dense destinations" begin
+    PE = Base.get_extension(Bramble, :BramblePolyesterExt)
+    X = domain(interval(0.0, 1.0))
+    mk(pol) = (Random.seed!(7);
+        gridspace(mesh(X, 9, false; backend = backend(policy = pol))))
+    Wp, Ws = mk(CpuPolyester()), mk(CpuSerial())
+    f = x -> x + 1.0
+    ref = parent(Rₕ!(element(Ws), f))
+    n = length(ref)
+    @testset "$lbl" for (lbl, data) in (("strided", view(zeros(2n), 1:2:(2n))),
+        ("reversed", view(zeros(n), n:-1:1)),
+        ("reinterpret", reinterpret(Float64, zeros(UInt64, n))))
+        GC.@preserve data begin
+            @test PE._dec(PE._enc(data)) === data
+        end
+        v = Bramble.VectorElement(data, Wp)
+        Rₕ!(v, f)
+        @test collect(parent(v)) == ref
+    end
+    g = x -> (x + 1.0, 2x)
+    refc = parent(Rₕ!(element(Ws × Ws), g))
+    vc = Bramble.VectorElement(view(zeros(4n), 1:2:(4n)), Wp × Wp)
+    Rₕ!(vc, g)
+    @test collect(parent(vc)) == refc
 end
 
 end # module

@@ -69,14 +69,18 @@ See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 @inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple) = project!(uₕ, map(PointValue, f))
 
 # A concretely typed kernel for per-point restriction calls, avoiding anonymous closure
-# captures over (`f`, `Ωₕ`, `idxs`). A named callable struct eliminates compiler indirection
-# and achieves performance parity with a flat loop.
-struct _RₕKernel{F, M, IX}
+# captures over (`f`, `pts`, `idxs`). A named callable struct eliminates compiler indirection
+# and achieves performance parity with a flat loop. It holds `points(Ωₕ)` (one vector in 1D,
+# an `NTuple{D}` of them otherwise) rather than the mesh, as `_AvgKernel` holds `half_points`,
+# so `CpuPolyester` splits it into the coordinate vectors and an almost empty skeleton
+# (gpena/Bramble.jl#503); `_condition_point` assembles the point `point(Ωₕ, I)` returns.
+# Device paths never build it (`_launch_restriction!` and the `_nd` launchers below).
+struct _RₕKernel{F, X, IX}
     f::F
-    Ω::M
+    x::X
     idxs::IX
 end
-@inline (k::_RₕKernel)(i) = k.f(point(k.Ω, k.idxs[i]))
+@inline (k::_RₕKernel)(i) = k.f(_condition_point(k.x, k.idxs[i]))
 
 # The plain methods above ensure that unmasked restriction calls (the primary path during
 # time stepping) resolve directly without invoking Julia's keyword argument dispatch
@@ -86,9 +90,10 @@ end
 # `PointValue`'s side of the `project!` contract (`operators/projection.jl`). The same
 # kernel serves the scalar and the scattered case: `f` returns a scalar on a scalar space
 # and the leaves' tuple on a composite one, which is exactly what each sweep wants.
-@inline _rule_kernel(rule::PointValue, sp) = _RₕKernel(rule.f, mesh(sp), indices(mesh(sp)))
+@inline _rule_kernel(rule::PointValue, sp) = _RₕKernel(rule.f, points(mesh(sp)), indices(mesh(sp)))
 
-@inline _rule_scatter_kernel(rule::PointValue, sp, ::Val{NC}) where {NC} = _RₕKernel(rule.f, mesh(sp), indices(mesh(sp)))
+@inline _rule_scatter_kernel(rule::PointValue, sp, ::Val{NC}) where {NC} = _RₕKernel(
+    rule.f, points(mesh(sp)), indices(mesh(sp)))
 
 @inline _rule_component(rule::PointValue, k) = PointValue(pt -> rule.f(pt)[k])
 

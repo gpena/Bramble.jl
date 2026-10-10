@@ -84,6 +84,18 @@ end
                 @test n_reinferred == 0
                 n_reinferred > 0 && @info "Re-inference after loading Polyester:\n$out"
             end
+            # New user functions in the split sweeps infer nothing of Polyester's family;
+            # the extension's own instances show the sweeps reached it.
+            m_ext = match(r"REINFER_NEWF_EXT=(\d+)", out)
+            m_newf = match(r"REINFER_NEWF_POLYESTER=(\d+)", out)
+            @test m_ext !== nothing
+            @test m_newf !== nothing
+            if m_ext !== nothing && m_newf !== nothing
+                @test parse(Int, something(m_ext.captures[1])) > 0
+                n_newf = parse(Int, something(m_newf.captures[1]))
+                @test n_newf == 0
+                n_newf > 0 && @info "Polyester inferred for new user functions:\n$out"
+            end
         end
     else
         @test_skip "Polyester load invalidation check skipped on prerelease Julia"
