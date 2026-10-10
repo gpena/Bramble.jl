@@ -159,9 +159,9 @@ end
 # closures over captures (`f`, `x`, `idxs`, `nodes`, `wts`). Explicit struct types ensure
 # predictable inlining and eliminate allocation flakes inside parallel loop dispatch.
 #
-# No accumulator seed is built here: `_cell_average` seeds itself from `f`'s own first
-# evaluation, so the mesh's element type `T` never leaks into the quadrature sum
-# (gpena/Bramble.jl#148).
+# No accumulator seed is built here: `_cell_average` seeds itself from its first weighted
+# term, so the sum's type is the promotion of `T` and `f`'s return type from the first
+# step on (gpena/Bramble.jl#148, #523).
 struct _AvgKernel{F, X, IX, NQ, T}
     f::F
     x::X
@@ -436,9 +436,11 @@ end
 broadcasting `.+`/`.*` over a `Number` accumulator computes exactly the scalar arithmetic
 `+`/`*` would, and over an `NTuple` accumulator the per-component sum, so no `::Val{NC}` or
 caller-built seed is needed to tell the two apart (gpena/Bramble.jl#102, #148). The
-accumulator is seeded from `f`'s own first evaluation rather than `zero(T)`, so `T` (the
-mesh's element type) never leaks into the sum when `f` returns something else, such as a
-`ForwardDiff.Dual` under AD (gpena/Bramble.jl#148).
+accumulator is seeded with the zero of the first weighted term `wts[1] .* f(pt)` rather
+than `zero(T)`, so the result is the promotion of `T` (the mesh's element type) and `f`'s
+return type: a `ForwardDiff.Dual` under AD stays a `Dual` (gpena/Bramble.jl#148), and an
+`f` narrower than the mesh type (`Int`, or `Float32` on a `Float64` mesh) gives a sum whose
+type does not change mid-loop (gpena/Bramble.jl#523).
 
 A one-dimensional mesh answers `half_points` with a plain vector but indexes with
 `CartesianIndex{1}`; the `CartesianIndex{1}` method unwraps that to the `Int` the
@@ -466,19 +468,22 @@ correctness at any `D` and is tested directly rather than through a mesh.
 
 # Average of `f` over the 1D cell spanned by `x[i] .. x[i+1]`.
 #
-# The accumulator starts from `f`'s own first evaluation, not `zero(T)`: `T` is the mesh's
-# element type, but `f` can return something else entirely -- a `ForwardDiff.Dual` under
-# AD, say -- and seeding from the mesh forced a mid-loop type change the moment `f`'s
-# result first arrived (gpena/Bramble.jl#148). Element type comes from the data, never from
-# the space, same rule `Rₕ` follows. `zero.(...)` broadcasts over both the scalar and the
-# `NTuple` (composite) return shape, so one method still covers both.
+# The accumulator starts from the zero of the first weighted term, `wts[1] .* f(pt1)`, not
+# `zero(T)`: `T` is the mesh's element type, but `f` can return something else entirely --
+# a `ForwardDiff.Dual` under AD, say -- and seeding from the mesh forced a mid-loop type
+# change the moment `f`'s result first arrived (gpena/Bramble.jl#148). Seeding from `f`
+# alone failed the other way: an `f` narrower than `T` (`Int`, `Float32` on a `Float64`
+# mesh) changed type at the first `wts[q] .*` (gpena/Bramble.jl#523). The weighted term's
+# type is the promotion of `T` and `f`'s, a fixed point of the loop, the same idea as
+# `interpolate_at`'s `promote_type` accumulator. `zero.(...)` broadcasts over both the
+# scalar and the `NTuple` (composite) return shape, so one method still covers both.
 @inline function _cell_average(
         f, x::AbstractVector, i::Int, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}
 ) where {NQ, T}
     @inbounds a = T(x[i])
     @inbounds d = T(x[i + 1]) - a
 
-    @inbounds s = zero.(f(a + nodes[1] * d))
+    @inbounds s = zero.(wts[1] .* f(a + nodes[1] * d))
     @inbounds for q in 1:NQ
         s = s .+ wts[q] .* f(a + nodes[q] * d)
     end
@@ -506,9 +511,9 @@ end
     p1s = ntuple(q -> a1 + nodes[q] * d1, Val(NQ))
     p2s = ntuple(q -> a2 + nodes[q] * d2, Val(NQ))
 
-    # Accumulator seeded from `f`'s own first evaluation, not `zero(T)` -- see the 1D
-    # method above (gpena/Bramble.jl#148).
-    @inbounds s = zero.(f((p1s[1], p2s[1])))
+    # Accumulator seeded from the zero of the first weighted term, not `zero(T)` -- see the
+    # 1D method above (gpena/Bramble.jl#148, #523).
+    @inbounds s = zero.(wts[1] .* f((p1s[1], p2s[1])))
     @inbounds for q2 in 1:NQ
         w2 = wts[q2]
         p2 = p2s[q2]
@@ -541,9 +546,9 @@ end
     p2s = ntuple(q -> a2 + nodes[q] * d2, Val(NQ))
     p3s = ntuple(q -> a3 + nodes[q] * d3, Val(NQ))
 
-    # Accumulator seeded from `f`'s own first evaluation, not `zero(T)` -- see the 1D
-    # method above (gpena/Bramble.jl#148).
-    @inbounds s = zero.(f((p1s[1], p2s[1], p3s[1])))
+    # Accumulator seeded from the zero of the first weighted term, not `zero(T)` -- see the
+    # 1D method above (gpena/Bramble.jl#148, #523).
+    @inbounds s = zero.(wts[1] .* f((p1s[1], p2s[1], p3s[1])))
     @inbounds for q3 in 1:NQ
         w3 = wts[q3]
         p3 = p3s[q3]
@@ -572,10 +577,10 @@ end
     a = ntuple(k -> @inbounds(T(x[k][idx[k]])), Val(D))
     b = ntuple(k -> @inbounds(T(x[k][idx[k] + 1])), Val(D))
 
-    # Accumulator seeded from `f`'s own first evaluation, not `zero(T)` -- see the 1D
-    # method above (gpena/Bramble.jl#148).
+    # Accumulator seeded from the zero of the first weighted term, not `zero(T)` -- see the
+    # 1D method above (gpena/Bramble.jl#148, #523).
     pt1 = ntuple(k -> a[k] + nodes[1] * (b[k] - a[k]), Val(D))
-    s = zero.(f(pt1))
+    s = zero.(wts[1] .* f(pt1))
     @inbounds for q in CartesianIndices(ntuple(_ -> NQ, Val(D)))
         w = one(T)
         for k in 1:D
