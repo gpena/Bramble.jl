@@ -101,6 +101,11 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
             # symmetric `A` to `accelerate_solve` with every keyword, so a `kind` it rejects
             # throws, where `A \ F` would ignore it.
             @test_throws ArgumentError pde_solve(p.A, p.F; kind = :nonsense)
+            # The plain call, with no keyword at all, reaches Accelerate too. On this 2D
+            # Poisson system Accelerate's result differs from `A \ F` in the last bits and
+            # is repeatable, so equality tells the two routes apart.
+            @test pde_solve(p.A, p.F) == accelerate_solve(p.A, p.F)
+            @test pde_solve(p.A, p.F) != p.A \ p.F
 
             cd = convection_diffusion_system(20)
             @test !issymmetric(cd.A)
