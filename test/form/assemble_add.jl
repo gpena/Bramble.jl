@@ -353,9 +353,12 @@ using ..TestUtils: _fillnz!, alloc_test
 
         Fref = 2.0 .* assemble(l)
 
-        F = zeros(ndofs(W_par))
+        # F starts nonzero and is added to twice, so an overwrite or a zeroing first shows
+        F = ones(ndofs(W_par))
         assemble_add!(F, l_par, 2.0)
-        @test F ≈ Fref
+        @test F ≈ 1 .+ Fref
+        assemble_add!(F, l_par)
+        @test F ≈ 1 .+ 1.5 .* Fref
     end
 
     # The explicit-scale, cached `assemble_add!(A, a, α)` /
