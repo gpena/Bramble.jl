@@ -28,9 +28,9 @@ module UtilsNestedThreadingTests
 # The mesh is non-uniform, so a band that picked up the wrong spacing index would not agree.
 using Test
 using Bramble
-using Bramble: CpuThreaded, _dot, _in_threaded_region, _is_static_nesting_error,
-               _static_or_serial, _serial_for!, _threaded_for!, assemble_add!,
-               assemble_parallel!, D₋ₓ!, Mₓ!, divₕ!, εₕ!, εcₕ!, curlₕ!, ∇̃ₕ!
+using Bramble: CpuThreaded, MarkedIndicesUnion, _dot, _dot_masked, _in_threaded_region,
+               _is_static_nesting_error, _static_or_serial, _serial_for!, _threaded_for!,
+               assemble_add!, assemble_parallel!, D₋ₓ!, Mₓ!, divₕ!, εₕ!, εcₕ!, curlₕ!, ∇̃ₕ!
 using SparseArrays: nonzeros
 using ..TestUtils: WITH_SLOW_TESTS, _reset_seen!, _Spy, _threads_seen
 
@@ -175,6 +175,22 @@ end
             @test_skip "top-level threading needs --threads >= 2"
         end
         @test all(==(ref), _nested_results(() -> _dot(P, _Spy(x), y, z)))
+
+        # The masked seam likewise: a serial fall-through (the pre-#301 `_dot_masked(
+        # ::CpuThreaded, ...)`) returns the same value, so only the spread can pin it.
+        # The masks are sparse and marked in both thread bands, as boundary markers are.
+        odd = BitVector(isodd.(1:n))
+        late_even = BitVector(iseven.(1:n)) .& (1:n .> n ÷ 2)
+        for mask in (odd, MarkedIndicesUnion((odd, late_even)))
+            _reset_seen!()
+            ref_m = _dot_masked(P, _Spy(x), y, z, mask)
+            if Threads.nthreads() >= 2
+                @test _threads_seen() >= 2
+            else
+                @test_skip "top-level threading needs --threads >= 2"
+            end
+            @test all(==(ref_m), _nested_results(() -> _dot_masked(P, _Spy(x), y, z, mask)))
+        end
 
         # `_threaded_for!` at top level spreads over the threads; nested, every index is
         # written by the task that made the call.
