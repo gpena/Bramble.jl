@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Heat equation — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=17721c40">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=c2cc6aa6">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Heat equation — Bramble.jl">
   <meta property="og:title" content="Heat equation — Bramble.jl">
@@ -167,7 +167,7 @@ uₕ = element(Wₕ)
 parent(uₕ) .= sol.u[end]
 normₕ(Rₕ(Wₕ, x -&gt; uexact(x, 1.0)) - uₕ)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">2.380504758046399e-5</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2.3805047580463986e-5</code></pre>
 </div>
 <p>A surface plot of the whole time evolution, <code class="md-code-inline">x</code> and <code class="md-code-inline">t</code> the two horizontal axes, <code class="md-code-inline">u</code> as height and colour, needs no new solve: <code class="md-code-inline">sol</code> already interpolates continuously in <code class="md-code-inline">t</code>, so sampling it at a uniform grid of times is enough to lay one out. The white curve traces <code class="md-code-inline">u(x, t)</code> at the current instant and loops on its own:</p>
 <div class="md-multi-output">
@@ -388,7 +388,7 @@ uₕ_r = element(Wₕ)
 parent(uₕ_r) .= sol_rosenbrock.u[end]
 normₕ(Rₕ(Wₕ, x -&gt; uexact(x, 1.0)) - uₕ_r)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">2.3805036993673637e-5</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2.3805036993673634e-5</code></pre>
 </div>
 <p>No <code class="md-code-inline">AutoFiniteDiff()</code> and no BDF fallback: the default forward-mode <code class="md-code-inline">autodiff</code> differentiates the Jacobian through <code class="md-code-inline">u</code> only, and <code class="md-code-inline">tgrad</code> supplies the <code class="md-code-inline">t</code>-derivative directly.</p>
 <h2 id="A-time-dependent-operator" class="md-heading">A time-dependent operator<a href="#A-time-dependent-operator" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -414,7 +414,7 @@ sol_t_rosenbrock = solve(prob_t, Rodas5P(); reltol = 1e-11, abstol = 1e-13)
 sol_t_fbdf = solve(prob_t, FBDF(); reltol = 1e-11, abstol = 1e-13)
 maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end]))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">4.1046610554928975e-12</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">1.852989983675002e-12</code></pre>
 </div>
 <p>The same <code class="md-code-inline">ODEProblem</code>, one stepper differentiating through <code class="md-code-inline">t</code> by default and the other needing no <code class="md-code-inline">∂f/∂t</code> at all, land on the same answer – neither <code class="md-code-inline">AutoFiniteDiff()</code> nor a hand-written <code class="md-code-inline">tgrad</code> was needed for the operator itself.</p>
 <h2 id="Hand-rolled-backward-Euler" class="md-heading">Hand-rolled backward Euler<a href="#Hand-rolled-backward-Euler" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -472,7 +472,7 @@ end
 
 maximum(abs.(u_be .- sol_t_fbdf.u[end]))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0005879630916251211</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0005879630938767921</code></pre>
 </div>
 <p><code class="md-code-inline">assemble_add!</code>&#39;s row is <code class="md-code-inline">nonzeros(A_be)</code>, not <code class="md-code-inline">A_be</code> itself: refilling every entry the pattern holds costs the stored nonzeros, where <code class="md-code-inline">fill!(A_be, 0)</code> would walk the whole dense <code class="md-code-inline">m × n</code> index space <code class="md-code-inline">SparseMatrixCSC</code>&#39;s generic <code class="md-code-inline">AbstractArray</code> fallback covers. <code class="md-code-inline">dirichlet_bc!</code> runs <em>after</em> both accumulations, never between them – accumulating a second piece into an already-constrained row would add its own contribution on top of the identity <code class="md-code-inline">dirichlet_bc!</code> wrote there.</p>
 <p>Backward Euler at <span class="md-math md-math-inline">\(\Delta t = 1/200\)</span> against the adaptive, high-accuracy <code class="md-code-inline">FBDF</code> solve above: first order in time, so the two are close but not equal – the discrepancy this checks is bounded well above round-off and well below a scheme that regressed to a wrong answer entirely.</p>
@@ -511,9 +511,9 @@ orders = [log(errs[i] / errs[i + 1]) / log(hs[i] / hs[i + 1]) for i in 1:(length
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">4-element Vector{Float64}:
  2.006346455253545
- 2.001583630249058
- 2.00039571445426
- 2.0000988732060128</code></pre>
+ 2.0015836287997586
+ 2.0003956970539947
+ 2.000098852704134</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -598,6 +598,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=17721c40"></script>
+  <script src="../../assets/materialdocs.js?v=c2cc6aa6"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=4336b820">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=2fe8acd9">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -132,7 +132,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.point">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.point</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L317-L325" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L332-L340" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -152,22 +152,23 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.box">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.box</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L105-L112" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L105-L116" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">box(a::Number, b::Number) -&gt; CartesianProduct{1, T}
-box(a::NTuple{D}, b::NTuple{D}) -&gt; CartesianProduct{D, T}</code></pre>
+box(a::Tuple{Vararg{Number, D}}, b::Tuple{Vararg{Number, D}}) -&gt; CartesianProduct{D, T}</code></pre>
 </div>
 <p>Construct a <a href="../../internals/geometry/#Bramble.CartesianProduct"><code class="md-code-inline">CartesianProduct</code></a> from two opposing corner points <code class="md-code-inline">a</code> and <code class="md-code-inline">b</code>.</p>
+<p>The corners may mix element types: every coordinate is floated and all axes are promoted to one type <code class="md-code-inline">T</code>, so <code class="md-code-inline">box((0.0f0, 0.0), (1.0f0, 0.1))</code> is a <code class="md-code-inline">CartesianProduct{2, Float64}</code>. Homogeneous corners keep their type.</p>
 <p>Interval bounds for each dimension <code class="md-code-inline">i</code> are defined by <span class="md-math md-math-inline">\([\min(a_i, b_i), \max(a_i, b_i)]\)</span>.</p>
 </div>
 </div>
 <div class="md-docstring" id="LinearAlgebra.:×">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>LinearAlgebra.:×</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L195-L201" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L206-L212" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -189,7 +190,7 @@ box(a::NTuple{D}, b::NTuple{D}) -&gt; CartesianProduct{D, T}</code></pre>
 <div class="md-docstring" id="Bramble.dim">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.dim</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L258-L263" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L270-L275" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -203,7 +204,7 @@ dim(::Type{&lt;:AbstractSpaceType}) -&gt; Int</code></pre>
 <div class="md-docstring" id="Bramble.topo_dim">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.topo_dim</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L163-L167" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L174-L178" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -231,7 +232,7 @@ dim(::Type{&lt;:AbstractSpaceType}) -&gt; Int</code></pre>
 <div class="md-docstring" id="Base.extrema-Tuple{Bramble.CartesianProduct, Integer}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.extrema</code> — <span class="md-docstring-sig">Tuple{Bramble.CartesianProduct, Integer}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L175-L181" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L186-L192" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -246,7 +247,7 @@ extrema(X::CartesianProduct{D}) -&gt; NTuple{D, Tuple{T, T}}</code></pre>
 <div class="md-docstring" id="Bramble.center">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.center</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L123-L127" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L134-L138" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -266,7 +267,7 @@ extrema(X::CartesianProduct{D}) -&gt; NTuple{D, Tuple{T, T}}</code></pre>
 <div class="md-docstring" id="Bramble.projection">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.projection</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L221-L225" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L232-L236" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -286,7 +287,7 @@ extrema(X::CartesianProduct{D}) -&gt; NTuple{D, Tuple{T, T}}</code></pre>
 <div class="md-docstring" id="Bramble.boundary_symbols">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.boundary_symbols</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L345-L356" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L356-L367" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -317,7 +318,7 @@ boundary_symbols(D::Integer) -&gt; Tuple{Vararg{Symbol}}</code></pre>
 <div class="md-docstring" id="Bramble.markers">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.markers</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L123-L145" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L126-L156" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -330,9 +331,14 @@ markers(space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair.
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">space_set</code>: Geometric spatial set.</p>
 </li>
-<li><p><code class="md-code-inline">time_set</code>: Optional 1D temporal interval for time-dependent boundary conditions.</p>
+<li><p><code class="md-code-inline">time_set</code>: Optional 1D temporal interval for time-dependent boundary conditions. With it, every predicate <code class="md-code-inline">Function</code> takes <code class="md-code-inline">(x, t)</code>. <code class="md-code-inline">markers(...)(t)</code> fixes <code class="md-code-inline">(x, t)</code> predicates at <code class="md-code-inline">t</code> and keeps spatial <code class="md-code-inline">x</code> predicates, so it also applies to markers built without it.</p>
 </li>
-<li><p><code class="md-code-inline">pairs</code>: Vararg sequence of <code class="md-code-inline">label =&gt; identifier</code> pairs where identifier is a <code class="md-code-inline">Symbol</code>, <code class="md-code-inline">NTuple{N, Symbol}</code>, or predicate <code class="md-code-inline">Function</code>.</p>
+<li><p><code class="md-code-inline">pairs</code>: Vararg sequence of <code class="md-code-inline">label =&gt; identifier</code> pairs where identifier is a <code class="md-code-inline">Symbol</code>, a tuple (<code class="md-code-inline">NTuple{N, Symbol}</code>), <code class="md-code-inline">AbstractVector{Symbol}</code> or <code class="md-code-inline">AbstractSet{Symbol}</code> of boundary symbols, or a predicate <code class="md-code-inline">Function</code> (<code class="md-code-inline">x -&gt; Bool</code>, or <code class="md-code-inline">(x, t) -&gt; Bool</code> with <code class="md-code-inline">time_set</code>).</p>
+</li>
+</ul>
+<p><strong>Throws</strong></p>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">ArgumentError</code>: if an identifier is of any other kind (for example a <code class="md-code-inline">String</code>, a <code class="md-code-inline">Dict</code> or a callable object that is not a <code class="md-code-inline">Function</code>), names a symbol that is not a boundary of <code class="md-code-inline">space_set</code>, or, with <code class="md-code-inline">time_set</code>, is a predicate that does not accept <code class="md-code-inline">(x, t)</code>.</p>
 </li>
 </ul>
 <p><strong>Examples</strong></p>
@@ -360,12 +366,13 @@ true</code></pre>
 <pre><code class="language-julia">markers(Ωₕ::AbstractMeshType) -&gt; MeshMarkers</code></pre>
 </div>
 <p>Return the <a href="../../internals/mesh/#Bramble.MeshMarkers"><code class="md-code-inline">MeshMarkers</code></a> dictionary associated with mesh <code class="md-code-inline">Ωₕ</code>.</p>
+<p>The dictionary and its <code class="md-code-inline">BitVector</code>s are read-only views of the mesh&#39;s labels. Change labels with <code class="md-code-inline">markers!</code> or <code class="md-code-inline">set_markers!</code>, which rebuild the marker state assembly reads; an edit made in place is not seen by assembly.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.domain">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.domain</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L79-L105" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L86-L113" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -387,7 +394,7 @@ domain(space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair..
 </li>
 <li><p><code class="md-code-inline">space_set</code>: Spatial bounding set.</p>
 </li>
-<li><p><code class="md-code-inline">time_set</code>: 1D temporal interval for time-dependent boundary conditions.</p>
+<li><p><code class="md-code-inline">time_set</code>: 1D temporal interval for time-dependent boundary conditions. Predicate identifiers then take <code class="md-code-inline">(x, t)</code>, and an <code class="md-code-inline">x -&gt; Bool</code> predicate throws an <code class="md-code-inline">ArgumentError</code>.</p>
 </li>
 </ul>
 <p><strong>Examples</strong></p>
@@ -443,6 +450,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=4336b820"></script>
+  <script src="../../assets/materialdocs.js?v=2fe8acd9"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b71fbd80">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b29b36ab">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -237,7 +237,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.assemble">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L273-L286" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L342-L355" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -282,7 +282,7 @@ u = A \ F</code></pre>
 <div class="md-docstring" id="Bramble.assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L965-L995" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1034-L1064" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -337,7 +337,7 @@ u = A \ F</code></pre>
 <div class="md-docstring" id="Bramble.assemble_parallel!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble_parallel!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1183-L1190" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1252-L1259" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -409,7 +409,7 @@ end</code></pre>
 <h2 id="Matrix-free-Kronecker-operators" class="md-heading">Matrix-free Kronecker operators<a href="#Matrix-free-Kronecker-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>For a separable <code class="md-code-inline">BilinearForm</code> (one whose assembled matrix is an exact sum of Kronecker products of one-dimensional factors over a <code class="md-code-inline">MeshnD</code>), <code class="md-code-inline">kronecker_operator</code> builds a <code class="md-code-inline">KroneckerLinearOperator</code> that applies in one fused pass over the grid instead of ever assembling the <code class="md-code-inline">D</code>-dimensional matrix: a <code class="md-code-inline">200^3</code> mesh stores <code class="md-code-inline">O(200)</code> numbers per axis rather than the assembled matrix&#39;s <code class="md-code-inline">O(200^3)</code> stored entries. <code class="md-code-inline">is_separable</code> checks the condition beforehand and lists what factors.</p>
 <p>What factors: the difference, average, jump and shift families along any axis and chains of them, so mixed derivatives and advection terms (whose factors need not be symmetric); <code class="md-code-inline">innerₕ</code>, <code class="md-code-inline">inner₊</code> and <code class="md-code-inline">inner_Γ</code> weights; a restriction to <code class="md-code-inline">:interior</code>; a grid-function coefficient that varies along one axis; and scalar or <code class="md-code-inline">Ref</code> coefficients. A composite space whose leaves share one mesh gives a block operator, one Kronecker operator per block. What does not: a coefficient varying along several axes, other region restrictions (Dirichlet rows included), an interpolation, a 1D mesh, trial and test spaces on different meshes, and the star and cross-weighted differences. A grid-function coefficient is read once, when the operator is built, and warns so; use a <code class="md-code-inline">Ref</code> for a coefficient that changes, or <code class="md-code-inline">matrix_free_operator</code>, which reads it live. Under <code class="md-code-inline">CpuThreaded</code> the product runs threaded, and an operator whose mesh was mutated in place afterwards throws instead of applying.</p>
-<p><code class="md-code-inline">fdm_solve</code> requires <code class="md-code-inline">using Kronecker</code> (the <code class="md-code-inline">BrambleKroneckerExt</code> extension) and solves a separable, constant-coefficient system by fast diagonalisation instead of a general sparse factorisation.</p>
+<p><code class="md-code-inline">fdm_solve</code> requires <code class="md-code-inline">using Kronecker</code> (the <code class="md-code-inline">BrambleKroneckerExt</code> extension) and solves a Laplacian-like system without a general sparse factorisation: one whose terms each differ from one mass per axis on at most one axis. A symmetric one is solved by fast diagonalisation, a non-symmetric one (advection terms) by a Schur-form solve. A form with a mixed derivative is refused; use <code class="md-code-inline">fdm_preconditioner</code> (in <a href="../../api_sciml/">Scientific computing</a>) to precondition a Krylov solver with its Laplacian-like part. <code class="md-code-inline">fdm_factorize</code> factorises once, and <code class="md-code-inline">fdm_solve!</code> then solves each right-hand side with zero allocations; <code class="md-code-inline">fdm_factorize!</code> refills that factorisation after a coefficient or the mesh changed, without building it again.</p>
 <div class="md-docstring" id="Bramble.is_separable">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.is_separable</code></h4>
@@ -430,16 +430,14 @@ end</code></pre>
 </li>
 <li><p>a restriction to <code class="md-code-inline">:interior</code>, provided the mesh&#39;s <code class="md-code-inline">:interior</code> marker is the geometric one (the product of its axes&#39; own interiors);</p>
 </li>
-<li><p>a grid-function coefficient that varies along one axis only, and a plain number inside a side;</p>
+<li><p>a grid-function coefficient that varies along one axis only;</p>
 </li>
-<li><p>a scalar or <code class="md-code-inline">Ref</code> coefficient around a term.</p>
+<li><p>a scalar or <code class="md-code-inline">Ref</code> coefficient around a term or inside a side, so the simplifier merging <code class="md-code-inline">innerₕ(u, v) + a * innerₕ(D₋ₓ(u), v)</code> into <code class="md-code-inline">innerₕ(u + a * D₋ₓ(u), v)</code> changes nothing, and a <code class="md-code-inline">Ref</code> is read at every product.</p>
 </li>
 </ul>
 <p>What does not, and answers <code class="md-code-inline">false</code>:</p>
 <ul class="md-list-tight">
 <li><p>a grid-function coefficient varying along several axes, or living on another mesh;</p>
-</li>
-<li><p>a <code class="md-code-inline">Ref</code> merged inside a side with other terms;</p>
 </li>
 <li><p>a region restriction other than <code class="md-code-inline">:interior</code>, including Dirichlet rows;</p>
 </li>
@@ -469,7 +467,7 @@ is_separable(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(fₕ * u, v)))  # false: var
 <div class="md-docstring" id="Bramble.kronecker_operator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.kronecker_operator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L486-L537" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L487-L538" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -528,7 +526,7 @@ K * x ≈ assemble(a) * x</code></pre>
 <div class="md-docstring" id="Bramble.fdm_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fdm_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L26-L41" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L26-L47" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -536,10 +534,119 @@ K * x ≈ assemble(a) * x</code></pre>
 <pre><code class="language-julia">fdm_solve(a::BilinearForm, F::AbstractVector; dirichlet = nothing) -&gt; Vector
 fdm_solve(K::KroneckerLinearOperator, F::AbstractVector) -&gt; Vector</code></pre>
 </div>
-<p>Directly solve <code class="md-code-inline">assemble(a) \ F</code> (or the linear system <code class="md-code-inline">K</code> represents) for a separable, constant-coefficient <code class="md-code-inline">BilinearForm</code> by fast diagonalisation, without assembling <code class="md-code-inline">a</code>&#39;s matrix.</p>
+<p>Directly solve <code class="md-code-inline">assemble(a) \ F</code> (or the linear system <code class="md-code-inline">K</code> represents) for a Laplacian-like <code class="md-code-inline">BilinearForm</code>, without assembling <code class="md-code-inline">a</code>&#39;s matrix. A form is Laplacian-like when it is separable and every term differs from one mass per axis on at most one axis. Symmetric 1D operators are solved by fast diagonalisation; non-symmetric ones (advection terms) by a complex generalised Schur factorisation per axis and a triangular back substitution. A mixed-derivative form is refused: precondition a Krylov solver with <a href="../../api_sciml/#Bramble.fdm_preconditioner"><code class="md-code-inline">fdm_preconditioner</code></a> instead. <a href="../../api/forms/#Bramble.fdm_factorize"><code class="md-code-inline">fdm_factorize</code></a> and <a href="../../api/forms/#Bramble.fdm_solve!"><code class="md-code-inline">fdm_solve!</code></a> split the factorisation from the solve.</p>
 <p><code class="md-code-inline">dirichlet</code>, when given, must request homogeneous Dirichlet conditions on the whole mesh boundary; <code class="md-code-inline">K</code> alone carries no boundary handling, since a <code class="md-code-inline">KroneckerLinearOperator</code> has no tensor structure of its own to restrict.</p>
 <p>Requires <a href="https://github.com/MichielStock/Kronecker.jl">Kronecker.jl</a>; call <code class="md-code-inline">using Kronecker</code> before calling this function.</p>
 <p>See also: <a href="../../api/forms/#Bramble.kronecker_operator"><code class="md-code-inline">kronecker_operator</code></a>, <a href="../../api/forms/#Bramble.KroneckerLinearOperator"><code class="md-code-inline">KroneckerLinearOperator</code></a>, <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a>.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.fdm_factorize">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.fdm_factorize</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L102-L148" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">fdm_factorize(a::BilinearForm; dirichlet = nothing)
+fdm_factorize(K::KroneckerLinearOperator; dirichlet = nothing)</code></pre>
+</div>
+<p>Factorise, once, the system <a href="../../api/forms/#Bramble.fdm_solve"><code class="md-code-inline">fdm_solve</code></a> solves, so that each further right-hand side costs only the solve. The result supports <a href="../../api/forms/#Bramble.fdm_solve!"><code class="md-code-inline">fdm_solve!</code></a>, <code class="md-code-inline">ldiv!(x, f, F)</code> (the same solve) and <code class="md-code-inline">size</code>; its type is internal. <code class="md-code-inline">fdm_solve(a, F)</code> is <code class="md-code-inline">fdm_factorize(a)</code> followed by one solve.</p>
+<p><code class="md-code-inline">a</code> must be a form <code class="md-code-inline">fdm_solve</code> accepts, and <code class="md-code-inline">fdm_factorize(a; dirichlet)</code> refuses what <code class="md-code-inline">fdm_solve(a, F; dirichlet)</code> refuses. <code class="md-code-inline">K</code> must be Laplacian-like, as for <code class="md-code-inline">fdm_solve(K, F)</code>; unlike that method, <code class="md-code-inline">fdm_factorize(K)</code> also takes <code class="md-code-inline">dirichlet = :boundary</code>. With <code class="md-code-inline">dirichlet = :boundary</code>, each right-hand side must be zero on the boundary and the solution is zero there. The factorisation is built from the mesh and coefficients as they are when <code class="md-code-inline">fdm_factorize</code> is called: after <a href="../../api/meshes/#Bramble.change_points!"><code class="md-code-inline">change_points!</code></a> or a change of a coefficient (a <code class="md-code-inline">Ref</code> one included), refill it with <a href="../../api/forms/#Bramble.fdm_factorize!"><code class="md-code-inline">fdm_factorize!</code></a>, or call <code class="md-code-inline">fdm_factorize</code> again. Construction costs <code class="md-code-inline">O(n_d^3)</code> per axis; a solve on host vectors costs <code class="md-code-inline">O(N Σ_d n_d)</code> and allocates nothing. The factorisation is host-only.</p>
+<p>Requires <a href="https://github.com/MichielStock/Kronecker.jl">Kronecker.jl</a>; call <code class="md-code-inline">using Kronecker</code> before calling this function.</p>
+<p><strong>Throws</strong></p>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">ArgumentError</code> saying <code class="md-code-inline">fdm_solve</code> does not support the form or operator, with the reason, for one that is not Laplacian-like or is singular.</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet</code> is neither <code class="md-code-inline">nothing</code> nor <code class="md-code-inline">:boundary</code>.</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code> naming <code class="md-code-inline">change_points!</code>: <code class="md-code-inline">K</code>&#39;s mesh was mutated in place after <code class="md-code-inline">K</code> was built; build the operator again.</p>
+</li>
+</ul>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble, Kronecker
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (25, 19), (false, false))
+Wₕ = gridspace(Ωₕ)
+a = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+f = fdm_factorize(a)
+x = zeros(ndofs(Wₕ))
+for k in 1:3
+    F = rand(ndofs(Wₕ))
+    fdm_solve!(x, f, F)   # x ≈ assemble(a) \ F
+end</code></pre>
+</div>
+<p>See also: <a href="../../api/forms/#Bramble.fdm_solve!"><code class="md-code-inline">fdm_solve!</code></a>, <a href="../../api/forms/#Bramble.fdm_solve"><code class="md-code-inline">fdm_solve</code></a>, <a href="../../api_sciml/#Bramble.fdm_preconditioner"><code class="md-code-inline">fdm_preconditioner</code></a>.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.fdm_factorize!">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.fdm_factorize!</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L151-L210" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">fdm_factorize!(f, a::BilinearForm) -&gt; f
+fdm_factorize!(f, K::KroneckerLinearOperator) -&gt; f</code></pre>
+</div>
+<p>Refill the factorisation <code class="md-code-inline">f</code>, which <a href="../../api/forms/#Bramble.fdm_factorize"><code class="md-code-inline">fdm_factorize</code></a> returned, from <code class="md-code-inline">a</code> or <code class="md-code-inline">K</code>, and return <code class="md-code-inline">f</code>. Use it in place of a new <code class="md-code-inline">fdm_factorize</code> when the structure is the same and only the numbers changed: a coefficient that is a scalar or a <code class="md-code-inline">Ref</code> took a new value, or <a href="../../api/meshes/#Bramble.change_points!"><code class="md-code-inline">change_points!</code></a> moved the grid points and <code class="md-code-inline">a</code> is a form on a new <code class="md-code-inline">gridspace</code> (or <code class="md-code-inline">K</code> a new <a href="../../api/forms/#Bramble.kronecker_operator"><code class="md-code-inline">kronecker_operator</code></a>) built after it. <code class="md-code-inline">f</code> keeps its <code class="md-code-inline">dirichlet</code>: there is no keyword here. Afterwards <code class="md-code-inline">fdm_solve!(x, f, F)</code> solves the new system, and agrees bitwise with the solve of a fresh <code class="md-code-inline">fdm_factorize</code>, unless a term&#39;s coefficient is now zero: that term keeps its place, and the two agree to rounding. Only <code class="md-code-inline">Float32</code> and <code class="md-code-inline">Float64</code> are supported.</p>
+<p>With <code class="md-code-inline">K</code>, a refill allocates nothing once warm. With <code class="md-code-inline">a</code>, it allocates nothing once warm for the form <code class="md-code-inline">f</code> was built (or last refilled) from, when only scalar or <code class="md-code-inline">Ref</code> coefficients changed. A different form is projected again, and so is one that reads a grid-function coefficient, so that an edit made with <code class="md-code-inline">Rₕ!</code> is read and never ignored; both allocate. The operator or form must have the structure <code class="md-code-inline">f</code> was built for: the same dimension, sizes, eltype, number of terms, mass term on each axis, terms left out at build (a zero coefficient, or a factor that is zero on the solved points), and symmetric or non-symmetric (Schur) solve. Anything else needs a new <code class="md-code-inline">fdm_factorize</code>. A <code class="md-code-inline">KroneckerLinearOperator</code> backed by a device is refused: the refill is host-only. An <a href="../../api_sciml/#Bramble.FDMPreconditioner"><code class="md-code-inline">FDMPreconditioner</code></a> is not refilled.</p>
+<p>Requires <a href="https://github.com/MichielStock/Kronecker.jl">Kronecker.jl</a>; call <code class="md-code-inline">using Kronecker</code> before calling this function.</p>
+<p><strong>Throws</strong></p>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">ArgumentError</code> starting <code class="md-code-inline">fdm_factorize! cannot refill this factorisation</code>, then the reason: <code class="md-code-inline">a</code> or <code class="md-code-inline">K</code> differs from <code class="md-code-inline">f</code> in dimension, size, eltype, number of terms, mass term, a term left out at build that is present now, or whether the solve is symmetric or Schur, or <code class="md-code-inline">K</code> is backed by a device. <code class="md-code-inline">f</code> is left as it was and still solves.</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code>: the refilled system is one <code class="md-code-inline">fdm_solve</code> refuses, singular or with a mass that is not symmetric positive definite. <code class="md-code-inline">f</code> then cannot solve, and <a href="../../api/forms/#Bramble.fdm_solve!"><code class="md-code-inline">fdm_solve!</code></a> says so, until a later refill succeeds.</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code> naming <code class="md-code-inline">change_points!</code>: the mesh of <code class="md-code-inline">a</code> or <code class="md-code-inline">K</code> was mutated in place after it was built; build the form on a new <code class="md-code-inline">gridspace</code> (or the operator again).</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code> saying <code class="md-code-inline">fdm_solve</code> does not support the form, with the reason: <code class="md-code-inline">a</code> is on a composite space, or is not separable.</p>
+</li>
+</ul>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble, Kronecker
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (25, 19), (false, false))
+Wₕ = gridspace(Ωₕ)
+c = Ref(1.0)
+a = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v)))
+f = fdm_factorize(a)
+F = rand(ndofs(Wₕ))
+x = zeros(ndofs(Wₕ))
+for k in 1:3
+    c[] = 10.0^k
+    fdm_factorize!(f, a)   # no allocation once warm: only a Ref changed
+    fdm_solve!(x, f, F)    # x ≈ assemble(a) \ F
+end</code></pre>
+</div>
+<p>See also: <a href="../../api/forms/#Bramble.fdm_factorize"><code class="md-code-inline">fdm_factorize</code></a>, <a href="../../api/forms/#Bramble.fdm_solve!"><code class="md-code-inline">fdm_solve!</code></a>, <a href="../../api/forms/#Bramble.fdm_solve"><code class="md-code-inline">fdm_solve</code></a>.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.fdm_solve!">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.fdm_solve!</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L213-L232" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">fdm_solve!(x::AbstractVector, f, F::AbstractVector) -&gt; x</code></pre>
+</div>
+<p>Solve into <code class="md-code-inline">x</code>, with the factorisation <code class="md-code-inline">f</code> that <a href="../../api/forms/#Bramble.fdm_factorize"><code class="md-code-inline">fdm_factorize</code></a> returned, the system it was built for, right-hand side <code class="md-code-inline">F</code>. With <code class="md-code-inline">dirichlet = :boundary</code>, <code class="md-code-inline">x</code> is zero on the boundary. <code class="md-code-inline">x</code> may alias <code class="md-code-inline">F</code>. On host vectors it allocates nothing.</p>
+<p>Requires <a href="https://github.com/MichielStock/Kronecker.jl">Kronecker.jl</a>; call <code class="md-code-inline">using Kronecker</code> before calling this function.</p>
+<p><strong>Throws</strong></p>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">DimensionMismatch</code>: <code class="md-code-inline">x</code> or <code class="md-code-inline">F</code> does not have <code class="md-code-inline">size(f, 1)</code> entries.</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">x</code> or <code class="md-code-inline">F</code> is not 1-based.</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code> naming <code class="md-code-inline">fdm_factorize!</code>: the last <a href="../../api/forms/#Bramble.fdm_factorize!"><code class="md-code-inline">fdm_factorize!</code></a> of <code class="md-code-inline">f</code> was refused because the system is singular or its mass is not symmetric positive definite. Refill <code class="md-code-inline">f</code> before solving again.</p>
+</li>
+</ul>
+<p>See also: <a href="../../api/forms/#Bramble.fdm_factorize"><code class="md-code-inline">fdm_factorize</code></a>, <a href="../../api/forms/#Bramble.fdm_factorize!"><code class="md-code-inline">fdm_factorize!</code></a>, <a href="../../api/forms/#Bramble.fdm_solve"><code class="md-code-inline">fdm_solve</code></a>.</p>
 </div>
 </div>
 <h2 id="Matrix-free-operators" class="md-heading">Matrix-free operators<a href="#Matrix-free-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -547,7 +654,7 @@ fdm_solve(K::KroneckerLinearOperator, F::AbstractVector) -&gt; Vector</code></pr
 <div class="md-docstring" id="Bramble.matrix_free_operator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.matrix_free_operator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/matrix_free.jl#L184-L231" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/matrix_free.jl#L199-L246" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -602,7 +709,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.MatrixFreeOperator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.MatrixFreeOperator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/matrix_free.jl#L113-L161" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/matrix_free.jl#L128-L176" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -763,7 +870,7 @@ sparse_ad = AutoSparse(AutoForwardDiff();
 <div class="md-docstring" id="Bramble.dirichlet_bc!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.dirichlet_bc!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L267-L276" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L268-L277" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -821,7 +928,7 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only</code></
 <div class="md-docstring" id="Bramble.symmetrize!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.symmetrize!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L708-L718" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L709-L719" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -978,6 +1085,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=b71fbd80"></script>
+  <script src="../../assets/materialdocs.js?v=b29b36ab"></script>
 </body>
 </html>

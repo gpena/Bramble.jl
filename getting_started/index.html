@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Getting started — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=62e96bf1">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=92729d58">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Getting started — Bramble.jl">
   <meta property="og:title" content="Getting started — Bramble.jl">
@@ -172,7 +172,7 @@ uₕ .= A \ F
 
 normₕ(uₕ .- Rₕ(Wₕ, uexact))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0004017888396867575</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0004017888396870854</code></pre>
 </div>
 <p>Four parts in ten thousand. Halving the spacing should cut that by four, since the scheme is second order:</p>
 <div class="md-multi-output">
@@ -196,7 +196,7 @@ e₁, e₂ = poisson_error(33), poisson_error(65)
 
 e₁, e₂, log2(e₁ / e₂)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0004017888396867575, 0.00010041090485595501, 2.0005215337097284)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0004017888396870854, 0.00010041090485689163, 2.0005215336974485)</code></pre>
 </div>
 <h2 id="What-each-step-gives-you" class="md-heading">What each step gives you<a href="#What-each-step-gives-you" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>The form is the step worth dwelling on. <code class="md-code-inline">a</code> and <code class="md-code-inline">l</code> are expressions in the trial and test functions, not matrices: <code class="md-code-inline">form</code> stores the expression, and <code class="md-code-inline">assemble</code> is what walks the mesh. That separation is what lets the same <code class="md-code-inline">a</code> be refilled every step of a time loop, handed to a nonlinear solver, or differentiated.</p>
@@ -209,6 +209,8 @@ e₁, e₂, log2(e₁ / e₂)</code></pre>
 <li><p>The <a href="../examples/poisson_linear/">worked examples</a> run the whole chain on real problems, a Poisson problem, a convection-diffusion problem and a heat equation.</p>
 </li>
 </ul>
+<h2 id="Coding-with-Claude" class="md-heading">Coding with Claude<a href="#Coding-with-Claude" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>The repository includes a <a href="https://code.claude.com">Claude Code</a> plugin with the API by task, the rules that keep Bramble code correct (exported versus <code class="md-code-inline">public</code> names, seeding random meshes, literal integer coefficients in forms) and worked examples whose results are checked. Install it from Claude Code with <code class="md-code-inline">/plugin marketplace add gpena/Bramble.jl</code>, then <code class="md-code-inline">/plugin install bramble@bramble</code>.</p>
 <h2 id="Reading-order" class="md-heading">Reading order<a href="#Reading-order" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>Read the tutorials in the order of the sidebar, top to bottom. Each line says what the page teaches.</p>
 <ul class="md-list-tight">
@@ -236,6 +238,7 @@ e₁, e₂, log2(e₁ / e₂)</code></pre>
           <a class="md-toc-link md-toc-h2" href="#The-problem">The problem</a>
           <a class="md-toc-link md-toc-h2" href="#The-code">The code</a>
           <a class="md-toc-link md-toc-h2" href="#What-each-step-gives-you">What each step gives you</a>
+          <a class="md-toc-link md-toc-h2" href="#Coding-with-Claude">Coding with Claude</a>
           <a class="md-toc-link md-toc-h2" href="#Reading-order">Reading order</a>
       </div>
     </aside>
@@ -254,6 +257,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=62e96bf1"></script>
+  <script src="../assets/materialdocs.js?v=92729d58"></script>
 </body>
 </html>

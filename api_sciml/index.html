@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scientific computing: SciML, AD and solvers — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=cef8f80b">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=b0f218e5">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
   <meta property="og:title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
@@ -983,10 +983,69 @@ true</code></pre>
 <p>See also: <a href="../api_sciml/#Bramble.chebyshev_preconditioner"><code class="md-code-inline">chebyshev_preconditioner</code></a>, <a href="../api_sciml/#Bramble.max_eigenvalue_estimate"><code class="md-code-inline">max_eigenvalue_estimate</code></a>, <a href="../api_sciml/#Bramble.AbstractMatrixFreePreconditioner"><code class="md-code-inline">AbstractMatrixFreePreconditioner</code></a>.</p>
 </div>
 </div>
+<div class="md-docstring" id="Bramble.fdm_preconditioner">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.fdm_preconditioner</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L50-L99" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">fdm_preconditioner(a::BilinearForm; dirichlet = nothing) -&gt; FDMPreconditioner</code></pre>
+</div>
+<p>A preconditioner for <code class="md-code-inline">assemble(a; dirichlet)</code> that applies the fast-diagonalisation inverse of <code class="md-code-inline">a</code>&#39;s Laplacian-like part, factorised once, without assembling <code class="md-code-inline">a</code>&#39;s matrix. The Laplacian-like part keeps the terms <a href="../api/forms/#Bramble.fdm_solve"><code class="md-code-inline">fdm_solve</code></a> can solve: with one mass per axis, every term that differs from the masses on at most one axis. Every term differing on two or more axes (a mixed derivative such as <code class="md-code-inline">innerₕ(D₋ₓ(D₋ᵧ(u)), v)</code>, or a coefficient varying along two axes) is left out of the preconditioner, though the Krylov solver still sees it in <code class="md-code-inline">assemble(a)</code>. For a form <code class="md-code-inline">fdm_solve</code> accepts, the preconditioner is the exact inverse.</p>
+<p>Use it for a mixed-derivative form whose cross term the diffusion dominates, so that what it leaves out is small beside what it inverts. The larger the cross term, the more work it leaves to the Krylov solver. A form <code class="md-code-inline">fdm_solve</code> accepts needs no Krylov solver at all.</p>
+<p><code class="md-code-inline">dirichlet</code> is <code class="md-code-inline">nothing</code> (the unconstrained system) or <code class="md-code-inline">:boundary</code> (homogeneous Dirichlet on the whole mesh boundary): there the boundary rows of <code class="md-code-inline">assemble(a; dirichlet = :boundary)</code> are identity rows, so the preconditioner is the identity on them and the interior factorisation inside. Construction costs <code class="md-code-inline">O(n_d^3)</code> per axis; an <code class="md-code-inline">ldiv!</code> on host vectors costs <code class="md-code-inline">O(N Σ_d n_d)</code> and allocates nothing. The preconditioner is host-only.</p>
+<p>Requires <a href="https://github.com/MichielStock/Kronecker.jl">Kronecker.jl</a>; call <code class="md-code-inline">using Kronecker</code> before calling this function.</p>
+<p><strong>Throws</strong></p>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">ArgumentError</code> saying <code class="md-code-inline">fdm_preconditioner</code> does not support the form, with the reason, for a form with no usable Laplacian-like part: <code class="md-code-inline">a</code> is not separable, it is posed on a composite space, a mass is not symmetric positive definite, an axis has no term of its own once the two-axis terms are left out (the form has no Laplacian-like part), or that part is singular. These are <code class="md-code-inline">fdm_solve</code>&#39;s refusals, a two-axis term apart.</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet</code> is neither <code class="md-code-inline">nothing</code> nor <code class="md-code-inline">:boundary</code>.</p>
+</li>
+</ul>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble, Kronecker, LinearSolve
+using Bramble: D₋ₓ, D₋ᵧ
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (33, 25), (false, false))
+Wₕ = gridspace(Ωₕ)
+a = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+                           0.25 * innerₕ(D₋ₓ(D₋ᵧ(u)), v))
+P = fdm_preconditioner(a)
+A = assemble(a)
+F = rand(ndofs(Wₕ))
+sol = solve(LinearProblem(A, F), KrylovJL_GMRES(); Pl = P)</code></pre>
+</div>
+<p>See also: <a href="../api_sciml/#Bramble.FDMPreconditioner"><code class="md-code-inline">FDMPreconditioner</code></a>, <a href="../api/forms/#Bramble.fdm_solve"><code class="md-code-inline">fdm_solve</code></a>, <a href="../api_sciml/#Bramble.jacobi_preconditioner"><code class="md-code-inline">jacobi_preconditioner</code></a>.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.FDMPreconditioner">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.FDMPreconditioner</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L146-L160" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">FDMPreconditioner{T, F} &lt;: AbstractMatrixFreePreconditioner{T}</code></pre>
+</div>
+<p>The fast-diagonalisation preconditioner of a separable <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a>: <code class="md-code-inline">ldiv!(y, P, x)</code> applies the exact inverse of the form&#39;s Laplacian-like part (every term that differs from one mass per axis on at most one axis), factorised once, and allocates nothing on host vectors. Under <code class="md-code-inline">dirichlet = :boundary</code> it is the identity on the boundary rows. Build one with <a href="../api_sciml/#Bramble.fdm_preconditioner"><code class="md-code-inline">fdm_preconditioner</code></a>, which needs <code class="md-code-inline">using Kronecker</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">T</code>: The element type of the form&#39;s Kronecker operator.</p>
+</li>
+<li><p><code class="md-code-inline">F</code>: The type of the stored factorisation, the one <code class="md-code-inline">BrambleKroneckerExt</code> builds.</p>
+</li>
+</ul>
+<p>See also: <a href="../api_sciml/#Bramble.fdm_preconditioner"><code class="md-code-inline">fdm_preconditioner</code></a>, <a href="../api_sciml/#Bramble.AbstractMatrixFreePreconditioner"><code class="md-code-inline">AbstractMatrixFreePreconditioner</code></a>.</p>
+</div>
+</div>
 <div class="md-docstring" id="Bramble.max_eigenvalue_estimate">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.max_eigenvalue_estimate</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/chebyshev.jl#L203-L252" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/chebyshev.jl#L203-L253" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1022,7 +1081,8 @@ true</code></pre>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">using Bramble, LinearAlgebra
+<pre><code class="language-julia">using Bramble, LinearAlgebra, Random
+Random.seed!(1)
 Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 33, false))
 a = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 λ = eigmax(Symmetric(Matrix(assemble(a))))
@@ -1389,7 +1449,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.red_black_gauss_seidel">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.red_black_gauss_seidel</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L305-L365" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L305-L366" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1433,7 +1493,8 @@ red_black_gauss_seidel(op::MatrixFreeOperator; sweeps = 1) -&gt; RedBlackGaussSe
 <p>After a sweep the residual vanishes at the black points, whose equations the black half has just solved exactly.</p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">using Bramble
+<pre><code class="language-julia">using Bramble, Random
+Random.seed!(1)
 Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 11, false))
 a = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 x, b = rand(ndofs(Wₕ)), rand(ndofs(Wₕ))
@@ -1449,7 +1510,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.smooth!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.smooth!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L442-L491" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L443-L492" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2477,6 +2538,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=cef8f80b"></script>
+  <script src="../assets/materialdocs.js?v=b0f218e5"></script>
 </body>
 </html>
