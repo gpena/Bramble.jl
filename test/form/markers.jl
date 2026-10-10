@@ -35,6 +35,10 @@ using Bramble: dot, D₋ᵧ, D₋ₓ, inner₊ᵧ, inner₊ₓ
         a1 = form(Wₕ, Wₕ, (u, v) -> inner₊(D₋ₓ(u), D₋ₓ(v); markers = (:bottom,)))
         a2 = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v); markers = (:bottom,)))
         @test assemble(a1) ≈ assemble(a2)
+        # both spellings share the restriction: pin it to the unrestricted rows on :bottom
+        on_bottom = Bramble.index_in_marker(Ωₕ, :bottom)
+        full = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+        @test assemble(a1) ≈ on_bottom .* assemble(full)
     end
 
     @testset "Gradient tuple inner₊" begin
@@ -46,6 +50,11 @@ using Bramble: dot, D₋ᵧ, D₋ₓ, inner₊ᵧ, inner₊ₓ
                       inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v); markers = (:bottom,))
         )
         @test assemble(a) ≈ assemble(b)
+        # both spellings share the restriction: pin it to unrestricted rows on :bottom. The
+        # y part has no quadrature point on y = 0, so only the x part's rows remain
+        on_bottom = Bramble.index_in_marker(Ωₕ, :bottom)
+        full_x = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+        @test assemble(a) ≈ on_bottom .* assemble(full_x)
     end
 
     @testset "Linear form restriction" begin
@@ -57,6 +66,9 @@ using Bramble: dot, D₋ᵧ, D₋ₓ, inner₊ᵧ, inner₊ₓ
         # restricted to :bottom, only entries on that edge are nonzero
         Ωₕ_bottom_mask = Bramble.index_in_marker(Ωₕ, :bottom)
         @test all(iszero, assemble(l1)[.!Ωₕ_bottom_mask])
+        # and the entries on it are the unrestricted ones: the two checks above pass with a
+        # marked point dropped
+        @test assemble(l1) ≈ Ωₕ_bottom_mask .* assemble(form(Wₕ, v -> innerₕ(fₕ, v)))
     end
 
     @testset "Reserved markers" begin
@@ -68,6 +80,10 @@ using Bramble: dot, D₋ᵧ, D₋ₓ, inner₊ᵧ, inner₊ₓ
         @test dot(vₕ.data, assemble(a_boundary) * uₕ.data) +
               dot(vₕ.data, assemble(a_interior) * uₕ.data) ≈
               dot(vₕ.data, assemble(full) * uₕ.data)
+        # the sum cannot tell the two regions apart: each is the mass on its own rows
+        on_boundary = Bramble.index_in_marker(Ωₕ, :boundary)
+        @test assemble(a_boundary) ≈ on_boundary .* assemble(full)
+        @test assemble(a_interior) ≈ .!on_boundary .* assemble(full)
     end
 
     @testset "Unknown marker error" begin
