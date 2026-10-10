@@ -666,6 +666,13 @@ end
             xml = read(joinpath(dir, entries[1].file), String)
             @test occursin("Name=\"u\" NumberOfComponents=\"1\"", xml)
         end
+
+        # The (t, u) pairs written: the appended data is compressed, so they are read where
+        # the extension builds them, against the hand-built solution's own states.
+        VE = Base.get_extension(Bramble, :BrambleVTKSciMLExt)
+        steps = VE._solution_steps(sol, nothing)
+        @test first.(steps) == ts
+        @test last.(steps) == [u0, u1, u2]
     end
 
     @testset "interpolated times, custom field name" begin
@@ -681,6 +688,17 @@ end
             xml = read(joinpath(dir, entries[1].file), String)
             @test occursin("Name=\"temperature\" NumberOfComponents=\"1\"", xml)
         end
+
+        # `build_solution` interpolates linearly: t = 0.25 is 0.625 of the way across
+        # [0, 0.4], and t = 0.75 is 0.35/0.6 of the way across [0.4, 1].
+        VE = Base.get_extension(Bramble, :BrambleVTKSciMLExt)
+        steps = VE._solution_steps(sol, range(0.0, 1.0; length = 5))
+        @test first.(steps) == collect(range(0.0, 1.0; length = 5))
+        @test steps[1][2] ≈ u0
+        @test steps[2][2] ≈ u0 .+ 0.625 .* (u1 .- u0)
+        @test steps[3][2] ≈ u1 .+ (0.1 / 0.6) .* (u2 .- u1)
+        @test steps[4][2] ≈ u1 .+ (0.35 / 0.6) .* (u2 .- u1)
+        @test steps[5][2] ≈ u2
     end
 end
 
