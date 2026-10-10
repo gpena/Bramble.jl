@@ -69,6 +69,13 @@ using Bramble
             @test_throws "has length 3, but the mesh has 5 points" export_pgfplots(
                 joinpath(dir, "t"), Ωₕ, "u" => [1.0, 2.0, 3.0]
             )
+
+            # A VectorElement from a mesh of another size, among correct fields, is named.
+            Ωs = mesh(domain(interval(0.0, 1.0)), 3, true)
+            wₕ = Rₕ(gridspace(Ωs), x -> x[1])
+            @test_throws "\"w\" has length 3, but the mesh has 5 points" export_pgfplots(
+                joinpath(dir, "t"), Ωₕ, "a" => zeros(5), "w" => wₕ, "b" => zeros(Float32, 5)
+            )
         end
     end
 
