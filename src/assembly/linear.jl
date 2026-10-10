@@ -221,11 +221,11 @@ function _typed_restrictions(op::ShiftNode{D, Dim}, sp, reach) where {D, Dim}
 end
 
 @noinline function _shift_reach(cart::CartesianIndices, step::CartesianIndex, reach::BitVector)
-    lins = LinearIndices(cart)
+    lin_of = LinearIndices(cart)
     moved = falses(length(reach))
     for lin in findall(reach)
         J = cart[lin] + step
-        checkbounds(Bool, lins, J) && (moved[lins[J]] = true)
+        checkbounds(Bool, lin_of, J) && (moved[lin_of[J]] = true)
     end
     return moved
 end

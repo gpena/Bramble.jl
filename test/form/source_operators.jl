@@ -331,14 +331,14 @@ using Bramble:
         g = source_function(x -> 0 < x < 1 ? x : throw(DomainError(x)), Val(1))
         fi = source_function(x -> 1 / (x * (1 - x)), Val(1))  # Inf at both ends
         bvec(src) = assemble(form(Wₕ, v -> innerₕ(src, v)))
-        ue = [1 < i < n ? 2.0 : Inf for i in 1:n]   # infinite outside :interior
+        u_end = [1 < i < n ? 2.0 : Inf for i in 1:n]   # infinite outside :interior
         v2 = [1 < i < n ? 3.0 : Inf for i in 1:n]
 
         @testset "inferred, bound and unbound" begin
             srcs = (ri(sf), 2.0 * ri(sf), ri(sf) + sf, D₊ₓ(ri(sf)), ri(dirac(0.4)),
                 ri(ri(sf)), rh(ri(q)), ri(sf) + rb(sf) + rh(sf), collect(1.0:n) * ri(sf),
-                shift_op(2.0 * rb(sf), 1, 1), shift_op(ri(sf), 1, -1), ue * (-ri(sf)),
-                v2 * (ue * ri(rh(sf))))
+                shift_op(2.0 * rb(sf), 1, 1), shift_op(ri(sf), 1, -1), u_end * (-ri(sf)),
+                v2 * (u_end * ri(rh(sf))))
             for src in srcs
                 ast = resolve_form_ast(form(Wₕ, v -> innerₕ(src, v)))
                 p = ast isa Bramble.OperatorScale ? ast.inner_op : ast
@@ -363,8 +363,8 @@ using Bramble:
             @test refill_bytes(ri(sf) + rb(sf) + rh(sf)) == 0
             @test refill_bytes(source_function(x -> 3, Val(1)) + ri(sf)) == 0
             @test refill_bytes(ri(dirac(0.4)) + sf) == 0
-            @test refill_bytes(ue * (-ri(sf))) == 0
-            @test refill_bytes(v2 * (ue * ri(rh(sf)))) == 0
+            @test refill_bytes(u_end * (-ri(sf))) == 0
+            @test refill_bytes(v2 * (u_end * ri(rh(sf)))) == 0
         end
 
         @testset "never read outside the region" begin
@@ -422,16 +422,16 @@ using Bramble:
             u5 = [i <= 5 || i == n ? Inf : 2.0 for i in 1:n]
             ri_b(c) = [1 < i < n ? (x[i] + 1) * c * 2.0 * w[i] : 0.0 for i in 1:n]
             rh_b(c, d) = [6 <= i < n ? (x[i] + 1) * c * d * w[i] : 0.0 for i in 1:n]
-            @test isequal(bvec(ue * (2.0 * ri(sf))), ri_b(2.0))
-            @test isequal(bvec(ue * (-ri(sf))), ri_b(-1.0))
-            @test isequal(bvec(ue * (ri(sf) / 2)), ri_b(0.5))
+            @test isequal(bvec(u_end * (2.0 * ri(sf))), ri_b(2.0))
+            @test isequal(bvec(u_end * (-ri(sf))), ri_b(-1.0))
+            @test isequal(bvec(u_end * (ri(sf) / 2)), ri_b(0.5))
             @test isequal(bvec(u5 * (2.0 * ri(rh(sf)))), rh_b(2.0, 2.0))
             @test isequal(bvec(v2 * (u5 * ri(rh(sf)))), rh_b(2.0, 3.0))
             @test isequal(bvec(u5 * ri(v2 * rh(sf))), rh_b(3.0, 2.0))
             @test isequal(bvec(u5 * ri(Ref(2.0) * rh(sf))), rh_b(2.0, 2.0))
             # three and four scales above the restriction: the trait follows every one
             v3 = fill(3.0, n)
-            @test isequal(bvec(ue * (v3 * (2.0 * ri(sf)))), ri_b(6.0))
+            @test isequal(bvec(u_end * (v3 * (2.0 * ri(sf)))), ri_b(6.0))
             @test isequal(bvec(u5 * (Ref(2.0) * (2.0 * (v2 * ri(rh(sf)))))),
                 rh_b(12.0, 2.0))
             @test isequal(bvec(Inf * (v2 * ri(sf)) + sf),
