@@ -227,4 +227,51 @@ end
     end
 end
 
+# `Rₕ!` evaluates `f` at the coordinates `host_points` reads, under every CPU policy: on
+# random non-uniform 1D, 2D and 3D meshes, masked and composite, Float32 too (#503).
+# The reference is `f` at those points, so it does not run `Rₕ!`'s own kernel.
+function _rh_space(D, T, policy)
+    X = foldl(×, ntuple(_ -> interval(zero(T), one(T)), D))
+    ns = ((13,), (9, 7), (6, 5, 4))[D]
+    Random.seed!(503 + D)   # `false` axes take random points; the markers are set on them
+    Ωₕ = mesh(domain(X, :left => x -> first(x) < T(0.4)), D == 1 ? ns[1] : ns,
+        D == 1 ? false : ntuple(_ -> false, D); backend = backend(T; policy = policy))
+    return gridspace(Ωₕ)
+end
+
+function _rh_ref(f, W, marked = Returns(true))
+    hp = Bramble.host_points(mesh(W))
+    pt(I) = hp isa Tuple ? ntuple(d -> hp[d][I[d]], length(hp)) : hp[I[1]]
+    return vec([marked(pt(I)) ? f(pt(I)) : zero(f(pt(I)))
+                for I in Bramble.indices(mesh(W))])
+end
+
+const _RH_POLICIES = (CpuSerial(), CpuThreaded(), CpuPolyester())
+
+@testset "Rₕ! equals f at host points (#503)" begin
+    @testset "$(nameof(typeof(p))) $T $(D)D" for p in _RH_POLICIES, T in (Float64, Float32),
+        D in 1:3
+
+        W = _rh_space(D, T, p)
+        f = D == 1 ? (x -> sin(3x) + x^2) : (x -> sin(3x[1]) * cos(x[2]) + sum(x))
+        g, h = x -> 2f(x) - 1, x -> 1 - f(x)
+        left = x -> first(x) < T(0.4)
+        hp = Bramble.host_points(mesh(W))
+        @test all(x -> !allequal(diff(x)), hp isa Tuple ? hp : (hp,))
+        u, v = element(W), element(W × W)
+        @test eltype(parent(u)) === T
+        @test parent(Rₕ!(u, f)) == _rh_ref(f, W)
+        @test parent(Rₕ!(u, f; markers = (:left,))) == _rh_ref(f, W, left)
+        @test 0 < count(!iszero, parent(u)) < length(u)
+        for (rule, a, b) in ((x -> (g(x), h(x)), g, h), ((g, h), g, h))
+            Rₕ!(v, rule)
+            @test parent(components(v)[1]) == _rh_ref(a, W)
+            @test parent(components(v)[2]) == _rh_ref(b, W)
+            Rₕ!(v, rule; markers = (:left,))
+            @test parent(components(v)[1]) == _rh_ref(a, W, left)
+            @test parent(components(v)[2]) == _rh_ref(b, W, left)
+        end
+    end
+end
+
 end # module TestPolyesterParity
