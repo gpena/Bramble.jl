@@ -141,7 +141,13 @@ end
 # which never uses it. What exposes it is the order of the solution: a weight off by a factor
 # of two, or missing its corner share, drops a second-order scheme to first order.
 @testset "Natural BCs: second-order convergence" begin
-    @testset "2D Dirichlet/Neumann/Robin, graded mesh" begin
+    # Both arms refine one mesh by halving, so the levels are nested: the uniform arm is the
+    # 9, 17, 33, 65 sequence, the random arm a seeded random 9-point start. On a uniform mesh
+    # every half-spacing is h or h/2, so a weight that only goes wrong on uneven spacing
+    # (a transverse half-cell read from the wrong index, a mean spacing) still gives order
+    # 2 there; the random arm is the one that sees it. Its first pair is pre-asymptotic and
+    # comes in from above (2.13 in 2D, 2.11 in 1D, seed 20250829), hence its wider top bound.
+    @testset "2D Dirichlet/Neumann/Robin" begin
         u_ex(x) = cos(2.2 * x[1]) * exp(0.7 * x[2])
         ux(x) = -2.2 * sin(2.2 * x[1]) * exp(0.7 * x[2])
         uy(x) = 0.7 * cos(2.2 * x[1]) * exp(0.7 * x[2])
@@ -156,24 +162,33 @@ end
             :xmin => :xmin, :xmax => :xmax, :ymin => :ymin, :ymax => :ymax)
         bcs = dirichlet_constraints(Ω, :xmin => u_ex)
 
-        errs = map((9, 17, 33, 65)) do n
-            Wₕ = gridspace(mesh(Ω, (n, n), (true, true)))
-            a = form(Wₕ, Wₕ,
-                (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v) +
-                          inner_Γ(β * u, v; markers = (:ymin, :ymax)))
-            l = form(Wₕ,
-                v -> innerₕ(f, v) + inner_Γ(gN, v; markers = (:xmax,)) +
-                     inner_Γ(gR_min, v; markers = (:ymin,)) +
-                     inner_Γ(gR_max, v; markers = (:ymax,)))
-            A, F = assemble(a, l; dirichlet = bcs)
-            uₕ = element(Wₕ)
-            parent(uₕ) .= Matrix(A) \ Vector(F)
-            return normₕ(uₕ - Rₕ(Wₕ, u_ex))
-        end
+        for (lbl, unif) in (("uniform", true), ("random", false))
+            @testset "$lbl" begin
+                Random.seed!(20250829)
+                Ωₕ = mesh(Ω, (9, 9), (unif, unif))
+                errs = map(0:3) do k
+                    k > 0 && iterative_refinement!(Ωₕ, markers(Ω))
+                    Wₕ = gridspace(Ωₕ)
+                    a = form(Wₕ, Wₕ,
+                        (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v) +
+                                  inner_Γ(β * u, v; markers = (:ymin, :ymax)))
+                    l = form(Wₕ,
+                        v -> innerₕ(f, v) + inner_Γ(gN, v; markers = (:xmax,)) +
+                             inner_Γ(gR_min, v; markers = (:ymin,)) +
+                             inner_Γ(gR_max, v; markers = (:ymax,)))
+                    A, F = assemble(a, l; dirichlet = bcs)
+                    uₕ = element(Wₕ)
+                    parent(uₕ) .= Matrix(A) \ Vector(F)
+                    return normₕ(uₕ - Rₕ(Wₕ, u_ex))
+                end
 
-        rates = [log2(errs[i] / errs[i + 1]) for i in 1:(length(errs) - 1)]
-        @test all(r -> 1.95 < r < 2.05, rates)
-        @test _lsq_order(errs) > 1.95
+                rates = [log2(errs[i] / errs[i + 1]) for i in 1:(length(errs) - 1)]
+                lo, hi = unif ? (1.95, 2.05) : (1.9, 2.15)
+                @test all(r -> lo < r < hi, rates)
+                @test 1.95 < last(rates) < 2.05
+                @test 1.95 < _lsq_order(errs) < 2.1
+            end
+        end
     end
 
     @testset "1D Neumann: point face has weight 1" begin
@@ -186,18 +201,27 @@ end
         Ω = domain(interval(0.0, 1.0), :xmin => :xmin, :xmax => :xmax)
         bcs = dirichlet_constraints(Ω, :xmin => u_ex)
 
-        errs = map((9, 17, 33, 65)) do n
-            Wₕ = gridspace(mesh(Ω, n, true))
-            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
-            l = form(Wₕ, v -> innerₕ(f, v) + inner_Γ(du, v; markers = (:xmax,)))
-            A, F = assemble(a, l; dirichlet = bcs)
-            uₕ = element(Wₕ)
-            parent(uₕ) .= Matrix(A) \ Vector(F)
-            return normₕ(uₕ - Rₕ(Wₕ, u_ex))
-        end
+        for (lbl, unif) in (("uniform", true), ("random", false))
+            @testset "$lbl" begin
+                Random.seed!(20250829)
+                Ωₕ = mesh(Ω, 9, unif)
+                errs = map(0:3) do k
+                    k > 0 && iterative_refinement!(Ωₕ, markers(Ω))
+                    Wₕ = gridspace(Ωₕ)
+                    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+                    l = form(Wₕ, v -> innerₕ(f, v) + inner_Γ(du, v; markers = (:xmax,)))
+                    A, F = assemble(a, l; dirichlet = bcs)
+                    uₕ = element(Wₕ)
+                    parent(uₕ) .= Matrix(A) \ Vector(F)
+                    return normₕ(uₕ - Rₕ(Wₕ, u_ex))
+                end
 
-        rates = [log2(errs[i] / errs[i + 1]) for i in 1:(length(errs) - 1)]
-        @test all(r -> 1.9 < r < 2.1, rates)
+                rates = [log2(errs[i] / errs[i + 1]) for i in 1:(length(errs) - 1)]
+                @test all(r -> 1.9 < r < (unif ? 2.1 : 2.15), rates)
+                @test 1.95 < last(rates) < 2.05
+                @test 1.95 < _lsq_order(errs) < 2.1
+            end
+        end
     end
 end
 
