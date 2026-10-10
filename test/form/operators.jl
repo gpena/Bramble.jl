@@ -175,6 +175,7 @@ const _ORIGIN_2D = (0, 0)
         # node would otherwise assemble as the identity (gpena/Bramble.jl#526)
         u1 = TrialFunction{1, 1}()
         for op in (u1, D₋ₓ(u1)), d in (0, 2)
+
             @test_throws ArgumentError shift_op(op, d, 1)
             @test_throws ArgumentError shift_op(op, Val(d), 1)
         end

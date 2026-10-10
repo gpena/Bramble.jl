@@ -217,8 +217,9 @@ end
         check(Float32, (5, 4, 3), f32; rtol = 1e-4)
         @test @inferred(_ke_op(Float32, (5, 4, 3), f32)[1, 1]) isa Float32
         # A scaled Float32 term (a Rational scale, as `op / 2` makes) stays Float32 too.
-        check(Float32, (5, 4), (((1 // 2, 2.5), (band(5, 1, 1; T = Float32),
-            band(4, 1, 1; T = Float32))),); rtol = 1e-4)
+        check(
+            Float32, (5, 4), (((1 // 2, 2.5), (band(5, 1, 1; T = Float32),
+                band(4, 1, 1; T = Float32))),); rtol = 1e-4)
         check(ComplexF64, (5, 4), (((), (band(5, 1, 1; T = ComplexF64),
             band(4, 1, 1; T = ComplexF64))),))
         check(BigFloat, (4, 3), ((

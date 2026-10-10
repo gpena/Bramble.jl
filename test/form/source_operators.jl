@@ -223,6 +223,7 @@ using Bramble:
         for shape in shapes
             ast = resolve_form_ast(form(Wₕ, shape))
             for op in (ast.left_op, ast), i in (1, 3, n)  # `n`: the shift leaves the grid
+
                 @test @inferred(Bramble.local_stencil(op, Wₕ, CartesianIndex(i), nothing, i)) isa
                       Tuple
             end

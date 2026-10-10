@@ -340,7 +340,7 @@ using ..TestUtils: alloc_test, @test_allocs
         Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 6, 4), (false, false, false))
         u3 = Rₕ(gridspace(Ω3), x -> x[1]^2 + 2x[2] - x[3])
         for (u, xin, xout) in ((u2, (0.3f0, 0.4f0), (1.7f0, 0.4f0)),
-                               (u3, (0.3f0, 0.4f0, 0.6f0), (1.7f0, 0.4f0, -0.2f0)))
+            (u3, (0.3f0, 0.4f0, 0.6f0), (1.7f0, 0.4f0, -0.2f0)))
             for pol in (:error, :clamp, :extrapolate, NaN)
                 @test alloc_test(interpolate_at, u, xin; outside = pol) == 0
                 @test interpolate_at(u, xin; outside = pol) == interpolate_at(u, Float64.(xin))

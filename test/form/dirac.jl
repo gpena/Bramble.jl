@@ -470,7 +470,7 @@ using Bramble:
         @test_throws ArgumentError dirac(Any[])
         @test_throws "at least one point location" dirac(Any[])
         bad = ([[0.1, 0.2], [0.3, 0.4, 0.5]], [[0.1, 0.2, 0.3], [0.4, 0.5]], [(0.1, 0.2), (0.3, 0.4, 0.5)],
-               [(0.1, 0.2), [0.3, 0.4, 0.5]], [(0.1, 0.2), 0.3], [0.1, [0.2, 0.3]])
+            [(0.1, 0.2), [0.3, 0.4, 0.5]], [(0.1, 0.2), 0.3], [0.1, [0.2, 0.3]])
         for pts in bad
             @test_throws ArgumentError dirac(pts)
             @test_throws "dirac point 2" dirac(pts)

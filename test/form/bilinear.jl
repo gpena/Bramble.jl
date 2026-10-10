@@ -240,6 +240,7 @@ using Bramble:
                 want = Dict(expected)
                 # Float32 tolerance: a block reaching leaf 2 is computed in its precision.
                 for i in 1:3, j in 1:3
+
                     @test isapprox(mblk(A, i, j), get(want, (i, j), zeros(m, m)); rtol = 1e-6)
                 end
                 @test any(!iszero, A)

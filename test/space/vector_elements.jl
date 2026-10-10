@@ -1319,13 +1319,14 @@ end
     # slot, so it is checked by value alone.
     xs = [0.0, 0.1, 0.35, 1.0]
     cases = ((xs, 2, 0.225),
-             ((xs,), CartesianIndex(2), 0.225),
-             (ntuple(_ -> xs, Val(2)), CartesianIndex(2, 3), 0.9),
-             (ntuple(_ -> xs, Val(3)), CartesianIndex(2, 3, 1), 0.95),
-             (ntuple(_ -> xs, Val(4)), CartesianIndex(2, 3, 1, 2), 1.175))
+        ((xs,), CartesianIndex(2), 0.225),
+        (ntuple(_ -> xs, Val(2)), CartesianIndex(2, 3), 0.9),
+        (ntuple(_ -> xs, Val(3)), CartesianIndex(2, 3, 1), 0.95),
+        (ntuple(_ -> xs, Val(4)), CartesianIndex(2, 3, 1, 2), 1.175))
     f_int(pt) = 1
     f_f32(pt) = Float32(sum(pt))
     for (x, idx, mid_sum) in cases, (f, want) in ((f_int, 1.0), (f_f32, mid_sum))
+
         ci = first(only(Base.code_typed(_cell_average,
             (typeof(f), typeof(x), typeof(idx), typeof(nodes), typeof(wts));
             optimize = false)))

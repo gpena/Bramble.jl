@@ -294,8 +294,10 @@ end
     f, acc, leaves, 1)
 
 _foldl_leaves_from(f::F, acc, ::Tuple{}, c::Int) where {F} = acc
-_foldl_leaves_from(f::F, acc, leaves::Tuple, c::Int) where {F} = _foldl_leaves_from(
-    f, f(acc, c, first(leaves)), Base.tail(leaves), c + 1)
+function _foldl_leaves_from(f::F, acc, leaves::Tuple, c::Int) where {F}
+    _foldl_leaves_from(
+        f, f(acc, c, first(leaves)), Base.tail(leaves), c + 1)
+end
 
 """
     _at_leaf(f, leaves, c) -> f(leaves[c])

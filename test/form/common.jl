@@ -414,7 +414,7 @@ using Bramble:
 
         # a Float32 space on a non-uniform mesh assembles Float32 forms through `/ 2`
         W32 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 11, false;
-                             backend = backend(Float32)))
+            backend = backend(Float32)))
         A32 = assemble(form(W32, W32, (u, v) -> innerₕ(u, v) / 2))
         @test eltype(A32) === Float32
         @test A32 == assemble(form(W32, W32, (u, v) -> 0.5f0 * innerₕ(u, v)))
