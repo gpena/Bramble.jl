@@ -160,7 +160,7 @@ end
 # leaf's mesh would silently assemble the wrong numbers, not merely run slower. A component
 # outside the space throws here, at `form`, through `_routed_target`'s check; returning the
 # term unchanged for it made the result a Union and deferred the error to assembly.
-_lower_sources_for_space(ast, Wₕ) = _lower_sources(ast, Wₕ)
+_lower_sources_for_space(ast, Wₕ) = _lower_term(ast, Wₕ)
 
 function _lower_sources_for_space(ast, Wₕ::CompositeGridSpace)
     return _lower_sources_over_leaves(ast, leaf_spaces_offsets(Wₕ))
@@ -175,8 +175,112 @@ end
 function _lower_sources_over_leaves(term::TERM, leaves) where {TERM}
     target = _routed_target(term, length(leaves))
     target === nothing && return term
-    return _at_leaf(leaf -> _lower_sources(term, first(leaf)), leaves, target)
+    return _at_leaf(leaf -> _lower_term(term, first(leaf)), leaves, target)
 end
+
+# A term's sources lowered against the leaf `sp` it assembles on, then its restricted
+# sources typed against the same leaf. Host spaces only: the probe reads a point and a
+# source value one at a time, a scalar read a device array refuses.
+_lower_term(term, sp) = _typed_restrictions(
+    locality(backend(sp)), _lower_sources(term, sp), sp)
+_typed_restrictions(::HostLocality, op, sp) = _typed_restrictions(
+    op, sp, trues(length(indices(mesh(sp)))))
+_typed_restrictions(::DeviceLocality, op, sp) = op
+
+# --- A restricted source keeps one stencil type (gpena/Bramble.jl#639) --- #
+#
+# Outside its region a `RegionRestriction` answers `()` and inside it its operand's stencil,
+# so a restricted source's `local_stencil` infers a `Union` of the two, and every node above
+# it inherits it. Here, once, at `form`, each restriction of a source-only operand
+# (`_is_source_only`) is evaluated at one point of its region, on the space it assembles on,
+# and stores a zero stencil of what it found there (`_zero_entries`): outside the region it
+# answers that instead of `()` (`_outside_stencil`, operators/region_restriction.jl), so its
+# stencil has one length and one type at every point. No inference is run on the source.
+# The type is decided by `form`, not per walk, so a walk's bound term has one type whatever
+# the regions hold when it runs; region membership itself is still read live, per walk.
+#
+# The source is called only at a point where an assembly calls it anyway: `reach` marks the
+# points (linear indices) at which the walk evaluates the node, narrowed by every enclosing
+# restriction and moved by every enclosing `ShiftNode`, so a source undefined outside its
+# region, or outside an enclosing one, is never called there. No such point (an empty
+# region, a label the mesh lacks yet) leaves the node as it was, answering `()`. The source
+# itself is not sampled: it is called again at every point of its region on every assembly.
+# Nested restrictions are typed inner first, so an outer probe outside an inner region reads
+# the inner zero stencil.
+_typed_restrictions(op, sp, reach) = op
+
+function _typed_restrictions(op::UnaryWrapper, sp, reach)
+    return _rewrap_inner(op, _typed_restrictions(op.inner_op, sp, reach))
+end
+
+# A shift evaluates its operand at `I + shift` for each `I` it is evaluated at.
+function _typed_restrictions(op::ShiftNode{D, Dim}, sp, reach) where {D, Dim}
+    step = _stencil_step(Val(Dim), Val(D)) * op.shift_amount
+    moved = _shift_reach(CartesianIndices(indices(mesh(sp))), step, reach)
+    return _rewrap_inner(op, _typed_restrictions(op.inner_op, sp, moved))
+end
+
+@noinline function _shift_reach(cart::CartesianIndices, step::CartesianIndex, reach::BitVector)
+    lins = LinearIndices(cart)
+    moved = falses(length(reach))
+    for lin in findall(reach)
+        J = cart[lin] + step
+        checkbounds(Bool, lins, J) && (moved[lins[J]] = true)
+    end
+    return moved
+end
+
+function _typed_restrictions(op::OperatorAdd{D}, sp, reach) where {D}
+    left = _typed_restrictions(op.left_op, sp, reach)
+    right = _typed_restrictions(op.right_op, sp, reach)
+    return left === op.left_op && right === op.right_op ? op :
+           OperatorAdd{D, typeof(left), typeof(right)}(left, right)
+end
+
+function _typed_restrictions(op::LinearProduct{D, W}, sp, reach) where {D, W}
+    left = _typed_restrictions(op.left_op, sp, reach)
+    return left === op.left_op ? op :
+           LinearProduct{D, W, typeof(left), typeof(op.right_op)}(left, op.right_op)
+end
+
+function _typed_restrictions(op::RegionRestriction, sp, reach)
+    Ωₕ = mesh(sp)
+    inside = _probe_reach(_marker_words(Ωₕ), _probe_ids(op.region, Ωₕ), reach)
+    inner = _typed_restrictions(op.inner_op, sp, inside)
+    _is_source_only(inner) || return _rebuild_restriction(op, op.region, inner)
+    lin = findfirst(inside)
+    lin === nothing && return _rebuild_restriction(op, op.region, inner)
+    I = CartesianIndices(indices(Ωₕ))[lin]
+    bound, mk = _bind_walk(inner, Ωₕ)
+    z = _zero_entries(local_stencil(bound, sp, I, mk, lin))
+    return RegionRestriction{_dim(op), typeof(op.region), typeof(inner), typeof(z)}(
+        op.region, inner, z)
+end
+
+# The points of `reach` inside the region: out of line, typed by the region and the word
+# matrix only, so a new source does not compile it again.
+@noinline function _probe_reach(words::AbstractMatrix{UInt64}, ids, reach::BitVector)
+    inside = falses(length(reach))
+    for lin in findall(reach)
+        _in_probe_region(words, ids, lin) && (inside[lin] = true)
+    end
+    return inside
+end
+
+@inline _dim(::LazyOp{D}) where {D} = D
+
+# The zero of every coefficient, offsets kept: `zero` rather than a `false` scale, so the
+# zero is `+0.0` whatever the sign of the probed value.
+@inline _zero_entries(s::Tuple) = map(t -> (Base.front(t)..., zero(t[end])), s)
+
+# A label's column in the word matrix, or 0 for a label the mesh lacks: the walk reports
+# that one (`_validate_term_markers`), not `form`.
+@inline _probe_ids(label::Symbol, Ωₕ) = get(_marker_ids(Ωₕ), label, 0)
+@inline _probe_ids(labels::NTuple{N, Symbol}, Ωₕ) where {N} = map(l -> _probe_ids(l, Ωₕ), labels)
+
+# Whether point `lin` is in the region; a label the mesh lacks (id 0) marks no point.
+@inline _in_probe_region(words, id::Int, lin::Int) = id != 0 && _is_marked(words, id, lin)
+@inline _in_probe_region(words, ids::Tuple, lin::Int) = any(id -> _in_probe_region(words, id, lin), ids)
 
 """
     form(Wₕ, f) -> LinearForm
@@ -204,6 +308,20 @@ alternative (`update_coefficients!`) a source meant to keep varying should use i
 The one exception is an interpolant [`πₕ`](@ref)`(uₕ)`, which is never sampled: every
 `assemble`/`assemble!` evaluates it on `uₕ`'s current values, and throws an `ArgumentError`
 once `uₕ`'s mesh has moved.
+
+A source under `restrict_to` is also called once here, at the first point of its region
+that the assembly reads (inside every enclosing region, moved by every enclosing shift), so
+that outside its region it answers a zero of the type it has inside and its stencil keeps
+one type at every point. It is never called at a point no assembly reads, with one
+exception: the point comes from the markers as they stand at `form`, so after `markers!`
+moves the region the source has been called once at a point of the old one. A region with
+no such point at `form` keeps the empty stencil. In return:
+
+  - a source that throws at a point of its region throws here, not at the first assembly;
+  - a coefficient that is not finite outside the region gives `NaN` there when it scales a
+    shift, a difference, an average or a sum holding the restricted source (directly over
+    the restriction, or over restrictions and scales nested in it, it still gives 0);
+  - [`assemble_add!`](@ref) into entries holding `-0.0` may turn them into `+0.0` there.
 
 # Examples
 
@@ -1240,7 +1358,7 @@ end
 
 function _host_sources(op::RegionRestriction{D, R}) where {D, R}
     inner = _host_sources(op.inner_op)
-    return RegionRestriction{D, R, typeof(inner)}(op.region, inner)
+    return _rebuild_restriction(op, op.region, inner)
 end
 
 # The `@node_family` nodes (`operators/node_family.jl`): one `inner_op` each, rebuilt
