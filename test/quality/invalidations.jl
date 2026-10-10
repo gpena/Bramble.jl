@@ -1,6 +1,7 @@
 module QualityInvalidationsTests
 
 using Test
+using Logging: NullLogger, with_logger
 
 #===========================================================================#
 # Zero-tolerance gate on package-owned method invalidations.
@@ -13,18 +14,50 @@ using Test
 # project this test run resolved, and reads back the count it prints.
 #===========================================================================#
 
+# A subprocess that fails is a failed gate, not a skip: an error inside the script (a renamed
+# name it calls, an extension that fails to load) would otherwise pass the zero-invalidation
+# check as one more broken.
+function _subprocess_output(cmd::Base.AbstractCmd, what::AbstractString)
+    return try
+        read(cmd, String)
+    catch e
+        @error "$what subprocess failed" exception = e
+        @test false
+        nothing
+    end
+end
+
+# Keeps what is recorded in it, printing nothing and passing nothing up: the control below
+# needs a failure that stays inside it.
+struct _Recorded <: Test.AbstractTestSet
+    description::String
+    results::Vector{Any}
+end
+_Recorded(description; kwargs...) = _Recorded(description, Any[])
+Test.record(ts::_Recorded, r) = (push!(ts.results, r); r)
+Test.finish(ts::_Recorded) = ts
+
+@testset "a failing subprocess fails" begin
+    script = joinpath(@__DIR__, "no_such_script.jl")
+    ts = with_logger(NullLogger()) do
+        @testset _Recorded "control" begin
+            cmd = `$(Base.julia_cmd()) --startup-file=no $script`
+            _subprocess_output(pipeline(cmd; stderr = devnull), "Control")
+        end
+    end
+    @test count(r -> r isa Test.Fail, ts.results) == 1
+    @test !any(r -> r isa Test.Broken, ts.results)
+end
+
 @testset "Invalidations" begin
     if isempty(VERSION.prerelease)
         script = joinpath(@__DIR__, "invalidations_snoop.jl")
         jl = Base.julia_cmd()
         project = Base.active_project()
 
-        out = try
-            read(`$jl --project=$project --startup-file=no $script`, String)
-        catch e
-            @test_skip "Invalidation snoop subprocess failed to run: $e"
-            nothing
-        end
+        out = _subprocess_output(
+            `$jl --project=$project --startup-file=no $script`, "Invalidation snoop"
+        )
 
         if out !== nothing
             m = match(r"OWNED_COUNT=(\d+)", out)
@@ -49,12 +82,9 @@ end
         snoop = joinpath(@__DIR__, "invalidations_polyester_snoop.jl")
         reinfer = joinpath(@__DIR__, "invalidations_polyester_reinfer.jl")
 
-        out = try
-            read(`$jl --project=$project --startup-file=no $snoop`, String)
-        catch e
-            @test_skip "Polyester invalidation snoop subprocess failed to run: $e"
-            nothing
-        end
+        out = _subprocess_output(
+            `$jl --project=$project --startup-file=no $snoop`, "Polyester invalidation snoop"
+        )
 
         if out !== nothing
             m = match(r"POLYESTER_OWNED=(\d+)", out)
@@ -69,12 +99,10 @@ end
         # Without coverage: a covered package's precompiled code is not used, so under CI's
         # `coverage=true` every Bramble method infers again whatever Polyester did.
         jl_nocov = Cmd(filter(a -> !startswith(a, "--code-coverage"), jl.exec))
-        out = try
-            read(`$jl_nocov --project=$project --threads=2 --startup-file=no $reinfer`, String)
-        catch e
-            @test_skip "Polyester reinference subprocess failed to run: $e"
-            nothing
-        end
+        out = _subprocess_output(
+            `$jl_nocov --project=$project --threads=2 --startup-file=no $reinfer`,
+            "Polyester reinference"
+        )
 
         if out !== nothing
             m = match(r"REINFER_POLYESTER=(\d+)", out)
