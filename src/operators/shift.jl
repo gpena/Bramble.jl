@@ -531,9 +531,11 @@ end
 # the masked stencils use. The scale is the `Bool` itself. `false` is a strong zero
 # (`Inf * false == 0.0`), so a source that is not finite at the boundary point still
 # contributes exactly zero, and a `Bool` keeps each entry's own type (`Float32`, `Int`, a
-# `Dual`). The stencil keeps its length at every point, so it has one concrete type. An empty
-# stencil off the grid made it a `Union` that a Dirac's `Int` weight carried into the
-# assembly loop (gpena/Bramble.jl#524).
+# `Dual`). For a plain source or a Dirac the stencil keeps its length at every point, so it
+# has one concrete type. An empty stencil off the grid made it a `Union` that a Dirac's `Int`
+# weight carried into the assembly loop (gpena/Bramble.jl#524). A restricted source is never
+# called outside its region, where its stencil is empty, so it still infers a `Union`,
+# union-split at no run-time cost (gpena/Bramble.jl#639).
 #
 # An interpolation is not a source: it is re-evaluated at the clamped point like any other
 # operand, which is harmless inside a masked tap. A shift has no mask, so off the grid it
@@ -566,10 +568,9 @@ end
 
 # A source-only operand's stencil at `J`: its `local_stencil`, which a
 # [`RegionRestriction`](@ref) overrides (`operators/region_restriction.jl`). Outside its
-# region a bound restriction returns the zero stencil of its probed type, without calling the
-# source, so the stencil keeps one length at every point; an unbound one returns `()`. Not
+# region a restriction returns `()`, bound or not, without calling the source. Not
 # `shifted_inner_stencil`: `RegionRestriction`'s override there zeroes with `zero(T)`, so a
-# non-finite value outside the region gives NaN where the zero stencil gives 0.
+# non-finite value outside the region gives NaN where the empty stencil gives 0.
 @inline _source_stencil_at(op, space, J::CartesianIndex, markers, lin_idx::Int) = local_stencil(
     op, space, J, markers, lin_idx
 )

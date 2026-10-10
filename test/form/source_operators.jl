@@ -209,6 +209,8 @@ using Bramble:
         # Off the grid a shifted source used to be an empty stencil and on it a one-entry
         # one, so `local_stencil` inferred a `Union`; a Dirac's `Int` weight carried it past
         # the `LinearProduct` into the assembly loop. Both branches now keep one length.
+        # A shifted *restricted* source is not among them: it is never evaluated outside its
+        # region, so its stencil is still empty there (see "Shifted source kept in region").
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
         Wₕ = gridspace(Ωₕ)
         sf = source_function(x -> x + 1, Val(1))
@@ -216,7 +218,6 @@ using Bramble:
         shapes = (
             v -> innerₕ(shift_op(sf, 1, 1), v),
             v -> innerₕ(shift_op(dirac(0.4), 1, 1), v),
-            v -> innerₕ(shift_op(restrict_to(:interior, sf), 1, 1), v),
             v -> innerₕ(D₋ₓ(shift_op(sf, 1, 1)), v)
         )
         for shape in shapes
@@ -270,6 +271,37 @@ using Bramble:
         @test isnan(b2[2])                          # reads x = 0, on :boundary, g(0) = NaN
         @test all(i -> b2[i] === 0.0, 3:n)          # reads interior NaNs, all outside
         @test isequal(b2, expected2)
+    end
+
+    @testset "Shifted source kept in region (#524)" begin
+        # A source may be undefined outside its region; shifting the restriction must not
+        # call it there. `g` throws at both boundary points, outside `:interior`.
+        Bramble._seed_mesh1d_rng!(7)
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
+        Wₕ = gridspace(Ωₕ)
+        w = weights(Wₕ, Innerh())
+        x = points(Ωₕ)
+        n = length(w)
+        g = x -> 0 < x < 1 ? x : throw(DomainError(x))
+        rg = restrict_to(:interior, source_function(g, Val(1)))
+
+        b = assemble(form(Wₕ, v -> innerₕ(shift_op(rg, 1, 1), v)))
+        @test isequal(b, [1 < i + 1 < n ? x[i + 1] * w[i] : 0.0 for i in 1:n])
+        b2 = assemble(form(Wₕ, v -> innerₕ(shift_op(rg, 1, -2), v)))
+        @test isequal(b2, [1 < i - 2 < n ? x[i - 2] * w[i] : 0.0 for i in 1:n])
+
+        # outside the region the stencil is empty, so `local_stencil` infers a `Union`
+        # of the two lengths (gpena/Bramble.jl#639), and the source is not read there
+        ast = resolve_form_ast(form(Wₕ, v -> innerₕ(shift_op(rg, 1, 1), v)))
+        op, mk = Bramble._bind_walk(ast.left_op, Wₕ)
+        @test Bramble.local_stencil(op, Wₕ, CartesianIndex(n - 1), mk, n - 1) === ()
+        @test only(Bramble.local_stencil(op, Wₕ, CartesianIndex(2), mk, 2))[end] == x[3]
+
+        # the Union is split, not boxed: refilling allocates nothing
+        l = form(Wₕ, v -> innerₕ(shift_op(rg, 1, 1), v))
+        bl = assemble(l)
+        assemble!(bl, l)                            # warm up
+        @test (@allocated assemble!(bl, l)) == 0
     end
 
     @testset "Region restriction" begin
