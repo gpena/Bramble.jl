@@ -401,8 +401,17 @@ import Base: diff
     end
 
     @testset "Mesh modification" begin
+        # A label's mask as both stores hold it: the Dict `markers(Ωₕ)` and the word matrix
+        # assembly reads (`_is_marked`), point by point.
+        function stored_masks(Ωₕ, label)
+            words, id = Bramble._marker_words(Ωₕ), Bramble._marker_id(Ωₕ, label)
+            word_mask = BitVector(Bramble._is_marked(words, id, i) for i in 1:npoints(Ωₕ))
+            return markers(Ωₕ)[label], word_mask
+        end
+
         @testset "iterative_refinement!" begin
-            dm = markers(interval(0, 1), :BC => :left, :Center => x -> 0.4 < x[1] < 0.6)
+            dm = markers(interval(0, 1), :BC => :left, :Center => x -> 0.4 < x[1] < 0.6,
+                :Q => x -> 0.2 < x[1] < 0.3)
             Ω = create_test_domain(0.0, 1.0; markers = dm)
 
             npts_initial = 3 # Pts: 0.0, 0.5, 1.0
@@ -423,6 +432,23 @@ import Base: diff
             @test npoints(Ωₕ2) == npts_refined2
             @test indices(Ωₕ2) == CartesianIndices((npts_refined2,))
             @test points(Ωₕ2) == [0.0, 0.25, 0.5, 0.75, 1.0]
+            # the markers are re-derived on the refined points, not left at the old three
+            @test all(==(Bool[0, 0, 1, 0, 0]), stored_masks(Ωₕ2, :Center))
+            @test all(==(Bool[1, 0, 0, 0, 0]), stored_masks(Ωₕ2, :BC))
+            @test all(==(Bool[1, 0, 0, 0, 1]), stored_masks(Ωₕ2, :boundary))
+            # :Q holds only at the new midpoint 0.25, not at any old point
+            @test all(==(Bool[0, 1, 0, 0, 0]), stored_masks(Ωₕ2, :Q))
+
+            # On non-uniform points the masks follow the refined points themselves.
+            # [0, 0.9, 1] refines to [0, 0.45, 0.9, 0.95, 1], where the masks of a
+            # uniform grid (Center at 0.5, Q at 0.25) would be wrong.
+            Ωₕ_nu = mesh(Ω, npts_initial, true; backend = backend())
+            change_points!(Ωₕ_nu, dm, [0.0, 0.9, 1.0])
+            iterative_refinement!(Ωₕ_nu, dm)
+            @test points(Ωₕ_nu) ≈ [0.0, 0.45, 0.9, 0.95, 1.0]
+            @test all(==(Bool[0, 1, 0, 0, 0]), stored_masks(Ωₕ_nu, :Center))
+            @test all(==(Bool[0, 0, 0, 0, 0]), stored_masks(Ωₕ_nu, :Q))
+            @test all(==(Bool[1, 0, 0, 0, 0]), stored_masks(Ωₕ_nu, :BC))
 
             # On a 1-ulp interval the midpoint of the two endpoints rounds onto one of
             # them, so refinement would tie neighbours (gpena/Bramble.jl#621). Both forms
@@ -532,7 +558,8 @@ import Base: diff
         end
 
         @testset "change_points!" begin
-            dm = markers(interval(0, 1), :Endpoint => :right, :NearStart => x -> x[1] < 0.3)
+            dm = markers(interval(0, 1), :Endpoint => :right, :NearStart => x -> x[1] < 0.3,
+                :Far => x -> x[1] > 0.3)
             Ω = create_test_domain(0.0, 2.0; markers = dm)
             npts = 5 # Pts: 0.0, 0.5, 1.0, 1.5, 2.0
             Ωₕ = mesh(Ω, npts, true; backend = backend())
@@ -546,11 +573,19 @@ import Base: diff
             Ωₕ_copy1 = deepcopy(Ωₕ)
             change_points!(Ωₕ_copy1, new_pts_valid)
             @test points(Ωₕ_copy1) ≈ new_pts_valid
+            # the two-argument form keeps the markers of the old points (0.5 ≥ 0.3)
+            @test all(==(Bool[1, 0, 0, 0, 0]), stored_masks(Ωₕ_copy1, :NearStart))
+            @test all(==(Bool[0, 0, 0, 0, 1]), stored_masks(Ωₕ_copy1, :Endpoint))
+            @test all(==(Bool[0, 1, 1, 1, 1]), stored_masks(Ωₕ_copy1, :Far))
 
             # Test valid change *with* marker update
             Ωₕ_copy2 = deepcopy(Ωₕ)
             change_points!(Ωₕ_copy2, dm, new_pts_valid)
             @test points(Ωₕ_copy2) ≈ new_pts_valid
+            # the three-argument form re-derives them on the new points (0.1 < 0.3)
+            @test all(==(Bool[1, 1, 0, 0, 0]), stored_masks(Ωₕ_copy2, :NearStart))
+            @test all(==(Bool[0, 0, 0, 0, 1]), stored_masks(Ωₕ_copy2, :Endpoint))
+            @test all(==(Bool[0, 0, 1, 1, 1]), stored_masks(Ωₕ_copy2, :Far))
 
             # A different point count is rejected and leaves the points untouched.
             Ωₕ_copy3 = deepcopy(Ωₕ)
