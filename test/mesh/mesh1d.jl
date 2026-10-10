@@ -353,10 +353,24 @@ import Base: diff
             :Neumann => :right,
             :Mixed => (:left, :right),
             :LowerHalf => x -> x[1] < 0.5,
+            :UpperHalf => x -> x[1] > 0.5,
             :PointMarker => x -> isapprox(x[1], 0.75)
         )
 
         Ω = create_test_domain(0.0, 1.0; markers = dm)
+
+        # Which points carry each marker, not only its name: a mask left all-false, the
+        # left and right ends swapped, or a tuple marking only its first symbol fails here.
+        # :UpperHalf holds at x = 1, so a predicate skipping the last point fails too.
+        function check_masks(Ωₕ; lower = Bool[1, 1, 0, 0, 0], upper = Bool[0, 0, 0, 1, 1],
+                point = Bool[0, 0, 0, 1, 0])
+            @test markers(Ωₕ)[:Dirichlet] == Bool[1, 0, 0, 0, 0]
+            @test markers(Ωₕ)[:Neumann] == Bool[0, 0, 0, 0, 1]
+            @test markers(Ωₕ)[:Mixed] == Bool[1, 0, 0, 0, 1]
+            @test markers(Ωₕ)[:LowerHalf] == lower
+            @test markers(Ωₕ)[:UpperHalf] == upper
+            @test markers(Ωₕ)[:PointMarker] == point
+        end
 
         npts = 5 # Points: 0.0, 0.25, 0.5, 0.75, 1.0
         Ωₕ = mesh(Ω, npts, true; backend = backend())
@@ -364,15 +378,26 @@ import Base: diff
         # Test marker retrieval before explicit setting (should be done by constructor)
         # :boundary/:interior are always present too now (test/mesh/markers.jl covers them).
         @test Set(keys(markers(Ωₕ))) == Set([
-            :Dirichlet, :Neumann, :Mixed, :LowerHalf, :PointMarker, :boundary, :interior
+            :Dirichlet, :Neumann, :Mixed, :LowerHalf, :UpperHalf, :PointMarker, :boundary,
+            :interior
         ])
+        check_masks(Ωₕ)
 
         # Test explicit call to set_markers! (should ideally yield the same)
         set_markers!(Ωₕ, dm) # Recalculate
         # :boundary/:interior are always present too now (test/mesh/markers.jl covers them).
         @test Set(keys(markers(Ωₕ))) == Set([
-            :Dirichlet, :Neumann, :Mixed, :LowerHalf, :PointMarker, :boundary, :interior
+            :Dirichlet, :Neumann, :Mixed, :LowerHalf, :UpperHalf, :PointMarker, :boundary,
+            :interior
         ])
+        check_masks(Ωₕ)
+
+        # On non-uniform points the predicates read the stored points: a uniform
+        # coordinate rebuilt from the index would put 0.25, 0.5, 0.75 in their place.
+        set_points!(Ωₕ, [0.0, 0.1, 0.2, 0.3, 1.0])
+        set_markers!(Ωₕ, dm)
+        check_masks(Ωₕ; lower = Bool[1, 1, 1, 1, 0], upper = Bool[0, 0, 0, 0, 1],
+            point = Bool[0, 0, 0, 0, 0])
     end
 
     @testset "Mesh modification" begin
