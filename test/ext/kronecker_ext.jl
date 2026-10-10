@@ -3,7 +3,7 @@ module TestKroneckerExt
 using Test
 using Bramble
 using Bramble: is_separable, kronecker_operator, KroneckerLinearOperator
-using Kronecker: kronecker
+using Kronecker: Kronecker, kronecker
 using LinearAlgebra: LinearAlgebra, mul!, issymmetric, ldiv!, lu, norm
 using SparseArrays: SparseMatrixCSC
 using LinearSolve: LinearProblem, solve, KrylovJL_GMRES
@@ -49,7 +49,8 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
             K = kronecker_operator(a)
             Aref = SparseMatrixCSC(K)
 
-            Kjl = kronecker(K)
+            # Concrete for the 3-term 2D and 4-term 3D sums (gpena/Bramble.jl#599).
+            Kjl = @inferred kronecker(K)
             @test collect(Kjl) ≈ Aref
             @test Matrix(Kjl) ≈ Matrix(Aref)
 
@@ -61,6 +62,39 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
             y = Kjl * x
             @test isapprox(y, yref; rtol = 1e-10, atol = 1e-10)
         end
+    end
+
+    # A Float32 operator gives a Float32 Kronecker.jl object, lazy for one term and
+    # materialised for a sum (gpena/Bramble.jl#600); values match the Float64 twin, an
+    # Integer divisor's Rational scale converts too, and a complex `Ref` coefficient keeps
+    # its imaginary part rather than being forced into Float32.
+    @testset "Kronecker.jl object keeps eltype" begin
+        # Graded rather than random: a random mesh draws different points per eltype.
+        W32 = gridspace(_graded_mesh((13, 11); backend = backend(Float32)))
+        W64 = gridspace(_graded_mesh((13, 11)))
+        kron_of(W, f) = kronecker(kronecker_operator(form(W, W, f)))
+
+        mass = (u, v) -> innerₕ(u, v)
+        K1 = kron_of(W32, mass)
+        @test K1 isa Kronecker.KroneckerProduct
+        @test eltype(K1) === Float32
+        @test collect(K1) ≈ collect(kron_of(W64, mass))
+
+        sums = ((u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)),
+            (u, v) -> innerₕ(u, v) / 2 + inner₊(∇ₕ(u), ∇ₕ(v)) / 2)
+        for f in sums
+            K = kronecker_operator(form(W32, W32, f))
+            Kjl = @inferred kronecker(K)
+            @test Kjl isa Matrix{Float32}
+            @test Kjl ≈ Matrix(SparseMatrixCSC(K))
+            @test Kjl ≈ collect(kron_of(W64, f))
+        end
+
+        c = Ref(2.0f0 + 1.0f0im)
+        Kc = kron_of(W32, (u, v) -> innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v)))
+        @test eltype(Kc) <: Complex
+        Kstiff = collect(kron_of(W32, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))))
+        @test Kc ≈ collect(K1) .+ (2 + 1im) .* Kstiff
     end
 
     # fdm_solve against sparse backslash on 2D 25x19 and 3D 11x9x8 meshes, homogeneous Dirichlet.
