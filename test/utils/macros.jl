@@ -118,7 +118,11 @@ end
         sw = StringWrapper("hello world foo")
         @test split(sw) == ["hello", "world", "foo"]
         @test split(sw, " ") == ["hello", "world", "foo"]
-        @test split(sw, keepempty = false) == ["hello", "world", "foo"]
+        # each keyword below changes the result from split's default, so a forwarded
+        # method that dropped `kwargs...` cannot pass; the "," delimiter is not split's
+        # whitespace default, so dropping positional arguments beside keywords fails too
+        @test split(sw; limit = 2) == ["hello", "world foo"]
+        @test split(StringWrapper("a,,b"), ","; keepempty = false) == ["a", "b"]
     end
 
     # Invariants tested:
@@ -127,14 +131,12 @@ end
         tw_int = TypedWrapper(42)
         tw_float = TypedWrapper(3.14)
 
-        z_int = zero(tw_int)
-        z_float = zero(tw_float)
-
-        @test z_int isa Int
-        @test z_int == 0
-
-        @test z_float isa Float64
-        @test z_float == 0.0
+        # inferred, not only of the right runtime type: an expansion reaching the field
+        # through a non-constant lookup still returns an Int
+        @test (@inferred zero(tw_int)) === 0
+        @test (@inferred zero(tw_float)) === 0.0
+        # a forwarded call with positional arguments is inferred too
+        @test (@inferred VectorContainer([1.0])[1]) === 1.0
     end
 
     # Invariants tested:
