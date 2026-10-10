@@ -442,8 +442,10 @@ using Kronecker: Kronecker
                 # `semidiscretize_rhs` (the precompile workload): called as
                 # `Bramble.semidiscretize_rhs` to warm the right-hand-side closure; not public.
                 :semidiscretize_rhs,
-                # `Base.FastContiguousSubArray` (`_PtrAlike`): the contiguous-view type a
-                # pointer-based reduction accepts; Base has no public spelling for it.
+                # `Base.FastContiguousSubArray` (`_PtrAlike`, `_Rawable`): the
+                # contiguous-view type a pointer-based reduction accepts and that
+                # crosses the type-erased `@batch` loop as a raw pointer view; Base has
+                # no public spelling for it.
                 :FastContiguousSubArray,
                 # `KroneckerBlockOperator`, `_kron_check_fresh`, `_kron_check_spaces`,
                 # `_kron_is_fresh`, `_kron_leaves`, `_kron_reads_coef`, `resolve_form_ast`,
@@ -495,6 +497,9 @@ using Kronecker: Kronecker
                 :Broadcasted,
                 :Extruded,
                 :RefValue,
+                # `Base.ReshapedArray` (src/space/vectorelement.jl; `_Rawable` in
+                # BramblePolyesterExt): a reshape of an `Array` crosses the type-erased
+                # `@batch` loop as a raw pointer view.
                 :ReshapedArray,
                 :SizeUnknown,
                 :eval,
@@ -595,7 +600,9 @@ using Kronecker: Kronecker
                 :getcolptr,
                 # `Base.inferencebarrier` (src/assembly/bilinear_execution.jl): the fallback for a
                 # transposed pair whose two block tuples differ in length, a case the types
-                # already rule out, so the barrier keeps it from being inferred at all.
+                # already rule out, so the barrier keeps it from being inferred at all. In
+                # BramblePolyesterExt, `_rerun_bands!`/`_rerun_scatter!` sit behind it, so a
+                # split sweep's caller does not infer the host rerun over the user function.
                 :inferencebarrier,
                 # `ReverseDiff.record_mul!`: records the tape entry
                 # for that `mul!`; ReverseDiff has no public equivalent.

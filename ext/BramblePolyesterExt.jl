@@ -621,13 +621,97 @@ function _batch_for_bands!(v::AbstractArray, idxs::Union{AbstractUnitRange, Cart
     skel, arrays = _kernel_parts(f, v)
     skel isa _Whole && return _batch_for_whole!(v, idxs, arrays)
     n = Threads.nthreads()
-    failed = false
-    @batch reduction=((|, failed),) for b in 1:n
-        failed |= _for_slab_threw(skel, arrays, v, idxs, n, b)
-    end
-    failed && _rerun_on_host(b -> _for_fill!(v, f, idxs, n, b), 1:n)
+    failed = _erased_batch(_for_slab_threw, n, skel, arrays, v, idxs, n)
+    failed && Base.inferencebarrier(_rerun_bands!)(v, f, idxs, n)
     return nothing
 end
+
+# The split sweeps' `@batch` loop is typed on nothing that depends on the kernel, so a new
+# user function compiles no Polyester method (#503). The guarded task and its arguments
+# (split kernel, its arrays, the destinations, the index range) are encoded as one isbits
+# payload: isbits values as they are, each mutable object as its address (`_Obj`), a tuple
+# element by element, and any other immutable value (a `SubArray`) field by field
+# (`_Fields`). Only an argument itself, or an element of a tuple argument, crosses as `_Raw`
+# (below); a field inside `_Fields` that is not isbits crosses as `_Obj` or as `_Fields`
+# again, never as `_Raw`, so `_dec` rebuilds the value with its own field types. The caller
+# roots the arguments with `GC.@preserve` for the whole loop and holds the payload in a
+# `Ref`. The loop captures only two pointers, the payload's and that of a C-callable entry
+# compiled for the payload's type, which decodes the arguments (`unsafe_pointer_to_objref`)
+# and runs the task. `_erased_run` and Polyester's machinery under it are compiled once, in
+# this extension's image, for every kernel and user function. A throwing task is rerun on
+# the host through the original arguments, behind `Base.inferencebarrier`, so the caller
+# does not infer the rerun's closure over the user function.
+struct _Obj{A}
+    p::Ptr{Cvoid}
+end
+struct _Fields{T, E}
+    e::E
+end
+# A dense array of isbits elements (an `Array`, a contiguous view of one, a reshape of one)
+# crosses as `_Raw`, its pointer and dimensions: the band bodies index it with no array
+# object to reload. It stays rooted through `GC.@preserve` on the caller's arguments.
+struct _Raw{T, N} <: AbstractArray{T, N}
+    p::Ptr{T}
+    dims::NTuple{N, Int}
+end
+Base.size(a::_Raw) = a.dims
+Base.IndexStyle(::Type{<:_Raw}) = IndexLinear()
+Base.@propagate_inbounds function Base.getindex(a::_Raw, i::Int)
+    @boundscheck checkbounds(a, i)
+    return unsafe_load(a.p, i)
+end
+Base.@propagate_inbounds function Base.setindex!(a::_Raw, x, i::Int)
+    @boundscheck checkbounds(a, i)
+    unsafe_store!(a.p, x, i)
+    return a
+end
+const _Rawable{T} = Union{Array{T}, Base.FastContiguousSubArray{T, <:Any, <:Array{T}},
+    Base.ReshapedArray{T, <:Any, <:Array{T}}}
+@inline _enc(x::T) where {T} = isbitstype(T) ? x : _enc_heap(x)
+@inline function _enc(x::_Rawable{T}) where {T}
+    return isbitstype(T) ? _Raw{T, ndims(x)}(pointer(x), size(x)) : _enc_heap(x)
+end
+@inline _enc_heap(x::T) where {T} = ismutabletype(T) ? _Obj{T}(pointer_from_objref(x)) :
+                                    _enc_fields(x)
+@inline _enc_heap(x::Tuple) = map(_enc, x)
+# A field keeps its declared type through the round trip: no `_Raw` below the top level.
+@inline _enc_field(x::T) where {T} = isbitstype(T) ? x : _enc_field_heap(x)
+@inline _enc_field_heap(x::T) where {T} = ismutabletype(T) ?
+                                          _Obj{T}(pointer_from_objref(x)) : _enc_fields(x)
+@inline _enc_field_heap(x::Tuple) = map(_enc_field, x)
+@generated function _enc_fields(x::T) where {T}
+    e = Expr(:tuple, (:(_enc_field(getfield(x, $i))) for i in 1:fieldcount(T))...)
+    return :(_Fields{T, typeof($e)}($e))
+end
+@inline _dec(x) = x
+@inline _dec(o::_Obj{A}) where {A} = unsafe_pointer_to_objref(o.p)::A
+@inline _dec(t::Tuple) = map(_dec, t)
+@generated function _dec(f::_Fields{T, E}) where {T, E}
+    return Expr(:new, T, (:(_dec(f.e[$i])) for i in 1:fieldcount(E))...)
+end
+function _slab_entry(p::Ptr{P}, b::Int) where {P}
+    t = _dec(unsafe_load(p))
+    return Cint(first(t)(Base.tail(t)..., b))
+end
+@inline _slab_fptr(::Type{P}) where {P} = @cfunction(_slab_entry, Cint, (Ptr{P}, Int))
+# Polyester's `@batch` reads `ccall` in its body as a captured variable: call it here.
+@inline _call_entry(fp::Ptr{Cvoid}, p::Ptr{Cvoid}, b::Int) = ccall(fp, Cint,
+    (Ptr{Cvoid}, Int), p, b) != Cint(0)
+@noinline function _erased_run(fp::Ptr{Cvoid}, p::Ptr{Cvoid}, n::Int)
+    failed = false
+    @batch reduction=((|, failed),) for b in 1:n
+        failed |= _call_entry(fp, p, b)
+    end
+    return failed
+end
+@inline function _erased_batch(task::T, n::Int, args...) where {T}
+    pay = _enc((task, args...))
+    r = Ref(pay)
+    return GC.@preserve args r _erased_run(_slab_fptr(typeof(pay)),
+        Ptr{Cvoid}(pointer_from_objref(r)), n)
+end
+@noinline _rerun_bands!(v, f, idxs, n) = _rerun_on_host(
+    b -> _for_fill!(v, f, idxs, n, b), 1:n)
 
 # A whole kernel's loop runs one guarded slab per iteration, not one guarded index: a
 # guarded call per index ran an `avgₕ!` closure over an array 5% slower than the parent
@@ -841,13 +925,12 @@ function Bramble._batch_scatter_for!(mats::Tuple, idxs::AbstractRange, g::G) whe
     skel, arrays = _kernel_parts(g, mats...)
     skel isa _Whole && return _batch_scatter_whole!(mats, idxs, arrays)
     a, n = _ascending(idxs), Threads.nthreads()
-    failed = false
-    @batch reduction=((|, failed),) for b in 1:n
-        failed |= _scatter_slab_threw(skel, arrays, mats, a, n, b)
-    end
-    failed && _rerun_on_host(i -> (@inbounds _write_components!(mats, g(i), i)), idxs)
+    failed = _erased_batch(_scatter_slab_threw, n, skel, arrays, mats, a, n)
+    failed && Base.inferencebarrier(_rerun_scatter!)(mats, g, idxs)
     return nothing
 end
+@noinline _rerun_scatter!(mats, g, idxs) = _rerun_on_host(
+    i -> (@inbounds _write_components!(mats, g(i), i)), idxs)
 
 function Bramble._batch_scatter_for!(mats::Tuple, idxs::AbstractArray, g::G) where {G}
     return _batch_scatter_each!(mats, idxs, g)
