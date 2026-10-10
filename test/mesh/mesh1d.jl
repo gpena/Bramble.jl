@@ -32,7 +32,7 @@ import Bramble:
                 spacings,
                 stepsize
 import Bramble:
-                cell_measure, cell_measures, hₘₐₓ, half_points, boundary_indices, interior_indices
+                cell_measure, cell_measures, hₘₐₓ, hₘᵢₙ, half_points, boundary_indices, interior_indices
 import Bramble: DomainMarkers, Mesh1D, Backend, forward_spacing, MeshMarkers
 import Base: diff
 
@@ -230,6 +230,24 @@ import Base: diff
         @testset "hₘₐₓ" begin
             @test hₘₐₓ(Ωₕ_unif) ≈ 1.0
             @test hₘₐₓ(Ωₕ_nonunif) ≈ 2.0
+
+            # spacings [1, 1, 2, 2]: the smallest and largest differ, so a min/max mix-up shows
+            @test hₘᵢₙ(Ωₕ_unif) == 1.0
+            @test hₘᵢₙ(Ωₕ_nonunif) == 1.0
+
+            # hₘᵢₙ is the smallest spacing. On [0, 2, 2.5, 5] (spacings 2, 2, 0.5, 2.5) it
+            # sits inside, so it differs from the first spacing and from hₘₐₓ / 2, which
+            # both equal it on the mesh above.
+            Ωₕ_inner = mesh(Ω_nonunif, 4, true; backend = backend())
+            set_points!(Ωₕ_inner, [0.0, 2.0, 2.5, 5.0])
+            @test hₘᵢₙ(Ωₕ_inner) == 0.5
+            @test hₘₐₓ(Ωₕ_inner) == 2.5
+
+            # On [0, 2, 4, 4.5] (spacings 2, 2, 2, 0.5) the smallest spacing is the last
+            # one, so a minimum that skips the last cell shows
+            Ωₕ_last = mesh(Ω_nonunif, 4, true; backend = backend())
+            set_points!(Ωₕ_last, [0.0, 2.0, 4.0, 4.5])
+            @test hₘᵢₙ(Ωₕ_last) == 0.5
         end
 
         @testset "half_spacing" begin
