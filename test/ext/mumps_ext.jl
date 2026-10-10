@@ -107,19 +107,32 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
     @testset "Control options (icntl, cntl)" begin
         p = poisson_system(Val(1), 15; source = x -> 1.0)
 
-        # Custom memory relaxation and METIS ordering (7 => 5)
+        # Custom memory relaxation and METIS ordering (7 => 5). The solution is the same
+        # under any ordering, so the controls are read back: MUMPS's defaults are 7 and 5.
         fact = mumps_factorize(p.A; sym = :spd, icntl = (7 => 5, 14 => 35))
+        @test fact.mumps.icntl[7] == 5
+        @test fact.mumps.icntl[14] == 35
+        # INFOG(7) is the ordering MUMPS actually used in the analysis (the default picks 2)
+        @test fact.mumps.infog[7] == 5
         u = fact \ p.F
         @test isapprox(u, p.u_ref; atol = 1.0e-12)
 
         # pde_solve with MUMPSFactorization directly
         @test isapprox(pde_solve(fact, p.F), u; atol = 1.0e-12)
 
-        # a numeric update reusing that symbolic METIS analysis
+        # a numeric update reusing that symbolic METIS analysis, on a matrix whose solution
+        # differs: every entry doubled halves it, Dirichlet rows included
         A_modified = copy(p.A)
-        A_modified[1, 1] += 5.0
+        nonzeros(A_modified) .*= 2.0
+        @test !isapprox(A_modified \ p.F, p.u_ref; atol = 1.0e-12)
         refactor!(fact, A_modified)
         @test isapprox(fact \ p.F, A_modified \ p.F; atol = 1.0e-12)
+
+        # a real control (relative pivoting threshold; MUMPS's default is -1.0), read back
+        # only: under sym = :spd MUMPS does not use CNTL(1)
+        fact_c = mumps_factorize(p.A; sym = :spd, cntl = (1 => 0.5,))
+        @test fact_c.mumps.cntl[1] == 0.5
+        @test isapprox(fact_c \ p.F, p.u_ref; atol = 1.0e-12)
     end
 
     @testset "Error handling & validation" begin
