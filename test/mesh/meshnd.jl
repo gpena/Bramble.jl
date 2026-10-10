@@ -271,7 +271,15 @@ using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
             Ω_2d_dummy = create_test_nd_set(intervals_2d)
 
             # Setup for modification tests
-            dm_2d = markers(Ω_2d_dummy, :L => :left)
+            # :Low depends on where the points are on both axes, so a mask derived before
+            # either axis moves shows; :L does not
+            low(p) = p[1] < 1.2 && p[2] < 2.5
+            dm_2d = markers(Ω_2d_dummy, :L => :left, :Low => low)
+            # the word matrix assembly reads (`_is_marked`), point by point
+            function word_mask(Ωₕ, label)
+                words, id = Bramble._marker_words(Ωₕ), Bramble._marker_id(Ωₕ, label)
+                return BitVector(Bramble._is_marked(words, id, i) for i in 1:npoints(Ωₕ))
+            end
             Ω_2d_mod = create_test_nd_domain(intervals_2d, markers = dm_2d)
             npts_initial = (3, 3) # Pts: x=[0, 1.5, 3], y=[0, 2, 4]
             Ωₕ_2d_orig = mesh(Ω_2d_mod, npts_initial, (true, true); backend = backend())
@@ -285,6 +293,15 @@ using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
             # Check a point coordinate after refinement
             @test points(Ωₕ_2d_refined(1)) ≈ [0.0, 0.75, 1.5, 2.25, 3.0]
             @test points(Ωₕ_2d_refined(2)) ≈ [0.0, 1.0, 2.0, 3.0, 4.0]
+            # the markers are re-derived on the refined points: x = 0, 0.75 by y = 0, 1, 2
+            @test Bramble.index_in_marker(Ωₕ_2d_refined, :Low) ==
+                  _marker_mask(Ωₕ_2d_refined, low)
+            @test count(Bramble.index_in_marker(Ωₕ_2d_refined, :Low)) == 6
+            @test word_mask(Ωₕ_2d_refined, :Low) == _marker_mask(Ωₕ_2d_refined, low)
+            @test word_mask(Ωₕ_2d_refined, :L) ==
+                  _marker_mask(Ωₕ_2d_refined, p -> p[1] == 0.0)
+            @test Bramble.index_in_marker(Ωₕ_2d_refined, :L) ==
+                  _marker_mask(Ωₕ_2d_refined, p -> p[1] == 0.0)
 
             # change_points!
             Ωₕ_2d_changed = deepcopy(Ωₕ_2d_orig)
@@ -294,6 +311,12 @@ using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
             @test npoints(Ωₕ_2d_changed, Tuple) == npts_initial # Size doesn't change
             @test points(Ωₕ_2d_changed(1)) ≈ new_pts_x
             @test points(Ωₕ_2d_changed(2)) ≈ new_pts_y
+            # and on the moved points: x = 1.5 became 1 and y = 2 became 3, so x = 0, 1 on
+            # the y = 0 row are the only points left
+            @test Bramble.index_in_marker(Ωₕ_2d_changed, :Low) ==
+                  _marker_mask(Ωₕ_2d_changed, low)
+            @test count(Bramble.index_in_marker(Ωₕ_2d_changed, :Low)) == 2
+            @test word_mask(Ωₕ_2d_changed, :Low) == _marker_mask(Ωₕ_2d_changed, low)
         end
     end # Dimension D=2 Testset
 
