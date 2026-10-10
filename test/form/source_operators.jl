@@ -501,6 +501,20 @@ using Bramble:
         @test b != full                             # and the mask actually removed something
         # every entry is either the unmasked one or zero: the mask selects, it does not scale
         @test all(i -> b[i] ≈ full[i] || iszero(b[i]), eachindex(b))
+        # and which ones: exactly the :interior points keep theirs, an inverted or shifted
+        # mask passes the three checks above
+        @test b ≈ Bramble.index_in_marker(Ωₕ, :interior) .* full
+
+        # :interior on a square is symmetric under x ↔ y and x ↦ 1 - x, so a transposed or
+        # mirrored mask keeps the same points; a region on the left only tells them apart,
+        # and a source whose D₋ₓ varies along x tells which neighbour was read
+        Ωₗ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :lft => x -> x[1] < 0.3), (6, 6),
+                  (true, true))
+        Wₗ = gridspace(Ωₗ)
+        sx = source_function(x -> x[1]^2 + 2 * x[2] + 1, Val(2))
+        bₗ = assemble(form(Wₗ, v -> innerₕ(restrict_to(:lft, D₋ₓ(sx)), v)))
+        fullₗ = assemble(form(Wₗ, v -> innerₕ(D₋ₓ(sx), v)))
+        @test bₗ ≈ Bramble.index_in_marker(Ωₗ, :lft) .* fullₗ
     end
 
     @testset "VectorElement source" begin
