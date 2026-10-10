@@ -42,9 +42,8 @@ using ..TestUtils: _run_example_page
     end
 
     # The in-place Crank-Nicolson loop: pattern reuse, one factorization, and a backsolve
-    # into the solution's own storage. Its assertions pin the per-step allocation under a
-    # bound loose enough to survive a compiler change but tight enough to catch a closure
-    # built inside the loop (a few hundred bytes per step), the error at t = 1 bracketed
+    # into the solution's own storage. Its assertions pin the per-step allocation at zero
+    # bytes (a closure reaching `Rₕ!` uninferred costs 96), the error at t = 1 bracketed
     # away from zero, and the order in time.
     @testset "Transient loop, in place" begin
         _run_example_page(:transient_inplace)
