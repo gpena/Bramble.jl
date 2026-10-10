@@ -429,7 +429,7 @@ _bind_marker_ids(op, Ωₕ::AbstractMeshType) = op
 function _bind_marker_ids(op::RegionRestriction{D}, Ωₕ::AbstractMeshType) where {D}
     inner = _bind_marker_ids(op.inner_op, Ωₕ)
     region = _region_ids(op.region, Ωₕ)
-    return RegionRestriction{D, typeof(region), typeof(inner)}(region, inner)
+    return _rebuild_restriction(op, region, inner)
 end
 
 function _bind_marker_ids(op::UnaryWrapper, Ωₕ::AbstractMeshType)

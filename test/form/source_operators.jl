@@ -208,9 +208,9 @@ using Bramble:
     @testset "Shifted source infers (#524)" begin
         # Off the grid a shifted source used to be an empty stencil and on it a one-entry
         # one, so `local_stencil` inferred a `Union`; a Dirac's `Int` weight carried it past
-        # the `LinearProduct` into the assembly loop. Both branches now keep one length.
-        # A shifted *restricted* source is not among them: it is never evaluated outside its
-        # region, so its stencil is still empty there (see "Shifted source kept in region").
+        # the `LinearProduct` into the assembly loop. Both branches now keep one length, and
+        # so does a shifted restricted source: outside its region it answers the zero
+        # stencil `form` stored (gpena/Bramble.jl#639).
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
         Wₕ = gridspace(Ωₕ)
         sf = source_function(x -> x + 1, Val(1))
@@ -218,7 +218,8 @@ using Bramble:
         shapes = (
             v -> innerₕ(shift_op(sf, 1, 1), v),
             v -> innerₕ(shift_op(dirac(0.4), 1, 1), v),
-            v -> innerₕ(D₋ₓ(shift_op(sf, 1, 1)), v)
+            v -> innerₕ(D₋ₓ(shift_op(sf, 1, 1)), v),
+            v -> innerₕ(shift_op(restrict_to(:interior, sf), 1, 1), v)
         )
         for shape in shapes
             ast = resolve_form_ast(form(Wₕ, shape))
@@ -295,18 +296,195 @@ using Bramble:
         b2 = assemble(form(Wₕ, v -> innerₕ(shift_op(rg, 1, -2), v)))
         @test isequal(b2, [1 < i - 2 < n ? x[i - 2] * w[i] : 0.0 for i in 1:n])
 
-        # outside the region the stencil is empty, so `local_stencil` infers a `Union`
-        # of the two lengths (gpena/Bramble.jl#639), and the source is not read there
+        # outside the region the stencil is the zero `form` stored, built without reading
+        # the source there (gpena/Bramble.jl#639)
         ast = resolve_form_ast(form(Wₕ, v -> innerₕ(shift_op(rg, 1, 1), v)))
         op, mk = Bramble._bind_walk(ast.left_op, Wₕ)
-        @test Bramble.local_stencil(op, Wₕ, CartesianIndex(n - 1), mk, n - 1) === ()
+        @test Bramble.local_stencil(op, Wₕ, CartesianIndex(n - 1), mk, n - 1) ===
+              (((0,), 0.0),)
         @test only(Bramble.local_stencil(op, Wₕ, CartesianIndex(2), mk, 2))[end] == x[3]
 
-        # the Union is split, not boxed: refilling allocates nothing
+        # refilling allocates nothing
         l = form(Wₕ, v -> innerₕ(shift_op(rg, 1, 1), v))
         bl = assemble(l)
         assemble!(bl, l)                            # warm up
         @test (@allocated assemble!(bl, l)) == 0
+    end
+
+    @testset "Restricted source keeps one type (#639)" begin
+        # `form` calls each restricted source once, at a point of its region the walk reads,
+        # and stores a zero stencil of that value: outside the region the node answers it
+        # instead of `()`, so `local_stencil` infers one type. `n` stays odd and the mesh
+        # uniform: the middle point, x = 0.5, is sampled for the element type
+        # (`_leaf_eltype`) whatever the region, and every source below is defined there.
+        n = 9
+        Ωₕ = mesh(domain(interval(0.0, 1.0), :half => x -> x[1] > 0.5,
+                :none => x -> x[1] > 2), n, true)
+        Wₕ = gridspace(Ωₕ)
+        x = points(Ωₕ)
+        w = weights(Wₕ, Innerh())
+        ri = s -> restrict_to(:interior, s)       # 2:n-1
+        rb = s -> restrict_to(:boundary, s)       # 1 and n
+        rh = s -> restrict_to(:half, s)           # 6:n
+        sf = source_function(x -> x + 1, Val(1))
+        q = source_function(x -> sqrt(x - 0.5), Val(1))
+        g = source_function(x -> 0 < x < 1 ? x : throw(DomainError(x)), Val(1))
+        fi = source_function(x -> 1 / (x * (1 - x)), Val(1))  # Inf at both ends
+        bvec(src) = assemble(form(Wₕ, v -> innerₕ(src, v)))
+        u_end = [1 < i < n ? 2.0 : Inf for i in 1:n]   # infinite outside :interior
+        v2 = [1 < i < n ? 3.0 : Inf for i in 1:n]
+
+        @testset "inferred, bound and unbound" begin
+            srcs = (ri(sf), 2.0 * ri(sf), ri(sf) + sf, D₊ₓ(ri(sf)), ri(dirac(0.4)),
+                ri(ri(sf)), rh(ri(q)), ri(sf) + rb(sf) + rh(sf), collect(1.0:n) * ri(sf),
+                shift_op(2.0 * rb(sf), 1, 1), shift_op(ri(sf), 1, -1), u_end * (-ri(sf)),
+                v2 * (u_end * ri(rh(sf))))
+            for src in srcs
+                ast = resolve_form_ast(form(Wₕ, v -> innerₕ(src, v)))
+                p = ast isa Bramble.OperatorScale ? ast.inner_op : ast
+                for op in (ast, p, p.left_op)
+                    bound, mk = Bramble._bind_walk(op, Wₕ)
+                    for (o, m) in ((op, nothing), (bound, mk)), i in (1, 5, n)
+
+                        @test @inferred(Bramble.local_stencil(o, Wₕ, CartesianIndex(i), m, i)) isa
+                              Tuple
+                    end
+                end
+            end
+        end
+
+        @testset "no allocation" begin
+            function refill_bytes(src)
+                l = form(Wₕ, v -> innerₕ(src, v))
+                b = assemble(l)
+                assemble!(b, l)                   # warm up
+                return @allocated assemble!(b, l)
+            end
+            @test refill_bytes(ri(sf) + rb(sf) + rh(sf)) == 0
+            @test refill_bytes(source_function(x -> 3, Val(1)) + ri(sf)) == 0
+            @test refill_bytes(ri(dirac(0.4)) + sf) == 0
+            @test refill_bytes(u_end * (-ri(sf))) == 0
+            @test refill_bytes(v2 * (u_end * ri(rh(sf)))) == 0
+        end
+
+        @testset "never read outside the region" begin
+            inner_g = [1 < i < n ? x[i] * w[i] : 0.0 for i in 1:n]
+            b = bvec(ri(g))
+            @test b[1] === 0.0 && b[n] === 0.0
+            @test isequal(b, inner_g)
+            @test isequal(bvec(ri(fi)), [1 < i < n ? 1 / (x[i] * (1 - x[i])) * w[i] : 0.0
+                                         for i in 1:n])
+            # nested both ways: only 6:n-1 lies in both regions
+            both = [6 <= i < n ? x[i] * w[i] : 0.0 for i in 1:n]
+            @test isequal(bvec(rh(ri(g))), both)
+            @test isequal(bvec(ri(rh(g))), both)
+            # shifted: row `i` reads point `i - 1`
+            @test isequal(bvec(shift_op(ri(fi), 1, -1)),
+                [1 < i - 1 < n ? 1 / (x[i - 1] * (1 - x[i - 1])) * w[i] : 0.0 for i in 1:n])
+            # a restriction over a shift: the boundary rows read points 0 (off the grid) and
+            # n - 1, so `qq` is probed at x[n - 1], never at x[n] = 1, where it throws
+            qq = source_function(x -> x == 1.0 ? throw(DomainError(x)) : x, Val(1))
+            b = bvec(rb(shift_op(rh(qq), 1, -1)))
+            @test isequal(b, [i == n ? x[n - 1] * w[n] : 0.0 for i in 1:n])
+        end
+
+        @testset "infinite scale outside the region" begin
+            # directly over the restriction an infinite coefficient still gives exactly 0
+            u = [1 < i < n ? 2.0 : Inf for i in 1:n]
+            bu = bvec(u * ri(fi))
+            @test bu[1] === 0.0 && bu[n] === 0.0
+            @test bu ≈ [1 < i < n ? 2 / (x[i] * (1 - x[i])) * w[i] : 0.0 for i in 1:n]
+            expected = [1 < i < n ? Inf : (x[i] + 1) * w[i] for i in 1:n]
+            @test isequal(bvec(Inf * ri(sf) + sf), expected)
+            @test isequal(bvec(Ref(Inf) * ri(sf) + sf), expected)
+            # so it does over restrictions and scales nested in the restriction: these rows
+            # lie outside the inner region, where `u` is infinite
+            u5 = [i <= 5 || i == n ? Inf : 2.0 for i in 1:n]
+            inside = [6 <= i < n ? 2 * (x[i] + 1) * w[i] : 0.0 for i in 1:n]
+            @test isequal(bvec(u5 * ri(rh(sf))), inside)
+            @test isequal(bvec(u5 * rh(ri(sf))), inside)
+            @test isequal(bvec(u5 * ri(2.0 * rh(sf))), 2 .* inside)
+            @test isequal(bvec(Inf * ri(rh(sf)) + sf),
+                [6 <= i < n ? Inf : (x[i] + 1) * w[i] for i in 1:n])
+            # residue (`form` docstring): over a shift, a difference, an average or a sum it
+            # gives NaN, not 0 or ±Inf
+            @test isnan(bvec(u * shift_op(ri(sf), 1, 1))[n])
+            @test isnan(bvec(u * (ri(sf) + sf))[1])
+            @test isnan(bvec(u5 * ri(shift_op(rh(sf), 1, -1)))[2])
+            @test isnan(bvec(u5 * D₊ₓ(ri(sf)))[1])
+            @test isnan(bvec(u5 * D₋ₓ(ri(sf)))[n])
+            @test isnan(bvec(u5 * M₊ₓ(ri(sf)))[1])
+        end
+
+        @testset "scale chain outside the region" begin
+            # only pointwise scales lie between the coefficient and the restriction, so the
+            # chain is zeroed once at the top: an outer infinite coefficient still gives 0
+            u5 = [i <= 5 || i == n ? Inf : 2.0 for i in 1:n]
+            ri_b(c) = [1 < i < n ? (x[i] + 1) * c * 2.0 * w[i] : 0.0 for i in 1:n]
+            rh_b(c, d) = [6 <= i < n ? (x[i] + 1) * c * d * w[i] : 0.0 for i in 1:n]
+            @test isequal(bvec(u_end * (2.0 * ri(sf))), ri_b(2.0))
+            @test isequal(bvec(u_end * (-ri(sf))), ri_b(-1.0))
+            @test isequal(bvec(u_end * (ri(sf) / 2)), ri_b(0.5))
+            @test isequal(bvec(u5 * (2.0 * ri(rh(sf)))), rh_b(2.0, 2.0))
+            @test isequal(bvec(v2 * (u5 * ri(rh(sf)))), rh_b(2.0, 3.0))
+            @test isequal(bvec(u5 * ri(v2 * rh(sf))), rh_b(3.0, 2.0))
+            @test isequal(bvec(u5 * ri(Ref(2.0) * rh(sf))), rh_b(2.0, 2.0))
+            # three and four scales above the restriction: the trait follows every one
+            v3 = fill(3.0, n)
+            @test isequal(bvec(u_end * (v3 * (2.0 * ri(sf)))), ri_b(6.0))
+            @test isequal(bvec(u5 * (Ref(2.0) * (2.0 * (v2 * ri(rh(sf)))))),
+                rh_b(12.0, 2.0))
+            @test isequal(bvec(Inf * (v2 * ri(sf)) + sf),
+                [1 < i < n ? Inf : (x[i] + 1) * w[i] for i in 1:n])
+        end
+
+        @testset "positive zero outside the region" begin
+            F = fill(-0.0, n)
+            assemble_add!(F, form(Wₕ, v -> innerₕ(ri(source_function(x -> -1.0, Val(1))), v)))
+            @test F[1] === 0.0 && F[n] === 0.0
+            @test F[2] == -w[2]
+        end
+
+        @testset "call set" begin
+            calls = Float64[]
+            rec = source_function(x -> (push!(calls, x); x + 1), Val(1))
+            l = form(Wₕ, v -> innerₕ(rh(rec), v))
+            @test calls == [x[6]]                 # the probe: the region's first point
+            assemble(l)
+            @test sort!(unique(calls)) == x[5:n]  # x[5]: the element-type sample
+            empty!(calls)
+            l = form(Wₕ, v -> innerₕ(shift_op(rh(rec), 1, -1), v))
+            assemble(l)
+            @test sort!(unique(calls)) == x[5:(n - 1)]  # x[n] is read by no row
+            # a source throwing at the first point of its region throws at `form`
+            x₂ = x[2]
+            th = source_function(y -> y == x₂ ? throw(DomainError(y)) : y, Val(1))
+            @test_throws DomainError form(Wₕ, v -> innerₕ(ri(th), v))
+        end
+
+        @testset "markers! after form" begin
+            # the probe point comes from the markers at `form`: once the region moves, the
+            # source has been called at x[6], which no assembly reads any more
+            Ωm = mesh(domain(interval(0.0, 1.0), :half => x -> x[1] > 0.5), n, true)
+            Wm = gridspace(Ωm)
+            calls = Float64[]
+            rec = source_function(x -> (push!(calls, x); x + 1), Val(1))
+            l = form(Wm, v -> innerₕ(rh(rec), v))
+            m = copy(Bramble.markers(Ωm))
+            m[:half] = [xi > 0.8 for xi in points(Ωm)]
+            Bramble.markers!(Ωm, m)
+            b = assemble(l)
+            @test sort!(unique(calls)) == [x[5], x[6], x[8], x[n]]
+            @test isequal(b, [i >= 8 ? (x[i] + 1) * w[i] : 0.0 for i in 1:n])
+        end
+
+        @testset "empty region stays empty" begin
+            ast = resolve_form_ast(form(Wₕ, v -> innerₕ(restrict_to(:none, sf), v)))
+            @test ast.left_op.zero_stencil === nothing
+            op, mk = Bramble._bind_walk(ast.left_op, Wₕ)
+            @test Bramble.local_stencil(op, Wₕ, CartesianIndex(3), mk, 3) === ()
+            @test all(iszero, bvec(restrict_to(:none, sf)))
+        end
     end
 
     @testset "Region restriction" begin
