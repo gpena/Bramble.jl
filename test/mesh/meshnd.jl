@@ -39,6 +39,7 @@ using Bramble:
                boundary_indices,
                forward_spacings,
                half_points,
+               hₘᵢₙ,
                interior_indices
 using LinearAlgebra: hypot
 using Random
@@ -960,6 +961,9 @@ end
             brute = maximum(hypot(spacing(Ωₕ, idx)...) for idx in indices(Ωₕ))
             @test hₘₐₓ(Ωₕ) == brute
             @test hₘₐₓ(Ωₕ) ≈ hypot(ntuple(i -> hₘₐₓ(Ωₕ(i)), D)...)
+            # hₘᵢₙ, its counterpart, against the same brute force over every cell
+            @test hₘᵢₙ(Ωₕ) == minimum(hypot(spacing(Ωₕ, idx)...) for idx in indices(Ωₕ))
+            unif || @test hₘᵢₙ(Ωₕ) < hₘₐₓ(Ωₕ)
         end
     end
 end
