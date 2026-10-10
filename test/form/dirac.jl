@@ -345,8 +345,9 @@ using Bramble:
 
     # The weight's type is the mesh's element type promoted with the strength's
     # A Float32 space with a Float32 strength gives a Float32 vector. A Float64
-    # strength (the default `1.0`) on a Float32 space still promotes, as `innerₕ(1.0, v)`
-    # does; an integer strength takes the space's type. The location keeps Float64 precision.
+    # strength on a Float32 space still promotes, as `innerₕ(1.0, v)` does; an integer
+    # strength, the default `1` included, takes the space's type (#634). The location
+    # keeps Float64 precision.
     @testset "Weight eltype follows the space (#361)" begin
         Random.seed!(20260927)
         for D in (1, 2)
@@ -359,7 +360,9 @@ using Bramble:
                 for (label, src, T) in (("Float32 strength", dirac(p1, 2.0f0), Float32),
                     ("points", dirac(pts, [1.5f0, -0.5f0]), Float32),
                     ("Int strength", dirac(p1, 2), Float32),
-                    ("default Float64 strength", dirac(p1), Float64),
+                    ("default strength", dirac(p1), Float32),
+                    ("default points strength", dirac(pts), Float32),
+                    ("Float64 strength", dirac(p1, 1.0), Float64),
                     ("Float64 points strength", dirac(pts, [1.5, -0.5]), Float64))
                     l = form(W32, v -> innerₕ(src, v))
                     b = @inferred assemble(l)
@@ -380,6 +383,7 @@ using Bramble:
         W64 = gridspace(mesh(Ω64, 11, false))
         b64 = @inferred assemble(form(W64, v -> innerₕ(dirac(0.37), v)))
         @test eltype(b64) === Float64
+        @test b64 == assemble(form(W64, v -> innerₕ(dirac(0.37, 1.0), v)))
         @test eltype(assemble(form(W64, v -> innerₕ(dirac(0.37, 2.0f0), v)))) === Float64
         if WITH_AD_TESTS
             for src in (s -> dirac(0.37, s), s -> dirac([(0.2,), (0.55,)], [s, 2s]))
@@ -433,6 +437,43 @@ using Bramble:
                 @test eltype(b) === Float64
                 @test sum(b) ≈ sum(assemble(form(W32, v -> innerₕ(1.0f0, v)))) + 1.1 rtol = 1e-6
             end
+        end
+    end
+
+    # Tuples are the inferable spelling; a vector point normalises to the same tuple, and an
+    # empty point or one whose length or kind disagrees with the first is a named error (#531)
+    @testset "dirac: point spellings and checks (#531)" begin
+        @test @inferred(dirac((0.3, 0.4), 2.0)) === DiracSource{2}((0.3, 0.4), 2.0)
+        many = @inferred dirac([(0.3, 0.4), (0.7, 0.2)], [1.0, -1.0])
+        @test many isa DiracSource{2, Vector{NTuple{2, Float64}}, Vector{Float64}}
+        @test many.points == [(0.3, 0.4), (0.7, 0.2)]
+        @test dirac([0.2, 0.7]).points === (0.2, 0.7)
+
+        Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+        Wₕ = gridspace(mesh(Ω, (6, 6), (false, true)))
+        b_vec = assemble(form(Wₕ, v -> innerₕ(dirac([0.3, 0.4], 2.0), v)))
+        b_tup = assemble(form(Wₕ, v -> innerₕ(dirac((0.3, 0.4), 2.0), v)))
+        @test b_vec == b_tup
+        @test count(!iszero, b_tup) > 1
+
+        # an untyped list (a `Vector{Any}`) of tuples and vectors is a list of points; one of
+        # reals only is one point, like a flat real vector
+        mixed = dirac([(0.1, 0.2), [0.3, 0.4]])
+        @test mixed isa DiracSource{2, Vector{NTuple{2, Float64}}, Vector{Int}}
+        @test mixed.points == [(0.1, 0.2), (0.3, 0.4)]
+        @test dirac(Any[0.2, 0.7]).points === (0.2, 0.7)
+
+        for empty in (Float64[], (), [Float64[]])
+            @test_throws ArgumentError dirac(empty)
+            @test_throws "empty" dirac(empty)
+        end
+        @test_throws ArgumentError dirac(Any[])
+        @test_throws "at least one point location" dirac(Any[])
+        bad = ([[0.1, 0.2], [0.3, 0.4, 0.5]], [[0.1, 0.2, 0.3], [0.4, 0.5]], [(0.1, 0.2), (0.3, 0.4, 0.5)],
+            [(0.1, 0.2), [0.3, 0.4, 0.5]], [(0.1, 0.2), 0.3], [0.1, [0.2, 0.3]])
+        for pts in bad
+            @test_throws ArgumentError dirac(pts)
+            @test_throws "dirac point 2" dirac(pts)
         end
     end
 end

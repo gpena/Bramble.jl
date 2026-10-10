@@ -680,6 +680,26 @@ end
         @test norm(u1) == norm(parent(u1))   # one argument stays LinearAlgebra's Euclidean norm
         @test_throws ArgumentError norm(u1, "L2")
 
+        # every kind returns the data eltype promoted with the mesh's (#532): a narrow
+        # element used to make "∞" alone keep the data type, so the call inferred a Union.
+        # `element(W, Float32)` is used, not `element(W, 1.5f0)`, which promotes to Float64.
+        uf = element(W1, Float32)
+        @test eltype(uf) === Float32
+        fill!(uf, 1.5f0)
+        ui = element(W1, Int)
+        fill!(ui, 0)
+        ui[3] = -3
+        W1f = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 11, true))
+        uif = element(W1f, Int)
+        fill!(uif, 0)
+        uif[4] = -5
+        for (u, T, umax) in ((uf, Float64, 1.5), (ui, Float64, 3), (uif, Float32, 5))
+            for kind in ("h", "1h", "∞")
+                @test @inferred(norm(u, kind)) isa T
+            end
+            @test norm(u, "∞") == umax == norminf(u)
+        end
+
         # the absolute value is taken before the maximum: a field that is everywhere
         # negative has a positive norm
         @test norminf(Rₕ(W1, x -> -2.0 - x[1])) ≈ 3.0

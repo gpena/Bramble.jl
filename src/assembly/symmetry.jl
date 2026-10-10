@@ -185,6 +185,32 @@ function _collect_scaled_terms!(out::Vector{Tuple{Vector{Any}, Any}}, scales::Ve
     return false
 end
 
+# Whether two scaling lists scale by the same amount. Equal factor by factor, as before;
+# otherwise the `Ref` factors must be the same objects in the same order and the plain
+# numbers must have the same exact product. `simplify_ast` leaves `(A / 2) / 3` as two
+# `Rational` scalings (gpena/Bramble.jl#633), which must still partner `A' / 6`. The product
+# is a `Rational{BigInt}`, so it cannot overflow; a non-finite float, a non-real factor, or a
+# zero beside `1 // 0` has no exact product and does not partner.
+function _same_scalings(a::Vector{Any}, b::Vector{Any})
+    length(a) == length(b) && all(map(==, a, b)) && return true
+    isref(c) = c isa Base.RefValue
+    ra, rb = filter(isref, a), filter(isref, b)
+    length(ra) == length(rb) && all(map(===, ra, rb)) || return false
+    na, nb = filter(!isref, a), filter(!isref, b)
+    all(_has_exact_value, na) && all(_has_exact_value, nb) || return false
+    _exact_product(na) === nothing && return false
+    _exact_product(nb) === nothing && return false
+    return _exact_product(na) == _exact_product(nb)
+end
+_has_exact_value(c) = c isa Union{Integer, Rational} || (c isa AbstractFloat && isfinite(c))
+function _exact_product(v::Vector{Any})
+    R = Rational{BigInt}
+    has_zero = any(iszero, v)
+    has_inf = any(c -> c isa Rational && iszero(denominator(c)), v)
+    has_zero && has_inf && return nothing
+    return prod(c -> R(c), v; init = one(R))
+end
+
 # Symmetric terms need no partner; every other term needs its own transposed partner with
 # the same scalings, and each term partners at most one other.
 function _is_symmetric_sum(ast)
@@ -196,8 +222,8 @@ function _is_symmetric_sum(ast)
         s, p = terms[i]
         _same_operator_shape(p.left_op, p.right_op) && continue
         j = findfirst(eachindex(terms)) do k
-            k > i && !used[k] && length(terms[k][1]) == length(s) &&
-                all(map(==, terms[k][1], s)) && _is_transposed_pair(p, terms[k][2])
+            k > i && !used[k] && _same_scalings(terms[k][1], s) &&
+                _is_transposed_pair(p, terms[k][2])
         end
         j === nothing && return false
         used[j] = true
@@ -305,8 +331,8 @@ Whether `a` is symmetric by construction: a sum or scaling of terms `innerₕ(L(
 with the *same* `L` written once and applied to both the trial and test argument, and of
 transposed pairs `innerₕ(A(u), B(v)) + innerₕ(B(u), A(v))`, which may sit anywhere in the sum.
 The two terms of a pair must carry the same coefficients: the same object (a `Ref`, a grid
-function) or equal numbers, or none on either. A term with no partner makes the answer
-`false`.
+function), or numbers whose exact products are equal (`(A / 2) / 3` partners `B / 6`), or
+none on either. A term with no partner makes the answer `false`.
 
 Purely structural: this walks `a`'s expression and never assembles a matrix. It is also
 conservative: a term that happens to produce a symmetric matrix through some other route

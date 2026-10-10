@@ -174,6 +174,79 @@ using Bramble:
         @test blk(Aop, 1, 1) ≈ transpose(Dx) * Hx * Dx
         @test blk(Aop, 1, 2) ≈ H
         @test all(iszero, blk(Aop, 2, 2))
+
+        # Leaves of different types, a Float64 leaf beside a Float32 one on different graded
+        # meshes, and a third leaf of the first's type, so a named block sits past a leaf of
+        # another type. Every block is the static walk's (#553), checked against the same
+        # form assembled on the scalar leaf spaces.
+        @testset "Mixed-type leaves (#553)" begin
+            m = 7
+            Ω1 = mesh(domain(interval(0.0, 1.0)), m, false)
+            set_points!(Ω1, collect(range(0.0, 1.0; length = m)) .^ 1.5)
+            Ω2 = mesh(domain(interval(0.0f0, 1.0f0)), m, false; backend = backend(Float32))
+            set_points!(Ω2, Float32.(collect(range(0.0, 1.0; length = m)) .^ 2))
+            Ω3 = mesh(domain(interval(0.0, 1.0)), m, false)
+            set_points!(Ω3, collect(range(0.0, 1.0; length = m)) .^ 3)
+            W1, W2, W3 = gridspace(Ω1), gridspace(Ω2), gridspace(Ω3)
+            Vm = W1 × W2 × W3
+            leaves = leaf_spaces_offsets(Vm)
+            mblk(A, i, j) = Matrix(A)[((i - 1) * m + 1):(i * m), ((j - 1) * m + 1):(j * m)]
+            k(u, v) = innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v))
+            # Assembled on the scalar leaves: trial `Wu`, test `Wv`, the block's own mesh.
+            ref(f, Wu, Wv) = Matrix(assemble(form(Wu, Wv, f)))
+            _alloc(A, a) = (assemble!(A, a); @allocated assemble!(A, a))
+            terms(op::Bramble.OperatorAdd) = (terms(op.left_op)..., terms(op.right_op)...)
+            terms(op) = (op,)
+
+            cases = (
+                # every diagonal block, each on its own leaf
+                ((u, v) -> k(u, v),
+                    ((1, 1) => ref(k, W1, W1), (2, 2) => ref(k, W2, W2),
+                        (3, 3) => ref(k, W3, W3))),
+                # a transposed pair across the Float64 and Float32 leaves, then a named
+                # block after it, distinct scales so no block passes for another
+                ((u, v) -> innerₕ(u(1), v(2)) + 3 * innerₕ(u(2), v(1)) +
+                           100 * innerₕ(u(3), v(2)),
+                    ((2, 1) => ref(innerₕ, W1, W2), (1, 2) => 3 * ref(innerₕ, W2, W1),
+                        (2, 3) => 100 * ref(innerₕ, W3, W2))),
+                # one named block, on the last leaf
+                ((u, v) -> inner₊ₓ(D₋ₓ(u(3)), D₋ₓ(v(3))),
+                    ((3, 3) => ref((u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)), W3, W3),))
+            )
+            # A named block over these leaves is resolved lazily; the fields
+            # jacobian_pattern.jl reads off it still name the right leaves and offsets.
+            named = innerₕ(TrialFunction{1}()(3), TestFunction{1}()(2))
+            nb = only(blocks(named, leaves, leaves))
+            @test nb.trial_leaf === W3 && nb.test_leaf === W2
+            @test nb.row_offset == m && nb.col_offset == 2m
+
+            # A linear form naming the Float32 leaf between the two Float64 ones: the
+            # literal component folds the leaf walk to that leaf, so `form` stays concrete
+            # with three leaves (two fold even without the walk being inlined).
+            src(x) = 1 + x^2
+            l = @inferred form(Vm, v -> innerₕ(src, v(2)))
+            b = assemble(l)
+            @test isapprox(b[(m + 1):(2m)], assemble(form(W2, v -> innerₕ(src, v)));
+                rtol = 1e-6)
+            @test all(iszero, b[1:m]) && all(iszero, b[(2m + 1):(3m)])
+
+            for (f, expected) in cases
+                a = form(Vm, Vm, f)
+                for term in terms(a.ast)
+                    R = only(Base.return_types(blocks, map(typeof, (term, leaves, leaves))))
+                    @test isconcretetype(R)
+                end
+                A = assemble(a)
+                want = Dict(expected)
+                # Float32 tolerance: a block reaching leaf 2 is computed in its precision.
+                for i in 1:3, j in 1:3
+
+                    @test isapprox(mblk(A, i, j), get(want, (i, j), zeros(m, m)); rtol = 1e-6)
+                end
+                @test any(!iszero, A)
+                @test _alloc(A, a) == 0
+            end
+        end
     end
 
     @testset "dirichlet_components restriction" begin

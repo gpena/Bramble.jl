@@ -314,9 +314,10 @@ struct PointDependentStencil <: StencilShiftTrait end
 # For the masked callers that zero is one they already multiply in.
 # A bare leaf needs no zero: relabelling it moves its one offset off the grid, and the
 # assembly's own bounds check drops it. A source has no offset left for that check once a
-# `PointDependentStencil` has reduced the shift to a bare value, so `ShiftNode` checks
-# [`_in_grid`](@ref) itself for one, and zeroes any other point-dependent operand (an
-# interpolation, say) with the same check after re-evaluating it at the clamped point.
+# `PointDependentStencil` has reduced the shift to a bare value, so `ShiftNode` reads it at
+# the clamped point and multiplies by [`_in_grid`](@ref) of the true one (a `Bool`, a strong
+# zero, so a non-finite boundary value still gives 0), and zeroes any other point-dependent
+# operand (an interpolation, say) with the same check after re-evaluating it there.
 @inline function _clamped_shift(
         m, I::CartesianIndex{D}, ::Val{Dim}, delta::Int
 ) where {D, Dim}
@@ -332,7 +333,8 @@ Whether `I` names a real point of `space`'s mesh.
 
 The check [`ShiftNode`](@ref)'s own `local_stencil` makes for a `PointDependentStencil` inner
 operator, in place of trusting `_clamped_shift`'s clamp; see the note there for why that
-trust does not extend to this one caller.
+trust does not extend to this one caller. For a source the `Bool` itself scales the stencil
+read at the clamped point, so the stencil keeps one length and one type at every point.
 """
 @inline _in_grid(space, I::CartesianIndex{D}) where {D} = checkbounds(Bool, LinearIndices(indices(mesh(space))), I)
 
@@ -340,7 +342,9 @@ trust does not extend to this one caller.
     shifted_inner_stencil(inner_op, inner, space, I, markers, ::Val{Dim}, delta)
 
 The stencil `inner_op` contributes `delta` points away in direction `Dim`, given `inner`, its
-stencil already evaluated at `I`.
+stencil already evaluated at `I`. Called from a [`ShiftNode`](@ref), `inner` is that stencil
+only for a bare `TrialFunction` or `TestFunction`, and `nothing` for any other operand, whose
+paths below re-evaluate it at the shifted point and never read `inner`.
 
 The one place the "shift by relabelling" assumption is made, so the one place a node that
 cannot be relabelled has to be handled. The default dispatches on

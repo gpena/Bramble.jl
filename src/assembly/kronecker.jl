@@ -56,8 +56,9 @@ through `assemble!`.
 @inline _kron_coeff_factor(c::Base.RefValue{<:Number}) = c[]
 
 # `init = 1.0` rather than `true` (the usual empty-product identity elsewhere in this
-# package): every use multiplies straight into a `Float64` accumulator, and an empty
-# `scales` tuple is the common case (a term with no wrapping scalar at all).
+# package): an empty `scales` tuple is the common case (a term with no wrapping scalar at
+# all). `mul!`, `getindex` and `SparseMatrixCSC` pass it through `_kron_scalar`, so a
+# `Float32` operator stays `Float32`; a complex one keeps the `Float64` coefficient.
 @inline _kron_coeff(scales::Tuple) = prod(_kron_coeff_factor, scales; init = 1.0)
 
 # --- Term classification ------------------------------------------------------------- #
@@ -1127,7 +1128,7 @@ function Base.getindex(K::KroneckerLinearOperator{T, D}, i::Int, j::Int) where {
     Jc = CartesianIndices(K.dims)[j]
     total = zero(T)
     for term in K.terms
-        c = _kron_coeff(term.scales)
+        c = _kron_scalar(T, _kron_coeff(term.scales))
         p = one(T)
         for d in 1:D
             p *= _kron_entry(term.factors[d], Ic[d], Jc[d])
@@ -1195,7 +1196,7 @@ function SparseArrays.SparseMatrixCSC(K::KroneckerLinearOperator{T}) where {T}
     J = Int[]
     V = T[]
     for term in K.terms
-        c = _kron_coeff(term.scales)
+        c = _kron_scalar(T, _kron_coeff(term.scales))
         Aterm = foldl(kron, reverse(map(_kron_as_sparse, term.factors)))
         i, j, v = SparseArrays.findnz(Aterm)
         append!(I, i)

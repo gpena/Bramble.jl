@@ -359,7 +359,8 @@ using Kronecker: Kronecker
                 # allocation and constraint internals a storage backend has to specialise;
                 # `_kron_coeff` is the scale a
                 # separable term carries, read when the extension rebuilds that sum as a
-                # `Kronecker.jl` object. None is something a user calls.
+                # `Kronecker.jl` object, and `_kron_scalar` converts it to the operator's
+                # element type there. None is something a user calls.
                 :_csr_backend,
                 :_backend_eye,
                 :_backend_zeros,
@@ -367,6 +368,7 @@ using Kronecker: Kronecker
                 :_dirichlet_bc_indices!,
                 :_each_marked,
                 :_kron_coeff,
+                :_kron_scalar,
                 # `_allocate_from_pattern` (BrambleMetalExt, BrambleSparseMatricesCSRExt): the
                 # system-matrix allocation hook a storage backend specialises on its own sparse
                 # type, same shape as `_csr_backend` above.

@@ -285,9 +285,10 @@ copy per grid-function coefficient in the form.
 
 **`dirac` on a device space.** A Float32 host space now gets a Float32 vector out of
 `dirac` (gpena/Bramble.jl#361; previously always Float64, which then failed to assemble
-on a Float32/Metal space). `dirac`'s default strength, `1.0`, is a Float64 literal, so pass
-a Float32 strength explicitly on a Float32/Metal space (`dirac(x0, 1f0)`) -- the same rule
-as any other Float64 coefficient (`innerₕ(1.0, v)` is refused on Metal too). In 1D, a vector
+on a Float32/Metal space). `dirac`'s default strength is the integer `1`, which takes the
+space's element type (gpena/Bramble.jl#634). An explicit Float64 strength (`dirac(x0, 1.0)`)
+still widens the vector to Float64 -- the same rule as any other Float64 coefficient
+(`innerₕ(1.0, v)` is refused on Metal too) -- so write `1f0` there. In 1D, a vector
 of several source points must be written as 1-tuples, `dirac([(0.2f0,), (0.7f0,)], ...)`: a
 plain vector of numbers is read as one multi-dimensional point instead.
 

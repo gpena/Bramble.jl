@@ -443,13 +443,22 @@ struct ShiftNode{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
 end
 
 """
+    shift_op(op::LazyOp{D}, ::Val{Dim}, amount::Int) where {D, Dim}
     shift_op(op::LazyOp{D}, dim::Int, amount::Int) where D
 
-Shifts the stencil of `op` by `amount` grid points in dimension `dim`.
+Shifts the stencil of `op` by `amount` grid points in dimension `Dim` (or `dim`). A
+direction that is not an `Int` in `1:D` throws an `ArgumentError`. The `Int` direction
+forwards to the `Val` form, so a literal direction still gives a concrete node type.
 """
-function shift_op(op::LazyOp{D}, dim::Int, amount::Int) where {D}
-    return ShiftNode{D, dim, typeof(op)}(amount, op)
+@noinline _throw_shift_dim_type_error(dim) = throw(ArgumentError("the stencil direction must be an Int, got $(repr(dim)) of type $(typeof(dim))"))
+
+@inline function shift_op(op::LazyOp{D}, ::Val{Dim}, amount::Int) where {D, Dim}
+    # `Val(true)` or `Val(1.0)` would pass the range check and fail later, far from here
+    Dim isa Int || _throw_shift_dim_type_error(Dim)
+    1 <= Dim <= D || _throw_stencil_dim_error(Dim, D)
+    return ShiftNode{D, Dim, typeof(op)}(amount, op)
 end
+@inline shift_op(op::LazyOp, dim::Int, amount::Int) = shift_op(op, Val(dim), amount)
 
 # The public shifts on a symbolic operand (gpena/Bramble.jl#352): `S₊ₓ(u)` is
 # `forward_shift(u, Val(1))`, the node `shift_op(u, 1, 1)` builds but with the direction read
@@ -479,11 +488,26 @@ end
 @inline function local_stencil(
         op::ShiftNode{D, Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D, Dim}
-    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
+    inner = _shift_operand_stencil(op.inner_op, space, I, markers, lin_idx)
     return _shift_node_stencil(
         stencil_shift_trait(op.inner_op), op, inner, space, I, markers
     )
 end
+
+# The operand's stencil at `I` itself, read only where it is used: a bare leaf's is relabelled
+# as it stands. Every other operand is evaluated afresh at the shifted point, so reading it at
+# `I` too doubled the work per level of nested shifts, 2^depth in all, once `simplify_ast`
+# stopped merging them (gpena/Bramble.jl#530). The other paths ignore `nothing`.
+@inline _shift_operand_stencil(op::_BareLeaf, space, I, markers, lin_idx::Int) = local_stencil(
+    op, space, I, markers, lin_idx
+)
+@inline _shift_operand_stencil(op, space, I, markers, lin_idx::Int) = nothing
+
+# A chain of shifts down to a bare leaf is re-evaluated inline, as the leaf itself is
+# (`_wraps_leaf`, `ast/common.jl`): each link has one tap, so inlining grows the code by the
+# chain's length, not taps^depth. Out of line, `S₊ₓ(S₊ₓ(u))` paid a call per link per point.
+@inline _wraps_leaf(::ShiftNode{D, Dim, <:_BareLeaf}) where {D, Dim} = true
+@inline _wraps_leaf(op::ShiftNode{D, Dim, <:ShiftNode}) where {D, Dim} = _wraps_leaf(op.inner_op)
 
 @inline _shift_node_stencil(
     ::TranslationInvariantStencil,
@@ -501,10 +525,17 @@ end
 # it, which is what makes `_clamped_shift`'s "clamp now, a zero mask absorbs it" contract safe
 # for them. For an operand with offsets, `_reevaluated_shift` (`ast/common.jl`) supplies that
 # zero itself where the clamp bites. Nothing there would absorb it for a source: a source has
-# already been reduced to a value by the time this runs, with no offset left to relabel. A
-# source shifted off the grid therefore reads as zero here, an empty stencil, the same
-# "missing neighbour is zero" convention the masked stencils use, mirroring how
-# `RegionRestriction` already spells "contributes nothing here".
+# already been reduced to a value by the time this runs, with no offset left to relabel. So
+# the source is read at the clamped point and scaled by `_in_grid` of the true one, and a
+# source shifted off the grid reads as zero, the same "missing neighbour is zero" convention
+# the masked stencils use. The scale is the `Bool` itself. `false` is a strong zero
+# (`Inf * false == 0.0`), so a source that is not finite at the boundary point still
+# contributes exactly zero, and a `Bool` keeps each entry's own type (`Float32`, `Int`, a
+# `Dual`). For a plain source or a Dirac the stencil keeps its length at every point, so it
+# has one concrete type. An empty stencil off the grid made it a `Union` that a Dirac's `Int`
+# weight carried into the assembly loop (gpena/Bramble.jl#524). A restricted source is never
+# called outside its region, where its stencil is empty, so it still infers a `Union`,
+# union-split at no run-time cost (gpena/Bramble.jl#639).
 #
 # An interpolation is not a source: it is re-evaluated at the clamped point like any other
 # operand, which is harmless inside a masked tap. A shift has no mask, so off the grid it
@@ -520,23 +551,29 @@ end
         I::CartesianIndex{D},
         markers
 ) where {D, Dim}
+    Ishift = I + _stencil_step(Val(Dim), Val(D)) * op.shift_amount
     if _is_source_only(op.inner_op)
-        Ishift = I + _stencil_step(Val(Dim), Val(D)) * op.shift_amount
-        _in_grid(space, Ishift) || return ()
-        return local_stencil(
-            op.inner_op, space, Ishift, markers, LinearIndices(indices(mesh(space)))[Ishift]
-        )
-    else
-        Ishift = I + _stencil_step(Val(Dim), Val(D)) * op.shift_amount
-        T = eltype(space)
-        return scale_stencil(
-            shifted_inner_stencil(
-                op.inner_op, inner, space, I, markers, Val(Dim), op.shift_amount
-            ),
-            _in_grid(space, Ishift) ? one(T) : zero(T)
-        )
+        m = mesh(space)
+        Iclamped = _clamped_shift(m, I, Val(Dim), _shift_delta(op.shift_amount))
+        lin = LinearIndices(indices(m))[Iclamped]
+        at = _source_stencil_at(op.inner_op, space, Iclamped, markers, lin)
+        return scale_stencil(at, _in_grid(space, Ishift))
     end
+    shifted = shifted_inner_stencil(
+        op.inner_op, inner, space, I, markers, Val(Dim), op.shift_amount
+    )
+    T = eltype(space)
+    return scale_stencil(shifted, _in_grid(space, Ishift) ? one(T) : zero(T))
 end
+
+# A source-only operand's stencil at `J`: its `local_stencil`, which a
+# [`RegionRestriction`](@ref) overrides (`operators/region_restriction.jl`). Outside its
+# region a restriction returns `()`, bound or not, without calling the source. Not
+# `shifted_inner_stencil`: `RegionRestriction`'s override there zeroes with `zero(T)`, so a
+# non-finite value outside the region gives NaN where the empty stencil gives 0.
+@inline _source_stencil_at(op, space, J::CartesianIndex, markers, lin_idx::Int) = local_stencil(
+    op, space, J, markers, lin_idx
+)
 
 function resolve_ast(op::ShiftNode{D, Dim}) where {D, Dim}
     inner = resolve_ast(op.inner_op)

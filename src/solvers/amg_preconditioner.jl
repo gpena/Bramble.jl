@@ -34,7 +34,9 @@ instead.
 
 # Keywords
 - `method`: `:smoothed_aggregation` (default) or `:ruge_stuben`, `AlgebraicMultigrid`'s two
-  hierarchy constructions.
+  hierarchy constructions. The two return different `MultiLevel` types, so a `method` known
+  only at run time makes the result type a `Union`. A literal `method`, or the default, gives
+  a concrete type.
 - Every other keyword forwards to the chosen `AlgebraicMultigrid` constructor.
 
 The `BilinearForm` method matches `assemble(a::BilinearForm; ...)`'s own default and does not

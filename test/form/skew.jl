@@ -44,6 +44,23 @@ using ..TestUtils: @test_allocs
             M3 = Matrix(assemble(form(W3, W3, skew_symmetric(w3))))
             @test M3 + M3' == zeros(size(M3))
         end
+
+        @testset "Float32 stays Float32 (#522)" begin
+            # The Float64 twin reuses the Float32 mesh's points, so the two matrices
+            # describe the same grid and differ only by rounding.
+            Ω32 = mesh(domain(interval(0.0f0, 1.0f0)), 21, false)
+            Ω64 = mesh(domain(interval(0.0, 1.0)), 21, true)
+            Bramble.set_points!(Ω64, Float64.(points(Ω32)))
+            W32, W64 = gridspace(Ω32), gridspace(Ω64)
+            w32 = Rₕ(W32, x -> 1.0f0 + x[1]^2)
+            w64 = Rₕ(W64, x -> 1.0 + x[1]^2)
+            @test eltype(w32) === Float32
+            M32 = Matrix(assemble(form(W32, W32, skew_symmetric(w32))))
+            M64 = Matrix(assemble(form(W64, W64, skew_symmetric(w64))))
+            @test eltype(M32) === Float32
+            @test M32 + M32' == zeros(Float32, size(M32))
+            @test isapprox(M32, M64; rtol = 10 * eps(Float32))
+        end
     end
 
     @testset "skew part of the advective form" begin

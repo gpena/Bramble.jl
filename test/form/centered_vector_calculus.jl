@@ -81,6 +81,12 @@ end
         @test eltype(B64) === Float64
         @test isapprox(B32, B64; rtol = 10 * eps(Float32))
     end
+    # The staggered εₕ pairs with inner₊ and halves its shear pieces the same way (#521).
+    B32 = assemble(form(V32, V32, (u, v) -> inner₊(εₕ(u), εₕ(v))))
+    B64 = assemble(form(V64, V64, (u, v) -> inner₊(εₕ(u), εₕ(v))))
+    @test eltype(B32) === Float32
+    @test eltype(B64) === Float64
+    @test isapprox(B32, B64; rtol = 10 * eps(Float32))
     for div in (divcₕ, div̽ₕ)
         A32 = assemble(form(W32, V32, (q, v) -> innerₕ(q, div(v))))
         @test eltype(A32) === Float32

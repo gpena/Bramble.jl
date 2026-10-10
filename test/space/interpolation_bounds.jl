@@ -329,6 +329,29 @@ using ..TestUtils: alloc_test, @test_allocs
         @test @inferred(interpolate_at(uₕ, x0)) isa Float64
         @test @inferred(interpolate_at(uₕ, x0; outside = :clamp)) isa Float64
     end
+
+    @testset "Float32 point on Float64 mesh (#525)" begin
+        # #525: an `:extrapolate` coordinate kept the point's own type, so the per-axis
+        # tuple was a Float32/Float64 Union and allocated (80-112 B) inside and outside.
+        @test Base.return_types(Bramble._interp_resolve_coord, (Float32, Float64, Float64, Symbol)) ==
+              Any[Float64]
+        Ω2 = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (7, 6), (false, false))
+        u2 = Rₕ(gridspace(Ω2), x -> x[1]^2 + 2x[2])
+        Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 6, 4), (false, false, false))
+        u3 = Rₕ(gridspace(Ω3), x -> x[1]^2 + 2x[2] - x[3])
+        for (u, xin, xout) in ((u2, (0.3f0, 0.4f0), (1.7f0, 0.4f0)),
+            (u3, (0.3f0, 0.4f0, 0.6f0), (1.7f0, 0.4f0, -0.2f0)))
+            for pol in (:error, :clamp, :extrapolate, NaN)
+                @test alloc_test(interpolate_at, u, xin; outside = pol) == 0
+                @test interpolate_at(u, xin; outside = pol) == interpolate_at(u, Float64.(xin))
+            end
+            for pol in (:clamp, :extrapolate, NaN)
+                @test alloc_test(interpolate_at, u, xout; outside = pol) == 0
+            end
+            @test interpolate_at(u, xout; outside = :extrapolate) ==
+                  interpolate_at(u, Float64.(xout); outside = :extrapolate)
+        end
+    end
 end
 
 end # module

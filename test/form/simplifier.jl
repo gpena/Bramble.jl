@@ -162,12 +162,13 @@ using Bramble:
         @test f.inner_op.left_op === A
         @test f.inner_op.right_op === B
 
-        # a shared dynamic coefficient factors the same way
+        # a shared dynamic coefficient does not: `Ref` identity is a run-time value
+        # (gpena/Bramble.jl#527), so the sum keeps both scaled terms
         β = Ref(1.5)
         f = simplify_ast(β * A + β * B)
-        @test f isa OperatorScale
-        @test f.scalar === β
-        @test f.inner_op isa OperatorAdd
+        @test f isa OperatorAdd
+        @test f.left_op.scalar === β
+        @test f.right_op.scalar === β
 
         # different coefficients never factor
         g = simplify_ast(2 * A + 3 * B)
@@ -248,11 +249,12 @@ end
         @test Matrix(assemble(a)) ≈ 2 .* (Ax + Ay)
     end
 
-    # The coefficient is combined at construction and must still track its updates.
+    # The same `Ref` on both terms is not combined (gpena/Bramble.jl#527), and the two
+    # terms must still track its updates.
     @testset "RefValue coefficient tracks updates" begin
         β = Ref(1.0)
         a = form(Wₕ, Wₕ, (u, v) -> β * innerₕ(u, v) + β * innerₕ(u, v))
-        @test resolve_form_ast(a) isa OperatorScale
+        @test resolve_form_ast(a) isa OperatorAdd
 
         @test Matrix(assemble(a)) ≈ 2 .* H
         β[] = 3.0
@@ -261,10 +263,10 @@ end
 end
 
 # Rules 4-7: scalar lifting out of an inner product, component distribution on a
-# component-mixing sum inside one, nested grid-function scales, and shift idempotence. Each reaches
-# one layer deeper than rules 1-3 (into `BilinearProduct`/`LinearProduct`/`ShiftNode`), so
-# every one gets its own structural check plus a numeric check against an independent
-# reference, exactly as rules 1-3 did above.
+# component-mixing sum inside one, nested grid-function scales, and shifts kept as built.
+# Each reaches one layer deeper than rules 1-3 (into `BilinearProduct`/`LinearProduct`/
+# `ShiftNode`), so every one gets its own structural check plus a numeric check against an
+# independent reference, exactly as rules 1-3 did above.
 @testset "Scalar lifting out of inner products" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, true))
     Wₕ = gridspace(Ωₕ)
@@ -390,31 +392,49 @@ end
     end
 end
 
-@testset "Shift idempotence" begin
+# A shift by a runtime amount, along a `Val` direction: `simplify_ast` keeps every shift as
+# built, so the node type never depends on the amount and `form` infers concretely
+# (gpena/Bramble.jl#530).
+_rt_shift(k::Int, W) = form(W, W, (u, v) -> innerₕ(shift_op(u, Val(1), k), v))
+
+@testset "Shift kept as built" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, true))
     Wₕ = gridspace(Ωₕ)
     A = IdentityOperator(Wₕ)
 
-    @test simplify_ast(shift_op(A, 1, 0)) === A
+    # neither `Shift₀` nor nested shifts fold: the amount is a field, not a type parameter
+    for op in (shift_op(A, 1, 0), shift_op(shift_op(A, 1, 2), 1, 3),
+        shift_op(shift_op(A, 1, 2), 1, -2), shift_op(shift_op(A, 1, 2), 2, 3))
+        @test simplify_ast(op) === op
+    end
 
-    s = simplify_ast(shift_op(shift_op(A, 1, 2), 1, 3))
-    @test s isa ShiftNode
-    @test s.shift_amount == 5
-    @test s.inner_op === A
+    u = Bramble.TrialFunction{2, 1}()
+    for op in (S₊ₓ(u), S₊ₓ(S₊ₓ(u)), S₊ₓ(S₋ₓ(u)), shift_op(u, 1, 0))
+        @test isconcretetype(only(Base.return_types(simplify_ast, (typeof(op),))))
+    end
+    @test isconcretetype(only(Base.return_types(_rt_shift, (Int, typeof(Wₕ)))))
 
-    # a shift and its inverse do not collapse: `S₊ₓ(S₋ₓ(u))` is `u` in the interior but 0 at
-    # the last point, where the inner shift's read has left the grid.
-    s0 = simplify_ast(shift_op(shift_op(A, 1, 2), 1, -2))
-    @test s0 isa ShiftNode
-    @test s0.shift_amount == -2
-    @test s0.inner_op isa ShiftNode
-    @test s0.inner_op.shift_amount == 2
-    @test simplify_ast(shift_op(shift_op(A, 1, 3), 1, -1)).inner_op isa ShiftNode
-
-    # shifts along different dimensions never combine into one node
-    s2 = simplify_ast(shift_op(shift_op(A, 1, 2), 2, 3))
-    @test s2 isa ShiftNode
-    @test s2.inner_op isa ShiftNode
+    # values: a zero shift is the identity and nested shifts in one sense are their sum,
+    # bitwise, on a non-uniform mesh, bilinear, under a difference, and over a source
+    Wn = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (false, false)))
+    sf = source_function(x -> 1 + x[1]^2 + x[2], Val(2))
+    bil(f) = Matrix(assemble(form(Wn, Wn, (u, v) -> innerₕ(f(u), v))))
+    lin(f) = assemble(form(Wn, v -> innerₕ(f(sf), v)))
+    @test bil(u -> shift_op(u, 1, 0)) == bil(identity)
+    @test Matrix(assemble(_rt_shift(0, Wn))) == bil(identity)
+    @test Matrix(assemble(_rt_shift(2, Wn))) == bil(u -> S₊ₓ(S₊ₓ(u)))
+    @test lin(f -> shift_op(f, 1, 0)) == lin(identity)
+    for (nested, single) in (
+        (u -> shift_op(shift_op(u, 1, 1), 1, 2), u -> shift_op(u, 1, 3)),
+        (u -> shift_op(shift_op(u, 1, -2), 1, -1), u -> shift_op(u, 1, -3)),
+        (u -> S₊ₓ(S₊ₓ(u)), u -> shift_op(u, 1, 2))
+    )
+        @test bil(nested) == bil(single)
+        @test bil(D₋ₓ ∘ nested) == bil(D₋ₓ ∘ single)
+        @test bil(D₋ᵧ ∘ nested) == bil(D₋ᵧ ∘ single)
+        @test lin(nested) == lin(single)
+    end
+    @test bil(u -> S₊ₓ(S₊ₓ(u))) != bil(u -> S₊ₓ(u))
 
     @testset "combined shift: numeric agreement" begin
         Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 8, true)
@@ -423,11 +443,11 @@ end
 
         b_nested = assemble(form(Wₕ1, v -> innerₕ(shift_op(shift_op(sf, 1, 1), 1, 2), v)))
         b_combined = assemble(form(Wₕ1, v -> innerₕ(shift_op(sf, 1, 3), v)))
-        @test b_nested ≈ b_combined
+        @test b_nested == b_combined
     end
 
     # the bilinear form of a composed shift against the grid-function computation, on a
-    # non-uniform mesh: same-sign shifts merge exactly, opposite-sign ones keep the
+    # non-uniform mesh: same-sign shifts compose to their sum, opposite-sign ones keep the
     # boundary zero of the inner read
     @testset "composed shifts: grid function" begin
         W = gridspace(mesh(domain(interval(0.0, 1.0)), 7, false))
@@ -439,10 +459,11 @@ end
             A = assemble(form(W, W, (u, v) -> innerₕ(f(u), v)))
             @test A * parent(uh) ≈ H * parent(f(uh))
         end
-        # `shift_op`'s amounts beyond one, against the matrix powers
+        # `shift_op`'s amounts beyond one and zero, against the matrix powers
         for (f, M) in (
             (u -> shift_op(shift_op(u, 1, 2), 1, -2), Sm^2 * Sp^2),
-            (u -> shift_op(shift_op(u, 1, 1), 1, 2), Sp^3)
+            (u -> shift_op(shift_op(u, 1, 1), 1, 2), Sp^3),
+            (u -> shift_op(u, 1, 0), Sp^0)
         )
             @test Matrix(assemble(form(W, W, (u, v) -> innerₕ(f(u), v)))) ≈ H * M
         end
@@ -640,6 +661,23 @@ _rt_two_sources(W, g₁, g₂) = form(W, v -> innerₕ(g₁, v) + innerₕ(g₂,
 # trade-off has to be a deliberate edit to this test rather than a silent drift either way.
 _rt_runtime_int(n::Int, W) = form(W, W, (u, v) -> n * innerₕ(u, v))
 
+# A runtime component index (gpena/Bramble.jl#529). The `Integer`-factor rule is decided by
+# `_component_free`, a type, so two `2 *` terms on component `i` stay two terms and `form`
+# infers concretely. The distribution gates still read `component_idx` values: whether
+# `v(i) + v(1)` mixes components is known only at run time, so that form's type is a `Union`
+# of the distributed and undistributed trees -- kept on purpose, see `_mixes_components`.
+_rt_comp_factor(i::Int, V) = form(V, V, (u, v) -> 2 * innerₕ(u(i), v(i)) + 2 * innerₕ(D₋ₓ(u(i)), v(i)))
+_rt_comp_mixed(i::Int, V) = form(V, V, (u, v) -> innerₕ(u(i), v(i) + v(1)))
+
+# Sums of `Ref`-scaled terms (gpena/Bramble.jl#527). The like-term and factoring rules used to
+# fire when both sides held the *same* `Ref` object, but `cl === cr` on two `RefValue{Float64}`
+# field loads is a run-time value, so `form` inferred a `Union`. `_rt_ref_two` reached the
+# like-term branch (one singleton product), `_rt_ref_shared` the factoring branch (two
+# different products), `_rt_ref_linear` the factoring branch through a linear form.
+_rt_ref_two(β, γ, W) = form(W, W, (u, v) -> β * innerₕ(u, v) + γ * innerₕ(u, v))
+_rt_ref_shared(β, W) = form(W, W, (u, v) -> β * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + β * innerₕ(u, v))
+_rt_ref_linear(β, W, f, g) = form(W, v -> β * innerₕ(f, v) + β * innerₕ(g, v))
+
 _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
 
 @testset "runtime coefficient: form type-stable" begin
@@ -662,8 +700,28 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
     @test _infers(_rt_two_coeffs, (W, typeof(g₁), typeof(g₂)))
     @test _infers(_rt_two_sources, (W, typeof(g₁), typeof(g₂)))
 
+    # `Ref` coefficients, shared or not: see `_rt_ref_two`'s comment.
+    R = Base.RefValue{Float64}
+    @test _infers(_rt_ref_two, (R, R, W))
+    @test _infers(_rt_ref_shared, (R, W))
+    @test _infers(_rt_ref_linear, (R, W, typeof(g₁), typeof(g₂)))
+
     # ... and the deliberate hole, asserted as such: see `_rt_runtime_int`'s comment.
     @test !_infers(_rt_runtime_int, (Int, W))
+
+    # Runtime component index: see `_rt_comp_factor`'s comment. The hole is asserted as a
+    # two-member `Union`, so a form that infers `Union{}` (a throwing path) cannot pass it.
+    Ω₁ = mesh(domain(interval(0.0, 1.0)), 11, true)
+    V₂ = gridspace(Ω₁)^Val(2)
+    @test _infers(_rt_comp_factor, (Int, typeof(V₂)))
+    T_mixed = only(Base.return_types(_rt_comp_mixed, (Int, typeof(V₂))))
+    @test T_mixed isa Union && length(Base.uniontypes(T_mixed)) == 2
+    # Same-component terms are no longer factored, but assemble to what was written.
+    M₂(f) = Matrix(assemble(form(V₂, V₂, f)))
+    @test Matrix(assemble(_rt_comp_factor(2, V₂))) ≈
+          2 .* M₂((u, v) -> innerₕ(u(2), v(2))) .+ 2 .* M₂((u, v) -> innerₕ(D₋ₓ(u(2)), v(2)))
+    @test Matrix(assemble(_rt_comp_mixed(2, V₂))) ≈
+          M₂((u, v) -> innerₕ(u(2), v(2))) .+ M₂((u, v) -> innerₕ(u(2), v(1)))
 
     # The rewrites themselves are unchanged for the `Integer` coefficients they are written
     # for, which is what makes the restriction affordable: the earlier testsets pin them.
@@ -730,6 +788,15 @@ _rt_factor(θ::Float64, W) = form(W, W,
     @test Matrix(assemble(coef)) ≈
           5.0 .* M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) +
           3.0 .* M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)))
+
+    # The same `Ref` on both terms no longer factors by identity (gpena/Bramble.jl#527), but
+    # a shared argument still merges the two products into one.
+    shared = bf((u, v) -> a * innerₕ(D₋ₓ(u), D₊ₓ(v)) + a * innerₕ(D₋ₓ(u), D₋ᵧ(v)))
+    @test _nprod(shared.ast, BilinearProduct) == 1
+    a[] = 7.0
+    @test Matrix(assemble(shared)) ≈
+          7.0 .* (M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) + M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v))))
+    @test simplify_ast(shared.ast) == shared.ast
 
     # Component-indexed products never factor, so no component-mixing sum is formed.
     V2 = Wₕ × Wₕ

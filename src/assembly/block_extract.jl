@@ -156,21 +156,172 @@ end
 end
 
 """
-    blocks(term, trial_leaves, test_leaves) -> Tuple{Vararg{Block}}
+    _NamedBlock{TrialLeaves, TestLeaves}
 
-Every [`Block`](@ref) `term` must be assembled into.
+The block a term names when its leaves differ in type, a Float64 leaf beside a Float32 one
+say. It holds the leaf tuples and the runtime `(trial, test)` components, not yet resolved
+to a [`Block`](@ref).
 
-A term naming both sides (via [`block_of`](@ref)) resolves to the one `Block` it names. A
+Why not resolve it at once? Indexing a heterogeneous tuple with a runtime component gives a
+`Union` of leaf types, and a `Block` built from that is abstract, so every consumer would
+dispatch on it per block and box what it computes. [`_foldl_blocks`](@ref) walks the tuples
+statically instead. Homogeneous leaves never come here: a runtime index into
+`Tuple{Vararg{T}}` is concrete and compiles one block walk, not one per leaf pair.
+"""
+struct _NamedBlock{TrialLeaves <: Tuple, TestLeaves <: Tuple}
+    trial_leaves::TrialLeaves
+    test_leaves::TestLeaves
+    trial_component::Int
+    test_component::Int
+end
+
+# jacobian_pattern.jl iterates `blocks` and reads `Block`'s fields off each element. For a
+# `_NamedBlock` those resolve at run time, as they did before the static walk existed: the
+# pattern is built once, at setup, where one dispatch per block is cheap.
+function Base.getproperty(nb::_NamedBlock, name::Symbol)
+    name === :trial_leaf && return first(getfield(nb, :trial_leaves)[nb.trial_component])
+    name === :test_leaf && return first(getfield(nb, :test_leaves)[nb.test_component])
+    name === :row_offset && return last(getfield(nb, :test_leaves)[nb.test_component])
+    name === :col_offset && return last(getfield(nb, :trial_leaves)[nb.trial_component])
+    return getfield(nb, name)
+end
+
+# Homogeneous on both sides: the runtime index is concrete. Anything else defers the
+# lookup to the static walk.
+@inline _named_block(trial_leaves::Tuple{L, Vararg{L}}, test_leaves::Tuple{M, Vararg{M}},
+    tc::Int, sc::Int) where {L, M} = _block_from_indices(trial_leaves, test_leaves, tc, sc)
+@inline _named_block(trial_leaves::Tuple, test_leaves::Tuple, tc::Int, sc::Int) = _NamedBlock(
+    trial_leaves, test_leaves, tc, sc)
+
+"""
+    blocks(term, trial_leaves, test_leaves) -> Tuple
+
+Every block `term` must be assembled into.
+
+A term naming both sides (via [`block_of`](@ref)) resolves to the one block it names. A
 term naming neither is the same integrand on every diagonal block, so it resolves to one
-`Block` per diagonal leaf pair. `trial_leaves`/`test_leaves` are `leaf_spaces_offsets`
-results.
+[`Block`](@ref) per diagonal leaf pair. `trial_leaves`/`test_leaves` are
+`leaf_spaces_offsets` results. A named block over leaves of different types is a
+[`_NamedBlock`](@ref), so the result is concrete either way; walk it with
+[`_foldl_blocks`](@ref) to reach each `Block` concretely.
 """
 @inline function blocks(term, trial_leaves::Tuple, test_leaves::Tuple)
     blk = block_of(term, length(trial_leaves), length(test_leaves))
     blk === nothing && return _diagonal_blocks(trial_leaves, test_leaves)
     tc, sc = blk
-    return (_block_from_indices(trial_leaves, test_leaves, tc, sc),)
+    return (_named_block(trial_leaves, test_leaves, tc, sc),)
 end
+
+# `f(acc, blk)` on one element of `blocks`: a `Block` as it is; a `_NamedBlock` by walking
+# its trial leaves, then its test leaves, to the named positions, so the `Block` built there
+# has concrete leaf types. The component ranges were checked by `block_of`.
+@inline _with_block(f::F, acc, blk::Block) where {F} = f(acc, blk)
+@inline _with_block(f::F, acc, nb::_NamedBlock) where {F} = _named_trial(
+    f, acc, getfield(nb, :trial_leaves), nb, 1)
+
+_named_trial(f::F, acc, ::Tuple{}, nb, c::Int) where {F} = acc
+function _named_trial(f::F, acc, trial_leaves::Tuple, nb, c::Int) where {F}
+    c == nb.trial_component &&
+        return _named_test(f, acc, first(trial_leaves), getfield(nb, :test_leaves), nb, 1)
+    return _named_trial(f, acc, Base.tail(trial_leaves), nb, c + 1)
+end
+
+_named_test(f::F, acc, trial, ::Tuple{}, nb, c::Int) where {F} = acc
+function _named_test(f::F, acc, trial, test_leaves::Tuple, nb, c::Int) where {F}
+    if c == nb.test_component
+        test = first(test_leaves)
+        return f(acc, Block(first(trial), first(test), last(test), last(trial)))
+    end
+    return _named_test(f, acc, trial, Base.tail(test_leaves), nb, c + 1)
+end
+
+"""
+    _foldl_blocks(f, acc, bs) -> acc
+
+`acc = f(acc, blk)` for every `Block` of `bs`, a [`blocks`](@ref) result, in order. A
+homogeneous tuple of `Block`s is a plain loop; any other tuple (one `Block` type per leaf
+pair, or a [`_NamedBlock`](@ref)) is walked by tail recursion, so `f` sees a concrete
+`Block` at every call. The accumulator is threaded by return value, never captured, so a
+counter such as the replay's `next` is not boxed.
+"""
+@inline function _foldl_blocks(f::F, acc, bs::Tuple{B, Vararg{B}}) where {F, B <: Block}
+    for blk in bs
+        acc = f(acc, blk)
+    end
+    return acc
+end
+@inline _foldl_blocks(f::F, acc, ::Tuple{}) where {F} = acc
+@inline _foldl_blocks(f::F, acc, bs::Tuple) where {F} = _foldl_blocks(
+    f, _with_block(f, acc, first(bs)), Base.tail(bs))
+
+"""
+    _foldl_block_pairs(f, acc, b1, b2) -> acc
+
+`acc = f(acc, blk, blk2)` for the `k`-th `Block`s of `b1` and `b2`, two equal-length
+[`blocks`](@ref) results: [`_foldl_blocks`](@ref) for a transposed pair, whose consumers need
+both blocks at once. A `_NamedBlock` on either side is resolved by nesting the two walks.
+"""
+@inline function _foldl_block_pairs(
+        f::F, acc, b1::Tuple{B1, Vararg{B1}}, b2::Tuple{B2, Vararg{B2}}
+) where {F, B1 <: Block, B2 <: Block}
+    for (blk, blk2) in map(tuple, b1, b2)
+        acc = f(acc, blk, blk2)
+    end
+    return acc
+end
+@inline _foldl_block_pairs(f::F, acc, ::Tuple{}, ::Tuple{}) where {F} = acc
+@inline function _foldl_block_pairs(f::F, acc, b1::Tuple, b2::Tuple) where {F}
+    acc = _with_block(acc, first(b1)) do a, blk
+        return _with_block((a2, blk2) -> f(a2, blk, blk2), a, first(b2))
+    end
+    return _foldl_block_pairs(f, acc, Base.tail(b1), Base.tail(b2))
+end
+
+"""
+    _foldl_leaves(f, acc, leaves) -> acc
+
+`acc = f(acc, c, leaf)` for each `(c, leaf)` of a `leaf_spaces_offsets` tuple. Homogeneous
+leaves loop with a runtime index; leaves of different types are walked by tail recursion, so
+`f` sees each leaf's own type rather than their `Union`.
+"""
+@inline function _foldl_leaves(f::F, acc, leaves::Tuple{L, Vararg{L}}) where {F, L}
+    for (c, leaf) in enumerate(leaves)
+        acc = f(acc, c, leaf)
+    end
+    return acc
+end
+@inline _foldl_leaves(f::F, acc, leaves::Tuple) where {F} = _foldl_leaves_from(
+    f, acc, leaves, 1)
+
+_foldl_leaves_from(f::F, acc, ::Tuple{}, c::Int) where {F} = acc
+function _foldl_leaves_from(f::F, acc, leaves::Tuple, c::Int) where {F}
+    _foldl_leaves_from(
+        f, f(acc, c, first(leaves)), Base.tail(leaves), c + 1)
+end
+
+"""
+    _at_leaf(f, leaves, c) -> f(leaves[c])
+
+`f` applied to leaf `c` of a `leaf_spaces_offsets` tuple, `c` already range-checked. A
+runtime index on homogeneous leaves; a static walk on leaves of different types, so `f`
+is called on a concrete leaf. The walk's recursion is `@inline`, so a literal component
+(`v(2)`) reaches the comparisons as a constant and folds the walk to one leaf: without it,
+constant propagation stopped at the recursion and `form` inferred a `Union` of the
+per-leaf results on three leaves or more.
+"""
+@inline _at_leaf(f::F, leaves::Tuple{L, Vararg{L}}, c::Int) where {F, L} = f(leaves[c])
+@inline _at_leaf(f::F, leaves::Tuple, c::Int) where {F} = _at_leaf_from(f, leaves, c, 1)
+
+@inline _at_leaf_from(f::F, ::Tuple{}, c::Int, i::Int) where {F} = _throw_leaf_out_of_range(
+    c, i - 1)
+@inline function _at_leaf_from(f::F, leaves::Tuple, c::Int, i::Int) where {F}
+    c == i && return f(first(leaves))
+    return _at_leaf_from(f, Base.tail(leaves), c, i + 1)
+end
+
+@noinline _throw_leaf_out_of_range(c::Int, n::Int) = throw(
+    ArgumentError("component $c is outside a composite space of $n components.")
+)
 
 """
     _collect_region_labels(op) -> NTuple{N, Symbol}

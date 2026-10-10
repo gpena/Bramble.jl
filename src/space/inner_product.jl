@@ -411,6 +411,10 @@ end
 Returns the discrete norm of `uₕ` that `kind` names: `"h"` is [`normₕ`](@ref), `"1h"` is
 [`norm₁ₕ`](@ref) and `"∞"` is [`norminf`](@ref). Any other `kind` throws an `ArgumentError`.
 
+Every kind returns the data's element type promoted with the mesh's, so the result type does
+not depend on `kind`: for `"∞"` this converts [`norminf`](@ref), which keeps the data's own
+type, so a `Float32` or `Int` element on a `Float64` mesh gives a `Float64` for every kind.
+
 The one-argument `norm(uₕ)` is unchanged: a [`VectorElement`](@ref) is an `AbstractVector`,
 so it is still `LinearAlgebra`'s Euclidean norm of the values, which carries no quadrature
 weight.
@@ -418,7 +422,7 @@ weight.
 function norm(uₕ::VectorElement, kind::AbstractString)
     kind == "h" && return normₕ(uₕ)
     kind == "1h" && return norm₁ₕ(uₕ)
-    kind == "∞" && return norminf(uₕ)
+    kind == "∞" && return convert(promote_type(eltype(uₕ), eltype(space(uₕ))), norminf(uₕ))
     throw(ArgumentError("the norm must be \"h\", \"1h\" or \"∞\", got \"$kind\""))
 end
 

@@ -390,6 +390,68 @@ using Bramble:
         @test resolve_ast(t) isa OperatorScale
     end
 
+    @testset "Integer divisor keeps eltype (#633)" begin
+        # a divisor that fits in an `Int` scales by the exact rational, wider ones and floats
+        # by the `Float64` reciprocal as before
+        @test (@inferred id / 2).scalar === 1 // 2
+        @test (id / -3).scalar === -1 // 3
+        @test (id / Int8(-128)).scalar === -1 // 128
+        @test (id / UInt32(3)).scalar === 1 // 3
+        @test (id / true).scalar === 1 // 1
+        @test (id / 0).scalar === 1 // 0
+        @test Float64((id / typemin(Int)).scalar) === 1 / typemin(Int)
+        @test (id / UInt64(2)).scalar === 0.5
+        @test (id / Int128(2)).scalar === 0.5
+        @test (id / big(2)).scalar isa BigFloat
+        @test (id / 0.5).scalar === 2.0
+
+        # the simplifier neither folds nor combines a rational scale: checked arithmetic
+        # would overflow where the floats it stands for do not
+        t = Bramble.simplify_ast((id / 2^40) / 2^40)
+        @test t isa OperatorScale && t.inner_op isa OperatorScale
+        @test Bramble.simplify_ast(id / 2 + id / 2) isa OperatorAdd
+        @test Bramble.simplify_ast(2 * (3 * id)).scalar === 6
+
+        # a Float32 space on a non-uniform mesh assembles Float32 forms through `/ 2`
+        W32 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 11, false;
+            backend = backend(Float32)))
+        A32 = assemble(form(W32, W32, (u, v) -> innerₕ(u, v) / 2))
+        @test eltype(A32) === Float32
+        @test A32 == assemble(form(W32, W32, (u, v) -> 0.5f0 * innerₕ(u, v)))
+        b32 = assemble(form(W32, v -> innerₕ(x -> 1.0f0, v) / 2))
+        @test eltype(b32) === Float32
+        @test b32 == assemble(form(W32, v -> 0.5f0 * innerₕ(x -> 1.0f0, v)))
+        N32 = form(W32, W32, (u, v) -> -(innerₕ(u, v) / 2) / 3 + innerₕ(u, v) / UInt8(4))
+        @test eltype(assemble(N32)) === Float32
+
+        # on Float64 a lone divisor gives the `1 / c` matrix bit for bit, for a plain and a
+        # `Ref`-scaled form
+        A = assemble(form(Wₕ1, Wₕ1, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)) / 3))
+        @test A == assemble(form(Wₕ1, Wₕ1, (u, v) -> (1 / 3) * innerₕ(D₋ₓ(u), D₋ₓ(v))))
+        β = Ref(3.0)
+        Aβ = assemble(form(Wₕ1, Wₕ1, (u, v) -> innerₕ(β * D₋ₓ(u), D₋ₓ(v)) / 2))
+        @test Aβ == assemble(form(Wₕ1, Wₕ1, (u, v) -> innerₕ(1.5 * D₋ₓ(u), D₋ₓ(v))))
+
+        # divisors whose rational products, sums or negations overflow assemble as the
+        # floats did: each scale converts on its own
+        A1 = assemble(form(Wₕ1, Wₕ1, (u, v) -> innerₕ(u, v)))
+        F(f) = assemble(form(Wₕ1, Wₕ1, f))
+        @test F((u, v) -> (innerₕ(u, v) / 2^40) / 2^40) == A1 .* (1 / 2^40)^2
+        @test F((u, v) -> innerₕ(u, v) / 2^62 + innerₕ(u, v) / (2^62 - 1)) ≈
+              A1 .* (1 / 2^62 + 1 / (2^62 - 1))
+        @test F((u, v) -> -(innerₕ(u, v) / Int8(-128))) == A1 ./ 128
+        @test F((u, v) -> innerₕ(u, v) / typemin(Int)) == A1 .* (1 / typemin(Int))
+        @test F((u, v) -> (innerₕ(u, v) / UInt8(200)) / UInt8(200)) ≈ A1 ./ 40000
+        Z = F((u, v) -> innerₕ(u, v) / 0 - innerₕ(u, v) / 0)
+        @test all(isnan, Z.nzval)
+        @test all(==(Inf), F((u, v) -> innerₕ(u, v) / 0 + innerₕ(u, v) / 0).nzval)
+
+        # the documented limit: a transposed pair multiplies its nested rational scales
+        # exactly, and 2^80 does not fit in an `Int`
+        @test_throws OverflowError F((u, v) -> (innerₕ(D₋ₓ(u), v) / 2^40) / 2^40 +
+                                               innerₕ(u, D₋ₓ(v)))
+    end
+
     @testset "is_symbolic" begin
         u, v = TrialFunction{2}(), TestFunction{2}()
 

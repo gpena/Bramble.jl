@@ -199,14 +199,20 @@ Semidiscretise `M u_h' = F(t) - A(t) u_h` from a spatial operator that genuinely
 `t` -- built fresh, once per element type `t` is ever reached at, instead of the single
 `BilinearForm` the other method assembles into one fixed matrix.
 
-`build(t)` is called once for each element type `t` is ever seen at (`Float64` on a normal
-step, a `ForwardDiff.Dual` while a Rosenbrock stepper's `tgrad` differentiates the residual
-through `t`), and must return `(a, refill!)`: the [`BilinearForm`](@ref) to assemble, built
-around whatever live coefficient buffer(s) it needs, and a *one*-argument `refill!(t)`
-updating those buffers from the current `t` -- called on every step, cache hit or miss, so a
-later step at an already-seen type still sees the new `t` rather than the one `build` first
-saw. Same build/refill!/cache discipline as [`type_cached_assemble!`](@ref), keyed on `t`
-instead of a `VectorElement` iterate.
+`build(t)` is called once for each element type `t` is ever seen at (the space's element
+type on a normal step, a `ForwardDiff.Dual` while a Rosenbrock stepper's `tgrad`
+differentiates the residual through `t`), and must return `(a, refill!)`: the
+[`BilinearForm`](@ref) to assemble, built around whatever live coefficient buffer(s) it
+needs, and a *one*-argument `refill!(t)` updating those buffers from the current `t` --
+called on every step, cache hit or miss, so a later step at an already-seen type still sees
+the new `t` rather than the one `build` first saw. Same build/refill!/cache discipline as
+[`type_cached_assemble!`](@ref), keyed on `t` instead of a `VectorElement` iterate.
+
+The probe at construction calls `build` at `zero(eltype(Wₕ))`, `Wₕ` the space of `l`, so the
+time span of the solve should use that same element type: a `Float32` space solved over a
+`Float64` time span reaches a second element type and builds once more for it. A step at
+any element type other than the probe's goes through an untyped cache, so the residual and
+[`jacobian!`](@ref) allocate on every call there, not only for a source buffer.
 
 `build` should be a named function, not a closure literal written inline -- the same reason
 [`type_cached_assemble!`](@ref)'s own docstring gives: a `do ... end` block re-literalised on
@@ -214,8 +220,8 @@ every call allocates a new closure each time.
 
 This is what lets a Rosenbrock method (`Rodas5P`, `Rosenbrock23`) capture `-Ȧ(t) u_h` by
 differentiating through `t` directly: the other method's fixed `BilinearForm` closes over a
-`Float64`-typed coefficient buffer, which cannot hold a `Dual` and throws `InexactError`
-under exactly that AD sweep.
+coefficient buffer of the space's element type, which cannot hold a `Dual` and throws
+`InexactError` under exactly that AD sweep.
 
 # Keywords
 Same as the `BilinearForm` method, except `reassemble` defaults to `true` -- a `build`-based
@@ -251,14 +257,16 @@ function semidiscretize(
     labels, constraint_values = _normalize_dirichlet(dirichlet)
     constraints = _source_constraints(labels, constraint_values)
 
-    t0 = 0.0
+    t0 = zero(eltype(sp))
     a0, refill0! = build(t0)
     _validate_semidiscrete_spaces(a0, l)
     refill0!(t0)
     A0 = allocate_system_matrix(a0)
     assemble!(A0, a0; dirichlet = labels, dirichlet_components = dirichlet_components)
 
-    operator = TypeCachedOperator(build, Dict{DataType, Any}(Float64 => (a0, refill0!, A0)))
+    # The probe's entry is the operator's typed `primary`, and its `A0` is the very matrix
+    # `operator_matrix(sd)` returns: a step at `typeof(t0)` refills it in place.
+    operator = TypeCachedOperator(build, typeof(t0), (a0, refill0!, A0))
 
     M = _assemble_mass_matrix(
         mass === nothing ? _default_mass_form(sp) : mass, labels, dirichlet_components
@@ -282,7 +290,7 @@ function semidiscretize(
 end
 
 """
-    TypeCachedOperator{F}
+    TypeCachedOperator{F, K, P}
 
 A time-dependent spatial operator for [`semidiscretize`](@ref), built by `build(t)` once per
 element type `t` is ever reached at, exactly the discipline [`type_cached_assemble!`](@ref)
@@ -290,11 +298,21 @@ uses for a coefficient that depends on the current iterate: the *pattern* of a t
 operator is as fixed across element types as it is across time steps, only the coefficient's
 own values differ, and only because they were evaluated at a different `t`.
 
+The entry built at construction, for `t` of type `K`, is stored concretely as `primary`
+(`P`, the type of `(a, refill!, A)`), so a step at `K` -- every step of a real solve --
+infers and allocates nothing. Any other element type (a `ForwardDiff.Dual`) lives in
+`cache`.
+
 Not constructed directly: [`semidiscretize`](@ref)`(build, l; ...)` builds one.
 """
-struct TypeCachedOperator{F}
+struct TypeCachedOperator{F, K, P}
     build::F
+    primary::P
     cache::Dict{DataType, Any}
+end
+
+function TypeCachedOperator(build::F, ::Type{K}, primary::P) where {F, K, P}
+    return TypeCachedOperator{F, K, P}(build, primary, Dict{DataType, Any}())
 end
 
 # Mirrors `type_cached_assemble!`'s own cache-dict discipline, with `t` -- rather than a
@@ -357,9 +375,12 @@ end
 Evaluate `du = F(t) - A u`, the right-hand side of `M u_h' = F(t) - A u_h`.
 
 Allocates nothing (**0 bytes**) whenever `eltype(du)` and `typeof(t)` match the assembled
-element type -- the path every step of a real solve takes. A wider element type (a
-`ForwardDiff.Dual` `t`, from the time gradient a Rosenbrock method needs) is met by
-allocating a matching source buffer for that call alone.
+element type (the space's element type, for a `build`-based operator) -- the path every step
+of a real solve takes. A wider element type (a `ForwardDiff.Dual` `t`, from the time
+gradient a Rosenbrock method needs) is met by allocating a matching source buffer for that
+call. On a `build`-based operator, a step at any element type other than the probe's also
+goes through an untyped operator cache, and allocates on every call (as does
+[`jacobian!`](@ref)).
 
 `p` reaches [`update_coefficients!`](@ref semidiscretize) and a time-dependent Dirichlet
 condition written as `(x, t, p) -> ...`, if either was given one of those shapes; otherwise
@@ -476,18 +497,34 @@ end
     return _reassemble_operator!(sd.operator, sd, x, t)
 end
 
-# The `BilinearForm` path: one fixed, `Float64`-typed matrix, refilled in place every step --
-# unaffected by, and exactly as before, `TypeCachedOperator` existing.
+# The `BilinearForm` path: one fixed matrix, of its assembled element type, refilled in
+# place every step -- unaffected by, and exactly as before, `TypeCachedOperator` existing.
 @inline function _reassemble_operator!(op::BilinearForm, sd::Semidiscretization, x, t)
     A = sd.operator_matrix
     assemble!(A, op; dirichlet = sd.labels, dirichlet_components = sd.components)
     return A
 end
 
-# The `build`-based path: a fresh matrix, of whichever element type `x` and `t` are running
-# at, fetched from (or added to) `op`'s cache -- see `TypeCachedOperator`.
-function _reassemble_operator!(op::TypeCachedOperator, sd::Semidiscretization, x, t)
+# The `build`-based path. At the key the probe was built under (`K`, folded at compile time
+# against `T`) it refills and reassembles the typed `primary`, whose matrix is
+# `sd.operator_matrix`; any other element type goes through the barrier below.
+function _reassemble_operator!(
+        op::TypeCachedOperator{F, K}, sd::Semidiscretization, x, t
+) where {F, K}
     T = promote_type(eltype(x), typeof(t))
+    T === K || return _reassemble_cached!(op, T, sd, t)
+    a, refill!, A = op.primary
+    refill!(t)
+    assemble!(A, a; dirichlet = sd.labels, dirichlet_components = sd.components)
+    return A
+end
+
+# A fresh matrix, of whichever element type `x` and `t` are running at, fetched from (or
+# added to) `op`'s cache. Its entries are untyped, so this path dispatches at run time; the
+# barrier keeps that out of the typed path above.
+@noinline function _reassemble_cached!(
+        op::TypeCachedOperator, ::Type{T}, sd::Semidiscretization, t
+) where {T}
     a, A = _fetch_or_build!(op, T, t)
     assemble!(A, a; dirichlet = sd.labels, dirichlet_components = sd.components)
     return A

@@ -24,6 +24,17 @@ test leaves replaced by their indexed forms.
 
 Reached through the functor, so `op(i)` is `component(op, i)`. The index distributes, so
 `(v + D₋ₓ(v))(1)` and `v(1) + D₋ₓ(v(1))` are the same tree.
+
+The index is a value, not part of the type. A literal index such as `v(1) + v(2)` still
+gives `form` one concrete return type. A runtime component index (`v(i)` with `i` a
+function argument) makes the form's type a `Union` when a sum of indexed terms sits inside
+one inner product (`innerₕ(u(i), v(i) + D₋ₓ(v(i)))`), or under a scalar or grid-function
+coefficient shared by the whole sum (`3 * (innerₕ(u(i), v(i)) + innerₕ(u(i), D₋ₓ(v(i))))`),
+even when every term names the same `i`: whether the sum is split into one term per
+component is then decided at run time. Separate inner products, each carrying its own
+coefficient (`3 * innerₕ(u(i), v(i)) + 3 * innerₕ(u(i), D₋ₓ(v(i)))`), infer concretely. The
+form assembles the same either way; where a concrete type matters (automatic
+differentiation, a function barrier), use literal components or separate inner products.
 """
 function component end
 

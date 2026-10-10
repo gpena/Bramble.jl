@@ -390,11 +390,11 @@ Matrix(assemble(a_off)) ≈ Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(
     A `Float64` coefficient is only known at run time, so the rule does not fire.
 
 Two limits apply. A rule whose outcomes have different node types fires only when the
-compiler settles it from types, so a scalar coefficient must be an `Integer` (or the same
-`Ref` on both terms) for the like-term and factoring rules to apply. A `Float64` known at run
-time leaves the terms apart: same numbers, one extra sweep. And the pass stops at an inner
-product's own arguments, so a scalar buried in a difference such as `innerₕ(D₋ₓ(2 * u), v)`
-is invisible to it. Write `2 * innerₕ(D₋ₓ(u), v)` instead.
+compiler settles it from types, so a scalar coefficient must be an `Integer` for the
+like-term and factoring rules to apply. A `Float64` known at run time, or a `Ref`, leaves the
+terms apart: same numbers, one extra sweep. And the pass stops at an inner product's own
+arguments, so a scalar buried in a difference such as `innerₕ(D₋ₓ(2 * u), v)` is invisible
+to it. Write `2 * innerₕ(D₋ₓ(u), v)` instead.
 
 The [internals page on forms](../internals/form.md) documents the stencil algebra and the
 exact rewrite rules.

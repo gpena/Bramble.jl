@@ -59,7 +59,9 @@ step with `wₕ` refreshed; the construction does not care where they came from.
 See also: [`innerₕ`](@ref), [`Dcₓ`](@ref)
 """
 @inline function skew_symmetric(A)
-    return (u, v) -> 0.5 * innerₕ(A(u), v) - 0.5 * innerₕ(u, A(v))
+    # The half is the exact `1 // 2`: a Float64 `0.5` would promote a Float32 form to
+    # Float64 (#522), and `/ 2` builds the same Float64 scale.
+    return (u, v) -> (1 // 2) * innerₕ(A(u), v) - (1 // 2) * innerₕ(u, A(v))
 end
 
 @inline skew_symmetric(wₕ::VectorElement) = skew_symmetric(_advection_operator((wₕ,)))

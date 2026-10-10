@@ -205,6 +205,110 @@ using Bramble:
         @test !isapprox(b2, wrongly_clamped)
     end
 
+    @testset "Shifted source infers (#524)" begin
+        # Off the grid a shifted source used to be an empty stencil and on it a one-entry
+        # one, so `local_stencil` inferred a `Union`; a Dirac's `Int` weight carried it past
+        # the `LinearProduct` into the assembly loop. Both branches now keep one length.
+        # A shifted *restricted* source is not among them: it is never evaluated outside its
+        # region, so its stencil is still empty there (see "Shifted source kept in region").
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
+        Wₕ = gridspace(Ωₕ)
+        sf = source_function(x -> x + 1, Val(1))
+        n = length(weights(Wₕ, Innerh()))
+        shapes = (
+            v -> innerₕ(shift_op(sf, 1, 1), v),
+            v -> innerₕ(shift_op(dirac(0.4), 1, 1), v),
+            v -> innerₕ(D₋ₓ(shift_op(sf, 1, 1)), v)
+        )
+        for shape in shapes
+            ast = resolve_form_ast(form(Wₕ, shape))
+            for op in (ast.left_op, ast), i in (1, 3, n)  # `n`: the shift leaves the grid
+
+                @test @inferred(Bramble.local_stencil(op, Wₕ, CartesianIndex(i), nothing, i)) isa
+                      Tuple
+            end
+        end
+    end
+
+    @testset "Shifted Inf source off grid (#524)" begin
+        # `false` is a strong zero, so the last row, whose shifted point is off the grid, is
+        # exactly 0 even though the clamped read there is `Inf`; scaling by `zero(T)` instead
+        # would give `Inf * 0.0 = NaN`. The row before it legitimately reads `f(1) = Inf`.
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
+        Wₕ = gridspace(Ωₕ)
+        f = x -> 1 / (1 - x)
+        fₕ = Rₕ(Wₕ, f)
+        w = weights(Wₕ, Innerh())
+        @test isinf(parent(fₕ)[end])
+
+        b = assemble(form(Wₕ, v -> innerₕ(shift_op(source_function(f, Val(1)), 1, 1), v)))
+        expected = [i < length(w) ? parent(fₕ)[i + 1] * w[i] : 0.0 for i in eachindex(w)]
+        @test b[end] === 0.0
+        @test isequal(b, expected)
+    end
+
+    @testset "Shifted restricted Inf source (#524)" begin
+        # A restricted source shifted onto a grid point outside its region contributes
+        # exactly 0 even where the source is not finite there. The `zero(T)` the restriction's
+        # own tap override scales by would give `Inf * 0.0 = NaN` instead.
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
+        Wₕ = gridspace(Ωₕ)
+        w = weights(Wₕ, Innerh())
+        n = length(w)
+
+        f = x -> 1 / (1 - x)                        # Inf at x = 1, a boundary point
+        fₕ = Rₕ(Wₕ, f)
+        b = assemble(form(Wₕ,
+            v -> innerₕ(shift_op(restrict_to(:interior, source_function(f, Val(1))), 1, 1), v)))
+        expected = [1 < i + 1 < n ? parent(fₕ)[i + 1] * w[i] : 0.0 for i in 1:n]
+        @test b[n - 1] === 0.0                      # reads x = 1, outside :interior
+        @test isequal(b, expected)
+
+        g = x -> x < 0.5 ? NaN : x                  # NaN at interior points too
+        gₕ = Rₕ(Wₕ, g)
+        b2 = assemble(form(Wₕ,
+            v -> innerₕ(shift_op(restrict_to(:boundary, source_function(g, Val(1))), 1, -1), v)))
+        expected2 = [i - 1 in (1, n) ? parent(gₕ)[i - 1] * w[i] : 0.0 for i in 1:n]
+        @test isnan(b2[2])                          # reads x = 0, on :boundary, g(0) = NaN
+        @test all(i -> b2[i] === 0.0, 3:n)          # reads interior NaNs, all outside
+        @test isequal(b2, expected2)
+    end
+
+    @testset "Shifted source kept in region (#524)" begin
+        # A source may be undefined outside its region; shifting the restriction must not
+        # call it there. `g` throws at both boundary points, outside `:interior`.
+        Bramble._seed_mesh1d_rng!(7)
+        Ωₕ = try
+            mesh(domain(interval(0.0, 1.0)), 9, false)
+        finally
+            Bramble._unseed_mesh1d_rng!()
+        end
+        Wₕ = gridspace(Ωₕ)
+        w = weights(Wₕ, Innerh())
+        x = points(Ωₕ)
+        n = length(w)
+        g = x -> 0 < x < 1 ? x : throw(DomainError(x))
+        rg = restrict_to(:interior, source_function(g, Val(1)))
+
+        b = assemble(form(Wₕ, v -> innerₕ(shift_op(rg, 1, 1), v)))
+        @test isequal(b, [1 < i + 1 < n ? x[i + 1] * w[i] : 0.0 for i in 1:n])
+        b2 = assemble(form(Wₕ, v -> innerₕ(shift_op(rg, 1, -2), v)))
+        @test isequal(b2, [1 < i - 2 < n ? x[i - 2] * w[i] : 0.0 for i in 1:n])
+
+        # outside the region the stencil is empty, so `local_stencil` infers a `Union`
+        # of the two lengths (gpena/Bramble.jl#639), and the source is not read there
+        ast = resolve_form_ast(form(Wₕ, v -> innerₕ(shift_op(rg, 1, 1), v)))
+        op, mk = Bramble._bind_walk(ast.left_op, Wₕ)
+        @test Bramble.local_stencil(op, Wₕ, CartesianIndex(n - 1), mk, n - 1) === ()
+        @test only(Bramble.local_stencil(op, Wₕ, CartesianIndex(2), mk, 2))[end] == x[3]
+
+        # the Union is split, not boxed: refilling allocates nothing
+        l = form(Wₕ, v -> innerₕ(shift_op(rg, 1, 1), v))
+        bl = assemble(l)
+        assemble!(bl, l)                            # warm up
+        @test (@allocated assemble!(bl, l)) == 0
+    end
+
     @testset "Region restriction" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 6), (true, true))
         Wₕ = gridspace(Ωₕ)

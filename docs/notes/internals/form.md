@@ -178,10 +178,10 @@ storing it (`ast/simplifier.jl`, [gpena/Bramble.jl#159](https://github.com/gpena
 Most of it rewrites three node types: `OperatorAdd`, `OperatorScale` and `GridFunctionScale`.
 They are exactly what `ast.jl`'s `+`, `*` and `/` overloads build. Every other node (differences,
 averages, jumps, restrictions, interpolation, and every leaf) is semantic rather than
-algebraic, and is left as it is. Two exceptions reach one layer deeper, into
-`BilinearProduct`/`LinearProduct` (what `innerₕ`/`inner₊`/... build) and into `ShiftNode`:
-leaving them untouched would mean either a correctness gap (§"Component distribution" below)
-or a documented dead end (a hidden scalar defeating `symmetry.jl`'s structural shape check).
+algebraic, and is left as it is. The exceptions reach one layer deeper, into
+`BilinearProduct`/`LinearProduct` (what `innerₕ`/`inner₊`/... build): leaving them
+untouched would mean either a correctness gap (§"Component distribution" below) or a
+documented dead end (a hidden scalar defeating `symmetry.jl`'s structural shape check).
 
 The rules matter here rather than only in the tutorial because of where the router splits
 work: `_visit_operator_add*` (`stencil_eval.jl`) recurses on `OperatorAdd` alone, so every
@@ -197,7 +197,7 @@ smaller number of sweeps for the same matrix or vector:
 | `c1 * (c2 * A)`, both static | `(c1 * c2) * A` | unchanged term count, one multiply instead of two |
 | `A + A`, `A` a singleton node | `2 * A` | two routed terms become one |
 | `c1 * A + c2 * A`, same singleton `A` | `(c1 + c2) * A` | two routed terms become one |
-| `c * A + c * B`, same `c` | `c * (A + B)` | two routed terms become one |
+| `c * A + c * B`, same `Integer` `c`, `A`/`B` name no component | `c * (A + B)` | two routed terms become one |
 
 `ZeroOperator{D,Nothing}(nothing)` is synthesized for the zero case rather than reusing a
 concrete space, because a `LazyOp{D}` subtree in general carries no space to read back.
@@ -239,13 +239,15 @@ sums assemble as the two terms they were written as, which means one extra route
 numbers.
 
 A `Base.RefValue` coefficient (§2's dynamic scalar coefficients) is never dereferenced by the
-pass and never combined with a static number, or with a different `Ref`, only recognized as
-the same coefficient when it is the same `Ref` object on both sides. The whole point of a
+pass and never combined with a static number or with another `Ref`, not even the same `Ref`
+object on both sides: that identity is a run-time value, so the rule would give `form` a
+`Union` return type (gpena/Bramble.jl#527). `β * A + β * B` assembles as two terms unless the
+shared-argument rule below factors it; write `β * (A + B)` for one sweep. The whole point of a
 `Ref` coefficient is that its value can change after the form is built, so folding its
 current value into a static number would bake in a snapshot the rest of the design goes out
 of its way to avoid.
 
-### Reaching one layer deeper: inner products and shifts
+### Reaching one layer deeper: inner products
 
 | Input | Simplifies to | Why |
 |:--- |:--- |:--- |
@@ -254,8 +256,14 @@ of its way to avoid.
 | `u_h * (v_h * A)` | `(u_h .* v_h) * A` | one elementwise multiply at construction, not two scalings per point per assembly |
 | `⟨Au, Bv⟩ + ⟨Au, Cv⟩` (or `⟨Au, Bv⟩ + ⟨Cu, Bv⟩`), shared `A` a singleton node, anywhere in the sum | `⟨Au, (B + C)v⟩` (or `⟨(A + C)u, Bv⟩`) | one product, one compiled term, instead of two |
 | `⟨f, Av⟩ + ⟨f, Bv⟩`, shared source a singleton node | `⟨f, (A + B)v⟩` | as above, for a linear form |
-| `Shift₀(u)` | `u` | a zero shift is the identity |
-| `Shift_a(Shift_b(u))`, same dimension, `a` and `b` of one sign | `Shift_{a+b}(u)` | additive only then: a shift reads 0 off the grid, so `Shift_k(Shift_{-k}(u))` is not `u` at the boundary and stays nested |
+
+A `ShiftNode` is simplified inside and kept as built. Neither `Shift₀(u)` nor a nest of
+shifts in one sense is folded any more, because the amount is a field rather than a type
+parameter: both rewrites chose the node type from a runtime value, and `form` inferred a
+`Union` ([gpena/Bramble.jl#530](https://github.com/gpena/Bramble.jl/issues/530)). Values do
+not change. Each level of a nest costs one evaluation of its operand, at the shifted point
+(`local_stencil(::ShiftNode)`). A zero shift over a restricted operand now stores explicit
+zeros in the sparsity pattern, since `Shift₀` is no longer elided; the values are the same.
 
 Factoring a shared argument uses the like-term rule's gate: the shared argument must pass
 `_statically_equal`. Whether the rule fires is settled by the argument types, and a
@@ -292,10 +300,12 @@ That guard, `_mixes_components(a, b)`, has to be checked again wherever an
 because hiding one there reintroduces exactly the unroutable shape: `2 * (A + B)` for `A`/`B`
 naming different components would throw at assembly the same way the un-lifted `innerₕ(fₕ, v(1)
 + v(2))` above did. So rule 2's factoring step (`c * A + c * B -> c * (A + B)`) refuses to
-fire when `A`/`B` mix components, and `simplify_ast(::OperatorScale)`/
-`simplify_ast(::GridFunctionScale)` distribute their own coefficient over an inner sum that
-mixes, rather than wrapping it, whenever `BilinearProduct`'s/`LinearProduct`'s own
-distribution produces one and something still wraps it from outside.
+fire when `A` or `B` names any component (`_component_free`, decided by type, so a runtime
+component index cannot make `form`'s type a `Union` through it; gpena/Bramble.jl#529), and
+`simplify_ast(::OperatorScale)`/`simplify_ast(::GridFunctionScale)` distribute their own
+coefficient over an inner sum that mixes, rather than wrapping it, whenever
+`BilinearProduct`'s/`LinearProduct`'s own distribution produces one and something still wraps
+it from outside.
 
 ## One setup walk per term
 

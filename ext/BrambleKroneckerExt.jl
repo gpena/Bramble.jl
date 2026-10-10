@@ -58,9 +58,11 @@ using PrecompileTools: @setup_workload, @compile_workload
 
 # One term's coefficient times its Kronecker product, last axis leftmost -- the same
 # convention `SparseMatrixCSC(K)` uses (`src/assembly/kronecker.jl`), with `⊗` standing in for
-# `kron` (they agree, module docstring above).
-@inline function _kron_jl_term(term)
-    c = Bramble._kron_coeff(term.scales)
+# `kron` (they agree, module docstring above). The coefficient goes through `_kron_scalar`
+# as in `SparseMatrixCSC(K)`, so a Float32 `K` stays Float32 (gpena/Bramble.jl#600) while a
+# Dual or Complex `Ref` coefficient keeps its own type, which `T(c)` would not.
+@inline function _kron_jl_term(term, ::Type{T}) where {T}
+    c = Bramble._kron_scalar(T, Bramble._kron_coeff(term.scales))
     return c * foldl(⊗, reverse(term.factors))
 end
 
@@ -90,12 +92,12 @@ collect(Kronecker.kronecker(K)) ≈ SparseMatrixCSC(K)
 
 See also: [`kronecker_operator`](@ref), [`KroneckerLinearOperator`](@ref).
 """
-function Kronecker.kronecker(K::KroneckerLinearOperator)
+function Kronecker.kronecker(K::KroneckerLinearOperator{T}) where {T}
     Bramble._kron_check_fresh(K)
     terms = K.terms
-    result = _kron_jl_term(terms[1])
+    result = _kron_jl_term(terms[1], T)
     for term in Base.tail(terms)
-        result = result + _kron_jl_term(term)
+        result = result + _kron_jl_term(term, T)
     end
     return result
 end

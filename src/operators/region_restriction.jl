@@ -86,6 +86,21 @@ end
 @inline _in_region(op::RegionRestriction, words, lin_idx::Int) = _is_marked(
     words, op.region, lin_idx)
 
+# The source read a `ShiftNode` makes (`operators/shift.jl`): the restricted source at `J`
+# inside the region, the empty stencil outside, as `local_stencil` above. The source is never
+# called outside its region, where it may be undefined (throw, or return a non-number), so a
+# shifted restricted source infers a `Union` of the two lengths. It is union-split at no
+# run-time cost (gpena/Bramble.jl#639).
+@inline function _source_stencil_at(
+        op::RegionRestriction, space, J::CartesianIndex, markers, lin_idx::Int
+)
+    if _in_region(op, markers, lin_idx)
+        return _source_stencil_at(op.inner_op, space, J, markers, lin_idx)
+    else
+        return ()
+    end
+end
+
 # A tap reaching `delta` points away re-evaluates the restriction at that neighbour. Doing
 # it through `local_stencil` above would return `()` or a full tuple depending on the
 # neighbour's marker, so the tap's tuple length would vary from point to point and the

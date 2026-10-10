@@ -149,15 +149,17 @@ end
 
 # --- Eager source lowering across a CompositeGridSpace's leaves --- #
 #
-# A non-composite space has exactly one leaf -- itself -- so `_lower_sources` above runs
-# directly against `Wₕ`, unambiguous. A composite space's terms follow the same routing rule
-# `_route_terms!` assembles by (`_routed_target`, above): a term naming one component lowers
-# against that leaf's own space; a term naming none goes to *every* leaf, which may have
-# different meshes, so there is no single space to sample against and lowering is skipped for
-# it -- the same `SourceFunction` it already was, evaluated fresh per leaf at assembly time
-# exactly as today. Missing this optimisation for that one shape is the safe choice: sampling
-# against the wrong leaf's mesh would silently assemble the wrong numbers, not merely run
-# slower.
+# A non-composite space has exactly one leaf -- itself -- so `_lower_sources` (ast/common.jl,
+# and the methods above) runs directly against `Wₕ`, unambiguous. A composite space's terms
+# follow the routing rule the assembly walks use (`_routed_target`, below): a term naming one
+# component lowers against that leaf's own space; a term naming none goes to *every* leaf,
+# which may have different meshes, so there is no single space to sample against and lowering
+# is skipped for it -- the same `SourceFunction` it already was, evaluated fresh per leaf at
+# assembly time.
+# Missing this optimisation for that one shape is the safe choice: sampling against the wrong
+# leaf's mesh would silently assemble the wrong numbers, not merely run slower. A component
+# outside the space throws here, at `form`, through `_routed_target`'s check; returning the
+# term unchanged for it made the result a Union and deferred the error to assembly.
 _lower_sources_for_space(ast, Wₕ) = _lower_sources(ast, Wₕ)
 
 function _lower_sources_for_space(ast, Wₕ::CompositeGridSpace)
@@ -171,9 +173,9 @@ function _lower_sources_over_leaves(op::OperatorAdd, leaves)
 end
 
 function _lower_sources_over_leaves(term::TERM, leaves) where {TERM}
-    target = test_component_or_nothing(term)
-    (target === nothing || target < 1 || target > length(leaves)) && return term
-    return _lower_sources(term, first(leaves[target]))
+    target = _routed_target(term, length(leaves))
+    target === nothing && return term
+    return _at_leaf(leaf -> _lower_sources(term, first(leaf)), leaves, target)
 end
 
 """
@@ -233,8 +235,9 @@ end
 # one past its end. Only a source that kept its `VectorElement` (`_as_source`,
 # operators/inner.jl) knows its mesh; a plain vector, from a lowered closure or built by
 # hand, carries none and is skipped. Routed as `each_routed_leaf` routes, so a term naming
-# no component is checked against every leaf; one naming a component outside the space is
-# left to the assembly walks, which report it. The walk reaches what `_host_sources` does.
+# no component is checked against every leaf; one naming a component outside the space never
+# reaches here, as `_lower_sources_for_space` runs first in `form` and throws for it. The walk
+# reaches what `_host_sources` does.
 # Once, at `form`: points moved later (`change_points!`) are not caught, as in
 # `_same_mesh_or_throw` (jacobian_pattern.jl), whose predicate this is.
 _check_source_meshes(ast, Wₕ) = _check_source_mesh(ast, mesh(Wₕ))
@@ -251,8 +254,9 @@ end
 
 function _check_source_meshes_over_leaves(term::TERM, leaves) where {TERM}
     target = test_component_or_nothing(term)
-    for (c, leaf) in enumerate(leaves)
+    _foldl_leaves(nothing, leaves) do _, c, leaf
         (target === nothing || target == c) && _check_source_mesh(term, mesh(first(leaf)))
+        return nothing
     end
     return nothing
 end
@@ -497,7 +501,7 @@ function _routed_eltype(term, leaves, diagonal, T)
     target = test_component_or_nothing(term)
     _check_component(target, length(leaves))
     target === nothing && return _every_leaf_eltype(term, diagonal, T)
-    return _folded_eltype(term, first(leaves[target]), T)
+    return _at_leaf(leaf -> _folded_eltype(term, first(leaf), T), leaves, target)
 end
 
 # A term naming no component is assembled on every diagonal block, so each of their leaves
@@ -530,7 +534,7 @@ function _trial_routed_eltype(term, leaves, diagonal, T)
     target = trial_component_or_nothing(term)
     _check_component(target, length(leaves))
     target === nothing && return _every_leaf_type(diagonal, T)
-    return promote_type(T, eltype(first(leaves[target])))
+    return _at_leaf(leaf -> promote_type(T, eltype(first(leaf))), leaves, target)
 end
 
 # An unnamed trial function stands on every diagonal block, so each of their leaves' types
@@ -817,11 +821,13 @@ function _sweep_parallel!(
 
     if nbands != 0
         rest = Base.front(inds)
-        # One pass over every band when nothing can collide; see `_sweep_bilinear!`.
-        bands = prod(strides) == 1 ? (1:1:nbands,) : (1:2:nbands, 2:2:nbands)
-        for bidx in bands
+        # One pass over every band when nothing can collide, else odd bands then even; the
+        # colour is a `StepRange` either way (see `_sweep_bilinear!`).
+        step = prod(strides) == 1 ? 1 : 2
+        for start in 1:step
             _sweep_linear_band_colour!(
-                policy, b, sp, bound, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
+                policy, b, sp, bound, ax, start:step:nbands, nbands, rest, lin_indices,
+                mesh_markers, offset, α
             )
         end
         return b
@@ -912,9 +918,9 @@ end
 # `f(leaf_space, offset)`, for each leaf the term routes to.
 @inline function each_routed_leaf(f::F, term, leaves) where {F}
     target = _routed_target(term, length(leaves))
-    for (c, leaf) in enumerate(leaves)
-        _goes_to_leaf(target, c) || continue
-        f(first(leaf), last(leaf))
+    _foldl_leaves(nothing, leaves) do _, c, leaf
+        _goes_to_leaf(target, c) && f(first(leaf), last(leaf))
+        return nothing
     end
     return nothing
 end
@@ -924,11 +930,9 @@ end
 # value is what keeps it concretely typed instead of captured and boxed.
 @inline function fold_routed_leaves(f::F, term, leaves, acc::T) where {F, T}
     target = _routed_target(term, length(leaves))
-    for (c, leaf) in enumerate(leaves)
-        _goes_to_leaf(target, c) || continue
-        acc = f(first(leaf), last(leaf), acc)
+    return _foldl_leaves(acc, leaves) do a, c, leaf
+        return _goes_to_leaf(target, c) ? f(first(leaf), last(leaf), a) : a
     end
-    return acc
 end
 
 # --- the three consumers ---------------------------------------------------------- #

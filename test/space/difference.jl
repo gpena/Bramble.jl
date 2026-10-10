@@ -1053,12 +1053,12 @@ end
     @testset "εₕ and inner₊" begin
         ε = εₕ(u)
         @test ε.entries[1][1] === (D₋ₓ(u(1)),)
-        @test ε.entries[1][2] === (0.5 * Mₓ(D₋ᵧ(u(1))), 0.5 * Mᵧ(D₋ₓ(u(2))))
-        @test ε.entries[2][1] === (0.5 * Mᵧ(D₋ₓ(u(2))), 0.5 * Mₓ(D₋ᵧ(u(1))))
+        @test ε.entries[1][2] === ((1 // 2) * Mₓ(D₋ᵧ(u(1))), (1 // 2) * Mᵧ(D₋ₓ(u(2))))
+        @test ε.entries[2][1] === ((1 // 2) * Mᵧ(D₋ₓ(u(2))), (1 // 2) * Mₓ(D₋ᵧ(u(1))))
         @test ε.entries[2][2] === (D₋ᵧ(u(2)),)
 
-        a(w) = 0.5 * Mₓ(D₋ᵧ(w(1)))
-        b(w) = 0.5 * Mᵧ(D₋ₓ(w(2)))
+        a(w) = (1 // 2) * Mₓ(D₋ᵧ(w(1)))
+        b(w) = (1 // 2) * Mᵧ(D₋ₓ(w(2)))
         S = Val((1, 2))
         hand = inner₊(D₋ₓ(u(1)), D₋ₓ(v(1)), Val((1,))) +
                inner₊(a(u), a(v), S) + inner₊(a(u), b(v), S) +

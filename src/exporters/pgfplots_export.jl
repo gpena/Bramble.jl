@@ -41,18 +41,6 @@ function _pgf_grid_len(name, a, n)
     return a
 end
 
-function _pgf_check_lengths(cols::Tuple, n)
-    for field in cols, (nm, col) in field
-
-        length(col) == n || throw(
-            ArgumentError(
-            "\"$nm\" has length $(length(col)), but the mesh has $n points"
-        ),
-        )
-    end
-    return nothing
-end
-
 # Writes the 1D table behind a function barrier: `cols` is a tuple of per-field collections,
 # each concretely typed, and the recursion over it is unrolled by the compiler.
 function _pgf_write_1d(io::IO, x, cols::Tuple)
@@ -133,7 +121,8 @@ function export_pgfplots(filename::AbstractString, Ωₕ::AbstractMeshType{1}, f
     # One concretely typed collection of `(name, column)` pairs per field, so the row loop
     # below can infer every `col[i]` and reshaped views are never copied into one eltype.
     cols = map(((name, data),) -> _pgf_columns(name, data), fields)
-    _pgf_check_lengths(cols, n)
+    # `map` unrolls over the tuple, so each field's check sees its concrete column type.
+    map(field -> foreach(((nm, col),) -> _pgf_grid_len(nm, col, n), field), cols)
 
     out = _pgf_filename(filename)
     open(out, "w") do io
