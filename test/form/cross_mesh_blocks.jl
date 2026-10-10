@@ -2,6 +2,7 @@ module FormCrossMeshBlocksTests
 
 using Test
 using Bramble
+using LinearAlgebra: Diagonal
 using Bramble:
                CompositeGridSpace,
                form,
@@ -11,7 +12,9 @@ using Bramble:
                allocate_system_matrix,
                D₋ₓ,
                Mₓ,
-               inner₊ₓ
+               inner₊ₓ,
+               weights,
+               Innerh
 
 # Coupling two leaves of a composite space whose meshes differ in size.
 #
@@ -33,7 +36,9 @@ using Bramble:
 
 @testset "Cross-mesh blocks" begin
     Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (6, 6), (true, true))
-    Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (3, 3), (true, true))
+    # the small leaf is non-uniform, so its weights differ from cell to cell and from the
+    # big leaf's: a block on the wrong leaf's weights, or on none, cannot match by accident
+    Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (3, 3), (false, false))
     Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
     Vh = CompositeGridSpace((Wbig, Wsmall))
 
@@ -80,19 +85,28 @@ using Bramble:
     end
 
     @testset "Permitted configurations" begin
+        # the mass matrix of each leaf, from its own weights: the blocks every term below
+        # must reproduce, which a size or a nonzero count cannot tell from a wrong leaf's
+        H(W) = Matrix(Diagonal(collect(weights(W, Innerh()))))
+        Hdiag = cat(H(Wbig), H(Wsmall); dims = (1, 2))
+
         # diagonal blocks on the same heterogeneous space: each leaf couples to itself, so
         # the index spaces match by construction
         a_diag = form(Vh, Vh, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
         A = assemble(a_diag)
         @test size(A) == (ndofs(Vh), ndofs(Vh))
-        @test count(!iszero, A) == ndofs(Vh)
+        @test Matrix(A) ≈ Hdiag
+        # the refills write in place and reproduce the same values; the threaded one replays
+        # through its own mode, so its values are pinned separately
         @test assemble!(A, a_diag) === A
+        @test Matrix(A) ≈ Hdiag
         @test assemble_parallel!(A, a_diag) === A
+        @test Matrix(A) ≈ Hdiag
 
         # a term naming no component at all, on a heterogeneous space: it reaches every
         # diagonal block, which is the `blk === nothing` branch of the same routing
         a_broadcast = form(Vh, Vh, (u, v) -> innerₕ(u, v))
-        @test size(assemble(a_broadcast)) == (ndofs(Vh), ndofs(Vh))
+        @test Matrix(assemble(a_broadcast)) ≈ Hdiag
 
         # cross blocks on a HOMOGENEOUS composite space are untouched: every leaf shares one
         # mesh, so the index arithmetic was always well defined there
@@ -108,8 +122,12 @@ using Bramble:
         # space, which is what the offset arithmetic actually needs
         Ωtwin = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (6, 6), (true, true))
         Vtwin = CompositeGridSpace((Wbig, gridspace(Ωtwin)))
-        @test size(assemble(form(Vtwin, Vtwin, (u, v) -> innerₕ(u(2), v(1))))) ==
-              (ndofs(Vtwin), ndofs(Vtwin))
+        n = ndofs(Wbig)
+        At = Matrix(assemble(form(Vtwin, Vtwin, (u, v) -> innerₕ(u(2), v(1)))))
+        # rows are the test leaf (1), columns the trial leaf (2); both leaves are uniform
+        # 6×6, so the block is the same whichever leaf's weights it is built from
+        @test At[1:n, (n + 1):(2n)] ≈ H(Wbig)
+        @test count(!iszero, At) == n
     end
 end
 
