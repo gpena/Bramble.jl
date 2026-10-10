@@ -146,11 +146,13 @@ end
 # One coordinate against one axis's domain `[lo, hi]`, already known not to need the
 # fill-value short-circuit (that is decided one layer up, in `_interp_cell_frac`, before
 # any axis is visited, so this only ever sees the three symbols). A near-boundary point is
-# snapped exactly onto the boundary under every policy, `:error` included.
+# snapped exactly onto the boundary under every policy, `:error` included. Every branch
+# returns the promoted type, as `clamp` does: a Float32 point on a Float64 mesh would
+# otherwise infer a Union and allocate in the per-axis `ntuple` of the callers (#525).
 @inline function _interp_resolve_coord(xd, lo, hi, outside::Symbol)
     _interp_near_boundary(lo, hi, xd) && return clamp(xd, lo, hi)
     outside === :clamp && return clamp(xd, lo, hi)
-    outside === :extrapolate && return xd
+    outside === :extrapolate && return convert(promote_type(typeof(xd), typeof(lo), typeof(hi)), xd)
     return _throw_outside_domain(xd, lo, hi)
 end
 
