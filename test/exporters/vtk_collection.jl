@@ -31,6 +31,9 @@ end
         mktempdir() do dir
             pvd_path = joinpath(dir, "series")
             files = export_vtk(pvd_path) do pvd
+                # The wrapper holds the WriteVTK collection in a concrete field (an
+                # abstract one costs a dynamic dispatch per written step).
+                @test isconcretetype(fieldtype(typeof(pvd), :pvd))
                 for (i, t) in enumerate(times)
                     uₕ = Rₕ(Wₕ, x -> t * (x[1] + x[2]))
                     pvd[t] = (joinpath(dir, "step_$i"), Ωₕ, "u" => uₕ)

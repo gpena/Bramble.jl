@@ -29,11 +29,11 @@ end
 # Wraps the `WriteVTK.CollectionFile` (a type WriteVTK does not make public) so that
 # `pvd[t] = (filename, Ωₕ, fields...)` can be a `Base.setindex!` method without committing
 # type piracy: neither `CollectionFile` nor `Tuple` belongs to Bramble, so the method needs a
-# Bramble-owned first argument to be legal. Left untyped rather than importing the
-# non-public `CollectionFile` name just to annotate a field nothing dispatches on. Not
-# exported -- the user only ever sees it as the `pvd` argument of their own `do`-block.
-struct _VTKCollection
-    pvd::Any
+# Bramble-owned first argument to be legal. The parameter keeps the field concrete without
+# importing the non-public `CollectionFile` name just to annotate it. Not exported -- the
+# user only ever sees it as the `pvd` argument of their own `do`-block.
+struct _VTKCollection{P}
+    pvd::P
 end
 
 function Base.setindex!(coll::_VTKCollection, entry::Tuple, t::Real)
