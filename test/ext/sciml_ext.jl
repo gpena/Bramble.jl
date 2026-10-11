@@ -147,6 +147,14 @@ end
         @test R_full === typeof(prob)
         @test SciMLBase.specialization(prob.f) === SciMLBase.FullSpecialize
         @test prob.f.f isa Bramble.Semidiscretization
+
+        # The two-form call leaves `reassemble` at its default: the literal must fold
+        # into `Val(false)` for the problem type to be concrete.
+        forms_closure(a, l, u₀, I) = ode_problem(a, l, u₀, I; dirichlet = :boundary)
+        forms_args = (typeof(a), typeof(l), typeof(u₀), typeof(I))
+        R_forms = only(Base.return_types(forms_closure, forms_args))
+        @test isconcretetype(R_forms)
+        @test R_forms === typeof(forms_closure(a, l, u₀, I))
     end
 
     @testset "ode_problem: p reaches residual" begin

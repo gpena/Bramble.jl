@@ -156,7 +156,7 @@ sd = semidiscretize(a, l; dirichlet = bcs)
 
 See also [`ode_function`](@ref), [`ode_problem`](@ref), [`jacobian!`](@ref).
 """
-function semidiscretize(
+Base.@constprop :aggressive function semidiscretize(
         a::BilinearForm,
         l::LinearForm;
         mass = nothing,
@@ -244,7 +244,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)
 
 See also [`ode_function`](@ref), [`ode_problem`](@ref).
 """
-function semidiscretize(
+Base.@constprop :aggressive function semidiscretize(
         build::B,
         l::LinearForm;
         mass = nothing,

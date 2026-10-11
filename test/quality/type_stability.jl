@@ -73,6 +73,12 @@ end
             @test_opt target_modules = TM _diffusion(Wₕ)
             @test_opt target_modules = TM _load(Wₕ)
         end
+        # `reassemble` left at its default must fold into `Val(false)`, whatever
+        # the (non-constant) Dirichlet labels.
+        sd_closure(a, l, d::Symbol) = semidiscretize(a, l; dirichlet = d)
+        sd_args = (typeof(_diffusion(Wₕ1)), typeof(_load(Wₕ1)), Symbol)
+        @test isconcretetype(only(Base.return_types(sd_closure, sd_args)))
+        @test_opt target_modules = TM sd_closure(_diffusion(Wₕ1), _load(Wₕ1), :boundary)
     end
 
     @testset "Operator application" begin
