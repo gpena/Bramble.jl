@@ -35,7 +35,13 @@ using Bramble:
                D₋ᵧ,
                D₊ᵧ,
                D₋ₓ,
+               Dcₓ,
+               Dcᵧ,
+               D̽ᵧ,
+               D̽ₓ,
+               _check_centered_meshes,
                inner₊ᵧ,
+               source_function,
                boundary_indices,
                forward_spacings,
                half_points,
@@ -593,6 +599,120 @@ using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
                     @test all(iszero, op(Wₕ))
                 end
             end
+
+            # Dc and D̽ need a neighbour on each side, so along an axis of fewer than three
+            # points a form using them throws at `form`, with the runtime operator's own
+            # message, instead of assembling to zero (gpena/Bramble.jl#629).
+            @testset "Dc along collapsed y, $(eltype(Ωₕ)) $tag" for (tag, Ωₕ) in (
+                ("set", Ωₕ_set64), ("storage", Ωₕ_f32))
+                Wₕ = gridspace(Ωₕ)
+                msg = "a centered difference along direction 2 needs at least 3 points " *
+                      "there, got 1"
+                f = source_function(x -> x[1], Val(2))
+                @test_throws ArgumentError(msg) form(
+                    Wₕ, Wₕ, (u, v) -> inner₊ᵧ(Dcᵧ(u), Dcᵧ(v)))
+                @test_throws ArgumentError(msg) form(Wₕ, Wₕ, (u, v) -> innerₕ(Dcᵧ(u), v))
+                @test_throws ArgumentError(msg) form(Wₕ, Wₕ, (u, v) -> innerₕ(D̽ᵧ(u), v))
+                @test_throws ArgumentError(msg) form(Wₕ, Wₕ, (u, v) -> innerₕ(u, Dcᵧ(v)))
+                @test_throws ArgumentError(msg) form(Wₕ, Wₕ, (u, v) -> innerₕ(u, D̽ᵧ(v)))
+                @test_throws ArgumentError(msg) form(
+                    Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 2.0 * innerₕ(Dcᵧ(u), v))
+                @test_throws ArgumentError(msg) form(Wₕ, v -> innerₕ(Dcᵧ(f), v))
+                @test_throws ArgumentError(msg) form(Wₕ, v -> innerₕ(D̽ᵧ(f), v))
+                @test_throws ArgumentError(msg) form(Wₕ, v -> innerₕ(f, Dcᵧ(v)))
+                @test_throws ArgumentError(msg) Dcᵧ(Wₕ)
+            end
+
+            # 1D: two points are too few along x as well.
+            W2 = gridspace(mesh(create_test_nd_domain(((0.0, 1.0),)), 2, false;
+                backend = backend()))
+            msg1 = "a centered difference along direction 1 needs at least 3 points " *
+                   "there, got 2"
+            @test_throws ArgumentError(msg1) form(W2, W2, (u, v) -> innerₕ(Dcₓ(u), v))
+            @test_throws ArgumentError(msg1) form(
+                W2, v -> innerₕ(Dcₓ(source_function(x -> x[1], Val(1))), v))
+
+            # Three points along y are enough: the same form builds, assembles nonzero, and
+            # the check, run once at `form`, leaves the refill allocation-free.
+            W3 = gridspace(mesh(create_test_nd_domain(((0.0, 1.0), (0.0, 1.0))), (4, 3),
+                (false, false); backend = backend()))
+            a3 = form(W3, W3, (u, v) -> inner₊ᵧ(Dcᵧ(u), Dcᵧ(v)))
+            A3 = assemble(a3)
+            @test all(isfinite, A3)
+            @test !iszero(A3)
+            _refill(A, a) = (assemble!(A, a); @allocated assemble!(A, a))
+            @test _refill(A3, a3) == 0
+            @test !iszero(assemble(form(W3, W3, (u, v) -> innerₕ(D̽ᵧ(u), v))))
+
+            # A composite whose Dcᵧ term names only its full leaf never walks the collapsed
+            # one, so it forms; a term naming the collapsed leaf, or no leaf, throws.
+            Wf = gridspace(mesh(create_test_nd_domain(((0.0, 1.0), (0.0, 1.0))), (4, 4),
+                (false, false); backend = backend()))
+            Wc = gridspace(Ωₕ_set64)
+            V = Wf × Wc
+            ac = form(V, V,
+                (u, v) -> inner₊ᵧ(Dcᵧ(u(1)), Dcᵧ(v(1))) + 100.0 * innerₕ(u(2), v(2)))
+            Ac = assemble(ac)
+            Af = assemble(form(Wf, Wf, (u, v) -> inner₊ᵧ(Dcᵧ(u), Dcᵧ(v))))
+            Am = assemble(form(Wc, Wc, (u, v) -> innerₕ(u, v)))
+            nf = ndofs(Wf)
+            @test !iszero(Af)
+            @test Ac[1:nf, 1:nf] ≈ Af
+            @test Ac[(nf + 1):end, (nf + 1):end] ≈ 100.0 * Am
+            msg = "a centered difference along direction 2 needs at least 3 points " *
+                  "there, got 1"
+            @test_throws ArgumentError(msg) form(
+                V, V, (u, v) -> inner₊ᵧ(Dcᵧ(u(2)), Dcᵧ(v(2))))
+            @test_throws ArgumentError(msg) form(V, V, (u, v) -> innerₕ(u, Dcᵧ(v)))
+            @test_throws ArgumentError(msg) form(V, v -> innerₕ(1.0, Dcᵧ(v)))
+            @test_throws ArgumentError(msg) form(V, v -> innerₕ(1.0, D̽ᵧ(v(2))))
+            g = source_function(x -> x[2]^2, Val(2))
+            bc = assemble(form(V, v -> innerₕ(g, Dcᵧ(v(1)))))
+            @test length(bc) == ndofs(V)
+            @test !iszero(bc[1:nf])
+            @test iszero(bc[(nf + 1):end])
+
+            # A term interpolating its test side is walked on the trial leaf, so that is the
+            # leaf checked: a collapsed trial throws, a collapsed interpolated test doesn't.
+            Wl = gridspace(mesh(create_test_nd_domain(((0.0, 1.0), (0.5, 0.5))), (4, 4),
+                (true, true); backend = backend()))
+            Vl = Wf × Wl
+            @test_throws ArgumentError(msg) form(Wl, Wf, (u, v) -> innerₕ(Dcᵧ(u), πₕ(v)))
+            @test_throws ArgumentError(msg) form(
+                Vl, Vl, (u, v) -> innerₕ(Dcᵧ(u(2)), πₕ(v(1))))
+            Ai = assemble(form(Wf, Wl,
+                (u, v) -> innerₕ(Dcᵧ(u), πₕ(v; outside = :clamp))))
+            @test all(isfinite, Ai)
+            @test !iszero(Ai)
+            Aic = assemble(form(Vl, Vl,
+                (u, v) -> innerₕ(Dcᵧ(u(1)), πₕ(v(2); outside = :clamp))))
+            @test Aic[(nf + 1):end, 1:nf] ≈ Ai
+
+            # A term naming no component is assembled on the diagonal blocks alone, so on a
+            # rectangular pair only the first leaf is walked: the collapsed one is never
+            # reached, and the forms build with that block alone filled.
+            Ad = assemble(form(Wf, Wf, (u, v) -> innerₕ(Dcᵧ(u), v)))
+            At = assemble(form(Wf, Wf, (u, v) -> innerₕ(u, Dcᵧ(v))))
+            @test !iszero(Ad) && !iszero(At)
+            R = assemble(form(Wf, Vl, (u, v) -> innerₕ(Dcᵧ(u), v)))
+            @test size(R) == (ndofs(Vl), nf)
+            @test R[1:nf, :] ≈ Ad
+            @test iszero(R[(nf + 1):end, :])
+            R = assemble(form(Wf, Vl, (u, v) -> innerₕ(u, Dcᵧ(v))))
+            @test R[1:nf, :] ≈ At
+            @test iszero(R[(nf + 1):end, :])
+            R = assemble(form(Vl, Wf, (u, v) -> innerₕ(Dcᵧ(u), πₕ(v))))
+            @test size(R) == (nf, ndofs(Vl))
+            @test R[:, 1:nf] ≈ Ad
+            @test iszero(R[:, (nf + 1):end])
+
+            # The check itself allocates nothing, on a scalar and on a composite space.
+            gc = (u, v) -> inner₊ᵧ(Dcᵧ(u), Dcᵧ(v)) + innerₕ(D̽ₓ(u), v)
+            _check_bytes(W) = (a = form(W, W, gc);
+                _check_centered_meshes(a.ast, W, W);
+                @allocated _check_centered_meshes(a.ast, W, W))
+            @test _check_bytes(Wf) == 0
+            @test _check_bytes(Wf × Wf) == 0
         end
 
         @testset "Collapsed dimensions, one layer further" begin

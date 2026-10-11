@@ -358,6 +358,7 @@ function form(Wₕ, f)
     raw_ast = f(test_function(Wₕ))
     _validate_form_expression(raw_ast, Val(D))
     ast = simplify_ast(resolve_ast(raw_ast))
+    _check_centered_meshes(ast, Wₕ)
     ast = _lower_sources_for_space(ast, Wₕ)
     _check_source_meshes(ast, Wₕ)
     return LinearForm{D, typeof(Wₕ), typeof(ast)}(Wₕ, ast)
@@ -431,6 +432,75 @@ end
         "it with `Rₕ` on the test space.",
     ),
     )
+end
+
+# --- A centered difference needs three points along its direction --- #
+#
+# `Dc` and `D̽` read a neighbour on each side, so on an axis with fewer than three points
+# their symbolic stencils truncate at every point and the form assembles to zero, where the
+# runtime operators throw (gpena/Bramble.jl#629). Checked once, at `form`, per term, on the
+# leaf the sweep walks (`_walked_leaf`): the test leaf, or the trial leaf when the term
+# interpolates on the test side. Routed as `each_routed_leaf` and `blocks` route: a term
+# naming a component goes to that leaf alone, one naming none to every leaf the assembly
+# walks, so a composite whose collapsed leaf the term never touches still forms. A
+# component outside the space matches no leaf here and is refused where it was before. The
+# operand of an `InterpolationNode` lives on another mesh, so it is not entered. A linear
+# form walks its test space; `bilinear.jl`'s `form` passes both of its spaces.
+_check_centered_meshes(ast, Vₕ) = _check_centered_meshes(ast, Vₕ, Vₕ)
+
+function _check_centered_meshes(op::OperatorAdd, Wₕ, Vₕ)
+    _check_centered_meshes(op.left_op, Wₕ, Vₕ)
+    _check_centered_meshes(op.right_op, Wₕ, Vₕ)
+    return nothing
+end
+
+function _check_centered_meshes(term, Wₕ, Vₕ)
+    # A term naming neither side is assembled on the diagonal blocks alone, the first
+    # `min` of the two leaf counts (`_diagonal_blocks`), so only those leaves are checked.
+    # A linear form passes its test space twice: every leaf, as `each_routed_leaf` routes.
+    unnamed = trial_component_or_nothing(term) === nothing &&
+              test_component_or_nothing(term) === nothing
+    nmax = unnamed ? min(_leaf_count(Wₕ), _leaf_count(Vₕ)) : typemax(Int)
+    _has_test_interp(term) &&
+        return _check_centered_on_side(term, Wₕ, trial_component_or_nothing, nmax)
+    return _check_centered_on_side(term, Vₕ, test_component_or_nothing, nmax)
+end
+
+_leaf_count(space) = 1
+_leaf_count(space::CompositeGridSpace) = length(leaf_spaces_offsets(space))
+
+@inline function _check_centered_on_side(term, space, side_component::F, nmax) where {F}
+    return _check_centered_mesh(term, mesh(space))
+end
+
+@inline function _check_centered_on_side(
+        term, space::CompositeGridSpace, side_component::F, nmax) where {F}
+    target = side_component(term)
+    _foldl_leaves(nothing, leaf_spaces_offsets(space)) do _, c, leaf
+        (target === nothing ? c <= nmax : target == c) &&
+            _check_centered_mesh(term, mesh(first(leaf)))
+        return nothing
+    end
+    return nothing
+end
+
+_check_centered_mesh(op, Ωₕ) = nothing
+_check_centered_mesh(op::InterpolationNode, Ωₕ) = nothing
+_check_centered_mesh(op::UnaryWrapper, Ωₕ) = _check_centered_mesh(op.inner_op, Ωₕ)
+
+function _check_centered_mesh(op::Union{OperatorAdd, LinearProduct, BilinearProduct}, Ωₕ)
+    _check_centered_mesh(op.left_op, Ωₕ)
+    _check_centered_mesh(op.right_op, Ωₕ)
+    return nothing
+end
+
+function _check_centered_mesh(
+        op::Union{CenteredDifference{D, Dim}, CrossWeightedDifference{D, Dim}},
+        Ωₕ
+) where {D, Dim}
+    n = npoints(Ωₕ, Tuple)[Dim]
+    n >= 3 || _throw_centered_too_few_points(Dim, n)
+    return _check_centered_mesh(op.inner_op, Ωₕ)
 end
 
 # --- Assembly implementations ----------------------------------------------------- #

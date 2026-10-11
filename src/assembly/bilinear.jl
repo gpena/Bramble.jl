@@ -345,6 +345,7 @@ function form(Wₕ, Vₕ, f)
     ast = simplify_ast(resolve_ast(raw_ast))
     _check_space_components(ast, Wₕ, trial_component_or_nothing, "trial")
     _check_space_components(ast, Vₕ, test_component_or_nothing, "test")
+    _check_centered_meshes(ast, Wₕ, Vₕ)  # linear.jl (gpena/Bramble.jl#629)
     return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast)}(
         Wₕ, Vₕ, ast, _AssemblyCache{D}(ast)
     )
