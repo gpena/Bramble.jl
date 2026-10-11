@@ -230,6 +230,53 @@ using ..TestUtils: alloc_test, @test_allocs, _half_spacing_oracle
     end
 end
 
+# A face name whose alias is a user label answers for that label only when the label marks
+# nothing off the face; otherwise the face name means its own face (gpena/Bramble.jl#659).
+# The oracle is a hand-built `:xm` marker on the xmin face, set through `markers!`.
+@testset "Face name never reads another (#659)" begin
+    S = interval(0.0, 1.0) × interval(0.0, 1.0)
+    sides = :boundary => boundary_symbols(S)
+    Ωh = mesh(domain(S, :left => :ymin, sides), (5, 5), (false, false))
+    Ωr = deepcopy(Ωh)
+    mm = copy(Bramble.markers(Ωr))
+    xb = falses(25)
+    xb[1:5:21] .= true
+    mm[:xm] = xb
+    Bramble.markers!(Ωr, mm)
+    @test findall(Bramble.index_in_marker(Ωh, :xmin)) == 1:5:21
+    @test findall(Bramble.index_in_marker(Ωh, :left)) == 1:5
+
+    W, Wr = gridspace(Ωh), gridspace(Ωr)
+    a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+    l = form(W, v -> innerₕ(x -> 1.0, v))
+    ar = form(Wr, Wr, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+    lr = form(Wr, v -> innerₕ(x -> 1.0, v))
+    A, F = assemble(a, l; dirichlet = :xmin => x -> 7.0)
+    Ar, Fr = assemble(ar, lr; dirichlet = :xm => x -> 7.0)
+    @test A == Ar
+    @test F == Fr
+
+    g = x -> 1 + x[1] + 2x[2]
+    u, ur = Rₕ(W, g), Rₕ(Wr, g)
+    @test innerₕ(u, element(W, 1.0); markers = (:xmin,)) ==
+          innerₕ(ur, element(Wr, 1.0); markers = (:xm,))
+    @test Bramble.reaction(a, l, u; marker = :xmin) ==
+          Bramble.reaction(ar, lr, ur; marker = :xm)
+
+    # A label on its own face still answers for its alias: the stored vector, 0 bytes.
+    Ωa = mesh(domain(S, :left => :left, sides), (5, 5), (false, false))
+    @test Bramble.index_in_marker(Ωa, :xmin) === Bramble.index_in_marker(Ωa, :left)
+    @test_allocs Bramble.index_in_marker(Ωa, :xmin)
+
+    # So does an open face (corners excluded): every marked point is on xmin.
+    open_left = x -> x[1] == 0 && 0 < x[2] < 1
+    Ωo = mesh(domain(S, :left => open_left, sides), (5, 5), (false, false))
+    @test Bramble.index_in_marker(Ωo, :xmin) === Bramble.index_in_marker(Ωo, :left)
+    @test findall(Bramble.index_in_marker(Ωo, :xmin)) == [6, 11, 16]
+
+    @test_throws KeyError Bramble.index_in_marker(Ωh, :zmin)
+end
+
 # The predicate probes in `markers(space, pairs...)` (src/geometry/marker.jl): a 1D predicate
 # takes the scalar coordinate, and one that does not is refused with a message naming the
 # label.
