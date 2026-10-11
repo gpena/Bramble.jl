@@ -5,7 +5,7 @@ using Random
 using ForwardDiff
 using Bramble
 using ..TestUtils: WITH_AD_TESTS
-using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
+using Bramble: reaction, reaction!, reaction_density, reaction_density!
 
 # `reaction` extracts the boundary flux a Dirichlet constraint had
 # to supply, from the *unconstrained* operator/load and the already-solved uₕ: r = A uₕ - F
@@ -259,9 +259,100 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
 
         dens = reaction_density(a, l, uₕ; marker = :left)
         @test dens isa Bramble.VectorElement
-        @test parent(dens)[1] ≈ reaction(a, l, uₕ; marker = :left) / weights(Wₕ, Bramble.Innerh())[1]
+        # a 1D face is a point of measure 1, so the density at the end is the reaction itself
+        @test parent(dens)[1] ≈ reaction(a, l, uₕ; marker = :left)
+        @test parent(dens)[1] ≈ pi rtol = 1.0e-2
         # zero away from the marker
         @test all(iszero, parent(dens)[2:end])
+    end
+
+    # In 2D the density divides by the surface weight on the marker's faces, not the cell
+    # measure: the cell measure carries a normal half-spacing, so -r/w grows like 1/h
+    # (gpena/Bramble.jl#546). u = sin(πx)sin(πy) has q·n = π sin(πy) on x = 0.
+    @testset "reaction_density: converges to q·n" begin
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        sol(x) = sin(pi * x[1]) * sin(pi * x[2])
+        function solved(Ωₕ)
+            Wₕ = gridspace(Ωₕ)
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+            l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> 2pi^2 * sol(x)), v))
+            A, F = assemble(a, l; dirichlet = :boundary => sol)
+            uₕ = element(Wₕ)
+            uₕ .= A \ F
+            return Wₕ, a, l, uₕ
+        end
+        B = boundary_symbols(S)
+        Ω = domain(S, :xmin => :xmin, :boundary => B)
+
+        # uniform, so the midpoint of x = 0 is a node: q·n = π there
+        errs = map((21, 41)) do N
+            _, a, l, uₕ = solved(mesh(Ω, (N, N), (true, true)))
+            dens = reshape(parent(reaction_density(a, l, uₕ; marker = :xmin)), N, N)
+            return abs(dens[1, (N + 1) ÷ 2] - pi)
+        end
+        @test errs[2] < errs[1] / 3
+        @test errs[2] < 0.01
+
+        # non-uniform: integrating the density over the faces recovers the reaction
+        Ωₕ = mesh(Ω, (13, 11), (false, false))
+        Wₕ, a, l, uₕ = solved(Ωₕ)
+        one_ = element(Wₕ, 1.0)
+        d = reaction_density(a, l, uₕ; marker = :xmin)
+        @test inner_Γ(d, one_, :xmin) ≈ reaction(a, l, uₕ; marker = :xmin)
+        db = reaction_density(a, l, uₕ; marker = :boundary)
+        @test inner_Γ(db, one_, :boundary) ≈ reaction(a, l, uₕ; marker = :boundary)
+
+        # by hand: -r over the surface weight, a mid-face point and a corner on two faces
+        r = reshape(assemble(a) * parent(uₕ) - assemble(l), 13, 11)
+        x, y = points(Ωₕ(1)), points(Ωₕ(2))
+        @test reshape(parent(d), 13, 11)[1, 5] ≈ -r[1, 5] / ((y[6] - y[4]) / 2)
+        @test reshape(parent(db), 13, 11)[1, 1] ≈ -r[1, 1] / ((y[2] - y[1]) / 2 + (x[2] - x[1]) / 2)
+
+        # the faces come from the marked points, not the label's name: a label defined as
+        # another face never divides by zero
+        Ωm = domain(S, :left => :ymin, :boundary => B)
+        Wm, am, lm, um = solved(mesh(Ωm, (13, 11), (false, false)))
+        dm = try
+            parent(reaction_density(am, lm, um; marker = :left))
+        catch e
+            e isa ArgumentError || rethrow()
+            nothing
+        end
+        @test dm === nothing || all(isfinite, dm)
+        dm === nothing || @test inner_Γ(element(Wm, dm), element(Wm, 1.0), :ymin) ≈
+                                reaction(am, lm, um; marker = :left)
+
+        # a user-named whole face
+        Ωi = domain(S, :inflow => :xmin, :boundary => B)
+        Wi, ai, li, ui = solved(mesh(Ωi, (13, 11), (false, false)))
+        @test inner_Γ(reaction_density(ai, li, ui; marker = :inflow), element(Wi, 1.0), :xmin) ≈
+              reaction(ai, li, ui; marker = :inflow)
+
+        # a face with its corners left out still selects that face
+        Ωo = domain(S, :open => x -> x[1] == 1 && 0 < x[2] < 1, :boundary => B)
+        Wo, ao, lo, uo = solved(mesh(Ωo, (13, 11), (false, false)))
+        do_ = reaction_density(ao, lo, uo; marker = :open)
+        @test all(isfinite, parent(do_))
+        @test inner_Γ(do_, element(Wo, 1.0), :xmax) ≈ reaction(ao, lo, uo; marker = :open)
+
+        # an interior marker has no surface weight
+        Ωc = domain(S, :core => x -> 0.2 < x[1] < 0.8 && 0.2 < x[2] < 0.8, :boundary => B)
+        Wc, ac, lc, uc = solved(mesh(Ωc, (13, 11), (false, false)))
+        @test_throws ArgumentError reaction_density(ac, lc, uc; marker = :core)
+        @test_throws ArgumentError reaction_density!(
+            zeros(ndofs(Wc)), assemble(ac), assemble(lc), uc; marker = :core)
+        @test isfinite(reaction(ac, lc, uc; marker = :core))
+
+        # part of a face selects no face, alone or beside a whole one
+        Ωp = domain(S, :half => x -> x[1] == 0 && x[2] <= 0.5,
+            :c => x -> x[1] == 0 || (x[2] == 0 && x[1] <= 0.5), :boundary => B)
+        Wp, ap, lp, up = solved(mesh(Ωp, (13, 11), (false, false)))
+        Ap, Fp = assemble(ap), assemble(lp)
+        for m in (:half, :c)
+            @test_throws ArgumentError reaction_density(ap, lp, up; marker = m)
+            @test_throws ArgumentError reaction_density!(
+                zeros(ndofs(Wp)), Ap, Fp, up; marker = m)
+        end
     end
 
     # The in-place variants, the dense fallbacks, several markers and the space validation,
@@ -288,7 +379,8 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
             uₕ = element(W₁)
             uₕ .= randn(n₁)
             r = Matrix(A) * parent(uₕ) - F
-            w = weights(W₁, Bramble.Innerh())
+            # surface weight of a 1D face: a point, of measure 1 (not the cell measure)
+            ω = ones(n₁)
 
             for marker in (:left, :right, (:left, :right), (:left, :left))
                 ms = marker isa Symbol ? (marker,) : marker
@@ -307,7 +399,7 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
                 @test reaction(Matrix(A), F, uₕ; marker = marker) ≈ expected
 
                 dens_expected = zeros(n₁)
-                dens_expected[idx] .= -r[idx] ./ w[idx]
+                dens_expected[idx] .= -r[idx] ./ ω[idx]
                 dens = zeros(n₁)
                 @test reaction_density!(dens, A, F, uₕ; marker = marker) === dens
                 @test dens ≈ dens_expected
@@ -334,7 +426,7 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
             uₕ = element(W)
             uₕ .= randn(n₁ + n₂)
             r = Matrix(A) * parent(uₕ) - F
-            ws = (weights(W₁, Bramble.Innerh()), weights(W₂, Bramble.Innerh()))
+            ωs = (ones(n₁), ones(n₂))   # 1D surface weights, as above
             offs = (0, n₁)
             Ωs = (Ω₁, Ω₂)
 
@@ -353,7 +445,7 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
                 for k in sel
                     for m in ms, j in rows(Ωs[k], m, offs[k])
 
-                        dens_expected[j] = -r[j] / ws[k][j - offs[k]]
+                        dens_expected[j] = -r[j] / ωs[k][j - offs[k]]
                     end
                 end
                 expected = -sum(r[idx])

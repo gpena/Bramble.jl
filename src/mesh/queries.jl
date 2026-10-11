@@ -431,6 +431,43 @@ end
 @inline _no_faces(mask) = all(m -> !m[1] && !m[2], mask)
 
 """
+    _marked_face_mask(Ωₕ::AbstractMeshType{D}, marked_at) -> NTuple{D, NTuple{2, Bool}}
+
+The coordinate faces a marked point set covers, as a per-axis `(min, max)` mask, read off
+the marked points rather than a label's name. `marked_at(k)` says whether the point with
+linear index `k` is marked.
+
+A face is selected when every point of its relative interior is marked: the points off the
+edges and corners it shares with its neighbours. A marker that leaves the corners out
+(`x -> x[1] == 1 && 0 < x[2] < 1`) therefore still selects its face. A face with no relative
+interior (two points or fewer on a transverse axis) needs all its points marked; in 1D a face
+is a single point and its own interior.
+"""
+@inline function _marked_face_mask(Ωₕ::AbstractMeshType{D}, marked_at) where {D}
+    idxs = indices(Ωₕ)
+    faces = boundary_indices(idxs)
+    return ntuple(Val(D)) do d
+        (_face_is_marked(marked_at, idxs, faces[2d - 1], d),
+            _face_is_marked(marked_at, idxs, faces[2d], d))
+    end
+end
+
+@inline function _face_is_marked(
+        marked_at, idxs::CartesianIndices{D}, face::CartesianIndices{D}, d::Int
+) where {D}
+    lin = LinearIndices(idxs)
+    open = CartesianIndices(
+        ntuple(e -> e == d ? face.indices[e] : _open_range(face.indices[e]), Val(D))
+    )
+    for I in ifelse(isempty(open), face, open)
+        marked_at(lin[I]) || return false
+    end
+    return true
+end
+
+@inline _open_range(r::AbstractUnitRange) = (first(r) + 1):(last(r) - 1)
+
+"""
     _check_surface_is_thin(Ωₕ::AbstractMeshType{D}, mask) -> Nothing
 
 Refuse a face set that is not a surface on this mesh.
