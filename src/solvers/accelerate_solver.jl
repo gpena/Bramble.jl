@@ -24,7 +24,7 @@ abstract type AccelerateFactorization{T} <: Factorization{T} end
 """
     accelerate_factorize(A::SparseMatrixCSC; sym = :auto, kind = :auto, kwargs...) -> AccelerateFactorization
     accelerate_factorize(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
-                         symmetrize = false, sym = :auto, kind = :auto, kwargs...) -> AccelerateFactorization
+                         sym = :auto, kind = :auto, kwargs...) -> AccelerateFactorization
 
 Compute the sparse direct factorization of `A` (or the assembled matrix of `a`) using Apple
 Accelerate's native `libSparse` on macOS.
@@ -68,6 +68,7 @@ function accelerate_factorize(
     if !Sys.isapple()
         throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
     end
+    _reject_factorize_symmetrize(:accelerate_factorize, kwargs)
     A = assemble(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )

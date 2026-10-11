@@ -30,6 +30,9 @@ A `SparseMatrixCSR` (`SparseMatricesCSR.jl`) is also accepted: converted to `Spa
 first (no backend has a native CSR solve path -- see `docs/src/internals/csr_solvers.md`),
 then factored exactly as above.
 
+The form method refuses `symmetrize` with an `ArgumentError`: it also changes the load vector.
+Call `A, F = assemble(a, l; symmetrize = true)` and factor the matrix `A`.
+
 # Examples
 
 ```julia
@@ -60,10 +63,24 @@ function sparse_factorize(A::SparseMatrixCSC; solver::Symbol = :default, sym = :
     end
 end
 
+# `symmetrize` belongs to `assemble(a, l; symmetrize = true)`, which also symmetrises the
+# load vector. A factorization of `a` alone has no matching `F`, so it refuses the keyword.
+function _reject_factorize_symmetrize(name::Symbol, kwargs)
+    haskey(kwargs, :symmetrize) && throw(
+        ArgumentError(
+        "$name(a::BilinearForm) does not accept `symmetrize`: it also changes the load " *
+        "vector, which a factorization of `a` alone cannot match. Assemble with " *
+        "`A, F = assemble(a, l; symmetrize = true)` and call $name(A) on the matrix."
+    ),
+    )
+    return nothing
+end
+
 function sparse_factorize(
         a::BilinearForm; solver::Symbol = :default, sym = :auto,
         dirichlet = nothing, dirichlet_components = nothing, kwargs...
 )
+    _reject_factorize_symmetrize(:sparse_factorize, kwargs)
     A = assemble(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )

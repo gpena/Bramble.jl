@@ -18,14 +18,14 @@ abstract type MUMPSFactorization{T} <: Factorization{T} end
 """
     mumps_factorize(A::AbstractMatrix; sym = :auto, icntl = nothing, cntl = nothing, kwargs...) -> MUMPSFactorization
     mumps_factorize(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
-                    symmetrize = false, sym = :auto, kwargs...) -> MUMPSFactorization
+                    sym = :auto, kwargs...) -> MUMPSFactorization
 
 Compute the sparse direct multifrontal factorization of `A` (or the assembled matrix of `a`)
 using [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl).
 
 # Symmetry options
 - `:auto`: the default, which detects symmetry automatically. If `A` is symmetric and positive
-  definite (or `symmetrize = true`), it uses symmetric positive-definite factorization
+  definite, it uses symmetric positive-definite factorization
   (`sym = 1`). If symmetric, it uses general symmetric ``LDL^T`` (`sym = 2`). Otherwise it
   uses unsymmetric LU (`sym = 0`).
 - `:spd`, `:definite`, `1`: symmetric positive definite (Cholesky / ``LL^T``).
@@ -60,6 +60,7 @@ function mumps_factorize(
         a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
         sym = :auto, kwargs...
 )
+    _reject_factorize_symmetrize(:mumps_factorize, kwargs)
     A = assemble(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )

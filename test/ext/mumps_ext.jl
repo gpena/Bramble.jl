@@ -1,8 +1,19 @@
+# Normally test/runtests.jl includes test/ext/SolverContracts.jl immediately before this
+# file (SolverContracts.jl's own header comment documents that ordering contract), so
+# `Main.ExtSolverContracts` already exists by the time the `using ..ExtSolverContracts`
+# below runs. Included here too, guarded, so `include("test/ext/mumps_ext.jl")`
+# also works standalone without double-defining the module when
+# runtests.jl already loaded it.
+if !isdefined(Main, :ExtSolverContracts)
+    include(joinpath(@__DIR__, "SolverContracts.jl"))
+end
+
 module TestMUMPSExt
 
 using Test
 using Bramble
 using Bramble: MUMPSFactorization, mumps_factorize, mumps_refactor!, mumps_solve, refactor!
+using Bramble: change_points!, sparse_factorize
 using LinearAlgebra
 using SparseArrays
 using MUMPS
@@ -133,6 +144,31 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         fact_c = mumps_factorize(p.A; sym = :spd, cntl = (1 => 0.5,))
         @test fact_c.mumps.cntl[1] == 0.5
         @test isapprox(fact_c \ p.F, p.u_ref; atol = 1.0e-12)
+    end
+
+    @testset "factorize(a): symmetrize refused" begin
+        Ωₕ = mesh(
+            domain(
+                interval(0.0, 1.0) × interval(0.0, 1.0),
+                :boundary => boundary_symbols(interval(0.0, 1.0) × interval(0.0, 1.0))
+            ), (9, 7), (true, true)
+        )
+        change_points!(Ωₕ, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
+        Wₕ = gridspace(Ωₕ)
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> 1.0), v))
+        bc = :boundary => x -> 1.0 + x[1]
+        for symmetrize in (true, false)
+            @test_throws ArgumentError mumps_factorize(a; dirichlet = bc, symmetrize = symmetrize)
+            @test_throws ArgumentError sparse_factorize(
+                a; solver = :mumps, dirichlet = bc, symmetrize = symmetrize
+            )
+        end
+
+        # The plain call still solves, with the Dirichlet data lifted into F by assemble
+        A, F = assemble(a, l; dirichlet = bc)
+        @test mumps_factorize(a; dirichlet = bc) \ F ≈ Matrix(A) \ F
+        @test sparse_factorize(a; solver = :mumps, dirichlet = bc) \ F ≈ Matrix(A) \ F
     end
 
     @testset "Error handling & validation" begin

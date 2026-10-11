@@ -16,14 +16,14 @@ abstract type SuiteSparseFactorization{T} <: Factorization{T} end
 """
     suitesparse_factorize(A::AbstractMatrix; sym = :auto, kwargs...) -> SuiteSparseFactorization
     suitesparse_factorize(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
-                          symmetrize = false, sym = :auto, kwargs...) -> SuiteSparseFactorization
+                          sym = :auto, kwargs...) -> SuiteSparseFactorization
 
 Compute the sparse direct factorization of `A` (or the assembled matrix of `a`) using
 SuiteSparse (CHOLMOD for symmetric positive-definite systems, UMFPACK for unsymmetric).
 
 # Symmetry options
-- `:auto` (default) automatically detects symmetry. If `A` is symmetric and positive definite
-  (or `symmetrize = true`), uses CHOLMOD sparse Cholesky. Otherwise, uses UMFPACK sparse LU.
+- `:auto` (default) automatically detects symmetry. If `A` is symmetric and positive definite,
+  uses CHOLMOD sparse Cholesky. Otherwise, uses UMFPACK sparse LU.
 - `:spd`, `:definite`, or `1` selects symmetric positive definite (CHOLMOD Cholesky).
 - `:symmetric` or `2` selects symmetric factorization.
 - `:unsymmetric` or `0` selects general unsymmetric (UMFPACK LU).
@@ -51,6 +51,7 @@ function suitesparse_factorize(
         a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
         sym = :auto, kwargs...
 )
+    _reject_factorize_symmetrize(:suitesparse_factorize, kwargs)
     A = assemble(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )

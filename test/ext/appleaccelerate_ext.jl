@@ -14,6 +14,7 @@ using Test
 using Bramble
 using Bramble: AccelerateFactorization, accelerate_factorize, accelerate_refactor!,
                accelerate_solve
+using Bramble: change_points!, sparse_factorize
 using LinearAlgebra
 using SparseArrays
 using Random
@@ -143,6 +144,35 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
                 p; atol = 1.0e-12,
                 factorize = A -> accelerate_factorize(A; sym = :unsymmetric)
             )
+        end
+
+        @testset "factorize(a): symmetrize refused" begin
+            Ωₕ = mesh(
+                domain(
+                    interval(0.0, 1.0) × interval(0.0, 1.0),
+                    :boundary => boundary_symbols(interval(0.0, 1.0) × interval(0.0, 1.0))
+                ), (9, 7), (true, true)
+            )
+            change_points!(
+                Ωₕ, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5)
+            )
+            Wₕ = gridspace(Ωₕ)
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+            l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> 1.0), v))
+            bc = :boundary => x -> 1.0 + x[1]
+            for symmetrize in (true, false)
+                @test_throws ArgumentError accelerate_factorize(
+                    a; dirichlet = bc, symmetrize = symmetrize
+                )
+                @test_throws ArgumentError sparse_factorize(
+                    a; solver = :accelerate, dirichlet = bc, symmetrize = symmetrize
+                )
+            end
+
+            # The plain call still solves, with the Dirichlet data lifted into F by assemble
+            A, F = assemble(a, l; dirichlet = bc)
+            @test accelerate_factorize(a; dirichlet = bc) \ F ≈ Matrix(A) \ F
+            @test sparse_factorize(a; solver = :accelerate, dirichlet = bc) \ F ≈ Matrix(A) \ F
         end
 
         @testset "Error handling & validation" begin

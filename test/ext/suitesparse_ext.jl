@@ -1,9 +1,20 @@
+# Normally test/runtests.jl includes test/ext/SolverContracts.jl immediately before this
+# file (SolverContracts.jl's own header comment documents that ordering contract), so
+# `Main.ExtSolverContracts` already exists by the time the `using ..ExtSolverContracts`
+# below runs. Included here too, guarded, so `include("test/ext/suitesparse_ext.jl")`
+# also works standalone without double-defining the module when
+# runtests.jl already loaded it.
+if !isdefined(Main, :ExtSolverContracts)
+    include(joinpath(@__DIR__, "SolverContracts.jl"))
+end
+
 module TestSuiteSparseExt
 
 using Test
 using Bramble
 using Bramble: SuiteSparseFactorization, suitesparse_factorize, suitesparse_qr_factorize,
                suitesparse_qr_solve, suitesparse_refactor!, suitesparse_solve
+using Bramble: change_points!, sparse_factorize
 using LinearAlgebra
 using SparseArrays
 using SuiteSparse
@@ -111,6 +122,31 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         # a genuine least-squares residual is orthogonal to A_ls's column space
         residual = A_ls * u_ls - F_ls
         @test isapprox(A_ls' * residual, zeros(size(A_ls, 2)); atol = 1.0e-8)
+    end
+
+    @testset "factorize(a): symmetrize refused" begin
+        Ωₕ = mesh(
+            domain(
+                interval(0.0, 1.0) × interval(0.0, 1.0),
+                :boundary => boundary_symbols(interval(0.0, 1.0) × interval(0.0, 1.0))
+            ), (9, 7), (true, true)
+        )
+        change_points!(Ωₕ, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
+        Wₕ = gridspace(Ωₕ)
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> 1.0), v))
+        bc = :boundary => x -> 1.0 + x[1]
+        for symmetrize in (true, false)
+            @test_throws ArgumentError suitesparse_factorize(a; dirichlet = bc, symmetrize = symmetrize)
+            @test_throws ArgumentError sparse_factorize(
+                a; solver = :suitesparse, dirichlet = bc, symmetrize = symmetrize
+            )
+        end
+
+        # The plain call still solves, with the Dirichlet data lifted into F by assemble
+        A, F = assemble(a, l; dirichlet = bc)
+        @test suitesparse_factorize(a; dirichlet = bc) \ F ≈ Matrix(A) \ F
+        @test sparse_factorize(a; solver = :suitesparse, dirichlet = bc) \ F ≈ Matrix(A) \ F
     end
 
     @testset "Error handling & validation" begin
