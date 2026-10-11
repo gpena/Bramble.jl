@@ -344,6 +344,38 @@ end
         @test suitesparse_qr_factorize(ar; dirichlet = bc) isa SparseArrays.SPQR.QRSparse
     end
 
+    # A taller-than-wide CSR matrix zeroes the constrained rows past its last column, as
+    # CSC does, instead of throwing for their missing diagonal; an in-range row with no
+    # stored diagonal still throws.
+    @testset "rectangular Dirichlet: agrees with CSC" begin
+        mk(be, n) = gridspace(mesh(domain(interval(0.0, 1.0)), n, true; backend = be))
+        csc, csr = Bramble.backend(), csr_backend()
+
+        # rows path: W -> W × W (20 × 10)
+        g = (W) -> form(W, W × W, (u, V) -> innerₕ(u, V(1)) + innerₕ(u, V(2)))
+        Ac = assemble(g(mk(csc, 10)); dirichlet = :boundary)
+        Ar = assemble(g(mk(csr, 10)); dirichlet = :boundary)
+        @test size(Ac, 1) > size(Ac, 2)
+        @test Ar isa SparseMatrixCSR
+        @test Matrix(Ar) ≈ Matrix(Ac)
+
+        # indices path: scalar πₕ, 10 -> 14 points
+        h = (W1, W2) -> form(W1, W2, (u, v) -> innerₕ(πₕ(u), v))
+        Bc = assemble(h(mk(csc, 10), mk(csc, 14)); dirichlet = :boundary)
+        Br = assemble(h(mk(csr, 10), mk(csr, 14)); dirichlet = :boundary)
+        @test size(Bc, 1) > size(Bc, 2)
+        @test Br isa SparseMatrixCSR
+        @test Matrix(Br) ≈ Matrix(Bc)
+
+        # positive control: row 1 is in range and stores no diagonal
+        Ad = sparsecsr([1, 2], [2, 1], [1.0, 1.0], 2, 2)
+        m = BitVector([true, false])
+        @test_throws ArgumentError Bramble._dirichlet_bc_indices!(copy(Ad), m)
+        @test_throws ArgumentError Bramble._dirichlet_bc_rows!(
+            copy(Ad), ((m, 0, nothing, true),)
+        )
+    end
+
     # sparse_factorize still rejects non-CSR, non-CSC types.
     @testset "other matrix types rejected" begin
         # The catch-all's guarantee for a genuinely unsupported type (dense `Matrix`,

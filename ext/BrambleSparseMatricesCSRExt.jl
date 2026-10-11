@@ -169,7 +169,8 @@ end
 # gives this for free where the CSC method (dirichlet_constraints.jl) has to sweep every
 # column checking which rows it touches. The diagonal is written where the same pass meets
 # it, exactly like the CSC method; see the module docstring above for why a missing one
-# throws here instead of being inserted.
+# throws here instead of being inserted. A row past the last column of a taller-than-wide
+# matrix has no diagonal to find: it is only zeroed, as the CSC method does.
 function Bramble._dirichlet_bc_rows!(A::SparseMatrixCSR{1}, entries::Tuple)
     T = eltype(A)
     rowptr = A.rowptr
@@ -187,7 +188,7 @@ function Bramble._dirichlet_bc_rows!(A::SparseMatrixCSR{1}, entries::Tuple)
                     vals[k] = zero(T)
                 end
             end
-            diagonal_found || _throw_missing_csr_diagonal(r)
+            diagonal_found || r > size(A, 2) || _throw_missing_csr_diagonal(r)
             return nothing
         end
     end
@@ -211,7 +212,7 @@ function Bramble._dirichlet_bc_indices!(A::SparseMatrixCSR{1}, index_in_marker::
                 vals[k] = zero(T)
             end
         end
-        diagonal_found || _throw_missing_csr_diagonal(i)
+        diagonal_found || i > size(A, 2) || _throw_missing_csr_diagonal(i)
         return nothing
     end
     return A
