@@ -84,6 +84,7 @@ using Kronecker: Kronecker
     #   `SparseFactorizationLDLT`, `SparseFactorizationLUTPP`, `SparseFactorizationQR`
     #   (BrambleAppleAccelerateExt): AppleAccelerate's own factorization type and the
     #   kind/hook names its `factor!`/`refactor!` calls need, none of them public there.
+    #   `AASparseMatrix`, `ATT_ORDINARY`: build LU's and QR's untagged full storage (#653).
     # - `finalize!`, `get_sol!`, `set_cntl!`, `set_icntl!`, `suppress_display!`
     #   (BrambleMUMPSExt): MUMPS's own solver-control API, none of it public there.
     # - `BrownFullBasicInit` (BrambleSciMLSensitivityExt): brought into `SciMLSensitivity`'s
@@ -225,6 +226,9 @@ using Kronecker: Kronecker
                 :CHOLMOD,
                 :UMFPACK,
                 :AAFactorization,
+                # `AASparseMatrix`, `ATT_ORDINARY`: LU/QR's untagged full storage (#653)
+                :AASparseMatrix,
+                :ATT_ORDINARY,
                 :factor!,
                 :refactor!,
                 :SparseFactorizationCholesky,
@@ -387,6 +391,8 @@ using Kronecker: Kronecker
                 # (BrambleSparseMatricesCSRExt): the row-major CSR counterparts of the CSC
                 # scatter/zero primitives `bilinear_traversal.jl`/`bilinear.jl` already reach.
                 :_scatter_position,
+                # `_scatter_storage`: the CSR extension's storage hook, same family
+                :_scatter_storage,
                 :_scatter_add!,
                 :_zero_stored!,
                 # `_batch_for!`, `_batch_axis_for!`, `_batch_scatter_for!`, `_batch_dot`,

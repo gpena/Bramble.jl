@@ -218,6 +218,43 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
             @test isapprox(accelerate_factorize(A_s) \ F_s, Matrix(A_s) \ F_s; atol = 1.0e-12)
         end
 
+        @testset "LU and QR on a Hermitian matrix (#653)" begin
+            # AppleAccelerate stores a Hermitian matrix as its lower triangle; LU and QR must
+            # factor the full matrix. Helmholtz -Δu - 50u (uniform) and SPD (non-uniform).
+            S3 = interval(0.0, 1.0) × interval(0.0, 1.0)
+            for (k, uni) in ((-50.0, true), (1.0, false))
+                Ω3 = mesh(domain(S3, :boundary => boundary_symbols(S3)), (10, 9), (uni, uni))
+                W3 = gridspace(Ω3)
+                a3 = form(W3, W3, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + k * innerₕ(u, v))
+                l3 = form(W3, v -> innerₕ(Rₕ(W3, x -> 1.0 + x[1]), v))
+                A, F = assemble(a3, l3; dirichlet = ZERO_BC, symmetrize = true)
+                @test issymmetric(A)
+                ref = Matrix(A) \ F
+                A2 = copy(A)
+                foreach(i -> A2[i, i] += 2, 1:size(A, 1))
+                ref2 = Matrix(A2) \ F
+                for o in ((sym = :unsymmetric,), (kind = :lu,), (kind = :lutpp,), (kind = :qr,))
+                    f = accelerate_factorize(A; o...)
+                    @test f.sym === (get(o, :kind, nothing) === :qr ? :qr : :unsymmetric)
+                    @test isapprox(f \ F, ref; rtol = 1.0e-10)
+                    @test isapprox(accelerate_refactor!(f, A2) \ F, ref2; rtol = 1.0e-10)
+                end
+            end
+
+            # Complex Hermitian, not symmetric: `:auto` takes LU
+            du = fill(1.0 + 0.5im, 5)
+            H = sparse(Tridiagonal(conj.(du), fill(4.0 + 0im, 6), du))
+            bh = ComplexF64.(1:6)
+            @test !issymmetric(H) && ishermitian(H)
+            @test isapprox(accelerate_factorize(H) \ bh, Matrix(H) \ bh; rtol = 1.0e-12)
+
+            # Unsymmetric 3×3: LU on a matrix that was never stored as a triangle
+            Au = sparse([4.0 1 0; 2 5 1; 0 3 6])
+            bu = [1.0, 2, 3]
+            u_u = accelerate_factorize(Au; sym = :unsymmetric) \ bu
+            @test isapprox(u_u, Matrix(Au) \ bu; rtol = 1.0e-12)
+        end
+
         @testset "Error handling & validation" begin
             validation_contract(
                 poisson_system(Val(1), 5; source = x -> 1.0);

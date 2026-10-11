@@ -24,6 +24,8 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
     using AppleAccelerate:
                            AppleAccelerate,
                            AAFactorization,
+                           AASparseMatrix,
+                           ATT_ORDINARY,
                            factor!,
                            refactor!,
                            SparseFactorizationCholesky,
@@ -72,13 +74,23 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         end
     end
 
+    # AppleAccelerate 0.7.0's `AASparseMatrix(A)` stores a Hermitian `A` as its tagged
+    # lower triangle. Cholesky and LDLᵀ read a triangle; LU and QR read the matrix, and
+    # factor that triangle alone, so they get the full storage, untagged.
+    function _aa_matrix(A::SparseMatrixCSC, sym_flag::Symbol)
+        sym_flag === :unsymmetric || sym_flag === :qr || return AASparseMatrix(A)
+        return AASparseMatrix(
+            size(A)..., Clong.(A.colptr .- 1), Cint.(A.rowval .- 1), copy(A.nzval), ATT_ORDINARY
+        )
+    end
+
     function Bramble._accelerate_factorize(A::SparseMatrixCSC; sym = :auto, kind = :auto, kwargs...)
         m, n = size(A)
         m == n || throw(DimensionMismatch("Matrix must be square for sparse direct solve, got $(m)×$(n)"))
 
         fact_kind, sym_flag = _accelerate_fact_kind(A, sym, kind)
 
-        aa = AAFactorization(A)
+        aa = AAFactorization(_aa_matrix(A, sym_flag))
         check = nothing
         if fact_kind === SparseFactorizationCholesky && sym === :auto && kind === :auto
             # Symmetry and a positive diagonal make `A` a Cholesky candidate only: a failed
@@ -172,7 +184,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         (m == fact.dim && n == fact.dim) || throw(
             DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
         )
-        refactor!(fact.aa_fact, A)
+        refactor!(fact.aa_fact, _aa_matrix(A, fact.sym))
         fact.check === nothing || (fact.check = A)
         return fact
     end
