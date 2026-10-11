@@ -94,7 +94,7 @@ function _each_dirichlet_row(f::F, space::ScalarGridSpace, labels, components) w
     _validate_scalar_components(components)
     Ωₕ = mesh(space)
     for p in labels
-        _each_marked(f, index_in_marker(Ωₕ, p), 0)
+        _each_marker_point(f, Ωₕ, p, 0)
     end
     return nothing
 end

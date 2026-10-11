@@ -110,7 +110,15 @@ The `BitVector` is a read-only view of the mesh's labels. Change labels with `ma
 `set_markers!`, which rebuild the marker state assembly reads; an edit made in place is not
 seen by assembly.
 """
-@inline function index_in_marker(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
+@inline function index_in_marker(Ωₕ::AbstractMeshType, label::Symbol)
+    bits = _stored_marker(Ωₕ, label)
+    bits === nothing && return _geometric_face_bits(Ωₕ, label)
+    return bits
+end
+
+# The stored `BitVector` that answers for `label` under `index_in_marker`'s rule, or `nothing`
+# when `label` is a face name that means its own face, which no stored marker holds.
+@inline function _stored_marker(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
     m = markers(Ωₕ)
     direct = get(m, label, nothing)
     direct !== nothing && return direct
@@ -121,10 +129,25 @@ seen by assembly.
             # The alias answers for `label` only when it marks nothing off `label`'s face: a
             # user's `:left => :ymin` must not answer for `:xmin` (gpena/Bramble.jl#659).
             _marks_only_face(Ωₕ, aliased, label) && return aliased
-            return _geometric_face_bits(Ωₕ, label)
+            return nothing
         end
     end
     return _throw_unknown_marker_label(Ωₕ, label)
+end
+
+# Calls `f(offset + i)` for every point `i` that `index_in_marker(Ωₕ, label)` marks, in
+# increasing order, without building the `BitVector` a face name may fall back to: the
+# per-stage residual of a semidiscretisation walks its labels through here and allocates
+# nothing on any branch.
+@inline function _each_marker_point(f::F, Ωₕ::AbstractMeshType{D}, label::Symbol, offset::Int) where {F, D}
+    bits = _stored_marker(Ωₕ, label)
+    bits === nothing || return _each_marked(f, bits, offset)
+    axis, side = _face_of_symbol(Val(D), label)
+    lin = LinearIndices(indices(Ωₕ))
+    for I in boundary_indices(Ωₕ)[2axis - 2 + side]
+        f(offset + @inbounds lin[I])
+    end
+    return nothing
 end
 
 # Whether every point `bits` marks lies on the face `label` names: the marked points on that

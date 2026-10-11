@@ -274,6 +274,23 @@ end
     @test Bramble.index_in_marker(Ωo, :xmin) === Bramble.index_in_marker(Ωo, :left)
     @test findall(Bramble.index_in_marker(Ωo, :xmin)) == [6, 11, 16]
 
+    # The residual walks a label without building the fallback face: same points, 0 bytes.
+    sd = semidiscretize(a, l; dirichlet = :xmin)
+    sdr = semidiscretize(ar, lr; dirichlet = :xm)
+    v = collect(range(0.25, 1.75; length = 25))
+    du, dur = zeros(25), zeros(25)
+    sd(du, v, nothing, 0.0)
+    sdr(dur, v, nothing, 0.0)
+    @test du == dur
+    walk(Ω, lab) = (ix = Int[]; Bramble._each_marker_point(i -> push!(ix, i), Ω, lab, 3); ix)
+    @test walk(Ωh, :xmin) == (1:5:21) .+ 3
+    @test walk(Ωh, :left) == (1:5) .+ 3
+    @test walk(Ωo, :xmin) == [6, 11, 16] .+ 3
+    tick!(hits, Ω) = Bramble._each_marker_point(i -> (hits[i] += 1), Ω, :xmin, 0)
+    hits = zeros(Int, 25)
+    @test_allocs tick!(hits, Ωh)
+    @test findall(>(0), hits) == 1:5:21
+
     @test_throws KeyError Bramble.index_in_marker(Ωh, :zmin)
 end
 
