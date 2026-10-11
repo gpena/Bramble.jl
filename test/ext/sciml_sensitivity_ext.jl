@@ -143,6 +143,60 @@ using ..TestUtils: _have
 
             @test isapprox(adjoint_dθ, fd_dθ; rtol = 1e-4)
         end
+
+        # Default specialization wraps the residual in a `FunctionWrappersWrapper`, which
+        # hid the `Semidiscretization` from the `Mᵀ` correction (gpena/Bramble.jl#606).
+        @testset "Mᵀ correction under default wrapper" begin
+            # A dense backend and a `p`-free condition, so that no `p`-vjp runs: that is
+            # what lets `QuadratureAdjoint(autojacvec = false)` return a `du0` at all
+            # without `FullSpecialize`.
+            Ωₕ = Bramble.mesh(
+                Bramble.domain(Bramble.interval(0.0, 1.0)), 21, false;
+                backend = Bramble.backend(matrix_type = Matrix{Float64})
+            )
+            Wₕ = gridspace(Ωₕ)
+            I = Bramble.interval(0.0, 0.5)
+            fₕ = Bramble.element(Wₕ, 0.0)
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+            l = form(Wₕ, v -> innerₕ(fₕ, v))
+            bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
+            sd = semidiscretize(a, l; dirichlet = bcs)
+            θ₀ = 0.4
+            ts = [0.125, 0.25, 0.375, 0.5]
+            pts = points(Ωₕ)
+            u0θ(θ) = begin
+                v = [_ssens_uex(x, θ) for x in pts]
+                v[1] = 0.0
+                v[end] = 0.0
+                v
+            end
+
+            prob = ode_problem(sd, u0θ(θ₀), I)
+            sol = solve(prob, FBDF(); abstol = 1e-9, reltol = 1e-9, saveat = ts)
+            obs = [copy(u) .+ 0.01 for u in sol.u]
+            dgdu!(out, u, p, t, i) = (@. out = 2 * (u - obs[i]); nothing)
+
+            du0, _ = Bramble.adjoint_sensitivities(
+                sol, FBDF(); sensealg = QuadratureAdjoint(autojacvec = false), t = ts,
+                dgdu_discrete = dgdu!, abstol = 1e-9, reltol = 1e-9
+            )
+
+            # Same `abstol`/`reltol`/`h` as the testset above.
+            h = 1e-4
+            du0dθ = (u0θ(θ₀ + h) - u0θ(θ₀ - h)) / (2h)
+            adjoint_dθ = dot(du0, du0dθ)
+
+            loss(θ) = begin
+                s = solve(
+                    SciMLBase.remake(prob; u0 = u0θ(θ)), FBDF(); abstol = 1e-9,
+                    reltol = 1e-9, saveat = ts
+                )
+                sum(sum(abs2, s.u[k] - obs[k]) for k in eachindex(ts))
+            end
+            fd_dθ = (loss(θ₀ + h) - loss(θ₀ - h)) / (2h)
+
+            @test isapprox(adjoint_dθ, fd_dθ; rtol = 1e-4)
+        end
     else
         @test_skip "SciMLSensitivity not in this environment"
     end
