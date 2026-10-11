@@ -54,6 +54,7 @@ function suitesparse_factorize(
     A = assemble(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
+    A = _as_csc(A)
     return _suitesparse_factorize(A; sym = sym, kwargs...)
 end
 
@@ -79,6 +80,7 @@ function suitesparse_solve(
     A, F = assemble(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components, symmetrize = symmetrize
     )
+    A = _as_csc(A)
     sym_effective = (sym === :auto && symmetrize) ? :spd : sym
     u = _suitesparse_solve(A, F; sym = sym_effective, kwargs...)
     return element(trial_space(a), u)
@@ -153,6 +155,7 @@ function suitesparse_qr_factorize(
     A = assemble(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
+    A = _as_csc(A)
     return qr(A; kwargs...)
 end
 
@@ -177,6 +180,7 @@ function suitesparse_qr_solve(
     A, F = assemble(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
+    A = _as_csc(A)
     u = qr(A; kwargs...) \ F
     return element(trial_space(a), u)
 end

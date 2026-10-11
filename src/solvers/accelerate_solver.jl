@@ -71,6 +71,7 @@ function accelerate_factorize(
     A = assemble(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
+    A = _as_csc(A)
     return _accelerate_factorize(A; sym = sym, kind = kind, kwargs...)
 end
 
@@ -151,6 +152,7 @@ function accelerate_solve(
     A, F = assemble(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components, symmetrize = symmetrize
     )
+    A = _as_csc(A)
     sym_effective = (sym === :auto && symmetrize) ? :spd : sym
     u = _accelerate_solve(A, F; sym = sym_effective, kind = kind, kwargs...)
     return element(trial_space(a), u)

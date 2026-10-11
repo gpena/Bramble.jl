@@ -54,6 +54,7 @@ function sparspak_factorize(
     A = assemble(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
+    A = _as_csc(A)
     return _sparspak_factorize(A)
 end
 
@@ -91,6 +92,7 @@ function sparspak_solve(
     A, F = assemble(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components, symmetrize = symmetrize
     )
+    A = _as_csc(A)
     u = _sparspak_solve(A, F)
     return element(trial_space(a), u)
 end

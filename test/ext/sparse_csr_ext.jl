@@ -25,6 +25,14 @@ using SparseArrays
 using SparseMatricesCSR
 using LinearAlgebra: issymmetric, I
 using Random
+using Sparspak, SuiteSparse, MUMPS
+using Bramble: sparspak_solve, suitesparse_solve, mumps_solve, accelerate_solve,
+               suitesparse_qr_solve, sparspak_factorize, suitesparse_factorize,
+               mumps_factorize, accelerate_factorize, suitesparse_qr_factorize
+
+if Sys.isapple()
+    using AppleAccelerate
+end
 
 # `docs/src/internals/csr_solvers.md`: the `sparse_factorize`/
 # `pde_solve`/`refactor!` CSC-conversion fallback for `SparseMatrixCSR`. `refactor_contract`
@@ -297,6 +305,43 @@ end
 
         # the one-based path is unchanged
         @test pde_solve(sparsecsr(rows, cols, vals, 3, 3), F) ≈ ref
+    end
+
+    # The backend solvers' `BilinearForm` methods pass the assembled matrix through
+    # `_as_csc`: without it a CSR-backed form reaches the extension's `::SparseMatrixCSC`
+    # method as a `MethodError`, and `qr` silently densifies it to `QRCompactWY`. The
+    # oracle is a dense solve of the CSC-backed system with nonzero Dirichlet data.
+    @testset "backend solvers: BilinearForm on CSR" begin
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        function mk(be)
+            W = gridspace(mesh(domain(S, :boundary => boundary_symbols(S)), (9, 7), (true, true); backend = be))
+            a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+            l = form(W, v -> innerₕ(Rₕ(W, x -> 1.0 + x[1] * x[2]), v))
+            return a, l
+        end
+        ac, lc = mk(Bramble.backend())
+        ar, lr = mk(csr_backend())
+        bc = :boundary => x -> x[1]
+        A, F = assemble(ac, lc; dirichlet = bc)
+        @test assemble(ar; dirichlet = bc) isa SparseMatrixCSR
+        ref = Matrix(A) \ F
+        @test !(ref ≈ zero(ref))
+
+        pairs = Any[
+            ("sparspak", sparspak_solve, sparspak_factorize),
+            ("suitesparse", suitesparse_solve, suitesparse_factorize),
+            ("mumps", mumps_solve, mumps_factorize),
+            ("suitesparse_qr", suitesparse_qr_solve, suitesparse_qr_factorize)
+        ]
+        Sys.isapple() && push!(pairs, ("accelerate", accelerate_solve, accelerate_factorize))
+        for (name, solve, factorize) in pairs
+            @testset "$name" begin
+                @test parent(solve(ar, lr; dirichlet = bc)) ≈ ref
+                @test factorize(ar; dirichlet = bc) \ F ≈ ref
+            end
+        end
+        # `qr` of a CSR matrix would densify to `QRCompactWY`: the factorization is sparse
+        @test suitesparse_qr_factorize(ar; dirichlet = bc) isa SparseArrays.SPQR.QRSparse
     end
 
     # sparse_factorize still rejects non-CSR, non-CSC types.

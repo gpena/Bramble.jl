@@ -110,6 +110,10 @@ function _csr_to_csc(A::AbstractMatrix)
     return sparse(I, o == 0 ? colval : colval .+ o, nzval, m, n)
 end
 
+# The assembled matrix of a `BilinearForm` is CSR on a `csr_backend()` mesh, and no backend
+# solver takes one (`qr` would silently densify it): the form methods pass it through here.
+_as_csc(A) = _is_csr(A) ? _csr_to_csc(A) : A
+
 # `assemble(a::BilinearForm)` is generic over the backend's matrix type (gpena/Bramble.jl#12)
 # and a dense-backed form assembles into a `Matrix`, not a `SparseMatrixCSC` -- so the call
 # above genuinely can reach here. `sparse_factorize` only ever supported `SparseMatrixCSC`

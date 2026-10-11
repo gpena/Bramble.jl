@@ -63,6 +63,7 @@ function mumps_factorize(
     A = assemble(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
+    A = _as_csc(A)
     return _mumps_factorize(A; sym = sym, kwargs...)
 end
 
@@ -105,6 +106,7 @@ function mumps_solve(
     A, F = assemble(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components, symmetrize = symmetrize
     )
+    A = _as_csc(A)
     u = _mumps_solve(A, F; sym = sym, kwargs...)
     return element(trial_space(a), u)
 end
