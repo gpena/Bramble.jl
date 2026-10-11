@@ -67,6 +67,26 @@ using Bramble:
         @test issymmetric(a4)
         @test !isposdef(a4)
         @test issymmetric(Matrix(assemble(a4)))
+
+        β = Ref(1.5)
+        a5 = form(Wₕ, Wₕ, (u, v) -> β * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+        @test isposdef(a5) === true
+        β[] = -1.5
+        @test isposdef(a5) === false
+        β[] = 0.0
+        @test isposdef(a5) === false
+        β[] = 2.0
+        @test isposdef(a5) === true
+
+        @test isposdef(form(Wₕ, Wₕ, (u, v) -> Ref(-1.0) * innerₕ(u, v))) === false
+        @test isposdef(form(Wₕ, Wₕ, (u, v) -> Ref(0.0) * innerₕ(u, v))) === false
+        @test isposdef(form(Wₕ, Wₕ, (u, v) -> (1.0 + 0.0im) * innerₕ(u, v))) === false
+
+        γ = Ref(1.0)
+        a6 = form(Wₕ, Wₕ, (u, v) -> γ * innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+        @test isposdef(a6) === true
+        γ[] = -1.0
+        @test isposdef(a6) === false
     end
 
     @testset "Different operators" begin

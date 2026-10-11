@@ -320,7 +320,14 @@ _is_posdef_term(op::BilinearProduct) = _same_operator_shape(op.left_op, op.right
 function _is_posdef_term(op::OperatorAdd)
     return _is_posdef_term(op.left_op) && _is_posdef_term(op.right_op)
 end
-_is_posdef_term(op::OperatorScale) = op.scalar > 0 && _is_posdef_term(op.inner_op)
+function _is_posdef_term(op::OperatorScale)
+    return _is_positive_scale(op.scalar) && _is_posdef_term(op.inner_op)
+end
+# A `Ref` is read now, so the answer follows its current value; a non-real scale is never
+# taken as positive.
+_is_positive_scale(c::Real) = c > 0
+_is_positive_scale(c::Base.RefValue) = _is_positive_scale(c[])
+_is_positive_scale(c) = false
 _is_posdef_term(::ZeroOperator) = true
 _is_posdef_term(op) = false
 
@@ -373,6 +380,9 @@ Whether `a` is symmetric positive semi-definite by the `LᵀWL` construction
 `issymmetric` checks: true only when every term is `innerₕ(L(u), L(v))` (a transposed pair
 need not be semi-definite, so one makes the answer `false`) and every scaling along the way
 is by a positive number, which is what keeps that positivity from being flipped or collapsed.
+A `Ref` scale is read when `isposdef` is called, so the answer follows its value at that
+moment and may change after the `Ref` is updated. A non-real scale, complex included,
+answers `false`.
 
 Purely structural, like `issymmetric`, and for the same reason conservative: this does not
 prove positive-definite (which also needs `L` to have trivial kernel), only that the
