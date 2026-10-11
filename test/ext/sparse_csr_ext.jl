@@ -5,6 +5,12 @@
 #
 #   julia --project=test -e 'using Bramble, Test; include("test/TestUtils.jl");
 #     include("test/ext/sparse_csr_ext.jl")'
+# test/runtests.jl includes test/ext/SolverContracts.jl before this file; included here
+# too, guarded, so the file also loads standalone (as in appleaccelerate_ext.jl).
+if !isdefined(Main, :ExtSolverContracts)
+    include(joinpath(@__DIR__, "SolverContracts.jl"))
+end
+
 module TestSparseMatricesCSRExt
 
 using Test
@@ -269,6 +275,28 @@ end
             factorize = sparse_factorize,
             backend_refactor! = sparse_refactor!
         )
+    end
+
+    # `sparsecsr(Val(0), ...)` stores `rowptr`/`colval` from 0 (gpena/Bramble.jl#540). The
+    # matrix is unsymmetric, so a transposed conversion would also fail these checks.
+    @testset "zero-based CSR: solve and factorize" begin
+        rows, cols, vals = [1, 2, 2, 3], [1, 1, 2, 3], [4.0, -1.0, 4.0, 4.0]
+        A0 = sparsecsr(Val(0), rows, cols, vals, 3, 3)
+        @test A0.rowptr[1] == 0
+        F = [1.0, 2.0, 3.0]
+        ref = Matrix(sparse(rows, cols, vals, 3, 3)) \ F
+
+        @test pde_solve(A0, F) ≈ ref
+        fact = sparse_factorize(A0)
+        @test fact \ F ≈ ref
+
+        # new values, same pattern: `refactor!` must solve with the zero-based matrix's values
+        vals2 = [2.0, 3.0, 5.0, 7.0]
+        ref2 = Matrix(sparse(rows, cols, vals2, 3, 3)) \ F
+        @test refactor!(fact, sparsecsr(Val(0), rows, cols, vals2, 3, 3)) \ F ≈ ref2
+
+        # the one-based path is unchanged
+        @test pde_solve(sparsecsr(rows, cols, vals, 3, 3), F) ≈ ref
     end
 
     # sparse_factorize still rejects non-CSR, non-CSC types.

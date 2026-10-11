@@ -99,12 +99,15 @@ end
 function _csr_to_csc(A::AbstractMatrix)
     m, n = size(A)
     rowptr, colval, nzval = A.rowptr, A.colval, A.nzval
+    # a zero-based `sparsecsr(Val(0), ...)` stores `rowptr` and `colval` from 0: read the
+    # base off the data and shift both to one-based (`o == 0` for the usual one-based case)
+    o = 1 - Int(rowptr[1])
     I = Vector{Int}(undef, length(nzval))
-    @inbounds for i in 1:m, k in rowptr[i]:(rowptr[i + 1] - 1)
+    @inbounds for i in 1:m, k in (rowptr[i] + o):(rowptr[i + 1] + o - 1)
 
         I[k] = i
     end
-    return sparse(I, colval, nzval, m, n)
+    return sparse(I, o == 0 ? colval : colval .+ o, nzval, m, n)
 end
 
 # `assemble(a::BilinearForm)` is generic over the backend's matrix type (gpena/Bramble.jl#12)
