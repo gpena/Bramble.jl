@@ -523,8 +523,9 @@ end
 # Read from the node types wherever they carry it (a `Number` or `Ref{T}` scale, an array
 # coefficient or source), and from a value only where nothing else reveals it: a thunk is
 # called once, and so is every strength of a `Vector{Function}` Dirac source. Never from a
-# stencil probed at one point: a restricted term, or a Dirac point far from that point,
-# answers there with nothing, or with a narrower type than it writes elsewhere, and the
+# stencil probed at an arbitrary point (a restricted source is probed inside its region,
+# below): a restricted term, or a Dirac point far from that point, answers there with
+# nothing, or with a narrower type than it writes elsewhere, and the
 # vector it is assembled into cannot hold what the other points write. Static types keep
 # `@inferred assemble` stable; `assemble!` sizes nothing, so a refill never comes here.
 #
@@ -541,11 +542,77 @@ end
 
 # One operand, and nothing of its own that is not already in `T` (the space's spacings).
 const _ELTYPE_WRAPPERS = Union{
-    RegionRestriction, ShiftNode, InterpolationNode, BackwardDifference, ForwardDifference,
+    ShiftNode, InterpolationNode, BackwardDifference, ForwardDifference,
     CenteredDifference, StarDifference, CrossWeightedDifference, BackwardAverage,
     ForwardAverage, CenteredAverage, JumpNode}
 
 @inline _leaf_eltype(T, op::_ELTYPE_WRAPPERS, sp) = _leaf_eltype(T, op.inner_op, sp)
+
+# A restricted source is typed at the point `form` probed it (`_typed_restrictions`), the
+# first point of its region the walk reads, not the middle point a bare `SourceFunction` is
+# sampled at, where a source defined only on its region may throw or answer another type.
+# A probed node holds a zero stencil of that value, so its coefficient types are read and
+# nothing is called. An unprobed one (a term naming no component on a composite, which
+# `_lower_sources_over_leaves` leaves alone) is left as it was built and read on the leaf
+# `sp`. Its operand is evaluated, as the walk does, at the points of its region in turn
+# until one answers a non-empty stencil (an enclosed restriction or a shift off the grid
+# answers `()` without calling the source). Whether one does is known only at run time, so
+# the answer starts from the type the operand's stencil infers with its restrictions taken
+# off (`_static_coeff_eltype`). An empty region and a found point then give the same type,
+# and `@inferred assemble` holds.
+# A device leaf is not probed by `form` either, so its restriction still types its operand.
+@inline _leaf_eltype(T, op::RegionRestriction{<:Any, <:Any, <:Any, <:Tuple}, sp) = _stencil_eltype(
+    T, op.zero_stencil)
+@inline _leaf_eltype(T, op::RegionRestriction{<:Any, <:Any, <:Any, Nothing}, sp) = _unprobed_eltype(
+    locality(backend(sp)), T, op, sp)
+
+_unprobed_eltype(::DeviceLocality, T, op, sp) = _leaf_eltype(T, op.inner_op, sp)
+function _unprobed_eltype(::HostLocality, T, op, sp)
+    _is_source_only(op.inner_op) || return _leaf_eltype(T, op.inner_op, sp)
+    Ωₕ = mesh(sp)
+    cart = CartesianIndices(indices(Ωₕ))
+    S = _static_coeff_eltype(T, op.inner_op, sp, first(cart))
+    bound, mk = _bind_walk(op.inner_op, Ωₕ)
+    inside = _probe_reach(_marker_words(Ωₕ), _probe_ids(op.region, Ωₕ), trues(length(cart)))
+    for lin in findall(inside)
+        s = local_stencil(bound, sp, cart[lin], mk, lin)
+        s === () || return _stencil_eltype(S, s)
+    end
+    return S
+end
+
+# `T` promoted with the coefficient types `op`'s stencil infers once its restrictions are
+# taken off (a restriction answers `()` outside its region, so its stencil infers a
+# `Union`). The type comes from broadcasting over no point: the source is not called.
+function _static_coeff_eltype(T, op, sp, I)
+    bound, mk = _bind_walk(_unrestricted(op), mesh(sp))
+    return _stencil_type_eltype(T, eltype((lin -> local_stencil(bound, sp, I, mk, lin)).(Int[])))
+end
+
+_unrestricted(op) = op
+_unrestricted(op::UnaryWrapper) = _rewrap_inner(op, _unrestricted(op.inner_op))
+_unrestricted(op::RegionRestriction) = _unrestricted(op.inner_op)
+function _unrestricted(op::OperatorAdd{D}) where {D}
+    left, right = _unrestricted(op.left_op), _unrestricted(op.right_op)
+    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
+end
+
+# `T` promoted with the coefficient types of a concrete stencil type. Only concrete number
+# types count; anything else is left to the value read at the probe point. The generator
+# only lists the types: `promote_type` runs in the caller's world, where the promotion
+# rules of packages loaded after Bramble (`ForwardDiff.Dual`) are seen.
+@generated function _stencil_type_eltype(::Type{T}, ::Type{S}) where {T, S}
+    Cs = Any[]
+    for E in (S <: Tuple && isconcretetype(S) ? fieldtypes(S) : ())
+        C = E <: Tuple && fieldcount(E) > 0 ? fieldtype(E, fieldcount(E)) : Any
+        isconcretetype(C) && C <: Number && push!(Cs, C)
+    end
+    return :(promote_type(T, $(Cs...)))
+end
+
+@inline _stencil_eltype(T, ::Tuple{}) = T
+@inline _stencil_eltype(T, s::Tuple) = _stencil_eltype(
+    promote_type(T, typeof(first(s)[end])), Base.tail(s))
 
 @inline _leaf_eltype(T, op::Union{OperatorAdd, BilinearProduct, LinearProduct}, sp) = _leaf_eltype(
     _leaf_eltype(T, op.left_op, sp), op.right_op, sp)
