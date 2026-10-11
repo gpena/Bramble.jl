@@ -394,13 +394,14 @@ end
 #
 # `_accepts(f, Val(N))` asks whether `f` takes `N` arguments. A `ComposedFunction` and a
 # `Fix` are varargs-callable, so they answer for what they wrap: the innermost function of a
-# composition receives every argument, and a `Fix1`/`Fix2` supplies one itself.
+# composition receives every argument, and a `Fix{K}` (`Fix1`, `Fix2`, ...) supplies the
+# `K`-th itself, so it needs at least `K - 1` arguments before it.
 @inline function _accepts(f::F, ::Val{N}) where {F, N}
     return @inline hasmethod(f, NTuple{N, Any})
 end
 @inline _accepts(c::ComposedFunction, ::Val{N}) where {N} = _accepts(c.inner, Val(N))
-@inline function _accepts(f::Union{Base.Fix1, Base.Fix2}, ::Val{N}) where {N}
-    return _accepts(f.f, Val(N + 1))
+@inline function _accepts(f::Base.Fix{K}, ::Val{N}) where {K, N}
+    return N >= K - 1 && _accepts(f.f, Val(N + 1))
 end
 
 @inline function _is_spatial(f::F) where {F}
