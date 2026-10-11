@@ -661,6 +661,34 @@ end
         u1 = Rₕ(Wc, x -> x[1])
         @test innerₕ(u1, Rₕ(Wc, x -> 1.0)) ≈ 0.5
     end
+
+    @testset "Composite H¹ norm and seminorm" begin
+        # The H¹ norm of a product space is the square root of the summed squares over the
+        # components. The components differ by six orders of magnitude, so a norm that
+        # dropped or mis-weighted one of them cannot agree with the sum.
+        for Ω in (
+            mesh(domain(interval(0.0, 1.0)), 9, false),
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, true))
+        )
+            W = gridspace(Ω)
+            u = element(W × W)
+            n = length(u) ÷ 2
+            u[1:n] .= [sin(i^2) + i for i in 1:n]
+            u[(n + 1):end] .= [1.0e6 * (cos(i^3) + i^2) for i in 1:n]
+            c = Bramble.components(u)
+
+            sq(f) = sum(f(ci)^2 for ci in c)
+            @test snorm₁ₕ(u) ≈ sqrt(sq(snorm₁ₕ))
+            @test norm₁ₕ(u) ≈ sqrt(sq(norm₁ₕ))
+            @test norm(u, "1h") == norm₁ₕ(u)
+            @test norm(u, "1h") ≈ sqrt(sq(norm₁ₕ))
+
+            # the second component carries nearly all of it, and the first still counts
+            @test norm₁ₕ(c[2]) > 1.0e5 * norm₁ₕ(c[1])
+            @test norm₁ₕ(u) > norm₁ₕ(c[2])
+            @test norm₁ₕ(u)^2 ≈ normₕ(u)^2 + snorm₁ₕ(u)^2
+        end
+    end
 end
 
 # The maximum norm carries no quadrature weight, so every check below is against a value

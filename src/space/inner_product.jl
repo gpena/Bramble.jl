@@ -5,7 +5,7 @@
 #=
 Which argument each product accepts, and why they differ.
 
-  innerₕ, normₕ, norm₁ₕ, snorm₁ₕ   a grid function on a scalar space
+  innerₕ, normₕ, norm₁ₕ, snorm₁ₕ   a grid function on a scalar or a composite space
   inner₊, norm₊                    a tuple of grid functions, one per direction
 
 The cell-measure product weights one value per grid point, so it is defined for a
@@ -32,9 +32,9 @@ either side makes the two collide. The constraint is asserted in
 change to either signature fails a test rather than silently returning the wrong kind of
 thing.
 
-A composite grid function is deliberately not accepted by either. It is a stack of
-scalar functions with no single weighting of its own, and summing over its
-components is a choice the caller should make explicitly rather than have inferred.
+A composite grid function is deliberately not accepted by the tuple products: it is a
+stack of scalar functions with no single directional weighting of its own. The
+cell-measure products take it as the product space does, summing over its components.
 The operators are the other way round: Rₕ, avgₕ and every difference, jump and
 average apply componentwise and take any grid function.
 =#
@@ -1324,11 +1324,15 @@ materialising it, so this allocates nothing.
 
 See also: [`norm₁ₕ`](@ref), [`norm₊`](@ref), [`∇ₕ`](@ref).
 
-Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
-composite grid space is rejected at dispatch; take a scalar component of it with
-[`components`](@ref) first, which is itself a scalar grid function and is accepted.
+On a [`CompositeGridSpace`](@ref) it is the seminorm of the product space, as for
+[`normₕ`](@ref): the square root of the sum of the components' squared seminorms.
 """
 @inline snorm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(_snorm₁ₕ_sq(uₕ))
+@inline snorm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(_snorm₁ₕ_sq(uₕ))
+
+# Squared seminorm summed over the leaves, so the composite never takes a root per component.
+@inline _snorm₁ₕ_sq(uₕ::VectorElement{<:CompositeGridSpace}) = sum(
+    _snorm₁ₕ_sq, components(uₕ))
 
 """
     norm₁ₕ(uₕ::VectorElement) -> Real
@@ -1342,8 +1346,8 @@ Returns the discrete version of the standard ``H^1`` norm of [`VectorElement`](@
 Built from the squared quantities directly: taking `normₕ` and `snorm₁ₕ` and squaring
 them back up would compute two square roots only to undo them.
 
-Defined for grid functions of a [`ScalarGridSpace`](@ref) only. A grid function of a
-composite grid space is rejected at dispatch; take a scalar component of it with
-[`components`](@ref) first, which is itself a scalar grid function and is accepted.
+On a [`CompositeGridSpace`](@ref) it is the norm of the product space, as for
+[`normₕ`](@ref): the square root of the sum of the components' squared norms.
 """
 @inline norm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ))
+@inline norm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ))
