@@ -132,13 +132,25 @@ end
 # a recording made before it no longer matches and the next fill re-records
 # (gpena/Bramble.jl#465). A restricted term's walk reads the markers, so the recorded
 # positions depend on them as much as on `A`.
+#
+# `stored` is `A`'s stored-entry count at the recording (`_pattern_length`): a
+# `dirichlet_bc!` that inserts a missing diagonal shifts every later `nzval` position while
+# `A` keeps its identity, so a grown count re-records (gpena/Bramble.jl#534).
 mutable struct _AssemblyCache{D, AST}
     valid::Bool
     A_id::UInt
     ast::AST
     segments::Vector{Segment{D}}
     stamp::UInt64
+    stored::Int
 end
+
+# The stored-entry count a recording's positions index into. A `SparseMatrixCSC` can grow
+# (`dirichlet_bc!` inserts a missing diagonal); any other matrix keeps `length(A)`, which
+# never changes. No `AbstractSparseMatrix` method: the CSR extension never inserts, it
+# refuses a missing diagonal instead.
+@inline _pattern_length(A::SparseMatrixCSC) = length(nonzeros(A))
+@inline _pattern_length(A::AbstractMatrix) = length(A)
 
 # The newest marker stamp among `Wₕ`'s leaf meshes. The stamps come from one global counter,
 # so a `markers!` on any leaf mesh makes it strictly larger, never equal to an older value.
@@ -208,7 +220,7 @@ end
 # same expression tree `BilinearForm` stores -- never `nothing`, which would have made the
 # parameter a lie on the first cache miss.
 function _AssemblyCache{D}(ast::AST) where {D, AST}
-    return _AssemblyCache{D, AST}(false, UInt(0), ast, _no_segments(Val(D)), UInt64(0))
+    return _AssemblyCache{D, AST}(false, UInt(0), ast, _no_segments(Val(D)), UInt64(0), 0)
 end
 
 """
