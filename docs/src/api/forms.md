@@ -59,13 +59,12 @@ operator is built, and warns so; use a `Ref` for a coefficient that changes, or
 `matrix_free_operator`, which reads it live. Under `CpuThreaded` the product runs threaded,
 and an operator whose mesh was mutated in place afterwards throws instead of applying.
 
-`fdm_solve` requires `using Kronecker` (the `BrambleKroneckerExt` extension) and solves a
-Laplacian-like system without a general sparse factorisation: one whose terms each differ
-from one mass per axis on at most one axis. A symmetric one is solved by fast
-diagonalisation, a non-symmetric one (advection terms) by a Schur-form solve. A form with a
-mixed derivative is refused; use `fdm_preconditioner` (in
-[Scientific computing](../api_sciml.md)) to precondition a Krylov solver with its
-Laplacian-like part. `fdm_factorize` factorises once, and `fdm_solve!` then solves each
+`fdm_solve` requires `using Kronecker` (the `BrambleKroneckerExt` extension). It solves a
+Laplacian-like system, one whose terms each differ from one mass per axis on at most one
+axis, without a general sparse factorisation: by fast diagonalisation when it is symmetric,
+and by a Schur-form solve when advection terms make it non-symmetric. A mixed derivative is
+refused. For such a form, `fdm_preconditioner` (in [Scientific computing](../api_sciml.md))
+preconditions a Krylov solver with its Laplacian-like part. `fdm_factorize` factorises once, and `fdm_solve!` then solves each
 right-hand side with zero allocations; `fdm_factorize!` refills that factorisation after a
 coefficient or the mesh changed, without building it again.
 
