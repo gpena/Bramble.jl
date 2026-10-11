@@ -144,13 +144,15 @@ function Bramble._second_order_ode_function(sd::SecondOrderSemidiscretization)
     )
 end
 
-function Bramble._second_order_ode_problem(sd::SecondOrderSemidiscretization, du₀, u₀, I; kwargs...)
+function Bramble._second_order_ode_problem(
+        sd::SecondOrderSemidiscretization, du₀, u₀, I; p = SciMLBase.NullParameters()
+)
     tspan = _tspan(I)
     u0 = _initial_vector(u₀)
     dv0 = _initial_vector(du₀)
-    Bramble.dirichlet_bc!(u0, sd, first(tspan))
+    Bramble.dirichlet_bc!(u0, sd, first(tspan), p)
     f = Bramble._second_order_ode_function(sd)
-    return SecondOrderODEProblem(f, dv0, u0, tspan)
+    return SecondOrderODEProblem(f, dv0, u0, tspan, p)
 end
 
 function Bramble._linear_problem(

@@ -327,19 +327,23 @@ function _second_order_ode_function(::Any)
 end
 
 """
-    second_order_ode_problem(sd::SecondOrderSemidiscretization, du₀, u₀, I::CartesianProduct{1}) -> SecondOrderODEProblem
-    second_order_ode_problem(K::BilinearForm, l::LinearForm, du₀, u₀, I; kwargs...) -> SecondOrderODEProblem
+    second_order_ode_problem(sd::SecondOrderSemidiscretization, du₀, u₀, I::CartesianProduct{1}; p) -> SecondOrderODEProblem
+    second_order_ode_problem(K::BilinearForm, l::LinearForm, du₀, u₀, I; p, kwargs...) -> SecondOrderODEProblem
 
 Build the `SecondOrderODEProblem` stepping `sd` over the time domain `I`, from the initial
 velocity `du₀` and initial displacement `u₀` -- each a [`VectorElement`](@ref) or a plain
 vector. `I` may equally be a `(t₀, t₁)` tuple.
 
 `u₀` is copied, never mutated, and the copy is made consistent with the Dirichlet rows at `t₀`
-(see [`dirichlet_bc!`](@ref)). `du₀` is passed through unchanged: velocity at a constrained
-dof is not an independent algebraic unknown here (see this file's header comment).
+(see [`dirichlet_bc!`](@ref)), against `p` when one is given. `du₀` is passed through
+unchanged: velocity at a constrained dof is not an independent algebraic unknown here (see
+this file's header comment).
 
-Keywords are those of [`second_order_ode_function`](@ref); the two-form method also forwards
-to [`semidiscretize_second_order`](@ref).
+The only keyword is `p` (default `SciMLBase.NullParameters()`), for a residual or Dirichlet
+conditions given a parameter-dependent, `(x, t, p)` form (see
+[`semidiscretize_second_order`](@ref)). It is stored in the problem and used for the
+Dirichlet values at `t₀`. The two-form method also forwards its other keywords to
+[`semidiscretize_second_order`](@ref).
 
 Requires [SciMLBase.jl](https://github.com/SciML/SciMLBase.jl).
 
@@ -351,6 +355,12 @@ prob = second_order_ode_problem(sd, Rₕ(Wₕ, x -> 0.0), Rₕ(Wₕ, x -> sinpi(
 sol = solve(prob, Rodas5P(); reltol = 1e-11, abstol = 1e-13)
 ```
 
+```julia
+bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t, p) -> p[1] * t)
+sd = semidiscretize_second_order(K, l; dirichlet = bcs)
+prob = second_order_ode_problem(sd, du₀, u₀, I; p = [0.7])
+```
+
 See also [`second_order_ode_function`](@ref), [`semidiscretize_second_order`](@ref).
 """
 function second_order_ode_problem(sd::SecondOrderSemidiscretization, du₀, u₀, I; kwargs...)
@@ -358,10 +368,13 @@ function second_order_ode_problem(sd::SecondOrderSemidiscretization, du₀, u₀
 end
 
 function second_order_ode_problem(
-        K::BilinearForm, l::LinearForm, du₀, u₀, I; kwargs...
+        K::BilinearForm, l::LinearForm, du₀, u₀, I; p = nothing, kwargs...
 )
     sd = semidiscretize_second_order(K, l; kwargs...)
-    return _second_order_ode_problem(sd, du₀, u₀, I)
+    # `p` is pulled out before `semidiscretize_second_order`, which has no keyword for it,
+    # and omitted when not given so the problem's own default applies.
+    p_kwargs = p === nothing ? (;) : (; p = p)
+    return _second_order_ode_problem(sd, du₀, u₀, I; p_kwargs...)
 end
 
 function _second_order_ode_problem(::Any, du₀, u₀, I; kwargs...)

@@ -475,6 +475,20 @@ end
             # The two-form method builds the semidiscretisation on the way.
             @test second_order_ode_problem(K, l, du₀, u₀, Iv; dirichlet = bcs) isa
                   SciMLBase.ODEProblem
+
+            # The caller's `p` reaches the problem, the boundary values at t₀ and the residual.
+            @test prob.p isa SciMLBase.NullParameters
+            bcs_p = dirichlet_constraints(Ωₕ, Iv, :boundary => (x, t, p) -> p[1] * (t + 1))
+            sd_p = semidiscretize_second_order(K, l; dirichlet = bcs_p)
+            prob_p = second_order_ode_problem(sd_p, du₀, u₀, Iv; p = [0.7])
+            @test prob_p.p == [0.7]
+            @test prob_p.u0.x[2][1] == 0.7 && prob_p.u0.x[2][n] == 0.7
+            dv = zeros(n)
+            prob_p.f.f1(dv, zeros(n), prob_p.u0.x[2], prob_p.p, 0.5)
+            @test dv[1] ≈ 0.35   # constrained row: g(x, 0.5, p) - u₁ = 1.05 - 0.7
+            prob_p2 = second_order_ode_problem(K, l, du₀, u₀, Iv; dirichlet = bcs_p, p = [0.7])
+            @test prob_p2.p == [0.7] && prob_p2.u0.x[2][n] == 0.7
+            @test_throws MethodError second_order_ode_problem(sd, du₀, u₀, Iv; abstol = 1e-8)
         end
 
         # VelocityVerlet et al. cannot be used at all: `OrdinaryDiffEqCore` refuses any
