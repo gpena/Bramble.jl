@@ -3,7 +3,7 @@ module FormZeroFormTests
 using Test
 using Bramble
 using Bramble: ZeroOperator, resolve_form_ast, allocate_system_matrix, assemble_parallel!
-using ..TestUtils: alloc_test
+using ..TestUtils: alloc_test, WITH_3D_TESTS
 
 # A bilinear form whose whole AST simplifies to zero.
 #
@@ -32,7 +32,9 @@ end
 @testset "zero-simplifying form: zero matrix" begin
     cases = (
         (domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6)),
-        (domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)), (5, 6, 4))
+        (WITH_3D_TESTS ?
+         ((domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)), (5, 6, 4)),) :
+         ())...
     )
 
     @testset "Scalar space, $(length(sz))D, non-uniform" for (S, sz) in cases

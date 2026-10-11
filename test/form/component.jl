@@ -30,7 +30,7 @@ using Bramble:
                inner₊ₓ,
                innerₕ,
                jumpₓ
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, @test_allocs, WITH_3D_TESTS
 
 # `component(op, i)` (the mechanism behind `u(1)`, `D₋ₓ(v)(2)`, and the composite
 # `innerₕ(uₕ, r)` shorthand alike) rebuilds a symbolic tree with its trial/test leaves
@@ -195,7 +195,8 @@ using ..TestUtils: alloc_test, @test_allocs
         end
     end
 
-    @testset "Composite shorthand: inner₊₂" begin
+    # 3D only: runs nightly (`slow`).
+    WITH_3D_TESTS && @testset "Composite shorthand: inner₊₂" begin
         # inner₊₂ needs a spatial dimension of at least 3, unlike the 2D composite spaces
         # used above; here we use a separate small 3D setup.
         Ω3 = mesh(

@@ -3,7 +3,7 @@ module FormBlockExtractTests
 using Test
 using InteractiveUtils: subtypes
 using Random
-using ..TestUtils: alloc_test
+using ..TestUtils: alloc_test, TEST_DIMS
 using Bramble
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, M₊ₓ, M₊ᵧ
@@ -229,7 +229,7 @@ function _scalar_trial_composite_test(D)
 end
 
 @testset "Scalar trial, composite test" begin
-    for D in 2:3
+    for D in filter(≥(2), TEST_DIMS)
         Wₕ, Vₕ, p, vc = _scalar_trial_composite_test(D)
         for d in 1:D
             a = form(Wₕ, Vₕ, (q, v) -> innerₕ(q(1), Dcₓ(v(d))))

@@ -5,7 +5,7 @@ using Bramble
 using SparseArrays
 using Random
 using Bramble: Serial, Parallel, backend, execution_policy, allocate_system_matrix
-using ..TestUtils: _fillnz!, alloc_test
+using ..TestUtils: _fillnz!, alloc_test, WITH_3D_TESTS
 
 # `assemble_add!` accumulates a form's contribution into an already
 # filled matrix/vector, in place, without the `fill!` `assemble!` does first. Every check
@@ -18,14 +18,17 @@ using ..TestUtils: _fillnz!, alloc_test
         cases = (
             ("1D", mesh(domain(interval(0.0, 1.0)), 21, true)),
             ("2D", mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (true, true))),
-            (
-                "3D",
-                mesh(
-                    domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
-                    (5, 6, 7),
-                    (true, true, true)
-                )
-            )
+            (WITH_3D_TESTS ?
+             (
+                (
+                    "3D",
+                    mesh(
+                        domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
+                        (5, 6, 7),
+                        (true, true, true)
+                    )
+                ),
+            ) : ())...
         )
         for (lbl, Ωₕ) in cases
             @testset "$lbl" begin
@@ -195,15 +198,18 @@ using ..TestUtils: _fillnz!, alloc_test
                 (9, 8),
                 (false, false)
             ),
-            (
-                "3D",
-                domain(
-                    box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)),
-                    :walls => boundary_symbols(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+            (WITH_3D_TESTS ?
+             (
+                (
+                    "3D",
+                    domain(
+                        box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)),
+                        :walls => boundary_symbols(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+                    ),
+                    (7, 6, 5),
+                    (false, false, false)
                 ),
-                (7, 6, 5),
-                (false, false, false)
-            )
+            ) : ())...
         )
         for (lbl, Ω, npts, unif) in cases
             @testset "$lbl" begin

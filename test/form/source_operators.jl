@@ -2,7 +2,7 @@ module FormSourceOperatorsTests
 
 using Test
 using Bramble
-using ..TestUtils: WITH_AD_TESTS
+using ..TestUtils: WITH_AD_TESTS, WITH_3D_TESTS
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, M₊ₓ, M₊ᵧ
 using ForwardDiff
@@ -679,19 +679,22 @@ using Bramble:
         @test b2 ≈ A2 * parent(fₕ)
         @test !all(iszero, b2)
 
-        # inner₊₂(source, v): the plain directional (z) form, 3D since Dim = 3 needs D ≥ 3
-        Ω3 = mesh(
-            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 3, 5), (true, true, true)
-        )
-        W3 = gridspace(Ω3)
-        f3 = x -> x[1] + x[2]^2 - x[3]
-        sf3 = source_function(f3, Val(3))
-        f3ₕ = Rₕ(W3, f3)
+        # inner₊₂(source, v): the plain directional (z) form, 3D since Dim = 3 needs D ≥ 3.
+        # Runs nightly (`slow`).
+        if WITH_3D_TESTS
+            Ω3 = mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 3, 5), (true, true, true)
+            )
+            W3 = gridspace(Ω3)
+            f3 = x -> x[1] + x[2]^2 - x[3]
+            sf3 = source_function(f3, Val(3))
+            f3ₕ = Rₕ(W3, f3)
 
-        b3 = assemble(form(W3, v -> inner₊₂(sf3, v)))
-        A3 = assemble(form(W3, W3, (u, v) -> inner₊₂(u, v)))
-        @test b3 ≈ A3 * parent(f3ₕ)
-        @test !all(iszero, b3)
+            b3 = assemble(form(W3, v -> inner₊₂(sf3, v)))
+            A3 = assemble(form(W3, W3, (u, v) -> inner₊₂(u, v)))
+            @test b3 ≈ A3 * parent(f3ₕ)
+            @test !all(iszero, b3)
+        end
     end
 
     @testset "Allocation contract" begin

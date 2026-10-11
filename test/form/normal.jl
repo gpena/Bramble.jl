@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: normal_vector
 using LinearAlgebra: dot
-using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
+using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
 
 # The outward normal, as a discrete grid function and as a symbol inside a form.
 #
@@ -119,10 +119,12 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
             (domain(interval(0.0, 1.0)), 9, false, (:xmin, :xmax, :left, :right)),
             (domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false),
                 (:xmin, :xmax, :ymin, :ymax, :left, :right, :bottom, :top)),
-            (domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 3.0)),
+            (WITH_3D_TESTS ?
+             ((domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 3.0)),
                 (5, 6, 4), (false, false, false),
                 (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax,
-                    :back, :front, :left, :right, :bottom, :top))
+                    :back, :front, :left, :right, :bottom, :top)),) :
+             ())...
         )
         for (D, (S, sz, unif, labels)) in enumerate(cases)
             Ωₕ = mesh(S, sz, unif)
@@ -149,8 +151,10 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
         end
         cases = (
             (domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (1.0, 2.0), (9, 7)),
-            (domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
-                (1.0, 2.0, 3.0), (5, 6, 4))
+            (WITH_3D_TESTS ?
+             ((domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
+                (1.0, 2.0, 3.0), (5, 6, 4)),) :
+             ())...
         )
         for (S, L, sz) in cases
             D = length(L)
@@ -236,7 +240,7 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
         # type, as `A - B` does, and never widen a Float32 form to Float64.
         # `unit` runs the full term sweep in Float64 per dimension and one Float32 lin and bil
         # per dimension; `slow` runs the whole cross product.
-        @testset "$T, $(D)D" for T in (Float32, Float64), D in (2, 3)
+        @testset "$T, $(D)D" for T in (Float32, Float64), D in filter(≥(2), TEST_DIMS)
 
             full = WITH_SLOW_TESTS || T === Float64
 

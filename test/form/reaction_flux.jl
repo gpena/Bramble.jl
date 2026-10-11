@@ -4,7 +4,7 @@ using Test
 using Random
 using ForwardDiff
 using Bramble
-using ..TestUtils: WITH_AD_TESTS
+using ..TestUtils: WITH_AD_TESTS, WITH_3D_TESTS
 using Bramble: reaction, reaction!, reaction_density, reaction_density!
 
 # `reaction` extracts the boundary flux a Dirichlet constraint had
@@ -130,8 +130,8 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
         @test sum(reaction(a, l, uₕ; marker = s) for s in sides) ≈ total_src atol = 1e-9
     end
 
-    # The net flux exists and matches a manufactured solution.
-    @testset "3D flux: manufactured solution" begin
+    # The net flux exists and matches a manufactured solution. 3D only: runs nightly (`slow`).
+    WITH_3D_TESTS && @testset "3D flux: manufactured solution" begin
         sol(x) = sin(pi * x[1]) * sin(pi * x[2]) * sin(pi * x[3])
         src(x) = 3 * pi^2 * sol(x)
         S = interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)

@@ -3,6 +3,7 @@ module FormSymmetryTests
 using Test
 using Bramble
 using Random
+using ..TestUtils: WITH_3D_TESTS
 using LinearAlgebra: issymmetric, isposdef, cholesky, Symmetric, issuccess, eigvals, opnorm
 using SparseArrays: nonzeros
 using Bramble:
@@ -420,7 +421,7 @@ using Bramble:
         # matrix is strictly positive-definite -- via a real Cholesky factorization on
         # several random, non-uniform meshes, in 1D/2D/3D.
         Random.seed!(20260906)
-        for (D, n) in ((1, 21), (2, (9, 11)), (3, (5, 6, 4)))
+        for (D, n) in ((1, 21), (2, (9, 11)), (WITH_3D_TESTS ? ((3, (5, 6, 4)),) : ())...)
             Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
             Ωr = D == 1 ? mesh(Ωd, n, false) : mesh(Ωd, n, ntuple(_ -> false, D))
             Wr = gridspace(Ωr)

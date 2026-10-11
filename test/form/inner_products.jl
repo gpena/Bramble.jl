@@ -3,7 +3,7 @@ module FormInnerProductsTests
 using Test
 using Bramble
 using LinearAlgebra: Diagonal, diag, dot
-using ..TestUtils: @test_allocs
+using ..TestUtils: @test_allocs, WITH_3D_TESTS
 using Bramble:
                IdentityOperator,
                TrialFunction,
@@ -326,7 +326,8 @@ end
         end
     end
 
-    @testset "3D" begin
+    # 3D only: runs nightly (`slow`).
+    WITH_3D_TESTS && @testset "3D" begin
         Ω3 = domain(box((0.0, 0.0, 0.0), (0.5, 0.6, 0.7)))
         Ωₕ3 = mesh(Ω3, (4, 5, 3), (false, false, false))
         Wₕ3 = gridspace(Ωₕ3)

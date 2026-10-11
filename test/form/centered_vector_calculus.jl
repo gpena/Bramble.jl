@@ -3,6 +3,7 @@ module FormCenteredVectorCalculusTests
 using Test
 using Bramble
 using Random
+using ..TestUtils: WITH_3D_TESTS, TEST_DIMS
 
 function _setup(D)
     Random.seed!(287)
@@ -18,7 +19,7 @@ function _setup(D)
 end
 
 @testset "Centered vector calculus in forms (#287)" begin
-    for D in 2:3
+    for D in filter(≥(2), TEST_DIMS)
         Wₕ, Vₕ, p, uₕ, vₕ = _setup(D)
 
         A = assemble(form(Wₕ, Vₕ, (q, v) -> innerₕ(q, divcₕ(v))))
@@ -41,7 +42,7 @@ end
 # The two differ on a non-uniform mesh and at the ends (D̽ is one-sided there, Dc zero), so
 # each form is checked against its own runtime operator and against the centered one.
 @testset "Cross-weighted vector calculus (#349)" begin
-    for D in 2:3
+    for D in filter(≥(2), TEST_DIMS)
         Wₕ, Vₕ, p, uₕ, vₕ = _setup(D)
 
         A = assemble(form(Wₕ, Vₕ, (q, v) -> innerₕ(q, div̽ₕ(v))))
@@ -64,7 +65,8 @@ end
 # The strain forms scale their shear pieces by one half: that scale must not promote a
 # Float32 form to Float64. The Float64 twin reuses the Float32 mesh's points, so the two
 # matrices describe the same grid and differ only by rounding.
-@testset "Strain forms keep eltype (#349)" begin
+# 3D only: runs nightly (`slow`).
+WITH_3D_TESTS && @testset "Strain forms keep eltype (#349)" begin
     Random.seed!(349)
     Ω32 = mesh(domain(box((0.0f0, 0.0f0, 0.0f0), (1.0f0, 1.0f0, 1.0f0))), (6, 5, 7),
         (false, false, false))

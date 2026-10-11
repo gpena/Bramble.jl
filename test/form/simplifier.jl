@@ -4,7 +4,7 @@ using Test
 using Bramble
 using LinearAlgebra: Diagonal, issymmetric, isposdef
 using SparseArrays: nnz
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
 using Bramble:
                D₋ᵧ,
                IdentityOperator,
@@ -580,7 +580,8 @@ end
     end
 
     # innerₕ(divₕ(u), divₕ(v)): a three-term mixing sum on both sides.
-    @testset "3D innerₕ(divₕ, divₕ): 3-term sums" begin
+    # 3D only: runs nightly (`slow`).
+    WITH_3D_TESTS && @testset "3D innerₕ(divₕ, divₕ): 3-term sums" begin
         # The motivating case: the 3D discrete divergence inner product could not be
         # written at all before this fix (its 2D counterpart, a two-term sum, already
         # worked). Checked against the nine written-out (i, j) single-component products.

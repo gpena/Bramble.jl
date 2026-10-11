@@ -5,7 +5,7 @@ using LinearAlgebra
 using Random
 using ForwardDiff
 using Bramble
-using ..TestUtils: WITH_AD_TESTS
+using ..TestUtils: WITH_AD_TESTS, WITH_3D_TESTS
 using Bramble:
                DiracSource,
                form,
@@ -172,7 +172,8 @@ using Bramble:
         @test (@allocated assemble!(buf, l_sum)) == 0
     end
 
-    @testset "3D Point Source (Non-Uniform)" begin
+    # 3D only: runs nightly (`slow`).
+    WITH_3D_TESTS && @testset "3D Point Source (Non-Uniform)" begin
         Random.seed!(20260914)
         Ωₕ = mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
