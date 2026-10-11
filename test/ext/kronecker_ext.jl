@@ -496,6 +496,55 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
         @test occursin("composite space", refusal(() -> fdm_solve(kronecker_operator(b), G)))
     end
 
+    # A complex right-hand side is refused with an ArgumentError on both routes, by
+    # `fdm_solve`, `fdm_solve!` and the preconditioner's `ldiv!`: the symmetric route once
+    # threw an InexactError and the Schur route dropped the imaginary part
+    # (gpena/Bramble.jl#598). A complex output with a real right-hand side is accepted and
+    # is the real solve; so is a `Vector{Any}` or `Vector{Number}` holding reals, while one
+    # complex entry in it is refused.
+    @testset "fdm_solve: complex F refused" begin
+        Wₕ = gridspace(_graded_mesh((13, 9)))
+        n = ndofs(Wₕ)
+        L(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
+        rng = MersenneTwister(KRON_EXT_SEED)
+        F₀ = rand(rng, n)
+        Fc = complex.(F₀, rand(rng, n))
+        boundary = Bramble._combined_mask(mesh(Wₕ), (:boundary,))
+        routes = ("symmetric" => (L, KronExt._FDMFactorization),
+            "Schur" => ((u, v) -> L(u, v) + innerₕ(D₋ₓ(u), v), KronExt._SchurFactorization))
+        for (name, (f, R)) in routes, dir in (nothing, :boundary)
+            a = form(Wₕ, Wₕ, f)
+            # `assemble` keeps a boundary value that the `:boundary` solve sets to zero.
+            Fr = copy(F₀)
+            dir === :boundary && (Fr[boundary] .= 0)
+            @test KronExt._fdm_factorize(kronecker_operator(a), dir) isa R
+            fact = fdm_factorize(a; dirichlet = dir)
+            P = fdm_preconditioner(a; dirichlet = dir)
+            xr = fdm_solve(a, Fr; dirichlet = dir)
+            @test xr ≈ Matrix(assemble(a; dirichlet = dir)) \ Fr
+            @test_throws "must be real" fdm_solve(a, Fc; dirichlet = dir)
+            @test_throws ArgumentError fdm_solve(a, Fc; dirichlet = dir)
+            @test_throws ArgumentError fdm_solve(kronecker_operator(a), Fc)
+            @test_throws ArgumentError fdm_solve!(zeros(ComplexF64, n), fact, Fc)
+            @test_throws "fdm_preconditioner" ldiv!(zeros(ComplexF64, n), P, Fc)
+            @test_throws ArgumentError ldiv!(zeros(ComplexF64, n), P, Fc)
+            xc = fdm_solve!(zeros(ComplexF64, n), fact, Fr)
+            @test xc == xr && all(iszero, imag(xc))
+            @test ldiv!(zeros(ComplexF64, n), P, Fr) ≈ ldiv!(zeros(n), P, Fr)
+            # An abstract eltype is decided by the values it holds.
+            for G in (Vector{Any}(Fr), Vector{Number}(Fr))
+                @test fdm_solve(a, G; dirichlet = dir) == xr
+                @test fdm_solve!(zeros(n), fact, G) == xr
+                @test ldiv!(zeros(n), P, G) == ldiv!(zeros(n), P, Fr)
+            end
+            G = Vector{Any}(Fr)
+            G[findfirst(!iszero, Fr)] = 1.0 + 2.0im
+            @test_throws ArgumentError fdm_solve(a, G; dirichlet = dir)
+            @test_throws ArgumentError fdm_solve!(zeros(ComplexF64, n), fact, G)
+            @test_throws ArgumentError ldiv!(zeros(ComplexF64, n), P, G)
+        end
+    end
+
     # `fdm_preconditioner` inverts the Laplacian-like part `K_L` exactly and leaves the
     # two-axis terms (`K_R`) to the Krylov solver: GMRES with `Pl = P` matches the sparse
     # direct solve on mixed-derivative forms, with advection too (the Schur route), in fewer

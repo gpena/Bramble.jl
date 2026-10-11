@@ -220,6 +220,17 @@ end
     throw(DimensionMismatch("$caller: $name has length $m, the operator needs $n"))
 end
 
+# A complex right-hand side is refused on both routes: the symmetric route cannot store it in
+# its real workspace, and the Schur route would drop its imaginary part. An abstract eltype
+# (`Vector{Any}` of reals) is decided by its values; a concrete one never scans `F`, so a
+# device `F` is not indexed and a real one keeps its 0-byte solve.
+_fdm_real_rhs(F) = eltype(F) <: Real || (!isconcretetype(eltype(F)) && all(x -> x isa Real, F))
+
+@noinline function _throw_fdm_complex(caller::String, ::Type{S}) where {S}
+    throw(ArgumentError("$caller: the right-hand side has element type $S, it must be " *
+                        "real; solve its real and imaginary parts separately"))
+end
+
 # A refill that `fdm_factorize!` refused after it started writing left `f` holding no system.
 @noinline function _throw_fdm_invalid()
     throw(ArgumentError("fdm_solve: the last `fdm_factorize!` of this factorisation was " *
@@ -703,6 +714,7 @@ function _fdm_ldiv!(x::AbstractVector, f::_FDMFactorization{T, D}, F::AbstractVe
     Base.require_one_based_indexing(x, F)
     # With `keep`, the preconditioner's `ldiv!(y, P, x)`: `x` is its input, `y` its output.
     caller = keep ? "fdm_preconditioner" : "fdm_solve"
+    _fdm_real_rhs(F) || _throw_fdm_complex(caller, eltype(F))
     length(F) == f.n ||
         _throw_fdm_length_mismatch(f.n, length(F), keep ? "x" : "F"; caller = caller)
     length(x) == f.n ||
@@ -1037,6 +1049,7 @@ function _fdm_ldiv!(x::AbstractVector, f::_SchurFactorization{T, D}, F::Abstract
     Base.require_one_based_indexing(x, F)
     # With `keep`, the preconditioner's `ldiv!(y, P, x)`: `x` is its input, `y` its output.
     caller = keep ? "fdm_preconditioner" : "fdm_solve"
+    _fdm_real_rhs(F) || _throw_fdm_complex(caller, eltype(F))
     length(F) == f.n ||
         _throw_fdm_length_mismatch(f.n, length(F), keep ? "x" : "F"; caller = caller)
     length(x) == f.n ||
@@ -1127,6 +1140,7 @@ end
 
 function _fdm_solve_core(K::KroneckerLinearOperator{T, D}, F::AbstractVector, dirichlet) where {T, D}
     length(F) == K.n || _throw_fdm_length_mismatch(K.n, length(F))
+    _fdm_real_rhs(F) || _throw_fdm_complex("fdm_solve", eltype(F))
     f = _fdm_factorize(K, dirichlet)
     F isa Array && return ldiv!(Vector{T}(undef, K.n), f, F)
     # The Schur route is host-only: one copy of `F` to the host and one of `x` back.
@@ -1204,6 +1218,8 @@ alone; the message then says so, and the same form assembled in Float64 may be s
     of its own, or the system is singular (see below). Solve a separable one with
     `kronecker_operator(a)` and a Krylov solver.
   - `ArgumentError`: `dirichlet` is neither `nothing` nor `:boundary`.
+  - `ArgumentError`: `F` holds a complex value; solve its real and imaginary parts
+    separately.
   - `DimensionMismatch`: `F`'s length does not match `a`'s number of degrees of freedom.
 
 # Examples
@@ -1241,6 +1257,8 @@ Dirichlet. `K` must be Laplacian-like, as that method describes.
   - `ArgumentError` saying `fdm_solve` does not support the operator, with the reason,
     when `K` is not Laplacian-like, is a composite space's block operator, or is singular
     (as the `BilinearForm` method describes, Float32 included).
+  - `ArgumentError`: `F` holds a complex value; solve its real and imaginary parts
+    separately.
   - `DimensionMismatch`: `F`'s length does not match `K`'s size.
   - `ArgumentError` naming `change_points!`: `K`'s mesh was mutated in place after `K` was
     built (see [`KroneckerLinearOperator`](@ref)); build the operator again.
