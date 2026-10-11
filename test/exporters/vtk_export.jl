@@ -77,6 +77,25 @@ using WriteVTK
         end
     end
 
+    @testset "heterogeneous composite refused" begin
+        Ω = domain(interval(0.0, 1.0))
+        Wa = gridspace(mesh(Ω, 5, true))
+        Wb = gridspace(mesh(Ω, 5, false))
+        c = Rₕ(Wa × Wb, (x -> x[1], x -> x[1]))
+        # Leaves sharing one mesh are the positive control.
+        cc = Rₕ(Wb × Wb, (x -> x[1], x -> 2x[1]))
+
+        @test_throws ArgumentError Bramble._vtk_data(c)
+        mktempdir() do dir
+            @test_throws ArgumentError export_vtk(joinpath(dir, "t"), c)
+            @test_throws "different meshes" export_vtk(joinpath(dir, "t"), mesh(Wa), "c" => c)
+            @test !ispath(joinpath(dir, "t.vtr"))
+            f = only(export_vtk(joinpath(dir, "ok"), cc))
+            @test isfile(f)
+            @test occursin("NumberOfComponents=\"2\"", read(f, String))
+        end
+    end
+
     @testset "3D export" begin
         Ωₕ = mesh(
             domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 4, 3), (true, true, true)

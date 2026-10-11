@@ -9,6 +9,7 @@ end
 # one per component (named `name_1`, `name_2`, ...) for a composite one, since a table's
 # columns have no way to group themselves the way a VTK field's `NumberOfComponents` does.
 function _pgf_columns(name, uₕ::VectorElement{<:CompositeGridSpace})
+    _require_one_mesh("export_pgfplots", uₕ)
     return [(string(name, "_", i), reshape(c)) for (i, c) in enumerate(components(uₕ))]
 end
 _pgf_columns(name, uₕ::VectorElement) = [(string(name), reshape(uₕ))]
@@ -82,7 +83,8 @@ external package needed, since the format is just whitespace-separated numbers.
 On a 1D mesh, any number of named fields become columns: `x name₁ name₂ ...`, one row per
 grid point, readable with `\\addplot table {file.dat}` or `\\addplot table[y=name] {file.dat}`
 to pick one column by name. A composite [`VectorElement`](@ref) expands into one column per
-component, named `name_1`, `name_2`, and so on.
+component, named `name_1`, `name_2`, and so on. A composite whose components live on
+different meshes throws an `ArgumentError`: export each component against its own mesh.
 
 On a 2D mesh, exactly one field is written as `x y z` triples (pgfplots' `surf`/`mesh`
 format has no way to encode more than one value per point) with a blank line after each

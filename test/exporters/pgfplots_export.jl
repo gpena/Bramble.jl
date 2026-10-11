@@ -63,6 +63,26 @@ using Bramble
         end
     end
 
+    @testset "heterogeneous composite refused" begin
+        Ω = domain(interval(0.0, 1.0))
+        Wa = gridspace(mesh(Ω, 5, true))
+        Wb = gridspace(mesh(Ω, 5, false))
+        c = Rₕ(Wa × Wb, (x -> x[1], x -> x[1]))
+        # Same input shared by one mesh is the positive control.
+        cc = Rₕ(Wb × Wb, (x -> x[1], x -> 2x[1]))
+
+        mktempdir() do dir
+            @test_throws ArgumentError export_pgfplots(joinpath(dir, "t"), c)
+            @test_throws "different meshes" export_pgfplots(joinpath(dir, "t"), c)
+            @test_throws ArgumentError export_pgfplots(
+                joinpath(dir, "t"), mesh(Wa), "c" => c
+            )
+            @test !ispath(joinpath(dir, "t.dat"))
+            f = export_pgfplots(joinpath(dir, "ok"), cc)
+            @test readlines(f)[1] == "x u_1 u_2"
+        end
+    end
+
     @testset "1D wrong length" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
         mktempdir() do dir
