@@ -19,7 +19,10 @@ requested solver backend.
 - `:sparspak`: pure-Julia sparse direct LU, zero binary dependencies.
 
 # Symmetry options
-- `:auto` automatically detects matrix symmetry (and diagonal positivity).
+- `:auto` detects matrix symmetry. A symmetric matrix is tried as positive definite
+  (SuiteSparse and Apple Accelerate only when its diagonal is positive) and refactored as
+  symmetric indefinite when that fails. A singular matrix throws a `SingularException`. See
+  the docstring of each backend's `*_factorize`.
 - `:spd`, `:definite`, or `1` selects symmetric positive definite.
 - `:symmetric` or `2` selects general symmetric.
 - `:unsymmetric` or `0` selects general unsymmetric.

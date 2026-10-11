@@ -1,7 +1,7 @@
 module BrambleAppleAccelerateExt
 
 using Bramble: Bramble, AccelerateFactorization
-using LinearAlgebra: LinearAlgebra, ldiv!, issymmetric, diag
+using LinearAlgebra: LinearAlgebra, ldiv!, issymmetric, diag, opnorm, norm
 using SparseArrays: SparseArrays, SparseMatrixCSC
 
 # This module implements only the *sparse* `_accelerate_factorize`/`_accelerate_refactor!`
@@ -35,6 +35,9 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         aa_fact::AAFactorization{T}
         sym::Symbol
         dim::Int
+        # Set only when `:auto` fell back from Cholesky to LDLᵀ. The pivoted LDLᵀ never
+        # reports a singular matrix, so every solve checks its backward error against it.
+        check::Union{Nothing, SparseMatrixCSC{T}}
     end
 
     Base.size(fact::ConcreteAccelerateFactorization) = (fact.dim, fact.dim)
@@ -76,9 +79,23 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         fact_kind, sym_flag = _accelerate_fact_kind(A, sym, kind)
 
         aa = AAFactorization(A)
-        factor!(aa, fact_kind)
+        check = nothing
+        if fact_kind === SparseFactorizationCholesky && sym === :auto && kind === :auto
+            # Symmetry and a positive diagonal make `A` a Cholesky candidate only: a failed
+            # `factor!` refactors as LDLᵀ on the same object.
+            try
+                factor!(aa, fact_kind)
+            catch e
+                e isa ErrorException || rethrow()
+                fact_kind, sym_flag = SparseFactorizationLDLT, :symmetric
+                factor!(aa, fact_kind)
+                check = A
+            end
+        else
+            factor!(aa, fact_kind)
+        end
 
-        return ConcreteAccelerateFactorization{eltype(A)}(aa, sym_flag, n)
+        return ConcreteAccelerateFactorization{eltype(A)}(aa, sym_flag, n, check)
     end
 
     function LinearAlgebra.ldiv!(
@@ -92,7 +109,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
             DimensionMismatch("Output vector length $(length(x)) does not match matrix dimension $n"),
         )
         ldiv!(x, fact.aa_fact, b)
-        return x
+        return _aa_check(fact, x, b)
     end
 
     function LinearAlgebra.ldiv!(
@@ -102,7 +119,9 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         length(b) == n || throw(
             DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
         )
+        b0 = fact.check === nothing ? b : copy(b)
         ldiv!(fact.aa_fact, b)
+        fact.check === nothing || _aa_check(fact, b, b0)
         return b
     end
 
@@ -120,8 +139,20 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         return uₕ
     end
 
+    # The backward error of an LDLᵀ fallback (`fact.check`): a singular matrix gives a
+    # large residual, which `ldiv!` and `\` turn into the `SingularException` that the
+    # pivoted LDLᵀ does not raise itself.
+    function _aa_check(fact, x, b)
+        A = fact.check
+        A === nothing && return x
+        r = A * x - b
+        tol = sqrt(eps(real(eltype(A)))) * (opnorm(A, Inf) * norm(x, Inf) + norm(b, Inf))
+        norm(r, Inf) <= tol || throw(LinearAlgebra.SingularException(0))
+        return x
+    end
+
     function Base.:\(fact::ConcreteAccelerateFactorization, b::AbstractVector)
-        return fact.aa_fact \ b
+        return _aa_check(fact, fact.aa_fact \ b, b)
     end
 
     # `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
@@ -142,6 +173,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
             DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
         )
         refactor!(fact.aa_fact, A)
+        fact.check === nothing || (fact.check = A)
         return fact
     end
 else

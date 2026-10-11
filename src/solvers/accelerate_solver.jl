@@ -30,9 +30,14 @@ Compute the sparse direct factorization of `A` (or the assembled matrix of `a`) 
 Accelerate's native `libSparse` on macOS.
 
 # Symmetry and factorization options
-- `sym = :auto` (default) automatically detects symmetry. If `A` is symmetric with strictly positive
-  diagonal, uses Cholesky (`SparseFactorizationCholesky`). If symmetric, uses ``LDL^T`` (`SparseFactorizationLDLT`).
-  Otherwise uses threshold partial pivoting LU (`SparseFactorizationLUTPP`).
+- `sym = :auto` (default) detects symmetry. A symmetric `A` with a positive diagonal is tried
+  with Cholesky (`SparseFactorizationCholesky`), and when that fails (`A` is not positive
+  definite) it is refactored as ``LDL^T`` (`SparseFactorizationLDLT`) on the same object. The
+  pivoted ``LDL^T`` never reports a singular matrix, so each solve with such a factorisation
+  checks the backward error and throws a `SingularException` when it is large. A symmetric `A`
+  with a non-positive diagonal uses ``LDL^T`` directly. Any other `A` uses threshold partial
+  pivoting LU (`SparseFactorizationLUTPP`). Under `:auto` the `kwargs` reach whichever
+  factorisation runs, so a keyword only Cholesky takes errors after the fallback.
 - `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`) selects symmetric positive definite Cholesky.
 - `sym = :symmetric` or `2` (or `kind = :ldlt`) selects symmetric indefinite ``LDL^T``.
 - `sym = :unsymmetric` or `0` (or `kind = :lu` / `:lutpp`) selects general unsymmetric LU with threshold partial pivoting.
@@ -130,6 +135,8 @@ end
                      symmetrize = false, sym = :auto, kind = :auto, kwargs...) -> VectorElement
 
 Directly solve `A u = F` (or `assemble(a, l)` system) using Apple Accelerate direct factorization.
+`sym` is as in [`accelerate_factorize`](@ref): `symmetrize = true` does not choose Cholesky,
+`:auto` still tries it and falls back to ``LDL^T``.
 
 Requires macOS and [AppleAccelerate.jl](https://github.com/JuliaLinearAlgebra/AppleAccelerate.jl);
 call `using AppleAccelerate` before calling this function.
@@ -154,8 +161,7 @@ function accelerate_solve(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components, symmetrize = symmetrize
     )
     A = _as_csc(A)
-    sym_effective = (sym === :auto && symmetrize) ? :spd : sym
-    u = _accelerate_solve(A, F; sym = sym_effective, kind = kind, kwargs...)
+    u = _accelerate_solve(A, F; sym = sym, kind = kind, kwargs...)
     return element(trial_space(a), u)
 end
 

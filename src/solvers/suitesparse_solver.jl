@@ -22,8 +22,12 @@ Compute the sparse direct factorization of `A` (or the assembled matrix of `a`) 
 SuiteSparse (CHOLMOD for symmetric positive-definite systems, UMFPACK for unsymmetric).
 
 # Symmetry options
-- `:auto` (default) automatically detects symmetry. If `A` is symmetric and positive definite,
-  uses CHOLMOD sparse Cholesky. Otherwise, uses UMFPACK sparse LU.
+- `:auto` (default) detects symmetry. A symmetric `A` with a positive diagonal is tried with
+  CHOLMOD sparse Cholesky, and when that fails (`A` is not positive definite) UMFPACK sparse
+  LU factors it instead, so a symmetric indefinite matrix is solved and a singular one throws
+  a `SingularException`. Any other `A` uses UMFPACK sparse LU. Under `:auto` the `kwargs`
+  reach whichever factorisation runs, so a keyword only Cholesky takes (such as `shift`)
+  errors after the fallback.
 - `:spd`, `:definite`, or `1` selects symmetric positive definite (CHOLMOD Cholesky).
 - `:symmetric` or `2` selects symmetric factorization.
 - `:unsymmetric` or `0` selects general unsymmetric (UMFPACK LU).
@@ -65,6 +69,8 @@ end
                       symmetrize = false, sym = :auto, kwargs...) -> VectorElement
 
 Directly solve `A u = F` (or `assemble(a, l)` system) using SuiteSparse factorization.
+`sym` is as in [`suitesparse_factorize`](@ref): `symmetrize = true` does not choose Cholesky,
+`:auto` still lets CHOLMOD decide.
 
 Requires `SuiteSparse.jl`; call `using SuiteSparse` before calling this function.
 
@@ -82,8 +88,7 @@ function suitesparse_solve(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components, symmetrize = symmetrize
     )
     A = _as_csc(A)
-    sym_effective = (sym === :auto && symmetrize) ? :spd : sym
-    u = _suitesparse_solve(A, F; sym = sym_effective, kwargs...)
+    u = _suitesparse_solve(A, F; sym = sym, kwargs...)
     return element(trial_space(a), u)
 end
 

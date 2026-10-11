@@ -171,6 +171,49 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         @test sparse_factorize(a; solver = :mumps, dirichlet = bc) \ F ≈ Matrix(A) \ F
     end
 
+    @testset "sym = :auto: indefinite and singular" begin
+        # Shifted Helmholtz, -Δu - 50u = f: symmetric, positive diagonal, indefinite. A uniform
+        # mesh keeps the diagonal positive (a random one gives a non-positive entry about once
+        # in 200 runs), so `:auto` meets a Cholesky candidate that is not positive definite.
+        S2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ω2 = mesh(domain(S2, :boundary => boundary_symbols(S2)), (10, 10), (true, true))
+        W2 = gridspace(Ω2)
+        a_helm = form(W2, W2, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) - 50.0 * innerₕ(u, v))
+        l_helm = form(W2, v -> innerₕ(Rₕ(W2, x -> 1.0), v))
+        A_h, F_h = assemble(a_helm, l_helm; dirichlet = ZERO_BC, symmetrize = true)
+        @test issymmetric(A_h)
+        @test all(>(0), diag(A_h))
+        @test minimum(eigvals(Symmetric(Matrix(A_h)))) < 0
+        u_ref = Matrix(A_h) \ F_h
+
+        @test isapprox(mumps_factorize(A_h) \ F_h, u_ref; atol = 1.0e-10)
+        @test isapprox(sparse_factorize(A_h; solver = :mumps) \ F_h, u_ref; atol = 1.0e-10)
+        @test isapprox(pde_solve(A_h, F_h; solver = :mumps), u_ref; atol = 1.0e-10)
+        # `symmetrize = true` no longer forces Cholesky
+        u_form = mumps_solve(a_helm, l_helm; dirichlet = ZERO_BC, symmetrize = true)
+        @test isapprox(parent(u_form), u_ref; atol = 1.0e-10)
+
+        # Symmetric with a positive diagonal, a zero pivot in the LDLᵀ order: solvable
+        M = sparse([1.0 1 0; 1 1 1; 0 1 1])
+        b = [1.0, 2.0, 3.0]
+        @test isapprox(mumps_factorize(M) \ b, Matrix(M) \ b; atol = 1.0e-12)
+
+        # Singular: the fallback reports it rather than returning a wrong answer
+        Sg = sparse([1.0 1; 1 1])
+        @test_throws SingularException mumps_factorize(Sg) \ [1.0, 2.0]
+        @test_throws SingularException pde_solve(Sg, [1.0, 2.0]; solver = :mumps)
+
+        # The Cholesky route stays for a positive definite matrix, on a non-uniform mesh
+        Ωn = mesh(domain(S2, :boundary => boundary_symbols(S2)), (9, 7), (true, true))
+        change_points!(Ωn, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
+        Wn = gridspace(Ωn)
+        a_spd = form(Wn, Wn, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+        l_spd = form(Wn, v -> innerₕ(Rₕ(Wn, x -> 1.0), v))
+        A_s, F_s = assemble(a_spd, l_spd; dirichlet = ZERO_BC, symmetrize = true)
+        @test mumps_factorize(A_s).sym == 1
+        @test isapprox(mumps_factorize(A_s) \ F_s, Matrix(A_s) \ F_s; atol = 1.0e-12)
+    end
+
     @testset "Error handling & validation" begin
         p = poisson_system(Val(1), 5; source = x -> 1.0)
         validation_contract(

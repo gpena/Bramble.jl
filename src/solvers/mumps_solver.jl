@@ -24,13 +24,17 @@ Compute the sparse direct multifrontal factorization of `A` (or the assembled ma
 using [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl).
 
 # Symmetry options
-- `:auto`: the default, which detects symmetry automatically. If `A` is symmetric and positive
-  definite, it uses symmetric positive-definite factorization
-  (`sym = 1`). If symmetric, it uses general symmetric ``LDL^T`` (`sym = 2`). Otherwise it
-  uses unsymmetric LU (`sym = 0`).
+- `:auto`: the default, which detects symmetry. A symmetric `A` is factored as symmetric
+  positive definite (`sym = 1`, no pivoting), and when MUMPS reports a zero or negative pivot
+  (`INFOG(1) = -10` or `INFOG(12) > 0`) it is factored again as general symmetric ``LDL^T``
+  (`sym = 2`). Any other `A` uses unsymmetric LU (`sym = 0`). Under `:auto` the `kwargs`
+  reach whichever factorisation runs.
 - `:spd`, `:definite`, `1`: symmetric positive definite (Cholesky / ``LL^T``).
 - `:symmetric`, `2`: general symmetric (``LDL^T`` with Bunch-Kaufman pivoting).
 - `:unsymmetric`, `0`: general unsymmetric LU.
+
+A failed factorisation (`INFOG(1) < 0`) throws for every `sym`: a `SingularException` for a
+zero pivot (`INFOG(1) = -10`), an error otherwise.
 
 # Control parameters
 - `icntl`: Optional dictionary or collection of pairs of integer control parameters (e.g., `7 => 1` for user/METIS ordering, `14 => 30` for memory relaxation).
@@ -76,7 +80,8 @@ end
 Directly solve `A u = F` (or `assemble(a, l)` system) using MUMPS direct factorization.
 
 # Symmetry options
-- `:auto`: the default, which detects symmetry automatically.
+- `:auto`: the default, as in [`mumps_factorize`](@ref): `symmetrize = true` does not
+  choose positive definite, and a symmetric indefinite `A` is refactored as ``LDL^T``.
 - `:spd`, `:definite`, `1`: symmetric positive definite.
 - `:symmetric`, `2`: general symmetric.
 - `:unsymmetric`, `0`: general unsymmetric.
