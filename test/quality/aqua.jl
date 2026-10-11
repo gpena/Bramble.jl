@@ -26,7 +26,8 @@ using Aqua
         ambiguities = true,
         unbound_args = test_unbound,
         undefined_exports = true,
-        project_extras = true,
+        # The one Aqua check that reads test/, which these checks no longer analyse.
+        project_extras = false,
         stale_deps = true,
         deps_compat = true,
         # This check ran on every version until ea501d8 guarded it off Julia 1.13, where
