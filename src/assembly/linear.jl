@@ -160,7 +160,24 @@ end
 # leaf's mesh would silently assemble the wrong numbers, not merely run slower. A component
 # outside the space throws here, at `form`, through `_routed_target`'s check; returning the
 # term unchanged for it made the result a Union and deferred the error to assembly.
-_lower_sources_for_space(ast, Wₕ) = _lower_term(ast, Wₕ)
+# On a non-composite space a term can still name a component, by re-indexing its one leaf
+# (`v(1)(2)`, ast/component.jl), and nothing downstream reads it, so it is checked against
+# the space's one component here too (gpena/Bramble.jl#638).
+function _lower_sources_for_space(ast, Wₕ)
+    _check_scalar_components(ast, test_component_or_nothing, "test")
+    return _lower_term(ast, Wₕ)
+end
+
+# Each term's component on one side, read by `side_component`, against the one component a
+# non-composite space has. `bilinear.jl`'s `form` runs it for a non-composite side, too.
+function _check_scalar_components(op::OperatorAdd, side_component::F, side) where {F}
+    _check_scalar_components(op.left_op, side_component, side)
+    _check_scalar_components(op.right_op, side_component, side)
+    return nothing
+end
+
+_check_scalar_components(term, side_component::F, side) where {F} = _check_component(
+    side_component(term), 1, side)
 
 function _lower_sources_for_space(ast, Wₕ::CompositeGridSpace)
     return _lower_sources_over_leaves(ast, leaf_spaces_offsets(Wₕ))
@@ -684,7 +701,7 @@ end
 
 function _routed_eltype(term, leaves, diagonal, T)
     target = test_component_or_nothing(term)
-    _check_component(target, length(leaves))
+    _check_component(target, length(leaves), "test")
     target === nothing && return _every_leaf_eltype(term, diagonal, T)
     return _at_leaf(leaf -> _folded_eltype(term, first(leaf), T), leaves, target)
 end
@@ -717,7 +734,7 @@ end
 
 function _trial_routed_eltype(term, leaves, diagonal, T)
     target = trial_component_or_nothing(term)
-    _check_component(target, length(leaves))
+    _check_component(target, length(leaves), "trial")
     target === nothing && return _every_leaf_type(diagonal, T)
     return _at_leaf(leaf -> promote_type(T, eltype(first(leaf))), leaves, target)
 end
@@ -1060,17 +1077,18 @@ end
 #
 # That is the failure mode the composite tests exist to prevent, so it is checked once per
 # term rather than left to the reader of the answer.
-@inline _check_component(::Nothing, ::Int) = nothing
+# `side` ("test" or "trial") names the space the component is counted against.
+@inline _check_component(::Nothing, ::Int, ::String) = nothing
 
-@inline function _check_component(target::Int, nblocks::Int)
-    1 <= target <= nblocks || _throw_component_out_of_range(target, nblocks)
+@inline function _check_component(target::Int, nblocks::Int, side::String)
+    1 <= target <= nblocks || _throw_component_out_of_range(target, nblocks, side)
     return nothing
 end
 
-@noinline function _throw_component_out_of_range(target::Int, nblocks::Int)
+@noinline function _throw_component_out_of_range(target::Int, nblocks::Int, side::String)
     throw(
         ArgumentError(
-        "a term of this form names component $target, and its test space has $nblocks. " *
+        "a term of this form names component $target, and its $side space has $nblocks. " *
         "Components are numbered 1 to $nblocks; a term written for a space with more of " *
         "them contributes nothing here, which is why this is an error rather than a zero.",
     ),
@@ -1093,7 +1111,7 @@ Recursing the tree rather than flattening it into a vector of terms first avoids
 # Which leaves a term goes to. Resolved once per term, not once per (term, leaf).
 @inline function _routed_target(term, nleaves::Int)
     target = test_component_or_nothing(term)
-    _check_component(target, nleaves)
+    _check_component(target, nleaves, "test")
     return target
 end
 

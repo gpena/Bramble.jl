@@ -343,10 +343,19 @@ function form(Wₕ, Vₕ, f)
     raw_ast = f(trial_function(Wₕ), test_function(Vₕ))
     _validate_form_expression(raw_ast, Val(D))
     ast = simplify_ast(resolve_ast(raw_ast))
+    _check_space_components(ast, Wₕ, trial_component_or_nothing, "trial")
+    _check_space_components(ast, Vₕ, test_component_or_nothing, "test")
     return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast)}(
         Wₕ, Vₕ, ast, _AssemblyCache{D}(ast)
     )
 end
+
+# A non-composite side has one component, so a term re-indexing its leaf past it
+# (`u(1)(2)`) is refused here, at `form` (gpena/Bramble.jl#638). A composite side is
+# checked at assembly, by `block_of`, as before.
+_check_space_components(ast, space, side_component, side) = _check_scalar_components(
+    ast, side_component, side)
+_check_space_components(ast, ::CompositeGridSpace, side_component, side) = nothing
 
 # --- Mesh compatibility checks ------------------------------------------------------ #
 #
