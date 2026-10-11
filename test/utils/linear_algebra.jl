@@ -306,7 +306,7 @@ using ..TestUtils: alloc_test, @test_allocs, MockDeviceArray
     #    with an explicit locality, a linear range or a CartesianIndices) never compile a
     #    sweep helper with a `Function` kernel: every wrapper takes the kernel as a type
     #    parameter. Only compiled instances count; code-less ones come from inference and
-    #    the pkgimage. Not thread-gated: the widening happens at one thread as well.
+    #    the pkgimage. It is not thread-gated, since the widening happens at one thread too.
     @testset "Sweeps specialise on the kernel (#459)" begin
         n = 64
         g = i -> (Float64(i), Float64(2i))

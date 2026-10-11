@@ -154,9 +154,9 @@ function fdm_factorize end
 
 Refill the factorisation `f`, which [`fdm_factorize`](@ref) returned, from `a` or `K`, and
 return `f`. Use it in place of a new `fdm_factorize` when the structure is the same and only
-the numbers changed: a coefficient that is a scalar or a `Ref` took a new value, or
+the numbers changed, as when a coefficient that is a scalar or a `Ref` took a new value, or
 [`change_points!`](@ref) moved the grid points and `a` is a form on a new `gridspace` (or `K`
-a new [`kronecker_operator`](@ref)) built after it. `f` keeps its `dirichlet`: there is no
+a new [`kronecker_operator`](@ref)) built after it. `f` keeps its `dirichlet`, so there is no
 keyword here. Afterwards `fdm_solve!(x, f, F)` solves the new system, and agrees bitwise with
 the solve of a fresh `fdm_factorize`, unless a term's coefficient is now zero: that term
 keeps its place, and the two agree to rounding. Only `Float32` and `Float64` are supported.
