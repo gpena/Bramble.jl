@@ -5,7 +5,7 @@ using Bramble
 using Bramble: is_separable, kronecker_operator, KroneckerLinearOperator
 using Kronecker: Kronecker, kronecker
 using LinearAlgebra: LinearAlgebra, mul!, issymmetric, ldiv!, lu, norm
-using SparseArrays: SparseMatrixCSC
+using SparseArrays: SparseMatrixCSC, findnz, nnz, sparse
 using LinearSolve: LinearProblem, solve, KrylovJL_GMRES
 using Random
 # `CpuPolyester` meshes below; test/ext/polyester_ext.jl, next in the ext group, loads it too.
@@ -542,6 +542,58 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
             @test_throws ArgumentError fdm_solve(a, G; dirichlet = dir)
             @test_throws ArgumentError fdm_solve!(zeros(ComplexF64, n), fact, G)
             @test_throws ArgumentError ldiv!(zeros(ComplexF64, n), P, G)
+        end
+    end
+
+    # gpena/Bramble.jl#662: a stored zero in a factor is absent to the classification, at
+    # build and at refill alike. `Kz` is `K` with every non-mass factor padded with stored
+    # zeros on its three diagonals, plus a term whose first factor stores only zeros: it
+    # factorises as `K` does (same route, masses and `ldiv!` bit for bit), with the extra
+    # term dropped (`on == -1`), and `fdm_factorize!` replays it to the same answer.
+    @testset "fdm_solve: stored zeros are absent" begin
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (11, 9), (true, true))
+        Bramble.change_points!(Ω,
+            (range(0.0, 1.0; length = 11) .^ 1.25, range(0.0, 1.0; length = 9) .^ 1.5))
+        W = gridspace(Ω)
+        function pad(F)
+            A = sparse(F)
+            n = size(A, 1)
+            i, j, v = findnz(A)
+            return sparse(vcat(i, 1:(n - 1), 2:n, 1:n), vcat(j, 2:n, 1:(n - 1), 1:n),
+                vcat(v, zeros(3n - 2)), n, n)
+        end
+        function zf(F)
+            A = pad(F)
+            return SparseMatrixCSC(A.m, A.n, A.colptr, A.rowval, zero(A.nzval))
+        end
+        L(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
+        Ladv(u, v) = L(u, v) + 1.5 * innerₕ(D₋ₓ(u), v) + 2.5 * innerₕ(D₋ᵧ(u), v)
+        routes = ((L, KronExt._FDMFactorization), (Ladv, KronExt._SchurFactorization))
+        rng = MersenneTwister(KRON_EXT_SEED + 9)
+        for (f, R) in routes, bc in (nothing, :boundary)
+            K = kronecker_operator(form(W, W, f))
+            t1 = first(K.terms)
+            ts = (t1,
+                map(t -> Bramble._kron_term(t.scales, map(pad, t.factors)),
+                    Base.tail(K.terms))...,
+                Bramble._kron_term(t1.scales, (zf(t1.factors[1]), pad(t1.factors[2]))))
+            Kz = KroneckerLinearOperator{Float64, 2, typeof(ts), typeof(K.policy)}(ts, K.dims,
+                K.n, K.policy)
+            fa = fdm_factorize(K; dirichlet = bc)
+            fz = fdm_factorize(Kz; dirichlet = bc)
+            @test fa isa R
+            @test typeof(fz) == typeof(fa)
+            @test fz.recipe.proportional == fa.recipe.proportional
+            @test fz.recipe.on == [fa.recipe.on; -1]
+            b = rand(rng, K.n)
+            x = ldiv!(zeros(K.n), fa, b)
+            @test ldiv!(zeros(K.n), fz, b) == x
+            @test Bramble.fdm_factorize!(fz, Kz) === fz
+            @test ldiv!(zeros(K.n), fz, b) == x
+            # The factor keeps its stored zeros; only the comparisons skip them.
+            r = bc === nothing ? (1:11) : (2:10)
+            Fz = pad(K.terms[2].factors[1])
+            @test nnz(KronExt._fdm_factor(Fz, r)) == nnz(Fz[r, r])
         end
     end
 

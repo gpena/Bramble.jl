@@ -51,7 +51,7 @@ using Kronecker: Kronecker, ⊗
 using LinearAlgebra: LinearAlgebra, BlasInt, Diagonal, Symmetric, isposdef, issymmetric,
                      ldiv!, mul!
 using LinearAlgebra.BLAS: @blasfunc, libblastrampoline
-using SparseArrays: SparseMatrixCSC, dropzeros!, nonzeros, nnz, nzrange, rowvals, sparse
+using SparseArrays: SparseMatrixCSC, nonzeros, nzrange, rowvals, sparse
 using PrecompileTools: @setup_workload, @compile_workload
 
 # --- 1. Conversion to a Kronecker.jl object ------------------------------------------ #
@@ -342,25 +342,20 @@ function _fdm_host_factor(F::Bramble._KronDeviceSparse)
 end
 
 # One factor as the classification compares it: on the host, sparse, restricted to `r`
-# (`2:end-1` under `dirichlet = :boundary`), stored zeros dropped.
-_fdm_factor(F, r) = dropzeros!(sparse(_fdm_host_factor(F))[r, r])
+# (`2:end-1` under `dirichlet = :boundary`). Stored zeros stay stored: every comparison
+# below walks entries through `_fdm_next`, which treats a stored zero as absent.
+_fdm_factor(F, r) = sparse(_fdm_host_factor(F))[r, r]
 
 # Factor equality up to rounding: the same factor is usually the same cached object.
 function _fdm_same(A::SparseMatrixCSC, B::SparseMatrixCSC)
     A === B && return true
-    scale = max(maximum(abs, nonzeros(A); init = 0.0), maximum(abs, nonzeros(B); init = 0.0))
-    return maximum(abs, nonzeros(A - B); init = 0.0) <= 8 * eps(Float64) * scale
+    return _fdm_same_entries(A, false, B, 1:size(A, 2), Float64)
 end
 
 # The `r` with `A == r * R` up to rounding (`one(T)` when `A` equals `R`), or `nothing`.
 function _fdm_ratio(R::SparseMatrixCSC{T}, A::SparseMatrixCSC{T}) where {T}
-    _fdm_same(R, A) && return one(T)
-    (R.colptr == A.colptr && R.rowval == A.rowval) || return nothing
-    a, b = nonzeros(A), nonzeros(R)
-    k = argmax(abs.(b))
-    r = a[k] / b[k]
-    err = maximum(abs(a[i] - r * b[i]) for i in eachindex(a, b))
-    return err <= 8 * eps(T) * maximum(abs, a) ? r : nothing
+    found, r = _fdm_ratio_entries(R, false, A, 1:size(A, 2), T)
+    return found ? r : nothing
 end
 
 _fdm_spd(M::SparseMatrixCSC) = issymmetric(M) && isposdef(Symmetric(Matrix(M)))
@@ -388,7 +383,7 @@ function _fdm_axis_data(K::KroneckerLinearOperator{T, D}, rng::NTuple{D};
         c = T(Bramble._kron_coeff(term.scales))  # `T`: a Float32 device keeps Float32
         f = ntuple(d -> SparseMatrixCSC{T, Int}(_fdm_factor(term.factors[d], rng[d])), Val(D))
         # A zero term (a zero `Ref`, or a factor that vanishes on the interior) adds nothing.
-        (iszero(c) || any(F -> nnz(F) == 0, f)) && continue
+        (iszero(c) || any(F -> !_fdm_has_entry(F, 1:size(F, 2)), f)) && continue
         push!(cs, c)
         push!(fs, f)
         push!(kept, k)
@@ -1349,7 +1344,7 @@ _fdm_val(F::Diagonal, ::Int, p::Int) = F.diag[p]
 _fdm_val(F::AbstractMatrix, j::Int, p::Int) = F[p, j]
 
 # The first position from `p` on, up to `stop`, holding a nonzero in a row of `rng`: the
-# entries `_fdm_factor`'s `dropzeros!(sparse(F)[rng, rng])` keeps.
+# entries of `_fdm_factor(F, rng)`, a stored zero treated as absent.
 @inline function _fdm_next(F, j::Int, p::Int, stop::Int, rng::UnitRange{Int})
     while p <= stop
         (_fdm_row(F, j, p) in rng && !iszero(_fdm_val(F, j, p))) && return p

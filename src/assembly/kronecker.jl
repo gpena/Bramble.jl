@@ -1196,9 +1196,9 @@ times the Kronecker product of its `D` one-dimensional factors, last axis leftmo
 and inspection only -- this is exactly the `D`-dimensional matrix [`kronecker_operator`](@ref)
 is built to avoid forming.
 
-The stored pattern is the one `dropzeros` leaves of `assemble(a)`: `assemble` keeps the
-explicit zeros of its stencil, this matrix does not, so the two agree entry for entry but
-their `nnz` can differ.
+The matrix keeps the explicit zeros its factors store. It lacks only those `assemble(a)`'s
+stencil holds outside the factors (a pure `inner_Γ` form, on the interior points of the
+face rows' diagonal), so the two agree entry for entry but their `nnz` can differ there.
 
 Built as a single `sparse(I, J, V, n, n)` call over every term's `findnz` triplets (`V`
 pre-scaled by that term's coefficient) rather than summing each term's Kronecker product
