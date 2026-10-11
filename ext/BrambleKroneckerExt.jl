@@ -220,10 +220,10 @@ end
     throw(DimensionMismatch("$caller: $name has length $m, the operator needs $n"))
 end
 
-# A complex right-hand side is refused on both routes: the symmetric route cannot store it in
-# its real workspace, and the Schur route would drop its imaginary part. An abstract eltype
-# (`Vector{Any}` of reals) is decided by its values; a concrete one never scans `F`, so a
-# device `F` is not indexed and a real one keeps its 0-byte solve.
+# A complex right-hand side is refused on both routes: the symmetric route cannot store it
+# in its real workspace, and the Schur route would drop its imaginary part. An abstract
+# eltype (`Vector{Any}` of reals) is decided by its values; a concrete one never scans `F`,
+# so a device `F` is not indexed and a real one keeps its 0-byte solve.
 _fdm_real_rhs(F) = eltype(F) <: Real || (!isconcretetype(eltype(F)) && all(x -> x isa Real, F))
 
 @noinline function _throw_fdm_complex(caller::String, ::Type{S}) where {S}

@@ -24,10 +24,10 @@ SuiteSparse (CHOLMOD for symmetric positive-definite systems, UMFPACK for unsymm
 # Symmetry options
 - `:auto` (default) detects symmetry. A symmetric `A` with a positive diagonal is tried with
   CHOLMOD sparse Cholesky, and when that fails (`A` is not positive definite) UMFPACK sparse
-  LU factors it instead, so a symmetric indefinite matrix is solved and a singular one throws
-  a `SingularException`. Any other `A` uses UMFPACK sparse LU. Under `:auto` the `kwargs`
-  reach whichever factorisation runs, so a keyword only Cholesky takes (such as `shift`)
-  errors after the fallback.
+  LU factors it instead, so a symmetric indefinite matrix is solved and a singular one
+  throws a `SingularException`. Any other `A` uses UMFPACK sparse LU. Under `:auto` the
+  `kwargs` reach whichever factorisation runs, so a keyword only Cholesky takes (such as
+  `shift`) errors after the fallback.
 - `:spd`, `:definite`, or `1` selects symmetric positive definite (CHOLMOD Cholesky).
 - `:symmetric` or `2` selects symmetric factorization.
 - `:unsymmetric` or `0` selects general unsymmetric (UMFPACK LU).
@@ -71,8 +71,8 @@ end
                       symmetrize = false, sym = :auto, kwargs...) -> VectorElement
 
 Directly solve `A u = F` (or `assemble(a, l)` system) using SuiteSparse factorization.
-`sym` is as in [`suitesparse_factorize`](@ref): `symmetrize = true` does not choose Cholesky,
-`:auto` still lets CHOLMOD decide.
+`sym` is as in [`suitesparse_factorize`](@ref): `symmetrize = true` does not choose
+Cholesky, `:auto` still lets CHOLMOD decide.
 
 A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
 
@@ -180,7 +180,8 @@ end
 
 Directly solve `A u = F` (exactly if square, least-squares if overdetermined) using
 SuiteSparse's SPQR sparse QR factorization. Needs only `SparseArrays`; no `using
-SuiteSparse` required. A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
+SuiteSparse` required. A `BilinearForm` on a dense or CSR backend is converted to
+`SparseMatrixCSC` first.
 
 See also [`suitesparse_qr_factorize`](@ref), [`pde_solve`](@ref).
 """

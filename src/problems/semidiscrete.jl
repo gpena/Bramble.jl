@@ -130,8 +130,8 @@ Time and parameter dependence of the Dirichlet values is detected by arity, exac
 at each step against the residual's own `p`, conditions accepting `(x, t)` are evaluated at
 each step without it, and conditions accepting `(x)` are not evaluated per step at all.
 `update_coefficients!` is detected between its one- and two-argument forms, but prefers the
-one-argument form: `(t, p = default) -> ...` is called as `f(t)` and ignores `p`. A `Base.Fix`
-or composition is classified by the function it wraps.
+one-argument form: `(t, p = default) -> ...` is called as `f(t)` and ignores `p`. A
+`Base.Fix` or composition is classified by the function it wraps.
 
 !!! note "`p` reaches only the source, never the operator"
     `A` (and therefore [`jacobian!`](@ref)) stays fixed for a given `t`, regardless of `p`:
@@ -428,9 +428,9 @@ struct ParametricUpdate{F}
 end
 
 @inline _wrap_update(::Nothing) = nothing
-# Unlike the Dirichlet conditions, a hook prefers its one-argument form: `(t, p = 1.0) -> ...`
-# is called as `f(t)` and ignores `p`, and only a function with no one-argument method but a
-# two-argument one is parametric.
+# Unlike the Dirichlet conditions, a hook prefers its one-argument form:
+# `(t, p = 1.0) -> ...` is called as `f(t)` and ignores `p`, and only a function with no
+# one-argument method but a two-argument one is parametric.
 @inline function _wrap_update(f)
     return (!_accepts(f, Val(1)) && _accepts(f, Val(2))) ? ParametricUpdate(f) : f
 end

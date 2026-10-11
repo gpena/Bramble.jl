@@ -25,9 +25,9 @@ using [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl).
 
 # Symmetry options
 - `:auto`: the default, which detects symmetry. A symmetric `A` is factored as symmetric
-  positive definite (`sym = 1`, no pivoting), and when MUMPS reports a zero or negative pivot
-  (`INFOG(1) = -10` or `INFOG(12) > 0`) it is factored again as general symmetric ``LDL^T``
-  (`sym = 2`). Any other `A` uses unsymmetric LU (`sym = 0`).
+  positive definite (`sym = 1`, no pivoting), and when MUMPS reports a zero or negative
+  pivot (`INFOG(1) = -10` or `INFOG(12) > 0`) it is factored again as general symmetric
+  ``LDL^T`` (`sym = 2`). Any other `A` uses unsymmetric LU (`sym = 0`).
 - `:spd`, `:definite`, `1`: symmetric positive definite (Cholesky / ``LL^T``).
 - `:symmetric`, `2`: general symmetric (``LDL^T`` with Bunch-Kaufman pivoting).
 - `:unsymmetric`, `0`: general unsymmetric LU.

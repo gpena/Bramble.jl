@@ -383,8 +383,8 @@ end
 # by the bare AST/stencil construction above or by any `assemble`/`assemble!` shape already
 # warmed -- `assemble_add!` takes its own cached-record path with an explicit scale
 # (`_assemble_bilinear_core_cached!`/`_assemble_linear_core!` in src/assembly/assemble_add.jl),
-# and `reaction`/`reaction_density` walk the unconstrained residual through `leaf_spaces_offsets`
-# (gpena/Bramble.jl#283).
+# and `reaction`/`reaction_density` walk the unconstrained residual through
+# `leaf_spaces_offsets` (gpena/Bramble.jl#283).
 #
 # Builds its own non-uniform mesh with a single `:boundary` marker covering the whole
 # boundary, rather than reusing the session's mesh/label: `markers(Ωₕ)` is a `NamedTuple`

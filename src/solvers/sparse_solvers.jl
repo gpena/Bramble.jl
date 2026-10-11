@@ -29,15 +29,15 @@ requested solver backend.
 
 Ignored by `:sparspak`, which always factors as general unsymmetric LU.
 
-`kwargs` go to the chosen backend's `*_factorize`, which throws on a keyword it does not take.
-`:sparspak` takes none and throws an `ArgumentError`.
+`kwargs` go to the chosen backend's `*_factorize`, which throws on a keyword it does not
+take. `:sparspak` takes none and throws an `ArgumentError`.
 
 A `SparseMatrixCSR` (`SparseMatricesCSR.jl`) is also accepted: converted to `SparseMatrixCSC`
 first (no backend has a native CSR solve path -- see `docs/src/internals/csr_solvers.md`),
 then factored exactly as above.
 
-The form method refuses `symmetrize` with an `ArgumentError`: it also changes the load vector.
-Call `A, F = assemble(a, l; symmetrize = true)` and factor the matrix `A`.
+The form method refuses `symmetrize` with an `ArgumentError`: it also changes the load
+vector. Call `A, F = assemble(a, l; symmetrize = true)` and factor the matrix `A`.
 
 # Examples
 

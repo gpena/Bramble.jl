@@ -223,6 +223,8 @@ before calling this function.
 
   - `DimensionMismatch`: `x` or `F` does not have `size(f, 1)` entries.
   - `ArgumentError`: `x` or `F` is not 1-based.
+  - `ArgumentError`: `F` holds a complex value; solve its real and imaginary parts
+    separately.
   - `ArgumentError` naming `fdm_factorize!`: the last [`fdm_factorize!`](@ref) of `f` was
     refused because the system is singular or its mass is not symmetric positive definite.
     Refill `f` before solving again.

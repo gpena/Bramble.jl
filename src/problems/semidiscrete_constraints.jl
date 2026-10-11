@@ -59,9 +59,10 @@ struct TimeParamDependentConstraints{C}
 end
 
 # Time/parameter dependence is read off the conditions' arity through `_accepts`
-# (geometry/marker.jl), which sees through a `Fix` or a composition to the function it wraps.
-# The three-argument test comes first, then the two-argument one, so `(x, t, p) -> ...` is
-# parametric, `(x, t = 0.0) -> ...` is time-dependent and `x -> ...` is static.
+# (geometry/marker.jl), which sees through a `Fix` or a composition to the function it
+# wraps. The three-argument test comes first, then the two-argument one, so
+# `(x, t, p) -> ...` is parametric, `(x, t = 0.0) -> ...` is time-dependent and `x -> ...`
+# is static.
 function _dirichlet_is_time_dependent(constraints::ConstraintMarkers)
     conds = conditions(constraints)
     isempty(conds) && return false

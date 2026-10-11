@@ -1363,7 +1363,8 @@ The result has the real type of the element type, as for [`normₕ`](@ref): each
 @inline snorm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
 @inline snorm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
 
-# Squared seminorm summed over the leaves, so the composite never takes a root per component.
+# Squared seminorm summed over the leaves, so the composite never takes a root per
+# component.
 @inline _snorm₁ₕ_sq(uₕ::VectorElement{<:CompositeGridSpace}) = sum(
     _snorm₁ₕ_sq, components(uₕ))
 

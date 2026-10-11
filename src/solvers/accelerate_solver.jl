@@ -30,13 +30,13 @@ Compute the sparse direct factorization of `A` (or the assembled matrix of `a`) 
 Accelerate's native `libSparse` on macOS.
 
 # Symmetry and factorization options
-- `sym = :auto` (default) detects symmetry. A symmetric `A` with a positive diagonal is tried
-  with Cholesky (`SparseFactorizationCholesky`), and when that fails (`A` is not positive
-  definite) it is refactored as ``LDL^T`` (`SparseFactorizationLDLT`) on the same object. The
-  pivoted ``LDL^T`` never reports a singular matrix, so each solve with such a factorisation
-  checks the backward error and throws a `SingularException` when it is large. A symmetric `A`
-  with a non-positive diagonal uses ``LDL^T`` directly. Any other `A` uses threshold partial
-  pivoting LU (`SparseFactorizationLUTPP`).
+- `sym = :auto` (default) detects symmetry. A symmetric `A` with a positive diagonal is
+  tried with Cholesky (`SparseFactorizationCholesky`), and when that fails (`A` is not
+  positive definite) it is refactored as ``LDL^T`` (`SparseFactorizationLDLT`) on the same
+  object. The pivoted ``LDL^T`` never reports a singular matrix, so each solve with such a
+  factorisation checks the backward error and throws a `SingularException` when it is large.
+  A symmetric `A` with a non-positive diagonal uses ``LDL^T`` directly. Any other `A` uses
+  threshold partial pivoting LU (`SparseFactorizationLUTPP`).
 - `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`) selects symmetric positive definite Cholesky.
 - `sym = :symmetric` or `2` (or `kind = :ldlt`) selects symmetric indefinite ``LDL^T``.
 - `sym = :unsymmetric` or `0` (or `kind = :lu` / `:lutpp`) selects general unsymmetric LU with threshold partial pivoting.
@@ -44,8 +44,9 @@ Accelerate's native `libSparse` on macOS.
 
 Any keyword other than `sym` and `kind` throws a `MethodError`.
 
-A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first, so a dense-backed
-form uses `libSparse`; `accelerate_factorize(::Matrix)` itself stays dense LAPACK.
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first, so a
+dense-backed form uses `libSparse`; `accelerate_factorize(::Matrix)` itself stays dense
+LAPACK.
 
 Requires macOS and [AppleAccelerate.jl](https://github.com/JuliaLinearAlgebra/AppleAccelerate.jl);
 call `using AppleAccelerate` before calling this function.
@@ -143,8 +144,9 @@ Directly solve `A u = F` (or `assemble(a, l)` system) using Apple Accelerate dir
 `:auto` still tries it and falls back to ``LDL^T``. Any keyword other than `sym` and `kind`
 throws a `MethodError`.
 
-A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first, so a dense-backed
-form uses `libSparse`; `accelerate_factorize(::Matrix)` itself stays dense LAPACK.
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first, so a
+dense-backed form uses `libSparse`; `accelerate_factorize(::Matrix)` itself stays dense
+LAPACK.
 
 Requires macOS and [AppleAccelerate.jl](https://github.com/JuliaLinearAlgebra/AppleAccelerate.jl);
 call `using AppleAccelerate` before calling this function.

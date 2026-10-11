@@ -79,9 +79,10 @@ for a `Semidiscretization`'s index-1 DAE specifically (both overridable):
 SciMLBase.FullSpecialize)` -- both `p` and `specialize` matter: `specialize` avoids a
 function-wrapper error the moment a `p`-vjp is computed (see the note on `ode_problem`
 itself), and without a real `p` there is nothing for `dp` to be a gradient with respect to.
-`FullSpecialize` is required for a `p`-vjp only. A `u₀`-only adjoint on a default-specialized
-problem still gets the `Mᵀ` correction wherever the chosen `sensealg` runs at all, because
-the correction unwraps the function wrapper before it looks at the residual.
+`FullSpecialize` is required for a `p`-vjp only. A `u₀`-only adjoint on a
+default-specialized problem still gets the `Mᵀ` correction wherever the chosen `sensealg`
+runs at all, because the correction unwraps the function wrapper before it looks at the
+residual.
 
 # Examples
 
@@ -115,10 +116,10 @@ end
 # `Mᵀ` corrects the initial-condition gradient for exactly the case where Bramble handed
 # SciMLBase a `Semidiscretization`'s own mass matrix -- `sol.prob.f.f` is the underlying
 # callable an `ODEFunction` always wraps at `.f`, and `SciMLBase.unwrapped_f` strips the
-# `FunctionWrappersWrapper` the default specialization puts around it. Anything else (a `SemidiscretizeRHS`,
-# whose `M⁻¹` is already folded into the residual and carries no `mass_matrix` of its own;
-# a plain user residual) is left untouched: there is no known convention here to correct
-# for, and guessing one would be worse than doing nothing.
+# `FunctionWrappersWrapper` the default specialization puts around it. Anything else (a
+# `SemidiscretizeRHS`, whose `M⁻¹` is already folded into the residual and carries no
+# `mass_matrix` of its own; a plain user residual) is left untouched: there is no known
+# convention here to correct for, and guessing one would be worse than doing nothing.
 @inline _correct_initial_adjoint(du0, ::Any) = du0
 @inline _correct_initial_adjoint(du0, sd::Semidiscretization) = transpose(mass_matrix(sd)) * du0
 

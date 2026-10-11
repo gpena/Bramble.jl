@@ -68,9 +68,9 @@ chain differentiable.
   `AppleAccelerate.jl`, honoured unconditionally regardless of symmetry), `:mumps` (needs
   `MUMPS.jl`), `:sparspak` (pure Julia, needs `Sparspak.jl`).
 - `kwargs`: passed to the chosen backend (for `:accelerate` and `:mumps` the keywords of
-  [`accelerate_solve`](@ref) and [`mumps_solve`](@ref)), which throws on one it does not take.
-  `:default` takes only `kind`, on every platform, and `:sparspak` takes none: both throw an
-  `ArgumentError` on any other keyword.
+  [`accelerate_solve`](@ref) and [`mumps_solve`](@ref)), which throws on one it does not
+  take. `:default` takes only `kind`, on every platform, and `:sparspak` takes none: both
+  throw an `ArgumentError` on any other keyword.
 - `sym`: symmetry hint for `:suitesparse`, `:accelerate` and `:mumps` (and, on macOS, for
   `:default`'s own choice of solver -- see above). `:auto` (default) detects it;
   `:spd`/`:definite`/`1`, `:symmetric`/`2` and `:unsymmetric`/`0` state it.

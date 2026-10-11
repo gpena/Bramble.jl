@@ -97,7 +97,8 @@ end
 
 # A `p` carrying `ForwardDiff.Dual`s (or any non-`AbstractFloat` element type) makes
 # `dirichlet_bc!` write `p`-dependent values into the copy, which a `Float64` vector cannot
-# hold. The copy is widened only then: a `Float32` `u₀` with a `Float64` `p` stays `Float32`.
+# hold. The copy is widened only then: a `Float32` `u₀` with a `Float64` `p` stays
+# `Float32`.
 @inline _initial_vector(u₀, p) = _initial_vector(u₀)
 @inline function _initial_vector(u₀, ::AbstractArray{T}) where {T}
     v = _initial_vector(u₀)

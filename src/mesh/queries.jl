@@ -438,8 +438,8 @@ linear index `k` is marked.
 A face is selected when every point of its relative interior is marked: the points off the
 edges and corners it shares with its neighbours. A marker that leaves the corners out
 (`x -> x[1] == 1 && 0 < x[2] < 1`) therefore still selects its face. A face with no relative
-interior (two points or fewer on a transverse axis) needs all its points marked; in 1D a face
-is a single point and its own interior.
+interior (two points or fewer on a transverse axis) needs all its points marked; in 1D a
+face is a single point and its own interior.
 """
 @inline function _marked_face_mask(Ωₕ::AbstractMeshType{D}, marked_at) where {D}
     idxs = indices(Ωₕ)
@@ -468,15 +468,17 @@ end
 """
     _surface_mask(Ωₕ::AbstractMeshType{D}, labels::NTuple{N, Symbol}) -> NTuple{D, NTuple{2, Bool}}
 
-The coordinate faces `labels` cover on the mesh `Ωₕ`, as a per-axis `(min, max)` mask. A label
-is read from its definition: one that `markers(Ωₕ)` holds is read off its marked points, the
-union over every such label going through [`_marked_face_mask`](@ref); any other label is a
-face name, resolved by `_face_of_symbol`. The alias fallback of [`index_in_marker`](@ref) is
-not used, since it would read `:xmin` as a user's `:left`.
+The coordinate faces `labels` cover on the mesh `Ωₕ`, as a per-axis `(min, max)` mask. A
+label is read from its definition: one that `markers(Ωₕ)` holds is read off its marked
+points, the union over every such label going through [`_marked_face_mask`](@ref); any other
+label is a face name, resolved by `_face_of_symbol`. The alias fallback of
+[`index_in_marker`](@ref) is not used: it answers a face name with the aliased marker's own
+points whenever they all lie on that face, and they can be only part of it, while a face
+name here means the whole coordinate face.
 
-Throws an `ArgumentError` when the markers select no face, or when one of their marked points
-lies on no selected face. "On a face" is index arithmetic, never a weight, so the check reads
-no spacing and does not scalar-index a device mesh.
+Throws an `ArgumentError` when the markers select no face, or when one of their marked
+points lies on no selected face. "On a face" is index arithmetic, never a weight, so the
+check reads no spacing and does not scalar-index a device mesh.
 """
 @inline function _surface_mask(Ωₕ::AbstractMeshType{D}, labels::NTuple{N, Symbol}) where {D, N}
     m = markers(Ωₕ)

@@ -116,8 +116,9 @@ seen by assembly.
     return bits
 end
 
-# The stored `BitVector` that answers for `label` under `index_in_marker`'s rule, or `nothing`
-# when `label` is a face name that means its own face, which no stored marker holds.
+# The stored `BitVector` that answers for `label` under `index_in_marker`'s rule, or
+# `nothing` when `label` is a face name that means its own face, which no stored marker
+# holds.
 @inline function _stored_marker(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
     m = markers(Ωₕ)
     direct = get(m, label, nothing)
