@@ -10,10 +10,12 @@
 # own pattern reaches: `A` acting on the explicit `u` (that's `a`'s own sparsity, already
 # exact -- see allocate_system_matrix), plus the chain-rule term through `αvals`'s own
 # dependence on `u`. `local_stencil`'s `GridFunctionScale` case (form/common.jl) reads that
-# coefficient as `grid_fn[lin_idx]` -- the SAME point `I` the assembly loop is currently at,
-# not shifted by the term's own offsets -- so the second contribution's reach is exactly `I`
-# widened by whatever stencil op the coefficient was itself built from (e.g. Mₕ's `{0,-1}`),
-# at every row the term reaches from `I`. That composition is what this file adds.
+# coefficient at the point the node is evaluated at, which an operator outside it shifts:
+# `D₋ₓ(c * U)` reads `c` at `I` and at `I - eₓ` (gpena/Bramble.jl#536). The second
+# contribution's reach is therefore every such read point -- the reach of the operators
+# enclosing the coefficient (`_coefficient_anchors`) -- widened by whatever stencil op the
+# coefficient was itself built from (e.g. Mₕ's `{0,-1}`), at every row the term reaches
+# from `I`. That composition is what this file adds.
 #
 # Left out of the matrix-type seam: both methods below always
 # return a `SparseMatrixCSC{Bool}`, regardless of `a`'s own backend. A Jacobian sparsity
@@ -60,6 +62,51 @@ function _point_dependent_nodes(ops::Tuple)
     rest = _point_dependent_nodes(Base.tail(ops))
     return _has_trial_interp(first(ops)) ? (first(ops), rest...) : rest
 end
+
+# Every offset from the walked point at which a term reads a coefficient: the reach of the
+# operators enclosing each `GridFunctionScale`, composed from the root down. `D₋ₓ(c * U)`
+# reads `c` at `{0, -1}`, `Dcₓ(c * Dcₓ(U))` at `{-1, 1}`, and `inner₊(c * ∇ₕ(U), ∇ₕ(V))`
+# at `{0}`.
+# Read off the AST, not the point's stencil: the stencil's offsets compose the operators
+# inside the coefficient too, and its trial entries through πₕ name absolute columns. A term
+# with no `GridFunctionScale` keeps the walked point alone, the reach before #536.
+function _coefficient_anchors(ast::LazyOp{D}) where {D}
+    origin = [ntuple(_ -> 0, Val(D))]
+    anchors = _coefficient_reach!(NTuple{D, Int}[], ast, origin)
+    return isempty(anchors) ? origin : sort!(anchors)
+end
+
+# `outer` is the reach of every operator above `op`, as offsets from the walked point.
+function _coefficient_reach!(anchors, op::GridFunctionScale, outer)
+    for o in outer
+        o in anchors || push!(anchors, o)
+    end
+    return _coefficient_reach!(anchors, op.inner_op, outer)
+end
+
+function _coefficient_reach!(anchors, op::TappedNode{D, Dim}, outer) where {D, Dim}
+    steps = map(_shift_delta, _stencil_taps(op))
+    return _coefficient_reach!(anchors, op.inner_op, _reach(outer, Val(Dim), steps))
+end
+
+function _coefficient_reach!(anchors, op::ShiftNode{D, Dim}, outer) where {D, Dim}
+    shifted = _reach(outer, Val(Dim), (op.shift_amount,))
+    return _coefficient_reach!(anchors, op.inner_op, shifted)
+end
+
+# A scale, a restriction or an interpolation moves no read point.
+_coefficient_reach!(anchors, op::UnaryWrapper, outer) = _coefficient_reach!(
+    anchors, op.inner_op, outer
+)
+
+function _coefficient_reach!(
+        anchors, op::Union{OperatorAdd, BilinearProduct, LinearProduct}, outer
+)
+    _coefficient_reach!(anchors, op.left_op, outer)
+    return _coefficient_reach!(anchors, op.right_op, outer)
+end
+
+_coefficient_reach!(anchors, ::LazyOp, outer) = anchors
 
 # The union of every relative node's reach -- the same offsets `stencil_offsets` already
 # gives any stencil op, since a coefficient dependency is written exactly the way a form
@@ -124,10 +171,12 @@ says how, through [`πₕ`](@ref): `U -> πₕ(U)` for `cvals = α.(πₕ(Wₐ, 
 `U -> Mₕ(πₕ(U))` for `cvals = α.(Mₕ(πₕ(Wₐ, uₕ)))`, and `U -> πₕ(U(2))` for a coefficient
 interpolated from component 2 of a composite trial space. At each walked point the pattern
 then adds, to every row the term reaches there, the source-mesh columns that composition
-reads: the corners of the cell the point falls in, and for an operator applied outside
-`πₕ` the corners at each neighbour that operator reaches. A dependency naming a leaf on
-another mesh without `πₕ` (`U -> Mₕ(U)`) is refused with an `ArgumentError`.
-So is one naming a component the trial space does not have (`U -> U(3)` on `W × W`).
+reads at every point the coefficient is read: the reach of the operators enclosing it, so
+`{0, -1}` in `D₋ₓ(cvals * πₕ(u))` and `{-1, 1}` in `Dcₓ(cvals * Dcₓ(πₕ(u)))`. Those columns
+are the corners of the cell that point falls in, and for an operator applied outside `πₕ`
+the corners at each neighbour that operator reaches. A dependency naming a leaf on another
+mesh without `πₕ` (`U -> Mₕ(U)`) is refused with an `ArgumentError`. So is one naming a
+component the trial space does not have (`U -> U(3)` on `W × W`).
 
 ```julia
 using Bramble: jacobian_pattern
@@ -156,15 +205,17 @@ function jacobian_pattern(
     point_deps = map(_point_dependent_nodes(nodes)) do op
         return _bind_point_dependency(op, nothing, form.trial_space, 0, Ωₕ)
     end
+    anchors = _coefficient_anchors(ast)
 
     I_vec = Int[]
     J_vec = Int[]
     hint = _pattern_size_hint(bound, space, mesh_markers, lin_indices) *
-           (1 + length(coeff_offsets))
+           (1 + length(anchors) * length(coeff_offsets))
     sizehint!(I_vec, hint)
     sizehint!(J_vec, hint)
     _scalar_jacobian_walk!(
-        I_vec, J_vec, bound, space, mesh_markers, lin_indices, coeff_offsets, point_deps
+        I_vec, J_vec, bound, space, mesh_markers, lin_indices, coeff_offsets, anchors,
+        point_deps
     )
 
     n = ndofs(form.test_space)
@@ -176,7 +227,8 @@ end
 # specialised on its `Function...` arguments, so the bound point-dependent nodes are only
 # concretely typed from this call on, and the walk dispatches statically at every point.
 function _scalar_jacobian_walk!(
-        I_vec, J_vec, ast, space, mesh_markers, lin_indices, coeff_offsets, point_deps
+        I_vec, J_vec, ast, space, mesh_markers, lin_indices, coeff_offsets, anchors,
+        point_deps
 )
     @inbounds for I in CartesianIndices(lin_indices)
         lin_idx = lin_indices[I]
@@ -194,7 +246,7 @@ function _scalar_jacobian_walk!(
         end
 
         _push_point_dependencies!(
-            I_vec, J_vec, point_deps, stencil, lin_indices, I, 0, space, mesh_markers, lin_idx
+            I_vec, J_vec, point_deps, stencil, lin_indices, I, 0, space, mesh_markers, anchors
         )
         isempty(coeff_offsets) && continue
 
@@ -205,8 +257,9 @@ function _scalar_jacobian_walk!(
             row = _test_row(lin_indices, I, off_v)
             row == 0 && continue
 
-            for δ in coeff_offsets
-                Ic = I + CartesianIndex(δ)
+            for o in anchors, δ in coeff_offsets
+
+                Ic = I + CartesianIndex(o) + CartesianIndex(δ)
                 checkbounds(Bool, lin_indices, Ic) || continue
                 push!(I_vec, row)
                 push!(J_vec, lin_indices[Ic])
@@ -308,21 +361,22 @@ function _bind_point_dependency(op, target, leaf, col_offset, Ωₕ)
     return (bound, LinearIndices(indices(mesh(leaf))), col_offset)
 end
 
-# Every column each bound point-dependent node reads at `I`, added to every row the term's
-# own `stencil` reaches from `I`. One call per node, recursing on the tuple, so each node's
-# stencil is concretely typed.
+# Every column each bound point-dependent node reads at each on-grid `I + o`, `o` in
+# `anchors` (`_coefficient_anchors`), added to every row the term's own `stencil` reaches
+# from `I`. One call per node, recursing on the tuple, so each node's stencil is concretely
+# typed.
 @inline _push_point_dependencies!(I_vec, J_vec, ::Tuple{}, args...) = nothing
 @inline function _push_point_dependencies!(
         I_vec, J_vec, deps::Tuple, stencil, lin_indices, I, row_offset, space, markers,
-        lin_idx
+        anchors
 )
     _push_point_dependency!(
         I_vec, J_vec, first(deps)..., stencil, lin_indices, I, row_offset, space, markers,
-        lin_idx
+        anchors
     )
     return _push_point_dependencies!(
         I_vec, J_vec, Base.tail(deps), stencil, lin_indices, I, row_offset, space, markers,
-        lin_idx
+        anchors
     )
 end
 
@@ -345,20 +399,24 @@ _carries_data(op::OperatorAdd) = _carries_data(op.left_op) || _carries_data(op.r
 
 function _push_point_dependency!(
         I_vec, J_vec, op, dep_lin_indices, dep_col_offset, stencil, lin_indices, I,
-        row_offset, space, markers, lin_idx
+        row_offset, space, markers, anchors
 )
-    dep_stencil = local_stencil(op, space, I, markers, lin_idx)
-    @inbounds for k in eachindex(stencil)
-        off_v = stencil[k][2]
-        _row_offset_seen_before(stencil, k, off_v) && continue
-        row = _test_row(lin_indices, I, off_v)
-        row == 0 && continue
-        for entry in dep_stencil
-            _structural_zero(op, entry[2]) && continue
-            col = _trial_column(dep_lin_indices, I, entry[1])
-            col == 0 && continue
-            push!(I_vec, row + row_offset)
-            push!(J_vec, col + dep_col_offset)
+    @inbounds for o in anchors
+        Io = I + CartesianIndex(o)
+        checkbounds(Bool, lin_indices, Io) || continue
+        dep_stencil = local_stencil(op, space, Io, markers, lin_indices[Io])
+        for k in eachindex(stencil)
+            off_v = stencil[k][2]
+            _row_offset_seen_before(stencil, k, off_v) && continue
+            row = _test_row(lin_indices, I, off_v)
+            row == 0 && continue
+            for entry in dep_stencil
+                _structural_zero(op, entry[2]) && continue
+                col = _trial_column(dep_lin_indices, Io, entry[1])
+                col == 0 && continue
+                push!(I_vec, row + row_offset)
+                push!(J_vec, col + dep_col_offset)
+            end
         end
     end
     return nothing
@@ -386,6 +444,7 @@ function _pattern_term_jacobian!(
     bound, mesh_markers = _bind_walk(term, sp)
     lin_indices = LinearIndices(indices(Ωₕ))
     dep_ops, point_nodes = deps
+    anchors = _coefficient_anchors(term)
 
     resolved = map(dep_ops) do (target, offsets)
         leaf_lin_indices, leaf_col_offset = _dependency_leaf(
@@ -417,7 +476,7 @@ function _pattern_term_jacobian!(
 
         _push_point_dependencies!(
             I_vec, J_vec, point_deps, stencil, lin_indices, I, row_offset, sp, mesh_markers,
-            lin_indices[I]
+            anchors
         )
         isempty(resolved) && continue
 
@@ -429,9 +488,9 @@ function _pattern_term_jacobian!(
             row_base == 0 && continue
             row = row_base + row_offset
 
-            for (dep_lin_indices, dep_col_offset, offsets) in resolved, δ in offsets
-
-                Ic = I + CartesianIndex(δ)
+            for (dep_lin_indices, dep_col_offset, offsets) in resolved, o in anchors,
+                δ in offsets
+                Ic = I + CartesianIndex(o) + CartesianIndex(δ)
                 checkbounds(Bool, dep_lin_indices, Ic) || continue
                 push!(I_vec, row)
                 push!(J_vec, dep_lin_indices[Ic] + dep_col_offset)

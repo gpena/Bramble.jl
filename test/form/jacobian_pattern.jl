@@ -8,7 +8,7 @@ using ForwardDiff, DifferentiationInterface
 using SparseConnectivityTracer: SparseConnectivityTracer
 using SparseMatrixColorings: SparseMatrixColorings
 using SparseArrays: nnz, sparse, findnz
-using Bramble: D₋ₓ, jacobian_pattern
+using Bramble: D₋ₓ, D₋ᵧ, Dcₓ, Dcᵧ, S₊ₓ, jacobian_pattern, πₕ
 
 # `jacobian_pattern` (form/jacobian_pattern.jl, gpena/Bramble.jl#21) reads a Newton
 # residual's Jacobian sparsity off `a`'s AST plus each named coefficient dependency's own
@@ -108,6 +108,18 @@ function _coupled_reaction_diffusion(n)
     return (; Vₕ = Vₕ, coupled_form = coupled_form, residual = residual)
 end
 
+# The ForwardDiff Jacobian of the residual `x -> assemble(mk(coeff(xₕ))) * x`, where `xₕ`
+# is the element of `Wu` holding `x`, and `jacobian_pattern(mk(c₀), dep)` (#536).
+function _jacobian_and_pattern(Wu, mk, coeff, c₀, dep)
+    function residual(x)
+        xₕ = element(Wu, eltype(x))
+        xₕ .= x
+        return assemble(mk(coeff(xₕ))) * x
+    end
+    J = ForwardDiff.jacobian(residual, 0.5 .+ sin.(1:ndofs(Wu)) .^ 2)
+    return J, jacobian_pattern(mk(c₀), dep)
+end
+
 @testset "jacobian_pattern" begin
     # The native pattern is a safe superset of the AD-traced one.
     @testset "superset of AD pattern ($D D)" for (D, n) in ((1, 12), (2, 6), (3, 4))
@@ -128,6 +140,59 @@ end
         # possible but numerically zero) entries are fine -- see the file header.
         @test all(ground_truth .<= mine)
         @test nnz(mine) >= nnz(sparse(ground_truth))
+    end
+
+    # A coefficient inside a difference is read at every tap of that difference, not only
+    # at the walked point: `D₋ₓ(c * U)` reads `c` at `I` and `I - eₓ` (gpena/Bramble.jl#536).
+    # The read points are the reach of the operators *enclosing* the coefficient, which is
+    # neither the term's trial nor its test reach: `D₋ₓ(c * S₊ₓ(U))` reads `c` at {0,-1}
+    # with trial offsets {1,0}, and `Dcₓ(c * Dcₓ(U))` at {±1} with trial offsets {0,±2}.
+    @testset "coefficient at a shifted tap (#536)" begin
+        α(s) = 3 + 1 / (1 + s^2)
+        W = gridspace(mesh(domain(interval(0.0, 1.0)), 12, false))
+        W2 = gridspace(
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (false, false))
+        )
+        cases = (
+            (W, (c, U, V) -> innerₕ(D₋ₓ(c * U), V), u -> Mₕ(u), U -> Mₕ(U)),
+            (W, (c, U, V) -> innerₕ(D₋ₓ(c * S₊ₓ(U)), V), u -> Mₕ(u), U -> Mₕ(U)),
+            (W, (c, U, V) -> innerₕ(Dcₓ(c * Dcₓ(U)), V), identity, U -> U),
+            (W2, (c, U, V) -> innerₕ(D₋ᵧ(c * U), V), u -> Mₕ(u)[2], U -> Mₕ(U)[2]),
+            (W2, (c, U, V) -> innerₕ(Dcᵧ(c * Dcₓ(U)), V), identity, U -> U)
+        )
+        for (Wₕ, f, built_from, dep) in cases
+            J, P = _jacobian_and_pattern(
+                Wₕ, c -> form(Wₕ, Wₕ, (U, V) -> f(c, U, V)), u -> α.(built_from(u)),
+                element(Wₕ, 1.0), dep
+            )
+            @test all((J .!= 0) .<= P)
+            @test nnz(P) <= 2 * count(!iszero, J)
+        end
+
+        # A coefficient outside every difference is read at the walked point alone, so the
+        # pattern is exactly the AD one (the page docs/src/examples/poisson_nonlinear.jl
+        # pins this count).
+        J, P = _jacobian_and_pattern(
+            W, c -> form(W, W, (U, V) -> inner₊(c * ∇ₕ(U), ∇ₕ(V))), u -> α.(Mₕ(u)),
+            element(W, 1.0), U -> Mₕ(U)
+        )
+        @test all((J .!= 0) .<= P)
+        @test nnz(P) == count(!iszero, J)
+
+        # Through πₕ: the coefficient lives on the walked mesh `Wa`, interpolated from `Wb`.
+        Wa = gridspace(mesh(domain(interval(0.0, 1.0)), 6, false))
+        Wb = gridspace(mesh(domain(interval(0.0, 1.0)), 9, false))
+        function interpolated(ub)
+            c = element(Wa, eltype(ub))
+            c .= α.(Mₕ(πₕ(Wa, ub)))
+            return c
+        end
+        J, P = _jacobian_and_pattern(
+            Wb, c -> form(Wb, Wa, (u, v) -> innerₕ(D₋ₓ(c * πₕ(u)), v)), interpolated,
+            element(Wa, 1.0), U -> Mₕ(πₕ(U))
+        )
+        @test all((J .!= 0) .<= P)
+        @test nnz(P) <= 2 * count(!iszero, J)
     end
 
     # Newton with the native pattern reaches the right answer.
@@ -429,6 +494,27 @@ end
 
             @test all(ground_truth .<= mine)
             @test nnz(mine) >= nnz(sparse(ground_truth))
+        end
+
+        # The block path: block (1,1) reads a coefficient built from component 2 inside a
+        # difference, so at the taps of the operators enclosing it (gpena/Bramble.jl#536).
+        @testset "shifted coefficient tap (#536)" begin
+            α(s) = 3 + 1 / (1 + s^2)
+            Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 10, false))
+            Vₕ = Wₕ^Val(2)
+            blocks = (
+                ((c, p) -> D₋ₓ(c * p(1)), w -> Mₕ(components(w)[2]), U -> Mₕ(U(2))),
+                ((c, p) -> D₋ₓ(c * S₊ₓ(p(1))), w -> components(w)[2], U -> U(2)),
+                ((c, p) -> Dcₓ(c * Dcₓ(p(1))), w -> components(w)[2], U -> U(2))
+            )
+            for (op, built_from, dep) in blocks
+                mk(c) = form(Vₕ, Vₕ, (p, q) -> innerₕ(op(c, p), q(1)) + innerₕ(p(2), q(2)))
+                J, P = _jacobian_and_pattern(
+                    Vₕ, mk, w -> α.(built_from(w)), element(Wₕ, 1.0), dep
+                )
+                @test all((J .!= 0) .<= P)
+                @test nnz(P) <= 2 * count(!iszero, J)
+            end
         end
 
         # No dependencies is a safe superset of assemble(a)'s own pattern.
