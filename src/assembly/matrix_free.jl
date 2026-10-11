@@ -1419,8 +1419,8 @@ function _mf_host_ast(a::BilinearForm)
 end
 
 # A region `_mf_host_ast` bound on the host: its marker ids, in a type nothing else makes,
-# so a walk entry tells it from a region a user wrote as ids (`restrict_to(1, u)`), which
-# `_bind_walk` refuses as it does on every other route.
+# so a walk entry tells it from a bare id. `restrict_to(1, u)` is refused at construction,
+# and `_bind_walk` still refuses any id that reaches it, on every route.
 struct _MFBoundRegion{R}
     ids::R
 end

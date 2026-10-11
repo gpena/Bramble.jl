@@ -1059,19 +1059,13 @@ end
     @test isapprox(op * x, assemble(form(Vb, Vb, f); dirichlet = :boundary) * x; rtol = 1e-12)
 end
 
-# A region written as an id (`restrict_to(1, u)`) is refused by the walk's bind on every
-# route. The fused bands bind on the host and let only the regions they bound skip the
-# in-task bind, so a user's id must not read marker column 1 there either.
-@testset "integer region throws on every policy" begin
+# A region written as an id (`restrict_to(1, u)`) is refused when `restrict_to` builds the
+# node, so it never reaches the walk's bind or the fused bands' marker columns.
+@testset "integer region throws at form" begin
     X = interval(0.0, 1.0) × interval(0.0, 1.0)
     W = gridspace(mesh(domain(X, :dir => boundary_symbols(X)), (13, 11), (true, true)))
-    a = form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(restrict_to(1, u), v))
-    x = ones(ndofs(W))
-    for policy in (CpuSerial(), CpuThreaded(), CpuPolyester())
-        op = matrix_free_operator(a; policy)
-        @test (op.plan === nothing) == (policy isa CpuSerial)
-        @test_throws MethodError op * x
-    end
+    @test_throws ArgumentError form(
+        W, W, (u, v) -> innerₕ(u, v) + innerₕ(restrict_to(1, u), v))
 end
 
 # Mixed leaf policies, CpuThreaded beside CpuPolyester (the Threaded + Serial case

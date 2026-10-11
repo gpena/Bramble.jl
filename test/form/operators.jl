@@ -24,6 +24,7 @@ using Bramble:
                local_stencil,
                resolve_ast,
                restrict_to,
+               source_function,
                shift_op,
                inner_plus,
                is_symbolic,
@@ -256,6 +257,32 @@ const _ORIGIN_2D = (0, 0)
             Ad = Matrix(assemble(ad))
             nd = size(Ad, 1)
             @test findall(!iszero, [Ad[i, i] for i in 1:nd]) == findall(markers(Ωd)[:interior])
+        end
+
+        @testset "Marker-label regions only" begin
+            # A predicate, a number and a tuple with a non-label are refused at
+            # construction, not left to fail in the walk.
+            @test_throws ArgumentError restrict_to(x -> x[1] < 0.3, id)
+            @test_throws ArgumentError restrict_to(0.3, id)
+            @test_throws ArgumentError restrict_to((:bottom, 1), id)
+            err = try
+                restrict_to(x -> x[1] < 0.3, id)
+            catch e
+                e
+            end
+            @test occursin("marker", err.msg)
+
+            # A Symbol, a Symbol tuple and the empty tuple still build.
+            @test restrict_to(:bottom, id).region === :bottom
+            @test restrict_to((:bottom, :interior), id).region === (:bottom, :interior)
+            @test restrict_to((), id) isa RegionRestriction
+
+            # A one-label tuple restricts exactly as the label does.
+            s = source_function(x -> 1.0, Val(2))
+            b1 = assemble(form(Wₕ, v -> innerₕ(restrict_to((:bottom,), s), v)))
+            b2 = assemble(form(Wₕ, v -> innerₕ(restrict_to(:bottom, s), v)))
+            @test b1 == b2
+            @test sum(b1) > 0
         end
 
         @testset "Operator composition" begin

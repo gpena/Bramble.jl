@@ -36,7 +36,12 @@ end
 """
     restrict_to(region, op::LazyOp{D}) -> RegionRestriction
 
-Restrict the operator `op` to a specific mesh region or boundary identifier.
+Restrict the operator `op` to a mesh region named by a marker label.
+
+`region` is one of two forms:
+- a `Symbol`, the label of a domain marker (`:interior`, `:boundary`, `:left`, a name the
+  domain was given);
+- a tuple of `Symbol`s, the union of those labels.
 
 # Examples
 ```julia
@@ -45,10 +50,25 @@ restrict_to(:interior, U)
 
 # Restrict to a boundary region
 restrict_to(:left, U)
+
+# Restrict to the union of two regions
+restrict_to((:left, :right), U)
 ```
+
+# Throws
+- `ArgumentError`: if `region` is neither a `Symbol` nor a tuple of `Symbol`s. A region
+  given by a predicate is not supported: name it as a domain marker instead
+  (`domain(S, :name => x -> ...)`) and restrict to `:name`.
 """
-function restrict_to(region, op::LazyOp{D}) where {D}
+function restrict_to(region::Union{Symbol, Tuple{Vararg{Symbol}}}, op::LazyOp{D}) where {D}
     return RegionRestriction{D, typeof(region), typeof(op)}(region, op)
+end
+
+function restrict_to(region, ::LazyOp)
+    throw(ArgumentError(
+        "restrict_to: the region must be a marker label (a Symbol) or a tuple of " *
+        "labels, got a $(typeof(region)). To restrict by a predicate, name the region " *
+        "as a domain marker, `domain(S, :name => x -> ...)`, and restrict to `:name`."))
 end
 
 # --- Zero-allocation stencil evaluators -------------------------------------------- #
