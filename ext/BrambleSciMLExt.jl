@@ -95,6 +95,15 @@ end
 @inline _initial_vector(u₀::AbstractVector) = collect(u₀)
 @inline _initial_vector(u₀) = collect(parent(u₀))
 
+# A `p` carrying `ForwardDiff.Dual`s (or any non-`AbstractFloat` element type) makes
+# `dirichlet_bc!` write `p`-dependent values into the copy, which a `Float64` vector cannot
+# hold. The copy is widened only then: a `Float32` `u₀` with a `Float64` `p` stays `Float32`.
+@inline _initial_vector(u₀, p) = _initial_vector(u₀)
+@inline function _initial_vector(u₀, ::AbstractArray{T}) where {T}
+    v = _initial_vector(u₀)
+    return T <: AbstractFloat ? v : convert(Vector{promote_type(eltype(v), T)}, v)
+end
+
 # `p` defaults to `SciMLBase.NullParameters()`, `ODEProblem`'s own default -- passed
 # positionally rather than as a `kwargs...` entry, since `ODEProblem(f, u0, tspan; kwargs...)`
 # (the method a plain callable `f`/`rhs` reaches, as opposed to the `@add_kwonly`-generated
@@ -115,7 +124,7 @@ Base.@constprop :aggressive function Bramble._ode_problem(
         p = SciMLBase.NullParameters(), specialize = nothing
 )
     tspan = _tspan(I)
-    u0 = _initial_vector(u₀)
+    u0 = _initial_vector(u₀, p)
     Bramble.dirichlet_bc!(u0, sd, first(tspan), p)
     f = Bramble._ode_function(
         sd; jacobian = jacobian, jac_prototype = jac_prototype, tgrad = tgrad
@@ -148,8 +157,8 @@ function Bramble._second_order_ode_problem(
         sd::SecondOrderSemidiscretization, du₀, u₀, I; p = SciMLBase.NullParameters()
 )
     tspan = _tspan(I)
-    u0 = _initial_vector(u₀)
-    dv0 = _initial_vector(du₀)
+    u0 = _initial_vector(u₀, p)
+    dv0 = _initial_vector(du₀, p)
     Bramble.dirichlet_bc!(u0, sd, first(tspan), p)
     f = Bramble._second_order_ode_function(sd)
     return SecondOrderODEProblem(f, dv0, u0, tspan, p)

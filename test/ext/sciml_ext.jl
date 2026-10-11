@@ -15,6 +15,7 @@ using OrdinaryDiffEqTsit5: Tsit5
 using ..TestUtils: _check_eoc
 using NonlinearSolve: NewtonRaphson
 using ADTypes: AutoFiniteDiff, AutoForwardDiff
+using ForwardDiff: ForwardDiff
 using WriteVTK: WriteVTK
 using LightXML: parse_file, root, find_element, child_elements, attribute, free
 
@@ -176,6 +177,21 @@ end
         bcs_t = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 1 + t)
         sd_t = semidiscretize(a, l; dirichlet = bcs_t)
         @test ode_problem(sd_t, u₀, I).p isa SciMLBase.NullParameters
+
+        # A `p` of `ForwardDiff.Dual`s reaches the copied u₀: it is widened to hold the
+        # `p`-dependent boundary values, so the derivative through `ode_problem` is exact.
+        sd_d = semidiscretize(a, l; dirichlet = bcs)
+        z = zeros(n)
+        @test ForwardDiff.gradient(θ -> ode_problem(sd_d, z, I; p = θ).u0[1], [1.0, 2.0]) ==
+              [1.0, 0.0]
+        @test ForwardDiff.gradient(θ -> ode_problem(sd_d, z, I; p = θ).u0[n], [1.0, 2.0]) ==
+              [1.0, 0.0]
+
+        # The widening is for a non-float `p` only: a `Float32` u₀ with a `Float64` `p`
+        # stays `Float32`, and a `Float64` u₀ with a `Float32` `p` stays `Float64`.
+        @test eltype(ode_problem(sd_d, zeros(Float32, n), I; p = [1.0, 2.0]).u0) ===
+              Float32
+        @test eltype(ode_problem(sd_d, z, I; p = Float32[1, 2]).u0) === Float64
     end
 
     # `semidiscretize_rhs`: the point of folding `M⁻¹` in ahead of
@@ -470,7 +486,7 @@ end
             @test parent(du₀) == before_du  # du₀ is never mutated
             @test prob.u0.x[2] !== parent(u₀)
             @test prob.u0.x[2][1] ≈ 0.0 && prob.u0.x[2][n] ≈ 0.0   # made consistent at t₀
-            @test prob.u0.x[1] == parent(du₀)                       # du₀ passed through as-is
+            @test prob.u0.x[1] == parent(du₀)                       # du₀ copied as-is
 
             # The two-form method builds the semidiscretisation on the way.
             @test second_order_ode_problem(K, l, du₀, u₀, Iv; dirichlet = bcs) isa
@@ -488,6 +504,16 @@ end
             @test dv[1] ≈ 0.35   # constrained row: g(x, 0.5, p) - u₁ = 1.05 - 0.7
             prob_p2 = second_order_ode_problem(K, l, du₀, u₀, Iv; dirichlet = bcs_p, p = [0.7])
             @test prob_p2.p == [0.7] && prob_p2.u0.x[2][n] == 0.7
+
+            # A `Dual` `p` widens both copies; the Dirichlet value at t₀ differentiates exactly.
+            @test ForwardDiff.derivative(
+                q -> second_order_ode_problem(sd_p, du₀, u₀, Iv; p = [q]).u0.x[2][n], 0.7
+            ) == 1.0
+            prob_d = second_order_ode_problem(
+                sd_p, du₀, u₀, Iv; p = [ForwardDiff.Dual(0.7, 1.0)]
+            )
+            @test eltype(prob_d.u0.x[1]) == eltype(prob_d.u0.x[2]) == eltype(prob_d.p)
+            @test ForwardDiff.value.(prob_d.u0.x[1]) == parent(du₀)
             @test_throws MethodError second_order_ode_problem(sd, du₀, u₀, Iv; abstol = 1e-8)
         end
 

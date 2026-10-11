@@ -335,9 +335,10 @@ velocity `du₀` and initial displacement `u₀` -- each a [`VectorElement`](@re
 vector. `I` may equally be a `(t₀, t₁)` tuple.
 
 `u₀` is copied, never mutated, and the copy is made consistent with the Dirichlet rows at `t₀`
-(see [`dirichlet_bc!`](@ref)), against `p` when one is given. `du₀` is passed through
-unchanged: velocity at a constrained dof is not an independent algebraic unknown here (see
-this file's header comment).
+(see [`dirichlet_bc!`](@ref)), against `p` when one is given. `du₀` is copied too, and its
+rows are not made consistent: velocity at a constrained dof is not an independent algebraic
+unknown here (see this file's header comment). When `p` is an array whose element type is not
+a float, such as `ForwardDiff.Dual`s, both copies are widened to hold it.
 
 The only keyword is `p` (default `SciMLBase.NullParameters()`), for a residual or Dirichlet
 conditions given a parameter-dependent, `(x, t, p)` form (see
