@@ -404,6 +404,23 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
             end
         end
 
+        # A complex load against a Float64 matrix: the dense in-place path must promote, not
+        # round `F` into a Float64 buffer (InexactError), and agree with the sparse path.
+        @testset "in-place, complex load vector" begin
+            A = assemble(form(W₁, W₁, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))))
+            uₕ = Rₕ(W₁, x -> x[1]^2)
+            Fc = complex.(ones(n₁), 1.0)
+            marker = (:left, :right)
+            nmarked = length(union(rows(Ω₁, :left, 0), rows(Ω₁, :right, 0)))
+            expected = reaction(A, Fc, uₕ; marker = marker)
+            @test imag(expected) ≈ nmarked
+            @test reaction!(zeros(ComplexF64, n₁), Matrix(A), Fc, uₕ; marker = marker) ≈
+                  expected
+            @test sum(reaction_density!(
+                zeros(ComplexF64, n₁), Matrix(A), Fc, uₕ; marker = marker)) ≈
+                  sum(reaction_density!(zeros(ComplexF64, n₁), A, Fc, uₕ; marker = marker))
+        end
+
         # The internal walk and residual helpers, called through `invokelatest` so each runs as
         # its own compiled method (not inlined into a caller), against hand-derived values.
         @testset "internal helpers vs hand values" begin
@@ -480,6 +497,15 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
         @test ForwardDiff.derivative(h, 2.0) ≈ h(3.0) - h(2.0)
         gd(s) = reaction(Matrix(A), s .* ones(ndofs(Wₕ)), uₕ; marker = :boundary)
         @test ForwardDiff.derivative(gd, 2.0) ≈ ForwardDiff.derivative(g, 2.0)
+        # the dense in-place variants: d reaction/ds = 2 (the two marked ends)
+        n = ndofs(Wₕ)
+        gi(s) = (F = s .* ones(n); reaction!(similar(F), Matrix(A), F, uₕ; marker = :boundary))
+        @test ForwardDiff.derivative(gi, 2.0) ≈ 2.0
+        hd(s) = (F = s .* ones(n);
+            sum(reaction_density!(zero(F), Matrix(A), F, uₕ; marker = :boundary)))
+        hs(s) = (F = s .* ones(n); sum(reaction_density!(zero(F), A, F, uₕ; marker = :boundary)))
+        @test ForwardDiff.derivative(hd, 2.0) ≈ ForwardDiff.derivative(hs, 2.0)
+        @test ForwardDiff.derivative(hd, 2.0) > 0
         @test reaction(A, Matrix(A) * parent(uₕ), uₕ; marker = :boundary) isa Float64
         @test reaction(Matrix(A), ones(ndofs(Wₕ)), uₕ; marker = :boundary) ≈
               reaction(A, ones(ndofs(Wₕ)), uₕ; marker = :boundary)

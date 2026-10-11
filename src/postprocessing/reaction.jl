@@ -325,8 +325,8 @@ function _reaction_residual!(
     return scratch
 end
 
-# Any other matrix type: the same full `A * u` the non-`!` fallback uses (bit-identical to
-# it), but only the marked entries are copied into `scratch` -- matching the sparse path's
+# Any other matrix type: the non-`!` fallback's own residual, promoted over `A`, `u` and `F`
+# (bit-identical to it), but only the marked entries are copied into `scratch` -- matching the sparse path's
 # "only marked entries touched" contract, which `reaction_density!` needs to stay exactly
 # zero away from the marker rather than merely small. Still allocates the temporary `r`
 # internally: unlike `SparseMatrixCSC`, a dense matrix has no cheaper way to get `A * u` at
@@ -335,8 +335,7 @@ function _reaction_residual!(
         scratch::AbstractVector, A::AbstractMatrix, F::AbstractVector, u::AbstractVector,
         leaves::Tuple, markers, components
 )
-    r = A * u
-    r .-= F
+    r = _reaction_residual(A, F, u, ())
     _copy_marked!(scratch, r, leaves, markers, components, 1)
     return scratch
 end
