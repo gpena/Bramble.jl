@@ -3,7 +3,7 @@ module SpaceInterpolationBoundsTests
 using Test
 using Bramble
 using Bramble: interpolation_matrix, locate_cell, weights
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
 
 # `interpolate_at` used to extrapolate silently past the mesh boundary: `locate_cell`
 # clamps which *cell* is read, but the fraction within it was never clamped, so a point
@@ -32,7 +32,8 @@ using ..TestUtils: alloc_test, @test_allocs
             @test_throws ArgumentError interpolate_at(uₕ, (0.5, -2.0)) # x in, y out
         end
 
-        @testset "3D" begin
+        # 3D only: built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+        WITH_3D_TESTS && @testset "3D" begin
             Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 5, 5), (true, true, true))
             uₕ = Rₕ(gridspace(Ωₕ), x -> x[1] + x[2] + x[3])
             @test_throws ArgumentError interpolate_at(uₕ, (0.5, 0.5, 3.0))
@@ -67,7 +68,8 @@ using ..TestUtils: alloc_test, @test_allocs
             @test interpolate_at(uₕ, (5.0, 0.5); outside = -1.0) == -1.0
         end
 
-        @testset "3D" begin
+        # 3D only: built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+        WITH_3D_TESTS && @testset "3D" begin
             Ωₕ = mesh(
                 domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 5, 5), (true, true, true)
             )
@@ -226,7 +228,8 @@ using ..TestUtils: alloc_test, @test_allocs
             end
         end
 
-        @testset "3D" begin
+        # 3D only: built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+        WITH_3D_TESTS && @testset "3D" begin
             dom = domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
             u = Rₕ(gridspace(mesh(dom, (5, 5, 5), (true, true, true))), x -> 1.0)
             for s1 in signs, s2 in signs, s3 in signs
@@ -259,7 +262,8 @@ using ..TestUtils: alloc_test, @test_allocs
         end
 
         # Two or more axes far out: each axis's slope must survive, not just the first.
-        @testset "Affine, dyadic 5x5x5" begin
+        # 3D only: built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+        WITH_3D_TESTS && @testset "Affine, dyadic 5x5x5" begin
             dom = domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
             g(x) = 2x[1] - x[2] + 4x[3] + 0.5
             u = Rₕ(gridspace(mesh(dom, (5, 5, 5), (true, true, true))), g)
@@ -320,11 +324,14 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs interpolate_at(u2, (0.3, 0.7))
         @test alloc_test(interpolate_at, uₕ, 1e20; outside = :extrapolate) == 0
         @test alloc_test(interpolate_at, u2, (1e20, -1e20); outside = :extrapolate) == 0
-        Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 5, 5), (true, true, true))
-        u3 = Rₕ(gridspace(Ω3), x -> x[1] * x[2])
-        @test alloc_test(interpolate_at, u3, (1e20, 0.5, -1e20); outside = :extrapolate) == 0
-        @test @inferred(interpolate_at(u3, (1e20, 0.5, -1e20); outside = :extrapolate)) isa
-              Float64
+        # The 3D mesh is built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+        if WITH_3D_TESTS
+            Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 5, 5), (true, true, true))
+            u3 = Rₕ(gridspace(Ω3), x -> x[1] * x[2])
+            @test alloc_test(interpolate_at, u3, (1e20, 0.5, -1e20); outside = :extrapolate) == 0
+            @test @inferred(interpolate_at(u3, (1e20, 0.5, -1e20); outside = :extrapolate)) isa
+                  Float64
+        end
 
         @test @inferred(interpolate_at(uₕ, x0)) isa Float64
         @test @inferred(interpolate_at(uₕ, x0; outside = :clamp)) isa Float64
@@ -337,10 +344,15 @@ using ..TestUtils: alloc_test, @test_allocs
               Any[Float64]
         Ω2 = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (7, 6), (false, false))
         u2 = Rₕ(gridspace(Ω2), x -> x[1]^2 + 2x[2])
-        Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 6, 4), (false, false, false))
-        u3 = Rₕ(gridspace(Ω3), x -> x[1]^2 + 2x[2] - x[3])
-        for (u, xin, xout) in ((u2, (0.3f0, 0.4f0), (1.7f0, 0.4f0)),
-            (u3, (0.3f0, 0.4f0, 0.6f0), (1.7f0, 0.4f0, -0.2f0)))
+        # The 3D mesh is built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+        if WITH_3D_TESTS
+            Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 6, 4), (false, false, false))
+            u3 = Rₕ(gridspace(Ω3), x -> x[1]^2 + 2x[2] - x[3])
+        end
+        for (u, xin, xout) in (
+            (u2, (0.3f0, 0.4f0), (1.7f0, 0.4f0)),
+            (WITH_3D_TESTS ? ((u3, (0.3f0, 0.4f0, 0.6f0), (1.7f0, 0.4f0, -0.2f0)),) : ())...
+        )
             for pol in (:error, :clamp, :extrapolate, NaN)
                 @test alloc_test(interpolate_at, u, xin; outside = pol) == 0
                 @test interpolate_at(u, xin; outside = pol) == interpolate_at(u, Float64.(xin))

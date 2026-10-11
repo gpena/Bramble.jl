@@ -9,7 +9,7 @@ using Bramble: inner₊ₓ, set_points!
 import Bramble: D₊ₓ
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
 using Bramble: components, star_spacings, StarSpacings, submeshes
 using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points, _zero_boundary!
 using ..SpaceDifferenceTests: test_operator_matrix_equivalence
@@ -79,7 +79,8 @@ star_ops(::Val{3}) = (D̃ₓ, D̃ᵧ, D̃₂)
         end
     end
 
-    @testset "Exactness" begin
+    # 3D only: it builds a 3D mesh, so it runs in `slow` (nightly), not in `unit` (#650).
+    WITH_3D_TESTS && @testset "Exactness" begin
         # a constant differences to zero, and x differences to one, in every direction
         Ωₕ = mesh(
             domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 6, 4), (true, true, true)
@@ -172,16 +173,19 @@ star_ops(::Val{3}) = (D̃ₓ, D̃ᵧ, D̃₂)
                 @test agree(innerₕ(D̃ₓ(a), b), -inner₊ₓ(a, D₋ₓ(b)))
                 @test agree(innerₕ(D̃ᵧ(a), b), -inner₊ᵧ(a, D₋ᵧ(b)))
 
-                Ω3 = mesh(
-                    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
-                    (11, 9, 8),
-                    (unif, unif, unif)
-                )
-                W3 = gridspace(Ω3)
-                c, d = Rₕ(W3, u3), Rₕ(W3, v3)
-                @test agree(innerₕ(D̃ₓ(c), d), -inner₊ₓ(c, D₋ₓ(d)))
-                @test agree(innerₕ(D̃ᵧ(c), d), -inner₊ᵧ(c, D₋ᵧ(d)))
-                @test agree(innerₕ(D̃₂(c), d), -inner₊₂(c, D₋₂(d)))
+                # 3D runs in `slow` (nightly), not in `unit` (#650).
+                if WITH_3D_TESTS
+                    Ω3 = mesh(
+                        domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                        (11, 9, 8),
+                        (unif, unif, unif)
+                    )
+                    W3 = gridspace(Ω3)
+                    c, d = Rₕ(W3, u3), Rₕ(W3, v3)
+                    @test agree(innerₕ(D̃ₓ(c), d), -inner₊ₓ(c, D₋ₓ(d)))
+                    @test agree(innerₕ(D̃ᵧ(c), d), -inner₊ᵧ(c, D₋ᵧ(d)))
+                    @test agree(innerₕ(D̃₂(c), d), -inner₊₂(c, D₋₂(d)))
+                end
             end
         end
 
@@ -224,21 +228,24 @@ star_ops(::Val{3}) = (D̃ₓ, D̃ᵧ, D̃₂)
             w2 = Rₕ(W2, x -> sin(pi * x[1]) * sin(pi * x[2]))
             @test agree(innerₕ(div_star(v2), w2), -inner₊(v2, ∇ₕ(w2)))
 
-            Ω3 = mesh(
-                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (9, 8, 7), (false, false, false)
-            )
-            W3 = gridspace(Ω3)
-            v3 = (
-                Rₕ(W3, x -> cos(x[1]) + 0.7),
-                Rₕ(W3, x -> x[2]^2 + 0.2x[1]),
-                Rₕ(W3, x -> 0.4x[3] + x[1] * x[2])
-            )
-            w3 = Rₕ(W3, x -> sin(pi * x[1]) * sin(pi * x[2]) * sin(pi * x[3]))
-            @test agree(innerₕ(div_star(v3), w3), -inner₊(v3, ∇ₕ(w3)))
+            # 3D runs in `slow` (nightly), not in `unit` (#650).
+            if WITH_3D_TESTS
+                Ω3 = mesh(
+                    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (9, 8, 7), (false, false, false)
+                )
+                W3 = gridspace(Ω3)
+                v3 = (
+                    Rₕ(W3, x -> cos(x[1]) + 0.7),
+                    Rₕ(W3, x -> x[2]^2 + 0.2x[1]),
+                    Rₕ(W3, x -> 0.4x[3] + x[1] * x[2])
+                )
+                w3 = Rₕ(W3, x -> sin(pi * x[1]) * sin(pi * x[2]) * sin(pi * x[3]))
+                @test agree(innerₕ(div_star(v3), w3), -inner₊(v3, ∇ₕ(w3)))
 
-            # and the tuple route gives what summing the directional inner products gives
-            @test -inner₊(v3, ∇ₕ(w3)) ≈ -(inner₊ₓ(v3[1], D₋ₓ(w3)) +
-                                          inner₊ᵧ(v3[2], D₋ᵧ(w3)) + inner₊₂(v3[3], D₋₂(w3)))
+                # and the tuple route gives what summing the directional inner products gives
+                @test -inner₊(v3, ∇ₕ(w3)) ≈ -(inner₊ₓ(v3[1], D₋ₓ(w3)) +
+                                              inner₊ᵧ(v3[2], D₋ᵧ(w3)) + inner₊₂(v3[3], D₋₂(w3)))
+            end
         end
 
         WITH_SLOW_TESTS && @testset "Random grids (Supposition)" begin

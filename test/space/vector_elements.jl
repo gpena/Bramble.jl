@@ -10,7 +10,7 @@ using LinearAlgebra: norm, lu, ldiv!, mul!, dot
 using SparseArrays
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
 using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
 
 _idx_read2(u, i, j) = u[CartesianIndex(i, j)]
@@ -266,52 +266,54 @@ end
         @test_allocs _idx_write_ci!(u_2d, 5.0, CartesianIndex(2, 3))
         @test_allocs _idx_write_ci_inb!(u_2d, 5.0, CartesianIndex(2, 3))
 
-        # 3D Multidimensional & Cartesian indexing (#155)
-        Ωₕ_3d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 4, 5))
-        W_3d = gridspace(Ωₕ_3d)
-        u_3d = element(W_3d, 0.0)
+        if WITH_3D_TESTS
+            # 3D Multidimensional & Cartesian indexing (#155)
+            Ωₕ_3d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 4, 5))
+            W_3d = gridspace(Ωₕ_3d)
+            u_3d = element(W_3d, 0.0)
 
-        for i in 1:3, j in 1:4, k in 1:5
-            u_3d[CartesianIndex(i, j, k)] = 100.0 * i + 10.0 * j + k
+            for i in 1:3, j in 1:4, k in 1:5
+                u_3d[CartesianIndex(i, j, k)] = 100.0 * i + 10.0 * j + k
+            end
+
+            m3_reshaped = reshape(u_3d)
+            for i in 1:3, j in 1:4, k in 1:5
+                @test u_3d[CartesianIndex(i, j, k)] == 100.0 * i + 10.0 * j + k
+                @test m3_reshaped[i, j, k] == 100.0 * i + 10.0 * j + k
+            end
+
+            u_3d[CartesianIndex(2, 3, 4)] = 999.0
+            @test u_3d[CartesianIndex(2, 3, 4)] == 999.0
+            @test m3_reshaped[2, 3, 4] == 999.0
+
+            @test @inferred(u_3d[CartesianIndex(2, 3, 4)]) === 999.0
+
+            # Bounds checks for 3D (grid-coordinate access via CartesianIndex)
+            @test_throws BoundsError u_3d[CartesianIndex(0, 1, 1)]
+            @test_throws BoundsError u_3d[CartesianIndex(4, 1, 1)]
+            @test_throws BoundsError u_3d[CartesianIndex(1, 5, 1)]
+            @test_throws BoundsError u_3d[CartesianIndex(1, 1, 6)]
+            @test_throws BoundsError (u_3d[CartesianIndex(4, 1, 1)] = 1.0)
+
+            # Integer multi-index is AbstractVector trailing-index access, not grid
+            # coordinates (option 2, gpena/Bramble.jl#348).
+            for k in 1:length(u_3d)
+                @test u_3d[k, 1] == parent(u_3d)[k]
+            end
+            @test_throws BoundsError u_3d[1, 2]
+            @test_throws BoundsError u_3d[1, 1, 2]
+            @test_throws BoundsError u_3d[length(u_3d) + 1, 1]
+            @test_throws BoundsError (u_3d[1, 2] = 1.0)
+            u_3d[7, 1] = 741.0
+            @test u_3d[7, 1] == 741.0
+            @test parent(u_3d)[7] == 741.0
+
+            # Zero allocations check for 3D
+            @test_allocs _idx_read3(u_3d, 2, 3, 4)
+            @test_allocs _idx_read3_inb(u_3d, 2, 3, 4)
+            @test_allocs _idx_write3!(u_3d, 7.0, 2, 3, 4)
+            @test_allocs _idx_write3_inb!(u_3d, 7.0, 2, 3, 4)
         end
-
-        m3_reshaped = reshape(u_3d)
-        for i in 1:3, j in 1:4, k in 1:5
-            @test u_3d[CartesianIndex(i, j, k)] == 100.0 * i + 10.0 * j + k
-            @test m3_reshaped[i, j, k] == 100.0 * i + 10.0 * j + k
-        end
-
-        u_3d[CartesianIndex(2, 3, 4)] = 999.0
-        @test u_3d[CartesianIndex(2, 3, 4)] == 999.0
-        @test m3_reshaped[2, 3, 4] == 999.0
-
-        @test @inferred(u_3d[CartesianIndex(2, 3, 4)]) === 999.0
-
-        # Bounds checks for 3D (grid-coordinate access via CartesianIndex)
-        @test_throws BoundsError u_3d[CartesianIndex(0, 1, 1)]
-        @test_throws BoundsError u_3d[CartesianIndex(4, 1, 1)]
-        @test_throws BoundsError u_3d[CartesianIndex(1, 5, 1)]
-        @test_throws BoundsError u_3d[CartesianIndex(1, 1, 6)]
-        @test_throws BoundsError (u_3d[CartesianIndex(4, 1, 1)] = 1.0)
-
-        # Integer multi-index is AbstractVector trailing-index access, not grid
-        # coordinates (option 2, gpena/Bramble.jl#348).
-        for k in 1:length(u_3d)
-            @test u_3d[k, 1] == parent(u_3d)[k]
-        end
-        @test_throws BoundsError u_3d[1, 2]
-        @test_throws BoundsError u_3d[1, 1, 2]
-        @test_throws BoundsError u_3d[length(u_3d) + 1, 1]
-        @test_throws BoundsError (u_3d[1, 2] = 1.0)
-        u_3d[7, 1] = 741.0
-        @test u_3d[7, 1] == 741.0
-        @test parent(u_3d)[7] == 741.0
-
-        # Zero allocations check for 3D
-        @test_allocs _idx_read3(u_3d, 2, 3, 4)
-        @test_allocs _idx_read3_inb(u_3d, 2, 3, 4)
-        @test_allocs _idx_write3!(u_3d, 7.0, 2, 3, 4)
-        @test_allocs _idx_write3_inb!(u_3d, 7.0, 2, 3, 4)
 
         # Component view indexing
         V_comp = W_2d^2
@@ -344,20 +346,22 @@ end
         @test y == 2.0 .* parent(u_2d)
 
         @test dot(u_2d, u_2d) ≈ sum(abs2, parent(u_2d))
+if WITH_3D_TESTS
 
-        Ωₕ_3d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 4, 5))
-        W_3d = gridspace(Ωₕ_3d)
-        m = ndofs(W_3d)
-        u_3d = element(W_3d, collect(1.0:m))
+            Ωₕ_3d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 4, 5))
+            W_3d = gridspace(Ωₕ_3d)
+            m = ndofs(W_3d)
+            u_3d = element(W_3d, collect(1.0:m))
 
-        A3 = spdiagm(0 => fill(3.0, m))
-        @test A3 * u_3d == 3.0 .* parent(u_3d)
+            A3 = spdiagm(0 => fill(3.0, m))
+            @test A3 * u_3d == 3.0 .* parent(u_3d)
 
-        y3 = similar(parent(u_3d))
-        mul!(y3, A3, u_3d)
-        @test y3 == 3.0 .* parent(u_3d)
+            y3 = similar(parent(u_3d))
+            mul!(y3, A3, u_3d)
+            @test y3 == 3.0 .* parent(u_3d)
 
-        @test dot(u_3d, u_3d) ≈ sum(abs2, parent(u_3d))
+            @test dot(u_3d, u_3d) ≈ sum(abs2, parent(u_3d))
+end
     end
 
     @testset "similar" begin
@@ -487,7 +491,7 @@ end
 end
 
 @testset "PDE operators" begin
-    for D in 1:3
+    for D in TEST_DIMS
         @testset "$D-Dimensional Tests" begin
             dims, Wₕ, uₕ = setup_test_grid(Val(D))
             @test length(uₕ) == prod(dims)
@@ -1234,16 +1238,19 @@ end
         (x -> sin(x[1]), x -> cos(x[2])),
         x -> (sin(x[1]), cos(x[2]))
     ),
-        (
-        "3D",
-        mesh(
-            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
-            (5, 4, 6),
-            (true, true, false)
-        ),
-        (x -> sin(x[1]), x -> cos(x[3])),
-        x -> (sin(x[1]), cos(x[3]))
-    )
+        # The 3D case is built only where `WITH_3D_TESTS` holds (not under `unit`).
+        (WITH_3D_TESTS ?
+         ((
+            "3D",
+            mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                (5, 4, 6),
+                (true, true, false)
+            ),
+            (x -> sin(x[1]), x -> cos(x[3])),
+            x -> (sin(x[1]), cos(x[3]))
+        ),) :
+         ())...
     )
         @testset "$lbl" begin
             Vₕ = gridspace(Ωₕ, Val(2))

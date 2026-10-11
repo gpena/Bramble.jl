@@ -2,7 +2,7 @@ module MeshMarkersTests
 
 using Test
 using Bramble
-using ..TestUtils: alloc_test, @test_allocs, _half_spacing_oracle
+using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs, _half_spacing_oracle
 
 # `:boundary`/`:interior` are reserved markers every mesh now carries automatically,
 # computed from the mesh's own shape (see `_ensure_geometric_markers!`
@@ -192,26 +192,29 @@ using ..TestUtils: alloc_test, @test_allocs, _half_spacing_oracle
         #     Axis 1 (x): `:xmin` <-> `:back`, `:xmax` <-> `:front`
         #     Axis 2 (y): `:ymin` <-> `:left`, `:ymax` <-> `:right`
         #     Axis 3 (z): `:zmin` <-> `:bottom`, `:zmax` <-> `:top`
-        S3 = interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)
-        Ωₕ_3d = mesh(
-            domain(
-                S3,
-                :xm => :xmin, :xp => :xmax,
-                :ym => :ymin, :yp => :ymax,
-                :zm => :zmin, :zp => :zmax,
-                :bk => :back, :fr => :front,
-                :lt => :left, :rt => :right,
-                :bm => :bottom, :tp => :top
-            ),
-            (3, 4, 5),
-            (true, true, true)
-        )
-        @test Bramble.index_in_marker(Ωₕ_3d, :xm) == Bramble.index_in_marker(Ωₕ_3d, :bk)
-        @test Bramble.index_in_marker(Ωₕ_3d, :xp) == Bramble.index_in_marker(Ωₕ_3d, :fr)
-        @test Bramble.index_in_marker(Ωₕ_3d, :ym) == Bramble.index_in_marker(Ωₕ_3d, :lt)
-        @test Bramble.index_in_marker(Ωₕ_3d, :yp) == Bramble.index_in_marker(Ωₕ_3d, :rt)
-        @test Bramble.index_in_marker(Ωₕ_3d, :zm) == Bramble.index_in_marker(Ωₕ_3d, :bm)
-        @test Bramble.index_in_marker(Ωₕ_3d, :zp) == Bramble.index_in_marker(Ωₕ_3d, :tp)
+        # They are built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+        if WITH_3D_TESTS
+            S3 = interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)
+            Ωₕ_3d = mesh(
+                domain(
+                    S3,
+                    :xm => :xmin, :xp => :xmax,
+                    :ym => :ymin, :yp => :ymax,
+                    :zm => :zmin, :zp => :zmax,
+                    :bk => :back, :fr => :front,
+                    :lt => :left, :rt => :right,
+                    :bm => :bottom, :tp => :top
+                ),
+                (3, 4, 5),
+                (true, true, true)
+            )
+            @test Bramble.index_in_marker(Ωₕ_3d, :xm) == Bramble.index_in_marker(Ωₕ_3d, :bk)
+            @test Bramble.index_in_marker(Ωₕ_3d, :xp) == Bramble.index_in_marker(Ωₕ_3d, :fr)
+            @test Bramble.index_in_marker(Ωₕ_3d, :ym) == Bramble.index_in_marker(Ωₕ_3d, :lt)
+            @test Bramble.index_in_marker(Ωₕ_3d, :yp) == Bramble.index_in_marker(Ωₕ_3d, :rt)
+            @test Bramble.index_in_marker(Ωₕ_3d, :zm) == Bramble.index_in_marker(Ωₕ_3d, :bm)
+            @test Bramble.index_in_marker(Ωₕ_3d, :zp) == Bramble.index_in_marker(Ωₕ_3d, :tp)
+        end
 
         # Alias fallback in index_in_marker when only one style was registered
         Ωₕ_alias_test = mesh(domain(S2, :left => :left, :ymax => :ymax), (4, 4), (true, true))
@@ -225,7 +228,7 @@ using ..TestUtils: alloc_test, @test_allocs, _half_spacing_oracle
         @test_allocs Bramble.index_in_marker(Ωₕ_alias_test, :xmin)
         @test_allocs Bramble.boundary_indices(Bramble.indices(Ωₕ_1d))
         @test_allocs Bramble.boundary_indices(Bramble.indices(Ωₕ_2d))
-        @test_allocs Bramble.boundary_indices(Bramble.indices(Ωₕ_3d))
+        WITH_3D_TESTS && @test_allocs Bramble.boundary_indices(Bramble.indices(Ωₕ_3d))
         @test_allocs Bramble.boundary_symbol_to_cartesian(Bramble.indices(Ωₕ_1d))
     end
 end
@@ -424,19 +427,23 @@ end
     end
 
     @testset "3D: normals and face symbols" begin
-        Ω3 = mesh(
-            domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
-            (4, 5, 4), (false, false, false)
-        )
-        for (sym, n) in ((:xmin, (-1.0, 0.0, 0.0)), (:back, (-1.0, 0.0, 0.0)),
-            (:xmax, (1.0, 0.0, 0.0)), (:front, (1.0, 0.0, 0.0)),
-            (:ymin, (0.0, -1.0, 0.0)), (:left, (0.0, -1.0, 0.0)),
-            (:ymax, (0.0, 1.0, 0.0)), (:right, (0.0, 1.0, 0.0)),
-            (:zmin, (0.0, 0.0, -1.0)), (:bottom, (0.0, 0.0, -1.0)),
-            (:zmax, (0.0, 0.0, 1.0)), (:top, (0.0, 0.0, 1.0)))
-            @test Bramble.normal_vector(Ω3, sym) == n
+        # The mesh is built in `slow` and by the nightly run (gpena/Bramble.jl#650); the
+        # face symbols below need none.
+        if WITH_3D_TESTS
+            Ω3 = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
+                (4, 5, 4), (false, false, false)
+            )
+            for (sym, n) in ((:xmin, (-1.0, 0.0, 0.0)), (:back, (-1.0, 0.0, 0.0)),
+                (:xmax, (1.0, 0.0, 0.0)), (:front, (1.0, 0.0, 0.0)),
+                (:ymin, (0.0, -1.0, 0.0)), (:left, (0.0, -1.0, 0.0)),
+                (:ymax, (0.0, 1.0, 0.0)), (:right, (0.0, 1.0, 0.0)),
+                (:zmin, (0.0, 0.0, -1.0)), (:bottom, (0.0, 0.0, -1.0)),
+                (:zmax, (0.0, 0.0, 1.0)), (:top, (0.0, 0.0, 1.0)))
+                @test Bramble.normal_vector(Ω3, sym) == n
+            end
+            @test_throws ArgumentError Bramble.normal_vector(Ω3, :inlet)
         end
-        @test_throws ArgumentError Bramble.normal_vector(Ω3, :inlet)
 
         for (sym, face) in ((:xmin, (1, 1)), (:back, (1, 1)), (:xmax, (1, 2)),
             (:front, (1, 2)), (:ymin, (2, 1)), (:left, (2, 1)), (:ymax, (2, 2)),
@@ -505,18 +512,21 @@ end
               _half_spacing_oracle(xs, 1) + _half_spacing_oracle(ys, 1)
         @test Bramble._surface_weight(Ω2, mc, CartesianIndex(1, 3)) ≈ _half_spacing_oracle(ys, 3)
 
-        # 3D: on :zmax the weight is the product of the two transverse half spacings
-        Ω3 = mesh(
-            domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
-            (4, 5, 4), (false, false, false)
-        )
-        x3, y3, z3 = Bramble.host_points(Ω3)
-        mz = Bramble._face_mask(Val(3), (:zmax,))
-        for i in 1:4, j in 1:5
+        # 3D: on :zmax the weight is the product of the two transverse half spacings. The
+        # mesh is built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+        if WITH_3D_TESTS
+            Ω3 = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
+                (4, 5, 4), (false, false, false)
+            )
+            x3, y3, z3 = Bramble.host_points(Ω3)
+            mz = Bramble._face_mask(Val(3), (:zmax,))
+            for i in 1:4, j in 1:5
 
-            @test Bramble._surface_weight(Ω3, mz, CartesianIndex(i, j, 4)) ≈
-                  _half_spacing_oracle(x3, i) * _half_spacing_oracle(y3, j)
-            @test Bramble._surface_weight(Ω3, mz, CartesianIndex(i, j, 2)) == 0.0
+                @test Bramble._surface_weight(Ω3, mz, CartesianIndex(i, j, 4)) ≈
+                      _half_spacing_oracle(x3, i) * _half_spacing_oracle(y3, j)
+                @test Bramble._surface_weight(Ω3, mz, CartesianIndex(i, j, 2)) == 0.0
+            end
         end
     end
 end

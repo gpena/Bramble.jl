@@ -3,7 +3,7 @@ module MeshConstructorsTests
 using Test
 using Bramble
 using Bramble: _expand_uniform, Backend, Serial, stepsize, Mesh1D, MeshnD, is_uniform
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
 
 @testset "Mesh constructors" begin
     @testset "Internal _expand_uniform helper" begin
@@ -113,7 +113,8 @@ using ..TestUtils: alloc_test, @test_allocs
             @test is_uniform(M2_kw_tup(1)) && !is_uniform(M2_kw_tup(2))
         end
 
-        @testset "3D CartesianProduct" begin
+        # 3D only: built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+        WITH_3D_TESTS && @testset "3D CartesianProduct" begin
             M3 = @inferred mesh(X3, (5, 6, 7))
             @test M3 isa MeshnD{3}
             @test size(M3) == (5, 6, 7)
@@ -177,13 +178,15 @@ using ..TestUtils: alloc_test, @test_allocs
         @test size(m2_int_mixed) == (15, 15)
         @test !is_uniform(m2_int_mixed(1)) && is_uniform(m2_int_mixed(2))
 
-        # 3D equivalence
-        m3_int = @inferred mesh(Ω3, 6)
-        m3_tup = @inferred mesh(Ω3, (6, 6, 6))
-        @test size(m3_int) == (6, 6, 6)
-        @test points(m3_int) == points(m3_tup)
-        @test markers(m3_int)[:boundary] == markers(m3_tup)[:boundary]
-        @test markers(m3_int)[:interior] == markers(m3_tup)[:interior]
+        # 3D equivalence, built in `slow` and by the nightly run (gpena/Bramble.jl#650)
+        if WITH_3D_TESTS
+            m3_int = @inferred mesh(Ω3, 6)
+            m3_tup = @inferred mesh(Ω3, (6, 6, 6))
+            @test size(m3_int) == (6, 6, 6)
+            @test points(m3_int) == points(m3_tup)
+            @test markers(m3_int)[:boundary] == markers(m3_tup)[:boundary]
+            @test markers(m3_int)[:interior] == markers(m3_tup)[:interior]
+        end
 
         # Preserving custom markers
         Ω_custom = domain(X2, :left_edge => :left, :bottom_edge => :bottom)

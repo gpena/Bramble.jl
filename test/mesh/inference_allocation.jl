@@ -24,7 +24,7 @@ using Bramble:
                point,
                stepsize
 using StaticArrays: SVector
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
 
 # Type stability and allocation of the mesh interface.
 #
@@ -38,23 +38,29 @@ using ..TestUtils: alloc_test, @test_allocs
     # A Float32 mesh: its normals carry the mesh's element type
     Ωf = mesh(domain(interval(0.0f0, 1.0f0)), 8, false)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 9), (true, false))
-    Ωₕ3 = mesh(
-        domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6), (true, false, true)
-    )
+    # The 3D fixtures Ωₕ3 and Ωₙ3 are built in `slow` and by the nightly run
+    # (gpena/Bramble.jl#650); every use of them is behind `WITH_3D_TESTS`.
+    if WITH_3D_TESTS
+        Ωₕ3 = mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6), (true, false, true)
+        )
+    end
     Ωu = mesh(domain(interval(0.0, 1.0)), 32, true)     # uniform, for stepsize
 
     # Fully non-uniform, for locate_cell's vector/tuple overloads: uniform is a special
     # case and must not be the only shape these are checked against.
     Ωₙ1 = mesh(domain(interval(0.0, 1.0)), 11, false)
     Ωₙ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 9), (false, false))
-    Ωₙ3 = mesh(
-        domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
-        (5, 6, 7),
-        (false, false, false)
-    )
+    if WITH_3D_TESTS
+        Ωₙ3 = mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+            (5, 6, 7),
+            (false, false, false)
+        )
+    end
 
     @testset "Type stability" begin
-        for (lbl, Ωₕ) in (("1D", Ωₕ1), ("2D", Ωₕ2), ("3D", Ωₕ3))
+        for (lbl, Ωₕ) in (("1D", Ωₕ1), ("2D", Ωₕ2), (WITH_3D_TESTS ? (("3D", Ωₕ3),) : ())...)
             @testset "$lbl" begin
                 @test @inferred(npoints(Ωₕ)) isa Int
                 @test @inferred(npoints(Ωₕ, Tuple)) isa Tuple
@@ -76,7 +82,7 @@ using ..TestUtils: alloc_test, @test_allocs
 
         # the per-axis vectors, which every nD mesh answers as an NTuple of vectors; their
         # inference is pinned by `@test_opt` in test/quality/type_stability.jl
-        for (Ωₕ, D) in ((Ωₕ2, 2), (Ωₕ3, 3))
+        for (Ωₕ, D) in ((Ωₕ2, 2), (WITH_3D_TESTS ? ((Ωₕ3, 3),) : ())...)
             @test spacings(Ωₕ) isa NTuple{D, Vector{Float64}}
             @test half_spacings(Ωₕ) isa NTuple{D, Vector{Float64}}
             @test cell_measures(Ωₕ) isa NTuple{D, Vector{Float64}}
@@ -91,8 +97,10 @@ using ..TestUtils: alloc_test, @test_allocs
 
         @test @inferred(point(Ωₕ2, CartesianIndex(2, 3))) isa NTuple{2, Float64}
         @test @inferred(cell_measure(Ωₕ2, CartesianIndex(2, 3))) isa Float64
-        @test @inferred(point(Ωₕ3, CartesianIndex(2, 3, 4))) isa NTuple{3, Float64}
-        @test @inferred(cell_measure(Ωₕ3, CartesianIndex(2, 3, 4))) isa Float64
+        if WITH_3D_TESTS
+            @test @inferred(point(Ωₕ3, CartesianIndex(2, 3, 4))) isa NTuple{3, Float64}
+            @test @inferred(cell_measure(Ωₕ3, CartesianIndex(2, 3, 4))) isa Float64
+        end
 
         @test @inferred(locate_cell(Ωₕ1, 0.5)) isa Int
         @test @inferred(normal_vector(Ωₕ1, :left)) isa NTuple{1, Float64}
@@ -107,16 +115,16 @@ using ..TestUtils: alloc_test, @test_allocs
             @test locate_cell(Ωₙ1, v1) == locate_cell(Ωₙ1, 0.37)
             @test locate_cell(Ωₙ1, (0.37,)) == locate_cell(Ωₙ1, 0.37)
             @test locate_cell(Ωₙ2, v2) == locate_cell(Ωₙ2, (0.3, 1.1))
-            @test locate_cell(Ωₙ3, v3) == locate_cell(Ωₙ3, (0.3, 0.6, 0.9))
+            WITH_3D_TESTS && @test locate_cell(Ωₙ3, v3) == locate_cell(Ωₙ3, (0.3, 0.6, 0.9))
 
             @test @inferred(locate_cell(Ωₙ1, v1)) isa Int
             @test @inferred(locate_cell(Ωₙ1, (0.37,))) isa Int
             @test @inferred(locate_cell(Ωₙ2, v2)) isa CartesianIndex{2}
-            @test @inferred(locate_cell(Ωₙ3, v3)) isa CartesianIndex{3}
+            WITH_3D_TESTS && @test @inferred(locate_cell(Ωₙ3, v3)) isa CartesianIndex{3}
 
             @test_throws DimensionMismatch locate_cell(Ωₙ1, [0.1, 0.2])
             @test_throws DimensionMismatch locate_cell(Ωₙ2, [0.1])
-            @test_throws DimensionMismatch locate_cell(Ωₙ3, [0.1, 0.2])
+            WITH_3D_TESTS && @test_throws DimensionMismatch locate_cell(Ωₙ3, [0.1, 0.2])
         end
     end
 
@@ -131,7 +139,7 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs cell_measure(Ωₕ1, 3)
         @test_allocs spacings(Ωₕ1)
         @test_allocs spacings(Ωₕ2)
-        @test_allocs spacings(Ωₕ3)
+        WITH_3D_TESTS && @test_allocs spacings(Ωₕ3)
         @test_allocs npoints(Ωₕ1)
         @test_allocs hₘₐₓ(Ωₕ1)
         @test_allocs hₘᵢₙ(Ωₕ1)
@@ -147,17 +155,17 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs locate_cell(Ωₙ1, v1)
         @test_allocs locate_cell(Ωₙ1, (0.37,))
         @test_allocs locate_cell(Ωₙ2, v2)
-        @test_allocs locate_cell(Ωₙ3, v3)
+        WITH_3D_TESTS && @test_allocs locate_cell(Ωₙ3, v3)
 
         @test_allocs point(Ωₕ2, CartesianIndex(2, 3))
         @test_allocs cell_measure(Ωₕ2, CartesianIndex(2, 3))
         @test_allocs npoints(Ωₕ2, Tuple)
-        @test_allocs point(Ωₕ3, CartesianIndex(2, 3, 4))
-        @test_allocs cell_measure(Ωₕ3, CartesianIndex(2, 3, 4))
-        @test_allocs spacing(Ωₕ3, CartesianIndex(2, 3, 4))
-        @test_allocs hₘₐₓ(Ωₕ3)
-        @test_allocs hₘᵢₙ(Ωₕ3)
-        @test_allocs npoints(Ωₕ3)
+        WITH_3D_TESTS && @test_allocs point(Ωₕ3, CartesianIndex(2, 3, 4))
+        WITH_3D_TESTS && @test_allocs cell_measure(Ωₕ3, CartesianIndex(2, 3, 4))
+        WITH_3D_TESTS && @test_allocs spacing(Ωₕ3, CartesianIndex(2, 3, 4))
+        WITH_3D_TESTS && @test_allocs hₘₐₓ(Ωₕ3)
+        WITH_3D_TESTS && @test_allocs hₘᵢₙ(Ωₕ3)
+        WITH_3D_TESTS && @test_allocs npoints(Ωₕ3)
         @test_allocs npoints(Ωₕ2)
 
         # Multi-dimensional metric queries and projections
@@ -171,7 +179,7 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs hₘᵢₙ(Ωₕ2)
         @test_allocs locate_cell(Ωₕ2, SVector(0.5, 0.5))
         @test_allocs normal_vector(Ωₕ2, :left)
-        @test_allocs normal_vector(Ωₕ3, :top)
+        WITH_3D_TESTS && @test_allocs normal_vector(Ωₕ3, :top)
 
         # In-place mutating operations
         n1 = npoints(Ωₕ1)

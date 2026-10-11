@@ -8,7 +8,7 @@ using Bramble: Dcᵧ, Dc₂, Dcₓ, D̃ᵧ, D̃₂, D̃ₓ, D̽ᵧ, D̽₂, D̽�
 using Bramble: index_in_marker, jumpᵧ, jump₂, jumpₓ
 using SparseArrays: SparseMatrixCSC, nnz
 using LinearAlgebra: Diagonal
-using ..TestUtils: MockDeviceArray
+using ..TestUtils: MockDeviceArray, TEST_DIMS, WITH_3D_TESTS
 using Bramble: components, restrict_to
 # Internal: defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, D₊₂, D₊, div₊ₕ, curl₊ₕ, forward_star_difference
@@ -25,7 +25,7 @@ using Bramble:
                space
 
 @testset "Linear operators" begin
-    for D in 1:3
+    for D in TEST_DIMS
         @testset "$(D)D" begin
             I = interval(0.0, 1.0)
             X = domain(reduce(×, ntuple(_ -> I, Val(D))))
@@ -97,7 +97,7 @@ end
         for (Ω, n, unif) in (
             (Ω1, 21, true), (Ω1, 17, false),
             (Ω2, (9, 8), (true, true)), (Ω2, (11, 9), (false, false)),
-            (Ω3, (7, 6, 5), (true, true, true))
+            (WITH_3D_TESTS ? ((Ω3, (7, 6, 5), (true, true, true)),) : ())...
         )
             Ωₕ = mesh(Ω, n, unif)
             Wₕ = gridspace(Ωₕ)
@@ -172,7 +172,7 @@ end
         @test_throws DimensionMismatch divₕ((u1, u2, u1))
     end
 
-    @testset "curlₕ in 2D and 3D" begin
+    @testset "curlₕ in 2D" begin
         Ωₕ = mesh(Ω2, (9, 8), (false, false))
         Wₕ = gridspace(Ωₕ)
         u1 = Rₕ(Wₕ, x -> x[1]^2 + x[2])
@@ -188,7 +188,14 @@ end
         interior = reshape(parent(curlₕ(∇ₕ(w))), (9, 8))[3:end, 3:end]
         @test maximum(abs, interior) < 1e-14
 
-        # 3D: three components, each the right combination
+        # there is no 1D curl
+        W1 = gridspace(mesh(Ω1, 9, true))
+        @test_throws ArgumentError curlₕ((Rₕ(W1, sin),))
+    end
+
+    # The 3D curl builds 3D meshes, so it runs nightly (gpena/Bramble.jl#650).
+    WITH_3D_TESTS && @testset "curlₕ in 3D" begin
+        # three components, each the right combination
         Ω3ₕ = mesh(Ω3, (8, 7, 6), (false, false, false))
         W3 = gridspace(Ω3ₕ)
         f = (Rₕ(W3, x -> sin(x[1]) * x[2]), Rₕ(W3, x -> x[3]^2),
@@ -208,10 +215,6 @@ end
         dest = ntuple(_ -> element(W3), Val(3))
         curlₕ!(dest, f)
         @test all(k -> parent(dest[k]) == parent(c[k]), 1:3)
-
-        # there is no 1D curl
-        W1 = gridspace(mesh(Ω1, 9, true))
-        @test_throws ArgumentError curlₕ((Rₕ(W1, sin),))
     end
 end
 
@@ -225,7 +228,9 @@ end
         ("", mesh(domain(interval(0.0, 1.0)), 11, false)),
         ("", mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (9, 7), false)),
         (" uniform", mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (9, 7), true)),
-        ("", mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (6, 5, 4), false))
+        (WITH_3D_TESTS ?
+         (("", mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (6, 5, 4), false)),) :
+         ())...
     )
     # Each family's stencil taps along its axis: the stored pattern is one entry per tap
     # that stays on the grid, whatever its weight (#662).

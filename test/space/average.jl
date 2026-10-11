@@ -8,6 +8,7 @@ import Bramble: forward_average_dim!, backward_average_dim!
 using LinearAlgebra: norm
 using SparseArrays: nnz
 using ..SpaceVectorElementsTests: setup_test_grid
+using ..TestUtils: TEST_DIMS
 using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 @testset "Averaging operators" begin
@@ -25,7 +26,7 @@ using ..SpaceDifferenceTests: test_operator_matrix_equivalence
     get_coord(pts, I::CartesianIndex{1}) = pts[I[1]]
     coeffs = (2.0, 3.0, 5.0)
 
-    for D in 1:3
+    for D in TEST_DIMS
         @testset "$D-Dimensional Tests" begin
             dims, Wₕ, uₕ = setup_test_grid(Val(D))
             Ωₕ = mesh(Wₕ)

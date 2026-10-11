@@ -50,7 +50,7 @@ using Bramble:
 using LinearAlgebra: hypot
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
+using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask
 
 # --- Test Suite ---
 @testset "Multi-dimensional meshes" begin
@@ -326,7 +326,8 @@ using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
         end
     end # Dimension D=2 Testset
 
-    @testset "Three-dimensional meshes" begin
+    # 3D only: built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+    WITH_3D_TESTS && @testset "Three-dimensional meshes" begin
         D = 3
         npts_3d = (3, 4, 2) # Nx=3, Ny=4, Nz=2
         intervals_3d = ((0.0, 2.0), (0.0, 3.0), (0.0, 1.0)) # dx=1.0, dy=1.0, dz=1.0
@@ -508,10 +509,13 @@ using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
             # properties"'s; these are the type-level eltype and the 3D dim.
             @test eltype(typeof(Ωₕ_2d)) == Float64
 
-            intervals_3d = ((0.0, 1.0), (0.0, 1.0), (0.0, 1.0))
-            Ω_3d = create_test_nd_domain(intervals_3d)
-            Ωₕ_3d = mesh(Ω_3d, (2, 2, 2), (true, true, true); backend = backend())
-            @test dim(typeof(Ωₕ_3d)) == 3
+            # The 3D mesh is built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+            if WITH_3D_TESTS
+                intervals_3d = ((0.0, 1.0), (0.0, 1.0), (0.0, 1.0))
+                Ω_3d = create_test_nd_domain(intervals_3d)
+                Ωₕ_3d = mesh(Ω_3d, (2, 2, 2), (true, true, true); backend = backend())
+                @test dim(typeof(Ωₕ_3d)) == 3
+            end
         end
 
         @testset "Field accessors" begin
@@ -554,11 +558,14 @@ using ..TestUtils: WITH_SLOW_TESTS, _marker_mask
             @test point(Ωₕ_line, (3, 1)) == (1.0, 5.0)
             @test all(p -> p[2] == 5.0, Iterators.product(points(Ωₕ_line)...))
 
-            # A single point embedded in 3D.
-            Ω_pt = create_test_nd_domain(((2.0, 2.0), (3.0, 3.0), (4.0, 4.0)))
-            Ωₕ_pt = mesh(Ω_pt, (5, 5, 5), (true, true, true); backend = backend())
-            @test npoints(Ωₕ_pt, Tuple) == (1, 1, 1)
-            @test point(Ωₕ_pt, (1, 1, 1)) == (2.0, 3.0, 4.0)
+            # A single point embedded in 3D, built in `slow` and by the nightly run
+            # (gpena/Bramble.jl#650).
+            if WITH_3D_TESTS
+                Ω_pt = create_test_nd_domain(((2.0, 2.0), (3.0, 3.0), (4.0, 4.0)))
+                Ωₕ_pt = mesh(Ω_pt, (5, 5, 5), (true, true, true); backend = backend())
+                @test npoints(Ωₕ_pt, Tuple) == (1, 1, 1)
+                @test point(Ωₕ_pt, (1, 1, 1)) == (2.0, 3.0, 4.0)
+            end
 
             # y collapses in Float32 storage only: the index grid and the submesh agree on
             # one point, and the mesh matches a set-collapsed one on the same backend.
@@ -861,7 +868,7 @@ end # Main Testset
 
     @testset "Index tracking" begin
         # (40, 5) non-uniform: the 40-point axis grows from 1 to 2 to 3 word rows.
-        for (npts, unif) in (((5, 4), true), ((3, 4, 5), false), ((40, 5), false))
+        for (npts, unif) in (((5, 4), true), (WITH_3D_TESTS ? (((3, 4, 5), false),) : ())..., ((40, 5), false))
             D = length(npts)
             Ω = if D == 2
                 domain(interval(0.0, 1.0) × interval(0.0, 1.0))
@@ -890,7 +897,7 @@ end # Main Testset
     @testset "Refined grid function" begin
         # The observable consequence: with a stale index set, Rₕ leaves entries
         # untouched, so the result does not match the function it restricted.
-        for npts in ((5, 4), (3, 4, 5))
+        for npts in ((5, 4), (WITH_3D_TESTS ? ((3, 4, 5),) : ())...)
             D = length(npts)
             Ω = if D == 2
                 domain(interval(0.0, 1.0) × interval(0.0, 1.0))
@@ -955,7 +962,7 @@ end # Main Testset
         # Refining one submesh resizes that axis but not the parent's indices or markers.
         # A space, form and assemble built on the parent afterward returned a wrong matrix
         # with no error; gridspace now refuses the inconsistent mesh.
-        for npts in ((7, 6), (3, 4, 5))
+        for npts in ((7, 6), (WITH_3D_TESTS ? ((3, 4, 5),) : ())...)
             D = length(npts)
             Ω = if D == 2
                 domain(interval(0.0, 1.0) × interval(0.0, 1.0))
@@ -1096,7 +1103,7 @@ end
     Random.seed!(20260830)
     for (dims, X) in (
         ((7, 9), interval(0.0, 1.0) × interval(0.0, 2.0)),
-        ((5, 6, 4), box((0.0, 0.0, 0.0), (1.0, 2.0, 3.0)))
+        (WITH_3D_TESTS ? (((5, 6, 4), box((0.0, 0.0, 0.0), (1.0, 2.0, 3.0))),) : ())...
     )
         D = length(dims)
         for unif in (true, false)

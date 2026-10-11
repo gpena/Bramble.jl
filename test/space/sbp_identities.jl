@@ -8,7 +8,7 @@ using Bramble: inner₊ₓ, set_points!
 import Bramble: M₊ₓ
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
 using ..TestUtils: _nonuniform_points, _zero_boundary!
 
 # Discrete integration by parts for the centered divergence.
@@ -87,21 +87,24 @@ using ..TestUtils: _nonuniform_points, _zero_boundary!
 
                 @test agree(divergence_ibp(u2, v2)...)
 
-                Ω3 = mesh(
-                    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
-                    (11, 9, 8),
-                    (unif, unif, unif)
-                )
-                W3 = gridspace(Ω3)
-                b3 = x -> sin(pi * x[1]) * sin(pi * x[2]) * sin(pi * x[3])
-                u3 = (
-                    Rₕ(W3, x -> b3(x) * (1 + x[1])),
-                    Rₕ(W3, x -> b3(x) * (2 - x[2]^2)),
-                    Rₕ(W3, x -> b3(x) * (3 + x[3] * x[1]))
-                )
-                v3 = Rₕ(W3, x -> b3(x) * sin(2pi * x[2]))
+                # 3D runs in `slow` (nightly), not in `unit` (#650).
+                if WITH_3D_TESTS
+                    Ω3 = mesh(
+                        domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                        (11, 9, 8),
+                        (unif, unif, unif)
+                    )
+                    W3 = gridspace(Ω3)
+                    b3 = x -> sin(pi * x[1]) * sin(pi * x[2]) * sin(pi * x[3])
+                    u3 = (
+                        Rₕ(W3, x -> b3(x) * (1 + x[1])),
+                        Rₕ(W3, x -> b3(x) * (2 - x[2]^2)),
+                        Rₕ(W3, x -> b3(x) * (3 + x[3] * x[1]))
+                    )
+                    v3 = Rₕ(W3, x -> b3(x) * sin(2pi * x[2]))
 
-                @test agree(divergence_ibp(u3, v3)...)
+                    @test agree(divergence_ibp(u3, v3)...)
+                end
             end
         end
     end

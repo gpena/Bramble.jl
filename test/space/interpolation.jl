@@ -5,6 +5,7 @@ using Bramble
 using Bramble: D₋ₓ, Mₓ, interpolation_matrix, change_points!
 using SparseArrays: sparse
 using LinearAlgebra: Diagonal, issymmetric
+using ..TestUtils: TEST_DIMS
 using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunction,
                TestFunction, IndexedTrialFunction, IndexedTestFunction, InterpolationNode,
                SourceVector, SourceConstant, component, stencil_offsets, expression,
@@ -114,7 +115,7 @@ using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunctio
         per_axis(Ωf, Ωc, d) = npoints(Ωf(d)) == 1 ? sparse(ones(1, 1)) :
                               interpolation_matrix(gridspace(Ωf(d)), gridspace(Ωc(d)))
 
-        for D in (2, 3), c in 1:D, unif in (true, false)
+        for D in filter(≥(2), TEST_DIMS), c in 1:D, unif in (true, false)
             Ωc = mesh(domain(reduce(×, ntuple(d -> axis(d, c), D))),
                 ntuple(d -> d == c ? 1 : 3 + d, D), ntuple(_ -> unif, D))
             Ωf = deepcopy(Ωc)

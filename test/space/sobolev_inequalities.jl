@@ -6,7 +6,7 @@ using Bramble: D₋ᵧ, D₋₂, D₋ₓ, index_in_marker, inner₊ᵧ, inner₊
 using Bramble: set_points!
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: TEST_DIMS, WITH_3D_TESTS, WITH_SLOW_TESTS
 using ..TestUtils: _boundary_vanishing, _nonuniform_points, _zero_boundary!
 
 # The discrete Poincaré and Sobolev embedding inequalities (gpena/Bramble.jl#187), for grid
@@ -64,7 +64,7 @@ end
     @testset "Poincaré, mixed L^∞ embedding (#234)" begin
         # Both inequalities share the meshes and the fields: `‖v‖_∞ ≤ ‖∂₁⋯∂_D v‖` is the
         # generalisation of the L^∞ embedding that is true (see the module header).
-        for D in 1:3
+        for D in TEST_DIMS
             @testset "$(D)D" begin
                 Random.seed!(20260918)
                 Ω = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), Val(D))))
@@ -119,8 +119,9 @@ end
         @test 0.2 < norminf(vₕ) / g < 1.0
     end
 
-    # The L^∞ embedding does not generalise per direction.
-    @testset "L^∞ bound fails per direction (#187)" begin
+    # The L^∞ embedding does not generalise per direction. The counterexample is 3D only, so
+    # it runs nightly (gpena/Bramble.jl#650).
+    WITH_3D_TESTS && @testset "L^∞ bound fails per direction (#187)" begin
         # The counterexample, kept as a test so the per-direction claim cannot come back: a
         # field concentrated enough that its maximum beats the domain-averaged directional
         # gradient norm. In 3D the plain product bump already comes within 20% of the bound,

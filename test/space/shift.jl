@@ -6,6 +6,7 @@ using Bramble: S₊ₓ, S₊ᵧ, S₊₂, S₋ₓ, S₋ᵧ, S₋₂, S₊ₓ!, S
                forward_shift, backward_shift, jumpₓ, jump, VectorElement
 using Random
 using SparseArrays
+using ..TestUtils: TEST_DIMS
 
 # The index shifts: `S₊(u)ᵢ = u_{i+1}`, `S₋(u)ᵢ = u_{i-1}`, one grid
 # point along a direction, with 0 where the neighbour is off the grid. The reference below
@@ -50,7 +51,7 @@ _in_place_bytes(f!, v, u) = (f!(v, u); @allocated f!(v, u))
     @test (sx, sy, sz) === (S₋ₓ, S₋ᵧ, S₋₂)
 
     bangs = Dict(S₊ₓ => S₊ₓ!, S₊ᵧ => S₊ᵧ!, S₊₂ => S₊₂!, S₋ₓ => S₋ₓ!, S₋ᵧ => S₋ᵧ!, S₋₂ => S₋₂!)
-    for D in 1:3
+    for D in TEST_DIMS
         Ωₕ = _mesh(D)
         @test !Bramble.is_uniform(Ωₕ)
         Wₕ = gridspace(Ωₕ)
@@ -93,7 +94,7 @@ _in_place_bytes(f!, v, u) = (f!(v, u); @allocated f!(v, u))
 end
 
 @testset "shift: transpose and jump" begin
-    for D in 1:3
+    for D in TEST_DIMS
         Ωₕ = _mesh(D)
         uₕ = Rₕ(gridspace(Ωₕ), _f)
         for d in 1:D
@@ -118,7 +119,7 @@ end
 # test/ext/polyester_ext.jl's "Shift engines under CpuPolyester" owns it.
 @testset "shift: engines agree" begin
     policies = (Parallel(),)
-    for D in 1:3, policy in policies
+    for D in TEST_DIMS, policy in policies
 
         us = Rₕ(gridspace(_mesh(D)), _f)
         up = Rₕ(gridspace(_mesh(D; policy)), _f)
@@ -139,7 +140,7 @@ end
 end
 
 @testset "shift: allocation and inference" begin
-    for D in 1:3
+    for D in TEST_DIMS
         uₕ = Rₕ(gridspace(_mesh(D)), _f)
         vₕ = similar(uₕ)
         for f! in (S₊ₓ!, S₋ₓ!, S₊ᵧ!, S₋ᵧ!, S₊₂!, S₋₂!)[1:(2D)]

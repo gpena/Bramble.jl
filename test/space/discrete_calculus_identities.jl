@@ -8,7 +8,7 @@ using Bramble: Dcₓ, D₋ₓ, Mₓ, inner₊ₓ, norminf, set_points!
 using Random
 using Supposition
 using Bramble: cell_measures, AbstractMeshType, weights, Innerplus
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: TEST_DIMS, WITH_SLOW_TESTS
 using ..TestUtils: _boundary_vanishing, _nonuniform_points, _zero_boundary!
 
 # The discrete calculus identities and inequalities of Propositions 2.1-2.4
@@ -66,7 +66,7 @@ end
     end
 
     @testset "2.1 Discrete Green's first identity" begin
-        for D in 1:3, unif in (true, false)
+        for D in TEST_DIMS, unif in (true, false)
 
             @testset "$(D)D $(unif ? "uniform" : "non-uniform")" begin
                 Ωₕ = mesh(_unit(D), ntuple(_ -> 9, Val(D)), ntuple(_ -> unif, Val(D)))
@@ -100,7 +100,7 @@ end
         # spacing along the difference's own direction -- not the smallest cell measure,
         # which carries a half one. The two coincide to within a factor on a quasi-uniform
         # mesh and separate by orders of magnitude on a graded one.
-        for D in 1:3, unif in (true, false)
+        for D in TEST_DIMS, unif in (true, false)
 
             Ωₕ = mesh(_unit(D), ntuple(_ -> 9, Val(D)), ntuple(_ -> unif, Val(D)))
             Wₕ = gridspace(Ωₕ)

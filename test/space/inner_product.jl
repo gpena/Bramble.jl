@@ -8,12 +8,12 @@ using Bramble: set_points!, weights
 using LinearAlgebra: norm
 using Supposition
 using ForwardDiff
-using ..TestUtils: WITH_SLOW_TESTS, @test_allocs, _nonuniform_points
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS, @test_allocs, _nonuniform_points
 using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
 using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
 
 @testset "Inner products & norms" begin
-    for D in 1:3
+    for D in TEST_DIMS
         dims, Wh, u = setup_test_grid(Val(D))
 
         # normₕ of the all-ones element is `sqrt(<domain measure>)` in every dimension --
@@ -135,7 +135,8 @@ using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
         end
     end
 
-    @testset "3D" begin
+    # 3D only: it builds a 3D mesh, so it runs in `slow` (nightly), not in `unit` (#650).
+    WITH_3D_TESTS && @testset "3D" begin
         dims_3d, Wₕ_3d, u1 = setup_test_grid(Val(3))
         domain_volume = 125.0 # Domain is [-1, 4]³
 
@@ -193,7 +194,8 @@ end
         Tuple(d for d in 1:D if ((m >> (d - 1)) & 1) == 1) for m in 0:(2 ^ D - 1)
     )
 
-    @testset "3D: all 8 sets" begin
+    # 3D only: it builds a 3D mesh, so it runs in `slow` (nightly), not in `unit` (#650).
+    WITH_3D_TESTS && @testset "3D: all 8 sets" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
             (6, 5, 4), (true, false, true))
         Wₕ = gridspace(Ωₕ)
@@ -229,7 +231,8 @@ end
         @test_throws ArgumentError weights(Wₕ, Val((1, 3)))
     end
 
-    @testset "Alias identities" begin
+    # 3D only: it builds a 3D mesh, so it runs in `slow` (nightly), not in `unit` (#650).
+    WITH_3D_TESTS && @testset "Alias identities" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
             (5, 4, 6), (true, true, false))
         Wₕ = gridspace(Ωₕ)
@@ -261,7 +264,19 @@ end
         @test inner₊(u, v, Val((1, 2)); markers = ()) == inner₊(u, v, Val((1, 2)))
     end
 
-    @testset "Zero allocation, empty and singletons" begin
+    @testset "Zero allocation, 2D subsets" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, true))
+        Wₕ = gridspace(Ωₕ)
+        u = Rₕ(Wₕ, x -> x[1])
+        v = Rₕ(Wₕ, x -> 1.0)
+
+        @test_allocs inner₊(u, v, Val(()))
+        @test_allocs inner₊(u, v, Val((1,)))
+        @test_allocs inner₊(u, v, Val((2,)))
+    end
+
+    # 3D only: it builds a 3D mesh, so it runs in `slow` (nightly), not in `unit` (#650).
+    WITH_3D_TESTS && @testset "Zero allocation, empty and singletons" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
             (6, 5, 4), (true, true, true))
         Wₕ = gridspace(Ωₕ)
@@ -393,7 +408,9 @@ end
     for (T, rtol) in ((Float64, 1e-12), (Float32, 1.0f-5))
         Ωs = (mesh(domain(unit(T)), 37, false),
             mesh(domain(unit(T) × unit(T)), (31, 17), (false, false)),
-            mesh(domain(unit(T) × unit(T) × unit(T)), (9, 8, 7), (false, false, false)))
+            (WITH_3D_TESTS ?
+             (mesh(domain(unit(T) × unit(T) × unit(T)), (9, 8, 7), (false, false, false)),) :
+             ())...)
         for Ωₕ in Ωs
             Wₕ = gridspace(Ωₕ)
             u = Rₕ(Wₕ, x -> 1 + sum(sin, x))
@@ -433,7 +450,9 @@ end
     for (T, rtol) in ((Float64, 1e-12), (Float32, 1.0f-5))
         Ωs = (mesh(domain(unit(T)), 37, false),
             mesh(domain(unit(T) × unit(T)), (31, 17), (false, false)),
-            mesh(domain(unit(T) × unit(T) × unit(T)), (9, 8, 7), (false, false, false)))
+            (WITH_3D_TESTS ?
+             (mesh(domain(unit(T) × unit(T) × unit(T)), (9, 8, 7), (false, false, false)),) :
+             ())...)
         for Ωₕ in Ωs
             u = Rₕ(gridspace(Ωₕ), x -> 1 + sum(sin, x))
             @test snorm₁ₕ(u)^2 ≈ dense_snorm_sq(u) rtol = rtol
@@ -447,8 +466,10 @@ end
             mesh(domain(unit(Float64) × unit(Float64)), (6, 2), (false, false)),
             mesh(domain(unit(Float64) × unit(Float64)), (1, 5), (false, false)),
             mesh(domain(unit(Float64) × unit(Float64)), (5, 1), (false, false)),
-            mesh(domain(unit(Float64) × unit(Float64) × unit(Float64)), (2, 3, 2),
-                (false, false, false)))
+            (WITH_3D_TESTS ?
+             (mesh(domain(unit(Float64) × unit(Float64) × unit(Float64)), (2, 3, 2),
+                (false, false, false)),) :
+             ())...)
         for Ωₕ in Ωs
             u = Rₕ(gridspace(Ωₕ), x -> 1 + sum(sin, x))
             @test snorm₁ₕ(u)^2 ≈ dense_snorm_sq(u) rtol = 1e-12
@@ -542,14 +563,16 @@ end
             "2D",
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (true, false))
         ),
-        (
+        (WITH_3D_TESTS ?
+         ((
             "3D",
             mesh(
                 domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
                 (4, 5, 6),
                 (true, false, true)
             )
-        )
+        ),) :
+         ())...
     )
 
     for (lbl, Ωₕ) in meshes
@@ -741,16 +764,24 @@ end
         @test norminf(Rₕ(W2, x -> x[1] + x[2])) ≈ 3.0        # attained at (1, 2)
         @test norminf(Rₕ(W2, x -> -x[2])) ≈ 2.0
 
-        Ω3 = mesh(
-            domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 3.0)),
-            (5, 5, 6), (true, true, true))
-        W3 = gridspace(Ω3)
-        @test norminf(Rₕ(W3, x -> x[3])) ≈ 3.0
-
         # a single spike dominates everything else, wherever it sits
-        uₕ = Rₕ(W3, x -> 0.1)
+        uₕ = Rₕ(W2, x -> 0.1)
         parent(uₕ)[7] = -42.0
         @test norminf(uₕ) ≈ 42.0
+
+        # 3D runs in `slow` (nightly), not in `unit` (#650).
+        if WITH_3D_TESTS
+            Ω3 = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 3.0)),
+                (5, 5, 6), (true, true, true))
+            W3 = gridspace(Ω3)
+            @test norminf(Rₕ(W3, x -> x[3])) ≈ 3.0
+
+            # a single spike dominates everything else, wherever it sits
+            uₕ = Rₕ(W3, x -> 0.1)
+            parent(uₕ)[7] = -42.0
+            @test norminf(uₕ) ≈ 42.0
+        end
     end
 
     @testset "Non-uniform meshes do not change it" begin
@@ -911,7 +942,8 @@ end
             end
         end
 
-        @testset "3D: the surface area of a box" begin
+        # 3D only: it builds a 3D mesh, so it runs in `slow` (nightly), not in `unit` (#650).
+        WITH_3D_TESTS && @testset "3D: the surface area of a box" begin
             Ωₕ = mesh(
                 domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
                 (5, 6, 7), (true, true, true))
@@ -1073,7 +1105,7 @@ end
     f(x) = sum(x) + prod(sin, x)
     g(x) = 1.0 + sum(abs2, x)
 
-    for D in 1:3
+    for D in TEST_DIMS
         @testset "$(D)D" begin
             Ωₕ = mesh(sets[D], npts[D], ntuple(_ -> false, D))
             Wₕ = gridspace(Ωₕ)

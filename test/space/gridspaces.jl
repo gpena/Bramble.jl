@@ -20,14 +20,17 @@ using Bramble: vector
 using LinearAlgebra: norm
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS
 using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
 using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
 
 @testset "Grid spaces" begin
     mesh1d = mesh(domain(interval(0, 1)), 10, true)
     mesh2d = mesh(domain(box((0, 0), (0.5, 0.6))), (5, 6), (true, true))
-    mesh3d = mesh(domain(box((0, 0, 0), (0.5, 0.6, 0.7))), (4, 4, 4), (true, true, true))
+    # The 3D mesh is built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+    if WITH_3D_TESTS
+        mesh3d = mesh(domain(box((0, 0, 0), (0.5, 0.6, 0.7))), (4, 4, 4), (true, true, true))
+    end
 
     @testset "Weight helpers" begin
         @testset "__prod" begin
@@ -90,12 +93,12 @@ using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
     @testset "ScalarGridSpace" begin
         W1 = gridspace(mesh1d)
         W2 = gridspace(mesh2d)
-        W3 = gridspace(mesh3d)
+        WITH_3D_TESTS && (W3 = gridspace(mesh3d))
 
         @testset "Types & fields" begin
             @test W1 isa ScalarGridSpace
             @test W2 isa ScalarGridSpace
-            @test W3 isa ScalarGridSpace
+            WITH_3D_TESTS && @test W3 isa ScalarGridSpace
             @test isimmutable(W1)
 
             # Verify cached matrices are NOT stored on the struct
@@ -113,10 +116,10 @@ using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
             @test mesh_type(typeof(W1)) === typeof(mesh1d)
             @test dim(W1) == 1
             @test dim(W2) == 2
-            @test dim(W3) == 3
+            WITH_3D_TESTS && @test dim(W3) == 3
             @test dim(typeof(W1)) == 1
             @test dim(typeof(W2)) == 2
-            @test dim(typeof(W3)) == 3
+            WITH_3D_TESTS && @test dim(typeof(W3)) == 3
             @test eltype(W1) === Float64
             @test eltype(typeof(W1)) === Float64
             @test backend(W1) === backend(mesh1d)
@@ -128,8 +131,10 @@ using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
             @test ndofs(W1, Tuple) == (10,)
             @test ndofs(W2) == 30
             @test ndofs(W2, Tuple) == (5, 6)
-            @test ndofs(W3) == 64
-            @test ndofs(W3, Tuple) == (4, 4, 4)
+            if WITH_3D_TESTS
+                @test ndofs(W3) == 64
+                @test ndofs(W3, Tuple) == (4, 4, 4)
+            end
         end
 
         @testset "Weight accessors" begin
@@ -148,7 +153,8 @@ using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
         # weights(Wₕ, Val(S)) for every staggered set S ⊆ 1:D.
         # Checked against the mesh's own spacing/half_spacing directly, hand-multiplied per
         # axis -- independent of the per-axis factors `SpaceWeights` stores internally.
-        @testset "weights(Wₕ, Val(S))" begin
+        # 3D only: built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+        WITH_3D_TESTS && @testset "weights(Wₕ, Val(S))" begin
             Ω3 = domain(box((0.0, 0.0, 0.0), (0.5, 0.6, 0.7)))
             Ωₕ3 = mesh(Ω3, (4, 3, 5), (false, false, false))
             W3v = gridspace(Ωₕ3)
@@ -541,7 +547,28 @@ end
 # The first is the identity, the second the dense tensor product in
 # `CartesianIndices` order. The oracle is built from `points` alone, per axis: the backward
 # spacing (zero at the first node) on a staggered axis, the half-cell width elsewhere.
-@testset "host_weights, SeparableWeights arrays" begin
+# The 2D case below is the one `unit` runs; the 3D one is built in `slow` and by the nightly
+# run (gpena/Bramble.jl#650).
+@testset "host_weights, SeparableWeights, 2D" begin
+    Ωₕ = mesh(domain(box((0.0, 0.0), (0.5, 0.6))), (4, 5), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    n = npoints(Ωₕ, Tuple)
+    xs = ntuple(d -> collect(Bramble.points(Ωₕ(d))), 2)
+
+    for S in ((), (2,), (1, 2))
+        w = weights(Wₕ, Val(S))
+        @test Bramble.host_weights(w) === w
+        a = Array(w)
+        @test a isa Vector{Float64}
+        expected = vec([prod(
+                            d -> d in S ? _backward_spacing_oracle(xs[d], I[d]) :
+                                 _half_spacing_oracle(xs[d], I[d]), 1:2)
+                        for I in CartesianIndices(n)])
+        @test a ≈ expected
+    end
+end
+
+WITH_3D_TESTS && @testset "host_weights, SeparableWeights arrays" begin
     Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (0.5, 0.6, 0.7))), (4, 5, 6), (false, false, false))
     Wₕ = gridspace(Ωₕ)
     n = npoints(Ωₕ, Tuple)

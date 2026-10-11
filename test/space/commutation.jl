@@ -9,7 +9,7 @@ import Bramble: diff₋ₓ, diff₊ᵧ, D₊ₓ, D₊ᵧ, M₊ₓ
 using Bramble: diff₋ₓ, diff₊ᵧ
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS, _nonuniform_points
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, _nonuniform_points
 
 # Mixed differences commute.
 #
@@ -67,7 +67,8 @@ using ..TestUtils: WITH_SLOW_TESTS, _nonuniform_points
         end
     end
 
-    @testset "3D direction pairs" begin
+    # 3D only: it builds a 3D mesh, so it runs in `slow` (nightly), not in `unit` (#650).
+    WITH_3D_TESTS && @testset "3D direction pairs" begin
         for (lbl, unif) in (("uniform", true), ("random", false))
             @testset "$lbl" begin
                 Random.seed!(20260830)

@@ -6,12 +6,12 @@ using Bramble: ∇cₕ!, divcₕ!, curlcₕ!, εcₕ!
 using Bramble: Dc
 using Random
 using ..TestUtils: alloc_test
-using ..TestUtils: _bubble, _composite, _field, _fixture
+using ..TestUtils: _bubble, _composite, _field, _fixture, TEST_DIMS
 
 @testset "Centered vector calculus (#287)" begin
     Random.seed!(287)
 
-    @testset "∇cₕ ($(D)D)" for D in 1:3
+    @testset "∇cₕ ($(D)D)" for D in TEST_DIMS
         _, _, u, _ = _fixture(D)
         g = ∇cₕ(u[1])
         dest = D == 1 ? similar(u[1]) : ntuple(_ -> similar(u[1]), D)
@@ -26,7 +26,7 @@ using ..TestUtils: _bubble, _composite, _field, _fixture
         @test alloc_test(∇cₕ!, dest, u[1]) == 0
     end
 
-    @testset "divcₕ ($(D)D)" for D in 1:3
+    @testset "divcₕ ($(D)D)" for D in TEST_DIMS
         Ωₕ, _, u, _ = _fixture(D)
         oracle = sum(parent(Dc(u[d], d)) for d in 1:D)
         F = _field(u, D)
@@ -43,7 +43,7 @@ using ..TestUtils: _bubble, _composite, _field, _fixture
         @test_throws DimensionMismatch divcₕ(ntuple(_ -> u[1], D + 1))
     end
 
-    @testset "curlcₕ ($(D)D)" for D in 1:3
+    @testset "curlcₕ ($(D)D)" for D in TEST_DIMS
         Ωₕ, _, u, _ = _fixture(D)
         dc(k, d) = parent(Dc(u[k], d))
         if D == 1
@@ -67,7 +67,7 @@ using ..TestUtils: _bubble, _composite, _field, _fixture
         end
     end
 
-    @testset "εcₕ ($(D)D)" for D in 1:3
+    @testset "εcₕ ($(D)D)" for D in TEST_DIMS
         Ωₕ, _, u, _ = _fixture(D)
         F = _field(u, D)
         ε = εcₕ(F)
@@ -91,7 +91,7 @@ using ..TestUtils: _bubble, _composite, _field, _fixture
     # Summation by parts: for F and u vanishing on the boundary, divcₕ is minus the adjoint
     # of the centered gradient, exactly, on a non-uniform mesh. Non-vanishing fields pick up
     # boundary terms, so the identity must fail for them.
-    @testset "SBP duality ($(D)D)" for D in 1:3
+    @testset "SBP duality ($(D)D)" for D in TEST_DIMS
         _, _, u, dims = _fixture(D)
         duality(F, w) = (innerₕ(divcₕ(_field(F, D)), w),
             -sum(innerₕ(F[d], Dc(w, d)) for d in 1:D))

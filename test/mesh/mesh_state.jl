@@ -7,7 +7,7 @@ using Bramble: markers, markers!, index_in_marker, is_uniform, change_points!, s
                iterative_refinement!, points, npoints, spacing, half_spacing, cell_measure,
                point, indices, half_points, spacings, half_spacings, _walk_mesh,
                _marker_words, _marker_id, _mesh_version, Mesh1D, Mesh1DState, MeshnDState
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
 
 # The immutable mesh state (gpena/Bramble.jl#437): geometry, version, uniformity flag and
 # marker words, held as plain arrays and isbits values; label-set changes rebuild it whole.
@@ -29,12 +29,16 @@ function words_agree(Ωₕ)
 end
 
 I = interval(0.0, 1.0)
+# The 3D mesh is built in `slow` and by the nightly run (gpena/Bramble.jl#650); callers index
+# only the first two.
 function _meshes()
     (Random.seed!(41);
         (
             mesh(domain(I, :l => :left, :c => x -> x < 0.4), 70, false),
             mesh(domain(I × I, :l => :left, :c => x -> x[1] + x[2] < 0.7), (9, 8), (false, false)),
-            mesh(domain(I × I × I, :c => x -> x[1] < 0.5), (5, 4, 6), (false, true, false))))
+            (WITH_3D_TESTS ?
+             (mesh(domain(I × I × I, :c => x -> x[1] < 0.5), (5, 4, 6), (false, true, false)),) :
+             ())...))
 end
 
 @testset "Mesh state (#437)" begin

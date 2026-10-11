@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: D₋ₓ!, VectorElement
 using Random
-using ..TestUtils: alloc_test, @test_allocs, WITH_SLOW_TESTS
+using ..TestUtils: alloc_test, @test_allocs, TEST_DIMS, WITH_3D_TESTS, WITH_SLOW_TESTS
 
 # The in-place forms of every directional operator.
 #
@@ -88,11 +88,12 @@ end
         Ωs = (
             mesh(domain(interval(0.0, 1.0)), 9, false),
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false)),
-            mesh(
+            (WITH_3D_TESTS ?
+             (mesh(
                 domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
                 (4, 5, 4),
                 (false, true, false)
-            )
+            ),) : ())...
         )
         fs = (
             x -> x^3 + sin(4x) + 1,
@@ -102,7 +103,7 @@ end
 
         _agreement_case(Val(1), Ωs[1], fs[1])
         _agreement_case(Val(2), Ωs[2], fs[2])
-        _agreement_case(Val(3), Ωs[3], fs[3])
+        WITH_3D_TESTS && _agreement_case(Val(3), Ωs[3], fs[3])
     end
 
     @testset "Zero allocations" begin
@@ -146,11 +147,12 @@ end
         Ωs = (
             mesh(domain(interval(0.0, 1.0)), 9, false),
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, false)),
-            mesh(
+            (WITH_3D_TESTS ?
+             (mesh(
                 domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
                 (4, 5, 4),
                 (false, true, false)
-            )
+            ),) : ())...
         )
         fs = (
             x -> x^3 + sin(4x) + 1,
@@ -158,7 +160,7 @@ end
             x -> x[1]^2 + 2x[2] + sin(x[3]) + 1
         )
 
-        for D in 1:3
+        for D in TEST_DIMS
             @testset "$(D)D" begin
                 Ωₕ = Ωs[D]
                 Wₕ = gridspace(Ωₕ)
@@ -192,18 +194,24 @@ end
         Ωs = (
             mesh(domain(interval(0.0, 1.0)), 9, false),
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 5), (true, false)),
-            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 3), (false, true, false))
+            (WITH_3D_TESTS ? (mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 3), (false, true, false)
+            ),) : ())...
         )
         bigger = (
             mesh(domain(interval(0.0, 1.0)), 12, true),
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, true)),
-            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 4), (true, true, true))
+            (WITH_3D_TESTS ? (mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 4), (true, true, true)
+            ),) : ())...
         )
         # the same number of points, arranged differently; a 1D grid has only one shape
         permuted = (
             nothing,
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (true, false)),
-            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 5, 4), (false, true, false))
+            (WITH_3D_TESTS ? (mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 5, 4), (false, true, false)
+            ),) : ())...
         )
         centered = (Bramble.Mcₓ!, Bramble.Mcᵧ!, Bramble.Mc₂!)
         shifts = (Bramble.S₊ₓ!, Bramble.S₋ₓ!, Bramble.S₊ᵧ!, Bramble.S₋ᵧ!, Bramble.S₊₂!,
@@ -229,7 +237,7 @@ end
 
         families = WITH_SLOW_TESTS ? _INPLACE_FAMILIES : _UNIT_FAMILIES
         nshifts(D) = WITH_SLOW_TESTS ? 2D : 2
-        for D in 1:3
+        for D in TEST_DIMS
             @testset "$(D)D" begin
                 Wₕ, Vₕ = gridspace(Ωs[D]), gridspace(Ωs[D], Val(2))
                 Bₕ, Bᵥ = gridspace(bigger[D]), gridspace(bigger[D], Val(2))
@@ -277,23 +285,31 @@ end
         Ωs = (
             mesh(domain(interval(0.0, 1.0)), 9, false),
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 5), (true, false)),
-            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 3), (false, true, false))
+            (WITH_3D_TESTS ? (mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 3), (false, true, false)
+            ),) : ())...
         )
         bigger = (
             mesh(domain(interval(0.0, 1.0)), 12, true),
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, true)),
-            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 4), (true, true, true))
+            (WITH_3D_TESTS ? (mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 4), (true, true, true)
+            ),) : ())...
         )
         permuted = (
             nothing,
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (true, false)),
-            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 5, 4), (false, true, false))
+            (WITH_3D_TESTS ? (mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 5, 4), (false, true, false)
+            ),) : ())...
         )
         # Fresh meshes of the same shape as `Ωs`, with different random non-uniform points.
         twin = (
             nothing,
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 5), (true, false)),
-            mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 3), (false, true, false))
+            (WITH_3D_TESTS ? (mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 3), (false, true, false)
+            ),) : ())...
         )
         fs = (x -> x^2 + 1, x -> x[1] + 2x[2]^2 + 1, x -> x[1] * x[2] + x[3] + 1)
 
@@ -359,17 +375,24 @@ end
             return map(parent, leaves(packed)) == map(parent, leaves(ref))
         end
 
+        from2d = filter(>=(2), TEST_DIMS)
         forms = (
-            (Bramble.divₕ!, :scalar, :field, 1:3), (Bramble.div₊ₕ!, :scalar, :field, 1:3),
-            (Bramble.divcₕ!, :scalar, :field, 1:3), (Bramble.diṽₕ!, :scalar, :field, 1:3),
-            (Bramble.div̽ₕ!, :scalar, :field, 1:3), (Bramble.Δₕ!, :scalar, :scalar, 1:3),
-            (Bramble.curlₕ!, :curl, :field, 2:3), (Bramble.curl₊ₕ!, :curl, :field, 2:3),
-            (Bramble.curlcₕ!, :curl, :field, 2:3), (Bramble.curl̃ₕ!, :curl, :field, 2:3),
-            (Bramble.curl̽ₕ!, :curl, :field, 2:3),
-            (Bramble.∇cₕ!, :grad, :scalar, 1:3), (Bramble.∇̃ₕ!, :grad, :scalar, 1:3),
-            (Bramble.∇̽ₕ!, :grad, :scalar, 1:3),
-            (Bramble.εₕ!, :strain, :field, 1:3), (Bramble.εcₕ!, :strain, :field, 1:3),
-            (Bramble.ε₊ₕ!, :strain, :field, 1:3), (Bramble.ε̽ₕ!, :strain, :field, 1:3)
+            (Bramble.divₕ!, :scalar, :field, TEST_DIMS),
+            (Bramble.div₊ₕ!, :scalar, :field, TEST_DIMS),
+            (Bramble.divcₕ!, :scalar, :field, TEST_DIMS),
+            (Bramble.diṽₕ!, :scalar, :field, TEST_DIMS),
+            (Bramble.div̽ₕ!, :scalar, :field, TEST_DIMS),
+            (Bramble.Δₕ!, :scalar, :scalar, TEST_DIMS),
+            (Bramble.curlₕ!, :curl, :field, from2d), (Bramble.curl₊ₕ!, :curl, :field, from2d),
+            (Bramble.curlcₕ!, :curl, :field, from2d), (Bramble.curl̃ₕ!, :curl, :field, from2d),
+            (Bramble.curl̽ₕ!, :curl, :field, from2d),
+            (Bramble.∇cₕ!, :grad, :scalar, TEST_DIMS),
+            (Bramble.∇̃ₕ!, :grad, :scalar, TEST_DIMS),
+            (Bramble.∇̽ₕ!, :grad, :scalar, TEST_DIMS),
+            (Bramble.εₕ!, :strain, :field, TEST_DIMS),
+            (Bramble.εcₕ!, :strain, :field, TEST_DIMS),
+            (Bramble.ε₊ₕ!, :strain, :field, TEST_DIMS),
+            (Bramble.ε̽ₕ!, :strain, :field, TEST_DIMS)
         )
 
         # `unit` keeps the first form of each kind (divergence, curl, gradient, Laplacian,
@@ -437,7 +460,8 @@ end
 
         # `Δₕ!` also takes composite elements, whose totals agree on a permuted grid, so
         # each destination leaf is checked against its source leaf.
-        @testset "Δₕ! composite" begin
+        # Its meshes are 3D, so it runs nightly (gpena/Bramble.jl#650).
+        WITH_3D_TESTS && @testset "Δₕ! composite" begin
             Vₕ, Pᵥ = gridspace(Ωs[3], Val(2)), gridspace(permuted[3], Val(2))
             Bᵥ = gridspace(bigger[3], Val(2))
             uv = Rₕ(Vₕ, (fs[3], fs[3]))
