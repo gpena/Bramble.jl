@@ -262,6 +262,8 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
     # Float64 cases; gpena/Bramble.jl#443). Float64 to 1e-10 of the sparse solve, Float32
     # within 10x of a dense Float32 LU's residual, 0 bytes per `ldiv!`. Without OpenBLAS the
     # active LAPACK's failure is an ArgumentError naming it, never a raw LAPACKException.
+    # Whether Accelerate fails depends on the host (it converges on the macOS CI runner), so
+    # under Accelerate either outcome passes: that error, or the solve to 1e-10.
     @testset "fdm_solve: Schur route under any LAPACK" begin
         @test all(!=(C_NULL), KronExt._OPENBLAS_GGES3[])
         G(u, v) = inner₊(∇ₕ(u), ∇ₕ(v))
@@ -308,14 +310,20 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
             LinearAlgebra.BLAS.get_config().loaded_libs)
         try
             KronExt._OPENBLAS_GGES3[] = (C_NULL, C_NULL)
-            if accelerate
-                @test_throws ArgumentError fdm_solve(a, F; dirichlet = :boundary)
-                @test_throws "active LAPACK" fdm_solve(a, F; dirichlet = :boundary)
-                @test_throws "Accelerate" fdm_solve(a, F; dirichlet = :boundary)
-            else
+            failure = accelerate ? try
+                fdm_solve(a, F; dirichlet = :boundary)
+                nothing
+            catch e
+                e
+            end : nothing
+            if failure === nothing
                 A = assemble(a; dirichlet = :boundary)
                 @test norm(fdm_solve(a, F; dirichlet = :boundary) - A \ F) <=
                       1e-10 * norm(A \ F)
+            else
+                @test failure isa ArgumentError
+                @test occursin("active LAPACK", sprint(showerror, failure))
+                @test occursin("Accelerate", sprint(showerror, failure))
             end
         finally
             KronExt._OPENBLAS_GGES3[] = found

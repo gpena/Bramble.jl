@@ -145,9 +145,12 @@ jobs:
           if-no-files-found: warn
 
   # Per-file coverage floor over the two coverage halves merged: `lcov-backends` from this
-  # run, and `lcov-suite` from the newest nightly.yml run on `main` that produced one. The
-  # halves can come from different commits, at most a week apart; nightly's half is
-  # normally from the Sunday run. Writes the report to the job summary, then
+  # run, and `lcov-suite` from the newest nightly.yml run on this run's commit. The halves
+  # must come from the same commit: lcov records line numbers, so merging halves from two
+  # commits that touched a file measures the wrong lines (the 2026-10-11 run reported 55% for
+  # a file covered at 87%). Without a nightly half on this commit the floor is skipped with a
+  # warning; the backends half alone leaves most of src/ below it. Writes the report to the
+  # job summary, then
   # fails the job when a non-exempt src/ file is below the floor (`--fail --prefix src/`);
   # ext/ files stay in the report but cannot fail it.
   coverage-floor:
@@ -174,18 +177,29 @@ jobs:
           pattern: lcov-*
           path: lcov
 
-      - name: Fetch the `slow` half from the newest nightly
+      - name: Fetch the `slow` half from the newest nightly on this commit
+        id: suite
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           run_id=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=lcov-suite&per_page=20" \
-            --jq '[.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main")][0].workflow_run.id // ""')
-          if [ -z "$run_id" ]; then echo "::warning::No unexpired lcov-suite artifact from nightly.yml on main."; exit 0; fi
+            --jq '[.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main")
+                   | select(.workflow_run.head_sha == "${{ github.sha }}")][0].workflow_run.id // ""')
+          if [ -z "$run_id" ]; then
+            echo "::warning::No unexpired lcov-suite artifact from nightly.yml on ${{ github.sha }}."
+            exit 0
+          fi
           gh run download "$run_id" --repo "${{ github.repository }}" --name lcov-suite --dir lcov/lcov-suite
+          echo "found=true" >> "$GITHUB_OUTPUT"
 
       - name: Report the per-file coverage floor
         run: |
+          if [ "${{ steps.suite.outputs.found }}" != "true" ]; then
+            echo "::warning::No nightly coverage half on this commit; skipping the coverage floor."
+            echo "No nightly.yml \`lcov-suite\` on ${{ github.sha }}; floor not computed." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           files=$(find lcov -name lcov.info 2>/dev/null | sort)
           if [ -z "$files" ]; then
             echo "::warning::No lcov artifacts found; skipping the coverage floor."
