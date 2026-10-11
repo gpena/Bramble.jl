@@ -4,8 +4,7 @@ import Base: eltype, length
 import Base: show, first, last, getindex, setindex!, iterate, size, firstindex, lastindex, axes, eachindex
 
 using SparseArrays: SparseArrays, SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!,
-                    blockdiag,
-                    dropzeros!
+                    blockdiag
 
 using LinearAlgebra: I, Diagonal
 import LinearAlgebra: mul!, issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot, lu, cholesky, ⋅, norm
