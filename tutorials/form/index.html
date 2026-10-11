@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Linear and bilinear forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=98507dc9">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=654bc0d0">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Linear and bilinear forms — Bramble.jl">
   <meta property="og:title" content="Linear and bilinear forms — Bramble.jl">
@@ -439,7 +439,7 @@ Matrix(assemble(a_off)) ≈ Matrix(assemble(form(Wₕ, Wₕ, (u, v) -&gt; inner�
 <p>Replace <code class="md-code-inline">0 *</code> by <code class="md-code-inline">0.0 *</code> in <code class="md-code-inline">a_off</code> and compare <code class="md-code-inline">Bramble.resolve_form_ast(a_off)</code>. A <code class="md-code-inline">Float64</code> coefficient is only known at run time, so the rule does not fire.</p>
 </div>
 </div>
-<p>Two limits apply. A rule whose outcomes have different node types fires only when the compiler settles it from types, so a scalar coefficient must be an <code class="md-code-inline">Integer</code> (or the same <code class="md-code-inline">Ref</code> on both terms) for the like-term and factoring rules to apply. A <code class="md-code-inline">Float64</code> known at run time leaves the terms apart: same numbers, one extra sweep. And the pass stops at an inner product&#39;s own arguments, so a scalar buried in a difference such as <code class="md-code-inline">innerₕ(D₋ₓ(2 * u), v)</code> is invisible to it. Write <code class="md-code-inline">2 * innerₕ(D₋ₓ(u), v)</code> instead.</p>
+<p>Two limits apply. A rule whose outcomes have different node types fires only when the compiler settles it from types, so a scalar coefficient must be an <code class="md-code-inline">Integer</code> for the like-term and factoring rules to apply. A <code class="md-code-inline">Float64</code> known at run time, or a <code class="md-code-inline">Ref</code>, leaves the terms apart: same numbers, one extra sweep. And the pass stops at an inner product&#39;s own arguments, so a scalar buried in a difference such as <code class="md-code-inline">innerₕ(D₋ₓ(2 * u), v)</code> is invisible to it. Write <code class="md-code-inline">2 * innerₕ(D₋ₓ(u), v)</code> instead.</p>
 <p>The <a href="../../internals/form/">internals page on forms</a> documents the stencil algebra and the exact rewrite rules.</p>
       </article>
       <footer class="md-footer">
@@ -479,6 +479,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=98507dc9"></script>
+  <script src="../../assets/materialdocs.js?v=654bc0d0"></script>
 </body>
 </html>

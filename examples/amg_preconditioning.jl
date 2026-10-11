@@ -92,9 +92,7 @@ sol_amg.iters
 
 #-
 
-# All three agree with each other and with the manufactured solution, restricted to the         #src
-# interior where the SBP scheme is second order (the boundary rows are exact by             #src
-# construction).                                                                             #src
+# All three agree with each other.                                                           #src
 @test u_direct≈sol_cg.u atol=1e-6 rtol=1e-6                                               #src
 @test u_direct≈sol_amg.u atol=1e-6 rtol=1e-6                                              #src
 
@@ -108,7 +106,12 @@ normₕ(uₕ .- Rₕ(space(uₕ), uex))
 
 #-
 
-@test normₕ(uₕ .- Rₕ(space(uₕ), uex)) < 1.0e-2                                              #src
+# With the cell-averaged source the scheme reproduces e^(x+y) to round-off (1e-13 measured), #src
+# so this error is CG's stopping error, 4e-8 measured.                                       #src
+@test normₕ(uₕ .- Rₕ(space(uₕ), uex)) < 1.0e-6                                              #src
+# Only a preconditioned solve gets there in 20 iterations: plain CG needs 191 at n = 65.     #src
+@test parent(solve(a, l; dirichlet = bcs, symmetrize = true, solver = KrylovJL_CG(),         #src
+    preconditioner = :amg, maxiters = 20))≈u_direct atol=1e-6 rtol=1e-6               #src
 
 # ## Iteration counts under refinement
 #

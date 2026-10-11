@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scientific computing: SciML, AD and solvers — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=b781b9cc">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=997f105c">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
   <meta property="og:title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
@@ -151,9 +151,10 @@ sd = semidiscretize(a, l; dirichlet = bcs)</code></pre>
 <pre><code class="language-julia">semidiscretize(build, l::LinearForm; kwargs...) -&gt; Semidiscretization</code></pre>
 </div>
 <p>Semidiscretise <code class="md-code-inline">M u_h&#39; = F(t) - A(t) u_h</code> from a spatial operator that genuinely depends on <code class="md-code-inline">t</code> – built fresh, once per element type <code class="md-code-inline">t</code> is ever reached at, instead of the single <code class="md-code-inline">BilinearForm</code> the other method assembles into one fixed matrix.</p>
-<p><code class="md-code-inline">build(t)</code> is called once for each element type <code class="md-code-inline">t</code> is ever seen at (<code class="md-code-inline">Float64</code> on a normal step, a <code class="md-code-inline">ForwardDiff.Dual</code> while a Rosenbrock stepper&#39;s <code class="md-code-inline">tgrad</code> differentiates the residual through <code class="md-code-inline">t</code>), and must return <code class="md-code-inline">(a, refill!)</code>: the <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> to assemble, built around whatever live coefficient buffer(s) it needs, and a <em>one</em>-argument <code class="md-code-inline">refill!(t)</code> updating those buffers from the current <code class="md-code-inline">t</code> – called on every step, cache hit or miss, so a later step at an already-seen type still sees the new <code class="md-code-inline">t</code> rather than the one <code class="md-code-inline">build</code> first saw. Same build/refill!/cache discipline as <a href="../api_sciml/#Bramble.type_cached_assemble!"><code class="md-code-inline">type_cached_assemble!</code></a>, keyed on <code class="md-code-inline">t</code> instead of a <code class="md-code-inline">VectorElement</code> iterate.</p>
+<p><code class="md-code-inline">build(t)</code> is called once for each element type <code class="md-code-inline">t</code> is ever seen at (the space&#39;s element type on a normal step, a <code class="md-code-inline">ForwardDiff.Dual</code> while a Rosenbrock stepper&#39;s <code class="md-code-inline">tgrad</code> differentiates the residual through <code class="md-code-inline">t</code>), and must return <code class="md-code-inline">(a, refill!)</code>: the <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> to assemble, built around whatever live coefficient buffer(s) it needs, and a <em>one</em>-argument <code class="md-code-inline">refill!(t)</code> updating those buffers from the current <code class="md-code-inline">t</code> – called on every step, cache hit or miss, so a later step at an already-seen type still sees the new <code class="md-code-inline">t</code> rather than the one <code class="md-code-inline">build</code> first saw. Same build/refill!/cache discipline as <a href="../api_sciml/#Bramble.type_cached_assemble!"><code class="md-code-inline">type_cached_assemble!</code></a>, keyed on <code class="md-code-inline">t</code> instead of a <code class="md-code-inline">VectorElement</code> iterate.</p>
+<p>The probe at construction calls <code class="md-code-inline">build</code> at <code class="md-code-inline">zero(eltype(Wₕ))</code>, <code class="md-code-inline">Wₕ</code> the space of <code class="md-code-inline">l</code>, so the time span of the solve should use that same element type: a <code class="md-code-inline">Float32</code> space solved over a <code class="md-code-inline">Float64</code> time span reaches a second element type and builds once more for it. A step at any element type other than the probe&#39;s goes through an untyped cache, so the residual and <a href="../api_sciml/#Bramble.jacobian!"><code class="md-code-inline">jacobian!</code></a> allocate on every call there, not only for a source buffer.</p>
 <p><code class="md-code-inline">build</code> should be a named function, not a closure literal written inline – the same reason <a href="../api_sciml/#Bramble.type_cached_assemble!"><code class="md-code-inline">type_cached_assemble!</code></a>&#39;s own docstring gives: a <code class="md-code-inline">do ... end</code> block re-literalised on every call allocates a new closure each time.</p>
-<p>This is what lets a Rosenbrock method (<code class="md-code-inline">Rodas5P</code>, <code class="md-code-inline">Rosenbrock23</code>) capture <code class="md-code-inline">-Ȧ(t) u_h</code> by differentiating through <code class="md-code-inline">t</code> directly: the other method&#39;s fixed <code class="md-code-inline">BilinearForm</code> closes over a <code class="md-code-inline">Float64</code>-typed coefficient buffer, which cannot hold a <code class="md-code-inline">Dual</code> and throws <code class="md-code-inline">InexactError</code> under exactly that AD sweep.</p>
+<p>This is what lets a Rosenbrock method (<code class="md-code-inline">Rodas5P</code>, <code class="md-code-inline">Rosenbrock23</code>) capture <code class="md-code-inline">-Ȧ(t) u_h</code> by differentiating through <code class="md-code-inline">t</code> directly: the other method&#39;s fixed <code class="md-code-inline">BilinearForm</code> closes over a coefficient buffer of the space&#39;s element type, which cannot hold a <code class="md-code-inline">Dual</code> and throws <code class="md-code-inline">InexactError</code> under exactly that AD sweep.</p>
 <p><strong>Keywords</strong></p>
 <p>Same as the <code class="md-code-inline">BilinearForm</code> method, except <code class="md-code-inline">reassemble</code> defaults to <code class="md-code-inline">true</code> – a <code class="md-code-inline">build</code>-based operator exists specifically to be rebuilt at every step.</p>
 <p><strong>Examples</strong></p>
@@ -288,7 +289,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.jacobian!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L498-L510" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L535-L547" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -303,7 +304,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.jacobian_prototype">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian_prototype</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L538-L549" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L575-L586" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -728,7 +729,7 @@ u_spd = pde_solve(A, F; solver = :suitesparse, sym = :spd)</code></pre>
 <div class="md-docstring" id="Bramble.amg_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.amg_preconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/amg_preconditioner.jl#L19-L65" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/amg_preconditioner.jl#L19-L67" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -741,7 +742,7 @@ amg_preconditioner(a::BilinearForm; method = :smoothed_aggregation, dirichlet = 
 <p>The elliptic SBP forms Bramble assembles (Poisson, variable-coefficient diffusion, Helmholtz) have condition numbers scaling as <code class="md-code-inline">O(h^-2)</code>: a direct sparse solve suffers severe fill-in past a few hundred thousand degrees of freedom, and an unpreconditioned Krylov method needs <code class="md-code-inline">O(h^-1)</code> iterations. Algebraic multigrid builds its coarse-grid hierarchy from the graph of <code class="md-code-inline">A</code> alone, giving a preconditioned Krylov method grid-independent, <code class="md-code-inline">O(1)</code> iteration counts instead.</p>
 <p><strong>Keywords</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">method</code>: <code class="md-code-inline">:smoothed_aggregation</code> (default) or <code class="md-code-inline">:ruge_stuben</code>, <code class="md-code-inline">AlgebraicMultigrid</code>&#39;s two hierarchy constructions.</p>
+<li><p><code class="md-code-inline">method</code>: <code class="md-code-inline">:smoothed_aggregation</code> (default) or <code class="md-code-inline">:ruge_stuben</code>, <code class="md-code-inline">AlgebraicMultigrid</code>&#39;s two hierarchy constructions. The two return different <code class="md-code-inline">MultiLevel</code> types, so a <code class="md-code-inline">method</code> known only at run time makes the result type a <code class="md-code-inline">Union</code>. A literal <code class="md-code-inline">method</code>, or the default, gives a concrete type.</p>
 </li>
 <li><p>Every other keyword forwards to the chosen <code class="md-code-inline">AlgebraicMultigrid</code> constructor.</p>
 </li>
@@ -1665,7 +1666,7 @@ x, y = rand(33^2), rand(33^2)
 <div class="md-docstring" id="Bramble.gmg_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.gmg_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L524-L581" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L527-L584" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2538,6 +2539,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=b781b9cc"></script>
+  <script src="../assets/materialdocs.js?v=997f105c"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=ac909c1e">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=4f16c364">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -95,7 +95,7 @@
 <div class="md-docstring" id="Bramble.form">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.form</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L179-L218" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L285-L338" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -106,6 +106,15 @@
 <p>Construction resolves the AST once and runs <a href="../../internals/form/#Bramble.simplify_ast-Tuple{Bramble.LazyOp}"><code class="md-code-inline">simplify_ast</code></a> over it – factoring common scalings and shared inner-product arguments, combining like terms, and eliding zero-scaled ones – before it is stored. Grid partitioning for parallel assembly is determined from the resolved AST during assembly (see <code class="md-code-inline">_colour_strides</code>).</p>
 <p>Every <code class="md-code-inline">SourceFunction</code> reachable from the simplified AST – a source term built directly from a plain function, <code class="md-code-inline">f(x)</code>, rather than a <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> or a <code class="md-code-inline">Ref</code> – is then sampled once against its own leaf&#39;s space and lowered to a <code class="md-code-inline">SourceVector</code> because a brand-new closure passed as a source would force a full recompilation of the assembly pipeline on every distinct closure, since Julia gives it its own type; assembling against the fixed <code class="md-code-inline">SourceVector</code> shape instead means that cost is paid once, here, not on every later <code class="md-code-inline">assemble!</code>/<code class="md-code-inline">assemble</code> call. This changes what a raw closure that captures mutable state does: it is evaluated once, now, not re-evaluated on later assemblies. <code class="md-code-inline">VectorElement</code> and <code class="md-code-inline">Ref</code> coefficients are unaffected – see the note on <code class="md-code-inline">_lower_sources</code> in <code class="md-code-inline">form/common.jl</code> for why, and for the documented alternative (<code class="md-code-inline">update_coefficients!</code>) a source meant to keep varying should use instead.</p>
 <p>The one exception is an interpolant <a href="../../api/spaces/#Bramble.πₕ"><code class="md-code-inline">πₕ</code></a><code class="md-code-inline">(uₕ)</code>, which is never sampled: every <code class="md-code-inline">assemble</code>/<code class="md-code-inline">assemble!</code> evaluates it on <code class="md-code-inline">uₕ</code>&#39;s current values, and throws an <code class="md-code-inline">ArgumentError</code> once <code class="md-code-inline">uₕ</code>&#39;s mesh has moved.</p>
+<p>A source under <code class="md-code-inline">restrict_to</code> is also called once here, at the first point of its region that the assembly reads (inside every enclosing region, moved by every enclosing shift), so that outside its region it answers a zero of the type it has inside and its stencil keeps one type at every point. It is never called at a point no assembly reads, with one exception: the point comes from the markers as they stand at <code class="md-code-inline">form</code>, so after <code class="md-code-inline">markers!</code> moves the region the source has been called once at a point of the old one. A region with no such point at <code class="md-code-inline">form</code> keeps the empty stencil. In return:</p>
+<ul class="md-list-tight">
+<li><p>a source that throws at a point of its region throws here, not at the first assembly;</p>
+</li>
+<li><p>a coefficient that is not finite outside the region gives <code class="md-code-inline">NaN</code> there when it scales a shift, a difference, an average or a sum holding the restricted source (directly over the restriction, or over restrictions and scales nested in it, it still gives 0);</p>
+</li>
+<li><p><a href="../../api/forms/#Bramble.assemble_add!"><code class="md-code-inline">assemble_add!</code></a> into entries holding <code class="md-code-inline">-0.0</code> may turn them into <code class="md-code-inline">+0.0</code> there.</p>
+</li>
+</ul>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -156,15 +165,16 @@ a = form(Vₕ, Vₕ, (u, v) -&gt; inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + in
 <div class="md-docstring" id="Bramble.dirac">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.dirac</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/ast.jl#L147-L205" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/ast.jl#L147-L217" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">dirac(x0::Union{Real, NTuple{D, Real}, AbstractVector{&lt;:Real}}, strength = 1.0) -&gt; DiracSource{D}
-dirac(points::AbstractVector, strengths = 1.0) -&gt; DiracSource{D}</code></pre>
+<pre><code class="language-julia">dirac(x0::Union{Real, NTuple{D, Real}, AbstractVector{&lt;:Real}}, strength = 1) -&gt; DiracSource{D}
+dirac(points::AbstractVector, strengths = 1) -&gt; DiracSource{D}</code></pre>
 </div>
 <p>Construct a symbolic point (Dirac delta) source term at coordinate <code class="md-code-inline">x0</code> with scalar <code class="md-code-inline">strength</code>, or a collection of point sources at <code class="md-code-inline">points</code> with corresponding <code class="md-code-inline">strengths</code>.</p>
+<p>Tuples are the type-stable spelling of a point: <code class="md-code-inline">dirac((0.3, 0.4))</code> and <code class="md-code-inline">dirac([(0.3, 0.4), (0.7, 0.2)])</code> infer a concrete <code class="md-code-inline">DiracSource{2}</code>. A vector point is accepted, but its dimension is read from its length at run time, so <code class="md-code-inline">dirac([0.3, 0.4])</code> and <code class="md-code-inline">dirac([[0.3, 0.4], [0.7, 0.2]])</code> are not inferable; they normalise to the same tuples and assemble the same load vector. A vector with a real element type (<code class="md-code-inline">[0.2, 0.7]</code>, <code class="md-code-inline">Real[0.2, 0.7]</code>), or an untyped <code class="md-code-inline">Any[0.2, 0.7]</code> holding only reals, is one point, here the 2D point <code class="md-code-inline">(0.2, 0.7)</code>; two 1D points are spelt <code class="md-code-inline">dirac([(0.2,), (0.7,)])</code>. A list of points may mix tuples and vectors.</p>
 <p><strong>Mathematical formulation</strong></p>
 <p>A point source represents the continuous linear functional:</p>
 <div class="md-math md-math-display">
@@ -189,9 +199,9 @@ dirac(points::AbstractVector, strengths = 1.0) -&gt; DiracSource{D}</code></pre>
 </ul>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">x0</code>: Point coordinate, a scalar number (1D), <code class="md-code-inline">NTuple{D, Real}</code>, or <code class="md-code-inline">AbstractVector{&lt;:Real}</code>.</p>
+<li><p><code class="md-code-inline">x0</code>: Point coordinate, a scalar number (1D), <code class="md-code-inline">NTuple{D, Real}</code> (type-stable), or <code class="md-code-inline">AbstractVector{&lt;:Real}</code> (one <code class="md-code-inline">D</code>-dimensional point, not inferable). An empty tuple or vector throws an <code class="md-code-inline">ArgumentError</code>.</p>
 </li>
-<li><p><code class="md-code-inline">strength</code>: Source intensity (default: <code class="md-code-inline">1.0</code>). Accepts any of the following.</p>
+<li><p><code class="md-code-inline">strength</code>: Source intensity (default: <code class="md-code-inline">1</code>, which takes the space&#39;s element type). Accepts any of the following.</p>
 <ul class="md-list-tight">
 <li><p>A constant <code class="md-code-inline">Number</code> (e.g. <code class="md-code-inline">2.5</code>).</p>
 </li>
@@ -201,7 +211,7 @@ dirac(points::AbstractVector, strengths = 1.0) -&gt; DiracSource{D}</code></pre>
 </li>
 </ul>
 </li>
-<li><p><code class="md-code-inline">points</code>: Collection of point coordinates for multiple simultaneous sources.</p>
+<li><p><code class="md-code-inline">points</code>: Collection of point coordinates for multiple simultaneous sources. The first point sets the dimension <code class="md-code-inline">D</code>; a later point with a different number of coordinates, or of a kind that cannot have <code class="md-code-inline">D</code> coordinates, throws an <code class="md-code-inline">ArgumentError</code> naming its index.</p>
 </li>
 <li><p><code class="md-code-inline">strengths</code>: Matching collection of intensities, or a single scalar broadcast to all points.</p>
 </li>
@@ -237,7 +247,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.assemble">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L342-L355" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L464-L477" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -282,7 +292,7 @@ u = A \ F</code></pre>
 <div class="md-docstring" id="Bramble.assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1034-L1064" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1156-L1186" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -337,7 +347,7 @@ u = A \ F</code></pre>
 <div class="md-docstring" id="Bramble.assemble_parallel!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble_parallel!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1252-L1259" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1374-L1381" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -409,11 +419,11 @@ end</code></pre>
 <h2 id="Matrix-free-Kronecker-operators" class="md-heading">Matrix-free Kronecker operators<a href="#Matrix-free-Kronecker-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>For a separable <code class="md-code-inline">BilinearForm</code> (one whose assembled matrix is an exact sum of Kronecker products of one-dimensional factors over a <code class="md-code-inline">MeshnD</code>), <code class="md-code-inline">kronecker_operator</code> builds a <code class="md-code-inline">KroneckerLinearOperator</code> that applies in one fused pass over the grid instead of ever assembling the <code class="md-code-inline">D</code>-dimensional matrix: a <code class="md-code-inline">200^3</code> mesh stores <code class="md-code-inline">O(200)</code> numbers per axis rather than the assembled matrix&#39;s <code class="md-code-inline">O(200^3)</code> stored entries. <code class="md-code-inline">is_separable</code> checks the condition beforehand and lists what factors.</p>
 <p>What factors: the difference, average, jump and shift families along any axis and chains of them, so mixed derivatives and advection terms (whose factors need not be symmetric); <code class="md-code-inline">innerₕ</code>, <code class="md-code-inline">inner₊</code> and <code class="md-code-inline">inner_Γ</code> weights; a restriction to <code class="md-code-inline">:interior</code>; a grid-function coefficient that varies along one axis; and scalar or <code class="md-code-inline">Ref</code> coefficients. A composite space whose leaves share one mesh gives a block operator, one Kronecker operator per block. What does not: a coefficient varying along several axes, other region restrictions (Dirichlet rows included), an interpolation, a 1D mesh, trial and test spaces on different meshes, and the star and cross-weighted differences. A grid-function coefficient is read once, when the operator is built, and warns so; use a <code class="md-code-inline">Ref</code> for a coefficient that changes, or <code class="md-code-inline">matrix_free_operator</code>, which reads it live. Under <code class="md-code-inline">CpuThreaded</code> the product runs threaded, and an operator whose mesh was mutated in place afterwards throws instead of applying.</p>
-<p><code class="md-code-inline">fdm_solve</code> requires <code class="md-code-inline">using Kronecker</code> (the <code class="md-code-inline">BrambleKroneckerExt</code> extension) and solves a Laplacian-like system without a general sparse factorisation: one whose terms each differ from one mass per axis on at most one axis. A symmetric one is solved by fast diagonalisation, a non-symmetric one (advection terms) by a Schur-form solve. A form with a mixed derivative is refused; use <code class="md-code-inline">fdm_preconditioner</code> (in <a href="../../api_sciml/">Scientific computing</a>) to precondition a Krylov solver with its Laplacian-like part. <code class="md-code-inline">fdm_factorize</code> factorises once, and <code class="md-code-inline">fdm_solve!</code> then solves each right-hand side with zero allocations; <code class="md-code-inline">fdm_factorize!</code> refills that factorisation after a coefficient or the mesh changed, without building it again.</p>
+<p><code class="md-code-inline">fdm_solve</code> requires <code class="md-code-inline">using Kronecker</code> (the <code class="md-code-inline">BrambleKroneckerExt</code> extension). It solves a Laplacian-like system, one whose terms each differ from one mass per axis on at most one axis, without a general sparse factorisation: by fast diagonalisation when it is symmetric, and by a Schur-form solve when advection terms make it non-symmetric. A mixed derivative is refused. For such a form, <code class="md-code-inline">fdm_preconditioner</code> (in <a href="../../api_sciml/">Scientific computing</a>) preconditions a Krylov solver with its Laplacian-like part. <code class="md-code-inline">fdm_factorize</code> factorises once, and <code class="md-code-inline">fdm_solve!</code> then solves each right-hand side with zero allocations; <code class="md-code-inline">fdm_factorize!</code> refills that factorisation after a coefficient or the mesh changed, without building it again.</p>
 <div class="md-docstring" id="Bramble.is_separable">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.is_separable</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L109-L164" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L110-L165" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -467,7 +477,7 @@ is_separable(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(fₕ * u, v)))  # false: var
 <div class="md-docstring" id="Bramble.kronecker_operator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.kronecker_operator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L487-L538" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L488-L539" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -505,7 +515,7 @@ K * x ≈ assemble(a) * x</code></pre>
 <div class="md-docstring" id="Bramble.KroneckerLinearOperator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.KroneckerLinearOperator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L232-L301" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L233-L302" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -591,7 +601,7 @@ end</code></pre>
 <pre><code class="language-julia">fdm_factorize!(f, a::BilinearForm) -&gt; f
 fdm_factorize!(f, K::KroneckerLinearOperator) -&gt; f</code></pre>
 </div>
-<p>Refill the factorisation <code class="md-code-inline">f</code>, which <a href="../../api/forms/#Bramble.fdm_factorize"><code class="md-code-inline">fdm_factorize</code></a> returned, from <code class="md-code-inline">a</code> or <code class="md-code-inline">K</code>, and return <code class="md-code-inline">f</code>. Use it in place of a new <code class="md-code-inline">fdm_factorize</code> when the structure is the same and only the numbers changed: a coefficient that is a scalar or a <code class="md-code-inline">Ref</code> took a new value, or <a href="../../api/meshes/#Bramble.change_points!"><code class="md-code-inline">change_points!</code></a> moved the grid points and <code class="md-code-inline">a</code> is a form on a new <code class="md-code-inline">gridspace</code> (or <code class="md-code-inline">K</code> a new <a href="../../api/forms/#Bramble.kronecker_operator"><code class="md-code-inline">kronecker_operator</code></a>) built after it. <code class="md-code-inline">f</code> keeps its <code class="md-code-inline">dirichlet</code>: there is no keyword here. Afterwards <code class="md-code-inline">fdm_solve!(x, f, F)</code> solves the new system, and agrees bitwise with the solve of a fresh <code class="md-code-inline">fdm_factorize</code>, unless a term&#39;s coefficient is now zero: that term keeps its place, and the two agree to rounding. Only <code class="md-code-inline">Float32</code> and <code class="md-code-inline">Float64</code> are supported.</p>
+<p>Refill the factorisation <code class="md-code-inline">f</code>, which <a href="../../api/forms/#Bramble.fdm_factorize"><code class="md-code-inline">fdm_factorize</code></a> returned, from <code class="md-code-inline">a</code> or <code class="md-code-inline">K</code>, and return <code class="md-code-inline">f</code>. Use it in place of a new <code class="md-code-inline">fdm_factorize</code> when the structure is the same and only the numbers changed, as when a coefficient that is a scalar or a <code class="md-code-inline">Ref</code> took a new value, or <a href="../../api/meshes/#Bramble.change_points!"><code class="md-code-inline">change_points!</code></a> moved the grid points and <code class="md-code-inline">a</code> is a form on a new <code class="md-code-inline">gridspace</code> (or <code class="md-code-inline">K</code> a new <a href="../../api/forms/#Bramble.kronecker_operator"><code class="md-code-inline">kronecker_operator</code></a>) built after it. <code class="md-code-inline">f</code> keeps its <code class="md-code-inline">dirichlet</code>, so there is no keyword here. Afterwards <code class="md-code-inline">fdm_solve!(x, f, F)</code> solves the new system, and agrees bitwise with the solve of a fresh <code class="md-code-inline">fdm_factorize</code>, unless a term&#39;s coefficient is now zero: that term keeps its place, and the two agree to rounding. Only <code class="md-code-inline">Float32</code> and <code class="md-code-inline">Float64</code> are supported.</p>
 <p>With <code class="md-code-inline">K</code>, a refill allocates nothing once warm. With <code class="md-code-inline">a</code>, it allocates nothing once warm for the form <code class="md-code-inline">f</code> was built (or last refilled) from, when only scalar or <code class="md-code-inline">Ref</code> coefficients changed. A different form is projected again, and so is one that reads a grid-function coefficient, so that an edit made with <code class="md-code-inline">Rₕ!</code> is read and never ignored; both allocate. The operator or form must have the structure <code class="md-code-inline">f</code> was built for: the same dimension, sizes, eltype, number of terms, mass term on each axis, terms left out at build (a zero coefficient, or a factor that is zero on the solved points), and symmetric or non-symmetric (Schur) solve. Anything else needs a new <code class="md-code-inline">fdm_factorize</code>. A <code class="md-code-inline">KroneckerLinearOperator</code> backed by a device is refused: the refill is host-only. An <a href="../../api_sciml/#Bramble.FDMPreconditioner"><code class="md-code-inline">FDMPreconditioner</code></a> is not refilled.</p>
 <p>Requires <a href="https://github.com/MichielStock/Kronecker.jl">Kronecker.jl</a>; call <code class="md-code-inline">using Kronecker</code> before calling this function.</p>
 <p><strong>Throws</strong></p>
@@ -1085,6 +1095,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=ac909c1e"></script>
+  <script src="../../assets/materialdocs.js?v=4f16c364"></script>
 </body>
 </html>
