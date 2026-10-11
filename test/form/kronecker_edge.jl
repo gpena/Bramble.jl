@@ -252,6 +252,78 @@ end
         y = mul!(zeros(D1, 20), _ke_op(D1, dims, specsD), x)
         @test isapprox(ForwardDiff.value.(y), ForwardDiff.value.(AD * x))
         @test isapprox(ForwardDiff.partials.(y, 1), ForwardDiff.partials.(AD * x, 1))
+
+        # (#535) A term's scale joins the element type: a Dual or complex scale widens the
+        # operator, plain, in a `Ref` and in a block, while a Float64 scale on a Float32
+        # mesh keeps it Float32. Oracle: `assemble`, on graded 2D meshes.
+        W = _ke_space((5, 6))
+        p = ForwardDiff.Dual{:t}(0.5, 1.0)
+        lap = (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))
+        xw = randn(rng, ndofs(W))
+        for s in (p, Ref(p))
+            a = form(W, W, (u, v) -> s * lap(u, v))
+            K, A = kronecker_operator(a), assemble(a)
+            @test eltype(K) == eltype(A) == typeof(p)
+            @test ForwardDiff.value.(K * xw) ≈ ForwardDiff.value.(A * xw)
+            @test ForwardDiff.partials.(K * xw, 1) ≈ ForwardDiff.partials.(A * xw, 1)
+            @test eltype(SparseMatrixCSC(K)) == typeof(p)
+            @test ForwardDiff.partials.(Matrix(SparseMatrixCSC(K)), 1) ≈
+                  ForwardDiff.partials.(Matrix(A), 1)
+        end
+        c = form(W, W, (u, v) -> (1.0 + 2.0im) * lap(u, v))
+        Kc = kronecker_operator(c)
+        @test eltype(Kc) == ComplexF64
+        @test Kc * xw ≈ assemble(c) * xw
+        V = W × W
+        b = form(V, V, (u, v) -> p * lap(u(1), v(1)) + innerₕ(u(2), v(2)))
+        Kb = kronecker_operator(b)
+        @test Kb isa KroneckerBlockOperator
+        @test eltype(Kb) == typeof(p)
+        xv = randn(rng, ndofs(V))
+        @test ForwardDiff.partials.(Kb * xv, 1) ≈ ForwardDiff.partials.(assemble(b) * xv, 1)
+        @test ForwardDiff.value.(Kb * xv) ≈ ForwardDiff.value.(assemble(b) * xv)
+        M32 = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 2.0f0)), (5, 6),
+            (false, false))
+        Bramble.change_points!(M32, (Float32.(range(0, 1; length = 5) .^ 1.25),
+            Float32.(2 .* range(0, 1; length = 6) .^ 1.5)))
+        W32 = gridspace(M32)
+        a32 = form(W32, W32, (u, v) -> 2.0 * lap(u, v))
+        K32 = kronecker_operator(a32)
+        @test eltype(K32) == Float32
+        x32 = randn(rng, Float32, ndofs(W32))
+        @test K32 * x32 ≈ assemble(a32) * x32 rtol = 1e-4
+        # Float32-based scales keep the Float32 base, as `assemble` does.
+        p32 = ForwardDiff.Dual{:t}(0.5f0, 1.0f0)
+        for s in (p32, Ref(p32), 1.0f0 + 2.0f0im)
+            a = form(W32, W32, (u, v) -> s * lap(u, v))
+            K, A = kronecker_operator(a), assemble(a)
+            @test eltype(K) == eltype(A) == typeof(s isa Ref ? s[] : s)
+            @test K * x32 ≈ A * x32 rtol = 1e-4
+            # The read paths keep that base too: an entry and the Kronecker.jl object.
+            @test typeof(K[1, 1]) == eltype(K)
+            @test eltype(Kronecker.kronecker(K)) == eltype(K)
+        end
+        # A term with no scale beside a `Ref`-scaled one.
+        a = form(W32, W32, (u, v) -> lap(u, v) + Ref(p32) * innerₕ(u, v))
+        K = kronecker_operator(a)
+        @test eltype(K) == eltype(assemble(a)) == typeof(K[1, 1]) == typeof(p32)
+        @test eltype(Kronecker.kronecker(K)) == typeof(p32)
+        @test ForwardDiff.partials.(K * x32, 1) ≈ ForwardDiff.partials.(assemble(a) * x32, 1)
+        # A Dual{Float32} term beside a Float64-scaled one: `K` narrows the Float64 scale to
+        # the mesh's Float32 on purpose, while `assemble` widens to Dual{Float64}, so only
+        # the values are compared with `assemble`.
+        a = form(W32, W32, (u, v) -> p32 * lap(u, v) + 2.0 * innerₕ(u, v))
+        K, A = kronecker_operator(a), assemble(a)
+        @test eltype(K) == typeof(K[1, 1]) == eltype(Kronecker.kronecker(K)) == typeof(p32)
+        @test ForwardDiff.value.(K * x32) ≈ ForwardDiff.value.(A * x32) rtol = 1e-4
+        @test ForwardDiff.partials.(K * x32, 1) ≈ ForwardDiff.partials.(A * x32, 1) rtol = 1e-4
+        V32 = W32 × W32
+        b32 = form(V32, V32, (u, v) -> p32 * lap(u(1), v(1)) + innerₕ(u(2), v(2)))
+        Kb32 = kronecker_operator(b32)
+        @test eltype(Kb32) == eltype(assemble(b32)) == typeof(p32)
+        y32 = randn(rng, Float32, ndofs(V32))
+        @test ForwardDiff.partials.(Kb32 * y32, 1) ≈
+              ForwardDiff.partials.(assemble(b32) * y32, 1) rtol = 1e-4
     end
 
     # (#427): factors with rows or columns that hold nothing, entries stored as an

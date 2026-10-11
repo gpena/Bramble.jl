@@ -62,7 +62,7 @@ using PrecompileTools: @setup_workload, @compile_workload
 # as in `SparseMatrixCSC(K)`, so a Float32 `K` stays Float32 (gpena/Bramble.jl#600) while a
 # Dual or Complex `Ref` coefficient keeps its own type, which `T(c)` would not.
 @inline function _kron_jl_term(term, ::Type{T}) where {T}
-    c = Bramble._kron_scalar(T, Bramble._kron_coeff(term.scales))
+    c = Bramble._kron_coeff(T, term.scales)
     return c * foldl(⊗, reverse(term.factors))
 end
 
