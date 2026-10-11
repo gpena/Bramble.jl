@@ -959,6 +959,69 @@ end
             # one face of that axis alone is still a surface
             @test inner_Γ(oc, oc, :ymin) ≈ 1.0
         end
+
+        @testset "Labels read as defined (#655)" begin
+            # A label the mesh holds is read off its marked points, never its name. On a
+            # non-uniform mesh the lumped weight integrates g = 1 + x + 2y exactly on each
+            # edge: 2 on x = 0, 3 on x = 1, 1.5 on y = 0, 3.5 on y = 1.
+            S = interval(0.0, 1.0) × interval(0.0, 1.0)
+            mk(lab...) = gridspace(mesh(domain(S, lab..., :boundary => boundary_symbols(S)),
+                (11, 9), (false, false)))
+            g(x) = 1 + x[1] + 2x[2]
+            ig(W, l...) = inner_Γ(Rₕ(W, g), element(W, 1.0), l...)
+
+            W = mk(:left => :ymin)
+            @test ig(W, :left) == ig(W, :ymin)
+            @test ig(W, :left) ≈ 1.5
+            @test ig(W, :xmin) ≈ 2.0
+            Wi = mk(:inflow => :xmin)
+            @test ig(Wi, :inflow) == ig(Wi, :xmin)
+            @test ig(Wi, :inflow, :ymax) ≈ 2.0 + 3.5
+            # two half-face markers sharing a point select the face together
+            Wa = mk(:a => x -> x[1] == 0 && x[2] <= 0.5, :b => x -> x[1] == 0 && x[2] >= 0.5)
+            @test ig(Wa, :a, :b) == ig(Wa, :xmin)
+            @test ig(Wa, :a, :b) ≈ 2.0
+            # an open face, its two corners left out (D-E6)
+            Wo = mk(:right => x -> x[1] == 1 && 0 < x[2] < 1)
+            @test ig(Wo, :right) == ig(Wo, :xmax)
+            @test ig(Wo, :right) ≈ 3.0
+            # a name-agreeing marker changes nothing
+            Wn = mk(:left => :xmin)
+            @test ig(Wn, :left) == ig(Wn, :xmin)
+            @test ig(Wn, :left) ≈ 2.0
+
+            # a face plus half of another, an empty and an interior marker
+            whole(W, l) = try
+                ig(W, l)
+                false
+            catch e
+                e isa ArgumentError && occursin("whole boundary faces", sprint(showerror, e))
+            end
+            Wc = mk(:c => x -> x[1] == 0 || (x[2] == 0 && x[1] <= 0.5))
+            @test_throws ArgumentError ig(Wc, :c)
+            @test whole(Wc, :c)
+            We = mk(:e => x -> false)
+            @test_throws ArgumentError ig(We, :e)
+            @test whole(We, :e)
+            Wm = mk(:mid => x -> 0.2 < x[1] < 0.8 && 0.2 < x[2] < 0.8)
+            @test_throws ArgumentError ig(Wm, :mid)
+            @test whole(Wm, :mid)
+            @test whole(Wm, :interior)
+
+            # on a one-point axis a marker covers both of its faces; the face name picks one
+            W1 = gridspace(mesh(domain(S, :bottom => :ymin), (5, 1), (true, true)))
+            u1, o1 = Rₕ(W1, x -> 1 + x[1]), element(W1, 1.0)
+            @test_throws ArgumentError inner_Γ(u1, o1, :bottom)
+            @test isfinite(inner_Γ(u1, o1, :ymin))
+            @test inner_Γ(u1, o1, :ymin) ≈ 1.5
+
+            # half a face alone is refused; with its other half it is the face
+            @test whole(Wa, :a)
+            ui, oi = Rₕ(Wi, g), element(Wi, 1.0)
+            @test_allocs inner_Γ(ui, oi, :inflow)
+            u, o = Rₕ(Wa, g), element(Wa, 1.0)
+            @test_allocs inner_Γ(u, o, :a, :b, :ymin)
+        end
     end
 end
 

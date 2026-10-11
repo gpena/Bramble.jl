@@ -393,6 +393,11 @@ end
             @test Bramble._face_of_symbol(Val(2), sym) == face
         end
         @test_throws "does not name one in 2D" Bramble._face_of_symbol(Val(2), :zmin)
+        # through `inner_Γ`: a label that is neither a marker of the mesh nor a face name
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        W = gridspace(mesh(domain(S, :inflow => :xmin), (5, 4), (false, false)))
+        o = element(W, 1.0)
+        @test_throws "does not name one in 2D" inner_Γ(o, o, :inflow, :inlet)
     end
 
     @testset "Face masks" begin

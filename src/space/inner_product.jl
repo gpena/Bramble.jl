@@ -199,13 +199,23 @@ existing cell measures (a ``D``-dimensional quantity restricted to a set of poin
 scales like `h`, vanishing under refinement: 0.125 on a 5×5 mesh of the unit square restricted
 to `:bottom`, against 1.0 here on the same mesh and region, on every mesh.
 
-`labels` name whole coordinate faces: `:boundary`, the canonical `:xmin`…`:zmax`, or their
-viewpoint aliases. A user-defined marker covering part of a face, an interior interface or a
-staircase is a genuinely more general surface -- the weight stops factorising where the
-surface is cut at an interior transverse index, and needs the explicit one-sided face sum --
-and is refused rather than silently given the factorised weight. A `DimensionMismatch` is
-thrown when the storage of `uₕ` or `vₕ` does not hold one value per point of the mesh of
-`space(uₕ)`.
+A label is read from its definition. One the mesh holds as a marker is read off its marked
+points. It selects each coordinate face whose points off its edges and corners are all
+marked, and several markers select the union of their faces. A user-named whole face
+(`:inflow => :xmin`), an open face (`x -> x[1] == 1 && 0 < x[2] < 1`) and two markers that
+each cover half of a face all qualify. So does `:boundary`, which a mesh holds by default; a
+domain that redefines it integrates its definition, as the mesh warns when it is built. A
+label the mesh does not hold is a face name (the canonical `:xmin`…`:zmax`, `:boundary`, or
+a viewpoint alias). Under `domain(S, :left => :ymin)`, `:left` is therefore the bottom edge.
+On an axis with one point, a label's marked points cover both faces of that axis, so such a
+label throws; the face name (`:ymin`) is the way to name one of them.
+
+Markers that select no face, or that mark a point on no selected face, throw an
+`ArgumentError`: part of a face, an interior interface or a staircase is a genuinely more
+general surface -- the weight stops factorising where the surface is cut at an interior
+transverse index, and needs the explicit one-sided face sum -- and is refused rather than
+silently given the factorised weight. A `DimensionMismatch` is thrown when the storage of
+`uₕ` or `vₕ` does not hold one value per point of the mesh of `space(uₕ)`.
 
 The symbolic twin, for use inside a form, is `inner_Γ(g, v; markers = …)`
 (`operators/inner.jl`). It takes its regions as a keyword, to sit beside `innerₕ`; this
@@ -231,10 +241,10 @@ See also: [`innerₕ`](@ref)
 function inner_Γ(
         uₕ::VectorElement{<:ScalarGridSpace{D}},
         vₕ::VectorElement{<:ScalarGridSpace{D}},
-        labels::Symbol...
-) where {D}
+        labels::Vararg{Symbol, N}
+) where {D, N}
     Ωₕ = mesh(space(uₕ))
-    mask = _face_mask(Val(D), labels)
+    mask = _surface_mask(Ωₕ, labels)
     _no_faces(mask) && _throw_no_surface_labels()
     _check_surface_is_thin(Ωₕ, mask)
     u, v, n = parent(uₕ), parent(vₕ), npoints(Ωₕ)
@@ -257,7 +267,8 @@ end
 # fraction of the points, so the arithmetic saved by a marked-index walk is not worth a
 # second traversal shape. The same weight is read per point by the symbolic path
 # (`compute_weight(::InnerGamma, …)`, operators/inner.jl), so the two layers compute the
-# same number by construction.
+# same number by construction for face names. A label the mesh defines differently is read
+# from its marker here but by its name there, until gpena/Bramble.jl#660 resolves both alike.
 @inline function _surface_sum(Ωₕ, mask, u, v)
     acc = zero(eltype(u)) * zero(eltype(v)) * zero(eltype(Ωₕ))
     lin = LinearIndices(indices(Ωₕ))
