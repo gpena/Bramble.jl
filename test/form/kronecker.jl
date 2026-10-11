@@ -10,7 +10,7 @@ using Random
 using LinearSolve: LinearProblem, solve, KrylovJL_CG
 using ForwardDiff
 using Polyester
-using ..TestUtils: WITH_AD_TESTS, _graded_mesh
+using ..TestUtils: WITH_3D_TESTS, WITH_AD_TESTS, _graded_mesh
 
 # `is_separable`/`kronecker_operator`: a bilinear form whose
 # resolved AST is a sum of `innerₕ(u, v)`/`inner₊(∇ₕ(u), ∇ₕ(v))`-shaped terms over a
@@ -53,14 +53,17 @@ end
             Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 7), npts2)
             W2 = gridspace(Ω2)
 
-            Random.seed!(KRON_SEED)
-            Ω3 = mesh(
-                domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
-                (6, 5, 4), npts3
-            )
-            W3 = gridspace(Ω3)
+            spaces = Any[(W2, "2D")]  # Any: each space is its own type
+            if WITH_3D_TESTS
+                Random.seed!(KRON_SEED)
+                Ω3 = mesh(
+                    domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
+                    (6, 5, 4), npts3
+                )
+                push!(spaces, (gridspace(Ω3), "3D"))
+            end
 
-            for (Wₕ, tag) in ((W2, "2D"), (W3, "3D"))
+            for (Wₕ, tag) in spaces
                 unif_tag = npts2 === true ? "uniform" : "non-uniform"
                 @testset "$tag, $unif_tag" begin
                     @test is_separable(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))
@@ -98,14 +101,17 @@ end
         Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (31, 17), (false, false))
         W2 = gridspace(Ω2)
 
-        Random.seed!(KRON_SEED + 1)
-        Ω3 = mesh(
-            domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
-            (9, 8, 7), (false, false, false)
-        )
-        W3 = gridspace(Ω3)
+        spaces = Any[W2]  # Any: each space is its own type
+        if WITH_3D_TESTS
+            Random.seed!(KRON_SEED + 1)
+            Ω3 = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
+                (9, 8, 7), (false, false, false)
+            )
+            push!(spaces, gridspace(Ω3))
+        end
 
-        for Wₕ in (W2, W3)
+        for Wₕ in spaces
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)))
             A = assemble(a)
             K = kronecker_operator(a)
@@ -404,7 +410,7 @@ end
     # family below factors on graded meshes, and `SparseMatrixCSC(K)` is `assemble(a)`,
     # stored pattern included. A coefficient varying along one axis is a factor too.
     @testset "Kronecker: projected forms" begin
-        for n in ((9, 7), (6, 5, 7))
+        for n in ((9, 7), (WITH_3D_TESTS ? ((6, 5, 7),) : ())...)
             Wₕ = gridspace(_graded_mesh(n))
             fx = Rₕ(Wₕ, x -> 1 + x[1])
             fy = Rₕ(Wₕ, x -> 2 + x[2]^2)
@@ -511,7 +517,7 @@ end
     # the projection carries on axis 1. A `Ref` there is carried beside the factors and read
     # at every product.
     @testset "Kronecker: like terms merged" begin
-        for n in ((9, 7), (6, 5, 7))
+        for n in ((9, 7), (WITH_3D_TESTS ? ((6, 5, 7),) : ())...)
             Wₕ = gridspace(_graded_mesh(n))
             fx = Rₕ(Wₕ, x -> 1 + x[1])
             fams = [
@@ -538,7 +544,7 @@ end
             (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) + c * Bramble.inner₊ₓ(D₋ₓ(u), v),
             (u, v) -> innerₕ(D₋ₓ(u), v) + c * innerₕ(u, v)
         ]
-        for n in ((17, 13), (6, 5, 7)), f in advection
+        for n in ((17, 13), (WITH_3D_TESTS ? ((6, 5, 7),) : ())...), f in advection
 
             Wₕ = gridspace(_graded_mesh(n))
             a = form(Wₕ, Wₕ, f)
@@ -560,7 +566,7 @@ end
     # bit for bit, on a form whose 1D assembly would otherwise round differently.
     @testset "Kronecker: factors across policies" begin
         f = (u, v) -> innerₕ(D₋ₓ(Mₓ(u)), D₋ₓ(Mₓ(v))) + 0.3 * innerₕ(u, v)
-        for n in ((5, 4), (12, 9, 11))
+        for n in ((5, 4), (WITH_3D_TESTS ? ((12, 9, 11),) : ())...)
             Ks = [kronecker_operator(form(W, W, f))
                   for W in (gridspace(_graded_mesh(n; backend = backend(; policy = P)))
             for P in (Bramble.CpuSerial(), Bramble.CpuThreaded(), Bramble.CpuPolyester()))]
@@ -612,7 +618,7 @@ end
         kform(W) = form(W, W, (u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v)))
         for P in (Bramble.CpuSerial(), Bramble.CpuThreaded())
             bytes = Dict{Tuple, Int}()
-            for n in ((9, 7), (257, 257), (6, 5, 4), (33, 33, 33))
+            for n in ((9, 7), (257, 257), (WITH_3D_TESTS ? ((6, 5, 4), (33, 33, 33)) : ())...)
                 @testset "$P $(join(n, '×'))" begin
                     W = gridspace(_graded_mesh(n; backend = backend(; policy = P)))
                     a = kform(W)
@@ -656,7 +662,7 @@ end
             end
             # Constant in grid size: a large grid allocates no more than a small one.
             @test bytes[(257, 257)] <= bytes[(9, 7)]
-            @test bytes[(33, 33, 33)] <= bytes[(6, 5, 4)]
+            WITH_3D_TESTS && @test bytes[(33, 33, 33)] <= bytes[(6, 5, 4)]
         end
     end
 
@@ -767,7 +773,7 @@ end
     # `kronecker_operator` is `@noinline`, so a caller compiles one call to it (cached once by
     # the precompile workload) instead of the whole build; the product is unchanged.
     @testset "kronecker_operator stays a call" begin
-        for n in ((9, 8), (6, 5, 7))
+        for n in ((9, 8), (WITH_3D_TESTS ? ((6, 5, 7),) : ())...)
             Wₕ = gridspace(_graded_mesh(n))
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
             x = rand(MersenneTwister(KRON_SEED), ndofs(Wₕ))
@@ -779,8 +785,8 @@ end
         end
     end
 
-    # summarysize(K) << summarysize(assemble(a)).
-    @testset "memory: K smaller than assembled" begin
+    # summarysize(K) << summarysize(assemble(a)). It needs the 60^3 mesh, so it runs nightly.
+    WITH_3D_TESTS && @testset "memory: K smaller than assembled" begin
         Ωₕ = mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
             (60, 60, 60), true

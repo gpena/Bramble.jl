@@ -8,7 +8,7 @@ using LinearAlgebra: issymmetric, mul!
 using SparseArrays: SparseMatrixCSC, nnz, findnz
 using Random
 using Polyester
-using ..TestUtils: ZeroBasedVector, _graded_mesh
+using ..TestUtils: WITH_3D_TESTS, ZeroBasedVector, _graded_mesh
 
 # `kronecker_operator` on a composite space whose leaves share one mesh: one
 # `KroneckerLinearOperator` per nonzero (test leaf, trial leaf) block, wrapped in a
@@ -58,7 +58,7 @@ end
 
 @testset "Kronecker blocks" begin
     @testset "matches assemble, 2D and 3D" begin
-        for n in ((9, 7), (6, 5, 7))
+        for n in ((9, 7), (WITH_3D_TESTS ? ((6, 5, 7),) : ())...)
             _kb_matches_assemble(n)
         end
     end
@@ -172,7 +172,7 @@ end
     # The same product bit for bit under every host policy, and 0 B warm under `CpuSerial`
     # and `CpuPolyester`, 3- and 5-argument.
     @testset "policies: bitwise and bytes" begin
-        for n in ((9, 7), (6, 5, 7))
+        for n in ((9, 7), (WITH_3D_TESTS ? ((6, 5, 7),) : ())...)
             Ks = map((Bramble.CpuSerial(), Bramble.CpuThreaded(), Bramble.CpuPolyester())) do P
                 V = gridspace(_graded_mesh(n; backend = backend(; policy = P)), Val(2))
                 return kronecker_operator(form(V, V, _kb_coupled))

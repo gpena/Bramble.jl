@@ -5,7 +5,7 @@ using Bramble
 using Bramble: D₊ₓ, D₋ₓ, D₋ᵧ, D₊ᵧ, Dc, Mₓ, M₊ᵧ, Mcₓ, jumpₓ, jumpᵧ, S₊ₓ, S₋ᵧ, inner₊ₓ,
                inner₊ᵧ, restrict_to
 using SparseArrays: SparseMatrixCSC, nnz, nonzeros, spzeros
-using ..TestUtils: _graded_mesh
+using ..TestUtils: WITH_3D_TESTS, _graded_mesh
 
 # `_kron_project` (gpena/Bramble.jl#427): one addend of a resolved form, projected onto
 # each axis of a tensor mesh, gives 1D factors whose summed `kron`s are what `assemble`
@@ -47,7 +47,8 @@ end
 @testset "Kronecker projection (#427)" begin
     @testset "families match assemble" begin
         # Any: each space is its own type
-        for W in Any[gridspace(_graded_mesh((9, 7))), gridspace(_graded_mesh((6, 5, 7)))]
+        for W in Any[gridspace(_graded_mesh((9, 7))),
+                     (WITH_3D_TESTS ? (gridspace(_graded_mesh((6, 5, 7))),) : ())...]
             forms = Any[  # Any: each closure is its own type
                 (u, v) -> innerₕ(Dc(u, Val(1)), Dc(v, Val(1))),
                 (u, v) -> innerₕ(M₊ᵧ(u), Mcₓ(v)),
@@ -124,11 +125,13 @@ end
 
     @testset "inner_Γ is a sum over its faces" begin
         W2 = gridspace(_graded_mesh((9, 7)))
-        W3 = gridspace(_graded_mesh((6, 5, 7)))
         cases = Any[  # Any: each space and marker set is its own type
-            (W2, :xmin, 1), (W2, :ymax, 1), (W2, (:xmin, :ymin), 2), (W2, :boundary, 4),
-            (W3, :zmax, 1), (W3, (:xmax, :ymin), 2), (W3, (:xmin, :ymax, :zmin), 3),
-            (W3, :boundary, 6)]
+            (W2, :xmin, 1), (W2, :ymax, 1), (W2, (:xmin, :ymin), 2), (W2, :boundary, 4)]
+        if WITH_3D_TESTS
+            W3 = gridspace(_graded_mesh((6, 5, 7)))
+            push!(cases, (W3, :zmax, 1), (W3, (:xmax, :ymin), 2),
+                (W3, (:xmin, :ymax, :zmin), 3), (W3, :boundary, 6))
+        end
         for (W, mk, nfaces) in cases
             a = form(W, W, (u, v) -> inner_Γ(u, v; markers = mk))
             P = Bramble._kron_project(only(_proj_leaves(a))[2], mesh(W))
@@ -160,7 +163,8 @@ end
 
     @testset "single-axis coefficients factor" begin
         # Any: each space is its own type
-        for W in Any[gridspace(_graded_mesh((9, 7))), gridspace(_graded_mesh((6, 5, 7)))]
+        for W in Any[gridspace(_graded_mesh((9, 7))),
+                     (WITH_3D_TESTS ? (gridspace(_graded_mesh((6, 5, 7))),) : ())...]
             fx = Rₕ(W, x -> 1 + x[1])
             fy = Rₕ(W, x -> 2 + x[2]^2)
             fl = Rₕ(W, x -> 1 + x[end]^3)  # the last axis: z in 3D

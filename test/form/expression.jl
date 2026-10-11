@@ -5,6 +5,7 @@ using Bramble
 using Bramble: restrict_to, dirac, D₋ᵧ, D₋₂, D₋ₓ, Mₓ, jumpₓ
 using Bramble: TrialFunction, TestFunction, IdentityOperator, ZeroOperator, OperatorScale,
                SourceVector, source_function
+using ..TestUtils: WITH_3D_TESTS
 
 # `expression(form)`/`expression(ast::LazyOp)` (src/ast/expression.jl) render a
 # resolved form AST in Bramble's own operator notation. Every string asserted below was
@@ -38,7 +39,8 @@ using Bramble: TrialFunction, TestFunction, IdentityOperator, ZeroOperator, Oper
         @test expression(a) == "innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(D₋ᵧ(u), D₋ᵧ(v))"
     end
 
-    @testset "3D scalar form" begin
+    # The one 3D case of this file builds a 3D mesh, so it runs nightly.
+    WITH_3D_TESTS && @testset "3D scalar form" begin
         # The third spatial subscript renders as `₂`, not `z`/`₃`
         # (`Bramble._BRAMBLE_var2symbol = ("ₓ", "ᵧ", "₂")`).
         Ωₕ = mesh(

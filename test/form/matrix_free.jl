@@ -6,7 +6,7 @@ using Bramble: MatrixFreeOperator, VectorElement, trial_space, test_space, restr
                D₊ᵧ
 using LinearAlgebra: mul!, norm, dot
 using Random
-using ..TestUtils: WITH_SLOW_TESTS, _graded_mesh
+using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _graded_mesh
 
 # `matrix_free_operator` applies a bilinear form through the walk the
 # assembly replays, so every check compares it against `assemble(a; dirichlet)` on the same
@@ -22,7 +22,8 @@ _mf_alloc3(y, op, x) = (mul!(y, op, x); @allocated mul!(y, op, x))
 _mf_alloc5(y, op, x) = (mul!(y, op, x, 0.5, 2.0); @allocated mul!(y, op, x, 0.5, 2.0))
 _mf_alloc_times(op, x) = (op * x; @allocated op * x)
 
-# Seeded on every call, so two backends draw the same non-uniform meshes.
+# Seeded on every call, so two backends draw the same non-uniform meshes. The 3D space is
+# built only where 3D meshes may be (`WITH_3D_TESTS`): callers index `[1]` and `[2]`.
 function _mf_spaces(be = backend())
     Random.seed!(MF_SEED)
     return (
@@ -30,9 +31,10 @@ function _mf_spaces(be = backend())
         gridspace(mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 2.0), :west => :left), (9, 11), (false, true);
             backend = be)),
-        gridspace(mesh(
+        (WITH_3D_TESTS ?
+         (gridspace(mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0), :west => :left), (
-                6, 7, 5), false; backend = be))
+                6, 7, 5), false; backend = be)),) : ())...
     )
 end
 
@@ -231,8 +233,7 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         Ωc = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :west => :left), (9, 7), (false, false))
         Ωf = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (13, 11), (false, false))
         Ωs = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 3), (false, false))
-        Ω3 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4, 6), false)
-        Wc, Wf, Ws, W3 = gridspace(Ωc), gridspace(Ωf), gridspace(Ωs), gridspace(Ω3)
+        Wc, Wf, Ws = gridspace(Ωc), gridspace(Ωf), gridspace(Ωs)
         κ = Rₕ(Wc, x -> 1 + sum(abs2, x))
         V = Wc × Wc
         cases = Any[  # Any: each form is its own type, and each Dirichlet label set too
@@ -244,7 +245,6 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
             # Three slices against a reach of two: the wide term's grid has no interior to
             # peel, so its band walks every point guarded.
             ("no interior", form(Ws, Ws, (u, v) -> innerₕ(u, D₋ᵧ(D₋ᵧ(v))) + innerₕ(D₊ᵧ(u), v)), :boundary, (-2, 0)),
-            ("3D", form(W3, W3, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))), :boundary, (-1, 0)),
             ("pointwise", form(Wc, Wc, (u, v) -> innerₕ(u, v) + innerₕ(κ * u, v)), nothing, (0, 0)),
             ("composite pair",
                 form(V, V, (u, v) -> innerₕ(D₋ᵧ(u(1)), v(2)) + 3.0 * innerₕ(u(2), D₋ᵧ(v(1))) +
@@ -252,6 +252,12 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
                 :boundary, (-1, 0)),
             ("test interpolation", form(Wc, Wf, (u, v) -> innerₕ(πₕ(u), v) + innerₕ(u, πₕ(v))), nothing, (0, 0))
         ]
+        if WITH_3D_TESTS  # the one 3D case runs nightly
+            Ω3 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4, 6), false)
+            W3 = gridspace(Ω3)
+            push!(cases,
+                ("3D", form(W3, W3, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))), :boundary, (-1, 0)))
+        end
         for (name, a, dl, reach) in cases
             @testset "$name" begin
                 op = _mf_op(a, dl)
@@ -400,7 +406,7 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
     # and both `inner₊(D₋ᵢu, D₋ᵢv)` units are answered by the cached geometry the sink
     # carries (`_mf_whole`). They do not prove the branch bodies run the gather and the cache.
     @testset "matrix-free: zero bytes at scale" begin
-        for n in ((9, 2), (257, 257), (5, 4, 2), (33, 33, 33))
+        for n in ((9, 2), (257, 257), (WITH_3D_TESTS ? ((5, 4, 2), (33, 33, 33)) : ())...)
             W = gridspace(_graded_mesh(n))
             @test !Bramble.is_uniform(mesh(W)(1))
             a = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
