@@ -79,12 +79,12 @@ Built by [`semidiscretize`](@ref); read back with [`mass_matrix`](@ref) and
 - `update_coefficients`: callable invoked with `t` (or, wrapped in `ParametricUpdate`, with `t` and the residual's own `p`) before assembly, or `nothing`.
 - `reassemble`: `Val(true)` to refill `A` at every step.
 """
-struct Semidiscretization{A, L, S, MT, VT, BC, LB, CP, ST, TR, R} <: AbstractSemidiscretization
+struct Semidiscretization{A, L, S, MT, MM, VT, BC, LB, CP, ST, TR, R} <: AbstractSemidiscretization
     operator::A
     source::L
     space::S
     operator_matrix::MT
-    mass_matrix::MT
+    mass_matrix::MM
     source_vector::VT
     constraints::BC
     labels::LB
@@ -603,8 +603,8 @@ end
 
 function Base.show(
         io::IO, ::MIME"text/plain",
-        sd::Semidiscretization{A, L, S, MT, VT, BC, LB, CP, ST, TR, R}
-) where {A, L, S, MT, VT, BC, LB, CP, ST, TR, R}
+        sd::Semidiscretization{A, L, S, MT, MM, VT, BC, LB, CP, ST, TR, R}
+) where {A, L, S, MT, MM, VT, BC, LB, CP, ST, TR, R}
     return show_block(io) do io
         pp = PrettyPrinter(io)
         printstyled(io, "Semidiscretization"; bold = true, color = :cyan)

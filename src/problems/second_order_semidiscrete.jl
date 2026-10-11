@@ -95,7 +95,7 @@ Built by [`semidiscretize_second_order`](@ref); read back with [`mass_matrix`](@
 - `labels`: constrained boundary labels.
 - `components`: leaf components the labels bind to, or `nothing` for all.
 """
-struct SecondOrderSemidiscretization{K, C, L, S, MT, CM, VT, BC, LB, CP} <:
+struct SecondOrderSemidiscretization{K, C, L, S, MT, CM, MM, VT, BC, LB, CP} <:
        AbstractSemidiscretization
     stiffness::K
     damping::C
@@ -103,7 +103,7 @@ struct SecondOrderSemidiscretization{K, C, L, S, MT, CM, VT, BC, LB, CP} <:
     space::S
     stiffness_matrix::MT
     damping_matrix::CM
-    mass_matrix::MT
+    mass_matrix::MM
     source_vector::VT
     constraints::BC
     labels::LB
@@ -262,8 +262,8 @@ end
 
 function Base.show(
         io::IO, ::MIME"text/plain",
-        sd::SecondOrderSemidiscretization{K, C, L, S, MT, CM, VT, BC, LB, CP}
-) where {K, C, L, S, MT, CM, VT, BC, LB, CP}
+        sd::SecondOrderSemidiscretization{K, C, L, S, MT, CM, MM, VT, BC, LB, CP}
+) where {K, C, L, S, MT, CM, MM, VT, BC, LB, CP}
     return show_block(io) do io
         pp = PrettyPrinter(io)
         printstyled(io, "SecondOrderSemidiscretization"; bold = true, color = :cyan)

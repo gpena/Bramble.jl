@@ -445,10 +445,10 @@ end
 
 # The matrix-type seam extended to the consumers of assembly ):
 # `semidiscretize`, `mass_matrix` and `operator_matrix` read whatever matrix type the form's
-# own backend produces -- the `Semidiscretization{...,MT,...}` parameter already carried for
-# both matrices -- rather than assuming `SparseMatrixCSC`. A dense `Matrix{Float64}` backend
-# must semidiscretise to the exact same numbers as the default CSC backend, and the residual
-# built from it must agree too.
+# own backend produces -- the `Semidiscretization{...,MT,MM,...}` parameters carried for
+# the operator and mass matrices -- rather than assuming `SparseMatrixCSC`. A dense
+# `Matrix{Float64}` backend must semidiscretise to the exact same numbers as the default CSC
+# backend, and the residual built from it must agree too.
 @testset "Dense backend" begin
     I = Bramble.interval(0.0, 1.0)
     Ωc = Bramble.mesh(Bramble.domain(I), 21, false)
