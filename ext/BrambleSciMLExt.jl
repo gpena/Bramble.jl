@@ -146,9 +146,13 @@ function Bramble._ode_problem(
     return ODEProblem(rhs, u0, tspan, p; kwargs...)
 end
 
+# `{true}` fixes `iip` at compile time: the one-argument `DynamicalODEFunction(f1)` asks
+# `isinplace(f1, 5)` at run time, which leaves the function type, and the problem's,
+# abstract. The residual is always in place, and `nothing` is the `f2` that constructor
+# would have passed, so the object built is the same.
 function Bramble._second_order_ode_function(sd::SecondOrderSemidiscretization)
-    return DynamicalODEFunction(
-        (dv, v, u, p, t) -> sd(dv, v, u, p, t);
+    return DynamicalODEFunction{true}(
+        (dv, v, u, p, t) -> sd(dv, v, u, p, t), nothing;
         mass_matrix = block_mass_matrix(sd)
     )
 end

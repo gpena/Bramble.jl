@@ -2,7 +2,7 @@ module ExtSciMlExtTests
 
 using Test
 using Bramble
-using Bramble: ode_function
+using Bramble: ode_function, second_order_ode_function
 using Bramble: SecondOrderSemidiscretization, block_mass_matrix, damping_matrix,
                jacobian_prototype, mass_matrix, operator_matrix, semidiscretize_rhs,
                stiffness_matrix
@@ -523,6 +523,34 @@ end
             @test eltype(prob_d.u0.x[1]) == eltype(prob_d.u0.x[2]) == eltype(prob_d.p)
             @test ForwardDiff.value.(prob_d.u0.x[1]) == parent(du₀)
             @test_throws MethodError second_order_ode_problem(sd, du₀, u₀, Iv; abstol = 1e-8)
+        end
+
+        # `DynamicalODEFunction{true}` fixes `iip` at compile time; the one-argument
+        # constructor asks `isinplace` at run time and leaves both types abstract.
+        @testset "second order: concrete inferred type" begin
+            sd = semidiscretize_second_order(K, l; dirichlet = bcs)
+            u₀ = parent(Rₕ(Wₕ, x -> _wave_uex(x, 0.0)))
+            du₀ = zero(u₀)
+            fn_args = (typeof(sd),)
+            R_fn = only(Base.return_types(second_order_ode_function, fn_args))
+            @test isconcretetype(R_fn)
+            @test R_fn === typeof(second_order_ode_function(sd))
+
+            forms_fn(K, l, bcs) = second_order_ode_function(K, l; dirichlet = bcs)
+            R_forms = only(Base.return_types(forms_fn, map(typeof, (K, l, bcs))))
+            @test isconcretetype(R_forms)
+            @test R_forms === typeof(forms_fn(K, l, bcs))
+
+            default_prob(sd, du₀, u₀, I) = second_order_ode_problem(sd, du₀, u₀, I)
+            p_prob(sd, du₀, u₀, I) = second_order_ode_problem(sd, du₀, u₀, I; p = [0.5])
+            prob_args = (typeof(sd), typeof(du₀), typeof(u₀), typeof(Iv))
+            for k in (default_prob, p_prob)
+                R = only(Base.return_types(k, prob_args))
+                @test isconcretetype(R)
+                prob = k(sd, du₀, u₀, Iv)
+                @test R === typeof(prob)
+                @test SciMLBase.isinplace(prob)
+            end
         end
 
         # VelocityVerlet et al. cannot be used at all: `OrdinaryDiffEqCore` refuses any
