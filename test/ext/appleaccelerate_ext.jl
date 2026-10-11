@@ -32,6 +32,16 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
                             poisson_solve_contract, refactor_contract,
                             unsymmetric_refactor_contract, validation_contract
 
+# A `MethodError` that names the offending keyword, not any other failure.
+function throws_unknown_kw(f, kw::Symbol)
+    try
+        f()
+    catch e
+        return e isa MethodError && occursin(string(kw), sprint(showerror, e))
+    end
+    return false
+end
+
 @testset "AppleAccelerate extension" begin
     if !Sys.isapple()
         @testset "Non-macOS guard" begin
@@ -253,6 +263,44 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
             bu = [1.0, 2, 3]
             u_u = accelerate_factorize(Au; sym = :unsymmetric) \ bu
             @test isapprox(u_u, Matrix(Au) \ bu; rtol = 1.0e-12)
+        end
+
+        @testset "unknown keyword throws (#657)" begin
+            A = sparse(SymTridiagonal(fill(4.0, 6), fill(-1.0, 5)))
+            b = collect(1.0:6)
+            ref = Matrix(A) \ b
+            S = interval(0.0, 1.0) × interval(0.0, 1.0)
+            Ω = mesh(domain(S, :boundary => boundary_symbols(S)), (6, 6), (true, true))
+            W = gridspace(Ω)
+            a_form = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+
+            @test throws_unknown_kw(() -> accelerate_factorize(A; bogus = 1), :bogus)
+            @test throws_unknown_kw(() -> accelerate_solve(A, b; bogus = 1), :bogus)
+            @test throws_unknown_kw(
+                () -> accelerate_factorize(a_form; dirichlet = ZERO_BC, bogus = 1), :bogus
+            )
+            @test throws_unknown_kw(() -> accelerate_factorize(Matrix(A); bogus = 1), :bogus)
+            @test throws_unknown_kw(() -> pde_solve(A, b; solver = :accelerate, bogus = 1), :bogus)
+            @test throws_unknown_kw(
+                () -> sparse_factorize(A; solver = :accelerate, bogus = 1), :bogus
+            )
+            @test throws_unknown_kw(() -> factorize(A, AccelerateFactorization; bogus = 1), :bogus)
+            # The `symmetrize` refusal still comes first on the form method
+            @test_throws ArgumentError accelerate_factorize(
+                a_form; dirichlet = ZERO_BC, symmetrize = true, bogus = 1
+            )
+
+            # The accepted keywords still solve
+            @test accelerate_factorize(A; sym = :symmetric, kind = :ldlt) \ b ≈ ref
+            @test accelerate_solve(A, b; sym = :spd, kind = :cholesky) ≈ ref
+            @test pde_solve(A, b; solver = :accelerate, kind = :ldlt) ≈ ref
+            @test accelerate_factorize(Matrix(A); sym = :spd, kind = :cholesky) \ b ≈ ref
+
+            # `:default` takes only `kind`, on every platform
+            for Aᵢ in (A, sparse([4.0 1; 0 3]))
+                @test_throws ArgumentError pde_solve(Aᵢ, ones(size(Aᵢ, 1)); bogus = 1)
+            end
+            @test pde_solve(A, b; kind = :ldlt) ≈ ref
         end
 
         @testset "Error handling & validation" begin

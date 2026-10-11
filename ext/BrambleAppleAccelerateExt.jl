@@ -84,7 +84,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         )
     end
 
-    function Bramble._accelerate_factorize(A::SparseMatrixCSC; sym = :auto, kind = :auto, kwargs...)
+    function Bramble._accelerate_factorize(A::SparseMatrixCSC; sym = :auto, kind = :auto)
         m, n = size(A)
         m == n || throw(DimensionMismatch("Matrix must be square for sparse direct solve, got $(m)×$(n)"))
 
@@ -198,8 +198,8 @@ else
     end
 end
 
-function Bramble._accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; sym = :auto, kind = :auto, kwargs...)
-    fact = Bramble._accelerate_factorize(A; sym = sym, kind = kind, kwargs...)
+function Bramble._accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; sym = :auto, kind = :auto)
+    fact = Bramble._accelerate_factorize(A; sym = sym, kind = kind)
     return fact \ F
 end
 

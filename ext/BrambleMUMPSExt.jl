@@ -65,7 +65,7 @@ function _mumps_sym_flag(A::AbstractMatrix, sym)
 end
 
 function Bramble._mumps_factorize(
-        A::SparseMatrixCSC; sym = :auto, icntl = nothing, cntl = nothing, kwargs...
+        A::SparseMatrixCSC; sym = :auto, icntl = nothing, cntl = nothing
 )
     _ensure_mpi_init()
 
@@ -95,7 +95,7 @@ function Bramble._mumps_factorize(
     # either shows the SYM = 1 guess was wrong, so factor again with pivoted LDLᵀ (SYM = 2).
     if sym === :auto && sym_flag == 1 && (mumps.infog[1] == -10 || mumps.infog[12] > 0)
         finalize!(mumps)
-        return Bramble._mumps_factorize(A; sym = 2, icntl = icntl, cntl = cntl, kwargs...)
+        return Bramble._mumps_factorize(A; sym = 2, icntl = icntl, cntl = cntl)
     end
     if mumps.infog[1] < 0
         code, info = mumps.infog[1], mumps.infog[2]
@@ -171,9 +171,9 @@ function Base.:\(
 end
 
 function Bramble._mumps_solve(
-        A::SparseMatrixCSC, F::AbstractVector; sym = :auto, icntl = nothing, cntl = nothing, kwargs...
+        A::SparseMatrixCSC, F::AbstractVector; sym = :auto, icntl = nothing, cntl = nothing
 )
-    fact = Bramble._mumps_factorize(A; sym = sym, icntl = icntl, cntl = cntl, kwargs...)
+    fact = Bramble._mumps_factorize(A; sym = sym, icntl = icntl, cntl = cntl)
     return fact \ F
 end
 

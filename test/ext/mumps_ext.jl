@@ -27,6 +27,16 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
                             poisson_solve_contract, refactor_contract,
                             unsymmetric_refactor_contract, validation_contract
 
+# A `MethodError` that names the offending keyword, not any other failure.
+function throws_unknown_kw(f, kw::Symbol)
+    try
+        f()
+    catch e
+        return e isa MethodError && occursin(string(kw), sprint(showerror, e))
+    end
+    return false
+end
+
 @testset "MUMPS extension" begin
     @testset "Poisson 1D/2D/3D (sym = :spd)" begin
         poisson_solve_contract(;
@@ -212,6 +222,44 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         A_s, F_s = assemble(a_spd, l_spd; dirichlet = ZERO_BC, symmetrize = true)
         @test mumps_factorize(A_s).sym == 1
         @test isapprox(mumps_factorize(A_s) \ F_s, Matrix(A_s) \ F_s; atol = 1.0e-12)
+    end
+
+    @testset "unknown keyword throws (#657)" begin
+        A = sparse(SymTridiagonal(fill(4.0, 6), fill(-1.0, 5)))
+        b = collect(1.0:6)
+        ref = Matrix(A) \ b
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ω = mesh(domain(S, :boundary => boundary_symbols(S)), (6, 6), (true, true))
+        W = gridspace(Ω)
+        a_form = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+        bc = ZERO_BC
+
+        @test throws_unknown_kw(() -> mumps_factorize(A; bogus = 1), :bogus)
+        @test throws_unknown_kw(() -> mumps_solve(A, b; bogus = 1), :bogus)
+        @test throws_unknown_kw(() -> mumps_factorize(a_form; dirichlet = bc, bogus = 1), :bogus)
+        @test throws_unknown_kw(() -> pde_solve(A, b; solver = :mumps, bogus = 1), :bogus)
+        @test throws_unknown_kw(() -> sparse_factorize(A; solver = :mumps, bogus = 1), :bogus)
+        @test throws_unknown_kw(() -> factorize(A, MUMPSFactorization; bogus = 1), :bogus)
+        # The `symmetrize` refusal still comes first on the form method
+        @test_throws ArgumentError mumps_factorize(a_form; dirichlet = bc, symmetrize = true, bogus = 1)
+
+        # The accepted keywords still solve
+        @test mumps_factorize(A; sym = :spd, icntl = [14 => 30], cntl = [1 => 0.01]) \ b ≈ ref
+        @test mumps_solve(A, b; sym = :spd, icntl = [14 => 30]) ≈ ref
+        @test pde_solve(A, b; solver = :mumps, sym = :spd) ≈ ref
+
+        # `:auto` on the indefinite 3×3 factors twice, the second time through `sym = 2`
+        M = sparse([1.0 1 0; 1 1 1; 0 1 1])
+        bM = [1.0, 2.0, 3.0]
+        @test mumps_factorize(M).sym == 2
+        @test mumps_factorize(M; icntl = [14 => 30], cntl = [1 => 0.01]) \ bM ≈ Matrix(M) \ bM
+
+        # `:default` takes only `kind`, on every platform
+        for Aᵢ in (A, sparse([4.0 1; 0 3]))
+            bᵢ = ones(size(Aᵢ, 1))
+            @test_throws ArgumentError pde_solve(Aᵢ, bᵢ; bogus = 1)
+        end
+        @test pde_solve(A, b; kind = :ldlt) ≈ ref
     end
 
     @testset "Error handling & validation" begin

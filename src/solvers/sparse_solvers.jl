@@ -29,6 +29,9 @@ requested solver backend.
 
 Ignored by `:sparspak`, which always factors as general unsymmetric LU.
 
+`kwargs` go to the chosen backend's `*_factorize`, which throws on a keyword it does not take.
+`:sparspak` takes none and throws an `ArgumentError`.
+
 A `SparseMatrixCSR` (`SparseMatricesCSR.jl`) is also accepted: converted to `SparseMatrixCSC`
 first (no backend has a native CSR solve path -- see `docs/src/internals/csr_solvers.md`),
 then factored exactly as above.
@@ -56,6 +59,7 @@ function sparse_factorize(A::SparseMatrixCSC; solver::Symbol = :default, sym = :
     elseif solver === :mumps
         return mumps_factorize(A; sym = sym, kwargs...)
     elseif solver === :sparspak
+        _reject_unknown_kwargs(:sparse_factorize, "solver = :sparspak", kwargs)
         return sparspak_factorize(A)
     else
         throw(
@@ -64,6 +68,19 @@ function sparse_factorize(A::SparseMatrixCSC; solver::Symbol = :default, sym = :
         ),
         )
     end
+end
+
+# A backend that takes no keyword beyond `sym` cannot ignore the rest: a typo would pass.
+# `allowed` lists the keywords the route does take.
+function _reject_unknown_kwargs(name::Symbol, route::String, kwargs, allowed = ())
+    bad = [k for k in keys(kwargs) if !(k in allowed)]
+    isempty(bad) || throw(
+        ArgumentError(
+        "$name($route) does not accept the keyword(s) $(join(bad, ", ")). " *
+        (isempty(allowed) ? "It takes none." : "It takes $(join(allowed, ", ")).")
+    ),
+    )
+    return nothing
 end
 
 # `symmetrize` belongs to `assemble(a, l; symmetrize = true)`, which also symmetrises the

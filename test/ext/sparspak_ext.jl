@@ -1,8 +1,19 @@
+# Normally test/runtests.jl includes test/ext/SolverContracts.jl immediately before this
+# file (SolverContracts.jl's own header comment documents that ordering contract), so
+# `Main.ExtSolverContracts` already exists by the time the `using ..ExtSolverContracts`
+# below runs. Included here too, guarded, so `include("test/ext/sparspak_ext.jl")`
+# also works standalone without double-defining the module when runtests.jl already
+# loaded it.
+if !isdefined(Main, :ExtSolverContracts)
+    include(joinpath(@__DIR__, "SolverContracts.jl"))
+end
+
 module TestSparspakExt
 
 using Test
 using Bramble
 using Bramble: SparspakFactorization, sparspak_factorize, sparspak_refactor!, sparspak_solve
+using Bramble: sparse_factorize
 using LinearAlgebra
 using SparseArrays
 using Sparspak
@@ -87,6 +98,16 @@ using ..TestUtils: _fd, WITH_AD_TESTS
             d = ForwardDiff.derivative(g, 1.0)
             @test isapprox(d, _fd(g, 1.0); atol = 1.0e-6, rtol = 1.0e-6)
         end
+    end
+
+    @testset "unknown keyword throws (#657)" begin
+        A = sparse(SymTridiagonal(fill(4.0, 6), fill(-1.0, 5)))
+        b = collect(1.0:6)
+        @test_throws ArgumentError pde_solve(A, b; solver = :sparspak, bogus = 1)
+        @test_throws ArgumentError sparse_factorize(A; solver = :sparspak, bogus = 1)
+        # `sym` is a named keyword and stays ignored here
+        @test pde_solve(A, b; solver = :sparspak, sym = :spd) ≈ Matrix(A) \ b
+        @test sparse_factorize(A; solver = :sparspak, sym = :spd) \ b ≈ Matrix(A) \ b
     end
 
     @testset "Error handling & validation" begin
