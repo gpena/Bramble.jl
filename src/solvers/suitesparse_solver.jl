@@ -32,6 +32,8 @@ SuiteSparse (CHOLMOD for symmetric positive-definite systems, UMFPACK for unsymm
 - `:symmetric` or `2` selects symmetric factorization.
 - `:unsymmetric` or `0` selects general unsymmetric (UMFPACK LU).
 
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
+
 Requires `SuiteSparse.jl`; call `using SuiteSparse` before calling this function.
 
 # Examples
@@ -72,6 +74,8 @@ Directly solve `A u = F` (or `assemble(a, l)` system) using SuiteSparse factoriz
 `sym` is as in [`suitesparse_factorize`](@ref): `symmetrize = true` does not choose Cholesky,
 `:auto` still lets CHOLMOD decide.
 
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
+
 Requires `SuiteSparse.jl`; call `using SuiteSparse` before calling this function.
 
 See also [`suitesparse_factorize`](@ref), [`refactor!`](@ref), [`pde_solve`](@ref).
@@ -105,13 +109,15 @@ function suitesparse_refactor!(fact::SuiteSparseFactorization, A::SparseMatrixCS
     return _suitesparse_refactor!(fact, A)
 end
 
-function _suitesparse_factorize(::Any; kwargs...)
+function _suitesparse_factorize(A; kwargs...)
+    _ext_loaded(:BrambleSuiteSparseExt) && _throw_unsupported_matrix("suitesparse_factorize", A)
     return error(
         "suitesparse_factorize requires SuiteSparse.jl. Add `using SuiteSparse` before calling this function.",
     )
 end
 
-function _suitesparse_solve(::Any, ::Any; kwargs...)
+function _suitesparse_solve(A, ::Any; kwargs...)
+    _ext_loaded(:BrambleSuiteSparseExt) && _throw_unsupported_matrix("suitesparse_solve", A)
     return error(
         "suitesparse_solve requires SuiteSparse.jl. Add `using SuiteSparse` before calling this function.",
     )
@@ -137,6 +143,8 @@ SuiteSparse's SPQR, suited to overdetermined least-squares systems and the recta
 blocks of a constrained saddle-point form. Unlike [`suitesparse_factorize`](@ref), `A` need
 not be square, and this needs only `SparseArrays` -- already a dependency of Bramble, no
 `using SuiteSparse` required.
+
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
 
 `kwargs` (`tol`, `ordering`, ...) are forwarded to `SparseArrays.SPQR.qr`.
 
@@ -172,7 +180,7 @@ end
 
 Directly solve `A u = F` (exactly if square, least-squares if overdetermined) using
 SuiteSparse's SPQR sparse QR factorization. Needs only `SparseArrays`; no `using
-SuiteSparse` required.
+SuiteSparse` required. A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
 
 See also [`suitesparse_qr_factorize`](@ref), [`pde_solve`](@ref).
 """

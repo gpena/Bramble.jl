@@ -104,6 +104,7 @@ function sparse_factorize(
     A = assemble(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
+    A = _as_csc(A)
     return sparse_factorize(A; solver = solver, sym = sym, kwargs...)
 end
 
@@ -150,6 +151,19 @@ end
 # The assembled matrix of a `BilinearForm` is CSR on a `csr_backend()` mesh, and no backend
 # solver takes one (`qr` would silently densify it): the form methods pass it through here.
 _as_csc(A) = _is_csr(A) ? _csr_to_csc(A) : A
+
+# A dense-backed form assembles into a `Matrix`, which no backend takes either. The scan is
+# O(n²), once per solve, on a matrix whose assembly is already O(n²).
+_as_csc(A::Matrix) = sparse(A)
+
+# The `_X_factorize`/`_X_solve` fallbacks of the backend solvers (and the ILU ones) say
+# "requires X.jl" only when the extension is missing. With it loaded, a matrix type its
+# methods do not take (a `Diagonal`, say) gets this error naming the type instead.
+_ext_loaded(ext::Symbol) = Base.get_extension(Bramble, ext) !== nothing
+
+function _throw_unsupported_matrix(name::String, A)
+    throw(ArgumentError("$name takes a SparseMatrixCSC; got a $(typeof(A))."))
+end
 
 # `assemble(a::BilinearForm)` is generic over the backend's matrix type (gpena/Bramble.jl#12)
 # and a dense-backed form assembles into a `Matrix`, not a `SparseMatrixCSC` -- so the call

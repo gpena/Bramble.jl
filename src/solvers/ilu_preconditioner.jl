@@ -66,13 +66,15 @@ function ilu_preconditioner(
     return _ilu_preconditioner(A; kwargs...)
 end
 
-function _ilu_preconditioner(::Any; kwargs...)
+function _ilu_preconditioner(A; kwargs...)
+    _ext_loaded(:BrambleILUZeroExt) && _throw_unsupported_matrix("ilu_preconditioner", A)
     return error(
         "ilu_preconditioner requires ILUZero.jl. Add `using ILUZero` before calling this function.",
     )
 end
 
-function _ilu_operator(::Any; kwargs...)
+function _ilu_operator(A; kwargs...)
+    _ext_loaded(:BrambleILUZeroExt) && _throw_unsupported_matrix("preconditioner = :ilu0", A)
     return error(
         "preconditioner = :ilu0 requires ILUZero.jl. Add `using ILUZero` before calling this function.",
     )

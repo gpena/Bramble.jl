@@ -28,6 +28,8 @@ Sparspak has no binary dependency, so it factors matrices whose entries are not
 `Float64`/`ComplexF64` -- `Float32`, `BigFloat`, or a `ForwardDiff.Dual` -- where SuiteSparse
 and MUMPS cannot.
 
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
+
 Requires [Sparspak.jl](https://github.com/JuliaSparse/Sparspak.jl); call `using Sparspak`
 before calling this function.
 
@@ -65,6 +67,8 @@ end
 
 Directly solve `A u = F` (or `assemble(a, l)` system) using Sparspak's pure-Julia sparse
 direct LU factorization.
+
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
 
 Requires [Sparspak.jl](https://github.com/JuliaSparse/Sparspak.jl); call `using Sparspak`
 before calling this function.
@@ -110,13 +114,15 @@ function sparspak_refactor!(fact::SparspakFactorization, A::SparseMatrixCSC)
     return _sparspak_refactor!(fact, A)
 end
 
-function _sparspak_factorize(::Any)
+function _sparspak_factorize(A)
+    _ext_loaded(:BrambleSparspakExt) && _throw_unsupported_matrix("sparspak_factorize", A)
     return error(
         "sparspak_factorize requires Sparspak.jl. Add `using Sparspak` before calling this function.",
     )
 end
 
-function _sparspak_solve(::Any, ::Any)
+function _sparspak_solve(A, ::Any)
+    _ext_loaded(:BrambleSparspakExt) && _throw_unsupported_matrix("sparspak_solve", A)
     return error(
         "sparspak_solve requires Sparspak.jl. Add `using Sparspak` before calling this function.",
     )

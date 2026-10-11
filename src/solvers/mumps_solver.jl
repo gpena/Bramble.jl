@@ -41,6 +41,8 @@ zero pivot (`INFOG(1) = -10`), an error otherwise.
 
 Any other keyword throws a `MethodError`.
 
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
+
 Requires [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl); call `using MUMPS` before
 calling this function.
 
@@ -90,6 +92,8 @@ Directly solve `A u = F` (or `assemble(a, l)` system) using MUMPS direct factori
 `icntl` and `cntl` are as in [`mumps_factorize`](@ref). Any other keyword throws a
 `MethodError`.
 
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
+
 Requires [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl); call `using MUMPS` before
 calling this function.
 
@@ -134,13 +138,15 @@ function mumps_refactor!(fact::MUMPSFactorization, A::SparseMatrixCSC)
     return _mumps_refactor!(fact, A)
 end
 
-function _mumps_factorize(::Any; kwargs...)
+function _mumps_factorize(A; kwargs...)
+    _ext_loaded(:BrambleMUMPSExt) && _throw_unsupported_matrix("mumps_factorize", A)
     return error(
         "mumps_factorize requires MUMPS.jl. Add `using MUMPS` before calling this function.",
     )
 end
 
-function _mumps_solve(::Any, ::Any; kwargs...)
+function _mumps_solve(A, ::Any; kwargs...)
+    _ext_loaded(:BrambleMUMPSExt) && _throw_unsupported_matrix("mumps_solve", A)
     return error(
         "mumps_solve requires MUMPS.jl. Add `using MUMPS` before calling this function.",
     )

@@ -23,9 +23,9 @@ using Bramble: matrix, backend_eye, backend_zeros, allocate_system_matrix,
 using Bramble: D₊ₓ, D₊ᵧ
 using SparseArrays
 using SparseMatricesCSR
-using LinearAlgebra: issymmetric, I
+using LinearAlgebra: issymmetric, I, Diagonal
 using Random
-using Sparspak, SuiteSparse, MUMPS
+using Sparspak, SuiteSparse, MUMPS, ILUZero
 using Bramble: sparspak_solve, suitesparse_solve, mumps_solve, accelerate_solve,
                suitesparse_qr_solve, sparspak_factorize, suitesparse_factorize,
                mumps_factorize, accelerate_factorize, suitesparse_qr_factorize
@@ -342,6 +342,67 @@ end
         end
         # `qr` of a CSR matrix would densify to `QRCompactWY`: the factorization is sparse
         @test suitesparse_qr_factorize(ar; dirichlet = bc) isa SparseArrays.SPQR.QRSparse
+    end
+
+    # A dense-backed form assembles into a `Matrix`: `_as_csc` makes every backend solve it.
+    # With the extension loaded, the `_X_*` fallbacks reached by any other matrix type say so
+    # and name the type, instead of "requires X.jl". The oracle is the dense solve.
+    @testset "backend solvers: dense form (#658)" begin
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Wd = gridspace(
+            mesh(
+            domain(S, :boundary => boundary_symbols(S)), (6, 7), (false, false);
+            backend = Bramble.backend(matrix_type = Matrix{Float64})
+        ),
+        )
+        a = form(Wd, Wd, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+        l = form(Wd, v -> innerₕ(Rₕ(Wd, x -> 1.0 + x[1] * x[2]), v))
+        bc = :boundary => x -> x[1]
+        A, F = assemble(a, l; dirichlet = bc)
+        @test A isa Matrix{Float64}
+        ref = A \ F
+        @test !(ref ≈ zero(ref))
+
+        pairs = Any[
+            ("sparspak", sparspak_solve, sparspak_factorize),
+            ("suitesparse", suitesparse_solve, suitesparse_factorize),
+            ("mumps", mumps_solve, mumps_factorize),
+            ("suitesparse_qr", suitesparse_qr_solve, suitesparse_qr_factorize)
+        ]
+        Sys.isapple() && push!(pairs, ("accelerate", accelerate_solve, accelerate_factorize))
+        for (name, solve, factorize) in pairs
+            @testset "$name" begin
+                @test parent(solve(a, l; dirichlet = bc)) ≈ ref
+                @test factorize(a; dirichlet = bc) \ F ≈ ref
+            end
+        end
+        @test suitesparse_qr_factorize(a; dirichlet = bc) isa SparseArrays.SPQR.QRSparse
+        @test sparse_factorize(a; solver = :sparspak, dirichlet = bc) \ F ≈ ref
+
+        # a matrix type no backend takes: the message names it, whichever backend is asked
+        D = Diagonal(ones(3))
+        for f in (
+            () -> Bramble._sparspak_factorize(D), () -> Bramble._sparspak_solve(D, ones(3)),
+            () -> Bramble._suitesparse_factorize(D), () -> Bramble._suitesparse_solve(D, ones(3)),
+            () -> Bramble._mumps_factorize(D), () -> Bramble._mumps_solve(D, ones(3)),
+            () -> Bramble._accelerate_factorize(D), () -> Bramble._accelerate_solve(D, ones(3)),
+            () -> ilu_preconditioner(D), () -> Bramble._ilu_operator(D)
+        )
+            e = try
+                f()
+                nothing
+            catch err
+                err
+            end
+            @test e isa ArgumentError
+            msg = e isa ArgumentError ? e.msg : ""
+            @test occursin("takes a SparseMatrixCSC; got a $(typeof(D))", msg)
+            @test !occursin("requires", msg)
+        end
+        @test_throws ArgumentError(
+            "preconditioner = :ilu0 takes a SparseMatrixCSC; got a $(typeof(D))."
+        ) Bramble._ilu_operator(D)
+        @test_throws ArgumentError ilu_preconditioner(Matrix(D))
     end
 
     # A taller-than-wide CSR matrix zeroes the constrained rows past its last column, as

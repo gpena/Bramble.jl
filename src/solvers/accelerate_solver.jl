@@ -44,6 +44,9 @@ Accelerate's native `libSparse` on macOS.
 
 Any keyword other than `sym` and `kind` throws a `MethodError`.
 
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first, so a dense-backed
+form uses `libSparse`; `accelerate_factorize(::Matrix)` itself stays dense LAPACK.
+
 Requires macOS and [AppleAccelerate.jl](https://github.com/JuliaLinearAlgebra/AppleAccelerate.jl);
 call `using AppleAccelerate` before calling this function.
 
@@ -140,6 +143,9 @@ Directly solve `A u = F` (or `assemble(a, l)` system) using Apple Accelerate dir
 `:auto` still tries it and falls back to ``LDL^T``. Any keyword other than `sym` and `kind`
 throws a `MethodError`.
 
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first, so a dense-backed
+form uses `libSparse`; `accelerate_factorize(::Matrix)` itself stays dense LAPACK.
+
 Requires macOS and [AppleAccelerate.jl](https://github.com/JuliaLinearAlgebra/AppleAccelerate.jl);
 call `using AppleAccelerate` before calling this function.
 
@@ -183,13 +189,15 @@ function accelerate_refactor!(fact::AccelerateFactorization, A::SparseMatrixCSC)
     return _accelerate_refactor!(fact, A)
 end
 
-function _accelerate_factorize(::Any; kwargs...)
+function _accelerate_factorize(A; kwargs...)
+    _ext_loaded(:BrambleAppleAccelerateExt) && _throw_unsupported_matrix("accelerate_factorize", A)
     return error(
         "accelerate_factorize requires AppleAccelerate.jl. Add `using AppleAccelerate` before calling this function.",
     )
 end
 
-function _accelerate_solve(::Any, ::Any; kwargs...)
+function _accelerate_solve(A, ::Any; kwargs...)
+    _ext_loaded(:BrambleAppleAccelerateExt) && _throw_unsupported_matrix("accelerate_solve", A)
     return error(
         "accelerate_solve requires AppleAccelerate.jl. Add `using AppleAccelerate` before calling this function.",
     )
