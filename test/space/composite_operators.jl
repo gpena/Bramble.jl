@@ -237,7 +237,8 @@ using ..TestUtils: alloc_test, @test_allocs, TEST_DIMS, WITH_3D_TESTS
                     vc_cases[1][4]),
                 (WITH_3D_TESTS ?
                  ((mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 4, 6),
-                    (false, false, true)), vc_cases[2][4]),) : ())...
+                        (false, false, true)),
+                    vc_cases[2][4]),) : ())...
             )
             for (Ωₕ, fs) in nu_cases
                 D = length(fs)

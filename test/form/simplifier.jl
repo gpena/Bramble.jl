@@ -605,7 +605,6 @@ end
         if WITH_SLOW_TESTS
             A_nine = zeros(size(A_div))
             for i in 1:3, j in 1:3
-
                 A_nine .+= A_ij(i, j)
             end
             @test A_div ≈ A_nine

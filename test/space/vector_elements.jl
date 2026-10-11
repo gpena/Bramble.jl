@@ -346,8 +346,7 @@ end
         @test y == 2.0 .* parent(u_2d)
 
         @test dot(u_2d, u_2d) ≈ sum(abs2, parent(u_2d))
-if WITH_3D_TESTS
-
+        if WITH_3D_TESTS
             Ωₕ_3d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 4, 5))
             W_3d = gridspace(Ωₕ_3d)
             m = ndofs(W_3d)
@@ -361,7 +360,7 @@ if WITH_3D_TESTS
             @test y3 == 3.0 .* parent(u_3d)
 
             @test dot(u_3d, u_3d) ≈ sum(abs2, parent(u_3d))
-end
+        end
     end
 
     @testset "similar" begin
@@ -1238,18 +1237,18 @@ end
         (x -> sin(x[1]), x -> cos(x[2])),
         x -> (sin(x[1]), cos(x[2]))
     ),
-        # The 3D case is built only where `WITH_3D_TESTS` holds (not under `unit`).
+    # The 3D case is built only where `WITH_3D_TESTS` holds (not under `unit`).
         (WITH_3D_TESTS ?
          ((
-            "3D",
-            mesh(
-                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
-                (5, 4, 6),
-                (true, true, false)
-            ),
-            (x -> sin(x[1]), x -> cos(x[3])),
-            x -> (sin(x[1]), cos(x[3]))
-        ),) :
+        "3D",
+        mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+            (5, 4, 6),
+            (true, true, false)
+        ),
+        (x -> sin(x[1]), x -> cos(x[3])),
+        x -> (sin(x[1]), cos(x[3]))
+    ),) :
          ())...
     )
         @testset "$lbl" begin

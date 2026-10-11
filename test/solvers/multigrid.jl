@@ -45,7 +45,8 @@ _mg_agree(a, b) = isapprox(a, b; rtol = 1e-13, atol = 1e-13)
                 :blob => x -> (x[1] - 0.5)^2 + (x[2] - 1.0)^2 < 0.2),
             (17, 33),
             3),
-        (WITH_3D_TESTS ? ((
+        (WITH_3D_TESTS ?
+         ((
             domain(interval(0.0, 1.0) × interval(-1.0, 1.0) × interval(0.0, 2.0),
                 :inlet => :left, :half => x -> x[3] < 1.0),
             (9, 5, 17),

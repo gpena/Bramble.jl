@@ -95,7 +95,7 @@ end
     @testset "edge: threaded line counts" begin
         f = (u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v))
         for n in _ke_sizes(((3, 2), (2, 2), (40, 2), (2, 40), (2, 2, 2), (3, 2, 2), (5, 4, 3),
-                            (2, 2, 40)))
+            (2, 2, 40)))
             Ws, Wt = _ke_space(n, CpuSerial()), _ke_space(n, CpuThreaded())
             a = form(Wt, Wt, f)
             Ks = kronecker_operator(form(Ws, Ws, f))
@@ -478,7 +478,7 @@ end
         sizes2 = ((9, 7), (1, 5), (5, 1), (2, 5), (3, 3), (2, 2), (3, 1), (1, 1))
         sizes3 = ((6, 5, 7), (1, 4, 3), (4, 1, 3), (3, 4, 1), (2, 3, 2), (1, 1, 4), (1, 1, 1))
         for (sizes, masks) in Any[(sizes2, masks2),
-                                  (WITH_3D_TESTS ? ((sizes3, masks3),) : ())...], n in sizes
+                (WITH_3D_TESTS ? ((sizes3, masks3),) : ())...], n in sizes
 
             for graded in (true, false)
                 (graded || n == first(sizes)) || continue

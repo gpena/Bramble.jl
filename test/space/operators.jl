@@ -278,6 +278,7 @@ end
         Ωd = mk(graded; backend = backend(matrix_type = Matrix{Float64}))
         N = npoints(Ωₕ)
         for (ops, taps) in fams, d in 1:2
+
             A = ops[d](Ωₕ)
             B = kronecker_operator_matrix(Ωₕ, ops[d])
             n = npoints(Ωₕ, Tuple)[d]

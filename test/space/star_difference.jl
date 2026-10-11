@@ -244,7 +244,7 @@ star_ops(::Val{3}) = (D̃ₓ, D̃ᵧ, D̃₂)
 
                 # and the tuple route gives what summing the directional inner products gives
                 @test -inner₊(v3, ∇ₕ(w3)) ≈ -(inner₊ₓ(v3[1], D₋ₓ(w3)) +
-                                              inner₊ᵧ(v3[2], D₋ᵧ(w3)) + inner₊₂(v3[3], D₋₂(w3)))
+                        inner₊ᵧ(v3[2], D₋ᵧ(w3)) + inner₊₂(v3[3], D₋₂(w3)))
             end
         end
 

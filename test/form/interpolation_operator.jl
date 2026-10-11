@@ -170,7 +170,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             (domain(interval(0.0, 1.0) × interval(0.5, 0.5)), (9, 1), (5, 1)),
             (WITH_3D_TESTS ?
              ((domain(interval(0.5, 0.5) × interval(0.0, 1.0) × interval(0.0, 1.0)),
-                (1, 7, 5), (1, 4, 3)),) :
+            (1, 7, 5), (1, 4, 3)),) :
              ())...
         )
             for unif in (true, false)

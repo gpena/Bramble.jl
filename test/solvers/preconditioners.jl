@@ -29,7 +29,8 @@ function _pc_spaces()
     return (
         gridspace(mesh(domain(interval(0.0, 1.0)), 17, false)),
         gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (9, 11), (false, true))),
-        (WITH_3D_TESTS ? (gridspace(mesh(
+        (WITH_3D_TESTS ?
+         (gridspace(mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7, 5), false)),) : ())...
     )
 end

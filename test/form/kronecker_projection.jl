@@ -48,7 +48,7 @@ end
     @testset "families match assemble" begin
         # Any: each space is its own type
         for W in Any[gridspace(_graded_mesh((9, 7))),
-                     (WITH_3D_TESTS ? (gridspace(_graded_mesh((6, 5, 7))),) : ())...]
+            (WITH_3D_TESTS ? (gridspace(_graded_mesh((6, 5, 7))),) : ())...]
             forms = Any[  # Any: each closure is its own type
                 (u, v) -> innerₕ(Dc(u, Val(1)), Dc(v, Val(1))),
                 (u, v) -> innerₕ(M₊ᵧ(u), Mcₓ(v)),
@@ -164,7 +164,7 @@ end
     @testset "single-axis coefficients factor" begin
         # Any: each space is its own type
         for W in Any[gridspace(_graded_mesh((9, 7))),
-                     (WITH_3D_TESTS ? (gridspace(_graded_mesh((6, 5, 7))),) : ())...]
+            (WITH_3D_TESTS ? (gridspace(_graded_mesh((6, 5, 7))),) : ())...]
             fx = Rₕ(W, x -> 1 + x[1])
             fy = Rₕ(W, x -> 2 + x[2]^2)
             fl = Rₕ(W, x -> 1 + x[end]^3)  # the last axis: z in 3D

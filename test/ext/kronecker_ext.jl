@@ -513,6 +513,7 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
         routes = ("symmetric" => (L, KronExt._FDMFactorization),
             "Schur" => ((u, v) -> L(u, v) + innerₕ(D₋ₓ(u), v), KronExt._SchurFactorization))
         for (name, (f, R)) in routes, dir in (nothing, :boundary)
+
             a = form(Wₕ, Wₕ, f)
             # `assemble` keeps a boundary value that the `:boundary` solve sets to zero.
             Fr = copy(F₀)
@@ -571,6 +572,7 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
         routes = ((L, KronExt._FDMFactorization), (Ladv, KronExt._SchurFactorization))
         rng = MersenneTwister(KRON_EXT_SEED + 9)
         for (f, R) in routes, bc in (nothing, :boundary)
+
             K = kronecker_operator(form(W, W, f))
             t1 = first(K.terms)
             ts = (t1,

@@ -1023,12 +1023,13 @@ end
             @test ig(Wn, :left) ≈ 2.0
 
             # a face plus half of another, an empty and an interior marker
-            whole(W, l) = try
-                ig(W, l)
-                false
-            catch e
-                e isa ArgumentError && occursin("whole boundary faces", sprint(showerror, e))
-            end
+            whole(W, l) =
+                try
+                    ig(W, l)
+                    false
+                catch e
+                    e isa ArgumentError && occursin("whole boundary faces", sprint(showerror, e))
+                end
             Wc = mk(:c => x -> x[1] == 0 || (x[2] == 0 && x[1] <= 0.5))
             @test_throws ArgumentError ig(Wc, :c)
             @test whole(Wc, :c)
@@ -1202,6 +1203,7 @@ _cplx_norm(f, ur, ui) = sqrt(f(ur)^2 + f(ui)^2)
 @testset "Complex grid functions (#644)" begin
     I = interval(0.0, 1.0)
     @testset "$(D)D, $(nameof(typeof(p)))" for D in (1, 2), p in (Serial(), Parallel())
+
         S = D == 1 ? I : I × interval(-1.0, 1.0)
         Ωd = domain(S, :a => :xmin, :b => (D == 1 ? :xmax : :ymax))
         n = D == 1 ? 41 : (9, 11)

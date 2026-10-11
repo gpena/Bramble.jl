@@ -12,7 +12,7 @@ import SparseArrays: issparse, sprand, spdiagm, spzeros, nnz
 using Bramble: forward_star_difference, centered_difference, cross_weighted_difference
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS, _nonuniform_points,
-                    MockDeviceMatrix, MockDeviceVector
+                   MockDeviceMatrix, MockDeviceVector
 using ..SpaceVectorElementsTests: setup_test_grid
 
 # Backward difference operators

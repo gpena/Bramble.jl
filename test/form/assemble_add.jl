@@ -21,13 +21,13 @@ using ..TestUtils: _fillnz!, alloc_test, WITH_3D_TESTS
             (WITH_3D_TESTS ?
              (
                 (
-                    "3D",
-                    mesh(
-                        domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
-                        (5, 6, 7),
-                        (true, true, true)
-                    )
-                ),
+                "3D",
+                mesh(
+                    domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
+                    (5, 6, 7),
+                    (true, true, true)
+                )
+            ),
             ) : ())...
         )
         for (lbl, Ωₕ) in cases
@@ -201,14 +201,14 @@ using ..TestUtils: _fillnz!, alloc_test, WITH_3D_TESTS
             (WITH_3D_TESTS ?
              (
                 (
-                    "3D",
-                    domain(
-                        box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)),
-                        :walls => boundary_symbols(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
-                    ),
-                    (7, 6, 5),
-                    (false, false, false)
+                "3D",
+                domain(
+                    box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)),
+                    :walls => boundary_symbols(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
                 ),
+                (7, 6, 5),
+                (false, false, false)
+            ),
             ) : ())...
         )
         for (lbl, Ω, npts, unif) in cases
