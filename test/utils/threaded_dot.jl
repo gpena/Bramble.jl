@@ -255,4 +255,46 @@ end
     end
 end
 
+@testset "Complex u conjugated (#644)" begin
+    # `_threaded_dot`/`_threaded_dot_masked` conjugate `u` as the serial kernels do, dense
+    # and `SeparableWeights` alike. Checked against an explicit `conj(u) v w` sum, not only
+    # against the serial kernel, which an unconjugated pair of kernels would also match.
+    _cu(n) = ComplexF64[complex(0.3 + 0.11 * i, 0.9 - 0.13 * i) for i in 1:n]
+    _cv(n) = ComplexF64[complex(-0.6 + 0.07 * i, 0.2 + 0.05 * i) for i in 1:n]
+    _oracle(u, v, w, idx) = sum(conj(u[i]) * v[i] * w[i] for i in idx; init = 0.0im)
+    _close(a, b) = isapprox(a, b; rtol = 1.0e-12, atol = 1.0e-12)
+
+    @testset "Dense, length $n" for n in (0, 1, 37, 5000)
+        u, v, w = _cu(n), _cv(n), Float64[1.0 + 0.05 * i for i in 1:n]
+        mask = falses(n)
+        n > 0 && (mask[1:2:n] .= true)
+        mask2 = falses(n)
+        n > 0 && (mask2[2:3:n] .= true)
+        union_mask = MarkedIndicesUnion((mask, mask2))
+
+        expected = _oracle(u, v, w, 1:n)
+        @test _close(_dot(u, v, w), expected)
+        @test _close(_threaded_dot(u, v, w), expected)
+        expected_m = _oracle(u, v, w, findall(mask))
+        @test _close(_dot_masked(u, v, w, mask), expected_m)
+        @test _close(_threaded_dot_masked(u, v, w, mask), expected_m)
+        expected_u = _oracle(u, v, w, findall(mask .| mask2))
+        @test _close(_dot_masked(u, v, w, union_mask), expected_u)
+        @test _close(_threaded_dot_masked(u, v, w, union_mask), expected_u)
+    end
+
+    @testset "SeparableWeights, $(D)D" for (D, dims) in ((1, (37,)), (2, (23, 17)))
+        Ω = D == 1 ? domain(interval(0.0, 1.0)) :
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0))
+        w = weights(gridspace(mesh(Ω, dims, ntuple(_ -> false, D))), Val(()))
+        n = length(w)
+        u, v, wd = _cu(n), _cv(n), collect(w)
+        mask = falses(n)
+        mask[1:2:n] .= true
+
+        @test _close(_threaded_dot(u, w, v), _oracle(u, v, wd, 1:n))
+        @test _close(_threaded_dot_masked(u, w, v, mask), _oracle(u, v, wd, findall(mask)))
+    end
+end
+
 end # module

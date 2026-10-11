@@ -7,6 +7,7 @@ using Bramble: D₋ᵧ, D₋ₓ, cell_measure, indices, inner₊ᵧ, inner₊₂
 using Bramble: set_points!, weights
 using LinearAlgebra: norm
 using Supposition
+using ForwardDiff
 using ..TestUtils: WITH_SLOW_TESTS, @test_allocs, _nonuniform_points
 using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
 using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
@@ -1093,6 +1094,73 @@ end
     for (lin_idx, I) in enumerate(CartesianIndices((2, 2)))
         @test Bramble._weight_at(dense, I, lin_idx) == dense[lin_idx]
         @test Bramble._weight_at(dense, I, lin_idx) == Bramble._weight_at(sep, I, lin_idx)
+    end
+end
+
+# A complex grid function against oracles built from its real and imaginary parts
+# (gpena/Bramble.jl#644). The first argument is conjugated, so
+# (u, v) = (ur, vr) + (ui, vi) + i[(ur, vi) - (ui, vr)] and ‖u‖² = ‖ur‖² + ‖ui‖². An
+# unconjugated kernel gives (ur, vr) - (ui, vi) + i[(ur, vi) + (ui, vr)] instead.
+_cplx_oracle(f, ur, ui, vr, vi) = complex(f(ur, vr) + f(ui, vi), f(ur, vi) - f(ui, vr))
+_cplx_norm(f, ur, ui) = sqrt(f(ur)^2 + f(ui)^2)
+
+@testset "Complex grid functions (#644)" begin
+    I = interval(0.0, 1.0)
+    @testset "$(D)D, $(nameof(typeof(p)))" for D in (1, 2), p in (Serial(), Parallel())
+        S = D == 1 ? I : I × interval(-1.0, 1.0)
+        Ωd = domain(S, :a => :xmin, :b => (D == 1 ? :xmax : :ymax))
+        n = D == 1 ? 41 : (9, 11)
+        W = gridspace(mesh(Ωd, n, ntuple(_ -> false, D); backend = backend(policy = p)))
+        N = ndofs(W)
+        ur, ui, vr, vi = (element(W) for _ in 1:4)
+        ur .= sin.(1:N)
+        ui .= cos.(2 .* (1:N)) .+ 0.5
+        vr .= 1 ./ (1:N)
+        vi .= sin.(3 .* (1:N)) .- 0.25
+        u, v = element(W, ComplexF64), element(W, ComplexF64)
+        u .= complex.(ur, ui)
+        v .= complex.(vr, vi)
+
+        @test innerₕ(u, v) ≈ _cplx_oracle(innerₕ, ur, ui, vr, vi)
+        @test inner₊(u, v) ≈ _cplx_oracle(inner₊, ur, ui, vr, vi)
+        for St in (D == 1 ? ((), (1,)) : ((), (1,), (2,), (1, 2)))
+            f = (a, b) -> inner₊(a, b, Val(St))
+            @test f(u, v) ≈ _cplx_oracle(f, ur, ui, vr, vi)
+            fm = (a, b) -> inner₊(a, b, Val(St); markers = (:a, :b))
+            @test fm(u, v) ≈ _cplx_oracle(fm, ur, ui, vr, vi)
+        end
+        for m in ((:a,), (:a, :b))
+            fm = (a, b) -> innerₕ(a, b; markers = m)
+            @test fm(u, v) ≈ _cplx_oracle(fm, ur, ui, vr, vi)
+        end
+        fΓ = (a, b) -> inner_Γ(a, b, :boundary)
+        @test fΓ(u, v) ≈ _cplx_oracle(fΓ, ur, ui, vr, vi)
+
+        uu = innerₕ(u, u)
+        @test real(uu) > 0
+        @test isapprox(imag(uu), 0; atol = 1.0e-14 * real(uu))
+
+        for f in (normₕ, norm₊, snorm₁ₕ, norm₁ₕ, w -> norm(w, "1h"))
+            @test f(u) isa Float64
+            @test f(u) ≈ _cplx_norm(f, ur, ui)
+        end
+
+        # Real data takes the same kernels, so a norm is still the root of its inner product.
+        @test normₕ(ur) === sqrt(innerₕ(ur, ur))
+        @test norm₊(ur) === sqrt(inner₊(ur, ur))
+        if p isa Serial
+            @test_allocs innerₕ(u, v)
+            @test_allocs snorm₁ₕ(u)
+        end
+
+        # A `Dual` is `Real`: no conjugation, and its norm is a `Dual` whose partial is the
+        # derivative of t ↦ ‖ur + t ui‖ₕ at 0, (ur, ui)ₕ / ‖ur‖ₕ.
+        ud = element(W, typeof(ForwardDiff.Dual(1.0, 1.0)))
+        ud .= ForwardDiff.Dual.(ur, ui)
+        nd = normₕ(ud)
+        @test nd isa ForwardDiff.Dual
+        @test ForwardDiff.value(nd) ≈ normₕ(ur)
+        @test ForwardDiff.partials(nd, 1) ≈ innerₕ(ur, ui) / normₕ(ur)
     end
 end
 

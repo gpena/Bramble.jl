@@ -88,7 +88,7 @@ end
 end
 
 """
-    innerₕ(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Real
+    innerₕ(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Number
 
 Returns the discrete ``L^2`` inner product of the grid functions `uₕ` and `vₕ`, weighting each point by its cell measure.
 
@@ -122,6 +122,12 @@ The two grid functions must have the same number of components.
 
 `markers` restricts the sum to the union of the labelled regions' points (a masked sum of
 the same cell measures, not a surface integral; see the note above `_combined_mask`).
+
+A complex `uₕ` is conjugated, as in every inner product in this file
+(gpena/Bramble.jl#644): each term is
+``\\overline{\\textrm{u}_h(x_i)} \\textrm{v}_h(x_i)``, so `innerₕ(uₕ, uₕ)` is real and
+non-negative. The result has the element type of the data promoted with the mesh's: complex
+for complex data, a `Dual` for `ForwardDiff.Dual` data.
 
 # Examples
 
@@ -168,7 +174,7 @@ end
 end
 
 """
-    inner_Γ(uₕ::VectorElement, vₕ::VectorElement, labels::Symbol...) -> Real
+    inner_Γ(uₕ::VectorElement, vₕ::VectorElement, labels::Symbol...) -> Number
 
 Returns the ``(D-1)``-dimensional boundary integral of `uₕ * vₕ` over the grid faces `labels`
 name,
@@ -184,6 +190,9 @@ normal directions of the surface pieces through a point, of the product of the *
 half-spacings. In 1D a face is a point of measure 1, so `inner_Γ(uₕ, vₕ, :boundary)` is
 `u(x₀)v(x₀) + u(x_N)v(x_N)`, with no spacing anywhere -- the correct pairing for a 1D Neumann
 term, and not comparable dimensionally with the 2D and 3D cases.
+
+A complex `uₕ` is conjugated and the result has the data's element type, as for
+[`innerₕ`](@ref).
 
 **Not the same quantity as `innerₕ(uₕ, vₕ; markers = labels)`.** That is a masked sum of the
 existing cell measures (a ``D``-dimensional quantity restricted to a set of points), and it
@@ -256,7 +265,7 @@ end
         w = _surface_weight(Ωₕ, mask, I)
         iszero(w) && continue
         k = lin[I]
-        acc += w * u[k] * v[k]
+        acc += w * conj(u[k]) * v[k]
     end
     return acc
 end
@@ -275,7 +284,7 @@ end
 @noinline _surface_sum(loc::Locality, policy, Ωₕ, mask, u, v) = _throw_locality_mismatch(loc, policy)
 
 """
-    _surface_sum(::DeviceLocality, ::GpuPolicy, Ωₕ, mask, u, v) -> Real
+    _surface_sum(::DeviceLocality, ::GpuPolicy, Ωₕ, mask, u, v) -> Number
 
 Device counterpart of [`_surface_sum`](@ref) above: a canonical face (or a union of them) is
 a set of at most `2D` axis-aligned `(D-1)`-dimensional slices of the grid, so the CPU walk
@@ -326,7 +335,7 @@ end
     su = selectdim(ur, d, idx)
     sv = selectdim(vr, d, idx)
     w = _transverse_weight_device(Ωₕ, u, Val(d), Val(D))
-    return sum(su .* sv .* w)
+    return sum(conj.(su) .* sv .* w)
 end
 
 # 1D has no transverse axis at all -- a face is a point of measure 1 (see the note above
@@ -363,7 +372,7 @@ scalar the way `half_spacing` would on the host path.
 end
 
 """
-    normₕ(uₕ::VectorElement) -> Real
+    normₕ(uₕ::VectorElement) -> Number
 
 Returns the discrete ``L^2`` norm of the grid function `uₕ`, defined as
 
@@ -373,9 +382,14 @@ Returns the discrete ``L^2`` norm of the grid function `uₕ`, defined as
 
 On a [`CompositeGridSpace`](@ref) it is the norm of the product space, which follows from
 the inner product there: the square root of the sum of the components' squared norms.
+
+The result has the real type of the element type (gpena/Bramble.jl#644): a `Float64` for
+`Float64` or `ComplexF64` data on a `Float64` mesh, a `Dual` for `ForwardDiff.Dual` data.
+The inner product of a complex `uₕ` with itself is real up to a zero imaginary part, which
+is dropped before the square root.
 """
-@inline normₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(innerₕ(uₕ, uₕ))
-@inline normₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(innerₕ(uₕ, uₕ))
+@inline normₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ)))
+@inline normₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ)))
 
 """
     norminf(uₕ::VectorElement) -> Real
@@ -406,14 +420,15 @@ end
 @inline norminf(uₕ::NTuple{<:Any, VectorElement}) = maximum(norminf, uₕ)
 
 """
-    norm(uₕ::VectorElement, kind::AbstractString) -> Real
+    norm(uₕ::VectorElement, kind::AbstractString) -> Number
 
 Returns the discrete norm of `uₕ` that `kind` names: `"h"` is [`normₕ`](@ref), `"1h"` is
 [`norm₁ₕ`](@ref) and `"∞"` is [`norminf`](@ref). Any other `kind` throws an `ArgumentError`.
 
-Every kind returns the data's element type promoted with the mesh's, so the result type does
-not depend on `kind`: for `"∞"` this converts [`norminf`](@ref), which keeps the data's own
-type, so a `Float32` or `Int` element on a `Float64` mesh gives a `Float64` for every kind.
+Every kind returns the real type of the data's element type promoted with the mesh's, so
+the result type does not depend on `kind`: for `"∞"` this converts [`norminf`](@ref), which
+keeps the data's own type, so a `Float32` or `Int` element on a `Float64` mesh gives a
+`Float64` for every kind, and so does a `ComplexF64` element.
 
 The one-argument `norm(uₕ)` is unchanged: a [`VectorElement`](@ref) is an `AbstractVector`,
 so it is still `LinearAlgebra`'s Euclidean norm of the values, which carries no quadrature
@@ -422,7 +437,7 @@ weight.
 function norm(uₕ::VectorElement, kind::AbstractString)
     kind == "h" && return normₕ(uₕ)
     kind == "1h" && return norm₁ₕ(uₕ)
-    kind == "∞" && return convert(promote_type(eltype(uₕ), eltype(space(uₕ))), norminf(uₕ))
+    kind == "∞" && return convert(real(promote_type(eltype(uₕ), eltype(space(uₕ)))), norminf(uₕ))
     throw(ArgumentError("the norm must be \"h\", \"1h\" or \"∞\", got \"$kind\""))
 end
 
@@ -481,7 +496,7 @@ end
         line_sum = zero(T)
         @simd for i₁ in 1:n₁
             k = offset + i₁
-            line_sum = muladd(T(u[k]) * T(v[k]), T(f₁[i₁]), line_sum)
+            line_sum = muladd(conj(T(u[k])) * T(v[k]), T(f₁[i₁]), line_sum)
         end
         s = muladd(c, line_sum, s)
         offset += n₁
@@ -499,7 +514,7 @@ end
     s = zero(T)
     cart = CartesianIndices(w.dims)
     @inbounds for i in MarkedIndices(mask)
-        s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
+        s = muladd(conj(T(u[i])) * T(v[i]), T(w[cart[i]]), s)
     end
     return s
 end
@@ -514,7 +529,7 @@ end
     s = zero(T)
     cart = CartesianIndices(w.dims)
     @inbounds for i in mask
-        s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
+        s = muladd(conj(T(u[i])) * T(v[i]), T(w[cart[i]]), s)
     end
     return s
 end
@@ -587,7 +602,7 @@ end
     rng = _band_range(ax, nchunks, b)
     s = zero(T)
     @inbounds @simd for i₁ in rng
-        s = muladd(T(u[i₁]) * T(v[i₁]), T(f₁[i₁]), s)
+        s = muladd(conj(T(u[i₁])) * T(v[i₁]), T(f₁[i₁]), s)
     end
     return s
 end
@@ -609,7 +624,7 @@ end
         line_sum = zero(T)
         @simd for i₁ in 1:n₁
             k = offset + i₁
-            line_sum = muladd(T(u[k]) * T(v[k]), T(f₁[i₁]), line_sum)
+            line_sum = muladd(conj(T(u[k])) * T(v[k]), T(f₁[i₁]), line_sum)
         end
         s = muladd(c, line_sum, s)
     end
@@ -666,7 +681,7 @@ end
         base = (widx - 1) * 64
         while word != zero(UInt64)
             i = base + trailing_zeros(word) + 1
-            s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
+            s = muladd(conj(T(u[i])) * T(v[i]), T(w[cart[i]]), s)
             word &= word - 1
         end
     end
@@ -684,7 +699,7 @@ end
         base = (widx - 1) * 64
         while word != zero(UInt64)
             i = base + trailing_zeros(word) + 1
-            s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
+            s = muladd(conj(T(u[i])) * T(v[i]), T(w[cart[i]]), s)
             word &= word - 1
         end
     end
@@ -712,7 +727,7 @@ end
 end
 
 """
-    _dot(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v) -> Real
+    _dot(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v) -> Number
 
 The device counterpart of [`_dot`](@ref)`(u, w::SeparableWeights, v)` above: the weight
 tensor is materialized once via `_separable_weights_full`, then the product with
@@ -725,11 +740,11 @@ tensor is materialized once via `_separable_weights_full`, then the product with
     (length(u) == n == length(v)) || _throw_dot_dim_error(length(u), n, length(v))
     dims = w.dims
     wfull = _separable_weights_full(w)
-    return sum(reshape(u, dims) .* reshape(v, dims) .* wfull)
+    return sum(conj.(reshape(u, dims)) .* reshape(v, dims) .* wfull)
 end
 
 """
-    _dot_masked(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v, mask::BitVector) -> Real
+    _dot_masked(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v, mask::BitVector) -> Number
 
 The device counterpart of the `BitVector`-masked specialization above: `mask` (always host
 memory, gpena/Bramble.jl#298) is copied onto `u`'s own device once, reshaped to `dims`
@@ -746,11 +761,11 @@ alongside `u` and `v`, and the masked sum is one broadcasted reduction.
     wfull = _separable_weights_full(w)
     md = similar(u, Bool)
     copyto!(md, Vector{Bool}(mask))
-    return sum(reshape(u, dims) .* reshape(v, dims) .* wfull .* reshape(md, dims))
+    return sum(conj.(reshape(u, dims)) .* reshape(v, dims) .* wfull .* reshape(md, dims))
 end
 
 """
-    _dot_masked(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v, mask::MarkedIndicesUnion) -> Real
+    _dot_masked(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v, mask::MarkedIndicesUnion) -> Number
 
 The multi-marker counterpart: `mask` is walked once, on the host, into a plain `BitVector`,
 then handled exactly as the `BitVector` method above.
@@ -770,11 +785,11 @@ then handled exactly as the `BitVector` method above.
     wfull = _separable_weights_full(w)
     md = similar(u, Bool)
     copyto!(md, Vector{Bool}(hostmask))
-    return sum(reshape(u, dims) .* reshape(v, dims) .* wfull .* reshape(md, dims))
+    return sum(conj.(reshape(u, dims)) .* reshape(v, dims) .* wfull .* reshape(md, dims))
 end
 
 """
-    inner₊(uₕ::VectorElement, vₕ::VectorElement, ::Val{S}; markers = ()) -> Real
+    inner₊(uₕ::VectorElement, vₕ::VectorElement, ::Val{S}; markers = ()) -> Number
 
 Returns the discrete inner product of the grid functions `uₕ` and `vₕ` weighted by the
 staggered set `S ⊆ 1:D`, [`weights`](@ref)`(space(uₕ), Val(S))`: entry `I` weighs
@@ -795,6 +810,9 @@ An `S` that is not a repeat-free subset of `1:D` throws an `ArgumentError`, as t
 
 `markers` restricts the sum to the union of the labelled regions' points, as it does for
 [`innerₕ`](@ref) (a masked sum of the weight above, not a surface integral).
+
+A complex `uₕ` is conjugated and the result has the data's element type, as for
+[`innerₕ`](@ref).
 
 Defined for grid functions of a [`ScalarGridSpace`](@ref) only, the same restriction every
 other `inner₊*` in this file has: a composite grid function has no single weighting of its
@@ -839,7 +857,7 @@ end
 end
 
 """
-    inner₊ₓ(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Real
+    inner₊ₓ(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Number
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the first variable.
 
@@ -877,7 +895,7 @@ integral).
 ) where {N} = _directional_inner_plus(uₕ, vₕ, Val(1); markers = markers)
 
 """
-    inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Real
+    inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Number
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ`
 associated with the second variable, the ``y`` direction.
@@ -910,7 +928,7 @@ integral).
 ) where {N} = _directional_inner_plus(uₕ, vₕ, Val(2); markers = markers)
 
 """
-    inner₊₂(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Real
+    inner₊₂(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Number
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ` associated with the `z` variable
 
@@ -947,7 +965,7 @@ integral).
 end
 
 """
-    inner₊(uₕ::VectorElement, vₕ::VectorElement, d; markers = ()) -> Real
+    inner₊(uₕ::VectorElement, vₕ::VectorElement, d; markers = ()) -> Number
 
 Returns [`inner₊ₓ`](@ref)/[`inner₊ᵧ`](@ref)/[`inner₊₂`](@ref)`(uₕ, vₕ; markers)`, selected by
 `d`: an `Integer` (`1`, `2` or `3`) or a `Symbol` (`:x`, `:y` or `:z`) (gpena/Bramble.jl#341).
@@ -1123,9 +1141,9 @@ function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
 end
 
 """
-    inner₊(uₕ::VectorElement, vₕ::VectorElement) -> Real
+    inner₊(uₕ::VectorElement, vₕ::VectorElement) -> Number
     inner₊(uₕ::VectorElement, vₕ::VectorElement, ::Type{Tuple}) -> Tuple
-    inner₊(uₕ::NTuple{D, VectorElement}, vₕ::NTuple{D, VectorElement}) -> Real
+    inner₊(uₕ::NTuple{D, VectorElement}, vₕ::NTuple{D, VectorElement}) -> Number
 
 Returns the discrete modified ``L^2`` inner product of the grid functions `uₕ` and `vₕ`.
 
@@ -1164,8 +1182,8 @@ itself a scalar grid function and is accepted.
 @generated inner₊(uₕ, vₕ, ::Type{Tuple}) = :($(_generate_inner_plus_body(uₕ, vₕ, :tuple)))
 
 """
-    norm₊(uₕ::VectorElement) -> Real
-    norm₊(uₕ::NTuple{D, VectorElement}) -> Real
+    norm₊(uₕ::VectorElement) -> Number
+    norm₊(uₕ::NTuple{D, VectorElement}) -> Number
 
 Returns the discrete modified ``L^2`` norm of the grid function `uₕ`. It also accepts an `NTuple` of [`VectorElement`](@ref)s.
 
@@ -1185,8 +1203,10 @@ Defined for grid functions of a [`ScalarGridSpace`](@ref) only, and for tuples w
 entries are such grid functions. A grid function of a composite grid space raises a
 `MethodError`; take a scalar component of it with [`components`](@ref) first, which is
 itself a scalar grid function and is accepted.
+
+The result has the real type of the element type, as for [`normₕ`](@ref).
 """
-@inline norm₊(uₕ::Union{VectorElement, NTuple{<:Any, VectorElement}}) = sqrt(inner₊(uₕ, uₕ))
+@inline norm₊(uₕ::Union{VectorElement, NTuple{<:Any, VectorElement}}) = sqrt(real(inner₊(uₕ, uₕ)))
 
 ################################################################################
 #                        Discrete H¹ Norm and Seminorm                         #
@@ -1236,13 +1256,13 @@ itself a scalar grid function and is accepted.
             @simd for i₁ in 2:n₁
                 k = offset + i₁
                 δ = (T(data[k]) - T(data[k - 1])) / T(h[i₁])
-                line_sum = muladd(T(f₁[i₁]), δ * δ, line_sum)
+                line_sum = muladd(T(f₁[i₁]), abs2(δ), line_sum)
             end
         else
             @simd for i₁ in 1:n₁
                 k = offset + i₁
                 δ = T(data[k]) - T(data[k - stride])
-                line_sum = muladd(T(f₁[i₁]), δ * δ, line_sum)
+                line_sum = muladd(T(f₁[i₁]), abs2(δ), line_sum)
             end
             ih = inv(T(h[J[d - 1]]))
             c *= ih * ih
@@ -1288,7 +1308,7 @@ end
         reshape(f, ntuple(j -> j == k ? length(f) : 1, D))
     end
     wfull = reduce((a, b) -> a .* b, factors)
-    return sum(wfull .* δ .* δ)
+    return sum(wfull .* conj.(δ) .* δ)
 end
 
 @inline _sum_dirs_device(data, space, Ωₕ, dims, ::Val{0}, ::Val{D}) where {D} = zero(eltype(data))
@@ -1310,7 +1330,7 @@ end
 end
 
 """
-    snorm₁ₕ(uₕ::VectorElement) -> Real
+    snorm₁ₕ(uₕ::VectorElement) -> Number
 
 Returns the discrete ``H^1`` seminorm of the grid function `uₕ`,
 
@@ -1326,16 +1346,19 @@ See also: [`norm₁ₕ`](@ref), [`norm₊`](@ref), [`∇ₕ`](@ref).
 
 On a [`CompositeGridSpace`](@ref) it is the seminorm of the product space, as for
 [`normₕ`](@ref): the square root of the sum of the components' squared seminorms.
+
+The result has the real type of the element type, as for [`normₕ`](@ref): each difference
+`δ` contributes `abs2(δ)`.
 """
-@inline snorm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(_snorm₁ₕ_sq(uₕ))
-@inline snorm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(_snorm₁ₕ_sq(uₕ))
+@inline snorm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
+@inline snorm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
 
 # Squared seminorm summed over the leaves, so the composite never takes a root per component.
 @inline _snorm₁ₕ_sq(uₕ::VectorElement{<:CompositeGridSpace}) = sum(
     _snorm₁ₕ_sq, components(uₕ))
 
 """
-    norm₁ₕ(uₕ::VectorElement) -> Real
+    norm₁ₕ(uₕ::VectorElement) -> Number
 
 Returns the discrete version of the standard ``H^1`` norm of [`VectorElement`](@ref) `uₕ`.
 
@@ -1348,6 +1371,8 @@ them back up would compute two square roots only to undo them.
 
 On a [`CompositeGridSpace`](@ref) it is the norm of the product space, as for
 [`normₕ`](@ref): the square root of the sum of the components' squared norms.
+
+The result has the real type of the element type, as for [`normₕ`](@ref).
 """
-@inline norm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ))
-@inline norm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ))
+@inline norm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ)))
+@inline norm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ)))

@@ -667,14 +667,18 @@ Base.eltype(::Type{<:MarkedIndicesUnion}) = Int
 # Discrete space inner product kernels
 
 """
-    _dot(u::AbstractVector, v::AbstractVector, w::AbstractVector) -> Real
+    _dot(u::AbstractVector, v::AbstractVector, w::AbstractVector) -> Number
 
 Compute the weighted trilinear dot product
 ```math
-\\sum_{i=1}^n u_i v_i w_i
+\\sum_{i=1}^n \\overline{u_i} v_i w_i
 ```
 
 Accumulates via fused multiply-add operations (`muladd`) with `@simd` vectorization.
+
+The first argument is conjugated (gpena/Bramble.jl#644), and so is `u` in every policy and
+device counterpart below. `conj` of a `Real` is the identity, so real data, `Dual`s
+included, gives the same bits as the unconjugated product.
 
 A same-eltype specialization used to sit alongside this one, skipping the `promote_type`
 call and the `T(...)` conversions on the (dispatch-favoured) assumption that they cost
@@ -697,18 +701,18 @@ something. Compared by `@code_llvm`/`@code_native` with matching element types
     s = zero(T)
 
     @inbounds @simd for i in 1:length(u)
-        s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+        s = muladd(conj(T(u[i])) * T(v[i]), T(w[i]), s)
     end
 
     return s
 end
 
 """
-    _dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector) -> Real
+    _dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector) -> Number
 
 Compute the weighted dot product restricted to indices where `mask` is true:
 ```math
-\\sum_{i \\in \\mathrm{supp}(\\mathrm{mask})} u_i v_i w_i
+\\sum_{i \\in \\mathrm{supp}(\\mathrm{mask})} \\overline{u_i} v_i w_i
 ```
 
 Walks `MarkedIndices(mask)`, so the work is proportional to the number of set bits
@@ -736,7 +740,7 @@ identical generated code, so one method now covers both cases.
     s = zero(T)
 
     @inbounds for i in MarkedIndices(mask)
-        s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+        s = muladd(conj(T(u[i])) * T(v[i]), T(w[i]), s)
     end
 
     return s
@@ -754,7 +758,7 @@ end
     s = zero(T)
 
     @inbounds for i in mask
-        s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+        s = muladd(conj(T(u[i])) * T(v[i]), T(w[i]), s)
     end
 
     return s
@@ -773,7 +777,7 @@ end
 # further down.
 
 """
-    _dot(policy::ExecutionPolicy, u, v, w) -> Real
+    _dot(policy::ExecutionPolicy, u, v, w) -> Number
 
 Policy-dispatched [`_dot`](@ref): [`CpuSerial`](@ref) falls through to the plain
 three-vector method; [`CpuThreaded`](@ref) reaches [`_threaded_dot`](@ref);
@@ -784,7 +788,7 @@ three-vector method; [`CpuThreaded`](@ref) reaches [`_threaded_dot`](@ref);
 @noinline _dot(::CpuPolyester, u, v, w) = _late(_batch_dot, u, v, w)
 
 """
-    _dot_masked(policy::ExecutionPolicy, u, v, w, mask) -> Real
+    _dot_masked(policy::ExecutionPolicy, u, v, w, mask) -> Number
 
 Policy-dispatched [`_dot_masked`](@ref): [`CpuSerial`](@ref) falls through to the plain
 masked method; [`CpuThreaded`](@ref) reaches [`_threaded_dot_masked`](@ref);
@@ -795,7 +799,7 @@ masked method; [`CpuThreaded`](@ref) reaches [`_threaded_dot_masked`](@ref);
 @noinline _dot_masked(::CpuPolyester, u, v, w, mask) = _late(_batch_dot_masked, u, v, w, mask)
 
 """
-    _threaded_dot(u::AbstractVector, v::AbstractVector, w::AbstractVector) -> Real
+    _threaded_dot(u::AbstractVector, v::AbstractVector, w::AbstractVector) -> Number
 
 [`CpuThreaded`](@ref)'s own counterpart of [`_dot`](@ref): partitions `1:length(u)` into
 `Threads.nthreads()` static bands via [`_band_range`](@ref), each `Threads.@threads :static`
@@ -829,7 +833,7 @@ Kept in an isolated function, the same reason [`_threaded_for!`](@ref) is, to ke
 end
 
 """
-    _dot_band(u, v, w, ax, nchunks::Int, k::Int) -> Real
+    _dot_band(u, v, w, ax, nchunks::Int, k::Int) -> Number
 
 The `k`-th of `nchunks` partial sums of [`_threaded_dot`](@ref), over the band
 [`_band_range`](@ref)`(ax, nchunks, k)`. One compiled body serves both the threaded loop and
@@ -843,14 +847,14 @@ must be made there too (gpena/Bramble.jl#473).
     rng = _band_range(ax, nchunks, k)
     s = zero(T)
     @inbounds @simd for i in rng
-        s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+        s = muladd(conj(T(u[i])) * T(v[i]), T(w[i]), s)
     end
     return s
 end
 
 """
-    _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector) -> Real
-    _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::MarkedIndicesUnion) -> Real
+    _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector) -> Number
+    _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::MarkedIndicesUnion) -> Number
 
 [`CpuThreaded`](@ref)'s own counterpart of [`_dot_masked`](@ref): partitions the mask's
 64-bit *words* (not `1:length(u)`) into `Threads.nthreads()` static bands, so the work stays
@@ -901,8 +905,8 @@ end
 end
 
 """
-    _dot_masked_band(u, v, w, mask::BitVector, ax, nchunks::Int, k::Int) -> Real
-    _dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -> Real
+    _dot_masked_band(u, v, w, mask::BitVector, ax, nchunks::Int, k::Int) -> Number
+    _dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -> Number
 
 The `k`-th of `nchunks` partial sums of [`_threaded_dot_masked`](@ref), over the mask words
 [`_band_range`](@ref)`(ax, nchunks, k)`. As [`_dot_band`](@ref), one compiled body serves the
@@ -920,7 +924,7 @@ must be made there too (gpena/Bramble.jl#473).
         base = (widx - 1) * 64
         while word != zero(UInt64)
             i = base + trailing_zeros(word) + 1
-            s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+            s = muladd(conj(T(u[i])) * T(v[i]), T(w[i]), s)
             word &= word - 1
         end
     end
@@ -936,7 +940,7 @@ end
         base = (widx - 1) * 64
         while word != zero(UInt64)
             i = base + trailing_zeros(word) + 1
-            s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+            s = muladd(conj(T(u[i])) * T(v[i]), T(w[i]), s)
             word &= word - 1
         end
     end
@@ -944,7 +948,7 @@ end
 end
 
 """
-    _batch_dot(u, v, w) -> Real
+    _batch_dot(u, v, w) -> Number
 
 [`CpuPolyester`](@ref)'s counterpart of [`_dot`](@ref), filled by `BramblePolyesterExt`. The
 only `src/` method errors naming Polyester.
@@ -954,7 +958,7 @@ only `src/` method errors naming Polyester.
 end
 
 """
-    _batch_dot_masked(u, v, w, mask) -> Real
+    _batch_dot_masked(u, v, w, mask) -> Number
 
 [`CpuPolyester`](@ref)'s counterpart of [`_dot_masked`](@ref), filled by
 `BramblePolyesterExt`. The only `src/` method errors naming Polyester.
@@ -1004,11 +1008,11 @@ end
 @noinline _dot_masked(::HostLocality, ::CpuPolyester, u, v, w, mask) = _late(_batch_dot_masked, u, v, w, mask)
 
 """
-    _dot(::DeviceLocality, ::GpuPolicy, u::AbstractVector, v::AbstractVector, w::AbstractVector) -> Real
+    _dot(::DeviceLocality, ::GpuPolicy, u::AbstractVector, v::AbstractVector, w::AbstractVector) -> Number
 
-The device counterpart of [`_dot`](@ref)`(u, v, w)`: `sum(u .* v .* w)`, one broadcasted
-`GPUArrays` reduction, reached once a [`GpuPolicy`](@ref) derives [`DeviceLocality`](@ref)
-from itself.
+The device counterpart of [`_dot`](@ref)`(u, v, w)`: `sum(conj.(u) .* v .* w)`,
+one broadcasted `GPUArrays` reduction, reached once a [`GpuPolicy`](@ref) derives
+[`DeviceLocality`](@ref) from itself.
 
 # Throws
 - `DimensionMismatch`: If `length(u)`, `length(v)`, and `length(w)` do not match.
@@ -1018,15 +1022,15 @@ from itself.
 )
     (length(u) == length(v) == length(w)) ||
         _throw_dot_dim_error(length(u), length(v), length(w))
-    return sum(u .* v .* w)
+    return sum(conj.(u) .* v .* w)
 end
 
 """
-    _dot_masked(::DeviceLocality, ::GpuPolicy, u, v, w, mask::BitVector) -> Real
+    _dot_masked(::DeviceLocality, ::GpuPolicy, u, v, w, mask::BitVector) -> Number
 
 The device counterpart of [`_dot_masked`](@ref)`(u, v, w, mask)`: `mask` is copied onto
-`u`'s own device once, then the masked sum is `sum(u .* v .* w .* md)`, one broadcasted
-reduction instead of a walk over [`MarkedIndices`](@ref).
+`u`'s own device once, then the masked sum is `sum(conj.(u) .* v .* w .* md)`, one
+broadcasted reduction instead of a walk over [`MarkedIndices`](@ref).
 
 # Throws
 - `DimensionMismatch`: If vector or mask lengths do not match.
@@ -1039,11 +1043,11 @@ reduction instead of a walk over [`MarkedIndices`](@ref).
         _throw_dot_dim_error(length(u), length(v), length(w), length(mask))
     md = similar(u, Bool)
     copyto!(md, Vector{Bool}(mask))
-    return sum(u .* v .* w .* md)
+    return sum(conj.(u) .* v .* w .* md)
 end
 
 """
-    _dot_masked(::DeviceLocality, ::GpuPolicy, u, v, w, mask::MarkedIndicesUnion) -> Real
+    _dot_masked(::DeviceLocality, ::GpuPolicy, u, v, w, mask::MarkedIndicesUnion) -> Number
 
 The multi-marker counterpart of the `BitVector` method above: `mask` is walked once, on the
 host, to build a plain `BitVector` (the same union `_combined_mask` would have
@@ -1064,7 +1068,7 @@ materialized), which is then copied onto `u`'s own device exactly as above.
     end
     md = similar(u, Bool)
     copyto!(md, Vector{Bool}(hostmask))
-    return sum(u .* v .* w .* md)
+    return sum(conj.(u) .* v .* w .* md)
 end
 
 # The `_sweep_for!` catch-all's counterpart: a locality/policy pairing neither the host nor

@@ -647,6 +647,30 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
         )
     end
 
+    # `_batch_dot`/`_batch_dot_masked` conjugate `u` (gpena/Bramble.jl#644): a complex
+    # `CpuPolyester` sum matches `CpuSerial` on the same jittered mesh and the oracle built
+    # from the real and imaginary parts, which an unconjugated kernel would miss.
+    @testset "complex innerₕ/inner₊ vs CpuSerial" begin
+        Wb, Ws = _pa_space(13, CpuPolyester()), _pa_space(13, CpuSerial())
+        N = ndofs(Wb)
+        parts(W) = map(f -> (r = element(W); r .= f.(1:N); r),
+            (sin, i -> cos(2i) + 0.5, i -> 1 / i, i -> sin(3i) - 0.25))
+        cplx(W, re, ii) = (z = element(W, ComplexF64); z .= complex.(re, ii); z)
+        for (St, m) in (((), ()), ((), (:dir,)), ((1, 2), ()), ((1, 2), (:dir,)))
+            f = (a, b) -> inner₊(a, b, Val(St); markers = m)
+            ur, ui, vr, vi = parts(Wb)
+            ub, vb = cplx(Wb, ur, ui), cplx(Wb, vr, vi)
+            oracle = complex(f(ur, vr) + f(ui, vi), f(ur, vi) - f(ui, vr))
+            sr, si, svr, svi = parts(Ws)
+            us, vs = cplx(Ws, sr, si), cplx(Ws, svr, svi)
+            @test isapprox(f(ub, vb), oracle; rtol = 1.0e-12)
+            @test isapprox(f(ub, vb), f(us, vs); rtol = 1.0e-12)
+        end
+        ur, ui, _, _ = parts(Wb)
+        @test isapprox(normₕ(cplx(Wb, ur, ui)), sqrt(normₕ(ur)^2 + normₕ(ui)^2);
+            rtol = 1.0e-12)
+    end
+
     @testset "two-field form agrees" begin
         n1, n2 = 9, 7
         I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
