@@ -49,6 +49,22 @@ See also: [`dirichlet_bc!`](@ref), [`assemble`](@ref), [`normal_vector`](@ref).
 @inline _reaction_markers(marker::Symbol) = (marker,)
 @inline _reaction_markers(marker::NTuple{N, Symbol}) where {N} = marker
 
+# The matrix methods index `A`, `F`, `uₕ`'s storage and the caller's buffer with
+# `@inbounds`, so a size mismatch must be caught here, not left to an out-of-bounds write.
+function _validate_reaction_sizes(A, F, uₕ, buf...)
+    n = ndofs(space(uₕ))
+    length(parent(uₕ)) == n ||
+        throw(DimensionMismatch("reaction: `uₕ` stores $(length(parent(uₕ))) values, expected $n."))
+    size(A) == (n, n) ||
+        throw(DimensionMismatch("reaction: `A` has size $(size(A)), expected ($n, $n) for `uₕ`'s space."))
+    length(F) == n || throw(DimensionMismatch("reaction: `F` has length $(length(F)), expected $n."))
+    for b in buf
+        length(b) == n ||
+            throw(DimensionMismatch("reaction: the output buffer has length $(length(b)), expected $n."))
+    end
+    return nothing
+end
+
 function _validate_reaction_spaces(a::BilinearForm, l::LinearForm, uₕ::VectorElement)
     n = ndofs(test_space(l))
     if ndofs(test_space(a)) != n || ndofs(trial_space(a)) != n
@@ -326,11 +342,12 @@ function _reaction_residual!(
 end
 
 # Any other matrix type: the non-`!` fallback's own residual, promoted over `A`, `u` and `F`
-# (bit-identical to it), but only the marked entries are copied into `scratch` -- matching the sparse path's
-# "only marked entries touched" contract, which `reaction_density!` needs to stay exactly
-# zero away from the marker rather than merely small. Still allocates the temporary `r`
-# internally: unlike `SparseMatrixCSC`, a dense matrix has no cheaper way to get `A * u` at
-# selected rows only, so `!` doesn't buy zero allocation here, only the non-`!` path's own.
+# (bit-identical to it), but only the marked entries are copied into `scratch` -- matching
+# the sparse path's "only marked entries touched" contract, which `reaction_density!` needs
+# to stay exactly zero away from the marker rather than merely small. Still allocates the
+# temporary `r` internally: unlike `SparseMatrixCSC`, a dense matrix has no cheaper way to
+# get `A * u` at selected rows only, so `!` doesn't buy zero allocation here, only the
+# non-`!` path's own.
 function _reaction_residual!(
         scratch::AbstractVector, A::AbstractMatrix, F::AbstractVector, u::AbstractVector,
         leaves::Tuple, markers, components
@@ -384,6 +401,7 @@ function reaction(
         A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
         marker, components = nothing
 )
+    _validate_reaction_sizes(A, F, uₕ)
     sp = space(uₕ)
     leaves = leaf_spaces_offsets(sp)
     _validate_dirichlet_components(components, length(leaves))
@@ -426,6 +444,7 @@ function reaction!(
         scratch::AbstractVector, A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
         marker, components = nothing
 )
+    _validate_reaction_sizes(A, F, uₕ, scratch)
     sp = space(uₕ)
     leaves = leaf_spaces_offsets(sp)
     _validate_dirichlet_components(components, length(leaves))
@@ -462,6 +481,7 @@ function reaction_density(
         A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
         marker, components = nothing
 )
+    _validate_reaction_sizes(A, F, uₕ)
     sp = space(uₕ)
     leaves = leaf_spaces_offsets(sp)
     _validate_dirichlet_components(components, length(leaves))
@@ -505,6 +525,7 @@ function reaction_density!(
         dens::AbstractVector, A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
         marker, components = nothing
 )
+    _validate_reaction_sizes(A, F, uₕ, dens)
     sp = space(uₕ)
     leaves = leaf_spaces_offsets(sp)
     _validate_dirichlet_components(components, length(leaves))

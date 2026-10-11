@@ -483,6 +483,30 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!, weights
             # `uₕ` on a different space from `a`/`l`
             @test_throws ArgumentError reaction(a₁, l₁, u₂; marker = :left)
             @test_throws ArgumentError reaction_density(a₂, l₂, u₁; marker = :left)
+
+            # the matrix methods: every size checked before the `@inbounds` loops run
+            A = assemble(a₁)
+            F = assemble(l₁)
+            for M in (A, Matrix(A))
+                # positive control: the right sizes go through
+                @test isfinite(reaction!(zeros(n₁), M, F, u₁; marker = :right))
+                @test length(reaction_density!(zeros(n₁), M, F, u₁; marker = :right)) == n₁
+                # short and long output buffers
+                for m in (n₁ - 1, n₁ + 1)
+                    @test_throws DimensionMismatch reaction!(zeros(m), M, F, u₁; marker = :right)
+                    @test_throws DimensionMismatch reaction_density!(zeros(m), M, F, u₁; marker = :right)
+                end
+                # `uₕ` from another mesh
+                @test_throws DimensionMismatch reaction(M, F, u₂; marker = :left)
+                @test_throws DimensionMismatch reaction_density(M, F, u₂; marker = :left)
+                @test_throws DimensionMismatch reaction!(zeros(n₂), M, F, u₂; marker = :left)
+                @test_throws DimensionMismatch reaction_density!(zeros(n₂), M, F, u₂; marker = :left)
+                # a short `F` and a non-square `A`
+                @test_throws DimensionMismatch reaction(M, F[1:(end - 1)], u₁; marker = :right)
+                @test_throws DimensionMismatch reaction_density(M, F[1:(end - 1)], u₁; marker = :right)
+                @test_throws DimensionMismatch reaction(M[1:(end - 1), :], F, u₁; marker = :right)
+                @test_throws DimensionMismatch reaction_density(M[:, 1:(end - 1)], F, u₁; marker = :right)
+            end
         end
     end
 
