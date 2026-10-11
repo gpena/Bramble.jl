@@ -311,11 +311,39 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
               "inner_Γₓ(u, v) + inner_Γᵧ(u, v)"
     end
 
+    # A label is read from its definition at `form`, as for `inner_Γ(g, v)` (#660). The
+    # lumped face weight integrates g = 1 + x + 2y exactly: 1.5 on y = 0, 2 on x = 0, and
+    # the outward normal there is -1.
+    @testset "normal: labels read as defined" begin
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        mk(lab...) = gridspace(mesh(domain(S, lab..., :boundary => boundary_symbols(S)),
+            (11, 9), (false, false)))
+        ηₓ, ηᵧ = η
+        g = x -> 1 + x[1] + 2x[2]
+        lin(W, t, m) = assemble(form(W, v -> inner_Γ(t, v; markers = m)))
+        bil(W, t, m) = assemble(form(W, W, (u, v) -> inner_Γ(t(u), v; markers = m)))
+
+        W = mk(:left => :ymin)
+        @test lin(W, g * ηᵧ, :left) == lin(W, g * ηᵧ, :ymin)
+        @test sum(lin(W, g * ηᵧ, :left)) ≈ -1.5
+        @test iszero(lin(W, g * ηₓ, :left))
+        @test lin(W, dot((g, g), η), :left) == lin(W, dot((g, g), η), :ymin)
+        @test bil(W, u -> u * ηᵧ, :left) == bil(W, u -> u * ηᵧ, :ymin)
+        Wi = mk(:inflow => :xmin)
+        @test lin(Wi, g * ηₓ, :inflow) == lin(Wi, g * ηₓ, :xmin)
+        @test sum(lin(Wi, g * ηₓ, :inflow)) ≈ -2.0
+        # a marker that is not whole faces is refused at `form`, as the numeric path does
+        Wc = mk(:c => x -> x[1] == 0 || (x[2] == 0 && x[1] <= 0.5))
+        @test_throws "whole boundary faces" lin(Wc, g * ηₓ, :c)
+    end
+
+    # An empty label set is refused when the term is built; an unknown label at `form`.
     @testset "Refusals" begin
         Wₕ = gridspace(mesh(Ω, (7, 7), (true, true)))
         v = Bramble.TestFunction{2}()
         F = (x -> 1.0, x -> 0.0)
-        @test_throws ArgumentError inner_Γ(dot(F, η), v; markers = (:inlet,))
+        @test_throws ArgumentError form(Wₕ, w -> inner_Γ(dot(F, η), w; markers = (:inlet,)))
+        @test_throws ArgumentError form(Wₕ, w -> inner_Γ(F[1] * η[1], w; markers = :inlet))
         @test_throws ArgumentError inner_Γ(dot(F, η), v)
         @test_throws ArgumentError normal_vector(Wₕ, :inlet)
         # a component of η is refused outside inner_Γ, by name, and past the form's dimension

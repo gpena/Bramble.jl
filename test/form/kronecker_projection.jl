@@ -138,12 +138,20 @@ end
             @test _proj_matches(form(W, W,
                 (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + 1.5 * inner_Γ(u, v; markers = mk)))
         end
-        # The face mask is geometric: a domain-redefined `:xmin` does not move it.
+        # A redefined `:xmin` means its definition (#660): the face it marks, one term, and
+        # a half-plane, which is no face, is refused at `form`.
         I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωy = mesh(domain(I2, :xmin => :ymax), (6, 5), (false, true))
+        Wy = gridspace(Ωy)
+        ay = form(Wy, Wy, (u, v) -> inner_Γ(u, v; markers = :xmin))
+        @test _proj_matches(ay)
+        @test length(Bramble._kron_project(only(_proj_leaves(ay))[2], Ωy)) == 1
+        ay_top = form(Wy, Wy, (u, v) -> inner_Γ(u, v; markers = :ymax))
+        @test assemble(ay) == assemble(ay_top)
         Ωc = mesh(domain(I2, :xmin => x -> x[2] < 0.5), (6, 5), (false, true))
         @test count(markers(Ωc)[:xmin]) == 12  # every point with y < 0.5, not the face
         Wc = gridspace(Ωc)
-        @test _proj_matches(form(Wc, Wc, (u, v) -> inner_Γ(u, v; markers = :xmin)))
+        @test_throws ArgumentError form(Wc, Wc, (u, v) -> inner_Γ(u, v; markers = :xmin))
         # On a one-point axis both faces are one point, weighed once; two terms double it.
         W1 = gridspace(mesh(domain(I2), (1, 5), (true, true)))
         @test _proj_matches(form(W1, W1, (u, v) -> inner_Γ(u, v; markers = :xmin)))

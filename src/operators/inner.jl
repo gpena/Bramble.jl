@@ -65,10 +65,11 @@ struct InnerPlusSet{S} <: AbstractInnerProduct end
 Quadrature weights for the \$(D-1)\$-dimensional surface integral over the grid faces `MASK`
 names (gpena/Bramble.jl#157).
 
-`MASK` is the per-axis `(min, max)` face mask `_face_mask` (mesh/queries.jl) resolves the
+`MASK` is the per-axis `(min, max)` face mask `_surface_mask` (mesh/queries.jl) resolves the
 form's `markers` into, carried as a type parameter rather than a field so the node stays a
 singleton the like-term simplifier can fold and `compute_weight` reads a compile-time literal.
-It is resolved once, when the form is built.
+Building the node holds the labels (`_SurfaceLabels`); `form` resolves them once, against
+the mesh of the test space (`_resolve_surfaces`).
 """
 struct InnerGamma{MASK} <: AbstractInnerProduct end
 
@@ -308,8 +309,11 @@ same lumped surface weight the numeric [`inner_Γ`](@ref) uses, so `uᵀ A v` eq
 `inner_Γ(uₕ, vₕ, markers...)` for the bilinear mass term.
 
 `markers` is a keyword here, matching [`innerₕ`](@ref), where the numeric twin takes its
-labels positionally; and it names whole coordinate faces (`:boundary`, `:xmin`…`:zmax`, or a
-viewpoint alias), for the reason the numeric one's docstring gives.
+labels positionally. A label is read from its definition when `form` is called, as the
+numeric one reads it: one the mesh holds as a marker selects the whole coordinate faces its
+points mark, and any other label is a face name (`:boundary`, `:xmin`…`:zmax`, or a
+viewpoint alias). Markers that are not whole faces, and an unknown label, throw an
+`ArgumentError` at `form`.
 
 The assembled block carries a structural entry at every point the surrounding operators
 reach, not only on `Γ`: the weight is zero off the surface rather than the entry being
@@ -345,14 +349,122 @@ end
 @inline _as_labels(s::Symbol) = (s,)
 @inline _as_labels(t::NTuple{N, Symbol}) where {N} = t
 
-# Resolving the labels is a runtime computation producing a *type*, so it happens once, here,
-# when the form is built -- not once per grid point. The node that comes out is concrete, so
-# assembly is as typed as it is for any other weight.
+# The node holds its labels until `form`, which knows the mesh a label is defined on
+# (gpena/Bramble.jl#660): resolving them there is a runtime computation producing a *type*,
+# made once per form, not once per grid point, and the node that comes out is as concrete
+# as any other weight.
 @inline function _inner_gamma(::Val{D}, markers) where {D}
     labels = _as_labels(markers)
-    mask = _face_mask(Val(D), labels)
-    _no_faces(mask) && _throw_no_surface_labels()
-    return InnerGamma{mask}()
+    isempty(labels) && _throw_no_surface_labels()
+    return InnerGamma{_SurfaceLabels{labels}}()
+end
+
+# The labels a surface weight names, before `form` resolves them to faces through
+# `_surface_mask` (mesh/queries.jl), the resolution the numeric `inner_Γ` makes.
+struct _SurfaceLabels{L} end
+
+# The faces of every surface product in `ast`, resolved on the mesh of the leaf its sweep
+# walks: a leaf of the test space `Vₕ`, or of the trial space `Wₕ` when the product
+# interpolates on the test side (`_walked_leaf`, operators/interpolation.jl). A linear form
+# passes its test space twice. Runs before `simplify_ast`, so terms naming the same faces
+# fold.
+@inline function _resolve_surfaces_for_space(ast, Vₕ, Wₕ = Vₕ)
+    _has_surface_labels(ast) || return ast
+    resolved = _resolve_surfaces(ast, (Wₕ, Vₕ))
+    _has_surface_labels(resolved) && _throw_surface_unresolved(typeof(resolved))
+    return resolved
+end
+
+_resolve_surfaces(op, spaces) = op
+function _resolve_surfaces(op::OperatorAdd{D}, spaces) where {D}
+    l = _resolve_surfaces(op.left_op, spaces)
+    r = _resolve_surfaces(op.right_op, spaces)
+    return OperatorAdd{D, typeof(l), typeof(r)}(l, r)
+end
+function _resolve_surfaces(op::OperatorScale{D}, spaces) where {D}
+    i = _resolve_surfaces(op.inner_op, spaces)
+    return OperatorScale{D, typeof(op.scalar), typeof(i)}(op.scalar, i)
+end
+function _resolve_surfaces(op::GridFunctionScale{D}, spaces) where {D}
+    i = _resolve_surfaces(op.inner_op, spaces)
+    return GridFunctionScale{D, typeof(op.grid_function), typeof(i)}(op.grid_function, i)
+end
+function _resolve_surfaces(op::RegionRestriction, spaces)
+    return _rebuild_restriction(op, op.region, _resolve_surfaces(op.inner_op, spaces))
+end
+function _resolve_surfaces(op::BilinearProduct{D, W}, spaces) where {D, W}
+    R = _resolved_on_walked(op, W, spaces...)
+    return BilinearProduct{D, R, typeof(op.left_op), typeof(op.right_op)}(
+        op.left_op, op.right_op)
+end
+function _resolve_surfaces(op::LinearProduct{D, W}, spaces) where {D, W}
+    R = _resolved_on_walked(op, W, spaces...)
+    return LinearProduct{D, R, typeof(op.left_op), typeof(op.right_op)}(
+        op.left_op, op.right_op)
+end
+
+# Routed as `_check_centered_meshes` (assembly/linear.jl) routes: a product naming a
+# component of the walked side is resolved on that leaf's mesh; one naming none reaches the
+# diagonal blocks, so each leaf it walks there has to read its labels as the same faces. A
+# product naming a component of the other side alone is resolved on the first leaf, and the
+# block routing refuses it at assembly, by name.
+function _resolved_on_walked(op, W, Wₕ, Vₕ)
+    _has_surface_labels(op) || return W
+    unnamed = trial_component_or_nothing(op) === nothing &&
+              test_component_or_nothing(op) === nothing
+    nmax = unnamed ? min(_leaf_count(Wₕ), _leaf_count(Vₕ)) : 1
+    _has_test_interp(op) &&
+        return _resolved_on_side(op, W, Wₕ, trial_component_or_nothing, nmax)
+    return _resolved_on_side(op, W, Vₕ, test_component_or_nothing, nmax)
+end
+
+_resolved_on_side(op, W, space, side_component::F, nmax) where {F} = _resolved_inner(
+    W, mesh(space))
+
+# A component outside the space is resolved on the first `nmax` leaves, and left to the
+# block routing to refuse by name.
+function _resolved_on_side(
+        op, W, space::CompositeGridSpace, side_component::F, nmax) where {F}
+    leaves = leaf_spaces_offsets(space)
+    k = side_component(op)
+    if k isa Int && 1 <= k <= length(leaves)
+        return _resolved_inner(W, mesh(first(leaves[k])))
+    end
+    R = _resolved_inner(W, mesh(first(first(leaves))))
+    for c in 2:min(nmax, length(leaves))
+        _resolved_inner(W, mesh(first(leaves[c]))) === R || _throw_surface_leaves_disagree()
+    end
+    return R
+end
+
+_resolved_inner(::Type{W}, Ωₕ) where {W} = W
+function _resolved_inner(::Type{InnerGamma{_SurfaceLabels{L}}}, Ωₕ) where {L}
+    return InnerGamma{_surface_mask(Ωₕ, L)}
+end
+
+# Whether a type holds a `_SurfaceLabels` anywhere in its parameters. Decided when `form` is
+# compiled, so a form with no surface term pays nothing for asking.
+_type_has_labels(::Type{<:_SurfaceLabels}) = true
+_type_has_labels(T::DataType) = any(p -> p isa Type && _type_has_labels(p), T.parameters)
+_type_has_labels(::Any) = false
+@generated _has_surface_labels(::T) where {T} = _type_has_labels(T)
+
+@noinline function _throw_surface_leaves_disagree()
+    throw(
+        ArgumentError(
+        "inner_Γ: a term naming no component reaches leaves whose meshes read its " *
+        "markers as different faces; name the component the term is for (`v(i)`).",
+    ),
+    )
+end
+
+@noinline function _throw_surface_unresolved(T)
+    throw(
+        ArgumentError(
+        "inner_Γ: a surface label was left unresolved in $(T); this is a Bramble bug, " *
+        "please report it.",
+    ),
+    )
 end
 
 # There is deliberately no `innerₕ` over gradient tuples. `inner₊` has one because its

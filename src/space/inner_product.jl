@@ -266,9 +266,8 @@ end
 # grid walk is the one every other inner product here does, and the boundary is a vanishing
 # fraction of the points, so the arithmetic saved by a marked-index walk is not worth a
 # second traversal shape. The same weight is read per point by the symbolic path
-# (`compute_weight(::InnerGamma, …)`, operators/inner.jl), so the two layers compute the
-# same number by construction for face names. A label the mesh defines differently is read
-# from its marker here but by its name there, until gpena/Bramble.jl#660 resolves both alike.
+# (`compute_weight(::InnerGamma, …)`, operators/inner.jl), from the mask the same
+# `_surface_mask` resolves, so the two layers compute the same number by construction.
 @inline function _surface_sum(Ωₕ, mask, u, v)
     acc = zero(eltype(u)) * zero(eltype(v)) * zero(eltype(Ωₕ))
     lin = LinearIndices(indices(Ωₕ))

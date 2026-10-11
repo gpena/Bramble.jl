@@ -176,7 +176,7 @@ the axis the point sits on: `-∏_{e ≠ DIM} ĥ_e` on the `min` face, `+` on th
 zero anywhere else.
 
 The directional counterpart of [`InnerGamma`](@ref), which lumps every incident face into one
-number. Both are resolved once, when the form is built, and carried as type parameters.
+number. Both are resolved once, when `form` is called, and carried as type parameters.
 """
 struct InnerGammaNormal{MASK, DIM} <: AbstractInnerProduct end
 
@@ -205,10 +205,17 @@ function inner_Γ(F::NormalContraction{D}, right::LazyOp{D}; markers = ()) where
     return _normal_terms(F.terms, right, Val(mask), Val(D))
 end
 
+# The labels, held until `form` resolves them to faces as it does `InnerGamma`'s
+# (`_resolve_surfaces`, operators/inner.jl).
 @inline function _normal_mask(::Val{D}, markers) where {D}
-    mask = _face_mask(Val(D), _as_labels(markers))
-    _no_faces(mask) && _throw_no_surface_labels()
-    return mask
+    labels = _as_labels(markers)
+    isempty(labels) && _throw_no_surface_labels()
+    return _SurfaceLabels{labels}
+end
+
+function _resolved_inner(
+        ::Type{InnerGammaNormal{_SurfaceLabels{L}, DIM}}, Ωₕ) where {L, DIM}
+    return InnerGammaNormal{_surface_mask(Ωₕ, L), DIM}
 end
 
 # The sum is built with `ntuple(Val(D))` so each weight is a type rather than a runtime value,
