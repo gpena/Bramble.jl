@@ -189,37 +189,6 @@ end
         @test Bramble._stencil_margin(D₋ₓ(πₕ(u))) == 1
     end
 
-    @testset "Bilinear terms, lexicographic distance" begin
-        # `bandwidths` reads every bilinear term's (trial, test) reach and turns each pair
-        # into a distance in the lexicographic order. The terms come through a sum and a
-        # scale, and anything that is not a bilinear term contributes none.
-        u, v = TrialFunction{1}(), TestFunction{1}()
-        terms = Bramble._bilinear_terms(innerₕ(D₊ₓ(u), D₋ₓ(v)) + 3 * innerₕ(u, v) + id1)
-        @test length(terms) == 2
-        @test eltype(terms) == Tuple{Vector{NTuple{1, Int}}, Vector{NTuple{1, Int}}}
-        @test sort(terms[1][1]) == [(0,), (1,)]
-        @test sort(terms[1][2]) == [(-1,), (0,)]
-        @test terms[2] == ([(0,)], [(0,)])
-        @test isempty(Bramble._bilinear_terms(id1))
-
-        # strides (1, n₁): one step along x is 1, one along y is n₁, and the distance is
-        # column minus row
-        @test Bramble._lex_distance((1, 0), (0, 1), (1, 5)) == 1 - 5
-        @test Bramble._lex_distance((0, 0), (0, 0), (1, 5)) == 0
-        @test Bramble._lex_distance((-1, 2), (1, -1), (1, 7)) == -2 + 3 * 7
-        @test Bramble._lex_distance((2,), (-1,), (1,)) == 3
-        @test Bramble._lex_strides((5, 4, 3)) == (1, 5, 20)
-        @test Bramble._lex_strides((7,)) == (1,)
-        @test isconcretetype(only(Base.return_types(Bramble._lex_strides, (NTuple{3, Int},))))
-
-        # and the bandwidth of a form on the non-uniform 2D mesh is the widest diagonal
-        # the assembled matrix occupies
-        a = form(Wₕ2, Wₕ2, (u, v) -> innerₕ(D₊ₓ(u), D₋ᵧ(v)) + innerₕ(u, v))
-        A = assemble(a)
-        offs = _matrix_offsets(A)
-        @test Bramble.bandwidths(a) == (-minimum(offs), maximum(offs))
-    end
-
     @testset "Node reach bounds" begin
         # a one-sided operator reaches its own side and no further; the centered one skips
         # its centre; the cross-weighted one does not

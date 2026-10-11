@@ -27,7 +27,6 @@ Bramble.reaction(A_unconstrained, F_unconstrained, uₕ; marker = :boundary)   #
 Bramble.reaction_density(...)                               # pointwise counterpart, for export_vtk
 
 Bramble.jacobian_pattern(a)                                  # Jacobian sparsity straight off the AST
-bandwidths(a), blockbandwidths(a)                    # storage the assembled matrix needs
 issymmetric(a), isposdef(a)                          # symbolic checks on a BilinearForm
 ```
 

@@ -55,7 +55,7 @@ Pages = [
 ]
 ```
 
-### Point sources, bandwidth analysis and structural properties
+### Point sources and structural properties
 
 ```@docs
 DiracSource

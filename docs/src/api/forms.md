@@ -122,11 +122,6 @@ move to their own [scientific computing reference](../api_sciml.md): the SciML s
 wave problems, `pde_solve`'s adjoint rule, AMG preconditioning, the SuiteSparse/Apple
 Accelerate/MUMPS direct solvers, and `type_cached_assemble!`.
 
-## Bandwidth analysis
-
-`bandwidths`/`blockbandwidths` are private; see the
-[forms internals page](../internals/form.md).
-
 ## Dirichlet conditions
 
 ```@docs
