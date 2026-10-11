@@ -3,6 +3,7 @@ module ExportersVtkExportTests
 using Test
 using Bramble
 using WriteVTK
+using ..TestUtils: WITH_3D_TESTS
 
 # `export_vtk` is a thin wrapper: it reshapes what is already there (`to_matrix`, whose
 # correctness is pinned in test/space/vector_elements.jl) and hands it to WriteVTK, which
@@ -96,7 +97,8 @@ using WriteVTK
         end
     end
 
-    @testset "3D export" begin
+    # Runs nightly: `unit` builds no 3D mesh.
+    WITH_3D_TESTS && @testset "3D export" begin
         Ωₕ = mesh(
             domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 4, 3), (true, true, true)
         )

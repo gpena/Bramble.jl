@@ -107,6 +107,29 @@ end
 # a property is not vacuously true has no job in a run where the property does not execute.
 const WITH_SLOW_TESTS = TEST_GROUP in ("all", "slow", "full")
 
+# Whether a 3D mesh may be built: every group but `unit` (gpena/Bramble.jl#650). It is keyed
+# on `unit` itself and not on `WITH_SLOW_TESTS`, which is also false in `ext` and `backends`,
+# where the Polyester and Metal files still run their 3D cases. `TEST_DIMS` is the dimension
+# loop for a test that covers each dimension: `for D in TEST_DIMS`, or
+# `filter(>=(2), TEST_DIMS)` for one that starts at 2D. A case that is 3D only takes
+# `WITH_3D_TESTS && @testset ...`, with a comment that it runs nightly.
+const WITH_3D_TESTS = TEST_GROUP != "unit"
+const TEST_DIMS = WITH_3D_TESTS ? (1, 2, 3) : (1, 2)
+
+# The guard: under `unit`, building a 3D mesh is an error that names the gate to use, so a
+# 3D case added to a unit file later fails on its first run and not at the next timing
+# measurement. It is a more specific method of the constructor `mesh` ends in (every 3D mesh
+# goes through it), and it does not exist in the other groups.
+if !WITH_3D_TESTS
+    function Bramble.MeshnD(
+            ::Bramble.CartesianProduct{3}, ::Bramble.MeshMarkers, ::CartesianIndices{3},
+            ::Bramble.Backend, ::Tuple
+    )
+        error("a 3D mesh is built under the `unit` group (gpena/Bramble.jl#650): loop over ",
+            "`TEST_DIMS` or gate the case with `WITH_3D_TESTS && @testset`; it runs in `slow`")
+    end
+end
+
 # Automatic differentiation and GPU tests are switched off in every group until the
 # milestones that own them: AD until v4.3.0, which decides which backends Bramble keeps, and
 # GPU until v4.4.0, which brings the device path to parity with the CPU. The files stay in
@@ -537,16 +560,22 @@ Base.setindex!(z::ZeroBasedVector, v, i::Int) = (z.p[i + 1] = v)
 const MG_SEED = 3291
 
 # Non-uniform meshes in 1D, 2D and 3D, and two with a collapsed axis (which also cover
-# `interpolation_matrix` on collapsed axes), with a level count each.
+# `interpolation_matrix` on collapsed axes), with a level count each. Without
+# `WITH_3D_TESTS` the two 3D entries are not built, so the tuple is (1D, 2D, collapsed 2D):
+# a caller that indexes it past the second entry gates itself on `WITH_3D_TESTS`.
 function _mg_transfer_meshes(bk = backend())
     Random.seed!(MG_SEED)
     unit(a = 0.0, b = 1.0) = interval(a, b)
     return (
         (mesh(domain(unit()), 33, false; backend = bk), 4),
         (mesh(domain(unit() × unit(0.0, 2.0)), (17, 9), false; backend = bk), 3),
-        (mesh(domain(unit() × unit(-1.0, 1.0) × unit(0.0, 2.0)), (9, 5, 9), false; backend = bk), 3),
+        (WITH_3D_TESTS ?
+         ((mesh(domain(unit() × unit(-1.0, 1.0) × unit(0.0, 2.0)), (9, 5, 9), false; backend = bk), 3),) :
+         ())...,
         (mesh(domain(unit() × unit(0.5, 0.5)), (17, 4), false; backend = bk), 3),
-        (mesh(domain(unit() × unit(0.5, 0.5) × unit()), (9, 4, 5), false; backend = bk), 2)
+        (WITH_3D_TESTS ?
+         ((mesh(domain(unit() × unit(0.5, 0.5) × unit()), (9, 4, 5), false; backend = bk), 2),) :
+         ())...
     )
 end
 
@@ -671,7 +700,8 @@ function _broadcast_space(n::NTuple{D, Int}, policy; seed = 357) where {D}
     return gridspace(mesh(_broadcast_domain(D), npts, unif; backend = backend(policy = policy)))
 end
 
-const _BROADCAST_SIZES = ((1,), (2,), (7,), (1001,), (5, 3), (40, 37), (4, 3, 5), (13, 11, 9))
+const _BROADCAST_SIZES = (
+    (1,), (2,), (7,), (1001,), (5, 3), (40, 37), (WITH_3D_TESTS ? ((4, 3, 5), (13, 11, 9)) : ())...)
 
 # Every broadcast shape, each writing into a fresh `NaN` destination (or
 # updating a copy in place): VectorElements only, a plain vector, literal scalars, a `Ref`

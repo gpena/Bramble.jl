@@ -2,6 +2,7 @@ module ExportersPgfplotsExportTests
 
 using Test
 using Bramble
+using ..TestUtils: WITH_3D_TESTS
 
 # Plain text, so unlike the VTK export test, the byte content itself is exactly what is
 # under test: there is no library on the other end whose correctness can be assumed.
@@ -151,7 +152,8 @@ using Bramble
         end
     end
 
-    @testset "3D refusal" begin
+    # Runs nightly: `unit` builds no 3D mesh.
+    WITH_3D_TESTS && @testset "3D refusal" begin
         Ωₕ = mesh(
             domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3), (true, true, true)
         )

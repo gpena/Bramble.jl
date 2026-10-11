@@ -10,7 +10,8 @@ using LinearAlgebra: LinearAlgebra, dot, norm, diag, LowerTriangular, UpperTrian
 using LinearSolve: LinearProblem, KrylovJL_CG, solve
 using ForwardDiff: ForwardDiff
 using Random
-using ..TestUtils: MG_SEED, ZeroBasedVector, _mg_jitter_mesh, _mg_spd, _mg_transfer_meshes
+using ..TestUtils: MG_SEED, TEST_DIMS, WITH_3D_TESTS, ZeroBasedVector, _mg_jitter_mesh, _mg_spd,
+                   _mg_transfer_meshes
 
 # Geometric multigrid. Meshes are non-uniform throughout: on a uniform
 # mesh rebuilding each level from the domain would nest too, and hide a hierarchy that does
@@ -44,11 +45,11 @@ _mg_agree(a, b) = isapprox(a, b; rtol = 1e-13, atol = 1e-13)
                 :blob => x -> (x[1] - 0.5)^2 + (x[2] - 1.0)^2 < 0.2),
             (17, 33),
             3),
-        (
+        (WITH_3D_TESTS ? ((
             domain(interval(0.0, 1.0) × interval(-1.0, 1.0) × interval(0.0, 2.0),
                 :inlet => :left, :half => x -> x[3] < 1.0),
             (9, 5, 17),
-            3)
+            3),) : ())...
     )
     for (Ω, n, L) in cases
         Ωf = mesh(Ω, n, false)
@@ -93,7 +94,7 @@ _mg_agree(a, b) = isapprox(a, b; rtol = 1e-13, atol = 1e-13)
     @test_throws ArgumentError GeometricMeshHierarchy(mesh(domain(interval(0.0, 1.0)), 18, false), 2)
     @test_throws ArgumentError GeometricMeshHierarchy(
         mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 11), false), 3)
-    @test_throws ArgumentError GeometricMeshHierarchy(
+    WITH_3D_TESTS && @test_throws ArgumentError GeometricMeshHierarchy(
         mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9, 7), false), 3)
     @test_throws ArgumentError GeometricMeshHierarchy(Ω1, 0)
     Ω33 = mesh(domain(interval(0.0, 1.0)), 33, false)
@@ -145,13 +146,17 @@ end
         end
     end
 
-    # Interpolation reproduces the multilinear function x₁ + 2 x₂ x₃ - x₂ exactly.
-    Ωf, L = _mg_transfer_meshes()[3]
-    H = GeometricMeshHierarchy(Ωf, L)
-    f(p) = p[1] + 2 * p[2] * p[3] - p[2]
-    grid(Ω) = vec([f((a, b, c)) for a in points(Ω(1)), b in points(Ω(2)), c in points(Ω(3))])
-    xf = zeros(npoints(H[3]))
-    @test _mg_agree(prolongate!(xf, H, 3, grid(H[2])), grid(H[3]))
+    # Interpolation reproduces the multilinear function x₁ + 2 x₂ x₃ - x₂ exactly. It needs the
+    # 3D mesh, the third entry of `_mg_transfer_meshes()` when `WITH_3D_TESTS` (it runs in
+    # `slow`); without it the third entry is a 2D mesh with a collapsed axis.
+    if WITH_3D_TESTS
+        Ωf, L = _mg_transfer_meshes()[3]
+        H = GeometricMeshHierarchy(Ωf, L)
+        f(p) = p[1] + 2 * p[2] * p[3] - p[2]
+        grid(Ω) = vec([f((a, b, c)) for a in points(Ω(1)), b in points(Ω(2)), c in points(Ω(3))])
+        xf = zeros(npoints(H[3]))
+        @test _mg_agree(prolongate!(xf, H, 3, grid(H[2])), grid(H[3]))
+    end
 
     # The unscaled transpose is Galerkin for the 1D stiffness on a non-uniform mesh: the
     # forms carry the discrete measure, so Pᵀ A_f P is the coarse form's matrix.
@@ -252,7 +257,7 @@ function _mg_smoother_form(D, n; T = Float64)
     return form(W, W, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v)))
 end
 
-const _MG_SMOOTHER_SHAPES = ((1, 33), (2, (17, 13)), (3, (9, 7, 9)))
+const _MG_SMOOTHER_SHAPES = filter(c -> c[1] in TEST_DIMS, ((1, 33), (2, (17, 13)), (3, (9, 7, 9))))
 
 # The colour of each unknown: the parity of its zero-based index sum.
 _mg_colours(dims) = [mod(sum(Tuple(I)) - length(dims), 2) for I in CartesianIndices(dims)][:]
@@ -538,7 +543,7 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
     end
 
     # CG iterations do not grow with the mesh on meshes of bounded cell aspect ratio.
-    for (D, ns) in ((2, (17, 33, 65)), (3, (9, 17)))
+    for (D, ns) in filter(c -> c[1] in TEST_DIMS, ((2, (17, 33, 65)), (3, (9, 17))))
         its = map(ns) do n
             Ωf = _mg_jitter_mesh(D, n)
             P = gmg_preconditioner(_mg_spd, Ωf)
@@ -558,7 +563,7 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
     end
     # A random base mesh refined by `iterative_refinement!` keeps its stretched cells, where
     # point smoothers are slower; CG still converges.
-    for (D, n₀, k) in ((2, 5, 3), (3, 5, 2))
+    for (D, n₀, k) in filter(c -> c[1] in TEST_DIMS, ((2, 5, 3), (3, 5, 2)))
         Random.seed!(MG_SEED + D)
         Ωf = mesh(domain(_mg_box(D)), ntuple(_ -> n₀, D), ntuple(_ -> false, D))
         foreach(_ -> iterative_refinement!(Ωf), 1:k)
@@ -694,7 +699,7 @@ end
 
 @testset "gmg: threaded cycles agree" begin
     policies = (Parallel(),)
-    for policy in policies, (D, n) in ((2, 33), (3, 9))
+    for policy in policies, (D, n) in filter(c -> c[1] in TEST_DIMS, ((2, 33), (3, 9)))
 
         Ωs = _mg_jitter_mesh(D, n)
         Ωt = _mg_jitter_mesh(D, n; bk = backend(; policy))

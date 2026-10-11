@@ -2,8 +2,8 @@ module SpaceThreadedBroadcastTests
 
 using Test
 using Bramble
-using ..TestUtils: alloc_test, _BROADCAST_SIZES, _broadcast_space, _check_broadcast_equal, _reset_seen!, _spy,
-                   _threads_seen
+using ..TestUtils: alloc_test, TEST_DIMS, WITH_3D_TESTS, _BROADCAST_SIZES, _broadcast_space,
+                   _check_broadcast_equal, _reset_seen!, _spy, _threads_seen
 
 # Under a `CpuThreaded` (`Parallel()`) backend, `dest .= expr` into a `VectorElement` runs
 # in static bands of the destination's storage, one per thread.
@@ -32,7 +32,7 @@ _axpy!(v, u, w) = (v .= 2.0 .* u .+ w)
     end
 
     # Nested inside a user's own threaded region.
-    @testset "Nested threaded region, n=$n" for n in ((1001,), (40, 37), (13, 11, 9))
+    @testset "Nested threaded region, n=$n" for n in ((1001,), (40, 37), (WITH_3D_TESTS ? ((13, 11, 9),) : ())...)
         dests, u, w = _nested(n)
         for k in 1:2
             @test dests[k] == k .* u .+ w
@@ -47,7 +47,7 @@ _axpy!(v, u, w) = (v .= 2.0 .* u .+ w)
 
     # Silent on a single thread: there is nothing to band across.
     if Threads.nthreads() >= 2
-        @testset "Runs on several threads, $(D)D" for D in 1:3
+        @testset "Runs on several threads, $(D)D" for D in TEST_DIMS
             n = D == 1 ? (200_000,) : D == 2 ? (400, 400) : (60, 60, 60)
             Wₕ = _broadcast_space(n, Parallel())
             uₕ, wₕ = Rₕ(Wₕ, x -> sin(sum(x))), Rₕ(Wₕ, x -> prod(x))

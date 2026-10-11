@@ -6,6 +6,7 @@ using Bramble: hₘᵢₙ, normal_vector
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: diff₋ₓ!, diff₋ᵧ!, diff₋₂!, diff₊ₓ!, diff₊ᵧ!, diff₊₂!
 using AllocCheck
+using ..TestUtils: WITH_3D_TESTS
 using Bramble:
                ×,
                _boundary_symbol_alias,
@@ -90,16 +91,24 @@ end
     # setup irreproducible for no gain.
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 32, true)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 9), (true, true))
-    Ωₕ3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6), (true, true, true))
-
-    Wₕ1, Wₕ2, Wₕ3 = gridspace(Ωₕ1), gridspace(Ωₕ2), gridspace(Ωₕ3)
+    Wₕ1, Wₕ2 = gridspace(Ωₕ1), gridspace(Ωₕ2)
     Vₕ2 = gridspace(Ωₕ2, Val(2))
 
     uₕ1 = Rₕ(Wₕ1, sin)
     uₕ2 = Rₕ(Wₕ2, x -> sin(x[1]) * x[2])
-    uₕ3 = Rₕ(Wₕ3, x -> sin(x[1]) + x[3])
     cₕ2 = Rₕ(Vₕ2, (x -> x[1], x -> x[2]))
-    vₕ1, vₕ2, vₕ3, dₕ2 = similar(uₕ1), similar(uₕ2), similar(uₕ3), similar(cₕ2)
+    vₕ1, vₕ2, dₕ2 = similar(uₕ1), similar(uₕ2), similar(cₕ2)
+
+    # The 3D fixtures exist from `slow` on (`unit` builds no 3D mesh). Each loop below adds its
+    # 3D case through `cases3`, which is empty under `unit`.
+    Ωₕ3, uₕ3, vₕ3 = if WITH_3D_TESTS
+        Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6), (true, true, true))
+        u3 = Rₕ(gridspace(Ω3), x -> sin(x[1]) + x[3])
+        (Ω3, u3, similar(u3))
+    else
+        (nothing, nothing, nothing)
+    end
+    cases3(case) = WITH_3D_TESTS ? (case,) : ()
 
     @testset "Geometry" begin
         X1 = interval(0.0, 1.0)
@@ -145,7 +154,7 @@ end
 
     @testset "Mesh queries" begin
         for (lbl, Ωₕ, I) in (
-            ("1D", Ωₕ1, Int), ("2D", Ωₕ2, CartesianIndex{2}), ("3D", Ωₕ3, CartesianIndex{3})
+            ("1D", Ωₕ1, Int), ("2D", Ωₕ2, CartesianIndex{2}), cases3(("3D", Ωₕ3, CartesianIndex{3}))...
         )
             @testset "$lbl" begin
                 @test _alloc_report(point, (typeof(Ωₕ), I)) == ""
@@ -170,7 +179,7 @@ end
     # grid point (`test/space/inference_allocation.jl` records the instances).
     @testset "In-place directional operators" begin
         for (suffix, dst, src) in (
-            ("ₓ", vₕ1, uₕ1), ("ᵧ", vₕ2, uₕ2), ("₂", vₕ3, uₕ3)
+            ("ₓ", vₕ1, uₕ1), ("ᵧ", vₕ2, uₕ2), cases3(("₂", vₕ3, uₕ3))...
         )
             @testset "$suffix" begin
                 for stem in (
@@ -189,7 +198,7 @@ end
     end
 
     @testset "Restriction, averaging and interpolation" begin
-        for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), ("3D", uₕ3))
+        for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), cases3(("3D", uₕ3))...)
             @testset "$lbl" begin
                 @test _alloc_report(Rₕ!, (typeof(uₕ), typeof(sin))) == ""
                 @test _alloc_report(avgₕ!, (typeof(uₕ), typeof(sin))) == ""
@@ -204,7 +213,7 @@ end
     end
 
     @testset "Inner products and norms" begin
-        for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), ("3D", uₕ3))
+        for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), cases3(("3D", uₕ3))...)
             @testset "$lbl" begin
                 @test _alloc_report(innerₕ, (typeof(uₕ), typeof(uₕ))) == ""
                 @test _alloc_report(inner₊, (typeof(uₕ), typeof(uₕ))) == ""

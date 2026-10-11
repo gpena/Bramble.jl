@@ -7,7 +7,7 @@ using Bramble: AbstractMatrixFreePreconditioner, JacobiPreconditioner, Chebyshev
 using LinearAlgebra: LinearAlgebra, ldiv!, diag, norm, cond, Symmetric, eigmax, isposdef
 using LinearSolve: LinearProblem, KrylovJL_CG, solve
 using Random
-using ..TestUtils: ZeroBasedVector
+using ..TestUtils: TEST_DIMS, WITH_3D_TESTS, ZeroBasedVector
 
 # Matrix-free preconditioners. Jacobi reads diag(A) off one stencil
 # walk, so every check compares it with `diag(assemble(a; dirichlet))`. Meshes are
@@ -23,13 +23,14 @@ _pc_alloc3(y, P, x) = (ldiv!(y, P, x); @allocated ldiv!(y, P, x))
 _pc_alloc2(P, x) = (ldiv!(P, x); @allocated ldiv!(P, x))
 _pc_alloc_build(a, kw) = (jacobi_preconditioner(a; kw...); @allocated jacobi_preconditioner(a; kw...))
 
+# The 3D space is built from `slow` on; callers index only the 1D and 2D ones.
 function _pc_spaces()
     Random.seed!(PC_SEED)
     return (
         gridspace(mesh(domain(interval(0.0, 1.0)), 17, false)),
         gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (9, 11), (false, true))),
-        gridspace(mesh(
-            domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7, 5), false))
+        (WITH_3D_TESTS ? (gridspace(mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7, 5), false)),) : ())...
     )
 end
 
@@ -191,7 +192,7 @@ end
     # The polynomial is the one its docstring states, SPD, and applied without allocating;
     # the form route with Dirichlet rows agrees with the operator route.
     @testset "chebyshev: the polynomial" begin
-        for D in 1:3
+        for D in TEST_DIMS
             a = _pc_cheb_form(D, (17, 9, 5)[D])
             A = Matrix(assemble(a; dirichlet = :boundary))
             n = size(A, 1)
@@ -261,7 +262,7 @@ end
     # top eigenvalue (which the polynomial needs) and not far past it, for A and for D⁻¹A. For
     # symmetric A it is at most 1.1λ up to rounding; D⁻¹A is not symmetric, so it may pass that.
     @testset "chebyshev: λmax estimate" begin
-        for D in 1:3
+        for D in TEST_DIMS
             a = _pc_cheb_form(D, (65, 17, 9)[D])
             op = matrix_free_operator(a)
             A = Matrix(assemble(a))
@@ -280,7 +281,7 @@ end
     # Degree 4 costs three products per application; it must at least halve the iterations
     # of plain CG, on the operator and on the assembled matrix.
     @testset "chebyshev: CG iterations halve" begin
-        for D in 1:3
+        for D in TEST_DIMS
             a = _pc_cheb_form(D, (129, 33, 11)[D])
             op = matrix_free_operator(a)
             b = randn(size(op, 1))

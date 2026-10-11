@@ -3,7 +3,7 @@ module SpaceThreadedVectorCalculusTests
 using Test
 using Bramble
 using Random
-using ..TestUtils: alloc_test, WITH_SLOW_TESTS, _reset_seen!, _spy, _threads_seen
+using ..TestUtils: alloc_test, TEST_DIMS, WITH_SLOW_TESTS, _reset_seen!, _spy, _threads_seen
 
 # Under a `CpuThreaded` (`Parallel()`) backend the in-place vector-calculus operators -- the
 # gradients, divergences, curls and strain tensors of vector_calculus.jl -- reach the banded
@@ -129,7 +129,7 @@ const _SIZES = (((1,), (2,), (3,), (5,), (401,)),
 const _UNIT_SIZES = (((2,), (3,)), ((9, 2), (3, 3)), ((5, 4, 2), (4, 3, 3)))
 
 @testset "Threaded vector calculus" begin
-    @testset "CpuThreaded equal to Serial, $(D)D" for D in 1:3
+    @testset "CpuThreaded equal to Serial, $(D)D" for D in TEST_DIMS
         # The composite field dispatches the same banded engines whatever the dimension, so
         # `unit` runs it in 1D and 2D and `slow` adds 3D, where it costs the most to compile.
         composite = WITH_SLOW_TESTS || D < 3
@@ -139,7 +139,7 @@ const _UNIT_SIZES = (((2,), (3,)), ((9, 2), (3, 3)), ((5, 4, 2), (4, 3, 3)))
 
     # Silent on a single thread: there is nothing to band across.
     if Threads.nthreads() >= 2
-        @testset "Runs on several threads" for D in 2:3
+        @testset "Runs on several threads" for D in filter(≥(2), TEST_DIMS)
             begin
                 n = D == 2 ? (64, 64) : (12, 12, 12)
                 Ωₕ = _mesh(n, Parallel())

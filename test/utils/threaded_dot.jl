@@ -20,6 +20,7 @@ using Test
 using Bramble
 using Bramble: _dot, _dot_masked, _threaded_dot, _threaded_dot_masked, MarkedIndicesUnion, CpuThreaded, weights,
                SeparableWeights
+using ..TestUtils: WITH_3D_TESTS
 
 @testset "CpuThreaded _dot/_dot_masked" begin
     # Invariants tested:
@@ -189,8 +190,8 @@ end
         (1, (max(1, nthreads - 1),)),  # the only axis shorter than nthreads
         (2, (23, 17)),
         (2, (23, max(1, nthreads - 1))),  # last axis shorter than nthreads
-        (3, (9, 7, 6)),
-        (3, (9, 7, max(1, nthreads - 1)))  # last axis shorter than nthreads
+        # The 3D grids are built from `slow` on; the second has its last axis shorter than nthreads.
+        (WITH_3D_TESTS ? ((3, (9, 7, 6)), (3, (9, 7, max(1, nthreads - 1)))) : ())...
     )
 
     # The values alone cannot tell: the dense kernels read `w` through its linear
