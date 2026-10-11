@@ -438,9 +438,10 @@ end
     end
 
     # With no OpenBLAS handle, the Schur route calls the active LAPACK's `xgges3` through
-    # libblastrampoline. Accelerate's fails to converge on this pencil
+    # libblastrampoline. Accelerate's can fail to converge on this pencil
     # (gpena/Bramble.jl#443): an ArgumentError naming the active LAPACK, as
-    # test/ext/kronecker_ext.jl pins for a fresh build on the same mesh and form.
+    # test/ext/kronecker_ext.jl pins for a fresh build on the same mesh and form. It
+    # converges on some hosts (the macOS CI runner), so under Accelerate either outcome passes.
     @testset "_fdm_decompose!: no OpenBLAS" begin
         X = interval(0.0, 1.0) × interval(0.0, 1.0)
         W = gridspace(mesh(domain(X), (65, 17), (true, true)))
@@ -456,12 +457,18 @@ end
         try
             KronExt._OPENBLAS_GGES3[] = (C_NULL, C_NULL)
             wipe!(f)
-            if accelerate
-                @test_throws ArgumentError KronExt._fdm_decompose!(f)
-                @test_throws "active LAPACK" KronExt._fdm_decompose!(f)
-            else
+            failure = accelerate ? try
+                KronExt._fdm_decompose!(f)
+                nothing
+            catch e
+                e
+            end : nothing
+            if failure === nothing
                 @test decompose_bytes(f) == 0
                 @test norm(fdm_solve!(similar(F), f, F) - x) <= 1e-10 * norm(x)
+            else
+                @test failure isa ArgumentError
+                @test occursin("active LAPACK", sprint(showerror, failure))
             end
         finally
             KronExt._OPENBLAS_GGES3[] = found

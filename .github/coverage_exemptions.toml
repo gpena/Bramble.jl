@@ -320,6 +320,25 @@ headers = [
 reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
 
 [[exempt_function]]
+path = "src/operators/region_restriction.jl"
+headers = [
+    "_is_marked(words::AbstractMatrix{UInt64}, ids::NTuple",
+    "_probed_chain(op::_ProbedRestriction",
+    "_probed_chain(op::Union{OperatorScale, GridFunctionScale}",
+    "_source_stencil_at(op::RegionRestriction",
+    "shifted_inner_stencil(inner_op::RegionRestriction",
+]
+reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
+
+[[exempt_function]]
+path = "src/operators/region_restriction.jl"
+methods = [
+    "_reaches_probed(::_ProbedRestriction)",
+    "_reaches_probed(::Any)",
+]
+reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; a test calls each (test/form/source_operators.jl)"
+
+[[exempt_function]]
 path = "src/problems/semidiscrete_constraints.jl"
 methods = [
     "_constraint_description(::TimeDependentConstraints)",
