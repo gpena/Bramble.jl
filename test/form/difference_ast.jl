@@ -19,7 +19,16 @@ using Bramble:
                trial_component_or_nothing,
                test_component_or_nothing,
                D₋ᵧ,
-               D₋ₓ
+               D₋ₓ,
+               Dcₓ,
+               Dcᵧ,
+               D̽ₓ,
+               D̽ᵧ,
+               Mₓ,
+               Mᵧ,
+               innerₕ,
+               restrict_to,
+               source_function
 
 # The two one-sided difference nodes of the symbolic layer.
 #
@@ -171,6 +180,86 @@ using Bramble:
         a_aniso = form(Wₕ, Wₕ, (u, v) -> inner₊((kx_elem, ky_elem) * ∇ₕ(u), ∇ₕ(v)))
         a_aniso_man = form(Wₕ, Wₕ, (u, v) -> inner₊(kx_elem * D₋ₓ(u), D₋ₓ(v)) + inner₊(ky_elem * D₋ᵧ(u), D₋ᵧ(v)))
         @test assemble(a_aniso) ≈ assemble(a_aniso_man)
+    end
+end
+
+# A difference of a restricted source reads its neighbour through the restriction, so the
+# source is never called outside its region, where it may throw or be infinite
+# (gpena/Bramble.jl#642). The oracle is an unrestricted source that is zero outside the
+# region: with a finite source the two agree bitwise, so they are compared with `===`.
+@testset "Difference of a restricted source (#642)" begin
+    inside1(x) = 0 < x < 1
+    inside2(x) = 0 < x[1] < 1 && 0 < x[2] < 1
+    strict(inside, f) = x -> inside(x) ? f(x) : throw(DomainError(x))
+    extended(inside, f) = x -> inside(x) ? f(x) : zero(f(x))
+    same(a, b) = length(a) == length(b) && all(map(===, a, b))
+    vec_of(W, op, f) = assemble(form(W, v -> innerₕ(op(f), v)))
+
+    W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 9, false))
+    W2 = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (false, false)))
+    ops1 = (D₋ₓ, D₊ₓ, Dcₓ, D̽ₓ, Mₕ)
+    ops2 = (D₋ₓ, D₊ₓ, Dcₓ, D̽ₓ, Mₓ, D₋ᵧ, D₊ᵧ, Dcᵧ, D̽ᵧ, Mᵧ)
+    # A positive source and one changing sign, so negative values and zeros are covered.
+    fs1 = (x -> x + 1, x -> sin(7x) - 0.3)
+    fs2 = (x -> x[1] * x[2] + 1, x -> sin(5x[1]) * cos(4x[2]) - 0.2)
+
+    @testset "Matches the zero-extended source" begin
+        for f in fs1, op in ops1
+
+            g = source_function(strict(inside1, f), Val(1))
+            r = vec_of(W1, op, restrict_to(:interior, g))
+            s = vec_of(W1, op, source_function(extended(inside1, f), Val(1)))
+            @test same(r, s)
+        end
+        for f in fs2, op in ops2
+
+            g = source_function(strict(inside2, f), Val(2))
+            r = vec_of(W2, op, restrict_to(:interior, g))
+            s = vec_of(W2, op, source_function(extended(inside2, f), Val(2)))
+            @test same(r, s)
+        end
+    end
+
+    @testset "Never called outside" begin
+        for op in ops1
+            seen = Float64[]
+            g = source_function(x -> (push!(seen, x); x + 1), Val(1))
+            vec_of(W1, op, restrict_to(:interior, g))
+            @test !isempty(seen)
+            @test all(inside1, seen)
+        end
+        for op in ops2
+            seen = Any[]
+            g = source_function(x -> (push!(seen, x); x[1] + x[2]), Val(2))
+            vec_of(W2, op, restrict_to(:interior, g))
+            @test !isempty(seen)
+            @test all(inside2, seen)
+        end
+    end
+
+    @testset "Infinite on the boundary" begin
+        fi = source_function(x -> 1 / (x * (1 - x)), Val(1))
+        for op in ops1
+            @test all(isfinite, vec_of(W1, op, restrict_to(:interior, fi)))
+        end
+        fi2 = source_function(x -> 1 / (x[1] * (1 - x[1]) * x[2] * (1 - x[2])), Val(2))
+        for op in ops2
+            @test all(isfinite, vec_of(W2, op, restrict_to(:interior, fi2)))
+        end
+    end
+
+    @testset "Inferred, no refill allocation" begin
+        g = source_function(strict(inside1, x -> x + 1), Val(1))
+        l = form(W1, v -> innerₕ(D₋ₓ(restrict_to(:interior, g)), v))
+        b = @inferred assemble(l)
+        refill(b, l) = @allocated assemble!(b, l)
+        refill(b, l)
+        @test refill(b, l) == 0
+        g2 = source_function(strict(inside2, x -> x[1] * x[2]), Val(2))
+        l2 = form(W2, v -> innerₕ(D₋ᵧ(restrict_to(:interior, g2)), v))
+        b2 = @inferred assemble(l2)
+        refill(b2, l2)
+        @test refill(b2, l2) == 0
     end
 end
 
