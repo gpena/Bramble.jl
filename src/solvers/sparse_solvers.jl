@@ -21,8 +21,10 @@ requested solver backend.
 # Symmetry options
 - `:auto` detects matrix symmetry. A symmetric matrix is tried as positive definite
   (SuiteSparse and Apple Accelerate only when its diagonal is positive) and refactored as
-  symmetric indefinite when that fails. A singular matrix throws a `SingularException`. See
-  the docstring of each backend's `*_factorize`.
+  symmetric indefinite when that fails. SuiteSparse throws a `SingularException` on a
+  singular matrix. Apple Accelerate may not: only the backward-error check of the
+  indefinite fallback reports one, so a singular matrix solves without an error on the
+  direct LDLᵀ and LU routes. See the docstring of each backend's `*_factorize`.
 - `:spd`, `:definite`, or `1` selects symmetric positive definite.
 - `:symmetric` or `2` selects general symmetric.
 - `:unsymmetric` or `0` selects general unsymmetric.
@@ -215,7 +217,7 @@ end
 function refactor!(
         fact::Factorization, a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing
 )
-    A = assemble(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
+    A = _as_csc(assemble(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components))
     return refactor!(fact, A)
 end
 
