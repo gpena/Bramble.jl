@@ -314,7 +314,9 @@ labels positionally. A label is read from its definition when `form` is called, 
 numeric one reads it: one the mesh holds as a marker selects the whole coordinate faces its
 points mark, and any other label is a face name (`:boundary`, `:xmin`…`:zmax`, or a
 viewpoint alias). Markers that are not whole faces, and an unknown label, throw an
-`ArgumentError` at `form`.
+`ArgumentError` at `form`. Unlike the numeric one, it accepts a face set holding both faces of
+an axis with two points or fewer, and assembles every face selected: on an axis with one
+point, a marker covers both faces of it, and so selects what `:boundary` does.
 
 The assembled block carries a structural entry at every point the surrounding operators
 reach, not only on `Γ`: the weight is zero off the surface rather than the entry being
