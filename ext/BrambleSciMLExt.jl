@@ -112,11 +112,10 @@ end
 # argument at all; it would silently land in `kwargs` instead and never reach the residual.
 #
 # `specialize` defaults to `nothing`, leaving `ODEProblem`'s own specialization choice
-# untouched -- existing callers get exactly the problem they always did. Passing
-# `SciMLBase.FullSpecialize` is what `Bramble.adjoint_sensitivities`
-# (`BrambleSciMLSensitivityExt`) needs: without it, calling the residual with a
-# differently-`eltype`-`p` than the forward solve used (exactly what computing a `p`-vjp
-# does) fails with "No matching function wrapper was found!" rather than differentiating.
+# untouched -- existing callers get exactly the problem they always did.
+# `Bramble.adjoint_sensitivities` (`BrambleSciMLSensitivityExt`) does not need
+# `SciMLBase.FullSpecialize` on any backend: it unwraps the function wrappers the default
+# specialization adds before it calls SciMLSensitivity.
 # The type-parameterized `ODEProblem{iip, specialize}` constructor is the only one that
 # accepts a choice of specialization at all -- there is no keyword for it on the plain one.
 Base.@constprop :aggressive function Bramble._ode_problem(

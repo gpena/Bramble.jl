@@ -79,12 +79,9 @@ Keywords are those of [`ode_function`](@ref), plus:
 - `p` (default `SciMLBase.NullParameters()`) for a residual whose `update_coefficients!` or
   Dirichlet conditions were given a parameter-dependent, `(t, p)`/`(x, t, p)` form (see
   [`semidiscretize`](@ref)'s own keywords).
-- `specialize` (default `nothing`, `ODEProblem`'s own choice untouched) -- pass
-  `SciMLBase.FullSpecialize` before handing the solved trajectory to
-  `Bramble.adjoint_sensitivities`: without it, a `p`-vjp calls the residual with a
-  differently-`eltype`-`p` than the forward solve used, which the default specialization
-  cannot dispatch and fails with "No matching function wrapper was found!" rather than
-  differentiating.
+- `specialize` (default `nothing`, `ODEProblem`'s own choice untouched). The solved
+  trajectory goes to `Bramble.adjoint_sensitivities` with any specialization:
+  `SciMLBase.FullSpecialize` is not needed for the adjoint on any backend.
 
 The two-form method also forwards its other keywords to [`semidiscretize`](@ref).
 

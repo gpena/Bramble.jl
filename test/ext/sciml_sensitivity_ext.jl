@@ -6,6 +6,7 @@ using LinearAlgebra: dot
 using Random: seed!
 using SciMLBase: SciMLBase, solve
 using OrdinaryDiffEqBDF: FBDF
+using SparseMatricesCSR
 using ..TestUtils: _have
 
 # `Bramble.adjoint_sensitivities`: `SciMLSensitivity.adjoint_sensitivities` wrapped with the
@@ -148,9 +149,9 @@ using ..TestUtils: _have
         # Default specialization wraps the residual in a `FunctionWrappersWrapper`, which
         # hid the `Semidiscretization` from the `Mᵀ` correction (gpena/Bramble.jl#606).
         @testset "Mᵀ correction under default wrapper" begin
-            # A dense backend and a `p`-free condition, so that no `p`-vjp runs: that is
-            # what lets `QuadratureAdjoint(autojacvec = false)` return a `du0` at all
-            # without `FullSpecialize`.
+            # A dense backend and a `p`-free condition, with an explicit sensealg: the
+            # wrapper is unwrapped before SciMLSensitivity sees `sol` (gpena/Bramble.jl#676),
+            # so `FullSpecialize` is not needed here.
             Ωₕ = Bramble.mesh(
                 Bramble.domain(Bramble.interval(0.0, 1.0)), 21, false;
                 backend = Bramble.backend(matrix_type = Matrix{Float64})
@@ -199,19 +200,39 @@ using ..TestUtils: _have
             @test isapprox(adjoint_dθ, fd_dθ; rtol = 1e-4)
         end
 
-        # A problem with no `p` (gpena/Bramble.jl#671): the default `sensealg` must be the
-        # quadrature adjoint, since every `InterpolatingAdjoint` variant fails on it inside
-        # SciMLSensitivity (SciML/SciMLSensitivity.jl#1703). `dp` is `nothing`, and `du0`
-        # matches central differences. `abstol`/`reltol`/`h` as in the testsets above.
-        function _ssens_pless_check(Ωₕ; specialize)
+        # The default `sensealg`, on every backend, against central differences. A problem
+        # with no `p` (gpena/Bramble.jl#671) gets the quadrature adjoint, since every
+        # `InterpolatingAdjoint` variant fails on it inside SciMLSensitivity
+        # (SciML/SciMLSensitivity.jl#1703); its `dp` is `nothing`. A problem with `p` gets
+        # the interpolating adjoint, and `dp` is the gradient with respect to `β` in the
+        # Dirichlet value `β t`. Default specialization wraps `jac` and `tgrad` for the
+        # forward `p`-eltype (gpena/Bramble.jl#676), and a dense Jacobian prototype comes
+        # back from `DiffEqBase` with its values replaced (gpena/Bramble.jl#679): both are
+        # repaired before SciMLSensitivity sees `sol`. `abstol`/`reltol`/`h` as in the
+        # testsets above.
+        function _ssens_check(Ωₕ; specialize = nothing, dirichlet = true, withp = false)
             Wₕ = gridspace(Ωₕ)
             I = Bramble.interval(0.0, 0.5)
             fₕ = Bramble.element(Wₕ, 0.0)
             a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
             l = form(Wₕ, v -> innerₕ(fₕ, v))
-            bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
-            sd = semidiscretize(a, l; dirichlet = bcs)
+            sd = if !dirichlet
+                semidiscretize(a, l)
+            elseif withp
+                semidiscretize(
+                    a, l; dirichlet = dirichlet_constraints(
+                        Ωₕ, I, :boundary => (x, t, p) -> p[1] * t
+                    )
+                )
+            else
+                semidiscretize(
+                    a, l; dirichlet = dirichlet_constraints(
+                        Ωₕ, I, :boundary => (x, t) -> 0.0
+                    )
+                )
+            end
             θ₀ = 0.4
+            β₀ = 0.7
             ts = [0.125, 0.25, 0.375, 0.5]
             pts = points(Ωₕ)
             u0θ(θ) = begin
@@ -221,47 +242,59 @@ using ..TestUtils: _have
                 v
             end
             kw = (; abstol = 1e-9, reltol = 1e-9)
+            mk(θ, β) =
+                if withp
+                    ode_problem(sd, u0θ(θ), I; p = [β], specialize = specialize)
+                else
+                    ode_problem(sd, u0θ(θ), I; specialize = specialize)
+                end
 
-            prob = ode_problem(sd, u0θ(θ₀), I; specialize = specialize)
-            sol = solve(prob, FBDF(); kw..., saveat = ts)
+            sol = solve(mk(θ₀, β₀), FBDF(); kw..., saveat = ts)
             obs = [copy(u) .+ 0.01 for u in sol.u]
             dgdu!(out, u, p, t, i) = (@. out = 2 * (u - obs[i]); nothing)
-
             du0, dp = Bramble.adjoint_sensitivities(
                 sol, FBDF(); t = ts, dgdu_discrete = dgdu!, kw...
             )
 
             h = 1e-4
-            du0dθ = (u0θ(θ₀ + h) - u0θ(θ₀ - h)) / (2h)
-            loss(θ) = begin
-                s = solve(SciMLBase.remake(prob; u0 = u0θ(θ)), FBDF(); kw..., saveat = ts)
+            loss(θ, β) = begin
+                s = solve(mk(θ, β), FBDF(); kw..., saveat = ts)
                 sum(sum(abs2, s.u[k] - obs[k]) for k in eachindex(ts))
             end
-            fd_dθ = (loss(θ₀ + h) - loss(θ₀ - h)) / (2h)
-            return dot(du0, du0dθ), fd_dθ, dp
+            du0dθ = (u0θ(θ₀ + h) - u0θ(θ₀ - h)) / (2h)
+            fd_θ = (loss(θ₀ + h, β₀) - loss(θ₀ - h, β₀)) / (2h)
+            fd_β = withp ? (loss(θ₀, β₀ + h) - loss(θ₀, β₀ - h)) / (2h) : nothing
+            return (; du0 = dot(du0, du0dθ), fd_θ, dp, fd_β)
         end
 
-        @testset "p-less, dense with Dirichlet, default" begin
-            seed!(671)
+        _ssens_dense() = Bramble.backend(matrix_type = Matrix{Float64})
+
+        @testset "p-less, default, $(tag), $(dirichlet ? "Dirichlet" : "no Dirichlet")" for (
+                tag, be
+            ) in (("CSC", Bramble.backend()), ("CSR", csr_backend()), ("dense", _ssens_dense())),
+            dirichlet in (true, false)
+
+            seed!(676)
             Ωₕ = Bramble.mesh(
-                Bramble.domain(Bramble.interval(0.0, 1.0)), 21, false;
-                backend = Bramble.backend(matrix_type = Matrix{Float64})
+                Bramble.domain(Bramble.interval(0.0, 1.0)), 21, false; backend = be
             )
-            adjoint_dθ, fd_dθ, dp = _ssens_pless_check(
-                Ωₕ; specialize = SciMLBase.AutoSpecialize
-            )
-            @test dp === nothing
-            @test isapprox(adjoint_dθ, fd_dθ; rtol = 1e-4)
+            r = _ssens_check(Ωₕ; dirichlet = dirichlet)
+            @test r.dp === nothing
+            @test isapprox(r.du0, r.fd_θ; rtol = 1e-4)
         end
 
-        @testset "p-less, CSC and FullSpecialize, default" begin
-            seed!(671)
-            Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 21, false)
-            adjoint_dθ, fd_dθ, dp = _ssens_pless_check(
-                Ωₕ; specialize = SciMLBase.FullSpecialize
+        @testset "p, default sensealg, $(tag), $(specialize)" for (tag, be) in (
+                ("CSR", csr_backend()), ("dense", _ssens_dense())
+            ),
+            specialize in (SciMLBase.AutoSpecialize, SciMLBase.FullSpecialize)
+
+            seed!(676)
+            Ωₕ = Bramble.mesh(
+                Bramble.domain(Bramble.interval(0.0, 1.0)), 21, false; backend = be
             )
-            @test dp === nothing
-            @test isapprox(adjoint_dθ, fd_dθ; rtol = 1e-4)
+            r = _ssens_check(Ωₕ; specialize = specialize, withp = true)
+            @test isapprox(r.du0, r.fd_θ; rtol = 1e-4)
+            @test isapprox(only(r.dp), r.fd_β; rtol = 1e-4)
         end
     else
         @test_skip "SciMLSensitivity not in this environment"
