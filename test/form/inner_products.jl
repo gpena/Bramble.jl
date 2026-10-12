@@ -587,6 +587,27 @@ end
             (u, v) -> inner_Γ(u, v; markers = (:inlet,)))
         @test_throws ArgumentError form(Wₕ, v -> inner_Γ(1.0, v; markers = :inlet))
     end
+
+    # On an axis with one point a marker's points cover both faces of that axis. The numeric
+    # `inner_Γ` refuses that face set, since every grid point lies on it; the symbolic one
+    # assembles every face selected, as `:boundary` does, and only the face name names one.
+    @testset "A marker on a one-point axis" begin
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        W = gridspace(mesh(domain(S, :l => :ymin), (5, 1), (false, false)))
+        oₕ = Rₕ(W, x -> 1.0)
+        @test_throws "not (D-1)-dimensional" inner_Γ(oₕ, oₕ, :l)
+        @test_throws "not (D-1)-dimensional" inner_Γ(oₕ, oₕ, :boundary)
+        @test inner_Γ(oₕ, oₕ, :ymin) ≈ 1.0
+
+        lin(m) = assemble(form(W, v -> inner_Γ(x -> 1.0, v; markers = m)))
+        bil(m) = assemble(form(W, W, (u, v) -> inner_Γ(u, v; markers = m)))
+        Fy = lin(:ymin)
+        @test sum(Fy) ≈ inner_Γ(oₕ, oₕ, :ymin)
+        @test lin(:l) == lin(:boundary)
+        @test lin(:l) ≈ Fy + lin((:xmin, :xmax))
+        @test findall(!iszero, lin(:l)) == 1:5
+        @test bil(:l) == bil(:boundary)
+    end
 end
 
 end # module FormInnerProductsTests
