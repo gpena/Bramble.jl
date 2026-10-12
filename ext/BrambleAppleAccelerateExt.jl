@@ -1,7 +1,7 @@
 module BrambleAppleAccelerateExt
 
 using Bramble: Bramble, AccelerateFactorization
-using LinearAlgebra: LinearAlgebra, ldiv!, issymmetric, diag, opnorm, norm
+using LinearAlgebra: LinearAlgebra, ldiv!, ishermitian, diag, opnorm, norm
 using SparseArrays: SparseArrays, SparseMatrixCSC
 
 # This module implements only the *sparse* `_accelerate_factorize`/`_accelerate_refactor!`
@@ -52,15 +52,19 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
 
     function _accelerate_fact_kind(A::AbstractMatrix, sym, kind)
         if kind === :cholesky || sym === :spd || sym === :definite || sym == 1
+            ishermitian(A) || _throw_not_hermitian(A)
             return (SparseFactorizationCholesky, :spd)
         elseif kind === :ldlt || sym === :symmetric || sym == 2
+            ishermitian(A) || _throw_not_hermitian(A)
             return (SparseFactorizationLDLT, :symmetric)
         elseif kind === :qr
             return (SparseFactorizationQR, :qr)
         elseif kind === :lu || kind === :lutpp || sym === :unsymmetric || sym == 0
             return (SparseFactorizationLUTPP, :unsymmetric)
         elseif _aa_auto(sym, kind)
-            if issymmetric(A)
+            # Hermitian, not symmetric: libSparse's Cholesky and LDLᵀ factor `A = LDLᴴ`, so
+            # a complex symmetric matrix that is not Hermitian goes to LU.
+            if ishermitian(A)
                 d = diag(A)
                 if !isempty(d) && all(x -> real(x) > 0, d)
                     return (SparseFactorizationCholesky, :spd)
@@ -77,6 +81,17 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
             ),
             )
         end
+    end
+
+    # libSparse's own refusal is an `ErrorException`; the caller chose the kind, so it is
+    # not converted to LU behind their back.
+    @noinline function _throw_not_hermitian(A::AbstractMatrix)
+        throw(
+            ArgumentError(
+            "Cholesky and LDLᵀ factor a Hermitian matrix, and this $(eltype(A)) matrix is " *
+            "not Hermitian. Use sym = :auto or kind = :lu.",
+        ),
+        )
     end
 
     # AppleAccelerate 0.7.0's `AASparseMatrix(A)` stores a Hermitian `A` as its tagged
@@ -202,6 +217,12 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         (m == fact.dim && n == fact.dim) || throw(
             DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
         )
+        # A Cholesky or LDLᵀ factorization, `:auto` or explicit, takes a Hermitian matrix
+        # only: AppleAccelerate stores a non-Hermitian one in full, against the factored
+        # triangle, and it needs LU, a new symbolic factorization. Refused before the
+        # factors are touched, so `fact` still solves with the old matrix.
+        (fact.sym === :spd || fact.sym === :symmetric) && !ishermitian(A) &&
+            _throw_not_hermitian(A)
         M = _aa_matrix(A, fact.sym)
         try
             refactor!(fact.aa_fact, M)

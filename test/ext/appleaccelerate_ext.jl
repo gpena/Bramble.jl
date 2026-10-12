@@ -251,12 +251,13 @@ end
                 end
             end
 
-            # Complex Hermitian, not symmetric: `:auto` takes LU
+            # Complex Hermitian, not symmetric: explicit LU factors the full matrix
             du = fill(1.0 + 0.5im, 5)
             H = sparse(Tridiagonal(conj.(du), fill(4.0 + 0im, 6), du))
             bh = ComplexF64.(1:6)
             @test !issymmetric(H) && ishermitian(H)
-            @test isapprox(accelerate_factorize(H) \ bh, Matrix(H) \ bh; rtol = 1.0e-12)
+            fH = accelerate_factorize(H; kind = :lu)
+            @test isapprox(fH \ bh, Matrix(H) \ bh; rtol = 1.0e-12)
 
             # Unsymmetric 3×3: LU on a matrix that was never stored as a triangle
             Au = sparse([4.0 1 0; 2 5 1; 0 3 6])
@@ -357,6 +358,69 @@ end
                 accelerate_refactor!(fM, 2 * S)
                 @test ldiv_bytes(x3, fM, b3) == 0
                 @test isapprox(x3, (2 * M) \ b3; rtol = 1.0e-12)
+            end
+        end
+
+        # libSparse's Cholesky and LDLᵀ factor `A = LDLᴴ`: `:auto` routes on `ishermitian`,
+        # so a complex symmetric matrix goes to LU, and an explicit Cholesky or LDLᵀ refuses
+        # any matrix that is not Hermitian, real or complex, with an `ArgumentError`.
+        @testset "Hermitian routing (#665)" begin
+            Ac = sparse(SymTridiagonal(fill(4.0 + 1.0im, 6), fill(1.0 - 0.5im, 5)))
+            b = ComplexF64.(1:6) .+ 0.5im
+            @test issymmetric(Ac) && !ishermitian(Ac)
+            fc = accelerate_factorize(Ac)
+            @test fc.sym === :unsymmetric
+            @test isapprox(fc \ b, Matrix(Ac) \ b; rtol = 1.0e-12)
+            @test isapprox(accelerate_refactor!(fc, 2 * Ac) \ b, Matrix(2 * Ac) \ b;
+                rtol = 1.0e-12)
+            explicit = ((sym = :spd,), (sym = :definite,), (kind = :cholesky,),
+                (sym = :symmetric,), (kind = :ldlt,))
+            Ar = sparse([4.0 1; 2 5])
+            for o in explicit
+                @test_throws ArgumentError accelerate_factorize(Ac; o...)
+                @test_throws ArgumentError accelerate_factorize(Ar; o...)
+                @test_throws ArgumentError accelerate_solve(Ar, [1.0, 2]; o...)
+            end
+
+            # Complex Hermitian on the three `:auto` routes: positive definite (Cholesky),
+            # a non-positive diagonal (LDLᵀ), and a positive diagonal but indefinite
+            # (Cholesky fails, LDLᵀ fallback); the explicit kinds agree
+            hh(d, e) = sparse(Tridiagonal(conj.(fill(e, 5)), fill(d, 6), fill(e, 5)))
+            Hp = hh(4.0 + 0im, 1.0 + 0.5im)
+            Hn = hh(-1.0 + 0im, 1.0 + 0.5im)
+            Hi = hh(1.0 + 0im, 1.0 + 0.5im)
+            @test minimum(eigvals(Hermitian(Matrix(Hi)))) < 0
+            for (H, route) in ((Hp, :spd), (Hn, :symmetric), (Hi, :symmetric))
+                @test ishermitian(H) && !issymmetric(H)
+                f = accelerate_factorize(H)
+                @test f.sym === route
+                @test isapprox(f \ b, Matrix(H) \ b; rtol = 1.0e-12)
+            end
+            @test isapprox(accelerate_factorize(Hp; sym = :spd) \ b, Matrix(Hp) \ b;
+                rtol = 1.0e-12)
+            @test isapprox(accelerate_factorize(Hi; kind = :ldlt) \ b, Matrix(Hi) \ b;
+                rtol = 1.0e-12)
+
+            # `refactor!` on the complex Hermitian Cholesky route: an indefinite matrix
+            # falls back to LDLᵀ, a singular one throws
+            fh = accelerate_factorize(Hp)
+            @test accelerate_refactor!(fh, Hi) === fh
+            @test fh.sym === :symmetric
+            @test isapprox(fh \ b, Matrix(Hi) \ b; rtol = 1.0e-12)
+            Hs = sparse(ComplexF64[1 1im; -1im 1])
+            @test_throws SingularException accelerate_refactor!(
+                accelerate_factorize(sparse(ComplexF64[2 1im; -1im 2])), Hs)
+
+            # A Cholesky or LDLᵀ factorization refuses a non-Hermitian matrix at
+            # `refactor!` too, and keeps solving with its old factors
+            As = sparse([4.0 1; 1 5])
+            for (A0, A1, o) in ((As, Ar, (sym = :spd,)), (As, Ar, (kind = :ldlt,)),
+                (As, Ar, (sym = :auto,)), (Hp, Ac, (sym = :auto,)),
+                (Hn, Ac, (sym = :auto,)))
+                f = accelerate_factorize(A0; o...)
+                bb = b[1:size(A0, 1)]
+                @test_throws ArgumentError accelerate_refactor!(f, A1)
+                @test isapprox(f \ bb, Matrix(A0) \ bb; rtol = 1.0e-12)
             end
         end
 
