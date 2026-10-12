@@ -33,10 +33,13 @@ Accelerate's native `libSparse` on macOS.
 - `sym = :auto` (default) detects symmetry. A symmetric `A` with a positive diagonal is
   tried with Cholesky (`SparseFactorizationCholesky`), and when that fails (`A` is not
   positive definite) it is refactored as ``LDL^T`` (`SparseFactorizationLDLT`) on the same
-  object. The pivoted ``LDL^T`` never reports a singular matrix, so each solve with such a
-  factorisation checks the backward error and throws a `SingularException` when it is large.
-  A symmetric `A` with a non-positive diagonal uses ``LDL^T`` directly. Any other `A` uses
-  threshold partial pivoting LU (`SparseFactorizationLUTPP`).
+  object. A symmetric `A` with a non-positive diagonal uses ``LDL^T`` directly. Any other
+  `A` uses threshold partial pivoting LU (`SparseFactorizationLUTPP`). None of these
+  reports a singular matrix itself, so `:auto` (and `nothing`) solves once against a fixed
+  vector and throws a `SingularException` when the backward error is large. A singular `A`
+  with a zero pivot throws, whatever the right-hand side. A nearly singular one may return
+  a large solution without an error, and so may a singular one whose zero pivot rounds to
+  about `eps`, as a pure-Neumann Laplacian's does.
 - `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`) selects symmetric positive definite Cholesky.
 - `sym = :symmetric` or `2` (or `kind = :ldlt`) selects symmetric indefinite ``LDL^T``.
 - `sym = :unsymmetric` or `0` (or `kind = :lu` / `:lutpp`) selects general unsymmetric LU with threshold partial pivoting.
@@ -181,6 +184,11 @@ end
 Recompute the numeric factorization of `A` stored in `fact` **reusing the existing symbolic
 factorization** (fill-reducing ordering and sparsity analysis). `A` must have the exact same
 sparsity pattern as the matrix originally factored.
+
+On a factorization from `sym = :auto`, a singular `A` with a zero pivot throws a
+`SingularException`, and so does every later solve until `fact` is refactored onto a
+nonsingular matrix. When `:auto` chose Cholesky and `A` is not positive definite, `A` is
+factored afresh as ``LDL^T``, as `accelerate_factorize` would, without the symbolic reuse.
 
 See also [`refactor!`](@ref), [`accelerate_factorize`](@ref).
 """

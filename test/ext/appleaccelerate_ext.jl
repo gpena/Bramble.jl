@@ -265,6 +265,101 @@ end
             @test isapprox(u_u, Matrix(Au) \ bu; rtol = 1.0e-12)
         end
 
+        # The pivoted LDLᵀ and LUTPP return a solution for a singular matrix, so `:auto`
+        # checks each factorization once against a fixed vector: every route throws, for a
+        # consistent right-hand side too, as SuiteSparse does (gpena/Bramble.jl#668).
+        @testset ":auto: singular throws on every route" begin
+            cases = (
+                ([0.0 0; 0 1], [1.0, 1]),     # direct LDLᵀ, non-positive diagonal
+                ([-1.0 1; 1 -1], [1.0, 2]),   # direct LDLᵀ
+                (zeros(2, 2), [1.0, 1]),      # direct LDLᵀ, the zero matrix
+                ([1.0 1; 2 2], [1.0, 2]),     # LU, consistent: libSparse's residual is 0
+                ([1.0 1; 2 2], [1.0, 3]),     # LU, inconsistent
+                ([1.0 1; 1 1], [1.0, 1])      # Cholesky fails, LDLᵀ fallback, consistent
+            )
+            for (M, b) in cases
+                S = sparse(M)
+                @test_throws SingularException accelerate_factorize(S) \ b
+                @test_throws SingularException sparse_factorize(S; solver = :accelerate) \ b
+                @test_throws SingularException pde_solve(S, b; solver = :accelerate)
+                @test_throws SingularException accelerate_solve(S, b)
+                # `nothing` spells `:auto` for `sym` and for `kind`
+                for o in ((sym = nothing,), (kind = nothing,), (sym = nothing, kind = nothing))
+                    @test_throws SingularException accelerate_factorize(S; o...)
+                end
+            end
+            @test_throws SingularException accelerate_factorize(sparse(zeros(Float32, 3, 3)))
+
+            # Nonsingular indefinite, unsymmetric and Float32 matrices still solve
+            for M in ([0.0 1 0; 1 0 1; 0 1 -2], [4.0 1 0; 2 5 1; 0 3 6], [-2.0 1; 1 -3],
+                    Float32[4 1 0; 2 5 1; 0 3 6])
+                b = collect(one(eltype(M)):size(M, 1))
+                tol = sqrt(eps(eltype(M)))
+                @test isapprox(accelerate_factorize(sparse(M)) \ b, M \ b; rtol = tol)
+            end
+            # A positive diagonal and indefinite under `sym = nothing`: the LDLᵀ fallback
+            # runs as under `:auto`, instead of libSparse's Cholesky error escaping
+            Mi = [1.0 2; 2 1]
+            for o in ((sym = nothing,), (kind = nothing,))
+                @test isapprox(accelerate_factorize(sparse(Mi); o...) \ [1.0, 2], Mi \ [1.0, 2])
+            end
+
+            # A refused `accelerate_refactor!` leaves every later solve refusing too, until
+            # a refactor onto a nonsingular matrix of the same pattern
+            A1 = sparse([1.0 1; 2 3])
+            f = accelerate_factorize(A1)
+            @test_throws SingularException accelerate_refactor!(f, sparse([1.0 1; 2 2]))
+            b = [1.0, 3.0]
+            x = zeros(2)
+            @test_throws SingularException f \ b
+            @test_throws SingularException f \ ComplexF64.(b)
+            @test_throws SingularException ldiv!(x, f, b)
+            @test_throws SingularException ldiv!(f, copy(b))
+            @test accelerate_refactor!(f, A1) === f
+            @test isapprox(f \ b, Matrix(A1) \ b; rtol = 1.0e-12)
+
+            # On the `:auto` Cholesky route, libSparse's refactor fails on a matrix that is
+            # not positive definite; the refactor falls back to LDLᵀ as the factorization
+            # does, so a singular matrix throws and an indefinite one solves
+            fc = accelerate_factorize(sparse([2.0 1; 1 2]))
+            @test fc.sym === :spd
+            @test_throws SingularException accelerate_refactor!(fc, sparse([1.0 1; 1 1]))
+            @test_throws SingularException fc \ b
+            @test accelerate_refactor!(fc, sparse([1.0 2; 2 1])) === fc
+            @test fc.sym === :symmetric
+            @test isapprox(fc \ b, [1.0 2; 2 1] \ b; rtol = 1.0e-12)
+            fc = accelerate_factorize(sparse([2.0 1; 1 2]))
+            @test accelerate_refactor!(fc, sparse([1.0 2; 2 1])) === fc
+            @test isapprox(fc \ b, [1.0 2; 2 1] \ b; rtol = 1.0e-12)
+
+            # What the docstrings concede: the ordering rounds a pure-Neumann Laplacian's
+            # zero pivot to about eps, so it solves without an error and a huge solution
+            nN = 100
+            N = spdiagm(-1 => fill(-1.0, nN - 1), 0 => [1.0; fill(2.0, nN - 2); 1.0],
+                1 => fill(-1.0, nN - 1))
+            @test norm(accelerate_factorize(N) \ ones(nN), Inf) > 1.0e12
+
+            # An explicit route stays unchecked, as #668 scopes the check to `:auto`
+            @test accelerate_factorize(sparse([1.0 1; 2 2]); sym = :unsymmetric) isa
+                  AccelerateFactorization
+
+            # The check runs per factorization, not per solve: `ldiv!` allocates nothing,
+            # after a factorization and after a refactor, on the LU and LDLᵀ routes
+            ldiv_bytes(x, f, b) = (ldiv!(x, f, b); @allocated ldiv!(x, f, b))
+            ldiv_bytes!(f, b) = (ldiv!(f, b); @allocated ldiv!(f, b))
+            for M in ([4.0 1 0; 2 5 1; 0 3 6], [0.0 1 0; 1 0 1; 0 1 -2])
+                S = sparse(M)
+                fM = accelerate_factorize(S)
+                b3 = [1.0, 2, 3]
+                x3 = zeros(3)
+                @test ldiv_bytes(x3, fM, b3) == 0
+                @test ldiv_bytes!(fM, copy(b3)) == 0
+                accelerate_refactor!(fM, 2 * S)
+                @test ldiv_bytes(x3, fM, b3) == 0
+                @test isapprox(x3, (2 * M) \ b3; rtol = 1.0e-12)
+            end
+        end
+
         @testset "unknown keyword throws (#657)" begin
             A = sparse(SymTridiagonal(fill(4.0, 6), fill(-1.0, 5)))
             b = collect(1.0:6)

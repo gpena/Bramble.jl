@@ -21,10 +21,11 @@ requested solver backend.
 # Symmetry options
 - `:auto` detects matrix symmetry. A symmetric matrix is tried as positive definite
   (SuiteSparse and Apple Accelerate only when its diagonal is positive) and refactored as
-  symmetric indefinite when that fails. SuiteSparse throws a `SingularException` on a
-  singular matrix. Apple Accelerate may not: only the backward-error check of the
-  indefinite fallback reports one, so a singular matrix solves without an error on the
-  direct LDLᵀ and LU routes. See the docstring of each backend's `*_factorize`.
+  symmetric indefinite when that fails. On SuiteSparse and Apple Accelerate, a singular
+  matrix with a zero pivot throws a `SingularException`; a nearly singular one may return a
+  large solution without an error. So may a singular one on Apple Accelerate, whose ordering
+  can round the zero pivot of a pure-Neumann Laplacian to about `eps`. See the docstring of
+  each backend's `*_factorize`.
 - `:spd`, `:definite`, or `1` selects symmetric positive definite.
 - `:symmetric` or `2` selects general symmetric.
 - `:unsymmetric` or `0` selects general unsymmetric.
