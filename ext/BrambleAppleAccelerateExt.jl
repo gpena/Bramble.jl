@@ -154,6 +154,35 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         return nothing
     end
 
+    # libSparse solves a strided buffer of the factorization's element type `T` with unit
+    # row stride. Any other right-hand side, a row-strided view, an adjoint or another
+    # element type, goes through a `T` copy; a complex one on a real factorization is
+    # solved as its real and imaginary parts, side by side in one call, as `LinearAlgebra`
+    # does for a complex `Vector` or `Matrix`.
+    function _aa_solve!(aa::AAFactorization{T}, B::AbstractVecOrMat) where {T}
+        B isa StridedVecOrMat{T} && stride(B, 1) == 1 && return ldiv!(aa, B)
+        n, k = size(B, 1), size(B, 2)
+        if T <: Real && eltype(B) <: Complex
+            W = Matrix{T}(undef, n, 2k)
+            W[:, 1:k] .= real.(B)
+            W[:, (k + 1):(2k)] .= imag.(B)
+            ldiv!(aa, W)
+            copyto!(B, complex.(view(W, :, 1:k), view(W, :, (k + 1):(2k))))
+        else
+            W = copyto!(Matrix{T}(undef, n, k), B)
+            ldiv!(aa, W)
+            copyto!(B, W)
+        end
+        return B
+    end
+    function _aa_solve!(
+            x::AbstractVecOrMat, aa::AAFactorization{T}, b::AbstractVecOrMat
+    ) where {T}
+        x isa StridedVecOrMat{T} && b isa StridedVecOrMat{T} &&
+            stride(x, 1) == 1 && stride(b, 1) == 1 && return ldiv!(x, aa, b)
+        return _aa_solve!(aa, copyto!(x, b))
+    end
+
     function LinearAlgebra.ldiv!(
             x::AbstractVector, fact::ConcreteAccelerateFactorization, b::AbstractVector
     )
@@ -165,7 +194,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
             DimensionMismatch("Output vector length $(length(x)) does not match matrix dimension $n"),
         )
         _aa_assert_usable(fact)
-        ldiv!(x, fact.aa_fact, b)
+        _aa_solve!(x, fact.aa_fact, b)
         return x
     end
 
@@ -177,8 +206,38 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
             DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
         )
         _aa_assert_usable(fact)
-        ldiv!(fact.aa_fact, b)
+        _aa_solve!(fact.aa_fact, b)
         return b
+    end
+
+    # A matrix right-hand side goes to libSparse's multi-column solve in one call;
+    # `LinearAlgebra`'s `\(::Factorization, ::AbstractVecOrMat)` reaches it through here.
+    # libSparse refuses a right-hand side with no columns, which has nothing to solve.
+    function LinearAlgebra.ldiv!(
+            fact::ConcreteAccelerateFactorization, B::AbstractMatrix
+    )
+        n = fact.dim
+        size(B, 1) == n || throw(
+            DimensionMismatch("Right-hand side has $(size(B, 1)) rows; the matrix dimension is $n"),
+        )
+        _aa_assert_usable(fact)
+        size(B, 2) == 0 && return B
+        _aa_solve!(fact.aa_fact, B)
+        return B
+    end
+
+    function LinearAlgebra.ldiv!(
+            X::AbstractMatrix, fact::ConcreteAccelerateFactorization, B::AbstractMatrix
+    )
+        n = fact.dim
+        (size(B, 1) == n && size(X) == size(B)) || throw(
+            DimensionMismatch("Output is $(join(size(X), '×')) and right-hand side \
+                              $(join(size(B), '×')); the matrix dimension is $n"),
+        )
+        _aa_assert_usable(fact)
+        size(B, 2) == 0 && return X
+        _aa_solve!(X, fact.aa_fact, B)
+        return X
     end
 
     # Disambiguates the two equally specific candidates for a `VectorElement` destination:
@@ -197,7 +256,8 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
 
     function Base.:\(fact::ConcreteAccelerateFactorization, b::AbstractVector)
         _aa_assert_usable(fact)
-        return fact.aa_fact \ b
+        T = promote_type(eltype(fact), eltype(b))
+        return _aa_solve!(fact.aa_fact, copyto!(similar(b, T, size(b)), b))
     end
 
     # `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real

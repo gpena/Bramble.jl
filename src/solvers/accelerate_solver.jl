@@ -17,7 +17,10 @@
 
 Wrapper type representing a factorized Apple Accelerate (`libSparse`) linear system,
 supporting in-place solves via `LinearAlgebra.ldiv!`, back-substitution via `\\`,
-and non-allocating symbolic reuse via `accelerate_refactor!`. Available only on macOS.
+and non-allocating symbolic reuse via `accelerate_refactor!`. Both solves take a vector or
+a matrix right-hand side of any real or complex element type, converted to the
+factorization's; an in-place `ldiv!` needs a destination that can hold the solution.
+Available only on macOS.
 """
 abstract type AccelerateFactorization{T} <: Factorization{T} end
 

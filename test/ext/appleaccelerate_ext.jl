@@ -424,6 +424,120 @@ end
             end
         end
 
+        # A matrix right-hand side is one multi-column libSparse solve on every kind;
+        # `\` and the three-argument `ldiv!` reach it through `LinearAlgebra`
+        @testset "matrix right-hand side (#665)" begin
+            A = sparse(SymTridiagonal(fill(4.0, 7), fill(-1.0, 6)))
+            Au = sparse([4.0 1 0; 2 5 1; 0 3 6])
+            Ai = sparse([0.0 1 0; 1 0 1; 0 1 -2])
+            for (M, kinds) in ((A, (:auto, :cholesky, :ldlt, :lu, :qr)),
+                (Au, (:auto, :lu, :qr)), (Ai, (:auto, :ldlt, :lu)))
+                n = size(M, 1)
+                B = reshape(collect(1.0:(3 * n)), n, 3)
+                B0 = copy(B)
+                ref = Matrix(M) \ B
+                for k in kinds
+                    f = accelerate_factorize(M; kind = k)
+                    X = f \ B
+                    @test X !== B && B == B0
+                    @test isapprox(X, ref; rtol = 1.0e-10)
+                    Y = similar(B)
+                    @test ldiv!(Y, f, B) === Y
+                    @test isapprox(Y, ref; rtol = 1.0e-10)
+                    @test B == B0
+                    C = copy(B)
+                    @test ldiv!(f, C) === C
+                    @test isapprox(C, ref; rtol = 1.0e-10)
+                    @test isapprox(reduce(hcat, (f \ B[:, j] for j in 1:3)), X;
+                        rtol = 1.0e-12)
+                    # No columns: nothing to solve, where libSparse would throw
+                    @test size(f \ zeros(n, 0)) == (n, 0)
+                    Z = zeros(n, 0)
+                    @test ldiv!(Z, f, zeros(n, 0)) === Z
+                    @test ldiv!(f, Z) === Z
+                end
+            end
+            fA = accelerate_factorize(A)
+            @test_throws DimensionMismatch fA \ ones(3, 2)
+            @test_throws DimensionMismatch ldiv!(fA, ones(3, 0))
+            B7 = reshape(collect(1.0:21), 7, 3)
+            for X in (fill(NaN, 7, 4), zeros(7, 2), zeros(3, 7), zeros(6, 3))
+                @test_throws DimensionMismatch ldiv!(X, fA, B7)
+            end
+            @test_throws DimensionMismatch ldiv!(zeros(7, 1), fA, zeros(7, 0))
+
+            # A matching `Matrix` goes straight to libSparse: no copy
+            ldivm_bytes(X, f, B) = (ldiv!(X, f, B); @allocated ldiv!(X, f, B))
+            ldivm_bytes!(f, B) = (ldiv!(f, B); @allocated ldiv!(f, B))
+            @test ldivm_bytes(similar(B7), fA, B7) == 0
+            @test ldivm_bytes!(fA, copy(B7)) == 0
+
+            # Views, adjoints, other precisions and complex right-hand sides on a real
+            # factorization go through a copy, by `\` and by both `ldiv!`s
+            ref7 = Matrix(A) \ B7
+            Bc7 = complex.(B7, 2B7)
+            refc = Matrix(A) \ Bc7
+            @test isapprox(fA \ view(Bc7, :, 1:2), refc[:, 1:2]; rtol = 1.0e-12)
+            @test isapprox(fA \ copy(Bc7')', refc; rtol = 1.0e-12)
+            @test isapprox(fA \ copy(B7')', ref7; rtol = 1.0e-12)
+            @test isapprox(fA \ Float32.(B7), ref7; rtol = 1.0e-6)
+            Xc = similar(Bc7)
+            @test ldiv!(Xc, fA, Bc7) === Xc
+            @test isapprox(Xc, refc; rtol = 1.0e-12)
+            Ct = copy(Bc7')'
+            @test ldiv!(fA, Ct) === Ct
+            @test isapprox(Ct, refc; rtol = 1.0e-12)
+            xc = similar(Bc7, 7)
+            @test ldiv!(xc, fA, Bc7[:, 2]) === xc
+            @test isapprox(xc, refc[:, 2]; rtol = 1.0e-12)
+            # A view with a row stride other than 1 goes through a copy too
+            C14 = repeat(B7; inner = (2, 1))
+            Cv = @view C14[1:2:end, :]
+            @test ldiv!(fA, Cv) === Cv
+            @test isapprox(Cv, ref7; rtol = 1.0e-12)
+            Y14 = zeros(14, 3)
+            Yv = @view Y14[1:2:end, :]
+            @test ldiv!(Yv, fA, B7) === Yv
+            @test isapprox(Y14[1:2:end, :], ref7; rtol = 1.0e-12)
+            @test all(iszero, Y14[2:2:end, :])
+            c14 = repeat(B7[:, 1]; inner = 2)
+            cv = @view c14[1:2:end]
+            @test ldiv!(fA, cv) === cv
+            @test isapprox(cv, ref7[:, 1]; rtol = 1.0e-12)
+            f32 = accelerate_factorize(SparseMatrixCSC{Float32, Int}(A))
+            @test isapprox(f32 \ B7, ref7; rtol = 1.0e-5)
+            @test eltype(f32 \ B7) == Float64
+            @test isapprox(f32 \ Bc7, refc; rtol = 1.0e-5)
+            @test isapprox(f32 \ B7[:, 1], ref7[:, 1]; rtol = 1.0e-5)
+            X64 = similar(B7)
+            @test ldiv!(X64, f32, B7) === X64
+            @test isapprox(X64, ref7; rtol = 1.0e-5)
+
+            # A complex B on a complex factorization, and on a real one
+            Ac = sparse(SymTridiagonal(fill(4.0 + 1.0im, 6), fill(1.0 - 0.5im, 5)))
+            Bc = reshape(ComplexF64.(1:12) .+ 0.5im, 6, 2)
+            Hp = sparse(Tridiagonal(fill(1.0 - 0.5im, 5), fill(4.0 + 0im, 6),
+                fill(1.0 + 0.5im, 5)))
+            for H in (Ac, Hp)
+                @test isapprox(accelerate_factorize(H) \ Bc, Matrix(H) \ Bc; rtol = 1.0e-12)
+            end
+            Ar = sparse(SymTridiagonal(fill(4.0, 6), fill(-1.0, 5)))
+            @test isapprox(accelerate_factorize(Ar) \ Bc, Matrix(Ar) \ Bc; rtol = 1.0e-12)
+
+            # A refused `refactor!` leaves matrix solves refusing too
+            A1 = sparse([1.0 1; 2 3])
+            f = accelerate_factorize(A1)
+            @test_throws SingularException accelerate_refactor!(f, sparse([1.0 1; 2 2]))
+            B2 = [1.0 2; 3 4]
+            @test_throws SingularException f \ B2
+            @test_throws SingularException f \ ComplexF64.(B2)
+            @test_throws SingularException ldiv!(similar(B2), f, B2)
+            @test_throws SingularException ldiv!(f, copy(B2))
+            @test_throws SingularException ldiv!(f, zeros(2, 0))
+            @test accelerate_refactor!(f, A1) === f
+            @test isapprox(f \ B2, Matrix(A1) \ B2; rtol = 1.0e-12)
+        end
+
         @testset "unknown keyword throws (#657)" begin
             A = sparse(SymTridiagonal(fill(4.0, 6), fill(-1.0, 5)))
             b = collect(1.0:6)
