@@ -207,6 +207,7 @@ each cover half of a face all qualify. So does `:boundary`, which a mesh holds b
 domain that redefines it integrates its definition, as the mesh warns when it is built. A
 label the mesh does not hold is a face name (the canonical `:xmin`…`:zmax`, `:boundary`, or
 a viewpoint alias). Under `domain(S, :left => :ymin)`, `:left` is therefore the bottom edge.
+[`normal_vector`](@ref)`(Wₕ, label)` resolves a label by this same rule.
 On an axis with one point, a label's marked points cover both faces of that axis, so such a
 label throws here (see the refusals below); the face name (`:ymin`) is the way to name one of
 them.

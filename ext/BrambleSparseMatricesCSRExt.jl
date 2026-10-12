@@ -171,8 +171,12 @@ end
 # it, exactly like the CSC method; see the module docstring above for why a missing one
 # throws here instead of being inserted. A row past the last column of a taller-than-wide
 # matrix has no diagonal to find: it is only zeroed, as the CSC method does.
-function Bramble._dirichlet_bc_rows!(A::SparseMatrixCSR{1}, entries::Tuple)
+#
+# These three methods take either index base: `rowptr` and `colval` of a zero-based
+# `sparsecsr(Val(0), ...)` count from 0, and `o = 1 - Bi` shifts both to one-based.
+function Bramble._dirichlet_bc_rows!(A::SparseMatrixCSR{Bi}, entries::Tuple) where {Bi}
     T = eltype(A)
+    o = 1 - Bi
     rowptr = A.rowptr
     colval = A.colval
     vals = A.nzval
@@ -180,8 +184,8 @@ function Bramble._dirichlet_bc_rows!(A::SparseMatrixCSR{1}, entries::Tuple)
         active || continue
         Bramble._each_marked(mask, offset) do r
             diagonal_found = false
-            @inbounds for k in rowptr[r]:(rowptr[r + 1] - 1)
-                if colval[k] == r
+            @inbounds for k in (rowptr[r] + o):(rowptr[r + 1] + o - 1)
+                if colval[k] + o == r
                     vals[k] = one(T)
                     diagonal_found = true
                 else
@@ -197,15 +201,18 @@ end
 
 # The scalar-space counterpart of `_dirichlet_bc_rows!` above, matching
 # `_dirichlet_bc_indices!(A::SparseMatrixCSC, ...)`'s contract against a flat mask.
-function Bramble._dirichlet_bc_indices!(A::SparseMatrixCSR{1}, index_in_marker::BitVector)
+function Bramble._dirichlet_bc_indices!(
+        A::SparseMatrixCSR{Bi}, index_in_marker::BitVector
+) where {Bi}
     T = eltype(A)
+    o = 1 - Bi
     rowptr = A.rowptr
     colval = A.colval
     vals = A.nzval
     Bramble._each_marked(index_in_marker, 0) do i
         diagonal_found = false
-        @inbounds for k in rowptr[i]:(rowptr[i + 1] - 1)
-            if colval[k] == i
+        @inbounds for k in (rowptr[i] + o):(rowptr[i + 1] + o - 1)
+            if colval[k] + o == i
                 vals[k] = one(T)
                 diagonal_found = true
             else
@@ -226,9 +233,12 @@ end
 # looks at rows -- here the roles are swapped, and the diagonal (`col == i`) is met from its
 # own row's pass instead of from a per-marked-column search.
 function Bramble.symmetrize!(
-        A::SparseMatrixCSR{1}, F::AbstractVector, mask::BitVector, offset::Int = 0
-)
+        A::SparseMatrixCSR{Bi}, F::AbstractVector, mask::BitVector, offset::Int = 0
+) where {Bi}
+    # before the `@inbounds` sweep: a non-square `A` would read `F[col]` past its end
+    Bramble._check_symmetrize_square(A)
     T = eltype(A)
+    o = 1 - Bi
     rowptr = A.rowptr
     colval = A.colval
     vals = A.nzval
@@ -238,8 +248,8 @@ function Bramble.symmetrize!(
     @inbounds for i in 1:nr
         i_marked = 1 <= (i - offset) <= nmask && mask[i - offset]
         diagonal_found = false
-        for k in rowptr[i]:(rowptr[i + 1] - 1)
-            col = colval[k]
+        for k in (rowptr[i] + o):(rowptr[i + 1] + o - 1)
+            col = colval[k] + o
             j = col - offset
             (1 <= j <= nmask && mask[j]) || continue
             if col == i

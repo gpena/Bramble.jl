@@ -307,6 +307,71 @@ end
         @test pde_solve(sparsecsr(rows, cols, vals, 3, 3), F) ≈ ref
     end
 
+    # The Dirichlet and symmetrize methods shift a zero-based matrix's `rowptr`/`colval` by
+    # one (gpena/Bramble.jl#666): read unshifted, they miss every diagonal and throw, or
+    # write the neighbouring entry. The oracle is the CSC result on a non-uniform mesh.
+    @testset "zero-based CSR: Dirichlet, symmetrize" begin
+        Random.seed!(666)
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωₕ = mesh(domain(S, :dir => x -> x[1] == 0), (6, 5), (false, false))
+        W = gridspace(Ωₕ)
+        a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        Ac = assemble(a)
+        n = size(Ac, 1)
+        r = findnz(Ac)
+        A0, A1 = sparsecsr(Val(0), r..., n, n), sparsecsr(Val(1), r..., n, n)
+        @test A0.rowptr[1] == 0 && A1.rowptr[1] == 1
+
+        # scalar space: the indices path
+        Rc = dirichlet_bc!(copy(Ac), Ωₕ, :dir)
+        @test Rc != Ac
+        dirichlet_bc!(A1, Ωₕ, :dir)
+        dirichlet_bc!(A0, Ωₕ, :dir)
+        @test Matrix(A0) == Matrix(Rc)
+        @test Matrix(A1) == Matrix(Rc)
+
+        Fc, F1, F0 = collect(1.0:n), collect(1.0:n), collect(1.0:n)
+        symmetrize!(Rc, Fc, Ωₕ, :dir)
+        symmetrize!(A1, F1, Ωₕ, :dir)
+        symmetrize!(A0, F0, Ωₕ, :dir)
+        @test Fc != collect(1.0:n)
+        @test Matrix(A0) == Matrix(Rc) && F0 == Fc
+        @test Matrix(A1) == Matrix(Rc) && F1 == Fc
+
+        B0 = sparsecsr(Val(0), r..., n, n)
+        assemble!(B0, a; dirichlet = :dir)
+        @test Matrix(B0) == Matrix(assemble(a; dirichlet = :dir))
+
+        # W -> W × W, taller than wide: the rows path, and rows past the last column
+        g = form(W, W × W, (u, V) -> innerₕ(u, V(1)) + innerₕ(u, V(2)))
+        Gc = assemble(g)
+        q = findnz(Gc)
+        G0 = sparsecsr(Val(0), q..., size(Gc)...)
+        Gr = dirichlet_bc!(copy(Gc), Bramble.test_space(g), :dir)
+        @test Gr != Gc
+        dirichlet_bc!(G0, Bramble.test_space(g), :dir)
+        @test Matrix(G0) == Matrix(Gr)
+
+        # a zero-based row with no stored diagonal still throws, on every method
+        D0 = sparsecsr(Val(0), [1, 2], [2, 1], [1.0, 1.0], 2, 2)
+        m = BitVector([true, false])
+        @test_throws ArgumentError Bramble._dirichlet_bc_indices!(copy(D0), m)
+        @test_throws ArgumentError Bramble._dirichlet_bc_rows!(
+            copy(D0), ((m, 0, nothing, true),)
+        )
+        @test_throws ArgumentError symmetrize!(copy(D0), ones(2), m, 0)
+
+        # zero-based, wide: refused before the sweep reads `F` past its end
+        Z0 = sparsecsr(Val(0), [1, 1, 2, 2], [1, 3, 2, 3], [2.0, 1.0, 2.0, 1.0], 2, 3)
+        Z00 = copy(Z0)
+        big = [1.0, 1.0, 1.0e6]
+        @test_throws ArgumentError symmetrize!(
+            Z0, view(big, 1:2), BitVector([false, false, true]), 0
+        )
+        @test Z0 == Z00
+        @test big == [1.0, 1.0, 1.0e6]
+    end
+
     # The backend solvers' `BilinearForm` methods pass the assembled matrix through
     # `_as_csc`: without it a CSR-backed form reaches the extension's `::SparseMatrixCSC`
     # method as a `MethodError`, and `qr` silently densifies it to `QRCompactWY`. The
@@ -440,6 +505,41 @@ end
         @test_throws ArgumentError Bramble._dirichlet_bc_rows!(
             copy(Ad), ((m, 0, nothing, true),)
         )
+    end
+
+    # `symmetrize!` refuses a non-square matrix with the same `ArgumentError` on CSR as on
+    # CSC, before touching it. At mask level the CSR sweep read `F[col]` past the end of a
+    # vector as long as the rows, under `@inbounds` (gpena/Bramble.jl#663).
+    @testset "non-square symmetrize!: refused like CSC" begin
+        mk(be) = gridspace(mesh(domain(interval(0.0, 1.0)), 7, false; backend = be))
+        errs = map((Bramble.backend(), csr_backend())) do be
+            W = mk(be)
+            a = form(W, W × W, (u, V) -> innerₕ(u, V(1)) + innerₕ(u, V(2)))
+            A = assemble(a; dirichlet = :boundary)
+            F = collect(1.0:size(A, 1))
+            A0, F0 = copy(A), copy(F)
+            e = try
+                symmetrize!(A, F, Bramble.test_space(a), :boundary)
+                nothing
+            catch err
+                err
+            end
+            @test A == A0
+            @test F == F0
+            e
+        end
+        @test errs[1] isa ArgumentError
+        @test errs[2] isa ArgumentError
+        @test errs[1].msg == errs[2].msg
+
+        # mask level, wide: `F` has two entries and the marked column is the third
+        Ar = sparsecsr([1, 1, 2, 2], [1, 3, 2, 3], [2.0, 1.0, 2.0, 1.0], 2, 3)
+        Ar0 = copy(Ar)
+        big = [1.0, 1.0, 1.0e6]
+        Fr = view(big, 1:2)
+        @test_throws ArgumentError symmetrize!(Ar, Fr, BitVector([false, false, true]), 0)
+        @test Ar == Ar0
+        @test big == [1.0, 1.0, 1.0e6]
     end
 
     # sparse_factorize still rejects non-CSR, non-CSC types.

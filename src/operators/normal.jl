@@ -11,20 +11,23 @@
 # `normal_vector(Ωₕ, :xmax)` (mesh/queries.jl) answers the geometric question: the constant
 # vector a named face points along. This answers the discrete one: the same vector *sampled
 # on the grid*, zero away from the face, so it can multiply a grid function or be exported
-# beside one. The two are the same number; only one of them has a degree of freedom per
-# point to put it in.
+# beside one. For a face name the two are the same number; only one of them has a degree of
+# freedom per point to put it in. A mesh marker is resolved here as `inner_Γ` resolves it
+# (`_normal_face_name`), while the mesh-level query reads every label as a face name.
 
 """
     normal_vector(Wₕ::ScalarGridSpace{D}, marker::Symbol) -> NTuple{D, VectorElement}
 
-Returns the outward unit normal of the boundary face `marker` names, as one grid function per
-coordinate: component `d` holds `normal_vector(mesh(Wₕ), marker)[d]` at every point of that
+Returns the outward unit normal of the boundary face `marker` selects, as one grid function
+per coordinate: component `d` holds that face's normal component `d` at every point of the
 face and zero everywhere else.
 
-`marker` names a whole coordinate face -- `:xmin`…`:zmax` or a viewpoint alias -- and is
-resolved by that name alone, never read from a mesh marker's points as [`inner_Γ`](@ref)
-reads its labels: a normal is a property of a face, and a marked set that is not one has no
-single normal to sample.
+`marker` is resolved as [`inner_Γ`](@ref) resolves its labels, so the two always agree on the
+face. A label the mesh holds as a marker is read off its marked points, which means that
+under `domain(S, :left => :ymin)` the label `:left` is the ymin face. Any other label is a
+face name (`:xmin`…`:zmax` or a viewpoint alias), whose normal is
+`normal_vector(mesh(Wₕ), marker)`. A normal belongs to one face. So a marker that covers
+several faces (`:boundary`), or only part of one, throws an `ArgumentError`.
 
 The components are zero off the face rather than the face's normal everywhere, so a product
 against one restricts to the face without a second mask.
@@ -46,8 +49,9 @@ See also: [`normal_vector`](@ref), [`inner_Γ`](@ref)
 """
 function normal_vector(Wₕ::ScalarGridSpace{D}, marker::Symbol) where {D}
     Ωₕ = mesh(Wₕ)
-    ν = normal_vector(Ωₕ, marker)  # throws the ArgumentError for an unknown marker
-    facet = boundary_symbol_to_cartesian(indices(Ωₕ))[marker]
+    face = _normal_face_name(Ωₕ, marker)
+    ν = normal_vector(Ωₕ, face)  # throws the ArgumentError for an unknown face name
+    facet = boundary_symbol_to_cartesian(indices(Ωₕ))[face]
     lin = LinearIndices(indices(Ωₕ))
 
     # `element(Wₕ, zero(eltype(Wₕ)))` fills through the `VectorElement` wrapper's generic
@@ -62,6 +66,27 @@ function normal_vector(Wₕ::ScalarGridSpace{D}, marker::Symbol) where {D}
     end
     _fill_normal!(locality(backend(Wₕ)), nₕ, facet, ν, lin, Val(D))
     return nₕ
+end
+
+# The face name `marker` resolves to under `inner_Γ`'s rule (`_surface_mask`,
+# mesh/queries.jl): a marker the mesh holds is read off its points, which must make up exactly
+# one face; any other label is already a face name and is returned as it is.
+@inline function _normal_face_name(Ωₕ::AbstractMeshType{D}, marker::Symbol) where {D}
+    haskey(markers(Ωₕ), marker) || return marker
+    mask = _surface_mask(Ωₕ, (marker,))
+    nfaces = sum(d -> mask[d][1] + mask[d][2], 1:D)
+    nfaces == 1 || _throw_normal_not_one_face(marker, nfaces)
+    axis = findfirst(d -> mask[d][1] || mask[d][2], 1:D)
+    return (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)[2axis - 1 + mask[axis][2]]
+end
+
+@noinline function _throw_normal_not_one_face(marker::Symbol, nfaces::Int)
+    throw(
+        ArgumentError(
+        "normal_vector: the marker :$marker covers $nfaces boundary faces; a normal is a " *
+        "property of one face. Name the face, or a marker covering exactly one face.",
+    ),
+    )
 end
 
 # Host fill: visits only the facet slice (gpena/Bramble.jl#333), never the whole volume.

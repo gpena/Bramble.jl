@@ -17,7 +17,10 @@
 
 Wrapper type representing a factorized Apple Accelerate (`libSparse`) linear system,
 supporting in-place solves via `LinearAlgebra.ldiv!`, back-substitution via `\\`,
-and non-allocating symbolic reuse via `accelerate_refactor!`. Available only on macOS.
+and non-allocating symbolic reuse via `accelerate_refactor!`. Both solves take a vector or
+a matrix right-hand side of any real or complex element type, converted to the
+factorization's; an in-place `ldiv!` needs a destination that can hold the solution.
+Available only on macOS.
 """
 abstract type AccelerateFactorization{T} <: Factorization{T} end
 
@@ -30,15 +33,21 @@ Compute the sparse direct factorization of `A` (or the assembled matrix of `a`) 
 Accelerate's native `libSparse` on macOS.
 
 # Symmetry and factorization options
-- `sym = :auto` (default) detects symmetry. A symmetric `A` with a positive diagonal is
-  tried with Cholesky (`SparseFactorizationCholesky`), and when that fails (`A` is not
-  positive definite) it is refactored as ``LDL^T`` (`SparseFactorizationLDLT`) on the same
-  object. The pivoted ``LDL^T`` never reports a singular matrix, so each solve with such a
-  factorisation checks the backward error and throws a `SingularException` when it is large.
-  A symmetric `A` with a non-positive diagonal uses ``LDL^T`` directly. Any other `A` uses
-  threshold partial pivoting LU (`SparseFactorizationLUTPP`).
-- `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`) selects symmetric positive definite Cholesky.
-- `sym = :symmetric` or `2` (or `kind = :ldlt`) selects symmetric indefinite ``LDL^T``.
+- `sym = :auto` (default) detects symmetry. A Hermitian `A` (for a real `A`, a symmetric
+  one) with a positive real diagonal is tried with Cholesky (`SparseFactorizationCholesky`),
+  and when that fails (`A` is not positive definite) it is refactored as ``LDL^T``
+  (`SparseFactorizationLDLT`) on the same object. A Hermitian `A` with a non-positive
+  diagonal uses ``LDL^T`` directly. Any other `A`, a complex symmetric one that is not
+  Hermitian included, uses threshold partial pivoting LU (`SparseFactorizationLUTPP`).
+  None of these reports a singular matrix itself, so `:auto` (and `nothing`) solves once
+  against a fixed vector and throws a `SingularException` when the backward error is
+  large. A singular `A` with a zero pivot throws, whatever the right-hand side. A nearly
+  singular one may return a large solution without an error, and so may a singular one
+  whose zero pivot rounds to about `eps`, as a pure-Neumann Laplacian's does.
+- `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`) selects Hermitian positive definite Cholesky.
+- `sym = :symmetric` or `2` (or `kind = :ldlt`) selects Hermitian indefinite ``LDL^T``.
+  These two take a Hermitian `A` only: any other `A`, real or complex, throws an
+  `ArgumentError`.
 - `sym = :unsymmetric` or `0` (or `kind = :lu` / `:lutpp`) selects general unsymmetric LU with threshold partial pivoting.
 - `kind = :qr` selects sparse QR factorization.
 
@@ -181,6 +190,13 @@ end
 Recompute the numeric factorization of `A` stored in `fact` **reusing the existing symbolic
 factorization** (fill-reducing ordering and sparsity analysis). `A` must have the exact same
 sparsity pattern as the matrix originally factored.
+
+On a factorization from `sym = :auto`, a singular `A` with a zero pivot throws a
+`SingularException`, and so does every later solve until `fact` is refactored onto a
+nonsingular matrix. When `:auto` chose Cholesky and `A` is not positive definite, `A` is
+factored afresh as ``LDL^T``, as `accelerate_factorize` would, without the symbolic reuse.
+A Cholesky or ``LDL^T`` factorization, from `:auto` or chosen, refuses an `A` that is not
+Hermitian with an `ArgumentError` and keeps its old factors.
 
 See also [`refactor!`](@ref), [`accelerate_factorize`](@ref).
 """
