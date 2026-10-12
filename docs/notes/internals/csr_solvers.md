@@ -134,8 +134,15 @@ problem with `FBDF` and `Rodas5P`, the solver's `J`, `W` and `f.mass_matrix` are
 `SparseMatrixCSC`, `f.jac` into `J` allocates nothing, the solve matches the CSC backend to
 1e-9 and allocates about 4x as much at 4x the dofs, the same as the CSC backend.
 
-`jacobian!(jacobian_prototype(sd), sd, ...)` on a CSR matrix still throws "outside sparsity
-pattern", with and without the handoff. It is a separate defect.
+`jacobian!(jacobian_prototype(sd), sd, ...)` fills the CSR prototype in place, through
+`_negate_into!(J::SparseMatrixCSR, A::SparseMatrixCSR)` in the extension. The prototype is
+a `copy` of the operator, so the two patterns match and `nzval` is negated entry for entry:
+O(nnz), no allocation, for either index base and index type. A `J` with another pattern is
+filled within its own entries, its stored values zeroed and each entry of `A` found by a
+binary search in its row, and an entry of `A` that `J` does not store throws an
+`ArgumentError` naming it. The generic copy is never used: its broadcast writes every entry,
+which `SparseMatrixCSR`'s `setindex!` refuses outside the pattern. Covered by the testset
+tagged `(#682)`.
 
 ## Performance: CSC vs. CSR for this fallback path
 

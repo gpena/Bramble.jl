@@ -683,6 +683,49 @@ end
         @test Matrix(J) == [-1.0 0.0; -2.0 -3.0]
     end
 
+    # `jacobian!` on `jacobian_prototype(sd)` itself, a CSR copy of the operator, used to
+    # throw from `SparseMatrixCSR`'s `setindex!` through the generic copy (#682).
+    @testset "_negate_into!: CSR from CSR (#682)" begin
+        _, sr = _heat_problem(csr_backend(), 41)
+        _, sc = _heat_problem(Bramble.backend(), 41)
+        u = rand(size(mass_matrix(sr), 1))
+        Jr = Bramble.jacobian_prototype(sr)
+        @test Bramble.jacobian!(Jr, sr, u, nothing, 0.0) === Jr
+        @test Jr isa SparseMatrixCSR
+        Jc = Bramble.jacobian!(Bramble.jacobian_prototype(sc), sc, u, nothing, 0.0)
+        @test nnz(Jr) == nnz(Jc)
+        @test Matrix(Jr) == Matrix(Jc)
+
+        Random.seed!(682)
+        n = 101
+        S = spdiagm(-1 => rand(n - 1), 0 => rand(n), 2 => rand(n - 2))
+        for (Bi, Ti) in ((1, Int), (1, Int32), (0, Int), (0, Int32))
+            A = _csr_of(S, Val(Bi), Ti)
+            J = copy(A)
+            J.nzval .= 0.0
+            @test Bramble._negate_into!(J, A) === J
+            @test Matrix(J) == -Matrix(S)
+            @test _negate_bytes(J, A) == 0
+
+            # a wider pattern storing every entry of `A`: its extra entries come out zero
+            W = _csr_of(S + spdiagm(1 => ones(n - 1)), Val(Bi), Ti)
+            W.nzval .= 9.0
+            @test Bramble._negate_into!(W, A) === W
+            @test Matrix(W) == -Matrix(S)
+
+            # a pattern missing an entry of `A` is refused by name, not by `setindex!`
+            N = _csr_of(spdiagm(-1 => ones(n - 1), 0 => ones(n)), Val(Bi), Ti)
+            err = try
+                Bramble._negate_into!(N, A)
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            @test occursin("entry (1, 3)", sprint(showerror, err))
+        end
+    end
+
     # sparse_factorize still rejects non-CSR, non-CSC types.
     @testset "other matrix types rejected" begin
         # The catch-all's guarantee for a genuinely unsupported type (dense `Matrix`,
