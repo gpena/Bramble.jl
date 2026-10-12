@@ -306,7 +306,8 @@ names, the term a natural boundary condition is written with:
 A source on the left gives a [`LinearForm`](@ref) contribution (the Neumann flux vector); a
 trial function gives a [`BilinearForm`](@ref) one (the Robin boundary mass). The weight is the
 same lumped surface weight the numeric [`inner_Γ`](@ref) uses, so `uᵀ A v` equals
-`inner_Γ(uₕ, vₕ, markers...)` for the bilinear mass term.
+`inner_Γ(uₕ, vₕ, markers...)` for the bilinear mass term and real data. The numeric
+`inner_Γ` conjugates its first argument, so for complex data `uᴴ A v` is the match.
 
 `markers` is a keyword here, matching [`innerₕ`](@ref), where the numeric twin takes its
 labels positionally. A label is read from its definition when `form` is called, as the

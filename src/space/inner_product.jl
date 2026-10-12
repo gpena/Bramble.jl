@@ -307,7 +307,8 @@ array is built or walked here, unlike [`_dot_masked`](@ref)'s device path, since
 face is already a contiguous slice rather than an arbitrary marked set. The transverse surface
 measure for that slice is built once from [`host_half_spacings`](@ref) (never read on the
 device), then copied onto `u`'s own device in one transfer via
-[`_transverse_weight_device`](@ref); the reduction itself is `sum(su .* sv .* w)`, no `@kernel`.
+[`_transverse_weight_device`](@ref); the reduction itself is `sum(conj.(su) .* sv .* w)`, no
+`@kernel`.
 
 Faces are summed independently rather than through one shared mask, exactly as the host
 `_surface_weight_dir` recursion does: a corner point on two active faces receives both
@@ -463,8 +464,8 @@ end
 # The unmasked `_dot` walks the grid one axis-1 line at a time. The outer loop runs over
 # `CartesianIndices(w.dims[2:D])`; for each line it forms the scalar
 # `c = ∏_{d ≥ 2} factors[d][I_d]` once, and the inner `@inbounds @simd` loop walks the
-# line's contiguous `dims[1]` entries, accumulating `u[k] * v[k] * factors[1][i₁]` with the
-# same `muladd` shape as the dense `_dot`. The line sum is then folded in as
+# line's contiguous `dims[1]` entries, accumulating `conj(u[k]) * v[k] * factors[1][i₁]` with
+# the same `muladd` shape as the dense `_dot`. The line sum is then folded in as
 # `s = muladd(c, line_sum, s)`. For D = 1 there is one line and `c = one(T)`. Nothing is
 # allocated and the weight tensor is never formed. Measured on non-uniform 1000² and 100³
 # grids (minimum of 15 runs): innerₕ and inner₊ₓ each take 0.74-0.78x the time of a dense

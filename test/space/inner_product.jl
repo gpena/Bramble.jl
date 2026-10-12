@@ -689,7 +689,7 @@ end
     @testset "Composite H¹ norm and seminorm" begin
         # The H¹ norm of a product space is the square root of the summed squares over the
         # components. The components differ by six orders of magnitude, so a norm that
-        # dropped or mis-weighted one of them cannot agree with the sum.
+        # dropped or misweighted one of them cannot agree with the sum.
         for Ω in (
             mesh(domain(interval(0.0, 1.0)), 9, false),
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, true))
@@ -1254,10 +1254,10 @@ _cplx_norm(f, ur, ui) = sqrt(f(ur)^2 + f(ui)^2)
         # derivative of t ↦ ‖ur + t ui‖ₕ at 0, (ur, ui)ₕ / ‖ur‖ₕ.
         ud = element(W, typeof(ForwardDiff.Dual(1.0, 1.0)))
         ud .= ForwardDiff.Dual.(ur, ui)
-        nd = normₕ(ud)
-        @test nd isa ForwardDiff.Dual
-        @test ForwardDiff.value(nd) ≈ normₕ(ur)
-        @test ForwardDiff.partials(nd, 1) ≈ innerₕ(ur, ui) / normₕ(ur)
+        nrm_d = normₕ(ud)
+        @test nrm_d isa ForwardDiff.Dual
+        @test ForwardDiff.value(nrm_d) ≈ normₕ(ur)
+        @test ForwardDiff.partials(nrm_d, 1) ≈ innerₕ(ur, ui) / normₕ(ur)
     end
 end
 

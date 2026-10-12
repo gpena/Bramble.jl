@@ -1178,7 +1178,7 @@ end
 #     only at larger sizes over repeated assemblies.
 #
 # A host reduction is a boundary of the first kind without any extra call needed: `_dot`'s
-# device method (`src/utils/linear_algebra.jl`) is `sum(u .* v .* w)`, and fetching a
+# device method (`src/utils/linear_algebra.jl`) is `sum(conj.(u) .* v .* w)`, and fetching a
 # `GPUArrays` reduction's result to a host scalar already forces the device to finish
 # everything queued before it -- `innerₕ`/`normₕ` synchronise by returning a plain number,
 # not by this file calling anything.

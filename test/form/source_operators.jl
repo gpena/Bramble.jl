@@ -490,9 +490,9 @@ using Bramble:
             bnd(y) = y == 0 || y == 1
             b2 = [i == 1 || i == n ? 2.0 * w[i] : 0.0 for i in 1:n]
             # 1D, outside `:boundary`: a source that throws, and one that answers a string
-            thr = source_function(y -> bnd(y) ? 2.0 : throw(DomainError(y)), Val(1))
+            thrown_rhs = source_function(y -> bnd(y) ? 2.0 : throw(DomainError(y)), Val(1))
             str = source_function(y -> bnd(y) ? 2.0 : "undefined", Val(1))
-            @test isequal(bvec(rb(thr)), b2)
+            @test isequal(bvec(rb(thrown_rhs)), b2)
             b = bvec(rb(str))
             @test eltype(b) == Float64 && isequal(b, b2)
             # a user region: only 6:n is marked
@@ -521,7 +521,7 @@ using Bramble:
             # a term naming no component on a composite: never typed at `form`
             WW = Wₕ × Wₕ
             ok = source_function(y -> 2.0, Val(1))
-            bWW = assemble(form(WW, v -> innerₕ(rb(thr), v)))
+            bWW = assemble(form(WW, v -> innerₕ(rb(thrown_rhs), v)))
             @test eltype(bWW) == Float64
             @test isequal(bWW, assemble(form(WW, v -> innerₕ(rb(ok), v))))
             @test isequal(bWW, vcat(b2, b2))

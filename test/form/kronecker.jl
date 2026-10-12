@@ -482,11 +482,10 @@ end
         @test isapprox(Kc * x, assemble(ac) * x; rtol = 1e-12)
     end
 
-    # Ruling (S2.5): wherever `assemble(a)` stores explicit zeros (a pure `inner_Γ` form on
-    # the interior points of the face rows' diagonal, `inner₊` at its zero-weight points,
-    # an all-zero factor on a two-point axis), `SparseMatrixCSC(K)` stores the pattern of
-    # `dropzeros(assemble(a))`: the values agree, and the factors are not padded to repeat
-    # the zeros.
+    # Ruling (S2.5): for a pure `inner_Γ` form, `assemble(a)` stores explicit zeros on the
+    # interior points of the face rows' diagonal, and `SparseMatrixCSC(K)` stores the
+    # pattern of `dropzeros(assemble(a))`: the values agree, and the factors are not padded
+    # to repeat the zeros.
     @testset "Kronecker: pure inner_Γ" begin
         Wₕ = gridspace(_graded_mesh((9, 7)))
         a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(u, v; markers = (:boundary,)))

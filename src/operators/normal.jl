@@ -21,9 +21,10 @@ Returns the outward unit normal of the boundary face `marker` names, as one grid
 coordinate: component `d` holds `normal_vector(mesh(Wₕ), marker)[d]` at every point of that
 face and zero everywhere else.
 
-`marker` names a whole coordinate face -- `:xmin`…`:zmax` or a viewpoint alias -- for the
-same reason [`inner_Γ`](@ref) does: a normal is a property of a face, and a marked set that
-is not one has no single normal to sample.
+`marker` names a whole coordinate face -- `:xmin`…`:zmax` or a viewpoint alias -- and is
+resolved by that name alone, never read from a mesh marker's points as [`inner_Γ`](@ref)
+reads its labels: a normal is a property of a face, and a marked set that is not one has no
+single normal to sample.
 
 The components are zero off the face rather than the face's normal everywhere, so a product
 against one restricts to the face without a second mask.

@@ -129,9 +129,9 @@ collect(zip(sides, per_side))
 
 rd = reaction_density(a, l, uₕ; marker = :boundary)
 
-@test inner_Γ(rd, element(Wₕ, 1.0), :boundary) ≈ flux_total                               #src
+@test inner_Γ(element(Wₕ, 1.0), rd, :boundary) ≈ flux_total                               #src
 
-inner_Γ(rd, element(Wₕ, 1.0), :boundary), maximum(parent(rd))
+inner_Γ(element(Wₕ, 1.0), rd, :boundary), maximum(parent(rd))
 
 # ## Two wells
 #

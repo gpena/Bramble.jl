@@ -328,8 +328,9 @@ so the term is the endpoint pairing ``g(x_N)\,v(x_N)``. In 2D the same expressio
 integral weighted by the transverse half-spacing, and in 3D a face integral. `inner_Γ`
 integrates over whole coordinate faces. A label is read from its definition: a marker in
 `domain(...)` selects the faces its points cover, so under `:left => :ymin` the label
-`:left` is the bottom edge. A label that is not a marker is a face name (`:boundary`,
-`:xmin` to `:zmax`, or a viewpoint alias) and needs no marker.
+`:left` is the bottom edge. A label that is not a marker is a face name (`:xmin` to
+`:zmax`, or a viewpoint alias) and needs no marker; `:boundary` is a marker every mesh holds,
+the union of its faces.
 
 A marker that exists nowhere the term reaches is an error, not a silent zero:
 

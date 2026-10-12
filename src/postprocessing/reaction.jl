@@ -504,7 +504,7 @@ The pointwise counterpart of [`reaction`](@ref): a grid function, zero away from
 equal at each marked point to the boundary flux density `q·n` there, which converges
 under refinement. It is `reaction`'s summand divided by the point's surface weight on the
 faces the marker covers, the weight [`inner_Γ`](@ref) integrates with, so
-`inner_Γ(density, element(space, 1.0), faces...)` recovers [`reaction`](@ref)'s scalar.
+`inner_Γ(element(space, 1.0), density, faces...)` recovers [`reaction`](@ref)'s scalar.
 Meant to be exported and plotted, e.g.
 `export_vtk(filename, Ωₕ, "reaction" => reaction_density(...))`.
 

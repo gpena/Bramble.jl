@@ -631,7 +631,7 @@ using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask
             end
 
             # 1D: two points are too few along x as well.
-            W2 = gridspace(mesh(create_test_nd_domain(((0.0, 1.0),)), 2, false;
+            W2 = gridspace(mesh(domain(interval(0.0, 1.0)), 2, false;
                 backend = backend()))
             msg1 = "a centered difference along direction 1 needs at least 3 points " *
                    "there, got 2"
@@ -641,7 +641,7 @@ using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask
 
             # Three points along y are enough: the same form builds, assembles nonzero, and
             # the check, run once at `form`, leaves the refill allocation-free.
-            W3 = gridspace(mesh(create_test_nd_domain(((0.0, 1.0), (0.0, 1.0))), (4, 3),
+            W3 = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 3),
                 (false, false); backend = backend()))
             a3 = form(W3, W3, (u, v) -> inner₊ᵧ(Dcᵧ(u), Dcᵧ(v)))
             A3 = assemble(a3)
@@ -653,7 +653,7 @@ using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask
 
             # A composite whose Dcᵧ term names only its full leaf never walks the collapsed
             # one, so it forms; a term naming the collapsed leaf, or no leaf, throws.
-            Wf = gridspace(mesh(create_test_nd_domain(((0.0, 1.0), (0.0, 1.0))), (4, 4),
+            Wf = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4),
                 (false, false); backend = backend()))
             Wc = gridspace(Ωₕ_set64)
             V = Wf × Wc
@@ -681,7 +681,7 @@ using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask
 
             # A term interpolating its test side is walked on the trial leaf, so that is the
             # leaf checked: a collapsed trial throws, a collapsed interpolated test doesn't.
-            Wl = gridspace(mesh(create_test_nd_domain(((0.0, 1.0), (0.5, 0.5))), (4, 4),
+            Wl = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.5, 0.5)), (4, 4),
                 (true, true); backend = backend()))
             Vl = Wf × Wl
             @test_throws ArgumentError(msg) form(Wl, Wf, (u, v) -> innerₕ(Dcᵧ(u), πₕ(v)))
