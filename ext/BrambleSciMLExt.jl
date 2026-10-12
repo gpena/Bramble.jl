@@ -52,7 +52,9 @@ using PrecompileTools: @setup_workload, @compile_workload
 #
 # Everything with substance lives in `src/problems/semidiscrete.jl`: a `Semidiscretization` is
 # already a callable with the `(du, u, p, t)` signature, already carries its mass matrix, and
-# already knows its own Jacobian. This file only names those pieces the way SciMLBase does.
+# already knows its own Jacobian. This file names those pieces the way SciMLBase does, and
+# hands the prototype and the mass matrix over through `_ode_storage`: a `SparseMatrixCSR`
+# reaches the solver as a `SparseMatrixCSC` copy (see the CSR extension).
 
 # `jacobian = nothing` leaves `jac` unset, which is what a solution-dependent operator wants:
 # `jacobian!` is only a Picard linearisation there, and the solver should build the real one
@@ -76,8 +78,8 @@ function Bramble._ode_function(
     prototype = jac_prototype === nothing ? jacobian_prototype(sd) : jac_prototype
     return ODEFunction{true}(
         sd;
-        mass_matrix = mass_matrix(sd),
-        jac_prototype = prototype,
+        mass_matrix = Bramble._ode_storage(mass_matrix(sd)),
+        jac_prototype = Bramble._ode_storage(prototype),
         jac = _jac_closure(jacobian, sd),
         tgrad = _tgrad_closure(tgrad, sd)
     )

@@ -15,6 +15,12 @@
 # `_scatter_storage(A)` without calling `_scatter_position`; the recording itself searches
 # once per matrix object, serially.
 #
+# The ODE handoff (src/problems/semidiscrete.jl): no solver in OrdinaryDiffEq's stack takes a
+# `SparseMatrixCSR` (its `similar` and the broadcasts of `jacobian2W!` need CSC, and
+# LinearSolve's factorizations throw on CSR), so `_ode_storage` gives the solver a
+# `SparseMatrixCSC` copy of the mass matrix and the Jacobian prototype, and `_negate_into!`
+# fills that CSC Jacobian from the CSR operator in O(nnz), where the generic copy is O(n²).
+#
 # `SparseMatrixCSR`'s own `setindex!` throws on an entry outside the sparsity pattern rather
 # than growing it the way `SparseMatrixCSC`'s does (`A[i,i] = one(T)`), so the Dirichlet and
 # symmetrize methods below assume the diagonal is already a stored pattern entry at every
@@ -39,6 +45,7 @@ using Bramble:
                inner₊,
                ∇ₕ,
                boundary_symbols
+using SparseArrays: SparseArrays, SparseMatrixCSC
 using SparseMatricesCSR: SparseMatricesCSR, SparseMatrixCSR, sparsecsr
 using PrecompileTools: @setup_workload, @compile_workload
 
@@ -149,6 +156,40 @@ end
 @inline function Bramble._zero_stored!(A::SparseMatrixCSR{1})
     fill!(A.nzval, zero(eltype(A)))
     return A
+end
+
+# --- the ODE handoff (semidiscrete.jl) ---------------------------------------------- #
+
+# `Bramble._csr_to_csc` is the O(nnz) triplet re-layout `sparse_factorize` already uses; it
+# reads the index base off `rowptr`, so a zero-based matrix converts too.
+@inline Bramble._ode_storage(A::SparseMatrixCSR) = Bramble._csr_to_csc(A)
+
+# `-A` into the CSC Jacobian `_ode_storage` built from `A`. Same pattern, so each stored
+# entry of `A` is found in its column of `J` by a binary search and the whole fill is
+# O(nnz); an entry `J` does not store (or a different `nnz`) leaves the generic copy to
+# answer, as the CSC/CSC method does. `o` shifts either index base to one-based.
+function Bramble._negate_into!(J::SparseMatrixCSC, A::SparseMatrixCSR{Bi}) where {Bi}
+    _negate_csr_into_csc!(J, A) || return Bramble._negate_into_generic!(J, A)
+    return J
+end
+
+function _negate_csr_into_csc!(J::SparseMatrixCSC, A::SparseMatrixCSR{Bi}) where {Bi}
+    SparseArrays.nnz(J) == length(A.nzval) || return false
+    size(J) == size(A) || return false
+    rv = SparseArrays.rowvals(J)
+    nzJ = SparseArrays.nonzeros(J)
+    cp = J.colptr
+    o = 1 - Bi
+    @inbounds for i in 1:size(A, 1), k in (Int(A.rowptr[i]) + o):(Int(A.rowptr[i + 1]) + o - 1)
+
+        j = Int(A.colval[k]) + o
+        lo = Int(cp[j])
+        hi = Int(cp[j + 1]) - 1
+        r = searchsortedfirst(rv, i, lo, hi, Base.Order.Forward)
+        (r <= hi && rv[r] == i) || return false
+        nzJ[r] = -A.nzval[k]
+    end
+    return true
 end
 
 # --- Dirichlet and symmetrize (dirichlet_constraints.jl's existing pattern) --------- #

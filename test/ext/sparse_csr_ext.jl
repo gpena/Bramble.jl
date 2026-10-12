@@ -20,12 +20,15 @@ using Bramble: matrix, backend_eye, backend_zeros, allocate_system_matrix,
                assemble_parallel!, refactor!, sparse_factorize, sparse_refactor!,
                SuiteSparseFactorization
 # Internal since v3.0: defined and documented, not exported.
-using Bramble: D₊ₓ, D₊ᵧ
+using Bramble: D₊ₓ, D₊ᵧ, mass_matrix
 using SparseArrays
 using SparseMatricesCSR
 using LinearAlgebra: issymmetric, I, Diagonal
 using Random
 using Sparspak, SuiteSparse, MUMPS, ILUZero
+using SciMLBase: SciMLBase, ODEFunction, solve
+using OrdinaryDiffEqBDF: FBDF
+using OrdinaryDiffEqRosenbrock: Rodas5P
 using Bramble: sparspak_solve, suitesparse_solve, mumps_solve, accelerate_solve,
                suitesparse_qr_solve, sparspak_factorize, suitesparse_factorize,
                mumps_factorize, accelerate_factorize, suitesparse_qr_factorize
@@ -82,6 +85,58 @@ end
 function _nnz(A)
     @assert A isa Union{SparseMatrixCSC, SparseMatrixCSR}
     return nnz(A)
+end
+
+# --- the ODE handoff (#677) ---------------------------------------------------------- #
+
+# The heat problem of the `ode_problem` docs on either backend: `-Δₕ` with a homogeneous
+# Dirichlet condition and a unit source, so the operator is constant and `jacobian!` is exact.
+function _heat_problem(be, N)
+    Random.seed!(677)
+    S = interval(0.0, 1.0)
+    Ωₕ = mesh(domain(S, :boundary => boundary_symbols(S)), N, false; backend = be)
+    W = gridspace(Ωₕ)
+    Iv = interval(0.0, 0.5)
+    a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+    l = form(W, v -> innerₕ(Bramble.element(W, 1.0), v))
+    sd = semidiscretize(
+        a, l; dirichlet = dirichlet_constraints(Ωₕ, Iv, :boundary => (x, t) -> 0.0)
+    )
+    return ode_problem(sd, [sinpi(x[1]) for x in points(Ωₕ)], Iv), sd
+end
+
+# The Jacobian and iteration matrix the integrator allocates, the mass matrix and `jac` it
+# was handed. A Rosenbrock cache holds them directly, an implicit BDF one in its nonlinear
+# solver.
+function _solver_matrices(prob, alg; kw...)
+    it = SciMLBase.init(prob, alg; kw...)
+    c = it.cache
+    c = hasproperty(c, :nlsolver) ? c.nlsolver.cache : c
+    return (; J = c.J, W = c.W, M = it.f.mass_matrix, jac = it.f.jac, u = it.u, p = it.p)
+end
+
+# Bytes `jac` allocates filling `J` once it has run (compiled).
+function _jac_bytes(jac, J, u, p)
+    jac(J, u, p, 0.0)
+    return @allocated jac(J, u, p, 0.0)
+end
+
+_solve_bytes(prob, alg; kw...) = @allocated SciMLBase.solve(prob, alg; kw...)
+
+# Bytes `Bramble._negate_into!` allocates once compiled.
+function _negate_bytes(J, A)
+    Bramble._negate_into!(J, A)
+    return @allocated Bramble._negate_into!(J, A)
+end
+
+# A CSR copy of the CSC matrix `S` with the given index base and index type.
+function _csr_of(S::SparseMatrixCSC, ::Val{Bi}, ::Type{Ti}) where {Bi, Ti}
+    Is, Js, Vs = findnz(S)
+    A = sparsecsr(Val(1), Is, Js, Vs, size(S)...)
+    o = 1 - Bi
+    return SparseMatrixCSR{Bi}(
+        size(A)..., Ti.(A.rowptr .- o), Ti.(A.colval .- o), copy(A.nzval)
+    )
 end
 
 @testset "SparseMatricesCSR extension" begin
@@ -540,6 +595,92 @@ end
         @test_throws ArgumentError symmetrize!(Ar, Fr, BitVector([false, false, true]), 0)
         @test Ar == Ar0
         @test big == [1.0, 1.0, 1.0e6]
+    end
+
+    # OrdinaryDiffEq's `similar`, the broadcasts of `jacobian2W!` and LinearSolve's
+    # factorizations all reject a `SparseMatrixCSR`, so a solve on `csr_backend()` fell to a
+    # dense `Matrix` Jacobian (O(n²) per step) or threw. `_ode_function` now hands the
+    # solver CSC copies of the prototype and the mass matrix (gpena/Bramble.jl#677).
+    @testset "implicit ODE solve: sparse J, W (#677)" begin
+        kw = (; reltol = 1.0e-8, abstol = 1.0e-10)
+        for alg in (FBDF(), Rodas5P())
+            name = nameof(typeof(alg))
+            bytes_csr = Int[]
+            bytes_csc = Int[]
+            for N in (201, 801)
+                pr, _ = _heat_problem(csr_backend(), N)
+                pc, _ = _heat_problem(Bramble.backend(), N)
+                m = _solver_matrices(pr, alg; kw...)
+                @test m.J isa SparseMatrixCSC
+                @test m.W isa SparseMatrixCSC
+                @test typeof(m.M) == typeof(m.J)
+                @test _jac_bytes(m.jac, m.J, m.u, m.p) == 0
+
+                sr = SciMLBase.solve(pr, alg; kw...)
+                sc = SciMLBase.solve(pc, alg; kw...)
+                @test SciMLBase.successful_retcode(sr)
+                @test maximum(abs, sr.u[end] - sc.u[end]) < 1.0e-9
+
+                push!(bytes_csr, _solve_bytes(pr, alg; kw...))
+                push!(bytes_csc, _solve_bytes(pc, alg; kw...))
+            end
+            # linear in the dofs (4x here, bound 6x), and no dearer than the CSC backend
+            @test bytes_csr[2] / bytes_csr[1] < 6
+            @test bytes_csr[2] / bytes_csc[2] < 1.5
+        end
+    end
+
+    @testset "ODE handoff: CSC copies (#677)" begin
+        pr, sd = _heat_problem(csr_backend(), 41)
+        pc, _ = _heat_problem(Bramble.backend(), 41)
+        @test mass_matrix(sd) isa SparseMatrixCSR
+        @test Bramble.jacobian_prototype(sd) isa SparseMatrixCSR
+        @test pr.f.mass_matrix isa SparseMatrixCSC
+        @test pr.f.jac_prototype isa SparseMatrixCSC
+        @test pr.f.mass_matrix == pc.f.mass_matrix
+        @test pr.f.jac_prototype == pc.f.jac_prototype
+        @test rowvals(pr.f.jac_prototype) == rowvals(pc.f.jac_prototype)
+
+        # a caller's own CSR prototype is converted too, a CSC one passed through as is
+        proto = Bramble.jacobian_prototype(sd)
+        f = Bramble._ode_function(sd; jac_prototype = proto)
+        @test f.jac_prototype isa SparseMatrixCSC
+        @test f.jac_prototype == proto
+        cproto = sparse(proto)
+        @test Bramble._ode_function(sd; jac_prototype = cproto).jac_prototype === cproto
+
+        # `jacobian = nothing`: the solver builds a sparse Jacobian from the CSC pattern
+        pn = ode_problem(sd, zeros(size(proto, 1)), (0.0, 0.1); jacobian = nothing)
+        @test pn.f.jac === nothing
+        sn = SciMLBase.solve(pn, FBDF(); reltol = 1.0e-8, abstol = 1.0e-10)
+        @test SciMLBase.successful_retcode(sn)
+        @test issparse(_solver_matrices(pn, FBDF()).J)
+    end
+
+    # The backend only builds `SparseMatrixCSR{1,T,Int}`, so no solve reaches a zero-based or
+    # `Int32` CSR: the method is checked on them directly. Its values come out right through
+    # the generic path too (6 kB at n = 101), so only the 0-byte check tells them apart.
+    @testset "_negate_into!: CSC from CSR (#677)" begin
+        Random.seed!(677)
+        n = 101
+        S = spdiagm(-1 => rand(n - 1), 0 => rand(n), 2 => rand(n - 2))
+        for (Bi, Ti) in ((1, Int), (1, Int32), (0, Int), (0, Int32))
+            A = _csr_of(S, Val(Bi), Ti)
+            @test typeof(A) === SparseMatrixCSR{Bi, Float64, Ti}
+            @test Matrix(A) == Matrix(S)
+            J = copy(S)
+            nonzeros(J) .= 0.0
+            @test Bramble._negate_into!(J, A) === J
+            @test J == -S
+            @test _negate_bytes(J, A) == 0
+        end
+
+        # a pattern the CSC cache does not store (same nnz): the generic copy answers
+        A = _csr_of(sparse([1, 2, 2], [1, 1, 2], [1.0, 2.0, 3.0], 2, 2), Val(1), Int)
+        J = sparse([1, 1, 2], [1, 2, 2], [9.0, 9.0, 9.0], 2, 2)
+        @test nnz(J) == nnz(A)
+        @test Bramble._negate_into!(J, A) === J
+        @test Matrix(J) == [-1.0 0.0; -2.0 -3.0]
     end
 
     # sparse_factorize still rejects non-CSR, non-CSC types.
