@@ -14,7 +14,7 @@ using Test
 using Bramble
 using Bramble: SuiteSparseFactorization, suitesparse_factorize, suitesparse_qr_factorize,
                suitesparse_qr_solve, suitesparse_refactor!, suitesparse_solve
-using Bramble: change_points!, sparse_factorize
+using Bramble: change_points!, refactor!, sparse_factorize
 using LinearAlgebra
 using SparseArrays
 using SuiteSparse
@@ -190,6 +190,31 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         A_s, F_s = assemble(a_spd, l_spd; dirichlet = ZERO_BC, symmetrize = true)
         @test suitesparse_factorize(A_s).sym === :spd
         @test isapprox(suitesparse_factorize(A_s) \ F_s, Matrix(A_s) \ F_s; atol = 1.0e-12)
+    end
+
+    # A dense-backed form assembles into a `Matrix`; `refactor!` converts it as the factorize
+    # and solve form methods do. Oracle: the refilled factorization solves to the dense `\`
+    # answer of the matrix assembled with the new coefficient, which differs from the first
+    # factorization's.
+    @testset "refactor!, dense-backed form" begin
+        I1 = interval(0.0, 1.0)
+        Ωd = mesh(
+            domain(I1, :boundary => boundary_symbols(I1)), 12, false;
+            backend = backend(matrix_type = Matrix{Float64})
+        )
+        Wd = gridspace(Ωd)
+        bc = :boundary => x -> 0.0
+        a1 = form(Wd, Wd, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        a2 = form(Wd, Wd, (u, v) -> 3 * inner₊(∇ₕ(u), ∇ₕ(v)))
+        rhs = ones(size(assemble(a1; dirichlet = bc), 1))
+        A2 = assemble(a2; dirichlet = bc)
+        @test A2 isa Matrix{Float64}
+        u2 = A2 \ rhs    # dense LU: not the sparse code under test
+        @test !(assemble(a1; dirichlet = bc) \ rhs ≈ u2)
+
+        fact = sparse_factorize(a1; solver = :suitesparse, dirichlet = bc)
+        @test refactor!(fact, a2; dirichlet = bc) === fact
+        @test fact \ rhs ≈ u2 rtol = 1e-10
     end
 
     @testset "Error handling & validation" begin
