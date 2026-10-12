@@ -320,8 +320,8 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
     # the outward normal there is -1.
     @testset "normal: labels read as defined" begin
         S = interval(0.0, 1.0) × interval(0.0, 1.0)
-        mk(lab...) = gridspace(mesh(domain(S, lab..., :boundary => boundary_symbols(S)),
-            (11, 9), (false, false)))
+        mk(lab...; unif = (false, false)) = gridspace(mesh(
+            domain(S, lab..., :boundary => boundary_symbols(S)), (11, 9), unif))
         ηₓ, ηᵧ = η
         g = x -> 1 + x[1] + 2x[2]
         lin(W, t, m) = assemble(form(W, v -> inner_Γ(t, v; markers = m)))
@@ -336,8 +336,9 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
         Wi = mk(:inflow => :xmin)
         @test lin(Wi, g * ηₓ, :inflow) == lin(Wi, g * ηₓ, :xmin)
         @test sum(lin(Wi, g * ηₓ, :inflow)) ≈ -2.0
-        # a marker that is not whole faces is refused at `form`, as the numeric path does
-        Wc = mk(:c => x -> x[1] == 0 || (x[2] == 0 && x[1] <= 0.5))
+        # a marker that is not whole faces is refused at `form`, as the numeric path does; x is
+        # uniform so the bottom half always holds interior points (random x can leave it empty)
+        Wc = mk(:c => x -> x[1] == 0 || (x[2] == 0 && x[1] <= 0.5); unif = (true, false))
         @test_throws "whole boundary faces" lin(Wc, g * ηₓ, :c)
     end
 
