@@ -3,6 +3,7 @@ module ExtSciMLSensitivityExtTests
 using Test
 using Bramble
 using LinearAlgebra: dot
+using Random: seed!
 using SciMLBase: SciMLBase, solve
 using OrdinaryDiffEqBDF: FBDF
 using ..TestUtils: _have
@@ -195,6 +196,71 @@ using ..TestUtils: _have
             end
             fd_dθ = (loss(θ₀ + h) - loss(θ₀ - h)) / (2h)
 
+            @test isapprox(adjoint_dθ, fd_dθ; rtol = 1e-4)
+        end
+
+        # A problem with no `p` (gpena/Bramble.jl#671): the default `sensealg` must be the
+        # quadrature adjoint, since every `InterpolatingAdjoint` variant fails on it inside
+        # SciMLSensitivity (SciML/SciMLSensitivity.jl#1703). `dp` is `nothing`, and `du0`
+        # matches central differences. `abstol`/`reltol`/`h` as in the testsets above.
+        function _ssens_pless_check(Ωₕ; specialize)
+            Wₕ = gridspace(Ωₕ)
+            I = Bramble.interval(0.0, 0.5)
+            fₕ = Bramble.element(Wₕ, 0.0)
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+            l = form(Wₕ, v -> innerₕ(fₕ, v))
+            bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
+            sd = semidiscretize(a, l; dirichlet = bcs)
+            θ₀ = 0.4
+            ts = [0.125, 0.25, 0.375, 0.5]
+            pts = points(Ωₕ)
+            u0θ(θ) = begin
+                v = [_ssens_uex(x, θ) for x in pts]
+                v[1] = 0.0
+                v[end] = 0.0
+                v
+            end
+            kw = (; abstol = 1e-9, reltol = 1e-9)
+
+            prob = ode_problem(sd, u0θ(θ₀), I; specialize = specialize)
+            sol = solve(prob, FBDF(); kw..., saveat = ts)
+            obs = [copy(u) .+ 0.01 for u in sol.u]
+            dgdu!(out, u, p, t, i) = (@. out = 2 * (u - obs[i]); nothing)
+
+            du0, dp = Bramble.adjoint_sensitivities(
+                sol, FBDF(); t = ts, dgdu_discrete = dgdu!, kw...
+            )
+
+            h = 1e-4
+            du0dθ = (u0θ(θ₀ + h) - u0θ(θ₀ - h)) / (2h)
+            loss(θ) = begin
+                s = solve(SciMLBase.remake(prob; u0 = u0θ(θ)), FBDF(); kw..., saveat = ts)
+                sum(sum(abs2, s.u[k] - obs[k]) for k in eachindex(ts))
+            end
+            fd_dθ = (loss(θ₀ + h) - loss(θ₀ - h)) / (2h)
+            return dot(du0, du0dθ), fd_dθ, dp
+        end
+
+        @testset "p-less, dense with Dirichlet, default" begin
+            seed!(671)
+            Ωₕ = Bramble.mesh(
+                Bramble.domain(Bramble.interval(0.0, 1.0)), 21, false;
+                backend = Bramble.backend(matrix_type = Matrix{Float64})
+            )
+            adjoint_dθ, fd_dθ, dp = _ssens_pless_check(
+                Ωₕ; specialize = SciMLBase.AutoSpecialize
+            )
+            @test dp === nothing
+            @test isapprox(adjoint_dθ, fd_dθ; rtol = 1e-4)
+        end
+
+        @testset "p-less, CSC and FullSpecialize, default" begin
+            seed!(671)
+            Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 21, false)
+            adjoint_dθ, fd_dθ, dp = _ssens_pless_check(
+                Ωₕ; specialize = SciMLBase.FullSpecialize
+            )
+            @test dp === nothing
             @test isapprox(adjoint_dθ, fd_dθ; rtol = 1e-4)
         end
     else
