@@ -101,10 +101,12 @@ Return the `BitVector` indicator associated with marker `label` in mesh `Ωₕ`.
 If `label` is not directly found in the mesh markers and is a face name, its
 coordinate-aligned or viewpoint boundary alias (#152's spellings: `:xmin` ↔ `:left` in 2D,
 `:xmin` ↔ `:back` in 3D) is consulted. The aliased marker answers for `label` only when
-every point it marks lies on `label`'s face (an open face too); otherwise `label` means its
-own face, and a new `BitVector` marking that face is returned. So on
-`domain(S, :left => :ymin)`, `:left` gives the ymin points and `:xmin` the xmin points. A
-label that is neither a marker nor a face name whose alias is a marker throws a `KeyError`.
+it marks at least one point and every point it marks lies on `label`'s face (an open face
+too); otherwise `label` means its own face, and a new `BitVector` marking that face is
+returned. So on `domain(S, :left => :ymin)`, `:left` gives the ymin points and `:xmin` the
+xmin points, and on `domain(S, :left => x -> false)`, `:left` marks nothing and `:xmin`
+still gives the xmin points. A label that is neither a marker nor a face name whose alias
+is a marker throws a `KeyError`.
 
 The `BitVector` is a read-only view of the mesh's labels. Change labels with `markers!` or
 `set_markers!`, which rebuild the marker state assembly reads; an edit made in place is not
@@ -127,8 +129,9 @@ end
     if alias !== nothing
         aliased = get(m, alias, nothing)
         if aliased !== nothing
-            # The alias answers for `label` only when it marks nothing off `label`'s face: a
-            # user's `:left => :ymin` must not answer for `:xmin` (gpena/Bramble.jl#659).
+            # The alias answers for `label` only when it marks something and nothing off
+            # `label`'s face: a user's `:left => :ymin` must not answer for `:xmin`
+            # (gpena/Bramble.jl#659), nor an empty `:left` leave `:xmin` empty (#664).
             _marks_only_face(Ωₕ, aliased, label) && return aliased
             return nothing
         end
@@ -151,8 +154,9 @@ end
     return nothing
 end
 
-# Whether every point `bits` marks lies on the face `label` names: the marked points on that
-# face number `count(bits)`. Index arithmetic only, so it allocates nothing.
+# Whether `bits` marks at least one point and every point it marks lies on the face `label`
+# names: the marked points on that face number `count(bits)`, and are not zero. Index
+# arithmetic only, so it allocates nothing.
 @inline function _marks_only_face(Ωₕ::AbstractMeshType{D}, bits::BitVector, label::Symbol) where {D}
     axis, side = _face_of_symbol(Val(D), label)
     face = boundary_indices(Ωₕ)[2axis - 2 + side]
@@ -161,7 +165,7 @@ end
     for I in face
         n += @inbounds bits[lin[I]]
     end
-    return n == count(bits)
+    return n > 0 && n == count(bits)
 end
 
 # The face `label` names, as a fresh `BitVector` over the mesh points.

@@ -2,6 +2,7 @@ module MeshMarkersTests
 
 using Test
 using Bramble
+using Random: Random
 using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs, _half_spacing_oracle
 
 # `:boundary`/`:interior` are reserved markers every mesh now carries automatically,
@@ -295,6 +296,40 @@ end
     @test findall(>(0), hits) == 1:5:21
 
     @test_throws KeyError Bramble.index_in_marker(Ωh, :zmin)
+end
+
+# An alias label that marks nothing does not answer for the face name either: `:xmin` still
+# means the xmin face, as on a domain whose `:left` is that face (gpena/Bramble.jl#664). The
+# oracle is the same problem on `domain(S, :left => :xmin)`.
+@testset "Empty alias leaves the face (#664)" begin
+    S = interval(0.0, 1.0) × interval(0.0, 1.0)
+    function solve_on(Ω)
+        Random.seed!(664)  # the same non-uniform mesh for both domains
+        Ωh = mesh(Ω, (6, 5), (false, false))
+        W = gridspace(Ωh)
+        a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        l = form(W, v -> innerₕ(x -> 1.0, v))
+        u = Rₕ(W, x -> 1 + x[1] + 2x[2])
+        A, F = assemble(a, l; dirichlet = :xmin => x -> 7.0)
+        sd = semidiscretize(a, l; dirichlet = :xmin)
+        du = zeros(30)
+        sd(du, collect(range(0.25, 1.75; length = 30)), nothing, 0.0)
+        return (Ωh, A, F, innerₕ(u, element(W, 1.0); markers = (:xmin,)),
+                Bramble.reaction(a, l, u; marker = :xmin), du)
+    end
+    Ωe, Ae, Fe, ie, re, due = solve_on(domain(S, :left => x -> false))
+    Ωc, Ac, Fc, ic, rc, duc = solve_on(domain(S, :left => :xmin))
+    @test !any(Bramble.index_in_marker(Ωe, :left))
+    @test findall(Bramble.index_in_marker(Ωe, :xmin)) == 1:6:25
+    @test findall(Bramble.index_in_marker(Ωc, :xmin)) == 1:6:25
+    walk(Ω) = (ix = Int[]; Bramble._each_marker_point(i -> push!(ix, i), Ω, :xmin, 0); ix)
+    @test walk(Ωe) == 1:6:25
+    @test Ae == Ac
+    @test Fe == Fc
+    @test count(==(7.0), Fe) == 5
+    @test ie == ic > 0
+    @test re == rc
+    @test due == duc
 end
 
 # The predicate probes in `markers(space, pairs...)` (src/geometry/marker.jl): a 1D predicate
