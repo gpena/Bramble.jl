@@ -554,6 +554,38 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
         end
     end
 
+    # A complex coefficient makes `eltype(kronecker_operator(a))` complex, and every fdm
+    # entry point refuses it with an ArgumentError naming it, a zero imaginary part too
+    # (gpena/Bramble.jl#535): it once reached the real-only `_sygvd!` as a MethodError.
+    # A real `Ref` scale still solves.
+    @testset "fdm_solve: complex coefficient refused" begin
+        Wₕ = gridspace(_graded_mesh((9, 7)))
+        n = ndofs(Wₕ)
+        F = rand(MersenneTwister(KRON_EXT_SEED), n)
+        L(c) = (u, v) -> innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v))
+        for c in (Ref(2.0 + 0.0im), 2.0 + 0.0im, Ref(2.0 + 1.0im), 2.0 + 1.0im),
+            dir in (nothing, :boundary)
+
+            a = form(Wₕ, Wₕ, L(c))
+            @test eltype(kronecker_operator(a)) <: Complex
+            why = r"does not support this form: a complex coefficient"
+            @test_throws why fdm_solve(a, F; dirichlet = dir)
+            @test_throws ArgumentError fdm_solve(a, F; dirichlet = dir)
+            @test_throws why fdm_solve(kronecker_operator(a), F)
+            @test_throws ArgumentError fdm_factorize(a; dirichlet = dir)
+            @test_throws why fdm_factorize(a; dirichlet = dir)
+            @test_throws r"fdm_preconditioner .*a complex coefficient" fdm_preconditioner(a;
+                dirichlet = dir)
+        end
+        # A 2-point axis has no interior, and the refusal does not depend on it.
+        W₂ = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (2, 5),
+            (false, false)))
+        @test_throws ArgumentError fdm_solve(form(W₂, W₂, L(2.0 + 0.0im)), ones(ndofs(W₂));
+            dirichlet = :boundary)
+        a = form(Wₕ, Wₕ, L(Ref(2.0)))
+        @test fdm_solve(a, F) ≈ Matrix(assemble(a)) \ F
+    end
+
     # gpena/Bramble.jl#662: a stored zero in a factor is absent to the classification, at
     # build and at refill alike. `Kz` is `K` with every non-mass factor padded with stored
     # zeros on its three diagonals, plus a term whose first factor stores only zeros: it

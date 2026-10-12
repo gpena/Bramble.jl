@@ -75,8 +75,10 @@ before calling this function.
   - `ArgumentError` saying `fdm_preconditioner` does not support the form, with the reason,
     for a form with no usable Laplacian-like part: `a` is not separable, it is posed on a
     composite space, a mass is not symmetric positive definite, an axis has no term of its
-    own once the two-axis terms are left out (the form has no Laplacian-like part), or that
-    part is singular. These are `fdm_solve`'s refusals, a two-axis term apart.
+    own once the two-axis terms are left out (the form has no Laplacian-like part), that
+    part is singular, or a complex scale or coefficient makes the Kronecker operator's
+    element type complex (a zero imaginary part included). These are `fdm_solve`'s
+    refusals, a two-axis term apart.
   - `ArgumentError`: `dirichlet` is neither `nothing` nor `:boundary`.
 
 # Examples
