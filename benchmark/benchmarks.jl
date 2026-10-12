@@ -703,7 +703,7 @@ function _prepare_params!(args)
     baseline = BenchmarkTools.load(args[j + 1])[1]
     println("loading benchmark parameters from ", args[j + 1], "...")
     try
-        loadparams!(SUITE, baseline, :evals, :samples)
+        loadparams!(SUITE, params(baseline), :evals, :samples)
     catch err
         @warn string("could not read parameters from the baseline; tuning instead, so ",
             "this comparison carries the run-to-run spread that tuning adds") exception = err

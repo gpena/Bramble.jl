@@ -69,6 +69,14 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         @test lf isa LinearForm
         @test test_space(lf) === Wₕ
         @test resolve_form_ast(lf) isa LinearProduct
+
+        # No `restrict_to`, so `form` builds no point mask for typing restrictions: it
+        # allocates nothing whatever the grid size.
+        function _form_bytes(W, f)
+            form(W, v -> innerₕ(f, v))
+            return @allocated form(W, v -> innerₕ(f, v))
+        end
+        @test _form_bytes(Wₕ, uₕ) == 0
     end
 
     @testset "Assembly" begin

@@ -200,9 +200,20 @@ end
 # source value one at a time, a scalar read a device array refuses.
 _lower_term(term, sp) = _typed_restrictions(
     locality(backend(sp)), _lower_sources(term, sp), sp)
-_typed_restrictions(::HostLocality, op, sp) = _typed_restrictions(
-    op, sp, trues(length(indices(mesh(sp)))))
+function _typed_restrictions(::HostLocality, op, sp)
+    _any_restriction(op) || return op
+    return _typed_restrictions(op, sp, trues(length(indices(mesh(sp)))))
+end
 _typed_restrictions(::DeviceLocality, op, sp) = op
+
+# Whether `_typed_restrictions` below would reach a `RegionRestriction`: without one, `form`
+# allocates no point mask (the `form (linear, 2D)` allocation bound in benchmark/).
+@inline _any_restriction(::RegionRestriction) = true
+@inline _any_restriction(op::OperatorAdd) = _any_restriction(op.left_op) ||
+                                            _any_restriction(op.right_op)
+@inline _any_restriction(op::LinearProduct) = _any_restriction(op.left_op)
+@inline _any_restriction(op::UnaryWrapper) = _any_restriction(op.inner_op)
+@inline _any_restriction(::Any) = false
 
 # --- A restricted source keeps one stencil type (gpena/Bramble.jl#639) --- #
 #
