@@ -7,6 +7,8 @@ Write `Ωₕ`, and any number of named fields over it, to a VTK rectilinear grid
 
 Each entry in `fields` is `name => data`, where `data` is a [`VectorElement`](@ref) over a
 grid space on `Ωₕ` (scalar or composite) or a plain array already shaped like the grid.
+A composite whose components live on different meshes throws an `ArgumentError`: export
+each component against its own mesh.
 The second method is a shorthand for a single field, named `"u"` unless told otherwise.
 
 A 1D mesh gets a degenerate second axis rather than being refused: VTK has no dedicated 1D
@@ -66,6 +68,22 @@ end
 _vtk_axes(Ωₕ::AbstractMeshType{1}) = (host_points(Ωₕ), [zero(eltype(Ωₕ))])
 _vtk_axes(Ωₕ::AbstractMeshType) = host_points(Ωₕ)
 
+# Both exporters write a composite's leaves side by side against one mesh: a VTK vector
+# field has one array per component, a table has one row per grid point. Leaves on
+# different meshes have no shared "point i", so they are refused rather than written as
+# values that pair up unrelated points. `fname` names the exporter in the message; the
+# pgfplots exporter shares this helper, as this file is included first.
+function _require_one_mesh(fname, uₕ::VectorElement{<:CompositeGridSpace})
+    _shares_one_mesh(components(uₕ)) && return nothing
+    throw(
+        ArgumentError(
+        "$fname needs every component of a composite element on the same mesh, but " *
+        "these components live on different meshes. Export each component against " *
+        "its own mesh instead.",
+    ),
+    )
+end
+
 # A scalar space gives an array shaped like the grid: `reshape(uₕ)` already reshapes a
 # `VectorElement`'s flat storage that way, in the same column-major order `points(Ωₕ)`'s
 # axes imply, so no permutation is needed. A composite space gives a `Tuple` of them:
@@ -73,7 +91,10 @@ _vtk_axes(Ωₕ::AbstractMeshType) = host_points(Ωₕ)
 # per component. Wrapping each with `Array` brings a device-backed field's storage to the
 # host before `WriteVTK` sees it. A plain array passed as field data gets the same copy
 # unless it is already an `Array`.
-_vtk_data(uₕ::VectorElement{<:CompositeGridSpace}) = map(Array ∘ reshape, components(uₕ))
+function _vtk_data(uₕ::VectorElement{<:CompositeGridSpace})
+    _require_one_mesh("export_vtk", uₕ)
+    return map(Array ∘ reshape, components(uₕ))
+end
 _vtk_data(uₕ::VectorElement) = Array(reshape(uₕ))
 _vtk_data(a::Array) = a
 _vtk_data(a::AbstractArray) = Array(a)

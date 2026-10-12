@@ -1,8 +1,19 @@
+# Normally test/runtests.jl includes test/ext/SolverContracts.jl immediately before this
+# file (SolverContracts.jl's own header comment documents that ordering contract), so
+# `Main.ExtSolverContracts` already exists by the time the `using ..ExtSolverContracts`
+# below runs. Included here too, guarded, so `include("test/ext/mumps_ext.jl")`
+# also works standalone without double-defining the module when
+# runtests.jl already loaded it.
+if !isdefined(Main, :ExtSolverContracts)
+    include(joinpath(@__DIR__, "SolverContracts.jl"))
+end
+
 module TestMUMPSExt
 
 using Test
 using Bramble
 using Bramble: MUMPSFactorization, mumps_factorize, mumps_refactor!, mumps_solve, refactor!
+using Bramble: change_points!, sparse_factorize
 using LinearAlgebra
 using SparseArrays
 using MUMPS
@@ -15,6 +26,16 @@ using MUMPS
 using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system,
                             poisson_solve_contract, refactor_contract,
                             unsymmetric_refactor_contract, validation_contract
+
+# A `MethodError` that names the offending keyword, not any other failure.
+function throws_unknown_kw(f, kw::Symbol)
+    try
+        f()
+    catch e
+        return e isa MethodError && occursin(string(kw), sprint(showerror, e))
+    end
+    return false
+end
 
 @testset "MUMPS extension" begin
     @testset "Poisson 1D/2D/3D (sym = :spd)" begin
@@ -133,6 +154,112 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         fact_c = mumps_factorize(p.A; sym = :spd, cntl = (1 => 0.5,))
         @test fact_c.mumps.cntl[1] == 0.5
         @test isapprox(fact_c \ p.F, p.u_ref; atol = 1.0e-12)
+    end
+
+    @testset "factorize(a): symmetrize refused" begin
+        Ωₕ = mesh(
+            domain(
+                interval(0.0, 1.0) × interval(0.0, 1.0),
+                :boundary => boundary_symbols(interval(0.0, 1.0) × interval(0.0, 1.0))
+            ), (9, 7), (true, true)
+        )
+        change_points!(Ωₕ, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
+        Wₕ = gridspace(Ωₕ)
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> 1.0), v))
+        bc = :boundary => x -> 1.0 + x[1]
+        for symmetrize in (true, false)
+            @test_throws ArgumentError mumps_factorize(a; dirichlet = bc, symmetrize = symmetrize)
+            @test_throws ArgumentError sparse_factorize(
+                a; solver = :mumps, dirichlet = bc, symmetrize = symmetrize
+            )
+        end
+
+        # The plain call still solves, with the Dirichlet data lifted into F by assemble
+        A, F = assemble(a, l; dirichlet = bc)
+        @test mumps_factorize(a; dirichlet = bc) \ F ≈ Matrix(A) \ F
+        @test sparse_factorize(a; solver = :mumps, dirichlet = bc) \ F ≈ Matrix(A) \ F
+    end
+
+    @testset "sym = :auto: indefinite and singular" begin
+        # Shifted Helmholtz, -Δu - 50u = f: symmetric, positive diagonal, indefinite. A uniform
+        # mesh keeps the diagonal positive (a random one gives a non-positive entry about once
+        # in 200 runs), so `:auto` meets a Cholesky candidate that is not positive definite.
+        S2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ω2 = mesh(domain(S2, :boundary => boundary_symbols(S2)), (10, 10), (true, true))
+        W2 = gridspace(Ω2)
+        a_helm = form(W2, W2, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) - 50.0 * innerₕ(u, v))
+        l_helm = form(W2, v -> innerₕ(Rₕ(W2, x -> 1.0), v))
+        A_h, F_h = assemble(a_helm, l_helm; dirichlet = ZERO_BC, symmetrize = true)
+        @test issymmetric(A_h)
+        @test all(>(0), diag(A_h))
+        @test minimum(eigvals(Symmetric(Matrix(A_h)))) < 0
+        u_ref = Matrix(A_h) \ F_h
+
+        @test isapprox(mumps_factorize(A_h) \ F_h, u_ref; atol = 1.0e-10)
+        @test isapprox(sparse_factorize(A_h; solver = :mumps) \ F_h, u_ref; atol = 1.0e-10)
+        @test isapprox(pde_solve(A_h, F_h; solver = :mumps), u_ref; atol = 1.0e-10)
+        # `symmetrize = true` no longer forces Cholesky
+        u_form = mumps_solve(a_helm, l_helm; dirichlet = ZERO_BC, symmetrize = true)
+        @test isapprox(parent(u_form), u_ref; atol = 1.0e-10)
+
+        # Symmetric with a positive diagonal, a zero pivot in the LDLᵀ order: solvable
+        M = sparse([1.0 1 0; 1 1 1; 0 1 1])
+        b = [1.0, 2.0, 3.0]
+        @test isapprox(mumps_factorize(M) \ b, Matrix(M) \ b; atol = 1.0e-12)
+
+        # Singular: the fallback reports it rather than returning a wrong answer
+        Sg = sparse([1.0 1; 1 1])
+        @test_throws SingularException mumps_factorize(Sg) \ [1.0, 2.0]
+        @test_throws SingularException pde_solve(Sg, [1.0, 2.0]; solver = :mumps)
+
+        # The Cholesky route stays for a positive definite matrix, on a non-uniform mesh
+        Ωn = mesh(domain(S2, :boundary => boundary_symbols(S2)), (9, 7), (true, true))
+        change_points!(Ωn, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
+        Wn = gridspace(Ωn)
+        a_spd = form(Wn, Wn, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+        l_spd = form(Wn, v -> innerₕ(Rₕ(Wn, x -> 1.0), v))
+        A_s, F_s = assemble(a_spd, l_spd; dirichlet = ZERO_BC, symmetrize = true)
+        @test mumps_factorize(A_s).sym == 1
+        @test isapprox(mumps_factorize(A_s) \ F_s, Matrix(A_s) \ F_s; atol = 1.0e-12)
+    end
+
+    @testset "unknown keyword throws (#657)" begin
+        A = sparse(SymTridiagonal(fill(4.0, 6), fill(-1.0, 5)))
+        b = collect(1.0:6)
+        ref = Matrix(A) \ b
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ω = mesh(domain(S, :boundary => boundary_symbols(S)), (6, 6), (true, true))
+        W = gridspace(Ω)
+        a_form = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+        bc = ZERO_BC
+
+        @test throws_unknown_kw(() -> mumps_factorize(A; bogus = 1), :bogus)
+        @test throws_unknown_kw(() -> mumps_solve(A, b; bogus = 1), :bogus)
+        @test throws_unknown_kw(() -> mumps_factorize(a_form; dirichlet = bc, bogus = 1), :bogus)
+        @test throws_unknown_kw(() -> pde_solve(A, b; solver = :mumps, bogus = 1), :bogus)
+        @test throws_unknown_kw(() -> sparse_factorize(A; solver = :mumps, bogus = 1), :bogus)
+        @test throws_unknown_kw(() -> factorize(A, MUMPSFactorization; bogus = 1), :bogus)
+        # The `symmetrize` refusal still comes first on the form method
+        @test_throws ArgumentError mumps_factorize(a_form; dirichlet = bc, symmetrize = true, bogus = 1)
+
+        # The accepted keywords still solve
+        @test mumps_factorize(A; sym = :spd, icntl = [14 => 30], cntl = [1 => 0.01]) \ b ≈ ref
+        @test mumps_solve(A, b; sym = :spd, icntl = [14 => 30]) ≈ ref
+        @test pde_solve(A, b; solver = :mumps, sym = :spd) ≈ ref
+
+        # `:auto` on the indefinite 3×3 factors twice, the second time through `sym = 2`
+        M = sparse([1.0 1 0; 1 1 1; 0 1 1])
+        bM = [1.0, 2.0, 3.0]
+        @test mumps_factorize(M).sym == 2
+        @test mumps_factorize(M; icntl = [14 => 30], cntl = [1 => 0.01]) \ bM ≈ Matrix(M) \ bM
+
+        # `:default` takes only `kind`, on every platform
+        for Aᵢ in (A, sparse([4.0 1; 0 3]))
+            bᵢ = ones(size(Aᵢ, 1))
+            @test_throws ArgumentError pde_solve(Aᵢ, bᵢ; bogus = 1)
+        end
+        @test pde_solve(A, b; kind = :ldlt) ≈ ref
     end
 
     @testset "Error handling & validation" begin

@@ -75,6 +75,33 @@ end
         bcs_x = dirichlet_constraints(Ωₕ, :boundary => x -> 1.0)
         @test semidiscretize(a, l; dirichlet = bcs_x).constraints isa
               Bramble.StaticConstraints
+
+        # Evaluated markers hold `Fix2(g, t)`, which takes one argument: static, not timed.
+        sd_eval = semidiscretize(a, l; dirichlet = bcs_t(0.5))
+        @test sd_eval.constraints isa Bramble.StaticConstraints
+        @test sd_eval(zeros(n), zeros(n), nothing, 0.3)[1] == 1.0
+
+        # A `Fix` is classified by the function it wraps: `Fix2(g, c)` with `g(x, c, t)`
+        # and `Fix{3}(h3, c)` with `h3(x, t, c)` are both (x, t) conditions.
+        g = (x, c, t) -> c * t
+        sd_fix2 = semidiscretize(
+            a, l; dirichlet = dirichlet_constraints(Ωₕ, I, :boundary => Base.Fix2(g, 3.0))
+        )
+        @test sd_fix2.constraints isa Bramble.TimeDependentConstraints
+        @test sd_fix2(zeros(n), zeros(n), nothing, 0.5)[1] == 1.5
+        h3 = (x, t, c) -> c * t
+        sd_fix3 = semidiscretize(
+            a, l; dirichlet = dirichlet_constraints(Ωₕ, I, :boundary => Base.Fix{3}(h3, 3.0))
+        )
+        @test sd_fix3.constraints isa Bramble.TimeDependentConstraints
+        @test sd_fix3(zeros(n), zeros(n), nothing, 0.5)[1] == 1.5
+
+        # A defaulted time argument stays time dependent: the lowest-arity rule would
+        # freeze it at its default.
+        bcs_d = dirichlet_constraints(Ωₕ, I, :boundary => (x, t = 0.0) -> 1 + t)
+        sd_d = semidiscretize(a, l; dirichlet = bcs_d)
+        @test sd_d.constraints isa Bramble.TimeDependentConstraints
+        @test sd_d(zeros(n), zeros(n), nothing, 0.5)[1] == 1.5
     end
 
     @testset "mass matrix carries the algebraic rows" begin
@@ -216,6 +243,22 @@ end
         sd1(zeros(n), zeros(n), 99.0, 1.5)
         @test seen1 == [1.5]
         @test !(sd1.update_coefficients isa Bramble.ParametricUpdate)
+
+        # A `Fix1` hook is classified by the function it wraps: `setindex!(α, t)` takes
+        # one argument more than the hook, so the hook is one-argument and stays raw.
+        α = Ref(0.0)
+        sdα = semidiscretize(a, l; (update_coefficients!) = Base.Fix1(setindex!, α))
+        @test !(sdα.update_coefficients isa Bramble.ParametricUpdate)
+        sdα(zeros(n), zeros(n), nothing, 0.5)
+        @test α[] == 0.5
+
+        # The hook prefers its one-argument form: `(t, p = 1.0) -> ...` is called as
+        # `f(t)` and ignores `p`.
+        β = Ref(0.0)
+        sdq = semidiscretize(a, l; (update_coefficients!) = (t, p = 1.0) -> (β[] = p))
+        @test !(sdq.update_coefficients isa Bramble.ParametricUpdate)
+        sdq(zeros(n), zeros(n), 0.25, 0.5)
+        @test β[] == 1.0
     end
 
     @testset "state exposes u to the forms" begin
@@ -445,10 +488,10 @@ end
 
 # The matrix-type seam extended to the consumers of assembly ):
 # `semidiscretize`, `mass_matrix` and `operator_matrix` read whatever matrix type the form's
-# own backend produces -- the `Semidiscretization{...,MT,...}` parameter already carried for
-# both matrices -- rather than assuming `SparseMatrixCSC`. A dense `Matrix{Float64}` backend
-# must semidiscretise to the exact same numbers as the default CSC backend, and the residual
-# built from it must agree too.
+# own backend produces -- the `Semidiscretization{...,MT,MM,...}` parameters carried for
+# the operator and mass matrices -- rather than assuming `SparseMatrixCSC`. A dense
+# `Matrix{Float64}` backend must semidiscretise to the exact same numbers as the default CSC
+# backend, and the residual built from it must agree too.
 @testset "Dense backend" begin
     I = Bramble.interval(0.0, 1.0)
     Ωc = Bramble.mesh(Bramble.domain(I), 21, false)

@@ -7,12 +7,13 @@ using Bramble: D₋ᵧ, D₋ₓ, cell_measure, indices, inner₊ᵧ, inner₊₂
 using Bramble: set_points!, weights
 using LinearAlgebra: norm
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS, @test_allocs, _nonuniform_points
+using ForwardDiff
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS, @test_allocs, _nonuniform_points
 using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
 using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
 
 @testset "Inner products & norms" begin
-    for D in 1:3
+    for D in TEST_DIMS
         dims, Wh, u = setup_test_grid(Val(D))
 
         # normₕ of the all-ones element is `sqrt(<domain measure>)` in every dimension --
@@ -134,7 +135,8 @@ using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
         end
     end
 
-    @testset "3D" begin
+    # 3D only: it builds a 3D mesh, so it runs in `slow` (nightly), not in `unit` (#650).
+    WITH_3D_TESTS && @testset "3D" begin
         dims_3d, Wₕ_3d, u1 = setup_test_grid(Val(3))
         domain_volume = 125.0 # Domain is [-1, 4]³
 
@@ -192,7 +194,8 @@ end
         Tuple(d for d in 1:D if ((m >> (d - 1)) & 1) == 1) for m in 0:(2 ^ D - 1)
     )
 
-    @testset "3D: all 8 sets" begin
+    # 3D only: it builds a 3D mesh, so it runs in `slow` (nightly), not in `unit` (#650).
+    WITH_3D_TESTS && @testset "3D: all 8 sets" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
             (6, 5, 4), (true, false, true))
         Wₕ = gridspace(Ωₕ)
@@ -228,7 +231,8 @@ end
         @test_throws ArgumentError weights(Wₕ, Val((1, 3)))
     end
 
-    @testset "Alias identities" begin
+    # 3D only: it builds a 3D mesh, so it runs in `slow` (nightly), not in `unit` (#650).
+    WITH_3D_TESTS && @testset "Alias identities" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
             (5, 4, 6), (true, true, false))
         Wₕ = gridspace(Ωₕ)
@@ -260,7 +264,19 @@ end
         @test inner₊(u, v, Val((1, 2)); markers = ()) == inner₊(u, v, Val((1, 2)))
     end
 
-    @testset "Zero allocation, empty and singletons" begin
+    @testset "Zero allocation, 2D subsets" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, true))
+        Wₕ = gridspace(Ωₕ)
+        u = Rₕ(Wₕ, x -> x[1])
+        v = Rₕ(Wₕ, x -> 1.0)
+
+        @test_allocs inner₊(u, v, Val(()))
+        @test_allocs inner₊(u, v, Val((1,)))
+        @test_allocs inner₊(u, v, Val((2,)))
+    end
+
+    # 3D only: it builds a 3D mesh, so it runs in `slow` (nightly), not in `unit` (#650).
+    WITH_3D_TESTS && @testset "Zero allocation, empty and singletons" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
             (6, 5, 4), (true, true, true))
         Wₕ = gridspace(Ωₕ)
@@ -392,7 +408,9 @@ end
     for (T, rtol) in ((Float64, 1e-12), (Float32, 1.0f-5))
         Ωs = (mesh(domain(unit(T)), 37, false),
             mesh(domain(unit(T) × unit(T)), (31, 17), (false, false)),
-            mesh(domain(unit(T) × unit(T) × unit(T)), (9, 8, 7), (false, false, false)))
+            (WITH_3D_TESTS ?
+             (mesh(domain(unit(T) × unit(T) × unit(T)), (9, 8, 7), (false, false, false)),) :
+             ())...)
         for Ωₕ in Ωs
             Wₕ = gridspace(Ωₕ)
             u = Rₕ(Wₕ, x -> 1 + sum(sin, x))
@@ -432,7 +450,9 @@ end
     for (T, rtol) in ((Float64, 1e-12), (Float32, 1.0f-5))
         Ωs = (mesh(domain(unit(T)), 37, false),
             mesh(domain(unit(T) × unit(T)), (31, 17), (false, false)),
-            mesh(domain(unit(T) × unit(T) × unit(T)), (9, 8, 7), (false, false, false)))
+            (WITH_3D_TESTS ?
+             (mesh(domain(unit(T) × unit(T) × unit(T)), (9, 8, 7), (false, false, false)),) :
+             ())...)
         for Ωₕ in Ωs
             u = Rₕ(gridspace(Ωₕ), x -> 1 + sum(sin, x))
             @test snorm₁ₕ(u)^2 ≈ dense_snorm_sq(u) rtol = rtol
@@ -446,8 +466,10 @@ end
             mesh(domain(unit(Float64) × unit(Float64)), (6, 2), (false, false)),
             mesh(domain(unit(Float64) × unit(Float64)), (1, 5), (false, false)),
             mesh(domain(unit(Float64) × unit(Float64)), (5, 1), (false, false)),
-            mesh(domain(unit(Float64) × unit(Float64) × unit(Float64)), (2, 3, 2),
-                (false, false, false)))
+            (WITH_3D_TESTS ?
+             (mesh(domain(unit(Float64) × unit(Float64) × unit(Float64)), (2, 3, 2),
+                (false, false, false)),) :
+             ())...)
         for Ωₕ in Ωs
             u = Rₕ(gridspace(Ωₕ), x -> 1 + sum(sin, x))
             @test snorm₁ₕ(u)^2 ≈ dense_snorm_sq(u) rtol = 1e-12
@@ -541,14 +563,16 @@ end
             "2D",
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (true, false))
         ),
-        (
+        (WITH_3D_TESTS ?
+         ((
             "3D",
             mesh(
                 domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
                 (4, 5, 6),
                 (true, false, true)
             )
-        )
+        ),) :
+         ())...
     )
 
     for (lbl, Ωₕ) in meshes
@@ -661,6 +685,34 @@ end
         u1 = Rₕ(Wc, x -> x[1])
         @test innerₕ(u1, Rₕ(Wc, x -> 1.0)) ≈ 0.5
     end
+
+    @testset "Composite H¹ norm and seminorm" begin
+        # The H¹ norm of a product space is the square root of the summed squares over the
+        # components. The components differ by six orders of magnitude, so a norm that
+        # dropped or misweighted one of them cannot agree with the sum.
+        for Ω in (
+            mesh(domain(interval(0.0, 1.0)), 9, false),
+            mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, true))
+        )
+            W = gridspace(Ω)
+            u = element(W × W)
+            n = length(u) ÷ 2
+            u[1:n] .= [sin(i^2) + i for i in 1:n]
+            u[(n + 1):end] .= [1.0e6 * (cos(i^3) + i^2) for i in 1:n]
+            c = Bramble.components(u)
+
+            sq(f) = sum(f(ci)^2 for ci in c)
+            @test snorm₁ₕ(u) ≈ sqrt(sq(snorm₁ₕ))
+            @test norm₁ₕ(u) ≈ sqrt(sq(norm₁ₕ))
+            @test norm(u, "1h") == norm₁ₕ(u)
+            @test norm(u, "1h") ≈ sqrt(sq(norm₁ₕ))
+
+            # the second component carries nearly all of it, and the first still counts
+            @test norm₁ₕ(c[2]) > 1.0e5 * norm₁ₕ(c[1])
+            @test norm₁ₕ(u) > norm₁ₕ(c[2])
+            @test norm₁ₕ(u)^2 ≈ normₕ(u)^2 + snorm₁ₕ(u)^2
+        end
+    end
 end
 
 # The maximum norm carries no quadrature weight, so every check below is against a value
@@ -712,16 +764,24 @@ end
         @test norminf(Rₕ(W2, x -> x[1] + x[2])) ≈ 3.0        # attained at (1, 2)
         @test norminf(Rₕ(W2, x -> -x[2])) ≈ 2.0
 
-        Ω3 = mesh(
-            domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 3.0)),
-            (5, 5, 6), (true, true, true))
-        W3 = gridspace(Ω3)
-        @test norminf(Rₕ(W3, x -> x[3])) ≈ 3.0
-
         # a single spike dominates everything else, wherever it sits
-        uₕ = Rₕ(W3, x -> 0.1)
+        uₕ = Rₕ(W2, x -> 0.1)
         parent(uₕ)[7] = -42.0
         @test norminf(uₕ) ≈ 42.0
+
+        # 3D runs in `slow` (nightly), not in `unit` (#650).
+        if WITH_3D_TESTS
+            Ω3 = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 3.0)),
+                (5, 5, 6), (true, true, true))
+            W3 = gridspace(Ω3)
+            @test norminf(Rₕ(W3, x -> x[3])) ≈ 3.0
+
+            # a single spike dominates everything else, wherever it sits
+            uₕ = Rₕ(W3, x -> 0.1)
+            parent(uₕ)[7] = -42.0
+            @test norminf(uₕ) ≈ 42.0
+        end
     end
 
     @testset "Non-uniform meshes do not change it" begin
@@ -882,7 +942,8 @@ end
             end
         end
 
-        @testset "3D: the surface area of a box" begin
+        # 3D only: it builds a 3D mesh, so it runs in `slow` (nightly), not in `unit` (#650).
+        WITH_3D_TESTS && @testset "3D: the surface area of a box" begin
             Ωₕ = mesh(
                 domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
                 (5, 6, 7), (true, true, true))
@@ -929,6 +990,70 @@ end
             @test_throws ArgumentError inner_Γ(oc, oc, :boundary)
             # one face of that axis alone is still a surface
             @test inner_Γ(oc, oc, :ymin) ≈ 1.0
+        end
+
+        @testset "Labels read as defined (#655)" begin
+            # A label the mesh holds is read off its marked points, never its name. On a
+            # non-uniform mesh the lumped weight integrates g = 1 + x + 2y exactly on each
+            # edge: 2 on x = 0, 3 on x = 1, 1.5 on y = 0, 3.5 on y = 1.
+            S = interval(0.0, 1.0) × interval(0.0, 1.0)
+            mk(lab...) = gridspace(mesh(domain(S, lab..., :boundary => boundary_symbols(S)),
+                (11, 9), (false, false)))
+            g(x) = 1 + x[1] + 2x[2]
+            ig(W, l...) = inner_Γ(Rₕ(W, g), element(W, 1.0), l...)
+
+            W = mk(:left => :ymin)
+            @test ig(W, :left) == ig(W, :ymin)
+            @test ig(W, :left) ≈ 1.5
+            @test ig(W, :xmin) ≈ 2.0
+            Wi = mk(:inflow => :xmin)
+            @test ig(Wi, :inflow) == ig(Wi, :xmin)
+            @test ig(Wi, :inflow, :ymax) ≈ 2.0 + 3.5
+            # two half-face markers sharing a point select the face together
+            Wa = mk(:a => x -> x[1] == 0 && x[2] <= 0.5, :b => x -> x[1] == 0 && x[2] >= 0.5)
+            @test ig(Wa, :a, :b) == ig(Wa, :xmin)
+            @test ig(Wa, :a, :b) ≈ 2.0
+            # an open face, its two corners left out (D-E6)
+            Wo = mk(:right => x -> x[1] == 1 && 0 < x[2] < 1)
+            @test ig(Wo, :right) == ig(Wo, :xmax)
+            @test ig(Wo, :right) ≈ 3.0
+            # a name-agreeing marker changes nothing
+            Wn = mk(:left => :xmin)
+            @test ig(Wn, :left) == ig(Wn, :xmin)
+            @test ig(Wn, :left) ≈ 2.0
+
+            # a face plus half of another, an empty and an interior marker
+            whole(W, l) =
+                try
+                    ig(W, l)
+                    false
+                catch e
+                    e isa ArgumentError && occursin("whole boundary faces", sprint(showerror, e))
+                end
+            Wc = mk(:c => x -> x[1] == 0 || (x[2] == 0 && x[1] <= 0.5))
+            @test_throws ArgumentError ig(Wc, :c)
+            @test whole(Wc, :c)
+            We = mk(:e => x -> false)
+            @test_throws ArgumentError ig(We, :e)
+            @test whole(We, :e)
+            Wm = mk(:mid => x -> 0.2 < x[1] < 0.8 && 0.2 < x[2] < 0.8)
+            @test_throws ArgumentError ig(Wm, :mid)
+            @test whole(Wm, :mid)
+            @test whole(Wm, :interior)
+
+            # on a one-point axis a marker covers both of its faces; the face name picks one
+            W1 = gridspace(mesh(domain(S, :bottom => :ymin), (5, 1), (true, true)))
+            u1, o1 = Rₕ(W1, x -> 1 + x[1]), element(W1, 1.0)
+            @test_throws ArgumentError inner_Γ(u1, o1, :bottom)
+            @test isfinite(inner_Γ(u1, o1, :ymin))
+            @test inner_Γ(u1, o1, :ymin) ≈ 1.5
+
+            # half a face alone is refused; with its other half it is the face
+            @test whole(Wa, :a)
+            ui, oi = Rₕ(Wi, g), element(Wi, 1.0)
+            @test_allocs inner_Γ(ui, oi, :inflow)
+            u, o = Rₕ(Wa, g), element(Wa, 1.0)
+            @test_allocs inner_Γ(u, o, :a, :b, :ymin)
         end
     end
 end
@@ -981,7 +1106,7 @@ end
     f(x) = sum(x) + prod(sin, x)
     g(x) = 1.0 + sum(abs2, x)
 
-    for D in 1:3
+    for D in TEST_DIMS
         @testset "$(D)D" begin
             Ωₕ = mesh(sets[D], npts[D], ntuple(_ -> false, D))
             Wₕ = gridspace(Ωₕ)
@@ -1065,6 +1190,74 @@ end
     for (lin_idx, I) in enumerate(CartesianIndices((2, 2)))
         @test Bramble._weight_at(dense, I, lin_idx) == dense[lin_idx]
         @test Bramble._weight_at(dense, I, lin_idx) == Bramble._weight_at(sep, I, lin_idx)
+    end
+end
+
+# A complex grid function against oracles built from its real and imaginary parts
+# (gpena/Bramble.jl#644). The first argument is conjugated, so
+# (u, v) = (ur, vr) + (ui, vi) + i[(ur, vi) - (ui, vr)] and ‖u‖² = ‖ur‖² + ‖ui‖². An
+# unconjugated kernel gives (ur, vr) - (ui, vi) + i[(ur, vi) + (ui, vr)] instead.
+_cplx_oracle(f, ur, ui, vr, vi) = complex(f(ur, vr) + f(ui, vi), f(ur, vi) - f(ui, vr))
+_cplx_norm(f, ur, ui) = sqrt(f(ur)^2 + f(ui)^2)
+
+@testset "Complex grid functions (#644)" begin
+    I = interval(0.0, 1.0)
+    @testset "$(D)D, $(nameof(typeof(p)))" for D in (1, 2), p in (Serial(), Parallel())
+
+        S = D == 1 ? I : I × interval(-1.0, 1.0)
+        Ωd = domain(S, :a => :xmin, :b => (D == 1 ? :xmax : :ymax))
+        n = D == 1 ? 41 : (9, 11)
+        W = gridspace(mesh(Ωd, n, ntuple(_ -> false, D); backend = backend(policy = p)))
+        N = ndofs(W)
+        ur, ui, vr, vi = (element(W) for _ in 1:4)
+        ur .= sin.(1:N)
+        ui .= cos.(2 .* (1:N)) .+ 0.5
+        vr .= 1 ./ (1:N)
+        vi .= sin.(3 .* (1:N)) .- 0.25
+        u, v = element(W, ComplexF64), element(W, ComplexF64)
+        u .= complex.(ur, ui)
+        v .= complex.(vr, vi)
+
+        @test innerₕ(u, v) ≈ _cplx_oracle(innerₕ, ur, ui, vr, vi)
+        @test inner₊(u, v) ≈ _cplx_oracle(inner₊, ur, ui, vr, vi)
+        for St in (D == 1 ? ((), (1,)) : ((), (1,), (2,), (1, 2)))
+            f = (a, b) -> inner₊(a, b, Val(St))
+            @test f(u, v) ≈ _cplx_oracle(f, ur, ui, vr, vi)
+            fm = (a, b) -> inner₊(a, b, Val(St); markers = (:a, :b))
+            @test fm(u, v) ≈ _cplx_oracle(fm, ur, ui, vr, vi)
+        end
+        for m in ((:a,), (:a, :b))
+            fm = (a, b) -> innerₕ(a, b; markers = m)
+            @test fm(u, v) ≈ _cplx_oracle(fm, ur, ui, vr, vi)
+        end
+        fΓ = (a, b) -> inner_Γ(a, b, :boundary)
+        @test fΓ(u, v) ≈ _cplx_oracle(fΓ, ur, ui, vr, vi)
+
+        uu = innerₕ(u, u)
+        @test real(uu) > 0
+        @test isapprox(imag(uu), 0; atol = 1.0e-14 * real(uu))
+
+        for f in (normₕ, norm₊, snorm₁ₕ, norm₁ₕ, w -> norm(w, "1h"))
+            @test f(u) isa Float64
+            @test f(u) ≈ _cplx_norm(f, ur, ui)
+        end
+
+        # Real data takes the same kernels, so a norm is still the root of its inner product.
+        @test normₕ(ur) === sqrt(innerₕ(ur, ur))
+        @test norm₊(ur) === sqrt(inner₊(ur, ur))
+        if p isa Serial
+            @test_allocs innerₕ(u, v)
+            @test_allocs snorm₁ₕ(u)
+        end
+
+        # A `Dual` is `Real`: no conjugation, and its norm is a `Dual` whose partial is the
+        # derivative of t ↦ ‖ur + t ui‖ₕ at 0, (ur, ui)ₕ / ‖ur‖ₕ.
+        ud = element(W, typeof(ForwardDiff.Dual(1.0, 1.0)))
+        ud .= ForwardDiff.Dual.(ur, ui)
+        nrm_d = normₕ(ud)
+        @test nrm_d isa ForwardDiff.Dual
+        @test ForwardDiff.value(nrm_d) ≈ normₕ(ur)
+        @test ForwardDiff.partials(nrm_d, 1) ≈ innerₕ(ur, ui) / normₕ(ur)
     end
 end
 

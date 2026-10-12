@@ -8,7 +8,7 @@ using Bramble: Dcᵧ, Dc₂, Dcₓ, D₋ₓ, VectorElement, set_points!
 import Bramble: D₊ₓ
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
 using Bramble: components
 using ..TestUtils: alloc_test, _nonuniform_points, _observed_orders, _zero_boundary!
 using ..SpaceDifferenceTests: test_operator_matrix_equivalence
@@ -83,7 +83,8 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
         @test !any(iszero, ry[:, 2:(end - 1)])
     end
 
-    @testset "Exact on affine" begin
+    # 3D only: it builds a 3D mesh, so it runs in `slow` (nightly), not in `unit` (#650).
+    WITH_3D_TESTS && @testset "Exact on affine" begin
         # The property the denominator buys. It holds for every grid, not only uniform
         # ones, which is what makes the operator worth having in this form.
         for (lbl, unif) in (("uniform", true), ("random", false))
@@ -247,17 +248,20 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                     )
                 end
 
-                Ω3 = mesh(
-                    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
-                    (11, 9, 8),
-                    (unif, unif, unif)
-                )
-                W3 = gridspace(Ω3)
-                c, d = Rₕ(W3, f3), Rₕ(W3, g3)
-                for op in (Dcₓ, Dcᵧ, Dc₂)
-                    @test isapprox(
-                        innerₕ(op(c), d), -innerₕ(c, op(d)); atol = 1e-12, rtol = 1e-12
+                # 3D runs in `slow` (nightly), not in `unit` (#650).
+                if WITH_3D_TESTS
+                    Ω3 = mesh(
+                        domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
+                        (11, 9, 8),
+                        (unif, unif, unif)
                     )
+                    W3 = gridspace(Ω3)
+                    c, d = Rₕ(W3, f3), Rₕ(W3, g3)
+                    for op in (Dcₓ, Dcᵧ, Dc₂)
+                        @test isapprox(
+                            innerₕ(op(c), d), -innerₕ(c, op(d)); atol = 1e-12, rtol = 1e-12
+                        )
+                    end
                 end
             end
         end

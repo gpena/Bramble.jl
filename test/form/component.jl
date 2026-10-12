@@ -28,8 +28,9 @@ using Bramble:
                inner₊ᵧ,
                inner₊₂,
                inner₊ₓ,
+               innerₕ,
                jumpₓ
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, @test_allocs, WITH_3D_TESTS
 
 # `component(op, i)` (the mechanism behind `u(1)`, `D₋ₓ(v)(2)`, and the composite
 # `innerₕ(uₕ, r)` shorthand alike) rebuilds a symbolic tree with its trial/test leaves
@@ -91,6 +92,54 @@ using ..TestUtils: alloc_test, @test_allocs
         @test eachindex(q) === 1:3
         @test firstindex(q) === 1
         @test [test_component_or_nothing(q[i]) for i in eachindex(q)] == [1, 2, 3]
+
+        # a re-indexed leaf on a scalar space names a component the space lacks: refused at
+        # `form`, on whichever side names it (gpena/Bramble.jl#638)
+        W = gridspace(mesh(domain(interval(0.0, 1.0)), 6, true))
+        W2 = W × W
+        f = x -> x + 1
+        message(g) =
+            try
+                g()
+                ""
+            catch e
+                e isa ArgumentError ? e.msg : "not an ArgumentError: $(typeof(e))"
+            end
+        test_has(n) = "names component 2, and its test space has $n"
+        trial_has(n) = "names component 2, and its trial space has $n"
+        @test occursin(test_has(1), message(() -> form(W, v -> innerₕ(f, v(1)(2)))))
+        @test occursin(trial_has(1),
+            message(() -> form(W, W, (u, v) -> innerₕ(u(1)(2), v))))
+        @test occursin(test_has(1),
+            message(() -> form(W, W, (u, v) -> innerₕ(u, v(1)(2)))))
+        @test occursin(trial_has(1),
+            message(() -> form(W, W2, (u, v) -> innerₕ(u(1)(2), v(1)))))
+        @test occursin(test_has(1),
+            message(() -> form(W2, W, (u, v) -> innerₕ(u(1), v(1)(2)))))
+        # a valid term beside it does not hide it
+        @test occursin(test_has(1),
+            message(() -> form(W, v -> innerₕ(f, v) + innerₕ(f, v(1)(2)))))
+
+        # the one component a scalar space has still forms, as the unindexed leaf
+        @test assemble(form(W, v -> innerₕ(f, v(1)))) == assemble(form(W, v -> innerₕ(f, v)))
+        @test sum(assemble(form(W, v -> innerₕ(f, v(1))))) ≈ 1.5
+        a_ref = assemble(form(W, W, (u, v) -> innerₕ(u, v)))
+        @test !iszero(a_ref)
+        @test assemble(form(W, W, (u, v) -> innerₕ(u(1), v))) == a_ref
+        @test assemble(form(W, W, (u, v) -> innerₕ(u, v(1)))) == a_ref
+
+        # on a composite space re-indexing replaces the index: `v(1)(2)` is component 2
+        b = assemble(form(W2, v -> innerₕ(f, v(1)(2))))
+        @test sum(b[1:6]) == 0
+        @test sum(b[7:12]) ≈ 1.5
+
+        # composite checks unchanged: a linear form refuses at `form`, a bilinear one forms
+        # and refuses at assembly
+        @test occursin("names component 3, and its test space has 2",
+            message(() -> form(W2, v -> innerₕ(f, v(1)(3)))))
+        a3 = form(W2, W2, (u, v) -> innerₕ(u(1)(3), v(1)))
+        @test occursin("names trial component 3, and that side has 2 blocks",
+            message(() -> assemble(a3)))
     end
 
     @testset "Operators rebuild around indexed leaf" begin
@@ -146,7 +195,8 @@ using ..TestUtils: alloc_test, @test_allocs
         end
     end
 
-    @testset "Composite shorthand: inner₊₂" begin
+    # 3D only: runs nightly (`slow`).
+    WITH_3D_TESTS && @testset "Composite shorthand: inner₊₂" begin
         # inner₊₂ needs a spatial dimension of at least 3, unlike the 2D composite spaces
         # used above; here we use a separate small 3D setup.
         Ω3 = mesh(

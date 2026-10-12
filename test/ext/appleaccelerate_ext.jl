@@ -14,6 +14,7 @@ using Test
 using Bramble
 using Bramble: AccelerateFactorization, accelerate_factorize, accelerate_refactor!,
                accelerate_solve
+using Bramble: change_points!, sparse_factorize
 using LinearAlgebra
 using SparseArrays
 using Random
@@ -30,6 +31,16 @@ end
 using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system,
                             poisson_solve_contract, refactor_contract,
                             unsymmetric_refactor_contract, validation_contract
+
+# A `MethodError` that names the offending keyword, not any other failure.
+function throws_unknown_kw(f, kw::Symbol)
+    try
+        f()
+    catch e
+        return e isa MethodError && occursin(string(kw), sprint(showerror, e))
+    end
+    return false
+end
 
 @testset "AppleAccelerate extension" begin
     if !Sys.isapple()
@@ -143,6 +154,153 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
                 p; atol = 1.0e-12,
                 factorize = A -> accelerate_factorize(A; sym = :unsymmetric)
             )
+        end
+
+        @testset "factorize(a): symmetrize refused" begin
+            Ωₕ = mesh(
+                domain(
+                    interval(0.0, 1.0) × interval(0.0, 1.0),
+                    :boundary => boundary_symbols(interval(0.0, 1.0) × interval(0.0, 1.0))
+                ), (9, 7), (true, true)
+            )
+            change_points!(
+                Ωₕ, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5)
+            )
+            Wₕ = gridspace(Ωₕ)
+            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+            l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> 1.0), v))
+            bc = :boundary => x -> 1.0 + x[1]
+            for symmetrize in (true, false)
+                @test_throws ArgumentError accelerate_factorize(
+                    a; dirichlet = bc, symmetrize = symmetrize
+                )
+                @test_throws ArgumentError sparse_factorize(
+                    a; solver = :accelerate, dirichlet = bc, symmetrize = symmetrize
+                )
+            end
+
+            # The plain call still solves, with the Dirichlet data lifted into F by assemble
+            A, F = assemble(a, l; dirichlet = bc)
+            @test accelerate_factorize(a; dirichlet = bc) \ F ≈ Matrix(A) \ F
+            @test sparse_factorize(a; solver = :accelerate, dirichlet = bc) \ F ≈ Matrix(A) \ F
+        end
+
+        @testset "sym = :auto: indefinite and singular" begin
+            # Shifted Helmholtz, -Δu - 50u = f: symmetric, positive diagonal, indefinite. A uniform
+            # mesh keeps the diagonal positive (a random one gives a non-positive entry about once
+            # in 200 runs), so `:auto` meets a Cholesky candidate that is not positive definite.
+            S2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+            Ω2 = mesh(domain(S2, :boundary => boundary_symbols(S2)), (10, 10), (true, true))
+            W2 = gridspace(Ω2)
+            a_helm = form(W2, W2, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) - 50.0 * innerₕ(u, v))
+            l_helm = form(W2, v -> innerₕ(Rₕ(W2, x -> 1.0), v))
+            A_h, F_h = assemble(a_helm, l_helm; dirichlet = ZERO_BC, symmetrize = true)
+            @test issymmetric(A_h)
+            @test all(>(0), diag(A_h))
+            @test minimum(eigvals(Symmetric(Matrix(A_h)))) < 0
+            u_ref = Matrix(A_h) \ F_h
+
+            @test isapprox(accelerate_factorize(A_h) \ F_h, u_ref; atol = 1.0e-10)
+            @test isapprox(sparse_factorize(A_h; solver = :accelerate) \ F_h, u_ref; atol = 1.0e-10)
+            @test isapprox(pde_solve(A_h, F_h; solver = :accelerate), u_ref; atol = 1.0e-10)
+            # `symmetrize = true` no longer forces Cholesky
+            u_form = accelerate_solve(a_helm, l_helm; dirichlet = ZERO_BC, symmetrize = true)
+            @test isapprox(parent(u_form), u_ref; atol = 1.0e-10)
+
+            # Symmetric with a positive diagonal, a zero pivot in the LDLᵀ order: solvable
+            M = sparse([1.0 1 0; 1 1 1; 0 1 1])
+            b = [1.0, 2.0, 3.0]
+            @test isapprox(accelerate_factorize(M) \ b, Matrix(M) \ b; atol = 1.0e-12)
+
+            # Singular: the fallback reports it rather than returning a wrong answer
+            Sg = sparse([1.0 1; 1 1])
+            @test_throws SingularException accelerate_factorize(Sg) \ [1.0, 2.0]
+            @test_throws SingularException pde_solve(Sg, [1.0, 2.0]; solver = :accelerate)
+
+            # The Cholesky route stays for a positive definite matrix, on a non-uniform mesh
+            Ωn = mesh(domain(S2, :boundary => boundary_symbols(S2)), (9, 7), (true, true))
+            change_points!(Ωn, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
+            Wn = gridspace(Ωn)
+            a_spd = form(Wn, Wn, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+            l_spd = form(Wn, v -> innerₕ(Rₕ(Wn, x -> 1.0), v))
+            A_s, F_s = assemble(a_spd, l_spd; dirichlet = ZERO_BC, symmetrize = true)
+            @test accelerate_factorize(A_s).sym === :spd
+            @test isapprox(accelerate_factorize(A_s) \ F_s, Matrix(A_s) \ F_s; atol = 1.0e-12)
+        end
+
+        @testset "LU and QR on a Hermitian matrix (#653)" begin
+            # AppleAccelerate stores a Hermitian matrix as its lower triangle; LU and QR must
+            # factor the full matrix. Helmholtz -Δu - 50u (uniform) and SPD (non-uniform).
+            S3 = interval(0.0, 1.0) × interval(0.0, 1.0)
+            for (k, uni) in ((-50.0, true), (1.0, false))
+                Ω3 = mesh(domain(S3, :boundary => boundary_symbols(S3)), (10, 9), (uni, uni))
+                W3 = gridspace(Ω3)
+                a3 = form(W3, W3, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + k * innerₕ(u, v))
+                l3 = form(W3, v -> innerₕ(Rₕ(W3, x -> 1.0 + x[1]), v))
+                A, F = assemble(a3, l3; dirichlet = ZERO_BC, symmetrize = true)
+                @test issymmetric(A)
+                ref = Matrix(A) \ F
+                A2 = copy(A)
+                foreach(i -> A2[i, i] += 2, 1:size(A, 1))
+                ref2 = Matrix(A2) \ F
+                for o in ((sym = :unsymmetric,), (kind = :lu,), (kind = :lutpp,), (kind = :qr,))
+                    f = accelerate_factorize(A; o...)
+                    @test f.sym === (get(o, :kind, nothing) === :qr ? :qr : :unsymmetric)
+                    @test isapprox(f \ F, ref; rtol = 1.0e-10)
+                    @test isapprox(accelerate_refactor!(f, A2) \ F, ref2; rtol = 1.0e-10)
+                end
+            end
+
+            # Complex Hermitian, not symmetric: `:auto` takes LU
+            du = fill(1.0 + 0.5im, 5)
+            H = sparse(Tridiagonal(conj.(du), fill(4.0 + 0im, 6), du))
+            bh = ComplexF64.(1:6)
+            @test !issymmetric(H) && ishermitian(H)
+            @test isapprox(accelerate_factorize(H) \ bh, Matrix(H) \ bh; rtol = 1.0e-12)
+
+            # Unsymmetric 3×3: LU on a matrix that was never stored as a triangle
+            Au = sparse([4.0 1 0; 2 5 1; 0 3 6])
+            bu = [1.0, 2, 3]
+            u_u = accelerate_factorize(Au; sym = :unsymmetric) \ bu
+            @test isapprox(u_u, Matrix(Au) \ bu; rtol = 1.0e-12)
+        end
+
+        @testset "unknown keyword throws (#657)" begin
+            A = sparse(SymTridiagonal(fill(4.0, 6), fill(-1.0, 5)))
+            b = collect(1.0:6)
+            ref = Matrix(A) \ b
+            S = interval(0.0, 1.0) × interval(0.0, 1.0)
+            Ω = mesh(domain(S, :boundary => boundary_symbols(S)), (6, 6), (true, true))
+            W = gridspace(Ω)
+            a_form = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+
+            @test throws_unknown_kw(() -> accelerate_factorize(A; bogus = 1), :bogus)
+            @test throws_unknown_kw(() -> accelerate_solve(A, b; bogus = 1), :bogus)
+            @test throws_unknown_kw(
+                () -> accelerate_factorize(a_form; dirichlet = ZERO_BC, bogus = 1), :bogus
+            )
+            @test throws_unknown_kw(() -> accelerate_factorize(Matrix(A); bogus = 1), :bogus)
+            @test throws_unknown_kw(() -> pde_solve(A, b; solver = :accelerate, bogus = 1), :bogus)
+            @test throws_unknown_kw(
+                () -> sparse_factorize(A; solver = :accelerate, bogus = 1), :bogus
+            )
+            @test throws_unknown_kw(() -> factorize(A, AccelerateFactorization; bogus = 1), :bogus)
+            # The `symmetrize` refusal still comes first on the form method
+            @test_throws ArgumentError accelerate_factorize(
+                a_form; dirichlet = ZERO_BC, symmetrize = true, bogus = 1
+            )
+
+            # The accepted keywords still solve
+            @test accelerate_factorize(A; sym = :symmetric, kind = :ldlt) \ b ≈ ref
+            @test accelerate_solve(A, b; sym = :spd, kind = :cholesky) ≈ ref
+            @test pde_solve(A, b; solver = :accelerate, kind = :ldlt) ≈ ref
+            @test accelerate_factorize(Matrix(A); sym = :spd, kind = :cholesky) \ b ≈ ref
+
+            # `:default` takes only `kind`, on every platform
+            for Aᵢ in (A, sparse([4.0 1; 0 3]))
+                @test_throws ArgumentError pde_solve(Aᵢ, ones(size(Aᵢ, 1)); bogus = 1)
+            end
+            @test pde_solve(A, b; kind = :ldlt) ≈ ref
         end
 
         @testset "Error handling & validation" begin

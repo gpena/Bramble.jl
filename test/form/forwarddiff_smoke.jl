@@ -7,7 +7,7 @@ module FormForwarddiffSmokeTests
 
 using Test
 using Bramble
-using Bramble: semidiscretize
+using Bramble: semidiscretize, semidiscretize_second_order
 using ForwardDiff
 using LinearAlgebra: Diagonal
 
@@ -51,6 +51,39 @@ end
             r0 = r(zeros(n))
             J = reduce(hcat, [r(Float64.((1:n) .== i)) .- r0 for i in 1:n])
             @test ForwardDiff.jacobian(r, zeros(n)) ≈ J rtol = 1e-10
+        end
+
+        @testset "Dual operator residual, $(D)D" begin
+            # A(κ) = (1 + ε) A₁ with a Dual coefficient, while M stays Float64.
+            κ = element(Wₕ, ForwardDiff.Dual(1.0, 1.0))
+            aκ = form(Wₕ, Wₕ, (u, v) -> inner₊(κ * ∇ₕ(u), ∇ₕ(v)))
+            a₁ = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+            l = form(Wₕ, v -> innerₕ(x -> 1.0, v))
+            sd1 = semidiscretize(a₁, l; dirichlet = :boundary)
+            A₁ = Matrix(Bramble.operator_matrix(sd1))
+            free = vec(any(!iszero, Matrix(Bramble.mass_matrix(sd1)); dims = 2))
+            @test !all(free) && any(free)
+            u = parent(Rₕ(Wₕ, x -> sinpi(x[1]) + 0.3))
+            du1 = sd1(zeros(n), u, nothing, 0.0)
+            # The residual's value is the Float64 one; its partial is -(A₁ u) on the free
+            # rows and 0 on the constrained ones.
+            dA = -(A₁ * u)
+            dA[.!free] .= 0.0
+
+            sd = semidiscretize(aκ, l; dirichlet = :boundary)
+            @test eltype(Bramble.operator_matrix(sd)) <: ForwardDiff.Dual
+            @test eltype(Bramble.mass_matrix(sd)) === Float64
+            du = sd(zeros(eltype(Bramble.operator_matrix(sd)), n),
+                ForwardDiff.Dual.(u, 0.0), nothing, 0.0)
+            @test ForwardDiff.value.(du) ≈ du1 rtol = 1e-12
+            @test map(d -> ForwardDiff.partials(d)[1], du) ≈ dA rtol = 1e-12
+
+            sd2 = semidiscretize_second_order(aκ, l; dirichlet = :boundary)
+            @test eltype(Bramble.mass_matrix(sd2)) === Float64
+            dv = sd2(zeros(eltype(Bramble.stiffness_matrix(sd2)), n), zeros(n),
+                ForwardDiff.Dual.(u, 0.0), nothing, 0.0)
+            @test ForwardDiff.value.(dv) ≈ du1 rtol = 1e-12
+            @test map(d -> ForwardDiff.partials(d)[1], dv) ≈ dA rtol = 1e-12
         end
     end
 end

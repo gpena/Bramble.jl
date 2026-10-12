@@ -11,7 +11,8 @@ using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff�
 import SparseArrays: issparse, sprand, spdiagm, spzeros, nnz
 using Bramble: forward_star_difference, centered_difference, cross_weighted_difference
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS, _nonuniform_points, MockDeviceMatrix, MockDeviceVector
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS, _nonuniform_points,
+                   MockDeviceMatrix, MockDeviceVector
 using ..SpaceVectorElementsTests: setup_test_grid
 
 # Backward difference operators
@@ -26,7 +27,7 @@ forward_ops(::Val{3}) = (D₊₂, diff₊ₓ, diff₊₂, forward_ops(Val(2))...
 
 # Compares operator application to explicit matrix-vector multiplication
 function test_operator_matrix_equivalence(op_generator)
-    for D in 1:3
+    for D in TEST_DIMS
         @testset "$(D)D" begin
             _, W, U = setup_test_grid(Val(D))
             Rₕ!(U, x -> exp(-sum(x)))
@@ -50,7 +51,6 @@ end
     # --- Common Setup for All Tests ---
     mesh1D = mesh(domain(box(0, 1)), 5, false)
     mesh2D = mesh(domain(box((0, 1), (2, 3))), (5, 4), (true, true))
-    mesh3D = mesh(domain(box((0, 1, 2), (4, 5, 6))), (4, 5, 4), (true, true, true))
     T = Float64
 
     @testset "Helper operators" begin
@@ -101,15 +101,18 @@ end
                 @test shift(mesh2D, Val(1), Val(val)) == Sₓ_expected
                 @test shift(mesh2D, Val(2), Val(val)) == Sᵧ_expected
 
-                # 3D
-                nx, ny, nz = npoints(mesh3D, Tuple)
-                Sₓ_3D_expected = identity_matrix(ny*nz) ⊗ spdiagm(val => ones(nx - abs(val)))
-                Sᵧ_3D_expected = identity_matrix(nz) ⊗ spdiagm(val => ones(ny - abs(val))) ⊗
-                                 identity_matrix(nx)
-                S₂_3D_expected = spdiagm(val => ones(nz - abs(val))) ⊗ identity_matrix(nx*ny)
-                @test shift(mesh3D, Val(1), Val(val)) == Sₓ_3D_expected
-                @test shift(mesh3D, Val(2), Val(val)) == Sᵧ_3D_expected
-                @test shift(mesh3D, Val(3), Val(val)) == S₂_3D_expected
+                # 3D: the 3D mesh is built only where `WITH_3D_TESTS` holds (not under `unit`).
+                if WITH_3D_TESTS
+                    mesh3D = mesh(domain(box((0, 1, 2), (4, 5, 6))), (4, 5, 4), (true, true, true))
+                    nx, ny, nz = npoints(mesh3D, Tuple)
+                    Sₓ_3D_expected = identity_matrix(ny*nz) ⊗ spdiagm(val => ones(nx - abs(val)))
+                    Sᵧ_3D_expected = identity_matrix(nz) ⊗ spdiagm(val => ones(ny - abs(val))) ⊗
+                                     identity_matrix(nx)
+                    S₂_3D_expected = spdiagm(val => ones(nz - abs(val))) ⊗ identity_matrix(nx*ny)
+                    @test shift(mesh3D, Val(1), Val(val)) == Sₓ_3D_expected
+                    @test shift(mesh3D, Val(2), Val(val)) == Sᵧ_3D_expected
+                    @test shift(mesh3D, Val(3), Val(val)) == S₂_3D_expected
+                end
             end
         end
     end
@@ -801,10 +804,12 @@ end
 
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 5, true)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 3), (true, true))
-    Ωₕ3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 4, 2), (true, true, true))
-    be1, be2, be3 = backend(Ωₕ1), backend(Ωₕ2), backend(Ωₕ3)
+    Ωₕ3 = WITH_3D_TESTS ?
+          mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 4, 2), (true, true, true)) :
+          nothing
+    be1, be2 = backend(Ωₕ1), backend(Ωₕ2)
+    be3 = WITH_3D_TESTS ? backend(Ωₕ3) : nothing
     nₓ, n_y = npoints(Ωₕ2, Tuple)
-    aₓ, a_y, a_z = npoints(Ωₕ3, Tuple)
 
     for i in (-2, -1, 1, 2)
         @testset "shift by $i" begin
@@ -813,13 +818,17 @@ end
                   backend_eye(be2, n_y) ⊗ _Eye(be2, nₓ, Val(i))
             @test shift(Ωₕ2, Val(2), Val(i)) ==
                   _Eye(be2, n_y, Val(i)) ⊗ backend_eye(be2, nₓ)
-            @test shift(Ωₕ3, Val(3), Val(i)) ==
-                  _Eye(be3, a_z, Val(i)) ⊗ backend_eye(be3, aₓ * a_y)
+            if WITH_3D_TESTS
+                aₓ, a_y, a_z = npoints(Ωₕ3, Tuple)
+                @test shift(Ωₕ3, Val(3), Val(i)) ==
+                      _Eye(be3, a_z, Val(i)) ⊗ backend_eye(be3, aₓ * a_y)
+            end
         end
     end
 
     @testset "Zero shift identity" begin
-        for (Ωₕ, be) in ((Ωₕ1, be1), (Ωₕ2, be2), (Ωₕ3, be3)), d in 1:dim(Ωₕ)
+        meshes = (Ωₕ1, be1), (Ωₕ2, be2), (WITH_3D_TESTS ? ((Ωₕ3, be3),) : ())...
+        for (Ωₕ, be) in meshes, d in 1:dim(Ωₕ)
 
             @test shift(Ωₕ, Val(d), Val(0)) == backend_eye(be, npoints(Ωₕ))
         end

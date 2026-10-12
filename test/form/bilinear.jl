@@ -11,7 +11,7 @@ import SparseArrays
 using SparseArrays: sparse, nnz, nonzeros, rowvals, SparseMatrixCSC
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS, WITH_AD_TESTS, @test_allocs
+using ..TestUtils: WITH_SLOW_TESTS, WITH_AD_TESTS, TEST_DIMS, @test_allocs
 using ..TestUtils: _nonuniform_points
 using Bramble:
                BilinearForm,
@@ -958,7 +958,7 @@ using Bramble:
 
         # They cover the grid exactly once.
         @testset "Interior + boundary slabs partition" begin
-            for D in (1, 2, 3), margin in (0, 1, 2)
+            for D in TEST_DIMS, margin in (0, 1, 2)
 
                 Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
                 Ω = mesh(Ωd, ntuple(_ -> 7, D), ntuple(_ -> true, D))
@@ -993,7 +993,7 @@ using Bramble:
             Bramble._sink_entry!(s::_MarginCollectSink, row::Int, col::Int, w, ::Int) = (
                 push!(s.seen, (row, col, Float64(w))); nothing)
 
-            for D in (1, 2, 3)
+            for D in TEST_DIMS
                 Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
                 Ω = mesh(Ωd, ntuple(_ -> 6, D), ntuple(_ -> true, D))
                 W = gridspace(Ω)

@@ -6,7 +6,7 @@ using Bramble: Mcᵧ, Mcᵧ!, Mc₂, Mc₂!, Mcₓ, Mcₓ!, VectorElement
 import Bramble: centered_average, stencil_matrix, kronecker_operator_matrix, CenteredAvgOp
 using Random: Xoshiro
 using SparseArrays: nnz
-using ..TestUtils: @test_allocs
+using ..TestUtils: @test_allocs, TEST_DIMS
 
 # Random non-uniform mesh on the unit cube of dimension D.
 function random_space(D; n = (9, 8, 7))
@@ -34,7 +34,7 @@ end
     ops = (Mcₓ, Mcᵧ, Mc₂)
     ops! = (Mcₓ!, Mcᵧ!, Mc₂!)
 
-    for D in 1:3
+    for D in TEST_DIMS
         @testset "$(D)D" begin
             Wₕ = random_space(D)
             Ωₕ = mesh(Wₕ)

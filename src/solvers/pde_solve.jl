@@ -67,6 +67,10 @@ chain differentiable.
   for a least-squares or rectangular `A`), `:accelerate` (Apple `libSparse`, needs
   `AppleAccelerate.jl`, honoured unconditionally regardless of symmetry), `:mumps` (needs
   `MUMPS.jl`), `:sparspak` (pure Julia, needs `Sparspak.jl`).
+- `kwargs`: passed to the chosen backend (for `:accelerate` and `:mumps` the keywords of
+  [`accelerate_solve`](@ref) and [`mumps_solve`](@ref)), which throws on one it does not
+  take. `:default` takes only `kind`, on every platform, and `:sparspak` takes none: both
+  throw an `ArgumentError` on any other keyword.
 - `sym`: symmetry hint for `:suitesparse`, `:accelerate` and `:mumps` (and, on macOS, for
   `:default`'s own choice of solver -- see above). `:auto` (default) detects it;
   `:spd`/`:definite`/`1`, `:symmetric`/`2` and `:unsymmetric`/`0` state it.
@@ -111,6 +115,7 @@ See also [`assemble`](@ref), [`sparse_factorize`](@ref), [`suitesparse_solve`](@
 """
 function pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol = :default, sym = :auto, kwargs...)
     if solver === :default
+        _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
         if Sys.isapple() && Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing &&
            _default_wants_accelerate(A, sym)
             return accelerate_solve(A, F; sym = sym, kwargs...)
@@ -125,6 +130,7 @@ function pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol = :defa
     elseif solver === :mumps
         return mumps_solve(A, F; sym = sym, kwargs...)
     elseif solver === :sparspak
+        _reject_unknown_kwargs(:pde_solve, "solver = :sparspak", kwargs)
         return sparspak_solve(A, F)
     else
         throw(

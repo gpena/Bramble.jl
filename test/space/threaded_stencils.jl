@@ -2,7 +2,7 @@ module SpaceThreadedStencilsTests
 
 using Test
 using Bramble
-using ..TestUtils: alloc_test, WITH_SLOW_TESTS, _check_stencils, _reset_seen!, _spy, _STENCIL_F,
+using ..TestUtils: alloc_test, TEST_DIMS, WITH_SLOW_TESTS, _check_stencils, _reset_seen!, _spy, _STENCIL_F,
                    _stencil_mesh_pair, _stencil_op, _stencil_op!, _threads_seen
 
 # Under a `CpuThreaded` (`Parallel()`) backend every CPU stencil engine -- the one-sided and
@@ -13,7 +13,7 @@ using ..TestUtils: alloc_test, WITH_SLOW_TESTS, _check_stencils, _reset_seen!, _
 # band that picked up the wrong spacing index would still give the right number.
 
 @testset "Threaded stencil engines" begin
-    @testset "Equal to Serial, $(D)D" for D in 1:3
+    @testset "Equal to Serial, $(D)D" for D in TEST_DIMS
         # `unit` keeps, per dimension, the degenerate last axis (2 points, empty bands) and
         # the smallest size the centered families accept; `slow` runs the full sweep.
         sizes = if WITH_SLOW_TESTS

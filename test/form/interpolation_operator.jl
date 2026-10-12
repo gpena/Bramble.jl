@@ -47,7 +47,7 @@ using Bramble:
                S₋ₓ,
                forward_shift,
                backward_shift
-using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
+using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, WITH_3D_TESTS
 
 # The interpolation operator: `πₕ(u)` over a trial function, as opposed to
 # `πₕ(uₕ)` over a grid function whose values are known (test/form/interpolation.jl).
@@ -140,7 +140,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
 
     @testset "Higher dimensions" begin
         # the `2ᴰ`-corner blend, where the 1D case only exercises two corners
-        for (nt, ns) in (((7, 5), (4, 3)), ((5, 4, 3), (3, 3, 2)))
+        for (nt, ns) in (((7, 5), (4, 3)), (WITH_3D_TESTS ? (((5, 4, 3), (3, 3, 2)),) : ())...)
             D = length(nt)
             Ω = if D == 2
                 domain(box((0.0, 0.0), (1.0, 1.0)))
@@ -168,8 +168,10 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         # per-axis Kronecker product.
         for (Ω, nt, ns) in (
             (domain(interval(0.0, 1.0) × interval(0.5, 0.5)), (9, 1), (5, 1)),
-            (domain(interval(0.5, 0.5) × interval(0.0, 1.0) × interval(0.0, 1.0)),
-            (1, 7, 5), (1, 4, 3))
+            (WITH_3D_TESTS ?
+             ((domain(interval(0.5, 0.5) × interval(0.0, 1.0) × interval(0.0, 1.0)),
+            (1, 7, 5), (1, 4, 3)),) :
+             ())...
         )
             for unif in (true, false)
                 D = length(nt)

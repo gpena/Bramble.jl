@@ -32,8 +32,11 @@ see the note above `reaction` itself.
 `r` already carries the cell-measure weighting `innerₕ`/`inner₊` impose (the same weights
 `weights(space, Innerh())` returns), so `reaction`'s net (already-integrated) quantity is
 `-r` summed directly, with **no** further rescaling. The pointwise density
-([`reaction_density`](@ref)) is the opposite: dividing each marked entry by its own cell
-measure recovers a flux **density**, comparable point to point and exportable as one.
+([`reaction_density`](@ref)) is the opposite: dividing each marked entry by its *surface*
+weight `ω` on the marker's faces (`_surface_weight`, mesh/queries.jl, the weight `inner_Γ`
+uses) recovers the flux density `q·n`, which converges under refinement. The cell measure
+`weights(space, Innerh())` is the wrong divisor: it carries a normal half-spacing, so the
+quotient grows like `1/h` (gpena/Bramble.jl#546).
 
 ## Overlap and components
 
@@ -48,6 +51,22 @@ See also: [`dirichlet_bc!`](@ref), [`assemble`](@ref), [`normal_vector`](@ref).
 
 @inline _reaction_markers(marker::Symbol) = (marker,)
 @inline _reaction_markers(marker::NTuple{N, Symbol}) where {N} = marker
+
+# The matrix methods index `A`, `F`, `uₕ`'s storage and the caller's buffer with
+# `@inbounds`, so a size mismatch must be caught here, not left to an out-of-bounds write.
+function _validate_reaction_sizes(A, F, uₕ, buf...)
+    n = ndofs(space(uₕ))
+    length(parent(uₕ)) == n ||
+        throw(DimensionMismatch("reaction: `uₕ` stores $(length(parent(uₕ))) values, expected $n."))
+    size(A) == (n, n) ||
+        throw(DimensionMismatch("reaction: `A` has size $(size(A)), expected ($n, $n) for `uₕ`'s space."))
+    length(F) == n || throw(DimensionMismatch("reaction: `F` has length $(length(F)), expected $n."))
+    for b in buf
+        length(b) == n ||
+            throw(DimensionMismatch("reaction: the output buffer has length $(length(b)), expected $n."))
+    end
+    return nothing
+end
 
 function _validate_reaction_spaces(a::BilinearForm, l::LinearForm, uₕ::VectorElement)
     n = ndofs(test_space(l))
@@ -325,18 +344,18 @@ function _reaction_residual!(
     return scratch
 end
 
-# Any other matrix type: the same full `A * u` the non-`!` fallback uses (bit-identical to
-# it), but only the marked entries are copied into `scratch` -- matching the sparse path's
-# "only marked entries touched" contract, which `reaction_density!` needs to stay exactly
-# zero away from the marker rather than merely small. Still allocates the temporary `r`
-# internally: unlike `SparseMatrixCSC`, a dense matrix has no cheaper way to get `A * u` at
-# selected rows only, so `!` doesn't buy zero allocation here, only the non-`!` path's own.
+# Any other matrix type: the non-`!` fallback's own residual, promoted over `A`, `u` and `F`
+# (bit-identical to it), but only the marked entries are copied into `scratch` -- matching
+# the sparse path's "only marked entries touched" contract, which `reaction_density!` needs
+# to stay exactly zero away from the marker rather than merely small. Still allocates the
+# temporary `r` internally: unlike `SparseMatrixCSC`, a dense matrix has no cheaper way to
+# get `A * u` at selected rows only, so `!` doesn't buy zero allocation here, only the
+# non-`!` path's own.
 function _reaction_residual!(
         scratch::AbstractVector, A::AbstractMatrix, F::AbstractVector, u::AbstractVector,
         leaves::Tuple, markers, components
 )
-    r = A * u
-    r .-= F
+    r = _reaction_residual(A, F, u, ())
     _copy_marked!(scratch, r, leaves, markers, components, 1)
     return scratch
 end
@@ -385,6 +404,7 @@ function reaction(
         A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
         marker, components = nothing
 )
+    _validate_reaction_sizes(A, F, uₕ)
     sp = space(uₕ)
     leaves = leaf_spaces_offsets(sp)
     _validate_dirichlet_components(components, length(leaves))
@@ -427,6 +447,7 @@ function reaction!(
         scratch::AbstractVector, A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
         marker, components = nothing
 )
+    _validate_reaction_sizes(A, F, uₕ, scratch)
     sp = space(uₕ)
     leaves = leaf_spaces_offsets(sp)
     _validate_dirichlet_components(components, length(leaves))
@@ -436,15 +457,41 @@ function reaction!(
     return _reaction_over_leaves(leaves, r, markers, components, 1, zero(eltype(r)))
 end
 
+# Whether point `k` is in any of the markers' masks (one `BitVector` per label, looked up
+# once per leaf rather than once per point).
+@inline _any_marked_bit(::Tuple{}, k) = false
+@inline _any_marked_bit(bits::Tuple, k) = (@inbounds first(bits)[k]) ||
+                                          _any_marked_bit(Base.tail(bits), k)
+
+@noinline function _throw_density_off_faces(k::Int)
+    throw(
+        ArgumentError(
+        "reaction_density: marked point $k of its mesh lies on no boundary face the marker " *
+        "covers, so it has no surface measure to divide by. The density needs a marker made " *
+        "of whole coordinate faces (corners may be left out); use `reaction` for the net " *
+        "flux through any other marked set.",
+    ),
+    )
+end
+
 # Same recursion shape as `_reaction_over_leaves`, writing the per-point density into a
-# preallocated `dens` (zero outside the marker) instead of accumulating a scalar.
+# preallocated `dens` (zero outside the marker) instead of accumulating a scalar. The faces
+# come from the marked points (`_marked_face_mask`, mesh/queries.jl), not the label's name,
+# and each point divides by its surface weight on them (`_surface_weight`), the weight
+# `inner_Γ` integrates with.
 @inline _reaction_density_over_leaves!(dens, ::Tuple{}, r, markers, components, i) = dens
 @inline function _reaction_density_over_leaves!(dens, leaves::Tuple, r, markers, components, i)
     sp, offset = first(leaves)
     if _leaf_selected(components, i)
-        w = weights(sp, Innerh())
-        @inbounds for j in _reaction_marked(mesh(sp), markers, offset)
-            dens[j] = -r[j] / w[j - offset]
+        Ωₕ = mesh(sp)
+        bits = map(s -> index_in_marker(Ωₕ, s), markers)
+        mask = _marked_face_mask(Ωₕ, k -> _any_marked_bit(bits, k))
+        _check_surface_is_thin(Ωₕ, mask)
+        cis = indices(Ωₕ)
+        @inbounds for j in _reaction_marked(Ωₕ, markers, offset)
+            ω = _surface_weight(Ωₕ, mask, cis[j - offset])
+            iszero(ω) && _throw_density_off_faces(j - offset)
+            dens[j] = -r[j] / ω
         end
     end
     return _reaction_density_over_leaves!(dens, Base.tail(leaves), r, markers, components, i + 1)
@@ -454,15 +501,23 @@ end
     reaction_density(A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement; marker, components = nothing) -> VectorElement
 
 The pointwise counterpart of [`reaction`](@ref): a grid function, zero away from `marker`,
-equal at each marked point to the physical flux **density** there -- `reaction`'s summand
-divided by that point's own cell measure (`weights(space, Innerh())`), so that summing
-`density .* weights` over the marker recovers [`reaction`](@ref)'s scalar exactly. Meant to
-be exported and plotted, e.g. `export_vtk(filename, Ωₕ, "reaction" => reaction_density(...))`.
+equal at each marked point to the boundary flux density `q·n` there, which converges
+under refinement. It is `reaction`'s summand divided by the point's surface weight on the
+faces the marker covers, the weight [`inner_Γ`](@ref) integrates with, so
+`inner_Γ(element(space, 1.0), density, faces...)` recovers [`reaction`](@ref)'s scalar.
+Meant to be exported and plotted, e.g.
+`export_vtk(filename, Ωₕ, "reaction" => reaction_density(...))`.
+
+The faces are read off the marked points, not the label's name: a face counts when every
+point of it is marked, except possibly its edges and corners. A corner on two such faces
+divides by the sum of their weights. A marked point on no such face (an interior marker, or
+part of a face) throws `ArgumentError`; [`reaction`](@ref) still gives its net flux.
 """
 function reaction_density(
         A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
         marker, components = nothing
 )
+    _validate_reaction_sizes(A, F, uₕ)
     sp = space(uₕ)
     leaves = leaf_spaces_offsets(sp)
     _validate_dirichlet_components(components, length(leaves))
@@ -506,6 +561,7 @@ function reaction_density!(
         dens::AbstractVector, A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
         marker, components = nothing
 )
+    _validate_reaction_sizes(A, F, uₕ, dens)
     sp = space(uₕ)
     leaves = leaf_spaces_offsets(sp)
     _validate_dirichlet_components(components, length(leaves))

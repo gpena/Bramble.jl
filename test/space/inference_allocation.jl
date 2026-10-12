@@ -18,7 +18,7 @@ using Bramble:
                diff₋ₓ,
                diff₋ᵧ,
                diff₋₂
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
 
 # Type stability and allocation across grid spaces, operators and inner products.
 #
@@ -34,15 +34,20 @@ using ..TestUtils: alloc_test, @test_allocs
 @testset "Inference and allocations" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 64, false)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 9), (true, false))
-    Ωₕ3 = mesh(
-        domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6), (true, false, true)
-    )
-    Wₕ1, Wₕ2, Wₕ3 = gridspace(Ωₕ1), gridspace(Ωₕ2), gridspace(Ωₕ3)
+    Wₕ1, Wₕ2 = gridspace(Ωₕ1), gridspace(Ωₕ2)
     Vₕ2 = gridspace(Ωₕ2, Val(2))
 
     uₕ1 = Rₕ(Wₕ1, sin)
     uₕ2 = Rₕ(Wₕ2, x -> sin(x[1]) * x[2])
-    uₕ3 = Rₕ(Wₕ3, x -> sin(x[1]) + x[3])
+    # The 3D fixtures are built in `slow` and by the nightly run (gpena/Bramble.jl#650);
+    # every use of them is behind `WITH_3D_TESTS`.
+    if WITH_3D_TESTS
+        Ωₕ3 = mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6), (true, false, true)
+        )
+        Wₕ3 = gridspace(Ωₕ3)
+        uₕ3 = Rₕ(Wₕ3, x -> sin(x[1]) + x[3])
+    end
     cₕ2 = Rₕ(Vₕ2, (x -> x[1], x -> x[2]))
 
     @testset "Type stability (setup)" begin
@@ -64,7 +69,7 @@ using ..TestUtils: alloc_test, @test_allocs
     end
 
     @testset "Type stability (inner products)" begin
-        for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), ("3D", uₕ3))
+        for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), (WITH_3D_TESTS ? (("3D", uₕ3),) : ())...)
             @testset "$lbl" begin
                 @test @inferred(norminf(uₕ)) isa Float64
                 g = ∇ₕ(uₕ)
@@ -78,25 +83,25 @@ using ..TestUtils: alloc_test, @test_allocs
         # the surface weight is computed per point rather than read from a stored vector,
         # so it is worth pinning that it still infers and still allocates nothing
         @test @inferred(inner_Γ(uₕ2, uₕ2, :ymin)) isa Float64
-        @test @inferred(inner_Γ(uₕ3, uₕ3, :boundary)) isa Float64
+        WITH_3D_TESTS && @test @inferred(inner_Γ(uₕ3, uₕ3, :boundary)) isa Float64
     end
 
     @testset "Type stability (vector calculus)" begin
         # Each of these recurses over directions on `Val(d)` rather than looping, for the
         # same boxing reason the vectorial aliases do.
-        for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), ("3D", uₕ3))
+        for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), (WITH_3D_TESTS ? (("3D", uₕ3),) : ())...)
             @testset "$lbl" begin
                 @test @inferred(divₕ(∇ₕ(uₕ))) isa VectorElement
             end
         end
         @test @inferred(curlₕ((uₕ2, uₕ2))) isa VectorElement
-        @test @inferred(curlₕ((uₕ3, uₕ3, uₕ3))) isa NTuple{3, VectorElement}
+        WITH_3D_TESTS && @test @inferred(curlₕ((uₕ3, uₕ3, uₕ3))) isa NTuple{3, VectorElement}
     end
 
     @testset "Zero allocations (inner products)" begin
         # A time-stepping loop evaluates these every step, so any allocation here is
         # per-step garbage.
-        for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), ("3D", uₕ3))
+        for (lbl, uₕ) in (("1D", uₕ1), ("2D", uₕ2), (WITH_3D_TESTS ? (("3D", uₕ3),) : ())...)
             @testset "$lbl" begin
                 @test_allocs innerₕ(uₕ, uₕ)
                 @test_allocs inner₊(uₕ, uₕ)
@@ -115,14 +120,17 @@ using ..TestUtils: alloc_test, @test_allocs
         @test_allocs norminf(c)
         @test_allocs norminf(cₕ2)
         @test_allocs inner_Γ(uₕ2, uₕ2, :ymin)
-        @test_allocs inner_Γ(uₕ3, uₕ3, :boundary)
+        WITH_3D_TESTS && @test_allocs inner_Γ(uₕ3, uₕ3, :boundary)
 
         # the mutating vector-calculus forms accumulate into their destination in one
         # traversal per direction, so none of them needs a scratch grid function
-        let v1 = similar(uₕ1), v2 = similar(uₕ2), v3 = similar(uₕ3)
+        let v1 = similar(uₕ1), v2 = similar(uₕ2)
             @test_allocs Δₕ!(v1, uₕ1)
             @test_allocs Δₕ!(v2, uₕ2)
-            @test_allocs Δₕ!(v3, uₕ3)
+            if WITH_3D_TESTS
+                v3 = similar(uₕ3)
+                @test_allocs Δₕ!(v3, uₕ3)
+            end
             @test_allocs divₕ!(v2, (uₕ2, uₕ2))
             @test_allocs div₊ₕ!(v2, (uₕ2, uₕ2))
             @test_allocs curlₕ!(v2, (uₕ2, uₕ2))
@@ -171,7 +179,7 @@ using ..TestUtils: alloc_test, @test_allocs
         for (lbl, uₕ, ops) in (
             ("1D", uₕ1, (diff₋ₓ, D₋ₓ, Mₓ, jumpₓ)),
             ("2D", uₕ2, (diff₋ᵧ, D₋ᵧ, Mᵧ, jumpᵧ)),
-            ("3D", uₕ3, (diff₋₂, D₋₂, M₂, jump₂))
+            (WITH_3D_TESTS ? (("3D", uₕ3, (diff₋₂, D₋₂, M₂, jump₂)),) : ())...
         )
             @testset "$lbl" begin
                 baseline = alloc_test(similar, uₕ)

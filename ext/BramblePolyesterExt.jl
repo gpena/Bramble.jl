@@ -211,7 +211,7 @@ end
         base = (widx - 1) * 64
         while word != zero(UInt64)
             i = base + trailing_zeros(word) + 1
-            s = muladd(T(u[i]) * T(v[i]), T(w[i]), s)
+            s = muladd(conj(T(u[i])) * T(v[i]), T(w[i]), s)
             word &= word - 1
         end
     end
@@ -227,7 +227,7 @@ end
         base = (widx - 1) * 64
         while word != zero(UInt64)
             i = base + trailing_zeros(word) + 1
-            s = muladd(T(u[i]) * T(v[i]), T(w[cart[i]]), s)
+            s = muladd(conj(T(u[i])) * T(v[i]), T(w[cart[i]]), s)
             word &= word - 1
         end
     end

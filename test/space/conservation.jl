@@ -3,6 +3,7 @@ module SpaceConservationTests
 using Test
 using Bramble
 using Bramble: D₋ᵧ, D₋₂, D₋ₓ, inner₊ᵧ, inner₊₂, inner₊ₓ
+using ..TestUtils: WITH_3D_TESTS
 
 # Discrete conservation (Gauss/divergence theorem): for a vector field vanishing on ∂Ω,
 # the total discrete divergence over the mesh must be zero.
@@ -44,7 +45,8 @@ using Bramble: D₋ᵧ, D₋₂, D₋ₓ, inner₊ᵧ, inner₊₂, inner₊ₓ
         @test !isapprox(flux_bad, 0.0; atol = 1e-8)
     end
 
-    @testset "3D" begin
+    # 3D only: built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+    WITH_3D_TESTS && @testset "3D" begin
         Ωₕ = mesh(
             domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (11, 9, 8), (true, false, true)
         )

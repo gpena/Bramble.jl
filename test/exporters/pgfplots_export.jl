@@ -2,6 +2,7 @@ module ExportersPgfplotsExportTests
 
 using Test
 using Bramble
+using ..TestUtils: WITH_3D_TESTS
 
 # Plain text, so unlike the VTK export test, the byte content itself is exactly what is
 # under test: there is no library on the other end whose correctness can be assumed.
@@ -60,6 +61,26 @@ using Bramble
             @test readlines(f) == [
                 "x u_1 u_2", "0.0 1.0 0.0", "0.25 1.25 2.5", "0.5 1.5 5.0",
                 "0.75 1.75 7.5", "1.0 2.0 10.0"]
+        end
+    end
+
+    @testset "heterogeneous composite refused" begin
+        Ω = domain(interval(0.0, 1.0))
+        Wa = gridspace(mesh(Ω, 5, true))
+        Wb = gridspace(mesh(Ω, 5, false))
+        c = Rₕ(Wa × Wb, (x -> x[1], x -> x[1]))
+        # Same input shared by one mesh is the positive control.
+        cc = Rₕ(Wb × Wb, (x -> x[1], x -> 2x[1]))
+
+        mktempdir() do dir
+            @test_throws ArgumentError export_pgfplots(joinpath(dir, "t"), c)
+            @test_throws "different meshes" export_pgfplots(joinpath(dir, "t"), c)
+            @test_throws ArgumentError export_pgfplots(
+                joinpath(dir, "t"), mesh(Wa), "c" => c
+            )
+            @test !ispath(joinpath(dir, "t.dat"))
+            f = export_pgfplots(joinpath(dir, "ok"), cc)
+            @test readlines(f)[1] == "x u_1 u_2"
         end
     end
 
@@ -131,7 +152,8 @@ using Bramble
         end
     end
 
-    @testset "3D refusal" begin
+    # Runs nightly: `unit` builds no 3D mesh.
+    WITH_3D_TESTS && @testset "3D refusal" begin
         Ωₕ = mesh(
             domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3), (true, true, true)
         )

@@ -12,7 +12,7 @@ using MUMPS:
              set_icntl!,
              set_cntl!,
              finalize!
-using LinearAlgebra: LinearAlgebra, ldiv!, issymmetric, diag
+using LinearAlgebra: LinearAlgebra, ldiv!, issymmetric
 using SparseArrays: SparseArrays, SparseMatrixCSC
 
 function _ensure_mpi_init()
@@ -43,9 +43,9 @@ _mumps_val_type(::Type{<:Complex}) = ComplexF64
 function _mumps_sym_flag(A::AbstractMatrix, sym)
     if sym === :auto
         if issymmetric(A)
-            # Check if strictly positive diagonal for SPD heuristic
-            d = diag(A)
-            return (!isempty(d) && all(x -> real(x) > 0, d)) ? 1 : 2
+            # Symmetry alone picks SYM = 1: `_mumps_factorize` refactors as SYM = 2 when
+            # the factorisation shows the matrix is not positive definite.
+            return 1
         else
             return 0
         end
@@ -65,7 +65,7 @@ function _mumps_sym_flag(A::AbstractMatrix, sym)
 end
 
 function Bramble._mumps_factorize(
-        A::SparseMatrixCSC; sym = :auto, icntl = nothing, cntl = nothing, kwargs...
+        A::SparseMatrixCSC; sym = :auto, icntl = nothing, cntl = nothing
 )
     _ensure_mpi_init()
 
@@ -91,6 +91,18 @@ function Bramble._mumps_factorize(
 
     associate_matrix!(mumps, A_mat)
     factorize!(mumps)
+    # INFOG(1) = -10 is a zero pivot and INFOG(12) > 0 counts negative ones: under `:auto`
+    # either shows the SYM = 1 guess was wrong, so factor again with pivoted LDLᵀ (SYM = 2).
+    if sym === :auto && sym_flag == 1 && (mumps.infog[1] == -10 || mumps.infog[12] > 0)
+        finalize!(mumps)
+        return Bramble._mumps_factorize(A; sym = 2, icntl = icntl, cntl = cntl)
+    end
+    if mumps.infog[1] < 0
+        code, info = mumps.infog[1], mumps.infog[2]
+        finalize!(mumps)
+        code == -10 && throw(LinearAlgebra.SingularException(Int(info)))
+        error("MUMPS factorization failed: INFOG(1) = $code, INFOG(2) = $info")
+    end
 
     return ConcreteMUMPSFactorization(mumps, sym_flag, n)
 end
@@ -159,9 +171,9 @@ function Base.:\(
 end
 
 function Bramble._mumps_solve(
-        A::SparseMatrixCSC, F::AbstractVector; sym = :auto, icntl = nothing, cntl = nothing, kwargs...
+        A::SparseMatrixCSC, F::AbstractVector; sym = :auto, icntl = nothing, cntl = nothing
 )
-    fact = Bramble._mumps_factorize(A; sym = sym, icntl = icntl, cntl = cntl, kwargs...)
+    fact = Bramble._mumps_factorize(A; sym = sym, icntl = icntl, cntl = cntl)
     return fact \ F
 end
 

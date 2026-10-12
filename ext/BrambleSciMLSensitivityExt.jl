@@ -26,6 +26,8 @@ using SciMLSensitivity: SciMLSensitivity, InterpolatingAdjoint, BrownFullBasicIn
 #    depending on `sensealg`), and the wrapper raises "No matching function wrapper was
 #    found!" rather than differentiating. This is set at `ode_problem` construction, before
 #    `solve` ever runs, so it cannot be fixed here after the fact -- callers must ask for it.
+#    It is needed for a `p`-vjp only: a `u₀`-only adjoint on a default-specialized problem
+#    still gets the `Mᵀ` correction (item 3), since that unwraps the wrapper first.
 # 2. `initializealg = BrownFullBasicInit()`. The adjoint DAE inherits the forward problem's
 #    algebraic structure: with `D` the constrained rows, `semidiscretize`'s convention gives
 #    `A[D, D] = I`, `A[D, Dᶜ] = 0`, so `(Aᵀ)[D, D] = I` and the adjoint is index-1 too, but
@@ -77,6 +79,10 @@ for a `Semidiscretization`'s index-1 DAE specifically (both overridable):
 SciMLBase.FullSpecialize)` -- both `p` and `specialize` matter: `specialize` avoids a
 function-wrapper error the moment a `p`-vjp is computed (see the note on `ode_problem`
 itself), and without a real `p` there is nothing for `dp` to be a gradient with respect to.
+`FullSpecialize` is required for a `p`-vjp only. A `u₀`-only adjoint on a
+default-specialized problem still gets the `Mᵀ` correction wherever the chosen `sensealg`
+runs at all, because the correction unwraps the function wrapper before it looks at the
+residual.
 
 # Examples
 
@@ -104,15 +110,16 @@ function Bramble.adjoint_sensitivities(
     du0, dp = SciMLSensitivity.adjoint_sensitivities(
         sol, alg; sensealg = sensealg, initializealg = initializealg, kwargs...
     )
-    return _correct_initial_adjoint(du0, sol.prob.f.f), dp
+    return _correct_initial_adjoint(du0, SciMLBase.unwrapped_f(sol.prob.f.f)), dp
 end
 
 # `Mᵀ` corrects the initial-condition gradient for exactly the case where Bramble handed
 # SciMLBase a `Semidiscretization`'s own mass matrix -- `sol.prob.f.f` is the underlying
-# callable an `ODEFunction` always wraps at `.f`. Anything else (a `SemidiscretizeRHS`,
-# whose `M⁻¹` is already folded into the residual and carries no `mass_matrix` of its own;
-# a plain user residual) is left untouched: there is no known convention here to correct
-# for, and guessing one would be worse than doing nothing.
+# callable an `ODEFunction` always wraps at `.f`, and `SciMLBase.unwrapped_f` strips the
+# `FunctionWrappersWrapper` the default specialization puts around it. Anything else (a
+# `SemidiscretizeRHS`, whose `M⁻¹` is already folded into the residual and carries no
+# `mass_matrix` of its own; a plain user residual) is left untouched: there is no known
+# convention here to correct for, and guessing one would be worse than doing nothing.
 @inline _correct_initial_adjoint(du0, ::Any) = du0
 @inline _correct_initial_adjoint(du0, sd::Semidiscretization) = transpose(mass_matrix(sd)) * du0
 

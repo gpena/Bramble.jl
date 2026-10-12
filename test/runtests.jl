@@ -200,12 +200,10 @@ if __bramble_with_quality
         include("quality/source_imports.jl")
         include("quality/testset_names.jl")
         include("quality/jet.jl")
-        # These three check the test suite itself, not the package. They stay out of `unit`
-        # (JET over every test file takes minutes, like the package JET above) and run
-        # with the rest of this group in nightly.yml.
+        # These two check the test suite itself, not the package. They stay out of `unit`
+        # and run with the rest of this group in nightly.yml.
         include("quality/type_stability.jl")
         include("quality/test_env.jl")
-        include("quality/test_jet.jl")
         include("quality/invalidations.jl")
         include("quality/claude_plugin.jl")
         # Already run above with the unit group; included here so a `quality`-only run

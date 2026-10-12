@@ -6,6 +6,7 @@ using Bramble: Dcₕ, D̃ₕ, D̽ₕ
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, M₊ₓ
 using Random
+using ..TestUtils: WITH_3D_TESTS
 using Bramble:
                IdentityOperator,
                TrialFunction,
@@ -134,7 +135,8 @@ end
             end
         end
 
-        @testset "3D directions" begin
+        # 3D only: runs nightly (`slow`).
+        WITH_3D_TESTS && @testset "3D directions" begin
             Ωₕ = mesh(
                 domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
                 (4, 5, 4),

@@ -36,7 +36,12 @@ end
 """
     restrict_to(region, op::LazyOp{D}) -> RegionRestriction
 
-Restrict the operator `op` to a specific mesh region or boundary identifier.
+Restrict the operator `op` to a mesh region named by a marker label.
+
+`region` is one of two forms:
+- a `Symbol`, the label of a domain marker (`:interior`, `:boundary`, `:left`, a name the
+  domain was given);
+- a tuple of `Symbol`s, the union of those labels.
 
 # Examples
 ```julia
@@ -45,10 +50,25 @@ restrict_to(:interior, U)
 
 # Restrict to a boundary region
 restrict_to(:left, U)
+
+# Restrict to the union of two regions
+restrict_to((:left, :right), U)
 ```
+
+# Throws
+- `ArgumentError`: if `region` is neither a `Symbol` nor a tuple of `Symbol`s. A region
+  given by a predicate is not supported: name it as a domain marker instead
+  (`domain(S, :name => x -> ...)`) and restrict to `:name`.
 """
-function restrict_to(region, op::LazyOp{D}) where {D}
+function restrict_to(region::Union{Symbol, Tuple{Vararg{Symbol}}}, op::LazyOp{D}) where {D}
     return RegionRestriction{D, typeof(region), typeof(op)}(region, op)
+end
+
+function restrict_to(region, ::LazyOp)
+    throw(ArgumentError(
+        "restrict_to: the region must be a marker label (a Symbol) or a tuple of " *
+        "labels, got a $(typeof(region)). To restrict by a predicate, name the region " *
+        "as a domain marker, `domain(S, :name => x -> ...)`, and restrict to `:name`."))
 end
 
 # --- Zero-allocation stencil evaluators -------------------------------------------- #
@@ -192,12 +212,24 @@ end
 # neighbour's marker, so the tap's tuple length would vary from point to point and the
 # assembly would lose type stability. Instead the operand is shifted by its own rule and
 # zeroed outside the region, which keeps the tuple length fixed.
+#
+# A source-only operand is the exception: it is read at the clamped neighbour through
+# `_source_stencil_at`, as `ShiftNode` reads it, so the source is never called outside its
+# region (nor at `I`), where it may throw or be infinite, and `Inf * 0` would give NaN.
+# Outside, the stencil is the zero one `form` stored, so it keeps its length wherever
+# `form` probed the node. The `Bool` [`_in_grid`](@ref) of the true neighbour, a strong
+# zero, zeroes a tap the clamp moved back onto the grid (gpena/Bramble.jl#642).
 @inline function shifted_inner_stencil(
         inner_op::RegionRestriction, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
 ) where {D, Dim}
     m = mesh(space)
     lins = LinearIndices(indices(m))
     Ishift = _clamped_shift(m, I, Val(Dim), _shift_delta(delta))
+    if _is_source_only(inner_op.inner_op)
+        at = _source_stencil_at(inner_op, space, Ishift, markers, lins[Ishift])
+        on_grid = _in_grid(space, I + _stencil_step(Val(Dim), Val(D)) * _shift_delta(delta))
+        return scale_stencil(at, on_grid)
+    end
     sub = local_stencil(inner_op.inner_op, space, I, markers, lins[I])
     shifted = shifted_inner_stencil(inner_op.inner_op, sub, space, I, markers, Val(Dim), delta)
     T = eltype(space)

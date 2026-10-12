@@ -24,6 +24,7 @@ using Bramble:
                local_stencil,
                resolve_ast,
                restrict_to,
+               source_function,
                shift_op,
                inner_plus,
                is_symbolic,
@@ -52,7 +53,7 @@ using Bramble:
                D̽ₓ,
                Mcₓ
 using LinearAlgebra: I, norm
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
 
 # The symbolic operator layer: averages, the shift node, region restriction, and the
 # inner products that turn a pair of operators into a bilinear product.
@@ -96,21 +97,24 @@ const _ORIGIN_2D = (0, 0)
     @testset "Averages" begin
         @testset "Directional nodes" begin
             # `z` needs a third axis; on the 2D `id` the node refuses it (gpena/Bramble.jl#624)
-            Ω3 = mesh(
-                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 4), (true, false, true)
-            )
-            id3 = IdentityOperator(gridspace(Ω3))
             @test_throws ArgumentError(
                 "the stencil direction must be between 1 and 2, got 3") M₂(id)
             @test_throws ArgumentError M₊₂(id)
-            for (op, T, dim) in (
+            ops = Any[
                 (Mₓ(id), BackwardAverage, 1),
                 (M₊ₓ(id), ForwardAverage, 1),
                 (Mᵧ(id), BackwardAverage, 2),
-                (M₊ᵧ(id), ForwardAverage, 2),
-                (M₂(id3), BackwardAverage, 3),
-                (M₊₂(id3), ForwardAverage, 3)
-            )
+                (M₊ᵧ(id), ForwardAverage, 2)
+            ]  # Any: each node is its own type
+            if WITH_3D_TESTS
+                Ω3 = mesh(
+                    domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 4),
+                    (true, false, true)
+                )
+                id3 = IdentityOperator(gridspace(Ω3))
+                push!(ops, (M₂(id3), BackwardAverage, 3), (M₊₂(id3), ForwardAverage, 3))
+            end
+            for (op, T, dim) in ops
                 @test op isa T
                 @test typeof(op).parameters[2] == dim
                 @test resolve_ast(op) isa T
@@ -256,6 +260,32 @@ const _ORIGIN_2D = (0, 0)
             Ad = Matrix(assemble(ad))
             nd = size(Ad, 1)
             @test findall(!iszero, [Ad[i, i] for i in 1:nd]) == findall(markers(Ωd)[:interior])
+        end
+
+        @testset "Marker-label regions only" begin
+            # A predicate, a number and a tuple with a non-label are refused at
+            # construction, not left to fail in the walk.
+            @test_throws ArgumentError restrict_to(x -> x[1] < 0.3, id)
+            @test_throws ArgumentError restrict_to(0.3, id)
+            @test_throws ArgumentError restrict_to((:bottom, 1), id)
+            err = try
+                restrict_to(x -> x[1] < 0.3, id)
+            catch e
+                e
+            end
+            @test occursin("marker", err.msg)
+
+            # A Symbol, a Symbol tuple and the empty tuple still build.
+            @test restrict_to(:bottom, id).region === :bottom
+            @test restrict_to((:bottom, :interior), id).region === (:bottom, :interior)
+            @test restrict_to((), id) isa RegionRestriction
+
+            # A one-label tuple restricts exactly as the label does.
+            s = source_function(x -> 1.0, Val(2))
+            b1 = assemble(form(Wₕ, v -> innerₕ(restrict_to((:bottom,), s), v)))
+            b2 = assemble(form(Wₕ, v -> innerₕ(restrict_to(:bottom, s), v)))
+            @test b1 == b2
+            @test sum(b1) > 0
         end
 
         @testset "Operator composition" begin
@@ -422,7 +452,7 @@ end
         @test_throws ArgumentError S₋(D₋ₓ(u), Val(3))
     end
 
-    @testset "$(D)D" for D in 1:3
+    @testset "$(D)D" for D in TEST_DIMS
         n = ntuple(i -> 4 + i, D)
         W = gridspace(mesh(domain(box(D)), n, ntuple(_ -> false, D)))
         uh = Rₕ(W, x -> 1 + sum(abs2, x) + prod(x))
@@ -482,7 +512,7 @@ end
            (D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, jumpₓ, Mₓ, M₊ₓ, Mcₓ, S₊ₓ, S₋ₓ) :
            (D₋ₓ, D₊ₓ, jumpₓ, M₊ₓ, S₊ₓ)
 
-    @testset "$(D)D" for D in 1:3
+    @testset "$(D)D" for D in TEST_DIMS
         n = ntuple(i -> 4 + i, D)
         W = gridspace(mesh(domain(box(D)), n, ntuple(_ -> false, D)))
         c = Rₕ(W, x -> 2 + sum(x) + prod(x))

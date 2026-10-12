@@ -4,6 +4,7 @@ using Test
 using Bramble
 using Bramble: inner₊ₓ, weights
 using LinearAlgebra: Symmetric, eigvals, isposdef
+using ..TestUtils: WITH_3D_TESTS
 
 # `inner₊ₓ`/`inner₊ᵧ`/`inner₊₂`'s transverse factor used to hand-zero the first and last
 # entry of every other axis, deleting real quadrature weight there: a node on two or more
@@ -94,7 +95,8 @@ using LinearAlgebra: Symmetric, eigvals, isposdef
             @test zrows == 0
         end
 
-        @testset "3D" begin
+        # 3D only: built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+        WITH_3D_TESTS && @testset "3D" begin
             kdim, zrows = check(
                 mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 4, 3), (true, true, true)),
                 3

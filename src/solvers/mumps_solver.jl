@@ -16,25 +16,32 @@ transient PDE time stepping.
 abstract type MUMPSFactorization{T} <: Factorization{T} end
 
 """
-    mumps_factorize(A::AbstractMatrix; sym = :auto, icntl = nothing, cntl = nothing, kwargs...) -> MUMPSFactorization
+    mumps_factorize(A::SparseMatrixCSC; sym = :auto, icntl = nothing, cntl = nothing) -> MUMPSFactorization
     mumps_factorize(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
-                    symmetrize = false, sym = :auto, kwargs...) -> MUMPSFactorization
+                    sym = :auto, icntl = nothing, cntl = nothing) -> MUMPSFactorization
 
 Compute the sparse direct multifrontal factorization of `A` (or the assembled matrix of `a`)
 using [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl).
 
 # Symmetry options
-- `:auto`: the default, which detects symmetry automatically. If `A` is symmetric and positive
-  definite (or `symmetrize = true`), it uses symmetric positive-definite factorization
-  (`sym = 1`). If symmetric, it uses general symmetric ``LDL^T`` (`sym = 2`). Otherwise it
-  uses unsymmetric LU (`sym = 0`).
+- `:auto`: the default, which detects symmetry. A symmetric `A` is factored as symmetric
+  positive definite (`sym = 1`, no pivoting), and when MUMPS reports a zero or negative
+  pivot (`INFOG(1) = -10` or `INFOG(12) > 0`) it is factored again as general symmetric
+  ``LDL^T`` (`sym = 2`). Any other `A` uses unsymmetric LU (`sym = 0`).
 - `:spd`, `:definite`, `1`: symmetric positive definite (Cholesky / ``LL^T``).
 - `:symmetric`, `2`: general symmetric (``LDL^T`` with Bunch-Kaufman pivoting).
 - `:unsymmetric`, `0`: general unsymmetric LU.
 
+A failed factorisation (`INFOG(1) < 0`) throws for every `sym`: a `SingularException` for a
+zero pivot (`INFOG(1) = -10`), an error otherwise.
+
 # Control parameters
 - `icntl`: Optional dictionary or collection of pairs of integer control parameters (e.g., `7 => 1` for user/METIS ordering, `14 => 30` for memory relaxation).
 - `cntl`: Optional dictionary or collection of pairs of real control parameters (e.g., `1 => 0.01` for numerical pivoting threshold).
+
+Any other keyword throws a `MethodError`.
+
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
 
 Requires [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl); call `using MUMPS` before
 calling this function.
@@ -60,24 +67,32 @@ function mumps_factorize(
         a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
         sym = :auto, kwargs...
 )
+    _reject_factorize_symmetrize(:mumps_factorize, kwargs)
     A = assemble(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
+    A = _as_csc(A)
     return _mumps_factorize(A; sym = sym, kwargs...)
 end
 
 """
-    mumps_solve(A::SparseMatrixCSC, F::AbstractVector; sym = :auto, kwargs...) -> Vector
+    mumps_solve(A::SparseMatrixCSC, F::AbstractVector; sym = :auto, icntl = nothing, cntl = nothing) -> Vector
     mumps_solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing,
-                symmetrize = false, sym = :auto, kwargs...) -> VectorElement
+                symmetrize = false, sym = :auto, icntl = nothing, cntl = nothing) -> VectorElement
 
 Directly solve `A u = F` (or `assemble(a, l)` system) using MUMPS direct factorization.
 
 # Symmetry options
-- `:auto`: the default, which detects symmetry automatically.
+- `:auto`: the default, as in [`mumps_factorize`](@ref): `symmetrize = true` does not
+  choose positive definite, and a symmetric indefinite `A` is refactored as ``LDL^T``.
 - `:spd`, `:definite`, `1`: symmetric positive definite.
 - `:symmetric`, `2`: general symmetric.
 - `:unsymmetric`, `0`: general unsymmetric.
+
+`icntl` and `cntl` are as in [`mumps_factorize`](@ref). Any other keyword throws a
+`MethodError`.
+
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
 
 Requires [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl); call `using MUMPS` before
 calling this function.
@@ -105,6 +120,7 @@ function mumps_solve(
     A, F = assemble(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components, symmetrize = symmetrize
     )
+    A = _as_csc(A)
     u = _mumps_solve(A, F; sym = sym, kwargs...)
     return element(trial_space(a), u)
 end
@@ -122,13 +138,15 @@ function mumps_refactor!(fact::MUMPSFactorization, A::SparseMatrixCSC)
     return _mumps_refactor!(fact, A)
 end
 
-function _mumps_factorize(::Any; kwargs...)
+function _mumps_factorize(A; kwargs...)
+    _ext_loaded(:BrambleMUMPSExt) && _throw_unsupported_matrix("mumps_factorize", A)
     return error(
         "mumps_factorize requires MUMPS.jl. Add `using MUMPS` before calling this function.",
     )
 end
 
-function _mumps_solve(::Any, ::Any; kwargs...)
+function _mumps_solve(A, ::Any; kwargs...)
+    _ext_loaded(:BrambleMUMPSExt) && _throw_unsupported_matrix("mumps_solve", A)
     return error(
         "mumps_solve requires MUMPS.jl. Add `using MUMPS` before calling this function.",
     )

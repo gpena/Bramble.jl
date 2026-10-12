@@ -466,14 +466,12 @@ Pages = [
 ]
 ```
 
-### Point sources, bandwidth analysis and structural properties
+### Point sources and structural properties
 
 `DiracSource` is filtered out of the block above since its docstring's `@ref`s point here
 rather than the autodocs entry. `issymmetric(::BilinearForm)`/`isposdef(::BilinearForm)`
 extend `LinearAlgebra`'s generic functions; the block above filters them out so they are
-listed here, beside the other structural properties. `bandwidths`/`blockbandwidths` are
-already picked up by the block above once its `Pages` point at the real
-`ast/stencil_pattern.jl` file.
+listed here, beside the other structural properties.
 
 ```@docs
 DiracSource

@@ -51,7 +51,7 @@ using Kronecker: Kronecker, ⊗
 using LinearAlgebra: LinearAlgebra, BlasInt, Diagonal, Symmetric, isposdef, issymmetric,
                      ldiv!, mul!
 using LinearAlgebra.BLAS: @blasfunc, libblastrampoline
-using SparseArrays: SparseMatrixCSC, dropzeros!, nonzeros, nnz, nzrange, rowvals, sparse
+using SparseArrays: SparseMatrixCSC, nonzeros, nzrange, rowvals, sparse
 using PrecompileTools: @setup_workload, @compile_workload
 
 # --- 1. Conversion to a Kronecker.jl object ------------------------------------------ #
@@ -62,7 +62,7 @@ using PrecompileTools: @setup_workload, @compile_workload
 # as in `SparseMatrixCSC(K)`, so a Float32 `K` stays Float32 (gpena/Bramble.jl#600) while a
 # Dual or Complex `Ref` coefficient keeps its own type, which `T(c)` would not.
 @inline function _kron_jl_term(term, ::Type{T}) where {T}
-    c = Bramble._kron_scalar(T, Bramble._kron_coeff(term.scales))
+    c = Bramble._kron_coeff(T, term.scales)
     return c * foldl(⊗, reverse(term.factors))
 end
 
@@ -220,6 +220,28 @@ end
     throw(DimensionMismatch("$caller: $name has length $m, the operator needs $n"))
 end
 
+# A complex right-hand side is refused on both routes: the symmetric route cannot store it
+# in its real workspace, and the Schur route would drop its imaginary part. An abstract
+# eltype (`Vector{Any}` of reals) is decided by its values; a concrete one never scans `F`,
+# so a device `F` is not indexed and a real one keeps its 0-byte solve.
+_fdm_real_rhs(F) = eltype(F) <: Real || (!isconcretetype(eltype(F)) && all(x -> x isa Real, F))
+
+@noinline function _throw_fdm_complex(caller::String, ::Type{S}) where {S}
+    throw(ArgumentError("$caller: the right-hand side has element type $S, it must be " *
+                        "real; solve its real and imaginary parts separately"))
+end
+
+# A complex scale or coefficient that makes `K`'s eltype complex (a `Ref(2.0 + 0.0im)` or a
+# literal `2.0 + 1.0im` scale) is refused, a zero imaginary part included: the generalised
+# eigensolvers here are real only, and narrowing to real would hide the scale's type. A
+# factor equal to the mass (a constant coefficient of 1, complex or not) leaves `K` real.
+@noinline function _throw_fdm_complex_form(::Type{T}; precond::Bool = false) where {T}
+    _throw_fdm_unsupported(
+        "a complex coefficient makes its Kronecker operator's element type $T, and fast " *
+        "diagonalisation needs a real one (a complex scale is refused even with a zero " *
+        "imaginary part)"; precond = precond)
+end
+
 # A refill that `fdm_factorize!` refused after it started writing left `f` holding no system.
 @noinline function _throw_fdm_invalid()
     throw(ArgumentError("fdm_solve: the last `fdm_factorize!` of this factorisation was " *
@@ -331,25 +353,20 @@ function _fdm_host_factor(F::Bramble._KronDeviceSparse)
 end
 
 # One factor as the classification compares it: on the host, sparse, restricted to `r`
-# (`2:end-1` under `dirichlet = :boundary`), stored zeros dropped.
-_fdm_factor(F, r) = dropzeros!(sparse(_fdm_host_factor(F))[r, r])
+# (`2:end-1` under `dirichlet = :boundary`). Stored zeros stay stored: every comparison
+# below walks entries through `_fdm_next`, which treats a stored zero as absent.
+_fdm_factor(F, r) = sparse(_fdm_host_factor(F))[r, r]
 
 # Factor equality up to rounding: the same factor is usually the same cached object.
 function _fdm_same(A::SparseMatrixCSC, B::SparseMatrixCSC)
     A === B && return true
-    scale = max(maximum(abs, nonzeros(A); init = 0.0), maximum(abs, nonzeros(B); init = 0.0))
-    return maximum(abs, nonzeros(A - B); init = 0.0) <= 8 * eps(Float64) * scale
+    return _fdm_same_entries(A, false, B, 1:size(A, 2), Float64)
 end
 
 # The `r` with `A == r * R` up to rounding (`one(T)` when `A` equals `R`), or `nothing`.
 function _fdm_ratio(R::SparseMatrixCSC{T}, A::SparseMatrixCSC{T}) where {T}
-    _fdm_same(R, A) && return one(T)
-    (R.colptr == A.colptr && R.rowval == A.rowval) || return nothing
-    a, b = nonzeros(A), nonzeros(R)
-    k = argmax(abs.(b))
-    r = a[k] / b[k]
-    err = maximum(abs(a[i] - r * b[i]) for i in eachindex(a, b))
-    return err <= 8 * eps(T) * maximum(abs, a) ? r : nothing
+    found, r = _fdm_ratio_entries(R, false, A, 1:size(A, 2), T)
+    return found ? r : nothing
 end
 
 _fdm_spd(M::SparseMatrixCSC) = issymmetric(M) && isposdef(Symmetric(Matrix(M)))
@@ -377,7 +394,7 @@ function _fdm_axis_data(K::KroneckerLinearOperator{T, D}, rng::NTuple{D};
         c = T(Bramble._kron_coeff(term.scales))  # `T`: a Float32 device keeps Float32
         f = ntuple(d -> SparseMatrixCSC{T, Int}(_fdm_factor(term.factors[d], rng[d])), Val(D))
         # A zero term (a zero `Ref`, or a factor that vanishes on the interior) adds nothing.
-        (iszero(c) || any(F -> nnz(F) == 0, f)) && continue
+        (iszero(c) || any(F -> !_fdm_has_entry(F, 1:size(F, 2)), f)) && continue
         push!(cs, c)
         push!(fs, f)
         push!(kept, k)
@@ -599,6 +616,7 @@ function _fdm_factorize(K::KroneckerLinearOperator{T, D}, dirichlet;
         precond::Bool = false) where {T, D}
     (dirichlet === nothing || dirichlet === :boundary) ||
         _throw_fdm_bad_dirichlet(dirichlet; precond = precond)
+    T <: Real || _throw_fdm_complex_form(T; precond = precond)
     dims_full = K.dims
     boundary = dirichlet === :boundary
     rng = ntuple(d -> boundary ? (2:(dims_full[d] - 1)) : (1:dims_full[d]), Val(D))
@@ -703,6 +721,7 @@ function _fdm_ldiv!(x::AbstractVector, f::_FDMFactorization{T, D}, F::AbstractVe
     Base.require_one_based_indexing(x, F)
     # With `keep`, the preconditioner's `ldiv!(y, P, x)`: `x` is its input, `y` its output.
     caller = keep ? "fdm_preconditioner" : "fdm_solve"
+    _fdm_real_rhs(F) || _throw_fdm_complex(caller, eltype(F))
     length(F) == f.n ||
         _throw_fdm_length_mismatch(f.n, length(F), keep ? "x" : "F"; caller = caller)
     length(x) == f.n ||
@@ -1037,6 +1056,7 @@ function _fdm_ldiv!(x::AbstractVector, f::_SchurFactorization{T, D}, F::Abstract
     Base.require_one_based_indexing(x, F)
     # With `keep`, the preconditioner's `ldiv!(y, P, x)`: `x` is its input, `y` its output.
     caller = keep ? "fdm_preconditioner" : "fdm_solve"
+    _fdm_real_rhs(F) || _throw_fdm_complex(caller, eltype(F))
     length(F) == f.n ||
         _throw_fdm_length_mismatch(f.n, length(F), keep ? "x" : "F"; caller = caller)
     length(x) == f.n ||
@@ -1127,6 +1147,7 @@ end
 
 function _fdm_solve_core(K::KroneckerLinearOperator{T, D}, F::AbstractVector, dirichlet) where {T, D}
     length(F) == K.n || _throw_fdm_length_mismatch(K.n, length(F))
+    _fdm_real_rhs(F) || _throw_fdm_complex("fdm_solve", eltype(F))
     f = _fdm_factorize(K, dirichlet)
     F isa Array && return ldiv!(Vector{T}(undef, K.n), f, F)
     # The Schur route is host-only: one copy of `F` to the host and one of `x` back.
@@ -1201,9 +1222,12 @@ alone; the message then says so, and the same form assembled in Float64 may be s
     every form that is not Laplacian-like: `a` is not separable, it is posed on a composite
     space, a term has non-mass factors on two axes (a mixed derivative, or a coefficient
     varying along two axes), a mass is not symmetric positive definite, an axis has no term
-    of its own, or the system is singular (see below). Solve a separable one with
-    `kronecker_operator(a)` and a Krylov solver.
+    of its own, the system is singular (see below), or a complex scale or coefficient makes
+    the Kronecker operator's element type complex (a zero imaginary part included). Solve a
+    separable one with `kronecker_operator(a)` and a Krylov solver.
   - `ArgumentError`: `dirichlet` is neither `nothing` nor `:boundary`.
+  - `ArgumentError`: `F` holds a complex value; solve its real and imaginary parts
+    separately.
   - `DimensionMismatch`: `F`'s length does not match `a`'s number of degrees of freedom.
 
 # Examples
@@ -1239,8 +1263,10 @@ Dirichlet. `K` must be Laplacian-like, as that method describes.
 # Throws
 
   - `ArgumentError` saying `fdm_solve` does not support the operator, with the reason,
-    when `K` is not Laplacian-like, is a composite space's block operator, or is singular
-    (as the `BilinearForm` method describes, Float32 included).
+    when `K` is not Laplacian-like, is a composite space's block operator, is singular, or
+    has a complex eltype (as the `BilinearForm` method describes, Float32 included).
+  - `ArgumentError`: `F` holds a complex value; solve its real and imaginary parts
+    separately.
   - `DimensionMismatch`: `F`'s length does not match `K`'s size.
   - `ArgumentError` naming `change_points!`: `K`'s mesh was mutated in place after `K` was
     built (see [`KroneckerLinearOperator`](@ref)); build the operator again.
@@ -1331,7 +1357,7 @@ _fdm_val(F::Diagonal, ::Int, p::Int) = F.diag[p]
 _fdm_val(F::AbstractMatrix, j::Int, p::Int) = F[p, j]
 
 # The first position from `p` on, up to `stop`, holding a nonzero in a row of `rng`: the
-# entries `_fdm_factor`'s `dropzeros!(sparse(F)[rng, rng])` keeps.
+# entries of `_fdm_factor(F, rng)`, a stored zero treated as absent.
 @inline function _fdm_next(F, j::Int, p::Int, stop::Int, rng::UnitRange{Int})
     while p <= stop
         (_fdm_row(F, j, p) in rng && !iszero(_fdm_val(F, j, p))) && return p

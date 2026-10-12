@@ -98,24 +98,82 @@ made in place is not seen by assembly.
 
 Return the `BitVector` indicator associated with marker `label` in mesh `Ωₕ`.
 
-If `label` is not directly found in the mesh markers, its coordinate-aligned
-or viewpoint boundary alias (e.g. `:xmin` ↔ `:left` in 2D, `:xmin` ↔ `:back` in 3D) is
-consulted if available.
+If `label` is not directly found in the mesh markers and is a face name, its
+coordinate-aligned or viewpoint boundary alias (#152's spellings: `:xmin` ↔ `:left` in 2D,
+`:xmin` ↔ `:back` in 3D) is consulted. The aliased marker answers for `label` only when
+every point it marks lies on `label`'s face (an open face too); otherwise `label` means its
+own face, and a new `BitVector` marking that face is returned. So on
+`domain(S, :left => :ymin)`, `:left` gives the ymin points and `:xmin` the xmin points. A
+label that is neither a marker nor a face name whose alias is a marker throws a `KeyError`.
 
 The `BitVector` is a read-only view of the mesh's labels. Change labels with `markers!` or
 `set_markers!`, which rebuild the marker state assembly reads; an edit made in place is not
 seen by assembly.
 """
-@inline function index_in_marker(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
+@inline function index_in_marker(Ωₕ::AbstractMeshType, label::Symbol)
+    bits = _stored_marker(Ωₕ, label)
+    bits === nothing && return _geometric_face_bits(Ωₕ, label)
+    return bits
+end
+
+# The stored `BitVector` that answers for `label` under `index_in_marker`'s rule, or
+# `nothing` when `label` is a face name that means its own face, which no stored marker
+# holds.
+@inline function _stored_marker(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
     m = markers(Ωₕ)
     direct = get(m, label, nothing)
     direct !== nothing && return direct
     alias = _boundary_symbol_alias(Val(D), label)
     if alias !== nothing
         aliased = get(m, alias, nothing)
-        aliased !== nothing && return aliased
+        if aliased !== nothing
+            # The alias answers for `label` only when it marks nothing off `label`'s face: a
+            # user's `:left => :ymin` must not answer for `:xmin` (gpena/Bramble.jl#659).
+            _marks_only_face(Ωₕ, aliased, label) && return aliased
+            return nothing
+        end
     end
     return _throw_unknown_marker_label(Ωₕ, label)
+end
+
+# Calls `f(offset + i)` for every point `i` that `index_in_marker(Ωₕ, label)` marks, in
+# increasing order, without building the `BitVector` a face name may fall back to: the
+# per-stage residual of a semidiscretisation walks its labels through here and allocates
+# nothing on any branch.
+@inline function _each_marker_point(f::F, Ωₕ::AbstractMeshType{D}, label::Symbol, offset::Int) where {F, D}
+    bits = _stored_marker(Ωₕ, label)
+    bits === nothing || return _each_marked(f, bits, offset)
+    axis, side = _face_of_symbol(Val(D), label)
+    lin = LinearIndices(indices(Ωₕ))
+    for I in boundary_indices(Ωₕ)[2axis - 2 + side]
+        f(offset + @inbounds lin[I])
+    end
+    return nothing
+end
+
+# Whether every point `bits` marks lies on the face `label` names: the marked points on that
+# face number `count(bits)`. Index arithmetic only, so it allocates nothing.
+@inline function _marks_only_face(Ωₕ::AbstractMeshType{D}, bits::BitVector, label::Symbol) where {D}
+    axis, side = _face_of_symbol(Val(D), label)
+    face = boundary_indices(Ωₕ)[2axis - 2 + side]
+    lin = LinearIndices(indices(Ωₕ))
+    n = 0
+    for I in face
+        n += @inbounds bits[lin[I]]
+    end
+    return n == count(bits)
+end
+
+# The face `label` names, as a fresh `BitVector` over the mesh points.
+@noinline function _geometric_face_bits(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
+    axis, side = _face_of_symbol(Val(D), label)
+    face = boundary_indices(Ωₕ)[2axis - 2 + side]
+    lin = LinearIndices(indices(Ωₕ))
+    bits = falses(length(lin))
+    for I in face
+        @inbounds bits[lin[I]] = true
+    end
+    return bits
 end
 
 @noinline function _throw_unknown_marker_label(Ωₕ::AbstractMeshType, label::Symbol)

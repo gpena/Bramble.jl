@@ -11,7 +11,7 @@ using Random
 using Polyester
 using Kronecker
 using ForwardDiff
-using ..TestUtils: ZeroBasedVector, _graded_mesh
+using ..TestUtils: TEST_DIMS, WITH_3D_TESTS, ZeroBasedVector, _graded_mesh
 
 # Regression tests for the edge cases the critics' probes found while the general Kronecker
 # operators (gpena/Bramble.jl#427, #439, #442) were built. Each testset is one area; each
@@ -28,6 +28,9 @@ function _ke_mesh(n::NTuple{D, Int}, P = CpuSerial(); graded = true) where {D}
         ntuple(_ -> true, D); backend = backend(; policy = P))
 end
 _ke_space(n, P = CpuSerial(); kw...) = gridspace(_ke_mesh(n, P; kw...))
+
+# The sizes in `ns` whose dimension is in `TEST_DIMS`: no 3D size under the unit group.
+_ke_sizes(ns) = filter(n -> length(n) in TEST_DIMS, ns)
 
 # A hand-built operator from `(scales, factors)` specs, one term each, on policy `P`.
 function _ke_op(T, dims, specs, P = CpuSerial())
@@ -91,7 +94,8 @@ end
     # calls nested in tasks or in threaded loops all give the serial result bit for bit.
     @testset "edge: threaded line counts" begin
         f = (u, v) -> innerₕ(u, v) + 2.5 * inner₊(∇ₕ(u), ∇ₕ(v))
-        for n in ((3, 2), (2, 2), (40, 2), (2, 40), (2, 2, 2), (3, 2, 2), (5, 4, 3), (2, 2, 40))
+        for n in _ke_sizes(((3, 2), (2, 2), (40, 2), (2, 40), (2, 2, 2), (3, 2, 2), (5, 4, 3),
+            (2, 2, 40)))
             Ws, Wt = _ke_space(n, CpuSerial()), _ke_space(n, CpuThreaded())
             a = form(Wt, Wt, f)
             Ks = kronecker_operator(form(Ws, Ws, f))
@@ -121,7 +125,7 @@ end
 
         # A product started inside a task, or inside a user's threaded loop, runs its lines
         # serially there and still gives the serial result.
-        for n in ((3, 2), (2, 2, 40))
+        for n in _ke_sizes(((3, 2), (2, 2, 40)))
             Ws, Wt = _ke_space(n, CpuSerial()), _ke_space(n, CpuThreaded())
             Ks, Kt = kronecker_operator(form(Ws, Ws, f)), kronecker_operator(form(Wt, Wt, f))
             N = size(Ks, 1)
@@ -252,6 +256,78 @@ end
         y = mul!(zeros(D1, 20), _ke_op(D1, dims, specsD), x)
         @test isapprox(ForwardDiff.value.(y), ForwardDiff.value.(AD * x))
         @test isapprox(ForwardDiff.partials.(y, 1), ForwardDiff.partials.(AD * x, 1))
+
+        # (#535) A term's scale joins the element type: a Dual or complex scale widens the
+        # operator, plain, in a `Ref` and in a block, while a Float64 scale on a Float32
+        # mesh keeps it Float32. Oracle: `assemble`, on graded 2D meshes.
+        W = _ke_space((5, 6))
+        p = ForwardDiff.Dual{:t}(0.5, 1.0)
+        lap = (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))
+        xw = randn(rng, ndofs(W))
+        for s in (p, Ref(p))
+            a = form(W, W, (u, v) -> s * lap(u, v))
+            K, A = kronecker_operator(a), assemble(a)
+            @test eltype(K) == eltype(A) == typeof(p)
+            @test ForwardDiff.value.(K * xw) ≈ ForwardDiff.value.(A * xw)
+            @test ForwardDiff.partials.(K * xw, 1) ≈ ForwardDiff.partials.(A * xw, 1)
+            @test eltype(SparseMatrixCSC(K)) == typeof(p)
+            @test ForwardDiff.partials.(Matrix(SparseMatrixCSC(K)), 1) ≈
+                  ForwardDiff.partials.(Matrix(A), 1)
+        end
+        c = form(W, W, (u, v) -> (1.0 + 2.0im) * lap(u, v))
+        Kc = kronecker_operator(c)
+        @test eltype(Kc) == ComplexF64
+        @test Kc * xw ≈ assemble(c) * xw
+        V = W × W
+        b = form(V, V, (u, v) -> p * lap(u(1), v(1)) + innerₕ(u(2), v(2)))
+        Kb = kronecker_operator(b)
+        @test Kb isa KroneckerBlockOperator
+        @test eltype(Kb) == typeof(p)
+        xv = randn(rng, ndofs(V))
+        @test ForwardDiff.partials.(Kb * xv, 1) ≈ ForwardDiff.partials.(assemble(b) * xv, 1)
+        @test ForwardDiff.value.(Kb * xv) ≈ ForwardDiff.value.(assemble(b) * xv)
+        M32 = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 2.0f0)), (5, 6),
+            (false, false))
+        Bramble.change_points!(M32, (Float32.(range(0, 1; length = 5) .^ 1.25),
+            Float32.(2 .* range(0, 1; length = 6) .^ 1.5)))
+        W32 = gridspace(M32)
+        a32 = form(W32, W32, (u, v) -> 2.0 * lap(u, v))
+        K32 = kronecker_operator(a32)
+        @test eltype(K32) == Float32
+        x32 = randn(rng, Float32, ndofs(W32))
+        @test K32 * x32 ≈ assemble(a32) * x32 rtol = 1e-4
+        # Float32-based scales keep the Float32 base, as `assemble` does.
+        p32 = ForwardDiff.Dual{:t}(0.5f0, 1.0f0)
+        for s in (p32, Ref(p32), 1.0f0 + 2.0f0im)
+            a = form(W32, W32, (u, v) -> s * lap(u, v))
+            K, A = kronecker_operator(a), assemble(a)
+            @test eltype(K) == eltype(A) == typeof(s isa Ref ? s[] : s)
+            @test K * x32 ≈ A * x32 rtol = 1e-4
+            # The read paths keep that base too: an entry and the Kronecker.jl object.
+            @test typeof(K[1, 1]) == eltype(K)
+            @test eltype(Kronecker.kronecker(K)) == eltype(K)
+        end
+        # A term with no scale beside a `Ref`-scaled one.
+        a = form(W32, W32, (u, v) -> lap(u, v) + Ref(p32) * innerₕ(u, v))
+        K = kronecker_operator(a)
+        @test eltype(K) == eltype(assemble(a)) == typeof(K[1, 1]) == typeof(p32)
+        @test eltype(Kronecker.kronecker(K)) == typeof(p32)
+        @test ForwardDiff.partials.(K * x32, 1) ≈ ForwardDiff.partials.(assemble(a) * x32, 1)
+        # A Dual{Float32} term beside a Float64-scaled one: `K` narrows the Float64 scale to
+        # the mesh's Float32 on purpose, while `assemble` widens to Dual{Float64}, so only
+        # the values are compared with `assemble`.
+        a = form(W32, W32, (u, v) -> p32 * lap(u, v) + 2.0 * innerₕ(u, v))
+        K, A = kronecker_operator(a), assemble(a)
+        @test eltype(K) == typeof(K[1, 1]) == eltype(Kronecker.kronecker(K)) == typeof(p32)
+        @test ForwardDiff.value.(K * x32) ≈ ForwardDiff.value.(A * x32) rtol = 1e-4
+        @test ForwardDiff.partials.(K * x32, 1) ≈ ForwardDiff.partials.(A * x32, 1) rtol = 1e-4
+        V32 = W32 × W32
+        b32 = form(V32, V32, (u, v) -> p32 * lap(u(1), v(1)) + innerₕ(u(2), v(2)))
+        Kb32 = kronecker_operator(b32)
+        @test eltype(Kb32) == eltype(assemble(b32)) == typeof(p32)
+        y32 = randn(rng, Float32, ndofs(V32))
+        @test ForwardDiff.partials.(Kb32 * y32, 1) ≈
+              ForwardDiff.partials.(assemble(b32) * y32, 1) rtol = 1e-4
     end
 
     # (#427): factors with rows or columns that hold nothing, entries stored as an
@@ -339,7 +415,8 @@ end
             end
         end
         _ke_quiet() do
-            for (D, n) in ((2, (2, 3)), (2, (6, 5)), (3, (4, 2, 3)), (3, (3, 4, 5))),
+            for (D, n) in filter(p -> p[1] in TEST_DIMS,
+                    ((2, (2, 3)), (2, (6, 5)), (3, (4, 2, 3)), (3, (3, 4, 5)))),
                 unif in (true, false)
 
                 flags = ntuple(_ -> unif, D)
@@ -400,7 +477,8 @@ end
             :boundary]
         sizes2 = ((9, 7), (1, 5), (5, 1), (2, 5), (3, 3), (2, 2), (3, 1), (1, 1))
         sizes3 = ((6, 5, 7), (1, 4, 3), (4, 1, 3), (3, 4, 1), (2, 3, 2), (1, 1, 4), (1, 1, 1))
-        for (sizes, masks) in Any[(sizes2, masks2), (sizes3, masks3)], n in sizes
+        for (sizes, masks) in Any[(sizes2, masks2),
+                (WITH_3D_TESTS ? ((sizes3, masks3),) : ())...], n in sizes
 
             for graded in (true, false)
                 (graded || n == first(sizes)) || continue
@@ -421,7 +499,7 @@ end
         # Chains, sums, restrictions, coefficients and several `inner_Γ` in one form, with
         # the masks each `inner_Γ` names.
         # Any: each size, form and mask list is its own type
-        for n in Any[(9, 7), (1, 5), (5, 1), (6, 5, 7), (1, 4, 3)]
+        for n in _ke_sizes(Any[(9, 7), (1, 5), (5, 1), (6, 5, 7), (1, 4, 3)])
             W = _ke_space(n)
             fx = Rₕ(W, x -> 1 + x[1])
             forms = Any[
@@ -451,7 +529,7 @@ end
     @testset "edge: one-point axes" begin
         _ke_quiet() do
             # Any: each size and form is its own type
-            for n in Any[(1, 4), (4, 1), (2, 1, 3)]
+            for n in _ke_sizes(Any[(1, 4), (4, 1), (2, 1, 3)])
                 W = _ke_space(n)
                 fx = Rₕ(W, x -> 1 + x[1])
                 fy = Rₕ(W, x -> 2 + x[2]^2)
@@ -569,7 +647,7 @@ end
         # BigFloat, nested, zero, beside a coefficient, a face or a restriction. On a mesh
         # with a one-point axis the NaNs of the differences agree too.
         # Any: each size and form is its own type
-        for n in Any[(7, 6), (1, 5), (4, 3, 5)]
+        for n in _ke_sizes(Any[(7, 6), (1, 5), (4, 3, 5)])
             Wn = _ke_space(n)
             forms = Any[
                 (u, v) -> innerₕ(2.0 * D₋ₓ(3.0 * u), v),
@@ -700,10 +778,9 @@ end
 
         # Pure Neumann: constants are in the kernel. Refused from the form and from the
         # operator, whatever the route to the zero eigenvalue; fine with a Dirichlet face.
-        W3 = _ke_space((6, 5, 7))
         # Any: each space and form is its own type
-        singular = Any[(W, grad), (W3, grad),
-            (W, (u, v) -> 1e-14 * innerₕ(u, v) + grad(u, v))]
+        singular = Any[(W, grad), (W, (u, v) -> 1e-14 * innerₕ(u, v) + grad(u, v))]
+        WITH_3D_TESTS && push!(singular, (_ke_space((6, 5, 7)), grad))
         for (Ws, f) in singular
             a = form(Ws, Ws, f)
             Fs = rand(MersenneTwister(KE_SEED), ndofs(Ws))
@@ -720,7 +797,7 @@ end
 
         # A 2-point axis leaves no unknown under `:boundary`: the answer is zeros.
         # Any: each size is its own type
-        for n in Any[(2, 2), (2, 4), (2, 3, 3), (3, 2, 4)]
+        for n in _ke_sizes(Any[(2, 2), (2, 4), (2, 3, 3), (3, 2, 4)])
             Wn = _ke_space(n)
             a = form(Wn, Wn, (u, v) -> innerₕ(u, v) + grad(u, v) +
                                        inner_Γ(u, v; markers = (:xmin,)))
@@ -828,16 +905,19 @@ end
             @test isapprox(Kn * xn, assemble(lap(Wn)) * xn; rtol = 1e-12)
         end
 
-        # Two operators on one threaded mesh both go stale; the one rebuilt does not.
-        Ωₕ = _ke_mesh((7, 6, 5), CpuThreaded(); graded = false)
-        W = gridspace(Ωₕ)
-        K1, K2 = kronecker_operator(lap(W)),
-        kronecker_operator(form(W, W, (u, v) -> innerₕ(u, v)))
-        x = rand(MersenneTwister(KE_SEED), size(K1, 1))
-        y = fill(NaN, size(K1, 1))
-        Bramble.change_points!(Ωₕ(3), collect(range(0, 1; length = 5) .^ 2))
-        @test stale(() -> mul!(y, K1, x)) && stale(() -> mul!(y, K2, x, 1.0, 0.0))
-        @test all(isnan, y)
+        # Two operators on one threaded mesh both go stale; the one rebuilt does not. The
+        # mesh is 3D, so this runs nightly.
+        if WITH_3D_TESTS
+            Ωₕ = _ke_mesh((7, 6, 5), CpuThreaded(); graded = false)
+            W = gridspace(Ωₕ)
+            K1, K2 = kronecker_operator(lap(W)),
+            kronecker_operator(form(W, W, (u, v) -> innerₕ(u, v)))
+            x = rand(MersenneTwister(KE_SEED), size(K1, 1))
+            y = fill(NaN, size(K1, 1))
+            Bramble.change_points!(Ωₕ(3), collect(range(0, 1; length = 5) .^ 2))
+            @test stale(() -> mul!(y, K1, x)) && stale(() -> mul!(y, K2, x, 1.0, 0.0))
+            @test all(isnan, y)
+        end
 
         # A form built on spaces from before the change is refused by `fdm_solve` with the
         # space's error, naming the remedy for the space (the other entry points are

@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Random
 import Bramble: Mcₓ, Mcᵧ, Mc₂, Mcₕ, CenteredAverage, D₋ₓ, TrialFunction
-using ..TestUtils: _random_element
+using ..TestUtils: _random_element, TEST_DIMS
 
 # A random non-uniform mesh on the unit cube of dimension `D`.
 function _nonuniform_space(D)
@@ -29,7 +29,7 @@ end
         @test !(Mcₕ(TrialFunction{1}()) isa Tuple)
     end
 
-    for D in 1:3
+    for D in TEST_DIMS
         Wₕ = _nonuniform_space(D)
         uₕ, vₕ = _random_element(Wₕ), _random_element(Wₕ)
         for d in 1:D

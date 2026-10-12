@@ -5,7 +5,7 @@ using Bramble
 using Bramble: D₊ₓ, D₋ₓ, D₋ᵧ, D₊ᵧ, Dc, Mₓ, M₊ᵧ, Mcₓ, jumpₓ, jumpᵧ, S₊ₓ, S₋ᵧ, inner₊ₓ,
                inner₊ᵧ, restrict_to
 using SparseArrays: SparseMatrixCSC, nnz, nonzeros, spzeros
-using ..TestUtils: _graded_mesh
+using ..TestUtils: WITH_3D_TESTS, _graded_mesh
 
 # `_kron_project` (gpena/Bramble.jl#427): one addend of a resolved form, projected onto
 # each axis of a tensor mesh, gives 1D factors whose summed `kron`s are what `assemble`
@@ -47,7 +47,8 @@ end
 @testset "Kronecker projection (#427)" begin
     @testset "families match assemble" begin
         # Any: each space is its own type
-        for W in Any[gridspace(_graded_mesh((9, 7))), gridspace(_graded_mesh((6, 5, 7)))]
+        for W in Any[gridspace(_graded_mesh((9, 7))),
+            (WITH_3D_TESTS ? (gridspace(_graded_mesh((6, 5, 7))),) : ())...]
             forms = Any[  # Any: each closure is its own type
                 (u, v) -> innerₕ(Dc(u, Val(1)), Dc(v, Val(1))),
                 (u, v) -> innerₕ(M₊ᵧ(u), Mcₓ(v)),
@@ -124,11 +125,13 @@ end
 
     @testset "inner_Γ is a sum over its faces" begin
         W2 = gridspace(_graded_mesh((9, 7)))
-        W3 = gridspace(_graded_mesh((6, 5, 7)))
         cases = Any[  # Any: each space and marker set is its own type
-            (W2, :xmin, 1), (W2, :ymax, 1), (W2, (:xmin, :ymin), 2), (W2, :boundary, 4),
-            (W3, :zmax, 1), (W3, (:xmax, :ymin), 2), (W3, (:xmin, :ymax, :zmin), 3),
-            (W3, :boundary, 6)]
+            (W2, :xmin, 1), (W2, :ymax, 1), (W2, (:xmin, :ymin), 2), (W2, :boundary, 4)]
+        if WITH_3D_TESTS
+            W3 = gridspace(_graded_mesh((6, 5, 7)))
+            push!(cases, (W3, :zmax, 1), (W3, (:xmax, :ymin), 2),
+                (W3, (:xmin, :ymax, :zmin), 3), (W3, :boundary, 6))
+        end
         for (W, mk, nfaces) in cases
             a = form(W, W, (u, v) -> inner_Γ(u, v; markers = mk))
             P = Bramble._kron_project(only(_proj_leaves(a))[2], mesh(W))
@@ -138,12 +141,20 @@ end
             @test _proj_matches(form(W, W,
                 (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + 1.5 * inner_Γ(u, v; markers = mk)))
         end
-        # The face mask is geometric: a domain-redefined `:xmin` does not move it.
+        # A redefined `:xmin` means its definition (#660): the face it marks, one term, and
+        # a half-plane, which is no face, is refused at `form`.
         I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωy = mesh(domain(I2, :xmin => :ymax), (6, 5), (false, true))
+        Wy = gridspace(Ωy)
+        ay = form(Wy, Wy, (u, v) -> inner_Γ(u, v; markers = :xmin))
+        @test _proj_matches(ay)
+        @test length(Bramble._kron_project(only(_proj_leaves(ay))[2], Ωy)) == 1
+        ay_top = form(Wy, Wy, (u, v) -> inner_Γ(u, v; markers = :ymax))
+        @test assemble(ay) == assemble(ay_top)
         Ωc = mesh(domain(I2, :xmin => x -> x[2] < 0.5), (6, 5), (false, true))
         @test count(markers(Ωc)[:xmin]) == 12  # every point with y < 0.5, not the face
         Wc = gridspace(Ωc)
-        @test _proj_matches(form(Wc, Wc, (u, v) -> inner_Γ(u, v; markers = :xmin)))
+        @test_throws ArgumentError form(Wc, Wc, (u, v) -> inner_Γ(u, v; markers = :xmin))
         # On a one-point axis both faces are one point, weighed once; two terms double it.
         W1 = gridspace(mesh(domain(I2), (1, 5), (true, true)))
         @test _proj_matches(form(W1, W1, (u, v) -> inner_Γ(u, v; markers = :xmin)))
@@ -152,7 +163,8 @@ end
 
     @testset "single-axis coefficients factor" begin
         # Any: each space is its own type
-        for W in Any[gridspace(_graded_mesh((9, 7))), gridspace(_graded_mesh((6, 5, 7)))]
+        for W in Any[gridspace(_graded_mesh((9, 7))),
+            (WITH_3D_TESTS ? (gridspace(_graded_mesh((6, 5, 7))),) : ())...]
             fx = Rₕ(W, x -> 1 + x[1])
             fy = Rₕ(W, x -> 2 + x[2]^2)
             fl = Rₕ(W, x -> 1 + x[end]^3)  # the last axis: z in 3D

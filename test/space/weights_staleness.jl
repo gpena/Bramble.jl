@@ -5,7 +5,7 @@ using ForwardDiff
 using Bramble
 using Bramble: norm₊
 using Bramble: change_points!, set_points!, weights
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
 
 # `ScalarGridSpace` precomputes its inner-product weights once from the mesh at
 # `gridspace(Ωₕ)` time. The mesh is mutable (`set_points!`, `change_points!`, `iterative_refinement!` all
@@ -115,7 +115,8 @@ end
         @test innerₕ(Rₕ(Wₕ_fresh, x -> 1.0), Rₕ(Wₕ_fresh, x -> 1.0)) ≈ 1.0
     end
 
-    @testset "3D (MeshnD)" begin
+    # 3D only: built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+    WITH_3D_TESTS && @testset "3D (MeshnD)" begin
         S = interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)
         Ωₕ = mesh(domain(S), (5, 5, 5), (true, true, true))
         Wₕ = gridspace(Ωₕ)

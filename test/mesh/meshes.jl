@@ -6,7 +6,7 @@ module MeshMeshesTests
 using Test
 using Bramble
 using Bramble: hₘᵢₙ, normal_vector
-using ..TestUtils: _marker_mask
+using ..TestUtils: WITH_3D_TESTS, _marker_mask
 import Bramble:
                 set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, hₘᵢₙ, is_collapsed,
                 change_points!, half_point, half_spacing, indices, is_uniform, locate_cell,
@@ -254,7 +254,8 @@ import Bramble:
             @test haskey(markers(Mh), :boundary)
         end
 
-        @testset "Three-dimensional domain to mesh" begin
+        # 3D only: built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+        WITH_3D_TESTS && @testset "Three-dimensional domain to mesh" begin
             I = interval(0.0, 1.0)
             Ω = I × I × I
             X = domain(Ω)
@@ -420,7 +421,8 @@ import Bramble:
             @test locate_cell(M2, (1e20, -Inf)) == CartesianIndex(10, 1)
         end
 
-        @testset "Three-dimensional extended interface" begin
+        # 3D only: built in `slow` and by the nightly run (gpena/Bramble.jl#650).
+        WITH_3D_TESTS && @testset "Three-dimensional extended interface" begin
             I = interval(0.0, 1.0)
             M3 = mesh(domain(I × I × I), (5, 5, 5))
 

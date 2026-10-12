@@ -12,7 +12,7 @@ using Bramble: restrict_to, πₕ, D₋ₓ, change_points!, indices, local_stenc
                _sweep_point!
 using SparseArrays
 using Random
-using ..TestUtils: alloc_test
+using ..TestUtils: alloc_test, WITH_3D_TESTS
 
 function jittered(n; seed)
     rng = Xoshiro(seed)
@@ -194,11 +194,14 @@ const sₕ = Rₕ(Sₕ, x -> exp(x[1]) * x[2])
     @testset "Rₕ kernels split without the mesh (#503)" begin
         Ω₁ = mesh(domain(interval(0.0, 1.0)), 7, false)
         change_points!(Ω₁, [0.0, 0.05, 0.2, 0.3, 0.55, 0.8, 1.0])
-        Ω₃ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
-            (5, 4, 3), (false, false, false))
+        # The 3D case runs in `slow` (gpena/Bramble.jl#650): unit does not build `Ω₃`.
+        if WITH_3D_TESTS
+            Ω₃ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
+                (5, 4, 3), (false, false, false))
+        end
         rule = Bramble.PointValue(x -> sum(x) + prod(x))
         rules = Bramble.PointValue(x -> (sum(x), prod(x)))
-        for W in (gridspace(Ω₁), Wₕ, gridspace(Ω₃))
+        for W in (gridspace(Ω₁), Wₕ, (WITH_3D_TESTS ? (gridspace(Ω₃),) : ())...)
             for k in (Bramble._rule_kernel(rule, W),
                 Bramble._rule_scatter_kernel(rules, W, Val(2)))
                 @test Bramble._batch_splittable(typeof(k))

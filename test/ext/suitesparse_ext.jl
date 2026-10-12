@@ -1,9 +1,20 @@
+# Normally test/runtests.jl includes test/ext/SolverContracts.jl immediately before this
+# file (SolverContracts.jl's own header comment documents that ordering contract), so
+# `Main.ExtSolverContracts` already exists by the time the `using ..ExtSolverContracts`
+# below runs. Included here too, guarded, so `include("test/ext/suitesparse_ext.jl")`
+# also works standalone without double-defining the module when
+# runtests.jl already loaded it.
+if !isdefined(Main, :ExtSolverContracts)
+    include(joinpath(@__DIR__, "SolverContracts.jl"))
+end
+
 module TestSuiteSparseExt
 
 using Test
 using Bramble
 using Bramble: SuiteSparseFactorization, suitesparse_factorize, suitesparse_qr_factorize,
                suitesparse_qr_solve, suitesparse_refactor!, suitesparse_solve
+using Bramble: change_points!, refactor!, sparse_factorize
 using LinearAlgebra
 using SparseArrays
 using SuiteSparse
@@ -111,6 +122,99 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         # a genuine least-squares residual is orthogonal to A_ls's column space
         residual = A_ls * u_ls - F_ls
         @test isapprox(A_ls' * residual, zeros(size(A_ls, 2)); atol = 1.0e-8)
+    end
+
+    @testset "factorize(a): symmetrize refused" begin
+        Ωₕ = mesh(
+            domain(
+                interval(0.0, 1.0) × interval(0.0, 1.0),
+                :boundary => boundary_symbols(interval(0.0, 1.0) × interval(0.0, 1.0))
+            ), (9, 7), (true, true)
+        )
+        change_points!(Ωₕ, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
+        Wₕ = gridspace(Ωₕ)
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> 1.0), v))
+        bc = :boundary => x -> 1.0 + x[1]
+        for symmetrize in (true, false)
+            @test_throws ArgumentError suitesparse_factorize(a; dirichlet = bc, symmetrize = symmetrize)
+            @test_throws ArgumentError sparse_factorize(
+                a; solver = :suitesparse, dirichlet = bc, symmetrize = symmetrize
+            )
+        end
+
+        # The plain call still solves, with the Dirichlet data lifted into F by assemble
+        A, F = assemble(a, l; dirichlet = bc)
+        @test suitesparse_factorize(a; dirichlet = bc) \ F ≈ Matrix(A) \ F
+        @test sparse_factorize(a; solver = :suitesparse, dirichlet = bc) \ F ≈ Matrix(A) \ F
+    end
+
+    @testset "sym = :auto: indefinite and singular" begin
+        # Shifted Helmholtz, -Δu - 50u = f: symmetric, positive diagonal, indefinite. A uniform
+        # mesh keeps the diagonal positive (a random one gives a non-positive entry about once
+        # in 200 runs), so `:auto` meets a Cholesky candidate that is not positive definite.
+        S2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ω2 = mesh(domain(S2, :boundary => boundary_symbols(S2)), (10, 10), (true, true))
+        W2 = gridspace(Ω2)
+        a_helm = form(W2, W2, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) - 50.0 * innerₕ(u, v))
+        l_helm = form(W2, v -> innerₕ(Rₕ(W2, x -> 1.0), v))
+        A_h, F_h = assemble(a_helm, l_helm; dirichlet = ZERO_BC, symmetrize = true)
+        @test issymmetric(A_h)
+        @test all(>(0), diag(A_h))
+        @test minimum(eigvals(Symmetric(Matrix(A_h)))) < 0
+        u_ref = Matrix(A_h) \ F_h
+
+        @test isapprox(suitesparse_factorize(A_h) \ F_h, u_ref; atol = 1.0e-10)
+        @test isapprox(sparse_factorize(A_h; solver = :suitesparse) \ F_h, u_ref; atol = 1.0e-10)
+        @test isapprox(pde_solve(A_h, F_h; solver = :suitesparse), u_ref; atol = 1.0e-10)
+        # `symmetrize = true` no longer forces Cholesky
+        u_form = suitesparse_solve(a_helm, l_helm; dirichlet = ZERO_BC, symmetrize = true)
+        @test isapprox(parent(u_form), u_ref; atol = 1.0e-10)
+
+        # Symmetric with a positive diagonal, a zero pivot in the LDLᵀ order: solvable
+        M = sparse([1.0 1 0; 1 1 1; 0 1 1])
+        b = [1.0, 2.0, 3.0]
+        @test isapprox(suitesparse_factorize(M) \ b, Matrix(M) \ b; atol = 1.0e-12)
+
+        # Singular: the fallback reports it rather than returning a wrong answer
+        Sg = sparse([1.0 1; 1 1])
+        @test_throws SingularException suitesparse_factorize(Sg) \ [1.0, 2.0]
+        @test_throws SingularException pde_solve(Sg, [1.0, 2.0]; solver = :suitesparse)
+
+        # The Cholesky route stays for a positive definite matrix, on a non-uniform mesh
+        Ωn = mesh(domain(S2, :boundary => boundary_symbols(S2)), (9, 7), (true, true))
+        change_points!(Ωn, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
+        Wn = gridspace(Ωn)
+        a_spd = form(Wn, Wn, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+        l_spd = form(Wn, v -> innerₕ(Rₕ(Wn, x -> 1.0), v))
+        A_s, F_s = assemble(a_spd, l_spd; dirichlet = ZERO_BC, symmetrize = true)
+        @test suitesparse_factorize(A_s).sym === :spd
+        @test isapprox(suitesparse_factorize(A_s) \ F_s, Matrix(A_s) \ F_s; atol = 1.0e-12)
+    end
+
+    # A dense-backed form assembles into a `Matrix`; `refactor!` converts it as the factorize
+    # and solve form methods do. Oracle: the refilled factorization solves to the dense `\`
+    # answer of the matrix assembled with the new coefficient, which differs from the first
+    # factorization's.
+    @testset "refactor!, dense-backed form" begin
+        I1 = interval(0.0, 1.0)
+        Ωd = mesh(
+            domain(I1, :boundary => boundary_symbols(I1)), 12, false;
+            backend = backend(matrix_type = Matrix{Float64})
+        )
+        Wd = gridspace(Ωd)
+        bc = :boundary => x -> 0.0
+        a1 = form(Wd, Wd, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        a2 = form(Wd, Wd, (u, v) -> 3 * inner₊(∇ₕ(u), ∇ₕ(v)))
+        rhs = ones(size(assemble(a1; dirichlet = bc), 1))
+        A2 = assemble(a2; dirichlet = bc)
+        @test A2 isa Matrix{Float64}
+        u2 = A2 \ rhs    # dense LU: not the sparse code under test
+        @test !(assemble(a1; dirichlet = bc) \ rhs ≈ u2)
+
+        fact = sparse_factorize(a1; solver = :suitesparse, dirichlet = bc)
+        @test refactor!(fact, a2; dirichlet = bc) === fact
+        @test fact \ rhs ≈ u2 rtol = 1e-10
     end
 
     @testset "Error handling & validation" begin

@@ -24,7 +24,7 @@ using Bramble:
                boundary_symbols
 using SuiteSparse: SuiteSparse, CHOLMOD, UMFPACK
 using LinearAlgebra: LinearAlgebra, Factorization, ldiv!, issymmetric, Symmetric, cholesky, cholesky!, lu,
-                     lu!, diag
+                     lu!, diag, issuccess
 using SparseArrays: SparseArrays, SparseMatrixCSC
 using PrecompileTools: @setup_workload, @compile_workload
 
@@ -66,7 +66,17 @@ function Bramble._suitesparse_factorize(A::SparseMatrixCSC; sym = :auto, kwargs.
 
     sym_flag = _suitesparse_sym_flag(A, sym)
 
-    fact_obj = if sym_flag === :spd
+    fact_obj = if sym_flag === :spd && sym === :auto
+        # A symmetric matrix with a positive diagonal is only a Cholesky candidate: CHOLMOD
+        # decides, and a failure falls back to UMFPACK, which reports a singular matrix.
+        c = cholesky(Symmetric(A); kwargs..., check = false)
+        if issuccess(c)
+            c
+        else
+            sym_flag = :symmetric
+            lu(A; kwargs...)
+        end
+    elseif sym_flag === :spd
         cholesky(Symmetric(A); kwargs...)
     else
         lu(A; kwargs...)

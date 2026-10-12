@@ -2,7 +2,7 @@ module ExtSciMlExtTests
 
 using Test
 using Bramble
-using Bramble: ode_function
+using Bramble: ode_function, second_order_ode_function
 using Bramble: SecondOrderSemidiscretization, block_mass_matrix, damping_matrix,
                jacobian_prototype, mass_matrix, operator_matrix, semidiscretize_rhs,
                stiffness_matrix
@@ -15,6 +15,7 @@ using OrdinaryDiffEqTsit5: Tsit5
 using ..TestUtils: _check_eoc
 using NonlinearSolve: NewtonRaphson
 using ADTypes: AutoFiniteDiff, AutoForwardDiff
+using ForwardDiff: ForwardDiff
 using WriteVTK: WriteVTK
 using LightXML: parse_file, root, find_element, child_elements, attribute, free
 
@@ -146,6 +147,14 @@ end
         @test R_full === typeof(prob)
         @test SciMLBase.specialization(prob.f) === SciMLBase.FullSpecialize
         @test prob.f.f isa Bramble.Semidiscretization
+
+        # The two-form call leaves `reassemble` at its default: the literal must fold
+        # into `Val(false)` for the problem type to be concrete.
+        forms_closure(a, l, u₀, I) = ode_problem(a, l, u₀, I; dirichlet = :boundary)
+        forms_args = (typeof(a), typeof(l), typeof(u₀), typeof(I))
+        R_forms = only(Base.return_types(forms_closure, forms_args))
+        @test isconcretetype(R_forms)
+        @test R_forms === typeof(forms_closure(a, l, u₀, I))
     end
 
     @testset "ode_problem: p reaches residual" begin
@@ -176,6 +185,21 @@ end
         bcs_t = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 1 + t)
         sd_t = semidiscretize(a, l; dirichlet = bcs_t)
         @test ode_problem(sd_t, u₀, I).p isa SciMLBase.NullParameters
+
+        # A `p` of `ForwardDiff.Dual`s reaches the copied u₀: it is widened to hold the
+        # `p`-dependent boundary values, so the derivative through `ode_problem` is exact.
+        sd_d = semidiscretize(a, l; dirichlet = bcs)
+        z = zeros(n)
+        @test ForwardDiff.gradient(θ -> ode_problem(sd_d, z, I; p = θ).u0[1], [1.0, 2.0]) ==
+              [1.0, 0.0]
+        @test ForwardDiff.gradient(θ -> ode_problem(sd_d, z, I; p = θ).u0[n], [1.0, 2.0]) ==
+              [1.0, 0.0]
+
+        # The widening is for a non-float `p` only: a `Float32` u₀ with a `Float64` `p`
+        # stays `Float32`, and a `Float64` u₀ with a `Float32` `p` stays `Float64`.
+        @test eltype(ode_problem(sd_d, zeros(Float32, n), I; p = [1.0, 2.0]).u0) ===
+              Float32
+        @test eltype(ode_problem(sd_d, z, I; p = Float32[1, 2]).u0) === Float64
     end
 
     # `semidiscretize_rhs`: the point of folding `M⁻¹` in ahead of
@@ -470,11 +494,63 @@ end
             @test parent(du₀) == before_du  # du₀ is never mutated
             @test prob.u0.x[2] !== parent(u₀)
             @test prob.u0.x[2][1] ≈ 0.0 && prob.u0.x[2][n] ≈ 0.0   # made consistent at t₀
-            @test prob.u0.x[1] == parent(du₀)                       # du₀ passed through as-is
+            @test prob.u0.x[1] == parent(du₀)                       # du₀ copied as-is
 
             # The two-form method builds the semidiscretisation on the way.
             @test second_order_ode_problem(K, l, du₀, u₀, Iv; dirichlet = bcs) isa
                   SciMLBase.ODEProblem
+
+            # The caller's `p` reaches the problem, the boundary values at t₀ and the residual.
+            @test prob.p isa SciMLBase.NullParameters
+            bcs_p = dirichlet_constraints(Ωₕ, Iv, :boundary => (x, t, p) -> p[1] * (t + 1))
+            sd_p = semidiscretize_second_order(K, l; dirichlet = bcs_p)
+            prob_p = second_order_ode_problem(sd_p, du₀, u₀, Iv; p = [0.7])
+            @test prob_p.p == [0.7]
+            @test prob_p.u0.x[2][1] == 0.7 && prob_p.u0.x[2][n] == 0.7
+            dv = zeros(n)
+            prob_p.f.f1(dv, zeros(n), prob_p.u0.x[2], prob_p.p, 0.5)
+            @test dv[1] ≈ 0.35   # constrained row: g(x, 0.5, p) - u₁ = 1.05 - 0.7
+            prob_p2 = second_order_ode_problem(K, l, du₀, u₀, Iv; dirichlet = bcs_p, p = [0.7])
+            @test prob_p2.p == [0.7] && prob_p2.u0.x[2][n] == 0.7
+
+            # A `Dual` `p` widens both copies; the Dirichlet value at t₀ differentiates exactly.
+            @test ForwardDiff.derivative(
+                q -> second_order_ode_problem(sd_p, du₀, u₀, Iv; p = [q]).u0.x[2][n], 0.7
+            ) == 1.0
+            prob_d = second_order_ode_problem(
+                sd_p, du₀, u₀, Iv; p = [ForwardDiff.Dual(0.7, 1.0)]
+            )
+            @test eltype(prob_d.u0.x[1]) == eltype(prob_d.u0.x[2]) == eltype(prob_d.p)
+            @test ForwardDiff.value.(prob_d.u0.x[1]) == parent(du₀)
+            @test_throws MethodError second_order_ode_problem(sd, du₀, u₀, Iv; abstol = 1e-8)
+        end
+
+        # `DynamicalODEFunction{true}` fixes `iip` at compile time; the one-argument
+        # constructor asks `isinplace` at run time and leaves both types abstract.
+        @testset "second order: concrete inferred type" begin
+            sd = semidiscretize_second_order(K, l; dirichlet = bcs)
+            u₀ = parent(Rₕ(Wₕ, x -> _wave_uex(x, 0.0)))
+            du₀ = zero(u₀)
+            fn_args = (typeof(sd),)
+            R_fn = only(Base.return_types(second_order_ode_function, fn_args))
+            @test isconcretetype(R_fn)
+            @test R_fn === typeof(second_order_ode_function(sd))
+
+            forms_fn(K, l, bcs) = second_order_ode_function(K, l; dirichlet = bcs)
+            R_forms = only(Base.return_types(forms_fn, map(typeof, (K, l, bcs))))
+            @test isconcretetype(R_forms)
+            @test R_forms === typeof(forms_fn(K, l, bcs))
+
+            default_prob(sd, du₀, u₀, I) = second_order_ode_problem(sd, du₀, u₀, I)
+            p_prob(sd, du₀, u₀, I) = second_order_ode_problem(sd, du₀, u₀, I; p = [0.5])
+            prob_args = (typeof(sd), typeof(du₀), typeof(u₀), typeof(Iv))
+            for k in (default_prob, p_prob)
+                R = only(Base.return_types(k, prob_args))
+                @test isconcretetype(R)
+                prob = k(sd, du₀, u₀, Iv)
+                @test R === typeof(prob)
+                @test SciMLBase.isinplace(prob)
+            end
         end
 
         # VelocityVerlet et al. cannot be used at all: `OrdinaryDiffEqCore` refuses any

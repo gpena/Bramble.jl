@@ -55,11 +55,23 @@ through `assemble!`.
 @inline _kron_coeff_factor(c::Number) = c
 @inline _kron_coeff_factor(c::Base.RefValue{<:Number}) = c[]
 
-# `init = 1.0` rather than `true` (the usual empty-product identity elsewhere in this
-# package): an empty `scales` tuple is the common case (a term with no wrapping scalar at
-# all). `mul!`, `getindex` and `SparseMatrixCSC` pass it through `_kron_scalar`, so a
-# `Float32` operator stays `Float32`; a complex one keeps the `Float64` coefficient.
-@inline _kron_coeff(scales::Tuple) = prod(_kron_coeff_factor, scales; init = 1.0)
+# The product of a term's scale factors, as given: `true` for an empty `scales` tuple, and
+# no `1.0` start, so a `Dual{Float32}` or `ComplexF32` scale keeps its Float32 base. Block
+# operators compare it, and the Kronecker.jl extension converts it with `T(...)` where it
+# needs a plain `T`; a coefficient read in `T` comes from `_kron_coeff(T, scales)` below.
+@inline _kron_coeff(::Tuple{}) = true
+@inline _kron_coeff(scales::Tuple) = prod(_kron_coeff_factor, scales)
+
+# A term's coefficient in the operator's element type `T`'s base: each plain float factor
+# is converted to `T` first, so a Float64 scale neither widens a Float32 `T` nor a
+# `Dual{Float32}` one, while a Dual or complex factor keeps its own type (and widens `T`
+# when `_kron_build` promotes with it). The build, `mul!`, `getindex` and
+# `SparseMatrixCSC` all read a coefficient through this.
+@inline _kron_in(::Type{T}, c::AbstractFloat) where {T} = convert(T, c)
+@inline _kron_in(::Type, c) = c
+@inline function _kron_coeff(::Type{T}, scales::Tuple) where {T}
+    return _kron_scalar(T, prod(c -> _kron_in(T, _kron_coeff_factor(c)), scales; init = one(T)))
+end
 
 # --- Term classification ------------------------------------------------------------- #
 
@@ -594,6 +606,8 @@ function _kron_build(cache, be, dims::NTuple{D, Int}, leaves, block::String) whe
         for (live, projected) in P
             factors = ntuple(d -> _kron_cached!(seen[d], _kron_factor(projected[d], mass[d])), Val(D))
             T = promote_type(T, map(eltype, factors)...)
+            # A Dual or complex scale widens `T`; a Float64 one on a Float32 mesh does not.
+            T = promote_type(T, typeof(_kron_coeff(T, (scales..., live...))))
             t = _kron_term((scales..., live...), factors)
             loc isa DeviceLocality && _kron_check_device(t)
             terms = (terms..., _kron_to_storage(loc, be, t))
@@ -1095,7 +1109,7 @@ end
 # The product with the locality given rather than read off `y`: a composite operator
 # (`kronecker_block.jl`) hands each block a view, whose type says host even on a device.
 function _kron_apply!(loc, y, K::KroneckerLinearOperator{T}, x, α, β) where {T}
-    cs = map(t -> _kron_scalar(T, α * _kron_coeff(t.scales)), K.terms)
+    cs = map(t -> _kron_scalar(T, α * _kron_coeff(T, t.scales)), K.terms)
     _kron_fused!(loc, y, K, x, cs, β)
     return y
 end
@@ -1128,7 +1142,7 @@ function Base.getindex(K::KroneckerLinearOperator{T, D}, i::Int, j::Int) where {
     Jc = CartesianIndices(K.dims)[j]
     total = zero(T)
     for term in K.terms
-        c = _kron_scalar(T, _kron_coeff(term.scales))
+        c = _kron_coeff(T, term.scales)
         p = one(T)
         for d in 1:D
             p *= _kron_entry(term.factors[d], Ic[d], Jc[d])
@@ -1182,9 +1196,9 @@ times the Kronecker product of its `D` one-dimensional factors, last axis leftmo
 and inspection only -- this is exactly the `D`-dimensional matrix [`kronecker_operator`](@ref)
 is built to avoid forming.
 
-The stored pattern is the one `dropzeros` leaves of `assemble(a)`: `assemble` keeps the
-explicit zeros of its stencil, this matrix does not, so the two agree entry for entry but
-their `nnz` can differ.
+The matrix keeps the explicit zeros its factors store. It lacks only those `assemble(a)`'s
+stencil holds outside the factors (a pure `inner_Γ` form, on the interior points of the
+face rows' diagonal), so the two agree entry for entry but their `nnz` can differ there.
 
 Built as a single `sparse(I, J, V, n, n)` call over every term's `findnz` triplets (`V`
 pre-scaled by that term's coefficient) rather than summing each term's Kronecker product
@@ -1196,7 +1210,7 @@ function SparseArrays.SparseMatrixCSC(K::KroneckerLinearOperator{T}) where {T}
     J = Int[]
     V = T[]
     for term in K.terms
-        c = _kron_scalar(T, _kron_coeff(term.scales))
+        c = _kron_coeff(T, term.scales)
         Aterm = foldl(kron, reverse(map(_kron_as_sparse, term.factors)))
         i, j, v = SparseArrays.findnz(Aterm)
         append!(I, i)

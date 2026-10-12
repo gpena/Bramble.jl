@@ -58,20 +58,21 @@ struct TimeParamDependentConstraints{C}
     constraints::C
 end
 
-# Time/parameter dependence is read off the conditions' arity, the same test
-# `_validate_time_dependent_arity` uses to check a time domain was passed honestly. A
-# spatial condition `x -> ...` has no two- or three-argument method, and a `(x, t) -> ...`
-# one has no three-argument method, so the three never collide.
+# Time/parameter dependence is read off the conditions' arity through `_accepts`
+# (geometry/marker.jl), which sees through a `Fix` or a composition to the function it
+# wraps. The three-argument test comes first, then the two-argument one, so
+# `(x, t, p) -> ...` is parametric, `(x, t = 0.0) -> ...` is time-dependent and `x -> ...`
+# is static.
 function _dirichlet_is_time_dependent(constraints::ConstraintMarkers)
     conds = conditions(constraints)
     isempty(conds) && return false
-    return all(m -> hasmethod(identifier(m), Tuple{Any, Any}), conds)
+    return all(m -> _accepts(identifier(m), Val(2)), conds)
 end
 
 function _dirichlet_is_time_param_dependent(constraints::ConstraintMarkers)
     conds = conditions(constraints)
     isempty(conds) && return false
-    return all(m -> hasmethod(identifier(m), Tuple{Any, Any, Any}), conds)
+    return all(m -> _accepts(identifier(m), Val(3)), conds)
 end
 
 @inline _source_constraints(::Nothing, ::Nothing) = NoConstraints()
@@ -94,7 +95,7 @@ function _each_dirichlet_row(f::F, space::ScalarGridSpace, labels, components) w
     _validate_scalar_components(components)
     Ωₕ = mesh(space)
     for p in labels
-        _each_marked(f, index_in_marker(Ωₕ, p), 0)
+        _each_marker_point(f, Ωₕ, p, 0)
     end
     return nothing
 end

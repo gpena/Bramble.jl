@@ -8,13 +8,13 @@ using Bramble: D₋ₓ
 using Random
 using Bramble: D₊, M₊ₕ, ε₊ₕ, ε₊ₕ!
 using ..TestUtils: alloc_test, @test_allocs
-using ..TestUtils: _bubble, _composite, _field, _fixture
+using ..TestUtils: _bubble, _composite, _field, _fixture, TEST_DIMS
 
 # Built on the averaged-spacing difference D̃.
 @testset "Averaged-spacing vector calculus (#287)" begin
     Random.seed!(287)
 
-    @testset "∇̃ₕ ($(D)D)" for D in 1:3
+    @testset "∇̃ₕ ($(D)D)" for D in TEST_DIMS
         _, _, u, _ = _fixture(D)
         g = ∇̃ₕ(u[1])
         dest = D == 1 ? similar(u[1]) : ntuple(_ -> similar(u[1]), D)
@@ -29,7 +29,7 @@ using ..TestUtils: _bubble, _composite, _field, _fixture
         @test_allocs ∇̃ₕ!(dest, u[1])
     end
 
-    @testset "diṽₕ ($(D)D)" for D in 1:3
+    @testset "diṽₕ ($(D)D)" for D in TEST_DIMS
         Ωₕ, _, u, _ = _fixture(D)
         oracle = sum(parent(D̃(u[d], d)) for d in 1:D)
         F = _field(u, D)
@@ -46,7 +46,7 @@ using ..TestUtils: _bubble, _composite, _field, _fixture
         @test_throws DimensionMismatch diṽₕ(ntuple(_ -> u[1], D + 1))
     end
 
-    @testset "curl̃ₕ ($(D)D)" for D in 1:3
+    @testset "curl̃ₕ ($(D)D)" for D in TEST_DIMS
         Ωₕ, _, u, _ = _fixture(D)
         ds(k, d) = parent(D̃(u[k], d))
         if D == 1
@@ -70,7 +70,7 @@ using ..TestUtils: _bubble, _composite, _field, _fixture
         end
     end
 
-    @testset "ε₊ₕ ($(D)D)" for D in 1:3
+    @testset "ε₊ₕ ($(D)D)" for D in TEST_DIMS
         Ωₕ, _, u, _ = _fixture(D)
         F = _field(u, D)
         ε = ε₊ₕ(F)

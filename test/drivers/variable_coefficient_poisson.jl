@@ -3,6 +3,7 @@ module DriversVariableCoefficientPoissonTests
 using Test
 using Bramble
 using Random
+using ..TestUtils: TEST_DIMS, WITH_3D_TESTS
 
 # Order of convergence for an operator no worked example uses: -div(κ(x)∇u) with a smooth,
 # spatially varying κ. Every page in docs/src/examples/ states a constant coefficient in its
@@ -70,7 +71,7 @@ const _SEED = 20260903
 const _LEVELS = (1 => (6, 7), 2 => (5, 6), 3 => (5, 4))   # D => (n0, levels)
 
 function _orders(assemble_form, rhs)
-    map((1, 2, 3)) do D
+    map(TEST_DIMS) do D
         n0, levels = _LEVELS[D].second
         Random.seed!(_SEED)
         hs, errs = _series(assemble_form, rhs, D, n0, levels)
@@ -92,7 +93,7 @@ _asymptotically_second_order(p, lower) = lower < p < 3.0
     κ(x) = 1.0 + 0.5 * sin(pi * x[1])
     dκ(x) = 0.5 * pi * cos(pi * x[1])
 
-    p1, p2, p3 = _orders(
+    ps = _orders(
         Wc -> begin
             # Evaluating κ at the nodes and multiplying it straight into the nodal
             # gradient degrades to first order: `∇ₕ(u)` lives at the staggered
@@ -109,9 +110,10 @@ _asymptotically_second_order(p, lower) = lower < p < 3.0
         (x, D) -> -(dκ(x) + D * κ(x)) * exp(sum(x))
     )
 
-    @test _asymptotically_second_order(p1, 1.9)
-    @test _asymptotically_second_order(p2, 1.9)
-    @test _asymptotically_second_order(p3, 1.8)
+    @test _asymptotically_second_order(ps[1], 1.9)
+    @test _asymptotically_second_order(ps[2], 1.9)
+    # The 3D series runs nightly: `unit` builds no 3D mesh.
+    WITH_3D_TESTS && @test _asymptotically_second_order(ps[3], 1.8)
 end
 
 end # module DriversVariableCoefficientPoissonTests

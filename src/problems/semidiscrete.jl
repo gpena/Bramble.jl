@@ -79,12 +79,12 @@ Built by [`semidiscretize`](@ref); read back with [`mass_matrix`](@ref) and
 - `update_coefficients`: callable invoked with `t` (or, wrapped in `ParametricUpdate`, with `t` and the residual's own `p`) before assembly, or `nothing`.
 - `reassemble`: `Val(true)` to refill `A` at every step.
 """
-struct Semidiscretization{A, L, S, MT, VT, BC, LB, CP, ST, TR, R} <: AbstractSemidiscretization
+struct Semidiscretization{A, L, S, MT, MM, VT, BC, LB, CP, ST, TR, R} <: AbstractSemidiscretization
     operator::A
     source::L
     space::S
     operator_matrix::MT
-    mass_matrix::MT
+    mass_matrix::MM
     source_vector::VT
     constraints::BC
     labels::LB
@@ -129,7 +129,9 @@ Time and parameter dependence of the Dirichlet values is detected by arity, exac
 [`dirichlet_constraints`](@ref) validates it: conditions accepting `(x, t, p)` are evaluated
 at each step against the residual's own `p`, conditions accepting `(x, t)` are evaluated at
 each step without it, and conditions accepting `(x)` are not evaluated per step at all.
-`update_coefficients!` is detected the same way, between its one- and two-argument forms.
+`update_coefficients!` is detected between its one- and two-argument forms, but prefers the
+one-argument form: `(t, p = default) -> ...` is called as `f(t)` and ignores `p`. A
+`Base.Fix` or composition is classified by the function it wraps.
 
 !!! note "`p` reaches only the source, never the operator"
     `A` (and therefore [`jacobian!`](@ref)) stays fixed for a given `t`, regardless of `p`:
@@ -154,7 +156,7 @@ sd = semidiscretize(a, l; dirichlet = bcs)
 
 See also [`ode_function`](@ref), [`ode_problem`](@ref), [`jacobian!`](@ref).
 """
-function semidiscretize(
+Base.@constprop :aggressive function semidiscretize(
         a::BilinearForm,
         l::LinearForm;
         mass = nothing,
@@ -242,7 +244,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)
 
 See also [`ode_function`](@ref), [`ode_problem`](@ref).
 """
-function semidiscretize(
+Base.@constprop :aggressive function semidiscretize(
         build::B,
         l::LinearForm;
         mass = nothing,
@@ -426,7 +428,12 @@ struct ParametricUpdate{F}
 end
 
 @inline _wrap_update(::Nothing) = nothing
-@inline _wrap_update(f) = hasmethod(f, Tuple{Any, Any}) ? ParametricUpdate(f) : f
+# Unlike the Dirichlet conditions, a hook prefers its one-argument form:
+# `(t, p = 1.0) -> ...` is called as `f(t)` and ignores `p`, and only a function with no
+# one-argument method but a two-argument one is parametric.
+@inline function _wrap_update(f)
+    return (!_accepts(f, Val(1)) && _accepts(f, Val(2))) ? ParametricUpdate(f) : f
+end
 
 @inline _update_coefficients!(::Nothing, p, t) = nothing
 # The existing one-argument path, untouched: a concrete `ParametricUpdate` method is more
@@ -603,8 +610,8 @@ end
 
 function Base.show(
         io::IO, ::MIME"text/plain",
-        sd::Semidiscretization{A, L, S, MT, VT, BC, LB, CP, ST, TR, R}
-) where {A, L, S, MT, VT, BC, LB, CP, ST, TR, R}
+        sd::Semidiscretization{A, L, S, MT, MM, VT, BC, LB, CP, ST, TR, R}
+) where {A, L, S, MT, MM, VT, BC, LB, CP, ST, TR, R}
     return show_block(io) do io
         pp = PrettyPrinter(io)
         printstyled(io, "Semidiscretization"; bold = true, color = :cyan)

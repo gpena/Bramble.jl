@@ -3,7 +3,7 @@ module FormInnerProductsTests
 using Test
 using Bramble
 using LinearAlgebra: Diagonal, diag, dot
-using ..TestUtils: @test_allocs
+using ..TestUtils: @test_allocs, WITH_3D_TESTS
 using Bramble:
                IdentityOperator,
                TrialFunction,
@@ -36,7 +36,10 @@ using Bramble:
                D₋ᵧ,
                inner₊ᵧ,
                inner₊₂,
-               inner₊ₓ
+               inner₊ₓ,
+               restrict_to,
+               resolve_form_ast,
+               πₕ
 
 # The inner products, from construction through to the stencil they evaluate to.
 #
@@ -323,7 +326,8 @@ end
         end
     end
 
-    @testset "3D" begin
+    # 3D only: runs nightly (`slow`).
+    WITH_3D_TESTS && @testset "3D" begin
         Ω3 = domain(box((0.0, 0.0, 0.0), (0.5, 0.6, 0.7)))
         Ωₕ3 = mesh(Ω3, (4, 5, 3), (false, false, false))
         Wₕ3 = gridspace(Ωₕ3)
@@ -435,10 +439,153 @@ end
         @test_allocs assemble!(B, a)
     end
 
+    # A label is read from its definition at `form`, as the numeric `inner_Γ` reads it
+    # (#660). On a non-uniform mesh the lumped weight integrates g = 1 + x + 2y exactly on
+    # each edge: 2 on x = 0, 3 on x = 1, 1.5 on y = 0, 3.5 on y = 1.
+    @testset "Labels read as defined (#660)" begin
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        mk(lab...) = gridspace(mesh(domain(S, lab..., :boundary => boundary_symbols(S)),
+            (11, 9), (false, false)))
+        g(x) = 1 + x[1] + 2x[2]
+        lin(W, m) = assemble(form(W, v -> inner_Γ(g, v; markers = m)))
+        bil(W, m) = assemble(form(W, W, (u, v) -> inner_Γ(u, v; markers = m)))
+        ig(W, l...) = inner_Γ(Rₕ(W, g), element(W, 1.0), l...)
+
+        W = mk(:left => :ymin)
+        @test lin(W, :left) == lin(W, :ymin)
+        @test sum(lin(W, :left)) ≈ ig(W, :left) ≈ 1.5
+        @test sum(lin(W, :xmin)) ≈ 2.0
+        A = bil(W, :left)
+        @test A == bil(W, :ymin)
+        uₕ = Rₕ(W, x -> sin(x[1]) + x[2])
+        vₕ = Rₕ(W, x -> cos(x[2]) * x[1] + 1.0)
+        @test dot(parent(vₕ), A * parent(uₕ)) ≈ inner_Γ(uₕ, vₕ, :left)
+        # a user-named whole face, and with a face name beside it
+        Wi = mk(:inflow => :xmin)
+        @test lin(Wi, :inflow) == lin(Wi, :xmin)
+        @test sum(lin(Wi, :inflow)) ≈ ig(Wi, :inflow) ≈ 2.0
+        @test sum(lin(Wi, (:inflow, :ymax))) ≈ ig(Wi, :inflow, :ymax) ≈ 2.0 + 3.5
+        # two half-face markers select the face together
+        Wa = mk(:a => x -> x[1] == 0 && x[2] <= 0.5, :b => x -> x[1] == 0 && x[2] >= 0.5)
+        @test lin(Wa, (:a, :b)) == lin(Wa, :xmin)
+        @test sum(lin(Wa, (:a, :b))) ≈ ig(Wa, :a, :b) ≈ 2.0
+        # an open face, its two corners left out (D-E6)
+        Wo = mk(:right => x -> x[1] == 1 && 0 < x[2] < 1)
+        @test lin(Wo, :right) == lin(Wo, :xmax)
+        @test sum(lin(Wo, :right)) ≈ ig(Wo, :right) ≈ 3.0
+        # a name-agreeing marker changes nothing
+        Wn = mk(:left => :xmin)
+        @test lin(Wn, :left) == lin(Wn, :xmin)
+        @test bil(Wn, :left) == bil(Wn, :xmin)
+        # a face plus half of another is refused at `form`, by the numeric path's error
+        Wc = mk(:c => x -> x[1] == 0 || (x[2] == 0 && x[1] <= 0.5))
+        @test_throws ArgumentError lin(Wc, :c)
+        @test_throws "whole boundary faces" lin(Wc, :c)
+        @test_throws "whole boundary faces" bil(Wc, :c)
+
+        # two spellings of one face fold into one term, as any like terms do
+        a2 = form(W, W, (u, v) -> inner_Γ(u, v; markers = :left) +
+                                  inner_Γ(u, v; markers = :ymin))
+        @test resolve_form_ast(a2) isa Bramble.OperatorScale
+        @test assemble(a2) ≈ 2A
+        @test !Bramble._has_surface_labels(resolve_form_ast(a2))
+    end
+
+    @testset "Labels under a wrapper (#660)" begin
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        W = gridspace(mesh(domain(S, :left => :ymin, :boundary => boundary_symbols(S)),
+            (11, 9), (false, false)))
+        Ay = assemble(form(W, W, (u, v) -> inner_Γ(u, v; markers = :ymin)))
+        @test assemble(form(W, W,
+            (u, v) -> restrict_to(:boundary, inner_Γ(u, v; markers = :left)))) == Ay
+        w = fill(2.0, ndofs(W))
+        @test assemble(form(W, W, (u, v) -> w * inner_Γ(u, v; markers = :left))) ≈ 2Ay
+        @test assemble(form(W, W, (u, v) -> -inner_Γ(u, v; markers = :left))) ≈ -Ay
+        g(x) = 1 + x[1] + 2x[2]
+        Fy = assemble(form(W, v -> inner_Γ(g, v; markers = :ymin)))
+        Fr = assemble(form(W, v -> restrict_to(:boundary, inner_Γ(g, v; markers = :left))))
+        @test Fr == Fy
+        @test assemble(form(W, v -> 3.0 * inner_Γ(g, v; markers = :left))) ≈ 3Fy
+    end
+
+    # The mesh is the test leaf's: only `W1` reads `:left` as y = 0.
+    @testset "Labels on a composite (#660)" begin
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        g(x) = 1 + x[1] + 2x[2]
+        W1 = gridspace(mesh(domain(S, :left => :ymin, :boundary => boundary_symbols(S)),
+            (7, 6), (false, false)))
+        W2 = gridspace(mesh(domain(S, :boundary => boundary_symbols(S)),
+            (6, 8), (false, false)))
+        n = ndofs(W2)
+        F2 = assemble(form(W2 × W1, v -> inner_Γ(g, v(2); markers = :left)))
+        @test sum(F2[(n + 1):end]) ≈ 1.5
+        @test iszero(F2[1:n])
+        F1 = assemble(form(W2 × W1, v -> inner_Γ(g, v(1); markers = :xmin)))
+        @test sum(F1[1:n]) ≈ 2.0
+        @test iszero(F1[(n + 1):end])
+        # a term naming no component reaches both leaves, which read `:left` apart
+        @test_throws ArgumentError form(W2 × W1, v -> inner_Γ(g, v; markers = :left))
+        @test_throws "different faces" form(W2 × W1, v -> inner_Γ(g, v; markers = :left))
+        # where they agree it reaches both
+        Fb = assemble(form(W2 × W1, v -> inner_Γ(g, v; markers = :ymin)))
+        @test sum(Fb[1:n]) ≈ 1.5
+        @test sum(Fb[(n + 1):end]) ≈ 1.5
+    end
+
+    # Under a test-side `πₕ` the sweep walks the trial leaf, so a label is read there: on a
+    # trial mesh holding it, against a test mesh that does not, it is its marked face.
+    @testset "Labels on the walked mesh (#660)" begin
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        mk(n, lab...) = gridspace(mesh(domain(S, lab..., :boundary => boundary_symbols(S)),
+            n, (false, false)))
+        tp(m) = (u, v) -> inner_Γ(u, πₕ(v); markers = m)
+        Vt = mk((7, 6))
+        Wi = mk((11, 9), :inflow => :xmin)
+        @test assemble(form(Wi, Vt, tp(:inflow))) == assemble(form(Wi, Vt, tp(:xmin)))
+        Wt = mk((11, 9), :left => :ymin)
+        Al = assemble(form(Wt, Vt, tp(:left)))
+        @test Al == assemble(form(Wt, Vt, tp(:ymin)))
+        @test Al != assemble(form(Wt, Vt, tp(:xmin)))
+        # on a composite, the walked leaf is the trial component the term names
+        W2 = mk((9, 10))
+        tc(k, m) = (u, v) -> inner_Γ(u(k), πₕ(v(k)); markers = m)
+        A2 = assemble(form(W2 × Wt, Vt × Vt, tc(2, :left)))
+        @test A2 == assemble(form(W2 × Wt, Vt × Vt, tc(2, :ymin)))
+        A1 = assemble(form(W2 × Wt, Vt × Vt, tc(1, :left)))
+        @test A1 == assemble(form(W2 × Wt, Vt × Vt, tc(1, :xmin)))
+        @test_throws "different faces" form(W2 × Wt, Vt × Vt, tp(:left))
+        # a term naming one side's component alone meets the block routing's own refusal
+        X = Vt × Wt
+        @test_throws "names its trial component but not its test one" assemble(
+            form(X, X, (u, v) -> inner_Γ(u(1), v; markers = :left)))
+        @test_throws "names its test component but not its trial one" assemble(
+            form(X, X, (u, v) -> inner_Γ(u, πₕ(v(2)); markers = :left)))
+    end
+
+    @testset "Labels refill in place (#660)" begin
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        W = gridspace(mesh(domain(S, :left => :ymin, :boundary => boundary_symbols(S)),
+            (11, 9), (false, false)))
+        g(x) = 1 + x[1] + 2x[2]
+        l = form(W, v -> inner_Γ(g, v; markers = :left))
+        b = @inferred assemble(l)
+        assemble!(b, l)
+        @test_allocs assemble!(b, l)
+        a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + inner_Γ(u, v; markers = :left))
+        B = @inferred assemble(a)
+        assemble!(B, a)
+        @test_allocs assemble!(B, a)
+    end
+
+    # An empty label set is refused when the node is built; a label the mesh neither holds
+    # nor reads as a face name is refused at `form`, where the mesh is known.
     @testset "Construction refusals" begin
         u, v = TrialFunction{2}(), TestFunction{2}()
-        @test_throws ArgumentError inner_Γ(u, v; markers = (:inlet,))
         @test_throws ArgumentError inner_Γ(u, v)
+        Wₕ = gridspace(mesh(Ω, (5, 5), (true, true)))
+        @test_throws ArgumentError form(Wₕ, Wₕ,
+            (u, v) -> inner_Γ(u, v; markers = (:inlet,)))
+        @test_throws ArgumentError form(Wₕ, v -> inner_Γ(1.0, v; markers = :inlet))
     end
 end
 

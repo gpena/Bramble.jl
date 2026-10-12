@@ -2,7 +2,7 @@ module FormSourceOperatorsTests
 
 using Test
 using Bramble
-using ..TestUtils: WITH_AD_TESTS
+using ..TestUtils: WITH_AD_TESTS, WITH_3D_TESTS
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, M₊ₓ, M₊ᵧ
 using ForwardDiff
@@ -314,9 +314,9 @@ using Bramble:
     @testset "Restricted source keeps one type (#639)" begin
         # `form` calls each restricted source once, at a point of its region the walk reads,
         # and stores a zero stencil of that value: outside the region the node answers it
-        # instead of `()`, so `local_stencil` infers one type. `n` stays odd and the mesh
-        # uniform: the middle point, x = 0.5, is sampled for the element type
-        # (`_leaf_eltype`) whatever the region, and every source below is defined there.
+        # instead of `()`, so `local_stencil` infers one type. The element type
+        # (`_leaf_eltype`) is read from that zero stencil, so the source is called nowhere
+        # else at `form` or before the walk.
         n = 9
         Ωₕ = mesh(domain(interval(0.0, 1.0), :half => x -> x[1] > 0.5,
                 :none => x -> x[1] > 2), n, true)
@@ -451,11 +451,11 @@ using Bramble:
             l = form(Wₕ, v -> innerₕ(rh(rec), v))
             @test calls == [x[6]]                 # the probe: the region's first point
             assemble(l)
-            @test sort!(unique(calls)) == x[5:n]  # x[5]: the element-type sample
+            @test sort!(unique(calls)) == x[6:n]  # no element-type sample outside it
             empty!(calls)
             l = form(Wₕ, v -> innerₕ(shift_op(rh(rec), 1, -1), v))
             assemble(l)
-            @test sort!(unique(calls)) == x[5:(n - 1)]  # x[n] is read by no row
+            @test sort!(unique(calls)) == x[6:(n - 1)]  # x[n] is read by no row
             # a source throwing at the first point of its region throws at `form`
             x₂ = x[2]
             th = source_function(y -> y == x₂ ? throw(DomainError(y)) : y, Val(1))
@@ -474,7 +474,7 @@ using Bramble:
             m[:half] = [xi > 0.8 for xi in points(Ωm)]
             Bramble.markers!(Ωm, m)
             b = assemble(l)
-            @test sort!(unique(calls)) == [x[5], x[6], x[8], x[n]]
+            @test sort!(unique(calls)) == [x[6], x[8], x[n]]
             @test isequal(b, [i >= 8 ? (x[i] + 1) * w[i] : 0.0 for i in 1:n])
         end
 
@@ -484,6 +484,83 @@ using Bramble:
             op, mk = Bramble._bind_walk(ast.left_op, Wₕ)
             @test Bramble.local_stencil(op, Wₕ, CartesianIndex(3), mk, 3) === ()
             @test all(iszero, bvec(restrict_to(:none, sf)))
+        end
+
+        @testset "eltype read inside the region (#643)" begin
+            bnd(y) = y == 0 || y == 1
+            b2 = [i == 1 || i == n ? 2.0 * w[i] : 0.0 for i in 1:n]
+            # 1D, outside `:boundary`: a source that throws, and one that answers a string
+            thrown_rhs = source_function(y -> bnd(y) ? 2.0 : throw(DomainError(y)), Val(1))
+            str = source_function(y -> bnd(y) ? 2.0 : "undefined", Val(1))
+            @test isequal(bvec(rb(thrown_rhs)), b2)
+            b = bvec(rb(str))
+            @test eltype(b) == Float64 && isequal(b, b2)
+            # a user region: only 6:n is marked
+            hthr = source_function(y -> y > 0.5 ? y : throw(DomainError(y)), Val(1))
+            hstr = source_function(y -> y > 0.5 ? y : "undefined", Val(1))
+            bh = [i >= 6 ? x[i] * w[i] : 0.0 for i in 1:n]
+            @test isequal(bvec(rh(hthr)), bh)
+            b = bvec(rh(hstr))
+            @test eltype(b) == Float64 && isequal(b, bh)
+
+            # 2D, outside `:boundary` of a non-uniform mesh
+            Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6),
+                (false, false))
+            W2 = gridspace(Ω2)
+            w2 = vec(weights(W2, Innerh()))
+            on2(y) = !(0 < y[1] < 1 && 0 < y[2] < 1)
+            ref2 = vec([I[1] in (1, 5) || I[2] in (1, 6) ? w2[k] : 0.0
+                        for (k, I) in enumerate(CartesianIndices((5, 6)))])
+            @test count(!iszero, ref2) == 2 * (5 + 6) - 4
+            for h in (y -> on2(y) ? 1.0 : throw(DomainError(y)),
+                y -> on2(y) ? 1.0 : "undefined")
+                b = assemble(form(W2, v -> innerₕ(rb(source_function(h, Val(2))), v)))
+                @test eltype(b) == Float64 && isequal(b, ref2)
+            end
+
+            # a term naming no component on a composite: never typed at `form`
+            WW = Wₕ × Wₕ
+            ok = source_function(y -> 2.0, Val(1))
+            bWW = assemble(form(WW, v -> innerₕ(rb(thrown_rhs), v)))
+            @test eltype(bWW) == Float64
+            @test isequal(bWW, assemble(form(WW, v -> innerₕ(rb(ok), v))))
+            @test isequal(bWW, vcat(b2, b2))
+            @test isequal(assemble(form(WW, v -> innerₕ(rb(str), v))), bWW)
+
+            # the probed value's type is kept: a Float32 mesh, a `Dual` source
+            Ω32 = mesh(domain(interval(0.0f0, 1.0f0)), n, true)
+            W32 = gridspace(Ω32)
+            t32 = source_function(y -> bnd(y) ? 2.0f0 : throw(DomainError(y)), Val(1))
+            b = assemble(form(W32, v -> innerₕ(rb(t32), v)))
+            @test eltype(b) == Float32 && b[1] == 2.0f0 * weights(W32, Innerh())[1]
+            d = ForwardDiff.Dual{:t}(1.0, 1.0)
+            td = source_function(y -> bnd(y) ? d : throw(DomainError(y)), Val(1))
+            b = bvec(rb(td))
+            @test eltype(b) == typeof(d) && ForwardDiff.partials(b[n])[1] == w[n]
+            bd = assemble(form(WW, v -> innerₕ(rb(td), v)))
+            @test eltype(bd) == typeof(d) && ForwardDiff.value(bd[1]) == w[1]
+
+            # an empty region: the source is never called, a zero vector of the space's type
+            nev = source_function(y -> throw(DomainError(y)), Val(1))
+            b = bvec(restrict_to(:none, nev))
+            @test eltype(b) == Float64 && all(iszero, b)
+            b = assemble(form(WW, v -> innerₕ(restrict_to(:none, nev), v)))
+            @test eltype(b) == Float64 && length(b) == 2n && all(iszero, b)
+            Ω32m = mesh(domain(interval(0.0f0, 1.0f0), :none => y -> y[1] > 2), n, true)
+            b = assemble(form(gridspace(Ω32m), v -> innerₕ(restrict_to(:none, nev), v)))
+            @test eltype(b) == Float32 && all(iszero, b)
+
+            # decided by types, whether or not the region holds a point the walk reads
+            cs = source_function(y -> y * im, Val(1))
+            @test @inferred(assemble(form(WW, v -> innerₕ(rh(cs), v)))) isa
+                  Vector{ComplexF64}
+            @test @inferred(assemble(form(WW, v -> innerₕ(rh(ri(sf)), v)))) isa
+                  Vector{Float64}
+            sd = source_function(y -> y * d, Val(1))
+            @test @inferred(assemble(form(WW, v -> innerₕ(ri(rh(sd)), v)))) isa
+                  Vector{typeof(d)}
+            b = @inferred assemble(form(Wₕ, v -> innerₕ(restrict_to(:none, cs), v)))
+            @test b isa Vector{ComplexF64} && all(iszero, b)
         end
     end
 
@@ -602,19 +679,22 @@ using Bramble:
         @test b2 ≈ A2 * parent(fₕ)
         @test !all(iszero, b2)
 
-        # inner₊₂(source, v): the plain directional (z) form, 3D since Dim = 3 needs D ≥ 3
-        Ω3 = mesh(
-            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 3, 5), (true, true, true)
-        )
-        W3 = gridspace(Ω3)
-        f3 = x -> x[1] + x[2]^2 - x[3]
-        sf3 = source_function(f3, Val(3))
-        f3ₕ = Rₕ(W3, f3)
+        # inner₊₂(source, v): the plain directional (z) form, 3D since Dim = 3 needs D ≥ 3.
+        # Runs nightly (`slow`).
+        if WITH_3D_TESTS
+            Ω3 = mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 3, 5), (true, true, true)
+            )
+            W3 = gridspace(Ω3)
+            f3 = x -> x[1] + x[2]^2 - x[3]
+            sf3 = source_function(f3, Val(3))
+            f3ₕ = Rₕ(W3, f3)
 
-        b3 = assemble(form(W3, v -> inner₊₂(sf3, v)))
-        A3 = assemble(form(W3, W3, (u, v) -> inner₊₂(u, v)))
-        @test b3 ≈ A3 * parent(f3ₕ)
-        @test !all(iszero, b3)
+            b3 = assemble(form(W3, v -> inner₊₂(sf3, v)))
+            A3 = assemble(form(W3, W3, (u, v) -> inner₊₂(u, v)))
+            @test b3 ≈ A3 * parent(f3ₕ)
+            @test !all(iszero, b3)
+        end
     end
 
     @testset "Allocation contract" begin

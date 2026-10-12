@@ -8,7 +8,7 @@ import Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₋ₕ, diff₊ₓ, diff
 using Bramble: components, ndofs, _grid_dims, _op_mesh
 using Bramble: diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊ₓ, diff₊ᵧ, diff₊₂, diff₋ₕ
 import Bramble: εₕ, εₕ!, Δₕ!
-using ..TestUtils: alloc_test, @test_allocs
+using ..TestUtils: alloc_test, @test_allocs, TEST_DIMS, WITH_3D_TESTS
 
 # Operators on composite grid functions.
 #
@@ -39,7 +39,8 @@ using ..TestUtils: alloc_test, @test_allocs
             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 6), (true, false)),
             2
         ),
-        (
+        (WITH_3D_TESTS ?
+         ((
             "3D",
             mesh(
                 domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))),
@@ -47,7 +48,7 @@ using ..TestUtils: alloc_test, @test_allocs
                 (true, false, true)
             ),
             3
-        )
+        ),) : ())...
     )
 
     # A distinct, non-symmetric function per component, so a component being written into
@@ -157,7 +158,8 @@ using ..TestUtils: alloc_test, @test_allocs
                 2,
                 (x -> sin(x[1]) + x[2]^2, x -> cos(x[2]) + x[1]^2)
             ),
-            (
+            (WITH_3D_TESTS ?
+             ((
                 "3D",
                 mesh(
                     domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 4, 6),
@@ -169,7 +171,7 @@ using ..TestUtils: alloc_test, @test_allocs
                     x -> cos(x[2]) + x[1] * x[3],
                     x -> sin(x[3]) + x[1] * x[2]
                 )
-            )
+            ),) : ())...
         )
 
         for (lbl, Ωₕ, D, fs) in vc_cases
@@ -233,8 +235,10 @@ using ..TestUtils: alloc_test, @test_allocs
             nu_cases = (
                 (mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false)),
                     vc_cases[1][4]),
-                (mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 4, 6),
-                        (false, false, true)), vc_cases[2][4])
+                (WITH_3D_TESTS ?
+                 ((mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 4, 6),
+                        (false, false, true)),
+                    vc_cases[2][4]),) : ())...
             )
             for (Ωₕ, fs) in nu_cases
                 D = length(fs)
@@ -282,7 +286,7 @@ using ..TestUtils: alloc_test, @test_allocs
         )
         f1 = (x -> x^3 + 1, x -> x[1]^2 * x[2] + 1, x -> x[1]^2 + x[2] * x[3])
         f2 = (x -> sin(x) + 2, x -> x[1] * x[2]^2, x -> x[1] * x[2] + x[3]^3)
-        for D in 1:3
+        for D in TEST_DIMS
             Ω1 = mesh(Bs[D], Ns[D][1], Us[D][1])
             Ω2 = mesh(Bs[D], Ns[D][2], Us[D][2])
             for (lbl, W1, W2) in (

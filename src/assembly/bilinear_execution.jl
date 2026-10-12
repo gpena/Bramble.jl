@@ -538,7 +538,7 @@ function _assemble_bilinear_core_cached!(
 ) where {AST_TYPE, D, CACHED_AST}
     stamp = _pattern_stamp(trial_space, test_space)
     if cache.valid && cache.A_id === objectid(A) && cache.ast === ast &&
-       cache.stamp === stamp
+       cache.stamp === stamp && cache.stored == _pattern_length(A)
         _replay_bilinear_core!(mode, A, trial_space, test_space, ast, cache.segments, α)
     else
         # A fresh vector, never `empty!` on whatever `cache.segments` currently references.
@@ -549,6 +549,8 @@ function _assemble_bilinear_core_cached!(
         #
         # A stamp mismatch (`markers!` since the recording) re-records against the same `A`:
         # a shrunk pattern refills correctly, a grown one throws the missing-entry error.
+        # So does a stored-entry count that moved (an inserted diagonal, #534), once; the
+        # fills after it replay again.
         segments = _record_bilinear_core!(
             mode, A, trial_space, test_space, ast, Val(D), α
         )
@@ -566,6 +568,7 @@ end
     cache.segments = segments
     cache.A_id = objectid(A)
     cache.stamp = stamp
+    cache.stored = _pattern_length(A)
     cache.ast = ast
     cache.valid = true
     return nothing

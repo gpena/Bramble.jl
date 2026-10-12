@@ -25,7 +25,7 @@
 # on the whole boundary, so all of the injected water has to leave through it.
 
 using Bramble
-using Bramble: reaction, reaction_density, weights
+using Bramble: reaction, reaction_density
 
 Q = 3.0
 x₀ = (0.35, 0.65)
@@ -123,16 +123,15 @@ per_side = [reaction(a, l, uₕ; marker = m) for m in sides]
 collect(zip(sides, per_side))
 
 # [`reaction_density`](@ref) is the pointwise counterpart: a grid function, zero away from the
-# marker, carrying the flux *density* at each marked point rather than its sum. Weighting it
-# by the cell measures recovers the scalar above, which is the check that the two agree, and
-# it is the form to hand an exporter:
+# marker, carrying the flux *density* at each marked point rather than its sum. Integrating
+# it over the boundary with [`inner_Γ`](@ref) recovers the scalar above, which is the check
+# that the two agree, and it is the form to hand an exporter:
 
 rd = reaction_density(a, l, uₕ; marker = :boundary)
-w = weights(Wₕ, Bramble.Innerh())
 
-@test sum(parent(rd) .* w) ≈ flux_total                                                    #src
+@test inner_Γ(element(Wₕ, 1.0), rd, :boundary) ≈ flux_total                               #src
 
-sum(parent(rd) .* w), maximum(parent(rd))
+inner_Γ(element(Wₕ, 1.0), rd, :boundary), maximum(parent(rd))
 
 # ## Two wells
 #

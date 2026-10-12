@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: normal_vector
 using LinearAlgebra: dot
-using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
+using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
 
 # The outward normal, as a discrete grid function and as a symbol inside a form.
 #
@@ -119,10 +119,12 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
             (domain(interval(0.0, 1.0)), 9, false, (:xmin, :xmax, :left, :right)),
             (domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false),
                 (:xmin, :xmax, :ymin, :ymax, :left, :right, :bottom, :top)),
-            (domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 3.0)),
+            (WITH_3D_TESTS ?
+             ((domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 3.0)),
                 (5, 6, 4), (false, false, false),
                 (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax,
-                    :back, :front, :left, :right, :bottom, :top))
+                    :back, :front, :left, :right, :bottom, :top)),) :
+             ())...
         )
         for (D, (S, sz, unif, labels)) in enumerate(cases)
             Ωₕ = mesh(S, sz, unif)
@@ -149,8 +151,10 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
         end
         cases = (
             (domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (1.0, 2.0), (9, 7)),
-            (domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
-                (1.0, 2.0, 3.0), (5, 6, 4))
+            (WITH_3D_TESTS ?
+             ((domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
+                (1.0, 2.0, 3.0), (5, 6, 4)),) :
+             ())...
         )
         for (S, L, sz) in cases
             D = length(L)
@@ -236,7 +240,7 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
         # type, as `A - B` does, and never widen a Float32 form to Float64.
         # `unit` runs the full term sweep in Float64 per dimension and one Float32 lin and bil
         # per dimension; `slow` runs the whole cross product.
-        @testset "$T, $(D)D" for T in (Float32, Float64), D in (2, 3)
+        @testset "$T, $(D)D" for T in (Float32, Float64), D in filter(≥(2), TEST_DIMS)
 
             full = WITH_SLOW_TESTS || T === Float64
 
@@ -311,11 +315,39 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS
               "inner_Γₓ(u, v) + inner_Γᵧ(u, v)"
     end
 
+    # A label is read from its definition at `form`, as for `inner_Γ(g, v)` (#660). The
+    # lumped face weight integrates g = 1 + x + 2y exactly: 1.5 on y = 0, 2 on x = 0, and
+    # the outward normal there is -1.
+    @testset "normal: labels read as defined" begin
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        mk(lab...) = gridspace(mesh(domain(S, lab..., :boundary => boundary_symbols(S)),
+            (11, 9), (false, false)))
+        ηₓ, ηᵧ = η
+        g = x -> 1 + x[1] + 2x[2]
+        lin(W, t, m) = assemble(form(W, v -> inner_Γ(t, v; markers = m)))
+        bil(W, t, m) = assemble(form(W, W, (u, v) -> inner_Γ(t(u), v; markers = m)))
+
+        W = mk(:left => :ymin)
+        @test lin(W, g * ηᵧ, :left) == lin(W, g * ηᵧ, :ymin)
+        @test sum(lin(W, g * ηᵧ, :left)) ≈ -1.5
+        @test iszero(lin(W, g * ηₓ, :left))
+        @test lin(W, dot((g, g), η), :left) == lin(W, dot((g, g), η), :ymin)
+        @test bil(W, u -> u * ηᵧ, :left) == bil(W, u -> u * ηᵧ, :ymin)
+        Wi = mk(:inflow => :xmin)
+        @test lin(Wi, g * ηₓ, :inflow) == lin(Wi, g * ηₓ, :xmin)
+        @test sum(lin(Wi, g * ηₓ, :inflow)) ≈ -2.0
+        # a marker that is not whole faces is refused at `form`, as the numeric path does
+        Wc = mk(:c => x -> x[1] == 0 || (x[2] == 0 && x[1] <= 0.5))
+        @test_throws "whole boundary faces" lin(Wc, g * ηₓ, :c)
+    end
+
+    # An empty label set is refused when the term is built; an unknown label at `form`.
     @testset "Refusals" begin
         Wₕ = gridspace(mesh(Ω, (7, 7), (true, true)))
         v = Bramble.TestFunction{2}()
         F = (x -> 1.0, x -> 0.0)
-        @test_throws ArgumentError inner_Γ(dot(F, η), v; markers = (:inlet,))
+        @test_throws ArgumentError form(Wₕ, w -> inner_Γ(dot(F, η), w; markers = (:inlet,)))
+        @test_throws ArgumentError form(Wₕ, w -> inner_Γ(F[1] * η[1], w; markers = :inlet))
         @test_throws ArgumentError inner_Γ(dot(F, η), v)
         @test_throws ArgumentError normal_vector(Wₕ, :inlet)
         # a component of η is refused outside inner_Γ, by name, and past the form's dimension

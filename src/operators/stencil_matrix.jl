@@ -23,8 +23,9 @@ after `stencil.jl`, still ahead of every file that calls into either.
 
 The fixed neighbour offsets along `op`'s axis that its stencil reads, in the same order
 [`_stencil_weights`](@ref) returns their coefficients. A tap whose neighbour falls outside
-the grid contributes no entry at all (checked in [`stencil_matrix`](@ref)), rather than a
-stored zero.
+the grid contributes no entry at all (checked in [`stencil_matrix`](@ref)). A tap that
+stays on the grid is always stored, even where its weight is exactly zero: the stencil, not
+the value, decides the pattern.
 """
 @inline _stencil_taps(::BackwardFiniteDiffOp) = (0, -1)
 @inline _stencil_taps(::ForwardFiniteDiffOp) = (1, 0)
@@ -252,8 +253,8 @@ end
 # `n x n` case and shrinks them to the sparse result afterwards, and shrinking an array does
 # not release the `Memory` behind it. What comes back is numerically right and reports the
 # right `nnz`, `length(nzval)` and `sizeof(nzval)`, but it carries two buffers of `n^2`
-# elements for as long as the operator lives. Measured on a 100 x 100 mesh: `D₋ₓ` has 19800
-# stored entries and a `Base.summarysize` of 1.51 GiB, against 400 KB for the unscaled
+# elements for as long as the operator lives. Measured on a 100 x 100 mesh: `D₋ₓ` then had
+# 19800 stored entries and a `Base.summarysize` of 1.51 GiB, against 400 KB for the unscaled
 # `backward_difference` it scales. `Base.summarysize` is the only size that shows it.
 #
 # Scaling the stored entries in place touches the nonzeros alone. `rowvals(A)[k]` is the row
@@ -261,9 +262,11 @@ end
 # into the weight vector. Every caller passes a matrix `shift` has just built for it, so
 # mutating that matrix in place is safe.
 #
-# `dropzeros!` is not tidying: a truncated boundary slice is expressed as a zero weight, and
-# the broadcast this replaces pruned the entries that weight annihilated. Keeping them would
-# leave the operators with a wider stored pattern than they have always had.
+# A truncated boundary slice is expressed as a zero weight, and the entries that weight
+# annihilates stay stored as explicit zeros. The pattern belongs to the stencil, not to its
+# values: pruning them would make it depend on the mesh, and a pattern that changes changes
+# identity behind any cache keyed on it (#534's replay). `stencil_matrix` stores the same
+# entries, so the two constructions agree on `nnz` as well as on values.
 #
 # One method with an `isa` branch, rather than the pair of methods this subsystem would
 # otherwise reach for. The branch is on the argument's *type*, so it folds away wherever the
@@ -283,8 +286,6 @@ end
         @inbounds for k in eachindex(nz)
             nz[k] *= w[rows[k]]
         end
-
-        dropzeros!(A)
     else
         # A dense or GPU backend has no stored-entry list to walk, and nothing is saved by
         # avoiding the full matrix: the broadcast is in place and allocates nothing.
@@ -329,17 +330,13 @@ function _stencil_matrix(
     K = length(taps)
 
     # Pass 1: how many stored entries land in each column -- one per (row, tap) whose
-    # neighbour stays on the grid *and* whose weight is not exactly zero, tallied at
-    # `colptr[col + 1]` and turned into the standard CSC column-start array by the running
-    # sum below.
+    # neighbour stays on the grid, tallied at `colptr[col + 1]` and turned into the standard
+    # CSC column-start array by the running sum below.
     #
-    # The weight check matches what the Kronecker oracle does: its own weighting step,
-    # `_scale_rows!` (above), drops a stored entry outright when scaling takes it to exactly
-    # zero, rather than keeping it as an explicit zero. That is what happens at a family's
-    # zeroed boundary weight (a `BackwardFiniteDiffOp`'s row 1, an average's row 1 or `n`):
-    # the entry is column-absent in the oracle, not merely zero-valued, so `stencil_matrix`
-    # drops it too rather than storing a value the equality check's `nnz` comparison would
-    # then disagree on.
+    # The weight is not consulted: only an off-grid tap contributes nothing. A family's
+    # zeroed boundary weight (a `BackwardFiniteDiffOp`'s row 1, an average's row 1 or `n`)
+    # is stored as an explicit zero, so the pattern is the stencil's whatever the mesh, and
+    # the Kronecker oracle's `_scale_rows!` (above) keeps the same entries (#662).
     colptr = zeros(Ti, N + 1)
     @inbounds for I in CartesianIndices(dims)
         idim = I[Dim]
@@ -347,7 +344,6 @@ function _stencil_matrix(
         for k in 1:K
             j = idim + taps[k]
             (1 <= j <= n) || continue
-            iszero(w[k]) && continue
             col = li[I + taps[k] * step]
             colptr[col + 1] += 1
         end
@@ -375,7 +371,6 @@ function _stencil_matrix(
         for k in 1:K
             j = idim + taps[k]
             (1 <= j <= n) || continue
-            iszero(w[k]) && continue
             col = li[I + taps[k] * step]
             pos = colptr[col]
             rowval[pos] = row
@@ -427,7 +422,6 @@ function _stencil_matrix(
         for k in 1:K
             j = idim + taps[k]
             (1 <= j <= n) || continue
-            iszero(w[k]) && continue
             host[row, li[I + taps[k] * step]] = T(w[k])
         end
     end

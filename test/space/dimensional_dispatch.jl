@@ -10,7 +10,7 @@ using Bramble: Mcᵧ, Mc₂, Mᵧ!
 # Internal or `public` since v3.0 (gpena/Bramble.jl#211), entry points included.
 import Bramble: diff₋, diff₋ₓ, diff₋ᵧ, diff₋₂, diff₊, diff₊ₓ, diff₊ᵧ, diff₊₂,
                 D₊, D₊ₓ, D₊ᵧ, D₊₂, M₊ₕ, M₊ₓ, M₊ᵧ, M₊₂
-using ..TestUtils: alloc_test
+using ..TestUtils: alloc_test, WITH_3D_TESTS
 
 # The dimensional entry points (gpena/Bramble.jl#74): `D₋(uₕ, d)` with `d` a `Val`, an `Int`
 # or a `Symbol`, over the same `Val`-parameterised base functions the subscript aliases have
@@ -45,19 +45,24 @@ const SYMBOLS = (:x, :y, :z)
 @testset "Dimensional dispatch" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 16, false)
     Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 9), (true, false))
-    Ωₕ3 = mesh(
-        domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6), (true, false, true)
-    )
-    Wₕ1, Wₕ2, Wₕ3 = gridspace(Ωₕ1), gridspace(Ωₕ2), gridspace(Ωₕ3)
+    Wₕ1, Wₕ2 = gridspace(Ωₕ1), gridspace(Ωₕ2)
     Vₕ2 = gridspace(Ωₕ2, Val(2))
 
     uₕ1 = Rₕ(Wₕ1, sin)
     uₕ2 = Rₕ(Wₕ2, x -> sin(x[1]) * x[2])
-    uₕ3 = Rₕ(Wₕ3, x -> sin(x[1]) + x[3])
+    # The 3D fixtures are built in `slow` and by the nightly run (gpena/Bramble.jl#650);
+    # every use of them is behind `WITH_3D_TESTS`.
+    if WITH_3D_TESTS
+        Ωₕ3 = mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6), (true, false, true)
+        )
+        Wₕ3 = gridspace(Ωₕ3)
+        uₕ3 = Rₕ(Wₕ3, x -> sin(x[1]) + x[3])
+    end
     cₕ2 = Rₕ(Vₕ2, (x -> x[1], x -> x[2]))
 
     @testset "agrees with the subscript aliases" begin
-        for (lbl, uₕ, D) in (("1D", uₕ1, 1), ("2D", uₕ2, 2), ("3D", uₕ3, 3))
+        for (lbl, uₕ, D) in (("1D", uₕ1, 1), ("2D", uₕ2, 2), (WITH_3D_TESTS ? (("3D", uₕ3, 3),) : ())...)
             @testset "$lbl" begin
                 for (entry, aliases) in FAMILIES, d in 1:D
 
@@ -91,7 +96,7 @@ const SYMBOLS = (:x, :y, :z)
         @test D̽ₕ(uₕ2) == (D̽ₓ(uₕ2), D̽ᵧ(uₕ2))
         @test Mₕ(uₕ2) == (Mₓ(uₕ2), Mᵧ(uₕ2))
         @test M₊ₕ(uₕ2) == (M₊ₓ(uₕ2), M₊ᵧ(uₕ2))
-        @test D̽ₕ(uₕ3) == (D̽ₓ(uₕ3), D̽ᵧ(uₕ3), D̽₂(uₕ3))
+        WITH_3D_TESTS && @test D̽ₕ(uₕ3) == (D̽ₓ(uₕ3), D̽ᵧ(uₕ3), D̽₂(uₕ3))
         # in one dimension the tuple collapses to the entry itself, and the two arities
         # then agree on the same value rather than disagreeing on its shape
         @test Mₕ(uₕ1) == Mₓ(uₕ1) == Mₕ(uₕ1, 1)
@@ -105,9 +110,11 @@ const SYMBOLS = (:x, :y, :z)
         @test_throws ArgumentError(
             "the stencil direction must be between 1 and 2, got 3") D₋(uₕ2, 3)
         @test_throws ArgumentError D₋(uₕ2, :z)
-        @test_throws ArgumentError(
-            "the stencil direction must be between 1 and 3, got 4") D₋(uₕ3, 4)
-        @test_throws ArgumentError D₋(uₕ3, 0)
+        if WITH_3D_TESTS
+            @test_throws ArgumentError(
+                "the stencil direction must be between 1 and 3, got 4") D₋(uₕ3, 4)
+            @test_throws ArgumentError D₋(uₕ3, 0)
+        end
         @test_throws ArgumentError Mₕ(uₕ2, :z)
         @test_throws ArgumentError(
             "the stencil direction must be :x, :y or :z, got :w") D₋(uₕ2, :w)
@@ -169,7 +176,7 @@ const SYMBOLS = (:x, :y, :z)
     end
 
     @testset "Type stability: Int and Symbol entries" begin
-        for (lbl, uₕ, D) in (("1D", uₕ1, 1), ("2D", uₕ2, 2), ("3D", uₕ3, 3))
+        for (lbl, uₕ, D) in (("1D", uₕ1, 1), ("2D", uₕ2, 2), (WITH_3D_TESTS ? (("3D", uₕ3, 3),) : ())...)
             @testset "$lbl" begin
                 for (entry, _) in FAMILIES, d in 1:D
 
@@ -192,7 +199,7 @@ const SYMBOLS = (:x, :y, :z)
     # cannot box, so it is the baseline to compare against rather than a bare number that
     # would have to be updated whenever `similar` changes.
     @testset "runtime vs literal direction cost" begin
-        for (lbl, uₕ, D) in (("1D", uₕ1, 1), ("2D", uₕ2, 2), ("3D", uₕ3, 3))
+        for (lbl, uₕ, D) in (("1D", uₕ1, 1), ("2D", uₕ2, 2), (WITH_3D_TESTS ? (("3D", uₕ3, 3),) : ())...)
             @testset "$lbl" begin
                 for (entry, aliases) in FAMILIES, d in 1:D
 
@@ -208,7 +215,8 @@ const SYMBOLS = (:x, :y, :z)
     # package can write: one loop that reads the same in 1D, 2D and 3D.
     @testset "a loop over directions" begin
         for (uₕ, D, aliases) in (
-            (uₕ1, 1, (D₋ₓ,)), (uₕ2, 2, (D₋ₓ, D₋ᵧ)), (uₕ3, 3, (D₋ₓ, D₋ᵧ, D₋₂))
+            (uₕ1, 1, (D₋ₓ,)), (uₕ2, 2, (D₋ₓ, D₋ᵧ)),
+            (WITH_3D_TESTS ? ((uₕ3, 3, (D₋ₓ, D₋ᵧ, D₋₂)),) : ())...
         )
             @test sum(innerₕ(D₋(uₕ, d), D₋(uₕ, d)) for d in 1:D) ==
                   sum(innerₕ(f(uₕ), f(uₕ)) for f in aliases)

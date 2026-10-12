@@ -1004,7 +1004,7 @@ end
 end
 
 # `_star_weight`/`_centered_weight` return zero wherever their stencil would need a
-# neighbour the grid does not have, truncating that slice of the matrix to an empty row.
+# neighbour the grid does not have, truncating that slice of the matrix to a zero row.
 @inline _star_weight(h, i, n) = i == n ? zero(eltype(h)) : 2 / (h[i] + h[i + 1])
 @inline _centered_weight(h, i, n) = (i == 1 || i == n) ? zero(eltype(h)) : inv(h[i] + h[i + 1])
 
@@ -1026,7 +1026,7 @@ end
 The forward difference over the averaged spacing along `dim_val`, as a sparse matrix.
 
 The forward difference scaled by the averaged spacing instead of the forward one. The last
-point along the direction has no forward neighbour, so its row is empty.
+point along the direction has no forward neighbour, so its row is zero.
 """
 function forward_star_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
     return stencil_matrix(Ωₕ, StarDiffOp{DIM}())
@@ -1037,7 +1037,7 @@ end
 
 The centered difference along `dim_val`, as a sparse matrix.
 
-Reaches one point either side, so both end rows are empty and the mesh needs at least three
+Reaches one point either side, so both end rows are zero and the mesh needs at least three
 points along the direction.
 """
 function centered_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
@@ -1100,7 +1100,14 @@ function _kron_cross_weighted_difference(
     # the scaling above is already applied, so the cache is free to be rewritten
     backward = _scale_rows!(_difference_operator(Ωₕ, Backward(), dim_val),
         _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_backward_weight))
-    return forward + backward
+
+    # A dense backend has no pattern to keep. On a sparse one `+` would prune every entry
+    # where the two cancel (all of the diagonal on a uniform mesh); one `sparse` call over
+    # both triplet lists sums them on the union pattern instead.
+    forward isa SparseMatrixCSC || return forward + backward
+    i₊, j₊, v₊ = SparseArrays.findnz(forward)
+    i₋, j₋, v₋ = SparseArrays.findnz(backward)
+    return sparse(vcat(i₊, i₋), vcat(j₊, j₋), vcat(v₊, v₋), size(forward)...)
 end
 
 # --- Kronecker oracle dispatch (gpena/Bramble.jl#185) --------------------------------- #

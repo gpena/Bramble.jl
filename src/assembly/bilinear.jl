@@ -132,13 +132,25 @@ end
 # a recording made before it no longer matches and the next fill re-records
 # (gpena/Bramble.jl#465). A restricted term's walk reads the markers, so the recorded
 # positions depend on them as much as on `A`.
+#
+# `stored` is `A`'s stored-entry count at the recording (`_pattern_length`): a
+# `dirichlet_bc!` that inserts a missing diagonal shifts every later `nzval` position while
+# `A` keeps its identity, so a grown count re-records (gpena/Bramble.jl#534).
 mutable struct _AssemblyCache{D, AST}
     valid::Bool
     A_id::UInt
     ast::AST
     segments::Vector{Segment{D}}
     stamp::UInt64
+    stored::Int
 end
+
+# The stored-entry count a recording's positions index into. A `SparseMatrixCSC` can grow
+# (`dirichlet_bc!` inserts a missing diagonal); any other matrix keeps `length(A)`, which
+# never changes. No `AbstractSparseMatrix` method: the CSR extension never inserts, it
+# refuses a missing diagonal instead.
+@inline _pattern_length(A::SparseMatrixCSC) = length(nonzeros(A))
+@inline _pattern_length(A::AbstractMatrix) = length(A)
 
 # The newest marker stamp among `Wₕ`'s leaf meshes. The stamps come from one global counter,
 # so a `markers!` on any leaf mesh makes it strictly larger, never equal to an older value.
@@ -208,7 +220,7 @@ end
 # same expression tree `BilinearForm` stores -- never `nothing`, which would have made the
 # parameter a lie on the first cache miss.
 function _AssemblyCache{D}(ast::AST) where {D, AST}
-    return _AssemblyCache{D, AST}(false, UInt(0), ast, _no_segments(Val(D)), UInt64(0))
+    return _AssemblyCache{D, AST}(false, UInt(0), ast, _no_segments(Val(D)), UInt64(0), 0)
 end
 
 """
@@ -330,11 +342,21 @@ function form(Wₕ, Vₕ, f)
     D = dim(Wₕ)
     raw_ast = f(trial_function(Wₕ), test_function(Vₕ))
     _validate_form_expression(raw_ast, Val(D))
-    ast = simplify_ast(resolve_ast(raw_ast))
+    ast = simplify_ast(_resolve_surfaces_for_space(resolve_ast(raw_ast), Vₕ, Wₕ))
+    _check_space_components(ast, Wₕ, trial_component_or_nothing, "trial")
+    _check_space_components(ast, Vₕ, test_component_or_nothing, "test")
+    _check_centered_meshes(ast, Wₕ, Vₕ)  # linear.jl (gpena/Bramble.jl#629)
     return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast)}(
         Wₕ, Vₕ, ast, _AssemblyCache{D}(ast)
     )
 end
+
+# A non-composite side has one component, so a term re-indexing its leaf past it
+# (`u(1)(2)`) is refused here, at `form` (gpena/Bramble.jl#638). A composite side is
+# checked at assembly, by `block_of`, as before.
+_check_space_components(ast, space, side_component, side) = _check_scalar_components(
+    ast, side_component, side)
+_check_space_components(ast, ::CompositeGridSpace, side_component, side) = nothing
 
 # --- Mesh compatibility checks ------------------------------------------------------ #
 #

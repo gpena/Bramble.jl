@@ -4,8 +4,7 @@ import Base: eltype, length
 import Base: show, first, last, getindex, setindex!, iterate, size, firstindex, lastindex, axes, eachindex
 
 using SparseArrays: SparseArrays, SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!,
-                    blockdiag,
-                    dropzeros!
+                    blockdiag
 
 using LinearAlgebra: I, Diagonal
 import LinearAlgebra: mul!, issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot, lu, cholesky, ⋅, norm
@@ -76,8 +75,10 @@ before calling this function.
   - `ArgumentError` saying `fdm_preconditioner` does not support the form, with the reason,
     for a form with no usable Laplacian-like part: `a` is not separable, it is posed on a
     composite space, a mass is not symmetric positive definite, an axis has no term of its
-    own once the two-axis terms are left out (the form has no Laplacian-like part), or that
-    part is singular. These are `fdm_solve`'s refusals, a two-axis term apart.
+    own once the two-axis terms are left out (the form has no Laplacian-like part), that
+    part is singular, or a complex scale or coefficient makes the Kronecker operator's
+    element type complex (a zero imaginary part included). These are `fdm_solve`'s
+    refusals, a two-axis term apart.
   - `ArgumentError`: `dirichlet` is neither `nothing` nor `:boundary`.
 
 # Examples
@@ -224,6 +225,8 @@ before calling this function.
 
   - `DimensionMismatch`: `x` or `F` does not have `size(f, 1)` entries.
   - `ArgumentError`: `x` or `F` is not 1-based.
+  - `ArgumentError`: `F` holds a complex value; solve its real and imaginary parts
+    separately.
   - `ArgumentError` naming `fdm_factorize!`: the last [`fdm_factorize!`](@ref) of `f` was
     refused because the system is singular or its mass is not symmetric positive definite.
     Refill `f` before solving again.

@@ -22,21 +22,31 @@ and non-allocating symbolic reuse via `accelerate_refactor!`. Available only on 
 abstract type AccelerateFactorization{T} <: Factorization{T} end
 
 """
-    accelerate_factorize(A::SparseMatrixCSC; sym = :auto, kind = :auto, kwargs...) -> AccelerateFactorization
+    accelerate_factorize(A::SparseMatrixCSC; sym = :auto, kind = :auto) -> AccelerateFactorization
     accelerate_factorize(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
-                         symmetrize = false, sym = :auto, kind = :auto, kwargs...) -> AccelerateFactorization
+                         sym = :auto, kind = :auto) -> AccelerateFactorization
 
 Compute the sparse direct factorization of `A` (or the assembled matrix of `a`) using Apple
 Accelerate's native `libSparse` on macOS.
 
 # Symmetry and factorization options
-- `sym = :auto` (default) automatically detects symmetry. If `A` is symmetric with strictly positive
-  diagonal, uses Cholesky (`SparseFactorizationCholesky`). If symmetric, uses ``LDL^T`` (`SparseFactorizationLDLT`).
-  Otherwise uses threshold partial pivoting LU (`SparseFactorizationLUTPP`).
+- `sym = :auto` (default) detects symmetry. A symmetric `A` with a positive diagonal is
+  tried with Cholesky (`SparseFactorizationCholesky`), and when that fails (`A` is not
+  positive definite) it is refactored as ``LDL^T`` (`SparseFactorizationLDLT`) on the same
+  object. The pivoted ``LDL^T`` never reports a singular matrix, so each solve with such a
+  factorisation checks the backward error and throws a `SingularException` when it is large.
+  A symmetric `A` with a non-positive diagonal uses ``LDL^T`` directly. Any other `A` uses
+  threshold partial pivoting LU (`SparseFactorizationLUTPP`).
 - `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`) selects symmetric positive definite Cholesky.
 - `sym = :symmetric` or `2` (or `kind = :ldlt`) selects symmetric indefinite ``LDL^T``.
 - `sym = :unsymmetric` or `0` (or `kind = :lu` / `:lutpp`) selects general unsymmetric LU with threshold partial pivoting.
 - `kind = :qr` selects sparse QR factorization.
+
+Any keyword other than `sym` and `kind` throws a `MethodError`.
+
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first, so a
+dense-backed form uses `libSparse`; `accelerate_factorize(::Matrix)` itself stays dense
+LAPACK.
 
 Requires macOS and [AppleAccelerate.jl](https://github.com/JuliaLinearAlgebra/AppleAccelerate.jl);
 call `using AppleAccelerate` before calling this function.
@@ -68,14 +78,16 @@ function accelerate_factorize(
     if !Sys.isapple()
         throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
     end
+    _reject_factorize_symmetrize(:accelerate_factorize, kwargs)
     A = assemble(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
+    A = _as_csc(A)
     return _accelerate_factorize(A; sym = sym, kind = kind, kwargs...)
 end
 
 """
-    accelerate_factorize(A::AbstractMatrix; sym = :auto, kind = :auto, kwargs...) -> LinearAlgebra.Factorization
+    accelerate_factorize(A::AbstractMatrix; sym = :auto, kind = :auto) -> LinearAlgebra.Factorization
 
 Dense factorization of `A`, via ordinary `LinearAlgebra.lu`, `LinearAlgebra.cholesky`, or
 `LinearAlgebra.qr` -- **not** Apple Accelerate's `libSparse` used by the `SparseMatrixCSC`
@@ -88,7 +100,7 @@ is register Accelerate with libblastrampoline (`BLAS.lbt_forward`), so plain
 moment `using AppleAccelerate` has been evaluated, on every call site in Bramble or anywhere
 else, with no Bramble dispatch involved. This method adds no acceleration beyond that; it
 exists so dense callers can spell `accelerate_factorize` with the same `sym`/`kind`
-vocabulary as the sparse methods above. `kwargs...` is accepted but unused.
+vocabulary as the sparse methods above.
 
 # Symmetry and factorization options
 - `sym = :auto` (default) uses `LinearAlgebra.cholesky` if `A` is symmetric positive definite,
@@ -102,7 +114,7 @@ vocabulary as the sparse methods above. `kwargs...` is accepted but unused.
 
 See also [`accelerate_solve`](@ref).
 """
-function accelerate_factorize(A::AbstractMatrix; sym = :auto, kind = :auto, kwargs...)
+function accelerate_factorize(A::AbstractMatrix; sym = :auto, kind = :auto)
     if kind === :cholesky || sym === :spd || sym === :definite || sym == 1
         return cholesky(A)
     elseif kind === :lu || sym === :unsymmetric || sym == 0
@@ -123,11 +135,18 @@ function accelerate_factorize(A::AbstractMatrix; sym = :auto, kind = :auto, kwar
 end
 
 """
-    accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; sym = :auto, kind = :auto, kwargs...) -> Vector
+    accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; sym = :auto, kind = :auto) -> Vector
     accelerate_solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing,
-                     symmetrize = false, sym = :auto, kind = :auto, kwargs...) -> VectorElement
+                     symmetrize = false, sym = :auto, kind = :auto) -> VectorElement
 
 Directly solve `A u = F` (or `assemble(a, l)` system) using Apple Accelerate direct factorization.
+`sym` is as in [`accelerate_factorize`](@ref): `symmetrize = true` does not choose Cholesky,
+`:auto` still tries it and falls back to ``LDL^T``. Any keyword other than `sym` and `kind`
+throws a `MethodError`.
+
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first, so a
+dense-backed form uses `libSparse`; `accelerate_factorize(::Matrix)` itself stays dense
+LAPACK.
 
 Requires macOS and [AppleAccelerate.jl](https://github.com/JuliaLinearAlgebra/AppleAccelerate.jl);
 call `using AppleAccelerate` before calling this function.
@@ -151,8 +170,8 @@ function accelerate_solve(
     A, F = assemble(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components, symmetrize = symmetrize
     )
-    sym_effective = (sym === :auto && symmetrize) ? :spd : sym
-    u = _accelerate_solve(A, F; sym = sym_effective, kind = kind, kwargs...)
+    A = _as_csc(A)
+    u = _accelerate_solve(A, F; sym = sym, kind = kind, kwargs...)
     return element(trial_space(a), u)
 end
 
@@ -172,13 +191,15 @@ function accelerate_refactor!(fact::AccelerateFactorization, A::SparseMatrixCSC)
     return _accelerate_refactor!(fact, A)
 end
 
-function _accelerate_factorize(::Any; kwargs...)
+function _accelerate_factorize(A; kwargs...)
+    _ext_loaded(:BrambleAppleAccelerateExt) && _throw_unsupported_matrix("accelerate_factorize", A)
     return error(
         "accelerate_factorize requires AppleAccelerate.jl. Add `using AppleAccelerate` before calling this function.",
     )
 end
 
-function _accelerate_solve(::Any, ::Any; kwargs...)
+function _accelerate_solve(A, ::Any; kwargs...)
+    _ext_loaded(:BrambleAppleAccelerateExt) && _throw_unsupported_matrix("accelerate_solve", A)
     return error(
         "accelerate_solve requires AppleAccelerate.jl. Add `using AppleAccelerate` before calling this function.",
     )

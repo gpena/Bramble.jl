@@ -6,7 +6,7 @@ using Bramble: VectorElement, jumpᵧ, jump₂, jumpₓ
 import Bramble: forward_difference, jump, jump_dim!, diff₊ₓ, M₊ₓ, M₊ᵧ
 using LinearAlgebra: norm
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, TEST_DIMS
 using ..SpaceVectorElementsTests: setup_test_grid
 
 # There is one jump, not a forward and a backward pair: the jump belongs to the interface
@@ -14,7 +14,7 @@ using ..SpaceVectorElementsTests: setup_test_grid
 # the unscaled forward difference, u_{i+1} - u_i, and forwards to it.
 
 @testset "Jump operators" begin
-    for D in 1:3
+    for D in TEST_DIMS
         @testset "$D-Dimensional Tests" begin
             dims, Wₕ, uₕ = setup_test_grid(Val(D))
             Ωₕ = mesh(Wₕ)

@@ -7,7 +7,7 @@ using Bramble: Dcₓ, D̽ᵧ, D̽₂, D̽ₓ, D₋ₓ, VectorElement
 using Random
 using Bramble: components
 using Bramble: div̽ₕ, div̽ₕ!, curl̽ₕ, curl̽ₕ!, ε̽ₕ, ε̽ₕ!, ∇̽ₕ!
-using ..TestUtils: alloc_test, _observed_orders
+using ..TestUtils: alloc_test, _observed_orders, WITH_3D_TESTS, TEST_DIMS
 using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 # The cross-weighted centered difference.
@@ -125,21 +125,23 @@ cross_weighted_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
             end
         end
 
-        # every direction, in three dimensions
-        Random.seed!(20260830)
-        Ω3 = mesh(
-            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 6, 4), (false, false, false)
-        )
-        W3 = gridspace(Ω3)
-        n3 = npoints(Ω3, Tuple)
-        for (d, op) in ((1, D̽ₓ), (2, D̽ᵧ), (3, D̽₂))
-            @test all(iszero, parent(op(Rₕ(W3, x -> x[mod1(d + 1, 3)]))))
-            r = reshape(parent(op(Rₕ(W3, x -> x[d]^2))), n3)
-            xd = points(Ω3)[d]
-            interior = CartesianIndices(
-                ntuple(k -> k == d ? (2:(n3[k] - 1)) : (1:n3[k]), 3)
+        # every direction, in three dimensions (runs in `slow`, nightly, not in `unit`: #650)
+        if WITH_3D_TESTS
+            Random.seed!(20260830)
+            Ω3 = mesh(
+                domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 6, 4), (false, false, false)
             )
-            @test all(r[I] ≈ 2 * xd[I[d]] for I in interior)
+            W3 = gridspace(Ω3)
+            n3 = npoints(Ω3, Tuple)
+            for (d, op) in ((1, D̽ₓ), (2, D̽ᵧ), (3, D̽₂))
+                @test all(iszero, parent(op(Rₕ(W3, x -> x[mod1(d + 1, 3)]))))
+                r = reshape(parent(op(Rₕ(W3, x -> x[d]^2))), n3)
+                xd = points(Ω3)[d]
+                interior = CartesianIndices(
+                    ntuple(k -> k == d ? (2:(n3[k] - 1)) : (1:n3[k]), 3)
+                )
+                @test all(r[I] ≈ 2 * xd[I[d]] for I in interior)
+            end
         end
     end
 
@@ -236,7 +238,7 @@ _cw_ops(::Val{2}) = (D̽ₓ, D̽ᵧ)
 _cw_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
 
 @testset "Cross-weighted vector calculus (#349)" begin
-    @testset "Component-wise identities, $(D)D" for D in 2:3
+    @testset "Component-wise identities, $(D)D" for D in filter(≥(2), TEST_DIMS)
         Ωₕ, Wₕ, u, fs = _cw_setup(D)
         ops = _cw_ops(Val(D))
         d(k, c) = parent(ops[k](u[c]))
@@ -275,7 +277,7 @@ _cw_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
         @test_throws DimensionMismatch div̽ₕ(ntuple(_ -> u[1], D + 1))
     end
 
-    @testset "In-place forms, $(D)D" for D in 2:3
+    @testset "In-place forms, $(D)D" for D in filter(≥(2), TEST_DIMS)
         _, Wₕ, u, _ = _cw_setup(D)
 
         v = element(Wₕ, 0.0)

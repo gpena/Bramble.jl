@@ -378,14 +378,13 @@ function _pc_form_assembly(
     return nothing
 end
 
-# `assemble_add!`, `bandwidths`, `blockbandwidths`, `reaction` and `reaction_density`: each
+# `assemble_add!`, `reaction` and `reaction_density`: each
 # is its own entry point over a real `BilinearForm`/`LinearForm`/`VectorElement`, not reached
 # by the bare AST/stencil construction above or by any `assemble`/`assemble!` shape already
 # warmed -- `assemble_add!` takes its own cached-record path with an explicit scale
 # (`_assemble_bilinear_core_cached!`/`_assemble_linear_core!` in src/assembly/assemble_add.jl),
-# `bandwidths`/`blockbandwidths` read the resolved AST without assembling, and `reaction`/
-# `reaction_density` walk the unconstrained residual through `leaf_spaces_offsets`
-# (gpena/Bramble.jl#283).
+# and `reaction`/`reaction_density` walk the unconstrained residual through
+# `leaf_spaces_offsets` (gpena/Bramble.jl#283).
 #
 # Builds its own non-uniform mesh with a single `:boundary` marker covering the whole
 # boundary, rather than reusing the session's mesh/label: `markers(Ωₕ)` is a `NamedTuple`
@@ -424,8 +423,6 @@ function _pc_form_reaction(Wₕ::ScalarGridSpace)
 
     assemble_add!(A, a, 0.5)
     assemble_add!(F, l, 0.5)
-    bandwidths(a)
-    blockbandwidths(a)
     reaction(A, F, uₕ; marker = :boundary)
     reaction_density(A, F, uₕ; marker = :boundary)
 
@@ -440,8 +437,6 @@ function _pc_form_reaction(Wₕ::ScalarGridSpace)
     nt = (; marker = :boundary)
     precompile(assemble_add!, (typeof(A), typeof(a), typeof(0.5)))
     precompile(assemble_add!, (typeof(F), typeof(l), typeof(0.5)))
-    precompile(bandwidths, (typeof(a),))
-    precompile(blockbandwidths, (typeof(a),))
     precompile(Core.kwcall, (typeof(nt), typeof(reaction), typeof(A), typeof(F), typeof(uₕ)))
     precompile(
         Core.kwcall, (typeof(nt), typeof(reaction_density), typeof(A), typeof(F), typeof(uₕ))

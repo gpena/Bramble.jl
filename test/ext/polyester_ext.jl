@@ -647,6 +647,30 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
         )
     end
 
+    # `_batch_dot`/`_batch_dot_masked` conjugate `u` (gpena/Bramble.jl#644): a complex
+    # `CpuPolyester` sum matches `CpuSerial` on the same jittered mesh and the oracle built
+    # from the real and imaginary parts, which an unconjugated kernel would miss.
+    @testset "complex innerₕ/inner₊ vs CpuSerial" begin
+        Wb, Ws = _pa_space(13, CpuPolyester()), _pa_space(13, CpuSerial())
+        N = ndofs(Wb)
+        parts(W) = map(f -> (r = element(W); r .= f.(1:N); r),
+            (sin, i -> cos(2i) + 0.5, i -> 1 / i, i -> sin(3i) - 0.25))
+        cplx(W, re, ii) = (z = element(W, ComplexF64); z .= complex.(re, ii); z)
+        for (St, m) in (((), ()), ((), (:dir,)), ((1, 2), ()), ((1, 2), (:dir,)))
+            f = (a, b) -> inner₊(a, b, Val(St); markers = m)
+            ur, ui, vr, vi = parts(Wb)
+            ub, vb = cplx(Wb, ur, ui), cplx(Wb, vr, vi)
+            oracle = complex(f(ur, vr) + f(ui, vi), f(ur, vi) - f(ui, vr))
+            sr, si, svr, svi = parts(Ws)
+            us, vs = cplx(Ws, sr, si), cplx(Ws, svr, svi)
+            @test isapprox(f(ub, vb), oracle; rtol = 1.0e-12)
+            @test isapprox(f(ub, vb), f(us, vs); rtol = 1.0e-12)
+        end
+        ur, ui, _, _ = parts(Wb)
+        @test isapprox(normₕ(cplx(Wb, ur, ui)), sqrt(normₕ(ur)^2 + normₕ(ui)^2);
+            rtol = 1.0e-12)
+    end
+
     @testset "two-field form agrees" begin
         n1, n2 = 9, 7
         I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
@@ -1035,19 +1059,13 @@ end
     @test isapprox(op * x, assemble(form(Vb, Vb, f); dirichlet = :boundary) * x; rtol = 1e-12)
 end
 
-# A region written as an id (`restrict_to(1, u)`) is refused by the walk's bind on every
-# route. The fused bands bind on the host and let only the regions they bound skip the
-# in-task bind, so a user's id must not read marker column 1 there either.
-@testset "integer region throws on every policy" begin
+# A region written as an id (`restrict_to(1, u)`) is refused when `restrict_to` builds the
+# node, so it never reaches the walk's bind or the fused bands' marker columns.
+@testset "integer region throws at form" begin
     X = interval(0.0, 1.0) × interval(0.0, 1.0)
     W = gridspace(mesh(domain(X, :dir => boundary_symbols(X)), (13, 11), (true, true)))
-    a = form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(restrict_to(1, u), v))
-    x = ones(ndofs(W))
-    for policy in (CpuSerial(), CpuThreaded(), CpuPolyester())
-        op = matrix_free_operator(a; policy)
-        @test (op.plan === nothing) == (policy isa CpuSerial)
-        @test_throws MethodError op * x
-    end
+    @test_throws ArgumentError form(
+        W, W, (u, v) -> innerₕ(u, v) + innerₕ(restrict_to(1, u), v))
 end
 
 # Mixed leaf policies, CpuThreaded beside CpuPolyester (the Threaded + Serial case

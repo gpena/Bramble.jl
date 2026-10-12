@@ -68,11 +68,9 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("jacobian_pattern_blocks.jl")
         include("type_cached_assemble.jl")
         include("semidiscrete.jl")
-        # v3.3.0 plan (memory scaling): `bandwidths`/`blockbandwidths` read from the AST alone
-        # (S4.1) and the dependency-free Kronecker operator (S5.1). Neither needs a weak
-        # dependency, so both run with the rest of this subsystem rather than behind the `ext`
-        # group.
-        include("bandwidth.jl")
+        # v3.3.0 plan (memory scaling): the dependency-free Kronecker operator (S5.1). It
+        # needs no weak dependency, so it runs with the rest of this subsystem rather than
+        # behind the `ext` group.
         include("kronecker.jl")
         include("kronecker_projection.jl")
         include("kronecker_block.jl")

@@ -156,6 +156,7 @@ end
 using SparseArrays
 using Random
 using LinearAlgebra: I as LinearAlgebraI
+using Bramble: shift_op
 
 # The fields `_dirichlet_bc_device!` reads from a device CSR matrix (`rowPtr`, `colVal`,
 # `nzVal`, and a host `mirror` with `rowptr`/`colval`/`nzval`), on host arrays.
@@ -323,6 +324,57 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
             end
         end
         @test !Bramble._row_marked((), 1)
+    end
+
+    # `dirichlet_bc!` inserts a missing diagonal into a `SparseMatrixCSC`, shifting every
+    # later stored entry while the matrix keeps its identity: the form's recording must not
+    # replay against the grown pattern. Both the keyword path and the manual one (the
+    # condition first, then a plain refill) re-record once, then replay at 0 B again.
+    @testset "Refill after an inserted diagonal (#534)" begin
+        refill_bytes(A, a) = @allocated assemble!(A, a)
+
+        W₁ = gridspace(mesh(domain(interval(0.0, 1.0)), 6, false))
+        a₁ = form(W₁, W₁, (u, v) -> innerₕ(shift_op(u, 1, 1), v))
+        R₁, R₁d = assemble(a₁), assemble(a₁; dirichlet = :boundary)
+        @test nnz(R₁d) > nnz(R₁)          # the condition grows the pattern
+
+        A = assemble(a₁; dirichlet = :boundary)
+        assemble!(A, a₁; dirichlet = :boundary)
+        @test A == R₁d
+        refill_bytes(A, a₁)
+        @test A == R₁
+        @test refill_bytes(A, a₁) == 0
+        M = assemble(a₁)
+        dirichlet_bc!(M, W₁, :boundary)
+        assemble!(M, a₁)
+        @test M == R₁
+        refill_bytes(M, a₁)
+        @test M == R₁
+        @test refill_bytes(M, a₁) == 0
+
+        # A saddle-point shape whose (1,1) block has no diagonal and whose (2,2) block is
+        # empty, on a non-uniform mesh, constrained on every component.
+        Ω₂ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (5, 4), (false, false))
+        W₂ = gridspace(Ω₂, Val(2))
+        a₂ = form(W₂, W₂,
+            (u, v) -> innerₕ(shift_op(u(1), 1, 1), v(1)) + innerₕ(u(2), v(1)) +
+                      innerₕ(u(1), v(2)))
+        R₂, R₂d = assemble(a₂), assemble(a₂; dirichlet = :boundary)
+        @test nnz(R₂d) > nnz(R₂)
+
+        B = assemble(a₂; dirichlet = :boundary)
+        assemble!(B, a₂; dirichlet = :boundary)
+        @test B == R₂d
+        refill_bytes(B, a₂)
+        @test B == R₂
+        @test refill_bytes(B, a₂) == 0
+        N = assemble(a₂)
+        dirichlet_bc!(N, W₂, :boundary)
+        assemble!(N, a₂)
+        @test N == R₂
+        refill_bytes(N, a₂)
+        @test N == R₂
+        @test refill_bytes(N, a₂) == 0
     end
 
     # A device CSR matrix cannot grow a missing diagonal: a constrained row without one
