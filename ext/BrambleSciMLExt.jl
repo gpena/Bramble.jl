@@ -52,7 +52,9 @@ using PrecompileTools: @setup_workload, @compile_workload
 #
 # Everything with substance lives in `src/problems/semidiscrete.jl`: a `Semidiscretization` is
 # already a callable with the `(du, u, p, t)` signature, already carries its mass matrix, and
-# already knows its own Jacobian. This file only names those pieces the way SciMLBase does.
+# already knows its own Jacobian. This file names those pieces the way SciMLBase does, and
+# hands the prototype and the mass matrix over through `_ode_storage`: a `SparseMatrixCSR`
+# reaches the solver as a `SparseMatrixCSC` copy (see the CSR extension).
 
 # `jacobian = nothing` leaves `jac` unset, which is what a solution-dependent operator wants:
 # `jacobian!` is only a Picard linearisation there, and the solver should build the real one
@@ -76,8 +78,8 @@ function Bramble._ode_function(
     prototype = jac_prototype === nothing ? jacobian_prototype(sd) : jac_prototype
     return ODEFunction{true}(
         sd;
-        mass_matrix = mass_matrix(sd),
-        jac_prototype = prototype,
+        mass_matrix = Bramble._ode_storage(mass_matrix(sd)),
+        jac_prototype = Bramble._ode_storage(prototype),
         jac = _jac_closure(jacobian, sd),
         tgrad = _tgrad_closure(tgrad, sd)
     )
@@ -112,11 +114,10 @@ end
 # argument at all; it would silently land in `kwargs` instead and never reach the residual.
 #
 # `specialize` defaults to `nothing`, leaving `ODEProblem`'s own specialization choice
-# untouched -- existing callers get exactly the problem they always did. Passing
-# `SciMLBase.FullSpecialize` is what `Bramble.adjoint_sensitivities`
-# (`BrambleSciMLSensitivityExt`) needs: without it, calling the residual with a
-# differently-`eltype`-`p` than the forward solve used (exactly what computing a `p`-vjp
-# does) fails with "No matching function wrapper was found!" rather than differentiating.
+# untouched -- existing callers get exactly the problem they always did.
+# `Bramble.adjoint_sensitivities` (`BrambleSciMLSensitivityExt`) does not need
+# `SciMLBase.FullSpecialize` on any backend: it unwraps the function wrappers the default
+# specialization adds before it calls SciMLSensitivity.
 # The type-parameterized `ODEProblem{iip, specialize}` constructor is the only one that
 # accepts a choice of specialization at all -- there is no keyword for it on the plain one.
 Base.@constprop :aggressive function Bramble._ode_problem(

@@ -15,14 +15,16 @@
     ode_function(a::BilinearForm, l::LinearForm; kwargs...) -> ODEFunction
 
 Wrap a semidiscretisation as an `ODEFunction` carrying its mass matrix, Jacobian and
-sparsity, ready for `OrdinaryDiffEq`.
+sparsity, ready for `OrdinaryDiffEq`. On a `csr_backend()` the solver receives
+`SparseMatrixCSC` copies of the mass matrix and of the Jacobian prototype, since no solver
+factorizes a `SparseMatrixCSR`.
 
 The two-form method builds the [`Semidiscretization`](@ref) first, forwarding every keyword
 to [`semidiscretize`](@ref).
 
 # Keywords
 - `jacobian`: `jacobian!` (the default) to hand the solver the exact `-A`, or `nothing` to let it build one by automatic differentiation from `jac_prototype`.
-- `jac_prototype`: sparsity for the solver's Jacobian cache (default: [`jacobian_prototype`](@ref)`(sd)`).
+- `jac_prototype`: sparsity for the solver's Jacobian cache (default: [`jacobian_prototype`](@ref)`(sd)`). A `SparseMatrixCSR`, given or defaulted, reaches the solver as a `SparseMatrixCSC` copy.
 - `tgrad`: analytical `∂f/∂t`, for a Rosenbrock method to use instead of differentiating through `t` (default: `nothing`, AD). Either SciMLBase's own `(dT, u, p, t) -> ...` signature or the Bramble-aware `(dT, sd, u, p, t) -> ...` one, told apart by arity.
 
 The resulting system is a differential-algebraic one whenever any Dirichlet label is
@@ -79,12 +81,9 @@ Keywords are those of [`ode_function`](@ref), plus:
 - `p` (default `SciMLBase.NullParameters()`) for a residual whose `update_coefficients!` or
   Dirichlet conditions were given a parameter-dependent, `(t, p)`/`(x, t, p)` form (see
   [`semidiscretize`](@ref)'s own keywords).
-- `specialize` (default `nothing`, `ODEProblem`'s own choice untouched) -- pass
-  `SciMLBase.FullSpecialize` before handing the solved trajectory to
-  `Bramble.adjoint_sensitivities`: without it, a `p`-vjp calls the residual with a
-  differently-`eltype`-`p` than the forward solve used, which the default specialization
-  cannot dispatch and fails with "No matching function wrapper was found!" rather than
-  differentiating.
+- `specialize` (default `nothing`, `ODEProblem`'s own choice untouched). The solved
+  trajectory goes to `Bramble.adjoint_sensitivities` with any specialization:
+  `SciMLBase.FullSpecialize` is not needed for the adjoint on any backend.
 
 The two-form method also forwards its other keywords to [`semidiscretize`](@ref).
 

@@ -58,11 +58,11 @@ When `ext/BrambleSparseMatricesCSRExt.jl` is loaded (i.e. the caller has done
 `using SparseMatricesCSR: SparseMatricesCSR, SparseMatrixCSR, sparsecsr` leaves
 `SparseMatrixCSR` bound as a name on the extension module object itself, reachable by
 reflection (`ext.SparseMatrixCSR`) without Bramble ever importing it. This keeps the new
-dispatch entirely inside the three files the CSR-solver work owns
+dispatch for the direct solvers entirely inside the three files the CSR-solver work owns
 (`src/solvers/sparse_solvers.jl`, `src/solvers/pde_solve.jl`,
 `test/ext/sparse_csr_ext.jl`) rather than requiring a change to
-`ext/BrambleSparseMatricesCSRExt.jl`, which today only covers construction/assembly, not
-solving.
+`ext/BrambleSparseMatricesCSRExt.jl`, which covered construction and assembly. The ODE
+handoff below is the one place the extension itself reaches into solving.
 
 `sparse_factorize`'s existing catch-all (`A::AbstractMatrix`) already threw `MethodError`
 for anything that isn't `SparseMatrixCSC`, deliberately, to keep
@@ -104,6 +104,45 @@ builds internally, which always use the default `SparseMatrixCSC` backend -- the
 parameter to make that fixture CSR-backed. The 1D/2D/3D unified-dispatcher checks it would
 otherwise provide are therefore written out by hand in `sparse_csr_ext.jl` against
 CSR-built systems instead.
+
+## The ODE handoff
+
+An implicit ODE solve (`ode_problem`, `ode_function`) is the second route a `SparseMatrixCSR`
+takes into a solver, and it needs the same conversion for a different reason: OrdinaryDiffEq
+allocates its Jacobian and iteration matrix with `similar(jac_prototype)`, forms the
+iteration matrix by broadcasting, and factorizes it through LinearSolve, whose LU, KLU,
+UMFPACK and Sparspak methods throw on a CSR matrix. Handed the CSR prototype, a solve ended
+on an unpreconditioned GMRES or a dense `Matrix` Jacobian, O(n²) per step.
+
+So `_ode_function` passes the prototype and the mass matrix through an internal
+`Bramble._ode_storage(A)` (`src/problems/semidiscrete.jl`), the identity for every matrix
+but a `SparseMatrixCSR`, for which the extension returns `Bramble._csr_to_csc(A)`. Both are
+converted: a CSC prototype with a CSR mass matrix still forces O(n²) time. A caller's own
+CSR `jac_prototype` is converted the same way, so `f.jac_prototype !== proto` on CSR, and
+`jacobian = nothing` runs sparse automatic differentiation from the CSC pattern.
+
+`jacobian!` then fills a CSC `J` from the CSR operator, through
+`_negate_into!(J::SparseMatrixCSC, A::SparseMatrixCSR)` in the extension: one binary search
+per stored entry, O(nnz), with no allocation, for either index base and index type. An
+entry of `A` that `J` does not store falls back to the generic copy, as the CSC/CSC method
+does. `mass_matrix(sd)` and `jacobian_prototype(sd)` stay `SparseMatrixCSR`, and the
+adjoint reads `mass_matrix(sd)`, so it is untouched. `second_order_ode_function` is not
+converted.
+
+Covered by the three testsets tagged `(#677)` in `test/ext/sparse_csr_ext.jl`. On the heat
+problem with `FBDF` and `Rodas5P`, the solver's `J`, `W` and `f.mass_matrix` are
+`SparseMatrixCSC`, `f.jac` into `J` allocates nothing, the solve matches the CSC backend to
+1e-9 and allocates about 4x as much at 4x the dofs, the same as the CSC backend.
+
+`jacobian!(jacobian_prototype(sd), sd, ...)` fills the CSR prototype in place, through
+`_negate_into!(J::SparseMatrixCSR, A::SparseMatrixCSR)` in the extension. The prototype is
+a `copy` of the operator, so the two patterns match and `nzval` is negated entry for entry:
+O(nnz), no allocation, for either index base and index type. A `J` with another pattern is
+filled within its own entries, its stored values zeroed and each entry of `A` found by a
+binary search in its row, and an entry of `A` that `J` does not store throws an
+`ArgumentError` naming it. The generic copy is never used: its broadcast writes every entry,
+which `SparseMatrixCSR`'s `setindex!` refuses outside the pattern. Covered by the testset
+tagged `(#682)`.
 
 ## Performance: CSC vs. CSR for this fallback path
 

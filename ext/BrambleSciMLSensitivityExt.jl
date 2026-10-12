@@ -21,15 +21,18 @@ using SciMLSensitivity: SciMLSensitivity, InterpolatingAdjoint, QuadratureAdjoin
 # singular (index-1 DAE) mass matrix a constrained problem has -- neither needed a bespoke
 # workaround, once three caller-side gaps were closed:
 #
-# 1. `ode_problem(...; specialize = SciMLBase.FullSpecialize)`. Without it, the default
-#    specialization builds a function wrapper for the `p`-eltype the *forward* solve ran at;
-#    computing a `p`-vjp calls the residual with a *different* `p` eltype (`Dual`/`Tracker`
-#    depending on `sensealg`), and the wrapper raises "No matching function wrapper was
-#    found!" rather than differentiating. This is set at `ode_problem` construction, before
-#    `solve` ever runs, so it cannot be fixed here after the fact -- callers must ask for it.
-#    It is needed on a sparse backend even with no `p`, and for a `p`-vjp on any backend. A
-#    `u₀`-only adjoint on a dense, default-specialized problem still gets the `Mᵀ`
-#    correction (item 3), since that unwraps the wrapper first.
+# 1. The function wrapper of the default specialization. `DiffEqBase` wraps `f` (and `jac`,
+#    `tgrad`) for the `p`-eltype the *forward* solve ran at; computing a `p`-vjp, or a
+#    sparse backend's adjoint, calls them with a different eltype (`Dual`/`Tracker`
+#    depending on `sensealg`) and the wrapper raises "No matching function wrapper was
+#    found!" rather than differentiating (gpena/Bramble.jl#676). `_unwrap_jac` rebuilds
+#    `sol` around a remade `ODEFunction` whose `jac` and `tgrad` are unwrapped, so
+#    `FullSpecialize` is not needed on any backend. The same rebuild repairs the Jacobian
+#    prototype of a dense backend: `DiffEqBase` replaces it with `similar(jp)`, whose values
+#    are whatever the allocator left, and `InterpolatingAdjoint` builds its adjoint
+#    prototype from them, so it reads garbage as the sparsity pattern (gpena/Bramble.jl#679).
+#    A full pattern (`true` everywhere) is what the adjoint needs. Measured against central
+#    differences: `nothing` instead is wrong, and a CSR prototype throws.
 # 2. `initializealg = BrownFullBasicInit()`. The adjoint DAE inherits the forward problem's
 #    algebraic structure: with `D` the constrained rows, `semidiscretize`'s convention gives
 #    `A[D, D] = I`, `A[D, Dᶜ] = 0`, so `(Aᵀ)[D, D] = I` and the adjoint is index-1 too, but
@@ -82,12 +85,11 @@ for a `Semidiscretization`'s index-1 DAE specifically (both overridable):
   constrained problem's seed outright); see this file's own module-level comment for why.
 
 # Requirements on `sol`
-`sol.prob` may be built with or without `p`: with no `p`, `dp` is `nothing`. Build it with
-`specialize = SciMLBase.FullSpecialize` when `p` is set (it avoids a function-wrapper error
-the moment a `p`-vjp is computed, see the note on `ode_problem` itself) and on a sparse
-backend even without `p`. A `u₀`-only adjoint on a dense, default-specialized problem still
-gets the `Mᵀ` correction, because the correction unwraps the function wrapper before it
-looks at the residual.
+`sol.prob` may be built with or without `p`: with no `p`, `dp` is `nothing`. It needs no
+particular specialization: `FullSpecialize` is not needed for the adjoint on any backend,
+because the function wrappers the default specialization adds are unwrapped before
+SciMLSensitivity sees `sol`. A `u₀`-only adjoint gets the `Mᵀ` correction too, because the
+correction unwraps the function wrapper before it looks at the residual.
 
 # Examples
 
@@ -96,7 +98,7 @@ using Bramble, SciMLBase, SciMLSensitivity, OrdinaryDiffEqBDF
 
 bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t, p) -> p[1] * t)
 sd = semidiscretize(a, l; dirichlet = bcs)
-prob = ode_problem(sd, u₀, I; p = [0.7], specialize = SciMLBase.FullSpecialize)
+prob = ode_problem(sd, u₀, I; p = [0.7])
 sol = solve(prob, FBDF(); saveat = ts)
 
 dgdu!(out, u, p, t, i) = (@. out = 2 * (u - obs[i]); nothing)
@@ -113,10 +115,34 @@ function Bramble.adjoint_sensitivities(
         kwargs...
 )
     du0, dp = SciMLSensitivity.adjoint_sensitivities(
-        sol, alg; sensealg = sensealg, initializealg = initializealg, kwargs...
+        _unwrap_jac(sol), alg; sensealg = sensealg, initializealg = initializealg, kwargs...
     )
     return _correct_initial_adjoint(du0, SciMLBase.unwrapped_f(sol.prob.f.f)), dp
 end
+
+# Rebuild `sol` around an `ODEFunction` whose `jac` and `tgrad` carry no function wrapper
+# and whose dense Jacobian prototype is full, see item 1 above. `remake(f; ...)` keeps every
+# other field of the `ODEFunction` (`paramjac`, `vjp`, `sparsity`, `colorvec`, `sys`,
+# `observed`, `initialization_data`) and its specialization. `u`, `t`, `k` and `interp` are
+# shared with `sol`, not copied, so the rebuild allocates the same for any trajectory length.
+# A `sol` whose `prob.f` is not an `ODEFunction` is passed through.
+function _unwrap_jac(sol::ODESolution)
+    f = sol.prob.f
+    f isa SciMLBase.ODEFunction || return sol
+    jp = f.jac_prototype
+    f2 = SciMLBase.remake(
+        f; jac = SciMLBase.unwrapped_f(f.jac), tgrad = SciMLBase.unwrapped_f(f.tgrad),
+        jac_prototype = _full_prototype(jp)
+    )
+    return SciMLBase.build_solution(
+        SciMLBase.remake(sol.prob; f = f2), sol.alg, sol.t, sol.u; k = sol.k,
+        interp = sol.interp, dense = sol.dense, alg_choice = sol.alg_choice,
+        retcode = sol.retcode, stats = sol.stats, calculate_error = false
+    )
+end
+
+_full_prototype(jp::Matrix) = fill!(similar(jp), true)
+_full_prototype(jp) = jp
 
 # A problem with no `p` (`NullParameters`, on every p-less `ode_problem` and
 # `second_order_ode_problem`) gets the quadrature adjoint: on one with a singular mass

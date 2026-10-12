@@ -62,11 +62,9 @@ end
 
 # ## The forward solve
 #
-# `specialize = SciMLBase.FullSpecialize` is required, not optional, for
-# [`Bramble.adjoint_sensitivities`](@ref) to reach this trajectory afterwards: without it, the
-# adjoint's own `β`-vjp calls the residual with a differently-typed `β` than the forward
-# solve used, and the default specialization's function wrapper raises rather than
-# differentiates -- [`ode_problem`](@ref)'s own docstring has the reasoning.
+# `specialize = SciMLBase.FullSpecialize` is not needed for
+# [`Bramble.adjoint_sensitivities`](@ref) to reach this trajectory afterwards, on any
+# backend; this example passes it anyway.
 
 using SciMLBase, OrdinaryDiffEqBDF
 

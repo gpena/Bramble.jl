@@ -559,8 +559,9 @@ function jacobian!(J, sd::Semidiscretization, u, p, t)
     return _negate_into!(J, A)
 end
 
-# Same pattern by construction (`jacobian_prototype` hands the solver a copy of `A`), so the
-# stored values line up one for one and no structural search is needed.
+# Same pattern by construction (`jacobian_prototype` hands the solver a copy of `A`, a CSC
+# copy on a `SparseMatrixCSR` backend), so the stored values line up one for one and no
+# structural search is needed.
 @inline function _negate_into!(J::SparseMatrixCSC, A::SparseMatrixCSC)
     nzJ = nonzeros(J)
     nzA = nonzeros(A)
@@ -592,6 +593,12 @@ system's Jacobian has -- [`jacobian_pattern`](@ref) answers the different questi
 See also [`jacobian!`](@ref).
 """
 @inline jacobian_prototype(sd::Semidiscretization) = copy(sd.operator_matrix)
+
+# The storage `_ode_function` hands OrdinaryDiffEq for the Jacobian prototype and the mass
+# matrix. Identity here; the `SparseMatricesCSR` extension converts a `SparseMatrixCSR` to
+# `SparseMatrixCSC`, the only sparse layout the solver's `similar`, broadcasts and
+# factorizations accept.
+@inline _ode_storage(A) = A
 
 # --- Display ------------------------------------------------------------------------ #
 #
