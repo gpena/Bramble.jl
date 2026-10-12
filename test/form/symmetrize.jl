@@ -358,6 +358,61 @@ using ..TestUtils: _tri, _nonuniform_points
             @test c.dense_composite == 0
         end
     end
+
+    # A form whose test and trial spaces differ in size assembles a non-square matrix. The
+    # sweeps use a marked test-space dof as a column index without bounds checks, so the
+    # CSC one read past the last column (a bus error) and the dense one wrote past it. Every
+    # entry point now refuses, tall or wide, before touching `A` or `F`
+    # (gpena/Bramble.jl#663).
+    @testset "Non-square matrix refused" begin
+        dense = backend(matrix_type = Matrix{Float64})
+        msgs = String[]
+        for be in (backend(), dense)
+            W = gridspace(mesh(domain(interval(0.0, 1.0)), 6, false; backend = be))
+            tall = form(W, W × W, (u, V) -> innerₕ(u, V(1)) + innerₕ(u, V(2)))
+            wide = form(W × W, W, (U, v) -> innerₕ(U(1), v) + innerₕ(U(2), v))
+            for a in (tall, wide)
+                A = assemble(a; dirichlet = :boundary)
+                @test size(A, 1) != size(A, 2)
+                F = collect(1.0:size(A, 1))
+                A0, F0 = copy(A), copy(F)
+                Vₜ = Bramble.test_space(a)
+                err = try
+                    symmetrize!(A, F, Vₜ, :boundary)
+                    nothing
+                catch e
+                    e
+                end
+                @test err isa ArgumentError
+                err isa ArgumentError && push!(msgs, err.msg)
+                @test A == A0
+                @test F == F0
+                # mask level, with a mask as long as the rows and one marked dof
+                mask = falses(size(A, 1))
+                mask[end] = true
+                @test_throws ArgumentError symmetrize!(A, F, mask, 0)
+                @test A == A0
+                @test F == F0
+            end
+            A = assemble(tall; dirichlet = :boundary)
+            F = ones(size(A, 1))
+            @test_throws ArgumentError symmetrize!(A, F, mesh(W), :boundary)
+            @test_throws ArgumentError symmetrize!(A, F, W, :boundary)
+            # no labels: refused at every level, the composite one included
+            @test_throws ArgumentError symmetrize!(A, F, mesh(W))
+            @test_throws ArgumentError symmetrize!(A, F, W)
+            @test_throws ArgumentError symmetrize!(A, F, W × W)
+
+            # positive control: the square form on the same mesh still symmetrizes
+            Asq = assemble(form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))); dirichlet = :boundary)
+            Fsq = ones(size(Asq, 1))
+            @test symmetrize!(Asq, Fsq, W, :boundary) === nothing
+            @test issymmetric(Asq)
+        end
+        # sparse and dense refuse with the same message
+        @test length(msgs) == 4
+        @test allequal(replace.(msgs, r"\d+×\d+" => ""))
+    end
 end
 
 # Symmetry restoration as a property (gpena/Bramble.jl#120).

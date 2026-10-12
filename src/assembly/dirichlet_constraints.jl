@@ -716,6 +716,9 @@ For each index `i` with prescribed Dirichlet boundary conditions:
 - Calculate `dᵢ = cᵢ .* F[i]`, where `cᵢ` is the `i`-th column of `A`;
 - Update `F` by subtracting `dᵢ` from `F` (preserving the `i`-th component);
 - Zero out off-diagonal elements in the `i`-th column of `A`.
+
+A non-square `A` (a form whose test and trial spaces differ in size) has no symmetry to
+restore and throws an `ArgumentError`.
 """
 @inline function symmetrize!(
         A::AbstractMatrix,
@@ -731,6 +734,7 @@ end
 function symmetrize!(
         A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...
 )
+    _check_symmetrize_square(A)
     for p in labels
         symmetrize!(A, F, index_in_marker(Ωₕ, p), 0)
     end
@@ -766,6 +770,7 @@ function symmetrize!(
         labels::Symbol...;
         components = nothing
 )
+    _check_symmetrize_square(A)
     isempty(labels) && return nothing
     leaves = leaf_spaces_offsets(Wₕ)
     _validate_dirichlet_components(components, length(leaves))
@@ -775,8 +780,26 @@ function symmetrize!(
     return nothing
 end
 
+# A marked index is a test-space dof that the sweeps below use as a column index, without
+# bounds checks. On a non-square `A` (tall or wide) that mixes test and trial numbering, so
+# every entry point refuses it before reading or writing `A` or `F` (gpena/Bramble.jl#663).
+@inline function _check_symmetrize_square(A::AbstractMatrix)
+    return size(A, 1) == size(A, 2) || _throw_symmetrize_not_square(A)
+end
+
+@noinline function _throw_symmetrize_not_square(A::AbstractMatrix)
+    m, n = size(A)
+    throw(
+        ArgumentError(
+        "symmetrize! needs a square matrix, got $(m)×$(n): a form whose test and trial " *
+        "spaces differ in size has no symmetry to restore.",
+    ),
+    )
+end
+
 # Generic implementation for dense matrices
 function symmetrize!(A::AbstractMatrix, F::AbstractVector, mask::BitVector, offset::Int = 0)
+    _check_symmetrize_square(A)
     T = eltype(A)
     _each_marked(mask, offset) do i
         dirichlet_val = F[i]
@@ -800,6 +823,7 @@ end
 #
 # No `@simd`: the branch rules it out, and `F[rows[k]]` is an indirect scatter.
 function symmetrize!(A::SparseMatrixCSC, F::AbstractVector, mask::BitVector, offset::Int = 0)
+    _check_symmetrize_square(A)
     T = eltype(A)
     rows = rowvals(A)
     vals = nonzeros(A)

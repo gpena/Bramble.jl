@@ -228,6 +228,8 @@ end
 function Bramble.symmetrize!(
         A::SparseMatrixCSR{1}, F::AbstractVector, mask::BitVector, offset::Int = 0
 )
+    # before the `@inbounds` sweep: a non-square `A` would read `F[col]` past its end
+    Bramble._check_symmetrize_square(A)
     T = eltype(A)
     rowptr = A.rowptr
     colval = A.colval

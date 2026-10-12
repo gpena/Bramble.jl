@@ -437,6 +437,41 @@ end
         )
     end
 
+    # `symmetrize!` refuses a non-square matrix with the same `ArgumentError` on CSR as on
+    # CSC, before touching it. At mask level the CSR sweep read `F[col]` past the end of a
+    # vector as long as the rows, under `@inbounds` (gpena/Bramble.jl#663).
+    @testset "non-square symmetrize!: refused like CSC" begin
+        mk(be) = gridspace(mesh(domain(interval(0.0, 1.0)), 7, false; backend = be))
+        errs = map((Bramble.backend(), csr_backend())) do be
+            W = mk(be)
+            a = form(W, W × W, (u, V) -> innerₕ(u, V(1)) + innerₕ(u, V(2)))
+            A = assemble(a; dirichlet = :boundary)
+            F = collect(1.0:size(A, 1))
+            A0, F0 = copy(A), copy(F)
+            e = try
+                symmetrize!(A, F, Bramble.test_space(a), :boundary)
+                nothing
+            catch err
+                err
+            end
+            @test A == A0
+            @test F == F0
+            e
+        end
+        @test errs[1] isa ArgumentError
+        @test errs[2] isa ArgumentError
+        @test errs[1].msg == errs[2].msg
+
+        # mask level, wide: `F` has two entries and the marked column is the third
+        Ar = sparsecsr([1, 1, 2, 2], [1, 3, 2, 3], [2.0, 1.0, 2.0, 1.0], 2, 3)
+        Ar0 = copy(Ar)
+        big = [1.0, 1.0, 1.0e6]
+        Fr = view(big, 1:2)
+        @test_throws ArgumentError symmetrize!(Ar, Fr, BitVector([false, false, true]), 0)
+        @test Ar == Ar0
+        @test big == [1.0, 1.0, 1.0e6]
+    end
+
     # sparse_factorize still rejects non-CSR, non-CSC types.
     @testset "other matrix types rejected" begin
         # The catch-all's guarantee for a genuinely unsupported type (dense `Matrix`,
