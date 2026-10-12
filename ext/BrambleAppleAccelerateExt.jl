@@ -97,8 +97,11 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
     # AppleAccelerate 0.7.0's `AASparseMatrix(A)` stores a Hermitian `A` as its tagged
     # lower triangle. Cholesky and LDLᵀ read a triangle; LU and QR read the matrix, and
     # factor that triangle alone, so they get the full storage, untagged.
+    # `AASparseMatrix(A)` takes `Int64` indices only, so an `Int32` triangle is widened
+    # first (`convert` returns an `Int64` `A` as it is).
     function _aa_matrix(A::SparseMatrixCSC, sym_flag::Symbol)
-        sym_flag === :unsymmetric || sym_flag === :qr || return AASparseMatrix(A)
+        sym_flag === :unsymmetric || sym_flag === :qr ||
+            return AASparseMatrix(convert(SparseMatrixCSC{eltype(A), Int64}, A))
         return AASparseMatrix(
             size(A)..., Clong.(A.colptr .- 1), Cint.(A.rowval .- 1), copy(A.nzval), ATT_ORDINARY
         )

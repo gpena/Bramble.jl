@@ -538,6 +538,40 @@ end
             @test isapprox(f \ B2, Matrix(A1) \ B2; rtol = 1.0e-12)
         end
 
+        # `AASparseMatrix(A)` takes `Int64` indices: the triangle kinds widen an `Int32`
+        # matrix, in `refactor!` and in the `:auto` LDLᵀ fallback too
+        @testset "Int32 indices, every kind (#665)" begin
+            A = sparse(SymTridiagonal(fill(4.0, 7), fill(-1.0, 6)))
+            Ai = sparse([0.0 1 0; 1 0 1; 0 1 -2])
+            Ax = sparse([1.0 2; 2 1])
+            b7 = collect(1.0:7)
+            to32(M) = SparseMatrixCSC{Float64, Int32}(M)
+            @test to32(A) isa SparseMatrixCSC{Float64, Int32}
+            for opts in (
+                (;), (sym = :spd,), (kind = :cholesky,), (kind = :ldlt,),
+                (sym = :symmetric,), (kind = :lu,), (kind = :qr,),
+            )
+                f = accelerate_factorize(to32(A); opts...)
+                @test isapprox(f \ b7, Matrix(A) \ b7; rtol = 1.0e-12)
+            end
+            for opts in ((;), (kind = :ldlt,))
+                f = accelerate_factorize(to32(Ai); opts...)
+                @test isapprox(f \ [1.0, 2, 3], Matrix(Ai) \ [1.0, 2, 3]; rtol = 1.0e-12)
+            end
+            # indefinite with a positive diagonal: Cholesky fails, :auto falls to LDLᵀ
+            f = accelerate_factorize(to32(Ax))
+            @test isapprox(f \ [1.0, 2], Matrix(Ax) \ [1.0, 2]; rtol = 1.0e-12)
+            for opts in ((;), (kind = :ldlt,))
+                f = accelerate_factorize(to32(A); opts...)
+                @test accelerate_refactor!(f, to32(2 * A)) === f
+                @test isapprox(f \ b7, Matrix(2 * A) \ b7; rtol = 1.0e-12)
+            end
+            # :auto Cholesky refactored to an indefinite matrix: the LDLᵀ fallback
+            f = accelerate_factorize(to32(sparse([2.0 1; 1 2])))
+            @test accelerate_refactor!(f, to32(Ax)) === f
+            @test isapprox(f \ [1.0, 2], Matrix(Ax) \ [1.0, 2]; rtol = 1.0e-12)
+        end
+
         @testset "unknown keyword throws (#657)" begin
             A = sparse(SymTridiagonal(fill(4.0, 6), fill(-1.0, 5)))
             b = collect(1.0:6)
