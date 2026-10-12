@@ -2,7 +2,8 @@ module BrambleSciMLSensitivityExt
 
 using Bramble: Bramble, Semidiscretization, mass_matrix
 using SciMLBase: SciMLBase, ODESolution
-using SciMLSensitivity: SciMLSensitivity, InterpolatingAdjoint, BrownFullBasicInit
+using SciMLSensitivity: SciMLSensitivity, InterpolatingAdjoint, QuadratureAdjoint,
+                        BrownFullBasicInit
 # `transpose` is `Base`'s own -- every module sees it already, so it is used unqualified
 # below with no `using LinearAlgebra: transpose` at all (that import would itself fail
 # `test/quality/explicit_imports.jl`'s "imports come from the true owner" check, since
@@ -26,8 +27,9 @@ using SciMLSensitivity: SciMLSensitivity, InterpolatingAdjoint, BrownFullBasicIn
 #    depending on `sensealg`), and the wrapper raises "No matching function wrapper was
 #    found!" rather than differentiating. This is set at `ode_problem` construction, before
 #    `solve` ever runs, so it cannot be fixed here after the fact -- callers must ask for it.
-#    It is needed for a `p`-vjp only: a `u₀`-only adjoint on a default-specialized problem
-#    still gets the `Mᵀ` correction (item 3), since that unwraps the wrapper first.
+#    It is needed on a sparse backend even with no `p`, and for a `p`-vjp on any backend. A
+#    `u₀`-only adjoint on a dense, default-specialized problem still gets the `Mᵀ`
+#    correction (item 3), since that unwraps the wrapper first.
 # 2. `initializealg = BrownFullBasicInit()`. The adjoint DAE inherits the forward problem's
 #    algebraic structure: with `D` the constrained rows, `semidiscretize`'s convention gives
 #    `A[D, D] = I`, `A[D, Dᶜ] = 0`, so `(Aᵀ)[D, D] = I` and the adjoint is index-1 too, but
@@ -67,22 +69,25 @@ rule makes for the steady case.
 # Keywords
 Every keyword `SciMLSensitivity.adjoint_sensitivities` takes, plus these two defaults chosen
 for a `Semidiscretization`'s index-1 DAE specifically (both overridable):
-- `sensealg`: `InterpolatingAdjoint(autojacvec = false)` -- `autojacvec = false` uses
+- `sensealg`: `InterpolatingAdjoint(autojacvec = false)` when `sol.prob.p` is set, and
+  `QuadratureAdjoint(autojacvec = false)` when it is not -- `autojacvec = false` uses
   [`Bramble.jacobian!`](@ref)'s own exact `-A` for the `u`-vjp, so no AD tool ever needs to
-  differentiate through the residual's mutating buffers for that half.
+  differentiate through the residual's mutating buffers for that half. On a problem with no
+  `p` whose mass matrix is singular (Dirichlet rows), every `InterpolatingAdjoint` variant
+  fails inside SciMLSensitivity (SciML/SciMLSensitivity.jl#1703), which is why the p-less
+  default is the quadrature variant. An explicit `InterpolatingAdjoint` on such a problem
+  is passed through unchanged and hits that error.
 - `initializealg`: `BrownFullBasicInit()` -- restores the adjoint's own algebraic
   consistency at `t = T` rather than merely checking it (the default `CheckInit` rejects a
   constrained problem's seed outright); see this file's own module-level comment for why.
 
 # Requirements on `sol`
-`sol.prob` must have been built with `ode_problem(sd, u₀, I; p = ..., specialize =
-SciMLBase.FullSpecialize)` -- both `p` and `specialize` matter: `specialize` avoids a
-function-wrapper error the moment a `p`-vjp is computed (see the note on `ode_problem`
-itself), and without a real `p` there is nothing for `dp` to be a gradient with respect to.
-`FullSpecialize` is required for a `p`-vjp only. A `u₀`-only adjoint on a
-default-specialized problem still gets the `Mᵀ` correction wherever the chosen `sensealg`
-runs at all, because the correction unwraps the function wrapper before it looks at the
-residual.
+`sol.prob` may be built with or without `p`: with no `p`, `dp` is `nothing`. Build it with
+`specialize = SciMLBase.FullSpecialize` when `p` is set (it avoids a function-wrapper error
+the moment a `p`-vjp is computed, see the note on `ode_problem` itself) and on a sparse
+backend even without `p`. A `u₀`-only adjoint on a dense, default-specialized problem still
+gets the `Mᵀ` correction, because the correction unwraps the function wrapper before it
+looks at the residual.
 
 # Examples
 
@@ -103,7 +108,7 @@ mirrors.
 """
 function Bramble.adjoint_sensitivities(
         sol::ODESolution, alg;
-        sensealg = InterpolatingAdjoint(autojacvec = false),
+        sensealg = _default_sensealg(sol.prob.p),
         initializealg = BrownFullBasicInit(),
         kwargs...
 )
@@ -112,6 +117,15 @@ function Bramble.adjoint_sensitivities(
     )
     return _correct_initial_adjoint(du0, SciMLBase.unwrapped_f(sol.prob.f.f)), dp
 end
+
+# A problem with no `p` (`NullParameters`, on every p-less `ode_problem` and
+# `second_order_ode_problem`) gets the quadrature adjoint: on one with a singular mass
+# matrix, every `InterpolatingAdjoint` variant and `BacksolveAdjoint` hit SciMLSensitivity's
+# `adjoint(::Nothing)` (SciML/SciMLSensitivity.jl#1703), and `GaussAdjoint` throws
+# `length(::NullParameters)`.
+# With a `p` the interpolating adjoint stays, the path gpena/Bramble.jl#239 validated.
+_default_sensealg(::SciMLBase.NullParameters) = QuadratureAdjoint(autojacvec = false)
+_default_sensealg(::Any) = InterpolatingAdjoint(autojacvec = false)
 
 # `Mᵀ` corrects the initial-condition gradient for exactly the case where Bramble handed
 # SciMLBase a `Semidiscretization`'s own mass matrix -- `sol.prob.f.f` is the underlying
