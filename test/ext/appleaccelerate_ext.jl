@@ -293,7 +293,7 @@ end
 
             # Nonsingular indefinite, unsymmetric and Float32 matrices still solve
             for M in ([0.0 1 0; 1 0 1; 0 1 -2], [4.0 1 0; 2 5 1; 0 3 6], [-2.0 1; 1 -3],
-                    Float32[4 1 0; 2 5 1; 0 3 6])
+                Float32[4 1 0; 2 5 1; 0 3 6])
                 b = collect(one(eltype(M)):size(M, 1))
                 tol = sqrt(eps(eltype(M)))
                 @test isapprox(accelerate_factorize(sparse(M)) \ b, M \ b; rtol = tol)
@@ -549,7 +549,7 @@ end
             @test to32(A) isa SparseMatrixCSC{Float64, Int32}
             for opts in (
                 (;), (sym = :spd,), (kind = :cholesky,), (kind = :ldlt,),
-                (sym = :symmetric,), (kind = :lu,), (kind = :qr,),
+                (sym = :symmetric,), (kind = :lu,), (kind = :qr,)
             )
                 f = accelerate_factorize(to32(A); opts...)
                 @test isapprox(f \ b7, Matrix(A) \ b7; rtol = 1.0e-12)

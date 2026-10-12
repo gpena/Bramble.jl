@@ -315,7 +315,7 @@ end
         du = zeros(30)
         sd(du, collect(range(0.25, 1.75; length = 30)), nothing, 0.0)
         return (Ωh, A, F, innerₕ(u, element(W, 1.0); markers = (:xmin,)),
-                Bramble.reaction(a, l, u; marker = :xmin), du)
+            Bramble.reaction(a, l, u; marker = :xmin), du)
     end
     Ωe, Ae, Fe, ie, re, due = solve_on(domain(S, :left => x -> false))
     Ωc, Ac, Fc, ic, rc, duc = solve_on(domain(S, :left => :xmin))
