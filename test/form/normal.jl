@@ -341,6 +341,53 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
         @test_throws "whole boundary faces" lin(Wc, g * ηₓ, :c)
     end
 
+    # `normal_vector` reads a label as `inner_Γ` does: a marker by its points, anything else
+    # as a face name. It read every label as a face name, so under `:left => :ymin` it gave
+    # the xmin normal for the face `inner_Γ` integrates as ymin (gpena/Bramble.jl#669).
+    @testset "normal_vector reads labels as inner_Γ" begin
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        mk(lab...) = gridspace(mesh(domain(S, lab..., :boundary => boundary_symbols(S)),
+            (11, 9), (false, false)))
+        same(n1, n2) = all(parent(n1[d]) == parent(n2[d]) for d in 1:2)
+        surface(W, m) = findall(!iszero,
+            assemble(form(W, v -> inner_Γ(x -> 1.0, v; markers = m))))
+
+        W = mk(:left => :ymin)
+        nl = normal_vector(W, :left)
+        @test same(nl, normal_vector(W, :ymin))
+        @test iszero(parent(nl[1]))
+        @test sum(parent(nl[2])) == -11
+        @test findall(!iszero, parent(nl[2])) == surface(W, :left)
+        # the face name keeps its own face
+        @test sum(parent(normal_vector(W, :xmin)[1])) == -9
+
+        # a user label on one whole face, and an open face, sample that face's normal
+        Wi = mk(:inflow => :xmax)
+        @test same(normal_vector(Wi, :inflow), normal_vector(Wi, :xmax))
+        @test findall(!iszero, parent(normal_vector(Wi, :inflow)[1])) == surface(Wi, :inflow)
+        Wo = mk(:o => x -> x[1] == 1 && 0 < x[2] < 1)
+        @test same(normal_vector(Wo, :o), normal_vector(Wo, :xmax))
+
+        # no single normal: several faces, or part of one
+        @test_throws ArgumentError normal_vector(W, :boundary)
+        @test_throws "covers 4 boundary faces" normal_vector(W, :boundary)
+        Wc = mk(:c => x -> x[1] == 0 && x[2] <= 0.5)
+        @test_throws ArgumentError normal_vector(Wc, :c)
+
+        # 3D: the face a marker selects is mapped to its own name on the third axis too
+        if WITH_3D_TESTS
+            I = interval(0.0, 1.0)
+            W3 = gridspace(mesh(domain(I × I × I, :front => :zmax, :up => :ymax),
+                (4, 5, 6), (false, false, false)))
+            same3(n1, n2) = all(parent(n1[d]) == parent(n2[d]) for d in 1:3)
+            @test same3(normal_vector(W3, :front), normal_vector(W3, :zmax))
+            @test sum(parent(normal_vector(W3, :front)[3])) == 4 * 5
+            @test same3(normal_vector(W3, :up), normal_vector(W3, :ymax))
+            @test findall(!iszero, parent(normal_vector(W3, :front)[3])) ==
+                  surface(W3, :front)
+        end
+    end
+
     # An empty label set is refused when the term is built; an unknown label at `form`.
     @testset "Refusals" begin
         Wₕ = gridspace(mesh(Ω, (7, 7), (true, true)))
