@@ -209,18 +209,21 @@ label the mesh does not hold is a face name (the canonical `:xmin`…`:zmax`, `:
 a viewpoint alias). Under `domain(S, :left => :ymin)`, `:left` is therefore the bottom edge.
 [`normal_vector`](@ref)`(Wₕ, label)` resolves a label by this same rule.
 On an axis with one point, a label's marked points cover both faces of that axis, so such a
-label throws; the face name (`:ymin`) is the way to name one of them.
+label throws here (see the refusals below); the face name (`:ymin`) is the way to name one of
+them.
 
 Markers that select no face, or that mark a point on no selected face, throw an
 `ArgumentError`: part of a face, an interior interface or a staircase is a genuinely more
 general surface -- the weight stops factorising where the surface is cut at an interior
 transverse index, and needs the explicit one-sided face sum -- and is refused rather than
-silently given the factorised weight. A `DimensionMismatch` is thrown when the storage of
-`uₕ` or `vₕ` does not hold one value per point of the mesh of `space(uₕ)`.
+silently given the factorised weight. So is a face set holding both faces of an axis with two
+points or fewer, since every grid point lies on it. A `DimensionMismatch` is thrown when the
+storage of `uₕ` or `vₕ` does not hold one value per point of the mesh of `space(uₕ)`.
 
 The symbolic twin, for use inside a form, is `inner_Γ(g, v; markers = …)`
 (`operators/inner.jl`). It takes its regions as a keyword, to sit beside `innerₕ`; this
-one keeps the positional labels it has always had.
+one keeps the positional labels it has always had. It does not refuse a face set holding both
+faces of an axis with two points or fewer: it assembles every face selected.
 
 # Examples
 

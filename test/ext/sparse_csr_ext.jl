@@ -446,13 +446,18 @@ end
 
         # a matrix type no backend takes: the message names it, whichever backend is asked
         D = Diagonal(ones(3))
-        for f in (
+        calls = Function[
             () -> Bramble._sparspak_factorize(D), () -> Bramble._sparspak_solve(D, ones(3)),
             () -> Bramble._suitesparse_factorize(D), () -> Bramble._suitesparse_solve(D, ones(3)),
             () -> Bramble._mumps_factorize(D), () -> Bramble._mumps_solve(D, ones(3)),
-            () -> Bramble._accelerate_factorize(D), () -> Bramble._accelerate_solve(D, ones(3)),
             () -> ilu_preconditioner(D), () -> Bramble._ilu_operator(D)
-        )
+        ]
+        # AppleAccelerate, and with it the extension, loads on macOS only (see the top)
+        if Sys.isapple()
+            push!(calls, () -> Bramble._accelerate_factorize(D))
+            push!(calls, () -> Bramble._accelerate_solve(D, ones(3)))
+        end
+        for f in calls
             e = try
                 f()
                 nothing
