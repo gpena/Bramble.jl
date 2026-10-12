@@ -723,6 +723,21 @@ end
             end
             @test err isa ArgumentError
             @test occursin("entry (1, 3)", sprint(showerror, err))
+
+            # `A`'s `rowptr` and nnz but row 1 stores columns 1, 2 where `A` has 1, 3: only
+            # `colval` tells the patterns apart, and (1, 3) is refused by name
+            cv = copy(A.colval)
+            cv[2] = Ti(2 - (1 - Bi))
+            R = SparseMatrixCSR{Bi}(n, n, copy(A.rowptr), cv, fill(9.0, length(cv)))
+            @test R.rowptr == A.rowptr && R.colval != A.colval
+            err = try
+                Bramble._negate_into!(R, A)
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            @test occursin("entry (1, 3)", sprint(showerror, err))
         end
     end
 
