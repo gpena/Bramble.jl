@@ -702,6 +702,35 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
     @test err isa ArgumentError && occursin("if the hierarchy allows them", sprint(showerror, err))
 end
 
+@testset "gmg: preconditioner infers (#708)" begin
+    # The κ-weighted form infers, and with it the preconditioner and the solve.
+    Ω = _mg_jitter_mesh(2, 9)
+    W = gridspace(Ω)
+    @test isconcretetype(typeof(@inferred _mg_spd(W)))
+    @test isconcretetype(typeof(@inferred gmg_preconditioner(_mg_spd, Ω)))
+    @inferred gmg_solve(_mg_spd, Ω, ones(npoints(Ω)))
+    WITH_3D_TESTS && @test isconcretetype(typeof(@inferred gmg_preconditioner(_mg_spd, _mg_jitter_mesh(3, 5))))
+
+    # Without the coefficient, whether the operator keeps a geometry is decided at run time,
+    # so `matrix_free_operator` returns a Union of two operators differing only in it (the
+    # comment above `_mf_operator`). That Union is all that is left non-concrete in
+    # `gmg_preconditioner`: every other parameter is fixed, the operator type comes from
+    # it, and the smoother built on that operator is left free.
+    lap = V -> form(V, V, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+    a = @inferred lap(W)
+    ops = Base.uniontypes(only(Base.return_types(matrix_free_operator, (typeof(a),))))
+    @test length(ops) == 2 && all(isconcretetype, ops)
+    @test allequal(op.parameters[1:5] for op in ops) && count(op -> op.parameters[6] === Nothing, ops) == 1
+    @test typeof(matrix_free_operator(a)) in ops
+    rt = only(Base.return_types(gmg_preconditioner, (typeof(lap), typeof(Ω))))
+    Ps = map(Base.unwrap_unionall, Base.uniontypes(rt))
+    fixed = [P.parameters[[1, 2, 5, 6]] for P in Ps]
+    @test allequal(fixed) && all(isconcretetype, first(fixed))
+    # the vector of levels holds one member of the Union, or their join over the geometry
+    @test all(P -> P.parameters[3] in (ops..., typejoin(ops...)), Ps)
+    @test typeof(gmg_preconditioner(lap, Ω)) <: rt
+end
+
 @testset "gmg: threaded cycles agree" begin
     policies = (Parallel(),)
     for policy in policies, (D, n) in filter(c -> c[1] in TEST_DIMS, ((2, 33), (3, 9)))

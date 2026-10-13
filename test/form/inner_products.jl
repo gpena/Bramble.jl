@@ -212,6 +212,29 @@ using Bramble:
         @test_throws ArgumentError inner₊((), ())
     end
 
+    @testset "Scaled gradient infers (#708)" begin
+        # `κ * ∇ₕ(u)` is a tuple of differences in different directions, so its entries
+        # differ in type; the sum must still infer, with weight `InnerPlus{d}` on term `d`,
+        # and assemble to the directional products added by hand. Non-uniform mesh.
+        Ωn = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (false, false))
+        Bramble.change_points!(Ωn, ([0.0, 0.1, 0.35, 0.5, 0.8, 1.0], [0.0, 0.2, 0.25, 0.5, 0.6, 0.9, 1.0]))
+        Wn = gridspace(Ωn)
+        κ = Rₕ(Wn, x -> 1 + x[1] + x[2]^2)
+        p = @inferred inner₊(κ * ∇ₕ(u), ∇ₕ(v))
+        @test typeof(p.left_op).parameters[2] === InnerPlus{1}
+        @test typeof(p.right_op).parameters[2] === InnerPlus{2}
+        @inferred inner₊(∇ₕ(u), ∇ₕ(v))
+        A = assemble(form(Wn, Wn, (a, b) -> inner₊(κ * ∇ₕ(a), ∇ₕ(b))))
+        B = assemble(form(Wn, Wn, (a, b) -> inner₊ₓ(κ * D₋ₓ(a), D₋ₓ(b)) + inner₊ᵧ(κ * D₋ᵧ(a), D₋ᵧ(b))))
+        @test A ≈ B && !iszero(A)
+        if WITH_3D_TESTS
+            u3, v3 = TrialFunction{3}(), TestFunction{3}()
+            I1 = interval(0.0, 1.0)
+            W3 = gridspace(mesh(domain(I1 × I1 × I1), (4, 4, 4), (false, false, false)))
+            @inferred inner₊(Rₕ(W3, x -> 1 + x[1]) * ∇ₕ(u3), ∇ₕ(v3))
+        end
+    end
+
     @testset "Symbolic and numeric families stay apart" begin
         # `inner₊` names two different things. Given grid functions it computes a number
         # (`src/space/inner_product.jl`), and given operators it builds an AST node

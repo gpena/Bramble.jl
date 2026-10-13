@@ -251,7 +251,7 @@ end
 
 # One directional source term per dimension, summed, with the sum restricted once. `Val(D)`
 # is what keeps `dim` a compile-time literal, so `InnerPlus{dim}` stays a type instead of
-# becoming a runtime value -- the same reason the folds below were written with `ntuple`.
+# becoming a runtime value -- the same reason `inner_plus` below builds its weights on `Val`.
 @inline function _inner_source_tuple(l, r::NTuple{D, LazyOp{D}}, markers) where {D}
     terms = ntuple(Val(D)) do dim
         _linear_source(InnerPlus{dim}(), l[dim], r[dim])
@@ -273,11 +273,16 @@ function inner_plus(
         right::NTuple{D, LazyOp{D}};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {D, N}
-    terms = ntuple(Val(D)) do dim
-        return _product(InnerPlus{dim}(), left[dim], right[dim])
-    end
+    terms = map(_product, _inner_plus_weights(Val(D)), left, right)
     return _restrict_by_markers(foldl(+, terms), markers)
 end
+
+# `(InnerPlus{1}(), …, InnerPlus{D}())`, built by recursion on `Val` so each weight is a type.
+# `inner_plus` maps over it with `left` and `right`: an `ntuple` closure indexing
+# `left[dim]` loses the element type when the tuple is heterogeneous (`κ * ∇ₕ(u)` in 2D),
+# and the sum then infers as an abstract `OperatorAdd` (gpena/Bramble.jl#708).
+@inline _inner_plus_weights(::Val{0}) = ()
+@inline _inner_plus_weights(::Val{D}) where {D} = (_inner_plus_weights(Val(D - 1))..., InnerPlus{D}())
 
 # Support both scalar and NTuple combinations in standard inner products:
 
