@@ -50,7 +50,7 @@ avgₕ(Wₕ, x -> sin(x[1]) * x[2]; quad_points = Val(4))
 ```
 
 On a Metal (or other device) backend, `f` runs *on the device* inside the quadrature
-kernel, evaluated `quad_points^D + 1` times per cell (gpena/Bramble.jl#94, #174, #693), so
+kernel, evaluated `quad_points^D` times per cell (gpena/Bramble.jl#94, #174, #693), so
 it must be GPU-compilable in the same sense [`Rₕ!`](@ref)'s docstring describes. A masked
 call runs the same kernel over just the marked cells, after zeroing the result on the
 device (gpena/Bramble.jl#297).
@@ -434,11 +434,12 @@ end
 broadcasting `.+`/`.*` over a `Number` accumulator computes exactly the scalar arithmetic
 `+`/`*` would, and over an `NTuple` accumulator the per-component sum, so no `::Val{NC}` or
 caller-built seed is needed to tell the two apart (gpena/Bramble.jl#102, #148). The
-accumulator is seeded with the zero of the first weighted term `wts[1] .* f(pt)` rather
-than `zero(T)`, so the result is the promotion of `T` (the mesh's element type) and `f`'s
-return type: a `ForwardDiff.Dual` under AD stays a `Dual` (gpena/Bramble.jl#148), and an
-`f` narrower than the mesh type (`Int`, or `Float32` on a `Float64` mesh) gives a sum whose
-type does not change mid-loop (gpena/Bramble.jl#523).
+accumulator is seeded with the first weighted term itself rather than `zero(T)`, and the
+loop runs over the remaining nodes, so `f` is called exactly `NQ^D` times per cell
+(gpena/Bramble.jl#693) and the result is the promotion of `T` (the mesh's element type)
+and `f`'s return type: a `ForwardDiff.Dual` under AD stays a `Dual`
+(gpena/Bramble.jl#148), and an `f` narrower than the mesh type (`Int`, or `Float32` on a
+`Float64` mesh) gives a sum whose type does not change mid-loop (gpena/Bramble.jl#523).
 
 A one-dimensional mesh answers `half_points` with a plain vector but indexes with
 `CartesianIndex{1}`; the `CartesianIndex{1}` method unwraps that to the `Int` the
@@ -471,8 +472,8 @@ correctness at any `D` and is tested directly rather than through a mesh.
     @inbounds a = T(x[i])
     @inbounds d = T(x[i + 1]) - a
 
-    @inbounds s = zero.(wts[1] .* f(a + nodes[1] * d))
-    @inbounds for q in 1:NQ
+    @inbounds s = wts[1] .* f(a + nodes[1] * d)
+    @inbounds for q in 2:NQ
         s = s .+ wts[q] .* f(a + nodes[q] * d)
     end
     return s
@@ -498,13 +499,13 @@ end
     p1s = ntuple(q -> a1 + nodes[q] * d1, Val(NQ))
     p2s = ntuple(q -> a2 + nodes[q] * d2, Val(NQ))
 
-    # Accumulator seeded from the zero of the first weighted term, not `zero(T)` -- see the
-    # 1D method above (gpena/Bramble.jl#148, #523).
-    @inbounds s = zero.(wts[1] .* f((p1s[1], p2s[1])))
+    # Accumulator seeded with the first weighted term, not `zero(T)`, and the loops skip
+    # that node -- see the 1D method above (gpena/Bramble.jl#148, #523, #693).
+    @inbounds s = (wts[1] * wts[1]) .* f((p1s[1], p2s[1]))
     @inbounds for q2 in 1:NQ
         w2 = wts[q2]
         p2 = p2s[q2]
-        for q1 in 1:NQ
+        for q1 in (q2 == 1 ? 2 : 1):NQ
             w1 = wts[q1] * w2
             p1 = p1s[q1]
             s = s .+ w1 .* f((p1, p2))
@@ -531,16 +532,16 @@ end
     p2s = ntuple(q -> a2 + nodes[q] * d2, Val(NQ))
     p3s = ntuple(q -> a3 + nodes[q] * d3, Val(NQ))
 
-    # Accumulator seeded from the zero of the first weighted term, not `zero(T)` -- see the
-    # 1D method above (gpena/Bramble.jl#148, #523).
-    @inbounds s = zero.(wts[1] .* f((p1s[1], p2s[1], p3s[1])))
+    # Accumulator seeded with the first weighted term, not `zero(T)`, and the loops skip
+    # that node -- see the 1D method above (gpena/Bramble.jl#148, #523, #693).
+    @inbounds s = (wts[1] * (wts[1] * wts[1])) .* f((p1s[1], p2s[1], p3s[1]))
     @inbounds for q3 in 1:NQ
         w3 = wts[q3]
         p3 = p3s[q3]
         for q2 in 1:NQ
             w23 = wts[q2] * w3
             p2 = p2s[q2]
-            for q1 in 1:NQ
+            for q1 in (q2 == 1 && q3 == 1 ? 2 : 1):NQ
                 w1 = wts[q1] * w23
                 p1 = p1s[q1]
                 s = s .+ w1 .* f((p1, p2, p3))
@@ -562,11 +563,11 @@ end
     a = ntuple(k -> @inbounds(T(x[k][idx[k]])), Val(D))
     b = ntuple(k -> @inbounds(T(x[k][idx[k] + 1])), Val(D))
 
-    # Accumulator seeded from the zero of the first weighted term, not `zero(T)` -- see the
-    # 1D method above (gpena/Bramble.jl#148, #523).
+    # Accumulator seeded with the first weighted term, not `zero(T)`, and the loop skips
+    # that node -- see the 1D method above (gpena/Bramble.jl#148, #523, #693).
     pt1 = ntuple(k -> a[k] + nodes[1] * (b[k] - a[k]), Val(D))
-    s = zero.(wts[1] .* f(pt1))
-    @inbounds for q in CartesianIndices(ntuple(_ -> NQ, Val(D)))
+    s = prod(ntuple(_ -> wts[1], Val(D))) .* f(pt1)
+    @inbounds for q in Iterators.drop(CartesianIndices(ntuple(_ -> NQ, Val(D))), 1)
         w = one(T)
         for k in 1:D
             w *= wts[q[k]]

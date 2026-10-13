@@ -449,6 +449,36 @@ end
         @test parent(components(c)[2]) ≈ ref_g rtol=1e-13
     end
 
+    @testset "avgₕ!: quad_points^D calls per cell" begin
+        # gpena/Bramble.jl#693: a seed evaluated f once more per cell. Every method of
+        # `_cell_average` (1D, 2D, 3D and the generic one, reached here at D = 4) must call
+        # f exactly NQ^D times, and a constant 1 must average to 1, which a node counted
+        # twice would not.
+        calls = Ref(0)
+        one_f = x -> (calls[] += 1; 1.0)
+        xs = [0.0, 0.3, 1.0]
+        for NQ in 1:3
+            nodes, wts = Bramble._gauss_rule(Val(NQ), Float64)
+            for D in 1:4
+                x = D == 1 ? xs : ntuple(_ -> xs, D)
+                idx = D == 1 ? 2 : CartesianIndex(ntuple(k -> isodd(k) ? 1 : 2, D))
+                calls[] = 0
+                @test Bramble._cell_average(one_f, x, idx, nodes, wts) ≈ 1.0 rtol=1e-14
+                @test calls[] == NQ^D
+            end
+        end
+
+        # through avgₕ! on a mesh: the step from quad_points = 1 to 2 costs 2² - 1 = 3 calls
+        # per cell, so it isolates the per-cell count from any one-off type probe call
+        Wₕ = gridspace(mesh(Ω, (5, 4), (false, false)))
+        g = x -> (calls[] += 1; sin(x[1]) * x[2])
+        count_calls(q) = (calls[] = 0; avgₕ!(element(Wₕ), g; quad_points = q); calls[])
+        c1, c2 = count_calls(1), count_calls(2)
+        ncells = (c2 - c1) ÷ 3
+        @test ncells == 20
+        @test c1 - ncells in (0, 1)
+    end
+
     @testset "Gauss rule at run-time precision" begin
         # BigFloat is not isbits, so the rule is built per call at the current precision.
         # Gauss-Legendre on [0, 1]: two points at 1/2 ∓ √3/6 with weight 1/2 each, three at
