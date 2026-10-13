@@ -1,15 +1,12 @@
 # vector_calculus.jl
-# The higher-level discrete vector calculus operators: divergence, curl and the Laplacian
-#. Each is a contraction of the directional differences
-# `operators/difference.jl` already provides, and each used to be written out by hand at
-# every call site.
+# The higher-level discrete vector calculus operators: divergence, curl and the Laplacian.
+# Each is a contraction of the directional differences `operators/difference.jl` already
+# provides.
 #
 # Three things are deliberate here.
 #
-# The names follow the gradient's. `∇ₕ` is the *backward* gradient and `∇₊ₕ` the forward one
-# (operators/difference.jl), so `divₕ`/`curlₕ` are backward and `div₊ₕ`/`curl₊ₕ` forward --
-# not the `div₋ₕ` the issue asked for, which would read as a fourth naming convention for the
-# same choice. `Δₕ` has no such pair: it is the conservative composition of the two.
+# `divₕ`/`curlₕ` are backward and `div₊ₕ`/`curl₊ₕ` forward, as `∇ₕ`/`∇₊ₕ` are; `Δₕ` composes
+# the two.
 #
 # Each operator accumulates into its destination in one traversal per direction rather than
 # composing the public aliases, which would need a temporary per direction. That is what lets
@@ -21,17 +18,10 @@
 
 # --- Device dispatch for the fused vector-calculus kernels ---------------------------------------------------- #
 #
-# Every accumulating engine below (`_accumulate_backward!`, `_accumulate_forward!`,
-# `_accumulate_laplacian!`, `_avg_backward_inplace!`) is a host `@inbounds @simd for` loop
-# that scalar-indexes its destination, which a device-backed `VectorElement` refuses
-# outright. `divₕ!`/`div₊ₕ!`/`curlₕ!`/`curl₊ₕ!`/`Δₕ!`/`εₕ!` each check `locality` on their
-# destination first and, on a device array, route to one fused `KernelAbstractions.@kernel`
-# launch that reads every component it needs exactly once per grid point -- instead of the
-# CPU path's one pass per spatial direction (or, for `εₕ!`'s off-diagonal entries, one pass
-# each for a difference and the average composed onto it) -- rather than raising
-# `ScalarIndexingDisallowed` partway through the first accumulation. `ext/BrambleKernelAbstractionsExt.jl`
-# fills in each launcher; without that extension loaded, the launcher throws a named
-# diagnostic instead, matching every other device stub in this package.
+# Each accumulating engine below is a host loop that scalar-indexes its destination. On a
+# device destination every entry point launches one fused `KernelAbstractions` kernel instead
+# (`ext/BrambleKernelAbstractionsExt.jl`); without the extension the launcher throws a named
+# error.
 function _throw_no_ka_vector_calculus_kernel(fname::String)
     error(
         "$fname requires KernelAbstractions.jl to apply a vector-calculus operator to a " *
@@ -234,12 +224,17 @@ end
 # `_same_mesh_or_throw` (assembly/jacobian_pattern.jl) accepts. `===` decides the common
 # case, and `host_points` does not copy on a host mesh, so the `!` forms allocate nothing.
 @noinline function _throw_field_grid(k::Int, ck, c1)
+    msg = if _grid_dims(ck) == _grid_dims(c1) && length(parent(ck)) == length(parent(c1))
+        "component $k is on another mesh of the same shape: its points differ from " *
+        "component 1's"
+    else
+        "component $k has $(length(parent(ck))) entries on a grid of $(_grid_dims(ck)) " *
+        "points, component 1 has $(length(parent(c1))) entries on $(_grid_dims(c1)), and " *
+        "the two must share the same mesh points"
+    end
     throw(
         ArgumentError(
-        "the components of a vector field must be grid functions of one mesh: component " *
-        "$k has $(length(parent(ck))) entries on a grid of $(_grid_dims(ck)) points, " *
-        "component 1 has $(length(parent(c1))) entries on $(_grid_dims(c1)), and the two " *
-        "must share the same mesh points",
+        "the components of a vector field must be grid functions of one mesh: " * msg
     ),
     )
 end
@@ -277,7 +272,7 @@ end
 # `_check_no_alias` uses `mightalias`, so a fresh view over a component's data is caught as
 # well as the component itself. `comps` is the field's components, or `(uₕ,)` for a
 # gradient; the tuple method walks a gradient, 3D curl or strain destination with `map`.
-# Destination leaves may not alias each other either: `_check_dest_distinct` below.
+# Destination leaves may not alias each other either: `_check_dest_distinct` below, which names `op`.
 @inline function _check_dest_alias(vₕ::VectorElement, comps::Tuple)
     map(c -> _check_no_alias(vₕ, c), comps)
     return nothing
@@ -294,26 +289,39 @@ end
 # with `mightalias`, so a fresh view is caught while disjoint views of one parent (the
 # leaves of `components(w)`) pass. The destination is flattened into its leaves and every
 # pair compared by tuple recursion, so mixed leaf types stay concrete and nothing allocates.
-@noinline _throw_dest_dest_alias() = throw(ArgumentError("destinations must not alias each other"))
+@noinline function _throw_dest_dest_alias(op::String, i::Int, j::Int)
+    throw(
+        ArgumentError(
+        "$op: destinations $i and $j share storage; each leaf of the destination must be " *
+        "its own array",
+    ),
+    )
+end
 
 @inline _dest_leaves(vₕ::VectorElement) = (vₕ,)
 @inline _dest_leaves(::Tuple{}) = ()
 @inline _dest_leaves(t::Tuple) = (_dest_leaves(first(t))..., _dest_leaves(Base.tail(t))...)
 
-@inline _check_distinct_leaves(::Tuple{}) = nothing
-@inline function _check_distinct_leaves(t::Tuple)
-    a = parent(first(t))
-    map(b -> Base.mightalias(a, parent(b)) && _throw_dest_dest_alias(), Base.tail(t))
-    return _check_distinct_leaves(Base.tail(t))
+@inline _check_leaf_against(a, ::Tuple{}, op::String, i::Int, j::Int) = nothing
+@inline function _check_leaf_against(a, rest::Tuple, op::String, i::Int, j::Int)
+    Base.mightalias(a, parent(first(rest))) && _throw_dest_dest_alias(op, i, j)
+    return _check_leaf_against(a, Base.tail(rest), op, i, j + 1)
 end
 
-@inline _check_dest_distinct(dest) = _check_distinct_leaves(_dest_leaves(dest))
+@inline _check_distinct_leaves(::Tuple{}, op::String, i::Int) = nothing
+@inline function _check_distinct_leaves(t::Tuple, op::String, i::Int)
+    rest = Base.tail(t)
+    _check_leaf_against(parent(first(t)), rest, op, i, i + 1)
+    return _check_distinct_leaves(rest, op, i + 1)
+end
+
+@inline _check_dest_distinct(dest, op::String) = _check_distinct_leaves(_dest_leaves(dest), op, 1)
 
 # --- Divergence ---------------------------------------------------------------------- #
 
 """
     divₕ(uₕ) -> VectorElement
-    divₕ(vₕ, uₕ) -> VectorElement
+    divₕ!(vₕ, uₕ) -> vₕ
 
 Returns the discrete divergence of the vector field `uₕ`, built from the backward
 differences:
@@ -333,7 +341,7 @@ stencil.
 [`divₕ!`](@ref) writes into a destination instead, and allocates nothing.
 
 `∇ₕ ⋅ uₕ` is the same call written with `⋅` (`LinearAlgebra.dot`, exported from Bramble)
-in place of the function name: `∇ₕ ⋅ uₕ === divₕ(uₕ)`. It needs `⋅` in scope (`using
+in place of the function name: `∇ₕ ⋅ uₕ == divₕ(uₕ)`. It needs `⋅` in scope (`using
 LinearAlgebra: ⋅` or Bramble's own re-export). `∇cₕ`, `∇̽ₕ`, `∇̃ₕ` and `∇₊ₕ` contract to
 [`divcₕ`](@ref), [`div̽ₕ`](@ref), [`diṽₕ`](@ref) and [`div₊ₕ`](@ref) the same way.
 
@@ -373,7 +381,7 @@ The forward-difference discrete divergence, ``\\sum_d \\textrm{D}_{+,x_d}(\\text
 The forward twin of [`divₕ`](@ref), standing to it as [`∇₊ₕ`](@ref) stands to [`∇ₕ`](@ref),
 and truncated to zero on the *last* slice of each direction rather than the first.
 
-`∇₊ₕ ⋅ uₕ === div₊ₕ(uₕ)`.
+`∇₊ₕ ⋅ uₕ == div₊ₕ(uₕ)`.
 """
 @inline div₊ₕ(uₕ) = div₊ₕ!(_field_similar(_field_components(uₕ)), uₕ)
 
@@ -457,7 +465,7 @@ allocates nothing. No destination may alias a component of `uₕ` or another des
 [`curl₊ₕ`](@ref) is the forward twin.
 
 `∇ₕ × uₕ` is the same call written with `×` (`LinearAlgebra.cross`) in place of the
-function name: `∇ₕ × uₕ === curlₕ(uₕ)`, needing `×` in scope. `∇cₕ`, `∇̽ₕ` and `∇̃ₕ`
+function name: `∇ₕ × uₕ == curlₕ(uₕ)`, needing `×` in scope. `∇cₕ`, `∇̽ₕ` and `∇̃ₕ`
 contract to [`curlcₕ`](@ref), [`curl̽ₕ`](@ref) and [`curl̃ₕ`](@ref) the same way.
 
 See also: [`divₕ`](@ref), [`∇ₕ`](@ref)
@@ -470,7 +478,7 @@ See also: [`divₕ`](@ref), [`∇ₕ`](@ref)
 
 The forward-difference discrete curl, the twin of [`curlₕ`](@ref).
 
-`∇₊ₕ × uₕ === curl₊ₕ(uₕ)`.
+`∇₊ₕ × uₕ == curl₊ₕ(uₕ)`.
 """
 @inline curl₊ₕ(uₕ) = _curl(uₕ, Forward(), "curl₊ₕ")
 
@@ -529,7 +537,7 @@ function _curl!(vₕ::VectorElement, uₕ, dir, op::String)
 end
 
 function _curl!(vₕ::NTuple{3, VectorElement}, uₕ, dir, op::String)
-    _check_dest_distinct(vₕ)
+    _check_dest_distinct(vₕ, op)
     comps = _field_components(uₕ)
     Wₕ = _field_space(uₕ)
     Ωₕ = mesh(Wₕ)
@@ -657,49 +665,10 @@ end
 
 # --- Strain tensor -------------------------------------------------------------------- #
 #
-# The discrete strain tensor of a
-# vector field,
-#
-#     εₕ(uₕ) = (∇ₕ(uₕ) + ∇ₕ(uₕ)ᵀ) / 2
-#
-# The gradient tensor itself needs no new code. `∇ₕ`/`∇₊ₕ` (operators/difference.jl) already
-# accept a `D`-leaf composite grid function through the same generic dispatch every composite
-# grid function goes through -- one leaf at a time -- and for a `D`-leaf composite on a
-# `D`-dimensional mesh that componentwise gradient already *is* the gradient tensor:
-# `components(∇ₕ(uₕ)[i])[j]` is `D₋ᵢ(uⱼ)`, the `(i, j)` entry. That dispatch is also the one
-# `test/space/composite_operators.jl`'s "Componentwise equality"/"Vectorial forms" testsets
-# exercise for leaf counts that have nothing to do with the mesh dimension (a multi-field
-# space, not a vector field); giving `∇ₕ` a second, more specific method for `D`-leaf
-# composites -- the only way to make it reject a mismatched leaf count -- would take over
-# every composite call regardless of leaf count (Julia dispatch has no way to prefer it only
-# when the leaf count happens to match `D`) and break that already-tested generic behaviour.
-# So no method is added here: the vector-field reading of `∇ₕ(uₕ)`/`∇₊ₕ(uₕ)` for a `D`-leaf
-# composite is the existing one, not a new one, and it does not reject other leaf counts --
-# only `εₕ` below does, since it has no such pre-existing generic meaning to preserve.
-#
-# The strain tensor is not simply that sum, though. `D₋ⱼ(uᵢ)` and `D₋ᵢ(uⱼ)` are staggered at
-# different points -- a backward difference along `xⱼ` sits half a cell along `j`, one along
-# `xᵢ` sits half a cell along `i` -- so adding them where they stand would add values that do
-# not belong to the same grid point. The averages `M₋ᵢ`/`M₋ⱼ` (operators/average.jl) relocate
-# each term to the point the two share before the sum, which is what pins `ε_ii` to a face
-# centre (offset in one direction) and `ε_ij` (`i != j`) to an edge centre (offset in two):
-#
-#     ε_ii(uₕ) = D₋ᵢ(uᵢ)
-#     ε_ij(uₕ) = (M₋ᵢ(D₋ⱼ(uᵢ)) + M₋ⱼ(D₋ᵢ(uⱼ))) / 2                                  (i != j)
-#
-# the same convention `docs/src/examples/elasticity_3d.jl` hand-expands term by term (its own
-# document-local `εₕ(p, i, j)` closure), which this replaces as a general operator.
-#
-# `divₕ` needs no extension for this. The `divₕ` above is the unstaggered
-# `Σᵢ D₋ᵢ(uᵢ)`, the SBP dual `∇ₕ`/`inner₊` already close an integration-by-parts identity
-# against (`test/space/discrete_calculus_identities.jl`, `test/space/sbp_identities.jl`,
-# `test/space/inference_allocation.jl`); it already accepts a `D`-leaf composite and returns a
-# grid function, which is all the runtime vector calculus needs of `divₕ`. The elasticity
-# example's own divergence term, `Σᵢ M₋ⱼM₋ₖ(D₋ᵢuᵢ)` (bringing every direction's contribution to
-# the one cell-centred point before summing, `{j, k}` the two directions other than `i`), is a
-# *different* object with a different staggering, needed only there; folding it into `divₕ`
-# would change what `divₕ` means for every existing caller of that identity rather than extend
-# it, so it lives in the form-level `divₕ(u::LazyOp)` (operators/difference.jl) instead.
+# `εₕ(uₕ) = (∇ₕuₕ + ∇ₕuₕᵀ)/2`, with each shear half averaged onto the edge centre the two
+# share: `ε_ii = D₋ᵢ(uᵢ)`, `ε_ij = (M₋ᵢ(D₋ⱼ(uᵢ)) + M₋ⱼ(D₋ᵢ(uⱼ)))/2`. The form-level `divₕ(u)`
+# (difference.jl) is the staggered divergence, a different operator from `divₕ` above (see the
+# design issue).
 
 # The backward average, in place: `out[I] = (out[I] + out[I - eᵢ]) / 2` along `DIM`, zero on
 # the first slice, exactly `_average_engine!`'s `Backward()` case (operators/average.jl)
@@ -896,7 +865,7 @@ function εₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     _check_field_grid(comps)
     _check_dest_grid(dest, first(comps))
     _check_dest_alias(dest, comps)
-    _check_dest_distinct(dest)
+    _check_dest_distinct(dest, "εₕ!")
     Ωₕ = mesh(Wₕ)
     dims = npoints(Ωₕ, Tuple)
     _strain_rows!(execution_policy(Wₕ), dest, comps, Ωₕ, dims, Val(D), Val(D))
@@ -989,7 +958,7 @@ function ∇cₕ!(dest, uₕ::VectorElement)
     D = dim(Ωₕ)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇cₕ!")
-    _check_dest_distinct(outs)
+    _check_dest_distinct(outs, "∇cₕ!")
     _check_dest_grid(dest, uₕ)
     _check_dest_alias(dest, (uₕ,))
     _centered_gradient!(
@@ -1031,7 +1000,7 @@ For fields vanishing on the boundary it is minus the adjoint of [`∇cₕ`](@ref
 
 `divcₕ!` writes into `vₕ`, which must not be one of the components, and allocates nothing.
 
-`∇cₕ ⋅ uₕ === divcₕ(uₕ)`.
+`∇cₕ ⋅ uₕ == divcₕ(uₕ)`.
 
 See also: [`divₕ`](@ref), [`curlcₕ`](@ref), [`εcₕ`](@ref)
 """
@@ -1073,7 +1042,7 @@ curl, and asking for one is an `ArgumentError`.
 `curlcₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
 allocates nothing. No destination may alias a component of `uₕ` or another destination.
 
-`∇cₕ × uₕ === curlcₕ(uₕ)`.
+`∇cₕ × uₕ == curlcₕ(uₕ)`.
 
 See also: [`curlₕ`](@ref), [`divcₕ`](@ref), [`∇cₕ`](@ref)
 """
@@ -1131,7 +1100,7 @@ function εcₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     _check_field_grid(comps)
     _check_dest_grid(dest, first(comps))
     _check_dest_alias(dest, comps)
-    _check_dest_distinct(dest)
+    _check_dest_distinct(dest, "εcₕ!")
     _centered_strain_rows!(
         execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Centered(),
         Val(D), Val(D)
@@ -1240,7 +1209,7 @@ function ∇̃ₕ!(dest, uₕ::VectorElement)
     D = dim(Ωₕ)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇̃ₕ!")
-    _check_dest_distinct(outs)
+    _check_dest_distinct(outs, "∇̃ₕ!")
     _check_dest_grid(dest, uₕ)
     _check_dest_alias(dest, (uₕ,))
     _star_gradient!(execution_policy(space(uₕ)), outs, parent(uₕ), Ωₕ, npoints(Ωₕ, Tuple), Val(D))
@@ -1277,7 +1246,7 @@ parts, ``(\\tilde{\\textrm{div}}_h \\textrm{F}, \\textrm{v})_h =
 
 `diṽₕ!` writes into `vₕ`, which must not be one of the components, and allocates nothing.
 
-`∇̃ₕ ⋅ uₕ === diṽₕ(uₕ)`.
+`∇̃ₕ ⋅ uₕ == diṽₕ(uₕ)`.
 
 See also: [`divₕ`](@ref), [`curl̃ₕ`](@ref), [`∇̃ₕ`](@ref)
 """
@@ -1320,7 +1289,7 @@ no 1D curl, and asking for one is an `ArgumentError`.
 `curl̃ₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
 allocates nothing. No destination may alias a component of `uₕ` or another destination.
 
-`∇̃ₕ × uₕ === curl̃ₕ(uₕ)`.
+`∇̃ₕ × uₕ == curl̃ₕ(uₕ)`.
 
 See also: [`curlₕ`](@ref), [`diṽₕ`](@ref), [`∇̃ₕ`](@ref)
 """
@@ -1441,7 +1410,7 @@ function ε₊ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     _check_field_grid(comps)
     _check_dest_grid(dest, first(comps))
     _check_dest_alias(dest, comps)
-    _check_dest_distinct(dest)
+    _check_dest_distinct(dest, "ε₊ₕ!")
     _forward_strain_rows!(
         execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), Val(D), Val(D)
     )
@@ -1539,7 +1508,7 @@ function ∇̽ₕ!(dest, uₕ::VectorElement)
     D = dim(Ωₕ)
     outs = dest isa VectorElement ? (dest,) : dest
     length(outs) == D || _throw_field_arity(length(outs), D, "∇̽ₕ!")
-    _check_dest_distinct(outs)
+    _check_dest_distinct(outs, "∇̽ₕ!")
     _check_dest_grid(dest, uₕ)
     _check_dest_alias(dest, (uₕ,))
     _centered_gradient!(
@@ -1567,7 +1536,7 @@ the one-sided difference the near side still defines, as for [`D̽ₓ`](@ref).
 
 `div̽ₕ!` writes into `vₕ`, which must not be one of the components, and allocates nothing.
 
-`∇̽ₕ ⋅ uₕ === div̽ₕ(uₕ)`.
+`∇̽ₕ ⋅ uₕ == div̽ₕ(uₕ)`.
 
 See also: [`divcₕ`](@ref), [`curl̽ₕ`](@ref), [`ε̽ₕ`](@ref), [`∇̽ₕ`](@ref)
 """
@@ -1610,7 +1579,7 @@ There is no 1D curl, and asking for one is an `ArgumentError`.
 `curl̽ₕ!` takes a destination -- a grid function in 2D, a 3-tuple of them in 3D -- and
 allocates nothing. No destination may alias a component of `uₕ` or another destination.
 
-`∇̽ₕ × uₕ === curl̽ₕ(uₕ)`.
+`∇̽ₕ × uₕ == curl̽ₕ(uₕ)`.
 
 See also: [`curlcₕ`](@ref), [`div̽ₕ`](@ref), [`∇̽ₕ`](@ref)
 """
@@ -1669,7 +1638,7 @@ function ε̽ₕ!(dest::NTuple{D, NTuple{D, VectorElement}}, uₕ) where {D}
     _check_field_grid(comps)
     _check_dest_grid(dest, first(comps))
     _check_dest_alias(dest, comps)
-    _check_dest_distinct(dest)
+    _check_dest_distinct(dest, "ε̽ₕ!")
     _centered_strain_rows!(
         execution_policy(_field_space(uₕ)), dest, comps, Ωₕ, npoints(Ωₕ, Tuple), CrossWeighted(),
         Val(D), Val(D)
@@ -1679,19 +1648,13 @@ end
 
 # --- ⋅ and × contract a gradient alias to its divergence/curl ------- #
 #
-# `∇ₕ ⋅ uₕ` / `∇ₕ × uₕ` read as the textbook notation for `divₕ(uₕ)` / `curlₕ(uₕ)`, and the
-# same for the other four gradient aliases (`∇cₕ`/`∇̽ₕ`/`∇̃ₕ` are `const` aliases of
-# `Dcₕ`/`D̽ₕ`/`D̃ₕ`, src/operators/difference.jl, so the methods below dispatch on those
-# function types directly). `dot`/`×` are already `import`ed from LinearAlgebra by
-# `src/Bramble.jl`.
-#
-# `uₕ` is narrowed to `_DivCurlOperand` -- exactly what `divₕ`/`curlₕ` and their siblings
-# accept here: an `NTuple{D, VectorElement}` or a composite `VectorElement`, both handled by
-# `_field_components`. An untyped second argument is ambiguous with ChainRulesCore's
-# `dot(::Any, ::NoTangent)`/`dot(::Any, ::ZeroTangent)`/`dot(::Any, ::NotImplemented)` (and the
-# `×` counterparts) once BrambleChainRulesCoreExt is loaded, since neither method is more
-# specific than the other on the second argument; narrowing to a type disjoint from those
-# ChainRulesCore singletons resolves the ambiguity without changing what `∇ₕ ⋅ u` computes.
+# `uₕ` is narrowed to `_DivCurlOperand`: an `NTuple{D, VectorElement}` or a composite
+# `VectorElement`, both handled by `_field_components`. An untyped second argument is
+# ambiguous with ChainRulesCore's `dot(::Any, ::NoTangent)`/`dot(::Any, ::ZeroTangent)`/
+# `dot(::Any, ::NotImplemented)` (and the `×` counterparts) once BrambleChainRulesCoreExt is
+# loaded, since neither method is more specific than the other on the second argument;
+# narrowing to a type disjoint from those ChainRulesCore singletons resolves the ambiguity
+# without changing what `∇ₕ ⋅ u` computes.
 #
 # The form-side case -- `uₕ` a `LazyOp` trial/test-function expression -- gets its own methods
 # below.
