@@ -88,9 +88,9 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
     # A refactor keeps the kind it was built with, so its remedy is a new factorization.
     @noinline function _throw_not_hermitian(A::AbstractMatrix, refactor::Bool = false)
         remedy = refactor ?
-            "Refactor onto a Hermitian matrix, or build a new factorization with " *
-            "`sym = :auto` or `kind = :lu`." :
-            "Use sym = :auto or kind = :lu."
+                 "Refactor onto a Hermitian matrix, or build a new factorization with " *
+                 "`sym = :auto` or `kind = :lu`." :
+                 "Use sym = :auto or kind = :lu."
         throw(
             ArgumentError(
             "Cholesky and LDLᵀ factor a Hermitian matrix, and this $(eltype(A)) matrix is " *

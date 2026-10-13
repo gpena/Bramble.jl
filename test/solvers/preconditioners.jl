@@ -248,12 +248,13 @@ end
         @test_throws ArgumentError chebyshev_preconditioner(op; λmax = Inf)
         # An estimate that fails names the estimate; an explicit λmax names the keyword.
         z = form(W, W, (u, v) -> 0.0 * innerₕ(u, v))
-        argmsg(f) = try
-            f()
-            ""
-        catch err
-            err isa ArgumentError ? sprint(showerror, err) : ""
-        end
+        argmsg(f) =
+            try
+                f()
+                ""
+            catch err
+                err isa ArgumentError ? sprint(showerror, err) : ""
+            end
         estimate = r"λmax estimate NaN is not finite and positive"
         @test occursin(estimate, argmsg(() -> chebyshev_preconditioner(z)))
         @test occursin(estimate, argmsg(() -> Bramble.chebyshev_smoother(z)))

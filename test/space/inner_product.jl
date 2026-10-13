@@ -189,7 +189,7 @@ end
         # The weight `inner₊ₓ` has, `h_{x,i} h_{y,j+1/2}`, gives another number here.
         swapped = sum(
             (i == 1 ? 0.0 : spacing(Ωₕ(1), i)) * cell_measure(Ωₕ(2), j) * U[i, j] * V[i, j]
-            for i in 1:nx, j in 1:ny
+        for i in 1:nx, j in 1:ny
         )
         @test !isapprox(inner₊ᵧ(u, v), swapped; rtol = 1.0e-3)
     end
