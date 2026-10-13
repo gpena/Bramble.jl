@@ -354,6 +354,19 @@ end
         @test MUMPS.is_finalized(mref)
     end
 
+    @testset "Float32 factorize and pde_solve" begin
+        A = sparse(Float32[4 1 0; 1 4 1; 0 1 4])
+        b = ones(Float32, 3)
+
+        x = mumps_factorize(A) \ b
+        @test eltype(x) == Float32
+        @test maximum(abs, A * x .- b) < 1.0f-5
+
+        y = pde_solve(A, b; solver = :mumps)
+        @test eltype(y) == Float32
+        @test maximum(abs, A * y .- b) < 1.0f-5
+    end
+
     @testset "Error handling & validation" begin
         p = poisson_system(Val(1), 5; source = x -> 1.0)
         validation_contract(
