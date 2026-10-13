@@ -1554,4 +1554,19 @@ WITH_SLOW_TESTS && @testset "Cell average reproduction (Supposition)" begin
     end
 end
 
+@testset "One-argument show (#700)" begin
+    uₕ = Rₕ(gridspace(mesh(domain(interval(0.0, 1.0)), 5, false)), x -> x)
+    printed = mktemp() do path, io
+        redirect_stdout(io) do
+            show(uₕ)
+        end
+        flush(io)
+        close(io)
+        return read(path, String)
+    end
+    @test printed == sprint(show, uₕ)
+    @test startswith(printed, "VectorElement{1D")
+    @test !occursin("0.25", printed)
+end
+
 end # module SpaceVectorElementsTests

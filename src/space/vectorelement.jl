@@ -66,7 +66,6 @@ See also: [`space`](@ref), [`VectorElement`](@ref)
 # The zero-argument method below is all `size` ever needs from `VectorElement`: `Base`'s
 # fallback already answers `size(uₕ, dim)` as `size(uₕ)[dim]` without a second definition.
 @inline Base.size(uₕ::VectorElement) = size(uₕ.data)
-@forward VectorElement.data (Bramble.show,)
 
 # A VectorElement wraps a vector, so indexing is linear; without this the
 # AbstractArray default of IndexCartesian() is used.
