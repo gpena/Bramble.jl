@@ -454,6 +454,10 @@ Override the grid coordinates in `Ωₕ`. Recalculates cached [`spacings`](@ref)
 unchanged, then replaces the mesh's [`Mesh1DState`](@ref) with one carrying the new version
 and the uniformity of the new points.
 
+The points must be finite, strictly increasing and at least one, and a collapsed mesh (a degenerate
+interval) takes a single point; anything else throws an `ArgumentError` naming the first
+offending point, before anything changes.
+
 A new point count also rebuilds the `:boundary` and `:interior` markers (and the marker
 words assembly reads) for the new grid. A mesh carrying any other label has no domain here
 to re-evaluate it onto the new points, so such a resize throws an `ArgumentError` before
@@ -470,6 +474,7 @@ mutated mesh. This is also what [`change_points!`](@ref) goes through, so the sa
 to it.
 """
 function set_points!(Ωₕ::Mesh1D, pts)
+    _check_set_points(Ωₕ, pts)
     n = length(pts)
     if length(_st(Ωₕ).pts) == n
         _set_points_geometry!(Ωₕ, pts)
@@ -489,6 +494,47 @@ function set_points!(Ωₕ::Mesh1D, pts)
     _ensure_geometric_markers!(fresh_markers, Ωₕ)
     markers!(Ωₕ, fresh_markers)
     return nothing
+end
+
+# Refuse, before any mutation, points `set_points!` would turn into a wrong geometry: no
+# points at all; several points on a collapsed mesh, whose spacings stay zero
+# (gpena/Bramble.jl#696); points that are not finite and strictly increasing, which give
+# negative weights and a wrong `locate_cell` (#698). One O(n) scan of one host copy at
+# most, as the constructor. `MeshnD` calls it per axis before mutating any.
+function _check_set_points(Ωₕ::Mesh1D, pts)
+    n = length(pts)
+    n == 0 && _throw_set_points_empty()
+    if is_collapsed(Ωₕ) && n > 1
+        a, b = extrema(set(Ωₕ))
+        _throw_collapsed_set_points(n, a, b)
+    end
+    x = _host_array(pts)
+    @inbounds for k in eachindex(x)
+        isfinite(x[k]) || _throw_set_points_not_finite(k, x[k])
+        k > firstindex(x) && x[k] <= x[k - 1] && _throw_set_points_not_increasing(k, x)
+    end
+    return nothing
+end
+
+@noinline function _throw_set_points_empty()
+    throw(ArgumentError("set_points! needs at least one point; the mesh is left unchanged"))
+end
+
+@noinline function _throw_collapsed_set_points(n, a, b)
+    msg = "set_points! was given $n points for a mesh of the degenerate interval " *
+          "[$a, $b], which holds a single point; the mesh is left unchanged"
+    throw(ArgumentError(msg))
+end
+
+@noinline function _throw_set_points_not_finite(k, v)
+    msg = "set_points! needs finite points, but point $k is $v; the mesh is left unchanged"
+    throw(ArgumentError(msg))
+end
+
+@noinline function _throw_set_points_not_increasing(k, x)
+    msg = "set_points! needs strictly increasing points, but point $k ($(x[k])) does " *
+          "not exceed point $(k - 1) ($(x[k - 1])); the mesh is left unchanged"
+    throw(ArgumentError(msg))
 end
 
 # The geometry of `set_points!` alone, with markers left untouched: the public setter adds

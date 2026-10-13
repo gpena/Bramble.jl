@@ -209,6 +209,45 @@ import Base: diff
             set_points!(Ωc, [0.0, 0.3, 1.0])
             @test points(Ωc) == [0.0, 0.3, 1.0]
         end
+
+        @testset "set_points! refuses invalid points" begin
+            # Non-increasing, tied or non-finite points are refused, naming the first bad
+            # index, before anything changes: version and spacings included (#698).
+            Ωₕ = mesh(create_test_domain(0.0, 1.0), 5, false; backend = backend())
+            p0 = copy(points(Ωₕ))
+            s0 = copy(spacings(Ωₕ))
+            v0 = Bramble._mesh_version(Ωₕ)
+            bad = [([0.0, 0.5, 0.25, 0.75, 1.0], "point 3"),
+                ([0.0, 0.25, 0.25, 0.75, 1.0], "point 3"),
+                ([0.0, 0.25, NaN, 0.75, 1.0], "point 3"),
+                ([0.0, 0.25, 0.5, 0.75, Inf], "point 5"),
+                ([-Inf, 0.25, 0.5, 0.75, 1.0], "point 1"),
+                ([0.0, 0.75, 0.5], "point 3"),
+                (Float64[], "at least one point")]
+            for (pts, msg) in bad
+                @test_throws ArgumentError set_points!(Ωₕ, pts)
+                @test_throws msg set_points!(Ωₕ, pts)
+                @test points(Ωₕ) == p0
+                @test spacings(Ωₕ) == s0
+                @test npoints(Ωₕ) == 5
+                @test Bramble._mesh_version(Ωₕ) == v0
+            end
+            # change_points! goes through the same check
+            @test_throws ArgumentError change_points!(Ωₕ, [0.0, 0.5, 0.25, 0.75, 1.0])
+            @test points(Ωₕ) == p0
+
+            # An empty list is refused on a collapsed mesh too, which keeps its one point.
+            Ωc = mesh(create_test_domain(1.0, 1.0), 1; backend = backend())
+            @test_throws ArgumentError set_points!(Ωc, Float64[])
+            @test npoints(Ωc) == 1
+            @test points(Ωc) == [1.0]
+
+            # A valid non-uniform list is accepted unchanged.
+            set_points!(Ωₕ, [0.0, 0.1, 0.5, 0.9, 1.0])
+            @test points(Ωₕ) == [0.0, 0.1, 0.5, 0.9, 1.0]
+            @test spacings(Ωₕ) ≈ [0.1, 0.1, 0.4, 0.4, 0.1]
+            @test Bramble.locate_cell(Ωₕ, 0.3) == 2
+        end
     end
 
     @testset "Geometric properties" begin
@@ -792,9 +831,12 @@ import Base: diff
             Random.seed!(492)
             @test !is_uniform(mesh(domain(interval(0.0, 1.0e-8)), 11, false))
 
-            # The widened tolerance never admits a spacing of the opposite sign.
+            # The widened tolerance never admits a spacing of the opposite sign. The public
+            # setters refuse such points (#698), so the geometry is written past them.
             Ω_back = mesh(domain(interval(0.0f0, 1.0f0)), 5)
-            change_points!(Ω_back, 1.0f6 .+ Float32[0, 0.25, 0.125, 0.375, 0.5])
+            back_pts = 1.0f6 .+ Float32[0, 0.25, 0.125, 0.375, 0.5]
+            @test_throws ArgumentError change_points!(Ω_back, back_pts)
+            Bramble._set_points_geometry!(Ω_back, back_pts)
             @test !is_uniform(Ω_back)
             # ...and still clears the 1-ulp drift when the spacing is only 2 ulps wide.
             @test is_uniform(mesh(domain(interval(1.0f6, 1.0f6 + 400)), 2561))
