@@ -119,3 +119,6 @@ STANDARDS.md
 # extension, so it shows up untracked after any local property-test run. It is regenerable
 # and machine-specific; there is nothing to share.
 check_*_check_*
+
+# graphify (code knowledge graph for Claude): generated per machine by `graphify update .`.
+graphify-out/
