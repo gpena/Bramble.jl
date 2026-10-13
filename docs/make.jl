@@ -35,6 +35,14 @@ end
 # Serially it is cheap, so this is not where a slow build's time goes, but there is no
 # reason to keep it serial either.
 let dir = joinpath(@__DIR__, "src", "examples")
+    # Documenter builds every `.md` under `docs/src`, and the generated pages are gitignored, so
+    # a checkout keeps (and OneDrive restores) pages written before `LITERATE_EXAMPLES` was cut.
+    # Drop each `.md` whose sibling `.jl` exists but is not listed; a `.md` with no sibling
+    # `.jl` is hand-written and stays.
+    for md in filter(endswith(".md"), readdir(dir))
+        jl = splitext(md)[1] * ".jl"
+        isfile(joinpath(dir, jl)) && !(jl in LITERATE_EXAMPLES) && rm(joinpath(dir, md))
+    end
     asyncmap(LITERATE_EXAMPLES) do file
         Literate.markdown(
             joinpath(dir, file), dir;
