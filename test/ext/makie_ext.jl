@@ -55,6 +55,8 @@ using Makie
         uₕ = Rₕ(gridspace(Ωₕ), x -> 1.0)
         @test_throws ArgumentError Makie.convert_arguments(Makie.PointBased(), uₕ)
         @test_throws ArgumentError Makie.convert_arguments(Makie.CellGrid(), uₕ)
+        # `lines(uₕ)` reaches `expand_dimensions` first
+        @test_throws ArgumentError Makie.expand_dimensions(Makie.PointBased(), uₕ)
     end
 
     @testset "composite: refused" begin
@@ -63,6 +65,7 @@ using Makie
         uv = Rₕ(Vₕ, (x -> x, x -> x^2))
         @test_throws ArgumentError Makie.convert_arguments(Makie.PointBased(), uv)
         @test_throws ArgumentError Makie.convert_arguments(Makie.CellGrid(), uv)
+        @test_throws ArgumentError Makie.expand_dimensions(Makie.PointBased(), uv)
 
         for c in components(uv)
             (pts,) = Makie.convert_arguments(Makie.PointBased(), c)

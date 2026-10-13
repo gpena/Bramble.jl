@@ -87,6 +87,21 @@ function Makie.convert_arguments(
     return _makie_error_dim(D)
 end
 
+# The same refusals one step earlier: Makie's generic `expand_dimensions` matches any
+# `VectorElement` (an `AbstractVector{<:Real}`) and would plot the DOF vector against its
+# index, so `lines(u)` on a composite or 3D element never reached the refusals above. The
+# 1D method above stays more specific.
+function Makie.expand_dimensions(
+        ::Makie.PointBased, ::VectorElement{<:CompositeGridSpace}
+)
+    return _makie_error_composite()
+end
+function Makie.expand_dimensions(
+        ::Makie.PointBased, ::VectorElement{<:ScalarGridSpace{D}}
+) where {D}
+    return _makie_error_dim(D)
+end
+
 # Warms `convert_arguments`/`expand_dimensions` for the 1D and 2D grid-function cases above
 # -- pure data conversion, no window or active display needed, so safe on a headless CI
 # runner. Only reachable once `Makie` is loaded, so only this extension's own precompile
