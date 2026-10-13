@@ -216,7 +216,7 @@ end
         Ωₕ2 = Bramble.mesh(
             Bramble.domain(Bramble.interval(0.0, 1.0), :left => :left, :right => :right), 11
         )
-        @test_throws ErrorException dirichlet_constraints(
+        @test_throws ArgumentError dirichlet_constraints(
             Ωₕ2, I, :left => (x, t) -> t, :right => (x, t, p) -> p * t
         )
     end
@@ -676,6 +676,79 @@ end
         M₁ = mass_matrix(sd₁)
         @test iszero(M₁[1, 1]) && iszero(M₁[nleaf, nleaf])
         @test !iszero(M₁[nleaf + 1, nleaf + 1]) && !iszero(M₁[n, n])
+    end
+end
+
+# Every form handed to `semidiscretize` is posed on `l`'s space: `mass` and `damping` of
+# another size (#705), and `a` or `mass` on another mesh with as many points (#706), are
+# refused at construction, while two `gridspace` calls over one mesh still pass.
+@testset "forms on other spaces (#705, #706)" begin
+    D = Bramble.domain(Bramble.interval(0.0, 1.0))
+    Ωᵤ = Bramble.mesh(D, 11, true)
+    Ωₙ = Bramble.mesh(D, 11, false)
+    @test Bramble.points(Ωᵤ) != Bramble.points(Ωₙ)
+    W = gridspace(Ωₙ)
+    W₇ = gridspace(Bramble.mesh(D, 7, false))
+    Wᵤ = gridspace(Ωᵤ)
+    stiff(X) = form(X, X, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+    mass(X) = form(X, X, (u, v) -> innerₕ(u, v))
+    a = stiff(W)
+    l = form(W, v -> innerₕ(x -> 1.0, v))
+    errmsg(f) = try
+        f()
+        ""
+    catch err
+        err isa ArgumentError ? sprint(showerror, err) : rethrow()
+    end
+
+    @testset "mass and damping of another size" begin
+        msg = errmsg(() -> semidiscretize(a, l; mass = mass(W₇)))
+        @test occursin("`mass`", msg) && occursin("7×7", msg) && occursin("11", msg)
+        msg = errmsg(() -> semidiscretize_second_order(a, l; damping = mass(W₇)))
+        @test occursin("`damping`", msg) && occursin("7×7", msg)
+        msg = errmsg(() -> semidiscretize_second_order(a, l; mass = mass(W₇)))
+        @test occursin("`mass`", msg)
+        build(t) = (a, _ -> nothing)
+        msg = errmsg(() -> semidiscretize(build, l; mass = mass(W₇)))
+        @test occursin("`mass`", msg)
+    end
+
+    @testset "same ndofs, other points" begin
+        @test_throws ArgumentError semidiscretize(stiff(Wᵤ), l)
+        @test occursin("mesh", errmsg(() -> semidiscretize(stiff(Wᵤ), l)))
+        @test occursin("`mass`", errmsg(() -> semidiscretize(a, l; mass = mass(Wᵤ))))
+        @test_throws ArgumentError semidiscretize_second_order(stiff(Wᵤ), l)
+        @test occursin("`damping`",
+            errmsg(() -> semidiscretize_second_order(a, l; damping = mass(Wᵤ))))
+        buildᵤ(t) = (stiff(Wᵤ), _ -> nothing)
+        @test_throws ArgumentError semidiscretize(buildᵤ, l)
+        # trial space alone on the other mesh
+        aₘ = form(Wᵤ, W, (u, v) -> innerₕ(u, v))
+        @test_throws ArgumentError semidiscretize(aₘ, l)
+    end
+
+    @testset "composite: checked leaf by leaf" begin
+        V = W × W
+        Vₘ = W × Wᵤ
+        lᵥ = form(V, v -> innerₕ(x -> 1.0, v(1)) + innerₕ(x -> 1.0, v(2)))
+        aᵥ(X) = form(X, X, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
+        @test semidiscretize(aᵥ(V), lᵥ) isa Bramble.Semidiscretization
+        @test occursin("mesh", errmsg(() -> semidiscretize(aᵥ(Vₘ), lᵥ)))
+        @test occursin("`mass`", errmsg(() -> semidiscretize(aᵥ(V), lᵥ; mass = aᵥ(Vₘ))))
+        # one leaf of 22 points against two of 11: same ndofs, other layout
+        W₂₂ = gridspace(Bramble.mesh(D, 22, true))
+        @test_throws ArgumentError semidiscretize(stiff(W₂₂), lᵥ)
+    end
+
+    @testset "one mesh, two gridspaces, rebuilt mesh" begin
+        W₁, W₂ = gridspace(Ωₙ), gridspace(Ωₙ)
+        sd = semidiscretize(stiff(W₁), form(W₂, v -> innerₕ(x -> 1.0, v)); mass = mass(W₂))
+        @test size(mass_matrix(sd)) == (11, 11)
+        Wᵣ = gridspace(Bramble.mesh(D, 11, true))
+        @test semidiscretize(stiff(Wᵣ), form(Wᵤ, v -> innerₕ(x -> 1.0, v))) isa
+              Bramble.Semidiscretization
+        @test semidiscretize_second_order(a, l; mass = mass(W), damping = mass(W)) isa
+              Bramble.SecondOrderSemidiscretization
     end
 end
 

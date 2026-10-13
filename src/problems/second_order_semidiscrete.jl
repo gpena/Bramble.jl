@@ -178,7 +178,7 @@ function semidiscretize_second_order(
         dirichlet_components = nothing
 )
     sp = test_space(l)
-    _validate_semidiscrete_spaces(K, l)
+    _validate_semidiscrete_spaces(K, l; mass = mass, damping = damping, name = "K")
 
     labels, constraint_values = _normalize_dirichlet(dirichlet)
     constraints = _source_constraints(labels, constraint_values)

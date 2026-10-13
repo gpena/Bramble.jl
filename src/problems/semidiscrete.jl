@@ -167,7 +167,7 @@ Base.@constprop :aggressive function semidiscretize(
         reassemble::Bool = false
 )
     sp = test_space(l)
-    _validate_semidiscrete_spaces(a, l)
+    _validate_semidiscrete_spaces(a, l; mass = mass)
 
     labels, constraint_values = _normalize_dirichlet(dirichlet)
     constraints = _source_constraints(labels, constraint_values)
@@ -261,7 +261,7 @@ Base.@constprop :aggressive function semidiscretize(
 
     t0 = zero(eltype(sp))
     a0, refill0! = build(t0)
-    _validate_semidiscrete_spaces(a0, l)
+    _validate_semidiscrete_spaces(a0, l; mass = mass)
     refill0!(t0)
     A0 = allocate_system_matrix(a0)
     assemble!(A0, a0; dirichlet = labels, dirichlet_components = dirichlet_components)
@@ -340,17 +340,45 @@ end
 
 @inline _default_mass_form(sp) = form(sp, sp, (u, v) -> innerₕ(u, v))
 
-function _validate_semidiscrete_spaces(a::BilinearForm, l::LinearForm)
-    n = ndofs(test_space(l))
+# `a`, `mass` and `damping` must be posed on `l`'s space: the same `ndofs` on both sides, and
+# leaf by leaf the same mesh (`_same_mesh`: the same object, or one with the same points), so
+# two `gridspace` calls over one mesh pass but same-sized meshes with other points do not.
+function _validate_semidiscrete_spaces(
+        a::BilinearForm, l::LinearForm; mass = nothing, damping = nothing, name = "a"
+)
+    sp = test_space(l)
+    _validate_form_space(a, name, sp)
+    mass === nothing || _validate_form_space(mass, "mass", sp)
+    damping === nothing || _validate_form_space(damping, "damping", sp)
+    return nothing
+end
+
+function _validate_form_space(a::BilinearForm, name, sp)
+    n = ndofs(sp)
     if ndofs(test_space(a)) != n || ndofs(trial_space(a)) != n
         throw(
             ArgumentError(
-            "semidiscretize: `a` and `l` must be posed on the same space; got " *
-            "$(ndofs(trial_space(a)))×$(ndofs(test_space(a))) for `a` and $n for `l`.",
+            "semidiscretize: `$name` and `l` must be posed on the same space; got " *
+            "$(ndofs(trial_space(a)))×$(ndofs(test_space(a))) for `$name` and $n for `l`.",
+        ),
+        )
+    end
+    if !(_same_leaf_meshes(test_space(a), sp) && _same_leaf_meshes(trial_space(a), sp))
+        throw(
+            ArgumentError(
+            "semidiscretize: `$name` and `l` must be posed on the same mesh; `$name` " *
+            "has the same number of dofs as `l` but its mesh has other points or " *
+            "another layout of components.",
         ),
         )
     end
     return nothing
+end
+
+function _same_leaf_meshes(Wa, Wb)
+    la, lb = leaf_spaces_offsets(Wa), leaf_spaces_offsets(Wb)
+    length(la) == length(lb) || return false
+    return all(i -> _same_mesh(mesh(first(la[i])), mesh(first(lb[i]))), eachindex(la))
 end
 
 # `dirichlet_bc!` writes `eₖ` into the constrained rows; the diagonal is then cleared, which
