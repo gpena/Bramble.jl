@@ -1056,22 +1056,34 @@ function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
     dim_u = get_dimension_from_type(u_type)
     dim_v = get_dimension_from_type(v_type)
 
-    u_is_tuple = u_type <: NTuple
-    v_is_tuple = v_type <: NTuple
+    # Every `Tuple`, not only an `NTuple`: a tuple whose entries differ in type, such as
+    # ∇ₕ(u) in 2D or a composite component beside a plain grid function, is no `NTuple`.
+    u_is_tuple = u_type <: Tuple
+    v_is_tuple = v_type <: Tuple
 
     # Two tuples must have the same arity; otherwise the extra entries would be dropped
-    # silently. The check covers every `Tuple`, not only an `NTuple`: a tuple whose
-    # entries differ in type, such as ∇ₕ(u) in 2D, is no `NTuple`. The message is spliced
-    # in as a String, as in the scalar branch below.
-    if u_type <: Tuple && v_type <: Tuple && fieldcount(u_type) != fieldcount(v_type)
+    # silently. The message is spliced in as a String, as in the scalar branch below.
+    if u_is_tuple && v_is_tuple && fieldcount(u_type) != fieldcount(v_type)
         len_u, len_v = fieldcount(u_type), fieldcount(v_type)
         return :(throw(DimensionMismatch($("Tuple lengths $len_u and $len_v do not match"))))
     end
 
+    # The entries of one tuple must live on meshes of one dimension: the direction count
+    # below is read off the first entry only, so a mix would be summed along the wrong
+    # directions, or fail deep inside, depending on the order of the entries.
+    for (is_tuple, T) in ((u_is_tuple, u_type), (v_is_tuple, v_type))
+        is_tuple || continue
+        dims = unique(filter(!isnothing, map(get_dimension_from_type, fieldtypes(T))))
+        if length(dims) > 1
+            msg = "Tuple entries live on meshes of dimensions $(join(dims, ", "))"
+            return :(throw(DimensionMismatch($msg)))
+        end
+    end
+
     # Prefer tuple arity when tuples are provided (e.g., inner₊((a,b), (c,d)) even in 1D).
-    D = if u_type <: NTuple
+    D = if u_is_tuple
         dim_u
-    elseif v_type <: NTuple
+    elseif v_is_tuple
         dim_v
     elseif !isnothing(dim_u) && !isnothing(dim_v)
         if dim_u == dim_v

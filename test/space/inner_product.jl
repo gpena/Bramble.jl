@@ -706,6 +706,48 @@ end
     # is what the element-type lookup is there to keep separate
     @test inner₊((uₕ, vₕ), (uₕ, vₕ)) ≈ inner₊ₓ(uₕ, uₕ) + inner₊ₓ(vₕ, vₕ)
 
+    @testset "Mixed-type tuple inner₊ and norm₊" begin
+        # A composite component is a view, so (c(1), w) is a Tuple but no NTuple. It must
+        # take the tuple path, entry i paired with direction i, and not be handed whole to
+        # the directional inner product. The mesh is non-uniform in both directions, so the
+        # x and y weights differ and a swapped pairing cannot agree.
+        I = interval(0.0, 1.0)
+        W = gridspace(mesh(domain(I × I), (6, 5), (false, false)))
+        c = Rₕ(W^2, x -> (x[1], x[2]^2))
+        w = Rₕ(W, x -> x[1] * x[2] + 1)
+        v = Rₕ(W, x -> exp(x[1]) - x[2])
+        c1 = c(1)
+        @test !(typeof((c1, w)) <: NTuple)
+
+        expected = inner₊ₓ(c1, c1) + inner₊ᵧ(w, w)
+        @test norm₊((c1, w))^2 ≈ expected
+        @test inner₊((c1, w), (c1, w)) ≈ expected
+        @test norm₊((w, c1))^2 ≈ inner₊ₓ(w, w) + inner₊ᵧ(c1, c1)
+        @test !(norm₊((w, c1)) ≈ norm₊((c1, w)))
+
+        # the same values as the homogeneous NTuple of plain copies
+        c1plain = Rₕ(W, x -> x[1])
+        @test inner₊((c1, w), (v, w)) ≈ inner₊((c1plain, w), (v, w))
+        @test inner₊((c1, w), (v, w)) ≈ inner₊ₓ(c1, v) + inner₊ᵧ(w, w)
+        @test inner₊((c1, w), (c1, v), Tuple) == (inner₊ₓ(c1, c1), inner₊ᵧ(w, v))
+
+        @test @inferred(inner₊((c1, w), (v, w))) isa Float64
+        @test @inferred(norm₊((c1, w))) isa Float64
+        @test_allocs inner₊((c1, w), (v, w))
+        @test_allocs norm₊((c1, w))
+
+        @test_throws DimensionMismatch inner₊((c1, w), (c1, w, v))
+
+        # entries on meshes of different dimension are an error in either order, not a
+        # sum over the first entry's directions
+        u1 = Rₕ(gridspace(mesh(domain(I), 7, false)), x -> x[1]^2 + 1)
+        @test_throws DimensionMismatch inner₊((u1, w), (u1, w))
+        @test_throws DimensionMismatch inner₊((w, u1), (w, u1))
+        @test_throws DimensionMismatch inner₊((u1, w), (u1, w), Tuple)
+        @test_throws DimensionMismatch norm₊((u1, w))
+        @test_throws DimensionMismatch norm₊((w, u1))
+    end
+
     @testset "Composite space inner product" begin
         # The inner product of a product space is the sum of the components', the only
         # natural definition across product components.
