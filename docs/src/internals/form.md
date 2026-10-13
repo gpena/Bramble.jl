@@ -46,6 +46,7 @@ Pages = [
     "assembly/symmetry.jl",
     "operators/inner.jl",
     "operators/region_restriction.jl",
+    "operators/node_family.jl",
     "assembly/dirichlet_constraints.jl",
     "assembly/linear.jl",
     "assembly/bilinear.jl",

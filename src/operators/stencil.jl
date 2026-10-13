@@ -7,21 +7,9 @@
 #=
 # stencil.jl
 
-The one-sided grid traversal, argument validation and alias/docstring generators that
-`difference.jl`, `average.jl`, `jump.jl` and `inner_product.jl` all build on.
-
-Extracted from `difference.jl` (gpena/Bramble.jl#42): none of this is about differences in
-particular, but until now `average.jl` and `jump.jl` had to depend on the largest file in
-`src/`, about a different operator family, because there was nowhere better to point.
-Included before all four consumers; Julia does not care which file a definition lives in
-within one module, so this is a pure move with no runtime change.
-
-What stays behind in `difference.jl` instead: everything actually specific to differencing
--- `CenteredStencil`/`Centered`/`CrossWeighted` (only the centered/cross-weighted families
-use them), `_difference_engine!` and `_centered_stencil_ranges`, `_apply_stencil!` and
-`_apply_spaced!` (the difference-family applicator, distinct from the generic
-`_apply_componentwise!` below), and `_throw_centered_too_few_points` (the three-point
-precondition, specific to centered stencils).
+The direction traits, argument checks, one-sided traversal and alias/docstring generators
+shared by the difference, average, jump and shift families and the inner products. The
+centered traversal and its three-point precondition stay in `difference.jl`.
 =#
 
 # --- Direction traits -------------------------------------------------------------- #
@@ -161,16 +149,9 @@ end
     return _throw_stencil_dim_error(d, 3)
 end
 
-# The tuple-valued aliases' unrolling, written once rather than generated per family.
-#
-# It lived in `_vectorial_expr` as three `alias(arg, ::Val{D})` methods until
-# gpena/Bramble.jl#74. That put the *mesh dimension* on a public two-argument signature,
-# which is the signature #74 needs for the *direction*: on a 2D mesh `D̽ₕ(u, Val(2))` meant
-# the pair, and has to mean the `y` difference. `D̽ₕ` (gpena/Bramble.jl#349: the family
-# formerly called `Dₕ`) is the one family whose dispatch alias and vectorial alias are the
-# same name, so only it collided -- but moving the unrolling here
-# removes the shape rather than special-casing the one name, and drops three generated
-# methods per family while doing it.
+# The tuple-valued aliases' unrolling, shared by every family. It is not an `alias(arg, ::Val{D})`
+# method, because that two-argument signature carries the *direction* (`D̽ₕ(u, Val(2))` is
+# the `y` difference, gpena/Bramble.jl#74).
 @inline _vectorial_apply(f::F, arg, ::Val{1}) where {F} = f(arg, Val(1))
 @inline _vectorial_apply(f::F, arg, ::Val{2}) where {F} = (f(arg, Val(1)), f(arg, Val(2)))
 @inline _vectorial_apply(f::F, arg, ::Val{3}) where {F} = (
@@ -189,8 +170,7 @@ end
 
 # `f!` is the single-component applicator; it is called once per *leaf* (`components`
 # flattens any nesting), so this needs no component count of its own: `map` over the two
-# tuples `components` returns unrolls exactly as the old `ntuple(…, Val(NC))` did, and stays
-# correct regardless of how deeply either space nests.
+# tuples `components` returns stays correct regardless of how deeply either space nests.
 @inline function _apply_componentwise!(
         f!, vₕ::VectorElement{<:CompositeGridSpace}, uₕ::VectorElement{<:CompositeGridSpace}
 )
@@ -208,7 +188,6 @@ end
 # The unit step along `DIM`.
 @inline _stencil_step(::Val{DIM}, ::Val{D}) where {DIM, D} = CartesianIndex(ntuple(i -> i == DIM ? 1 : 0, Val(D)))
 
-# The neighbour of `I`: ahead of it for a forward stencil, behind it for a backward one.
 @inline _neighbour(::Forward, I, step) = I + step
 @inline _neighbour(::Backward, I, step) = I - step
 
@@ -567,12 +546,9 @@ end
 Returns the expressions defining one family's dimensional entry point, as a `Vector{Expr}`:
 `alias_name(arg, d)` for `d` a `Val`, an `Int` or a `Symbol`.
 
-The name gpena/Bramble.jl#74 adds over machinery that was already there. Every family
-bottoms out in a `Val`-parameterised base function, and the 63 subscript aliases are
-one-line `Val` bindings over it; what was missing was a way to say "this operator, along
-*that* direction" with the direction a value. `sum(D₋(uₕ, d) for d in 1:D)` is the first
-dimension-agnostic form the package can express, and the subscripts stop being the only way
-in.
+Every family bottoms out in a `Val`-parameterised base function; this adds the entry point
+with the direction as a value, so `sum(D₋(uₕ, d) for d in 1:D)` is dimension-agnostic
+(gpena/Bramble.jl#74).
 
 The `Val` method is omitted when `alias_name` is `base_op_name` itself, as it is for
 `jump`: the family's own file already wrote that method, and generating it again would
@@ -657,8 +633,7 @@ function, `base_name!` on a composite one, and the allocating `base_name` built 
 them.
 
 The three are byte-identical across the families apart from which applicator they call and
-what it takes before the direction (gpena/Bramble.jl#101); `difference.jl` and
-`average.jl` each generated them from their own `@eval` loop before this existed:
+what it takes before the direction (gpena/Bramble.jl#101):
 
 | Family | `apply_fn` | `extra_args` |
 |:--|:--|:--|
@@ -709,9 +684,11 @@ end
 
 """
     _operator_aliases_expr(base_name, alias_stem, dir_string, what, formula;
-                           vectorial_alias = nothing, vectorial_note = "",
-                           opening_sentence = "", formula_note = "", alias_note = "",
-                           trailing_note = "", bang_opening_sentence = "", source = nothing)
+                           dispatch_alias = alias_stem, vectorial_alias = nothing,
+                           vectorial_dir_string = dir_string, vectorial_what = what,
+                           vectorial_note = "", opening_sentence = "", formula_note = "",
+                           alias_note = "", trailing_note = "", bang_opening_sentence = "",
+                           source = nothing)
 
 Returns the expressions defining one family's whole alias surface, as a `Vector{Expr}`: the
 per-coordinate `alias_stem` pair for every direction (`Dcₓ`/`Dcₓ!`, `Mᵧ`/`Mᵧ!`, …), the
@@ -723,10 +700,6 @@ dimensional entry point `dispatch_alias(arg, d)`, and, when `vectorial_alias` is
 that the family gains a direction argument without minting a bare `M` -- the single most
 common local name in finite-element code, and one `using Bramble` would then reserve.
 Passing `nothing` skips the entry point altogether.
-
-[`_alias_expr`](@ref)/[`_alias_bang_expr`](@ref) and [`_vectorial_expr`](@ref) were already
-shared; the *loop* calling them was written out once per family in `difference.jl` and once
-more in `average.jl` (gpena/Bramble.jl#101). This is that loop.
 
 The five note keywords are prose templates rather than finished sentences: each may carry
 `{direction}` and `{suffix}`, substituted per alias by [`_subst`](@ref). They were closures
@@ -839,9 +812,8 @@ end
 
 Defines one operator family's grid-function forms and its whole alias surface, declaratively.
 
-Replaces the `Core.eval` generators this file used to carry (gpena/Bramble.jl#258): the
-methods now arrive through macro expansion, so the parser sees each definition where it is
-written instead of the module growing methods while it loads.
+The methods arrive by macro expansion, so the parser sees each definition where it is
+written; nothing is `Core.eval`ed at load time (gpena/Bramble.jl#258).
 
 Keywords, all optional except `base` and `stem`:
 

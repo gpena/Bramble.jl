@@ -68,7 +68,7 @@ function _node_dimensional_expr(node_name, alias_name, alias_stem, what; source 
 end
 
 """
-    _node_alias_expr(alias_name, dispatch_name, direction_index, what; source = nothing)
+    _node_alias_expr(alias_name, dispatch_name, direction, direction_index, what; source = nothing)
 
 Returns the expression defining one per-coordinate alias, `alias_name(op)` as
 `dispatch_name(op, Val(direction_index))`, with its docstring attached.
@@ -154,12 +154,8 @@ end
 """
     _node_resolve_expr(node_name; source = nothing)
 
-Returns the expression defining `resolve_ast` for one node family.
-
-Identical across the six families but for the struct name, and it resolves the inner
-operator once rather than twice: `BackwardDifference` and `ForwardDifference` each called
-`resolve_ast(op.inner_op)` in both the type parameter and the field before this was
-generated, resolving the whole subtree twice per node.
+Returns the expression defining `resolve_ast` for one node family: resolve the inner
+operator once and rebuild the node around it.
 """
 function _node_resolve_expr(node_name; source = nothing)
     return _relocate!(
