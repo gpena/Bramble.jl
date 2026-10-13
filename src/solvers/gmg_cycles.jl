@@ -71,13 +71,17 @@ const _GMG_MAX_COARSE_DOFS = 4096
 
 _gmg_default_smoother(op) = chebyshev_smoother(op)
 
+# Whether every axis of `n` points with more than one coarsens `L` times by 2 and keeps at least
+# three points. `L` is an argument, not captured, so the loop below never boxes it.
+_gmg_coarsens(n, L::Int) = all(k -> k == 1 || (trailing_zeros(k - 1) >= L && (k - 1) >> L >= 2), n)
+
 # The most levels coarsening by 2 allows with at least three points left on every axis that
 # has more than one.
 function _gmg_default_levels(Ωₕ::AbstractMeshType)
     n = npoints(Ωₕ, Tuple)
     any(>(1), n) || return 1
     L = 1
-    while all(k -> k == 1 || (trailing_zeros(k - 1) >= L && (k - 1) >> L >= 2), n)
+    while _gmg_coarsens(n, L)
         L += 1
     end
     return L
@@ -469,35 +473,12 @@ end
 @inline _gmg_post_smooth!(s::AbstractSmoother, x, b) = smooth!(s, x, b)
 @inline _gmg_post_smooth!(s::RedBlackGaussSeidel, x, b) = smooth!(s, x, b; reverse = true)
 
-# `x = F⁻¹ x` in place for a dense `F = lu(A)`: LAPACK's row swaps in order, then the unit lower
-# and the upper triangular solves. `ldiv!(F, x)` calls LAPACK's `getrs!`, which boxes six
-# `Ref`s per call that Julia 1.12 keeps at `--optimize=1`, so the cycles would allocate there;
-# the coarsest level is small by construction (`_GMG_MAX_COARSE_DOFS`), so the loops cost nothing.
-function _gmg_lu_ldiv!(F, x::AbstractVector)
-    A, ipiv = F.factors, F.ipiv
-    n = length(x)
-    for i in 1:n
-        j = ipiv[i]
-        j == i || ((x[i], x[j]) = (x[j], x[i]))
-    end
-    for j in 1:n, i in (j + 1):n
-
-        x[i] -= A[i, j] * x[j]
-    end
-    for j in n:-1:1
-        x[j] /= A[j, j]
-        for i in 1:(j - 1)
-            x[i] -= A[i, j] * x[j]
-        end
-    end
-    return x
-end
-
 # `x = A₁⁻¹ b` on the coarsest level, through the dense factorisation, solved in `P.x[1]`.
+# `ldiv!` on a dense `lu` allocates nothing on Julia 1.13 at `--optimize=1`.
 @inline function _gmg_coarse_solve!(P::GMGPreconditioner, x, b)
     x₁ = P.x[1]
     copyto!(x₁, b)
-    _gmg_lu_ldiv!(P.coarse, x₁)
+    ldiv!(P.coarse, x₁)
     x === x₁ || copyto!(x, x₁)
     return x
 end
