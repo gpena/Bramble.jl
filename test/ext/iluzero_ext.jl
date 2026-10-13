@@ -6,6 +6,7 @@ using ILUZero: ILUZero, ILU0Precon
 using SciMLBase: LinearProblem, solve
 using LinearSolve: KrylovJL_GMRES
 using LinearAlgebra: ldiv!, norm, issymmetric
+using SparseMatricesCSR: SparseMatrixCSR
 
 # BrambleILUZeroExt: `ilu_preconditioner` builds the ILU(0) factorization
 # (solvers/ilu_preconditioner.jl explains the `_`-prefixed fallback idiom), and
@@ -28,9 +29,9 @@ using LinearAlgebra: ldiv!, norm, issymmetric
 # from diagonally dominant that ILU(0) itself breaks down (a one-shot application inflated a
 # unit-norm residual by 3e5x, measured while building this test), which is a discretization
 # bug, not a fact about ILU(0) -- `#244`'s own measurement used a stable discretization.
-function _convection_diffusion_2d(n; eps = 1.0e-2)
+function _convection_diffusion_2d(n; eps = 1.0e-2, kwargs...)
     Ωd = Bramble.domain(Bramble.interval(0.0, 1.0) × Bramble.interval(0.0, 1.0))
-    Ωₕ = Bramble.mesh(Ωd, (n, n), (true, true))
+    Ωₕ = Bramble.mesh(Ωd, (n, n), (true, true); kwargs...)
     Wₕ = gridspace(Ωₕ)
     a = form(Wₕ, Wₕ, (u, v) -> eps * inner₊(∇ₕ(u), ∇ₕ(v)) + inner₊(Mₕ(u), ∇ₕ(v)))
     fₕ = Bramble.element(Wₕ)
@@ -116,6 +117,26 @@ end
         # `nothing` (default) leaves the solve unpreconditioned, still correct.
         uₕ_none = solve(a, l; dirichlet = bcs, solver = KrylovJL_GMRES())
         @test parent(uₕ_none)≈expected atol=1e-6 rtol=1e-6
+    end
+
+    # A `csr_backend()` form assembles a `SparseMatrixCSR`, which ILUZero does not take: both
+    # entry points convert it, and match the CSC run on the same uniform mesh (uniform so
+    # the two meshes are point-identical).
+    @testset "ilu: CSR backend form" begin
+        a_csr, l_csr, bcs_csr = _convection_diffusion_2d(17; backend = csr_backend())
+        a_csc, l_csc, bcs_csc = _convection_diffusion_2d(17)
+        @test assemble(a_csr; dirichlet = :boundary) isa SparseMatrixCSR
+
+        P_csr = ilu_preconditioner(a_csr; dirichlet = :boundary)
+        @test P_csr isa ILU0Precon
+        P_csc = ilu_preconditioner(a_csc; dirichlet = :boundary)
+        @test P_csr.l_nzval == P_csc.l_nzval
+        @test P_csr.u_nzval == P_csc.u_nzval
+
+        u_csr = solve(a_csr, l_csr; dirichlet = bcs_csr, solver = KrylovJL_GMRES(),
+            preconditioner = :ilu0, reltol = 1e-12, abstol = 1e-14)
+        u_csc = solve(a_csc, l_csc; dirichlet = bcs_csc)
+        @test parent(u_csr)≈parent(u_csc) rtol=1e-8
     end
 
     # On a convection-dominated system GMRES needs far fewer iterations with ILU(0).

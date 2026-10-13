@@ -257,9 +257,11 @@ end
 # `BrambleAlgebraicMultigridExt`/`BrambleILUZeroExt`'s fallback-idiom counterparts to
 # `_amg_preconditioner`/`_ilu_preconditioner` (solvers/amg_preconditioner.jl,
 # solvers/ilu_preconditioner.jl) -- this extension calls them without ever depending on
-# `AlgebraicMultigrid`/`ILUZero` itself.
+# `AlgebraicMultigrid`/`ILUZero` itself. `prob.A` is CSR on a `csr_backend()` mesh, which
+# neither takes, so a `Symbol` preconditioner is built from its `SparseMatrixCSC` copy.
 _preconditioner_operator(::Nothing, ::AbstractMatrix) = nothing
 function _preconditioner_operator(preconditioner::Symbol, A::AbstractMatrix)
+    A = Bramble._as_csc(A)
     if preconditioner === :amg
         return Bramble._amg_operator(A)
     elseif preconditioner === :ilu0
