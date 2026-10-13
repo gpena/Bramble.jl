@@ -446,9 +446,8 @@ _is_source_only(::LazyOp) = false
 # ==============================================================================
 
 # Functions across `linear.jl`/`bilinear.jl`/`jacobian_pattern.jl` (`_check_block_meshes`,
-# `_route_terms!`, `_route_terms_parallel!`, `_pattern_blocks_jacobian!`,
-# `_assemble_blocks_parallel!`) walk a form's `OperatorAdd` tree to send each summand where
-# it belongs, all with the same shape: recurse left, recurse right, done. Recursing the tree
+# `_route_terms!`, `_route_terms_parallel!`, `_pattern_blocks_jacobian!`) walk a form's
+# `OperatorAdd` tree to send each summand where it belongs, all with the same shape: recurse left, recurse right, done. Recursing the tree
 # rather than flattening it into a vector of terms first preserves concrete types: a
 # flattened vector is `Vector{Any}` and makes every term a dynamic read, whereas recursing
 # keeps each term concretely typed at its own call and costs nothing.
@@ -484,7 +483,7 @@ _is_source_only(::LazyOp) = false
 end
 
 # `op` second, one mutated argument returned unchanged: `_route_terms!`,
-# `_route_terms_parallel!`, `_assemble_blocks!`, `_assemble_blocks_parallel!`.
+# `_route_terms_parallel!`, `_assemble_blocks!`.
 @inline function _visit_operator_add2(f::F, first_arg, op::OperatorAdd, rest...) where {F}
     map(t -> f(first_arg, t, rest...), _summands(op))
     return first_arg

@@ -164,7 +164,7 @@ _no_segments(::Val{3}) = _NO_SEGMENTS_3
     _zero_stored!(A::AbstractMatrix) -> AbstractMatrix
 
 Zero every value a refill will touch, before `_assemble_bilinear_core_cached!`/
-`_assemble_bilinear_parallel_core!` add each term's contribution back in.
+`_assemble_bilinear_parallel_cached!` add each term's contribution back in.
 
 Part of the matrix-type seam (gpena/Bramble.jl#12): `SparseMatrixCSC` only has to zero
 its stored `nzval` entries (the sparsity pattern itself never changes between refills), while

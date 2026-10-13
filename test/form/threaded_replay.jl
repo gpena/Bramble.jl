@@ -13,9 +13,8 @@ using ..TestUtils: WITH_SLOW_TESTS, _fillnz!, alloc_test
 # `Parallel()` form and `assemble_parallel!` from any policy write through the recorded
 # `nzval` positions, band by band, instead of searching for each entry. Every check here
 # goes against a serial `assemble` of the same form on the same (non-uniform) mesh, never
-# against another threaded fill. That no threaded refill searches at all is pinned by the
-# plan's own check, which makes the search throw; here the evidence is the cache recording
-# the matrix being filled, and agreement to round-off.
+# against another threaded fill. The evidence is the cache recording the matrix being filled,
+# and agreement to round-off.
 
 const _DOMAINS = (
     domain(interval(0.0, 1.0)),
@@ -218,11 +217,10 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
         @test _agrees(A, R)
     end
 
-    # A leaf whose policy does not replay is searched point by point (`_scatter_point!`).
-    # Without `BramblePolyesterExt`, `CpuPolyester` is such a policy, and the only sweeps it
-    # can run are the one-thread fallbacks of a test-side interpolation; every other unit
-    # stops at a `_batch_*` hook naming Polyester. With the extension it replays instead,
-    # and every fill below must still agree with the serial one.
+    # Without `BramblePolyesterExt`, `CpuPolyester` can only run the one-thread sweep of a
+    # test-side interpolation, which replays on the calling task; every other unit stops at
+    # a `_batch_bilinear_*_replay!` hook naming Polyester. With the extension every unit
+    # replays, and every fill below must still agree with the serial one.
     has_polyester = Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing
     function leaf1(n, policy, seed)
         Random.seed!(seed)
@@ -240,7 +238,7 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
         end
     end
 
-    @testset "no leaf replays: the searching sweep" begin
+    @testset "CpuPolyester test-side interpolation" begin
         R = assemble(form(leaf1(9, Serial(), 3), leaf1(6, Serial(), 4), interp))
         a = form(leaf1(9, CpuPolyester(), 3), leaf1(6, CpuPolyester(), 4), interp)
         for refill! in (assemble!, assemble_parallel!)
@@ -249,10 +247,9 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
             refill!(A, a)
             @test _agrees(A, R)
         end
-        # searched, so nothing was recorded (the extension's replay records)
-        @test a.cache.valid == has_polyester
+        @test a.cache.valid
 
-        # composite: each block searched at its own offsets, against the scalar cross-mesh
+        # composite: each block replayed at its own offsets, against the scalar cross-mesh
         # forms; 1 and 100 so that a block landing in the wrong place cannot pass
         f(u, v) = innerₕ(u(1), πₕ(v(2))) + 100 * innerₕ(u(2), πₕ(v(1)))
         comp(p) = CompositeGridSpace((leaf1(9, p, 5), leaf1(6, p, 6)))
@@ -270,10 +267,11 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
         @test iszero(M[1:9, 1:9]) && iszero(M[10:15, 10:15])
     end
 
-    @testset "no replay: units reach Polyester hooks" begin
+    @testset "CpuPolyester replay hooks" begin
         h(u, v) = innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(u, v)
         # 9 points band the grid; 3 are too few for two bands, so the sweep colours points
-        for (n, hook) in ((9, "_batch_bilinear_band_sweep!"), (3, "_batch_bilinear_colour_sweep!"))
+        for (n, hook) in
+            ((9, "_batch_bilinear_band_replay!"), (3, "_batch_bilinear_colour_replay!"))
             R = assemble(form(leaf1(n, Serial(), 7), leaf1(n, Serial(), 7), h))
             a = form(leaf1(n, CpuPolyester(), 7), leaf1(n, CpuPolyester(), 7), h)
             A = copy(R)
@@ -300,23 +298,53 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
         else
             err = polyester_error(assemble_parallel!, C, ac)
             @test err isa ArgumentError
-            @test occursin("_batch_bilinear_band_sweep!", err.msg)
+            @test occursin("_batch_bilinear_band_replay!", err.msg)
         end
-        # the replay hooks are reached only once the extension opts the policy in; their
-        # `src/` methods still answer an untyped call naming Polyester
+        # the `src/` methods of the hooks answer an untyped call naming Polyester
         for (hook, nargs) in ((Bramble._batch_bilinear_colour_replay!, 8),
-            (Bramble._batch_bilinear_band_replay!, 11),
-            (Bramble._batch_bilinear_colour_sweep!, 9),
-            (Bramble._batch_bilinear_band_sweep!, 12))
+            (Bramble._batch_bilinear_band_replay!, 11))
             err = polyester_error(hook, ntuple(_ -> nothing, nargs)...)
             @test err isa ArgumentError
             @test occursin(string(nameof(hook)), err.msg)
         end
     end
 
-    @testset "one leaf replays, the other searches" begin
-        # The form takes the recording because its test leaf replays; the unit walks the
-        # trial leaf (a test-side interpolation), which cannot, so that unit searches.
+    # `BramblePolyesterExt` may already be loaded in this process (test/ext/polyester_ext.jl
+    # loads Polyester), which turns the refusal above into a replay; a fresh process without
+    # Polyester still gets the error, naming Polyester, from both threaded entry points.
+    @testset "CpuPolyester refuses, fresh process" begin
+        script = """
+        using Bramble
+        using Bramble: CpuPolyester, backend, assemble_parallel!, allocate_system_matrix, D₋ₓ
+        Base.get_extension(Bramble, :BramblePolyesterExt) === nothing || error("ext loaded")
+        Ω = mesh(domain(interval(0.0, 1.0)), 9, false; backend = backend(policy = CpuPolyester()))
+        W = gridspace(Ω)
+        a = form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)))
+        entries = (("assemble!", A -> assemble!(A, a)),
+            ("assemble_parallel!", A -> assemble_parallel!(A, a)))
+        for (name, f) in entries
+            msg = try
+                f(allocate_system_matrix(a))
+                "NO ERROR"
+            catch e
+                string(typeof(e), ": ", sprint(showerror, e))
+            end
+            println(name, " => ", msg)
+        end
+        """
+        project = Base.active_project()
+        cmd = `$(Base.julia_cmd()) --startup-file=no --threads=1 --project=$project -e $script`
+        out = read(cmd, String)
+        for name in ("assemble!", "assemble_parallel!")
+            line = only(filter(l -> startswith(l, name * " => "), split(out, '\n')))
+            @test startswith(line, name * " => ArgumentError: ")
+            @test occursin("Polyester", line)
+        end
+    end
+
+    @testset "mixed leaf policies replay one recording" begin
+        # The unit walks the trial leaf (a test-side interpolation), so it replays on one
+        # thread, whatever the test leaf's policy.
         R = assemble(form(leaf1(9, Serial(), 3), leaf1(6, Serial(), 4), interp))
         a = form(leaf1(9, CpuPolyester(), 3), leaf1(6, Parallel(), 4), interp)
         A = copy(R)
@@ -346,22 +374,6 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
         Bramble._replay_pair_unit!(
             Bramble._ThreadedReplay(), P, bound, bound, sp, 0, 0, (0, 0), seg, 2.0, 0.0, 1)
         @test _agrees(P, _scaled(Rt, 2.0))
-
-        # a leaf that cannot replay searches the pair as its two terms, each at its own
-        # offsets and with its own scaling (`seg` is not read there)
-        g(u, v) = innerₕ(u, πₕ(v))
-        if !has_polyester
-            Rg = assemble(form(leaf1(9, Serial(), 3), leaf1(6, Serial(), 4), g))
-            Wpu, Wpv = leaf1(9, CpuPolyester(), 3), leaf1(6, CpuPolyester(), 4)
-            ag = form(Wpu, Wpv, g)
-            bg = Bramble._bind_interp_spaces(ag.ast, Wpu, Wpv)
-            spg = Bramble._walked_leaf(bg, Wpu, Wpv)
-            A = copy(Rg)
-            _fillnz!(A, 0.0)
-            Bramble._replay_pair_unit!(
-                Bramble._ThreadedReplay(), A, bg, bg, spg, 0, 0, (0, 0), seg, 2.0, 3.0, 0)
-            @test _agrees(A, _scaled(Rg, 5.0))
-        end
     end
 
     @testset "inside a threaded region" begin

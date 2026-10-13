@@ -301,19 +301,6 @@ function _pa_paths()
         b = zeros(ndofs(W))
         _pa_case(() -> assemble!(b, l), () -> copy(b))
     end))
-    push!(P,
-        ("assemble! bilinear (searching)",
-            false,
-            0,
-            (n, p) -> begin
-                a = _pa_poisson(_pa_space(n, p))
-                A = allocate_system_matrix(a)
-                call = () -> begin
-                    Bramble._zero_stored!(A)
-                    Bramble._assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast)
-                end
-                _pa_case(call, () -> copy(A))
-            end))
     push!(P, ("Rₕ!", true, 0, (n, p) -> begin
         u = element(_pa_space(n, p))
         _pa_case(() -> Rₕ!(u, _pa_g), () -> _pa_copy(u))
@@ -688,10 +675,11 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
         @test isapprox(Matrix(Apd), Matrix(Abd); atol = 1.0e-12)
     end
 
-    # An `Int32` target through the searching `@batch` sweep stores the same bits as an `Int`
-    # one (gpena/Bramble.jl#469): each task searches `_ScatterCSC` around the `Int32` arrays,
-    # whose positions must be `Int` to reach `nzval[pos]` rather than a missing method.
-    @testset "Int32 target: searching sweep (#469)" begin
+    # An `Int32` target through the replay `@batch` sweep stores the same bits as an `Int`
+    # one (gpena/Bramble.jl#469): the recording's positions are `Int`, so each task reaches
+    # `nzval[pos]` rather than a missing method. Filled twice: the first records, the second
+    # replays.
+    @testset "Int32 target: threaded replay (#469)" begin
         Random.seed!(469)
         Ω = mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (false, false);
@@ -705,9 +693,9 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
             A64 = allocate_system_matrix(a)
             @assert A64 isa SparseMatrixCSC{Float64, Int}
             A32 = SparseMatrixCSC{Float64, Int32}(A64)
-            for A in (A64, A32)
+            for A in (A64, A32), _ in 1:2
                 _fillnz!(A, 0.0)
-                Bramble._assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast)
+                assemble_parallel!(A, a)
             end
             @test getcolptr(A32) == getcolptr(A64) && rowvals(A32) == rowvals(A64)
             @test isequal(nonzeros(A32), nonzeros(A64))
@@ -766,14 +754,12 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
         @test d1 == d2 == d3
     end
 
-    # A warmed `CpuPolyester` refill replays the form's recorded `nzval` positions instead of
-    # searching: `_threaded_replay_policy(::CpuPolyester)` and
+    # A warmed `CpuPolyester` refill replays the form's recorded `nzval` positions through
     # `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` above. Checked the same
     # way `test/form/threaded_replay.jl` checks `CpuThreaded` -- agreement against a serial
     # `assemble` of the same non-uniform mesh, never against another threaded fill -- since
     # this extension's own `CpuPolyester` vs `Parallel()` testsets above never re-fill an
-    # already-assembled matrix and so would not tell a replay from a re-search.
-    # A warmed CpuPolyester refill replays the recording.
+    # already-assembled matrix and so would not tell a replay from a first fill.
     @testset "warmed refill replays (#338)" begin
         _replay_domains = (
             domain(interval(0.0, 1.0)),
@@ -811,7 +797,7 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
             @test getcolptr(B) == getcolptr(R) && rowvals(B) == rowvals(R)
             @test isapprox(B, R; rtol = 1e-12)
 
-            # A warmed refill (the recording already exists): replays, not re-searches.
+            # A warmed refill (the recording already exists) replays it.
             _fillnz!(B, NaN)
             assemble!(B, ab)
             @test getcolptr(B) == getcolptr(R) && rowvals(B) == rowvals(R)
@@ -1189,8 +1175,7 @@ Base.getindex(w::_BfWrapped, i::Int) = w.data[i]
             backend = backend(policy = policy))))
     _bf_close(a, b) = !iszero(b) && isapprox(a, b; rtol = eltype(a) == BigFloat ? 1e-60 : 1e-14)
     hooks = (:_batch_bilinear_band_replay!, :_batch_bilinear_colour_replay!,
-        :_batch_mf_bands!, :_batch_linear_colour_sweep!, :_batch_linear_band_sweep!,
-        :_batch_bilinear_colour_sweep!, :_batch_bilinear_band_sweep!)
+        :_batch_mf_bands!, :_batch_linear_colour_sweep!, :_batch_linear_band_sweep!)
     ext = Base.get_extension(Bramble, :BramblePolyesterExt)
     # How many of the extension's instances of hook `h` take `BigFloat` data.
     bigruns(h) = sum(methods(getfield(Bramble, h)); init = 0) do m
@@ -1226,20 +1211,11 @@ Base.getindex(w::_BfWrapped, i::Int) = w.data[i]
             form(W, v -> big"2.0" * innerₕ(x -> x[1], v)))
             push!(r, assemble(l))
         end
-        # The searching sweep, entered as a form with no replaying leaf enters it: point
-        # colouring on 9×11, bands on 9×33.
-        for Ws in (W, _bf_space((9, 33), policy; seed = 1))
-            a = form(Ws, Ws, (u, v) -> big"2.0" * inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
-            A = assemble(a)
-            fill!(nonzeros(A), 0)
-            Bramble._assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast)
-            push!(r, A)
-        end
         return r, (op.plan !== nothing, opv.plan === nothing)
     end
     (serial, _), (batched, (fused, per_unit)) = results
     @test fused && per_unit
-    @test map(eltype, batched) == [BigFloat, BigFloat, Float64, fill(BigFloat, 7)...]
+    @test map(eltype, batched) == [BigFloat, BigFloat, Float64, fill(BigFloat, 5)...]
     @test all(map(_bf_close, batched, serial))
     @testset "$h ran on BigFloat data" for (h, n) in zip(hooks, before)
         @test bigruns(h) > n
@@ -1484,11 +1460,12 @@ _se_kernel(c) = i -> c[1] * i + 1
     @test PE._slot_types() == length(ids) && PE._slots_quiescent()
 end
 
-# A stencil entry missing from the matrix's pattern throws inside the searching sweep's
-# `@batch` task. Before the split hooks caught it there, the throw on the host's chunk ended
-# Polyester's `GC.@preserve` while the workers still read the matrix, and the process
-# segfaulted in most runs. Point colouring on 9×11, bands on 9×33; the matrix stores the
-# diagonal only. Repeated, since the crash was intermittent.
+# A stencil entry missing from the matrix's pattern is reported by the recording's position
+# search, before any `@batch` task starts, with `CpuSerial`'s exception type and text. Once
+# the throw came from inside a task: it ended Polyester's `GC.@preserve` on the host's chunk
+# while the workers still read the matrix, and the process segfaulted in most runs.
+# Point colouring on 9×11, bands on 9×33; the matrix stores the diagonal only. Repeated, as
+# the crash was intermittent.
 @testset "missing pattern entry rethrows" begin
     _mp_space(n, policy) = (Random.seed!(437);
         gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), n, (false, false);
@@ -1510,13 +1487,12 @@ end
         for _ in 1:8
             W = _mp_space(n, CpuPolyester())
             a = _mp_form(W)
-            core = _mp_error(() -> Bramble._assemble_bilinear_parallel_core!(
-                _mp_diag(W), a.trial_space, a.test_space, a.ast))
             whole = _mp_error(() -> assemble!(_mp_diag(W), a))
-            @test core isa ArgumentError && sprint(showerror, core) == msg
+            direct = _mp_error(() -> assemble_parallel!(_mp_diag(W), a))
             @test whole isa ArgumentError && sprint(showerror, whole) == msg
+            @test direct isa ArgumentError && sprint(showerror, direct) == msg
         end
-        # The threads the failed sweeps reserved were released: a sweep still assembles.
+        # The threads the failed fills reserved were released: a fill still assembles.
         W = _mp_space(n, CpuPolyester())
         @test assemble(_mp_form(W)) ≈ assemble(_mp_form(Ws))
     end

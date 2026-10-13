@@ -52,8 +52,7 @@ test factor's reach, since that is the only side colouring ever needs. The answe
 does this reach" is static, not re-derived from a sample stencil evaluation.
 
 The colouring is what makes the matrix sweep correct rather than merely fast: whether a
-point's entries are found by `add_to_sparse!` searching a column, or read from a replayed
-recording (below), two threads landing on the same entry would race on the value, not just
+point's entries are read from a replayed recording (below), two threads landing on the same entry would race on the value, not just
 on the structure.
 
 ```@raw html
@@ -165,11 +164,10 @@ term's interior has a constant per-tap stride, so its diagonal segment replays t
 target (`_DiagonalReplayTarget`) instead of a positions vector; from 2D up no interior stride
 is constant, so every segment there is the general, position-list kind.
 
-Whether a unit replays or searches is decided per unit, from the effective policy of the leaf
-its sweep walks (`_leaf_replays`): `CpuThreaded` replays in `src/`, and `CpuPolyester` through
-`BramblePolyesterExt`'s own replay batch functions. A leaf whose
-effective policy has no replay hook keeps searching that unit, beside other units of the same
-form that do replay.
+Every unit replays, whatever the effective policy of the leaf its sweep walks: `CpuThreaded`
+in `src/`, and `CpuPolyester` through `BramblePolyesterExt`'s own replay batch functions.
+Without the extension those functions throw an `ArgumentError` naming Polyester. A unit with a
+test-side interpolation replays on one thread and needs no hook.
 
 ## Algebraic simplification of the sum and product layer
 
@@ -398,11 +396,14 @@ not by inspecting the type themselves.
 beside a dense `AbstractMatrix` fallback before this milestone, and both agree with each
 other today ("Dense & sparse agreement", `test/form/symmetrize.jl`).
 
-The band-coloured threaded sweep (`_scatter_point!`, `_sweep_bilinear!`,
-`_assemble_blocks_parallel!`, all in `bilinear_execution.jl`) runs for every matrix type
-([gpena/Bramble.jl#190](https://github.com/gpena/Bramble.jl/issues/190)): it only calls the
-generic `add_to_sparse!`, so a dense `Matrix` is coloured and threaded exactly like
-`SparseMatrixCSC`, through the same `_assemble_bilinear_parallel_core!(A::AbstractMatrix, ...)`.
+The band-coloured threaded sweep (`_sweep_bilinear!` and `_replay_point!`, in
+`bilinear_execution.jl`) runs for every matrix type
+([gpena/Bramble.jl#190](https://github.com/gpena/Bramble.jl/issues/190)): it replays the
+positions recorded for `A` through the generic `_scatter_storage`/`_replay_add!`, so a dense
+`Matrix` is coloured and threaded exactly like `SparseMatrixCSC`, through the same
+`_assemble_bilinear_parallel_cached!(A::AbstractMatrix, ...)`. There is no searching sweep:
+a refill that finds no recording records one serially first, and every threaded fill after it
+replays.
 What has not been measured is whether threading a dense or banded backend is faster than the
 serial record/replay pass.
 
@@ -423,8 +424,8 @@ Modules = [Bramble]
 Public = false
 Filter = x -> x in (
     Bramble._allocate_from_pattern, Bramble._scatter_position, Bramble._scatter_add!,
-    Bramble._zero_stored!, Bramble._batch_bilinear_colour_sweep!,
-    Bramble._batch_bilinear_band_sweep!, Bramble._batch_linear_colour_sweep!,
+    Bramble._zero_stored!, Bramble._batch_bilinear_colour_replay!,
+    Bramble._batch_bilinear_band_replay!, Bramble._batch_linear_colour_sweep!,
     Bramble._batch_linear_band_sweep!
 )
 Pages = [
@@ -442,8 +443,8 @@ Public = false
 Filter = x -> x ∉ (
     Bramble.DiracSource, Bramble.issymmetric, Bramble.isposdef,
     Bramble._allocate_from_pattern, Bramble._scatter_position, Bramble._scatter_add!,
-    Bramble._zero_stored!, Bramble._batch_bilinear_colour_sweep!,
-    Bramble._batch_bilinear_band_sweep!, Bramble._batch_linear_colour_sweep!,
+    Bramble._zero_stored!, Bramble._batch_bilinear_colour_replay!,
+    Bramble._batch_bilinear_band_replay!, Bramble._batch_linear_colour_sweep!,
     Bramble._batch_linear_band_sweep!
 )
 Pages = [

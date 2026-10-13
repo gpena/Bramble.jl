@@ -9,9 +9,9 @@ using Bramble: CpuSerial, CpuThreaded, CpuPolyester, backend, assemble_add!,
                assemble_parallel!, allocate_system_matrix, D₋ₓ, πₕ, inner₊ₓ
 
 # An `Int32` sparse target assembles to the same bits as an `Int` one (gpena/Bramble.jl#469).
-# The searching sweep's position search answers an `Int` for any index type, so the write
-# goes to `nzval[pos]` and never to the dense fallback `A[pos] += val`, which on a sparse
-# matrix reads `pos` as a linear index. Each `Int32` fill is checked against the `Int` fill
+# The position search answers an `Int` for any index type, so the recording holds `Int`
+# positions and the write goes to `nzval[pos]`, never to the dense fallback `A[pos] += val`,
+# which on a sparse matrix reads `pos` as a linear index. Each `Int32` fill is checked against the `Int` fill
 # through the same entry point under the same policy, bitwise, never against a serial fill:
 # a threaded composite refill differs from a serial one by round-off, for `Int` too.
 
@@ -54,8 +54,7 @@ function _refill!(A, a, entry)
     entry === :assemble! && return assemble!(A, a)
     entry === :assemble_parallel! && return assemble_parallel!(A, a)
     fill!(nonzeros(A), 0.0)
-    entry === :assemble_add! && return assemble_add!(A, a)
-    return Bramble._assemble_bilinear_parallel_core!(A, a.trial_space, a.test_space, a.ast)
+    return assemble_add!(A, a)
 end
 
 function _bitwise(A32, A64)
@@ -63,7 +62,7 @@ function _bitwise(A32, A64)
         isequal(nonzeros(A32), nonzeros(A64))
 end
 
-const _ENTRIES = (:assemble!, :assemble_parallel!, :assemble_add!, :core)
+const _ENTRIES = (:assemble!, :assemble_parallel!, :assemble_add!)
 
 @testset "Int32 sparse target" begin
     @testset "the position search answers Int" begin
@@ -73,12 +72,10 @@ const _ENTRIES = (:assemble!, :assemble_parallel!, :assemble_add!, :core)
         @test @inferred(Bramble._scatter_position(A32, 1, 1)) === 1
         @test Bramble._scatter_position(A32, 9, 9) === Bramble._scatter_position(A64, 9, 9)
         @test Bramble._scatter_position(A32, 1, 81) === 0
-        S = Bramble._ScatterCSC(getcolptr(A32), rowvals(A32), nonzeros(A32))
-        @test @inferred(Bramble._scatter_position(S, 1, 1)) === 1
     end
 
-    # Without `BramblePolyesterExt`, `CpuPolyester` can only run the one-thread fallback of
-    # a test-side interpolation; the scalar and composite forms stop at a hook naming
+    # Without `BramblePolyesterExt`, `CpuPolyester` can only run the one-thread sweep of a
+    # test-side interpolation; the scalar and composite forms stop at a hook naming
     # Polyester (as in threaded_replay.jl).
     has_polyester = Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing
     @testset "$(nameof(typeof(pol))), $case, $entry" for pol in (
@@ -89,7 +86,7 @@ const _ENTRIES = (:assemble!, :assemble_parallel!, :assemble_add!, :core)
         a = _form(case, pol)
         A64 = _csc(allocate_system_matrix(a))
         A32 = SparseMatrixCSC{Float64, Int32}(A64)
-        # Twice: the first fill records (or searches), the second replays a recording.
+        # Twice: the first fill records, the second replays the recording.
         for _ in 1:2
             fill!(nonzeros(A64), NaN)
             fill!(nonzeros(A32), NaN)

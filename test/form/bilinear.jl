@@ -1419,10 +1419,8 @@ struct _PlainSink end
         Bramble.DiagonalReplaySink(A, CartesianIndices((1:0,)), Int[], Int[], 1, 1.0))
     @test !Bramble._sink_needs_coordinates(Bramble._StrideReplaySink(A, Int[], Int[], 0, 1.0))
 
-    # the policy a forced-threaded sweep runs under, and which policies replay
+    # the policy a forced-threaded sweep runs under
     @test Bramble._coerce_serial_to_threaded(Bramble.GpuKernel()) === Bramble.CpuThreaded()
-    @test Bramble._threaded_replay_policy(Bramble.CpuThreaded())
-    @test Bramble._threaded_replay_policy(Bramble.CpuSerial()) == false
     # only 1D records diagonal segments
     @test Bramble._diagonal_replay(Val(1))
     @test !Bramble._diagonal_replay(Val(2))

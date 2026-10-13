@@ -9,7 +9,7 @@ using Bramble
 using Bramble: restrict_to, πₕ, D₋ₓ, change_points!, indices, local_stencil,
                leaf_spaces_offsets, each_routed_leaf, Mesh1DState, MeshnDState,
                _batch_split, _batch_rebuild, _bind_walk, _foreach_unit, _summands,
-               _sweep_point!
+               _entry_target, add_to_sparse!
 using SparseArrays
 using Random
 using ..TestUtils: alloc_test, WITH_3D_TESTS
@@ -54,12 +54,14 @@ function linear_units(l)
     return units
 end
 
-# The walk over one unit, as `_sweep_bilinear_serial!` and `_scatter_term!` do below
-# `_bind_walk`.
+# The walk over one unit below `_bind_walk`: each stencil entry added into the matrix where
+# `_entry_target` puts it, searching its position.
 function sweep!(A::AbstractMatrix, (sp, bound, mm), ro, co)
     lin = LinearIndices(indices(mesh(sp)))
-    for I in indices(mesh(sp))
-        _sweep_point!(A, bound, sp, I, lin, mm, ro, co, true)
+    for I in indices(mesh(sp)), (ou, ov, w) in local_stencil(bound, sp, I, mm, lin[I])
+
+        row, col = _entry_target(lin, I, ou, ov, ro, co)
+        row == 0 || add_to_sparse!(A, row, col, w, bound)
     end
     return A
 end

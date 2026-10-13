@@ -12,8 +12,8 @@ Modules = [Bramble]
 Public = false
 Filter = x -> x in (
     Bramble._allocate_from_pattern, Bramble._scatter_position, Bramble._scatter_add!,
-    Bramble._zero_stored!, Bramble._batch_bilinear_colour_sweep!,
-    Bramble._batch_bilinear_band_sweep!, Bramble._batch_linear_colour_sweep!,
+    Bramble._zero_stored!, Bramble._batch_bilinear_colour_replay!,
+    Bramble._batch_bilinear_band_replay!, Bramble._batch_linear_colour_sweep!,
     Bramble._batch_linear_band_sweep!
 )
 Pages = [
@@ -31,8 +31,8 @@ Public = false
 Filter = x -> x ∉ (
     Bramble.DiracSource, Bramble.issymmetric, Bramble.isposdef,
     Bramble._allocate_from_pattern, Bramble._scatter_position, Bramble._scatter_add!,
-    Bramble._zero_stored!, Bramble._batch_bilinear_colour_sweep!,
-    Bramble._batch_bilinear_band_sweep!, Bramble._batch_linear_colour_sweep!,
+    Bramble._zero_stored!, Bramble._batch_bilinear_colour_replay!,
+    Bramble._batch_bilinear_band_replay!, Bramble._batch_linear_colour_sweep!,
     Bramble._batch_linear_band_sweep!
 )
 Pages = [
