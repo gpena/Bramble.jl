@@ -723,6 +723,31 @@ using Bramble:
         _check_split(((u, v) -> innerₕ(u, R(:c, v + R(:l, v) + R(:r, v))),
             (u, v) -> innerₕ(u, R(:b, v))))
         _check_split(((u, v) -> innerₕ(u, R(:c, R(:l, v) + R(:r, v) + R(:b, v))),))
+        # A difference is distributed over a restricted sum the same way, every difference
+        # node alike: `D₋ₓ(R(:c, v + R(:l, v) + R(:r, v)))` allocated 70272 B and
+        # `D₋ₓ(v + R(:l, v) + R(:r, v) + R(:b, v))` 116528 B (gpena/Bramble.jl#759). The
+        # pattern is the unsplit product's, which keeps the zero weights of the restricted
+        # entries the parts drop: the seeded mesh pins it.
+        Random.seed!(20261014)
+        Wd = gridspace(mesh(Ωm, (7, 9), (false, false)))
+        for (Dop, nnz_a, nnz_b) in ((D₋ₓ, 90, 117), (Bramble.D₊ᵧ, 92, 119),
+            (Bramble.Dcₓ, 108, 108), (Bramble.D̃ₓ, 90, 117), (Bramble.D̽ᵧ, 148, 175))
+            for (whole, parts, nnz_whole) in (
+                ((u, v) -> innerₕ(u, Dop(R(:c, v + R(:l, v) + R(:r, v)))),
+                    Tuple((u, v) -> innerₕ(u, Dop(R(:c, g(v))))
+                    for g in (identity, v -> R(:l, v), v -> R(:r, v))), nnz_a),
+                ((u, v) -> innerₕ(u, Dop(v + R(:l, v) + R(:r, v) + R(:b, v))),
+                    Tuple((u, v) -> innerₕ(u, Dop(g(v)))
+                    for g in (identity, v -> R(:l, v), v -> R(:r, v), v -> R(:b, v))),
+                    nnz_b))
+                a = form(Wd, Wd, whole)
+                A = assemble(a)
+                @test _loop_bytes(A, a) == 0
+                P = sum(assemble(form(Wd, Wd, p)) for p in parts)
+                @test Matrix(A) ≈ Matrix(P)
+                @test nnz(A) == nnz_whole
+            end
+        end
         _check_split(((u, v) -> innerₕ(u, 2.0 * R(:l, v)), (u, v) -> innerₕ(u, 3 * R(:r, v))))
         _check_split((
             (u, v) -> innerₕ(u, v), (u, v) -> innerₕ(u, 2.0 * R(:l, v)),

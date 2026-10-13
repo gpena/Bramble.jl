@@ -478,6 +478,16 @@ _promote_scalar(x::Base.RefValue, T) = x
     op.zero_stencil === nothing || return (op,)
     return map(x -> _rewrap_inner(op, x), _expanded_summands(op.inner_op))
 end
+# A difference is linear in its operand entry for entry, so one over a sum holding a
+# restriction distributes the same way: `D₋ₓ(Rₕ(:c, v + Rₕ(:l, v)))` is
+# `D₋ₓ(Rₕ(:c, v)) + D₋ₓ(Rₕ(:c, Rₕ(:l, v)))` (gpena/Bramble.jl#759). An operand with no
+# restriction is left whole, so an unrestricted difference compiles nothing new.
+const _DifferenceNode = Union{BackwardDifference, ForwardDifference, CenteredDifference,
+    StarDifference, CrossWeightedDifference}
+@inline function _expanded_summands(op::_DifferenceNode)
+    _holds_restriction(op.inner_op) || return (op,)
+    return map(x -> _rewrap_inner(op, x), _expanded_summands(op.inner_op))
+end
 @inline _expanded_summands(op) = (op,)
 
 # The bits of `_expanded_summands(op)` summed, read off the types alone so the count folds
