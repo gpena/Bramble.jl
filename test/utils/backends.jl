@@ -758,6 +758,17 @@ end
                 println(name, "\t", nameof(typeof(e)), " ", e.msg)
             end
         end
+        for (name, f, args) in (
+                ("spmv", Bramble._launch_spmv_csr!, ([1.0], [1], [1], [1.0], [1.0], 1.0, 0.0)),
+                ("spmm", Bramble._launch_spmm_csr!, ([1.0;;], [1], [1], [1.0], [1.0;;], 1.0, 0.0)),
+            )
+            try
+                f(args...)
+                println(name, "\tRETURNED")
+            catch e
+                println(name, "\t", nameof(typeof(e)), " ", e.msg)
+            end
+        end
         """
         root = pkgdir(Bramble)
         cmd = `$(Base.julia_cmd()) --project=$root --startup-file=no --threads=1 -e $code`
@@ -773,6 +784,12 @@ end
         @test out["sync"] ==
               "ErrorException ka_synchronize has no method for Vector{Float64}. Add " *
               "`using KernelAbstractions` before calling this function."
+        # The two sparse stubs share the thrower and their docstrings promise `ErrorException`.
+        for (key, fname) in (("spmv", "_launch_spmv_csr!"), ("spmm", "_launch_spmm_csr!"))
+            @test out[key] ==
+                  "ErrorException $fname has no method loaded. Add " *
+                  "`using KernelAbstractions` before calling Metal sparse `mul!`."
+        end
     end
 end
 
