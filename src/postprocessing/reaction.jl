@@ -52,6 +52,20 @@ See also: [`dirichlet_bc!`](@ref), [`assemble`](@ref), [`normal_vector`](@ref).
 @inline _reaction_markers(marker::Symbol) = (marker,)
 @inline _reaction_markers(marker::NTuple{N, Symbol}) where {N} = marker
 
+# `()` also matches the `NTuple` method above (N = 0), so it needs its own, more specific one.
+@noinline _throw_no_marker() = throw(ArgumentError("`marker` names no label"))
+_reaction_markers(::Tuple{}) = _throw_no_marker()
+
+# Anything else (a `Vector`, a `String`, a tuple holding a non-`Symbol`) is outside the contract.
+@noinline function _throw_bad_marker(marker)
+    throw(
+        ArgumentError(
+        "`marker` must be a `Symbol` or a `Tuple` of `Symbol`s; got $(repr(marker)).",
+    ),
+    )
+end
+_reaction_markers(marker) = _throw_bad_marker(marker)
+
 # The matrix methods index `A`, `F`, `uₕ`'s storage and the caller's buffer with
 # `@inbounds`, so a size mismatch must be caught here, not left to an out-of-bounds write.
 function _validate_reaction_sizes(A, F, uₕ, buf...)

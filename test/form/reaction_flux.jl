@@ -220,6 +220,42 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
         @test !(r_combined ≈ r_left + r_bottom)
     end
 
+    @testset "Marker validation" begin
+        # Bad markers must name the problem, not raise a BoundsError or a MethodError on a
+        # private helper. `thrown` returns what `f` threw, or `nothing` if it returned.
+        thrown(f) = try
+            f()
+            nothing
+        catch err
+            err
+        end
+
+        # labels :left and :right, which `(:left, :left)` below needs
+        I = domain(interval(0.0, 1.0), :left => :xmin, :right => :xmax)
+        Wₕ = gridspace(mesh(I, 13, false))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(x -> 1.0, v))
+        uₕ = Rₕ(Wₕ, x -> x[1])
+        A = assemble(a)
+        F = assemble(l)
+
+        e0 = thrown(() -> reaction(a, l, uₕ; marker = ()))
+        @test e0 isa ArgumentError && occursin("names no label", sprint(showerror, e0))
+
+        for m in ([:left], ("left",), "left")
+            e = thrown(() -> reaction(a, l, uₕ; marker = m))
+            @test e isa ArgumentError && occursin(repr(m), sprint(showerror, e))
+            # the same check on the matrix methods, which share the marker parsing
+            e = thrown(() -> reaction!(zeros(ndofs(Wₕ)), A, F, uₕ; marker = m))
+            @test e isa ArgumentError && occursin(repr(m), sprint(showerror, e))
+            e = thrown(() -> reaction_density(A, F, uₕ; marker = m))
+            @test e isa ArgumentError && occursin(repr(m), sprint(showerror, e))
+        end
+
+        # a repeated label is the same selection as the label once
+        @test reaction(a, l, uₕ; marker = (:left, :left)) ≈ reaction(a, l, uₕ; marker = :left)
+    end
+
     @testset "Composite space: per-component reactions" begin
         # Two independent copies of the 1D problem stacked as a composite space; each
         # component solves its own manufactured problem, so a component-restricted
