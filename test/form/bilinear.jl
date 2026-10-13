@@ -35,9 +35,6 @@ using Bramble:
                blocks,
                leaf_spaces_offsets,
                visit_bilinear_stencil,
-               PatternSink,
-               _sink_entry!,
-               _sink_dedups,
                _entry_target,
                _trial_column,
                AbsoluteColumn,
@@ -849,26 +846,27 @@ using Bramble:
         u, v = TrialFunction{2}(), TestFunction{2}()
 
         @testset "Every scattered entry is in the pattern" begin
-            # Both traversals read the same walk, so the invariant can be asserted
-            # directly rather than inferred from a matrix that came out right.
-            for ast in (
-                resolve_form_ast(form(W, W, (a, b) -> innerₕ(a, b))),
-                resolve_form_ast(form(W, W, (a, b) -> innerₕ(D₋ₓ(a), D₋ₓ(b)))),
-                resolve_form_ast(form(W, W, (a, b) -> inner₊(∇ₕ(a), ∇ₕ(b)))),
-                resolve_form_ast(form(W, W, (a, b) -> innerₕ(Dcₓ(a), M₊ᵧ(b))))
+            # The pattern `allocate_system_matrix` preallocates is built by the coordinate
+            # walk, so the invariant can be asserted directly rather than inferred from a
+            # matrix that came out right.
+            for f in (
+                form(W, W, (a, b) -> innerₕ(a, b)),
+                form(W, W, (a, b) -> innerₕ(D₋ₓ(a), D₋ₓ(b))),
+                form(W, W, (a, b) -> inner₊(∇ₕ(a), ∇ₕ(b))),
+                form(W, W, (a, b) -> innerₕ(Dcₓ(a), M₊ᵧ(b)))
             )
-                pat = visit_bilinear_stencil(PatternSink(Int[], Int[]), ast, W, 0, 0)
-                pattern = Set(zip(pat.I_vec, pat.J_vec))
+                ast = resolve_form_ast(f)
+                pattern = Set(zip(SparseArrays.findnz(allocate_system_matrix(f))[1:2]...))
                 got = visit_bilinear_stencil(CollectSink([]), ast, W, 0, 0)
                 @test !isempty(got.seen)
                 @test all(((r, c, _),) -> (r, c) in pattern, got.seen)
             end
         end
 
-        # The pattern pass de-duplicates and the value pass does not.
-        @testset "Pattern de-duplicates, values do not" begin
-            # Two identical terms name every coordinate twice. The pattern wants each once;
-            # the values have to accumulate both, or the matrix comes out halved.
+        # The value pass does not de-duplicate.
+        @testset "Values do not de-duplicate" begin
+            # Two identical terms name every coordinate twice. The values have to
+            # accumulate both, or the matrix comes out halved.
             #
             # Built with `resolve_ast` directly rather than `form(...)`: `form` runs
             # `simplify_ast`, which combines two identical terms into
@@ -876,20 +874,13 @@ using Bramble:
             # double sweep this test exists to protect against -- so producing the
             # duplicate-term tree this traversal invariant is about has to bypass it.
             ast = resolve_ast(innerₕ(u, v) + innerₕ(u, v))
-            pat = visit_bilinear_stencil(PatternSink(Int[], Int[]), ast, W, 0, 0)
+            once = visit_bilinear_stencil(CollectSink([]), resolve_ast(innerₕ(u, v)), W, 0, 0)
             got = visit_bilinear_stencil(CollectSink([]), ast, W, 0, 0)
 
-            @test length(pat.I_vec) == length(unique(zip(pat.I_vec, pat.J_vec)))
-            @test length(got.seen) == 2 * length(pat.I_vec)
+            @test length(got.seen) == 2 * length(once.seen)
             # and the halving it protects against shows up in the assembled matrix
             @test Matrix(assemble(form(W, W, (a, b) -> innerₕ(a, b) + innerₕ(a, b)))) ≈
                   2 .* Matrix(assemble(form(W, W, (a, b) -> innerₕ(a, b))))
-        end
-
-        # Only the pattern sink asks for de-duplication.
-        @testset "Only the pattern sink de-duplicates" begin
-            @test _sink_dedups(PatternSink(Int[], Int[]))
-            @test !_sink_dedups(CollectSink([]))
         end
 
         @testset "Block offsets shift sink entries" begin
@@ -1418,21 +1409,15 @@ struct _PlainSink end
     @test !Bramble._test_inbounds(lin, I, (0, -1))
 
     # replay sinks read positions, not coordinates; any other sink is given coordinates,
-    # its slot is 0, and it keeps duplicates
+    # and its slot is 0
     @test Bramble._sink_needs_coordinates(_PlainSink())
     @test Bramble._sink_point!(_PlainSink(), 3, I) == 0
-    @test !_sink_dedups(_PlainSink())
-    @test _sink_dedups(PatternSink(Int[], Int[]))
     @test !Bramble._sink_needs_coordinates(Bramble.ReplaySink(A, Int[], Int[], 1.0))
     @test !Bramble._sink_needs_coordinates(
         Bramble._PairReplaySink(A, Int[], Int[], Int[], 1.0, 1.0, 0))
     @test !Bramble._sink_needs_coordinates(
         Bramble.DiagonalReplaySink(A, CartesianIndices((1:0,)), Int[], Int[], 1, 1.0))
     @test !Bramble._sink_needs_coordinates(Bramble._StrideReplaySink(A, Int[], Int[], 0, 1.0))
-    # a pattern sink records each coordinate pair it is handed
-    ps = PatternSink(Int[], Int[])
-    _sink_entry!(ps, 4, 2, 1.0, 0)
-    @test (ps.I_vec, ps.J_vec) == ([4], [2])
 
     # the policy a forced-threaded sweep runs under, and which policies replay
     @test Bramble._coerce_serial_to_threaded(Bramble.GpuKernel()) === Bramble.CpuThreaded()
