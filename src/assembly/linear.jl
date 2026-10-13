@@ -391,47 +391,33 @@ end
 # --- A VectorElement source must live on the leaf it is read on --- #
 #
 # `local_stencil(::SourceVector)` reads `op.vec[lin_idx]` at the walked leaf's linear index,
-# so a source from another mesh is read at the wrong points: a finer one silently, a coarser
-# one past its end. Only a source that kept its `VectorElement` (`_as_source`,
-# operators/inner.jl) knows its mesh; a plain vector, from a lowered closure or built by
-# hand, carries none and is skipped. Routed as `each_routed_leaf` routes, so a term naming
-# no component is checked against every leaf; one naming a component outside the space never
-# reaches here, as `_lower_sources_for_space` runs first in `form` and throws for it. The walk
-# reaches what `_host_sources` does.
-# Once, at `form`: points moved later (`change_points!`) are not caught, as in
-# `_same_mesh_or_throw` (jacobian_pattern.jl), whose predicate this is.
-_check_source_meshes(ast, Wₕ) = _check_source_mesh(ast, mesh(Wₕ))
-
-function _check_source_meshes(ast, Wₕ::CompositeGridSpace)
-    return _check_source_meshes_over_leaves(ast, leaf_spaces_offsets(Wₕ))
-end
-
-function _check_source_meshes_over_leaves(op::OperatorAdd, leaves)
-    _check_source_meshes_over_leaves(op.left_op, leaves)
-    _check_source_meshes_over_leaves(op.right_op, leaves)
-    return nothing
-end
-
-function _check_source_meshes_over_leaves(term::TERM, leaves) where {TERM}
-    target = test_component_or_nothing(term)
-    _foldl_leaves(nothing, leaves) do _, c, leaf
-        (target === nothing || target == c) && _check_source_mesh(term, mesh(first(leaf)))
-        return nothing
-    end
-    return nothing
-end
+# and `local_stencil(::GridFunctionScale)` its `grid_function[lin_idx]`, so a source or a
+# coefficient from another mesh is read at the wrong points: a finer one silently, a coarser
+# one past its end. Only an array that kept its `VectorElement` (`_as_source`,
+# operators/inner.jl, or `Rₕ` as a coefficient) knows its mesh; a plain vector, from a
+# lowered closure or built by hand, carries none and is skipped. Routed as
+# `_check_centered_meshes` routes, on the leaf the sweep walks; a linear form's test
+# components outside the space never reach here, as `_lower_sources_for_space` runs first
+# in `form` and throws for them. The walk reaches what `_host_sources` does. Once, at
+# `form`: points moved later (`change_points!`) are not caught, as in `_same_mesh`.
+_check_source_meshes(ast, Wₕ) = _check_source_meshes(ast, Wₕ, Wₕ)
+_check_source_meshes(ast, Wₕ, Vₕ) = _check_walked_meshes(_check_source_mesh, ast, Wₕ, Vₕ)
 
 _check_source_mesh(op, Ωₕ) = nothing
 
 function _check_source_mesh(op::SourceVector{D, <:VectorElement}, Ωₕ) where {D}
     Ωs = mesh(space(op.vec))
-    Ωs === Ωₕ ||
-        (npoints(Ωs, Tuple) == npoints(Ωₕ, Tuple) && host_points(Ωs) == host_points(Ωₕ)) ||
-        _throw_source_mesh(Ωs, Ωₕ)
+    _same_mesh(Ωs, Ωₕ) || _throw_source_mesh(Ωs, Ωₕ)
     return nothing
 end
 
-function _check_source_mesh(op::Union{OperatorAdd, LinearProduct}, Ωₕ)
+function _check_source_mesh(op::GridFunctionScale{D, <:VectorElement}, Ωₕ) where {D}
+    Ωs = mesh(space(op.grid_function))
+    _same_mesh(Ωs, Ωₕ) || _throw_source_mesh(Ωs, Ωₕ)
+    return _check_source_mesh(op.inner_op, Ωₕ)
+end
+
+function _check_source_mesh(op::Union{OperatorAdd, LinearProduct, BilinearProduct}, Ωₕ)
     _check_source_mesh(op.left_op, Ωₕ)
     _check_source_mesh(op.right_op, Ωₕ)
     return nothing
@@ -445,13 +431,13 @@ _check_source_mesh(op::UnaryWrapper, Ωₕ) = _check_source_mesh(op.inner_op, Ω
     ns, nh = npoints(Ωs, Tuple), npoints(Ωₕ, Tuple)
     # Equal counts would print two equal tuples, which show no reason for the refusal.
     which = ns == nh ? "the source is on another mesh of the same shape, $(ns) points" :
-            "the source's mesh has $(ns) points and the test space's $(nh)"
+            "the source's mesh has $(ns) points and the one it is read on $(nh)"
     throw(
         ArgumentError(
-        "a grid-function source of the linear form lives on another mesh than the test " *
-        "space it is read on: $(which). A source is read at the test space's " *
-        "own points, which name other places on another mesh. Interpolate it, as in " *
-        "`innerₕ(πₕ(uₕ), v)`, or build it with `Rₕ` on the test space.",
+        "a grid-function source or coefficient of the form lives on another mesh than the " *
+        "space it is read on: $(which). It is read at that space's own points, which " *
+        "name other places on another mesh. Interpolate it, as in `innerₕ(πₕ(uₕ), v)` " *
+        "or `πₕ(Wₕ, uₕ) * u`, or build it with `Rₕ` on the space the form walks.",
     ),
     )
 end
@@ -467,16 +453,20 @@ end
 # walks, so a composite whose collapsed leaf the term never touches still forms. A
 # component outside the space matches no leaf here and is refused where it was before. The
 # operand of an `InterpolationNode` lives on another mesh, so it is not entered. A linear
-# form walks its test space; `bilinear.jl`'s `form` passes both of its spaces.
+# form walks its test space; `bilinear.jl`'s `form` passes both of its spaces. The walk is
+# `_check_walked_meshes`, shared with `_check_source_meshes` above.
 _check_centered_meshes(ast, Vₕ) = _check_centered_meshes(ast, Vₕ, Vₕ)
+_check_centered_meshes(ast, Wₕ, Vₕ) = _check_walked_meshes(_check_centered_mesh, ast, Wₕ, Vₕ)
 
-function _check_centered_meshes(op::OperatorAdd, Wₕ, Vₕ)
-    _check_centered_meshes(op.left_op, Wₕ, Vₕ)
-    _check_centered_meshes(op.right_op, Wₕ, Vₕ)
+# Calls `check(term, Ωₕ)` for each term of `ast` on the mesh of every leaf the sweep walks
+# it over, routed as described above.
+function _check_walked_meshes(check::C, op::OperatorAdd, Wₕ, Vₕ) where {C}
+    _check_walked_meshes(check, op.left_op, Wₕ, Vₕ)
+    _check_walked_meshes(check, op.right_op, Wₕ, Vₕ)
     return nothing
 end
 
-function _check_centered_meshes(term, Wₕ, Vₕ)
+function _check_walked_meshes(check::C, term, Wₕ, Vₕ) where {C}
     # A term naming neither side is assembled on the diagonal blocks alone, the first
     # `min` of the two leaf counts (`_diagonal_blocks`), so only those leaves are checked.
     # A linear form passes its test space twice: every leaf, as `each_routed_leaf` routes.
@@ -484,20 +474,20 @@ function _check_centered_meshes(term, Wₕ, Vₕ)
               test_component_or_nothing(term) === nothing
     nmax = unnamed ? min(leaf_count(Wₕ), leaf_count(Vₕ)) : typemax(Int)
     _has_test_interp(term) &&
-        return _check_centered_on_side(term, Wₕ, trial_component_or_nothing, nmax)
-    return _check_centered_on_side(term, Vₕ, test_component_or_nothing, nmax)
+        return _check_on_side(check, term, Wₕ, trial_component_or_nothing, nmax)
+    return _check_on_side(check, term, Vₕ, test_component_or_nothing, nmax)
 end
 
-@inline function _check_centered_on_side(term, space, side_component::F, nmax) where {F}
-    return _check_centered_mesh(term, mesh(space))
+@inline function _check_on_side(check::C, term, space, side_component::F,
+        nmax) where {C, F}
+    return check(term, mesh(space))
 end
 
-@inline function _check_centered_on_side(
-        term, space::CompositeGridSpace, side_component::F, nmax) where {F}
+@inline function _check_on_side(check::C, term, space::CompositeGridSpace,
+        side_component::F, nmax) where {C, F}
     target = side_component(term)
     _foldl_leaves(nothing, leaf_spaces_offsets(space)) do _, c, leaf
-        (target === nothing ? c <= nmax : target == c) &&
-            _check_centered_mesh(term, mesh(first(leaf)))
+        (target === nothing ? c <= nmax : target == c) && check(term, mesh(first(leaf)))
         return nothing
     end
     return nothing

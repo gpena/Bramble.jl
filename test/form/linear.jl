@@ -800,7 +800,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         uni(n) = gridspace(mesh(Ωd, (n, n), (true, true)))
         W9 = uni(9)
         one_on(W) = Rₕ(W, x -> 1.0)
-        elsewhere = "lives on another mesh than the test space"
+        elsewhere = "lives on another mesh than the space it is read on"
         for (label, s) in (("finer", one_on(uni(11))), ("coarser", one_on(uni(5))),
             ("graded", one_on(gridspace(_graded_mesh((9, 9))))))
             @testset "$label" begin
@@ -814,7 +814,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         end
         @test_throws ArgumentError form(W9, v -> innerₕ(one_on(uni(11)), v))
         # the message names both meshes' point counts
-        @test_throws "the source's mesh has (11, 11) points and the test space's (9, 9)" form(
+        @test_throws "the source's mesh has (11, 11) points and the one it is read on (9, 9)" form(
             W9, v -> innerₕ(one_on(uni(11)), v))
         # equal counts on other points: the message names the shared shape instead
         @test_throws "the source is on another mesh of the same shape, (9, 9) points" form(
@@ -845,6 +845,66 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         Wg = gridspace(_graded_mesh((9, 9)))
         @test sum(assemble(form(Wg, v -> innerₕ(one_on(gridspace(_graded_mesh((9, 9)))), v)))) ≈
               1.0
+    end
+
+    @testset "Coefficient on another mesh" begin
+        # A grid-function coefficient is read at the walked leaf's own linear indices, as a
+        # source is, so one from another mesh was read at other points: on a finer mesh
+        # `diag(A) ./ diag(M)` came out as `gf[1:11]`, not `1 .+ points`, and on a coarser
+        # one past its end. `form` now refuses it, bilinear and linear alike
+        # (gpena/Bramble.jl#685). Graded meshes, so equal counts would not hide a mismatch.
+        Ω1 = domain(interval(0.0, 1.0))
+        graded(n) = (Ωg = mesh(Ω1, n, true);
+                     Bramble.change_points!(Ωg, range(0.0, 1.0; length = n) .^ 1.5); Ωg)
+        W = gridspace(graded(11))
+        fₕ = Rₕ(W, x -> x)
+        elsewhere = "lives on another mesh than the space it is read on"
+        for n in (21, 6)
+            Wo = gridspace(graded(n))
+            gf = Rₕ(Wo, x -> 1 + x)
+            @testset "$n points" begin
+                @test_throws elsewhere form(W, W, (u, v) -> innerₕ(gf * u, v))
+                @test_throws elsewhere form(W, v -> innerₕ(fₕ, gf * v))
+                # inside a difference, a sum and a scale too
+                @test_throws elsewhere form(
+                    W, W, (u, v) -> innerₕ(D₋ₓ(gf * u), D₋ₓ(v)))
+                @test_throws elsewhere form(
+                    W, W, (u, v) -> innerₕ(u, v) + 2 * innerₕ(gf * u, v))
+                counts = "the source's mesh has ($n,) points and the one it is read on (11,)"
+                @test_throws counts form(W, W, (u, v) -> innerₕ(gf * u, v))
+                # Interpolated onto `W` first, it assembles, and reads 1 + x at W's points.
+                gi = πₕ(W, gf)
+                A = assemble(form(W, W, (u, v) -> innerₕ(gi * u, v)))
+                M = assemble(form(W, W, (u, v) -> innerₕ(u, v)))
+                @test diag(A) ./ diag(M) ≈ 1 .+ points(mesh(W))
+                @test assemble(form(W, v -> innerₕ(fₕ, gi * v))) ≈
+                      assemble(form(W, v -> innerₕ(fₕ .* (1 .+ points(mesh(W))), v)))
+            end
+        end
+
+        # On the coefficient's own mesh, or a rebuilt one with its points, it assembles.
+        gc = Rₕ(W, x -> 1 + x)
+        gr = Rₕ(gridspace(graded(11)), x -> 1 + x)
+        M = assemble(form(W, W, (u, v) -> innerₕ(u, v)))
+        for g in (gc, gr)
+            A = assemble(form(W, W, (u, v) -> innerₕ(g * u, v)))
+            @test diag(A) ./ diag(M) ≈ 1 .+ points(mesh(W))
+            @test sum(assemble(form(W, v -> innerₕ(1.0, g * v)))) ≈ 1.5
+        end
+
+        # The coefficient is checked on the mesh the form walks: the test mesh, so one on
+        # the trial mesh of `c * πₕ(u)` is refused and one on the test mesh assembles.
+        Ws = gridspace(graded(7))
+        @test_throws elsewhere form(
+            Ws, W, (u, v) -> innerₕ(Rₕ(Ws, x -> 1 + x) * πₕ(u), v))
+        @test size(assemble(form(Ws, W, (u, v) -> innerₕ(gc * πₕ(u), v)))) == (11, 7)
+
+        # On a composite, against the leaf its term is routed to.
+        Vc = W × Ws
+        @test_throws elsewhere form(Vc, Vc, (U, V) -> innerₕ(gc * U(2), V(2)))
+        Ac = assemble(form(Vc, Vc, (U, V) -> innerₕ(gc * U(1), V(1))))
+        @test diag(Ac)[1:11] ./ diag(M) ≈ 1 .+ points(mesh(W))
+        @test iszero(Ac[12:end, :])
     end
 
     @testset "Invalid component error" begin
