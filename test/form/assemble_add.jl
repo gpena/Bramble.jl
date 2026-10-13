@@ -127,7 +127,7 @@ using ..TestUtils: _fillnz!, alloc_test, WITH_3D_TESTS
         @test Matrix(A) ≈ Aref
     end
 
-    # The error names the entry.
+    # The error names the term.
     @testset "Bilinear: too-narrow pattern raises" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, true)
         Wₕ = gridspace(Ωₕ)
@@ -136,6 +136,12 @@ using ..TestUtils: _fillnz!, alloc_test, WITH_3D_TESTS
 
         A = allocate_system_matrix(narrow_form)
         @test_throws ArgumentError assemble_add!(A, wide_form)
+
+        # The matrix of one form, taken for another: a mass matrix cannot hold a stiffness
+        # form's off-diagonal entries, so the scaled call raises as well.
+        mass = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
+        stiffness = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        @test_throws ArgumentError assemble_add!(allocate_system_matrix(mass), stiffness, 0.5)
     end
 
     # Correct and deterministic under Parallel() execution.

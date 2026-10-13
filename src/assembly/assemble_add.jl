@@ -33,7 +33,7 @@ Every internal function this threads `α` through (`_replay_segment!`,
 `_scatter_point!`, `_scatter_term!`, ... ) defaults it to `true`, so `assemble!`/`assemble`'s
 own call sites need no changes at all: `weight * true` is the exact algebraic identity
 (unlike `weight * false`, which is not, for `NaN`/`Inf`/signed zero), so this is the same
-optimization `_wrap_scale` (`form/simplifier.jl`) already relies on for `isone`/`iszero`
+optimization `_wrap_scale` (`ast/simplifier.jl`) already relies on for `isone`/`iszero`
 short-circuiting elsewhere in this package.
 
 ## Dirichlet interaction
@@ -63,9 +63,9 @@ parameter) without rebuilding anything.
 accumulate into the same `A` (a mass and a stiffness form, say, with different stencils),
 [`allocate_system_matrix`](@ref) against a form whose AST is their *sum* -- built once,
 for the pattern alone, never assembled itself -- gives a matrix wide enough for every
-piece: `PatternSink` (`bilinear_traversal.jl`) already walks an `OperatorAdd` as the union
-of both sides' entries, exactly what this needs. A missing entry raises an `ArgumentError`
-naming it, exactly as [`assemble!`](@ref)'s own first call does; nothing is silently
+piece: its coordinate walk (`_CoordSink`, `bilinear_traversal.jl`) takes the union of
+every summand's entries, exactly what this needs. A missing entry raises an `ArgumentError`
+naming the term, exactly as [`assemble!`](@ref)'s own first call does; nothing is silently
 dropped or reallocated.
 
 Threads following `trial_space(a)`'s backend [`execution_policy`](@ref), same as

@@ -1286,6 +1286,17 @@ end
     end
     @test bytes[1] == bytes[2]
 
+    # a single region restriction does not add to it: the exception starts at three
+    # restricted summands in one product (gpena/Bramble.jl#727)
+    # (the one accumulator cell is not zero bytes, so this is not a `@test_allocs`)
+    rbytes = map((101, 10001)) do n
+        Wr = gridspace(mesh(domain(interval(0.0, 1.0), :left => x -> x[1] < 0.3), n, false))
+        ar = form(Wr, Wr, (u, v) -> innerₕ(u, v) + innerₕ(u, restrict_to(:left, v)))
+        ur = element(Wr, randn(n))
+        contract(ar, ur, ur)
+    end
+    @test rbytes[1] == rbytes[2] <= 64
+
     # element types promote: a `Float32` argument, and a rectangular form
     a = cases[1]
     u32 = element(W, randn(Float32, ndofs(W)))
