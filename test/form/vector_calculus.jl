@@ -244,11 +244,9 @@ end
     # ∇ₕ ⋅ u in a bilinear form on a composite space.
     @testset "forms: ∇ₕ ⋅ u, composite bilinear" begin
         # Only the backward, centered and cross-weighted families have a *symbolic* `div`
-        # over a trial/test function (src/operators/difference.jl); `∇̃ₕ`/`∇₊ₕ` have
-        # none, so `∇̃ₕ ⋅ u`/`∇₊ₕ ⋅ u` inside a form is out of scope here -- the contraction
-        # still reaches whatever `diṽₕ`/`div₊ₕ` themselves support, symbolic or not. The
-        # staggered `divₕ` builds an `inner₊`-only container; the collocated `divcₕ`/`div̽ₕ`
-        # are plain operator sums that `innerₕ` accepts directly.
+        # over a trial/test function (src/operators/difference.jl); the refusals of the
+        # rest are tested below. The staggered `divₕ` builds an `inner₊`-only container;
+        # the collocated `divcₕ`/`div̽ₕ` are plain operator sums that `innerₕ` accepts.
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false))
         Vₕ = gridspace(Ωₕ)^Val(2)
 
@@ -260,6 +258,48 @@ end
             b1 = assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(G ⋅ u, G ⋅ v)))
             b2 = assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(Dv(u), Dv(v))))
             @test b1 == b2
+        end
+    end
+end
+
+# The seven contractions with no symbolic operator refuse at `form`, naming the operator,
+# instead of a `MethodError` on internal types at `assemble` (#691); the three that have one
+# still assemble against a single component.
+@testset "Symbolic ⋅ and × in a form (#691)" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 5), (false, false))
+    Vₕ = gridspace(Ωₕ)^Val(2)
+
+    @testset "refused, naming the operator" begin
+        # The names come from the function objects, so a look-alike glyph cannot pass.
+        refused = (
+            (u -> ∇ₕ × u, curlₕ), (u -> ∇₊ₕ × u, curl₊ₕ), (u -> ∇cₕ × u, curlcₕ),
+            (u -> ∇̃ₕ × u, curl̃ₕ), (u -> ∇̽ₕ × u, curl̽ₕ), (u -> ∇₊ₕ ⋅ u, div₊ₕ),
+            (u -> ∇̃ₕ ⋅ u, diṽₕ)
+        )
+        for (op, fn) in refused
+            name = string(nameof(fn))
+            build = () -> form(Vₕ, Vₕ, (u, v) -> innerₕ(op(u), v(1)))
+            @test_throws ArgumentError build()
+            err = try
+                build()
+            catch e
+                e
+            end
+            @test err isa ArgumentError && occursin("`$name`", sprint(showerror, err))
+        end
+    end
+
+    # The staggered `divₕ` pairs only with another `divₕ` under `inner₊`.
+    @testset "∇ₕ, ∇cₕ, ∇̽ₕ ⋅ u assemble" begin
+        a1 = assemble(form(Vₕ, Vₕ, (u, v) -> inner₊(∇ₕ ⋅ u, ∇ₕ ⋅ v)))
+        a2 = assemble(form(Vₕ, Vₕ, (u, v) -> inner₊(divₕ(u), divₕ(v))))
+        @test a1 == a2
+        @test count(!iszero, a1) > 0
+        for (G, Dv) in ((∇cₕ, divcₕ), (∇̽ₕ, div̽ₕ))
+            b1 = assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(G ⋅ u, v(1))))
+            b2 = assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(Dv(u), v(1))))
+            @test b1 == b2
+            @test count(!iszero, b1) > 0
         end
     end
 end
