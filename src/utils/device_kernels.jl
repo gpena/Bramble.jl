@@ -1,9 +1,8 @@
 # src/utils/device_kernels.jl: the seam between a Bramble `Backend` and a
 # `KernelAbstractions.jl` device (gpena/Bramble.jl#174). No `KernelAbstractions` dependency
 # here -- only the generic fallback, same idiom as `metal_backend`/`_metal_backend`
-# (`src/utils/backend.jl:403-409`) and `export_vtk`/`_export_vtk`
-# (`src/exporters/vtk_export.jl:41-52`): a helpful error naming the packages to load, not a
-# bare `MethodError`.
+# (`src/utils/backend.jl`) and `export_vtk`/`_export_vtk` (`src/exporters/vtk_export.jl`): a
+# helpful error naming the packages to load, not a bare `MethodError`.
 #
 # Every GPU backend extension (today `BrambleMetalExt` from `v3.5.0`, with a CUDA/ROCm/oneAPI
 # extension to follow) adds its own `ka_device` method for its own array type. That is the whole
@@ -46,10 +45,8 @@ end
 Block the calling thread until every `KernelAbstractions.jl` kernel and device transfer
 already queued against `x`'s device backend has completed.
 
-Through gpena/Bramble.jl#94, every `@kernel` launch in `BrambleKernelAbstractionsExt`
-called this right after launching, unconditionally. gpena/Bramble.jl#302/#306 removed
-that: under [`GpuKernel`](@ref) -- the only [`GpuPolicy`](@ref) there is -- a kernel launch
-now only enqueues onto the device's own command queue and returns, so a chain of operators
+Under [`GpuKernel`](@ref) -- the only [`GpuPolicy`](@ref) there is -- a kernel launch
+only enqueues onto the device's own command queue and returns, so a chain of operators
 (`D₋ₓ` into `D₋ᵧ`, say) pipelines instead of paying a host round-trip after each step.
 Kernels enqueued on the same queue still run in that queue's order, so this is *not* needed
 between chained device calls, only at a genuine host boundary:
