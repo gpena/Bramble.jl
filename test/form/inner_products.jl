@@ -113,11 +113,13 @@ using Bramble:
         # Each builds a LinearProduct wrapping the left operand in the right source node,
         # which is what lets a right-hand side be assembled.
         for (mk, T) in (((x -> x[1] + 1), SourceFunction), (3.5, SourceConstant), (uₕ, SourceVector))
-            for f in (innerₕ, (l, r) -> inner₊(l, D₋ᵧ(r)), inner₊ₓ, inner₊ᵧ, inner₊₂)
+            for f in (innerₕ, (l, r) -> inner₊(l, D₋ᵧ(r)), inner₊ₓ, inner₊ᵧ)
                 p = f(mk, v)
                 @test p isa LinearProduct
                 @test p.left_op isa T
             end
+            # z is not a direction of this 2D test function (#692)
+            @test_throws ArgumentError inner₊₂(mk, v)
 
             # a bare source is the source node it stands for: the direction comes from
             # the difference, markers included, and without one 2D inner₊ has none
@@ -143,9 +145,51 @@ using Bramble:
 
     @testset "Directional spellings" begin
         # inner₊₂ in particular had no test at all, for any left operand.
-        for f in (inner₊ₓ, inner₊ᵧ, inner₊₂)
+        for f in (inner₊ₓ, inner₊ᵧ)
             @test f(id, id) isa BilinearProduct
         end
+        # Building a 3D node needs no 3D mesh, so this runs in the unit group.
+        u3, v3 = TrialFunction{3}(), TestFunction{3}()
+        p3 = inner₊₂(u3, v3)
+        @test p3 isa BilinearProduct
+        @test typeof(p3).parameters[2] === InnerPlus{3}
+        @test typeof(inner₊₂(x -> x[3], v3)).parameters[2] === InnerPlus{3}
+        @test typeof(inner₊(u3, v3, 3)).parameters[2] === InnerPlus{3}
+    end
+
+    @testset "Direction beyond D refused (#692)" begin
+        # These used to build and then throw a BoundsError from the weight lookup at
+        # assembly. They now refuse when the node is built, with the numeric twin's message.
+        u1, v1 = TrialFunction{1}(), TestFunction{1}()
+        Wₕ1 = gridspace(mesh(domain(interval(0.0, 1.0)), 6, false))
+        refusals = (
+            () -> inner₊ᵧ(u1, v1),
+            () -> inner₊(u1, v1, 2),
+            () -> inner₊(u1, v1, :y),
+            () -> inner₊ᵧ(x -> x[1], v1),
+            () -> inner₊ᵧ(2.0, v1),
+            () -> inner₊₂(u, v),
+            () -> inner₊(u, v, 3),
+            () -> inner₊₂(uₕ, v),
+            () -> form(Wₕ1, Wₕ1, (a, b) -> inner₊ᵧ(a, b))
+        )
+        for f in refusals
+            @test_throws ArgumentError f()
+        end
+        msg = try
+            inner₊ᵧ(u1, v1)
+        catch e
+            sprint(showerror, e)
+        end
+        @test occursin("S = (2,)", msg)
+        @test occursin("not a subset of 1:1", msg)
+
+        # the directions that exist still build, and assemble
+        @test typeof(inner₊ₓ(u1, v1)).parameters[2] === InnerPlus{1}
+        @test typeof(inner₊ᵧ(u, v)).parameters[2] === InnerPlus{2}
+        @test typeof(inner₊(u, v, 2)).parameters[2] === InnerPlus{2}
+        @test assemble(form(Wₕ1, Wₕ1, (a, b) -> inner₊(a, b, 1))) ==
+              assemble(form(Wₕ1, Wₕ1, (a, b) -> inner₊ₓ(a, b)))
     end
 
     @testset "Tuple forms" begin

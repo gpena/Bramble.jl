@@ -375,10 +375,15 @@ const _ORIGIN_2D = (0, 0)
         end
 
         @testset "Explicit directions" begin
-            for (f, dim) in ((inner₊ₓ, 1), (inner₊ᵧ, 2), (inner₊₂, 3))
+            for (f, dim) in ((inner₊ₓ, 1), (inner₊ᵧ, 2))
                 @test weight(f(u2, v2)) === InnerPlus{dim}
                 @test weight(f(Mₓ(u2), Mₓ(v2))) === InnerPlus{dim}
             end
+            # z is no direction of 2D leaves (#692); 3D leaves need no mesh
+            @test_throws ArgumentError inner₊₂(u2, v2)
+            u3, v3 = TrialFunction{3}(), TestFunction{3}()
+            @test weight(inner₊₂(u3, v3)) === InnerPlus{3}
+            @test weight(inner₊₂(Mₓ(u3), Mₓ(v3))) === InnerPlus{3}
         end
 
         @testset "Gradient tuple sum" begin

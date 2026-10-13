@@ -122,7 +122,8 @@ function _pc_form_stencils(
     inner₊(D₋ₓ(u), D₋ₓ(v))
     inner₊(∇ₕ(u), ∇ₕ(v))
     inner₊ₓ(u, v)
-    inner₊ᵧ(u, v)
+    # y is a direction only from 2D up: in 1D inner₊ᵧ refuses at the call (#692)
+    dim(Ωₕ) >= 2 && inner₊ᵧ(u, v)
     return nothing
 end
 
