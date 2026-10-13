@@ -9,8 +9,8 @@
 # writes into the solution vector that already exists, so a Crank-Nicolson step allocates
 # nothing at all.
 #
-# This page is generated from `docs/src/examples/transient_inplace.jl` by Literate.jl, and
-# the same file runs under `test/examples/pages.jl`, where the `#src` assertions execute.
+# This script runs under `test/examples/pages.jl`, where the `#src` assertions execute; it is
+# not part of the published manual.
 #
 # ## Problem
 #
@@ -38,6 +38,10 @@ uexact(x, t) = exp(-t) * sinpi(x[1])
 Ω = domain(interval(0.0, 1.0), :left => :left, :right => :right)
 Ωₕ = mesh(Ω, 201)
 Wₕ = gridspace(Ωₕ)
+
+# The mesh is uniform on purpose: the order measured at the end of the page leans on the
+# spatial error cancelling part of the time error, and a different mesh would change that
+# spatial error and with it the measured order.
 
 m = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
 k = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
@@ -76,9 +80,8 @@ fact = sparse_factorize(A; sym = :unsymmetric)
 # ## The source, without a closure per step
 #
 # The source separates as ``f(x,t) = e^{-t} s(x)``, so the spatial part is restricted once and
-# the time factor is a `Ref` the form reads live. Nothing is rebuilt between steps, and no
-# closure is created inside the loop, which is what a per-step allocation would otherwise come
-# from.
+# the time factor is a `Ref` the form reads live. Nothing is rebuilt between steps; the `Ref`
+# keeps the time factor out of the form's type, so the form is built once.
 
 sₕ = Rₕ(Wₕ, x -> (π^2 - 1) * sinpi(x[1]))
 decay = Ref(1.0)
@@ -108,8 +111,8 @@ function step!(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)
 end
 
 # The measurement goes through a function of its own, with the buffers passed in as
-# arguments. `@allocated` written at top level reports the caller's boxing of the globals it
-# reads rather than the routine's own work, and that alone shows 32 bytes here.
+# arguments. `@allocated` written at top level can report the caller's boxing of the globals
+# it reads rather than the routine's own work, so the barrier is the safer habit.
 
 function step_allocation(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)
     step!(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)             # warm up: compile first

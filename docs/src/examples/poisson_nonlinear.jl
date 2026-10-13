@@ -80,9 +80,16 @@ for it in 1:200
 end
 length(picard_steps), picard_steps[[1, 2, 3, end]]
 
-# Bounded rather than pinned to a count: a run that never converges at all is the failure   #src
-# this guards against. The step sizes must actually reach the tolerance the loop breaks on. #src
-@test 0 < length(picard_steps) < 200                                                        #src
+# The ratio of each step to the one before it is the convergence rate of the iteration:
+
+picard_ratios = picard_steps[2:end] ./ picard_steps[1:(length(picard_steps) - 1)]
+extrema(picard_ratios)
+
+# Bounded rather than pinned to a count: a slower rate, or a run that never converges, is   #src
+# the failure this guards against. The step sizes must reach the tolerance the loop breaks  #src
+# on, and shrink by more than a factor of twenty at every step.                             #src
+@test 0 < length(picard_steps) <= 10                                                        #src
+@test all(<(0.05), picard_ratios)                                                           #src
 @test picard_steps[end] < 1e-12                                                             #src
 @test 1.0e-6 < norm₁ₕ(uₙ .- Rₕ(Wₕ, sol)) < 1.0e-2                                            #src
 
@@ -160,10 +167,10 @@ length(newton_residuals), newton_residuals
 # largest costs, but `diffusion_matrix` still rebuilds a *fresh* matrix, values and pattern
 # both, on every call, because `residual` has to stay generic over `T`
 # (`Float64` on a plain call, `ForwardDiff.Dual` while `jacobian!` is probing it) and a matrix
-# allocated for one element type cannot hold the other. Measured behind a function barrier: a
-# plain `residual(u)` call costs 17,536 B (rebuilding `A` once, at `T = Float64`); a full Newton
-# step costs 112,896 B (that, plus rebuilding it again at `T = Dual` for every colour
-# `jacobian!`'s sparse sweep needs).
+# allocated for one element type cannot hold the other. A plain `residual(u)` call rebuilds
+# `A` once, at `T = Float64`; a full Newton step rebuilds it again at `T = Dual` for every
+# colour `jacobian!`'s sparse sweep needs. The cost of a call is measured further down, next
+# to its cached counterpart.
 #
 # Quadratic convergence means the residual's correct digits roughly *double* each step, against
 # Picard's roughly constant gain of one, and it shows directly in how fast that list reaches
@@ -232,12 +239,27 @@ newton_residuals_cached, maximum(abs.(u_cached .- u))
 
 # Same convergence, same answer, and only `residual_cached` and `diffusion_matrix_cached` (the
 # first call at each of `T = Float64` and `T = Dual` still pays to build and to
-# [`allocate_system_matrix`](@ref)) differ from `residual`/`diffusion_matrix` above. Measured the
-# same way, behind the same function barrier: a plain `residual_cached(u)` call, once both types
-# have been seen, costs 2,880 B against `residual`'s 17,536 B; a full Newton step costs 74,016 B
-# against 112,896 B. What is left is not zero: `cache`'s value type is necessarily `Any`, since
-# the cached `(a, refill!, A)` triple's own concrete type differs across `T`, so fetching it back
-# out still pays a small, fixed dictionary/dynamic-dispatch cost, but that cost does not grow
+# [`allocate_system_matrix`](@ref)) differ from `residual`/`diffusion_matrix` above. The bytes
+# one call allocates are measured behind a function barrier, with the vector passed in as an
+# argument and a first call to compile and to fill the cache, so that the number is the
+# routine's own work. Once both element types have been seen:
+
+function residual_bytes(f, u)
+    f(u)
+    return @allocated f(u)
+end
+
+bytes_uncached = residual_bytes(residual, u)
+bytes_cached = residual_bytes(residual_cached, u)
+bytes_cached / bytes_uncached
+
+# The cached residual allocates under half of what the uncached one does.                   #src
+@test bytes_cached < bytes_uncached / 2                                                     #src
+
+# That ratio is what `residual_cached` buys over `residual`. What is left is not zero:
+# `cache`'s value type is necessarily `Any`, since the cached `(a, refill!, A)` triple's own
+# concrete type differs across `T`, so fetching it back out still pays a small, fixed
+# dictionary/dynamic-dispatch cost, but that cost does not grow
 # with the mesh, unlike the pattern rebuild it replaces (see
 # [`type_cached_assemble!`](@ref)'s own docstring and `test/form/type_cached_assemble.jl` for the
 # same comparison run at a mesh 100 times larger).
@@ -508,7 +530,7 @@ convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), 
 # `jacobian_pattern` flattens whatever `Mₕ(U)` returns, one node in 1D or a `D`-tuple in
 # 2D/3D, the same way before taking its reach, so nothing about `Ac`/`grad` above needs to
 # change to swap it in. Not re-run a second time here only to save the doc build the cost of
-# solving the same nine problems twice for an answer already shown identical above.
+# solving the same sixteen problems twice for an answer already shown identical above.
 #
 # ## Where to go next
 #
