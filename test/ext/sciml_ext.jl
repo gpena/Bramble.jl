@@ -25,7 +25,7 @@ using LightXML: parse_file, root, find_element, child_elements, attribute, free
 # "closures are not supported on this platform" -- two errors in every Weekly macOS leg
 # since v3.4.0, from a choice that depends on which packages happen to be loaded.
 const _NEWTON = NewtonRaphson(; autodiff = AutoForwardDiff())
-using LinearSolve: KrylovJL_GMRES
+using LinearSolve: KrylovJL_GMRES, LUFactorization
 
 # BrambleSciMLExt: the `ODEFunction`/`ODEProblem`/`LinearProblem` wrapping of a
 # `Semidiscretization`. The semidiscretisation itself, and its order of convergence, are
@@ -284,6 +284,49 @@ end
         )
         As, Fs = assemble(a, l; dirichlet = :boundary => x -> 1.0, symmetrize = true)
         @test parent(ws) ≈ As \ Fs
+    end
+
+    # A preconditioner is only read by a Krylov method: a direct method, or the default
+    # `solver = nothing`, would drop it silently, so `solve` refuses before assembling.
+    @testset "solve: preconditioner needs Krylov" begin
+        bc = :boundary => x -> 0.0
+        expected = parent(solve(a, l; dirichlet = bc))
+
+        # The `:amg` hierarchy is never built: the refusal comes first (AlgebraicMultigrid is
+        # not loaded in this file), so reaching `ArgumentError` rather than the "requires
+        # AlgebraicMultigrid.jl" error shows the check runs before the builder.
+        e = try
+            solve(a, l; dirichlet = bc, preconditioner = :amg)
+            nothing
+        catch err
+            err
+        end
+        @test e isa ArgumentError
+        @test occursin("preconditioner :amg", sprint(showerror, e))
+        @test occursin("Krylov", sprint(showerror, e))
+        @test occursin("default direct solver", sprint(showerror, e))
+
+        e = try
+            solve(a, l; dirichlet = bc, solver = LUFactorization(), preconditioner = :ilu0)
+            nothing
+        catch err
+            err
+        end
+        @test e isa ArgumentError
+        @test occursin("preconditioner :ilu0", sprint(showerror, e))
+        @test occursin("LUFactorization", sprint(showerror, e))
+
+        # An already-built object is refused the same way.
+        @test_throws ArgumentError solve(a, l; dirichlet = bc, preconditioner = Identity)
+
+        # `nothing` stays valid with either kind of solver, and a Krylov method takes one.
+        @test parent(solve(a, l; dirichlet = bc, preconditioner = nothing)) ≈ expected
+        @test parent(
+            solve(a, l; dirichlet = bc, solver = LUFactorization(), preconditioner = nothing)
+        ) ≈ expected
+        @test parent(
+            solve(a, l; dirichlet = bc, solver = KrylovJL_GMRES(), preconditioner = Identity)
+        )≈expected rtol=1e-6
     end
 
     # nonlinear_problem carries the residual and jac_prototype, and copies u0.

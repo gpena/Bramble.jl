@@ -147,9 +147,17 @@ end
         uₕ_none = solve(a, l; dirichlet = bcs, symmetrize = true, solver = KrylovJL_CG())
         @test parent(uₕ_none)≈expected atol=1e-6 rtol=1e-6
 
-        @test_throws ArgumentError solve(
-            a, l; dirichlet = bcs, symmetrize = true, preconditioner = :not_amg
-        )
+        e = try
+            solve(
+                a, l; dirichlet = bcs, symmetrize = true, solver = KrylovJL_CG(),
+                preconditioner = :not_amg
+            )
+            nothing
+        catch err
+            err
+        end
+        @test e isa ArgumentError
+        @test occursin("Unknown preconditioner: not_amg", sprint(showerror, e))
     end
 
     # A `csr_backend()` form assembles a `SparseMatrixCSR`, which AlgebraicMultigrid does not
