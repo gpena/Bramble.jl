@@ -418,12 +418,14 @@ precompile(_type_holds_restriction, (Any,))
 # A summed operand whose summands' constant scales differ in type (`2.0 * Rₕ(:l, v) +
 # 3 * Rₕ(:r, v)`) has a stencil whose weights differ in type from summand to summand, and
 # the walk boxes it at every point even with two restricted summands. Those scales, the
-# outermost of each summand only, are converted to their `promote_type`, which the entries
-# are promoted to anyway. A `Ref` scale is read live, so it is left as it is and only its
-# value type joins the promotion. Only a product holding a restriction gets here, and an
-# operand whose scales agree is returned untouched, as is one whose common type is not the
-# spaces' element type `E` the walk computes in: on a Float32 mesh, turning `3` into `3.0`
-# would move the values and add a third weight type, not remove one. `simplify_ast` keeps
+# outermost of each summand only, are converted to the spaces' element type `E` the walk
+# computes in, when their common `promote_type` promotes to `E` (`Int` with `Rational` on a
+# `Float64` mesh): the entries are promoted to `E` anyway, and `Int * Float64` and
+# `Rational * Float64` convert the same way. A `Ref` scale is read live, so it is left as it
+# is and only its value type joins the promotion. Only a product holding a restriction gets
+# here, and an operand whose scales agree is returned untouched, as is one whose common type
+# does not promote to `E`: on a Float32 mesh, a `Float64` scale would move the values and
+# add a third weight type, not remove one. `simplify_ast` keeps
 # the literals (its folding reads them).
 _uniform_scales(op, ::Type) = op
 # Scales still of several types after that keep the walk boxing whatever the split does, and
@@ -431,7 +433,7 @@ _uniform_scales(op, ::Type) = op
 @inline _mixed_scales(op) = _scales_differ(op, _scale_type(op))
 function _uniform_scales(op::OperatorAdd, ::Type{E}) where {E}
     T = _scale_type(op)
-    return T === E && _scales_differ(op, T) ? _promote_scales(op, T) : op
+    return promote_type(T, E) === E && _scales_differ(op, T) ? _promote_scales(op, E) : op
 end
 
 @inline _scale_type(op::OperatorScale) = _scalar_type(op.scalar)

@@ -786,6 +786,22 @@ using Bramble:
             W32, W32, ast, Bramble._AssemblyCache{2}(ast))
         @test Matrix(assemble(a)) == Matrix(assemble(unsplit))
 
+        # Scales of different types whose common type is not `E` but promotes to it (`Int`
+        # with `Rational` on a Float64 mesh) are converted to `E` too, as `Int * Float64`
+        # and `Rational * Float64` convert the same way: no boxing (15024 B before), and
+        # the matrix is the unsplit one's, bit for bit.
+        f = (u, v) -> innerₕ(u, 2 * R(:l, v) + (1 // 2) * R(:r, v) + R(:b, v))
+        a = form(W, W, f)
+        A = assemble(a)
+        ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+            resolve_ast(f(Bramble.trial_function(W), Bramble.test_function(W))), W, W))
+        unsplit = Bramble.BilinearForm{2, typeof(W), typeof(W), typeof(ast)}(
+            W, W, ast, Bramble._AssemblyCache{2}(ast))
+        U = assemble(unsplit)
+        @test _loop_bytes(A, a) == 0
+        @test Matrix(A) == Matrix(U)
+        @test nnz(A) == nnz(U)
+
         # Two restricted summands share a product only when their types agree: a scaled
         # and an unscaled one together boxed (12816 B for `2.0R + R + R`, 11984 B for the
         # last pair below), and whether they met depended on the order they were written.

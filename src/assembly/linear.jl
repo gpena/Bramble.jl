@@ -416,9 +416,9 @@ end
 
 # A product's test side holding three or more restricted summands is split as a bilinear
 # product's is (`_split_restricted_products`, bilinear.jl, gpena/Bramble.jl#727): grouped
-# by type, at most two a piece, its scales promoted to `E` when they share that type, every
-# piece one `LinearProduct` with the same source. Its source is left as it is: a restricted
-# source keeps one stencil type once `_typed_restrictions` (above) has typed it.
+# by type, at most two a piece, its scales promoted to `E` when their common type promotes
+# to it, every piece one `LinearProduct` with the same source. Its source is left as it is:
+# a restricted source keeps one stencil type once `_typed_restrictions` (above) has typed it.
 function _split_restricted_products(op::LinearProduct{D, W}, ::Type{E}) where {D, W, E}
     _holds_restriction(op.right_op) || return op
     r = _uniform_scales(op.right_op, E)
@@ -1540,8 +1540,10 @@ end
 
 Refill `b` with the assembled `form` across threads and return it, regardless of
 `test_space(form)`'s backend execution policy. Unlike [`assemble!`](@ref), does not
-apply Dirichlet conditions. On a device test space the threaded sweep runs on a host mirror
-into a host buffer, uploaded to `b` in one `copyto!`, as in [`assemble!`](@ref).
+apply Dirichlet conditions. A stencil reaching neighbours is swept by colour, so the entries
+can differ from the serial sweep in the last bits; repeated threaded calls agree exactly.
+On a device test space the threaded sweep runs on a host
+mirror into a host buffer, uploaded to `b` in one `copyto!`, as in [`assemble!`](@ref).
 """
 function assemble_parallel!(b::AbstractVector, form::LinearForm, ast = nothing)
     resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)

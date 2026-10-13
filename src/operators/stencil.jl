@@ -493,8 +493,8 @@ function _vectorial_expr(
     # `Val(dim(_op_mesh(arg)))` is read off the mesh *type*, so it is a literal by the time
     # `_vectorial_apply` dispatches on it; no `Val` here is ever built from a runtime value
     # (gpena/Bramble.jl#146).
-    entry = :(@inline $(alias_name)(arg) = _vectorial_apply(
-        $(base_op_name), arg, Val(dim(_op_mesh(arg)))
+    entry = :(@inline $(alias_name)(arg) = $(_vectorial_apply)(
+        $(base_op_name), arg, Val($(dim)($(_op_mesh)(arg)))
     ))
 
     documented_entry = Expr(
@@ -614,11 +614,11 @@ function _dimensional_expr(
     grid function whose components are those results.
     """
 
-    int_method = :(@inline $(alias_name)(arg::OperatorArgument, d::Int) = _dispatch_dim(
+    int_method = :(@inline $(alias_name)(arg::$(OperatorArgument), d::Int) = $(_dispatch_dim)(
         $(base_op_name), arg, d
     ))
-    sym_method = :(@inline $(alias_name)(arg::OperatorArgument, d::Symbol) = _dispatch_dim(
-        $(base_op_name), arg, _dim_index(d)
+    sym_method = :(@inline $(alias_name)(arg::$(OperatorArgument), d::Symbol) = $(_dispatch_dim)(
+        $(base_op_name), arg, $(_dim_index)(d)
     ))
 
     documented_int = Expr(
@@ -629,7 +629,7 @@ function _dimensional_expr(
     if alias_name !== base_op_name
         pushfirst!(
             exprs,
-            :(@inline $(alias_name)(arg::OperatorArgument, dim_val::Val) = $(base_op_name)(
+            :(@inline $(alias_name)(arg::$(OperatorArgument), dim_val::Val) = $(base_op_name)(
                 arg, dim_val
             ))
         )
@@ -675,18 +675,18 @@ function _grid_function_forms_expr(
     extra = Any[extra_args...]
 
     scalar = :(@inline $(bang_name)(
-        vₕ::VectorElement{<:ScalarGridSpace},
-        uₕ::VectorElement{<:ScalarGridSpace},
+        vₕ::$(VectorElement){<:$(ScalarGridSpace)},
+        uₕ::$(VectorElement){<:$(ScalarGridSpace)},
         dim_val::Val
     ) = $(apply_fn)(vₕ, uₕ, $(extra...), $(dir_instance), dim_val))
 
     composite = :(@inline $(bang_name)(
-        vₕ::VectorElement{<:CompositeGridSpace},
-        uₕ::VectorElement{<:CompositeGridSpace},
+        vₕ::$(VectorElement){<:$(CompositeGridSpace)},
+        uₕ::$(VectorElement){<:$(CompositeGridSpace)},
         dim_val::Val
     ) = $(apply_fn)(vₕ, uₕ, $(extra...), $(dir_instance), dim_val))
 
-    allocating = :(@inline $(base_name)(uₕ::VectorElement, dim_val::Val) = $(bang_name)(similar(uₕ), uₕ, dim_val))
+    allocating = :(@inline $(base_name)(uₕ::$(VectorElement), dim_val::Val) = $(bang_name)(similar(uₕ), uₕ, dim_val))
 
     documented_scalar = if isempty(docstring)
         scalar
