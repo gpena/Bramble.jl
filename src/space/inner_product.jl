@@ -120,6 +120,10 @@ the component-wise products:
 which is the only meaning it can have, so there is nothing ambiguous about accepting one.
 The two grid functions must have the same number of components.
 
+`uₕ` and `vₕ` must live on the same mesh, the same object or one with the same points (two
+`gridspace` calls over one mesh qualify); otherwise an `ArgumentError` is thrown, since the
+weights are read from `space(uₕ)`. The same holds for every inner product in this file.
+
 `markers` restricts the sum to the union of the labelled regions' points (a masked sum of
 the same cell measures, not a surface integral; see the note above `_combined_mask`).
 
@@ -215,7 +219,8 @@ general surface -- the weight stops factorising where the surface is cut at an i
 transverse index, and needs the explicit one-sided face sum -- and is refused rather than
 silently given the factorised weight. So is a face set holding both faces of an axis with two
 points or fewer, since every grid point lies on it. A `DimensionMismatch` is thrown when the
-storage of `uₕ` or `vₕ` does not hold one value per point of the mesh of `space(uₕ)`.
+storage of `uₕ` or `vₕ` does not hold one value per point of the mesh of `space(uₕ)`, and an
+`ArgumentError` when the two live on different meshes, as for [`innerₕ`](@ref).
 
 The symbolic twin, for use inside a form, is `inner_Γ(g, v; markers = …)`
 (`operators/inner.jl`). It takes its regions as a keyword, to sit beside `innerₕ`; this
@@ -244,6 +249,7 @@ function inner_Γ(
         vₕ::VectorElement{<:ScalarGridSpace{D}},
         labels::Vararg{Symbol, N}
 ) where {D, N}
+    _check_inner_meshes(uₕ, vₕ)
     Ωₕ = mesh(space(uₕ))
     mask = _surface_mask(Ωₕ, labels)
     _no_faces(mask) && _throw_no_surface_labels()
@@ -830,11 +836,36 @@ See also: [`inner₊`](@ref), [`weights`](@ref), [`SeparableWeights`](@ref).
         ::Val{S};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {S, N}
+    _check_inner_meshes(uₕ, vₕ)
     w = weights(space(uₕ), Val(S))
     policy = execution_policy(space(uₕ))
     N == 0 && return _dot(policy, uₕ.data, w, vₕ.data)
     mask = _combined_marked_indices(mesh(space(uₕ)), markers)
     return _dot_masked(policy, uₕ.data, w, vₕ.data, mask)
+end
+
+# Every numeric inner product of two scalar grid functions reaches the one above, so the
+# mesh is checked there: once per call, once per leaf of a composite and once per entry of
+# a tuple. The weights are those of `space(uₕ)`, so a `vₕ` on another mesh of the same
+# size would be read at the wrong points (gpena/Bramble.jl#701). The rule is `form`'s
+# (`_same_mesh`): two `gridspace` calls over one mesh pass, unlike a broadcast (#181).
+@inline function _check_inner_meshes(uₕ::VectorElement, vₕ::VectorElement)
+    Ωu, Ωv = mesh(space(uₕ)), mesh(space(vₕ))
+    _same_mesh(Ωu, Ωv) || _throw_inner_mesh_mismatch(Ωu, Ωv)
+    return nothing
+end
+
+@noinline function _throw_inner_mesh_mismatch(Ωu, Ωv)
+    nu, nv = npoints(Ωu, Tuple), npoints(Ωv, Tuple)
+    # Equal counts would print two equal tuples, which show no reason for the refusal.
+    which = nu == nv ? "another mesh of the same shape, $(nu) points" :
+            "meshes of $(nu) and $(nv) points"
+    throw(
+        ArgumentError(
+        "an inner product needs both grid functions on the same mesh; they live on " *
+        "$(which).",
+    ),
+    )
 end
 
 @inline function _directional_inner_plus(

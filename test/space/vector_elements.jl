@@ -911,7 +911,7 @@ end
 
         # innerₕ sums leaf by leaf: 3 leaves of constant 1, 2, 3 against all-ones, over a
         # mesh whose cell measures sum to 1 per leaf, gives 1+2+3 = 6 exactly. Runs on the
-        # heterogeneous `Wn`, since innerₕ has no shared-mesh requirement of its own.
+        # heterogeneous `Wn`: innerₕ asks only that each pair of leaves share a mesh (#701).
         u_const = element(Wn)
         v_ones = element(Wn)
         Rₕ!(u_const, (x -> 1.0, x -> 2.0, x -> 3.0))
