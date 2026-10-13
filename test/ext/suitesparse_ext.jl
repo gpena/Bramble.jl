@@ -200,6 +200,71 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         @test isapprox(suitesparse_factorize(A_s) \ F_s, Matrix(A_s) \ F_s; atol = 1.0e-12)
     end
 
+    # Helmholtz with absorption: complex symmetric, not Hermitian, positive real diagonal.
+    # CHOLMOD refuses such a matrix outright, so `:auto` must not offer it as a Cholesky
+    # candidate (#717). Oracle: dense `\`; the refactor refills the same LU.
+    @testset "sym = :auto: complex non-Hermitian" begin
+        n = 9
+        h = diff(range(0.0, 1.0; length = n + 2) .^ 1.5)
+        K = spdiagm(-1 => -1 ./ h[2:n], 0 => 1 ./ h[1:n] .+ 1 ./ h[2:(n + 1)], 1 => -1 ./ h[2:n])
+        M = sparse(1.0I, n, n)
+        A = complex.(K - 0.5M) + 0.4im * M
+        @test issymmetric(A) && !ishermitian(A)
+        @test all(x -> real(x) > 0, diag(A))
+        b = ComplexF64.(1:n) .+ 0.5im
+        u_ref = Matrix(A) \ b
+
+        fact = suitesparse_factorize(A)
+        @test fact.sym === :unsymmetric
+        @test isapprox(fact \ b, u_ref; rtol = 1.0e-12)
+        @test isapprox(sparse_factorize(A; solver = :suitesparse) \ b, u_ref; rtol = 1.0e-12)
+        @test isapprox(pde_solve(A, b; solver = :suitesparse), u_ref; rtol = 1.0e-12)
+
+        A2 = A + 0.3im * M
+        @test suitesparse_refactor!(fact, A2) === fact
+        @test isapprox(fact \ b, Matrix(A2) \ b; rtol = 1.0e-12)
+
+        # A real symmetric positive definite matrix keeps the Cholesky route
+        Ar = K + M
+        @test suitesparse_factorize(Ar).sym === :spd
+        @test isapprox(suitesparse_factorize(Ar) \ real(b), Matrix(Ar) \ real(b); rtol = 1.0e-12)
+    end
+
+    # Complex Hermitian with non-real off-diagonals: `Symmetric(A)` is not Hermitian for a
+    # complex matrix, so CHOLMOD would refuse it; the Cholesky route wraps it in `Hermitian`.
+    @testset "sym = :auto: complex Hermitian" begin
+        n = 9
+        h = diff(range(0.0, 1.0; length = n + 2) .^ 1.5)
+        K = spdiagm(-1 => -1 ./ h[2:n], 0 => 1 ./ h[1:n] .+ 1 ./ h[2:(n + 1)], 1 => -1 ./ h[2:n])
+        C = spdiagm(-1 => fill(-0.7im, n - 1), 1 => fill(0.7im, n - 1))
+        A = complex.(K) + C + sparse(1.0I, n, n)
+        @test ishermitian(A) && !issymmetric(A)
+        @test isposdef(Matrix(A))
+        b = ComplexF64.(1:n) .+ 0.5im
+
+        fact = suitesparse_factorize(A)
+        @test fact.sym === :spd
+        @test isapprox(fact \ b, Matrix(A) \ b; rtol = 1.0e-12)
+        @test isapprox(pde_solve(A, b; solver = :suitesparse), Matrix(A) \ b; rtol = 1.0e-12)
+
+        # CHOLMOD refactor onto another Hermitian positive definite matrix
+        A2 = A + 2.0 * sparse(1.0I, n, n) + 0.3 * C
+        @test suitesparse_refactor!(fact, A2) === fact
+        @test isapprox(fact \ b, Matrix(A2) \ b; rtol = 1.0e-12)
+
+        # A complex non-Hermitian matrix never reaches CHOLMOD, which would read one triangle
+        Cs = sparse(ComplexF64[2 1im; 1im 2])
+        @test_throws ArgumentError suitesparse_factorize(Cs; sym = :spd)
+        @test_throws ArgumentError suitesparse_refactor!(fact, complex.(K) + 0.4im * I)
+
+        # Hermitian indefinite: the Cholesky attempt fails and LU solves it
+        B = sparse(ComplexF64[1 3im; -3im 1])
+        @test minimum(eigvals(Hermitian(Matrix(B)))) < 0
+        fB = suitesparse_factorize(B)
+        @test fB.sym === :symmetric
+        @test isapprox(fB \ ComplexF64[1, 2], Matrix(B) \ ComplexF64[1, 2]; rtol = 1.0e-12)
+    end
+
     # A dense-backed form assembles into a `Matrix`; `refactor!` converts it as the factorize
     # and solve form methods do. Oracle: the refilled factorization solves to the dense `\`
     # answer of the matrix assembled with the new coefficient, which differs from the first

@@ -23,7 +23,7 @@ using Bramble:
                innerₕ,
                boundary_symbols
 using SuiteSparse: SuiteSparse, CHOLMOD, UMFPACK
-using LinearAlgebra: LinearAlgebra, Factorization, ldiv!, issymmetric, Symmetric, cholesky, cholesky!, lu,
+using LinearAlgebra: LinearAlgebra, Factorization, ldiv!, ishermitian, Hermitian, cholesky, cholesky!, lu,
                      lu!, diag, issuccess
 using SparseArrays: SparseArrays, SparseMatrixCSC
 using PrecompileTools: @setup_workload, @compile_workload
@@ -39,7 +39,10 @@ Base.size(fact::ConcreteSuiteSparseFactorization, d::Integer) = d <= 2 ? fact.di
 
 function _suitesparse_sym_flag(A::AbstractMatrix, sym)
     if sym === :auto
-        if issymmetric(A)
+        # `ishermitian`, not `issymmetric`: CHOLMOD rejects a complex symmetric, non-Hermitian
+        # matrix (Helmholtz with absorption) in `symbolic`, before `issuccess` can fall back
+        # to LU. The two tests agree on a real matrix.
+        if ishermitian(A)
             d = diag(A)
             return (!isempty(d) && all(x -> real(x) > 0, d)) ? :spd : :symmetric
         else
@@ -60,6 +63,15 @@ function _suitesparse_sym_flag(A::AbstractMatrix, sym)
     end
 end
 
+# CHOLMOD reads one triangle. A real matrix keeps the old `Symmetric` behaviour; a complex
+# one must be Hermitian, or the other triangle's conjugate would be factored silently.
+_cholmod_input(A::SparseMatrixCSC{<:Real}) = Hermitian(A)
+function _cholmod_input(A::SparseMatrixCSC)
+    ishermitian(A) ||
+        throw(ArgumentError("CHOLMOD needs a Hermitian complex matrix; use sym = :unsymmetric"))
+    return Hermitian(A)
+end
+
 function Bramble._suitesparse_factorize(A::SparseMatrixCSC; sym = :auto, kwargs...)
     m, n = size(A)
     m == n || throw(DimensionMismatch("Matrix must be square for sparse direct solve, got $(m)×$(n)"))
@@ -69,7 +81,7 @@ function Bramble._suitesparse_factorize(A::SparseMatrixCSC; sym = :auto, kwargs.
     fact_obj = if sym_flag === :spd && sym === :auto
         # A symmetric matrix with a positive diagonal is only a Cholesky candidate: CHOLMOD
         # decides, and a failure falls back to UMFPACK, which reports a singular matrix.
-        c = cholesky(Symmetric(A); kwargs..., check = false)
+        c = cholesky(Hermitian(A); kwargs..., check = false)
         if issuccess(c)
             c
         else
@@ -77,7 +89,7 @@ function Bramble._suitesparse_factorize(A::SparseMatrixCSC; sym = :auto, kwargs.
             lu(A; kwargs...)
         end
     elseif sym_flag === :spd
-        cholesky(Symmetric(A); kwargs...)
+        cholesky(_cholmod_input(A); kwargs...)
     else
         lu(A; kwargs...)
     end
@@ -151,7 +163,7 @@ function Bramble._suitesparse_refactor!(fact::ConcreteSuiteSparseFactorization, 
     )
 
     if fact.fact isa CHOLMOD.Factor
-        cholesky!(fact.fact, Symmetric(A))
+        cholesky!(fact.fact, _cholmod_input(A))
     elseif fact.fact isa UMFPACK.UmfpackLU
         lu!(fact.fact, A)
     else
