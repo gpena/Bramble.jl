@@ -556,10 +556,9 @@ end
 # instead splits the single line itself (`1:n₁`) into bands via `_band_range`, with the
 # trailing product `c` fixed at `one(T)`.
 #
-# The masked methods split the mask's 64-bit words into bands exactly as
-# `_threaded_dot_masked` (`src/utils/linear_algebra.jl`) does, and read `w` through a
-# `CartesianIndex` (`w[cart[i]]`), never the linear `Int` `getindex` this specialization
-# exists to avoid.
+# The masked reduction is `_threaded_dot_masked` (`src/utils/linear_algebra.jl`) itself: its
+# band reads `w` through a `CartesianIndex` (`w[cart[i]]`), never the linear `Int` `getindex`
+# this specialization exists to avoid.
 @noinline function _threaded_dot(
         u::AbstractVector, w::SeparableWeights{D, <:Any, VT}, v::AbstractVector
 ) where {D, VT}
@@ -627,82 +626,17 @@ end
     return s
 end
 
-@noinline function _threaded_dot_masked(
-        u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector, mask::BitVector
-) where {D}
-    n = length(w)
-    (length(u) == n == length(v) == length(mask)) ||
-        _throw_dot_dim_error(length(u), n, length(v), length(mask))
-    T = promote_type(eltype(u), eltype(w), eltype(v))
-    cart = CartesianIndices(w.dims)
-    nwords = length(mask.chunks)
-    nchunks = Threads.nthreads()
-    partials = zeros(T, nchunks)
-    ax = 1:nwords
-    _static_or_serial(_static_partials!, _serial_partials!, partials, nchunks,
-        _separable_masked_band, u, w, v, cart, mask, ax, nchunks)
-    return sum(partials)
+# The masked `SeparableWeights` reduction is `_threaded_dot_masked` itself
+# (`src/utils/linear_algebra.jl`), whose band reads `w` through `_masked_cart`. The term is
+# the one `_separable_masked_words_band` in `BramblePolyesterExt` keeps a copy of, so a change
+# here must be made there too (gpena/Bramble.jl#473).
+@inline _masked_cart(w::SeparableWeights) = CartesianIndices(w.dims)
+
+@inline function _masked_term(s, u, w, v, i, ::Type{T}, cart::CartesianIndices) where {T}
+    return muladd(conj(T(u[i])) * T(v[i]), T(w[cart[i]]), s)
 end
 
-@noinline function _threaded_dot_masked(
-        u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector, mask::MarkedIndicesUnion
-) where {D}
-    n = length(w)
-    (length(u) == n == length(v) == mask.len) ||
-        _throw_dot_dim_error(length(u), n, length(v), mask.len)
-    T = promote_type(eltype(u), eltype(w), eltype(v))
-    cart = CartesianIndices(w.dims)
-    nwords = length(mask.chunks[1])
-    nchunks = Threads.nthreads()
-    partials = zeros(T, nchunks)
-    ax = 1:nwords
-    _static_or_serial(_static_partials!, _serial_partials!, partials, nchunks,
-        _separable_masked_band, u, w, v, cart, mask, ax, nchunks)
-    return sum(partials)
-end
-
-# The per-band partial sums of the two masked `SeparableWeights` `_threaded_dot_masked`
-# methods above, shared by their threaded and serial loops as the dense ones are.
-# `BramblePolyesterExt` keeps a copy over the mask's words (`_separable_masked_words_band`),
-# so a change here must be made there too (gpena/Bramble.jl#473).
-@noinline function _separable_masked_band(
-        u, w::SeparableWeights, v, cart, mask::BitVector, ax, nchunks::Int, b::Int
-)
-    T = promote_type(eltype(u), eltype(w), eltype(v))
-    chunks = mask.chunks
-    rng = _band_range(ax, nchunks, b)
-    s = zero(T)
-    @inbounds for widx in rng
-        word = chunks[widx]
-        base = (widx - 1) * 64
-        while word != zero(UInt64)
-            i = base + trailing_zeros(word) + 1
-            s = muladd(conj(T(u[i])) * T(v[i]), T(w[cart[i]]), s)
-            word &= word - 1
-        end
-    end
-    return s
-end
-
-@noinline function _separable_masked_band(
-        u, w::SeparableWeights, v, cart, mask::MarkedIndicesUnion, ax, nchunks::Int, b::Int
-)
-    T = promote_type(eltype(u), eltype(w), eltype(v))
-    rng = _band_range(ax, nchunks, b)
-    s = zero(T)
-    @inbounds for widx in rng
-        word = _reduce_or_chunk(mask.chunks, widx)
-        base = (widx - 1) * 64
-        while word != zero(UInt64)
-            i = base + trailing_zeros(word) + 1
-            s = muladd(conj(T(u[i])) * T(v[i]), T(w[cart[i]]), s)
-            word &= word - 1
-        end
-    end
-    return s
-end
-
-# Device counterparts of the three specializations above (gpena/Bramble.jl#94, #174).
+# Device counterparts of the specializations above (gpena/Bramble.jl#94, #174).
 # A device-backed space's `SeparableWeights.factors` are themselves device arrays, so the
 # `CartesianIndices`/scalar-`getindex` walk above would scalar-index the device once per
 # grid point -- not merely slow, an error under `GPUArrays`' default scalar-indexing guard.

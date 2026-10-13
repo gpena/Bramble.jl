@@ -641,6 +641,28 @@ end
 
 @inline _reduce_or_chunk(chunks::NTuple{N, Vector{UInt64}}, i::Int) where {N} = reduce(|, ntuple(k -> chunks[k][i], Val(N)))
 
+# Word accessors for the masked dot bands (`_dot_masked_band`), the same three for both mask
+# types. `_mask_word(mask, w)` returns the `w`-th 64-bit word of the mask: for a
+# `MarkedIndicesUnion`, the OR of every marker's. `_mask_nwords(mask)` counts the words, and
+# `_mask_length(mask)` gives the length of the index range the mask selects from.
+#
+# A tuple of word vectors counts as a mask too, whatever its array type: `BramblePolyesterExt`
+# hands the words across `@batch` as `PtrArray`s. The OR is unrolled by recursion over the
+# tuple, since `reduce` over an `ntuple` ran the masked `innerₕ` about 1.2x slower once the
+# words were `PtrArray`s (gpena/Bramble.jl#473).
+@inline _mask_word(chunks::Tuple{Any}, w::Int) = @inbounds chunks[1][w]
+@inline function _mask_word(chunks::Tuple, w::Int)
+    return @inbounds chunks[1][w] | _mask_word(Base.tail(chunks), w)
+end
+@inline _mask_word(mask::BitVector, w::Int) = @inbounds mask.chunks[w]
+@inline _mask_word(mask::MarkedIndicesUnion, w::Int) = _mask_word(mask.chunks, w)
+
+@inline _mask_nwords(mask::BitVector) = length(mask.chunks)
+@inline _mask_nwords(mask::MarkedIndicesUnion) = length(mask.chunks[1])
+
+@inline _mask_length(mask::BitVector) = length(mask)
+@inline _mask_length(mask::MarkedIndicesUnion) = mask.len
+
 @inline function Base.iterate(
         m::MarkedIndicesUnion{N}, (chunk_idx, rest) = (0, zero(UInt64))
 ) where {N}
@@ -658,6 +680,19 @@ Base.IteratorSize(::Type{<:MarkedIndicesUnion}) = Base.SizeUnknown()
 Base.eltype(::Type{<:MarkedIndicesUnion}) = Int
 
 # Discrete space inner product kernels
+
+# One term of the weighted trilinear sum, `s + conj(u[i]) * w[i] * v[i]` in the common
+# element type `T`: the line every `_dot`, `_dot_masked` and band below accumulates with.
+@inline function _dot_term(s, u, w, v, i, ::Type{T}) where {T}
+    return muladd(conj(T(u[i])) * T(w[i]), T(v[i]), s)
+end
+
+# The masked bands read the weight through `_masked_cart(w)`: `nothing` for a vector, which
+# `_masked_term` reads as `_dot_term` does, and the `CartesianIndices` of a
+# `SeparableWeights` (`src/space/inner_product.jl`), which `w` is read through instead of its
+# linear `getindex`. One band and one driver then serve both.
+@inline _masked_cart(::AbstractVector) = nothing
+@inline _masked_term(s, u, w, v, i, ::Type{T}, ::Nothing) where {T} = _dot_term(s, u, w, v, i, T)
 
 """
     _dot(u::AbstractVector, w::AbstractVector, v::AbstractVector) -> Number
@@ -694,7 +729,7 @@ something. Compared by `@code_llvm`/`@code_native` with matching element types
     s = zero(T)
 
     @inbounds @simd for i in 1:length(u)
-        s = muladd(conj(T(u[i])) * T(w[i]), T(v[i]), s)
+        s = _dot_term(s, u, w, v, i, T)
     end
 
     return s
@@ -733,7 +768,7 @@ identical generated code, so one method now covers both cases.
     s = zero(T)
 
     @inbounds for i in MarkedIndices(mask)
-        s = muladd(conj(T(u[i])) * T(w[i]), T(v[i]), s)
+        s = _dot_term(s, u, w, v, i, T)
     end
 
     return s
@@ -751,7 +786,7 @@ end
     s = zero(T)
 
     @inbounds for i in mask
-        s = muladd(conj(T(u[i])) * T(w[i]), T(v[i]), s)
+        s = _dot_term(s, u, w, v, i, T)
     end
 
     return s
@@ -814,14 +849,13 @@ must be made there too (gpena/Bramble.jl#473).
     rng = _band_range(ax, nchunks, k)
     s = zero(T)
     @inbounds @simd for i in rng
-        s = muladd(conj(T(u[i])) * T(w[i]), T(v[i]), s)
+        s = _dot_term(s, u, w, v, i, T)
     end
     return s
 end
 
 """
-    _threaded_dot_masked(u::AbstractVector, w::AbstractVector, v::AbstractVector, mask::BitVector) -> Number
-    _threaded_dot_masked(u::AbstractVector, w::AbstractVector, v::AbstractVector, mask::MarkedIndicesUnion) -> Number
+    _threaded_dot_masked(u::AbstractVector, w::AbstractVector, v::AbstractVector, mask::Union{BitVector, MarkedIndicesUnion}) -> Number
 
 [`CpuThreaded`](@ref)'s own counterpart of [`_dot_masked`](@ref): partitions the mask's
 64-bit *words* (not `1:length(u)`) into `Threads.nthreads()` static bands, so the work stays
@@ -830,8 +864,8 @@ a mesh marker such as `:boundary`, `O(perimeter)` set bits inside an `O(n^D)` in
 walking every index (as an earlier version of this function did) turned that sparsity into a
 slowdown under `CpuThreaded` relative to plain `CpuSerial`.
 
-Each task loads its band's words once (`mask.chunks[w]` for a `BitVector`, joined across
-markers via `_reduce_or_chunk` for a [`MarkedIndicesUnion`](@ref)), skips whole zero
+Each task loads its band's words once (`_mask_word`: `mask.chunks[w]` for a `BitVector`, joined
+across markers for a [`MarkedIndicesUnion`](@ref)), skips whole zero
 words, and walks a nonzero word's set bits with `trailing_zeros`/`word & (word - 1)`, the same
 walk [`MarkedIndices`](@ref)/[`MarkedIndicesUnion`](@ref) use. No bounds guard against
 `length(u)` is needed for the padding bits of the final word, for the same reason
@@ -842,72 +876,44 @@ and a [`MarkedIndicesUnion`](@ref) ORs only `BitVector`s of that same length tog
 - `DimensionMismatch`: If vector or mask lengths do not match.
 """
 @noinline function _threaded_dot_masked(
-        u::AbstractVector, w::AbstractVector, v::AbstractVector, mask::BitVector
+        u::AbstractVector, w::AbstractVector, v::AbstractVector,
+        mask::Union{BitVector, MarkedIndicesUnion}
 )
-    (length(u) == length(w) == length(v) == length(mask)) ||
-        _throw_dot_dim_error(length(u), length(w), length(v), length(mask))
+    (length(u) == length(w) == length(v) == _mask_length(mask)) ||
+        _throw_dot_dim_error(length(u), length(w), length(v), _mask_length(mask))
     T = promote_type(eltype(u), eltype(w), eltype(v))
-    nwords = length(mask.chunks)
     nchunks = Threads.nthreads()
     partials = zeros(T, nchunks)
-    ax = 1:nwords
-    _static_or_serial(_static_partials!, _serial_partials!, partials, nchunks,
-        _dot_masked_band, u, w, v, mask, ax, nchunks)
-    return sum(partials)
-end
-
-@noinline function _threaded_dot_masked(
-        u::AbstractVector, w::AbstractVector, v::AbstractVector, mask::MarkedIndicesUnion
-)
-    (length(u) == length(w) == length(v) == mask.len) ||
-        _throw_dot_dim_error(length(u), length(w), length(v), mask.len)
-    T = promote_type(eltype(u), eltype(w), eltype(v))
-    nwords = length(mask.chunks[1])
-    nchunks = Threads.nthreads()
-    partials = zeros(T, nchunks)
-    ax = 1:nwords
+    ax = 1:_mask_nwords(mask)
     _static_or_serial(_static_partials!, _serial_partials!, partials, nchunks,
         _dot_masked_band, u, w, v, mask, ax, nchunks)
     return sum(partials)
 end
 
 """
-    _dot_masked_band(u, w, v, mask::BitVector, ax, nchunks::Int, k::Int) -> Number
-    _dot_masked_band(u, w, v, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -> Number
+    _dot_masked_band(u, w, v, mask::Union{BitVector, MarkedIndicesUnion}, ax, nchunks::Int, k::Int) -> Number
 
 The `k`-th of `nchunks` partial sums of [`_threaded_dot_masked`](@ref), over the mask words
 [`_band_range`](@ref)`(ax, nchunks, k)`. As [`_dot_band`](@ref), one compiled body serves the
-threaded loop and the serial one. `BramblePolyesterExt` runs [`_dot_band`](@ref) and keeps a
-copy of `_dot_masked_band` over the mask's words (`_masked_words_band`), so a change here
-must be made there too (gpena/Bramble.jl#473).
+threaded loop and the serial one. A `SeparableWeights` weight goes through it too. The band
+reads such a weight through its `CartesianIndices` (`_masked_cart`, `_masked_term`) and never
+through the linear `getindex`. `BramblePolyesterExt` runs [`_dot_band`](@ref) and keeps a copy
+of `_dot_masked_band` over the mask's words (`_masked_words_band` and
+`_separable_masked_words_band`), so a change here must be made there too
+(gpena/Bramble.jl#473).
 """
-@noinline function _dot_masked_band(u, w, v, mask::BitVector, ax, nchunks::Int, k::Int)
+@noinline function _dot_masked_band(
+        u, w, v, mask::Union{BitVector, MarkedIndicesUnion}, ax, nchunks::Int, k::Int)
     T = promote_type(eltype(u), eltype(w), eltype(v))
-    chunks = mask.chunks
     rng = _band_range(ax, nchunks, k)
+    cart = _masked_cart(w)
     s = zero(T)
     @inbounds for widx in rng
-        word = chunks[widx]
+        word = _mask_word(mask, widx)
         base = (widx - 1) * 64
         while word != zero(UInt64)
             i = base + trailing_zeros(word) + 1
-            s = muladd(conj(T(u[i])) * T(w[i]), T(v[i]), s)
-            word &= word - 1
-        end
-    end
-    return s
-end
-
-@noinline function _dot_masked_band(u, w, v, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int)
-    T = promote_type(eltype(u), eltype(w), eltype(v))
-    rng = _band_range(ax, nchunks, k)
-    s = zero(T)
-    @inbounds for widx in rng
-        word = _reduce_or_chunk(mask.chunks, widx)
-        base = (widx - 1) * 64
-        while word != zero(UInt64)
-            i = base + trailing_zeros(word) + 1
-            s = muladd(conj(T(u[i])) * T(w[i]), T(v[i]), s)
+            s = _masked_term(s, u, w, v, i, T, cart)
             word &= word - 1
         end
     end

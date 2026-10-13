@@ -92,6 +92,7 @@ module BramblePolyesterExt
 
 using Bramble
 using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
+               _mask_word, _mask_nwords, _mask_length,
                _write_components!, _band_range, _scatter_linear_point!,
                CpuPolyester, _ReplayTarget, _ActionTarget, _replay_point!, _difference_band!,
                _average_band!, _centered_average_band!, _broadcast_band!, _kron_line_init!,
@@ -177,15 +178,9 @@ end
 @inline _mask_chunks(mask::BitVector) = (mask.chunks,)
 @inline _mask_chunks(mask::MarkedIndicesUnion) = mask.chunks
 
-@inline _mask_length(mask::BitVector) = length(mask)
-@inline _mask_length(mask::MarkedIndicesUnion) = mask.len
-
-# The OR of every vector's word `k`, the union `MarkedIndicesUnion` walks
-# (`_reduce_or_chunk`, utils/linear_algebra.jl). Unrolled by recursion over the tuple:
-# `_reduce_or_chunk`'s `reduce` over an `ntuple` ran the masked `innerₕ` about 1.2x slower
-# on a 33² grid once the words were `PtrArray`s, and this ran it no slower than v3.22.0.
-@inline _mask_word(chunks::Tuple{Any}, k::Int) = @inbounds chunks[1][k]
-@inline _mask_word(chunks::Tuple, k::Int) = @inbounds chunks[1][k] | _mask_word(Base.tail(chunks), k)
+# The word accessors are `Bramble`'s own (`_mask_word`, `_mask_nwords`, `_mask_length`,
+# utils/linear_algebra.jl): `_mask_word` also takes the tuple of word vectors a band here
+# gets, and ORs it unrolled by recursion over the tuple.
 
 # One-based bit test against the word vectors. `MarkedIndicesUnion` has no `getindex` by
 # design (see its docstring), so this also spares collecting it into an indexable mask,
@@ -195,9 +190,12 @@ end
     return ((word >> ((i - 1) & 63)) & 0x1) != 0
 end
 
-# The masked band bodies: `_dot_masked_band` and `_separable_masked_band`
-# (src/utils/linear_algebra.jl, src/space/inner_product.jl) over the mask's words rather
-# than the mask, the same walk and the same `muladd`s in the same order, so the same sums.
+# The masked band bodies: `_dot_masked_band` with a vector weight and with a
+# `SeparableWeights` one (src/utils/linear_algebra.jl, src/space/inner_product.jl) over the
+# mask's words rather than the mask, the same walk and the same `muladd`s in the same order,
+# so the same sums.
+# The `muladd` stays spelled out here: calling `_dot_term` (utils/linear_algebra.jl) from
+# this `@batch` body ran the boundary-mask reduction about 6% slower (2 threads, 401²).
 @noinline function _masked_words_band(u, v, w, chunks::Tuple, ax, nb::Int, b::Int)
     T = promote_type(eltype(u), eltype(v), eltype(w))
     s = zero(T)
@@ -239,7 +237,7 @@ function Bramble._batch_dot_masked(
     nb = Threads.nthreads()
     partials = _partials(T)
     chunks = _mask_chunks(mask)
-    ax = 1:length(first(chunks))
+    ax = 1:_mask_nwords(mask)
     hu, hv, hw = _hand_arrays((u, v, w))
     @batch for b in 1:nb
         @inbounds partials[b] = _masked_words_band(
@@ -301,7 +299,7 @@ function Bramble._batch_dot_masked(
     hu, hf, hv = _hand_arrays((u, w.factors, v))
     cart = CartesianIndices(dims)
     chunks = _mask_chunks(mask)
-    ax = 1:length(first(chunks))
+    ax = 1:_mask_nwords(mask)
     @batch for b in 1:nb
         @inbounds partials[b] = _separable_masked_words_band(
             _take(hu), _weights(_take(hf), dims), _take(hv), cart, chunks, ax, nb, b)

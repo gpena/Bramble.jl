@@ -102,6 +102,9 @@ using Kronecker: Kronecker
                 :MarkedIndicesUnion,
                 :_band_range,
                 :_reduce_or_chunk,
+                :_mask_word,
+                :_mask_nwords,
+                :_mask_length,
                 # `_ReplayTarget`, `_replay_point!`: the warmed-refill
                 # replay's target union and per-point step, called from
                 # `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` above the
