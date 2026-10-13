@@ -316,7 +316,15 @@ end
 # Whether a term is `LᵀWL` by the argument above (transposed pairs are not: they need not be
 # semi-definite), with every `OperatorScale` along the way carrying a positive scalar:
 # `LᵀWL` is positive semi-definite, and a negative or zero scale would flip or collapse that.
-_is_posdef_term(op::BilinearProduct) = _same_operator_shape(op.left_op, op.right_op)
+#
+# A coefficient inside a side must also be real: assembly does not conjugate the test side,
+# so `innerₕ(g * u, g * v)` assembles to `LᵀGWGL`, and a non-real `g` makes `G²` indefinite
+# or negative (`g = im` gives `-LᵀWL`). Both sides are walked, since `OperatorScale` sides
+# match by `==` and `1.0 == 1.0 + 0im`.
+function _is_posdef_term(op::BilinearProduct)
+    return _same_operator_shape(op.left_op, op.right_op) && _is_real_side(op.left_op) &&
+           _is_real_side(op.right_op)
+end
 function _is_posdef_term(op::OperatorAdd)
     return _is_posdef_term(op.left_op) && _is_posdef_term(op.right_op)
 end
@@ -330,6 +338,35 @@ _is_positive_scale(c::Base.RefValue) = _is_positive_scale(c[])
 _is_positive_scale(c) = false
 _is_posdef_term(::ZeroOperator) = true
 _is_posdef_term(op) = false
+
+# Whether every coefficient inside a side is real: each `GridFunctionScale` has a real
+# element type and each `OperatorScale` a real scalar (a `Ref` read now). Walks every node
+# `_same_operator_shape` recognises; anything else answers `false`, as it does there.
+_is_real_side(::Union{TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFunction,
+    IdentityOperator, ZeroOperator}) = true
+for W in (
+    :BackwardDifference,
+    :ForwardDifference,
+    :CenteredDifference,
+    :StarDifference,
+    :CrossWeightedDifference,
+    :BackwardAverage,
+    :ForwardAverage,
+    :CenteredAverage,
+    :JumpNode,
+    :ShiftNode,
+    :RegionRestriction
+)
+    @eval _is_real_side(op::$W) = _is_real_side(op.inner_op)
+end
+_is_real_side(op::OperatorAdd) = _is_real_side(op.left_op) && _is_real_side(op.right_op)
+_is_real_side(op::OperatorScale) = _is_real_scale(op.scalar) && _is_real_side(op.inner_op)
+function _is_real_side(op::GridFunctionScale)
+    return eltype(op.grid_function) <: Real && _is_real_side(op.inner_op)
+end
+_is_real_side(op) = false
+_is_real_scale(c::Base.RefValue) = _is_real_scale(c[])
+_is_real_scale(c) = c isa Real
 
 """
     issymmetric(a::BilinearForm) -> Bool
@@ -381,8 +418,8 @@ Whether `a` is symmetric positive semi-definite by the `LᵀWL` construction
 need not be semi-definite, so one makes the answer `false`) and every scaling along the way
 is by a positive number, which is what keeps that positivity from being flipped or collapsed.
 A `Ref` scale is read when `isposdef` is called, so the answer follows its value at that
-moment and may change after the `Ref` is updated. A non-real scale, complex included,
-answers `false`.
+moment and may change after the `Ref` is updated. A non-real scale or coefficient, complex
+included, answers `false`.
 
 Purely structural, like `issymmetric`, and for the same reason conservative: this does not
 prove positive-definite (which also needs `L` to have trivial kernel), only that the
