@@ -84,10 +84,15 @@ above.
 # Reverse-mode differentiation
 
 With `ChainRulesCore.jl` loaded, `BrambleChainRulesExt`'s `rrule` solves the adjoint system
-`Aᵀ λ = ∂J/∂u` once, reusing the forward solve's own factorisation, and returns
-`∂J/∂A = -λ u'` (conjugate transpose, the ChainRules convention for a complex `A`; `-λ uᵀ`
-for real data) restricted to `A`'s sparsity (never densified) and `∂J/∂F = λ`. `using Enzyme`
-is enough for the same adjoint through `BrambleEnzymeExt`'s native `EnzymeRules` rule; do not
+`Aᴴ λ = ∂J/∂u` once and returns `∂J/∂A = -λ u'` (conjugate transpose, the ChainRules
+convention for a complex `A`; `-λ uᵀ` for real data) restricted to `A`'s sparsity (never
+densified) and `∂J/∂F = λ`. Without keywords the adjoint solve reuses the forward solve's own
+factorisation. The rule accepts the keywords of `pde_solve`: it forwards them to the primal
+solve and to the adjoint solve of `sparse(A')`, so `solver` and `sym` apply to `Aᴴ` as well,
+and a `sym` hint must hold for `Aᴴ` too. A `SparseMatrixCSR` `A` has no rule (ChainRules sees
+a method with no `rrule`, and differentiates the conversion and the solver's internals).
+`using Enzyme` is enough for the same adjoint through `BrambleEnzymeExt`'s native
+`EnzymeRules` rule, which takes no keywords (it cannot run before v4.3.0); do not
 call `Enzyme.@import_rrule`, whose bridge drops the cotangent's explicit zeros from `nzval`
 and returns a wrong gradient without any error. The Enzyme rule keeps the unconjugated
 `-λ uᵀ` and is not validated for complex `A`, whose convention differs. `Mooncake` cannot
