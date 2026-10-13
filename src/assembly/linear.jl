@@ -86,7 +86,20 @@ end
 )
     resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:evaluate!); ast)
     _assemble_linear!(scratch, form, resolved_ast, nothing, nothing)
-    return dot(scratch, parent(vₕ))
+    return _contract_values(scratch, parent(vₕ))
+end
+
+# `l(vₕ)` contracts without conjugating, so neither may this: `dot` conjugates its first
+# argument and would return conj(l(vₕ)) for a complex source. A real `a` has nothing to
+# conjugate, and keeps `dot` (BLAS on the host, and a device array's own reduction).
+_contract_values(a::AbstractVector{<:Real}, b::AbstractVector) = dot(a, b)
+
+function _contract_values(a::AbstractVector, b::AbstractVector)
+    acc = zero(promote_type(eltype(a), eltype(b)))
+    @inbounds @simd for i in eachindex(a, b)
+        acc += a[i] * b[i]
+    end
+    return acc
 end
 
 @noinline function evaluate!(::AbstractVector, ::LinearForm, v::AbstractVector; kwargs...)

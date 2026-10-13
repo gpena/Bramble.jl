@@ -1256,6 +1256,16 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         @test evaluate!(scratchv, lfv, wc) ≈ lfv(wc)
         @test_throws ArgumentError evaluate!(scratchv, lfv, parent(wc))
 
+        # a complex source: `l(vₕ)` contracts without conjugating, and `evaluate!` must too.
+        # `dot(scratch, v)` would return the conjugate, which the `!=` twin rejects.
+        lc = form(Wₕ, v -> innerₕ(x -> (1.0 + 2.0im) * (x[1] + 1), v))
+        bc = assemble(lc)
+        scratchc = similar(bc)
+        valc = evaluate!(scratchc, lc, uₕ)
+        @test valc ≈ lc(uₕ)
+        @test valc ≈ sum(bc .* parent(uₕ))
+        @test !(valc ≈ conj(lc(uₕ)))
+
         # and it allocates nothing per call, once warmed.
         #
         # Behind a barrier, like every other allocation assertion here: measured at testset
@@ -1290,6 +1300,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             return minimum(ntuple(_ -> @allocated(evaluate!(scratch, lf, v)), 3))
         end
         @test _evaluate_bytes(scratch, lf, uₕ) == 0
+        @test _evaluate_bytes(scratchc, lc, uₕ) == 0
     end
 
     @testset "Point-coloured sweep on a collapsed axis" begin
