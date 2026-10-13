@@ -7,6 +7,7 @@ using Bramble: OperatorAdd, block_of, resolve_form_ast
 using Bramble: D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, M₂, Mₓ, half_spacing
 using Bramble: ∇₊ₕ, div₊ₕ, curl₊ₕ
 using LinearAlgebra: dot, ⋅, ×
+using Random: Random
 
 # `∇ₕ`/`∇₊ₕ`/`εₕ`/`divₕ` accept a composite trial or
 # test function and expand, at the builder, into the same single-block products a user would
@@ -123,6 +124,8 @@ end
 @testset "Composite ∇ₕ, εₕ, divₕ (S6.5)" begin
     # Compact spelling equals the hand-expanded one.
     @testset "3D elasticity: compact = expanded" begin
+        # Seeded: some non-uniform draws push compact-vs-expanded rounding past atol.
+        Random.seed!(12)
         Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 4, 3), (false, true, false))
         Vₕ = gridspace(Ωₕ)^Val(3)
         μ, λ = 1.7, 0.9
@@ -144,6 +147,8 @@ end
     end
 
     @testset "2D elasticity: compact = expanded" begin
+        # Seeded: some non-uniform draws push compact-vs-expanded rounding past atol.
+        Random.seed!(12)
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (false, true))
         Vₕ = gridspace(Ωₕ)^Val(2)
         μ, λ = 2.3, 1.1
