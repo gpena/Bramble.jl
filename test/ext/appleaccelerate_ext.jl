@@ -319,6 +319,22 @@ end
             end
             @test_throws SingularException accelerate_factorize(sparse(zeros(Float32, 3, 3)))
 
+            # A structurally singular matrix (a zero row, an empty column, no matching of
+            # rows to columns) is refused by libSparse with its own `ErrorException`; it is
+            # a `SingularException` on every route and kind (gpena/Bramble.jl#723)
+            for M in ([1.0 0 0; 0 1 1; 0 0 0], [1.0 0 0; 0 1 0; 1 0 0], [1.0 0 0; 0 0 0; 0 0 1])
+                S = sparse(M)
+                @test_throws SingularException accelerate_factorize(S)
+                @test_throws SingularException accelerate_factorize(S; kind = :lu)
+                @test_throws SingularException accelerate_factorize(S; sym = :unsymmetric)
+                @test_throws SingularException sparse_factorize(S; solver = :accelerate)
+                @test_throws SingularException pde_solve(S, ones(3); solver = :accelerate)
+                @test_throws SingularException accelerate_solve(S, ones(3))
+            end
+            # Only libSparse's structural refusal is mapped: its other errors keep their type
+            @test_throws ErrorException accelerate_factorize(sparse([1.0 2; 2 1]); sym = :spd)
+            @test occursin("not a pivot", lowercase(string(@doc accelerate_factorize)))
+
             # Nonsingular indefinite, unsymmetric and Float32 matrices still solve
             for M in ([0.0 1 0; 1 0 1; 0 1 -2], [4.0 1 0; 2 5 1; 0 3 6], [-2.0 1; 1 -3],
                 Float32[4 1 0; 2 5 1; 0 3 6])

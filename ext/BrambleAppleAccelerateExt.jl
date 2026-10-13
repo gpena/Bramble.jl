@@ -113,6 +113,23 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         )
     end
 
+    # libSparse refuses a structurally singular matrix (a zero row or column, or no full
+    # matching of rows to columns) with an `ErrorException` it words itself. That is a
+    # singular matrix, so it becomes the `SingularException` every other singular matrix
+    # throws. libSparse reports no pivot, so the index is `0`: not a position. Matched by
+    # message, so libSparse's other refusals (not positive definite) stay `ErrorException`s.
+    _aa_structural(e) = e isa ErrorException && occursin("structurally singular", e.msg)
+
+    function _aa_factor!(aa, fact_kind)
+        try
+            factor!(aa, fact_kind)
+        catch e
+            _aa_structural(e) && throw(LinearAlgebra.SingularException(0))
+            rethrow()
+        end
+        return aa
+    end
+
     function Bramble._accelerate_factorize(A::SparseMatrixCSC; sym = :auto, kind = :auto)
         m, n = size(A)
         m == n || throw(DimensionMismatch("Matrix must be square for sparse direct solve, got $(m)×$(n)"))
@@ -129,10 +146,10 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
             catch e
                 e isa ErrorException || rethrow()
                 fact_kind, sym_flag = SparseFactorizationLDLT, :symmetric
-                factor!(aa, fact_kind)
+                _aa_factor!(aa, fact_kind)
             end
         else
-            factor!(aa, fact_kind)
+            _aa_factor!(aa, fact_kind)
         end
         auto && _aa_singular(aa, A) && throw(LinearAlgebra.SingularException(0))
 
@@ -309,11 +326,15 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
                 # fallback `_accelerate_factorize` takes, on a fresh object, since
                 # Cholesky's symbolic factorization cannot be refactored as LDLᵀ.
                 aa = AAFactorization(M)
-                factor!(aa, SparseFactorizationLDLT)
+                _aa_factor!(aa, SparseFactorizationLDLT)
                 fact.aa_fact, fact.sym = aa, :symmetric
             end
         catch e
             # A failed numeric refactor, of any kind, leaves the old factors unusable.
+            if _aa_structural(e)
+                fact.failure = LinearAlgebra.SingularException(0)
+                throw(fact.failure)
+            end
             fact.failure = e
             rethrow()
         end

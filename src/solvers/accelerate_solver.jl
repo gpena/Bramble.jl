@@ -43,7 +43,11 @@ Accelerate's native `libSparse` on macOS.
   against a fixed vector and throws a `SingularException` when the backward error is
   large. A singular `A` with a zero pivot throws, whatever the right-hand side. A nearly
   singular one may return a large solution without an error, and so may a singular one
-  whose zero pivot rounds to about `eps`, as a pure-Neumann Laplacian's does.
+  whose zero pivot rounds to about `eps`, as a pure-Neumann Laplacian's does. A
+  structurally singular `A` (a zero row or column, say), which libSparse refuses itself,
+  throws a `SingularException` too, for every `sym` and `kind`. The index of an Accelerate
+  `SingularException` is always `0` and is not a pivot position: libSparse reports none, so
+  Julia's "zero pivot found at index 0" message does not mean the first pivot.
 - `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`) selects Hermitian positive
   definite Cholesky.
 - `sym = :symmetric` or `2` (or `kind = :ldlt`) selects Hermitian indefinite ``LDL^T``.
@@ -197,7 +201,8 @@ sparsity pattern as the matrix originally factored.
 
 A failed refactor of any kind leaves the old factors unusable. Every later solve then
 throws the exception the refactor threw, until a refactor succeeds: a `SingularException`
-for a singular `A` with a zero pivot under `sym = :auto`, libSparse's error for an `A` that
+(its index is not a pivot position, as for `accelerate_factorize`) for a singular `A` with
+a zero pivot under `sym = :auto` or a structurally singular one, libSparse's error for an `A` that
 is not positive definite under an explicit `sym = :spd`. When `:auto` chose Cholesky and
 `A` is not positive definite, `A` is factored afresh as ``LDL^T``, as
 `accelerate_factorize` would, without the symbolic reuse. A Cholesky or ``LDL^T``
