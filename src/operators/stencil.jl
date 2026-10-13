@@ -537,7 +537,7 @@ function _vectorial_index_expr(alias_name, alias_stem, source)
         :(@inline Base.firstindex(::typeof($alias_name)) = 1),
         :(@inline Base.lastindex(::typeof($alias_name)) = 3),
         :(@inline function Base.getindex(::typeof($alias_name), i::Integer)
-            _check_direction_type(i)
+            $(_check_direction_type)(i)
             i == 1 && return $stem_x
             i == 2 && return $stem_y
             i == 3 && return $stem_z
