@@ -376,6 +376,7 @@ include("solvers/sparspak_solver.jl")
 include("solvers/sparse_solvers.jl")
 include("solvers/pde_solve.jl")
 
+include("exporters/common.jl")
 include("exporters/vtk_export.jl")
 include("exporters/pgfplots_export.jl")
 
