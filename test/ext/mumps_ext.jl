@@ -89,7 +89,7 @@ end
         @test fact isa MUMPSFactorization
 
         u1 = similar(F)
-        ldiv!(u1, fact, F)
+        @test @inferred(ldiv!(u1, fact, F)) === u1
         @test isapprox(u1, p.u_ref; atol = 1.0e-12)
 
         # Repeated solves with different RHS vectors
