@@ -808,6 +808,31 @@ else
         @test r === v
         @test Array(parent(v)) == Array(parent(u))
     end
+
+    # Only a launcher that takes a user function rewords its error as "could not compile
+    # the supplied function": a boxed capture in `Rₕ!` still does, while a host `Vector`
+    # handed to the average launcher (no user function) surfaces as its own error.
+    @testset "launch error wording (#712)" begin
+        Ω = mesh(domain(interval(0.0f0, 1.0f0)), 9, true; backend = metal_backend())
+        W = gridspace(Ω)
+        a = 1.0f0
+        boxed = x -> a * x[1]
+        a = 2.0f0  # reassigned after capture, so `boxed` holds a `Core.Box`
+        @test_throws "Rₕ! could not compile the supplied function" Rₕ(W, boxed)
+        @test_throws ErrorException Rₕ(W, boxed)
+
+        err = try
+            Bramble._launch_average_engine!(
+                zeros(Float32, 9), MtlVector(ones(Float32, 9)), (9,), Bramble.Forward(), Val(1),
+                Bramble.ka_device(metal_backend()))
+            nothing
+        catch e
+            e
+        end
+        # the compiler's own `GPUCompiler.KernelError` (GPUCompiler is no test dependency)
+        @test nameof(typeof(err)) === :KernelError
+        @test !occursin("could not compile the supplied function", sprint(showerror, err))
+    end
 end
 
 # The Backend constructor over Metal arrays, moved here from test/utils/backends.jl so that
