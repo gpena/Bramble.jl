@@ -100,6 +100,44 @@ using ..TestUtils: _fd, WITH_AD_TESTS
         end
     end
 
+    # Sparspak reports no singularity itself: a stored zero pivot or an empty row/column
+    # leaves `Inf` in the solution, a rank-deficient matrix throws `ErrorException("An
+    # empty problem. No matrix.")`. The extension turns both into `SingularException`,
+    # as SuiteSparse, MUMPS and Accelerate throw it (#722).
+    @testset "singular matrix throws (#722)" begin
+        stored_zero = sparse([1, 2, 3, 4], [1, 2, 3, 4], [2.0, 2.0, 0.0, 1.0])
+        rank_deficient = sparse([1.0 1 0; 1 1 0; 0 0 1])
+        empty_row = sparse([1.0 0 0; 0 1 1; 0 0 0])
+        for S in (stored_zero, rank_deficient, empty_row)
+            n = size(S, 1)
+            b = ones(n)
+            @test_throws SingularException pde_solve(S, b; solver = :sparspak)
+            @test_throws SingularException sparspak_solve(S, b)
+            @test_throws SingularException sparse_factorize(S; solver = :sparspak) \ b
+            @test_throws SingularException sparse_factorize(S; solver = :sparspak) \
+                                           ComplexF64.(b)
+            @test_throws SingularException factorize(S, SparspakFactorization) \ b
+            @test_throws SingularException ldiv!(
+                zeros(n), sparse_factorize(S; solver = :sparspak), b
+            )
+            @test_throws SingularException ldiv!(
+                sparse_factorize(S; solver = :sparspak), copy(b)
+            )
+        end
+
+        # refactor onto a singular matrix of the same pattern
+        A = sparse([4.0 1 0; 1 4 1; 0 1 4])
+        b = ones(3)
+        singular = sparse([1.0 1 0; 1 1 0; 0 0 4])
+        fact = sparspak_factorize(sparse([1.0 0.5 0; 0.5 1 0; 0 0 4]))
+        @test_throws SingularException sparspak_refactor!(fact, singular)
+
+        # A nonfinite right-hand side is propagated, not blamed on the matrix
+        @test isnan(sum(pde_solve(A, [1.0, NaN, 1.0]; solver = :sparspak)))
+        # nonsingular systems are unaffected
+        @test pde_solve(A, b; solver = :sparspak) ≈ Matrix(A) \ b
+    end
+
     @testset "unknown keyword throws (#657)" begin
         A = sparse(SymTridiagonal(fill(4.0, 6), fill(-1.0, 5)))
         b = collect(1.0:6)

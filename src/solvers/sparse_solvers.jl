@@ -30,7 +30,8 @@ requested solver backend.
 - `:symmetric` or `2` selects general symmetric.
 - `:unsymmetric` or `0` selects general unsymmetric.
 
-Ignored by `:sparspak`, which always factors as general unsymmetric LU.
+Ignored by `:sparspak`, which always factors as general unsymmetric LU. It too throws a
+`SingularException` for a singular matrix, with index `0` rather than a pivot position.
 
 `kwargs` go to the chosen backend's `*_factorize`, which throws on a keyword it does not
 take. `:sparspak` takes none and throws an `ArgumentError`.
