@@ -29,43 +29,39 @@ true
 See also: [`boundary_symbol_to_dict`](@ref), [`set_markers!`](@ref).
 """
 @inline function boundary_symbol_to_cartesian(indices::CartesianIndices{1})
-    N = length(indices)
-    xmin = indices[1:1]
-    xmax = indices[N:N]
+    xmin, xmax = boundary_indices(indices)
     return (; :xmin => xmin, :xmax => xmax, :left => xmin, :right => xmax)
 end
 
 function boundary_symbol_to_cartesian(indices::CartesianIndices{2})
-    N, M = size(indices)
-
+    xmin, xmax, ymin, ymax = boundary_indices(indices)
     return (;
-        :xmin => indices[1:1, 1:M],
-        :xmax => indices[N:N, 1:M],
-        :ymin => indices[1:N, 1:1],
-        :ymax => indices[1:N, M:M],
-        :left => indices[1:1, 1:M],
-        :right => indices[N:N, 1:M],
-        :bottom => indices[1:N, 1:1],
-        :top => indices[1:N, M:M]
+        :xmin => xmin,
+        :xmax => xmax,
+        :ymin => ymin,
+        :ymax => ymax,
+        :left => xmin,
+        :right => xmax,
+        :bottom => ymin,
+        :top => ymax
     )
 end
 
 function boundary_symbol_to_cartesian(indices::CartesianIndices{3})
-    N, M, K = size(indices)
-
+    xmin, xmax, ymin, ymax, zmin, zmax = boundary_indices(indices)
     return (;
-        :xmin => indices[1:1, 1:M, 1:K],
-        :xmax => indices[N:N, 1:M, 1:K],
-        :ymin => indices[1:N, 1:1, 1:K],
-        :ymax => indices[1:N, M:M, 1:K],
-        :zmin => indices[1:N, 1:M, 1:1],
-        :zmax => indices[1:N, 1:M, K:K],
-        :back => indices[1:1, 1:M, 1:K],
-        :front => indices[N:N, 1:M, 1:K],
-        :left => indices[1:N, 1:1, 1:K],
-        :right => indices[1:N, M:M, 1:K],
-        :bottom => indices[1:N, 1:M, 1:1],
-        :top => indices[1:N, 1:M, K:K]
+        :xmin => xmin,
+        :xmax => xmax,
+        :ymin => ymin,
+        :ymax => ymax,
+        :zmin => zmin,
+        :zmax => zmax,
+        :back => xmin,
+        :front => xmax,
+        :left => ymin,
+        :right => ymax,
+        :bottom => zmin,
+        :top => zmax
     )
 end
 
@@ -93,7 +89,7 @@ change labels.
 const MeshMarkers = Dict{Symbol, BitVector}
 
 """
-    process_label_for_mesh!(npts::Integer, markers_mesh::MeshMarkers, set_labels) -> Nothing
+    process_label_for_mesh!(npts, markers_mesh::MeshMarkers, set_labels) -> Nothing
 
 Initialize boolean indicator vectors for a collection of marker labels within `markers_mesh`.
 
@@ -135,7 +131,7 @@ function _init_mesh_markers(
 end
 
 """
-    set_markers!(Ωₕ::AbstractMeshType, domain_markers::DomainMarkers) -> Nothing
+    set_markers!(Ωₕ::AbstractMeshType, domain_markers; warn_marker_mismatch = true) -> Nothing
 
 Evaluate domain markers onto mesh points, creating `BitVector` indicators for each label.
 
@@ -149,7 +145,8 @@ Also seeds the default geometric markers `:boundary` and `:interior` if not alre
 # Arguments
 
   - `Ωₕ`: Target mesh whose `markers` field is populated.
-  - `domain_markers`: [`DomainMarkers`](@ref) containing semantic boundary or regional labels.
+  - `domain_markers`: a [`DomainMarkers`](@ref) or the evaluated markers of `Ω(t)`, holding
+    the semantic boundary or regional labels.
 
 # Keywords
 
@@ -246,9 +243,8 @@ than from user registrations, while every other label depends on a domain(...) c
 RegionRestriction's local_stencil (operators/region_restriction.jl) reads `:interior` as
 "not `:boundary`", and ensuring `:boundary` exists guarantees well-defined complementary indexing.
 
-`:boundary` is computed via `boundary_symbol_to_cartesian` (the same face ranges marked by
-`boundary_symbols`) rather than `is_boundary_index`, which excludes degenerate (length-1)
-axes. The face-based definition marks `:left` and `:right` consistently even for degenerate sets.
+`:boundary` is the union of `boundary_indices`, the face ranges, rather than
+`is_boundary_index`, which skips length-1 axes, so a degenerate set still marks both ends.
 `:interior` is defined as the logical complement `.!boundary_set`.
 =#
 

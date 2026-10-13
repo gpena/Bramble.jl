@@ -265,10 +265,7 @@ end
 
 @inline _boundary_symbol_alias(::Val{D}, ::Symbol) where {D} = nothing
 
-# The compact, embeddable form (gpena/Bramble.jl#45). It used to read
-# `Domain{2D, Float64}:` -- a trailing colon promising content that never followed it,
-# which is what `"$Ω"` and array display actually showed. The colon is gone and the marker
-# count, the thing a `Domain` carries that its underlying set does not, is named instead.
+# The compact, embeddable form: dimension, eltype, set and marker count (#45).
 function Base.show(io::IO, Ω::Domain)
     # Counted from the three marker collections rather than `length(labels(Ω))`: `labels`
     # returns a lazy `Iterators.Flatten`, which has no length.

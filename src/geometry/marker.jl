@@ -281,24 +281,10 @@ end
 
 # Parse identifier-based markers (Symbols and tuples, vectors or sets of Symbols) from input pairs.
 #
-# `filter` on the tuple, not a `Set` collected into one. `pairs` is a statically-typed tuple
-# of `Pair`s at every call site, and the two predicates are pure type tests, so `Base.filter`
-# -- `afoldl` over the elements -- const-folds them and hands back a tuple whose length and
-# element types are both known. Routing through a `Set` threw that away: `Tuple(::Set)` has no
-# length in its type, so `DomainMarkers` inferred as a `UnionAll`
-# (`DomainMarkers{ST, TT, …} where {ST<:Tuple{Vararg{Marker{Symbol}}}, …}`) and every read of
-# a marker field went through a non-concrete object, costing `apply_dirichlet_conditions!` a
-# runtime dispatch. This is the same shape `_pairs_to_tuple_conditions` below already used,
-# and it stays concrete past the `Any16` boundary (a 20-pair input gives `NTuple{10, …}`).
-#
-# The contract this fixes on: declaration order is preserved, and a verbatim-repeated pair
-# yields two markers rather than one. The `Set` was only ever half a deduplicator anyway --
-# `Marker{Set{Symbol}}` holds a mutable identifier, so two structurally identical tuple
-# markers were never `===` and never collapsed. Duplicates are harmless downstream: marking is
-# a monotone bit-set union (`_mark_indices!`, `mesh/marker.jl`) run after `_init_mesh_markers`
-# has zeroed everything, so marking a point twice is marking it once, and nothing reads the
-# order of `symbols`/`tuples`. `conditions` *is* order-sensitive (last declaration wins on an
-# overlapping node) and already came from this same order-preserving `filter`.
+# `filter` on the pair tuple const-folds the type tests, so the marker tuples keep their
+# length and element types and `DomainMarkers` stays concrete. Declaration order is kept; a
+# repeated pair marks the same bits twice, which is harmless, but `conditions` is
+# order-sensitive (the last declaration wins).
 @inline function _extract_identifier_markers(pairs::Tuple)
     symbol_pairs = filter(p -> p.second isa Symbol, pairs)
     tuple_pairs = filter(p -> p.second isa _SymbolCollection, pairs)
@@ -344,14 +330,14 @@ struct EvaluatedDomainMarkers{M <: DomainMarkers, T <: Number}
 end
 
 """
-    symbols(edm::EvaluatedDomainMarkers) -> Set{Marker{Symbol}}
+    symbols(edm::EvaluatedDomainMarkers) -> Tuple
 
 Return single-symbol markers from the underlying domain markers.
 """
 @inline symbols(edm::EvaluatedDomainMarkers) = symbols(edm.original_markers)
 
 """
-    tuples(edm::EvaluatedDomainMarkers) -> Set{Marker{Set{Symbol}}}
+    tuples(edm::EvaluatedDomainMarkers) -> Tuple
 
 Return multi-symbol markers from the underlying domain markers.
 """

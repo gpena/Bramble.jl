@@ -1,5 +1,3 @@
-# Pretty printing utilities for mesh types
-
 """
     print_mesh_header(pp::PrettyPrinter, mesh_type::String, D::Int, T::Type, npts) -> Nothing
 
@@ -22,7 +20,6 @@ Print a summary line for mesh properties (number of points, topology).
 function print_mesh_summary(pp::PrettyPrinter, npts, topodim::Int, collapsed::Bool)
     print_indent(pp)
 
-    # Print number of points
     if npts isa Tuple
         total_pts = prod(npts)
         printstyled(pp.io, "$total_pts points"; color = :blue)
@@ -55,10 +52,8 @@ Print the domain information for a mesh.
 function print_mesh_domain_info(pp::PrettyPrinter, set::CartesianProduct)
     print_indent(pp)
     printstyled(pp.io, "Domain: "; color = :light_black)
-    # The two-argument `show` is the embeddable one-liner, which already renders
-    # `[a, b] × [c, d]` and collapses degenerate axes to a single value. No `:compact`
-    # context needed to ask for it any more: it is the only thing this method does
-    # (gpena/Bramble.jl#45).
+    # The two-argument `show` is the one-liner `[a, b] × [c, d]`, with degenerate axes as a
+    # single value (#45).
     show(pp.io, set)
     return println(pp.io)
 end
@@ -127,7 +122,6 @@ function print_mesh_markers(pp::PrettyPrinter, mesh_markers::MeshMarkers)
     printstyled(pp.io, "$n_markers label$(n_markers == 1 ? "" : "s")"; color = :yellow)
     print(pp.io, " • ")
 
-    # Print labels
     print_joined(pp, keys(mesh_markers)) do label
         printstyled(pp.io, ":$label"; color = :green)
         marked_count = count(mesh_markers[label])
