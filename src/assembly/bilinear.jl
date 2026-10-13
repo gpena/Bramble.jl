@@ -527,8 +527,34 @@ function _type_shape_bits(T)
     return 0
 end
 
-# The summands of `Ts` (indices) as groups: one per sum, the first holding every summand
-# with no bits.
+# `T` with every scale and restriction around it peeled off: what a summand's full stencil
+# is built from, entry for entry, so two summands with the same core have stencils of the
+# same length.
+function _type_core(T)
+    while T <: Union{OperatorScale, GridFunctionScale, RegionRestriction}
+        T = fieldtype(T, :inner_op)
+    end
+    return T
+end
+
+# With restricted summands on both sides (`cap == 1`), every product's stencil length is
+# one of a left length times a right one, and past three distinct lengths the walk's
+# `Union` widens to `Tuple{Vararg}` and boxes at every point. A restricted summand alone
+# brings `0` or `q` entries; a plain summand of `p` entries beside it brings `p` or `p + q`,
+# and only `q == p` keeps the lengths on both sides at `n` and `2n`, three products in all.
+# So a lone plain summand joins a restriction of its own core (`u + Rₕ(:l, u)`, a scale on
+# either allowed), and otherwise the plain summands take a sum of their own:
+# `v + Rₕ(:t, D₋ₓ(v))`, `D₋ₓ(u) + D₋ₓ(Rₕ(:l, u))` and `u + D₋ₓ(u) + Rₕ(:l, u)` boxed
+# 11152 B to 16704 B (gpena/Bramble.jl#759).
+function _joins_restriction(P, K)
+    while K <: Union{OperatorScale, GridFunctionScale}
+        K = fieldtype(K, :inner_op)
+    end
+    return K <: RegionRestriction && _type_core(K) === _type_core(P)
+end
+
+# The summands of `Ts` (indices) as groups: one per sum, the plain summands (no bits)
+# joining the first group, or, both sides restricted, as `_joins_restriction` allows.
 function _type_groups(Ts::Vector{Any}, cap::Int)
     # Plain loops over plain vectors: compiled once into the package image (`precompile`
     # below), with no closure or generator of its own left to compile per session.
@@ -549,16 +575,29 @@ function _type_groups(Ts::Vector{Any}, cap::Int)
         end
     end
     groups = Vector{Int}[]
+    firsts = Int[]
     for k in 1:length(kinds)
         per = max(1, cap ÷ _type_shape_bits(kinds[k]))
         same = members[k]
+        push!(firsts, length(groups) + 1)
         for j in 1:per:length(same)
             push!(groups, same[j:min(j + per - 1, length(same))])
         end
     end
     isempty(groups) && return [plain]
-    groups[1] = vcat(plain, groups[1])
-    return groups
+    if isempty(plain) || cap > 1
+        groups[1] = vcat(plain, groups[1])
+        return groups
+    end
+    if length(plain) == 1
+        for k in 1:length(kinds)
+            if _joins_restriction(Ts[plain[1]], kinds[k])
+                groups[firsts[k]] = vcat(plain, groups[firsts[k]])
+                return groups
+            end
+        end
+    end
+    return pushfirst!(groups, plain)
 end
 
 function _sum_expr(name::Symbol, idx::Vector{Int})
@@ -591,6 +630,8 @@ end
 # image, it does not cost the first restricted `form` of a session its own compilation.
 precompile(_type_groups, (Vector{Any}, Int))
 precompile(_type_shape_bits, (Any,))
+precompile(_type_core, (Any,))
+precompile(_joins_restriction, (Any, Any))
 precompile(_sum_expr, (Symbol, Vector{Int}))
 precompile(_groups_expr, (Vector{Any}, Int))
 precompile(_product_sum_expr, (Int, Any, Vector{Any}, Vector{Any}))

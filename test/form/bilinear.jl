@@ -734,12 +734,12 @@ using Bramble:
             (Bramble.Dcₓ, 108, 108), (Bramble.D̃ₓ, 90, 117), (Bramble.D̽ᵧ, 148, 175))
             for (whole, parts, nnz_whole) in (
                 ((u, v) -> innerₕ(u, Dop(R(:c, v + R(:l, v) + R(:r, v)))),
-                    Tuple((u, v) -> innerₕ(u, Dop(R(:c, g(v))))
-                    for g in (identity, v -> R(:l, v), v -> R(:r, v))), nnz_a),
+                Tuple((u, v) -> innerₕ(u, Dop(R(:c, g(v))))
+                for g in (identity, v -> R(:l, v), v -> R(:r, v))), nnz_a),
                 ((u, v) -> innerₕ(u, Dop(v + R(:l, v) + R(:r, v) + R(:b, v))),
-                    Tuple((u, v) -> innerₕ(u, Dop(g(v)))
-                    for g in (identity, v -> R(:l, v), v -> R(:r, v), v -> R(:b, v))),
-                    nnz_b))
+                Tuple((u, v) -> innerₕ(u, Dop(g(v)))
+                for g in (identity, v -> R(:l, v), v -> R(:r, v), v -> R(:b, v))),
+                nnz_b))
                 a = form(Wd, Wd, whole)
                 A = assemble(a)
                 @test _loop_bytes(A, a) == 0
@@ -747,6 +747,27 @@ using Bramble:
                 @test Matrix(A) ≈ Matrix(P)
                 @test nnz(A) == nnz_whole
             end
+        end
+        # With restrictions on both sides, a plain summand beside a restriction of another
+        # operand (`v + R(:t, D₋ₓ(v))`, or `D₋ₓ(u)` beside `D₋ₓ(R(:l, u))`) gave stencils of
+        # four lengths and boxed: 11152, 15104, 33056 and 16480 B, and 16704 B for one piece
+        # of the third form (gpena/Bramble.jl#759). The plain summand now takes a product of
+        # its own; the pattern is the products', which keep the restricted entries' zeros.
+        L3 = (D₋ₓ, u -> D₋ₓ(R(:l, u)), u -> D₋ₓ(R(:t, u)))
+        R3 = (D₋ₓ, v -> D₋ₓ(R(:b, v)), v -> D₋ₓ(R(:r, v)))
+        for (lhs, rhs, nnz_whole) in (
+            ((identity, u -> R(:l, u)), (identity, v -> R(:t, D₋ₓ(v))), 69),
+            ((D₋ₓ, u -> R(:l, D₋ₓ(u))), (identity, v -> R(:t, D₋ₓ(v))), 123),
+            (L3, R3, 171),
+            ((identity, D₋ₓ, u -> R(:l, u)), (identity, v -> R(:t, v)), 117),
+            ((D₋ₓ, u -> D₋ₓ(R(:l, u))), (v -> D₋ₓ(R(:r, v)),), 126))
+            a = form(Wd, Wd, (u, v) -> innerₕ(sum(f(u) for f in lhs), sum(g(v) for g in rhs)))
+            A = assemble(a)
+            @test _loop_bytes(A, a) == 0
+            P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(f(u), g(v))))
+            for f in lhs for g in rhs)
+            @test Matrix(A) ≈ Matrix(P)
+            @test nnz(A) == nnz_whole
         end
         _check_split(((u, v) -> innerₕ(u, 2.0 * R(:l, v)), (u, v) -> innerₕ(u, 3 * R(:r, v))))
         _check_split((
