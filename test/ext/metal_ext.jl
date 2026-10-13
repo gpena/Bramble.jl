@@ -105,6 +105,31 @@ using ..TestUtils: _run_gpu_tests
             Z = _backend_zeros(MtlMatrix{Float32}, n)
             @test Z isa MtlMatrix{Float32}
             @test Array(Z) == zeros(Float32, n, n)
+
+            # A concrete storage-carrying type is not `MtlMatrix{Float32}` itself;
+            # `Type{…}` is invariant, so it needs the `<:` signature (#713).
+            MT = typeof(Metal.zeros(Float32, 3, 3))
+            @test MT !== MtlMatrix{Float32}
+            Ec = _backend_eye(MT, n)
+            @test Ec isa MtlMatrix{Float32}
+            @test Array(Ec) == Matrix{Float32}(I, n, n)
+            Zc = _backend_zeros(MT, n)
+            @test Zc isa MtlMatrix{Float32}
+            @test Array(Zc) == zeros(Float32, n, n)
+            ext = Base.get_extension(Bramble, :BrambleMetalExt)
+            @test which(_backend_eye, Tuple{Type{MT}, Int}).module === ext
+            @test which(_backend_zeros, Tuple{Type{MT}, Int}).module === ext
+
+            # The requested storage mode is kept, Shared as well as Private.
+            @test Ec isa MT
+            @test Zc isa MT
+            S = MtlMatrix{Float32, Metal.SharedStorage}
+            Es = _backend_eye(S, n)
+            @test Es isa S
+            @test Array(Es) == Matrix{Float32}(I, n, n)
+            Zs = _backend_zeros(S, n)
+            @test Zs isa S
+            @test Array(Zs) == zeros(Float32, n, n)
         end
 
         @testset "Round-trips through Array" begin

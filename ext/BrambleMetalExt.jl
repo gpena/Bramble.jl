@@ -105,12 +105,15 @@ end
 # backend_eye / backend_zeros. Metal-specific implementations
 # ---------------------------------------------------------------------------
 
-function _backend_eye(::Type{MtlMatrix{T}}, n::Integer) where {T}
-    return mtl(Matrix{T}(I, n, n))
+# Built as the requested `M`, so a concrete storage mode (Shared, Private) is kept.
+function _backend_eye(::Type{M}, n::Integer) where {T, M <: MtlMatrix{T}}
+    out = M(undef, n, n)
+    copyto!(out, Matrix{T}(I, n, n))
+    return out
 end
 
-function _backend_zeros(::Type{MtlMatrix{T}}, n::Integer) where {T}
-    out = MtlArray{T}(undef, n, n)
+function _backend_zeros(::Type{M}, n::Integer) where {T, M <: MtlMatrix{T}}
+    out = M(undef, n, n)
     Metal.fill!(out, zero(T))
     return out
 end
