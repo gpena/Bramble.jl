@@ -116,6 +116,22 @@ using Bramble:
         @test !(simplify_ast(A + B) isa OperatorScale)
     end
 
+    @testset "Int folding throws on overflow" begin
+        # gpena/Bramble.jl#704: wrapping `Int` arithmetic turned `2^32 * (2^32 * S)` into a
+        # `ZeroOperator` and flipped the sign of a `typemax(Int)` like-term sum.
+        u, v = trial_function(Wₕ), test_function(Wₕ)
+        @test_throws OverflowError simplify_ast(2^32 * (2^32 * S))
+        @test_throws OverflowError simplify_ast(typemax(Int) * S + 2 * S)
+        @test_throws OverflowError simplify_ast(innerₕ(2^32 * u, 2^32 * v))
+        # the largest products and sums that fit still fold exactly
+        c = simplify_ast(2^31 * (2^31 * S))
+        @test c isa OperatorScale && c.scalar === 2^62 && c.inner_op === S
+        c = simplify_ast((typemax(Int) - 2) * S + 2 * S)
+        @test c isa OperatorScale && c.scalar === typemax(Int) && c.inner_op === S
+        c = simplify_ast(innerₕ(2^31 * u, 2^31 * v))
+        @test c isa OperatorScale && c.scalar === 2^62 && c.inner_op === S
+    end
+
     @testset "Duplicate terms print as one" begin
         a_dup = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + innerₕ(u, v))
         @test expression(a_dup) == "2 * innerₕ(u, v)"
