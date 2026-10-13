@@ -224,6 +224,48 @@ end
         @test isapprox(mumps_factorize(A_s) \ F_s, Matrix(A_s) \ F_s; atol = 1.0e-12)
     end
 
+    # #716: a singular matrix of the same pattern is refused, and the factorization it
+    # leaves behind refuses to solve until a refactorization succeeds.
+    @testset "refactor onto a singular matrix (#716)" begin
+        p = poisson_system(Val(1), 15; source = x -> 1.0)
+        Z = copy(p.A)
+        nonzeros(Z) .= 0
+        B = copy(p.A)
+        nonzeros(B) .*= 2
+        for sym in (:unsymmetric, :spd, :auto)
+            fact = mumps_factorize(p.A; sym = sym)
+            @test_throws SingularException mumps_refactor!(fact, Z)
+            @test_throws SingularException refactor!(fact, Z)
+            # as SuiteSparse does after its own refused refactorization
+            @test_throws SingularException fact \ p.F
+            @test_throws SingularException ldiv!(similar(p.F), fact, p.F)
+            b = copy(p.F)
+            @test_throws SingularException ldiv!(fact, b)
+            @test b == p.F
+            @test mumps_refactor!(fact, B) === fact
+            @test isapprox(fact \ p.F, p.u_ref / 2; atol = 1.0e-12)
+        end
+
+        # `:auto` guessed SYM = 1 on an SPD matrix; a refactorization onto a nonsingular
+        # indefinite one of the same pattern repeats the factorization's SYM = 2 fallback,
+        # with the caller's controls
+        n = 10
+        A = sparse(SymTridiagonal(fill(4.0, n), fill(-1.0, n - 1)))
+        P = sparse(SymTridiagonal(fill(0.0, n), fill(1.0, n - 1)))
+        b = collect(1.0:n)
+        fact = mumps_factorize(A; icntl = (14 => 35,))
+        @test fact.sym == 1
+        @test mumps_refactor!(fact, P) === fact
+        @test fact.sym == 2
+        @test fact.mumps.icntl[14] == 35
+        @test norm(fact \ b - Matrix(P) \ b) < 1.0e-10
+        @test mumps_refactor!(fact, A) === fact
+        @test norm(fact \ b - Matrix(A) \ b) < 1.0e-10
+        # without `:auto` the SYM = 1 request stands, and the indefinite matrix is refused
+        fact_spd = mumps_factorize(A; sym = :spd)
+        @test_throws SingularException mumps_refactor!(fact_spd, P)
+    end
+
     @testset "unknown keyword throws (#657)" begin
         A = sparse(SymTridiagonal(fill(4.0, 6), fill(-1.0, 5)))
         b = collect(1.0:6)

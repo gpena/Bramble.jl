@@ -24,11 +24,20 @@ function _ensure_mpi_init()
     return nothing
 end
 
+const MUMPSControls = Tuple{Vector{Pair{Int, Int}}, Vector{Pair{Int, Float64}}}
+
+# `auto` holds the icntl and cntl of a `sym = :auto` request (`nothing` otherwise), so a
+# refactorization can repeat the SYM = 1 to SYM = 2 fallback; `failure` holds the exception
+# of a refused refactorization until one succeeds, and every solve rethrows it.
 mutable struct ConcreteMUMPSFactorization{T, TR, P} <: MUMPSFactorization{T}
     mumps::Mumps{T, TR, P}
     sym::Int
     dim::Int
+    auto::Union{Nothing, MUMPSControls}
+    failure::Union{Nothing, Exception}
 end
+
+_controls(c, ::Type{V}) where {V} = c === nothing ? Pair{Int, V}[] : [Int(k) => V(v) for (k, v) in c]
 
 Base.size(fact::ConcreteMUMPSFactorization) = (fact.dim, fact.dim)
 Base.size(fact::ConcreteMUMPSFactorization, d::Integer) = d <= 2 ? fact.dim : 1
@@ -62,6 +71,16 @@ function _mumps_sym_flag(A::AbstractMatrix, sym)
     end
 end
 
+# The exception for a failed MUMPS call (`INFOG(1) < 0`): -10 is a numerically singular
+# matrix, anything else a generic error naming `phase` and both INFOG codes.
+function _mumps_error(mumps::Mumps, phase::AbstractString)
+    code, info = mumps.infog[1], mumps.infog[2]
+    code == -10 && return LinearAlgebra.SingularException(Int(info))
+    return ErrorException("MUMPS $phase failed: INFOG(1) = $code, INFOG(2) = $info")
+end
+
+_wrong_spd_guess(mumps::Mumps) = mumps.infog[1] == -10 || mumps.infog[12] > 0
+
 function Bramble._mumps_factorize(
         A::SparseMatrixCSC; sym = :auto, icntl = nothing, cntl = nothing
 )
@@ -91,18 +110,18 @@ function Bramble._mumps_factorize(
     factorize!(mumps)
     # INFOG(1) = -10 is a zero pivot and INFOG(12) > 0 counts negative ones: under `:auto`
     # either shows the SYM = 1 guess was wrong, so factor again with pivoted LDLᵀ (SYM = 2).
-    if sym === :auto && sym_flag == 1 && (mumps.infog[1] == -10 || mumps.infog[12] > 0)
+    if sym === :auto && sym_flag == 1 && _wrong_spd_guess(mumps)
         finalize!(mumps)
         return Bramble._mumps_factorize(A; sym = 2, icntl = icntl, cntl = cntl)
     end
     if mumps.infog[1] < 0
-        code, info = mumps.infog[1], mumps.infog[2]
+        err = _mumps_error(mumps, "factorization")
         finalize!(mumps)
-        code == -10 && throw(LinearAlgebra.SingularException(Int(info)))
-        error("MUMPS factorization failed: INFOG(1) = $code, INFOG(2) = $info")
+        throw(err)
     end
 
-    return ConcreteMUMPSFactorization(mumps, sym_flag, n)
+    auto = sym === :auto ? (_controls(icntl, Int), _controls(cntl, Float64)) : nothing
+    return ConcreteMUMPSFactorization(mumps, sym_flag, n, auto, nothing)
 end
 
 function LinearAlgebra.ldiv!(
@@ -116,6 +135,7 @@ function LinearAlgebra.ldiv!(
         DimensionMismatch("Output vector length $(length(x)) does not match matrix dimension $n"),
     )
 
+    fact.failure === nothing || throw(fact.failure)
     associate_rhs!(fact.mumps, b)
     fact.mumps.job = MUMPS.SOLVE
     MUMPS.invoke_mumps!(fact.mumps)
@@ -131,6 +151,7 @@ function LinearAlgebra.ldiv!(
         DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
     )
 
+    fact.failure === nothing || throw(fact.failure)
     associate_rhs!(fact.mumps, b)
     fact.mumps.job = MUMPS.SOLVE
     MUMPS.invoke_mumps!(fact.mumps)
@@ -183,6 +204,25 @@ function Bramble._mumps_refactor!(fact::ConcreteMUMPSFactorization{T}, A::Sparse
     associate_matrix!(fact.mumps, A_mat)
     fact.mumps.job = MUMPS.FACTOR
     MUMPS.invoke_mumps!(fact.mumps)
+    mumps = fact.mumps
+    if fact.auto !== nothing && fact.sym == 1 && _wrong_spd_guess(mumps)
+        # The `:auto` fallback of `_mumps_factorize`: a fresh SYM = 2 instance with the
+        # caller's controls replaces the SYM = 1 one
+        try
+            icntl, cntl = fact.auto
+            sym2 = Bramble._mumps_factorize(A_mat; sym = 2, icntl = icntl, cntl = cntl)
+            finalize!(mumps)
+            fact.mumps, fact.sym = sym2.mumps, 2
+        catch err
+            fact.failure = err
+            rethrow()
+        end
+    elseif mumps.infog[1] < 0
+        # The factors are unusable until a refactorization succeeds; `ldiv!` refuses them
+        fact.failure = _mumps_error(mumps, "refactorization")
+        throw(fact.failure)
+    end
+    fact.failure = nothing
     return fact
 end
 
