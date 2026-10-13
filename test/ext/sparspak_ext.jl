@@ -100,6 +100,18 @@ using ..TestUtils: _fd, WITH_AD_TESTS
         end
     end
 
+    # Sparspak factors BigFloat matrices, which SuiteSparse, MUMPS and Accelerate cannot
+    # (docs/src/api_sciml.md). The solve must keep the element type and the residual must
+    # hold at BigFloat precision, not merely at Float64.
+    @testset "BigFloat element type" begin
+        n = 8
+        A = sparse(SymTridiagonal(fill(BigFloat(4), n), fill(BigFloat(1), n - 1)))
+        b = ones(BigFloat, n)
+        x = pde_solve(A, b; solver = :sparspak)
+        @test eltype(x) == BigFloat
+        @test maximum(abs, A * x .- b) < 1.0e-30
+    end
+
     # Sparspak reports no singularity itself: a stored zero pivot or an empty row/column
     # leaves `Inf` in the solution, a rank-deficient matrix throws `ErrorException("An
     # empty problem. No matrix.")`. The extension turns both into `SingularException`,
