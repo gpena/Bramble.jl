@@ -23,6 +23,19 @@ struct Backward <: GridDirection end
 @noinline _throw_stencil_dim_error(
     dim::Integer, D::Integer) = throw(ArgumentError("the stencil direction must be between 1 and $D, got $dim"))
 
+# The one direction check every operator calls. The type comes first: `true == 1`, so
+# `Val(true)` would pass the range alone and stand for the first axis (gpena/Bramble.jl#689).
+# Any other integer (`Int32`, `UInt`) is a direction. `Dim` is a type parameter at every
+# call, so both branches fold away at compile time.
+@inline _check_direction_type(d) = (d isa Integer && !(d isa Bool)) ||
+                                   _throw_shift_dim_type_error(d)
+
+@inline function _check_stencil_dim(Dim, D::Integer)
+    _check_direction_type(Dim)
+    1 <= Dim <= D || _throw_stencil_dim_error(Dim, D)
+    return nothing
+end
+
 @noinline _throw_stencil_symbol_error(d::Symbol) = throw(ArgumentError("the stencil direction must be :x, :y or :z, got :$d"))
 
 @noinline function _throw_stencil_size_error(lout::Int, lin::Int, dims)
@@ -524,6 +537,7 @@ function _vectorial_index_expr(alias_name, alias_stem, source)
         :(@inline Base.firstindex(::typeof($alias_name)) = 1),
         :(@inline Base.lastindex(::typeof($alias_name)) = 3),
         :(@inline function Base.getindex(::typeof($alias_name), i::Integer)
+            _check_direction_type(i)
             i == 1 && return $stem_x
             i == 2 && return $stem_y
             i == 3 && return $stem_z

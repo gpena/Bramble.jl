@@ -267,7 +267,7 @@ end
     (locality(typeof(vₕ.data)) isa DeviceLocality ||
      locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_shift()
     dims = _grid_dims(uₕ)
-    1 <= DIM <= length(dims) || _throw_stencil_dim_error(DIM, length(dims))
+    _check_stencil_dim(DIM, length(dims))
     _shift_engine!(execution_policy(space(uₕ)), vₕ.data, uₕ.data, dims, dir, Val(DIM))
     return vₕ
 end
@@ -284,7 +284,7 @@ end
 end
 
 @inline function _shift_matrix(Ωₕ::AbstractMeshType, ::Val{DIM}, amount::Val) where {DIM}
-    1 <= DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIM, dim(Ωₕ))
+    _check_stencil_dim(DIM, dim(Ωₕ))
     return shift(Ωₕ, Val(DIM), amount)
 end
 
@@ -445,16 +445,20 @@ end
     shift_op(op::LazyOp{D}, dim::Int, amount::Int) where D
 
 Shifts the stencil of `op` by `amount` grid points in dimension `Dim` (or `dim`). A
-direction that is not an `Int` in `1:D` throws an `ArgumentError`. The `Int` direction
-forwards to the `Val` form, so a literal direction still gives a concrete node type.
+direction that is a `Bool`, not an integer, or outside `1:D` throws an `ArgumentError`.
+The `Int` direction forwards to the `Val` form, so a literal direction still gives a
+concrete node type.
 """
-@noinline _throw_shift_dim_type_error(dim) = throw(ArgumentError("the stencil direction must be an Int, got $(repr(dim)) of type $(typeof(dim))"))
+@noinline function _throw_shift_dim_type_error(dim)
+    what = dim isa Bool ? "an integer, not a Bool" : "an integer"
+    throw(ArgumentError("the stencil direction must be $what, got $(repr(dim)) of type $(typeof(dim))"))
+end
 
 @inline function shift_op(op::LazyOp{D}, ::Val{Dim}, amount::Int) where {D, Dim}
-    # `Val(true)` or `Val(1.0)` would pass the range check and fail later, far from here
-    Dim isa Int || _throw_shift_dim_type_error(Dim)
-    1 <= Dim <= D || _throw_stencil_dim_error(Dim, D)
-    return ShiftNode{D, Dim, typeof(op)}(amount, op)
+    # `Val(true)` or `Val(1.0)` would pass the range check and fail later, far from here;
+    # `Int(Dim)` makes `Val(Int32(2))` the same node as `Val(2)`, which assembly expects
+    _check_stencil_dim(Dim, D)
+    return ShiftNode{D, Int(Dim), typeof(op)}(amount, op)
 end
 @inline shift_op(op::LazyOp, dim::Int, amount::Int) = shift_op(op, Val(dim), amount)
 
@@ -467,12 +471,12 @@ end
 # A direction past `D` is refused here, as `_apply_shifted!` refuses it for a grid function:
 # the node would otherwise assemble as the identity.
 @inline function forward_shift(op::LazyOp{D}, ::Val{Dim}) where {D, Dim}
-    1 <= Dim <= D || _throw_stencil_dim_error(Dim, D)
-    return ShiftNode{D, Dim, typeof(op)}(1, op)
+    _check_stencil_dim(Dim, D)
+    return ShiftNode{D, Int(Dim), typeof(op)}(1, op)
 end
 @inline function backward_shift(op::LazyOp{D}, ::Val{Dim}) where {D, Dim}
-    1 <= Dim <= D || _throw_stencil_dim_error(Dim, D)
-    return ShiftNode{D, Dim, typeof(op)}(-1, op)
+    _check_stencil_dim(Dim, D)
+    return ShiftNode{D, Int(Dim), typeof(op)}(-1, op)
 end
 
 @inline S₊(op::LazyOp, dim_val::Val) = forward_shift(op, dim_val)

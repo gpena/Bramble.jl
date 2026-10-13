@@ -97,7 +97,7 @@ _launch_average_engine!(out, in_ref, dims, dir, dim_val, dev) = _throw_no_ka_ave
     # make `_stencil_ranges` treat every point as both interior and boundary and return all
     # zeros.
     D = length(_grid_dims(uₕ))
-    1 <= DIM <= D || _throw_stencil_dim_error(DIM, D)
+    _check_stencil_dim(DIM, D)
     sp = space(uₕ)
     if execution_policy(sp) isa GpuPolicy
         dev = ka_device(backend(sp))
@@ -306,7 +306,7 @@ end
     # make `_stencil_ranges` treat every point as both interior and boundary and return all
     # zeros.
     D = length(_grid_dims(uₕ))
-    1 <= DIM <= D || _throw_stencil_dim_error(DIM, D)
+    _check_stencil_dim(DIM, D)
     sp = space(uₕ)
     (execution_policy(sp) isa GpuPolicy || locality(typeof(vₕ.data)) isa DeviceLocality ||
      locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_centered_average()
@@ -344,7 +344,7 @@ function _average_weights!(
         v::AbstractVector, Ωₕ::AbstractMeshType, ::Centered, ::Val{DIFF_DIM}
 ) where {DIFF_DIM}
     dims = npoints(Ωₕ, Tuple)
-    1 <= DIFF_DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIFF_DIM, dim(Ωₕ))
+    _check_stencil_dim(DIFF_DIM, dim(Ωₕ))
     li = LinearIndices(dims)
     n = dims[DIFF_DIM]
 
@@ -359,7 +359,7 @@ function _average_weights!(
 ) where {DIFF_DIM}
     dims = npoints(Ωₕ, Tuple)
 
-    1 <= DIFF_DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIFF_DIM, dim(Ωₕ))
+    _check_stencil_dim(DIFF_DIM, dim(Ωₕ))
 
     if execution_policy(Ωₕ) isa GpuPolicy
         _device_average_weights!(v, dims, dir, dim_val)
@@ -453,7 +453,7 @@ for config in _AVERAGE_OP_CONFIGS
         function $(Symbol(average_name, :_dim!))(
                 out, in, dims::NTuple{D, Int}, average_dim::Val{DIFF_DIM}
         ) where {D, DIFF_DIM}
-            1 <= DIFF_DIM <= D || _throw_stencil_dim_error(DIFF_DIM, D)
+            _check_stencil_dim(DIFF_DIM, D)
             length(out) == length(in) == prod(dims) ||
                 _throw_stencil_size_error(length(out), length(in), dims)
             in_ref = (out === in) ? copy(in) : in

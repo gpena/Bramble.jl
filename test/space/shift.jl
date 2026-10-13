@@ -154,6 +154,68 @@ end
     end
 end
 
+# `true == 1`, so a range check alone lets `Val(true)` through as the first axis
+# (gpena/Bramble.jl#689): every direction check must name the type, with the Bool message.
+function _bool_refused(f)
+    err = try
+        f()
+        nothing
+    catch e
+        e
+    end
+    return err isa ArgumentError && occursin("not a Bool", sprint(showerror, err))
+end
+
+@testset "shift: Bool direction refused" begin
+    Ωₕ = _mesh(2)
+    uₕ = Rₕ(gridspace(Ωₕ), _f)
+    U = Bramble.TrialFunction{2, 1}()
+    for f in (() -> S₊(U, Val(true)), () -> S₋(U, Val(true)),
+        () -> forward_shift(U, Val(true)), () -> Bramble.shift_op(U, Val(true), 1),
+        () -> Bramble.D₋(U, Val(true)),
+        () -> S₊(uₕ, Val(true)), () -> S₋(uₕ, Val(true)),
+        () -> Bramble.D₋(uₕ, Val(true)), () -> Bramble.forward_average(uₕ, Val(true)),
+        () -> Bramble.centered_average(uₕ, Val(true)), () -> Bramble.D₊(Ωₕ, Val(true)),
+        () -> Bramble.backward_average(Ωₕ, Val(true)),
+        () -> Bramble.centered_average(Ωₕ, Val(true)))
+        @test _bool_refused(f)
+    end
+    # positive control: an Int direction still builds and shifts
+    @test parent(S₊(uₕ, Val(1))) == _reference(_grid(uₕ), 1, 1)
+    @test S₊(U, Val(2)) isa Bramble.ShiftNode{2, 2}
+    @test Bramble.D₋(U, Val(2)) isa Bramble.LazyOp{2}
+    @test (@inferred S₊(uₕ, Val(2))) isa VectorElement
+    # the index route: a vectorial alias or `η` indexed by `true` is not its `x` entry
+    for f in (() -> ∇ₕ[true], () -> S₊ₕ[true], () -> Bramble.Mₕ[true], () -> Bramble.η[true])
+        @test _bool_refused(f)
+    end
+    @test ∇ₕ[1] === Bramble.∇ₕ[Int32(1)] && S₊ₕ[UInt(2)] === S₊ᵧ
+    @test Bramble.η[Int32(2)] === Bramble.η[2]
+    # any other integer type is still a direction, and gives the `Int` result
+    @test parent(S₊(uₕ, Val(Int32(1)))) == parent(S₊(uₕ, Val(1)))
+    @test parent(S₋(uₕ, Val(UInt(2)))) == parent(S₋(uₕ, Val(2)))
+    @test jump(Ωₕ, Val(Int32(2))) == jump(Ωₕ, Val(2))
+    @test Bramble.Mₕ(Ωₕ, Val(Int32(1))) == Bramble.Mₕ(Ωₕ, Val(1))
+    @test (@inferred S₊(uₕ, Val(Int32(2)))) isa VectorElement
+    # a symbolic node built from an `Int32` direction is the `Int` node, and assembles so
+    @test S₊(U, Val(Int32(2))) === S₊(U, Val(2))
+    @test Bramble.D₋(U, Val(UInt(1))) === Bramble.D₋(U, Val(1))
+    Wₕ = gridspace(Ωₕ)
+    _shift_matrix(s) = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(s(u), v)))
+    @test _shift_matrix(u -> Bramble.shift_op(u, Val(Int32(2)), 1)) ==
+          _shift_matrix(u -> Bramble.shift_op(u, Val(2), 1))
+    @test _shift_matrix(u -> S₊(u, Val(Int32(2)))) == _shift_matrix(u -> S₊(u, Val(2)))
+    # a non-integer direction is named as such, without the Bool clause
+    err = try
+        Bramble.shift_op(U, Val(1.0), 1)
+    catch e
+        e
+    end
+    @test err isa ArgumentError &&
+          sprint(showerror, err) ==
+          "ArgumentError: the stencil direction must be an integer, got 1.0 of type Float64"
+end
+
 # GPU testing is off, so the refusal is checked in core: through the `GpuKernel()`
 # policy the shift engine dispatches on, and through a host space carrying device-backed
 # data, which `_MockDevice` fakes by answering `DeviceLocality()`.

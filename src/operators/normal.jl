@@ -275,7 +275,10 @@ struct NormalComponent{DIM} <: AbstractNormalTerm end
 @inline Base.length(::NormalSymbol) = 3
 @inline Base.firstindex(::NormalSymbol) = 1
 @inline Base.lastindex(::NormalSymbol) = 3
-@inline Base.getindex(::NormalSymbol, d::Integer) = _normal_component(Val(Int(d)))
+@inline function Base.getindex(::NormalSymbol, d::Integer)
+    _check_direction_type(d)  # `η[true]` would otherwise be `η[1]` (gpena/Bramble.jl#689)
+    return _normal_component(Val(Int(d)))
+end
 @inline Base.getindex(::NormalSymbol, s::Symbol) = _normal_component(Val(_normal_axis(s)))
 @inline Base.iterate(::NormalSymbol, state::Int = 1) = state > 3 ? nothing : (η[state], state + 1)
 
