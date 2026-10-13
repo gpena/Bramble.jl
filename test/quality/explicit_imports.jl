@@ -348,6 +348,9 @@ using Kronecker: Kronecker
     #   submodule, reached once to initialise MPI lazily on first use.
     # - `FACTOR`, `SOLVE`, `invoke_mumps!` (BrambleMUMPSExt): MUMPS's job-type constants and
     #   the low-level driver call its `ldiv!`/`refactor!` methods issue directly.
+    # - `Finalized`, `is_finalized` (BrambleMUMPSExt): the finalizer skips the free once
+    #   MPI has shut down and refuses a finalized instance (gpena/Bramble.jl#715); neither
+    #   package makes them public.
     # - `_suitesparse_factorize`, `_suitesparse_refactor!`, `_suitesparse_solve`
     #   (BrambleSuiteSparseExt): the same `_`-prefixed fallback idiom again, one entry point
     #   per SuiteSparse-backed `factorize`/`refactor!`/`\` method.
@@ -555,6 +558,8 @@ using Kronecker: Kronecker
                 :FACTOR,
                 :SOLVE,
                 :invoke_mumps!,
+                :Finalized,
+                :is_finalized,
                 :_suitesparse_factorize,
                 :_suitesparse_refactor!,
                 :_suitesparse_solve,
