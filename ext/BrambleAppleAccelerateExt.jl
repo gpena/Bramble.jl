@@ -85,11 +85,16 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
 
     # libSparse's own refusal is an `ErrorException`; the caller chose the kind, so it is
     # not converted to LU behind their back.
-    @noinline function _throw_not_hermitian(A::AbstractMatrix)
+    # A refactor keeps the kind it was built with, so its remedy is a new factorization.
+    @noinline function _throw_not_hermitian(A::AbstractMatrix, refactor::Bool = false)
+        remedy = refactor ?
+            "Refactor onto a Hermitian matrix, or build a new factorization with " *
+            "`sym = :auto` or `kind = :lu`." :
+            "Use sym = :auto or kind = :lu."
         throw(
             ArgumentError(
             "Cholesky and LDLᵀ factor a Hermitian matrix, and this $(eltype(A)) matrix is " *
-            "not Hermitian. Use sym = :auto or kind = :lu.",
+            "not Hermitian. " * remedy,
         ),
         )
     end
@@ -266,9 +271,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
     # `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
     # factorizations against a complex right-hand side, and `ConcreteAccelerateFactorization
     # <: Factorization`, so that method and the one above are equally specific for a complex
-    # vector -- the call would be ambiguous without this one. It restates what
-    # `LinearAlgebra` does: solve the real and imaginary parts separately and recombine
-    # them.
+    # vector -- the call would be ambiguous without this one.
     function Base.:\(
             fact::ConcreteAccelerateFactorization{T}, b::Vector{Complex{T}}
     ) where {T <: Union{Float32, Float64}}
@@ -285,7 +288,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         # triangle, and it needs LU, a new symbolic factorization. Refused before the
         # factors are touched, so `fact` still solves with the old matrix.
         (fact.sym === :spd || fact.sym === :symmetric) && !ishermitian(A) &&
-            _throw_not_hermitian(A)
+            _throw_not_hermitian(A, true)
         M = _aa_matrix(A, fact.sym)
         try
             refactor!(fact.aa_fact, M)
