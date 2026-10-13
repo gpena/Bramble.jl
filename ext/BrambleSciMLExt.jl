@@ -188,11 +188,11 @@ function Bramble._linear_problem(
 end
 
 # `sol.u` is exactly the plain vector `element(Wₕ, ::AbstractVector)` already knows how to
-# wrap, so both unwrapping spellings just reroute to it. `Wₕ` is narrowed to
-# `AbstractSpaceType` -- a `LinearSolution` is itself an `AbstractVector`, so an untyped `Wₕ`
-# here would be ambiguous with `element(Wₕ::AbstractSpaceType, v::AbstractVector)` above:
-# neither method would be strictly more specific than the other.
-Bramble.element(Wₕ::Bramble.AbstractSpaceType, sol::LinearSolution) = Bramble.element(Wₕ, sol.u)
+# wrap, so both unwrapping spellings just reroute to it. A `LinearSolution` is itself an
+# `AbstractVector`, so `element(Wₕ, sol)` already reaches that method: the hook only hands
+# it `sol.u` to copy from. An `element` method of its own here invalidated every caller
+# compiled against `element(::AbstractSpaceType, ::Any)` (gpena/Bramble.jl#755).
+Bramble._element_coefficients(sol::LinearSolution) = sol.u
 Bramble.VectorElement(sol::LinearSolution, Wₕ::Bramble.AbstractSpaceType) = Bramble.element(Wₕ, sol.u)
 
 """
