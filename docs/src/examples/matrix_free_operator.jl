@@ -108,7 +108,7 @@ A = assemble(a; dirichlet = :boundary)
 
 bytes_operator = Base.summarysize(op)
 bytes_matrix = Base.summarysize(A)
-(ndofs = ndofs(Wₕ), operator_bytes = bytes_operator, csr_bytes = bytes_matrix,
+(ndofs = ndofs(Wₕ), operator_bytes = bytes_operator, matrix_bytes = bytes_matrix,
     ratio = round(bytes_matrix / bytes_operator; digits = 1))
 
 @test bytes_operator < bytes_matrix #src
