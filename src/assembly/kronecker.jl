@@ -271,11 +271,13 @@ is not symmetric, even for a form whose matrix happens to be symmetric. `mul!` r
 vectors that are not 1-based (an `OffsetArray`, say), which would otherwise give a wrong
 product silently.
 
-`K` holds no work buffers: it stores only its `D` one-dimensional factors and its execution
-policy, so it is immutable after construction and safe to share across threads (concurrent
-`mul!` calls on one `K` never race). The fused pass needs no scratch either. A serial host
-`mul!` allocates nothing, and so does a [`CpuPolyester`](@ref) product: each task rebuilds
-the light structs around plain arrays, so Polyester's argument box stays on the stack. `mul!` is generic over the element type, so ForwardDiff `Dual`s pass through. The
+`K` holds no work buffers: it stores its `D` one-dimensional factors per term, its execution
+policy, and the mesh and mesh version it checks for staleness, so it is immutable after
+construction and safe to share across threads (concurrent `mul!` calls on one `K` never race).
+The fused pass needs no scratch either. A serial host `mul!` allocates nothing, and so does a
+[`CpuPolyester`](@ref) product: each task rebuilds the light structs around plain arrays, so
+Polyester's argument box stays on the stack. `mul!` is generic over the element type, so
+ForwardDiff `Dual`s pass through. The
 `scratch = (b1, b2)` keyword that `mul!(y, K, x; scratch)` and
 `mul!(y, K, x, α, β; scratch)` accept is kept so existing callers still work, and is
 ignored.
@@ -401,8 +403,7 @@ function _kron_check_factors(factors::Tuple, dims::Tuple)
     return nothing
 end
 
-# Without a policy the operator runs serially: what every operator did before the policy was
-# a parameter.
+# Without a policy the operator runs serially.
 function KroneckerLinearOperator{T, D, TermsT}(terms, dims, n) where {T, D, TermsT <: Tuple}
     return KroneckerLinearOperator{T, D, TermsT, CpuSerial}(terms, dims, n, CpuSerial())
 end
@@ -550,8 +551,7 @@ K * x ≈ assemble(a) * x
 See also: [`is_separable`](@ref), [`KroneckerLinearOperator`](@ref).
 """
 @noinline function kronecker_operator(a::BilinearForm{D}) where {D}
-    # `@noinline`: a caller compiles one call instead of the whole build inlined, and the
-    # precompile workload's call caches a standalone instance every caller can reuse.
+    # `@noinline`: a caller compiles one call instead of the whole build inlined.
     D == 1 && _throw_not_separable_dim(D)
     return _kron_operator(trial_space(a), test_space(a), a)
 end
@@ -1065,22 +1065,11 @@ end
     )
 end
 
-# The three-argument method below is ambiguous against `ReverseDiff.mul!(::TrackedArray,
-# ::AbstractMatrix, ::TrackedArray{V, D, 1})` whenever `ReverseDiff` is loaded alongside Bramble: `KroneckerLinearOperator <:
-# AbstractMatrix`, so it satisfies ReverseDiff's unconstrained middle argument, while a
-# `TrackedVector` (`TrackedArray{V, D, 1}`) satisfies this method's `AbstractVector` on both
-# `y` and `x` -- the classic diagonal clash where each method wins on a different argument
-# and neither dominates. Unlike the `*` method removed below, this one cannot simply be
-# deleted, because `mul!` is the primitive `AbstractMatrix` operations are built from, not something
-# derived from a richer method the way `K * x` is derived from this `mul!`. Narrowing `y`/`x`
-# to something other than `AbstractVector` was considered and rejected: this operator's own
-# docstring commits it to plugging into `LinearProblem`/`KrylovJL_CG` "the same way an
-# assembled matrix does", and those callers are entitled to pass any `AbstractVector` (a
-# view, a solver's own work buffer), not just `Vector`. Resolved in
-# `ext/BrambleReverseDiffExt.jl` (gpena/Bramble.jl#295), a weak dependency on `ReverseDiff`
-# that defines the disambiguating `mul!(::ReverseDiff.TrackedArray, ::KroneckerLinearOperator,
-# ::ReverseDiff.TrackedArray)`, forwarding to `ReverseDiff.record_mul!` so the reverse pass
-# stays correct.
+# The three-argument method below is ambiguous against
+# `ReverseDiff.mul!(::TrackedArray, ::AbstractMatrix, ::TrackedArray)`: each wins on a different
+# argument. It stays (`mul!` is the primitive, and callers may pass any `AbstractVector`);
+# `ext/BrambleReverseDiffExt.jl` (#295) defines the disambiguating method, forwarding to
+# `ReverseDiff.record_mul!`.
 #
 # `scratch` is accepted and ignored: the fused pass above needs no work vectors, so a serial
 # host `mul!` allocates nothing with or without it, and callers that pass one keep working.

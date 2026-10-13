@@ -88,15 +88,10 @@ end
     )
 end
 
-# A time domain `I` promises the evaluation path (`(dm::DomainMarkers)(t)`, which does
-# `Base.Fix2(func, t)`, or `(dm::DomainMarkers)(t, p)`, which composes a `Base.Fix{3}` for
-# `p` with a `Base.Fix2` for `t` -- see `conditions(::EvaluatedParametricDomainMarkers)`,
-# marker.jl, for why that specific order and not the other one; both paths pass a spatial
-# `x -> ...` predicate through unwrapped, but this check rejects one) that every `func` here
-# accepts `(x, t)` or, uniformly, `(x, t, p)`. Nothing downstream
-# checks this: `Fix2` builds regardless of arity and only fails once the resulting closure is
-# called during assembly, far from the mistake. Caught here by arity alone, not by calling
-# `func`, since a condition's closure is otherwise never evaluated before assembly.
+# A time domain `I` promises that every `func` accepts `(x, t)` or, uniformly, `(x, t, p)`:
+# `(dm::DomainMarkers)(t[, p])` wraps it with `Fix2` (and `Fix{3}`), which builds regardless of
+# arity and fails only when assembly calls it. Checked here by arity alone, never by calling
+# `func`.
 #
 # The whole `pairs` tuple must agree on one shape, not mix them: `semidiscretize` decides
 # once, for the *entire* constraint set, whether to route through `TimeDependentConstraints`
@@ -574,8 +569,7 @@ function _dirichlet_bc_indices!(A::SparseMatrixCSC, index_in_marker::BitVector)
     # -- `A[i, i] = one(T)` binary-searches the column every call. Same reasoning, and the
     # same `diagonal_found` fallback, as `symmetrize!(::SparseMatrixCSC, ...)` below.
     #
-    # No `@simd`: the branches rule it out, as they already did before the diagonal write
-    # moved in here.
+    # No `@simd`: the branches rule it out.
     @inbounds for j in axes(A, 2)
         column_is_constrained = _row_marked(entries, j)
         diagonal_found = false
@@ -705,7 +699,20 @@ end
 
 # --- Symmetrization of the linear system ------------------------------------------- #
 
-# A scalar space carries its mesh, and every other entry point here takes one.
+"""
+`symmetrize!(A, F, Wₕ::ScalarGridSpace, labels...; components = nothing)`: the same on `mesh(Wₕ)`; `components` may only be `nothing` or `1`
+"""
+@inline function symmetrize!(
+        A::AbstractMatrix,
+        F::AbstractVector,
+        Wₕ::ScalarGridSpace,
+        labels::Symbol...;
+        components = nothing
+)
+    _validate_scalar_components(components)
+    return symmetrize!(A, F, mesh(Wₕ), labels...)
+end
+
 """
     symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...)
 
@@ -720,17 +727,6 @@ For each index `i` with prescribed Dirichlet boundary conditions:
 A non-square `A` (a form whose test and trial spaces differ in size) has no symmetry to
 restore and throws an `ArgumentError`.
 """
-@inline function symmetrize!(
-        A::AbstractMatrix,
-        F::AbstractVector,
-        Wₕ::ScalarGridSpace,
-        labels::Symbol...;
-        components = nothing
-)
-    _validate_scalar_components(components)
-    return symmetrize!(A, F, mesh(Wₕ), labels...)
-end
-
 function symmetrize!(
         A::AbstractMatrix, F::AbstractVector, Ωₕ::AbstractMeshType, labels::Symbol...
 )
@@ -758,10 +754,8 @@ rather than visiting each leaf once per label: by the time `symmetrize!` runs, `
 has already zeroed every marked row of `A` off its diagonal (the documented order of use),
 so for any two marked indices `i`, `k` in the combined set, `A[k, i] == 0`. That makes each
 marked index's elimination read/write entries that no other marked index's elimination
-touches, so the order they are visited in -- one combined pass here vs. the old label-by-label
-passes -- cannot change the result: a row marked by more than one label would previously
-just be visited again with nothing left to eliminate (idempotent), which the union mask
-now skips instead.
+touches, so the order they are visited in cannot change the result, and a row marked by several
+labels is visited once.
 """
 function symmetrize!(
         A::AbstractMatrix,

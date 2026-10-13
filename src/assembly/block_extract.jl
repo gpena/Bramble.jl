@@ -128,13 +128,9 @@ One leaf-space pair's rectangle within a composite system matrix: the concrete t
 test leaf spaces a term couples, and the row/column offset each contributes to that
 rectangle's position in the assembled matrix.
 
-Matrix rows are indexed by the test function (see `bilinear.jl`'s file header), so
-`row_offset` always comes from `test_leaf`'s offset in `leaf_spaces_offsets`, and
-`col_offset` from `trial_leaf`'s. That asymmetry used to be carried by convention across
-six call sites, each unpacking a bare `(tc, sc)` tuple into `first`/`last` calls in the
-right order -- one of which got it backwards (gpena/Bramble.jl#48). Naming it here means a
-caller reads `blk.row_offset`/`blk.col_offset` off the type instead of re-deriving which
-positional element means which.
+Matrix rows are indexed by the test function (see `bilinear.jl`'s file header).
+`row_offset` always comes from `test_leaf`'s offset and `col_offset` from `trial_leaf`'s, so a
+caller reads them off the type instead of unpacking a positional `(tc, sc)` tuple.
 """
 struct Block{TrialLeaf, TestLeaf}
     trial_leaf::TrialLeaf
@@ -175,9 +171,9 @@ struct _NamedBlock{TrialLeaves <: Tuple, TestLeaves <: Tuple}
     test_component::Int
 end
 
-# jacobian_pattern.jl iterates `blocks` and reads `Block`'s fields off each element. For a
-# `_NamedBlock` those resolve at run time, as they did before the static walk existed: the
-# pattern is built once, at setup, where one dispatch per block is cheap.
+# jacobian_pattern.jl iterates `blocks` and reads `Block`'s fields off each element; for a
+# `_NamedBlock` they resolve at run time, which is cheap there: the pattern is built once, at
+# setup.
 function Base.getproperty(nb::_NamedBlock, name::Symbol)
     name === :trial_leaf && return first(getfield(nb, :trial_leaves)[nb.trial_component])
     name === :test_leaf && return first(getfield(nb, :test_leaves)[nb.test_component])
@@ -342,9 +338,8 @@ end
 _region_labels(region::Symbol) = (region,)
 _region_labels(region::NTuple{N, Symbol}) where {N} = region
 
-# `RegionRestriction`'s own method above wins on specificity, so it is untouched by this
-# collapse; only `InterpolationNode`'s separate method (operators/interpolation.jl)
-# becomes redundant, since it recursed the same way.
+# Every one-operand node, `InterpolationNode` included, recurses here; `RegionRestriction`'s
+# own method above wins on specificity.
 _collect_region_labels(op::UnaryWrapper) = _collect_region_labels(op.inner_op)
 
 function _collect_region_labels(op::Union{BilinearProduct, LinearProduct, OperatorAdd})
