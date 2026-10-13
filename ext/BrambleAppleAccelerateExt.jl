@@ -38,10 +38,11 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         sym::Symbol
         dim::Int
         # `checked` marks an `:auto` factorization, which `_aa_singular` tests once per
-        # factorization and per `refactor!`. `singular` records a refused `refactor!`, so
-        # later solves throw as SuiteSparse's do; testing it costs one branch per solve.
+        # factorization and per `refactor!`. `failure` holds the exception of a failed
+        # `refactor!` of any kind until one succeeds, and later solves rethrow it as
+        # SuiteSparse's throw; testing it costs one branch per solve.
         checked::Bool
-        singular::Bool
+        failure::Union{Nothing, Exception}
     end
 
     Base.size(fact::ConcreteAccelerateFactorization) = (fact.dim, fact.dim)
@@ -135,7 +136,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         end
         auto && _aa_singular(aa, A) && throw(LinearAlgebra.SingularException(0))
 
-        return ConcreteAccelerateFactorization{eltype(A)}(aa, sym_flag, n, auto, false)
+        return ConcreteAccelerateFactorization{eltype(A)}(aa, sym_flag, n, auto, nothing)
     end
 
     # The pivoted LDLᵀ and LUTPP never report a singular matrix, and Cholesky can succeed on
@@ -158,7 +159,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
     end
 
     function _aa_assert_usable(fact::ConcreteAccelerateFactorization)
-        fact.singular && throw(LinearAlgebra.SingularException(0))
+        fact.failure === nothing || throw(fact.failure)
         return nothing
     end
 
@@ -290,22 +291,37 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         (fact.sym === :spd || fact.sym === :symmetric) && !ishermitian(A) &&
             _throw_not_hermitian(A, true)
         M = _aa_matrix(A, fact.sym)
+        # AppleAccelerate's `refactor!` refuses another stored-nonzero count before it
+        # touches the factors; refused here, so `failure` records only numeric failures.
+        nold, nnew = length(fact.aa_fact.matrixObj._nzval), length(M._nzval)
+        nold == nnew || throw(
+            ArgumentError(
+                "refactor! requires the same number of stored nonzeros (same sparsity " *
+                "pattern): factored matrix has $(nold), new matrix has $(nnew)",
+            ),
+        )
         try
-            refactor!(fact.aa_fact, M)
+            try
+                refactor!(fact.aa_fact, M)
+            catch e
+                (fact.checked && fact.sym === :spd && e isa ErrorException) || rethrow()
+                # `:auto` Cholesky on a matrix that is not positive definite: the LDLᵀ
+                # fallback `_accelerate_factorize` takes, on a fresh object, since
+                # Cholesky's symbolic factorization cannot be refactored as LDLᵀ.
+                aa = AAFactorization(M)
+                factor!(aa, SparseFactorizationLDLT)
+                fact.aa_fact, fact.sym = aa, :symmetric
+            end
         catch e
-            (fact.checked && e isa ErrorException) || rethrow()
-            # A failed numeric refactor leaves the old factors unusable.
-            fact.singular = true
-            fact.sym === :spd || rethrow()
-            # `:auto` Cholesky on a matrix that is not positive definite: the LDLᵀ fallback
-            # `_accelerate_factorize` takes, on a fresh object, since Cholesky's symbolic
-            # factorization cannot be refactored as LDLᵀ.
-            aa = AAFactorization(M)
-            factor!(aa, SparseFactorizationLDLT)
-            fact.aa_fact, fact.sym = aa, :symmetric
+            # A failed numeric refactor, of any kind, leaves the old factors unusable.
+            fact.failure = e
+            rethrow()
         end
-        fact.singular = fact.checked && _aa_singular(fact.aa_fact, A)
-        fact.singular && throw(LinearAlgebra.SingularException(0))
+        if fact.checked && _aa_singular(fact.aa_fact, A)
+            fact.failure = LinearAlgebra.SingularException(0)
+            throw(fact.failure)
+        end
+        fact.failure = nothing
         return fact
     end
 else

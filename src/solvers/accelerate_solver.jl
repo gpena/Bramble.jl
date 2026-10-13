@@ -195,12 +195,15 @@ Recompute the numeric factorization of `A` stored in `fact` **reusing the existi
 factorization** (fill-reducing ordering and sparsity analysis). `A` must have the exact same
 sparsity pattern as the matrix originally factored.
 
-On a factorization from `sym = :auto`, a singular `A` with a zero pivot throws a
-`SingularException`, and so does every later solve until `fact` is refactored onto a
-nonsingular matrix. When `:auto` chose Cholesky and `A` is not positive definite, `A` is
-factored afresh as ``LDL^T``, as `accelerate_factorize` would, without the symbolic reuse.
-A Cholesky or ``LDL^T`` factorization, from `:auto` or chosen, refuses an `A` that is not
-Hermitian with an `ArgumentError` and keeps its old factors.
+A failed refactor of any kind leaves the old factors unusable. Every later solve then
+throws the exception the refactor threw, until a refactor succeeds: a `SingularException`
+for a singular `A` with a zero pivot under `sym = :auto`, libSparse's error for an `A` that
+is not positive definite under an explicit `sym = :spd`. When `:auto` chose Cholesky and
+`A` is not positive definite, `A` is factored afresh as ``LDL^T``, as
+`accelerate_factorize` would, without the symbolic reuse. A Cholesky or ``LDL^T``
+factorization, from `:auto` or chosen, refuses an `A` that is not
+Hermitian with an `ArgumentError` and keeps its old factors, as every kind does for an
+`A` with another number of stored entries.
 
 See also [`refactor!`](@ref), [`accelerate_factorize`](@ref).
 """

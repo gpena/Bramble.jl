@@ -217,6 +217,34 @@ end
             @test_throws SingularException accelerate_factorize(Sg) \ [1.0, 2.0]
             @test_throws SingularException pde_solve(Sg, [1.0, 2.0]; solver = :accelerate)
 
+            # #721: an explicit Cholesky refactored onto an indefinite matrix of the same
+            # pattern refuses every later solve with the refactor's exception, until a
+            # refactor succeeds
+            nT = 6
+            T6 = spdiagm(-1 => -ones(nT - 1), 0 => 2ones(nT), 1 => -ones(nT - 1))
+            b6 = collect(1.0:nT)
+            fs = accelerate_factorize(T6; sym = :spd)
+            err = try
+                accelerate_refactor!(fs, -T6)
+                nothing
+            catch e
+                e
+            end
+            @test err isa ErrorException
+            @test_throws ErrorException fs \ b6
+            @test_throws ErrorException ldiv!(zeros(nT), fs, b6)
+            @test_throws ErrorException fs \ hcat(b6, b6)
+            @test accelerate_refactor!(fs, 2 * T6) === fs
+            @test isapprox(fs \ b6, Matrix(2 * T6) \ b6; rtol = 1.0e-12)
+            # A pattern with more stored entries is refused before the factors are touched,
+            # so the old factors still solve
+            Tc = T6 + sparse([1, nT], [nT, 1], [1.0, 1.0], nT, nT)
+            for o in ((sym = :spd,), (kind = :lu,))
+                fp = accelerate_factorize(T6; o...)
+                @test_throws ArgumentError accelerate_refactor!(fp, Tc)
+                @test isapprox(fp \ b6, Matrix(T6) \ b6; rtol = 1.0e-12)
+            end
+
             # The Cholesky route stays for a positive definite matrix, on a non-uniform mesh
             Ωn = mesh(domain(S2, :boundary => boundary_symbols(S2)), (9, 7), (true, true))
             change_points!(Ωn, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
