@@ -321,7 +321,7 @@ a = form(Vₕ, Vₕ, (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + inner
 function form(Wₕ, Vₕ, f)
     D = dim(Wₕ)
     raw_ast = f(trial_function(Wₕ), test_function(Vₕ))
-    _validate_form_expression(raw_ast, Val(D))
+    _validate_form_expression(raw_ast, Val(D), Val(:bilinear))
     ast = simplify_ast(_resolve_surfaces_for_space(resolve_ast(raw_ast), Vₕ, Wₕ))
     _check_space_components(ast, Wₕ, trial_component_or_nothing, "trial")
     _check_space_components(ast, Vₕ, test_component_or_nothing, "test")

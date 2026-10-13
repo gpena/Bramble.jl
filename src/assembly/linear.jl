@@ -120,9 +120,15 @@ Return the resolved AST stored inside the linear form.
 """
 @inline resolve_form_ast(form::LinearForm) = form.ast
 
-@inline _validate_form_expression(::LazyOp{D}, ::Val{D}) where {D} = nothing
+# The kind (`Val(:linear)` or `Val(:bilinear)`) only picks the error message, so the
+# success path builds no string. The throwers take it untyped here, which keeps the
+# matching-dimension method the most specific one for every kind.
+@inline _validate_form_expression(::LazyOp{D}, ::Val{D}, ::Val) where {D} = nothing
+@inline _validate_form_expression(bad, ::Val, kind) = _throw_form_value(bad, kind)
+@inline _validate_form_expression(::LazyOp{E}, ::Val{D}, kind) where {E, D} =
+    _throw_form_dimension(E, D, kind)
 
-@noinline function _validate_form_expression(bad, ::Val{D}) where {D}
+@noinline function _throw_form_value(bad, ::Val{:linear})
     throw(
         ArgumentError(
         "a linear form's expression has to build an operator over its test argument, and " *
@@ -132,11 +138,31 @@ Return the resolved AST stored inside the linear form.
     )
 end
 
-@noinline function _validate_form_expression(::LazyOp{E}, ::Val{D}) where {E, D}
+@noinline function _throw_form_value(bad, ::Val{:bilinear})
+    throw(
+        ArgumentError(
+        "the expression of a bilinear form has to build an operator over its trial and test " *
+        "arguments, and this one returned a $(typeof(bad)). Write it as a function of both " *
+        "(`(u, v) -> innerₕ(u, v)`) rather than as a value.",
+    ),
+    )
+end
+
+@noinline function _throw_form_dimension(E, D, ::Val{:linear})
     throw(
         ArgumentError(
         "a linear form's expression is $(E)-dimensional and its test space is $(D). The " *
         "operators in the expression have to come from the same space the form is built " *
+        "over.",
+    ),
+    )
+end
+
+@noinline function _throw_form_dimension(E, D, ::Val{:bilinear})
+    throw(
+        ArgumentError(
+        "the expression of a bilinear form is $(E)-dimensional and its trial space is $(D). " *
+        "The operators in the expression have to come from the spaces the form is built " *
         "over.",
     ),
     )
@@ -380,7 +406,7 @@ true
 function form(Wₕ, f)
     D = dim(Wₕ)
     raw_ast = f(test_function(Wₕ))
-    _validate_form_expression(raw_ast, Val(D))
+    _validate_form_expression(raw_ast, Val(D), Val(:linear))
     ast = simplify_ast(_resolve_surfaces_for_space(resolve_ast(raw_ast), Wₕ))
     _check_centered_meshes(ast, Wₕ)
     ast = _lower_sources_for_space(ast, Wₕ)

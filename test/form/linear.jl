@@ -907,6 +907,42 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         @test iszero(Ac[12:end, :])
     end
 
+    @testset "Malformed expression names its form" begin
+        # A bilinear expression that returned a value, or one built from another space's
+        # arguments, was reported as "a linear form's expression" with a `v -> …` example
+        # (gpena/Bramble.jl#686). Each kind now names itself; the linear text is unchanged.
+        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 11, false))
+        W2 = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), false))
+        function msg(f)
+            e = try
+                f()
+                nothing
+            catch err
+                err
+            end
+            @test e isa ArgumentError
+            return e isa ArgumentError ? sprint(showerror, e) : ""
+        end
+        value_bi = msg(() -> form(W1, W1, (u, v) -> 1.0))
+        @test occursin("the expression of a bilinear form", value_bi)
+        @test occursin("(u, v) -> innerₕ(u, v)", value_bi)
+        @test occursin("returned a Float64", value_bi)
+        @test !occursin("linear form's", value_bi)
+        value_li = msg(() -> form(W1, v -> 1.0))
+        @test value_li ==
+              "ArgumentError: a linear form's expression has to build an operator over its " *
+              "test argument, and this one returned a Float64. Write it as a function of " *
+              "the test argument (`v -> innerₕ(fₕ, v)`) rather than as a value."
+        # 1D operators in a form over a 2D space: the dimension message, per kind
+        u1, v1 = Bramble.trial_function(W1), Bramble.test_function(W1)
+        dim_bi = msg(() -> form(W2, W2, (u, v) -> innerₕ(u1, v1)))
+        @test occursin("the expression of a bilinear form is 1-dimensional", dim_bi)
+        @test !occursin("linear form's", dim_bi)
+        dim_li = msg(() -> form(W2, v -> innerₕ(1.0, v1)))
+        @test occursin("a linear form's expression is 1-dimensional and its test space is 2",
+                       dim_li)
+    end
+
     @testset "Invalid component error" begin
         # It used to contribute nothing, in silence. On a two-block space
         # `innerₕ(1.0, v(3))` assembled to zeros, and summed with a valid term it dropped
