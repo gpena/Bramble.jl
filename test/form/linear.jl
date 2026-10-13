@@ -855,7 +855,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         # (gpena/Bramble.jl#685). Graded meshes, so equal counts would not hide a mismatch.
         Ω1 = domain(interval(0.0, 1.0))
         graded(n) = (Ωg = mesh(Ω1, n, true);
-                     Bramble.change_points!(Ωg, range(0.0, 1.0; length = n) .^ 1.5); Ωg)
+            Bramble.change_points!(Ωg, range(0.0, 1.0; length = n) .^ 1.5); Ωg)
         W = gridspace(graded(11))
         fₕ = Rₕ(W, x -> x)
         elsewhere = "lives on another mesh than the space it is read on"
@@ -940,7 +940,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         @test !occursin("linear form's", dim_bi)
         dim_li = msg(() -> form(W2, v -> innerₕ(1.0, v1)))
         @test occursin("a linear form's expression is 1-dimensional and its test space is 2",
-                       dim_li)
+            dim_li)
     end
 
     @testset "Invalid component error" begin
@@ -1313,8 +1313,10 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             v -> innerₕ(g, 3 * R(:r, v)), v -> innerₕ(g, (1 // 2) * R(:b, v))))
         # A complex scale on a Float64 mesh is not promoted to: left as built, it still
         # allocates, and must still agree with its parts.
-        _check_split((v -> innerₕ(g, (1.0 + 2.0im) * R(:l, v)), v -> innerₕ(g, 3 * R(:r, v)),
-                v -> innerₕ(g, 2.0 * R(:b, v))); bytes = nothing)
+        _check_split(
+            (v -> innerₕ(g, (1.0 + 2.0im) * R(:l, v)), v -> innerₕ(g, 3 * R(:r, v)),
+                v -> innerₕ(g, 2.0 * R(:b, v)));
+            bytes = nothing)
         # Summands of one type are paired whatever order they are written in.
         _check_split((v -> innerₕ(g, R(:l, v)), v -> innerₕ(g, 2.0 * R(:r, v)),
             v -> innerₕ(g, R(:b, v))))

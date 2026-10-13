@@ -342,8 +342,10 @@ _is_posdef_term(op) = false
 # Whether every coefficient inside a side is real: each `GridFunctionScale` has a real
 # element type and each `OperatorScale` a real scalar (a `Ref` read now). Walks every node
 # `_same_operator_shape` recognises; anything else answers `false`, as it does there.
-_is_real_side(::Union{TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFunction,
-    IdentityOperator, ZeroOperator}) = true
+function _is_real_side(::Union{TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFunction,
+        IdentityOperator, ZeroOperator})
+    true
+end
 for W in (
     :BackwardDifference,
     :ForwardDifference,

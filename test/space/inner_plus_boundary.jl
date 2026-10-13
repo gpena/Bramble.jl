@@ -66,6 +66,7 @@ using ..TestUtils: WITH_3D_TESTS, _backward_spacing_oracle, _half_spacing_oracle
         wx = reshape(weights(Wₕ, Bramble.Innerplus(), 1), nx, ny)
         wy = reshape(weights(Wₕ, Bramble.Innerplus(), 2), nx, ny)
         for j in 1:ny, i in 1:nx
+
             @test wx[i, j] ≈ _backward_spacing_oracle(px, i) * _half_spacing_oracle(py, j)
             @test wy[i, j] ≈ _half_spacing_oracle(px, i) * _backward_spacing_oracle(py, j)
         end

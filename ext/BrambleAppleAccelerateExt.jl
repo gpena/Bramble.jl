@@ -313,9 +313,9 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         nold, nnew = length(fact.aa_fact.matrixObj._nzval), length(M._nzval)
         nold == nnew || throw(
             ArgumentError(
-                "refactor! requires the same number of stored nonzeros (same sparsity " *
-                "pattern): factored matrix has $(nold), new matrix has $(nnew)",
-            ),
+            "refactor! requires the same number of stored nonzeros (same sparsity " *
+            "pattern): factored matrix has $(nold), new matrix has $(nnew)",
+        ),
         )
         try
             try

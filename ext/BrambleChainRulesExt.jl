@@ -45,6 +45,7 @@ function ChainRulesCore.rrule(
         rows = rowvals(A)
         Āv = nonzeros(Ā)
         for j in axes(A, 2), k in nzrange(A, j)
+
             Āv[k] = -λ[rows[k]] * conj(u[j])
         end
         return (NoTangent(), Ā, λ)

@@ -223,12 +223,13 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
     @testset "Marker validation" begin
         # Bad markers must name the problem, not raise a BoundsError or a MethodError on a
         # private helper. `thrown` returns what `f` threw, or `nothing` if it returned.
-        thrown(f) = try
-            f()
-            nothing
-        catch err
-            err
-        end
+        thrown(f) =
+            try
+                f()
+                nothing
+            catch err
+                err
+            end
 
         # labels :left and :right, which `(:left, :left)` below needs
         I = domain(interval(0.0, 1.0), :left => :xmin, :right => :xmax)

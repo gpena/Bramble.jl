@@ -112,7 +112,7 @@ using ..TestUtils: _fd
             (real_unsym, collect(1.0:n), (; solver = :suitesparse, sym = :unsymmetric)),
             (cunsym, ComplexF64.(1:n) .+ 0.5im, (; solver = :suitesparse)),
             (cunsym, ComplexF64.(1:n) .+ 0.5im, (; solver = :suitesparse, sym = :unsymmetric)),
-            (csym, ComplexF64.(1:n) .+ 0.5im, (; solver = :suitesparse, sym = :symmetric)),
+            (csym, ComplexF64.(1:n) .+ 0.5im, (; solver = :suitesparse, sym = :symmetric))
         )
         for (A, F, kw) in cases
             @testset "$(eltype(A)) $(kw)" begin

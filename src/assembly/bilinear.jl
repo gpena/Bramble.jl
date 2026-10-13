@@ -375,8 +375,10 @@ function _split_restricted_products(
     return inner === op.inner_op ? op : _distribute_scale(op, inner)
 end
 _distribute_scale(op, inner) = _rewrap_inner(op, inner)
-_distribute_scale(op, inner::OperatorAdd) = OperatorAdd(
-    _distribute_scale(op, inner.left_op), _distribute_scale(op, inner.right_op))
+function _distribute_scale(op, inner::OperatorAdd)
+    OperatorAdd(
+        _distribute_scale(op, inner.left_op), _distribute_scale(op, inner.right_op))
+end
 
 # Both sides' shapes multiply, so with restricted summands on both sides each piece takes
 # at most one from each; with them on one side only, at most two from it. The counts are
@@ -566,6 +568,7 @@ end
 function _product_sum_expr(D::Int, W, Ls::Vector{Any}, Rs::Vector{Any})
     ex = nothing
     for i in 1:length(Ls), j in 1:length(Rs)
+
         t = :(BilinearProduct{$D, $W, $(Ls[i]), $(Rs[j])}(ls[$i], rs[$j]))
         ex = ex === nothing ? t : :(OperatorAdd($ex, $t))
     end

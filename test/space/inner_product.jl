@@ -834,6 +834,7 @@ end
         (x, y) -> inner₊((x, x), (y, y)), (x, y) -> inner₊((x, x), (y, y), Tuple)
     )
     for f in calls, (u, v) in ((a, b), (b, a), (a, c), (c, a))
+
         @test_throws ArgumentError f(u, v)
     end
     # one mismatched entry in a tuple is enough

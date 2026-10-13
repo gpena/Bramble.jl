@@ -729,9 +729,11 @@ using Bramble:
             (u, v) -> innerₕ(u, 3 * R(:r, v)), (u, v) -> innerₕ(u, (1 // 2) * R(:b, v))))
         # A complex scale on a Float64 mesh is not promoted to, so this form is left as
         # built and still allocates; it must still agree with its parts.
-        _check_split((
+        _check_split(
+            (
                 (u, v) -> innerₕ(u, (1.0 + 2.0im) * R(:l, v)), (u, v) -> innerₕ(u, 3 * R(:r, v)),
-                (u, v) -> innerₕ(u, 2.0 * R(:b, v))); bytes = nothing)
+                (u, v) -> innerₕ(u, 2.0 * R(:b, v)));
+            bytes = nothing)
         # A `Ref` scale is left in place, so the matrix still follows it.
         k = Ref(2.0)
         a = form(W, W, (u, v) -> innerₕ(u, k * R(:l, v)) + innerₕ(u, 3 * R(:r, v)))
@@ -740,7 +742,7 @@ using Bramble:
         k[] = -5.0
         assemble!(A, a)
         @test Matrix(A) ≈ Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, -5.0 * R(:l, v)) +
-                                                          innerₕ(u, 3 * R(:r, v)))))
+                                                               innerₕ(u, 3 * R(:r, v)))))
 
         # A product with at most two restricted summands and uniform scales folds to
         # itself at compile time, so `form` compiles no split for it.

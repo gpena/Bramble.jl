@@ -694,6 +694,7 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
             @assert A64 isa SparseMatrixCSC{Float64, Int}
             A32 = SparseMatrixCSC{Float64, Int32}(A64)
             for A in (A64, A32), _ in 1:2
+
                 _fillnz!(A, 0.0)
                 assemble_parallel!(A, a)
             end

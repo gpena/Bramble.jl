@@ -228,7 +228,7 @@ end
         return Base.typename(Base.unwrap_unionall(m.sig).parameters[end])
     end
     _masked_reaches_separable(u, w, v) = Bramble._masked_cart(w) isa CartesianIndices &&
-        _masked_term_slot(u, w, v) === Base.typename(CartesianIndices)
+                                         _masked_term_slot(u, w, v) === Base.typename(CartesianIndices)
 
     @testset "D=$D, dims=$dims" for (D, dims) in grids
         w = _separable_weights(D, dims)

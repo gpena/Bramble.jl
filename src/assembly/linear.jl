@@ -125,8 +125,7 @@ Return the resolved AST stored inside the linear form.
 # matching-dimension method the most specific one for every kind.
 @inline _validate_form_expression(::LazyOp{D}, ::Val{D}, ::Val) where {D} = nothing
 @inline _validate_form_expression(bad, ::Val, kind) = _throw_form_value(bad, kind)
-@inline _validate_form_expression(::LazyOp{E}, ::Val{D}, kind) where {E, D} =
-    _throw_form_dimension(E, D, kind)
+@inline _validate_form_expression(::LazyOp{E}, ::Val{D}, kind) where {E, D} = _throw_form_dimension(E, D, kind)
 
 @noinline function _throw_form_value(bad, ::Val{:linear})
     throw(

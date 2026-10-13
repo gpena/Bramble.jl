@@ -31,7 +31,7 @@ function ka_device(be)
     return _throw_no_ka(
         "ka_device has no method for $(typeof(be))",
         " and the package providing this backend's device (e.g. `using Metal`) before " *
-        "calling this function.",
+        "calling this function."
     )
 end
 
@@ -81,7 +81,7 @@ GPU backend inherits it for free.
 function ka_synchronize(x)
     return _throw_no_ka(
         "ka_synchronize has no method for $(typeof(x))",
-        " before calling this function.",
+        " before calling this function."
     )
 end
 
@@ -103,7 +103,7 @@ Requires `using KernelAbstractions`; the real method is supplied by
 function _launch_spmv_csr!(y, rowPtr, colVal, nzVal, x, α, β)
     return _throw_no_ka(
         "_launch_spmv_csr! has no method loaded",
-        " before calling Metal sparse `mul!`.",
+        " before calling Metal sparse `mul!`."
     )
 end
 
@@ -124,7 +124,7 @@ Requires `using KernelAbstractions`; the real method is supplied by
 function _launch_spmm_csr!(C, rowPtr, colVal, nzVal, B, α, β)
     return _throw_no_ka(
         "_launch_spmm_csr! has no method loaded",
-        " before calling Metal sparse `mul!`.",
+        " before calling Metal sparse `mul!`."
     )
 end
 

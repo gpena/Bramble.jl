@@ -694,12 +694,13 @@ end
     mass(X) = form(X, X, (u, v) -> innerₕ(u, v))
     a = stiff(W)
     l = form(W, v -> innerₕ(x -> 1.0, v))
-    errmsg(f) = try
-        f()
-        ""
-    catch err
-        err isa ArgumentError ? sprint(showerror, err) : rethrow()
-    end
+    errmsg(f) =
+        try
+            f()
+            ""
+        catch err
+            err isa ArgumentError ? sprint(showerror, err) : rethrow()
+        end
 
     @testset "mass and damping of another size" begin
         msg = errmsg(() -> semidiscretize(a, l; mass = mass(W₇)))

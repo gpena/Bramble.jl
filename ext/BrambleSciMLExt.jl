@@ -273,9 +273,9 @@ function _check_preconditioner_solver(preconditioner, solver)
     given = solver === nothing ? "the default direct solver" : "the solver $(typeof(solver))"
     throw(
         ArgumentError(
-            "preconditioner $name needs an iterative (Krylov) `solver`, such as " *
-            "`KrylovJL_CG()` or `KrylovJL_GMRES()`; $given would ignore it."
-        ),
+        "preconditioner $name needs an iterative (Krylov) `solver`, such as " *
+        "`KrylovJL_CG()` or `KrylovJL_GMRES()`; $given would ignore it."
+    ),
     )
 end
 

@@ -270,8 +270,7 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
     @testset "CpuPolyester replay hooks" begin
         h(u, v) = innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(u, v)
         # 9 points band the grid; 3 are too few for two bands, so the sweep colours points
-        for (n, hook) in
-            ((9, "_batch_bilinear_band_replay!"), (3, "_batch_bilinear_colour_replay!"))
+        for (n, hook) in ((9, "_batch_bilinear_band_replay!"), (3, "_batch_bilinear_colour_replay!"))
             R = assemble(form(leaf1(n, Serial(), 7), leaf1(n, Serial(), 7), h))
             a = form(leaf1(n, CpuPolyester(), 7), leaf1(n, CpuPolyester(), 7), h)
             A = copy(R)
