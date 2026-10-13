@@ -10,6 +10,12 @@ using RecipesBase
 # `Plots.jl`, so calling into `RecipesBase` is what actually exercises the same boundary a
 # user crossing it does, without paying for a renderer this extension never touches.
 
+# The refusals' exact messages, so a drifting or swapped message fails the test.
+const COMPOSITE_MSG = "plotting a composite element directly has no single reading — " *
+                      "plot each of its components(...) separately."
+const DIM3_MSG = "plotting a 3D grid function directly is not implemented — only 1D " *
+                 "and 2D. See export_vtk for a full 3D field."
+
 @testset "BramplePlotsExt" begin
     @testset "1D: line recipe" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)
@@ -46,14 +52,18 @@ using RecipesBase
             domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3), (true, true, true)
         )
         uₕ = Rₕ(gridspace(Ωₕ), x -> 1.0)
-        @test_throws ArgumentError RecipesBase.apply_recipe(Dict{Symbol, Any}(), uₕ)
+        @test_throws ArgumentError(DIM3_MSG) RecipesBase.apply_recipe(
+            Dict{Symbol, Any}(), uₕ
+        )
     end
 
     @testset "composite: refused" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
         Vₕ = gridspace(Ωₕ, Val(2))
         uv = Rₕ(Vₕ, (x -> x, x -> x^2))
-        @test_throws ArgumentError RecipesBase.apply_recipe(Dict{Symbol, Any}(), uv)
+        @test_throws ArgumentError(COMPOSITE_MSG) RecipesBase.apply_recipe(
+            Dict{Symbol, Any}(), uv
+        )
 
         # each component, on its own, is an ordinary 1D grid function
         for c in components(uv)

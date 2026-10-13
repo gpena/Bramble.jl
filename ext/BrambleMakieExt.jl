@@ -16,29 +16,6 @@ using Bramble:
 using Makie: Makie
 using PrecompileTools: @setup_workload, @compile_workload
 
-# A composite element has no single reading as one curve or one grid, so plot each of its
-# components(...) separately.
-function _makie_error_composite()
-    return throw(
-        ArgumentError(
-        "plotting a composite element directly has no single reading — plot each of its " *
-        "components(...) separately.",
-    ),
-    )
-end
-
-# Unlike PGFPlots, Makie genuinely can render a true 3D volume (`Makie.volume`), so this
-# refusal is a scope decision for this extension, not a limit of Makie itself: only 1D
-# curves and 2D grids are wired up here.
-function _makie_error_dim(D)
-    return throw(
-        ArgumentError(
-        "plotting a $(D)D grid function directly is not implemented — only 1D and 2D. " *
-        "See export_vtk for a full 3D field.",
-    ),
-    )
-end
-
 # 1D: `lines(uₕ)`, `scatter(uₕ)`. `PointBased` plot types want a vector of points, not two
 # separate coordinate vectors. Makie 0.10+ requires this.
 function Makie.convert_arguments(
@@ -68,23 +45,23 @@ function Makie.convert_arguments(
 end
 
 function Makie.convert_arguments(::Makie.PointBased, ::VectorElement{<:CompositeGridSpace})
-    return _makie_error_composite()
+    return Bramble._throw_plot_composite()
 end
 function Makie.convert_arguments(
         ::Union{Makie.CellGrid, Makie.VertexGrid}, ::VectorElement{<:CompositeGridSpace}
 )
-    return _makie_error_composite()
+    return Bramble._throw_plot_composite()
 end
 
 function Makie.convert_arguments(
         ::Makie.PointBased, ::VectorElement{<:ScalarGridSpace{D}}
 ) where {D}
-    return _makie_error_dim(D)
+    return Bramble._throw_plot_dim(D)
 end
 function Makie.convert_arguments(
         ::Union{Makie.CellGrid, Makie.VertexGrid}, ::VectorElement{<:ScalarGridSpace{D}}
 ) where {D}
-    return _makie_error_dim(D)
+    return Bramble._throw_plot_dim(D)
 end
 
 # The same refusals one step earlier: Makie's generic `expand_dimensions` matches any
@@ -94,12 +71,12 @@ end
 function Makie.expand_dimensions(
         ::Makie.PointBased, ::VectorElement{<:CompositeGridSpace}
 )
-    return _makie_error_composite()
+    return Bramble._throw_plot_composite()
 end
 function Makie.expand_dimensions(
         ::Makie.PointBased, ::VectorElement{<:ScalarGridSpace{D}}
 ) where {D}
-    return _makie_error_dim(D)
+    return Bramble._throw_plot_dim(D)
 end
 
 # Warms `convert_arguments`/`expand_dimensions` for the 1D and 2D grid-function cases above

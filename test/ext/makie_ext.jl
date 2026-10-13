@@ -12,6 +12,12 @@ using Makie
 # `Bramble.mesh` is qualified throughout: `using Bramble, Makie` together makes bare `mesh`
 # ambiguous (both packages export a function by that name).
 
+# The refusals' exact messages, so a drifting or swapped message fails the test.
+const COMPOSITE_MSG = "plotting a composite element directly has no single reading — " *
+                      "plot each of its components(...) separately."
+const DIM3_MSG = "plotting a 3D grid function directly is not implemented — only 1D " *
+                 "and 2D. See export_vtk for a full 3D field."
+
 @testset "BrambleMakieExt" begin
     @testset "1D: PointBased conversion" begin
         Ωₕ = Bramble.mesh(domain(interval(0.0, 1.0)), 9, true)
@@ -53,19 +59,25 @@ using Makie
             domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (3, 3, 3), (true, true, true)
         )
         uₕ = Rₕ(gridspace(Ωₕ), x -> 1.0)
-        @test_throws ArgumentError Makie.convert_arguments(Makie.PointBased(), uₕ)
-        @test_throws ArgumentError Makie.convert_arguments(Makie.CellGrid(), uₕ)
+        @test_throws ArgumentError(DIM3_MSG) Makie.convert_arguments(Makie.PointBased(), uₕ)
+        @test_throws ArgumentError(DIM3_MSG) Makie.convert_arguments(Makie.CellGrid(), uₕ)
         # `lines(uₕ)` reaches `expand_dimensions` first
-        @test_throws ArgumentError Makie.expand_dimensions(Makie.PointBased(), uₕ)
+        @test_throws ArgumentError(DIM3_MSG) Makie.expand_dimensions(Makie.PointBased(), uₕ)
     end
 
     @testset "composite: refused" begin
         Ωₕ = Bramble.mesh(domain(interval(0.0, 1.0)), 5, true)
         Vₕ = gridspace(Ωₕ, Val(2))
         uv = Rₕ(Vₕ, (x -> x, x -> x^2))
-        @test_throws ArgumentError Makie.convert_arguments(Makie.PointBased(), uv)
-        @test_throws ArgumentError Makie.convert_arguments(Makie.CellGrid(), uv)
-        @test_throws ArgumentError Makie.expand_dimensions(Makie.PointBased(), uv)
+        @test_throws ArgumentError(COMPOSITE_MSG) Makie.convert_arguments(
+            Makie.PointBased(), uv
+        )
+        @test_throws ArgumentError(COMPOSITE_MSG) Makie.convert_arguments(
+            Makie.CellGrid(), uv
+        )
+        @test_throws ArgumentError(COMPOSITE_MSG) Makie.expand_dimensions(
+            Makie.PointBased(), uv
+        )
 
         for c in components(uv)
             (pts,) = Makie.convert_arguments(Makie.PointBased(), c)
