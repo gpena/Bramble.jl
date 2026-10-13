@@ -236,10 +236,6 @@ if __bramble_with_ad_backends
         # Runs the transient-inverse-problem page itself, whose #src assertions need
         # `SciMLSensitivity`, same as `inverse_diffusion.jl` needing `Enzyme` above.
         include("examples/transient_inverse_problem.jl")
-        # BrambleChainRulesExt: the pde_solve rrule's own math, checked against finite
-        # differences and by hand -- needs only ChainRulesCore. Enzyme/Mooncake composition
-        # is chainrules_enzyme_ext.jl above.
-        include("ext/chainrules_ext.jl")
     end
 end
 
@@ -279,6 +275,11 @@ if __bramble_with_ext_backends
         include("ext/kronecker_refactorize.jl")
         include("ext/polyester_ext.jl")
         include("ext/polyester_parity.jl")
+        # BrambleChainRulesExt: the pde_solve rrule's own math, checked against finite
+        # differences and by hand. It needs only ChainRulesCore (a test/Project.toml
+        # dependency), so it runs here, not in "AD backends (expensive)". Enzyme/Mooncake
+        # composition is chainrules_enzyme_ext.jl there.
+        include("ext/chainrules_ext.jl")
     end
 end
 
