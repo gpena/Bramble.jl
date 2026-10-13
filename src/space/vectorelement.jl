@@ -585,8 +585,8 @@ end
 @inline Base.:*(Vₕ::NTuple{D, VectorElement}, uₕ::VectorElement) where {D} = uₕ * Vₕ
 
 """
-    f::Function * uₕ::VectorElement -> VectorElement
-    uₕ::VectorElement * f::Function -> VectorElement
+    f::Function * uₕ::VectorElement{<:ScalarGridSpace} -> VectorElement
+    uₕ::VectorElement{<:ScalarGridSpace} * f::Function -> VectorElement
 
 Project the continuous function `f` onto `uₕ`'s own space and scale `uₕ` pointwise by it
 (gpena/Bramble.jl#197): equivalent to `Rₕ(space(uₕ), f) .* uₕ`, computed as a single
@@ -594,9 +594,10 @@ Project the continuous function `f` onto `uₕ`'s own space and scale `uₕ` poi
 in place) rather than one allocation for the projection and a second for the broadcast.
 
 `f` is restricted to `space(uₕ)` first, so `(x -> x[1] < 1) * uₕ` is an ordinary
-`VectorElement`.
+`VectorElement`. Only scalar spaces have a method: on a composite element the product
+is a `MethodError` (gpena/Bramble.jl#702); scale a leaf `uₕ(i)` instead.
 """
-@inline function Base.:*(f::F, uₕ::VectorElement) where {F <: Function}
+@inline function Base.:*(f::F, uₕ::VectorElement{<:ScalarGridSpace}) where {F <: Function}
     Wₕ = space(uₕ)
     # Same destination type `Rₕ(Wₕ, f) .* uₕ` would have promoted to, allocated once and
     # filled in place (`Rₕ!`) instead of allocating a projected element and then a second
@@ -606,7 +607,7 @@ in place) rather than one allocation for the projection and a second for the bro
     dest .*= uₕ
     return dest
 end
-@inline Base.:*(uₕ::VectorElement, f::F) where {F <: Function} = f * uₕ
+@inline Base.:*(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F <: Function} = f * uₕ
 
 # --- Display ---------------------------------------------------------------------- #
 #
