@@ -169,14 +169,10 @@ end
     return (entry, _reaction_leaf_entries_impl(Base.tail(leaves), markers, components, i + 1)...)
 end
 
-# Sparse: a single sweep of the stored values, testing each row against every *selected*
-# leaf via `_row_marked` (dirichlet_constraints.jl, same `(mask, offset, n, active)` entry
-# shape as `_dirichlet_bc_rows!` uses) -- a `BitVector` test that costs nothing on the ~99%
-# of entries that miss, unlike a sorted-row binary search tried and measured slower here
-# (paid `O(log m)` on every entry, hit or miss). Accumulates column-by-column with `muladd`,
-# the same order `SparseArrays`'s own `A * u` uses (`_spmatmul!`, SparseArrays/linalg.jl), so
-# every row kept here comes out bit-identical to the corresponding entry of the full matvec
-# it replaces.
+# Sparse: one sweep of the stored values, testing each row against every selected leaf via
+# `_row_marked` (`BitVector` lookup, O(1) per entry). Accumulates column by column with
+# `muladd`, the order `SparseArrays`'s `A * u` uses, so each kept row is bit-identical to the
+# full matvec.
 function _restricted_matvec(A::SparseMatrixCSC, u::AbstractVector, entries::Tuple)
     T = promote_type(eltype(A), eltype(u))
     acc = Dict{Int, T}()
@@ -217,8 +213,8 @@ function _reaction_residual(A::SparseMatrixCSC, F::AbstractVector, u::AbstractVe
     _RestrictedResidual(_restricted_matvec(A, u, entries), F)
 end
 
-# Any other matrix type (dense, or an unrecognised backend): unchanged full computation --
-# the restricted path above only pays off against `SparseMatrixCSC`'s stored-entry sweep.
+# Any other matrix type (dense, or an unrecognised backend): the full residual `A * u - F`;
+# the restricted path pays off only against `SparseMatrixCSC`.
 function _reaction_residual(A::AbstractMatrix, F::AbstractVector, u::AbstractVector, ::Tuple)
     r = similar(u, promote_type(eltype(A), eltype(u), eltype(F)), size(A, 1))
     mul!(r, A, u)
@@ -278,9 +274,8 @@ end
     return _copy_marked!(scratch, r, Base.tail(leaves), markers, components, i + 1)
 end
 
-# The hot sparse sweep below still needs an O(1) indexed row test (a `BitVector` per stored
-# entry, `nnz(A)` times), which the allocation-free walk above can't give -- iterating it is
-# `O(1)` per step but has no `getindex`. So this keeps its own, separate entries: one
+# The sparse sweep below needs an O(1) indexed row test, which the allocation-free walk above
+# cannot give (iterating it has no `getindex`). So this keeps its own, separate entries: one
 # `NTuple{N,BitVector}` of `markers`' individual, per-label masks per leaf (each
 # `index_in_marker` call is itself allocation-free), ORed bit-by-bit on the fly in
 # `_reaction_row_marked` -- unlike `_reaction_leaf_entries`/`_row_marked`
