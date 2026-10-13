@@ -114,9 +114,9 @@ end
 # `2^32 * (2^32 * u)` throws `OverflowError` instead of wrapping to `0 * u` and vanishing
 # (gpena/Bramble.jl#704), as an overflowing `Rational` scale throws. Same type as `*`/`+`.
 @inline _fold_mul(a, b) = a * b
-@inline _fold_mul(a::Integer, b::Integer) = Base.checked_mul(a, b)
+@inline _fold_mul(a::Integer, b::Integer) = Base.Checked.checked_mul(a, b)
 @inline _fold_add(a, b) = a + b
-@inline _fold_add(a::Integer, b::Integer) = Base.checked_add(a, b)
+@inline _fold_add(a::Integer, b::Integer) = Base.Checked.checked_add(a, b)
 
 # Two coefficients just lifted out of the two arguments of one inner product, wrapped around
 # the product they were lifted from.

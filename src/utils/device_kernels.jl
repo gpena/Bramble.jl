@@ -143,7 +143,7 @@ end
     any(iszero, dims) && return nothing
     p = 1
     for d in dims
-        p, overflow = Base.mul_with_overflow(p, Int(d))
+        p, overflow = Base.Checked.mul_with_overflow(p, Int(d))
         (overflow || p > typemax(Int32)) && _throw_int32_extent(dims, op)
     end
     return nothing

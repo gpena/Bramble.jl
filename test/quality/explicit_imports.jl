@@ -620,7 +620,12 @@ using Kronecker: Kronecker
                 # generated function rebuilds an operator wrapper around a new operand from
                 # the wrapper's own type; Base has no public accessor for a type's wrapper.
                 :typename,
-                :unwrap_unionall
+                :unwrap_unionall,
+                # `Base.Experimental.@max_methods` (src/space/vectorelement.jl): caps `element`
+                # at one method so a method an extension adds invalidates none of its callers
+                # (#755); neither the module nor the macro has a public spelling.
+                :Experimental,
+                Symbol("@max_methods")
             )
         ) === nothing
     end
