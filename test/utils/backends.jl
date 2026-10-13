@@ -791,6 +791,72 @@ end
                   "`using KernelAbstractions` before calling Metal sparse `mul!`."
         end
     end
+
+    # 3. `_check_int32_extent` (#714) refuses more than `typemax(Int32)` entries with an
+    #    `ArgumentError` naming the operation and the count, a count or a dims tuple alike.
+    #    A tuple's product counts even when no single extent is too large, and overflowing
+    #    `Int` still throws; a zero extent is an empty launch. Nothing is allocated.
+    @testset "_check_int32_extent" begin
+        m = Int(typemax(Int32))
+        @test Bramble._check_int32_extent(m, "mul!") === nothing
+        @test Bramble._check_int32_extent((m,), "mul!") === nothing
+        @test Bramble._check_int32_extent((2^15, 2^16 - 1), "mul!") === nothing
+        @test Bramble._check_int32_extent((), "mul!") === nothing
+        @test Bramble._check_int32_extent((2^40, 2^40, 0), "mul!") === nothing
+        function msg(x)
+            try
+                Bramble._check_int32_extent(x, "curl")
+                return ""
+            catch e
+                return e isa ArgumentError ? sprint(showerror, e) : repr(e)
+            end
+        end
+        @test_throws ArgumentError Bramble._check_int32_extent(m + 1, "curl")
+        @test occursin("curl on $(m + 1) entries", msg(m + 1))
+        @test_throws ArgumentError Bramble._check_int32_extent((2^16, 2^15), "curl")
+        @test occursin("curl on $(2^31) entries", msg((2^16, 2^15)))
+        @test_throws ArgumentError Bramble._check_int32_extent((2^40, 2^40, 2), "curl")
+        @test occursin("curl on $(big(2)^81) entries", msg((2^40, 2^40, 2)))
+        @test_allocs Bramble._check_int32_extent(m, "mul!")
+        @test_allocs Bramble._check_int32_extent((2^15, 2^15), "mul!")
+    end
+
+    # 4. Every `Int32`-index launcher in `BrambleKernelAbstractionsExt` refuses a launch past
+    #    `typemax(Int32)` entries on the host, before it reaches the device. A lazy `1:2^31`
+    #    stands in for the output, so no large array is allocated. Needs the extension, so it
+    #    runs only where `KernelAbstractions` is loaded.
+    ka_ext = Base.get_extension(Bramble, :BrambleKernelAbstractionsExt)
+    if ka_ext !== nothing
+        @testset "Int32 launchers refuse 2^31 entries" begin
+            E = ka_ext
+            o = 1:(2 ^ 31)
+            d = (2^16, 2^15)
+            dev = E.KernelAbstractions.CPU()
+            F = Bramble.Forward()
+            launches = (
+                "difference" => () -> E._launch_difference_onesided!(o, o, 1.0, d, F, Val(1), dev),
+                "difference" => () -> E._launch_difference_centered!(o, o, 1.0, d, F, Val(1), dev),
+                "average" => () -> E._launch_average_engine!(o, o, d, F, Val(1), dev),
+                "divergence" => () -> E._launch_fused_divergence!(o, (o, o), (1.0, 1.0), d, F, dev),
+                "curl" => () -> E._launch_fused_curl2d!(o, o, o, 1.0, 1.0, d, F, dev),
+                "curl" => () -> E._launch_fused_curl3d!(
+                    o, o, o, o, o, o, 1.0, 1.0, 1.0, (2^11, 2^10, 2^10), F, dev),
+                "Laplacian" => () -> E._launch_fused_laplacian!(o, o, (1.0, 1.0), (1.0, 1.0), d, dev),
+                "strain" => () -> E._launch_fused_strain_offdiag!(o, o, o, 1.0, 1.0, d, Val(1), Val(2), dev),
+                "Kronecker mul!" => () -> E._launch_kron_fused!(o, o, d, (1, 2^16), (), (), 0.0, true)
+            )
+            for (op, launch) in launches
+                err = try
+                    launch()
+                    nothing
+                catch e
+                    e
+                end
+                @test err isa ArgumentError
+                @test occursin("$op on $(2^31) entries", sprint(showerror, err))
+            end
+        end
+    end
 end
 
 @testset "Deprecated policy aliases (#300)" begin

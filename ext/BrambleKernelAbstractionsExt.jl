@@ -494,6 +494,10 @@ end
 # `@index(Global)` pattern are not the cost. `benchmark/gpu_stencils.jl` reruns the
 # comparison in its `_run_int32_index` section.
 #
+# Every launcher of an `Int32`-index kernel calls `Bramble._check_int32_extent` once on
+# the host first: past `typemax(Int32)` entries the device-side conversion would fail where
+# the host cannot see it, so the host refuses the launch with an `ArgumentError` instead.
+#
 # A "fraction of peak" figure anywhere in this file or its benchmarks uses the peak measured
 # on this host (a plain KA copy kernel), not the hardware spec figure. Even that is a floor,
 # because a stencil whose neighbour reads overlap between adjacent threads can measure above
@@ -590,6 +594,7 @@ end
 
 function _launch_difference_onesided!(
         out::AbstractVector, in_ref, h, dims::Tuple, dir, dim_val::Val{DIM}, dev) where {DIM}
+    Bramble._check_int32_extent(length(out), "difference")
     n = dims[DIM]
     s = _axis_stride(dims, dim_val)
     invh = _reciprocal_spacing(h)
@@ -641,6 +646,7 @@ end
 
 function _launch_difference_centered!(
         out::AbstractVector, in_ref, h, dims::Tuple, dir, dim_val::Val{DIM}, dev) where {DIM}
+    Bramble._check_int32_extent(length(out), "difference")
     n = dims[DIM]
     s = _axis_stride(dims, dim_val)
     invh = _reciprocal_spacing(h)
@@ -664,6 +670,7 @@ end
 end
 
 function _launch_average_engine!(out::AbstractVector, in_ref, dims::Tuple, dir, dim_val::Val{DIM}, dev) where {DIM}
+    Bramble._check_int32_extent(length(out), "average")
     n = dims[DIM]
     s = _axis_stride(dims, dim_val)
     boundary_idx = Int32(Bramble._stencil_boundary_dim(dir, n))
@@ -775,9 +782,11 @@ end
 end
 
 function _launch_kron_fused!(y::AbstractVector, x::AbstractVector, dims, strides, cs, facs, β, βzero)
+    # `Int32` index arithmetic, since 64-bit integer division is emulated on Apple GPUs:
+    # `@index(Global) % Int32` wraps silently past `typemax(Int32)` entries, so the host
+    # refuses that many first, with an `ArgumentError`. `length(y)` is `prod(dims)`.
+    Bramble._check_int32_extent(length(y), "Kronecker mul!")
     dev = get_backend(y)
-    # `Int32` index arithmetic (an `InexactError` past `typemax(Int32)` entries): 64-bit
-    # integer division is emulated on Apple GPUs.
     dims32 = map(Int32, dims)
     strides32 = map(Int32, strides)
     _kron_fused_kernel!(dev)(y, x, dims32, strides32, cs, facs, β, βzero; ndrange = length(y))
@@ -867,6 +876,7 @@ end
 end
 
 function _launch_fused_divergence!(out::AbstractVector, comps::Tuple, hs::Tuple, dims::Tuple, dir, dev)
+    Bramble._check_int32_extent(length(out), "divergence")
     D = length(dims)
     strides = ntuple(d -> _axis_stride(dims, Val(d)), Val(D))
     ns32 = ntuple(d -> Int32(dims[d]), Val(D))
@@ -899,6 +909,7 @@ end
 end
 
 function _launch_fused_curl2d!(out::AbstractVector, u1, u2, h1, h2, dims::Tuple, dir, dev)
+    Bramble._check_int32_extent(length(out), "curl")
     s1 = _axis_stride(dims, Val(1))
     s2 = _axis_stride(dims, Val(2))
     invh1 = inv.(h1)
@@ -922,6 +933,7 @@ end
 end
 
 function _launch_fused_curl3d!(out1, out2, out3, u1, u2, u3, h1, h2, h3, dims::Tuple, dir, dev)
+    Bramble._check_int32_extent(length(out1), "curl")
     s1 = _axis_stride(dims, Val(1))
     s2 = _axis_stride(dims, Val(2))
     s3 = _axis_stride(dims, Val(3))
@@ -1009,6 +1021,7 @@ end
 end
 
 function _launch_fused_laplacian!(out::AbstractVector, u, hbs::Tuple, hss::Tuple, dims::Tuple, dev)
+    Bramble._check_int32_extent(length(out), "Laplacian")
     D = length(dims)
     strides = ntuple(d -> _axis_stride(dims, Val(d)), Val(D))
     ns32 = ntuple(d -> Int32(dims[d]), Val(D))
@@ -1084,6 +1097,7 @@ end
 function _launch_fused_strain_offdiag!(
         out::AbstractVector, ui, uj, hi, hj, dims::Tuple, dim_i::Val{I}, dim_j::Val{J}, dev
 ) where {I, J}
+    Bramble._check_int32_extent(length(out), "strain")
     si = _axis_stride(dims, dim_i)
     sj = _axis_stride(dims, dim_j)
     invh_i = inv.(hi)

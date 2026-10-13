@@ -127,3 +127,33 @@ function _launch_spmm_csr!(C, rowPtr, colVal, nzVal, B, α, β)
         " before calling Metal sparse `mul!`.",
     )
 end
+
+# The host-side guard every `Int32`-index device launcher calls once, before its launch
+# (gpena/Bramble.jl#714). A kernel computes its linear index in `Int32` (`@index(Global) %
+# Int32` wraps silently past `typemax(Int32)`, `Int32(idx)` throws a device-side error the
+# host never sees), so the entry count is checked here instead: `n` is the launch's entry
+# count, or a `dims` tuple whose product is, computed without overflowing. `op` names the
+# operation in the `ArgumentError`. Allocates nothing unless it throws.
+@inline function _check_int32_extent(n::Integer, op::String)
+    n <= typemax(Int32) || _throw_int32_extent(n, op)
+    return nothing
+end
+
+@inline function _check_int32_extent(dims::Tuple{Vararg{Integer}}, op::String)
+    any(iszero, dims) && return nothing
+    p = 1
+    for d in dims
+        p, overflow = Base.mul_with_overflow(p, Int(d))
+        (overflow || p > typemax(Int32)) && _throw_int32_extent(dims, op)
+    end
+    return nothing
+end
+
+# The count is formed here, past the `@noinline` barrier, so the overflow-safe `BigInt`
+# product costs a launch that passes the check nothing.
+@noinline _throw_int32_extent(dims::Tuple, op::String) = _throw_int32_extent(prod(big, dims), op)
+
+@noinline function _throw_int32_extent(n::Integer, op::String)
+    throw(ArgumentError("$op on $n entries is past the $(typemax(Int32)) that the device " *
+                        "kernel's Int32 index arithmetic can address"))
+end
