@@ -173,17 +173,6 @@ end
 @inline (k::_AvgKernel{F, X, IX, NQ, T})(i) where {F, X, IX, NQ, T} = _cell_average(
     k.f, k.x, k.idxs[i], k.nodes, k.wts)
 
-# `NC` is unused.
-struct _AvgScatterKernel{F, X, IX, NQ, T, NC}
-    f::F
-    x::X
-    idxs::IX
-    nodes::NTuple{NQ, T}
-    wts::NTuple{NQ, T}
-end
-@inline (k::_AvgScatterKernel{F, X, IX, NQ, T, NC})(i) where {F, X, IX, NQ, T, NC} = _cell_average(
-    k.f, k.x, k.idxs[i], k.nodes, k.wts)
-
 # `CellAverage`'s side of the `project!` contract (`operators/projection.jl`). The rule
 # carries the quadrature order; the driver decides the space's shape, the masking and the
 # execution policy.
@@ -193,18 +182,8 @@ end
     return _AvgKernel(rule.f, half_points(Ωₕ), indices(Ωₕ), nodes, wts)
 end
 
-@inline function _rule_scatter_kernel(
-        rule::CellAverage{F, NQ}, sp, ::Val{NC}
-) where {F, NQ, NC}
-    Ωₕ = mesh(sp)
-    T = eltype(Ωₕ)
-    nodes, wts = _gauss_rule(rule.nq, T)
-    x = half_points(Ωₕ)
-    idxs = indices(Ωₕ)
-    return _AvgScatterKernel{typeof(rule.f), typeof(x), typeof(idxs), NQ, T, NC}(
-        rule.f, x, idxs, nodes, wts
-    )
-end
+@inline _rule_scatter_kernel(rule::CellAverage, sp, ::Val{NC}) where {NC} = _rule_kernel(
+    rule, sp)
 
 @inline _rule_component(rule::CellAverage, k) = CellAverage(pt -> rule.f(pt)[k], rule.nq)
 

@@ -96,7 +96,7 @@ using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
                CpuPolyester, _ReplayTarget, _ActionTarget, _replay_point!, _difference_band!,
                _average_band!, _centered_average_band!, _broadcast_band!, _kron_line_init!,
                _kron_line_terms!, _kron_host_raw, _kron_host_rebuild, _bc_host_raw,
-               _bc_host_rebuild, _MaskedKernel, __prod, _RₕKernel, _AvgKernel, _AvgScatterKernel,
+               _bc_host_rebuild, _MaskedKernel, __prod, _RₕKernel, _AvgKernel,
                ReplaySink, _PairReplaySink, _DiagonalReplayTarget, ActionSink,
                _PairActionSink, _batch_split, _batch_rebuild, _MFFusedPlan, _MFPass,
                _MF_BAND, _MF_NO_COLLECT, _mf_apply_parts!, _mf_host_ast, _batch_splittable,
@@ -520,8 +520,8 @@ end
 # vectors and a `_MaskedKernel` its `BitVector`s, and any GC reference puts Polyester's
 # argument box on the heap. `v` crosses as a top-level loop argument and the kernel as one
 # `_batch_split` (`_split_or_whole` below), each task rebuilding it around the `PtrArray`s:
-# the `_RₕKernel` points, the `_AvgKernel`/`_AvgScatterKernel` half points and the weight
-# build's `Fix1(__prod, factors)` vectors in place. A `_MaskedKernel`'s masks first become
+# the `_RₕKernel` points, the `_AvgKernel` half points and the weight build's
+# `Fix1(__prod, factors)` vectors in place. A `_MaskedKernel`'s masks first become
 # their 64-bit word vectors (`_for_host_raw`), each rebuilt as `_ChunkBits`, a bit test over
 # the words. A single-iteration `@batch` runs its body inline on the plain `Vector`s, which
 # the rebuild accepts as well.
@@ -557,7 +557,6 @@ end
 _splits_kernel(::Type) = false
 _splits_kernel(::Type{<:_RₕKernel{F}}) where {F} = isbitstype(F)
 _splits_kernel(::Type{<:_AvgKernel{F}}) where {F} = isbitstype(F)
-_splits_kernel(::Type{<:_AvgScatterKernel{F}}) where {F} = isbitstype(F)
 _splits_kernel(::Type{<:Base.Fix1{typeof(__prod), <:Tuple{Vararg{AbstractVector}}}}) = true
 _splits_kernel(::Type{<:_MaskedKernel{K}}) where {K} = _splits_kernel(K)
 

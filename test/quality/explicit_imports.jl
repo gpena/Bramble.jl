@@ -149,12 +149,11 @@ using Kronecker: Kronecker
                 :_DiagonalReplayTarget,
                 :ActionSink,
                 :_PairActionSink,
-                # `_AvgKernel`, `_AvgScatterKernel`, `_MaskedKernel`, `_RₕKernel`, `__prod`:
+                # `_AvgKernel`, `_MaskedKernel`, `_RₕKernel`, `__prod`:
                 # the per-point kernels of the cell-average, projection and restriction
                 # operators, run by the extension's `@batch` bodies as the `CpuThreaded` sweeps
                 # run them, and the diagonal product the separable weights share.
                 :_AvgKernel,
-                :_AvgScatterKernel,
                 :_MaskedKernel,
                 :_RₕKernel,
                 :__prod,
