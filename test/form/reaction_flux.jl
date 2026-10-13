@@ -591,22 +591,16 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
             st = Base.invokelatest(iterate, m)[2]
             @test Base.invokelatest(iterate, m, st)[1] == idx[2] + 3
 
-            # per-leaf entries: the union mask, offset, size and selection of each leaf
+            # per-leaf entries: the per-label masks, offset, size and selection of each leaf
             entries = Base.invokelatest(
-                Bramble._reaction_leaf_entries, leaves, (:left, :right), nothing)
-            @test length(entries) == 1
-            @test Base.invokelatest(
-                Bramble._reaction_leaf_entries_impl, leaves, (:left, :right), nothing, 1) ==
-                  entries
-            mask, off, nn, active = entries[1]
-            @test findall(mask) == idx
-            @test (off, nn, active) == (0, n₁, true)
-            entries_b = Base.invokelatest(
                 Bramble._reaction_leaf_entries!, leaves, (:left, :right), nothing)
-            @test findall(entries_b[1][1][1]) == rows(Ω₁, :left, 0)
-            @test findall(entries_b[1][1][2]) == rows(Ω₁, :right, 0)
+            @test length(entries) == 1
+            masks, off, nn, active = entries[1]
+            @test findall(masks[1]) == rows(Ω₁, :left, 0)
+            @test findall(masks[2]) == rows(Ω₁, :right, 0)
+            @test (off, nn, active) == (0, n₁, true)
             for row in 1:n₁
-                @test Base.invokelatest(Bramble._reaction_row_marked, entries_b, row) ==
+                @test Base.invokelatest(Bramble._reaction_row_marked, entries, row) ==
                       (row in idx)
             end
             @test !Base.invokelatest(Bramble._reaction_row_marked, (), 1)

@@ -40,8 +40,8 @@ quotient grows like `1/h` (gpena/Bramble.jl#546).
 
 ## Overlap and components
 
-Marker overlap reuses `_combined_mask` (space/inner_product.jl), the same union used by
-`dirichlet_bc!`, so a point shared by two markers is counted once. `components` restricts
+Marker overlap is a union, as in `dirichlet_bc!`, so a point shared by two markers is
+counted once. `components` restricts
 a composite space's leaves exactly as `dirichlet_components` does for `assemble`/
 `dirichlet_bc!` -- 1-based positions in `leaf_spaces_offsets`, the same order `u(1)`,
 `u(2)`, ... addresses.
@@ -168,46 +168,36 @@ end
 # costs `nnz(A)`; testing every stored entry once against every *selected* leaf keeps a call
 # with several markers/components at one sweep total, not one per row or per leaf.
 
-# One entry per leaf, always (mirrors `_leaf_entries`/`_leaf_entries_impl`,
-# dirichlet_constraints.jl): keeps the tuple's shape independent of `components`, so
-# `_restricted_matvec`/`_row_marked`'s recursion below stays fully unrolled. `markers` here
-# can name several labels, so each entry's mask is `_combined_mask`'s union rather than a
-# single `index_in_marker` -- everything else matches.
-@inline _reaction_leaf_entries(leaves::Tuple, markers, components) = _reaction_leaf_entries_impl(leaves, markers, components, 1)
-@inline _reaction_leaf_entries_impl(::Tuple{}, markers, components, i::Int) = ()
-@inline function _reaction_leaf_entries_impl(leaves::Tuple, markers, components, i::Int)
-    sp, offset = first(leaves)
-    entry = (
-        _combined_mask(mesh(sp), markers), offset, ndofs(sp), _leaf_selected(components, i)
-    )
-    return (entry, _reaction_leaf_entries_impl(Base.tail(leaves), markers, components, i + 1)...)
-end
-
-# Sparse: one sweep of the stored values, testing each row against every selected leaf via
-# `_row_marked` (`BitVector` lookup, O(1) per entry). Accumulates column by column with
-# `muladd`, the order `SparseArrays`'s `A * u` uses, so each kept row is bit-identical to the
-# full matvec.
-function _restricted_matvec(A::SparseMatrixCSC, u::AbstractVector, entries::Tuple)
-    T = promote_type(eltype(A), eltype(u))
-    acc = Dict{Int, T}()
+# One column sweep of the stored values, shared by `_restricted_matvec` and the sparse
+# `_reaction_residual!` below: each entry is tested against every selected leaf via
+# `_reaction_row_marked` (O(1) per entry), and `accumulate!(row, v, uj)` receives the marked
+# ones in column order, which is the order `SparseArrays`'s `A * u` uses, so each kept row is
+# bit-identical to the full matvec once `accumulate!` adds with `muladd`.
+@inline function _marked_column_sweep!(accumulate!::F, A::SparseMatrixCSC, u::AbstractVector, entries::Tuple) where {F}
     rows = rowvals(A)
     vals = nonzeros(A)
-
     @inbounds for j in axes(A, 2)
         uj = u[j]
         for k in nzrange(A, j)
             row = rows[k]
-            if _row_marked(entries, row)
-                acc[row] = muladd(vals[k], uj, get(acc, row, zero(T)))
-            end
+            _reaction_row_marked(entries, row) && accumulate!(row, vals[k], uj)
         end
+    end
+    return nothing
+end
+
+function _restricted_matvec(A::SparseMatrixCSC, u::AbstractVector, entries::Tuple)
+    T = promote_type(eltype(A), eltype(u))
+    acc = Dict{Int, T}()
+    _marked_column_sweep!(A, u, entries) do row, v, uj
+        acc[row] = muladd(v, uj, get(acc, row, zero(T)))
     end
     return acc
 end
 
 # Answers `r[j] = (A * u)[j] - F[j]` at just the rows `_restricted_matvec` kept -- every `j`
 # `_reaction_over_leaves`/`_reaction_density_over_leaves!` ever ask for is one of them, since
-# both walk the same `MarkedIndices` `_reaction_leaf_entries` was built from.
+# both walk the same marked points `_reaction_leaf_entries!` was built from.
 struct _RestrictedResidual{T, Fv <: AbstractVector}
     acc::Dict{Int, T}
     F::Fv
@@ -239,12 +229,11 @@ end
 # --- In-place variants: caller-owned scratch, zero allocation (gpena/Bramble.jl#289 item 3) --
 #
 # `reaction!`/`reaction_density!` need literally zero bytes per call, steady state -- not just
-# "small", which rules out `_reaction_leaf_entries`/`_restricted_matvec` above even though that
-# path is already far smaller than the original full matvec: `_combined_mask` (used to build
-# each leaf's entry there) allocates a fresh unioned `BitVector` whenever `markers` names more
-# than one label. Below recurses over `leaves`/`markers`/`components` directly instead (the
-# same shape `_reaction_over_leaves` uses) and reads/writes only through `_reaction_marked`,
-# so it is allocation-free regardless of how many labels `marker` names.
+# "small", which rules out `_restricted_matvec`'s `Dict` above even though that path is already
+# far smaller than the original full matvec. Below recurses over `leaves`/`markers`/
+# `components` directly instead (the same shape `_reaction_over_leaves` uses) and reads/writes
+# only through `_reaction_marked`, so it is allocation-free regardless of how many labels
+# `marker` names.
 @inline _zero_marked!(scratch::AbstractVector, ::Tuple{}, markers, components, i) = nothing
 @inline function _zero_marked!(
         scratch::AbstractVector{T}, leaves::Tuple, markers, components, i
@@ -288,12 +277,13 @@ end
     return _copy_marked!(scratch, r, Base.tail(leaves), markers, components, i + 1)
 end
 
-# The sparse sweep below needs an O(1) indexed row test, which the allocation-free walk above
-# cannot give (iterating it has no `getindex`). So this keeps its own, separate entries: one
-# `NTuple{N,BitVector}` of `markers`' individual, per-label masks per leaf (each
+# The column sweep needs an O(1) indexed row test, which the allocation-free walk above
+# cannot give (iterating it has no `getindex`). So both residuals share one set of entries:
+# one `NTuple{N,BitVector}` of `markers`' individual, per-label masks per leaf (each
 # `index_in_marker` call is itself allocation-free), ORed bit-by-bit on the fly in
-# `_reaction_row_marked` -- unlike `_reaction_leaf_entries`/`_row_marked`
-# (dirichlet_constraints.jl) above, no label ever gets unioned into a fresh `BitVector`.
+# `_reaction_row_marked`, so no label ever gets unioned into a fresh `BitVector`. One entry
+# per leaf, always (mirrors `_leaf_entries`, dirichlet_constraints.jl): the tuple's shape is
+# independent of `components`, so the recursion below stays fully unrolled.
 @inline _reaction_leaf_entries!(leaves::Tuple, markers, components) = _reaction_leaf_entries_impl!(leaves, markers, components, 1)
 @inline _reaction_leaf_entries_impl!(
     ::Tuple{}, markers::NTuple{N, Symbol}, components, i::Int
@@ -336,17 +326,8 @@ function _reaction_residual!(
 )
     _zero_marked!(scratch, leaves, markers, components, 1)
     entries = _reaction_leaf_entries!(leaves, markers, components)
-    rows = rowvals(A)
-    vals = nonzeros(A)
-
-    @inbounds for j in axes(A, 2)
-        uj = u[j]
-        for k in nzrange(A, j)
-            row = rows[k]
-            if _reaction_row_marked(entries, row)
-                scratch[row] = muladd(vals[k], uj, scratch[row])
-            end
-        end
+    _marked_column_sweep!(A, u, entries) do row, v, uj
+        @inbounds scratch[row] = muladd(v, uj, scratch[row])
     end
 
     _subtract_marked!(scratch, F, leaves, markers, components, 1)
@@ -377,9 +358,9 @@ and load `F` (`assemble(a)`/`assemble(l)` with no `dirichlet` keyword -- `dirich
 would have already overwritten the rows this needs).
 
 `marker` is a `Symbol` or a `Tuple` of them, exactly as `dirichlet` accepts one or several
-labels; overlap between markers is counted once (`_combined_mask`, the same union
-`dirichlet_bc!` uses). `components` restricts a composite space's leaves (1-based
-positions in `leaf_spaces_offsets`, `nothing` meaning every leaf).
+labels; overlap between markers is counted once (the same union `dirichlet_bc!` takes).
+`components` restricts a composite space's leaves (1-based positions in
+`leaf_spaces_offsets`, `nothing` meaning every leaf).
 
 # Sign and scaling
 
@@ -419,7 +400,7 @@ function reaction(
     _validate_dirichlet_components(components, length(leaves))
 
     markers = _reaction_markers(marker)
-    entries = _reaction_leaf_entries(leaves, markers, components)
+    entries = _reaction_leaf_entries!(leaves, markers, components)
     r = _reaction_residual(A, F, parent(uₕ), entries)
     return _reaction_over_leaves(leaves, r, markers, components, 1, zero(eltype(r)))
 end
@@ -532,7 +513,7 @@ function reaction_density(
     _validate_dirichlet_components(components, length(leaves))
 
     markers = _reaction_markers(marker)
-    entries = _reaction_leaf_entries(leaves, markers, components)
+    entries = _reaction_leaf_entries!(leaves, markers, components)
     r = _reaction_residual(A, F, parent(uₕ), entries)
     dens = zeros(eltype(r), ndofs(sp))
     _reaction_density_over_leaves!(dens, leaves, r, markers, components, 1)
