@@ -9,7 +9,7 @@ using ..TestUtils: TEST_DIMS
 using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunction,
                TestFunction, IndexedTrialFunction, IndexedTestFunction, InterpolationNode,
                SourceVector, SourceConstant, component, stencil_offsets, expression,
-               host_points, _interp_triplet_frac, _is_source_only, _same_operator_shape,
+               host_points, _interp_cell_frac, _is_source_only, _same_operator_shape,
                _all_trial_interpolated, _all_test_interpolated, _has_trial_interp,
                _has_test_interp, _bind_interp_spaces
 
@@ -246,23 +246,22 @@ using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunctio
               [0.0 <= x <= 1.0 ? g1(x) : 0.0 for x in xd]
     end
 
-    # `_interp_triplet_frac` for a 1D source given its points as a 1-tuple: the method that
-    # resolves Aqua's ambiguity between the flat-vector and the `NTuple{D}` methods.
-    # `host_points(::Mesh1D)` never returns a 1-tuple, so it is called directly. Oracle: the
-    # returned cell brackets `x` and its fraction reproduces `x` as a convex combination of
-    # the cell's two (non-uniformly spaced) end points.
-    @testset "1D triplet fraction, 1-tuple of points" begin
+    # `_interp_cell_frac` given the coordinates explicitly: `host_points` is what
+    # `interpolation_matrix` passes, `points` what the pointwise and stencil paths read.
+    # Oracle: the returned cell brackets `x`, its fraction reproduces `x` as a convex
+    # combination of the cell's two (non-uniformly spaced) end points, and the explicit
+    # form agrees exactly with the three-argument form.
+    @testset "1D cell fraction, explicit points" begin
         Ωs = mesh(domain(interval(0.0, 1.0)), 8, false)
         pts = collect(points(Ωs))
         for x in (0.0, 0.2345, 0.71, 1.0)
-            i, t = _interp_triplet_frac(Ωs, (host_points(Ωs),), x, :error)
+            i, t = _interp_cell_frac(Ωs, host_points(Ωs), x, :error)
             @test pts[i] <= x <= pts[i + 1]
             @test (1 - t) * pts[i] + t * pts[i + 1] ≈ x atol=1e-14
-            @test (i, t) == _interp_triplet_frac(Ωs, host_points(Ωs), x, :error)
+            @test (i, t) == _interp_cell_frac(Ωs, x, :error)
         end
-        @test _interp_triplet_frac(Ωs, (host_points(Ωs),), 1.5, :clamp) ==
-              (length(pts) - 1, 1.0)
-        @test_throws ArgumentError _interp_triplet_frac(Ωs, (host_points(Ωs),), 1.5, :error)
+        @test _interp_cell_frac(Ωs, host_points(Ωs), 1.5, :clamp) == (length(pts) - 1, 1.0)
+        @test_throws ArgumentError _interp_cell_frac(Ωs, host_points(Ωs), 1.5, :error)
     end
 
     # The symbolic source `πₕ(uₕ)` in a linear form, read through its `GridInterpolant` at

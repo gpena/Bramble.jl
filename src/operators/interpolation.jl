@@ -155,11 +155,8 @@ end
     return _throw_outside_domain(xd, lo, hi)
 end
 
-@inline function _interp_in_domain(Ωₕ::AbstractMeshType{D}, x) where {D}
-    return all(ntuple(Val(D)) do d
-        pts = points(Ωₕ(d))
-        _interp_near_boundary(pts[1], pts[end], x[d])
-    end)
+@inline function _interp_in_domain(pts::NTuple{D}, x) where {D}
+    return all(ntuple(d -> _interp_near_boundary(pts[d][1], pts[d][end], x[d]), Val(D)))
 end
 
 """
@@ -284,15 +281,18 @@ end
 # exactly this and nothing more: `interpolate_at` above blends grid *values* with the
 # weights, `interpolation_matrix` emits them as matrix entries, and the symbolic
 # `InterpolationNode` (below) emits them as stencil entries against
-# absolute trial columns. Factored so the three cannot drift.
+# absolute trial columns. All three go through the one `_interp_cell_frac(Ωₕ, pts, x,
+# outside)`, so they cannot drift; they differ only in the coordinates `pts` they hand it:
+# the flat vector (1D) or per-axis tuple (D-dim) of `points` on the pointwise and stencil
+# paths (the three-argument methods below), `host_points` on the matrix path, which reads
+# host arrays whichever device `Ωₕ` lives on.
 #
 # Returns `(i, t)`/`(idx, ts)` as before, or the sentinel `nothing` when `outside isa
 # Number` *and* `x` is genuinely outside the domain -- the one shape change the fill value brings,
 # read by `interpolate_at` alone (the only caller a fill value is meaningful for; the
 # linear callers validate `outside` down to the three symbols before ever reaching here,
 # so `nothing` never arises on those paths).
-@inline function _interp_cell_frac(Ωₕ::AbstractMeshType{1}, x, outside)
-    pts = points(Ωₕ)
+@inline function _interp_cell_frac(Ωₕ::AbstractMeshType{1}, pts, x, outside)
     lo, hi = pts[1], pts[end]
     if outside isa Number && !_interp_near_boundary(lo, hi, x)
         return nothing
@@ -304,8 +304,10 @@ end
     return i, t
 end
 
-@inline function _interp_cell_frac(Ωₕ::AbstractMeshType{D}, x, outside) where {D}
-    if outside isa Number && !_interp_in_domain(Ωₕ, x)
+@inline function _interp_cell_frac(
+        Ωₕ::AbstractMeshType{D}, pts::NTuple{D}, x, outside
+) where {D}
+    if outside isa Number && !_interp_in_domain(pts, x)
         return nothing
     end
     # Every axis is now known to be resolvable without the fill-value short-circuit --
@@ -314,20 +316,32 @@ end
     # typed (a `Number`/`nothing` mix would not be).
     outside_sym = outside isa Number ? :extrapolate : outside
     xc = ntuple(Val(D)) do d
-        pts = points(Ωₕ(d))
-        _interp_resolve_coord(x[d], pts[1], pts[end], outside_sym)
+        _interp_resolve_coord(x[d], pts[d][1], pts[d][end], outside_sym)
     end
     idx = locate_cell(Ωₕ, xc)
     # A collapsed axis (one point) has no cell: `t = 0` there, and every caller drops or
     # zero-weights its far corner, so the axis is a 1×1 identity factor.
     ts = ntuple(Val(D)) do d
-        pts = points(Ωₕ(d))
-        length(pts) == 1 && return zero(xc[d] - pts[1])
+        pd = pts[d]
+        length(pd) == 1 && return zero(xc[d] - pd[1])
         i = idx[d]
-        lo, hi = pts[i], pts[i + 1]
+        lo, hi = pd[i], pd[i + 1]
         hi > lo ? (xc[d] - lo) / (hi - lo) : zero(xc[d] - lo)
     end
     return idx, ts
+end
+
+# Inference cannot rule out `points` of a 1D mesh being a 1-tuple of coordinates; forward it.
+@inline _interp_cell_frac(Ωₕ::AbstractMeshType{1}, pts::Tuple{Any}, x, outside) = _interp_cell_frac(
+    Ωₕ, pts[1], x, outside
+)
+
+# The pointwise and stencil paths read the mesh's own `points`.
+@inline _interp_cell_frac(Ωₕ::AbstractMeshType{1}, x, outside) = _interp_cell_frac(
+    Ωₕ, points(Ωₕ), x, outside
+)
+@inline function _interp_cell_frac(Ωₕ::AbstractMeshType{D}, x, outside) where {D}
+    return _interp_cell_frac(Ωₕ, ntuple(d -> points(Ωₕ(d)), Val(D)), x, outside)
 end
 
 # The multilinear weight of one corner: `tᵈ` where the corner is on the far side of
@@ -470,53 +484,13 @@ element type is promoted from `Wₕ`'s and `src`'s own, so interpolating a `Dual
 # value cannot be represented here). So the fraction helpers below never see the fill-value
 # short-circuit `_interp_cell_frac` carries for `interpolate_at` alone.
 #
-# `point(Ωdest, ·)` and `_interp_cell_frac` both read straight off `points`/`points(Ωₕ(d))`,
-# which throws outright on a device-backed mesh rather than
-# scalar-indexing it one point at a time. `host_points` is called exactly once per
+# `point(Ωdest, ·)` and the three-argument `_interp_cell_frac` both read straight off
+# `points`/`points(Ωₕ(d))`, which throws outright on a device-backed mesh rather than
+# scalar-indexing it one point at a time. So this path hands the four-argument
+# `_interp_cell_frac` the `host_points` instead, called exactly once per
 # mesh below -- not once per destination point -- so the whole assembly is a host loop over
 # host arrays regardless of where `Ωdest`/`Ωsrc` actually live; `locate_cell` is
 # the one per-point mesh query left, already safe on a device mesh by construction.
-
-@inline function _interp_triplet_frac(Ωsrc::AbstractMeshType{1}, pts_src, x, outside::Symbol)
-    lo, hi = pts_src[1], pts_src[end]
-    xc = _interp_resolve_coord(x, lo, hi, outside)
-    i = locate_cell(Ωsrc, xc)
-    plo, phi = pts_src[i], pts_src[i + 1]
-    t = phi > plo ? (xc - plo) / (phi - plo) : zero(xc - plo)
-    return i, t
-end
-
-# Ambiguity resolution only: `host_points(::Mesh1D)` is a flat vector, never a 1-tuple.
-@inline function _interp_triplet_frac(Ωsrc::AbstractMeshType{1}, pts_src::Tuple{Any}, x, outside::Symbol)
-    pts = pts_src[1]
-    lo, hi = pts[1], pts[end]
-    xc = _interp_resolve_coord(x, lo, hi, outside)
-    i = locate_cell(Ωsrc, xc)
-    plo, phi = pts[i], pts[i + 1]
-    t = phi > plo ? (xc - plo) / (phi - plo) : zero(xc - plo)
-    return i, t
-end
-
-@inline function _interp_triplet_frac(
-        Ωsrc::AbstractMeshType{D}, pts_src::NTuple{D}, x, outside::Symbol
-) where {D}
-    xc = ntuple(Val(D)) do d
-        pts = pts_src[d]
-        _interp_resolve_coord(x[d], pts[1], pts[end], outside)
-    end
-    idx = locate_cell(Ωsrc, xc)
-    # A collapsed axis (one point) has no cell to read `pts[i + 1]` from: `t = 0` there,
-    # and `_interpolation_triplets!` emits only its near corner, so the axis contributes
-    # a 1×1 identity factor to the per-axis Kronecker product.
-    ts = ntuple(Val(D)) do d
-        pts = pts_src[d]
-        length(pts) == 1 && return zero(xc[d] - pts[1])
-        i = idx[d]
-        lo, hi = pts[i], pts[i + 1]
-        hi > lo ? (xc[d] - lo) / (hi - lo) : zero(xc[d] - lo)
-    end
-    return idx, ts
-end
 
 function _interpolation_triplets!(
         rows, cols, vals, Ωdest::AbstractMeshType, Ωsrc::AbstractMeshType{1}, outside::Symbol
@@ -527,7 +501,7 @@ function _interpolation_triplets!(
     for i in indices(Ωdest)
         row = li_dest[i]
         x = pts_dest[row]
-        j, t = _interp_triplet_frac(Ωsrc, pts_src, x, outside)
+        j, t = _interp_cell_frac(Ωsrc, pts_src, x, outside)
         push!(rows, row, row)
         push!(cols, j, j + 1)
         push!(vals, 1 - t, t)
@@ -546,7 +520,7 @@ function _interpolation_triplets!(
     for I in indices(Ωdest)
         row = li_dest[I]
         x = ntuple(d -> pts_dest[d][I[d]], Val(D))
-        idx, ts = _interp_triplet_frac(Ωsrc, pts_src, x, outside)
+        idx, ts = _interp_cell_frac(Ωsrc, pts_src, x, outside)
 
         for corner in corners
             push!(rows, row)
