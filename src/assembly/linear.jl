@@ -962,6 +962,26 @@ Shared by the banded and the point-coloured sweep, so the two cannot drift apart
     return nothing
 end
 
+# One point of a right-hand-side sweep (`_sweep_coloured!`, bilinear_execution.jl):
+# `_scatter_linear_point!` into `b` at `I`.
+struct _LinearPoint{B, S, M, L, K, A}
+    b::B
+    sp::S
+    term::M
+    lin_indices::L
+    mesh_markers::K
+    offset::Int
+    α::A
+end
+@inline (p::_LinearPoint)(I) = _scatter_linear_point!(
+    p.b, p.sp, p.term, I, p.lin_indices, p.mesh_markers, p.offset, p.α)
+
+@inline _sweep_bands!(policy, p::_LinearPoint, ax, bidx, nbands::Int, rest) = _sweep_linear_band_colour!(
+    policy, p.b, p.sp, p.term, ax, bidx, nbands, rest, p.lin_indices, p.mesh_markers,
+    p.offset, p.α)
+@inline _sweep_points!(policy, p::_LinearPoint, idxs) = _sweep_colour!(
+    policy, p.b, p.sp, p.term, idxs, p.lin_indices, p.mesh_markers, p.offset, p.α)
+
 """
     _sweep_linear_band_colour!(policy, b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α = true) -> Nothing
 
@@ -986,32 +1006,8 @@ reaches only its own point cannot collide at all, and then `bidx` is every band 
         offset::Int,
         α = true
 ) where {TERM}
-    return _static_or_serial(_static_linear_band_colour!, _serial_linear_band_colour!, b, sp,
-        term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α)
-end
-
-# The `Threads.@threads :static` loop of `_sweep_linear_band_colour!(::CpuThreaded, ...)` and
-# the same bands run in order on the calling task, the pair `_static_or_serial` picks between.
-@noinline function _static_linear_band_colour!(
-        b, sp, term::TERM, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
-) where {TERM}
-    Threads.@threads :static for k in bidx
-        for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
-            _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
-        end
-    end
-    return nothing
-end
-
-@noinline function _serial_linear_band_colour!(
-        b, sp, term::TERM, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
-) where {TERM}
-    for k in bidx
-        for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
-            _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
-        end
-    end
-    return nothing
+    point = _LinearPoint(b, sp, term, lin_indices, mesh_markers, offset, α)
+    return _threaded_bands!(point, ax, bidx, nbands, rest)
 end
 
 @noinline function _sweep_linear_band_colour!(
@@ -1048,35 +1044,15 @@ The only `src/` method errors naming Polyester.
 end
 
 # Dispatches on the *effective* execution policy (`_sweep_parallel!` computes it):
-# `CpuThreaded` keeps `Threads.@threads` exactly as before; `CpuPolyester` reaches its own hook
+# `CpuThreaded` runs the shared `Threads.@threads` loop; `CpuPolyester` reaches its own hook
 # instead, so it never silently threads with the wrong mechanism.
 # `CpuSerial` never reaches this function -- `_effective_parallel_policy` only ever hands it
 # `CpuThreaded` or `CpuPolyester`.
 @noinline function _sweep_colour!(
         ::CpuThreaded, b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int, α = true
 ) where {TERM}
-    return _static_or_serial(_static_linear_colour!, _serial_linear_colour!, b, sp, term, idxs,
-        lin_indices, mesh_markers, offset, α)
-end
-
-# The `Threads.@threads :static` loop of `_sweep_colour!(::CpuThreaded, ...)` and the same
-# loop run in order on the calling task, the pair `_static_or_serial` picks between.
-@noinline function _static_linear_colour!(
-        b, sp, term::TERM, idxs, lin_indices, mesh_markers, offset, α
-) where {TERM}
-    Threads.@threads :static for I in idxs
-        _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
-    end
-    return nothing
-end
-
-@noinline function _serial_linear_colour!(
-        b, sp, term::TERM, idxs, lin_indices, mesh_markers, offset, α
-) where {TERM}
-    for I in idxs
-        _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
-    end
-    return nothing
+    point = _LinearPoint(b, sp, term, lin_indices, mesh_markers, offset, α)
+    return _threaded_colour!(point, idxs)
 end
 
 @noinline function _sweep_colour!(
@@ -1096,59 +1072,20 @@ naming Polyester.
     return _throw_cpubatch_without_polyester(:_batch_linear_colour_sweep!)
 end
 
-# Every colour in turn. `policy` is the *effective* policy (`_effective_parallel_policy(sp)`,
-# computed once here): `CpuSerial` is coerced to `CpuThreaded` since every call into this
-# function is already on the forced-threaded path (`_assemble_linear_parallel_core!`,
-# entered from a non-`CpuSerial` branch, or from `assemble_parallel!`'s own "regardless of
-# policy" contract); `CpuPolyester` passes through unchanged so the colour/band sweeps below
-# reach their own hook instead of `Threads.@threads`.
+# Every colour in turn (`_sweep_coloured!`, bilinear_execution.jl). `policy` is the
+# *effective* policy (`_effective_parallel_policy(sp)`, computed once here): `CpuSerial` is
+# coerced to `CpuThreaded` since every call into this function is already on the
+# forced-threaded path (`_assemble_linear_parallel_core!`, entered from a non-`CpuSerial`
+# branch, or from `assemble_parallel!`'s own "regardless of policy" contract);
+# `CpuPolyester` passes through unchanged so the colour/band sweeps reach their own hook
+# instead of `Threads.@threads`.
 function _sweep_parallel!(
         b::AbstractVector, sp, term::TERM, grid_inds, strides, offset::Int, α = true
 ) where {TERM}
-    Ωsp = mesh(sp)
-    lin_indices = LinearIndices(indices(Ωsp))
+    lin_indices = LinearIndices(indices(mesh(sp)))
     bound, mesh_markers = _bind_walk(term, sp)
-    policy = _effective_parallel_policy(sp)
-
-    # Bands before colours, for the reason spelled out in `_sweep_bilinear!`: two slabs
-    # instead of `prod(strides)` strided colours, each walked contiguously.
-    inds = grid_inds.indices
-    D = length(strides)
-    ax = inds[D]
-    nbands = _band_count(length(ax), strides[D], Threads.nthreads())
-
-    if nbands != 0
-        rest = Base.front(inds)
-        # One pass over every band when nothing can collide, else odd bands then even; the
-        # colour is a `StepRange` either way (see `_sweep_bilinear!`).
-        step = prod(strides) == 1 ? 1 : 2
-        for start in 1:step
-            _sweep_linear_band_colour!(
-                policy, b, sp, bound, ax, start:step:nbands, nbands, rest, lin_indices,
-                mesh_markers, offset, α
-            )
-        end
-        return b
-    end
-
-    if prod(strides) == 1
-        _sweep_colour!(policy, b, sp, bound, grid_inds, lin_indices, mesh_markers, offset, α)
-        return b
-    end
-
-    for c in CartesianIndices(strides)
-        _sweep_colour!(
-            policy,
-            b,
-            sp,
-            bound,
-            _colour_subgrid(grid_inds, c, strides),
-            lin_indices,
-            mesh_markers,
-            offset,
-            α
-        )
-    end
+    point = _LinearPoint(b, sp, bound, lin_indices, mesh_markers, offset, α)
+    _sweep_coloured!(_effective_parallel_policy(sp), point, grid_inds, strides)
     return b
 end
 

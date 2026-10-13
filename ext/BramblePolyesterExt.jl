@@ -1008,13 +1008,86 @@ end
 @inline _replay_join(y, x, c::Tuple{_Hot{:pair_action}, Vararg}) = _PairActionSink(
     y, x, Base.tail(c)...)
 
-@_task function _replay_band!(skel, arrays, h1, h2, rest, ax, nbands, b, lin_indices,
-        row_offset, col_offset)
-    c, s, tm, mm = _rejoin(skel, arrays)
-    t = _replay_join(h1, h2, c)
+# The sweep hooks' shared body. A replay and a right-hand-side scatter differ only in the
+# step each task runs per point, `_point(kind, ...)`, which each task builds around the
+# arrays it received. So one `@batch` body walks bands and one walks a colour's points, for
+# all four hooks, as `_sweep_coloured!` and its loops (bilinear_execution.jl) do for
+# `CpuThreaded`. `h1`, `h2` are the storage vectors crossing as top-level loop arguments,
+# `cold` the parts crossing as one `_batch_split`, and `lin_indices`, `k1`, `k2` the step's
+# isbits rest (`row_offset`, `col_offset` for a replay, `offset`, `α` for a scatter). They
+# cross one by one: as one tuple, a 401² `CpuPolyester` right-hand side ran 1.1x slower.
+#
+# The steps are callable structs rather than closures: a closure was not inlined into the
+# band loop, which ran a 401² `CpuPolyester` assembly 1.57x slower.
+struct _Replay end
+struct _Scatter end
+
+struct _ReplayStep{T, M, S, L, K}
+    target::T
+    term::M
+    sp::S
+    lin_indices::L
+    mesh_markers::K
+    row_offset::Int
+    col_offset::Int
+end
+@inline (p::_ReplayStep)(I) = _replay_point!(
+    p.target, p.term, p.sp, I, p.lin_indices, p.mesh_markers, p.row_offset, p.col_offset)
+
+struct _ScatterStep{B, S, M, L, K, A}
+    b::B
+    sp::S
+    term::M
+    lin_indices::L
+    mesh_markers::K
+    offset::Int
+    α::A
+end
+@inline (p::_ScatterStep)(I) = _scatter_linear_point!(
+    p.b, p.sp, p.term, I, p.lin_indices, p.mesh_markers, p.offset, p.α)
+
+@inline _point(::_Replay, h1, h2, (c, s, tm, mm), lin_indices, ro, co) = _ReplayStep(
+    _replay_join(h1, h2, c), tm, s, lin_indices, mm, ro, co)
+@inline _point(::_Scatter, b, _, (s, tm, mm), lin_indices, offset, α) = _ScatterStep(
+    b, s, tm, lin_indices, mm, offset, α)
+
+@_task function _sweep_band!(kind, skel, arrays, h1, h2, lin_indices, k1, k2, rest, ax,
+        nbands, b)
+    point = _point(kind, h1, h2, _rejoin(skel, arrays), lin_indices, k1, k2)
     for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
-        _replay_point!(t, tm, s, I, lin_indices, mm, row_offset, col_offset)
+        point(I)
     end
+    return nothing
+end
+
+function _batch_bands!(kind, h1, h2, cold, lin_indices, k1, k2, ax, bidx, nbands, rest)
+    skel, arrays = _split_or_whole(cold, h1, h2)
+    failed = false
+    @batch reduction=((|, failed),) for b in _ascending(bidx)
+        failed |= _sweep_band_threw(kind, skel, arrays, h1, h2, lin_indices, k1, k2, rest,
+            ax, nbands, b)
+    end
+    failed && _rerun_on_host(bidx) do b
+        point = _point(kind, h1, h2, cold, lin_indices, k1, k2)
+        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
+            point(I)
+        end
+    end
+    return nothing
+end
+
+@_task function _sweep_one!(kind, skel, arrays, h1, h2, lin_indices, k1, k2, I)
+    _point(kind, h1, h2, _rejoin(skel, arrays), lin_indices, k1, k2)(I)
+    return nothing
+end
+
+function _batch_points!(kind, h1, h2, cold, lin_indices, k1, k2, idxs)
+    skel, arrays = _split_or_whole(cold, h1, h2)
+    failed = false
+    @batch reduction=((|, failed),) for I in _ascending(idxs)
+        failed |= _sweep_one_threw(kind, skel, arrays, h1, h2, lin_indices, k1, k2, I)
+    end
+    failed && _rerun_on_host(I -> _point(kind, h1, h2, cold, lin_indices, k1, k2)(I), idxs)
     return nothing
 end
 
@@ -1022,50 +1095,25 @@ function Bramble._batch_bilinear_band_replay!(
         target::Union{_ReplayTarget, _ActionTarget}, sp, term, ax, bidx, nbands, rest,
         lin_indices, mesh_markers, row_offset, col_offset
 )
-    h1, h2, cold = _replay_parts(target)
-    skel, arrays = _split_or_whole((cold, sp, term, mesh_markers), h1, h2)
-    failed = false
-    @batch reduction=((|, failed),) for b in _ascending(bidx)
-        failed |= _replay_band_threw(skel, arrays, h1, h2, rest, ax, nbands, b,
-            lin_indices, row_offset, col_offset)
-    end
-    failed && _rerun_on_host(bidx) do b
-        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
-            _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset,
-                col_offset)
-        end
-    end
-    return nothing
-end
-
-@_task function _replay_one!(skel, arrays, h1, h2, I, lin_indices, row_offset, col_offset)
-    c, s, tm, mm = _rejoin(skel, arrays)
-    _replay_point!(
-        _replay_join(h1, h2, c), tm, s, I, lin_indices, mm, row_offset, col_offset)
-    return nothing
+    h1, h2, c = _replay_parts(target)
+    return _batch_bands!(_Replay(), h1, h2, (c, sp, term, mesh_markers), lin_indices,
+        row_offset, col_offset, ax, bidx, nbands, rest)
 end
 
 function Bramble._batch_bilinear_colour_replay!(
         target::Union{_ReplayTarget, _ActionTarget}, sp, term, idxs, lin_indices, mesh_markers,
         row_offset, col_offset
 )
-    h1, h2, cold = _replay_parts(target)
-    skel, arrays = _split_or_whole((cold, sp, term, mesh_markers), h1, h2)
-    failed = false
-    @batch reduction=((|, failed),) for I in _ascending(idxs)
-        failed |= _replay_one_threw(skel, arrays, h1, h2, I, lin_indices, row_offset,
-            col_offset)
-    end
-    failed && _rerun_on_host(idxs) do I
-        _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
-    end
-    return nothing
+    h1, h2, c = _replay_parts(target)
+    return _batch_points!(_Replay(), h1, h2, (c, sp, term, mesh_markers), lin_indices,
+        row_offset, col_offset, idxs)
 end
 
 # --- _batch_linear_colour_sweep!/_batch_linear_band_sweep! (src/assembly/linear.jl) ---- #
 #
 # As above, for the right-hand-side sweep: `_scatter_linear_point!` is the shared entry rule
-# with `_sweep_colour!`/`_sweep_linear_band_colour!`'s `CpuThreaded` bodies.
+# with the `CpuThreaded` sweep's `_LinearPoint`, and the bodies are the replay's own
+# (`_batch_bands!`, `_batch_points!`).
 #
 # `b::AbstractVector` (matching the `CpuThreaded` reference signature in linear.jl), for the
 # same reason the bilinear pair above is now constrained on `A`.
@@ -1078,47 +1126,16 @@ end
 # single-iteration `@batch` runs its body inline on the plain `Vector`s, which the rebuild
 # accepts as well. Parts that do not split cross whole (`_split_or_whole` above).
 
-@_task function _linear_point!(skel, arrays, b, I, lin_indices, offset, α)
-    s, tm, mm = _rejoin(skel, arrays)
-    _scatter_linear_point!(b, s, tm, I, lin_indices, mm, offset, α)
-    return nothing
-end
-
 function Bramble._batch_linear_colour_sweep!(b::AbstractVector, sp, term, idxs, lin_indices, mesh_markers, offset, α)
-    skel, arrays = _split_or_whole((sp, term, mesh_markers), b)
-    failed = false
-    @batch reduction=((|, failed),) for I in _ascending(idxs)
-        failed |= _linear_point_threw(skel, arrays, b, I, lin_indices, offset, α)
-    end
-    failed && _rerun_on_host(idxs) do I
-        _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
-    end
-    return nothing
-end
-
-@_task function _linear_band!(skel, arrays, b, rest, ax, nbands, k, lin_indices, offset, α)
-    s, tm, mm = _rejoin(skel, arrays)
-    for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
-        _scatter_linear_point!(b, s, tm, I, lin_indices, mm, offset, α)
-    end
-    return nothing
+    return _batch_points!(
+        _Scatter(), b, nothing, (sp, term, mesh_markers), lin_indices, offset, α, idxs)
 end
 
 function Bramble._batch_linear_band_sweep!(
         b::AbstractVector, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
 )
-    skel, arrays = _split_or_whole((sp, term, mesh_markers), b)
-    failed = false
-    @batch reduction=((|, failed),) for k in _ascending(bidx)
-        failed |= _linear_band_threw(skel, arrays, b, rest, ax, nbands, k, lin_indices,
-            offset, α)
-    end
-    failed && _rerun_on_host(bidx) do k
-        for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
-            _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
-        end
-    end
-    return nothing
+    return _batch_bands!(_Scatter(), b, nothing, (sp, term, mesh_markers), lin_indices,
+        offset, α, ax, bidx, nbands, rest)
 end
 
 # --- _batch_difference_engine!/_batch_average_engine!/_batch_centered_average_engine! ---- #

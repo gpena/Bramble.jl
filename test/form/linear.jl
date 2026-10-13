@@ -1432,7 +1432,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             @test bp ≈ bs
 
             # inside a threaded region a `:static` loop cannot start, so each colour runs
-            # in order on the calling task (`_serial_linear_colour!`), to the same answer
+            # in order on the calling task (`_serial_colour!`), to the same answer
             bt = fill(7.0, ndofs(Wc))
             Threads.@threads for _ in 1:1
                 assemble_parallel!(bt, lc)
