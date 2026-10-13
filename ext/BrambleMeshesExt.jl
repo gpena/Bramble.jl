@@ -7,11 +7,11 @@ using PrecompileTools: @setup_workload, @compile_workload
 
 @inline _error_install_makie() = println("Please install `GLMakie` and add `using GLMakie` to your preamble.")
 """
-	Meshes.viz(X::CartesianProduct{D,T}) where {D,T}
+    Meshes.viz(X::CartesianProduct)
 
-Visualize a [`CartesianProduct`](@ref).
+Visualize a [`CartesianProduct`](@ref). Keyword arguments are forwarded to `Meshes.viz`.
 """
-function Meshes.viz(X::CartesianProduct)
+function Meshes.viz(X::CartesianProduct; kwargs...)
     D = dim(X)
     @assert D >= 2
 
@@ -20,31 +20,32 @@ function Meshes.viz(X::CartesianProduct)
     mesh_set = Meshes.Box(mins, maxs)
 
     try
-        Meshes.viz(mesh_set)
+        Meshes.viz(mesh_set; kwargs...)
     catch
         _error_install_makie()
     end
 end
 
 """
-	Meshes.viz(Ωₕ::MeshnD{D})
+    Meshes.viz(Ωₕ::MeshnD{D}; kwargs...)
 
-Visualize a [`MeshnD`](@ref).
+Visualize a [`MeshnD`](@ref). Keyword arguments are forwarded to `Meshes.viz`, with
+`showsegments = true` by default.
 """
-function Meshes.viz(M::MeshnD{D}) where {D}
+function Meshes.viz(M::MeshnD{D}; kwargs...) where {D}
     @assert D >= 2
 
     pts = points(M)
     grid = Meshes.RectilinearGrid(pts...)
 
     try
-        Meshes.viz(grid; showsegments = true)
+        Meshes.viz(grid; showsegments = true, kwargs...)
     catch
         _error_install_makie()
     end
 end
 
-Meshes.viz(M::Mesh1D) = @error "Visualization of 1D meshes is not supported"
+Meshes.viz(M::Mesh1D; kwargs...) = @error "Visualization of 1D meshes is not supported"
 
 # Warms both `Meshes.viz` methods above (not the 1D one, which only ever errors) for a 2D
 # `CartesianProduct` and a 2D `MeshnD`. Each already wraps its real `Meshes.viz` call in a
@@ -52,8 +53,7 @@ Meshes.viz(M::Mesh1D) = @error "Visualization of 1D meshes is not supported"
 # (`_error_install_makie`) -- precompiling through that path is no riskier than an ordinary
 # call from a session without GLMakie loaded, which this code is already designed to
 # tolerate. Only reachable once `Meshes` is loaded, so only this extension's own precompile
-# pass reaches it. Not named in gpena/Bramble.jl#196, which covers 6 of this package's 7
-# extensions; added here to close that gap.
+# pass reaches it.
 if Bramble.PRECOMPILE_WORKLOAD
     @setup_workload begin
         X = interval(0.0, 1.0) × interval(0.0, 1.0)
