@@ -82,7 +82,12 @@ using ..TestUtils: _tri
             # A time domain alongside a `func(x)`-only condition has no effect and would
             # break only once `bcs(t)` is called during assembly. It is caught by arity, at
             # construction.
+            @test_throws ArgumentError dirichlet_constraints(Ωd, I, :gamma_1 => f1)
             @test_throws "must accept (x, t)" dirichlet_constraints(Ωd, I, :gamma_1 => f1)
+            # a mix of (x, t) and (x, t, p) across labels is refused the same way
+            @test_throws ArgumentError dirichlet_constraints(
+                Ωd, I, :gamma_1 => ((x, t) -> t), :gamma_2 => ((x, t, p) -> t)
+            )
         end
 
         # For every accepted `input` type.
@@ -494,9 +499,14 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         end
 
         @testset "Component argument type" begin
-            @test_throws ErrorException dirichlet_bc!(
+            @test_throws ArgumentError dirichlet_bc!(
                 _eye(nV), Vₕ, :bottom; components = :left
             )
+            @test_throws "Symbol" dirichlet_bc!(_eye(nV), Vₕ, :bottom; components = :left)
+            @test_throws ArgumentError dirichlet_bc!(
+                _eye(nV), Vₕ, :bottom; components = (1, 2.0)
+            )
+            @test_throws "2.0" dirichlet_bc!(_eye(nV), Vₕ, :bottom; components = (1, 2.0))
         end
 
         @testset "Nested composite (#64)" begin
@@ -605,6 +615,48 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0))
         @test dirichlet_bc!(v0, Wₕ, bcs) === v0            # no labels
         @test all(==(3.0), v0)
+
+        # A label with no condition in `bcs` is refused (#688), not skipped: the matrix
+        # call makes its rows identity rows, so a skip left the load value imposed.
+        Ωm = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0), :xmin => :left, :xmax => :right),
+            (5, 4),
+            (false, false)
+        )
+        Wm, Vm = gridspace(Ωm), gridspace(Ωm, Val(2))
+        bm = dirichlet_constraints(Ωm, :xmin => (x -> 7.0))
+        for (target, n) in ((Ωm, 20), (Wm, 20), (Vm, 40))
+            F = fill(3.0, n)
+            @test_throws ArgumentError dirichlet_bc!(F, target, bm, :xmin, :xmax)
+            @test_throws ":xmax" dirichlet_bc!(F, target, bm, :xmin, :xmax)
+            @test_throws ":xmin" dirichlet_bc!(F, target, bm, :xmax)
+            @test all(==(3.0), F)                          # refused before any write
+            @test dirichlet_bc!(F, target, bm, :xmin) === F
+            @test count(==(7.0), F) == n ÷ 5               # 4 :xmin rows per leaf
+        end
+        # the time-evaluated and parameter-evaluated constraint sets, too
+        Iₜ = interval(0.0, 1.0)
+        bt = dirichlet_constraints(Ωm, Iₜ, :xmin => ((x, t) -> t))
+        bp = dirichlet_constraints(Ωm, Iₜ, :xmin => ((x, t, p) -> t * p))
+        @test_throws ArgumentError dirichlet_bc!(zeros(20), Ωm, bt(0.5), :xmax)
+        @test_throws ArgumentError dirichlet_bc!(zeros(20), Ωm, bp(0.5, 2.0), :xmax)
+        @test count(==(1.0), dirichlet_bc!(zeros(20), Ωm, bp(0.5, 2.0), :xmin)) == 4
+
+        # A value that is not a function is refused where it is given, naming the label and
+        # the value: it used to be dropped from the conditions, so `dirichlet_constraints`
+        # gave a set with no condition at all, and the `dirichlet` keyword only failed later
+        # with a refusal that named neither.
+        @test_throws ArgumentError dirichlet_constraints(Ωm, :xmin => 2.0)
+        @test_throws "2.0" dirichlet_constraints(Ωm, :xmin => 2.0)
+        @test_throws ":xmax" dirichlet_constraints(Ωm, :xmin => (x -> 1.0), :xmax => 2.0)
+        @test_throws ArgumentError dirichlet_constraints(Ωm, Iₜ, :xmin => 2.0)
+        @test_throws ":xmax" dirichlet_constraints(Ωm, :xmin => :xmax, :xmax => (x -> 1.0))
+        lm = form(Wm, v -> innerₕ(1.0, v))
+        @test_throws ArgumentError assemble(lm; dirichlet = :xmin => 0.0)
+        @test_throws "0.0" assemble(lm; dirichlet = :xmin => 0.0)
+        @test_throws ":xmax" assemble(lm; dirichlet = :xmin => :xmax)
+        @test_throws "2.0" assemble(lm; dirichlet = (:xmin => (x -> 1.0), :xmax => 2.0))
+        @test count(==(7.0), assemble(lm; dirichlet = :xmin => (x -> 7.0))) == 4
     end
 
     @testset "Set/mesh/space construction" begin

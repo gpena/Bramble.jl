@@ -42,12 +42,14 @@ Each `pair` is of the form `:label => func`, where `:label` identifies the bound
 function dirichlet_constraints(input, pairs::Pair...)
     _constraint_domain(input)
     _validate_dirichlet_pair_labels(input, pairs)
+    _validate_dirichlet_values(pairs)
     return _create_generic_markers(pairs...)
 end
 
 function dirichlet_constraints(input, I::CartesianProduct{1}, pairs::Pair...)
     _constraint_domain(input)
     _validate_dirichlet_pair_labels(input, pairs)
+    _validate_dirichlet_values(pairs)
     _validate_time_dependent_arity(pairs)
     return _create_generic_markers(pairs...)
 end
@@ -88,6 +90,27 @@ end
     )
 end
 
+# `_create_generic_markers` keeps only the `Function` values as conditions, so a constant
+# (`:xmin => 0.0`) or a label (`:xmin => :xmax`) given as a value would vanish from `bcs`
+# and resurface, far from the mistake, as a label with no condition in `dirichlet_bc!`.
+# Recursion on the tuple unrolls, so the accepted case costs no dynamic iteration.
+@inline _validate_dirichlet_values(::Tuple{}) = nothing
+@inline function _validate_dirichlet_values(pairs::Tuple{Vararg{Pair}})
+    lbl, value = first(pairs)
+    value isa Function || _throw_bad_dirichlet_value(lbl, value)
+    return _validate_dirichlet_values(Base.tail(pairs))
+end
+
+@noinline function _throw_bad_dirichlet_value(lbl, value)
+    throw(
+        ArgumentError(
+        "Dirichlet condition for label `:$lbl` must be a function of x (or of (x, t) or " *
+        "(x, t, p) with a time domain); got $(repr(value)) of type $(typeof(value)). " *
+        "Write a constant as `:$lbl => (x -> c)`.",
+    ),
+    )
+end
+
 # A time domain `I` promises that every `func` accepts `(x, t)` or, uniformly, `(x, t, p)`:
 # `(dm::DomainMarkers)(t[, p])` wraps it with `Fix2` (and `Fix{3}`), which builds regardless of
 # arity and fails only when assembly calls it. Checked here by arity alone, never by calling
@@ -106,14 +129,18 @@ function _validate_time_dependent_arity(pairs::Tuple{Vararg{Pair}})
     n3 == length(pairs) && return nothing
     for (lbl, func) in pairs
         hasmethod(func, Tuple{Any, Any}) || hasmethod(func, Tuple{Any, Any, Any}) ||
-            error(
+            throw(
+                ArgumentError(
                 "dirichlet_constraints: condition for label `:$lbl` must accept (x, t) or " *
                 "(x, t, p) since a time domain was given, got $(func)",
+            ),
             )
     end
-    error(
+    throw(
+        ArgumentError(
         "dirichlet_constraints: conditions must uniformly accept (x, t) or uniformly " *
         "accept (x, t, p); got a mix across labels $(map(first, pairs)).",
+    ),
     )
 end
 
@@ -171,9 +198,14 @@ labels are read back out. Anything else throws.
 # rather than leaving the two to race for it as an ambiguity.
 @inline _normalize_dirichlet(::Tuple{}) = ((), nothing)
 @inline _normalize_dirichlet(labels::Tuple{Vararg{Symbol}}) = (labels, nothing)
-@inline _normalize_dirichlet(pair::Pair{Symbol}) = ((first(pair),), _create_generic_markers(pair))
-@inline _normalize_dirichlet(pairs::Tuple{Vararg{Pair{Symbol}}}) = (
-    map(first, pairs), _create_generic_markers(pairs...))
+@inline function _normalize_dirichlet(pair::Pair{Symbol})
+    _validate_dirichlet_values((pair,))
+    return ((first(pair),), _create_generic_markers(pair))
+end
+@inline function _normalize_dirichlet(pairs::Tuple{Vararg{Pair{Symbol}}})
+    _validate_dirichlet_values(pairs)
+    return (map(first, pairs), _create_generic_markers(pairs...))
+end
 @inline _normalize_dirichlet(bcs::ConstraintMarkers) = (labels(bcs), bcs)
 @inline _normalize_dirichlet(dirichlet) = _throw_bad_dirichlet(dirichlet)
 
@@ -199,15 +231,22 @@ end
 
 function _validate_dirichlet_components(components, n_leaves::Int)
     components === nothing && return nothing
-    if !(components isa Int || components isa Tuple)
-        error("dirichlet_components must be nothing, an Int, or a Tuple of Ints")
-    end
+    (components isa Int || components isa Tuple) ||
+        _throw_dirichlet_component_type(components)
     for c in (components isa Int ? (components,) : components)
-        c isa Int ||
-            error("dirichlet_components must be nothing, an Int, or a Tuple of Ints")
+        c isa Int || _throw_dirichlet_component_type(c)
         (1 <= c <= n_leaves) || _throw_dirichlet_component_out_of_range(c, n_leaves)
     end
     return nothing
+end
+
+@noinline function _throw_dirichlet_component_type(c)
+    throw(
+        ArgumentError(
+        "dirichlet_components must be nothing, an Int, or a Tuple of Ints; got $(repr(c)) " *
+        "of type $(typeof(c))",
+    ),
+    )
 end
 
 @noinline function _throw_dirichlet_component_out_of_range(c::Int, n_leaves::Int)
@@ -455,6 +494,9 @@ Write Dirichlet values into `v` at the points marked by `labels`.
 
 `bcs` may be unevaluated constraints or time-evaluated constraints (see [`ConstraintMarkers`](@ref)).
 Only the marked entries are modified, with complexity proportional to the boundary cardinality.
+
+# Throws
+- `ArgumentError`: if a label in `labels` has no condition in `bcs`.
 """
 @inline function dirichlet_bc!(
         v::AbstractVector,
@@ -464,8 +506,35 @@ Only the marked entries are modified, with complexity proportional to the bounda
         offset::Int = 0
 ) where {N}
     isempty(labels) && return v
+    _check_labels_have_conditions(conditions(bcs), labels)
     _apply_conditions!(conditions(bcs), v, Ωₕ, labels, offset)
     return v
+end
+
+# A label in `labels` with no condition in `bcs` used to be skipped, while the matrix call
+# for the same labels still made its rows identity rows: the solve then imposed whatever
+# load value sat in those rows (#688). Refused instead, naming both sides.
+@inline _has_condition(::Tuple{}, lbl::Symbol) = false
+@inline _has_condition(markers::Tuple, lbl::Symbol) = label(first(markers)) === lbl ||
+                                                      _has_condition(Base.tail(markers), lbl)
+
+@inline function _check_labels_have_conditions(markers::Tuple, labels::Tuple)
+    all(lbl -> _has_condition(markers, lbl), labels) ||
+        _throw_labels_without_condition(markers, labels)
+    return nothing
+end
+
+@noinline function _throw_labels_without_condition(markers::Tuple, labels::Tuple)
+    missing_labels = filter(lbl -> !_has_condition(markers, lbl), labels)
+    have = map(label, markers)
+    throw(
+        ArgumentError(
+        "dirichlet_bc!: `bcs` has no condition for label(s) " *
+        "$(join(string.(":", missing_labels), ", ")); it has conditions for " *
+        "$(isempty(have) ? "no label" : join(string.(":", have), ", ")). The matrix " *
+        "call would make those rows identity rows with no value written into the vector.",
+    ),
+    )
 end
 
 # Unrolled by recursion on the conditions tuple, same idiom as `_write_components!`
@@ -505,6 +574,7 @@ differentiate for a `p`-dependent boundary value.
         offset::Int = 0
 ) where {N}
     isempty(labels) && return v
+    _check_labels_have_conditions(conditions(bcs), labels)
     _apply_conditions!(conditions(bcs), v, Ωₕ, labels, offset)
     return v
 end
