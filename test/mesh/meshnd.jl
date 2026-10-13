@@ -324,6 +324,45 @@ using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask
             @test count(Bramble.index_in_marker(Ωₕ_2d_changed, :Low)) == 2
             @test word_mask(Ωₕ_2d_changed, :Low) == _marker_mask(Ωₕ_2d_changed, low)
         end
+
+        @testset "change_points! refuses before mutating" begin
+            I = interval(0.0, 1.0)
+            good_x = collect(range(0.0, 1.0; length = 5)) .^ 2
+            cases = (
+                (:count, (good_x, [0.0, 0.5, 1.0]), DimensionMismatch),
+                (:values, ([0.0, 0.1, 0.5, 0.9, 1.0], [0.0, 0.5, 0.25, 1.0]),
+                    ArgumentError),
+                (:nonfinite, (good_x, [0.0, 0.5, NaN, 1.0]), ArgumentError)
+            )
+            for (what, pts, E) in cases
+                Ω = mesh(domain(I × I), (5, 4), (false, false))
+                before = map(i -> copy(points(Ω(i))), (1, 2))
+                v0 = Bramble._mesh_version(Ω)
+                @test_throws E change_points!(Ω, pts)
+                @test points(Ω(1)) == before[1]
+                @test points(Ω(2)) == before[2]
+                @test Bramble._mesh_version(Ω) == v0
+            end
+            # the same pts, all valid, are applied and move the version
+            Ω = mesh(domain(I × I), (5, 4), (false, false))
+            v0 = Bramble._mesh_version(Ω)
+            change_points!(Ω, (good_x, [0.0, 0.25, 0.5, 1.0]))
+            @test points(Ω(1)) == good_x
+            @test points(Ω(2)) == [0.0, 0.25, 0.5, 1.0]
+            @test Bramble._mesh_version(Ω) > v0
+            # three axes, the refusal on the last one (3D meshes: slow, gpena/Bramble.jl#650)
+            if WITH_3D_TESTS
+                Ω3 = mesh(domain(I × I × I), (3, 4, 5), (false, false, false))
+                before = map(i -> copy(points(Ω3(i))), (1, 2, 3))
+                v0 = Bramble._mesh_version(Ω3)
+                new3 = ([0.0, 0.25, 1.0], [0.0, 0.1, 0.5, 1.0], [0.0, 0.5, 0.4, 0.8, 1.0])
+                @test_throws ArgumentError change_points!(Ω3, new3)
+                @test_throws DimensionMismatch change_points!(
+                    Ω3, (new3[1], new3[2], [0.0, 0.5, 1.0]))
+                @test map(i -> points(Ω3(i)), (1, 2, 3)) == before
+                @test Bramble._mesh_version(Ω3) == v0
+            end
+        end
     end # Dimension D=2 Testset
 
     # 3D only: built in `slow` and by the nightly run (gpena/Bramble.jl#650).

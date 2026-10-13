@@ -429,7 +429,17 @@ end
 # (gpena/Bramble.jl#68). `_nothing_to_refine`'s default (`interface.jl`) already answers
 # `false` for any mesh type that does not override it, so no override is needed here.
 
+# Every axis is checked, for its count and for its values, before any is mutated, so a
+# refusal on a later axis leaves the earlier ones and the version as they were, as
+# `_refine_indices!` does for a tie.
 function change_points!(Ωₕ::MeshnD{D}, pts) where {D}
+    @inbounds for i in 1:D
+        n = npoints(Ωₕ(i))
+        n == length(pts[i]) || _throw_point_count_mismatch(n, length(pts[i]))
+    end
+    @inbounds for i in 1:D
+        _check_set_points(Ωₕ(i), pts[i])
+    end
     @inbounds for i in 1:D
         change_points!(Ωₕ(i), pts[i])
     end
