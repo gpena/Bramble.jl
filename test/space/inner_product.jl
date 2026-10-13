@@ -6,6 +6,7 @@ using Bramble: norm₊
 using Bramble: D₋ᵧ, D₋ₓ, cell_measure, indices, inner₊ᵧ, inner₊₂, inner₊ₓ, norminf
 using Bramble: set_points!, weights
 using LinearAlgebra: norm
+using Random: Random
 using Supposition
 using ForwardDiff
 using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS, @test_allocs, _nonuniform_points
@@ -1158,6 +1159,8 @@ end
         end
 
         @testset "Labels read as defined (#655)" begin
+            # An unlucky draw puts all 7 interior y-points at or below 0.5, opening `:a`.
+            Random.seed!(1)
             # A label the mesh holds is read off its marked points, never its name. On a
             # non-uniform mesh the lumped weight integrates g = 1 + x + 2y exactly on each
             # edge: 2 on x = 0, 3 on x = 1, 1.5 on y = 0, 3.5 on y = 1.
