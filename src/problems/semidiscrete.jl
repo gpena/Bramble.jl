@@ -560,11 +560,13 @@ end
 
 # Same pattern by construction (`jacobian_prototype` hands the solver a copy of `A`, a CSC
 # copy on a `SparseMatrixCSR` backend), so the stored values line up one for one and no
-# structural search is needed.
+# structural search is needed. The check needs `colptr` as well as `rowvals`: equal row
+# sequences with different column breaks would put `-nzA` in the wrong slots (#703).
 @inline function _negate_into!(J::SparseMatrixCSC, A::SparseMatrixCSC)
     nzJ = nonzeros(J)
     nzA = nonzeros(A)
-    if length(nzJ) == length(nzA) && rowvals(J) == rowvals(A)
+    if size(J) == size(A) && SparseArrays.getcolptr(J) == SparseArrays.getcolptr(A) &&
+       length(nzJ) == length(nzA) && rowvals(J) == rowvals(A)
         @. nzJ = -nzA
         return J
     end

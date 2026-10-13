@@ -37,6 +37,7 @@ _sd_src(x, t) = (pi^2 - 1) * exp(-t) * sinpi(x[1])
 _sd_residual_allocs(sd, du, u, t) = @allocated sd(du, u, nothing, t)
 _sd_jacobian_allocs(J, sd, u, t) = @allocated Bramble.jacobian!(J, sd, u, nothing, t)
 _sd_rhs_allocs(rhs, du, u, t) = @allocated rhs(du, u, nothing, t)
+_sd_negate_allocs(J, A) = @allocated Bramble._negate_into!(J, A)
 
 function _sd_problem(n)
     Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), n)
@@ -150,6 +151,21 @@ end
             @test _sd_residual_allocs(sd, du, u, t) == 0
             @test _sd_jacobian_allocs(J, sd, u, t) == 0
         end
+    end
+
+    # The fast path writes `-nonzeros(A)` straight into `nonzeros(J)`, so it must see the
+    # whole pattern: here the row sequences match but the column breaks do not (#703).
+    @testset "_negate_into!: CSC colptr (#703)" begin
+        A = sparse([1, 2, 3], [1, 2, 3], [1.0, 2.0, 3.0], 3, 3)
+        J = SparseMatrixCSC(3, 3, [1, 4, 4, 4], [1, 2, 3], zeros(3))
+        @test rowvals(J) == rowvals(A)
+        @test Bramble._negate_into!(J, A) === J
+        @test Matrix(J) == -Matrix(A)
+
+        S = copy(A)
+        @test Bramble._negate_into!(S, A) === S
+        @test S == -A
+        @test _sd_negate_allocs(S, A) == 0
     end
 
     @testset "boundary values reach the residual" begin
