@@ -256,7 +256,7 @@ Construction allocates four vectors of length `ndofs` and, when `λmax` is not g
 - [`ChebyshevSmoother`](@ref).
 
 # Throws
-- `ArgumentError`: `degree < 1`, or `λmax` not finite and positive.
+- `ArgumentError`: `degree < 1`, or `λmax` (given or estimated) not finite and positive.
 - `ArgumentError`: `policy` is a [`GpuPolicy`](@ref); device execution is tracked on
   milestone v4.4.0.
 - `ArgumentError`: `dirichlet_components` names a leaf the test space does not have.
@@ -294,8 +294,12 @@ function chebyshev_smoother(
     degree >= 1 || throw(ArgumentError("chebyshev_smoother needs degree >= 1, got $degree"))
     J = jacobi_preconditioner(op)
     λ = λmax === nothing ? max_eigenvalue_estimate(op; preconditioner = J) : T(λmax)
-    (isfinite(λ) && λ > 0) ||
-        throw(ArgumentError("chebyshev_smoother needs a finite λmax > 0, got $λ"))
+    (isfinite(λ) && λ > 0) || throw(ArgumentError(
+        λmax === nothing ?
+        "chebyshev_smoother: the λmax estimate $λ is not finite and positive: " *
+        "the form's diagonal has a zero or the form is not SPD" :
+        "chebyshev_smoother needs a finite λmax > 0, got $λ"
+    ))
     d = J.inv_diagonal
     return ChebyshevSmoother{T, typeof(op), typeof(d)}(
         op, d, λ / 4, λ, Int(degree), similar(d), similar(d)

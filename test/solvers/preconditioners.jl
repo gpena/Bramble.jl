@@ -246,6 +246,20 @@ end
         @test_throws ArgumentError chebyshev_preconditioner(op; ratio = 1)
         @test_throws ArgumentError chebyshev_preconditioner(op; λmax = -1.0)
         @test_throws ArgumentError chebyshev_preconditioner(op; λmax = Inf)
+        # An estimate that fails names the estimate; an explicit λmax names the keyword.
+        z = form(W, W, (u, v) -> 0.0 * innerₕ(u, v))
+        argmsg(f) = try
+            f()
+            ""
+        catch err
+            err isa ArgumentError ? sprint(showerror, err) : ""
+        end
+        estimate = r"λmax estimate NaN is not finite and positive"
+        @test occursin(estimate, argmsg(() -> chebyshev_preconditioner(z)))
+        @test occursin(estimate, argmsg(() -> Bramble.chebyshev_smoother(z)))
+        given = "needs a finite λmax > 0, got -1.0"
+        @test occursin(given, argmsg(() -> chebyshev_preconditioner(op; λmax = -1.0)))
+        @test occursin(given, argmsg(() -> Bramble.chebyshev_smoother(op; λmax = -1.0)))
         @test_throws ArgumentError chebyshev_preconditioner(a; policy = Bramble.GpuKernel())
         @test_throws ArgumentError max_eigenvalue_estimate(op; iterations = 0)
         Wf = gridspace(mesh(domain(interval(0.0, 1.0)), 9, false))

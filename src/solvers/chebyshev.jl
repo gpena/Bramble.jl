@@ -91,7 +91,8 @@ allocates three vectors of length `ndofs` and, when `λmax` is not given, the tw
 - [`ChebyshevPreconditioner`](@ref): `ldiv!(y, P, x)` gives `p(D⁻¹A) D⁻¹ x`.
 
 # Throws
-- `ArgumentError`: `degree < 1`, `ratio <= 1`, or `λmax` not finite and positive.
+- `ArgumentError`: `degree < 1`, `ratio <= 1`, or `λmax` (given or estimated) not finite and
+  positive.
 - `ArgumentError`: `policy` is a [`GpuPolicy`](@ref); device execution is tracked on
   milestone v4.4.0.
 - `ArgumentError`: `dirichlet_components` names a leaf the test space does not have.
@@ -135,8 +136,12 @@ function chebyshev_preconditioner(
     ratio > 1 || throw(ArgumentError("chebyshev_preconditioner needs ratio > 1, got $ratio"))
     J = jacobi_preconditioner(op)
     λ = λmax === nothing ? max_eigenvalue_estimate(op; preconditioner = J) : T(λmax)
-    (isfinite(λ) && λ > 0) ||
-        throw(ArgumentError("chebyshev_preconditioner needs a finite λmax > 0, got $λ"))
+    (isfinite(λ) && λ > 0) || throw(ArgumentError(
+        λmax === nothing ?
+        "chebyshev_preconditioner: the λmax estimate $λ is not finite and positive: " *
+        "the form's diagonal has a zero or the form is not SPD" :
+        "chebyshev_preconditioner needs a finite λmax > 0, got $λ"
+    ))
     return ChebyshevPreconditioner{T, typeof(op), Vector{T}}(
         op, J.inv_diagonal, λ / T(ratio), λ, Int(degree), zeros(T, n), zeros(T, n)
     )
