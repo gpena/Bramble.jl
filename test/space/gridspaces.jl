@@ -250,6 +250,12 @@ using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
             @test SystemSpace[1] isa CompositeGridSpace{2}
             @test SystemSpace[2] isa ScalarGridSpace
             @test ndofs(SystemSpace) == 3 * ndofs(W)
+
+            # Counts are top-level: `leaf_count` counts the three scalar leaves.
+            @test ncomponents(SystemSpace) == 2
+            @test length(SystemSpace) == 2
+            @test Bramble.leaf_count(SystemSpace) == 3
+            @test ndofs(SystemSpace, Tuple) == (2 * ndofs(W), ndofs(W))
         end
 
         # `×` flattens associatively.
