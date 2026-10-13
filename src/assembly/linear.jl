@@ -1502,11 +1502,6 @@ function _host_sources(op::SourceVector{D}) where {D}
     return SourceVector{D, typeof(vec)}(vec)
 end
 
-function _host_sources(op::OperatorScale{D}) where {D}
-    inner = _host_sources(op.inner_op)
-    return OperatorScale{D, typeof(op.scalar), typeof(inner)}(op.scalar, inner)
-end
-
 function _host_sources(op::GridFunctionScale{D}) where {D}
     gf = _host_array(op.grid_function)
     inner = _host_sources(op.inner_op)
@@ -1525,24 +1520,13 @@ function _host_sources(op::LinearProduct{D, W}) where {D, W}
     return LinearProduct{D, W, typeof(left), typeof(right)}(left, right)
 end
 
-function _host_sources(op::ShiftNode{D, Dim}) where {D, Dim}
-    inner = _host_sources(op.inner_op)
-    return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
-end
-
-function _host_sources(op::RegionRestriction{D, R}) where {D, R}
-    inner = _host_sources(op.inner_op)
-    return _rebuild_restriction(op, op.region, inner)
-end
-
-# The `@node_family` nodes (`operators/node_family.jl`): one `inner_op` each, rebuilt
-# around the walked operand as their generated `_bind_interp_spaces` is.
-for N in (:BackwardDifference, :ForwardDifference, :CenteredDifference, :StarDifference,
-    :CrossWeightedDifference, :BackwardAverage, :ForwardAverage, :CenteredAverage, :JumpNode)
-    @eval function _host_sources(op::$N{D, Dim}) where {D, Dim}
-        inner = _host_sources(op.inner_op)
-        return $N{D, Dim, typeof(inner)}(inner)
-    end
+# The nodes holding one `inner_op` and nothing to copy: `OperatorScale`, `ShiftNode`,
+# `RegionRestriction` (its region and zero stencil kept) and the `@node_family` nodes
+# (`operators/node_family.jl`), each rebuilt around the walked operand by `_rewrap_inner`.
+function _host_sources(op::Union{OperatorScale, ShiftNode, RegionRestriction,
+        BackwardDifference, ForwardDifference, CenteredDifference, StarDifference,
+        CrossWeightedDifference, BackwardAverage, ForwardAverage, CenteredAverage, JumpNode})
+    return _rewrap_inner(op, _host_sources(op.inner_op))
 end
 
 """
