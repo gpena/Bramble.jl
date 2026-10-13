@@ -37,6 +37,10 @@ function throws_unknown_kw(f, kw::Symbol)
     return false
 end
 
+# The MUMPS instance of a factorization no caller can reach once this returns; built in a
+# function of its own so no frame of the testset roots it.
+@noinline dropped_instance(A) = mumps_factorize(A).mumps
+
 @testset "MUMPS extension" begin
     @testset "Poisson 1D/2D/3D (sym = :spd)" begin
         poisson_solve_contract(;
@@ -302,6 +306,52 @@ end
             @test_throws ArgumentError pde_solve(Aᵢ, bᵢ; bogus = 1)
         end
         @test pde_solve(A, b; kind = :ldlt) ≈ ref
+    end
+
+    # #715: a factorization frees its MUMPS instance on `finalize`, and after an `:auto`
+    # refactorization that instance is the SYM = 2 one, not the SYM = 1 one it replaced.
+    @testset "finalize frees the held instance (#715)" begin
+        n = 10
+        A = sparse(SymTridiagonal(fill(4.0, n), fill(-1.0, n - 1)))
+        P = sparse(SymTridiagonal(fill(0.0, n), fill(1.0, n - 1)))
+        b = collect(1.0:n)
+
+        fact = mumps_factorize(A)
+        m1 = fact.mumps
+        @test !MUMPS.is_finalized(m1)
+        finalize(fact)
+        @test MUMPS.is_finalized(m1)
+
+        fact = mumps_factorize(A)
+        m1 = fact.mumps
+        @test mumps_refactor!(fact, P) === fact
+        m2 = fact.mumps
+        @test m2 !== m1
+        @test MUMPS.is_finalized(m1)
+        # the replaced instance's former owner is gone; the new one stays live
+        GC.gc(true)
+        @test !MUMPS.is_finalized(m2)
+        @test norm(fact \ b - Matrix(P) \ b) < 1.0e-10
+        finalize(fact)
+        @test MUMPS.is_finalized(m2)
+        # a second `finalize` is harmless
+        finalize(fact)
+        @test MUMPS.is_finalized(m2)
+        # the freed factors are refused, not read as garbage
+        @test_throws ArgumentError fact \ b
+        @test_throws ArgumentError ldiv!(similar(b), fact, b)
+        bb = copy(b)
+        @test_throws ArgumentError ldiv!(fact, bb)
+        @test bb == b
+        @test_throws ArgumentError mumps_refactor!(fact, A)
+        @test_throws ArgumentError refactor!(fact, A)
+
+        # unreachable factorizations are freed by the collector
+        mref = dropped_instance(A)
+        GC.gc(true)
+        GC.gc(true)
+        yield()
+        @test MUMPS.is_finalized(mref)
     end
 
     @testset "Error handling & validation" begin

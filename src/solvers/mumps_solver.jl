@@ -35,6 +35,9 @@ using [MUMPS.jl](https://github.com/lruthotto/MUMPS.jl).
 A failed factorisation (`INFOG(1) < 0`) throws for every `sym`: a `SingularException` for a
 zero pivot (`INFOG(1) = -10`), an error otherwise.
 
+The factorization's MUMPS memory is freed once it is unreachable; `finalize(fact)` frees it
+at once, after which `fact` must not be used.
+
 # Control parameters
 - `icntl`: Optional dictionary or collection of pairs of integer control parameters (e.g.,
   `7 => 1` for user/METIS ordering, `14 => 30` for memory relaxation).
