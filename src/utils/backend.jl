@@ -248,15 +248,13 @@ about the hardware, and it sent CPU assembly loops at device arrays.
 
 The name states the launch mechanism only: work is dispatched to a device kernel. It replaces
 the previous name, `GpuAsync` (now a deprecated alias), which claimed a scheduling property the
-API does not have. **A call under this policy does not return before the device has finished.**
-Every kernel launched from `BrambleKernelAbstractionsExt` is followed by a
-`KernelAbstractions.synchronize`, so the launch is asynchronous but the Bramble-level call that
-issued it is not: `Rₕ!`, `avgₕ!` and the difference and average operators have all completed on
-the device by the time they return. Nothing in the package currently exposes a way to queue work
-and synchronise later. `Async` stated exactly the property this synchronize-after-launch
-behaviour rules out, which is why it was replaced rather than kept (gpena/Bramble.jl#300); the
-memory locality the old name also carried now lives in the `Locality` trait (gpena/Bramble.jl#298),
-which this policy claims through [`locality`](@ref) instead.
+API does not have. A kernel launch only enqueues onto the device's queue; a host read of the
+result, or [`ka_synchronize`](@ref), is the barrier. Kernels on one queue run in its order, so a
+chain of operators needs no synchronise between its steps. `Async` named a scheduling interface
+the package does not offer (no handle to wait on), which is why it was replaced rather than kept
+(gpena/Bramble.jl#300); the memory locality the old name also carried now lives in the
+`Locality` trait (gpena/Bramble.jl#298), which this policy claims through [`locality`](@ref)
+instead.
 
 See also: [`GpuPolicy`](@ref), [`ExecutionPolicy`](@ref).
 """
@@ -294,11 +292,9 @@ const CpuBatch = CpuPolyester
 
 Deprecated alias for [`GpuKernel`](@ref). Will be removed in the next major release.
 
-The old name claimed a scheduling property the API does not have: every kernel launch in
-`BrambleKernelAbstractionsExt` is followed by `KernelAbstractions.synchronize`, so a
-Bramble-level call under this policy has already completed on the device by the time it
-returns, and nothing about it is asynchronous from the caller's point of view
-(gpena/Bramble.jl#300).
+The old name claimed a scheduling property the API does not have: a kernel launch only
+enqueues onto the device's queue, and a host read of the result, or
+[`ka_synchronize`](@ref), is the barrier, with no handle to wait on (gpena/Bramble.jl#300).
 """
 const GpuAsync = GpuKernel
 
@@ -363,7 +359,8 @@ Compile-time descriptor specifying vector type `VT`, matrix type `MT`, and execu
 # Type parameters
 - `VT<:DenseVector`: Concrete dense vector type (for CPU or GPU).
 - `MT<:AbstractMatrix`: Concrete matrix type (e.g. `SparseMatrixCSC{Float64, Int}` or `Matrix{Float64}`).
-- `EP<:ExecutionPolicy`: Execution policy ([`Serial`](@ref), [`Parallel`](@ref), or [`CpuPolyester`](@ref)).
+- `EP<:ExecutionPolicy`: An [`ExecutionPolicy`](@ref), for example [`Serial`](@ref), [`Parallel`](@ref),
+  [`CpuPolyester`](@ref) or [`GpuKernel`](@ref).
 
 All three parameters must agree on [`locality`](@ref): a backend is meant to be wholly host --
 a `Vector` alongside a CPU sparse or dense matrix, run under a [`CpuPolicy`](@ref) -- or wholly
@@ -375,6 +372,8 @@ use (gpena/Bramble.jl#298, #296).
 # Throws
 - `ArgumentError`: `locality(VT) != locality(EP())`.
 - `ArgumentError`: `locality(MT) != locality(VT)`.
+- `ArgumentError`: `EP` is a [`GpuOffload`](@ref) whose wrapped device backend only supports
+  an element type other than `eltype(VT)`.
 
 See also: [`backend`](@ref), [`vector_type`](@ref), [`matrix_type`](@ref), [`execution_policy`](@ref), [`locality`](@ref).
 """
@@ -416,7 +415,10 @@ Return the matrix type `MT` configured for `backend`.
     execution_policy(backend::Backend{<:Any, <:Any, EP}) -> EP
     execution_policy(::Type{<:Backend{<:Any, <:Any, EP}}) -> EP
 
-Return the [`ExecutionPolicy`](@ref) instance ([`Serial`](@ref) or [`Parallel`](@ref)) configured for `backend`.
+Return the [`ExecutionPolicy`](@ref) instance configured for `backend`.
+
+For a [`GpuOffload`](@ref) backend this is the wrapped inner policy `I()`, not the `GpuOffload`
+wrapper, so every concrete-policy dispatch site sees the policy that runs the host work.
 """
 @inline execution_policy(::Backend{VT, MT, EP}) where {VT, MT, EP} = EP()
 @inline execution_policy(::Type{<:Backend{VT, MT, EP}}) where {VT, MT, EP} = EP()
@@ -429,7 +431,7 @@ Construct a [`Backend`](@ref) configuration.
 # Keywords
 - `vector_type`: Dense vector type (default: `Vector{Float64}`).
 - `matrix_type`: Matrix type (`SparseMatrixCSC{Float64, Int}` by default).
-- `policy`: Execution policy instance, [`Serial`](@ref) or [`Parallel`](@ref) (default: `Serial()`).
+- `policy`: An [`ExecutionPolicy`](@ref) instance (default: `Serial()`).
 
 # Returns
 - `Backend`: Singleton instance parameterized by `(vector_type, matrix_type, typeof(policy))`.
@@ -465,7 +467,7 @@ Allows meshes to inherit their scalar coordinate type from the underlying geomet
 - `T`: Coordinate and scalar element type (e.g. `Float64`, `Float32`).
 
 # Keywords
-- `policy`: Execution policy instance ([`Serial`](@ref) or [`Parallel`](@ref), default: `Serial()`).
+- `policy`: An [`ExecutionPolicy`](@ref) instance (default: `Serial()`).
 
 # Examples
 ```jldoctest
@@ -797,6 +799,10 @@ function metal_sparse_csc(A)
     )
 end
 
+# Test/mock hook: when set to a Bool, overrides _gpu_functional for testing device failure
+# without method overwriting (which emits compiler warnings).
+const _gpu_functional_override = Ref{Union{Nothing, Bool}}(nothing)
+
 """
     _gpu_functional(::Val{name}) -> Bool
 
@@ -809,15 +815,13 @@ host actually has the accelerator's hardware and drivers -- it degrades graceful
 rather than erroring. `ext/BrambleMetalExt.jl` overrides this for `Val(:metal)` with
 `Metal.functional()`, the one call that actually probes the device
 (gpena/Bramble.jl#192). [`gpu_backend`](@ref) requires both this and the extension being
-Declared with the generic `::Val` signature (rather than `::Val{:metal}` itself) so that
+loaded.
+
+It is declared with the generic `::Val` signature (rather than `::Val{:metal}` itself) so that
 `BrambleMetalExt`'s own `Val(:metal)` method is strictly more specific than this stub --
 otherwise the extension's method would silently overwrite this one instead of adding to
 it, which precompilation reports as method overwriting.
 """
-# Test/mock hook: when set to a Bool, overrides _gpu_functional for testing device failure
-# without method overwriting (which emits compiler warnings).
-const _gpu_functional_override = Ref{Union{Nothing, Bool}}(nothing)
-
 function _gpu_functional(::Val)
     override = _gpu_functional_override[]
     override !== nothing && return override

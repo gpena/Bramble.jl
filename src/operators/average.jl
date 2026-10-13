@@ -11,53 +11,6 @@
 #                                                             #
 ###############################################################
 
-#=
-# average.jl
-
-This file implements averaging operators for staggered grid computations.
-
-## Mathematical formulation
-
-For a function uₕ on a grid, the average operator ⟨·⟩ computes the mean value between 
-adjacent grid points:
-
-**Forward average** (at point xᵢ):
-    ⟨u⟩ᵢᶠ = (uᵢ + uᵢ₊₁) / 2
-
-**Backward average** (at point xᵢ):
-    ⟨u⟩ᵢᵇ = (uᵢ + uᵢ₋₁) / 2
-
-At boundary points where no neighbor exists:
-    ⟨u⟩ᵢ = uᵢ / 2
-
-## Use cases
-
-Typical uses:
-1. Staggered grids, to transfer variables between cell centers and faces
-2. Discontinuous Galerkin, to compute interface values
-3. Finite difference, to approximate derivatives at intermediate points
-4. Conservative schemes, to maintain flux conservation
-
-## Example
-
-```julia
-# Average velocity from cell centers to faces
-u_face = ⟨u⟩ᶠ(Vₕ, dim)  # Forward average in dimension dim
-
-# Average pressure from faces to centers  
-p_center = ⟨p⟩ᵇ(Pₕ, dim)  # Backward average in dimension dim
-```
-
-## Implementation details
-
-- Uses `@simd` for vectorization
-- Separate loops for interior (2-point average) and boundary (1-point)
-- Direction (Forward/Backward) controlled via trait dispatch
-- Boundary handling: halve the value (maintains consistency with operator algebra)
-
-See also: [`_compute_average`](@ref), [`add_half_shift`](@ref), [`Forward`](@ref), [`Backward`](@ref)
-=#
-
 # Both directions average a point with its neighbour, so one method covers them. The
 # kernels take `(cur, other)` in that order, matching _compute_difference, and the
 # engine below hands them the pair without knowing which way the stencil runs.
@@ -426,12 +379,9 @@ function _average_weights!(
     return nothing
 end
 
-# The `GpuPolicy` branch above: every entry is one except a single boundary slice along
-# `DIFF_DIM`, which is exactly a broadcast fill followed by a bulk zero over a `view` of
-# that one slice -- no per-element kernel needed, matching the "reach for a broadcast before
-# a kernel" precedent of the device cell-measure fill (`scalar_gridspace.jl`). `reshape` and
-# `view` both work on a device array without scalar indexing, unlike the `li[I]`-indexed
-# CPU loop above.
+# The `GpuPolicy` branch above: a broadcast fill and a zeroed `view` of the one boundary
+# slice, so no scalar indexing and no kernel of its own (as the device `_innerh_weights!`,
+# scalar_gridspace.jl).
 @inline function _device_average_weights!(
         v::AbstractVector, dims::NTuple{D, Int}, ::Forward, ::Val{DIFF_DIM}
 ) where {D, DIFF_DIM}
@@ -452,7 +402,6 @@ end
     return nothing
 end
 
-# Configuration array for average operators, expanded with descriptive strings.
 const _AVERAGE_OP_CONFIGS = [
     (
         direction = Forward(),
@@ -502,7 +451,7 @@ for config in _AVERAGE_OP_CONFIGS
         Low-level, in-place function to compute the $($dir_string_lowercase) average of vector `in` along dimension `average_dim`, storing the result in `out`. This function computes ``$($math_op)``.
         """
         function $(Symbol(average_name, :_dim!))(
-                out, in, h, dims::NTuple{D, Int}, average_dim::Val{DIFF_DIM}
+                out, in, dims::NTuple{D, Int}, average_dim::Val{DIFF_DIM}
         ) where {D, DIFF_DIM}
             1 <= DIFF_DIM <= D || _throw_stencil_dim_error(DIFF_DIM, D)
             length(out) == length(in) == prod(dims) ||
@@ -516,17 +465,10 @@ for config in _AVERAGE_OP_CONFIGS
             return nothing
         end
 
-        function $(Symbol(average_name, :_dim!))(
-                out, in, dims::NTuple{D, Int}, average_dim::Val{DIFF_DIM}
-        ) where {D, DIFF_DIM}
-            return $(Symbol(average_name, :_dim!))(out, in, nothing, dims, average_dim)
-        end
-
         # --- Retained Kronecker oracle (gpena/Bramble.jl#185) ---
         #
-        # The body `$average_name` used to have, kept under a `_kron_` name so
-        # `kronecker_operator_matrix` has an independent construction to check
-        # `stencil_matrix` against.
+        # An independent construction of the matrix, which `kronecker_operator_matrix`
+        # checks `stencil_matrix` against.
         function $(Symbol(:_kron_, average_name))(
                 Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ)
         )
@@ -622,9 +564,6 @@ end
 # The AST nodes: discrete averaging operators for the Bramble lazy AST
 # ==============================================================================
 # ==============================================================================
-
-# average.jl
-# Discrete averaging operators for Bramble lazy AST
 
 # ==============================================================================
 # Struct Definitions

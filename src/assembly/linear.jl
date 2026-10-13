@@ -129,7 +129,7 @@ end
     )
 end
 
-# Two node types `_lower_sources` (form/common.jl) needs its own method for, defined here
+# Two node types `_lower_sources` (ast/common.jl) needs its own method for, defined here
 # rather than alongside the rest of the family there because both are included after
 # common.jl -- a type named in a method *signature* has to already exist (bramble-performance
 # skill, "include-order rule"), unlike a name used only in a body.
@@ -200,9 +200,20 @@ end
 # source value one at a time, a scalar read a device array refuses.
 _lower_term(term, sp) = _typed_restrictions(
     locality(backend(sp)), _lower_sources(term, sp), sp)
-_typed_restrictions(::HostLocality, op, sp) = _typed_restrictions(
-    op, sp, trues(length(indices(mesh(sp)))))
+function _typed_restrictions(::HostLocality, op, sp)
+    _any_restriction(op) || return op
+    return _typed_restrictions(op, sp, trues(length(indices(mesh(sp)))))
+end
 _typed_restrictions(::DeviceLocality, op, sp) = op
+
+# Whether `_typed_restrictions` below would reach a `RegionRestriction`: without one, `form`
+# allocates no point mask (the `form (linear, 2D)` allocation bound in benchmark/).
+@inline _any_restriction(::RegionRestriction) = true
+@inline _any_restriction(op::OperatorAdd) = _any_restriction(op.left_op) ||
+                                            _any_restriction(op.right_op)
+@inline _any_restriction(op::LinearProduct) = _any_restriction(op.left_op)
+@inline _any_restriction(op::UnaryWrapper) = _any_restriction(op.inner_op)
+@inline _any_restriction(::Any) = false
 
 # --- A restricted source keeps one stencil type (gpena/Bramble.jl#639) --- #
 #
@@ -308,7 +319,7 @@ Construction resolves the AST once and runs [`simplify_ast`](@ref) over it -- fa
 common scalings and shared inner-product arguments, combining like terms, and eliding
 zero-scaled ones -- before it is stored.
 Grid partitioning for parallel assembly is determined from the resolved AST during assembly
-(see `_colour_strides`).
+(see `_term_colour_strides`).
 
 Every `SourceFunction` reachable from the simplified AST -- a source term built directly from
 a plain function, `f(x)`, rather than a [`VectorElement`](@ref) or a `Ref` -- is then
@@ -319,7 +330,7 @@ Julia gives it its own type; assembling against the fixed `SourceVector` shape i
 that cost is paid once, here, not on every later `assemble!`/`assemble` call. This changes
 what a raw closure that captures mutable state does: it is evaluated once, now, not
 re-evaluated on later assemblies. `VectorElement` and `Ref` coefficients are unaffected --
-see the note on `_lower_sources` in `form/common.jl` for why, and for the documented
+see the note on `_lower_sources` in `ast/common.jl` for why, and for the documented
 alternative (`update_coefficients!`) a source meant to keep varying should use instead.
 
 The one exception is an interpolant [`πₕ`](@ref)`(uₕ)`, which is never sampled: every
@@ -403,7 +414,7 @@ function _check_source_mesh(op::SourceVector{D, <:VectorElement}, Ωₕ) where {
     Ωs = mesh(space(op.vec))
     Ωs === Ωₕ ||
         (npoints(Ωs, Tuple) == npoints(Ωₕ, Tuple) && host_points(Ωs) == host_points(Ωₕ)) ||
-        _throw_source_mesh()
+        _throw_source_mesh(Ωs, Ωₕ)
     return nothing
 end
 
@@ -413,23 +424,21 @@ function _check_source_mesh(op::Union{OperatorAdd, LinearProduct}, Ωₕ)
     return nothing
 end
 
-function _check_source_mesh(
-        op::Union{OperatorScale, GridFunctionScale, ShiftNode, RegionRestriction,
-            BackwardDifference, ForwardDifference, CenteredDifference, StarDifference,
-            CrossWeightedDifference, BackwardAverage, ForwardAverage, CenteredAverage,
-            JumpNode},
-        Ωₕ
-)
-    return _check_source_mesh(op.inner_op, Ωₕ)
-end
+# The operand of an `InterpolationNode` lives on another mesh, so it is not entered.
+_check_source_mesh(op::InterpolationNode, Ωₕ) = nothing
+_check_source_mesh(op::UnaryWrapper, Ωₕ) = _check_source_mesh(op.inner_op, Ωₕ)
 
-@noinline function _throw_source_mesh()
+@noinline function _throw_source_mesh(Ωs, Ωₕ)
+    ns, nh = npoints(Ωs, Tuple), npoints(Ωₕ, Tuple)
+    # Equal counts would print two equal tuples, which show no reason for the refusal.
+    which = ns == nh ? "the source is on another mesh of the same shape, $(ns) points" :
+            "the source's mesh has $(ns) points and the test space's $(nh)"
     throw(
         ArgumentError(
         "a grid-function source of the linear form lives on another mesh than the test " *
-        "space it is read on. A source is read at the test space's own points, which name " *
-        "other places on another mesh. Interpolate it, as in `innerₕ(πₕ(uₕ), v)`, or build " *
-        "it with `Rₕ` on the test space.",
+        "space it is read on: $(which). A source is read at the test space's " *
+        "own points, which name other places on another mesh. Interpolate it, as in " *
+        "`innerₕ(πₕ(uₕ), v)`, or build it with `Rₕ` on the test space.",
     ),
     )
 end
@@ -460,14 +469,11 @@ function _check_centered_meshes(term, Wₕ, Vₕ)
     # A linear form passes its test space twice: every leaf, as `each_routed_leaf` routes.
     unnamed = trial_component_or_nothing(term) === nothing &&
               test_component_or_nothing(term) === nothing
-    nmax = unnamed ? min(_leaf_count(Wₕ), _leaf_count(Vₕ)) : typemax(Int)
+    nmax = unnamed ? min(leaf_count(Wₕ), leaf_count(Vₕ)) : typemax(Int)
     _has_test_interp(term) &&
         return _check_centered_on_side(term, Wₕ, trial_component_or_nothing, nmax)
     return _check_centered_on_side(term, Vₕ, test_component_or_nothing, nmax)
 end
-
-_leaf_count(space) = 1
-_leaf_count(space::CompositeGridSpace) = length(leaf_spaces_offsets(space))
 
 @inline function _check_centered_on_side(term, space, side_component::F, nmax) where {F}
     return _check_centered_mesh(term, mesh(space))
@@ -836,17 +842,8 @@ lock-free parallel assembly.
 An operator reaching only its own point (such as `innerₕ(fₕ, v)` or any form whose test
 argument carries no difference) strides by 1 in every dimension, resulting in a single colour.
 """
-@inline function _colour_strides(offsets::Vector{NTuple{D, Int}}) where {D}
-    isempty(offsets) && return ntuple(_ -> 1, D)
-
-    lo = first(offsets)
-    hi = first(offsets)
-    for o in offsets
-        lo = min.(lo, o)
-        hi = max.(hi, o)
-    end
-    return hi .- lo .+ 1
-end
+@inline _colour_strides(offsets::Vector{NTuple{D, Int}}) where {D} = _bounds_strides(
+    _offset_bounds(offsets))
 
 # `_colour_strides(stencil_offsets(op))` without the offset `Vector`s, so a threaded refill or
 # product costs no heap allocation per unit and call. `_row_bounds(op)` is the corner pair
@@ -908,7 +905,7 @@ end
 
 # The threaded pass over one colour, writing directly into `b`.
 """
-    _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset) -> Nothing
+    _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α = true) -> Nothing
 
 Add one grid point's stencil contributions to `b`.
 
@@ -937,7 +934,7 @@ Shared by the banded and the point-coloured sweep, so the two cannot drift apart
 end
 
 """
-    _sweep_linear_band_colour!(b, sp, term, ax, parity, nbands, rest, lin_indices, mesh_markers, offset) -> Nothing
+    _sweep_linear_band_colour!(policy, b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α = true) -> Nothing
 
 Scatter one band colour of `term` into `b` across threads.
 
@@ -1175,7 +1172,7 @@ contract into an accumulator, sweep threaded. It is now written once
 here, and the three consumers differ only in what they do per leaf.
 
 Recursing the tree rather than flattening it into a vector of terms first avoids allocation
-(see `_visit_operator_add2` and `_fold_operator_add` in form/stencil_eval.jl).
+(see `_visit_operator_add2` and `_fold_operator_add` in assembly/stencil_eval.jl).
 =#
 
 # Which leaves a term goes to. Resolved once per term, not once per (term, leaf).
@@ -1288,16 +1285,7 @@ function _scatter_term!(b::AbstractVector, sp, term::TERM, offset::Int, α = tru
     lin_indices = LinearIndices(indices(Ωsp))
     bound, mesh_markers = _bind_walk(term, sp)
     for I in indices(Ωsp)
-        lin_idx = lin_indices[I]
-        stencil = local_stencil(bound, sp, I, mesh_markers, lin_idx)
-
-        for (off_v, weight) in stencil
-            Iv = I + CartesianIndex(off_v)
-
-            if checkbounds(Bool, lin_indices, Iv)
-                @inbounds b[lin_indices[Iv] + offset] += α * weight
-            end
-        end
+        _scatter_linear_point!(b, sp, bound, I, lin_indices, mesh_markers, offset, α)
     end
     return b
 end
@@ -1313,6 +1301,8 @@ end
               dirichlet_components = nothing) -> AbstractVector
 
 Refill `b` with the assembled `form` and return it with zero allocations (**0 bytes**).
+A form whose terms, once simplified, put three or more region-restricted summands in one
+product allocates per grid point (see gpena/Bramble.jl#727).
 
 On a test space whose backend lives on a device (a Metal space, say), `b` is filled on the
 host and uploaded in one `copyto!`, as system matrices are: that path

@@ -54,8 +54,8 @@ composite, for both spellings. The element interface is uniform either way:
 `uₕ(1)` and `components(uₕ)` work on a scalar element.
 
 The `Val` form is always type stable. The `Int` form is stable wherever `N` is a
-literal or otherwise constant-foldable, and returns a small `Union` when `N` is
-only known at run time; prefer `Val` on hot paths.
+literal or otherwise constant-foldable, and has a non-concrete return type when `N` is
+only known at run time; prefer `Val`, or `Wₕ^N` for `N ≤ 3`, on hot paths.
 """
 function gridspace(Ωₕ::AbstractMeshType, ::Val{N}) where {N}
     W = gridspace(Ωₕ)
@@ -122,7 +122,9 @@ end
 
 @inline mesh(Wₕ::CompositeGridSpace) = mesh(first_space(Wₕ))
 @inline mesh_type(Wₕ::CompositeGridSpace) = typeof(mesh(Wₕ))
+@inline mesh_type(::Type{<:CompositeGridSpace{<:Any, Spaces}}) where {Spaces} = mesh_type(fieldtype(Spaces, 1))
 @inline dim(Wₕ::CompositeGridSpace) = dim(first_space(Wₕ))
+@inline dim(::Type{<:CompositeGridSpace{<:Any, Spaces}}) where {Spaces} = dim(fieldtype(Spaces, 1))
 @inline eltype(Wₕ::CompositeGridSpace) = eltype(first_space(Wₕ))
 @inline eltype(::Type{<:CompositeGridSpace{<:Any, Spaces}}) where {Spaces} = eltype(fieldtype(Spaces, 1))
 @inline backend(Wₕ::CompositeGridSpace) = backend(first_space(Wₕ))
@@ -190,7 +192,6 @@ directly (e.g. `CompositeGridSpace(Vh, Qh)`).
 @inline ×(X::CompositeGridSpace, Y::ScalarGridSpace) = CompositeGridSpace((X.spaces..., Y))
 @inline ×(X::ScalarGridSpace, Y::CompositeGridSpace) = CompositeGridSpace((X, Y.spaces...))
 @inline ×(X::CompositeGridSpace, Y::CompositeGridSpace) = CompositeGridSpace((X.spaces..., Y.spaces...))
-@inline ×(X::AbstractSpaceType, Y::AbstractSpaceType) = CompositeGridSpace((X, Y)) #===========================================================================# #===========================================================================#
 
 # Walking a composite space's leaves
 #
@@ -221,7 +222,6 @@ Returns the number of leaf scalar spaces in `Wₕ`. For a scalar space, returns 
 For a composite space, returns the total flattened number of scalar leaves.
 """
 @inline leaf_count(Wₕ::ScalarGridSpace) = 1
-@inline leaf_count(Wₕ::CompositeGridSpace) = length(leaf_spaces_offsets(Wₕ))
 @inline leaf_count(Wₕ::AbstractSpaceType) = length(leaf_spaces_offsets(Wₕ))
 
 @inline _leaf_spaces_offsets(Wₕ::ScalarGridSpace, offset::Int) = (((Wₕ, offset),), offset + ndofs(Wₕ))

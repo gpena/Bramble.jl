@@ -100,6 +100,8 @@ end
         @test parent(u1) isa Vector
         @test length(parent(u1)) == ndofs(W)
         @test eltype(parent(u1)) == Float64
+        @test typeof(u1) === typeof(element(W, Float64))
+        @test isconcretetype(typeof(u1))
 
         u2 = element(W, 5.0)
         @test u2 isa VectorElement

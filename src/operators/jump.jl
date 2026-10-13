@@ -78,17 +78,8 @@ are the same quantity.
 """
 @inline jump!(vₕ, uₕ, dim_val::Val) = forward_difference!(vₕ, uₕ, dim_val)
 
-# The alias surface comes from `@operator_family` like every other family's
-# (gpena/Bramble.jl#258). It was written out here for years because the shared generators
-# put a direction word into the docstring ("The `forward` jump along ..."), and a jump has
-# no direction to name: it belongs to the interface between two cells, not to a direction of
-# travel across it. `opening_sentence` and `bang_opening_sentence` now say what the family
-# needs said, so there is nothing left for a second copy of the loop to do.
-#
-# Folding it in also gives `jumpₕ` the unrolled `Val{2}`/`Val{3}` methods every other
-# vectorial alias has. The hand-written version closed over `ntuple(i -> jump(arg, Val(i)),
-# Val(D))`, which boxes `i` as a runtime `Int` and so cannot constant-fold into the stencil
-# engine -- the shape gpena/Bramble.jl#146 measured on the other families and fixed there.
+# The alias surface comes from `@operator_family`; `opening_sentence` carries the
+# direction-free prose a jump needs.
 @operator_family(base=jump,
     stem=jump,
     opening_sentence="The jump across the interfaces along the `{direction}` "*
@@ -117,8 +108,6 @@ end
 # ==============================================================================
 # ==============================================================================
 
-# jump.jl
-#
 # The symbolic jump across an interface,
 #
 #     ⟦u⟧ᵢ = u_{i+1} - u_i

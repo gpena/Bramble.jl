@@ -24,8 +24,8 @@ function _ensure_mpi_init()
     return nothing
 end
 
-mutable struct ConcreteMUMPSFactorization{T, TR} <: MUMPSFactorization{T}
-    mumps::Mumps{T, TR}
+mutable struct ConcreteMUMPSFactorization{T, TR, P} <: MUMPSFactorization{T}
+    mumps::Mumps{T, TR, P}
     sym::Int
     dim::Int
 end
@@ -43,8 +43,6 @@ _mumps_val_type(::Type{<:Complex}) = ComplexF64
 function _mumps_sym_flag(A::AbstractMatrix, sym)
     if sym === :auto
         if issymmetric(A)
-            # Symmetry alone picks SYM = 1: `_mumps_factorize` refactors as SYM = 2 when
-            # the factorisation shows the matrix is not positive definite.
             return 1
         else
             return 0
@@ -162,8 +160,7 @@ end
 # `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
 # factorizations against a complex right-hand side, and `ConcreteMUMPSFactorization <:
 # Factorization`, so that method and the one above are equally specific for a complex vector
-# -- the call would be ambiguous without this one. It restates what `LinearAlgebra` does:
-# solve the real and imaginary parts separately and recombine them.
+# -- the call would be ambiguous without this one.
 function Base.:\(
         fact::ConcreteMUMPSFactorization{T}, b::Vector{Complex{T}}
 ) where {T <: Union{Float32, Float64}}

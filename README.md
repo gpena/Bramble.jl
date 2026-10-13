@@ -27,15 +27,15 @@ Problems are written as bilinear and linear forms built from discrete operators,
 
 ## Features
 
-- **Meshes.** Nonuniform Cartesian meshes in 1D, 2D and 3D, with uniform, graded or random point distributions, boundary markers and iterative refinement.
+- **Meshes.** Nonuniform Cartesian meshes in 1D, 2D and 3D, with uniform or random point distributions, or points you place yourself (graded) with `change_points!`, boundary markers and iterative refinement.
 - **Discrete calculus.** Gradient, divergence, curl, Laplacian and strain operators (`∇ₕ`, `divₕ`, `curlₕ`, `Δₕ`, `εₕ`) in staggered, centered and averaged variants, jumps, means and index shifts, with discrete inner products and norms (`innerₕ`, `inner₊`, `inner_Γ`, `normₕ`) and point sources (`dirac`).
 - **Forms and assembly.** `form` and `assemble` build sparse matrices and load vectors directly. Separable operators assemble as Kronecker products, and `matrix_free_operator` applies a form without storing its matrix.
 - **Boundary conditions.** Dirichlet constraints by marker (`dirichlet_constraints`), restricted to chosen components of a system, with `symmetrize!` to keep symmetric problems symmetric.
 - **Coupled systems.** Composite spaces (`Wₕ^Val(N)`) and vector spaces, with block assembly addressed by component.
 - **Time-dependent problems.** `semidiscretize`, `ode_problem` and `second_order_ode_problem` hand first- and second-order systems to OrdinaryDiffEq and the rest of SciML.
 - **Solvers.** `pde_solve` with sparse direct factorizations (SuiteSparse, Apple Accelerate, MUMPS, Sparspak), preconditioners (algebraic multigrid, ILU(0), Jacobi, Chebyshev) and geometric multigrid (`gmg_solve`).
-- **Automatic differentiation.** Forward and reverse mode through operators, assembly and nonlinear residuals, via ForwardDiff, ReverseDiff and Enzyme, with sparse Jacobians and SciMLSensitivity adjoints for transient problems.
-- **Backends.** Serial, threaded (Polyester) and GPU (Metal, via KernelAbstractions) execution, with CSC or CSR storage chosen through `backend`.
+- **Automatic differentiation.** Forward-mode differentiation (ForwardDiff) through operators, assembly and nonlinear residuals. Reverse-mode (ReverseDiff, Enzyme, ChainRules), sparse Jacobians and SciMLSensitivity adjoints ship as extensions whose tests are off until v4.3.0.
+- **Backends.** Serial, threaded (Polyester) and experimental GPU (Metal) execution, with CSC or CSR storage chosen through `backend`. The GPU tests are off until v4.4.0.
 - **Visualization and export.** Plots and Makie recipes, VTK output for ParaView (`export_vtk`) and PGFPlots/TikZ output for LaTeX (`export_pgfplots`).
 
 ---
@@ -132,9 +132,7 @@ Documentation, tutorials, and the API reference are available at [https://gpena.
 - [Getting started](https://gpena.github.io/Bramble.jl/getting_started/)
 - Discrete foundations: [geometry](https://gpena.github.io/Bramble.jl/tutorials/geometry/), [meshes](https://gpena.github.io/Bramble.jl/tutorials/mesh/), [spaces](https://gpena.github.io/Bramble.jl/tutorials/space/), [operators](https://gpena.github.io/Bramble.jl/tutorials/operators/)
 - Forms and assembly: [forms](https://gpena.github.io/Bramble.jl/tutorials/form/), [coupled systems](https://gpena.github.io/Bramble.jl/tutorials/coupled_systems/)
-- Solvers and scientific computing: [solvers](https://gpena.github.io/Bramble.jl/tutorials/solvers/), [time stepping](https://gpena.github.io/Bramble.jl/tutorials/time_stepping/), [automatic differentiation](https://gpena.github.io/Bramble.jl/tutorials/autodiff/), [backends](https://gpena.github.io/Bramble.jl/tutorials/backend/)
-- Visualization and export: [plotting](https://gpena.github.io/Bramble.jl/tutorials/plotting/), [VTK](https://gpena.github.io/Bramble.jl/tutorials/vtk_export/), [PGFPlots](https://gpena.github.io/Bramble.jl/tutorials/pgfplots_export/)
-- [Worked examples](https://gpena.github.io/Bramble.jl/examples/poisson_linear/): stationary, time-dependent and inverse problems, and solver performance
+- [Worked examples](https://gpena.github.io/Bramble.jl/examples/poisson_linear/): a Poisson problem, a convection-diffusion problem and a heat equation
 
 ---
 

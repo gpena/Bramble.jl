@@ -45,6 +45,24 @@ using Bramble: refactor!, sparse_factorize, sparse_refactor!, sparspak_factorize
     @test_throws MethodError sparse_factorize(Matrix(A))
 end
 
+# `suitesparse_factorize` and `suitesparse_qr_factorize` take a `SparseMatrixCSC`: a CSR matrix
+# is a `MethodError`, and `sparse_factorize` is the entry that converts it. A child process
+# loads `SparseMatricesCSR`, which this process must not (its absence is tested elsewhere).
+# Slow group only: the child loads the test environment (about 75 s).
+WITH_SLOW_TESTS && @testset "suitesparse_factorize, CSR input" begin
+    code = raw"""
+    using Bramble, SparseArrays, SparseMatricesCSR, SuiteSparse
+    C = sparsecsr([1, 2, 3], [1, 2, 3], [2.0, 3.0, 4.0], 3, 3)
+    refused(f) = try; f(C); "returned"; catch e; nameof(typeof(e)); end
+    println(refused(Bramble.suitesparse_factorize))
+    println(refused(Bramble.suitesparse_qr_factorize))
+    println(Bramble.sparse_factorize(C; solver = :suitesparse) isa Bramble.SuiteSparseFactorization)
+    """
+    cmd = `$(Base.julia_cmd()) --project=$(dirname(something(Base.active_project()))) --startup-file=no --threads=1 -e $code`
+    lines = split(read(setenv(cmd, "JULIA_PKG_PRECOMPILE_AUTO" => "0"), String), '\n'; keepempty = false)
+    @test lines == ["MethodError", "MethodError", "true"]
+end
+
 # The solver wrappers forward to extension methods that narrow on the same signature; when
 # the weak dependency is not loaded the `::Any` fallback must raise its message. The suite
 # process may have loaded the extensions, so every fallback runs in a child process on the
@@ -198,6 +216,27 @@ end
 
     # A dense matrix is not a sparse system: no method.
     @test_throws MethodError pde_solve(Matrix(A), F)
+end
+
+# `:default` reads `kind` and `sym` only when it takes the Accelerate route (macOS, the
+# extension loaded, a symmetric `A`). On `A \\ F` they are accepted and ignored, so the same
+# call throws or returns by platform: an unsymmetric `A` never takes the route.
+@testset "pde_solve :default, kind and sym" begin
+    S = sparse([2.0 -1.0 0.0; -1.0 2.0 -1.0; 0.0 -1.0 2.0])
+    N = sparse([2.0 -1.0 0.0; 0.0 2.0 -1.0; 0.0 0.0 2.0])
+    F = [1.0, 2.0, 3.0]
+
+    @test pde_solve(N, F; kind = :bogus) == N \ F
+    @test pde_solve(N, F; sym = :bogus) == N \ F
+    @test pde_solve(S, F; sym = :bogus) == S \ F
+
+    if Sys.isapple() && Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing
+        @test_throws ArgumentError pde_solve(S, F; kind = :bogus)
+    else
+        @test pde_solve(S, F; kind = :bogus) == S \ F
+    end
+    # A keyword `:default` does not take is rejected on every platform.
+    @test_throws ArgumentError pde_solve(S, F; bogus = 1)
 end
 
 @testset "pde_solve uses Accelerate when loaded" begin

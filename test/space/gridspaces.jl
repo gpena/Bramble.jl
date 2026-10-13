@@ -238,6 +238,12 @@ using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
             @test backend(V) === backend(mesh2d)
             @test ncomponents(V) == 2
             @test ncomponents(typeof(V)) == 2
+            # Type-level interface, as for `eltype`: from the first leaf, nested or not.
+            @test dim(typeof(V)) == 2
+            @test mesh_type(typeof(V)) === typeof(mesh2d)
+            N = CompositeGridSpace((V, W))
+            @test dim(typeof(N)) == 2
+            @test mesh_type(typeof(N)) === typeof(mesh2d)
 
             @test ndofs(V) == 2 * ndofs(W)
             @test ndofs(V, Tuple) == (ndofs(W), ndofs(W))

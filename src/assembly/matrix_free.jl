@@ -1196,7 +1196,7 @@ function _mf_collect!(acc::_MFCollected, offsets, sp)
     grid_inds = indices(mesh(sp))
     dims = size(grid_inds)
     policy = execution_policy(sp)
-    # The bands cut `1:dims[D]`, and `_run_bands!` threads a CPU policy.
+    # The bands cut `1:dims[D]`, and `_mf_run_bands!` threads them under a CPU policy.
     if all(r -> first(r) == 1, axes(grid_inds)) && policy isa CpuPolicy
         policy = acc.forced === nothing ? _coerce_serial_to_threaded(policy) : acc.forced
     else

@@ -12,8 +12,7 @@
 # composite spaces. The numeric operators (`πₕ` / `πₕ!`) live here, alongside
 # the other operators over `VectorElement`, following the `Xₕ` / `Xₕ!` in-place
 # convention used by `Rₕ` / `Rₕ!` and `avgₕ` / `avgₕ!`. The symbolic AST wrapper
-# `πₕ` (taking one argument) lives in `operators/interpolation.jl`,
-# distinguished by dispatch arity.
+# `πₕ` (taking one argument) is defined below, distinguished by dispatch arity.
 #===========================================================================#
 
 #===========================================================================#
@@ -37,7 +36,7 @@
 # point endpoint noise (the acceptance criterion of the out-of-domain policy).
 #
 # The fill-value policy is pointwise-only, by mathematical necessity, not by omission:
-# `interpolation_matrix`/`InterpolationNode` (operators/interpolation.jl) represent
+# `interpolation_matrix`/`InterpolationNode` (both below) represent
 # interpolation as a *linear* map, `P * parent(src)`, and a row that returns a constant
 # regardless of `src` cannot be written as a weighted combination of `src`'s own entries
 # unless that constant is exactly zero. Those two paths accept only the three symbols and
@@ -81,8 +80,8 @@ end
 
 # `interpolate_at` fetches the 2^D corner values around a single query point one scalar
 # read at a time -- fine on the host, but a device transfer hidden inside a scalar call on
-# a device-backed element, and one this package refuses rather than perform silently
-#. Named after `_throw_no_scalar_point` (mesh/mesh1d.jl), guarding
+# a device-backed element, and one this package refuses rather than perform silently.
+# Named after `_throw_no_scalar_point` (mesh/mesh1d.jl), guarding
 # before any corner is read rather than mid-blend.
 @noinline function _throw_no_scalar_interpolate_at()
     throw(
@@ -179,8 +178,8 @@ coordinates rather than assuming a fixed step.
 
   - `:error` (the default): throw an `ArgumentError` naming `x` and the domain extent.
   - `:clamp`: clamp `x` to the domain first, then interpolate there.
-  - `:extrapolate`: the original behaviour -- blend using the boundary cell's own corner
-    weights and slope, unclamped, which is a linear extrapolation rather than a hold.
+  - `:extrapolate`: blend with the boundary cell's own corner weights and slope, unclamped:
+    a linear extrapolation rather than a hold.
   - a `Number` (e.g. `0.0`, `NaN`): return this value outright, bypassing the blend.
 
 A point outside by no more than a few `eps`, relative to the domain extent, is always
@@ -284,7 +283,7 @@ end
 # Which cell of `Ωₕ` holds `x`, and where inside it, per direction. Three callers want
 # exactly this and nothing more: `interpolate_at` above blends grid *values* with the
 # weights, `interpolation_matrix` emits them as matrix entries, and the symbolic
-# `InterpolationNode` (operators/interpolation.jl) emits them as stencil entries against
+# `InterpolationNode` (below) emits them as stencil entries against
 # absolute trial columns. Factored so the three cannot drift.
 #
 # Returns `(i, t)`/`(idx, ts)` as before, or the sentinel `nothing` when `outside isa
@@ -433,9 +432,8 @@ end
 @inline _πₕ_matrix(dest_loc, P) = _πₕ_matrix_at(dest_loc, locality(typeof(P)), P)
 @inline _πₕ_matrix_at(loc, ::T, P) where {T} = P
 
-# `dest` is device-backed and `P` is the host SparseMatrixCSC interpolation_matrix
-# returns: upload it once, a bulk sparse-to-sparse transfer,
-# never a per-entry scalar write into device memory.
+# `dest` is device-backed and `P` the host `SparseMatrixCSC`: uploaded as one bulk
+# transfer, on every call. Pass a device `P` to pay it once.
 @inline _πₕ_matrix_at(::DeviceLocality, ::HostLocality, P) = metal_sparse_csr(P)
 
 @inline _πₕ_vector(dest_loc, dest_parent, v) = _πₕ_vector_at(dest_loc, locality(typeof(v)), dest_parent, v)
@@ -454,10 +452,10 @@ end
     πₕ(Wₕ::ScalarGridSpace, src::VectorElement; outside = :error) -> VectorElement
 
 Evaluates `Rₕ(Wₕ, x -> interpolate_at(src, x; outside))`; see [`πₕ!`](@ref). Distinguished
-by multiple dispatch from the one-argument symbolic wrapper `πₕ(uₕ)` in
-`operators/interpolation.jl`. The element type is promoted from `Wₕ`'s and `src`'s
-own, so interpolating a `Dual`-valued `src` yields a `Dual`-valued result on an
-undifferentiated `Wₕ`. `outside` is forwarded to [`interpolate_at`](@ref) unchanged.
+by multiple dispatch from the one-argument symbolic wrapper `πₕ(uₕ)`, defined below. The
+element type is promoted from `Wₕ`'s and `src`'s own, so interpolating a `Dual`-valued
+`src` yields a `Dual`-valued result on an undifferentiated `Wₕ`. `outside` is forwarded to
+[`interpolate_at`](@ref) unchanged.
 """
 @inline πₕ(Wₕ::ScalarGridSpace, src::VectorElement; outside = :error) = Rₕ(
     Wₕ, x -> interpolate_at(src, x; outside)
@@ -488,15 +486,7 @@ undifferentiated `Wₕ`. `outside` is forwarded to [`interpolate_at`](@ref) unch
     return i, t
 end
 
-# The method above assumes `pts_src` is the flat vector `host_points(::Mesh1D)` actually
-# returns; the D-dimensional method below assumes `pts_src::NTuple{D}`, which at D=1 is
-# also a 1-tuple. Both match an `AbstractMeshType{1}` called with a 1-tuple `pts_src`
-# (Aqua's ambiguity report), which is otherwise only a static possibility -- `mesh()` always
-# builds `Mesh1D`, never a degenerate `MeshnD{1}`, for a 1D domain, so `host_points` never
-# actually returns a 1-tuple here. Disambiguating with this method, rather than by
-# restricting either of the two above, keeps both behaviours and simply unwraps the 1-tuple
-# down to the same scalar arithmetic the flat-vector method uses, so the case behaves
-# correctly if it is ever reached after all.
+# Ambiguity resolution only: `host_points(::Mesh1D)` is a flat vector, never a 1-tuple.
 @inline function _interp_triplet_frac(Ωsrc::AbstractMeshType{1}, pts_src::Tuple{Any}, x, outside::Symbol)
     pts = pts_src[1]
     lo, hi = pts[1], pts[end]
@@ -617,8 +607,7 @@ end
 # ==============================================================================
 # ==============================================================================
 
-# interpolation.jl
-# Symbolic counterpart of interpolate_at / πₕ! / πₕ (operators/interpolation.jl):
+# Symbolic counterpart of interpolate_at / πₕ! / πₕ (above):
 # wraps a grid function's interpolant as a SourceFunction, so it composes with the rest of
 # the AST layer exactly the way any other source does. This is a second method of the same
 # `πₕ` the numeric layer defines (dispatch distinguishes them by arity), not a separate name.
@@ -775,8 +764,8 @@ struct TestSide end
     )
 end
 
-# The side a leaf puts the interpolation on. Both leaf kinds are accepted, plain or indexed
-#; anything else is the operator-inside-interpolation refusal above.
+# The side a leaf puts the interpolation on. Both leaf kinds are accepted, plain or indexed;
+# anything else is the operator-inside-interpolation refusal above.
 @inline _interp_side_of(::Union{TrialFunction, IndexedTrialFunction}) = TrialSide
 @inline _interp_side_of(::Union{TestFunction, IndexedTestFunction}) = TestSide
 
@@ -972,8 +961,7 @@ end
 # `_bind_interp_spaces` then supplies each interpolation with the leaf whose degrees of freedom
 # it names -- the trial leaf for a trial-side node, the test leaf for a test-side one. Nothing
 # validates the two against each other any more: the node is given that leaf and has no other
-# space to disagree with, which is what dropping `πₕ`'s space argument bought
-#.
+# space to disagree with, which is what dropping `πₕ`'s space argument bought.
 #
 # Both are decided by the operator's type alone, allowing each rung to fold to a constant.
 
@@ -1046,9 +1034,9 @@ _has_test_interp(op::LinearProduct) = false
 The leaf whose grid the assembly sweep walks for `term`, and whose weights and markers its
 stencil sees.
 
-The test leaf, as it has always been, unless the term interpolates on the test side: then the
-rows are named absolutely and the trial leaf is the one that stays native, so it supplies the
-grid, the quadrature weight and the columns.
+The test leaf, unless the term interpolates on the test side: then the rows are named
+absolutely and the trial leaf is the one that stays native, so it supplies the grid, the
+quadrature weight and the columns.
 """
 @inline function _walked_leaf(term, trial_leaf, test_leaf)
     return _has_test_interp(term) ? trial_leaf : test_leaf

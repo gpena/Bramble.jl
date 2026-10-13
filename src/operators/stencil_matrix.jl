@@ -7,15 +7,8 @@
 #=
 # stencil_matrix.jl
 
-`stencil_matrix` and its two `_stencil_matrix` backends (the CSC two-pass writer and the
-dense/device fallback), `_scale_rows!` (the diagonal row-scaling helper they and the weighted
-operators in `difference.jl`/`average.jl` share), and `_stencil_taps`/`_stencil_weights`/
-`_HostAxisSpacings`, the per-family tap and weight helpers only `_stencil_matrix` calls.
-Moved out of `stencil.jl` (gpena/Bramble.jl#280) to keep that file to the shared traversal
-and alias framework alone, plus the `StencilOp` type hierarchy other operator files still
-tag their calls to `stencil_matrix` with; this is a pure move -- Julia does not care which
-file a definition lives in within one module -- and `Bramble.jl` includes this file directly
-after `stencil.jl`, still ahead of every file that calls into either.
+`stencil_matrix` and its CSC and dense backends, `_scale_rows!`, and the per-family
+`_stencil_taps`/`_stencil_weights` over `StencilOp`. Included right after `stencil.jl`.
 =#
 
 """
@@ -52,24 +45,9 @@ the value, decides the pattern.
 # host-backed mesh since `host_spacings` returns the existing array there instead of copying
 # it.
 #
-# It neither subtypes `AbstractMeshType` nor overloads `spacing`/`forward_spacing`/
-# `npoints`/`eltype` (gpena/Bramble.jl#94, JET cleanup): a first attempt did both, and
-# `report_package` flagged it twice over, in two different ways. Subtyping `AbstractMeshType`
-# while answering only four of its methods made every `AbstractMeshType`-typed function in
-# the package -- not just `_stencil_weights` below -- pick this mirror up in a union split
-# and report the methods it does not implement (`point`, `_mesh_version`, calling a mesh as
-# `Ωₕ(dim)`) as missing. Dropping the supertype but keeping the four overloads traded that
-# for a subtler version of the same problem: `report_package` widens an untyped argument's
-# candidate type set to *every* concrete type answering the same call shape anywhere in the
-# package, not only the ones related through `AbstractMeshType` -- so this mirror's own
-# `npoints(m, ::Type{Tuple})` matched unrelated `npoints(Ωₕ, Tuple)` calls in
-# `src/mesh/marker.jl`, `src/operators/restriction.jl` and `src/space/inner_product.jl`,
-# widened those functions' inferred argument type to include it, and every *other* call on
-# that same variable then flagged it missing too -- a new report in a different file for
-# every fix, each patchable only by adding this mirror to an interface it has no business
-# answering. `_axis_spacing`/`_axis_forward_spacing`/`_axis_npoints`/`_axis_eltype` below give
-# `_stencil_weights` the same four queries under names nothing else in the package calls, so
-# this mirror never becomes a candidate for a dispatch it was not built to answer.
+# Neither an `AbstractMeshType` nor a `spacing`/`npoints` overload: either one made JET's
+# `report_package` widen unrelated mesh calls to include it (gpena/Bramble.jl#94).
+# The `_axis_*` accessors are called by nothing else.
 struct _HostAxisSpacings{T, Dim}
     h::Vector{T}
 end
@@ -219,30 +197,9 @@ end
 
 # --- Single-pass operator matrices: stencil_matrix ----------------------------------- #
 #
-# gpena/Bramble.jl#185: every matrix form in difference.jl/average.jl/jump.jl built its
-# result as a Kronecker product of 1D shift matrices (`shift`, `_recursive_shift`,
-# `_difference_operator`, `_average_operator`, `add_half_shift`), each product and
-# subtraction/sum along the way an intermediate `SparseMatrixCSC` of its own, built and
-# thrown away. That is a second, independent implementation of every family's arithmetic
-# next to the one `local_stencil` already carries for form assembly (issue #185's own
-# complaint: "any change to operator boundary conventions requires manually keeping three
-# independent codebases in sync"), and it is not the cheapest way to fill a matrix whose
-# sparsity pattern is known ahead of a single stencil's reach.
-#
-# `stencil_matrix(Ωₕ, op)` replaces the Kronecker construction with one sweep over
-# `CartesianIndices(Ωₕ)` that writes `colptr`/`rowval`/`nzval` directly: two passes (count,
-# then fill), no intermediate matrix. `op` names one operator family along one axis --
-# `_stencil_taps(op)` gives its fixed neighbour offsets along that axis, `_stencil_weights`
-# the coefficients matching those offsets at a grid point.
-#
-# This mirrors, rather than calls, the offsets and arithmetic `local_stencil` uses for the
-# same families in `src/operators/{difference,average,jump}.jl` (their own
-# `_stencil_taps`/`_stencil_weights`, keyed on AST node types such as `BackwardDifference`
-# and `JumpNode`). Calling those directly would mean constructing a `LazyOp` tree from this
-# file to stand in for the node's `inner_op` field, which `src/space/` has no business
-# doing: forms are built on top of the space layer's operators, not the other way around.
-# The two are proved equal by the equality test against `kronecker_operator_matrix` below
-# instead of by sharing code, so the duplication is checked rather than removed.
+# `stencil_matrix` fills one family's matrix in one sweep (count, then fill), with no
+# intermediate Kronecker products. Its taps and weights mirror the node ones in
+# `difference.jl`/`average.jl`/`jump.jl`; `kronecker_operator_matrix` checks them entrywise.
 
 # --- Diagonal scaling of an operator matrix ----------------------------------------- #
 # Every weighted operator in this subsystem is a diagonal scaling of an unscaled one: build

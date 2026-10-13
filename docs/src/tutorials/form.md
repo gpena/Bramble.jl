@@ -151,8 +151,8 @@ issymmetric(c)  # different operators either side
 ```
 
 A positive answer says `cholesky` is worth trying on the result rather than a general
-factorization. The check costs a few nanoseconds, against tens of microseconds to assemble
-even this small a matrix.
+factorization. `isposdef` answers for semi-definiteness: this matrix has the constants in its
+kernel, so it is singular until the Dirichlet conditions below are applied.
 
 ## [Dirichlet conditions and a Poisson problem](@id form_dirichlet)
 
@@ -235,8 +235,9 @@ reaction(ad, ld, uh_elt; marker = :left), reaction(ad, ld, uh_elt; marker = :rig
 ```
 
 Both come out near ``\pi``. For ``u = \sin(\pi x)`` the flux ``-u'`` leaving the domain is
-``\pi`` at each end, and the two together recover the net source
-``\int_0^1 \pi^2 \sin(\pi x)\,dx = 2\pi`` to round-off, at any resolution. The sign
+``\pi`` at each end, and the two together recover the discrete net
+source ``(f_h, 1)_h`` to round-off at any resolution, which approaches ``2\pi`` at second order
+(``6.2781`` here). The sign
 convention is in the docstring of [`reaction`](@ref); [`reaction_density`](@ref) gives the
 pointwise quantity, suitable for [`export_vtk`](@ref).
 
@@ -373,7 +374,7 @@ repetition:
 
 ```@example forms
 a_dup = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + innerₕ(u, v))
-Bramble.resolve_form_ast(a_dup)     # 2 * innerₕ(u, v): one term, not two
+expression(a_dup)     # 2 * innerₕ(u, v): one term, not two
 ```
 
 ```@example forms
@@ -389,7 +390,7 @@ Matrix(assemble(a_off)) ≈ Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(
 ```
 
 !!! tip "Try this"
-    Replace `0 *` by `0.0 *` in `a_off` and compare `Bramble.resolve_form_ast(a_off)`.
+    Replace `0 *` by `0.0 *` in `a_off` and compare `expression(a_off)`.
     A `Float64` coefficient is only known at run time, so the rule does not fire.
 
 Two limits apply. A rule whose outcomes have different node types fires only when the

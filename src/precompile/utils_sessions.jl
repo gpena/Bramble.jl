@@ -1,5 +1,5 @@
-# precompile/utils_sessions.jl: backend-facing array construction and the weighted inner
-# products (src/utils/). Ordinary methods, so PrecompileTools caches them along with
+# precompile/utils_sessions.jl: backend array construction, the weighted dot products and
+# the sweep seam (src/utils/). Ordinary methods, so PrecompileTools caches them along with
 # everything they call.
 
 # None of this is reachable from mesh construction, which only allocates vectors.

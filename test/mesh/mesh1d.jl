@@ -196,6 +196,18 @@ import Base: diff
             @test findall(markers(Ωₕ)[:boundary]) == [1, 100]
             @test findall(markers(Ωₕ)[:interior]) == 2:99
             @test size(Bramble._marker_words(Ωₕ), 1) == 2
+
+            # A point-count change on a mesh with a custom label is refused, naming the
+            # call that keeps it; the mesh is left as it was.
+            dm = markers(interval(0, 1), :BC => :left)
+            Ωc = mesh(create_test_domain(0.0, 1.0; markers = dm), 3, true; backend = backend())
+            msgs = ["set_points!(Ωₕ, pts) was asked to change the point count",
+                "custom markers", ":BC", "change_points!(Ωₕ, markers(Ω), pts)"]
+            @test_throws msgs set_points!(Ωc, [0.0, 0.3, 0.7, 1.0])
+            @test npoints(Ωc) == 3
+            # the same count only moves the points, so it needs no domain
+            set_points!(Ωc, [0.0, 0.3, 1.0])
+            @test points(Ωc) == [0.0, 0.3, 1.0]
         end
     end
 
@@ -423,6 +435,9 @@ import Base: diff
             # untouched, not partially refined.
             Ωₕ = mesh(Ω, npts_initial, true; backend = backend())
             @test_throws ArgumentError iterative_refinement!(Ωₕ)
+            @test_throws ["iterative_refinement!(Ωₕ) was asked to refine",
+                "custom markers", ":BC", ":Center",
+                "iterative_refinement!(Ωₕ, domain_markers)"] iterative_refinement!(Ωₕ)
             @test npoints(Ωₕ) == npts_initial
             @test points(Ωₕ) == [0.0, 0.5, 1.0]
 

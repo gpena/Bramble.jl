@@ -534,6 +534,7 @@ using Kronecker: Kronecker
                 :_linear_problem,
                 :_ode_function,
                 :_ode_problem,
+                :_ode_storage,
                 :_nonlinear_problem,
                 :_second_order_ode_function,
                 :_second_order_ode_problem,

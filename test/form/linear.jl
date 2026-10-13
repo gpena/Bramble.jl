@@ -69,6 +69,14 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         @test lf isa LinearForm
         @test test_space(lf) === Wₕ
         @test resolve_form_ast(lf) isa LinearProduct
+
+        # No `restrict_to`, so `form` builds no point mask for typing restrictions: it
+        # allocates nothing whatever the grid size.
+        function _form_bytes(W, f)
+            form(W, v -> innerₕ(f, v))
+            return @allocated form(W, v -> innerₕ(f, v))
+        end
+        @test _form_bytes(Wₕ, uₕ) == 0
     end
 
     @testset "Assembly" begin
@@ -805,6 +813,12 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             end
         end
         @test_throws ArgumentError form(W9, v -> innerₕ(one_on(uni(11)), v))
+        # the message names both meshes' point counts
+        @test_throws "the source's mesh has (11, 11) points and the test space's (9, 9)" form(
+            W9, v -> innerₕ(one_on(uni(11)), v))
+        # equal counts on other points: the message names the shared shape instead
+        @test_throws "the source is on another mesh of the same shape, (9, 9) points" form(
+            W9, v -> innerₕ(one_on(gridspace(_graded_mesh((9, 9)))), v))
 
         # In 1D, where a bare test function in inner₊ reaches the source path
         Ω1 = domain(interval(0.0, 1.0))

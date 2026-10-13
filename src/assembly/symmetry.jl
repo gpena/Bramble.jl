@@ -400,15 +400,8 @@ end
 
 # --- Display ---------------------------------------------------------------------- #
 #
-# Both form types fell through to Julia's default `show`, which printed the whole resolved
-# AST type -- every operator node and its parameters -- ahead of the spaces, which are
-# what a caller actually wants to check. The detailed `show` below reports the spaces first,
-# then an `Expression` row rendered via `expression(form)`. That rendering logic itself
-# lives in `src/ast/expression.jl`, with the per-node-type methods colocated with each
-# node's struct.
-#
-# Lives in this file rather than `linear.jl`/`bilinear.jl` because `issymmetric` below is
-# what the detailed bilinear block reports, and it is defined here.
+# The detailed `show` reports the spaces first, then an `Expression` row (`expression(form)`,
+# src/ast/expression.jl). It lives here because it reports `issymmetric`, defined above.
 
 function Base.show(io::IO, l::LinearForm{D}) where {D}
     print(io, "LinearForm{$(D)D, ", ndofs(test_space(l)), "}")

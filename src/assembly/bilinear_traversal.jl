@@ -11,8 +11,8 @@
     _scatter_position(A::AbstractMatrix, row::Int, col::Int) -> Int
 
 Where entry `(row, col)` lives in `A`'s own storage, or `0` for a matrix type that can
-answer "not stored" (only `SparseMatrixCSC` does; every dense fallback below always
-answers a valid position).
+answer "not stored" (a CSC or CSR search, host or mirror, does; the dense fallback
+always answers a valid position).
 
 The seam a new backend's matrix type implements to plug into assembly
 (gpena/Bramble.jl#12): `DiagonalReplaySink`, the positions search of the
@@ -385,9 +385,9 @@ end
 
 # Whether an earlier entry already named the same pair of offsets. `entries` is anything
 # whose `k`-th element starts with `(off_u, off_v)`: `entry_offsets(stencil)`
-# (form/common.jl) from `_visit_entries`, which keeps offsets and weights in separate
+# (ast/common.jl) from `_visit_entries`, which keeps offsets and weights in separate
 # containers for Enzyme's sake, or the stencil itself from the pattern builders in
-# form/jacobian_pattern.jl, which never read a weight at all.
+# jacobian_pattern.jl, which never read a weight at all.
 @inline function _offsets_seen_before(entries, k::Int, off_u, off_v)
     @inbounds for l in 1:(k - 1)
         entries[l][1] == off_u && entries[l][2] == off_v && return true
@@ -642,7 +642,7 @@ end
 # One point's entries.
 #
 # The offsets and the weights are read from two separate containers ([`entry_offsets`](@ref)
-# /[`entry_weights`](@ref), form/common.jl) rather than from the stencil's own mixed
+# /[`entry_weights`](@ref), ast/common.jl) rather than from the stencil's own mixed
 # `Int`/`Float64` tuples. That is what lets `Enzyme` differentiate assembly with respect to
 # an operator's own coefficient (gpena/Bramble.jl#249): this function reads both halves of
 # every entry and is inlined into `_visit_guarded_region!` rather than into whatever closure
@@ -855,7 +855,8 @@ only [`DiagonalReplaySink`](@ref) needs this, pairing itself (interior) with an 
 
 # Arguments
 - `sink` (or `interior_sink`/`boundary_sink`): What to do per entry. The sinks are
-  [`PatternSink`](@ref), [`ReplaySink`](@ref) and [`DiagonalReplaySink`](@ref); the
+  `_CoordSink` (pattern and positions), [`ReplaySink`](@ref), `_PairReplaySink` and
+  [`DiagonalReplaySink`](@ref) (values); the
   contract is in [`_sink_entry!`](@ref), [`_sink_point!`](@ref) and [`_sink_dedups`](@ref).
 - `term`: The AST node whose stencil is evaluated at each point.
 - `sp`: The test leaf. Its grid is walked, and the stencil sees its markers.
@@ -992,7 +993,8 @@ end
         ArgumentError(
         "assembling $(typeof(term)) reached a matrix entry outside its preallocated " *
         "sparsity pattern. `A` was not built by `allocate_system_matrix` for this exact " *
-        "form, or the form's `ast` changed after `A` was built.",
+        "form, or its pattern does not hold every entry this form writes, or the form's " *
+        "`ast` changed after `A` was built.",
     ),
     )
 end

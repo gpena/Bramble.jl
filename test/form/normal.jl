@@ -374,6 +374,8 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
         @test_throws "covers 4 boundary faces" normal_vector(W, :boundary)
         Wc = mk(:c => x -> x[1] == 0 && x[2] <= 0.5)
         @test_throws ArgumentError normal_vector(Wc, :c)
+        @test_throws "normal_vector: the markers :c do not consist of whole boundary faces" normal_vector(
+            Wc, :c)
 
         # 3D: the face a marker selects is mapped to its own name on the third axis too
         if WITH_3D_TESTS
@@ -432,6 +434,15 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
         end
         @test occursin("has 1 component here", msg)
         @test_throws ArgumentError η[:w]
+        # a term naming no component, on leaves that read :left as different faces
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        bnd = :boundary => boundary_symbols(S)
+        W1 = gridspace(mesh(domain(S, :left => :ymin, bnd), (7, 6), (false, false)))
+        W2 = gridspace(mesh(domain(S, bnd), (6, 8), (false, false)))
+        flux = v -> inner_Γ(dot(F, η), v; markers = :left)
+        @test_throws ArgumentError form(W2 × W1, flux)
+        @test_throws "leaves 1 and 2, whose meshes read the markers :left as different faces" form(
+            W2 × W1, flux)
     end
 
     @testset "The normal is named η, not n (#341)" begin

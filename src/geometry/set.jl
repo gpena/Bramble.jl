@@ -178,11 +178,8 @@ Return the topological dimension of `X`, defined as the embedding dimension `D` 
 """
 @inline topo_dim(X::CartesianProduct{D}) where {D} = D - sum(X.collapsed)
 
-# Extends `Base.extrema` rather than defining a `Bramble.tails` of its own -- the whole
-# point of dropping `tails` (gpena/Bramble.jl#76) is that "the (min, max) pair of an
-# interval" already has a name. `CartesianProduct` is not iterable, so this adds new
-# dispatches rather than overriding the generic reduction `extrema` gives an
-# `AbstractArray`; there is no existing behaviour here to shadow.
+# Extends `Base.extrema`: a `CartesianProduct` is not iterable, so no generic method is
+# shadowed (#76).
 """
     extrema(X::CartesianProduct, i::Integer) -> Tuple{T, T}
     extrema(X::CartesianProduct{1}) -> Tuple{T, T}
@@ -301,7 +298,7 @@ Shared with [`Domain`](@ref)'s own detailed renderer, which used to carry a verb
 file is included *before* this one, so a signature naming `CartesianProduct` there would
 not resolve.
 """
-function print_set_extent(pp::PrettyPrinter, X::CartesianProduct)
+function print_set_extent(pp::PrettyPrinter, X::CartesianProduct{1})
     if X.collapsed[1]
         print_colored(pp, "Point"; color = :yellow)
         print(pp.io, " at ")

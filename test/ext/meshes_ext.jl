@@ -24,6 +24,7 @@ end
     @testset "2D CartesianProduct" begin
         S2 = Bramble.box((0.0, 0.0), (1.0, 2.0))
         @test (_viz_silent(S2); true)   # runs the Box conversion without throwing
+        @test (_viz_silent(S2; color = :red); true)   # keywords are accepted and forwarded
     end
 
     @testset "3D CartesianProduct" begin
@@ -43,6 +44,7 @@ end
             Bramble.domain(Bramble.box((0.0, 0.0), (1.0, 2.0))), (4, 5), (true, true)
         )
         @test (_viz_silent(Ω2); true)   # RectilinearGrid conversion from the mesh's points
+        @test (_viz_silent(Ω2; color = :red); true)
     end
 
     @testset "3D MeshnD" begin

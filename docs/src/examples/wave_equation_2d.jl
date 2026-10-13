@@ -5,10 +5,9 @@
 # order, and Bramble semidiscretises it as such rather than asking the caller to rewrite it
 # as a first-order system by hand.
 #
-# This page is generated from `docs/src/examples/wave_equation_2d.jl` by Literate.jl, and the
-# same file runs under `test/examples/wave_equation_2d.jl` with the assertions the page
-# renders but does not check. It needs `SciMLBase` and a stepper, so it runs behind the
-# `ext`/`full` test groups rather than on every push.
+# This script runs under `test/examples/ext_pages.jl`, in the `examples` test group, with the
+# assertions the page renders but does not check; it is not part of the published manual. It
+# needs `SciMLBase` and a stepper, so it does not run on every push.
 #
 # ## Problem
 #
@@ -52,9 +51,7 @@ const ω = c * sqrt(2) * π
 uexact(x, t) = sinpi(x[1]) * sinpi(x[2]) * cos(ω * t)
 duexact(x, t) = -ω * sinpi(x[1]) * sinpi(x[2]) * sin(ω * t)
 
-function wave_system(n)
-    Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
-    Ωₕ = mesh(Ω, (n, n), (true, true))
+function wave_system(Ωₕ)
     Wₕ = gridspace(Ωₕ)
     I = interval(0.0, 1.0)                       # the time domain
 
@@ -63,10 +60,12 @@ function wave_system(n)
     l = form(Wₕ, v -> innerₕ(fₕ, v))
     bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
 
-    return Ωₕ, Wₕ, I, semidiscretize_second_order(K, l; dirichlet = bcs)
+    return Wₕ, I, semidiscretize_second_order(K, l; dirichlet = bcs)
 end
 
-Ωₕ, Wₕ, I, sd = wave_system(25)
+Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+Ωₕ = mesh(Ω, (25, 25))
+Wₕ, I, sd = wave_system(Ωₕ)
 
 size(stiffness_matrix(sd)), damping_matrix(sd), size(block_mass_matrix(sd))
 
@@ -75,6 +74,11 @@ size(stiffness_matrix(sd)), damping_matrix(sd), size(block_mass_matrix(sd))
 # what makes the system differential-algebraic; and [`block_mass_matrix`](@ref) is the
 # `2n × 2n` matrix the first-order form needs, `M` above the identity.
 #
+# The mesh above is uniform, so the weights are known: an interior row of `M` carries the cell
+# measure ``h_x h_y = (1/24)^2``, and a Dirichlet row is zero.
+
+@test iszero(mass_matrix(sd)[1, 1]) && mass_matrix(sd)[13 + 25 * 12, 13 + 25 * 12] ≈ (1 / 24)^2 #src
+#
 # ## Stepping it
 #
 # [`second_order_ode_problem`](@ref) hands the whole thing to `OrdinaryDiffEq` as a
@@ -82,8 +86,9 @@ size(stiffness_matrix(sd)), damping_matrix(sd), size(block_mass_matrix(sd))
 #
 # A symplectic integrator would be the natural choice for a conservative problem, and it
 # cannot be used here: `OrdinaryDiffEqCore` refuses an explicit or symplectic method unless
-# the mass matrix is exactly `I`, and a discrete `innerₕ` mass matrix never is, since its
-# boundary rows carry a half weight. `Rodas5P` is mass-matrix aware and is what
+# the mass matrix is exactly `I`, and the mass matrix here never is: its interior rows carry
+# the cell measure ``h_x h_y``, and its Dirichlet rows are zero, which is what makes the
+# system differential-algebraic. `Rodas5P` is mass-matrix aware and is what
 # [`SecondOrderSemidiscretization`](@ref)'s own docstring points to.
 
 u₀ = Rₕ(Wₕ, x -> uexact(x, 0.0))
@@ -130,20 +135,28 @@ E = energy.(sol.u)
 drift = maximum(abs, E .- E[1]) / E[1]
 
 @test 0.0 < drift < 1.0e-8                                                                 #src
+@test length(sol.t) < 100                                                                  #src
 
 E[1], drift
 
-# Eleven digits of the initial energy survive a hundred-odd adaptive steps. That is the
+# Eleven digits of the initial energy survive some fifty adaptive steps. That is the
 # integrator's tolerance showing rather than a conservation theorem: tightening `reltol` to
-# `1e-10` takes the drift to around `1e-14`, and loosening it gives the digits back.
+# `1e-10` takes the drift to around `1e-13`, and loosening it gives the digits back.
 #
 # ## Spatial order of the wave solution
 #
 # Refining space, with the time tolerance held fixed and tight enough that the spatial error
-# is what is being measured:
+# is what is being measured. The uniform mesh above would flatter the rate, because on it
+# ``\sin(\pi x)\sin(\pi y)`` is an exact discrete eigenmode of the Laplacian. That special
+# case says little about the scheme. The series therefore runs on one seeded random coarse
+# mesh, refined in place with [`iterative_refinement!`](@ref) so every finer level is the same
+# random mesh, dyadically split. The uniform mesh stays above, where the check on the mass
+# matrix needs a known grid weight:
 
-function wave_error(n)
-    Ωₕ, Wₕ, I, sd = wave_system(n)
+using Random
+
+function wave_error(Ωₕ)
+    Wₕ, I, sd = wave_system(Ωₕ)
     prob = second_order_ode_problem(
         sd, Rₕ(Wₕ, x -> duexact(x, 0.0)), Rₕ(Wₕ, x -> uexact(x, 0.0)), I)
     sol = solve(prob, Rodas5P(); reltol = 1.0e-8, abstol = 1.0e-10)
@@ -151,17 +164,30 @@ function wave_error(n)
     return hₘₐₓ(Ωₕ), normₕ(uT - Rₕ(Wₕ, x -> uexact(x, 1.0)))
 end
 
-hs, errs = zip(wave_error.((13, 25, 41))...)
+function wave_series(levels; n0 = 7)
+    Random.seed!(20260903)
+    Ωc = mesh(Ω, (n0, n0), (false, false))
+    hs, errs = Float64[], Float64[]
+    for level in 1:levels
+        h, e = wave_error(Ωc)
+        push!(hs, h)
+        push!(errs, e)
+        level < levels && iterative_refinement!(Ωc)
+    end
+    return hs, errs
+end
+
+hs, errs = wave_series(3)   # 7² up to 25² points
 orders = [log(errs[i] / errs[i + 1]) / log(hs[i] / hs[i + 1]) for i in 1:(length(hs) - 1)]
 
 @test all(1.9 .< orders .< 2.1)                                                            #src
 
-collect(orders)
+orders
 
 #-
 
 include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
-convergence_plot([(collect(hs), collect(errs), "2D wave", "#5B5FC7")]; # hide
+convergence_plot([(hs, errs, "2D wave", "#5B5FC7")]; # hide
     title = "Wave equation at t = 1, ‖·‖ₕ") # hide
 
 # Second order, the same rate the steady problems reach, which is the point: the second-order

@@ -256,9 +256,8 @@ coupled_reaction_diffusion_widget(uₕ, vₕ; title = "Coupled reaction-diffusio
 # silently used the wrong block, which a single combined error could hide. A *dense*
 # `ForwardDiff.jacobian` over two coupled species would cost `(2n)^2` against the scalar
 # examples' `n^2`, and was what forced this example to stay at three small refinement levels
-# before switching to sparse AD; with it, this reaches five levels, the same order of tens of
-# thousands of degrees of freedom the [linear coupled
-# example](convection_diffusion_linear.md) reaches at six, in about a second per level:
+# before switching to sparse AD; with it, this reaches five levels, 8,450 unknowns on the
+# finest (``2 \times 65^2``), in about a second per level:
 
 Random.seed!(20260903)
 

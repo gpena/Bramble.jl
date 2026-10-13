@@ -10,7 +10,7 @@ using Random
 using Bramble: Mₓ!, type_cached_assemble!
 using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
 
-# `type_cached_assemble!` (form/type_cached_assemble.jl): caches a
+# `type_cached_assemble!` (assembly/type_cached_assemble.jl): caches a
 # coefficient-dependent BilinearForm's sparsity pattern per element type, so a Newton
 # residual generic over `T` only pays allocate_system_matrix's own cost once per type
 # instead of on every call.
@@ -134,13 +134,19 @@ const _traced_ad = AutoSparse(
         # property that actually matters holds: unlike `diffusion_matrix_direct`, whose
         # allocation grows with `ndofs` because it rebuilds the whole sparsity pattern every
         # call, a cache hit's cost does not grow with the mesh at all.
-        diffusion_matrix_cached = let cache = Dict{DataType, Any}()
+        hit_cache = Dict{DataType, Any}()
+        diffusion_matrix_cached = let cache = hit_cache
             uₕ -> type_cached_assemble!(_build_diffusion, cache, uₕ; dirichlet = :boundary)
         end
 
         u0 = element(Wₕ, 0.0)
         diffusion_matrix_cached(u0)   # first call: builds and caches
         diffusion_matrix_cached(u0)   # warm up the second call's own compilation
+
+        # The one dynamic call is the barrier taking the cached entry whole; past it, the
+        # refill and `assemble!` infer concretely at the entry's own type.
+        @test (@inferred Bramble._type_cached_fill!(hit_cache[Float64], u0, :boundary, nothing)) ===
+              hit_cache[Float64][3]
 
         cached_bytes = alloc_test(diffusion_matrix_cached, u0)
         direct_bytes = alloc_test(diffusion_matrix_direct, u0)

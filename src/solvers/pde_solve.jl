@@ -1,9 +1,10 @@
 # pde_solve.jl
 #
-# `pde_solve`: a name for `A \\ F` to hang a reverse-mode adjoint rule on.
+# `pde_solve`: the solve entry point, a plain `A \ F` unless `solver` or the macOS
+# Accelerate route says otherwise, and the one function a reverse-mode adjoint rule attaches to.
 #
 # No source-level AD tool -- forward or reverse, `ForwardDiff`, `ReverseDiff`, `Mooncake`,
-# `Enzyme` -- can differentiate through `\\` itself: it dispatches into compiled
+# `Enzyme` -- can differentiate through `\` itself: it dispatches into compiled
 # BLAS/SuiteSparse code, opaque to every one of them, the same reason none can differentiate
 # through any other library call written in C or Fortran. Everything *around* the solve --
 # `assemble`, `dirichlet_bc!` -- is already reverse-mode-differentiable (`docs/notes/internals/
@@ -12,8 +13,8 @@
 # problem or a PDE-constrained training loop without paying one factorisation per parameter"
 # (what closes gpena/Bramble.jl#228).
 #
-# `pde_solve` itself needs no weak dependency: without `ChainRulesCore` loaded it is exactly
-# `\\`, same result, same cost, just not differentiable. `BrambleChainRulesExt` supplies the
+# `pde_solve` itself needs no weak dependency: without `ChainRulesCore` it is the same solve,
+# just not differentiable. `BrambleChainRulesExt` supplies the
 # `ChainRulesCore.rrule`, and `BrambleEnzymeExt` a native `EnzymeRules` rule -- Enzyme gets
 # its own rather than a bridged one because `Enzyme.@import_rrule`'s bridge corrupts the
 # shadow of a sparse `A` whenever the cotangent carries an explicit zero
@@ -25,13 +26,9 @@
 # not something this package can route around, so it is left unsupported and documented
 # rather than worked around.
 
-# Whether `pde_solve`'s `:default` route (macOS, `AppleAccelerate.jl` loaded) should take
-# `accelerate_solve` rather than `A \\ F`. gpena/Bramble.jl#246 (R2): Accelerate only wins
-# against the previous `:default` on the symmetric factorisations it reaches (SPD/Cholesky,
-# LDLᵀ) -- 1.2-1.3x -- and loses 2.3-3.6x on unsymmetric systems, so the automatic choice is
-# narrowed to `issymmetric(A)`. An explicit `sym` hint is trusted outright rather than
-# re-checked: the caller has already asserted the property, and `:unsymmetric` is exactly the
-# case this narrowing exists to route away from Accelerate.
+# `:default` takes `accelerate_solve` on macOS only for a symmetric `A`: Accelerate loses on
+# unsymmetric systems. An explicit `sym` hint is trusted unchecked, and `:unsymmetric` is the
+# one that routes away.
 function _default_wants_accelerate(A, sym)
     sym === :spd || sym === :definite || sym == 1 ||
         sym === :symmetric || sym == 2 ||
@@ -40,7 +37,7 @@ end
 
 """
     pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver = :default, sym = :auto, kwargs...) -> Vector
-    pde_solve(fact::MUMPSFactorization, F::AbstractVector) -> Vector
+    pde_solve(fact::Factorization, F::AbstractVector) -> Vector
 
 Solve `A u = F` (or `fact u = F`) and return `u`.
 
@@ -60,17 +57,19 @@ chain differentiable.
   property, so it is not checked again. The narrowing exists because Accelerate is only a win
   on the symmetric factorisations it reaches (SPD/Cholesky, LDLᵀ): on forms assembled on 2D
   grid spaces it won on a symmetric Poisson-plus-mass system and lost on an unsymmetric
-  convection-diffusion one (gpena/Bramble.jl#246). This only ever narrows which solver runs on macOS; Linux and Windows
-  are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws from
-  `accelerate_solve` exactly as `solver = :accelerate` would -- `:default` never silently falls
-  back to `\\` after picking Accelerate. `:suitesparse` (CHOLMOD/UMFPACK), `:spqr` (sparse QR,
-  for a least-squares or rectangular `A`), `:accelerate` (Apple `libSparse`, needs
+  convection-diffusion one. This only ever narrows which solver runs on macOS; Linux and
+  Windows are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws
+  from `accelerate_solve` exactly as `solver = :accelerate` would -- `:default` never silently
+  falls back to `\\` after picking Accelerate. `:suitesparse` (CHOLMOD/UMFPACK), `:spqr`
+  (sparse QR, for a least-squares or rectangular `A`), `:accelerate` (Apple `libSparse`, needs
   `AppleAccelerate.jl`, honoured unconditionally regardless of symmetry), `:mumps` (needs
   `MUMPS.jl`), `:sparspak` (pure Julia, needs `Sparspak.jl`).
 - `kwargs`: passed to the chosen backend (for `:accelerate` and `:mumps` the keywords of
   [`accelerate_solve`](@ref) and [`mumps_solve`](@ref)), which throws on one it does not
-  take. `:default` takes only `kind`, on every platform, and `:sparspak` takes none: both
-  throw an `ArgumentError` on any other keyword.
+  take. `:default` takes only `kind` and `:sparspak` takes none: both throw an `ArgumentError`
+  on any other keyword. `kind` and `sym` are read only when the Accelerate route runs; on
+  `A \\ F` they are accepted and ignored, so `kind = :bogus` throws only where Accelerate is
+  taken.
 - `sym`: symmetry hint for `:suitesparse`, `:accelerate` and `:mumps` (and, on macOS, for
   `:default`'s own choice of solver -- see above). `:auto` (default) detects it;
   `:spd`/`:definite`/`1`, `:symmetric`/`2` and `:unsymmetric`/`0` state it.

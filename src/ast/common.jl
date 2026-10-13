@@ -481,7 +481,7 @@ The value a [`GridFunctionScale`](@ref) coefficient contributes at linear index 
 `Function` thunk deferred until `resolve_ast` calls it (see [`SourceVector`](@ref)'s
 docstring for why a thunk, not a plain vector, is the wire format), a bare `Number` for a
 uniform scale, or an array of per-point values. Shared by `local_stencil(::GridFunctionScale,
-...)` (`form/stencil_eval.jl`), which reads the coefficient at the point being visited, and
+...)` (`assembly/stencil_eval.jl`), which reads the coefficient at the point being visited, and
 the `shifted_inner_stencil` override below, which reads it at the point a tap shifts to --
 previously the same three-way branch, written out twice.
 """
@@ -494,16 +494,9 @@ previously the same three-way branch, written out twice.
     end
 end
 
-# `GridFunctionScale` is marked `PointDependentStencil` in operators/interpolation.jl,
-# but the generic `PointDependentStencil` branch above is wrong for it: discarding `inner`
-# and re-evaluating the whole node at `Ishift` would lose the trial or test column the
-# operand contributes (`GridFunctionScale(c, u)` evaluated fresh at `Ishift` reduces to `c`
-# read there times `u`'s own stencil *at* `Ishift` -- offset zero, not `delta`). What is
-# needed instead is the operand shifted by its own rule, with the coefficient read
-# separately at the shifted point, which is what this override gives it ahead of the
-# generic trait dispatch. `inner` is discarded, the same as the
-# generic point-dependent branch discards it: it was evaluated at `I`, and the coefficient
-# this tap needs is the one at `Ishift`.
+# `GridFunctionScale` overrides the trait dispatch (see `shifted_inner_stencil`'s docstring):
+# its operand shifts by its own rule and the coefficient is read at `Ishift`. `inner` was
+# evaluated at `I` and is not used.
 @inline function shifted_inner_stencil(
         inner_op::GridFunctionScale, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
 ) where {D, Dim}
@@ -515,15 +508,8 @@ end
     return scale_stencil(shifted, _grid_function_value(inner_op.grid_function, lins[Ishift]))
 end
 
-# A sum inherits `PointDependentStencil` (`_combine_shift_traits`,
-# operators/interpolation.jl) the moment either side does, which now includes any side
-# holding a `GridFunctionScale`. Without this override the generic branch above would
-# re-evaluate *both* summands at `Ishift`, including a translation-invariant one, losing its
-# trial column exactly as the unwrapped `GridFunctionScale` case above would; recursing into
-# each summand instead lets the translation-invariant side keep relabelling while the
-# point-dependent side re-reads its coefficient. The tuple length is unchanged from the
-# generic branch: that one already returned `local_stencil(::OperatorAdd, Ishift)`, itself a
-# concatenation of the same two halves.
+# A sum is point-dependent once either side is (`_combine_shift_traits`), so each summand is
+# shifted by its own rule; see `shifted_inner_stencil`'s docstring.
 @inline function shifted_inner_stencil(
         inner_op::OperatorAdd, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
 ) where {D, Dim}
@@ -546,7 +532,7 @@ end
 # ==============================================================================
 
 # Indexing a node by component (`v(1)`, and distribution through whatever is built on
-# top of it) lives in form/component.jl, included after the operator files because it needs
+# top of it) lives in ast/component.jl, included after the operator files because it needs
 # every node type in its signatures.
 
 """
@@ -589,15 +575,10 @@ source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
 # construction, and every later `assemble!`/`assemble` call is a flat array read like any
 # other `SourceVector`, regardless of how novel the closure's type is.
 #
-# This is a real behaviour change, not merely an optimisation: a `SourceFunction` closure
-# that captures mutable state is no longer re-evaluated on later assemblies -- it is
-# sampled once, here. `VectorElement` and `Ref` coefficients are unaffected (neither is ever
-# wrapped in a `SourceFunction`; see `GridFunctionScale`/`OperatorScale` below, both left as
-# pass-through, matching `simplify_ast`'s own shape in `simplifier.jl`), and no existing test
-# relied on a raw closure being re-invoked outside that documented pattern. A source meant to
-# vary after construction (a time-dependent PDE source, say) must use the already-documented
-# `update_coefficients!`/`VectorElement` pattern (`semidiscretize`'s docstring) instead of a
-# raw closure captured directly in the form.
+# So a `SourceFunction` closure is sampled once, at `form`; it is never re-invoked. A source
+# that changes afterwards goes through `update_coefficients!` and a `VectorElement`
+# (`semidiscretize`'s docstring). `VectorElement` and `Ref` coefficients are never wrapped in
+# a `SourceFunction` and stay live.
 #
 # One exception: the interpolant `πₕ(uₕ)`, whose function is a `GridInterpolant`
 # (operators/interpolation.jl, which holds its method), is left unsampled and read at every
@@ -607,7 +588,7 @@ source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
 #
 # Every node type not named here is a leaf as far as this pass is concerned (it can never
 # contain a `SourceFunction`, or lowering inside it is handled by its own caller -- see
-# `_lower_sources_for_space` in `form/linear.jl` for `LinearProduct`/`OperatorAdd` routing
+# `_lower_sources_for_space` in `assembly/linear.jl` for `LinearProduct`/`OperatorAdd` routing
 # across a `CompositeGridSpace`'s leaves) and is returned unchanged.
 @inline _lower_sources(op::LazyOp, space) = op
 
@@ -634,7 +615,7 @@ end
 
 # `ShiftNode` (operators/shift.jl) and `LinearProduct` (operators/inner.jl) are
 # both included after this file, so their `_lower_sources` methods -- naming the type in the
-# signature, unlike everything above -- live in form/linear.jl instead (bramble-performance
+# signature, unlike everything above -- live in assembly/linear.jl instead (bramble-performance
 # skill, "include-order rule").
 
 # ==============================================================================

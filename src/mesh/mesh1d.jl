@@ -168,8 +168,8 @@ end
 # change, and never equal across meshes or across two stores.
 @inline _marker_stamp(Ωₕ::Mesh1D) = getfield(Ωₕ, :marker_stamp)
 
-# Replaces the marker dictionary, its label table and the state's words together (O6: a
-# label set may change after construction; the word matrix is rebuilt, never resized).
+# Replaces the marker dictionary, its label table and the state's words together. A label
+# set may change after construction; the word matrix is rebuilt, never resized.
 function _store_markers!(Ωₕ::Mesh1D, mesh_markers)
     mm = convert(MeshMarkers, mesh_markers)
     ids, words = _marker_table(mm, npoints(Ωₕ))
@@ -377,7 +377,6 @@ Return the cached vector of backward spacings, where `spacings(Ωₕ)[i]` is
 grid points change.
 """
 @inline spacings(Ωₕ::_Mesh1DLike) = _st(Ωₕ).spacings
-@inline spacings!(Ωₕ::Mesh1D, v) = _set_state!(Ωₕ, _restate(_st(Ωₕ); spacings = v))
 
 """
     host_spacings(Ωₕ::Mesh1D) -> Vector
@@ -389,7 +388,7 @@ of where `Ωₕ`'s storage lives (gpena/Bramble.jl#94).
 element at a time, which a device-backed mesh (Metal.jl, ...) refuses outright: its scalar-
 indexing guard throws before a per-point loop over either accessor gets anywhere. Call this
 once instead to bring every spacing to the host in a single transfer, then index the `Array`
-it returns as many times as needed -- `stencil.jl`'s dense stencil-matrix builder does exactly
+it returns as many times as needed -- `stencil_matrix.jl`'s dense stencil-matrix builder does exactly
 that.
 
 On a host-backed mesh, `spacings(Ωₕ)` already is an `Array`, so this returns it directly with
@@ -439,16 +438,9 @@ See also: [`forward_spacing_for_derivative`](@ref).
     return f
 end
 
-# A single-point mesh (n == 1, whether from a topologically collapsed domain or simply a
-# one-point request) has no adjacent interval, so `half_spacings` is the honest raw zero
-# there -- that raw value stays untouched, since other code (collapse detection, among it)
-# reads it as exactly that. `cell_measures` is a *measure*, though, and the same `_apply_hs_logic`
-# coercion `half_spacing(::MeshnD, idx)` already applies is needed here too, or a mesh with
-# a collapsed axis silently gets a zero weight everywhere (gpena/Bramble.jl#89): the zero
-# case is only ever the single-element one, so this stays the same zero-copy array in
-# every other case and only allocates on that one rare, one-element path. That copy is
-# `similar(hs)` filled by a broadcast, so it keeps the mesh's own vector type (a device
-# vector stays one) and never reads `hs[1]` as a scalar (gpena/Bramble.jl#497).
+# A one-point mesh's raw half-spacing is zero, which collapse detection reads. As a measure
+# it is coerced to one by `_apply_hs_logic` (#89), into `similar(hs)` by broadcast so a
+# device vector stays one and `hs[1]` is never read as a scalar (#497).
 @inline function cell_measures(Ωₕ::_Mesh1DLike)
     hs = half_spacings(Ωₕ)
     return length(hs) == 1 ? (similar(hs) .= _apply_hs_logic.(hs)) : hs
@@ -488,25 +480,15 @@ function set_points!(Ωₕ::Mesh1D, pts)
     # rebuilt below; any other label has no domain to be re-evaluated from, so it is
     # refused before the geometry changes, as `iterative_refinement!(Ωₕ)` refuses it
     # (gpena/Bramble.jl#19).
-    extra_labels = setdiff(keys(markers(Ωₕ)), (:boundary, :interior))
-    isempty(extra_labels) || _throw_resize_drops_markers(extra_labels)
+    _check_only_geometric_labels(Ωₕ,
+        "set_points!(Ωₕ, pts) was asked to change the point count of",
+        "Build mesh(Ω, length(pts)) and call change_points!(Ωₕ, markers(Ω), pts) instead.")
 
     _set_points_geometry!(Ωₕ, pts)
     fresh_markers = MeshMarkers()
     _ensure_geometric_markers!(fresh_markers, Ωₕ)
     markers!(Ωₕ, fresh_markers)
     return nothing
-end
-
-@noinline function _throw_resize_drops_markers(extra_labels)
-    throw(
-        ArgumentError(
-        "set_points!(Ωₕ, pts) was asked to change the point count of a mesh carrying " *
-        "custom markers $(Tuple(extra_labels)), and there is no domain here to " *
-        "re-evaluate them onto the new points. Build mesh(Ω, length(pts)) and call " *
-        "change_points!(Ωₕ, markers(Ω), pts) instead.",
-    ),
-    )
 end
 
 # The geometry of `set_points!` alone, with markers left untouched: the public setter adds
@@ -527,19 +509,14 @@ end
                 half_spacings = vector(be, n), spacings = vector(be, n)))
     end
 
-    # A device-backed mesh with at least two points fills its three derived arrays in the
-    # one fused, non-uniform-formula kernel (gpena/Bramble.jl#305) -- the same kernel
-    # `_mesh` dispatches to for a non-uniform device mesh at construction, and valid here
-    # for any points (uniform or not), since `set_points!` carries no uniformity flag to
-    # branch on. Everything else (host-backed, or a single/no-interval mesh) keeps the
-    # three separate passes; the spacings come first there, since half_spacing! below
-    # reads them back through `spacing`.
+    # A device mesh with two or more points fills the three derived arrays in one fused
+    # kernel (#305), valid for any points. Otherwise three passes run, spacings first
+    # because `half_spacing!` reads them.
     if n >= 2 && !(points(Ωₕ) isa Array)
         _nonuniform_mesh1d_metrics!(Ωₕ)
     else
         spacing!(spacings(Ωₕ), Ωₕ)
 
-        # Re-compute the cell centers (half_pts) using the new grid points.
         half_points!(half_points(Ωₕ), Ωₕ)
 
         # Re-compute the cell widths (half_spacings) using the new grid points.
@@ -551,20 +528,6 @@ end
     _set_state!(Ωₕ, _restate(s; version = s.version + 1, uniform = _computed_uniform(s)))
     return nothing
 end
-
-"""
-    half_points!(Ωₕ::Mesh1D, pts::AbstractVector) -> Nothing
-
-Override the precomputed cell center cache in `Ωₕ`.
-"""
-@inline half_points!(Ωₕ::Mesh1D, pts) = _set_state!(Ωₕ, _restate(_st(Ωₕ); half_pts = pts))
-
-"""
-    half_spacings!(Ωₕ::Mesh1D, pts::AbstractVector) -> Nothing
-
-Override the precomputed cell width cache in `Ωₕ`.
-"""
-@inline half_spacings!(Ωₕ::Mesh1D, pts) = _set_state!(Ωₕ, _restate(_st(Ωₕ); half_spacings = pts))
 
 @inline eltype(::_Mesh1DLike{BT}) where {BT} = eltype(BT)
 @inline eltype(::Type{<:Mesh1D{BT}}) where {BT} = eltype(BT)
@@ -591,7 +554,7 @@ Return the `i`-th submesh of `Ωₕ`. A 1D mesh is its own only submesh, returni
 # raises for the same mistake. Catching it here to redirect to `host_spacings` would put a
 # locality check in the single most-called accessor in this file for a message this array
 # type already gives; a caller that hits it once should stop calling this per point and call
-# `host_spacings(Ωₕ)` once instead, as `stencil.jl` now does.
+# `host_spacings(Ωₕ)` once instead, as `stencil_matrix.jl` now does.
 @inline function spacing(Ωₕ::_Mesh1DLike, i::Int)
     _check_point_bounds(Ωₕ, i, "spacing")
     return @inbounds spacings(Ωₕ)[i]
@@ -692,31 +655,9 @@ end
     return _apply_hs_logic(half_spacing(Ωₕ, idx))
 end
 
-# `_generate_random_points!` used to draw from `Random.default_rng()` unconditionally, but a
-# device backend's kernel launches (metrics, fused init, ...) draw from that same global
-# stream as a side effect of launching -- even a uniform device mesh, which calls no RNG
-# code of its own, perturbs it. That meant seeding the global RNG and building a non-uniform
-# mesh on the host, then seeding again and building the "same" mesh on a device backend,
-# produced different interior coordinates: the device path's other kernel launches had
-# already burned draws from the global stream before this function ever ran
-# (gpena/Bramble.jl#320).
-#
-# The fix is opt-in, not a blanket switch to a package-local RNG: dozens of existing tests
-# (test/form/jacobian_pattern.jl:132, test/form/kronecker.jl, test/ext/kronecker_ext.jl,
-# test/space/centered_difference.jl, and ~23 others) call `Random.seed!(N)` immediately
-# before building a non-uniform mesh and rely on that call alone controlling the mesh's
-# interior points -- some for a single deterministic mesh a numerical assertion depends on
-# (jacobian_pattern.jl's Newton-iteration-count bound is one), not a "build twice, compare"
-# pattern. Drawing from a separate RNG unconditionally would make every one of those
-# `Random.seed!(N)` calls silently stop controlling its mesh, and would instead have
-# `_generate_random_points!` read whatever state a permanently-live, never-reseeded package
-# RNG happens to have accumulated from every other non-uniform mesh built earlier in the
-# same process -- order-dependent and effectively random in practice. Arming
-# `_generate_random_points!` onto the isolated RNG only for a caller that explicitly asks
-# for it, via `_seed_mesh1d_rng!`, keeps every existing `Random.seed!(N)` call working
-# exactly as before (`_MESH1D_RNG_ARMED` stays `false`, so the `else` branch below runs,
-# unchanged from the original code) while still giving device-mesh-reproducibility code
-# (gpena/Bramble.jl#320) a way to opt out of the global stream entirely.
+# Draws come from the global RNG unless `_seed_mesh1d_rng!` armed `_MESH1D_RNG`. Device
+# kernel launches consume global draws (#320), and existing `Random.seed!` calls before a
+# mesh build must keep controlling it, so the isolated RNG is opt-in.
 const _MESH1D_RNG = Random.Xoshiro()
 const _MESH1D_RNG_ARMED = Ref(false)
 
@@ -833,9 +774,9 @@ end
 # Device kernel launch stubs (gpena/Bramble.jl#94, #174)
 #
 # Every filler below (`_points!`, `half_points!`, `spacing!`, `half_spacing!`,
-# `_refine_indices!`) keeps its `x isa Array` method exactly as it always was -- a CPU loop
-# -- and gains a sibling method for a non-`Array` destination (a device-backed vector, e.g.
-# `MtlVector`). That sibling computes only the host-side scalars the kernel needs, then goes
+# `_refine_indices_fill!`) keeps its `x isa Array` method -- a CPU loop -- and gains a
+# sibling method for a non-`Array` destination (a device-backed vector, e.g. `MtlVector`).
+# That sibling computes only the host-side scalars the kernel needs, then goes
 # through `ka_device` (`src/utils/device_kernels.jl`) and one of the launchers below, which
 # `ext/BrambleKernelAbstractionsExt.jl` implements as a `KernelAbstractions.@kernel`. Without
 # that extension loaded, the launcher throws a named diagnostic instead of failing several
@@ -1008,10 +949,9 @@ end
 # route through the fused `_uniform_mesh1d_init!` kernel: a single-point mesh and a
 # non-uniform one. `unif` and `backend` are carried to keep this method's signature distinct
 # from the `Array` one above, since with `unif` dropped a three-argument device method would
-# be ambiguous with it. Past the single-point guard `unif` is always `false`. There is no
-# uniform branch to take. The non-uniform fill runs the `Array` method above into a scratch
-# `Vector{eltype(x)}`, so its tie redraw sees exactly the values that reach `x`, and
-# transfers them to `x` in one `copyto!`. Device `rand!`/`sort!` exist, but host generation
+# be ambiguous with it. Past the single-point guard `unif` is always `false`. The fill runs
+# the `Array` method above into a scratch `Vector{eltype(x)}`, so its tie redraw sees
+# exactly the values that reach `x`. Device `rand!`/`sort!` exist, but host generation
 # keeps a seeded mesh identical across backends, at a one-time O(n) construction cost.
 function _points!(x::AbstractVector, I::CartesianProduct{1}, unif::Bool, backend)
     cpu_pts = Vector{eltype(x)}(undef, length(x))
@@ -1049,7 +989,6 @@ function half_points!(x::AbstractVector, Ωₕ)
     return nothing
 end
 
-# Calculates the "half spacings" (cell widths/measures) for a 1D mesh.
 # Fills `x` with the backward spacings of `Ωₕ`. Must run before half_spacing!, which
 # reads them back through `spacing`.
 @inline function spacing!(x::Array, Ωₕ::_Mesh1DLike)
@@ -1063,8 +1002,8 @@ end
     end
 
     # The boundary convention: the first point has no interval behind it, so it repeats
-    # the first interval instead. Hoisted out of the loop, as the sibling kernels in this
-    # file (half_points!/half_spacing! above) already do for their own boundary entries.
+    # the first interval instead. Hoisted out of the loop, as `half_points!` and `half_spacing!`
+    # do for their own boundary entries.
     @inbounds begin
         x[1] = pts[2] - pts[1]
         @simd for i in 2:n
@@ -1241,7 +1180,6 @@ function _mesh(
     end
     is_uniform && n_points >= 2 && _check_uniform_distinct(pts, set)
 
-    # Generate the CartesianIndices for the grid.
     idxs = generate_indices(n_points)
 
     # Instantiate the Mesh1D struct with initial (empty) markers. The uniformity flag is set
@@ -1283,8 +1221,8 @@ end
     throw(ArgumentError(msg))
 end
 
-# The refinement fill itself, split out so it can dispatch on the destination's array type:
-# the `Array` method is the original CPU loop, unchanged; the other goes through a kernel.
+# The refinement fill itself, split out so it can dispatch on the destination: a CPU loop
+# for an `Array`, a kernel otherwise.
 @inline function _refine_indices_fill!(new_points::Array, old_points, N_old, backend)
     @inbounds @simd for i in 1:N_old
         new_points[2i - 1] = old_points[i]
@@ -1329,7 +1267,7 @@ function _refined_points(Ωₕ::Mesh1D)
     _refine_indices_fill!(new_points, old_points, N_old, backend(Ωₕ))
 
     host_points = _host_array(new_points)
-    # the half-points `half_points!` will fill on commit, by the same formula
+    # the half-points the commit fills, `(x[i] + x[i-1]) * 0.5`
     if !all(isfinite, host_points) ||
        any(i -> !isfinite((host_points[i] + host_points[i - 1]) * 0.5), 2:N_new)
         a, b = extrema(set(Ωₕ))
@@ -1404,7 +1342,7 @@ end
 
 # A deepcopy is an independent mutable mesh, so it gets a fresh identity: with the uid
 # copied, the original and the copy would share (uid, version) after one point change each
-# while holding different points.
+# while holding different points. Its marker stamp is fresh too, as `copy`'s is.
 function Base.deepcopy_internal(Ωₕ::Mesh1D, dict::IdDict)
     haskey(dict, Ωₕ) && return dict[Ωₕ]::typeof(Ωₕ)
     c = invoke(Base.deepcopy_internal, Tuple{Any, IdDict}, Ωₕ, dict)::typeof(Ωₕ)
@@ -1413,6 +1351,7 @@ function Base.deepcopy_internal(Ωₕ::Mesh1D, dict::IdDict)
         typeof(s)(s.set, s.indices, s.backend, s.pts, s.half_pts,
             s.half_spacings, s.spacings, s.collapsed, s.version, s.uniform, s.words,
             _next_mesh_uid()))
+    setfield!(c, :marker_stamp, _next_mesh_uid())
     return c
 end
 

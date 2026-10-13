@@ -23,8 +23,8 @@ files, each adding its own `expression` methods without touching this one.
 
 Render `form`'s resolved AST (`form.ast`) in Bramble's own operator notation.
 
-Left untyped on purpose: `LinearForm`/`BilinearForm` are defined in `form/linear.jl` and
-`form/bilinear.jl`, included well after this file, so a `Union{LinearForm,BilinearForm}`
+Left untyped on purpose: `LinearForm`/`BilinearForm` are defined in `assembly/linear.jl` and
+`assembly/bilinear.jl`, included well after this file, so a `Union{LinearForm,BilinearForm}`
 annotation here would need those names to exist at `include` time. Every `LazyOp` node has its
 own, more specific `expression` method, so this untyped fallback only ever catches forms.
 """

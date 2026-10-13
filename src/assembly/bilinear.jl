@@ -6,40 +6,19 @@
 
 # --- Struct definitions ----------------------------------------------------------- #
 
-# Every scattered contribution's nzval position, for one term routed into one block: the
-# same shape `add_to_sparse!` used to re-derive by searching on every call (gpena/Bramble.jl#26).
-# `point_ptr[lin_idx]:point_ptr[lin_idx + 1] - 1` is the slice of `positions` holding the
-# positions for grid point `lin_idx`'s own (guard-passing, non-deduplicated) stencil entries,
-# in the same order a scatter walk visits them -- addressed per point rather than by a shared
-# running counter, so the threaded refill reads it from every band at once without a race
-# (gpena/Bramble.jl#338).
-"""
-    NzvalSegment = Tuple{Vector{Int},Vector{Int}}
-
-One term's recorded nzval positions for one block, as `(point_ptr, positions)`.
-
-`point_ptr[lin_idx]:point_ptr[lin_idx + 1] - 1` is the slice of `positions` holding grid
-point `lin_idx`'s own entries, in the order a scatter walk visits them. Addressed per point
-rather than by a shared running counter, so a replay stays correct whatever order the grid
-is visited in.
-
-See also: [`ReplaySink`](@ref).
-"""
-const NzvalSegment = Tuple{Vector{Int}, Vector{Int}}
-
 """
     Segment{D}
 
 One term's recorded nzval positions for one block, on a `D`-dimensional structured grid.
-Replaces a former `Union{NzvalSegment,DiagonalSegment{D}}` (`AnySegment{D}`) with a single
-concrete struct (gpena/Bramble.jl#240): `Enzyme`'s strict-aliasing type analysis rejects a
-`Union` return outright (`IllegalTypeAnalysisException`), regardless of whether the segment
-itself is ever the target of differentiation, so `_try_diagonal_segment` needed a return type
-Enzyme can reason about -- a discriminated struct, not a two-branch `Union`.
+A single concrete struct, with `is_diagonal` discriminating the two shapes (gpena/Bramble.jl#240):
+`Enzyme`'s strict-aliasing type analysis rejects a `Union` return outright
+(`IllegalTypeAnalysisException`), regardless of whether the segment itself is ever the target
+of differentiation, so `_try_diagonal_segment` returns a type Enzyme can reason about, never
+a two-branch `Union`.
 
 `is_diagonal` selects which shape is populated:
-- `false` (flat). `point_ptr`/`positions` cover every entry, exactly as [`NzvalSegment`](@ref)
-  always has; `base`/`stride`/`interior` are unused placeholders (empty, zero).
+- `false` (flat). `point_ptr`/`positions` cover every entry; `base`/`stride`/`interior` are
+  unused placeholders (empty, zero).
 - `true` (diagonal, gpena/Bramble.jl#160). `point_ptr`/`positions` cover only the boundary
   shell; `base`/`stride`/`P`/`interior` carry the interior's per-tap stride arithmetic --
   interior entries are `base[k] + stride[k] * n` for the `n`-th point `interior`'s own
@@ -164,7 +143,7 @@ end
 # One shared, never-written empty `segments` vector per dimension, so a fresh form's cache
 # costs one allocation -- the mutable struct itself -- rather than two. Sharing is safe
 # because nothing ever writes *through* this reference: a cache miss in
-# `_assemble_bilinear_core_cached!` (form/bilinear_execution.jl) builds its own vector and
+# `_assemble_bilinear_core_cached!` (`bilinear_execution.jl`) builds its own vector and
 # assigns it, deliberately never `push!`ing into or `empty!`ing whatever `segments` points at.
 #
 # One constant per `D` rather than one shared `Segment[]`, because the eltype is
@@ -284,8 +263,9 @@ and `ndofs(test_space(a))`. The result's type is promoted from the element types
 and `v`, so a `ForwardDiff.Dual` in either argument comes through.
 
 On a CPU backend the call allocates only the one cell its sum runs in (a
-`ContractionSink`'s), whatever the grid size, except on a form with a region
-restriction (`restrict_to`), whose stencil evaluation allocates as it does in `assemble!`.
+`ContractionSink`'s), whatever the grid size; a form with three or more
+region-restricted summands in one product allocates per point, as in `assemble!`
+(gpena/Bramble.jl#727).
 Each call has its own cell, so tasks may call one form at once. On a GPU backend the matrix
 is assembled and multiplied, as the walk reads its vectors on the host.
 
@@ -444,7 +424,7 @@ Runs serially or across threads following `form.trial_space`'s backend
 boundary conditions to the matrix -- a label `Symbol`, a `Tuple` of labels, a `label => f`
 `Pair` (values ignored on the matrix side), or constraints from
 [`dirichlet_constraints`](@ref); see [`_normalize_dirichlet`](@ref) for every accepted
-form. `dirichlet_components` restricts which leaf components of a composite trial space
+form. `dirichlet_components` restricts which leaf components of a composite test space
 they bind to (see [`dirichlet_bc!`](@ref)).
 """
 function assemble(form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing)
@@ -457,7 +437,9 @@ end
     assemble!(A::AbstractMatrix, form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -> AbstractMatrix
 
 Assemble the `BilinearForm` into the preallocated matrix `A`, allocating nothing (**0 bytes**)
-when `A` is the default `SparseMatrixCSC`.
+when `A` is the default `SparseMatrixCSC`. A form whose terms, once simplified, put three or
+more region-restricted summands in one product allocates per grid point (see
+gpena/Bramble.jl#727).
 
 Runs serially or across threads following `form.trial_space`'s backend
 [`execution_policy`](@ref): [`Serial`](@ref) (the default) or [`Parallel`](@ref).

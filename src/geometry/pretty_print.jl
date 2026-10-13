@@ -104,7 +104,7 @@ Print each of `items` by calling `f(item)`, separating consecutive ones with `se
 Replaces seven hand-rolled variants of the same loop across the geometry and mesh
 renderers (gpena/Bramble.jl#47): `i < length(xs) && print(io, ", ")` in five places and a
 `first` flag in `print_marker_summary`, which had to guard three optional groups. `f` is
-passed as a closure in the same style as `_each_marked` in `form/dirichlet_constraints.jl`,
+passed as a closure in the same style as `_each_marked` in `assembly/dirichlet_constraints.jl`,
 which measured at zero allocations, so the pattern costs nothing here.
 
 `items` may be any iterable; the separator is written *before* each entry after the first,
@@ -183,8 +183,7 @@ function print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond:
     printstyled(pp.io, "$total marker$(total == 1 ? "" : "s")"; color = :yellow)
     print(pp.io, " (")
 
-    # Only the non-empty groups, so `print_joined` handles the separators that the
-    # `first` flag used to track across three independent `if`s.
+    # Only the non-empty groups.
     groups = ((n_sym, "symbol"), (n_tup, "tuple"), (n_cond, "function"))
     print_joined(pp, Iterators.filter(g -> first(g) > 0, groups)) do (n, name)
         return print(pp.io, "$n $name$(n == 1 ? "" : "s")")

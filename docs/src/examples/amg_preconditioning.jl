@@ -19,7 +19,8 @@
 # handful of iterations regardless of mesh size. A measurement made once already did exactly that: it
 # looked like a working comparison and said nothing about the preconditioner at all.
 # ``e^{x+y}`` excites the discrete spectrum broadly, so the iteration counts below reflect
-# the operator's actual conditioning.
+# the operator's actual conditioning. The mesh is uniform because the scheme then
+# reproduces ``e^{x+y}`` to round-off, so the only error left is the solver's stopping error.
 #
 # ## Why this needs a preconditioner at all
 #

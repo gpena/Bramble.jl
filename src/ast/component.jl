@@ -212,7 +212,7 @@ for (f, W) in (
 )
     # `NC` is `l`'s *leaf* count (`length(comps)`, over `components`, which flattens any
     # nesting), not the space's own structural type parameter -- `component(r, c)` names
-    # leaf `c` (form-level indexing is already leaf-based, see form/block_extract.jl), so
+    # leaf `c` (form-level indexing is already leaf-based, see assembly/block_extract.jl), so
     # this has to walk the same leaves `comps` does, in the same order, for any `r`.
     @eval @inline function $f(
             l::VectorElement{<:CompositeGridSpace}, r::LazyOp{D};
@@ -254,9 +254,8 @@ for (f, W) in (
     end
 end
 
-# `inner_Γ` had no composite method at all, so `inner_Γ(gₕ, v; markers)` took the scalar
-# `VectorElement` one and read the first component into every block. No tuple method: a
-# tuple there is a `MethodError` today, which is loud, and adding one would be new API.
+# The composite `inner_Γ`: without it the scalar `VectorElement` method would read the first
+# component into every block. No tuple method (a tuple is a loud `MethodError`).
 @inline function inner_Γ(
         l::VectorElement{<:CompositeGridSpace}, r::LazyOp{D}; markers = ()
 ) where {D}

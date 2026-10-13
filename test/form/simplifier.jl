@@ -116,6 +116,11 @@ using Bramble:
         @test !(simplify_ast(A + B) isa OperatorScale)
     end
 
+    @testset "Duplicate terms print as one" begin
+        a_dup = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + innerₕ(u, v))
+        @test expression(a_dup) == "2 * innerₕ(u, v)"
+    end
+
     @testset "Data-carrying terms are never combined" begin
         # The gate, stated as tests: equality decided by reading a field at run time would make
         # this method's return type depend on that read, and `form`'s return type a `Union` of

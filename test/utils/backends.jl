@@ -697,8 +697,9 @@ end
     # Invariants tested:
     # 1. `_gpu_functional`'s generic method, which every device name without an extension
     #    method of its own reaches, answers `false`, or the override hook's value while it is
-    #    set, and `false` again once it is cleared.
+    #    set, and `false` again once it is cleared. The docstring is attached to it.
     @testset "_gpu_functional fallback" begin
+        @test Base.Docs.hasdoc(Bramble, :_gpu_functional)
         dev = Val(:no_such_device)
         @test Bramble._gpu_functional(dev) === false
         try

@@ -10,15 +10,18 @@
 # High-Level Mesh Constructor Dispatch
 #------------------------------------------------------------------------------------------#
 
+@inline _expand_uniform(u::Bool, ::Val{D}) where {D} = ntuple(_ -> u, Val(D))
+@inline _expand_uniform(u::NTuple{D, Bool}, ::Val{D}) where {D} = u
+
 # The backend defaults to one over the domain's own element type rather than always to
 # Float64, so a Float32 domain gives a Float32 mesh. The element type is a property of the
 # storage, and the storage should follow the geometry it is built on; passing `backend`
 # explicitly still overrides it, which is how a mesh gets a type the domain does not have.
 """
-    mesh(Ω::Domain, npts::NTuple{D, Int}, unif::Union{Bool, NTuple{D, Bool}}; backend = backend(eltype(Ω))) -> AbstractMeshType{D}
-    mesh(Ω::Domain{<:CartesianProduct{D}}, npts::Int, unif::Union{Bool, NTuple{D, Bool}} = true; backend = backend(eltype(Ω))) -> AbstractMeshType{D}
-    mesh(Ω::Domain, npts::NTuple{D, Int}; uniform = true, backend = backend(eltype(Ω))) -> MeshnD
-    mesh(X::CartesianProduct, npts, args...; kwargs...) -> AbstractMeshType
+    mesh(Ω::Domain, npts::NTuple{D, Int}, unif::Union{Bool, NTuple{D, Bool}}; backend = backend(eltype(Ω)), warn_marker_mismatch = true) -> AbstractMeshType{D}
+    mesh(Ω::Domain{<:CartesianProduct{D}}, npts::Int, unif::Union{Bool, NTuple{D, Bool}} = true; backend = backend(eltype(Ω)), warn_marker_mismatch = true) -> AbstractMeshType{D}
+    mesh(Ω::Domain, npts::NTuple{D, Int}; uniform = true, backend = backend(eltype(Ω)), warn_marker_mismatch = true) -> MeshnD
+    mesh(X::CartesianProduct, npts, args...; warn_marker_mismatch = true, kwargs...) -> AbstractMeshType
 
 Return a [`Mesh1D`](@ref) or [`MeshnD`](@ref) (``D=2,3``) discretizing the [`Domain`](@ref) `Ω` or [`CartesianProduct`](@ref) `X`.
 
@@ -54,9 +57,6 @@ X = interval(0, 1) × interval(4, 5)
 Ωₕ_mixed = mesh(X, (10, 15), (true, false))
 ```
 """
-@inline _expand_uniform(u::Bool, ::Val{D}) where {D} = ntuple(_ -> u, Val(D))
-@inline _expand_uniform(u::NTuple{D, Bool}, ::Val{D}) where {D} = u
-
 @inline mesh(X::CartesianProduct, args...; kwargs...) = mesh(domain(X), args...; kwargs...)
 
 @inline mesh(

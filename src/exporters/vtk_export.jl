@@ -75,10 +75,12 @@ _vtk_axes(Ωₕ::AbstractMeshType) = host_points(Ωₕ)
 # pgfplots exporter shares this helper, as this file is included first.
 function _require_one_mesh(fname, uₕ::VectorElement{<:CompositeGridSpace})
     _shares_one_mesh(components(uₕ)) && return nothing
+    n = length(components(uₕ))
+    k = length(unique(objectid, map(c -> mesh(space(c)), components(uₕ))))
     throw(
         ArgumentError(
         "$fname needs every component of a composite element on the same mesh, but " *
-        "these components live on different meshes. Export each component against " *
+        "its $n components live on $k different meshes. Export each component against " *
         "its own mesh instead.",
     ),
     )

@@ -69,8 +69,10 @@ end
     _advection_operator(wₕ)
 )
 
-# `∑_d w_d Dc_{x_d}`, with the sum built by `ntuple` over `Val(D)` so each direction stays a
-# compile-time literal -- `Dc(x, Val(d))` with `d` from a loop would box it (#146).
+# `∑_d w_d Dc_{x_d}`, with the directions built as `ntuple(Val, Val(D))` and mapped
+# alongside the coefficients, so each reaches `Dc` as a literal `Val`. `Val(d)` inside an
+# `ntuple(d -> …, Val(D))` closure does not const-fold, and every build then dispatched
+# dynamically (#146).
 @inline function _advection_operator(wₕ::NTuple{D, VectorElement}) where {D}
-    return x -> sum(ntuple(d -> wₕ[d] * Dc(x, Val(d)), Val(D)))
+    return x -> sum(map((w, dv) -> w * Dc(x, dv), wₕ, ntuple(Val, Val(D))))
 end

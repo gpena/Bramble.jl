@@ -68,12 +68,9 @@ See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 @inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::F) where {F} = project!(uₕ, PointValue(f))
 @inline Rₕ!(uₕ::VectorElement{<:CompositeGridSpace}, f::Tuple) = project!(uₕ, map(PointValue, f))
 
-# A concretely typed kernel for per-point restriction calls, avoiding anonymous closure
-# captures over (`f`, `pts`, `idxs`). A named callable struct eliminates compiler indirection
-# and achieves performance parity with a flat loop. It holds `points(Ωₕ)` (one vector in 1D,
-# an `NTuple{D}` of them otherwise) rather than the mesh, as `_AvgKernel` holds `half_points`,
-# so `CpuPolyester` splits it into the coordinate vectors and an almost empty skeleton
-# (gpena/Bramble.jl#503); `_condition_point` assembles the point `point(Ωₕ, I)` returns.
+# A named kernel rather than a closure over `f`, `x`, `idxs` (gpena/Bramble.jl#64). It holds
+# `points(Ωₕ)` rather than the mesh so `CpuPolyester` can split it (gpena/Bramble.jl#503);
+# `_condition_point` builds the point.
 # Device paths never build it (`_launch_restriction!` and the `_nd` launchers below).
 struct _RₕKernel{F, X, IX}
     f::F

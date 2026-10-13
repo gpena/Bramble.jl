@@ -6,9 +6,8 @@
 # which is how the discrete solution can be checked against conservation rather than against
 # a norm alone.
 #
-# This page is generated from `docs/src/examples/point_sources_flux.jl` by Literate.jl. The
-# same file runs under `test/examples/pages.jl`, where the lines marked `#src` -- the
-# assertions the page does not show -- execute.
+# This script runs under `test/examples/pages.jl`, where the lines marked `#src` (the
+# assertions the page does not show) execute; it is not part of the published manual.
 #
 # ## Problem
 #
@@ -26,13 +25,14 @@
 
 using Bramble
 using Bramble: reaction, reaction_density
+using Random
 
 Q = 3.0
 x₀ = (0.35, 0.65)
 
 Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0),
     :left => :xmin, :right => :xmax, :bottom => :ymin, :top => :ymax)
-Ωₕ = mesh(Ω, (61, 61), (true, true))
+Ωₕ = mesh(Ω, (61, 61), (true, true))   # uniform, so the Green's-function probes below hit nodes
 Wₕ = gridspace(Ωₕ)
 
 a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
@@ -106,19 +106,22 @@ flux_total = reaction(a, l, uₕ; marker = :boundary)
 
 # Every drop injected leaves through the boundary, to round-off, on any mesh: this is a
 # discrete conservation statement, not a discretization error that shrinks under refinement.
+# The section on a random mesh below checks it off the uniform grid.
 
 @test abs(flux_total - Q) < 1.0e-10                                                        #src
 
 flux_total, flux_total - Q
 
-# Per side, the split follows the geometry. The well sits above centre and left of it, so the
-# top boundary takes the largest share and the bottom the smallest:
+# Per side, the split follows the geometry. The well sits on the diagonal ``x + y = 1``,
+# above centre and left of it, so the left and top sides take equal, largest shares and the
+# right and bottom equal, smallest ones:
 
 sides = (:left, :right, :bottom, :top)
 per_side = [reaction(a, l, uₕ; marker = m) for m in sides]
 
 @test sum(per_side) ≈ flux_total                                                           #src
 @test all(>(0.0), per_side)                                                                #src
+@test per_side[1] ≈ per_side[4] && per_side[2] ≈ per_side[3] && per_side[1] > 2 * per_side[2] #src
 
 collect(zip(sides, per_side))
 
@@ -132,6 +135,30 @@ rd = reaction_density(a, l, uₕ; marker = :boundary)
 @test inner_Γ(element(Wₕ, 1.0), rd, :boundary) ≈ flux_total                               #src
 
 inner_Γ(element(Wₕ, 1.0), rd, :boundary), maximum(parent(rd))
+
+# ## The same balance on a random mesh
+#
+# The uniform grid above makes the Green's-function probes land on nodes. Conservation does not
+# need it. On a seeded random mesh the well is no longer on a node, so `dirac` splits its
+# strength across the corners of the containing cell, and the boundary still returns all of it:
+
+Random.seed!(20260903)
+Ωᵣ = mesh(Ω, (61, 61), (false, false))
+Wᵣ = gridspace(Ωᵣ)
+
+aᵣ = form(Wᵣ, Wᵣ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+lᵣ = form(Wᵣ, v -> innerₕ(dirac(x₀, Q), v))
+
+Aᵣ, Fᵣ = assemble(aᵣ, lᵣ; dirichlet = :boundary => x -> 0.0)
+uᵣ = element(Wᵣ)
+uᵣ .= Aᵣ \ Fᵣ
+
+flux_random = reaction(aᵣ, lᵣ, uᵣ; marker = :boundary)
+
+@test abs(sum(assemble(lᵣ)) - Q) < 1.0e-10                                                 #src
+@test abs(flux_random - Q) < 1.0e-10                                                       #src
+
+sum(assemble(lᵣ)) - Q, flux_random - Q
 
 # ## Two wells
 #

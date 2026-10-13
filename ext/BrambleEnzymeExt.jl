@@ -6,9 +6,8 @@ using Enzyme.EnzymeRules: EnzymeRules, RevConfig, AugmentedReturn
 using SparseArrays: SparseMatrixCSC, rowvals, nonzeros, nzrange
 using LinearAlgebra: lu
 
-# A native Enzyme reverse rule for `pde_solve`, replacing what
-# `Enzyme.@import_rrule(typeof(pde_solve), SparseMatrixCSC, AbstractVector)` used to be the
-# documented way to get (gpena/Bramble.jl#240).
+# A native Enzyme reverse rule for `pde_solve`, used instead of `Enzyme.@import_rrule`
+# (gpena/Bramble.jl#240).
 #
 # The maths is the same adjoint `BrambleChainRulesExt`'s `ChainRulesCore.rrule` states: solve
 # `Aᵀ λ = ∂J/∂u` once against the forward solve's own factorisation, then `∂J/∂A = -λuᵀ` on

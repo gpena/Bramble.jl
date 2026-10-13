@@ -42,12 +42,13 @@ ndofs(Wₕ)
 
 # `41^3 = 68921` unknowns, large enough for the memory gap below to be worth looking at,
 # small enough that this page, including both direct solves further down, still runs in
-# seconds.
+# seconds. The mesh is uniform only to keep the sizes in the comparison readable; the
+# one-dimensional factors above were built on non-uniform meshes.
 #
 # ## Mathematical background
 #
-# The operator this page builds is a sum of Kronecker products, and `fdm_solve` exploits one
-# property of such sums. Both are shown below on matrices small enough to print, using plain
+# The operator this page builds is a sum of Kronecker products, and [`fdm_solve`](@ref)
+# exploits one property of such sums. Both are shown below on matrices small enough to print, using plain
 # dense matrices and `kron` from `LinearAlgebra`, so that the definition is visible. The lazy
 # type loaded above enters only once the operator itself is built.
 #
@@ -244,8 +245,8 @@ kron_3d = kron(Mz, My, Mx) + kron(Kz, My, Mx) + kron(Mz, Ky, Mx) + kron(Mz, My, 
 
 # The assembled matrices equal the Kronecker sums of the one-dimensional factors up to
 # rounding, on meshes whose points are unevenly spaced along every axis. This is the
-# structure `is_separable` looks for term by term: each term of the form must split into one
-# factor per axis. A grid-function coefficient varying along both axes does not split, since
+# structure [`is_separable`](@ref) looks for term by term: each term of the form must split
+# into one factor per axis. A grid-function coefficient varying along both axes does not split, since
 # its values are not a function of one coordinate alone, and that is why it is refused below.
 
 is_separable(a₂) && is_separable(a₃)
@@ -333,7 +334,7 @@ is_separable(a)
 @test is_separable(a) #src
 
 # A grid-function coefficient varying along one axis only is a diagonal factor on that axis,
-# read once when the operator is built (`kronecker_operator` warns so). One varying along
+# read once when the operator is built ([`kronecker_operator`](@ref) warns so). One varying along
 # several axes has no tensor structure to factor out, so `is_separable` refuses it rather
 # than guessing:
 
@@ -431,7 +432,7 @@ normₕ(uₕ .- Rₕ(Wₕ, sol))
 #
 # ## The operator's real limit: no boundary constraint of its own
 #
-# `K` and `kronecker_operator` carry no Dirichlet handling. A `KroneckerLinearOperator` is
+# `K` and `kronecker_operator` carry no Dirichlet handling. A [`KroneckerLinearOperator`](@ref) is
 # built for the whole grid, boundary rows included, because a boundary-restricted term has
 # no tensor structure of its own to factor. The problem above sidesteps this by using an
 # unconstrained (natural) boundary condition instead. Only `fdm_solve` reaches further, through
@@ -473,9 +474,8 @@ normₕ(u_d .- Rₕ(Wₕ, sol_d))
 #
 # ## Where to go next
 #
-#   - `kronecker_operator` is written as a plain code span throughout this page rather than
-#     a link, along with `is_separable`, `KroneckerLinearOperator` and `fdm_solve`: none of
-#     the four have an `@docs` entry on the [API reference](../api.md) yet.
+#   - The API reference documents [`kronecker_operator`](@ref), [`is_separable`](@ref),
+#     [`KroneckerLinearOperator`](@ref) and [`fdm_solve`](@ref).
 #   - [Linear Poisson](poisson_linear.md) assembles the same discrete Laplacian into a
 #     `SparseMatrixCSC` directly, with Dirichlet conditions from the start.
 #   - The [matrix-free operator](matrix_free_operator.md) page applies a form that is not

@@ -51,8 +51,8 @@ using ..SpaceDifferenceTests: test_operator_matrix_equivalence
                             midpoint = (coords(I) .+ coords(I + step_cartesian)) ./ 2
                             expected_vals[li[I]] = linear_func(midpoint)
                         else
-                            # Boundary point: f(x_N)/2
-                            expected_vals[li[I]] = 0#linear_func(coords(I)) / 2
+                            # Boundary slice: truncated to zero
+                            expected_vals[li[I]] = 0
                         end
                     end
 
@@ -102,8 +102,8 @@ using ..SpaceDifferenceTests: test_operator_matrix_equivalence
                             midpoint = (coords(I) .+ coords(I - step_cartesian)) ./ 2
                             expected_vals[li[I]] = linear_func(midpoint)
                         else
-                            # Boundary point: f(x_1)/2
-                            expected_vals[li[I]] = 0#linear_func(coords(I)) / 2
+                            # Boundary slice: truncated to zero
+                            expected_vals[li[I]] = 0
                         end
                     end
 

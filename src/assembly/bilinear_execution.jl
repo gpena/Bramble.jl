@@ -131,9 +131,9 @@ end
 # `point_ptr[lin_idx]` addresses each point's own slice of `positions` directly, so this
 # stays correct regardless of what order grid points are visited in.
 #
-# One method branching on `segment.is_diagonal`, not two dispatching on `NzvalSegment` versus
-# `DiagonalSegment` (gpena/Bramble.jl#240): both branches are fully concrete (`Segment{D}`
-# has one shape, not a Union). Flat replays through `ReplaySink`; diagonal (1D only,
+# One method branching on `segment.is_diagonal`, not two dispatching on the segment's type
+# (gpena/Bramble.jl#240): both branches are fully concrete (`Segment{D}` has one shape, not
+# a Union). Flat replays through `ReplaySink`; diagonal (1D only,
 # `_diagonal_replay`) replays the interior core through `DiagonalReplaySink`'s stride
 # arithmetic and the boundary shell through an ordinary `ReplaySink`, the two-sink form of
 # `visit_bilinear_stencil` running both in the one walk.
@@ -240,7 +240,7 @@ end
 # of N distinct `innerₕ` difference terms: recording inference 0.64 s at N = 9, 11.0 s at
 # N = 27; first assemble at N = 27 went from 44.4 s to 16.0 s).
 #
-# A transposed pair ⟨Au, Bv⟩ + ⟨Bu, Av⟩ among the summands (`_pair_plan`, form/symmetry.jl)
+# A transposed pair ⟨Au, Bv⟩ + ⟨Bu, Av⟩ among the summands (`_pair_plan`, symmetry.jl)
 # is one unit, not two: ⟨Au, Bv⟩ is walked once and each entry is also added, with the second
 # term's scaling, at its transpose (`_PairReplaySink`). First assemble of a 3D scalar form of
 # 9 such pairs: 11.9 s unpaired, 4.9 s paired; 3D `innerₕ(εcₕ(u), εcₕ(v))` (3 pairs among 15

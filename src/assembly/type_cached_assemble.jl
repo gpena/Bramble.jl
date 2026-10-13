@@ -18,9 +18,9 @@
 
 Assembles a coefficient-dependent [`BilinearForm`](@ref) into a matrix whose sparsity
 pattern is built once per distinct element type `uₕ` is ever passed at, rather than on
-every call -- the fix `diffusion_matrix`-style Newton residuals in the nonlinear worked
-examples name and deliberately defer, since [`assemble`](@ref)/[`allocate_system_matrix`](@ref)
-rebuild the whole matrix, pattern included, every time otherwise.
+every call, as `diffusion_matrix` in the nonlinear worked example does without it:
+[`assemble`](@ref)/[`allocate_system_matrix`](@ref) rebuild the whole matrix, pattern
+included, every time otherwise.
 
 `build(uₕ)` is called once for each element type `uₕ` is ever seen at, and must return
 `(a, refill!)`: the `BilinearForm` to assemble, built around whatever live coefficient
@@ -65,9 +65,9 @@ D-dimensional coefficient tuple.
 `cache` is shared across an entire Newton (or Picard) loop, one `Dict` per residual: the
 first call at a given type pays `build`'s own cost plus [`allocate_system_matrix`](@ref)'s;
 every later call at that same type pays only [`assemble!`](@ref)'s refill plus a small,
-fixed dictionary/dynamic-dispatch overhead fetching the cached entry back out (a few KB,
-independent of `ndofs`) -- not the `O(ndofs)` pattern rebuild a cache miss (or no cache at
-all) pays every time.
+fixed dictionary/dynamic-dispatch overhead fetching the cached entry back out
+(independent of `ndofs`) -- not the `O(ndofs)` pattern rebuild a cache miss (or no cache
+at all) pays every time.
 
 Not thread-safe. `cache` is a bare `Dict` with no lock, one per residual. Assembling from
 more than one task needs a lock or one cache per task.
@@ -83,7 +83,7 @@ function type_cached_assemble!(
     # has to construct its closure before `get!` can even decide whether to call it, so it
     # allocates on every call, cache hit or miss -- exactly the cost this function exists
     # to avoid paying more than once.
-    a, refill!, A = if haskey(cache, T)
+    entry = if haskey(cache, T)
         cache[T]
     else
         a, refill! = build(uₕ)
@@ -93,10 +93,21 @@ function type_cached_assemble!(
         # a genuinely unassigned reference, not merely an arbitrary bit pattern -- reading
         # it before `refill!` ever ran throws `UndefRefError` inside `allocate_system_matrix`.
         refill!(uₕ)
-        entry = (a, refill!, allocate_system_matrix(a))
-        cache[T] = entry
-        entry
+        new_entry = (a, refill!, allocate_system_matrix(a))
+        cache[T] = new_entry
+        new_entry
     end
+    # `entry` is `Any` here (the `Dict` is untyped, since the cached triple's type differs
+    # per `T`), so it crosses one function barrier whole: the single dynamic call is this
+    # one, and everything past it infers concretely. `inferencebarrier` keeps inference
+    # from also walking the barrier at the abstract `Tuple{Any, Any, Any}` signature, a
+    # path no call ever takes.
+    return Base.inferencebarrier(_type_cached_fill!)(
+        entry, uₕ, dirichlet, dirichlet_components)
+end
+
+function _type_cached_fill!(entry::Tuple, uₕ, dirichlet, dirichlet_components)
+    a, refill!, A = entry
     refill!(uₕ)
     assemble!(A, a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
     return A

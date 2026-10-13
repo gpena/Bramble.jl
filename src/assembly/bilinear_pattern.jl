@@ -64,7 +64,7 @@ function _allocate_from_pattern(
 end
 
 # A hint for `sizehint!`, not a real bound, used by the Jacobian pattern
-# (`form/jacobian_pattern.jl`): `local_stencil` can return a longer stencil at a boundary
+# (`jacobian_pattern.jl`): `local_stencil` can return a longer stencil at a boundary
 # point than at this representative interior one, so this can undercount. Cheap to get
 # wrong, since the only cost is a reallocation of the coordinate vectors.
 #

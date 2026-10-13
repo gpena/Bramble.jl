@@ -148,9 +148,9 @@ abstract type InnerProductType end
 
 Selector for modified discrete ``L^2`` inner products using staggered grid spacings.
 
-These inner products use a combination of forward spacings ``h_i`` and centered cell 
-widths ``h_{i+1/2}``, appearing naturally in energy estimates for finite difference 
-operators. Different spatial directions may have different weight formulas.
+These inner products use a combination of backward spacings ``h_i = x_i - x_{i-1}`` (zero
+at the first node) and cell widths ``h_{i+1/2}``, appearing naturally in energy
+estimates for finite difference operators. Different spatial directions may have different weight formulas.
 
 The modified inner products are used for:
 - Proving discrete energy stability
@@ -212,9 +212,10 @@ struct Innerh <: InnerProductType end
 #=
 The following functions define the **mandatory interface** for any concrete subtype
 of `AbstractSpaceType`. Any struct that subtypes `AbstractSpaceType` must implement
-these methods to be considered a valid function space in this framework. They are
-declared without methods, so a space that omits one fails with a `MethodError` naming
-the exact missing signature.
+these methods to be considered a valid function space in this framework. The stubs below
+without a method (`mesh`, `mesh_type`, `backend`, `dim`, `ndofs`) are the mandatory
+interface: a space that omits one fails with a `MethodError` naming it. The rest have
+generic definitions.
 =#
 
 """
@@ -289,9 +290,8 @@ Returns the total number of degrees of freedom (DOFs) in the function space `W�
     that does not know in advance which kind of space it was given should reach for one
     of the two unambiguous forms instead: `npoints(mesh(Wₕ), Tuple)` for the grid shape,
     or `map(ndofs, spaces(Wₕ))` for the per-component counts. Mixing them up is not
-    hypothetical, since `src/operators/difference.jl`'s `_grid_dims` avoids
-    `ndofs(Wₕ, Tuple)` for exactly this reason, after a 3-component 4×6 space addressed
-    13824 slots into 72 and segfaulted under an `@inbounds` engine.
+    hypothetical, since `_grid_dims` (`src/operators/stencil.jl`) reads the
+    grid shape from the mesh, not from `ndofs(Wₕ, Tuple)`, for exactly this reason.
 """
 function ndofs end
 

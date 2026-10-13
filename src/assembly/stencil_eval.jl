@@ -24,7 +24,7 @@ Two properties this has to preserve, both load-bearing:
     `(left..., right...)`, so folding right-to-left gives the same flat order the
     hand-written left-nested calls did.
 
-`stencil_offsets` (`form/stencil_pattern.jl`) now reads the same `_stencil_taps`, so a
+`stencil_offsets` (`ast/stencil_pattern.jl`) now reads the same `_stencil_taps`, so a
 node's reach and its stencil cannot disagree -- they used to be spelled out twice.
 =#
 
@@ -54,9 +54,9 @@ node's reach and its stencil cannot disagree -- they used to be spelled out twic
 
 The AST nodes that wrap exactly one operand in an `inner_op` field.
 
-Thirteen node types, and the reason they are worth naming together: a query about a term
+Fourteen node types, and the reason they are worth naming together: a query about a term
 usually has the same answer for a wrapper as for the operand inside it, so each such query
-used to be registered against all thirteen by hand -- one line apiece, per query
+used to be registered against all fourteen by hand -- one line apiece, per query
 (gpena/Bramble.jl#52). A query that forgot one inherited a fallback instead, and every
 fallback in this family is a plausible wrong answer rather than an error:
 `test_component_or_nothing` answering `nothing` sends a term to every block.
@@ -88,7 +88,7 @@ const UnaryWrapper{D} = Union{
 }
 
 # The queries that answer for a wrapper whatever they answer for its operand. One method
-# each, where every one of these was previously registered against all thirteen wrapper
+# each, where every one of these was previously registered against all fourteen wrapper
 # types by hand (gpena/Bramble.jl#52).
 #
 # They live here rather than beside their own ladders because `UnaryWrapper` names
@@ -101,7 +101,7 @@ const UnaryWrapper{D} = Union{
 # gap: `stencil_shift_trait(::LazyOp)` answers translation-invariant and
 # `_all_trial_interpolated(::LazyOp)` answers false, so a wrapper reaching either default
 # is a wrong answer, not a missing one. That is the shape of mistake this collapse is meant
-# to make impossible: there is now one method to get right per query, not thirteen.
+# to make impossible: there is now one method to get right per query, not fourteen.
 stencil_shift_trait(op::UnaryWrapper) = stencil_shift_trait(op.inner_op)
 _all_trial_interpolated(op::UnaryWrapper) = _all_trial_interpolated(op.inner_op)
 _all_test_interpolated(op::UnaryWrapper) = _all_test_interpolated(op.inner_op)
@@ -193,9 +193,10 @@ end
 # ("out-of-domain handling consistent with whatever #223 settles for interpolate_at") is
 # deliberately left for a follow-up, not folded into #223's own scope (its own "Subsystems
 # to Update" list never names this file).
-@inline _interp_cell_frac_pt(Ωₕ::AbstractMeshType{1}, pt::NTuple{1}, ::Val{1}) = (
-    CartesianIndex(_interp_cell_frac(Ωₕ, pt[1], :extrapolate)[1]),
-    (_interp_cell_frac(Ωₕ, pt[1], :extrapolate)[2],))
+@inline function _interp_cell_frac_pt(Ωₕ::AbstractMeshType{1}, pt::NTuple{1}, ::Val{1})
+    c, t = _interp_cell_frac(Ωₕ, pt[1], :extrapolate)
+    return (CartesianIndex(c), (t,))
+end
 @inline _interp_cell_frac_pt(Ωₕ::AbstractMeshType{D}, pt::NTuple{D}, ::Val{D}) where {D} = _interp_cell_frac(
     Ωₕ, pt, :extrapolate
 )
@@ -398,8 +399,9 @@ is_symbolic(op::LinearProduct) = true
     _is_source_only(op::LazyOp) -> Bool
 
 Whether a `LazyOp` subtree is source-only: built entirely from sources
-(`SourceFunction`/`SourceVector`) and the plain operators that wrap them, never bottoming
-out in a `TrialFunction`/`IndexedTrialFunction` leaf.
+(`SourceFunction`, `SourceVector`, `SourceConstant`, `DiracSource`) and the plain
+operators that wrap them, never bottoming out in a `TrialFunction`/`IndexedTrialFunction`
+leaf.
 
 `innerₕ`'s `l::Function`/`l::Number`/`l::VectorElement` overloads (`operators/inner.jl`)
 never need this: those three types are never anything but a source, so wrapping them in a
@@ -408,7 +410,7 @@ arrived as a `LazyOp`: `πₕ(uₕ)` ([`interpolate_at`](@ref)) or `D₋ₓ(π�
 sources too, just already wrapped, and the generic `innerₕ(::LazyOp, ::LazyOp)` used to build
 a `BilinearProduct` regardless, which is the wrong AST shape for a `LinearForm`'s assembly
 walk, since a `BilinearProduct`'s stencil carries a pair of offsets (trial and test), where
-`_scatter_term!` (`form/linear.jl`) expects one.
+`_scatter_term!` (`assembly/linear.jl`) expects one.
 
 A missing case defaults to `false` (the fallback `::LazyOp` method below), which is conservative,
 since that is exactly the behavior every node had before this predicate existed (always
@@ -495,7 +497,7 @@ end
 end
 
 # `op` first, an accumulator threaded through both children and returned:
-# `_route_terms_contract` (`form/linear.jl`).
+# `_route_terms_contract` (`assembly/linear.jl`).
 #
 # The `_visit_operator_add*` members above each return one of their own arguments unchanged,
 # so they walk for side effects and cannot fold a value. Contraction threads an accumulator,

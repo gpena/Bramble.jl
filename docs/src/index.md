@@ -60,7 +60,7 @@ Discretise in space with Bramble and pass the resulting system of ODEs to a time
 
 ```julia
 using Pkg
-Pkg.add("Bramble")
+Pkg.add(url = "https://github.com/gpena/Bramble.jl")
 ```
 
 ## A first solve

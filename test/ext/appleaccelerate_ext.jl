@@ -419,9 +419,28 @@ end
                 (Hn, Ac, (sym = :auto,)))
                 f = accelerate_factorize(A0; o...)
                 bb = b[1:size(A0, 1)]
-                @test_throws ArgumentError accelerate_refactor!(f, A1)
+                e = try
+                    accelerate_refactor!(f, A1)
+                    nothing
+                catch err
+                    err
+                end
+                @test e isa ArgumentError
+                # a refactor keeps its kind: the remedy is a new factorization
+                m = sprint(showerror, e)
+                @test occursin("new factorization", m)
+                @test !occursin("Use sym = :auto or kind = :lu.", m)
                 @test isapprox(f \ bb, Matrix(A0) \ bb; rtol = 1.0e-12)
             end
+            # the factorization path keeps the remedy a caller can follow
+            e = try
+                accelerate_factorize(Ar; sym = :spd)
+                nothing
+            catch err
+                err
+            end
+            @test e isa ArgumentError
+            @test occursin("Use sym = :auto or kind = :lu.", sprint(showerror, e))
         end
 
         # A matrix right-hand side is one multi-column libSparse solve on every kind;

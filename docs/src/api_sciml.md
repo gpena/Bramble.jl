@@ -155,10 +155,11 @@ refactor!
 ### SuiteSparse solver
 
 `suitesparse_factorize`/`suitesparse_solve` accept the same ordering and pivoting
-parameters as Julia's own `cholesky`/`lu` on a `SparseMatrixCSC` -- a fill-reducing `perm`
-for CHOLMOD, or a column ordering `q` and an 8-element `control` vector for UMFPACK -- and
-forward them unchanged, so `suitesparse_factorize(A; sym = :spd, perm = my_ordering)`
-reaches CHOLMOD's own ordering routine rather than Bramble's default.
+parameters as Julia's own `cholesky`/`lu` on a `SparseMatrixCSC`: a fill-reducing `perm`
+for CHOLMOD, or a column ordering `q` and a `control` vector (as
+`SparseArrays.UMFPACK.get_umfpack_control` returns) for UMFPACK. They are forwarded
+unchanged, so `suitesparse_factorize(A; sym = :spd, perm = my_ordering)` reaches CHOLMOD's
+own ordering routine rather than Bramble's default.
 
 ```@docs
 SuiteSparseFactorization

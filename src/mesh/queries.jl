@@ -466,7 +466,7 @@ end
 @inline _open_range(r::AbstractUnitRange) = (first(r) + 1):(last(r) - 1)
 
 """
-    _surface_mask(Ωₕ::AbstractMeshType{D}, labels::NTuple{N, Symbol}) -> NTuple{D, NTuple{2, Bool}}
+    _surface_mask(Ωₕ::AbstractMeshType{D}, labels::NTuple{N, Symbol}, caller = "inner_Γ") -> NTuple{D, NTuple{2, Bool}}
 
 The coordinate faces `labels` cover on the mesh `Ωₕ`, as a per-axis `(min, max)` mask. A
 label is read from its definition: one that `markers(Ωₕ)` holds is read off its marked
@@ -476,11 +476,12 @@ label is a face name, resolved by `_face_of_symbol`. The alias fallback of
 points whenever they all lie on that face, and they can be only part of it, while a face
 name here means the whole coordinate face.
 
-Throws an `ArgumentError` when the markers select no face, or when one of their marked
-points lies on no selected face. "On a face" is index arithmetic, never a weight, so the
-check reads no spacing and does not scalar-index a device mesh.
+Throws an `ArgumentError`, prefixed with `caller`, when the markers select no face, or when
+one of their marked points lies on no selected face. "On a face" is index arithmetic, never
+a weight, so the check reads no spacing and does not scalar-index a device mesh.
 """
-@inline function _surface_mask(Ωₕ::AbstractMeshType{D}, labels::NTuple{N, Symbol}) where {D, N}
+@inline function _surface_mask(Ωₕ::AbstractMeshType{D}, labels::NTuple{N, Symbol},
+        caller::String = "inner_Γ") where {D, N}
     m = markers(Ωₕ)
     mask = ntuple(_ -> (false, false), Val(D))
     has_marker = false
@@ -494,9 +495,9 @@ check reads no spacing and does not scalar-index a device mesh.
     has_marker || return mask
     marked_at = k -> _any_marked(m, labels, k)
     from_markers = _marked_face_mask(Ωₕ, marked_at)
-    _no_faces(from_markers) && _throw_markers_not_faces(m, labels)
+    _no_faces(from_markers) && _throw_markers_not_faces(m, labels, caller)
     mask = _or_mask(mask, from_markers)
-    _check_marked_on_faces(Ωₕ, m, labels, mask)
+    _check_marked_on_faces(Ωₕ, m, labels, mask, caller)
     return mask
 end
 
@@ -515,7 +516,8 @@ end
 
 # Walks the set bits of each marker alone (`findnext` skips empty chunks), so a marker on a
 # large mesh costs its marked points, not a dictionary lookup per grid point.
-@inline function _check_marked_on_faces(Ωₕ::AbstractMeshType{D}, m, labels, mask) where {D}
+@inline function _check_marked_on_faces(
+        Ωₕ::AbstractMeshType{D}, m, labels, mask, caller) where {D}
     cis = indices(Ωₕ)
     np = npoints(Ωₕ, Tuple)
     for s in labels
@@ -523,7 +525,7 @@ end
         b === nothing && continue
         k = findfirst(b)
         while k !== nothing
-            _on_mask_face(mask, cis[k], np) || _throw_markers_not_faces(m, labels)
+            _on_mask_face(mask, cis[k], np) || _throw_markers_not_faces(m, labels, caller)
             k = findnext(b, k + 1)
         end
     end
@@ -533,11 +535,11 @@ end
 @inline _on_mask_face(mask::NTuple{D}, I::CartesianIndex{D}, np) where {D} = any(
     d -> (mask[d][1] && I[d] == 1) || (mask[d][2] && I[d] == np[d]), ntuple(identity, Val(D)))
 
-@noinline function _throw_markers_not_faces(m, labels)
+@noinline function _throw_markers_not_faces(m, labels, caller)
     held = join((":$s" for s in labels if haskey(m, s)), ", ")
     throw(
         ArgumentError(
-        "inner_Γ: the markers $held do not consist of whole boundary faces. A marker " *
+        "$caller: the markers $held do not consist of whole boundary faces. A marker " *
         "selects a coordinate face when every point of the face off its edges and corners " *
         "is marked, and every marked point has to lie on a selected face. Part of a face, " *
         "an interior interface or a staircase is a more general surface: its weight does " *

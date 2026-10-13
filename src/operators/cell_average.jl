@@ -22,7 +22,7 @@
 # the docstring from `avgₕ` and binds it to nothing, which the exported-names-are-
 # documented check in test/quality catches.
 """
-    avgₕ(Wₕ::AbstractSpaceType, f; quad_points = AVG_QUAD_POINTS, markers = ()) -> VectorElement
+    avgₕ(Wₕ::AbstractSpaceType, f; quad_points = Val(AVG_QUAD_POINTS), markers = ()) -> VectorElement
 
 Returns a [`VectorElement`](@ref) with the average of function `f` with respect to the [`cell_measure`](@ref) of `mesh(Wₕ)` around each grid point.
 
@@ -50,10 +50,10 @@ avgₕ(Wₕ, x -> sin(x[1]) * x[2]; quad_points = Val(4))
 ```
 
 On a Metal (or other device) backend, `f` runs *on the device* inside the quadrature
-kernel, evaluated `quad_points^D` times per cell (gpena/Bramble.jl#94, #174), so it must be
-GPU-compilable in the same sense [`Rₕ!`](@ref)'s docstring describes. A masked call runs
-the same kernel over just the marked cells, after zeroing the result on the device
-(gpena/Bramble.jl#297).
+kernel, evaluated `quad_points^D + 1` times per cell (gpena/Bramble.jl#94, #174, #693), so
+it must be GPU-compilable in the same sense [`Rₕ!`](@ref)'s docstring describes. A masked
+call runs the same kernel over just the marked cells, after zeroing the result on the
+device (gpena/Bramble.jl#297).
 
 See also: [`avgₕ!`](@ref), [`Rₕ`](@ref).
 """
@@ -68,7 +68,8 @@ Base.@constprop :aggressive function avgₕ(
 end
 
 """
-    avgₕ!(uₕ::VectorElement, f; quad_points = AVG_QUAD_POINTS, markers = ()) -> VectorElement
+    avgₕ!(uₕ::VectorElement, f; quad_points = Val(AVG_QUAD_POINTS), markers = ()) -> VectorElement
+    avgₕ!(uₕ::VectorElement, f, quad_points::Val) -> VectorElement
 
 In-place version of the averaging operator [`avgₕ`](@ref). Returns `uₕ`.
 
@@ -172,10 +173,7 @@ end
 @inline (k::_AvgKernel{F, X, IX, NQ, T})(i) where {F, X, IX, NQ, T} = _cell_average(
     k.f, k.x, k.idxs[i], k.nodes, k.wts)
 
-# Same reasoning, for the tuple-valued (composite) quadrature call. `NC` is the space's
-# *leaf* count (`length(components(uₕ))`, which flattens any nesting), not the space's own
-# structural type parameter; kept as a type parameter here for a concrete struct even
-# though `_cell_average` no longer needs it to build a seed.
+# `NC` is unused.
 struct _AvgScatterKernel{F, X, IX, NQ, T, NC}
     f::F
     x::X
@@ -466,17 +464,7 @@ correctness at any `D` and is tested directly rather than through a mesh.
     wts::NTuple{NQ, T}
 ) where {NQ, T} = _cell_average(f, x, idx[1], nodes, wts)
 
-# Average of `f` over the 1D cell spanned by `x[i] .. x[i+1]`.
-#
-# The accumulator starts from the zero of the first weighted term, `wts[1] .* f(pt1)`, not
-# `zero(T)`: `T` is the mesh's element type, but `f` can return something else entirely --
-# a `ForwardDiff.Dual` under AD, say -- and seeding from the mesh forced a mid-loop type
-# change the moment `f`'s result first arrived (gpena/Bramble.jl#148). Seeding from `f`
-# alone failed the other way: an `f` narrower than `T` (`Int`, `Float32` on a `Float64`
-# mesh) changed type at the first `wts[q] .*` (gpena/Bramble.jl#523). The weighted term's
-# type is the promotion of `T` and `f`'s, a fixed point of the loop, the same idea as
-# `interpolate_at`'s `promote_type` accumulator. `zero.(...)` broadcasts over both the
-# scalar and the `NTuple` (composite) return shape, so one method still covers both.
+# Average of `f` over the 1D cell `x[i] .. x[i+1]`; the seed is explained in the docstring.
 @inline function _cell_average(
         f, x::AbstractVector, i::Int, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}
 ) where {NQ, T}
@@ -505,9 +493,8 @@ end
     @inbounds a2 = T(x[2][j])
     @inbounds d2 = T(x[2][j + 1]) - a2
 
-    # `p1` does not depend on `q2`, so evaluating it inside the `q2` loop recomputed it
-    # NQ² times instead of NQ (gpena/Bramble.jl#114). Precomputed once per axis instead;
-    # `ntuple` over a `Val`-known `NQ` unrolls to a stack tuple, no heap allocation.
+    # Each axis's node coordinates depend on that axis alone, so they are computed once per
+    # axis (a stack `ntuple`), not inside the inner loops.
     p1s = ntuple(q -> a1 + nodes[q] * d1, Val(NQ))
     p2s = ntuple(q -> a2 + nodes[q] * d2, Val(NQ))
 
@@ -538,10 +525,8 @@ end
     @inbounds a3 = T(x[3][k])
     @inbounds d3 = T(x[3][k + 1]) - a3
 
-    # `p1` (independent of `q2`/`q3`) was recomputed NQ³ times instead of NQ, and `p2`
-    # (independent of `q3`) NQ² times instead of NQ (gpena/Bramble.jl#114). Both
-    # precomputed once per axis instead, same zero-allocation `ntuple` idiom as the 2D
-    # method above.
+    # Each axis's node coordinates depend on that axis alone, so they are computed once per
+    # axis (a stack `ntuple`), not inside the inner loops.
     p1s = ntuple(q -> a1 + nodes[q] * d1, Val(NQ))
     p2s = ntuple(q -> a2 + nodes[q] * d2, Val(NQ))
     p3s = ntuple(q -> a3 + nodes[q] * d3, Val(NQ))

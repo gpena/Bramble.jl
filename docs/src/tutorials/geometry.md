@@ -34,7 +34,7 @@ dim(rod), center(rod), collect(labels(rod))
 Without markers, `domain(interval(0.0, 10.0))` labels the whole external boundary `:boundary`.
 
 !!! tip "Try this"
-    Replace the interval by `interval(0.0, 10.0) × interval(0.0, 1.0)` and keep the two markers. `dim` becomes 2, and `:left` and `:right` now name the two short sides of a strip: the same words mean the same faces in every dimension.
+    Replace the interval by `interval(0.0, 10.0) × interval(0.0, 1.0)` and keep the two markers. `dim` becomes 2, and `:left` and `:right` still name the two short sides of a 2D strip, but in 3D they are the `y` faces.
 
 ---
 
@@ -124,7 +124,7 @@ A `Domain` forwards the geometric queries of the previous sections to its set:
 dim(Ω), center(Ω), (0.5, 0.5) ∈ Ω, Bramble.is_collapsed(Ω)
 ```
 
-[`Bramble.set`](@ref) returns the underlying set. Next, the [mesh tutorial](@ref tutorial_mesh) discretizes a domain into points.
+[`Bramble.set`](@ref) (private, hence the prefix) returns the underlying set. Next, the [mesh tutorial](@ref tutorial_mesh) discretizes a domain into points.
 
 ---
 
@@ -132,7 +132,7 @@ dim(Ω), center(Ω), (0.5, 0.5) ∈ Ω, Bramble.is_collapsed(Ω)
 
 ### Boundary symbols
 
-Boundary symbols are coordinate-aligned, so the same name means the same face in every dimension:
+The canonical names mean the same face in every dimension; the viewpoint aliases do not (`:left` is `:xmin` in 1D and 2D, `:ymin` in 3D):
 
 - **1D**: `:xmin` (`:left`), `:xmax` (`:right`)
 - **2D**: `:xmin` (`:left`), `:xmax` (`:right`), `:ymin` (`:bottom`), `:ymax` (`:top`)
@@ -212,7 +212,7 @@ boundary_symbols(2)
 
 ### Collapsed sets
 
-A dimension is **collapsed** when its interval is degenerate (``a = b``), which is how a surface or interface embedded in a higher-dimensional space is written. `dim` is the embedding dimension and `topo_dim` the topological one; they differ only for a collapsed set. [`Bramble.is_collapsed`](@ref) answers per axis; it is public but not exported, hence the prefix:
+A dimension is **collapsed** when its interval is degenerate (``a = b``), which is how a surface or interface embedded in a higher-dimensional space is written. `dim` is the embedding dimension and `topo_dim` the topological one; they differ only for a collapsed set. [`Bramble.is_collapsed`](@ref) answers per axis; it is private, hence the prefix:
 
 ```@example geometry
 line_in_2d = interval(0.0, 1.0) × point(0.0)
@@ -245,4 +245,4 @@ m_time = markers(
 collect(labels(m_cond)), m_time(1.5)      # the second is the marker set frozen at t = 1.5
 ```
 
-`labels` flattens the three marker kinds through `Iterators.flatten`. Inside a loop that must not allocate, iterate `label_symbols`, `label_tuples` or `label_conditions` instead.
+`labels` returns one tuple of every label, symbol markers first, then tuple markers, then predicate markers, built without allocating. The helpers `label_symbols`, `label_tuples` and `label_conditions` behind it are internal.

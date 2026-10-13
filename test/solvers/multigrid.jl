@@ -614,7 +614,12 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
         @test_throws ArgumentError f(ZeroBasedVector(zeros(n)), P, zeros(n))
     end
 
-    # Default levels coarsen until an axis would drop below three points.
+    # Default levels coarsen until an axis would drop below three points, and infer as `Int`.
+    Ω1 = mesh(domain(interval(0.0, 1.0)), 33, true)
+    Bramble.change_points!(Ω1, sort!([0.0; rand(31); 1.0]))
+    @test @inferred(Bramble._gmg_default_levels(Ω1)) == 5
+    @test @inferred(Bramble._gmg_default_levels(_mg_jitter_mesh(2, 9))) == 3
+    WITH_3D_TESTS && @test @inferred(Bramble._gmg_default_levels(_mg_jitter_mesh(3, 9))) == 3
     for (np, L, nc) in (((33, 33), 5, (3, 3)), ((97, 17), 4, (13, 3)), ((17, 5), 2, (9, 3)))
         Ωd = mesh(domain(_mg_box(2)), np, (true, true))
         Pd = gmg_preconditioner(_mg_spd, Ωd)
@@ -623,16 +628,15 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
     Pd = gmg_preconditioner(_mg_spd, mesh(domain(_mg_box(2)), (97, 97), (true, true)))
     @test length(Pd.hierarchy) == 6 && npoints(Pd.hierarchy[1], Tuple) == (4, 4)
 
-    # The coarse solve is LAPACK's `getrs!` written out (swaps, then two triangular solves), so it
-    # needs no LAPACK call that allocates at --optimize=1: it matches `F \ b` on matrices whose
-    # pivoting swaps rows, in both precisions, and allocates nothing.
+    # The coarse solve is `ldiv!` on a dense `lu`, which allocates nothing at --optimize=1, on
+    # matrices whose pivoting swaps rows, in both precisions.
     for T in (Float64, Float32)
         A = T[0 1 2 3; 4 5 6 7; 1 0 3 1; 2 7 1 8] + T(0.5) * LinearAlgebra.I
         F, c = LinearAlgebra.lu(A), T[1, 2, 3, 4]
         @test F.p != 1:4
         y = copy(c)
-        @test Bramble._gmg_lu_ldiv!(F, y) === y && isapprox(y, F \ c; rtol = 100eps(T))
-        @test (@allocated Bramble._gmg_lu_ldiv!(F, y)) == 0
+        @test ldiv!(F, y) === y && isapprox(A * y, c; rtol = 100eps(T))
+        @test (@allocated ldiv!(F, y)) == 0
     end
 
     # Float32 stays Float32 and allocation-free.

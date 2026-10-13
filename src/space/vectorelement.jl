@@ -7,12 +7,6 @@
 # restriction.jl and cell_average.jl.
 #===========================================================================#
 
-# `Base.parent` is Julia's own name for "the storage a wrapper array delegates to" (see
-# `parent(::SubArray)`, `parent(::ReshapedArray)`); `VectorElement` never defined it, so
-# `parent(uₕ)` fell through to the generic `AbstractArray` fallback and returned `uₕ`
-# itself rather than unwrapping anything -- the wrong answer for a wrapper type, silently,
-# since nothing in this package called `parent` to notice. Replaces the former `values`
-# accessor outright (gpena/Bramble.jl#73).
 """
     parent(uₕ::VectorElement) -> AbstractVector
 
@@ -31,14 +25,9 @@ Reshapes the flat coefficient vector of `uₕ` into a multidimensional array tha
 This zero-argument form is specific to `VectorElement` and does not conflict with
 `reshape(A, dims)`; it does shadow `Base.reshape(A) = reshape(A, ())`'s 0-dimensional
 result for this type specifically, in favor of the shape a grid function actually has.
-Replaces the former `to_matrix` outright (gpena/Bramble.jl#73).
 """
 @inline Base.reshape(uₕ::VectorElement{<:ScalarGridSpace}) = Base.ReshapedArray(parent(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
 @inline Base.reshape(uₕ::VectorElement{<:CompositeGridSpace}) = map(reshape, components(uₕ))
-
-# `values!` is gone outright (gpena/Bramble.jl#73): `copyto!(uₕ, s)` already does the same
-# in-place copy through `VectorElement`'s `AbstractVector` interface, so it needed no
-# replacement definition of its own.
 
 """
     space(uₕ::VectorElement) -> AbstractSpaceType
@@ -122,9 +111,8 @@ Returns the degree-of-freedom ranges for every **leaf** of `Wₕ`, depth-first; 
 [`component_range`](@ref).
 """
 @inline function component_ranges(Wₕ::CompositeGridSpace)
-    # `map` over `leaf_spaces_offsets(Wₕ)` unrolls exactly as the old `ntuple(…, Val(N))`
-    # did: the tuple it walks is built by compile-time recursion (leaf_spaces_offsets),
-    # so its length and element types are known to the compiler, not just at runtime.
+    # `map` over the compile-time tuple `leaf_spaces_offsets` returns unrolls, so the
+    # result is an `NTuple` of known length.
     return map(
         leaves_entry -> (leaves_entry[2] + 1):(leaves_entry[2] + ndofs(leaves_entry[1])),
         leaf_spaces_offsets(Wₕ)
@@ -181,7 +169,6 @@ end
 
 @inline components(uₕ::VectorElement{<:ScalarGridSpace}) = (uₕ,)
 
-# Constructor for VectorElement
 """
     element(Wₕ::AbstractSpaceType) -> VectorElement
     element(Wₕ::AbstractSpaceType, α::Number) -> VectorElement
@@ -189,18 +176,7 @@ end
 Returns a [`VectorElement`](@ref) for grid space `Wₕ` with uninitialized components.
 If `α` is provided, the components are initialized to `α`.
 """
-@inline function element(Wₕ::AbstractSpaceType)
-    # Get the backend (e.g., CPU, GPU) from the space.
-    b = backend(Wₕ)
-
-    # Determine the types for the space, vector, and elements.
-    ST = typeof(Wₕ)
-    VT = vector_type(b)
-    T = eltype(b)
-
-    # Allocate a vector with the correct number of degrees of freedom (DoFs) and return the element.
-    return VectorElement{ST, T, VT}(vector(b, ndofs(Wₕ)), Wₕ)
-end
+@inline element(Wₕ::AbstractSpaceType) = element(Wₕ, eltype(backend(Wₕ)))
 
 """
     element(Wₕ::AbstractSpaceType, ::Type{T}) -> VectorElement
@@ -227,16 +203,8 @@ restricted function returns.
     return VectorElement{typeof(Wₕ), T, typeof(v)}(v, Wₕ)
 end
 
-# Constructor with a fill value `α`. The element type is promoted rather than taken from
-# `α` outright, so `element(Wₕ, 2)` still gives a Float64 element on a Float64 backend
-# while `element(Wₕ, dual)` gives a Dual one.
 function element(Wₕ::AbstractSpaceType, α::Number)
-    uₕ = element(Wₕ, promote_type(eltype(backend(Wₕ)), typeof(α)))
-    # `fill!(parent(uₕ), α)` reaches the device array's own `fill!` directly -- a single
-    # kernel -- the same thing `fill!(uₕ, α)` now does via its own method above, spelled out
-    # here since this constructor already holds `uₕ` unwrapped.
-    fill!(parent(uₕ), α)
-    return uₕ
+    return fill!(element(Wₕ, promote_type(eltype(backend(Wₕ)), typeof(α))), α)
 end
 
 """
@@ -245,7 +213,6 @@ end
 Returns a [`VectorElement`](@ref) for a grid space `Wₕ` with the same coefficients as `v`.
 """
 @inline function element(Wₕ::AbstractSpaceType, v::AbstractVector)
-    # Ensure the provided vector has the correct number of DoFs.
     length(v) == ndofs(Wₕ) || throw(
         DimensionMismatch(
         "input vector has length $(length(v)), but the space has $(ndofs(Wₕ)) degrees of freedom.",
@@ -292,7 +259,6 @@ end
 # Indexing Interface
 # ==============================================================================
 
-# Enable array-like linear indexing `uₕ[i]` for VectorElement.
 @inline Base.@propagate_inbounds Base.getindex(uₕ::VectorElement, i) = getindex(uₕ.data, i)
 @inline Base.@propagate_inbounds function Base.setindex!(uₕ::VectorElement, val, i)
     setindex!(uₕ.data, val, i)
@@ -301,19 +267,12 @@ end
 
 # Cartesian bounds checks
 @inline function Base.checkbounds(
-        ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}
-) where {D}
-    return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), I)
-end
-
-@inline function Base.checkbounds(
         ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace}, I::CartesianIndex
 )
     return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), I)
 end
 
 """
-    getindex(uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}) where {D}
     getindex(uₕ::VectorElement{<:ScalarGridSpace}, I::CartesianIndex)
 
 Access field degrees of freedom by grid coordinates through a `CartesianIndex`.
@@ -347,14 +306,6 @@ uₕ[5, 1] == parent(uₕ)[5]
 See also: [`VectorElement`](@ref), [`ScalarGridSpace`](@ref), [`reshape`](@ref)
 """
 @inline Base.@propagate_inbounds function Base.getindex(
-        uₕ::VectorElement{<:ScalarGridSpace{D}}, I::CartesianIndex{D}
-) where {D}
-    @boundscheck checkbounds(uₕ, I)
-    li = LinearIndices(indices(mesh(uₕ)))
-    return @inbounds uₕ.data[li[I]]
-end
-
-@inline Base.@propagate_inbounds function Base.getindex(
         uₕ::VectorElement{<:ScalarGridSpace}, I::CartesianIndex
 )
     @boundscheck checkbounds(uₕ, I)
@@ -363,7 +314,6 @@ end
 end
 
 """
-    setindex!(uₕ::VectorElement{<:ScalarGridSpace{D}}, val, I::CartesianIndex{D}) where {D} -> VectorElement
     setindex!(uₕ::VectorElement{<:ScalarGridSpace}, val, I::CartesianIndex) -> VectorElement
 
 Mutate field degrees of freedom by grid coordinates through a `CartesianIndex`, in-place.
@@ -381,15 +331,6 @@ which reads and writes `u[k, 1]` while building a sparse column) needs `uₕ[i, 
 
 Returns `uₕ` matching Base collection conventions.
 """
-@inline Base.@propagate_inbounds function Base.setindex!(
-        uₕ::VectorElement{<:ScalarGridSpace{D}}, val, I::CartesianIndex{D}
-) where {D}
-    @boundscheck checkbounds(uₕ, I)
-    li = LinearIndices(indices(mesh(uₕ)))
-    @inbounds uₕ.data[li[I]] = val
-    return uₕ
-end
-
 @inline Base.@propagate_inbounds function Base.setindex!(
         uₕ::VectorElement{<:ScalarGridSpace}, val, I::CartesianIndex
 )
@@ -467,10 +408,10 @@ function _find_vec_in_broadcast(args::Tuple)
     return _find_vec_in_broadcast(_find_vec_in_broadcast(args[1]), Base.tail(args))
 end
 _find_vec_in_broadcast(x::VectorElement) = x
-_find_vec_in_broadcast(::Any) = nothing # Not a VectorElement
-_find_vec_in_broadcast(::Tuple{}) = nothing # End of recursion
-_find_vec_in_broadcast(a::VectorElement, rest) = a # Found one
-_find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep searching
+_find_vec_in_broadcast(::Any) = nothing
+_find_vec_in_broadcast(::Tuple{}) = nothing
+_find_vec_in_broadcast(a::VectorElement, rest) = a
+_find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest)
 
 # `dest .= expr` lowers to `copyto!(dest, bc)` and, absent a specialised method, runs
 # Base's generic `AbstractArray` fallback: it indexes `bc[i]` on every iteration, and each
@@ -491,15 +432,14 @@ _find_vec_in_broadcast(::Any, rest) = _find_vec_in_broadcast(rest) # Keep search
     return dest
 end
 
-# `copyto!(dest, src)` between two `VectorElement`s had no method of its own, so it fell to
-# Base's generic `AbstractArray` `copyto!`: the same scalar-indexing loop the broadcast
-# method above exists to avoid, and one that crashes outright on device storage
-# (gpena/Bramble.jl#346). Wrapping `src` in an identity broadcast reuses that same method
-# -- and so the same `_broadcast_copyto!` seam -- rather than adding a second copy path.
+# Routed through the broadcast `copyto!` above so a device or threaded destination never
+# takes Base's element-by-element `AbstractArray` copy.
 """
     copyto!(dest::VectorElement, src::VectorElement) -> VectorElement
 
 Copies the coefficients of `src` into `dest` in place, and returns `dest`.
+
+`dest` and `src` must share one grid space (`===`); the size check alone is not enough.
 """
 @inline function Base.copyto!(dest::VectorElement, src::VectorElement)
     size(dest) == size(src) || throw(
@@ -635,27 +575,9 @@ end
     ArgumentError("VectorElement operands in a broadcast must share the same grid space"),
 )
 
-# Both of these delegate to broadcasting rather than filling a tuple allocated up front.
-#
-# The type of `a * vₕ` is the type of the product, and `similar(vₕ[i])` gives the type of
-# `vₕ[i]` alone; it copies the operand and drops the scalar. So a `Dual` scalar against a
-# `Float64` element allocated `Vector{Float64}` and then threw on the first store:
-#
-#     julia> ForwardDiff.Dual{Nothing}(2.0, 1.0) * (uₕ, vₕ)
-#     ERROR: MethodError: no method matching Float64(::ForwardDiff.Dual{...})
-#
-# `similar(::Broadcasted, ElType)` already computes the promoted type, and the scalar case
-# needs no method here at all: a `VectorElement` is an `AbstractVector`, so Base's own
-# `a * A == a .* A` covers it and has always promoted correctly. These two reimplemented
-# that by hand for tuples and lost the promotion, deriving the element type from the space
-# rather than the values.
-#
-# `vₕ[i] .* uₕ` rather than `uₕ .* vₕ[i]`: the broadcast picks the space off the first
-# `VectorElement` it finds, and the code this replaces took it from `vₕ[i]`. The product is
-# the same either way.
-#
-# `Val(D)` so the tuple is built unrolled, with `D` a static parameter rather than a count
-# passed at run time.
+# Broadcast rather than `similar(vₕ[i])`, so the result type promotes with the scalar (a
+# `Dual` times a `Float64` element gives a `Dual` element). The scalar case `a * uₕ` is
+# Base's `a .* A`. `Val(D)` unrolls the tuple.
 @inline Base.:*(uₕ::VectorElement, vₕ::NTuple{D, VectorElement}) where {D} = ntuple(i -> vₕ[i] .* uₕ, Val(D))
 
 @inline Base.:*(a::Number, vₕ::NTuple{D, VectorElement}) where {D} = ntuple(i -> a .* vₕ[i], Val(D))
@@ -672,19 +594,10 @@ Project the continuous function `f` onto `uₕ`'s own space and scale `uₕ` poi
 `VectorElement` allocation (`Rₕ!` projects `f` directly into it, then it is scaled by `uₕ`
 in place) rather than one allocation for the projection and a second for the broadcast.
 
-A plain `Function` has no meaning as a grid function on its own -- a form built from
-`innerₕ(f, v)` restricts it first through [`source_function`](@ref)/[`form`](@ref)'s own
-lowering, but `f * uₕ` outside a form (or a continuous spatial *condition* multiplying a
-grid function, `(x -> x[1] < 1) * uₕ`) had no operator to reach that with:
-```julia
-julia> (x -> x[1] < 1) * uₕ
-ERROR: MethodError: no method matching *(::Function, ::VectorElement)
-```
-now restricts `f` to `space(uₕ)` and multiplies elementwise, so the result is an ordinary
-`VectorElement`, usable anywhere one is -- including as a `SourceFunction`-lowered term
-inside another form.
+`f` is restricted to `space(uₕ)` first, so `(x -> x[1] < 1) * uₕ` is an ordinary
+`VectorElement`.
 """
-@inline function Base.:*(f::Function, uₕ::VectorElement)
+@inline function Base.:*(f::F, uₕ::VectorElement) where {F <: Function}
     Wₕ = space(uₕ)
     # Same destination type `Rₕ(Wₕ, f) .* uₕ` would have promoted to, allocated once and
     # filled in place (`Rₕ!`) instead of allocating a projected element and then a second
@@ -694,7 +607,7 @@ inside another form.
     dest .*= uₕ
     return dest
 end
-@inline Base.:*(uₕ::VectorElement, f::Function) = f * uₕ
+@inline Base.:*(uₕ::VectorElement, f::F) where {F <: Function} = f * uₕ
 
 # --- Display ---------------------------------------------------------------------- #
 #

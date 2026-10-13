@@ -880,6 +880,26 @@ using Bramble:
         w = weights(Wₕ, Innerh())
         @test b ≈ parent(cond * uₕ) .* w
     end
+
+    @testset "f * VectorElement allocation (#191)" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
+        Wₕ = gridspace(Ωₕ)
+        uₕ = element(Wₕ, 1.0)
+        cond = x -> x[1] < 0.5
+
+        # Each product goes through a one-line wrapper, so the call is measured from
+        # outside it, after a warm-up call. The product projects `f` and scales in place,
+        # so it costs no more than the projection `Rₕ(Wₕ, f)` alone; a method unspecialised
+        # on `f` pays for a dynamic dispatch on top and costs about twice that.
+        left(f, u) = f * u
+        right(u, f) = u * f
+        project(W, f) = Rₕ(W, f)
+        left(cond, uₕ)
+        right(uₕ, cond)
+        project(Wₕ, cond)
+        @test @allocated(left(cond, uₕ)) <= @allocated(project(Wₕ, cond))
+        @test @allocated(right(uₕ, cond)) <= @allocated(project(Wₕ, cond))
+    end
 end
 
 end # module FormSourceOperatorsTests

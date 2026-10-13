@@ -6,17 +6,10 @@
 # cached for the closures below are never reused by a user's own function. What
 # this workload does cache is everything around them, which dominates: the grid
 # space construction, the generated Gauss rule, the parallel-for
-# skeleton and the vector element arithmetic are all closure-independent. On a
-# 21-point 1D space that is a first avgₕ of 1.76 s against 0.02 s, and a first
-# grid space of 0.29 s against 0.02 s.
+# skeleton and the vector element arithmetic are all closure-independent.
 #
-# The residual per-closure cost stays. Re-measured 2026-09-04 (point 80), after points
-# 51/67 moved Rₕ!/avgₕ! to named kernel structs: roughly 9 ms for Rₕ and 16 ms for avgₕ,
-# a genuinely new closure each time, the reverse of the ~50 ms/~10 ms this comment
-# claimed before those points landed, most likely because avgₕ! (point 51) and Rₕ!
-# (point 67, modelled on it) picked up the kernel-struct fix at different times and
-# this number was never revisited after the second one landed. Both are still real,
-# irreducible costs: a second call with the identical closure literal at a *different*
+# The residual per-closure cost stays: a genuinely new closure pays it in full each time.
+# It is irreducible: a second call with the identical closure literal at a *different*
 # source line still pays the full amount, since Julia keys a closure's type by
 # definition site, not text, so no workload can warm a closure it does not itself write.
 # A type-erasing wrapper around f would remove even that, but it also blocks
@@ -50,15 +43,11 @@ function _pc_space_session(Ωₕ, f, g, marker::Symbol)
     # `project!` wraps the rule's kernel in a `_MaskedKernel` (gpena/Bramble.jl#51), so the
     # sweep is instantiated for a different callable.
     #
-    # What these two lines actually buy is small, and measured rather than assumed: three
-    # fresh processes each way, a masked first call goes 43.5 ms -> 40.5 ms for `Rₕ!` and
-    # 41.8 ms -> 41.4 ms for `avgₕ!` (spreads ±0.2 ms), for about 0.4 s of extra
-    # precompilation, itself inside the ~0.8 s run-to-run spread. So: 3 ms for `Rₕ!`, and
-    # nothing measurable for `avgₕ!`.
-    #
-    # The other ~40 ms is irreducible for the reason given above this function: `Rₕ!` and
-    # `avgₕ!` specialize on the caller's function type, and no workload can warm a closure
-    # it does not itself write. Kept because it is nearly free, not because it is a fix.
+    # The gain is small (about 3 ms on `Rₕ!`, none on `avgₕ!`): most of a masked first call
+    # is the caller's own closure. That cost is irreducible for the reason given above this
+    # function: `Rₕ!` and `avgₕ!` specialize on the caller's function type, and no workload
+    # can warm a closure it does not itself write. Kept because it is nearly free, not
+    # because it is a fix.
     Rₕ!(uₕ, g; markers = (marker,))
     avgₕ!(vₕ, g; markers = (marker,))
 

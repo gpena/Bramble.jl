@@ -4,8 +4,8 @@
 # worth having: a solution with a thin layer, where the points a uniform mesh spends in the
 # smooth region are wasted and the ones it spends in the layer are too few.
 #
-# This page is generated from `docs/src/examples/boundary_layer_graded.jl` by Literate.jl,
-# and the same file runs under `test/examples/pages.jl`, where the `#src` assertions execute.
+# This script runs under `test/examples/pages.jl`, where the `#src` assertions execute; it is
+# not part of the published manual.
 #
 # ## Problem
 #
@@ -114,7 +114,14 @@ collect(zip(ns, uniform_errors, graded_errors))
 
 # The graded mesh at 41 points is already better than the uniform one at 641. That is the
 # whole argument for a non-uniform Cartesian grid: the points go where the solution varies,
-# and the scheme keeps its order on them.
+# and the scheme keeps its order on them: halving the spacing divides the graded error by
+# four, which is second order.
+
+observed_orders = log2.(graded_errors[1:(end - 1)] ./ graded_errors[2:end])
+
+@test all(1.9 .< observed_orders .< 2.1)                                                   #src
+
+observed_orders
 
 #-
 
@@ -133,10 +140,14 @@ convergence_plot( # hide
 σs = (1.0, 2.0, 3.0, 4.0, 6.0, 8.0)
 errors_by_σ = [solve_on(graded_points(41; σ = σ))[1] for σ in σs]
 
-@test argmin(errors_by_σ) > 1                                                              #src
+best_σ = σs[argmin(errors_by_σ)]
+
+@test best_σ in (3.0, 4.0, 6.0)                                                            #src
 @test minimum(errors_by_σ) < 1.0e-3                                                        #src
 
 collect(zip(σs, errors_by_σ))
+
+best_σ
 
 # The best value here is around 4, where the finest cells are comparable with `ε`, and the
 # curve is flat enough on either side that the choice is not delicate.

@@ -69,8 +69,8 @@ methods that dispatch tells apart by what they are given rather than by differen
   rather than values. For the *unknown* side. It names no source space: that is the trial
   function's own, and assembly supplies it once the leaf is known.
 
-See the [operators tutorial](../tutorials/operators.md) for the numeric side and the pattern
-this exists for: a heterogeneous composite space whose leaves live on different meshes.
+This exists for the pattern of a heterogeneous composite space whose leaves live on different
+meshes.
 
 ```@docs
 interpolate_at

@@ -80,7 +80,7 @@ The norm of $\sin(\pi x)$ on $[0, 1]$ is $1/\sqrt{2} \approx 0.707$, which `norm
 $\nabla_{-h}$:
 
 ```math
-|u_h|_{1,h}^2 = \sum_{d=1}^D \|D_{-x_d} u_h\|_h^2, \qquad
+|u_h|_{1,h}^2 = \sum_{d=1}^D \|D_{-x_d} u_h\|_+^2, \qquad
 \|u_h\|_{1,h}^2 = \|u_h\|_h^2 + |u_h|_{1,h}^2.
 ```
 
@@ -149,7 +149,7 @@ normₕ(uvec)^2 ≈ normₕ(uvec(1))^2 + normₕ(uvec(2))^2
 
 `Wₕ^Val(N)` is type stable whatever `N` is, while `Wₕ^2` relies on the literal being
 constant-folded and only reaches `N ≤ 3`. [`vector_gridspace`](@ref)`(Ωₕ, 2)` builds the same
-space straight from a mesh, and `CompositeGridSpace((Wₕ, Wₕ))` builds one from spaces that
+space straight from a mesh, and `Bramble.CompositeGridSpace((Wₕ, Wₕ))` builds one from spaces that
 need not be identical:
 
 ```@example space
@@ -159,8 +159,8 @@ spaces(Vₕ) == (Wₕ, Wₕ)
 ### Weights
 
 `weights(Wₕ)` returns the whole `SpaceWeights` bundle, and a weight vector comes from naming
-the inner product it belongs to. `Bramble.Innerh` and `Bramble.Innerplus` are public but not
-exported, hence the prefix. `weights` is not defined for a composite space, since its leaves
+the inner product it belongs to. `Bramble.Innerh` and `Bramble.Innerplus` are internal, hence the
+prefix. `weights` is not defined for a composite space, since its leaves
 may live on different meshes: call it on a [`components`](@ref) leaf instead.
 
 ```@example space
