@@ -502,6 +502,13 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
         @test occursin(r"does not support this form: it is posed on a composite space",
             refusal(() -> fdm_solve(b, G)))
         @test occursin("composite space", refusal(() -> fdm_solve(kronecker_operator(b), G)))
+
+        # The `# Throws` claims for a wrong-length F and a bad dirichlet, on fdm_solve itself.
+        solvable = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + L(u, v))
+        short = rand(MersenneTwister(KRON_EXT_SEED), ndofs(Wₕ) - 1)
+        @test_throws DimensionMismatch fdm_solve(solvable, short)
+        @test_throws DimensionMismatch fdm_solve(kronecker_operator(solvable), short)
+        @test_throws "fdm_solve only supports" fdm_solve(solvable, F; dirichlet = :left)
     end
 
     # A complex right-hand side is refused with an ArgumentError on both routes, by

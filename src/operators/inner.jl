@@ -185,10 +185,20 @@ Each pair is split that way because the tuple forms fold several terms and have 
 the sum once rather than each term separately.
 =#
 
+# `InnerPlus{Dim}` names a direction, which must be one of the space's (gpena/Bramble.jl#692):
+# checked here, when the node is built, rather than at assembly, where the weight lookup
+# would throw a `BoundsError` far from the call. Same message as the numeric twin's.
+@inline _check_direction(::AbstractInnerProduct, ::Val{D}) where {D} = nothing
+@inline function _check_direction(::InnerPlus{Dim}, ::Val{D}) where {Dim, D}
+    Dim <= D || _throw_invalid_staggered_set((Dim,), D)
+    return nothing
+end
+
 # A source on the left makes the product linear; anything else makes it bilinear.
 @inline function _product(
-        ::W, left::LazyOp{D}, right::LazyOp{D}
+        w::W, left::LazyOp{D}, right::LazyOp{D}
 ) where {W <: AbstractInnerProduct, D}
+    _check_direction(w, Val(D))
     return if _is_source_only(left)
         LinearProduct{D, W, typeof(left), typeof(right)}(left, right)
     else
@@ -231,7 +241,8 @@ end
 @inline _as_source(l::VectorElement, ::Val{D}) where {D} = SourceVector{D, typeof(l)}(l)
 @inline _as_source(d::DiracSource{D}, ::Val{D}) where {D} = d
 
-@inline function _linear_source(::W, l, r::LazyOp{D}) where {W <: AbstractInnerProduct, D}
+@inline function _linear_source(w::W, l, r::LazyOp{D}) where {W <: AbstractInnerProduct, D}
+    _check_direction(w, Val(D))
     sf = _as_source(l, Val(D))
     return LinearProduct{D, W, typeof(sf), typeof(r)}(sf, r)
 end
@@ -240,7 +251,7 @@ end
 
 # One directional source term per dimension, summed, with the sum restricted once. `Val(D)`
 # is what keeps `dim` a compile-time literal, so `InnerPlus{dim}` stays a type instead of
-# becoming a runtime value -- the same reason the folds below were written with `ntuple`.
+# becoming a runtime value -- the same reason `inner_plus` below builds its weights on `Val`.
 @inline function _inner_source_tuple(l, r::NTuple{D, LazyOp{D}}, markers) where {D}
     terms = ntuple(Val(D)) do dim
         _linear_source(InnerPlus{dim}(), l[dim], r[dim])
@@ -262,11 +273,16 @@ function inner_plus(
         right::NTuple{D, LazyOp{D}};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {D, N}
-    terms = ntuple(Val(D)) do dim
-        return _product(InnerPlus{dim}(), left[dim], right[dim])
-    end
+    terms = map(_product, _inner_plus_weights(Val(D)), left, right)
     return _restrict_by_markers(foldl(+, terms), markers)
 end
+
+# `(InnerPlus{1}(), …, InnerPlus{D}())`, built by recursion on `Val` so each weight is a type.
+# `inner_plus` maps over it with `left` and `right`: an `ntuple` closure indexing
+# `left[dim]` loses the element type when the tuple is heterogeneous (`κ * ∇ₕ(u)` in 2D),
+# and the sum then infers as an abstract `OperatorAdd` (gpena/Bramble.jl#708).
+@inline _inner_plus_weights(::Val{0}) = ()
+@inline _inner_plus_weights(::Val{D}) where {D} = (_inner_plus_weights(Val(D - 1))..., InnerPlus{D}())
 
 # Support both scalar and NTuple combinations in standard inner products:
 
@@ -759,6 +775,9 @@ A `LinearProduct` if `left` is *source-only* ([`_is_source_only`](@ref)), a `Bil
 otherwise, exactly as [`innerₕ`](@ref) decides.
 
 `markers` restricts the sum as it does for [`innerₕ`](@ref).
+
+A direction beyond `D` throws an `ArgumentError` at the call: `inner₊ᵧ` in 1D, `inner₊₂`
+below 3D.
 """
 function inner₊ₓ(
         left::LazyOp{D}, right::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
@@ -787,7 +806,7 @@ This is the preferred spelling: `inner₊(D₋ₓ(u), D₋ₓ(v), :x)` over
 `inner₊ₓ(D₋ₓ(u), D₋ₓ(v))`, which stays reachable as a plain alias.
 
 An `Integer` outside `1:3` throws a `BoundsError`; a `Symbol` that is not `:x`/`:y`/`:z`
-throws an `ArgumentError`.
+throws an `ArgumentError`, as does a direction beyond `D` (`inner₊(u, v, 2)` in 1D).
 
 The numeric twin, for the same selector against grid functions rather than operators, is
 [`inner₊`](@ref)`(uₕ, vₕ, d)` (`src/space/inner_product.jl`), which also documents how

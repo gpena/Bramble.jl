@@ -1,5 +1,5 @@
 # bilinear_traversal.jl: one shared walk over a term's local stencils
-# (`visit_bilinear_stencil`), and the sinks that plug into it (`PatternSink`, `_CoordSink`,
+# (`visit_bilinear_stencil`), and the sinks that plug into it (`_CoordSink`,
 # `ReplaySink`). Kept as a single file deliberately: the walk and its sinks are a tightly
 # coupled design for guaranteeing allocation-free inner loops (gpena/Bramble.jl#50), and
 # splitting them further would scatter that coupling across files without a readability
@@ -31,8 +31,7 @@ bounds is "stored" for a dense backend, at `LinearIndices(A)[row, col]`.
 @inline _scatter_position(A::SparseMatrixCSC, row::Int, col::Int) = _csc_position(
     A.colptr, A.rowval, row, col)
 
-# The search itself, over a CSC's `colptr` and `rowval`, shared by `SparseMatrixCSC` and
-# `_ScatterCSC` below so the two answer the same position for every entry.
+# The search itself, over a CSC's `colptr` and `rowval`.
 @inline function _csc_position(colptr, rowval, row::Int, col::Int)
     p1 = Int(@inbounds colptr[col])
     p2 = Int(@inbounds colptr[col + 1]) - 1
@@ -108,26 +107,6 @@ same bits as before.
 @inline _scatter_storage(A::SparseMatrixCSC) = A.nzval
 @inline _scatter_storage(A::AbstractMatrix) = _scatter_storage(locality(typeof(A)), A)
 @inline _scatter_storage(::HostLocality, A::AbstractMatrix) = A
-
-# A `SparseMatrixCSC`'s three arrays without the matrix around them, the shape of `_KronCSC`
-# (kronecker.jl): what `CpuPolyester`'s searching sweeps rebuild in each `@batch` task around
-# the arrays it receives, since a captured `SparseMatrixCSC` puts Polyester's argument box on
-# the heap (gpena/Bramble.jl#433). Not an `AbstractMatrix`: only the searching sweep's
-# per-point step (`_scatter_point!`, `_sweep_point!`, `add_to_sparse!`) takes it, and its
-# position, write and storage are the `SparseMatrixCSC` ones, so it stores the same bits.
-struct _ScatterCSC{CP <: AbstractVector, RV <: AbstractVector, NV <: AbstractVector}
-    colptr::CP
-    rowval::RV
-    nzval::NV
-end
-
-@inline _scatter_position(A::_ScatterCSC, row::Int, col::Int) = _csc_position(
-    A.colptr, A.rowval, row, col)
-@inline function _scatter_add!(A::_ScatterCSC, pos::Integer, val)
-    @inbounds A.nzval[pos] += val
-    return nothing
-end
-@inline _scatter_storage(A::_ScatterCSC) = A.nzval
 
 """
     _replay_add!(nzval::AbstractArray, pos::Integer, val) -> Nothing
@@ -376,7 +355,7 @@ See also: [`allocate_system_matrix`](@ref), whose positions search raises the sa
 the serial path.
 """
 @inline function add_to_sparse!(
-        A::Union{AbstractMatrix, _ScatterCSC}, row::Int, col::Int, val::Number, term)
+        A::AbstractMatrix, row::Int, col::Int, val::Number, term)
     pos = _scatter_position(A, row, col)
     pos == 0 && _throw_missing_pattern_entry(term)
     _scatter_add!(A, pos, val)
@@ -486,31 +465,14 @@ them recorded the sparsity pattern and three wrote values into it, and the prope
 matters -- *every (row, col) the scatter touches is present in the pattern* -- held only
 because two independently written traversals agreed.
 
-The walk is now written once. A sink says what to do per entry, and declares by dispatch
-whether it wants the de-duplication the pattern passes need and the value passes must not
-have (repeated offsets accumulate).
+The walk is now written once. A sink says what to do per entry; repeated offsets within
+one point's stencil are all delivered, because value sinks must accumulate them.
 
 Every rule that used to live in five places lives here: which entries are dropped
 (out-of-range rows, and `_trial_column` answering 0), that `off_u` may be an
 `AbsoluteColumn` while `off_v` never is, and that the fifth argument to `local_stencil` is
 the *leaf's* linear index -- the wrong leaf reads the wrong `SourceVector`, silently.
 =#
-
-"""
-    _sink_dedups(sink) -> Bool
-
-Whether `sink` wants repeated `(off_u, off_v)` pairs within one point's stencil collapsed
-to a single entry.
-
-The sparsity pattern wants each `(row, col)` once however many stencil entries name it, and
-a value sink wants every one of them, because repeated entries accumulate. Getting this
-backwards gives a wrong matrix rather than an error, so it is answered by dispatch on the
-sink type: the default is `false`, and the branch folds away at compile time, leaving the
-value sweeps with no de-duplication scan at all.
-
-See also: [`visit_bilinear_stencil`](@ref), [`PatternSink`](@ref).
-"""
-@inline _sink_dedups(::Any) = false
 
 """
     _sink_needs_coordinates(sink) -> Bool
@@ -581,7 +543,7 @@ One entry: guard it, and hand it to the sink if it lands inside. Answers whether
 the caller can advance the slot.
 
 Fused rather than "compute the target, then act on it" ([`_entry_target`](@ref), which the
-tests use and `_scatter_point!` shares) because returning a `(row, col)` sentinel tuple has to
+tests use) because returning a `(row, col)` sentinel tuple has to
 be merged from three return points: measured against the hand-written loop it cost 5 extra
 phi nodes, 4 integer adds and 3 comparisons per entry, with identical loads, stores and calls.
 """
@@ -655,29 +617,16 @@ end
 # unrolling direct iteration gets. `entry_offsets`/`entry_weights` are homogeneous, which is
 # what makes indexing them affordable -- re-measured on the same replay benchmarks, not
 # assumed.
-#
-# The de-duplication branch is still chosen at compile time, so a value sink pays nothing
-# for `_offsets_seen_before`.
 Base.@propagate_inbounds function _visit_entries(
         sink::SINK, stencil, lin_indices, I, row_offset::Int, col_offset::Int, slot::Int
 ) where {SINK}
     offs = entry_offsets(stencil)
     wts = entry_weights(stencil)
-    if _sink_dedups(sink)
-        for k in eachindex(wts)
-            off_u, off_v = offs[k]
-            _offsets_seen_before(offs, k, off_u, off_v) && continue
-            _step_entry!(
-                sink, lin_indices, I, off_u, off_v, wts[k], row_offset, col_offset, slot
-            ) && (slot += 1)
-        end
-    else
-        for k in eachindex(wts)
-            off_u, off_v = offs[k]
-            _step_entry!(
-                sink, lin_indices, I, off_u, off_v, wts[k], row_offset, col_offset, slot
-            ) && (slot += 1)
-        end
+    for k in eachindex(wts)
+        off_u, off_v = offs[k]
+        _step_entry!(
+            sink, lin_indices, I, off_u, off_v, wts[k], row_offset, col_offset, slot
+        ) && (slot += 1)
     end
     return nothing
 end
@@ -691,23 +640,12 @@ Base.@propagate_inbounds function _visit_entries_unguarded(
 ) where {SINK}
     offs = entry_offsets(stencil)
     wts = entry_weights(stencil)
-    if _sink_dedups(sink)
-        for k in eachindex(wts)
-            off_u, off_v = offs[k]
-            _offsets_seen_before(offs, k, off_u, off_v) && continue
-            _step_entry_unguarded!(
-                sink, lin_indices, I, off_u, off_v, wts[k], row_offset, col_offset, slot
-            )
-            slot += 1
-        end
-    else
-        for k in eachindex(wts)
-            off_u, off_v = offs[k]
-            _step_entry_unguarded!(
-                sink, lin_indices, I, off_u, off_v, wts[k], row_offset, col_offset, slot
-            )
-            slot += 1
-        end
+    for k in eachindex(wts)
+        off_u, off_v = offs[k]
+        _step_entry_unguarded!(
+            sink, lin_indices, I, off_u, off_v, wts[k], row_offset, col_offset, slot
+        )
+        slot += 1
     end
     return nothing
 end
@@ -857,7 +795,7 @@ only [`DiagonalReplaySink`](@ref) needs this, pairing itself (interior) with an 
 - `sink` (or `interior_sink`/`boundary_sink`): What to do per entry. The sinks are
   `_CoordSink` (pattern and positions), [`ReplaySink`](@ref), `_PairReplaySink` and
   [`DiagonalReplaySink`](@ref) (values); the
-  contract is in [`_sink_entry!`](@ref), [`_sink_point!`](@ref) and [`_sink_dedups`](@ref).
+  contract is in [`_sink_entry!`](@ref) and [`_sink_point!`](@ref).
 - `term`: The AST node whose stencil is evaluated at each point.
 - `sp`: The test leaf. Its grid is walked, and the stencil sees its markers.
 - `row_offset`, `col_offset`: The block's origin in the assembled matrix, `0` for a scalar
@@ -935,39 +873,6 @@ end
 
 # --- the sinks --------------------------------------------------------------------- #
 
-# What sharing the traversal costs here, measured rather than assumed (gpena/Bramble.jl#50).
-# Against the hand-written walk this replaced, on a 300x300 grid with
-# `innerₕ(D₋ₓ(u), D₋ₓ(v))` -- the form `benchmark/benchmarks.jl`'s
-# `forms / allocate_system_matrix 2D` uses:
-#
-#   entries pushed  359,100 either way        resulting nnz  269,400 either way
-#   the walk        1268 us -> 1398 us        the whole call 2879 us -> 3286 us
-#
-# So `sparse!` does identical work and the traversal itself is about 10% slower, on forms
-# whose stencils carry several distinct offset pairs per point; `innerₕ(u, v)` came out
-# faster and `inner₊(∇ₕ(u), ∇ₕ(v))` unchanged. The enclosing function's LLVM is
-# near-identical, so the difference is a codegen subtlety that was not localised further.
-#
-# `allocate_system_matrix` no longer walks a form with it: its coordinate walk
-# (`_CoordSink`) keeps every entry, duplicates included, so the same coordinates also give
-# the replay positions; `sparse!` combines the duplicates.
-"""
-    PatternSink(I_vec::Vector{Int}, J_vec::Vector{Int})
-
-Collect the `(row, col)` coordinates a term can reach, for building a sparsity pattern.
-
-Appends each coordinate to `I_vec` and `J_vec`, for a caller to hand to `sparse!`. The only
-sink that de-duplicates ([`_sink_dedups`](@ref)): a coordinate named twice by one point's
-stencil is one entry of the pattern, and the weights it carries are not read here at all.
-
-See also: [`visit_bilinear_stencil`](@ref).
-"""
-struct PatternSink
-    I_vec::Vector{Int}
-    J_vec::Vector{Int}
-end
-@inline _sink_dedups(::PatternSink) = true
-
 """
     _sink_entry!(sink, row::Int, col::Int, weight, slot::Int) -> Nothing
 
@@ -978,14 +883,10 @@ entries that land inside the matrix, so a sink never has to guard the index itse
 counts accepted entries from this point's base ([`_sink_point!`](@ref)) and matters only to
 [`ReplaySink`](@ref); the others ignore it.
 """
-@inline function _sink_entry!(sink::PatternSink, row::Int, col::Int, _, ::Int)
-    push!(sink.I_vec, row)
-    push!(sink.J_vec, col)
-    return nothing
-end
+function _sink_entry! end
 
 # Raised by the positions search that builds the replay cache
-# (`_coordinates_to_positions!`) and by `add_to_sparse!` on the threaded path: a pattern that
+# (`_coordinates_to_positions!`) and by `add_to_sparse!`: a pattern that
 # cannot hold the form is reported rather than skipped. `@nospecialize`: an error path, not
 # worth one compiled copy per term type.
 @noinline function _throw_missing_pattern_entry(@nospecialize(term))

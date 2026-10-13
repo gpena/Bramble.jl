@@ -951,9 +951,7 @@ end
 # given as a `*` concatenation, a note with `{direction}`/`{suffix}` placeholders, a
 # vectorial keyword given and one left to its default.
 module OperatorFamilyProbe
-using Bramble: Bramble, VectorElement, ScalarGridSpace, CompositeGridSpace, OperatorArgument,
-               Backward, _apply_spaced!, _no_spacing, _no_precheck, _dispatch_dim, _dim_index,
-               _vectorial_apply, _op_mesh, dim
+using Bramble: Bramble, Backward, _apply_spaced!, _no_spacing, _no_precheck
 
 const PROBE_LINE = @__LINE__() + 1
 Bramble.@operator_family(base=probe,

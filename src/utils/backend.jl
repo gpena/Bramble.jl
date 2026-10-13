@@ -746,7 +746,8 @@ not, and fails at compile time with a dynamic-invocation error rather than at th
 
 # Throws
 - `ErrorException`: If `Metal.jl` is not loaded.
-- `ArgumentError`: If `policy` is a [`CpuPolicy`](@ref) (locality mismatch).
+- `ArgumentError`: If `policy` is a [`CpuPolicy`](@ref) (locality mismatch), or if `T` is a
+  numeric type other than `Float16` and `Float32` (with `Metal.jl` loaded), such as `Float64`.
 """
 function metal_backend(T::Type = Float32; policy::ExecutionPolicy = GpuKernel())
     return _metal_backend(T, policy)

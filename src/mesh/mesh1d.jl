@@ -454,6 +454,10 @@ Override the grid coordinates in `Ωₕ`. Recalculates cached [`spacings`](@ref)
 unchanged, then replaces the mesh's [`Mesh1DState`](@ref) with one carrying the new version
 and the uniformity of the new points.
 
+The points must be finite, strictly increasing and at least one, and a collapsed mesh (a degenerate
+interval) takes a single point; anything else throws an `ArgumentError` naming the first
+offending point, before anything changes.
+
 A new point count also rebuilds the `:boundary` and `:interior` markers (and the marker
 words assembly reads) for the new grid. A mesh carrying any other label has no domain here
 to re-evaluate it onto the new points, so such a resize throws an `ArgumentError` before
@@ -470,6 +474,7 @@ mutated mesh. This is also what [`change_points!`](@ref) goes through, so the sa
 to it.
 """
 function set_points!(Ωₕ::Mesh1D, pts)
+    _check_set_points(Ωₕ, pts)
     n = length(pts)
     if length(_st(Ωₕ).pts) == n
         _set_points_geometry!(Ωₕ, pts)
@@ -489,6 +494,47 @@ function set_points!(Ωₕ::Mesh1D, pts)
     _ensure_geometric_markers!(fresh_markers, Ωₕ)
     markers!(Ωₕ, fresh_markers)
     return nothing
+end
+
+# Refuse, before any mutation, points `set_points!` would turn into a wrong geometry: no
+# points at all; several points on a collapsed mesh, whose spacings stay zero
+# (gpena/Bramble.jl#696); points that are not finite and strictly increasing, which give
+# negative weights and a wrong `locate_cell` (#698). One O(n) scan of one host copy at
+# most, as the constructor. `MeshnD` calls it per axis before mutating any.
+function _check_set_points(Ωₕ::Mesh1D, pts)
+    n = length(pts)
+    n == 0 && _throw_set_points_empty()
+    if is_collapsed(Ωₕ) && n > 1
+        a, b = extrema(set(Ωₕ))
+        _throw_collapsed_set_points(n, a, b)
+    end
+    x = _host_array(pts)
+    @inbounds for k in eachindex(x)
+        isfinite(x[k]) || _throw_set_points_not_finite(k, x[k])
+        k > firstindex(x) && x[k] <= x[k - 1] && _throw_set_points_not_increasing(k, x)
+    end
+    return nothing
+end
+
+@noinline function _throw_set_points_empty()
+    throw(ArgumentError("set_points! needs at least one point; the mesh is left unchanged"))
+end
+
+@noinline function _throw_collapsed_set_points(n, a, b)
+    msg = "set_points! was given $n points for a mesh of the degenerate interval " *
+          "[$a, $b], which holds a single point; the mesh is left unchanged"
+    throw(ArgumentError(msg))
+end
+
+@noinline function _throw_set_points_not_finite(k, v)
+    msg = "set_points! needs finite points, but point $k is $v; the mesh is left unchanged"
+    throw(ArgumentError(msg))
+end
+
+@noinline function _throw_set_points_not_increasing(k, x)
+    msg = "set_points! needs strictly increasing points, but point $k ($(x[k])) does " *
+          "not exceed point $(k - 1) ($(x[k - 1])); the mesh is left unchanged"
+    throw(ArgumentError(msg))
 end
 
 # The geometry of `set_points!` alone, with markers left untouched: the public setter adds
@@ -797,14 +843,15 @@ end
 # instead of adding a genuinely more specific dispatch (method overwriting is an error during
 # precompilation).
 """
-    _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, h, n::Int, dev) -> Nothing
+    _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, b, h, n::Int, dev) -> Nothing
 
 Fills all four of a uniform mesh's arrays -- `pts`, `half_pts`, `spacings` and
 `half_spacings` -- in a single `KernelAbstractions.@kernel` launch on `dev`, over
-`1:(n + 1)` work items: `pts[i] = a + (i - 1) * h`, `spacings[i] = h`, `half_spacings[i] =
-h / 2` at `i = 1` or `i = n` and `h` elsewhere, and `half_pts[i] = a` at `i = 1`,
-`a + (n - 1) * h` at `i = n + 1`, and the midpoint formula in between. Every entry comes
-from `a`, `h` and `n` alone, with no read of `pts` itself -- the fusion of the uniform
+`1:(n + 1)` work items: `pts[i] = a + (i - 1) * h` except `pts[n] = b`, `spacings[i] = h`,
+`half_spacings[i] = h / 2` at `i = 1` or `i = n` and `h` elsewhere, and `half_pts[i] = a`
+at `i = 1`, `b` at `i = n + 1`, and the midpoint formula in between. The last point is `b`
+itself, since `a + (n - 1) * h` can miss it by an ulp (gpena/Bramble.jl#695). Every entry
+comes from `a`, `b`, `h` and `n` alone, with no read of `pts` itself -- the fusion of the uniform
 point fill, `_launch_spacing!`, `_launch_half_points!`
 and `_launch_half_spacing!` into one kernel for a uniform device mesh
 (gpena/Bramble.jl#303).
@@ -813,7 +860,7 @@ and `_launch_half_spacing!` into one kernel for a uniform device mesh
 - `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
   kernel to reach (`_throw_no_ka_mesh_kernel`).
 """
-function _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, h, n, dev)
+function _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, b, h, n, dev)
     _throw_no_ka_mesh_kernel("_launch_uniform_mesh1d_init!")
 end
 
@@ -927,6 +974,9 @@ _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_
         @simd ivdep for i in eachindex(x)
             x[i] = aₛ + (i - 1) * h
         end
+        # `aₛ + (npts - 1) * h` can miss `b` by an ulp, so an equality marker such as
+        # `x -> x == b` would mark nothing: pin the last node (gpena/Bramble.jl#695).
+        x[npts] = bₛ
     else
         # For a non-uniform grid, first generate points in the canonical interval [0, 1].
         x[1] = zero(T)
@@ -938,6 +988,10 @@ _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_
 
         # Scale and shift the points from [0, 1] to the target interval [a, b].
         @. x = a + x * (b - a)
+
+        # `a + 1 * (b - a)` can miss `b` by an ulp: pin both ends (gpena/Bramble.jl#695).
+        x[1] = a
+        x[npts] = b
 
         # Redraw any interior point the draw or the map left equal to a neighbour.
         _redraw_tied_points!(x, a, b)
@@ -1060,7 +1114,7 @@ end
 
 # Fused device counterpart of `_points!` + `spacing!` + `half_points!` + `half_spacing!`
 # together (gpena/Bramble.jl#303): one kernel launch fills `pts`, `half_pts`, `spacings`
-# and `half_spacings` from `a`, `h` and `n` alone. `_mesh` below is the only caller, before
+# and `half_spacings` from `a`, `b`, `h` and `n` alone. `_mesh` below is the only caller, before
 # a `Mesh1D` exists to pass in, which is why this takes the raw arrays rather than `Ωₕ`.
 @inline function _uniform_mesh1d_init!(
         pts::AbstractVector,
@@ -1068,12 +1122,13 @@ end
         spacings,
         half_spacings,
         a,
+        b,
         h,
         n::Int,
         backend
 )
     dev = ka_device(backend)
-    _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, h, n, dev)
+    _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, b, h, n, dev)
     return nothing
 end
 
@@ -1166,6 +1221,7 @@ function _mesh(
             _spacings,
             _half_spacings,
             a,
+            b,
             h,
             n_points,
             backend

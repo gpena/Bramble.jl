@@ -7,12 +7,9 @@ CurrentModule = Bramble
 
 ## Linear algebra backends
 
-The backend allocation hooks (`backend_eye`, `backend_zeros`, `ka_device`,
-`supports_undef_construction`) are private; see the
-[utilities internals page](../internals/utils.md).
-
 ```@docs
 backend
+Backend
 Locality
 HostLocality
 DeviceLocality
@@ -33,12 +30,18 @@ matrix
 vector_type
 matrix_type
 backend_types
+supports_undef_construction
+backend_eye
+backend_zeros
+ka_device
+ka_synchronize
 metal_sparse_csr
 metal_sparse_csc
 gpu_backend
 metal_backend
 csr_backend
 profile_backends
+BackendProfile
 sparse_refactor!
 PRECOMPILE_WORKLOAD
 ```

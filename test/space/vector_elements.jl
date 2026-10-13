@@ -911,7 +911,7 @@ end
 
         # innerₕ sums leaf by leaf: 3 leaves of constant 1, 2, 3 against all-ones, over a
         # mesh whose cell measures sum to 1 per leaf, gives 1+2+3 = 6 exactly. Runs on the
-        # heterogeneous `Wn`, since innerₕ has no shared-mesh requirement of its own.
+        # heterogeneous `Wn`: innerₕ asks only that each pair of leaves share a mesh (#701).
         u_const = element(Wn)
         v_ones = element(Wn)
         Rₕ!(u_const, (x -> 1.0, x -> 2.0, x -> 3.0))
@@ -1552,6 +1552,21 @@ WITH_SLOW_TESTS && @testset "Cell average reproduction (Supposition)" begin
         two_point = avgₕ(Wₕ, x -> x^2; quad_points = 2)
         @test all(_agree(parent(two_point)[i], exact[i]) for i in 1:npoints(Ωₕ))
     end
+end
+
+@testset "One-argument show (#700)" begin
+    uₕ = Rₕ(gridspace(mesh(domain(interval(0.0, 1.0)), 5, false)), x -> x)
+    printed = mktemp() do path, io
+        redirect_stdout(io) do
+            show(uₕ)
+        end
+        flush(io)
+        close(io)
+        return read(path, String)
+    end
+    @test printed == sprint(show, uₕ)
+    @test startswith(printed, "VectorElement{1D")
+    @test !occursin("0.25", printed)
 end
 
 end # module SpaceVectorElementsTests

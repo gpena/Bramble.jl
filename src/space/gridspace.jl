@@ -285,8 +285,9 @@ Returns the total number of degrees of freedom (DOFs) in the function space `W�
 !!! warning "The `Tuple` form means something different for a composite space"
     On a [`ScalarGridSpace`](@ref), `ndofs(Wₕ, Tuple)` is the grid's shape, with one entry
     per **spatial dimension** (`Nₓ`, `Nᵧ`, ...). On a [`CompositeGridSpace`](@ref), it is
-    instead one entry per **component**, each that component's own (scalar) DOF count,
-    unrelated to spatial dimension, and not a shape a `prod` should be taken over. Code
+    instead one entry per **top-level sub-space**, each that sub-space's total DOF count,
+    unrelated to spatial dimension, and not a shape a `prod` should be taken over. A nested
+    sub-space's entry counts all its leaves; `leaf_count` counts the scalar leaves. Code
     that does not know in advance which kind of space it was given should reach for one
     of the two unambiguous forms instead: `npoints(mesh(Wₕ), Tuple)` for the grid shape,
     or `map(ndofs, spaces(Wₕ))` for the per-component counts. Mixing them up is not
@@ -300,6 +301,10 @@ function ndofs end
     ncomponents(::Type{<:AbstractSpaceType}) -> Int
 
 Returns the number of field components of the function space (e.g. 1 for scalar, D for vector).
+
+On a [`CompositeGridSpace`](@ref) it counts the top-level sub-spaces: a nested composite
+counts its direct children. `leaf_count` counts the scalar leaves, and `components(uₕ)`
+lists them.
 """
 @inline ncomponents(::AbstractSpaceType{N}) where {N} = N
 @inline ncomponents(::Type{<:AbstractSpaceType{N}}) where {N} = N

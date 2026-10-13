@@ -4,15 +4,17 @@ using Test
 using Bramble
 using Bramble: inner₊ₓ, weights
 using LinearAlgebra: Symmetric, eigvals, isposdef
-using ..TestUtils: WITH_3D_TESTS
+using ..TestUtils: WITH_3D_TESTS, _backward_spacing_oracle, _half_spacing_oracle
 
 # `inner₊ₓ`/`inner₊ᵧ`/`inner₊₂`'s transverse factor used to hand-zero the first and last
 # entry of every other axis, deleting real quadrature weight there: a node on two or more
 # boundary hyperplanes got zero weight from every staggered direction and was absent from
-# the assembled operator entirely (gpena/Bramble.jl#236). Fixed in
-# `src/space/scalar_gridspace.jl`, `_innerplus_mean_weights!` -- see that function's own
-# docstring for why the discrete summation-by-parts identities (test/space/sbp_identities.jl)
-# do not depend on the zero, checked rather than assumed before the change.
+# the assembled operator entirely (gpena/Bramble.jl#236). The transverse factor is now
+# `cell_measures` of each other axis (the half-cell width at the boundary), which
+# `space_weights` in `src/space/scalar_gridspace.jl` reads. The discrete summation-by-parts
+# identities (test/space/sbp_identities.jl) do not depend on the old zero: each is stated
+# for a test function vanishing on the boundary, so the remainder an integration by parts
+# leaves there is already zero on its own account.
 #
 # Every check here is against an independent reference: a hand-computed eigenvalue count, a
 # manufactured solution's own exact convergence order, or a value computed a different way
@@ -23,10 +25,9 @@ using ..TestUtils: WITH_3D_TESTS
     @testset "Boundary entries: half-cell, not zero" begin
         # In 1D inner₊ has one direction, so there is no transverse factor.
         @testset "1D unaffected: no transverse factor" begin
-            # `_innerplus_mean_weights!` -- the function this fix changes -- is only ever
-            # called for D >= 2 (`space_weights(Ωₕ::AbstractMeshType{1})` uses
-            # `_innerplus_weights!` alone). `w[1] = 0` in 1D is `main`'s own zero, correct
-            # both before and after this fix: D₋ₓ genuinely has no cell behind node 1.
+            # `space_weights(Ωₕ::AbstractMeshType{1})` has the aligned factor alone.
+            # `w[1] = 0` in 1D is `main`'s own zero, correct both before and after this
+            # fix: D₋ₓ genuinely has no cell behind node 1.
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)
             w = weights(gridspace(Ωₕ), Bramble.Innerplus(), 1)
             @test w[1] == 0.0
@@ -52,6 +53,27 @@ using ..TestUtils: WITH_3D_TESTS
         @test count(iszero, wy_grid) == nx        # was 3*nx = 15 before the fix
         @test all(iszero, wy_grid[:, 1])
         @test all(!iszero, wy_grid[:, 2:end])
+    end
+
+    # The whole 2D weight on a non-uniform mesh, boundary entries included: the aligned
+    # backward spacing along d times the half-cell width along the other axis, computed
+    # from the points alone.
+    @testset "Non-uniform 2D weight, boundary included" begin
+        Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (6, 5), (false, false))
+        px, py = points(Ωₕ(1)), points(Ωₕ(2))
+        nx, ny = length(px), length(py)
+        Wₕ = gridspace(Ωₕ)
+        wx = reshape(weights(Wₕ, Bramble.Innerplus(), 1), nx, ny)
+        wy = reshape(weights(Wₕ, Bramble.Innerplus(), 2), nx, ny)
+        for j in 1:ny, i in 1:nx
+
+            @test wx[i, j] ≈ _backward_spacing_oracle(px, i) * _half_spacing_oracle(py, j)
+            @test wy[i, j] ≈ _half_spacing_oracle(px, i) * _backward_spacing_oracle(py, j)
+        end
+        # Non-trivial: the transverse boundary entries are positive and the mesh really
+        # is non-uniform.
+        @test all(>(0), wx[2:end, :]) && all(>(0), wy[:, 2:end])
+        @test !(px[2] - px[1] ≈ px[3] - px[2])
     end
 
     # `weights(Wₕ, Innerplus(), d)` against the documented sum.

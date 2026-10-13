@@ -881,6 +881,25 @@ using Bramble:
         @test b ≈ parent(cond * uₕ) .* w
     end
 
+    # gpena/Bramble.jl#702: a composite element has no `Function *` method, so the error
+    # names `*` instead of surfacing from inside `Rₕ!`. A leaf view still scales.
+    @testset "Function * composite element (#702)" begin
+        I = interval(0.0, 1.0)
+        Wₕ = gridspace(mesh(domain(I × I), (5, 4), (false, false)))
+        cₕ = Rₕ(Wₕ^2, x -> (x[1], x[2]))
+        f = x -> x[1] + 1.0
+
+        e = @test_throws MethodError f * cₕ
+        @test e.value.f === (*)
+        e = @test_throws MethodError cₕ * f
+        @test e.value.f === (*)
+
+        leaf = f * cₕ(2)
+        @test space(leaf) === space(cₕ(2))
+        @test parent(leaf) ≈ parent(Rₕ(Wₕ, x -> (x[1] + 1.0) * x[2]))
+        @test parent(cₕ(2) * f) == parent(leaf)
+    end
+
     @testset "f * VectorElement allocation (#191)" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
         Wₕ = gridspace(Ωₕ)

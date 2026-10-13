@@ -148,8 +148,8 @@ end
 #   whole files, groups `ad`, `full`, `backends` ("AD backends (expensive)" in runtests.jl)
 #     space/autodiff_heavy.jl, space/autodiff_policies.jl, ext/chainrules_enzyme_ext.jl,
 #     examples/inverse_diffusion.jl, ext/sparse_ad_ext.jl, ext/ad_backend_verification.jl,
-#     ext/sciml_sensitivity_ext.jl, examples/transient_inverse_problem.jl,
-#     ext/chainrules_ext.jl
+#     ext/sciml_sensitivity_ext.jl, examples/transient_inverse_problem.jl
+#   not gated: ext/chainrules_ext.jl runs in the `ext` group (it needs only ChainRulesCore)
 #   inline blocks, gated with `WITH_AD_TESTS` at the site
 #     form/bilinear.jl "Matrix differentiation", "Dual arguments";
 #     form/linear.jl "Parallel differentiation", the nonlinear residual Jacobian `if`,

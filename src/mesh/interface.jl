@@ -472,6 +472,16 @@ When passing `Tuple` as the second argument, returns a tuple with the number of 
 """
 function npoints end
 
+# Whether `Ωa` and `Ωb` are the same mesh: the same object, or one with the same points, so
+# a rebuilt but identical mesh passes. Counts alone are not enough. With equal counts but
+# other points, an index names the right position at the wrong place. `===` settles the
+# common case without reading a point, and `host_points` does not copy on a host mesh.
+# Points are compared as they stand; a later `change_points!` is not caught.
+@inline function _same_mesh(Ωa, Ωb)
+    return Ωa === Ωb ||
+           (npoints(Ωa, Tuple) == npoints(Ωb, Tuple) && host_points(Ωa) == host_points(Ωb))
+end
+
 """
     hₘₐₓ(Ωₕ::AbstractMeshType) -> Real
 

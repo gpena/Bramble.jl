@@ -185,7 +185,11 @@ end
     markers, lin_idx::Int
 ) where {D} = _chain_stencil(op, space, I, markers, lin_idx)
 
-@inline _in_region(op::RegionRestriction, ::Nothing, ::Int) = op.region === :interior
+# With no table a tuple region is still a union (see `_is_marked`): it holds the whole grid
+# when it names `:interior`, and is empty otherwise.
+@inline _in_region(op::RegionRestriction, ::Nothing, ::Int) = _names_interior(op.region)
+@inline _names_interior(r::Symbol) = r === :interior
+@inline _names_interior(r::Tuple) = :interior in r
 @inline _in_region(op::RegionRestriction, words, lin_idx::Int) = _is_marked(
     words, op.region, lin_idx)
 

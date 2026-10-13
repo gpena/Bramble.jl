@@ -1677,21 +1677,33 @@ const _DivCurlOperand = Union{Tuple{Vararg{VectorElement}}, VectorElement}
 
 # --- ⋅ and × over a form-side trial/test function ------------------ #
 #
-# `∇ₕ ⋅ u`/`∇ₕ × u` (and the four sibling gradient aliases) contract to `divₕ(u)`/`curlₕ(u)`
-# the same way over a symbolic `u`. `LazyOp` (ast/ast.jl) is included before this file, the
-# AST core preceding src/operators/difference.jl, so these methods
-# sit beside their `_DivCurlOperand`-typed numeric-`uₕ` siblings above.
-@inline dot(::typeof(∇ₕ), uₕ::LazyOp) = divₕ(uₕ)
-@inline ×(::typeof(∇ₕ), uₕ::LazyOp) = curlₕ(uₕ)
+# Only `∇ₕ ⋅ u`, `∇cₕ ⋅ u` and `∇̽ₕ ⋅ u` contract over a symbolic `u`: `divₕ`, `divcₕ` and
+# `div̽ₕ` have `LazyOp` methods (src/operators/difference.jl). No curl and neither `div₊ₕ`
+# nor `diṽₕ` has one, so the other seven throw an `ArgumentError` naming the missing
+# operator here, at `form`, instead of a `MethodError` on internal types at `assemble`.
+# `LazyOp` (ast/ast.jl) is included before this file, the AST core preceding
+# src/operators/difference.jl, so these methods sit beside their `_DivCurlOperand`-typed
+# numeric-`uₕ` siblings above.
+@noinline function _no_symbolic_contraction(expr::String, op::String)
+    throw(
+        ArgumentError(
+        "$expr inside a form needs a symbolic $op, which does not exist: only `∇ₕ ⋅ u`, " *
+        "`∇cₕ ⋅ u` and `∇̽ₕ ⋅ u` contract over a trial or test function"
+    ),
+    )
+end
 
-@inline dot(::typeof(∇₊ₕ), uₕ::LazyOp) = div₊ₕ(uₕ)
-@inline ×(::typeof(∇₊ₕ), uₕ::LazyOp) = curl₊ₕ(uₕ)
+@inline dot(::typeof(∇ₕ), uₕ::LazyOp) = divₕ(uₕ)
+×(::typeof(∇ₕ), ::LazyOp) = _no_symbolic_contraction("`∇ₕ × u`", "`curlₕ`")
+
+dot(::typeof(∇₊ₕ), ::LazyOp) = _no_symbolic_contraction("`∇₊ₕ ⋅ u`", "`div₊ₕ`")
+×(::typeof(∇₊ₕ), ::LazyOp) = _no_symbolic_contraction("`∇₊ₕ × u`", "`curl₊ₕ`")
 
 @inline dot(::typeof(∇cₕ), uₕ::LazyOp) = divcₕ(uₕ)
-@inline ×(::typeof(∇cₕ), uₕ::LazyOp) = curlcₕ(uₕ)
+×(::typeof(∇cₕ), ::LazyOp) = _no_symbolic_contraction("`∇cₕ × u`", "`curlcₕ`")
 
-@inline dot(::typeof(∇̃ₕ), uₕ::LazyOp) = diṽₕ(uₕ)
-@inline ×(::typeof(∇̃ₕ), uₕ::LazyOp) = curl̃ₕ(uₕ)
+dot(::typeof(∇̃ₕ), ::LazyOp) = _no_symbolic_contraction("`∇̃ₕ ⋅ u`", "`diṽₕ`")
+×(::typeof(∇̃ₕ), ::LazyOp) = _no_symbolic_contraction("`∇̃ₕ × u`", "`curl̃ₕ`")
 
 @inline dot(::typeof(∇̽ₕ), uₕ::LazyOp) = div̽ₕ(uₕ)
-@inline ×(::typeof(∇̽ₕ), uₕ::LazyOp) = curl̽ₕ(uₕ)
+×(::typeof(∇̽ₕ), ::LazyOp) = _no_symbolic_contraction("`∇̽ₕ × u`", "`curl̽ₕ`")

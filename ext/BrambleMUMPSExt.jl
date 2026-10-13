@@ -24,16 +24,40 @@ function _ensure_mpi_init()
     return nothing
 end
 
+const MUMPSControls = Tuple{Vector{Pair{Int, Int}}, Vector{Pair{Int, Float64}}}
+
+# `auto` holds the icntl and cntl of a `sym = :auto` request (`nothing` otherwise), so a
+# refactorization can repeat the SYM = 1 to SYM = 2 fallback; `failure` holds the exception
+# of a refused refactorization until one succeeds, and every solve rethrows it.
 mutable struct ConcreteMUMPSFactorization{T, TR, P} <: MUMPSFactorization{T}
     mumps::Mumps{T, TR, P}
     sym::Int
     dim::Int
+    auto::Union{Nothing, MUMPSControls}
+    failure::Union{Nothing, Exception}
+
+    # MUMPS.jl registers no finalizer, so the fact frees whichever instance it holds once
+    # unreachable or on `finalize(fact)`; `finalize!` is idempotent
+    function ConcreteMUMPSFactorization(
+            mumps::Mumps{T, TR, P}, sym, dim, auto, failure
+    ) where {T, TR, P}
+        fact = new{T, TR, P}(mumps, sym, dim, auto, failure)
+        return finalizer(_free_mumps!, fact)
+    end
 end
+
+# Julia runs pending finalizers at exit after MPI.jl's atexit hook has finalized MPI, and
+# a MUMPS call then aborts the process; the exiting process gives the memory back anyway.
+function _free_mumps!(fact::ConcreteMUMPSFactorization)
+    isdefined(MUMPS, :MPI) && MUMPS.MPI.Finalized() && return nothing
+    finalize!(fact.mumps)
+    return nothing
+end
+
+_controls(c, ::Type{V}) where {V} = c === nothing ? Pair{Int, V}[] : [Int(k) => V(v) for (k, v) in c]
 
 Base.size(fact::ConcreteMUMPSFactorization) = (fact.dim, fact.dim)
 Base.size(fact::ConcreteMUMPSFactorization, d::Integer) = d <= 2 ? fact.dim : 1
-
-Base.finalize(fact::ConcreteMUMPSFactorization) = finalize!(fact.mumps)
 
 _mumps_val_type(::Type{T}) where {T <: Union{Float32, Float64, ComplexF32, ComplexF64}} = T
 _mumps_val_type(::Type{<:Integer}) = Float64
@@ -61,6 +85,16 @@ function _mumps_sym_flag(A::AbstractMatrix, sym)
         )
     end
 end
+
+# The exception for a failed MUMPS call (`INFOG(1) < 0`): -10 is a numerically singular
+# matrix, anything else a generic error naming `phase` and both INFOG codes.
+function _mumps_error(mumps::Mumps, phase::AbstractString)
+    code, info = mumps.infog[1], mumps.infog[2]
+    code == -10 && return LinearAlgebra.SingularException(Int(info))
+    return ErrorException("MUMPS $phase failed: INFOG(1) = $code, INFOG(2) = $info")
+end
+
+_wrong_spd_guess(mumps::Mumps) = mumps.infog[1] == -10 || mumps.infog[12] > 0
 
 function Bramble._mumps_factorize(
         A::SparseMatrixCSC; sym = :auto, icntl = nothing, cntl = nothing
@@ -91,18 +125,18 @@ function Bramble._mumps_factorize(
     factorize!(mumps)
     # INFOG(1) = -10 is a zero pivot and INFOG(12) > 0 counts negative ones: under `:auto`
     # either shows the SYM = 1 guess was wrong, so factor again with pivoted LDLᵀ (SYM = 2).
-    if sym === :auto && sym_flag == 1 && (mumps.infog[1] == -10 || mumps.infog[12] > 0)
+    if sym === :auto && sym_flag == 1 && _wrong_spd_guess(mumps)
         finalize!(mumps)
         return Bramble._mumps_factorize(A; sym = 2, icntl = icntl, cntl = cntl)
     end
     if mumps.infog[1] < 0
-        code, info = mumps.infog[1], mumps.infog[2]
+        err = _mumps_error(mumps, "factorization")
         finalize!(mumps)
-        code == -10 && throw(LinearAlgebra.SingularException(Int(info)))
-        error("MUMPS factorization failed: INFOG(1) = $code, INFOG(2) = $info")
+        throw(err)
     end
 
-    return ConcreteMUMPSFactorization(mumps, sym_flag, n)
+    auto = sym === :auto ? (_controls(icntl, Int), _controls(cntl, Float64)) : nothing
+    return ConcreteMUMPSFactorization(mumps, sym_flag, n, auto, nothing)
 end
 
 function LinearAlgebra.ldiv!(
@@ -116,10 +150,14 @@ function LinearAlgebra.ldiv!(
         DimensionMismatch("Output vector length $(length(x)) does not match matrix dimension $n"),
     )
 
-    associate_rhs!(fact.mumps, b)
-    fact.mumps.job = MUMPS.SOLVE
-    MUMPS.invoke_mumps!(fact.mumps)
-    get_sol!(x, fact.mumps)
+    _check_usable(fact)
+    # `fact` stays rooted through the ccall, so its finalizer cannot free the instance
+    GC.@preserve fact begin
+        associate_rhs!(fact.mumps, b)
+        fact.mumps.job = MUMPS.SOLVE
+        MUMPS.invoke_mumps!(fact.mumps)
+        get_sol!(x, fact.mumps)
+    end
     return x
 end
 
@@ -131,10 +169,14 @@ function LinearAlgebra.ldiv!(
         DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
     )
 
-    associate_rhs!(fact.mumps, b)
-    fact.mumps.job = MUMPS.SOLVE
-    MUMPS.invoke_mumps!(fact.mumps)
-    get_sol!(b, fact.mumps)
+    _check_usable(fact)
+    # `fact` stays rooted through the ccall, so its finalizer cannot free the instance
+    GC.@preserve fact begin
+        associate_rhs!(fact.mumps, b)
+        fact.mumps.job = MUMPS.SOLVE
+        MUMPS.invoke_mumps!(fact.mumps)
+        get_sol!(b, fact.mumps)
+    end
     return b
 end
 
@@ -167,11 +209,24 @@ function Base.:\(
     return complex.(fact \ real(b), fact \ imag(b))
 end
 
+# A finalized instance makes every MUMPS.jl call a silent no-op, so refuse it here
+function _check_usable(fact::ConcreteMUMPSFactorization)
+    MUMPS.is_finalized(fact.mumps) && throw(
+        ArgumentError("the MUMPS factorization was finalized and its factors freed"),
+    )
+    fact.failure === nothing || throw(fact.failure)
+    return nothing
+end
+
 function Bramble._mumps_solve(
         A::SparseMatrixCSC, F::AbstractVector; sym = :auto, icntl = nothing, cntl = nothing
 )
     fact = Bramble._mumps_factorize(A; sym = sym, icntl = icntl, cntl = cntl)
-    return fact \ F
+    try
+        return fact \ F
+    finally
+        finalize(fact)
+    end
 end
 
 function Bramble._mumps_refactor!(fact::ConcreteMUMPSFactorization{T}, A::SparseMatrixCSC) where {T}
@@ -179,10 +234,38 @@ function Bramble._mumps_refactor!(fact::ConcreteMUMPSFactorization{T}, A::Sparse
     (m == fact.dim && n == fact.dim) || throw(
         DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
     )
+    MUMPS.is_finalized(fact.mumps) && throw(
+        ArgumentError("the MUMPS factorization was finalized and its factors freed"),
+    )
     A_mat = convert(SparseMatrixCSC{T, Int}, A)
+    GC.@preserve fact _refactor_instance!(fact, A_mat)
+    return fact
+end
+
+function _refactor_instance!(fact::ConcreteMUMPSFactorization, A_mat::SparseMatrixCSC)
     associate_matrix!(fact.mumps, A_mat)
     fact.mumps.job = MUMPS.FACTOR
     MUMPS.invoke_mumps!(fact.mumps)
+    mumps = fact.mumps
+    if fact.auto !== nothing && fact.sym == 1 && _wrong_spd_guess(mumps)
+        # The `:auto` fallback of `_mumps_factorize`: a fresh SYM = 2 instance with the
+        # caller's controls replaces the SYM = 1 one. `sym2` takes the old instance in
+        # exchange, so its finalizer never frees the one `fact` now holds
+        try
+            icntl, cntl = fact.auto
+            sym2 = Bramble._mumps_factorize(A_mat; sym = 2, icntl = icntl, cntl = cntl)
+            fact.mumps, sym2.mumps, fact.sym = sym2.mumps, mumps, 2
+            finalize(sym2)
+        catch err
+            fact.failure = err
+            rethrow()
+        end
+    elseif mumps.infog[1] < 0
+        # The factors are unusable until a refactorization succeeds; `ldiv!` refuses them
+        fact.failure = _mumps_error(mumps, "refactorization")
+        throw(fact.failure)
+    end
+    fact.failure = nothing
     return fact
 end
 

@@ -6,6 +6,8 @@ using AlgebraicMultigrid: AlgebraicMultigrid, aspreconditioner
 using SciMLBase: LinearProblem, solve
 using LinearSolve: KrylovJL_CG
 using LinearAlgebra: norm, issymmetric, ldiv!
+using SparseArrays: SparseMatrixCSC
+using SparseMatricesCSR: SparseMatrixCSR
 
 # BrambleAlgebraicMultigridExt: `amg_preconditioner` builds the AMG hierarchy
 # (solvers/amg_preconditioner.jl explains the `_`-prefixed fallback idiom), and
@@ -29,9 +31,9 @@ using LinearAlgebra: norm, issymmetric, ldiv!
 # has broadband content across the discrete spectrum instead, so the O(h^-1) growth an
 # unpreconditioned Krylov method shows on a genuinely elliptic right-hand side is real, and
 # AMG's O(1) count against it is a real contrast, not an artifact of the test problem.
-function _poisson_2d(n)
+function _poisson_2d(n; kwargs...)
     Ωd = Bramble.domain(Bramble.interval(0.0, 1.0) × Bramble.interval(0.0, 1.0))
-    Ωₕ = Bramble.mesh(Ωd, (n, n), (true, true))
+    Ωₕ = Bramble.mesh(Ωd, (n, n), (true, true); kwargs...)
     Wₕ = gridspace(Ωₕ)
     uex(x) = exp(x[1] + x[2])
     rhs(x) = -2 * uex(x)
@@ -42,6 +44,8 @@ function _poisson_2d(n)
     l = form(Wₕ, v -> innerₕ(fₕ, v))
     return a, l, bcs
 end
+
+_poisson_2d_csr(n) = _poisson_2d(n; backend = csr_backend())
 
 function _poisson_3d(n)
     Ωd = Bramble.domain(
@@ -143,9 +147,36 @@ end
         uₕ_none = solve(a, l; dirichlet = bcs, symmetrize = true, solver = KrylovJL_CG())
         @test parent(uₕ_none)≈expected atol=1e-6 rtol=1e-6
 
-        @test_throws ArgumentError solve(
-            a, l; dirichlet = bcs, symmetrize = true, preconditioner = :not_amg
-        )
+        e = try
+            solve(
+                a, l; dirichlet = bcs, symmetrize = true, solver = KrylovJL_CG(),
+                preconditioner = :not_amg
+            )
+            nothing
+        catch err
+            err
+        end
+        @test e isa ArgumentError
+        @test occursin("Unknown preconditioner: not_amg", sprint(showerror, e))
+    end
+
+    # A `csr_backend()` form assembles a `SparseMatrixCSR`, which AlgebraicMultigrid does not
+    # take: both entry points convert it, and match the CSC run on the same uniform mesh
+    # (uniform so the two meshes are point-identical).
+    @testset "amg: CSR backend form" begin
+        a_csr, l_csr, bcs_csr = _poisson_2d_csr(17)
+        a_csc, l_csc, bcs_csc = _poisson_2d(17)
+        @test assemble(a_csr; dirichlet = :boundary) isa SparseMatrixCSR
+
+        ml_csr = amg_preconditioner(a_csr; dirichlet = :boundary)
+        @test ml_csr isa AlgebraicMultigrid.MultiLevel
+        @test ml_csr.levels[1].A isa SparseMatrixCSC
+        @test ml_csr.levels[1].A == assemble(a_csc; dirichlet = :boundary)
+
+        u_csr = solve(a_csr, l_csr; dirichlet = bcs_csr, symmetrize = true,
+            solver = KrylovJL_CG(), preconditioner = :amg, reltol = 1e-12, abstol = 1e-14)
+        u_csc = solve(a_csc, l_csc; dirichlet = bcs_csc, symmetrize = true)
+        @test parent(u_csr)≈parent(u_csc) rtol=1e-8
     end
 
     # The CG iteration count stays essentially flat under mesh refinement.

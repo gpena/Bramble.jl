@@ -82,12 +82,12 @@ function _rule_component end
 # --- the device fast path (gpena/Bramble.jl#94, #174) ------------------------------- #
 #
 # `_rule_kernel`/`_rule_scatter_kernel` build a callable struct closing over the mesh's
-# point vectors (`points`/`half_points`) and indices (`_RₕKernel`, `_AvgKernel`,
-# `_AvgScatterKernel`), which is exactly right for the CPU sweep below but not
-# GPU-compilable: a device array nested in a wrapper struct is not adapted to the device,
-# and passing one into a `KernelAbstractions.@kernel` fails to compile with "passing
-# non-bitstype argument" the moment the kernel is launched, well before `f` itself is ever
-# reached (confirmed against a real Metal device while designing this). `_device_project!`/
+# point vectors (`points`/`half_points`) and indices (`_RₕKernel`, `_AvgKernel`), which is
+# exactly right for the CPU sweep below but not GPU-compilable: a device array nested in a
+# wrapper struct is not adapted to the device, and passing one into a
+# `KernelAbstractions.@kernel` fails to compile with "passing non-bitstype argument" the
+# moment the kernel is launched, well before `f` itself is ever reached (confirmed against
+# a real Metal device while designing this). `_device_project!`/
 # `_device_scatter_project!` are the alternative a rule can offer instead: a kernel built
 # only from the mesh's own coordinate *arrays*, passed to the device launcher as their own
 # top-level arguments rather than nested inside a wrapper struct.

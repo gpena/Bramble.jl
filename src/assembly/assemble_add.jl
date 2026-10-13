@@ -30,7 +30,7 @@ caller is free to change `α` (typically a `Ref`'s current value) on every call 
 replay from cache with 0 allocations.
 
 Every internal function this threads `α` through (`_replay_segment!`,
-`_scatter_point!`, `_scatter_term!`, ... ) defaults it to `true`, so `assemble!`/`assemble`'s
+`_scatter_term!`, ... ) defaults it to `true`, so `assemble!`/`assemble`'s
 own call sites need no changes at all: `weight * true` is the exact algebraic identity
 (unlike `weight * false`, which is not, for `NaN`/`Inf`/signed zero), so this is the same
 optimization `_wrap_scale` (`ast/simplifier.jl`) already relies on for `isone`/`iszero`

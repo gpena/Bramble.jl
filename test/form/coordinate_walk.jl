@@ -10,8 +10,6 @@ using Bramble:
                assemble_parallel!,
                allocate_system_matrix,
                resolve_form_ast,
-               visit_bilinear_stencil,
-               PatternSink,
                shift_op,
                D₋ₓ,
                D₊ₓ,
@@ -82,10 +80,6 @@ end
         p = _check_form(f)
         # One unit per summand, walked alone.
         @test p.halves == [-1, -1]
-        # The pattern `PatternSink` finds walking the whole fused sum names the same entries.
-        ast = resolve_form_ast(f)
-        pat = visit_bilinear_stencil(PatternSink(Int[], Int[]), ast, Wₕ, 0, 0)
-        @test Set(zip(pat.I_vec, pat.J_vec)) == _walk(f)[2]
     end
 
     @testset "coefficient" begin

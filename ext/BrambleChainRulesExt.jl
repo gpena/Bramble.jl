@@ -13,26 +13,40 @@ using PrecompileTools: @setup_workload, @compile_workload
 # reverse-mode-differentiable on its own.
 
 """
-    ChainRulesCore.rrule(::typeof(pde_solve), A::SparseMatrixCSC, F::AbstractVector)
+    ChainRulesCore.rrule(::typeof(pde_solve), A::SparseMatrixCSC, F::AbstractVector; kwargs...)
 
 Adjoint rule for [`pde_solve`](@ref): for a scalar functional `J` of the solution `u`, the
-pullback solves `Aᵀ λ = ∂J/∂u` once -- via `fact' \\ b` against the *same* LU factorisation the
+pullback solves `Aᴴ λ = ∂J/∂u` once and returns `∂J/∂A = -λ u'` (`u'` the conjugate
+transpose, so a complex `A` conjugates `u`; for real data this is `-λ uᵀ`) restricted to `A`'s
+own stored entries (never densified) and `∂J/∂F = λ`.
+
+Without keywords the adjoint solve is `fact' \\ b` against the *same* LU factorisation the
 forward solve already computed, which is exact and requires no second factorisation whether or
 not `A` is symmetric (a constrained row's `eₖ` replacement, `dirichlet_bc!`'s own convention,
-makes even a naturally symmetric form structurally asymmetric) -- and returns `∂J/∂A = -λ uᵀ`
-restricted to `A`'s own stored entries (never densified) and `∂J/∂F = λ`.
+makes even a naturally symmetric form structurally asymmetric). With keywords (`solver`, `sym`,
+and the backend's own) the primal is `pde_solve(A, F; kwargs...)` and the adjoint solve is
+`pde_solve(sparse(A'), ∂J/∂u; kwargs...)`, so the same backend and hint apply to `Aᴴ`. A `sym`
+hint must therefore hold for `Aᴴ` as well as `A`, which it does for the symmetric, Hermitian
+and positive definite cases it describes.
 """
-function ChainRulesCore.rrule(::typeof(pde_solve), A::SparseMatrixCSC, F::AbstractVector)
-    fact = lu(A)
-    u = fact \ F
+function ChainRulesCore.rrule(
+        ::typeof(pde_solve), A::SparseMatrixCSC, F::AbstractVector; kwargs...)
+    if isempty(kwargs)
+        fact = lu(A)
+        u = fact \ F
+        adjoint_solve = ȳ -> fact' \ ȳ
+    else
+        u = pde_solve(A, F; kwargs...)
+        adjoint_solve = ȳ -> pde_solve(sparse(A'), ȳ; kwargs...)
+    end
     function pde_solve_pullback(ȳ)
-        λ = fact' \ unthunk(ȳ)
+        λ = adjoint_solve(unthunk(ȳ))
         Ā = similar(A)
         rows = rowvals(A)
         Āv = nonzeros(Ā)
         for j in axes(A, 2), k in nzrange(A, j)
 
-            Āv[k] = -λ[rows[k]] * u[j]
+            Āv[k] = -λ[rows[k]] * conj(u[j])
         end
         return (NoTangent(), Ā, λ)
     end

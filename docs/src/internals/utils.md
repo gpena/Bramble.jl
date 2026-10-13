@@ -13,13 +13,6 @@ Public = false
 Pages = ["utils/backend.jl", ]
 ```
 
-## Device dispatch
-
-```@docs
-ka_device
-ka_synchronize
-```
-
 ## Linear algebra
 
 ```@autodocs

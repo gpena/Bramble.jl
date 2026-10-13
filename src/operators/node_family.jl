@@ -55,8 +55,9 @@ function _node_dimensional_expr(node_name, alias_name, alias_stem, what; source 
     """
 
     method = :(@inline function $(alias_name)(op::LazyOp{D}, ::Val{Dim}) where {D, Dim}
-        1 <= Dim <= D || _throw_stencil_dim_error(Dim, D)
-        return $(node_name){D, Dim, typeof(op)}(op)
+        _check_stencil_dim(Dim, D)
+        # an `Int32` or `UInt` direction builds the `Int` node, the one assembly knows
+        return $(node_name){D, Int(Dim), typeof(op)}(op)
     end)
 
     return Expr[

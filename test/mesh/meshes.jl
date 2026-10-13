@@ -624,6 +624,17 @@ end
         Ωc = mesh(domain(interval(3.0, 3.0)), 1, true)
         @test spacings(Ωc) == [0.0]
         @test spacing(Ωc, 1) == 0.0
+
+        # Several points on a collapsed mesh would keep zero spacings: refused, naming the
+        # degenerate interval and the count, with the mesh unchanged (#696).
+        p0 = copy(points(Ωc))
+        v0 = Bramble._mesh_version(Ωc)
+        @test_throws ArgumentError Bramble.set_points!(Ωc, [0.0, 0.5, 1.0])
+        @test_throws ["3 points", "[3.0, 3.0]"] Bramble.set_points!(Ωc, [0.0, 0.5, 1.0])
+        @test points(Ωc) == p0
+        @test spacings(Ωc) == [0.0]
+        @test Bramble._mesh_version(Ωc) == v0
+        @test is_collapsed(Ωc)
     end
 
     @testset "Derivative views" begin

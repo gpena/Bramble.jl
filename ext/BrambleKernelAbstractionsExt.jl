@@ -63,24 +63,25 @@ import Bramble:
 # points, spacings, half points and half spacings together, replacing a uniform point fill
 # plus the three sequential launches below (`_launch_spacing!`, `_launch_half_points!`,
 # `_launch_half_spacing!`) for a uniform device mesh. Every entry is closed-form arithmetic
-# on `a`, `h` and `n` alone -- unlike `_half_points_kernel!`/`_half_spacing_kernel!` below,
+# on `a`, `b`, `h` and `n` alone -- unlike `_half_points_kernel!`/`_half_spacing_kernel!` below,
 # which read `pts`/`h` back from global memory, this kernel reads nothing. `src/mesh/mesh1d.jl`
 # dispatches only the uniform, non-collapsed, device-backed, `n >= 2` case here; a
 # non-uniform or host-backed mesh keeps going through the three kernels below.
 # ---------------------------------------------------------------------------
 
-@kernel function _uniform_mesh1d_init_kernel!(pts, half_pts, spacings, half_spacings, a, h, n)
+@kernel function _uniform_mesh1d_init_kernel!(pts, half_pts, spacings, half_spacings, a, b, h, n)
     i = @index(Global)
     @inbounds begin
         if i <= n
-            pts[i] = a + (i - 1) * h
+            # the last node is `b` itself, not `a + (n - 1) * h` (gpena/Bramble.jl#695)
+            pts[i] = i == n ? b : a + (i - 1) * h
             spacings[i] = h
             half_spacings[i] = (i == 1 || i == n) ? h / 2 : h
         end
         if i == 1
             half_pts[i] = a
         elseif i == n + 1
-            half_pts[i] = a + (n - 1) * h
+            half_pts[i] = b
         else
             half_pts[i] = a + (2i - 3) * h / 2
         end
@@ -89,9 +90,9 @@ end
 
 function _launch_uniform_mesh1d_init!(
         pts::AbstractVector, half_pts::AbstractVector, spacings::AbstractVector,
-        half_spacings::AbstractVector, a, h, n::Int, dev
+        half_spacings::AbstractVector, a, b, h, n::Int, dev
 )
-    _uniform_mesh1d_init_kernel!(dev)(pts, half_pts, spacings, half_spacings, a, h, n; ndrange = n + 1)
+    _uniform_mesh1d_init_kernel!(dev)(pts, half_pts, spacings, half_spacings, a, b, h, n; ndrange = n + 1)
     return nothing
 end
 
@@ -250,9 +251,12 @@ end
 # arrays instead.
 # ---------------------------------------------------------------------------
 
-# The context every device-kernel launch below adds to whatever the compiler actually
-# raised, so a closure that boxes a capture or allocates unexpectedly gets pointed at the
-# reason rather than a bare wall of `GPUCompiler`/`KernelAbstractions` frames. Confirmed
+# The context every launch of a user-supplied function (`_gpu_for!`, `_gpu_scatter_for!`,
+# `Rₕ!`, `avgₕ!`) adds to whatever the compiler actually raised, so a closure that boxes a
+# capture or allocates unexpectedly gets pointed at the reason rather than a bare wall of
+# `GPUCompiler`/`KernelAbstractions` frames. Launchers with no user function (difference,
+# average, divergence, curl, Laplacian, strain, SpMV, SpMM, Kronecker) let their errors
+# surface as themselves: there the message would blame a function nobody supplied. Confirmed
 # against a real Metal device: a closure boxing a `mutable struct` field fails to compile
 # with a `GPUCompiler.InvalidIRError` reading "unsupported use of an undefined name" /
 # "unsupported dynamic function invocation" for each offending call.
@@ -264,6 +268,20 @@ end
         "global variable) -- this is inherent to GPU compilation, not specific to " *
         "$opname. The underlying compiler error is:\n\n$(sprint(showerror, err))",
     )
+end
+
+# Launches `kernel(args...; ndrange)`, rewording any error through
+# `_wrap_device_kernel_error`. `Vararg{Any, N}` and `K` force specialisation. A launch
+# through it allocates a few dozen bytes more than the inline `try` it replaces (about
+# 32-112 B on a ~2 KB Metal launch); positional `ndrange`, a tuple and `@noinline` all
+# measured the same.
+@inline function _guarded_launch(opname::String, kernel::K, args::Vararg{Any, N}; ndrange) where {K, N}
+    try
+        kernel(args...; ndrange = ndrange)
+    catch err
+        _wrap_device_kernel_error(err, opname)
+    end
+    return nothing
 end
 
 # --- the generic `_sweep_for!`/`_sweep_scatter_for!` seam ------------------ #
@@ -280,11 +298,7 @@ end
 
 function _gpu_for!(policy, v::AbstractArray, idxs, f)
     dev = get_backend(v)
-    try
-        _generic_for_kernel!(dev)(v, idxs, f; ndrange = length(idxs))
-    catch err
-        _wrap_device_kernel_error(err, "_gpu_for!")
-    end
+    _guarded_launch("_gpu_for!", _generic_for_kernel!(dev), v, idxs, f; ndrange = length(idxs))
     return nothing
 end
 
@@ -297,11 +311,8 @@ end
 
 function _gpu_scatter_for!(policy, mats::Tuple, idxs, g)
     dev = get_backend(mats[1])
-    try
-        _generic_scatter_kernel!(dev)(mats, idxs, g; ndrange = length(idxs))
-    catch err
-        _wrap_device_kernel_error(err, "_gpu_scatter_for!")
-    end
+    _guarded_launch(
+        "_gpu_scatter_for!", _generic_scatter_kernel!(dev), mats, idxs, g; ndrange = length(idxs))
     return nothing
 end
 
@@ -329,11 +340,7 @@ end
 end
 
 function _launch_restriction!(v::AbstractVector, pts::AbstractVector, f, dev, sel)
-    try
-        _restriction_kernel!(dev)(v, pts, f, sel; ndrange = _launch_range(sel, length(v)))
-    catch err
-        _wrap_device_kernel_error(err, "Rₕ!")
-    end
+    _guarded_launch("Rₕ!", _restriction_kernel!(dev), v, pts, f, sel; ndrange = _launch_range(sel, length(v)))
     return nothing
 end
 
@@ -344,11 +351,8 @@ end
 end
 
 function _launch_restriction_scatter!(mats::Tuple, pts::AbstractVector, f, dev, sel)
-    try
-        _restriction_scatter_kernel!(dev)(mats, pts, f, sel; ndrange = _launch_range(sel, length(pts)))
-    catch err
-        _wrap_device_kernel_error(err, "Rₕ!")
-    end
+    _guarded_launch(
+        "Rₕ!", _restriction_scatter_kernel!(dev), mats, pts, f, sel; ndrange = _launch_range(sel, length(pts)))
     return nothing
 end
 
@@ -366,11 +370,7 @@ end
 end
 
 function _launch_restriction_nd!(v::AbstractVector, pts::Tuple, idxs, f, dev, sel)
-    try
-        _restriction_nd_kernel!(dev)(v, pts, idxs, f, sel; ndrange = _launch_range(sel, length(v)))
-    catch err
-        _wrap_device_kernel_error(err, "Rₕ!")
-    end
+    _guarded_launch("Rₕ!", _restriction_nd_kernel!(dev), v, pts, idxs, f, sel; ndrange = _launch_range(sel, length(v)))
     return nothing
 end
 
@@ -383,11 +383,9 @@ end
 end
 
 function _launch_restriction_scatter_nd!(mats::Tuple, pts::Tuple, idxs, f, dev, sel)
-    try
-        _restriction_scatter_nd_kernel!(dev)(mats, pts, idxs, f, sel; ndrange = _launch_range(sel, length(idxs)))
-    catch err
-        _wrap_device_kernel_error(err, "Rₕ!")
-    end
+    _guarded_launch(
+        "Rₕ!", _restriction_scatter_nd_kernel!(dev), mats, pts, idxs, f, sel;
+        ndrange = _launch_range(sel, length(idxs)))
     return nothing
 end
 
@@ -403,11 +401,8 @@ end
 end
 
 function _launch_cell_average!(v::AbstractVector, x::AbstractVector, nodes, wts, f, dev, sel)
-    try
-        _cell_average_kernel!(dev)(v, x, nodes, wts, f, sel; ndrange = _launch_range(sel, length(v)))
-    catch err
-        _wrap_device_kernel_error(err, "avgₕ!")
-    end
+    _guarded_launch(
+        "avgₕ!", _cell_average_kernel!(dev), v, x, nodes, wts, f, sel; ndrange = _launch_range(sel, length(v)))
     return nothing
 end
 
@@ -419,11 +414,8 @@ end
 
 function _launch_cell_average_scatter!(mats::Tuple, x::AbstractVector, nodes, wts, f, dev, sel)
     n = length(x) - 1
-    try
-        _cell_average_scatter_kernel!(dev)(mats, x, nodes, wts, f, sel; ndrange = _launch_range(sel, n))
-    catch err
-        _wrap_device_kernel_error(err, "avgₕ!")
-    end
+    _guarded_launch(
+        "avgₕ!", _cell_average_scatter_kernel!(dev), mats, x, nodes, wts, f, sel; ndrange = _launch_range(sel, n))
     return nothing
 end
 
@@ -438,11 +430,9 @@ end
 end
 
 function _launch_cell_average_nd!(v::AbstractVector, x::Tuple, idxs, nodes, wts, f, dev, sel)
-    try
-        _cell_average_nd_kernel!(dev)(v, x, idxs, nodes, wts, f, sel; ndrange = _launch_range(sel, length(v)))
-    catch err
-        _wrap_device_kernel_error(err, "avgₕ!")
-    end
+    _guarded_launch(
+        "avgₕ!", _cell_average_nd_kernel!(dev), v, x, idxs, nodes, wts, f, sel;
+        ndrange = _launch_range(sel, length(v)))
     return nothing
 end
 
@@ -455,12 +445,9 @@ end
 end
 
 function _launch_cell_average_scatter_nd!(mats::Tuple, x::Tuple, idxs, nodes, wts, f, dev, sel)
-    try
-        _cell_average_scatter_nd_kernel!(dev)(
-            mats, x, idxs, nodes, wts, f, sel; ndrange = _launch_range(sel, length(idxs)))
-    catch err
-        _wrap_device_kernel_error(err, "avgₕ!")
-    end
+    _guarded_launch(
+        "avgₕ!", _cell_average_scatter_nd_kernel!(dev), mats, x, idxs, nodes, wts, f, sel;
+        ndrange = _launch_range(sel, length(idxs)))
     return nothing
 end
 
@@ -507,6 +494,10 @@ end
 # KernelAbstractions copy kernel of the same size shows that launch overhead and the flat
 # `@index(Global)` pattern are not the cost. `benchmark/gpu_stencils.jl` reruns the
 # comparison in its `_run_int32_index` section.
+#
+# Every launcher of an `Int32`-index kernel calls `Bramble._check_int32_extent` once on
+# the host first: past `typemax(Int32)` entries the device-side conversion would fail where
+# the host cannot see it, so the host refuses the launch with an `ArgumentError` instead.
 #
 # A "fraction of peak" figure anywhere in this file or its benchmarks uses the peak measured
 # on this host (a plain KA copy kernel), not the hardware spec figure. Even that is a floor,
@@ -604,17 +595,14 @@ end
 
 function _launch_difference_onesided!(
         out::AbstractVector, in_ref, h, dims::Tuple, dir, dim_val::Val{DIM}, dev) where {DIM}
+    Bramble._check_int32_extent(length(out), "difference")
     n = dims[DIM]
     s = _axis_stride(dims, dim_val)
     invh = _reciprocal_spacing(h)
     boundary_idx = Int32(Bramble._stencil_boundary_dim(dir, n))
-    try
-        _difference_onesided_kernel!(dev)(
-            out, in_ref, h, invh, Int32(n), s, boundary_idx, dir, dim_val; ndrange = length(out)
-        )
-    catch err
-        _wrap_device_kernel_error(err, "difference operator")
-    end
+    _difference_onesided_kernel!(dev)(
+        out, in_ref, h, invh, Int32(n), s, boundary_idx, dir, dim_val; ndrange = length(out)
+    )
     return nothing
 end
 
@@ -659,14 +647,11 @@ end
 
 function _launch_difference_centered!(
         out::AbstractVector, in_ref, h, dims::Tuple, dir, dim_val::Val{DIM}, dev) where {DIM}
+    Bramble._check_int32_extent(length(out), "difference")
     n = dims[DIM]
     s = _axis_stride(dims, dim_val)
     invh = _reciprocal_spacing(h)
-    try
-        _difference_centered_kernel!(dev)(out, in_ref, h, invh, Int32(n), s, dir, dim_val; ndrange = length(out))
-    catch err
-        _wrap_device_kernel_error(err, "centered difference operator")
-    end
+    _difference_centered_kernel!(dev)(out, in_ref, h, invh, Int32(n), s, dir, dim_val; ndrange = length(out))
     return nothing
 end
 
@@ -686,14 +671,11 @@ end
 end
 
 function _launch_average_engine!(out::AbstractVector, in_ref, dims::Tuple, dir, dim_val::Val{DIM}, dev) where {DIM}
+    Bramble._check_int32_extent(length(out), "average")
     n = dims[DIM]
     s = _axis_stride(dims, dim_val)
     boundary_idx = Int32(Bramble._stencil_boundary_dim(dir, n))
-    try
-        _average_kernel!(dev)(out, in_ref, Int32(n), s, boundary_idx, dir, dim_val; ndrange = length(out))
-    catch err
-        _wrap_device_kernel_error(err, "average operator")
-    end
+    _average_kernel!(dev)(out, in_ref, Int32(n), s, boundary_idx, dir, dim_val; ndrange = length(out))
     return nothing
 end
 
@@ -720,11 +702,7 @@ end
 
 function _launch_spmv_csr!(y::AbstractVector, rowPtr, colVal, nzVal, x::AbstractVector, α, β)
     dev = get_backend(y)
-    try
-        _spmv_csr_kernel!(dev)(y, rowPtr, colVal, nzVal, x, α, β; ndrange = length(y))
-    catch err
-        _wrap_device_kernel_error(err, "Metal sparse mul! (SpMV)")
-    end
+    _spmv_csr_kernel!(dev)(y, rowPtr, colVal, nzVal, x, α, β; ndrange = length(y))
     return nothing
 end
 
@@ -805,16 +783,14 @@ end
 end
 
 function _launch_kron_fused!(y::AbstractVector, x::AbstractVector, dims, strides, cs, facs, β, βzero)
+    # `Int32` index arithmetic, since 64-bit integer division is emulated on Apple GPUs:
+    # `@index(Global) % Int32` wraps silently past `typemax(Int32)` entries, so the host
+    # refuses that many first, with an `ArgumentError`. `length(y)` is `prod(dims)`.
+    Bramble._check_int32_extent(length(y), "Kronecker mul!")
     dev = get_backend(y)
-    # `Int32` index arithmetic (an `InexactError` past `typemax(Int32)` entries): 64-bit
-    # integer division is emulated on Apple GPUs.
     dims32 = map(Int32, dims)
     strides32 = map(Int32, strides)
-    try
-        _kron_fused_kernel!(dev)(y, x, dims32, strides32, cs, facs, β, βzero; ndrange = length(y))
-    catch err
-        _wrap_device_kernel_error(err, "KroneckerLinearOperator mul!")
-    end
+    _kron_fused_kernel!(dev)(y, x, dims32, strides32, cs, facs, β, βzero; ndrange = length(y))
     return nothing
 end
 
@@ -833,11 +809,7 @@ end
 
 function _launch_spmm_csr!(C::AbstractMatrix, rowPtr, colVal, nzVal, B::AbstractMatrix, α, β)
     dev = get_backend(C)
-    try
-        _spmm_csr_kernel!(dev)(C, rowPtr, colVal, nzVal, B, α, β; ndrange = size(C))
-    catch err
-        _wrap_device_kernel_error(err, "Metal sparse mul! (SpMM)")
-    end
+    _spmm_csr_kernel!(dev)(C, rowPtr, colVal, nzVal, B, α, β; ndrange = size(C))
     return nothing
 end
 
@@ -905,27 +877,24 @@ end
 end
 
 function _launch_fused_divergence!(out::AbstractVector, comps::Tuple, hs::Tuple, dims::Tuple, dir, dev)
+    Bramble._check_int32_extent(length(out), "divergence")
     D = length(dims)
     strides = ntuple(d -> _axis_stride(dims, Val(d)), Val(D))
     ns32 = ntuple(d -> Int32(dims[d]), Val(D))
     invhs = map(h -> inv.(h), hs)
-    try
-        if D == 1
-            _fused_divergence1d_kernel!(dev)(out, comps[1], invhs[1], ns32[1], strides[1], dir; ndrange = length(out))
-        elseif D == 2
-            _fused_divergence2d_kernel!(dev)(
-                out, comps[1], comps[2], invhs[1], invhs[2], ns32[1], ns32[2], strides[1], strides[2], dir;
-                ndrange = length(out)
-            )
-        else
-            _fused_divergence3d_kernel!(
-                dev)(
-                out, comps[1], comps[2], comps[3], invhs[1], invhs[2], invhs[3], ns32[1], ns32[2], ns32[3],
-                strides[1], strides[2], strides[3], dir; ndrange = length(out)
-            )
-        end
-    catch err
-        _wrap_device_kernel_error(err, "divₕ!/div₊ₕ!")
+    if D == 1
+        _fused_divergence1d_kernel!(dev)(out, comps[1], invhs[1], ns32[1], strides[1], dir; ndrange = length(out))
+    elseif D == 2
+        _fused_divergence2d_kernel!(dev)(
+            out, comps[1], comps[2], invhs[1], invhs[2], ns32[1], ns32[2], strides[1], strides[2], dir;
+            ndrange = length(out)
+        )
+    else
+        _fused_divergence3d_kernel!(
+            dev)(
+            out, comps[1], comps[2], comps[3], invhs[1], invhs[2], invhs[3], ns32[1], ns32[2], ns32[3],
+            strides[1], strides[2], strides[3], dir; ndrange = length(out)
+        )
     end
     return nothing
 end
@@ -941,17 +910,14 @@ end
 end
 
 function _launch_fused_curl2d!(out::AbstractVector, u1, u2, h1, h2, dims::Tuple, dir, dev)
+    Bramble._check_int32_extent(length(out), "curl")
     s1 = _axis_stride(dims, Val(1))
     s2 = _axis_stride(dims, Val(2))
     invh1 = inv.(h1)
     invh2 = inv.(h2)
-    try
-        _fused_curl2d_kernel!(dev)(
-            out, u1, u2, invh1, invh2, Int32(dims[1]), Int32(dims[2]), s1, s2, dir; ndrange = length(out)
-        )
-    catch err
-        _wrap_device_kernel_error(err, "curlₕ!/curl₊ₕ!")
-    end
+    _fused_curl2d_kernel!(dev)(
+        out, u1, u2, invh1, invh2, Int32(dims[1]), Int32(dims[2]), s1, s2, dir; ndrange = length(out)
+    )
     return nothing
 end
 
@@ -968,18 +934,15 @@ end
 end
 
 function _launch_fused_curl3d!(out1, out2, out3, u1, u2, u3, h1, h2, h3, dims::Tuple, dir, dev)
+    Bramble._check_int32_extent(length(out1), "curl")
     s1 = _axis_stride(dims, Val(1))
     s2 = _axis_stride(dims, Val(2))
     s3 = _axis_stride(dims, Val(3))
     invh1, invh2, invh3 = inv.(h1), inv.(h2), inv.(h3)
-    try
-        _fused_curl3d_kernel!(dev)(
-            out1, out2, out3, u1, u2, u3, invh1, invh2, invh3, Int32(dims[1]), Int32(dims[2]), Int32(dims[3]),
-            s1, s2, s3, dir; ndrange = length(out1)
-        )
-    catch err
-        _wrap_device_kernel_error(err, "curlₕ!/curl₊ₕ!")
-    end
+    _fused_curl3d_kernel!(dev)(
+        out1, out2, out3, u1, u2, u3, invh1, invh2, invh3, Int32(dims[1]), Int32(dims[2]), Int32(dims[3]),
+        s1, s2, s3, dir; ndrange = length(out1)
+    )
     return nothing
 end
 
@@ -1059,29 +1022,26 @@ end
 end
 
 function _launch_fused_laplacian!(out::AbstractVector, u, hbs::Tuple, hss::Tuple, dims::Tuple, dev)
+    Bramble._check_int32_extent(length(out), "Laplacian")
     D = length(dims)
     strides = ntuple(d -> _axis_stride(dims, Val(d)), Val(D))
     ns32 = ntuple(d -> Int32(dims[d]), Val(D))
-    try
-        if D == 1
-            _fused_laplacian1d_kernel!(dev)(
-                out, u, hbs[1], hss[1], ns32[1], strides[1]; ndrange = length(out)
-            )
-        elseif D == 2
-            _fused_laplacian2d_kernel!(
-                dev)(
-                out, u, hbs[1], hss[1], hbs[2], hss[2], ns32[1], ns32[2], strides[1], strides[2];
-                ndrange = length(out)
-            )
-        else
-            _fused_laplacian3d_kernel!(
-                dev)(
-                out, u, hbs[1], hss[1], hbs[2], hss[2], hbs[3], hss[3],
-                ns32[1], ns32[2], ns32[3], strides[1], strides[2], strides[3]; ndrange = length(out)
-            )
-        end
-    catch err
-        _wrap_device_kernel_error(err, "Δₕ!")
+    if D == 1
+        _fused_laplacian1d_kernel!(dev)(
+            out, u, hbs[1], hss[1], ns32[1], strides[1]; ndrange = length(out)
+        )
+    elseif D == 2
+        _fused_laplacian2d_kernel!(
+            dev)(
+            out, u, hbs[1], hss[1], hbs[2], hss[2], ns32[1], ns32[2], strides[1], strides[2];
+            ndrange = length(out)
+        )
+    else
+        _fused_laplacian3d_kernel!(
+            dev)(
+            out, u, hbs[1], hss[1], hbs[2], hss[2], hbs[3], hss[3],
+            ns32[1], ns32[2], ns32[3], strides[1], strides[2], strides[3]; ndrange = length(out)
+        )
     end
     return nothing
 end
@@ -1138,17 +1098,14 @@ end
 function _launch_fused_strain_offdiag!(
         out::AbstractVector, ui, uj, hi, hj, dims::Tuple, dim_i::Val{I}, dim_j::Val{J}, dev
 ) where {I, J}
+    Bramble._check_int32_extent(length(out), "strain")
     si = _axis_stride(dims, dim_i)
     sj = _axis_stride(dims, dim_j)
     invh_i = inv.(hi)
     invh_j = inv.(hj)
-    try
-        _fused_strain_offdiag_kernel!(dev)(
-            out, ui, uj, invh_i, invh_j, Int32(dims[I]), Int32(dims[J]), si, sj; ndrange = length(out)
-        )
-    catch err
-        _wrap_device_kernel_error(err, "εₕ!")
-    end
+    _fused_strain_offdiag_kernel!(dev)(
+        out, ui, uj, invh_i, invh_j, Int32(dims[I]), Int32(dims[J]), si, sj; ndrange = length(out)
+    )
     return nothing
 end
 

@@ -235,50 +235,6 @@ See also: [`fdm_factorize`](@ref), [`fdm_factorize!`](@ref), [`fdm_solve`](@ref)
 """
 function fdm_solve! end
 
-"""
-    _launch_spmv_csr!(y, rowPtr, colVal, nzVal, x, α, β) -> Nothing
-
-Row-parallel sparse matrix-vector product `y .= α .* (A * x) .+ β .* y`, where `A`'s
-storage is given as the raw CSR arrays `rowPtr`, `colVal`, `nzVal` -- never a struct
-wrapping them, since a struct nesting a device array fails `KernelAbstractions` kernel
-compilation. One work item owns one output row, so there are no write conflicts and no
-atomics.
-
-Requires `using KernelAbstractions`; the real method is supplied by
-`BrambleKernelAbstractionsExt`.
-
-# Throws
-- `ErrorException`: if `KernelAbstractions` is not loaded.
-"""
-function _launch_spmv_csr!(y, rowPtr, colVal, nzVal, x, α, β)
-    return _throw_no_ka_sparse_kernel("_launch_spmv_csr!")
-end
-
-"""
-    _launch_spmm_csr!(C, rowPtr, colVal, nzVal, B, α, β) -> Nothing
-
-Row-parallel sparse matrix-matrix product `C .= α .* (A * B) .+ β .* C` for a dense
-right-hand side `B`, where `A`'s storage is given as the raw CSR arrays `rowPtr`, `colVal`,
-`nzVal`. See [`_launch_spmv_csr!`](@ref) for the extension contract and why the arrays are
-passed separately rather than as a struct.
-
-Requires `using KernelAbstractions`; the real method is supplied by
-`BrambleKernelAbstractionsExt`.
-
-# Throws
-- `ErrorException`: if `KernelAbstractions` is not loaded.
-"""
-function _launch_spmm_csr!(C, rowPtr, colVal, nzVal, B, α, β)
-    return _throw_no_ka_sparse_kernel("_launch_spmm_csr!")
-end
-
-@noinline function _throw_no_ka_sparse_kernel(name::String)
-    return error(
-        "$name has no method loaded. Add `using KernelAbstractions` before calling " *
-        "Metal sparse `mul!`.",
-    )
-end
-
 # --- Submodule Includes ---
 include("utils/macros.jl")
 include("utils/backend.jl")
@@ -376,6 +332,7 @@ include("solvers/sparspak_solver.jl")
 include("solvers/sparse_solvers.jl")
 include("solvers/pde_solve.jl")
 
+include("exporters/common.jl")
 include("exporters/vtk_export.jl")
 include("exporters/pgfplots_export.jl")
 

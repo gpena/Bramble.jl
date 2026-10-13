@@ -130,7 +130,7 @@ end
 @inline backend(Wₕ::CompositeGridSpace) = backend(first_space(Wₕ))
 @inline execution_policy(Wₕ::CompositeGridSpace) = execution_policy(backend(Wₕ))
 @inline ndofs(Wₕ::CompositeGridSpace) = sum(ndofs, Wₕ.spaces)
-# One entry per *component*, not per spatial dimension: see the warning on the
+# One entry per *top-level sub-space*, not per spatial dimension: see the warning on the
 # `ndofs` stub (space/gridspace.jl) for why this is not interchangeable with the
 # scalar method's `Tuple` form of the same name.
 @inline ndofs(Wₕ::CompositeGridSpace, ::Type{Tuple}) = map(ndofs, Wₕ.spaces)
@@ -166,7 +166,20 @@ end
 # Collection Interface
 # ==============================================================================
 
+"""
+    getindex(Wₕ::CompositeGridSpace, i::Int) -> AbstractSpaceType
+
+Returns the `i`-th top-level sub-space of `Wₕ`. It is itself a composite when `Wₕ` is
+nested. `leaf_count` counts the scalar leaves across all levels.
+"""
 @inline Base.getindex(Wₕ::CompositeGridSpace, i::Int) = Wₕ.spaces[i]
+
+"""
+    length(Wₕ::CompositeGridSpace) -> Int
+
+Returns the number of top-level sub-spaces of `Wₕ`. A nested composite counts its direct
+children; `leaf_count` counts the scalar leaves.
+"""
 @inline Base.length(::CompositeGridSpace{N}) where {N} = N
 @inline Base.firstindex(::CompositeGridSpace) = 1
 @inline Base.lastindex(::CompositeGridSpace{N}) where {N} = N

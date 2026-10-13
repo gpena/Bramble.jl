@@ -28,6 +28,13 @@ Sparspak has no binary dependency, so it factors matrices whose entries are not
 `Float64`/`ComplexF64` -- `Float32`, `BigFloat`, or a `ForwardDiff.Dual` -- where SuiteSparse
 and MUMPS cannot.
 
+A singular matrix throws a `SingularException`, as it does for SuiteSparse, MUMPS and
+Accelerate, from the factorization or from the solve: a rank-deficient or structurally
+singular matrix at factorization, and a stored zero pivot or an empty row or column when a
+solve returns a non-finite entry for a finite right-hand side. Sparspak's own failure is
+a misleading `ErrorException` or an `Inf` in the solution. The index of the
+`SingularException` is `0`, not a pivot position.
+
 A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
 
 Requires [Sparspak.jl](https://github.com/JuliaSparse/Sparspak.jl); call `using Sparspak`
@@ -68,6 +75,9 @@ end
 Directly solve `A u = F` (or `assemble(a, l)` system) using Sparspak's pure-Julia sparse
 direct LU factorization.
 
+A singular matrix throws a `SingularException` with index `0` (see
+[`sparspak_factorize`](@ref)).
+
 A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
 
 Requires [Sparspak.jl](https://github.com/JuliaSparse/Sparspak.jl); call `using Sparspak`
@@ -106,7 +116,7 @@ end
 
 Recompute the numeric factorization of `A` inside `fact` **reusing the existing symbolic
 factorization** (fill-reducing ordering). `A` must have the exact same sparsity pattern as
-the matrix originally factored.
+the matrix originally factored. A singular `A` throws a `SingularException` with index `0`.
 
 See also [`refactor!`](@ref), [`sparspak_factorize`](@ref).
 """

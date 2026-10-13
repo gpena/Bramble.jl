@@ -261,7 +261,7 @@ end
     # reach the stencil and fault or return all zeros. It comes before `_op_mesh(uₕ)(DIM)`:
     # on a 1D mesh `Ωₕ(2) === Ωₕ` passes, and the index `I[DIM]` faults only later.
     D = length(_grid_dims(uₕ))
-    1 <= DIM <= D || _throw_stencil_dim_error(DIM, D)
+    _check_stencil_dim(DIM, D)
     sub = _op_mesh(uₕ)(DIM)
     precheck(sub, DIM)
     _apply_stencil!(vₕ, uₕ, spacing_func(sub), dir, dim_val)
@@ -598,7 +598,7 @@ function _derivative_weights!(
 ) where {F, DIFF_DIM}
     dims = npoints(Ωₕ, Tuple)
 
-    1 <= DIFF_DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIFF_DIM, dim(Ωₕ))
+    _check_stencil_dim(DIFF_DIM, dim(Ωₕ))
 
     sub = Ωₕ(DIFF_DIM)
     li = LinearIndices(dims)
@@ -677,7 +677,7 @@ for config in _DIFFERENCE_OP_CONFIGS
         function $(Symbol(diff_name, :_dim!))(
                 out, in, h, dims::NTuple{D, Int}, diff_dim::Val{DIFF_DIM}
         ) where {D, DIFF_DIM}
-            1 <= DIFF_DIM <= D || _throw_stencil_dim_error(DIFF_DIM, D)
+            _check_stencil_dim(DIFF_DIM, D)
             length(out) == length(in) == prod(dims) ||
                 _throw_stencil_size_error(length(out), length(in), dims)
             in_ref = (out === in) ? copy(in) : in
@@ -963,7 +963,7 @@ end
 @inline function _extended_weights!(
         w::AbstractVector, Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, weight::F
 ) where {F, DIFF_DIM}
-    1 <= DIFF_DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIFF_DIM, dim(Ωₕ))
+    _check_stencil_dim(DIFF_DIM, dim(Ωₕ))
 
     dims = npoints(Ωₕ, Tuple)
     h = spacings(Ωₕ(DIFF_DIM))
@@ -1014,7 +1014,7 @@ Reaches one point either side, so both end rows are zero and the mesh needs at l
 points along the direction.
 """
 function centered_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
-    1 <= DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIM, dim(Ωₕ))
+    _check_stencil_dim(DIM, dim(Ωₕ))
     n = npoints(Ωₕ(DIM))
     n >= 3 || _throw_centered_too_few_points(DIM, n)
 
@@ -1032,7 +1032,7 @@ far side, row 1 agrees with [`D₊ₓ`](@ref)`(Ωₕ, dim_val)` and row `n` with
 cross-weighting. The mesh still needs at least three points along the direction.
 """
 function cross_weighted_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
-    1 <= DIM <= dim(Ωₕ) || _throw_stencil_dim_error(DIM, dim(Ωₕ))
+    _check_stencil_dim(DIM, dim(Ωₕ))
     n = npoints(Ωₕ(DIM))
     n >= 3 || _throw_centered_too_few_points(DIM, n)
 

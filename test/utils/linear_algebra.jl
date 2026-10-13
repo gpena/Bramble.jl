@@ -485,6 +485,20 @@ using ..TestUtils: alloc_test, @test_allocs, MockDeviceArray
             @test _dot_masked(H, policy, u, v, w, U) ≈ unioned
         end
 
+        # Every CPU policy reaches the `ExecutionPolicy` method, so the locality methods
+        # carry the CPU dispatch once: no policy-level method sits in front of it.
+        V = Vector{Float64}
+        for P in (Bramble.CpuSerial, Bramble.CpuThreaded, Bramble.CpuPolyester)
+            @test which(_dot, Tuple{P, V, V, V}).sig.parameters[2] === Bramble.ExecutionPolicy
+            @test which(_dot_masked, Tuple{P, V, V, V, BitVector}).sig.parameters[2] ===
+                  Bramble.ExecutionPolicy
+        end
+        for policy in (CpuSerial(), CpuThreaded())
+            @test _dot(policy, u, v, w) ≈ full
+            @test _dot_masked(policy, u, v, w, bits) ≈ masked
+            @test _dot_masked(policy, u, v, w, U) ≈ unioned
+        end
+
         msg(f) = sprint(showerror, try
             f()
             nothing

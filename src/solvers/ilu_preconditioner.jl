@@ -37,6 +37,8 @@ The `BilinearForm` method matches `assemble(a::BilinearForm; ...)`'s own default
 symmetrize; ILU(0) does not assume symmetry, so this is the natural entry point for the
 unsymmetric, convection-dominated forms this preconditioner targets.
 
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
+
 Requires [ILUZero.jl](https://github.com/mohamed82008/ILUZero.jl); call `using ILUZero`
 before calling this function.
 
@@ -63,6 +65,7 @@ function ilu_preconditioner(
         a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, kwargs...
 )
     A = assemble(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
+    A = _as_csc(A)
     return _ilu_preconditioner(A; kwargs...)
 end
 

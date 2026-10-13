@@ -800,7 +800,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         uni(n) = gridspace(mesh(Ωd, (n, n), (true, true)))
         W9 = uni(9)
         one_on(W) = Rₕ(W, x -> 1.0)
-        elsewhere = "lives on another mesh than the test space"
+        elsewhere = "lives on another mesh than the space it is read on"
         for (label, s) in (("finer", one_on(uni(11))), ("coarser", one_on(uni(5))),
             ("graded", one_on(gridspace(_graded_mesh((9, 9))))))
             @testset "$label" begin
@@ -814,7 +814,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         end
         @test_throws ArgumentError form(W9, v -> innerₕ(one_on(uni(11)), v))
         # the message names both meshes' point counts
-        @test_throws "the source's mesh has (11, 11) points and the test space's (9, 9)" form(
+        @test_throws "the source's mesh has (11, 11) points and the one it is read on (9, 9)" form(
             W9, v -> innerₕ(one_on(uni(11)), v))
         # equal counts on other points: the message names the shared shape instead
         @test_throws "the source is on another mesh of the same shape, (9, 9) points" form(
@@ -845,6 +845,102 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         Wg = gridspace(_graded_mesh((9, 9)))
         @test sum(assemble(form(Wg, v -> innerₕ(one_on(gridspace(_graded_mesh((9, 9)))), v)))) ≈
               1.0
+    end
+
+    @testset "Coefficient on another mesh" begin
+        # A grid-function coefficient is read at the walked leaf's own linear indices, as a
+        # source is, so one from another mesh was read at other points: on a finer mesh
+        # `diag(A) ./ diag(M)` came out as `gf[1:11]`, not `1 .+ points`, and on a coarser
+        # one past its end. `form` now refuses it, bilinear and linear alike
+        # (gpena/Bramble.jl#685). Graded meshes, so equal counts would not hide a mismatch.
+        Ω1 = domain(interval(0.0, 1.0))
+        graded(n) = (Ωg = mesh(Ω1, n, true);
+            Bramble.change_points!(Ωg, range(0.0, 1.0; length = n) .^ 1.5); Ωg)
+        W = gridspace(graded(11))
+        fₕ = Rₕ(W, x -> x)
+        elsewhere = "lives on another mesh than the space it is read on"
+        for n in (21, 6)
+            Wo = gridspace(graded(n))
+            gf = Rₕ(Wo, x -> 1 + x)
+            @testset "$n points" begin
+                @test_throws elsewhere form(W, W, (u, v) -> innerₕ(gf * u, v))
+                @test_throws elsewhere form(W, v -> innerₕ(fₕ, gf * v))
+                # inside a difference, a sum and a scale too
+                @test_throws elsewhere form(
+                    W, W, (u, v) -> innerₕ(D₋ₓ(gf * u), D₋ₓ(v)))
+                @test_throws elsewhere form(
+                    W, W, (u, v) -> innerₕ(u, v) + 2 * innerₕ(gf * u, v))
+                counts = "the source's mesh has ($n,) points and the one it is read on (11,)"
+                @test_throws counts form(W, W, (u, v) -> innerₕ(gf * u, v))
+                # Interpolated onto `W` first, it assembles, and reads 1 + x at W's points.
+                gi = πₕ(W, gf)
+                A = assemble(form(W, W, (u, v) -> innerₕ(gi * u, v)))
+                M = assemble(form(W, W, (u, v) -> innerₕ(u, v)))
+                @test diag(A) ./ diag(M) ≈ 1 .+ points(mesh(W))
+                @test assemble(form(W, v -> innerₕ(fₕ, gi * v))) ≈
+                      assemble(form(W, v -> innerₕ(fₕ .* (1 .+ points(mesh(W))), v)))
+            end
+        end
+
+        # On the coefficient's own mesh, or a rebuilt one with its points, it assembles.
+        gc = Rₕ(W, x -> 1 + x)
+        gr = Rₕ(gridspace(graded(11)), x -> 1 + x)
+        M = assemble(form(W, W, (u, v) -> innerₕ(u, v)))
+        for g in (gc, gr)
+            A = assemble(form(W, W, (u, v) -> innerₕ(g * u, v)))
+            @test diag(A) ./ diag(M) ≈ 1 .+ points(mesh(W))
+            @test sum(assemble(form(W, v -> innerₕ(1.0, g * v)))) ≈ 1.5
+        end
+
+        # The coefficient is checked on the mesh the form walks: the test mesh, so one on
+        # the trial mesh of `c * πₕ(u)` is refused and one on the test mesh assembles.
+        Ws = gridspace(graded(7))
+        @test_throws elsewhere form(
+            Ws, W, (u, v) -> innerₕ(Rₕ(Ws, x -> 1 + x) * πₕ(u), v))
+        @test size(assemble(form(Ws, W, (u, v) -> innerₕ(gc * πₕ(u), v)))) == (11, 7)
+
+        # On a composite, against the leaf its term is routed to.
+        Vc = W × Ws
+        @test_throws elsewhere form(Vc, Vc, (U, V) -> innerₕ(gc * U(2), V(2)))
+        Ac = assemble(form(Vc, Vc, (U, V) -> innerₕ(gc * U(1), V(1))))
+        @test diag(Ac)[1:11] ./ diag(M) ≈ 1 .+ points(mesh(W))
+        @test iszero(Ac[12:end, :])
+    end
+
+    @testset "Malformed expression names its form" begin
+        # A bilinear expression that returned a value, or one built from another space's
+        # arguments, was reported as "a linear form's expression" with a `v -> …` example
+        # (gpena/Bramble.jl#686). Each kind now names itself; the linear text is unchanged.
+        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 11, false))
+        W2 = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), false))
+        function msg(f)
+            e = try
+                f()
+                nothing
+            catch err
+                err
+            end
+            @test e isa ArgumentError
+            return e isa ArgumentError ? sprint(showerror, e) : ""
+        end
+        value_bi = msg(() -> form(W1, W1, (u, v) -> 1.0))
+        @test occursin("the expression of a bilinear form", value_bi)
+        @test occursin("(u, v) -> innerₕ(u, v)", value_bi)
+        @test occursin("returned a Float64", value_bi)
+        @test !occursin("linear form's", value_bi)
+        value_li = msg(() -> form(W1, v -> 1.0))
+        @test value_li ==
+              "ArgumentError: a linear form's expression has to build an operator over its " *
+              "test argument, and this one returned a Float64. Write it as a function of " *
+              "the test argument (`v -> innerₕ(fₕ, v)`) rather than as a value."
+        # 1D operators in a form over a 2D space: the dimension message, per kind
+        u1, v1 = Bramble.trial_function(W1), Bramble.test_function(W1)
+        dim_bi = msg(() -> form(W2, W2, (u, v) -> innerₕ(u1, v1)))
+        @test occursin("the expression of a bilinear form is 1-dimensional", dim_bi)
+        @test !occursin("linear form's", dim_bi)
+        dim_li = msg(() -> form(W2, v -> innerₕ(1.0, v1)))
+        @test occursin("a linear form's expression is 1-dimensional and its test space is 2",
+            dim_li)
     end
 
     @testset "Invalid component error" begin
@@ -1173,6 +1269,88 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
                     2 * assemble(form(W, v -> innerₕ(1.0, restrict_to(:boundary, v))))
             @test b ≈ parts
         end
+
+        # Past two restricted summands the `Union` is not split and every point boxed
+        # (16400, 20256 and 38800 B for three, four and five summands on this 7x9 grid):
+        # `form` now splits such a product into products of at most two, and a form with
+        # more than two is walked one summand at a time (gpena/Bramble.jl#727). The vector
+        # must be the terms' assembled apart.
+        R = restrict_to
+        Ωm = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :l => :left, :r => :right,
+            :b => :bottom, :t => :top, :c => x -> x[1] < 0.5)
+        W = gridspace(mesh(Ωm, (7, 9), (false, false)))
+        labels = (:l, :r, :b, :t, :c)
+        g = element(W)
+        g .= 1.0 .+ (1:length(g)) ./ 7
+        function _check_split(terms; bytes = 0)
+            lf = form(W, v -> sum(t(v) for t in terms))
+            b = assemble(lf)
+            bytes === nothing || @test restricted_bytes(b, lf) == bytes
+            parts = sum(assemble(form(W, t)) for t in terms)
+            @test b ≈ parts
+            vₕ = Rₕ(W, x -> 1 + x[1] * x[2])
+            @test lf(vₕ) ≈ sum(parts .* parent(vₕ))
+            b2 = zero(b)
+            assemble_parallel!(b2, lf)
+            @test b2 == b
+            return b, parts
+        end
+        for k in 3:5
+            on(s) = v -> innerₕ(x -> 1 + x[1], R(s, v))
+            b, parts = _check_split(Tuple(on(s) for s in labels[1:k]))
+            @test b == parts
+            _check_split((v -> innerₕ(x -> 1 + x[1], v), Tuple(on(s) for s in labels[1:k])...))
+            # Each its own source, so `simplify_ast` folds nothing: k products, one walk each.
+            _check_split(Tuple(v -> innerₕ(i * g, R(labels[i], v)) for i in 1:k))
+            _check_split((v -> innerₕ(1.0, v),
+                Tuple(v -> 2.0 * innerₕ(g, D₋ₓ(R(s, v))) for s in labels[1:k])...))
+        end
+        # A restriction over a sum is distributed over it; constant scales of several types
+        # are converted to the space's element type (12816 B for `2.0R + 3R` before).
+        _check_split((v -> innerₕ(g, R(:c, v + R(:l, v) + R(:r, v))), v -> innerₕ(g, R(:b, v))))
+        _check_split((v -> innerₕ(x -> 1.0, 2.0 * R(:l, v)), v -> innerₕ(x -> 1.0, 3 * R(:r, v))))
+        _check_split((v -> innerₕ(g, v), v -> innerₕ(g, 2.0 * R(:l, v)),
+            v -> innerₕ(g, 3 * R(:r, v)), v -> innerₕ(g, (1 // 2) * R(:b, v))))
+        # A complex scale on a Float64 mesh is not promoted to: left as built, it still
+        # allocates, and must still agree with its parts.
+        _check_split(
+            (v -> innerₕ(g, (1.0 + 2.0im) * R(:l, v)), v -> innerₕ(g, 3 * R(:r, v)),
+                v -> innerₕ(g, 2.0 * R(:b, v)));
+            bytes = nothing)
+        # Summands of one type are paired whatever order they are written in.
+        _check_split((v -> innerₕ(g, R(:l, v)), v -> innerₕ(g, 2.0 * R(:r, v)),
+            v -> innerₕ(g, R(:b, v))))
+
+        # A scale over a sum of three restricted products is walked a summand at a time
+        # under the scale: walked whole it boxed per point (48816 B in 2D, 4624 B in 1D).
+        Ω1 = domain(interval(0.0, 1.0), :a => x -> x[1] < 0.3, :b => x -> x[1] > 0.6,
+            :c => x -> 0.2 < x[1] < 0.5)
+        for Ws in (gridspace(mesh(Ω1, 13, false)), W)
+            ls = Tuple(v -> innerₕ(1.0, R(s, v)) for s in (Ws === W ? (:l, :b, :c) : (:a, :b, :c)))
+            parts = sum(assemble(form(Ws, l)) for l in ls)
+            for (c, wrap) in ((2.0, x -> 2.0 * x), (-1, x -> -x))
+                lf = form(Ws, v -> wrap(ls[1](v) + ls[2](v) + ls[3](v)))
+                b = assemble(lf)
+                @test restricted_bytes(b, lf) == 0
+                @test b ≈ c * parts
+                b2 = zero(b)
+                assemble_parallel!(b2, lf)
+                @test b2 == b
+                vₕ = Rₕ(Ws, x -> 1 + x[1])
+                @test lf(vₕ) ≈ c * sum(parts .* parent(vₕ))
+            end
+        end
+
+        # A form holding no restriction comes back as `simplify_ast` built it, mixed scale
+        # types and all; the split of a restricted one infers its concrete result.
+        _ast(f) = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+            Bramble.resolve_ast(f(Bramble.test_function(W))), W))
+        ast = _ast(v -> innerₕ(g, 0.1 * v + 3 * D₋ₓ(v) + (1 // 3) * D₋ᵧ(v)))
+        @test Bramble._split_restricted_products(ast, Float64) === ast
+        ast = _ast(v -> innerₕ(g, g * R(:l, v) + g * R(:r, v) + g * R(:b, v) + g * R(:t, v)))
+        rt = Base.return_types(Bramble._split_restricted_products, (typeof(ast), Type{Float64}))
+        @test length(rt) == 1 && isconcretetype(only(rt))
+        @test Bramble._split_restricted_products(ast, Float64) isa Bramble.OperatorAdd
     end
 
     WITH_AD_TESTS && @testset "Assembled residual differentiation" begin
@@ -1256,6 +1434,16 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         @test evaluate!(scratchv, lfv, wc) ≈ lfv(wc)
         @test_throws ArgumentError evaluate!(scratchv, lfv, parent(wc))
 
+        # a complex source: `l(vₕ)` contracts without conjugating, and `evaluate!` must too.
+        # `dot(scratch, v)` would return the conjugate, which the `!=` twin rejects.
+        lc = form(Wₕ, v -> innerₕ(x -> (1.0 + 2.0im) * (x[1] + 1), v))
+        bc = assemble(lc)
+        scratchc = similar(bc)
+        valc = evaluate!(scratchc, lc, uₕ)
+        @test valc ≈ lc(uₕ)
+        @test valc ≈ sum(bc .* parent(uₕ))
+        @test !(valc ≈ conj(lc(uₕ)))
+
         # and it allocates nothing per call, once warmed.
         #
         # Behind a barrier, like every other allocation assertion here: measured at testset
@@ -1290,6 +1478,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             return minimum(ntuple(_ -> @allocated(evaluate!(scratch, lf, v)), 3))
         end
         @test _evaluate_bytes(scratch, lf, uₕ) == 0
+        @test _evaluate_bytes(scratchc, lc, uₕ) == 0
     end
 
     @testset "Point-coloured sweep on a collapsed axis" begin
@@ -1325,7 +1514,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             @test bp ≈ bs
 
             # inside a threaded region a `:static` loop cannot start, so each colour runs
-            # in order on the calling task (`_serial_linear_colour!`), to the same answer
+            # in order on the calling task (`_serial_colour!`), to the same answer
             bt = fill(7.0, ndofs(Wc))
             Threads.@threads for _ in 1:1
                 assemble_parallel!(bt, lc)

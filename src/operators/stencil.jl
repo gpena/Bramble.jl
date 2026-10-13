@@ -23,6 +23,19 @@ struct Backward <: GridDirection end
 @noinline _throw_stencil_dim_error(
     dim::Integer, D::Integer) = throw(ArgumentError("the stencil direction must be between 1 and $D, got $dim"))
 
+# The one direction check every operator calls. The type comes first: `true == 1`, so
+# `Val(true)` would pass the range alone and stand for the first axis (gpena/Bramble.jl#689).
+# Any other integer (`Int32`, `UInt`) is a direction. `Dim` is a type parameter at every
+# call, so both branches fold away at compile time.
+@inline _check_direction_type(d) = (d isa Integer && !(d isa Bool)) ||
+                                   _throw_shift_dim_type_error(d)
+
+@inline function _check_stencil_dim(Dim, D::Integer)
+    _check_direction_type(Dim)
+    1 <= Dim <= D || _throw_stencil_dim_error(Dim, D)
+    return nothing
+end
+
 @noinline _throw_stencil_symbol_error(d::Symbol) = throw(ArgumentError("the stencil direction must be :x, :y or :z, got :$d"))
 
 @noinline function _throw_stencil_size_error(lout::Int, lin::Int, dims)
@@ -480,8 +493,8 @@ function _vectorial_expr(
     # `Val(dim(_op_mesh(arg)))` is read off the mesh *type*, so it is a literal by the time
     # `_vectorial_apply` dispatches on it; no `Val` here is ever built from a runtime value
     # (gpena/Bramble.jl#146).
-    entry = :(@inline $(alias_name)(arg) = _vectorial_apply(
-        $(base_op_name), arg, Val(dim(_op_mesh(arg)))
+    entry = :(@inline $(alias_name)(arg) = $(_vectorial_apply)(
+        $(base_op_name), arg, Val($(dim)($(_op_mesh)(arg)))
     ))
 
     documented_entry = Expr(
@@ -524,6 +537,7 @@ function _vectorial_index_expr(alias_name, alias_stem, source)
         :(@inline Base.firstindex(::typeof($alias_name)) = 1),
         :(@inline Base.lastindex(::typeof($alias_name)) = 3),
         :(@inline function Base.getindex(::typeof($alias_name), i::Integer)
+            $(_check_direction_type)(i)
             i == 1 && return $stem_x
             i == 2 && return $stem_y
             i == 3 && return $stem_z
@@ -600,11 +614,11 @@ function _dimensional_expr(
     grid function whose components are those results.
     """
 
-    int_method = :(@inline $(alias_name)(arg::OperatorArgument, d::Int) = _dispatch_dim(
+    int_method = :(@inline $(alias_name)(arg::$(OperatorArgument), d::Int) = $(_dispatch_dim)(
         $(base_op_name), arg, d
     ))
-    sym_method = :(@inline $(alias_name)(arg::OperatorArgument, d::Symbol) = _dispatch_dim(
-        $(base_op_name), arg, _dim_index(d)
+    sym_method = :(@inline $(alias_name)(arg::$(OperatorArgument), d::Symbol) = $(_dispatch_dim)(
+        $(base_op_name), arg, $(_dim_index)(d)
     ))
 
     documented_int = Expr(
@@ -615,7 +629,7 @@ function _dimensional_expr(
     if alias_name !== base_op_name
         pushfirst!(
             exprs,
-            :(@inline $(alias_name)(arg::OperatorArgument, dim_val::Val) = $(base_op_name)(
+            :(@inline $(alias_name)(arg::$(OperatorArgument), dim_val::Val) = $(base_op_name)(
                 arg, dim_val
             ))
         )
@@ -661,18 +675,18 @@ function _grid_function_forms_expr(
     extra = Any[extra_args...]
 
     scalar = :(@inline $(bang_name)(
-        vₕ::VectorElement{<:ScalarGridSpace},
-        uₕ::VectorElement{<:ScalarGridSpace},
+        vₕ::$(VectorElement){<:$(ScalarGridSpace)},
+        uₕ::$(VectorElement){<:$(ScalarGridSpace)},
         dim_val::Val
     ) = $(apply_fn)(vₕ, uₕ, $(extra...), $(dir_instance), dim_val))
 
     composite = :(@inline $(bang_name)(
-        vₕ::VectorElement{<:CompositeGridSpace},
-        uₕ::VectorElement{<:CompositeGridSpace},
+        vₕ::$(VectorElement){<:$(CompositeGridSpace)},
+        uₕ::$(VectorElement){<:$(CompositeGridSpace)},
         dim_val::Val
     ) = $(apply_fn)(vₕ, uₕ, $(extra...), $(dir_instance), dim_val))
 
-    allocating = :(@inline $(base_name)(uₕ::VectorElement, dim_val::Val) = $(bang_name)(similar(uₕ), uₕ, dim_val))
+    allocating = :(@inline $(base_name)(uₕ::$(VectorElement), dim_val::Val) = $(bang_name)(similar(uₕ), uₕ, dim_val))
 
     documented_scalar = if isempty(docstring)
         scalar

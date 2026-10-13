@@ -268,7 +268,7 @@ Checked entrywise, `nnz` included, against [`kronecker_operator_matrix`](@ref), 
 Kronecker-product construction every operator family used before (gpena/Bramble.jl#185).
 """
 @inline function stencil_matrix(Ωₕ::AbstractMeshType, op::StencilOp{Dim}) where {Dim}
-    1 <= Dim <= dim(Ωₕ) || _throw_stencil_dim_error(Dim, dim(Ωₕ))
+    _check_stencil_dim(Dim, dim(Ωₕ))
     return _stencil_matrix(matrix_type(backend(Ωₕ)), Ωₕ, op)
 end
 

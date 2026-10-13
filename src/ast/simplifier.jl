@@ -110,10 +110,18 @@ end
 # on its own when assembled.
 @inline _folds(c) = c isa Number && !(c isa Rational)
 
+# The product and sum of two folding coefficients. Two `Integer`s use checked arithmetic, so
+# `2^32 * (2^32 * u)` throws `OverflowError` instead of wrapping to `0 * u` and vanishing
+# (gpena/Bramble.jl#704), as an overflowing `Rational` scale throws. Same type as `*`/`+`.
+@inline _fold_mul(a, b) = a * b
+@inline _fold_mul(a::Integer, b::Integer) = Base.Checked.checked_mul(a, b)
+@inline _fold_add(a, b) = a + b
+@inline _fold_add(a::Integer, b::Integer) = Base.Checked.checked_add(a, b)
+
 # Two coefficients just lifted out of the two arguments of one inner product, wrapped around
 # the product they were lifted from.
 @inline function _lift_scalars(cl, cr, inner::LazyOp)
-    _folds(cl) && _folds(cr) && return _wrap_scale(cl * cr, inner)
+    _folds(cl) && _folds(cr) && return _wrap_scale(_fold_mul(cl, cr), inner)
     return _wrap_scale(cl, _wrap_scale(cr, inner))
 end
 
@@ -287,7 +295,7 @@ function simplify_ast(op::OperatorScale)
         # on a known type and the product's type follows from them alone. A `Rational` on
         # either side does not fold either (`_folds`).
         if inner isa OperatorScale && _folds(op.scalar) && _folds(inner.scalar)
-            return _wrap_scale(op.scalar * inner.scalar, inner.inner_op)
+            return _wrap_scale(_fold_mul(op.scalar, inner.scalar), inner.inner_op)
         end
     end
 
@@ -331,7 +339,7 @@ function simplify_ast(op::OperatorAdd)
         # so the branch folds (see there). A singleton type has no `component_idx` to
         # disagree on. Static, non-`Rational` coefficients only (`_folds`); a `Ref`, even the
         # same one on both sides, falls through (gpena/Bramble.jl#527).
-        _folds(cl) && _folds(cr) && return _wrap_scale(cl + cr, al)
+        _folds(cl) && _folds(cr) && return _wrap_scale(_fold_add(cl, cr), al)
     elseif (left isa OperatorScale || right isa OperatorScale) &&
            cl isa Integer &&
            cr isa Integer &&

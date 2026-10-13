@@ -28,15 +28,17 @@ it becomes available on a new device the moment that device supplies this one me
   `using Metal` for a Metal backend).
 """
 function ka_device(be)
-    return _throw_no_ka_device(be)
+    return _throw_no_ka(
+        "ka_device has no method for $(typeof(be))",
+        " and the package providing this backend's device (e.g. `using Metal`) before " *
+        "calling this function."
+    )
 end
 
-@noinline function _throw_no_ka_device(be)
-    return error(
-        "ka_device has no method for $(typeof(be)). Add `using KernelAbstractions` and " *
-        "the package providing this backend's device (e.g. `using Metal`) before calling " *
-        "this function.",
-    )
+# The one thrower behind every stub in this file: `problem` is the first sentence (no full
+# stop), `tail` completes "Add `using KernelAbstractions`".
+@noinline function _throw_no_ka(problem::String, tail::String)
+    return error("$problem. Add `using KernelAbstractions`$tail")
 end
 
 """
@@ -77,12 +79,81 @@ GPU backend inherits it for free.
   `using KernelAbstractions`.
 """
 function ka_synchronize(x)
-    return _throw_no_ka_synchronize(x)
+    return _throw_no_ka(
+        "ka_synchronize has no method for $(typeof(x))",
+        " before calling this function."
+    )
 end
 
-@noinline function _throw_no_ka_synchronize(x)
-    return error(
-        "ka_synchronize has no method for $(typeof(x)). Add `using KernelAbstractions` " *
-        "before calling this function.",
+"""
+    _launch_spmv_csr!(y, rowPtr, colVal, nzVal, x, α, β) -> Nothing
+
+Row-parallel sparse matrix-vector product `y .= α .* (A * x) .+ β .* y`, where `A`'s
+storage is given as the raw CSR arrays `rowPtr`, `colVal`, `nzVal` -- never a struct
+wrapping them, since a struct nesting a device array fails `KernelAbstractions` kernel
+compilation. One work item owns one output row, so there are no write conflicts and no
+atomics.
+
+Requires `using KernelAbstractions`; the real method is supplied by
+`BrambleKernelAbstractionsExt`.
+
+# Throws
+- `ErrorException`: if `KernelAbstractions` is not loaded.
+"""
+function _launch_spmv_csr!(y, rowPtr, colVal, nzVal, x, α, β)
+    return _throw_no_ka(
+        "_launch_spmv_csr! has no method loaded",
+        " before calling Metal sparse `mul!`."
     )
+end
+
+"""
+    _launch_spmm_csr!(C, rowPtr, colVal, nzVal, B, α, β) -> Nothing
+
+Row-parallel sparse matrix-matrix product `C .= α .* (A * B) .+ β .* C` for a dense
+right-hand side `B`, where `A`'s storage is given as the raw CSR arrays `rowPtr`, `colVal`,
+`nzVal`. See [`_launch_spmv_csr!`](@ref) for the extension contract and why the arrays are
+passed separately rather than as a struct.
+
+Requires `using KernelAbstractions`; the real method is supplied by
+`BrambleKernelAbstractionsExt`.
+
+# Throws
+- `ErrorException`: if `KernelAbstractions` is not loaded.
+"""
+function _launch_spmm_csr!(C, rowPtr, colVal, nzVal, B, α, β)
+    return _throw_no_ka(
+        "_launch_spmm_csr! has no method loaded",
+        " before calling Metal sparse `mul!`."
+    )
+end
+
+# The host-side guard every `Int32`-index device launcher calls once, before its launch
+# (gpena/Bramble.jl#714). A kernel computes its linear index in `Int32` (`@index(Global) %
+# Int32` wraps silently past `typemax(Int32)`, `Int32(idx)` throws a device-side error the
+# host never sees), so the entry count is checked here instead: `n` is the launch's entry
+# count, or a `dims` tuple whose product is, computed without overflowing. `op` names the
+# operation in the `ArgumentError`. Allocates nothing unless it throws.
+@inline function _check_int32_extent(n::Integer, op::String)
+    n <= typemax(Int32) || _throw_int32_extent(n, op)
+    return nothing
+end
+
+@inline function _check_int32_extent(dims::Tuple{Vararg{Integer}}, op::String)
+    any(iszero, dims) && return nothing
+    p = 1
+    for d in dims
+        p, overflow = Base.Checked.mul_with_overflow(p, Int(d))
+        (overflow || p > typemax(Int32)) && _throw_int32_extent(dims, op)
+    end
+    return nothing
+end
+
+# The count is formed here, past the `@noinline` barrier, so the overflow-safe `BigInt`
+# product costs a launch that passes the check nothing.
+@noinline _throw_int32_extent(dims::Tuple, op::String) = _throw_int32_extent(prod(big, dims), op)
+
+@noinline function _throw_int32_extent(n::Integer, op::String)
+    throw(ArgumentError("$op on $n entries is past the $(typemax(Int32)) that the device " *
+                        "kernel's Int32 index arithmetic can address"))
 end

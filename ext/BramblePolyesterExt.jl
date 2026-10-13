@@ -1,6 +1,6 @@
 # ext/BramblePolyesterExt.jl: the Polyester-batched sweeps behind `CpuPolyester`.
 #
-# Nineteen hooks in `src/` are `@noinline` methods that error naming Polyester. This file
+# Seventeen hooks in `src/` are `@noinline` methods that error naming Polyester. This file
 # defines each of them, as the `Polyester.@batch` counterpart of an existing
 # `Threads.@threads` body, called from the identical call site once `execution_policy`
 # resolves to `CpuPolyester()` instead of `CpuThreaded()`. The colouring, the band splitting
@@ -11,9 +11,8 @@
 # `src/utils/linear_algebra.jl`: `_batch_for!`, `_batch_axis_for!`, `_batch_scatter_for!`,
 # `_batch_dot` and `_batch_dot_masked`.
 #
-# `src/assembly/bilinear_execution.jl`: `_batch_bilinear_colour_sweep!` and
-# `_batch_bilinear_band_sweep!`, and their warmed-refill counterparts
-# `_batch_bilinear_colour_replay!` and `_batch_bilinear_band_replay!`.
+# `src/assembly/bilinear_execution.jl`: `_batch_bilinear_colour_replay!` and
+# `_batch_bilinear_band_replay!`.
 #
 # `src/assembly/linear.jl`: `_batch_linear_colour_sweep!` and `_batch_linear_band_sweep!`.
 #
@@ -39,14 +38,11 @@
 # `src/problems/semidiscrete_rhs.jl`: `_batch_csr_spmv!`, which runs the explicit
 # right-hand side's product `du .-= A u` one compressed row per `@batch` iteration.
 #
-# A warmed refill replays recorded `nzval` positions instead of searching, gated per unit by
-# `_threaded_replay_policy`; only `CpuThreaded` answers `true` in `src/`.
-# This file's `_threaded_replay_policy(::CpuPolyester) = true` opts `CpuPolyester` in, and
-# `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` are the `@batch` counterparts
-# of `_batch_bilinear_band_sweep!`/`_batch_bilinear_colour_sweep!`, reached instead of
-# them once a unit's leaf can replay (`_leaf_replays`, bilinear_execution.jl): the colouring is
-# identical, only `_replay_point!` (reads the recording) stands in for `_scatter_point!`
-# (searches).
+# A threaded refill replays recorded `nzval` positions instead of searching, for every unit.
+# `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` are the `@batch`
+# counterparts of the `Threads.@threads` bodies `_sweep_band_colour!` and
+# `_sweep_bilinear_colour!` run under `CpuThreaded` (bilinear_execution.jl): the colouring is
+# identical, `_replay_point!` reads the recording at each point.
 #
 # `Polyester.@batch` accepts a `CartesianIndices` directly (`closure.jl`'s own `splitloop`
 # already splits it along its last axis, the same trick `_threaded_axis_for!` hand-rolls for
@@ -96,19 +92,19 @@ module BramblePolyesterExt
 
 using Bramble
 using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
-               _write_components!, _band_range, _scatter_point!, _scatter_linear_point!,
+               _mask_word, _mask_nwords, _mask_length,
+               _write_components!, _band_range, _scatter_linear_point!,
                CpuPolyester, _ReplayTarget, _ActionTarget, _replay_point!, _difference_band!,
                _average_band!, _centered_average_band!, _broadcast_band!, _kron_line_init!,
                _kron_line_terms!, _kron_host_raw, _kron_host_rebuild, _bc_host_raw,
-               _bc_host_rebuild, _MaskedKernel, __prod, _RₕKernel, _AvgKernel, _AvgScatterKernel,
+               _bc_host_rebuild, _MaskedKernel, __prod, _RₕKernel, _AvgKernel,
                ReplaySink, _PairReplaySink, _DiagonalReplayTarget, ActionSink,
                _PairActionSink, _batch_split, _batch_rebuild, _MFFusedPlan, _MFPass,
                _MF_BAND, _MF_NO_COLLECT, _mf_apply_parts!, _mf_host_ast, _batch_splittable,
-               _ScatterCSC, _dot_band, _last_axis_chunks,
+               _dot_band, _last_axis_chunks,
                _separable_line_band, _separable_block_band
 using Polyester: Polyester, @batch
 using LinearAlgebra: mul!
-using SparseArrays: SparseMatrixCSC
 using PrecompileTools: @setup_workload, @compile_workload
 
 # --- _batch_dot/_batch_dot_masked (src/utils/linear_algebra.jl) -------------------- #
@@ -182,15 +178,9 @@ end
 @inline _mask_chunks(mask::BitVector) = (mask.chunks,)
 @inline _mask_chunks(mask::MarkedIndicesUnion) = mask.chunks
 
-@inline _mask_length(mask::BitVector) = length(mask)
-@inline _mask_length(mask::MarkedIndicesUnion) = mask.len
-
-# The OR of every vector's word `k`, the union `MarkedIndicesUnion` walks
-# (`_reduce_or_chunk`, utils/linear_algebra.jl). Unrolled by recursion over the tuple:
-# `_reduce_or_chunk`'s `reduce` over an `ntuple` ran the masked `innerₕ` about 1.2x slower
-# on a 33² grid once the words were `PtrArray`s, and this ran it no slower than v3.22.0.
-@inline _mask_word(chunks::Tuple{Any}, k::Int) = @inbounds chunks[1][k]
-@inline _mask_word(chunks::Tuple, k::Int) = @inbounds chunks[1][k] | _mask_word(Base.tail(chunks), k)
+# The word accessors are `Bramble`'s own (`_mask_word`, `_mask_nwords`, `_mask_length`,
+# utils/linear_algebra.jl): `_mask_word` also takes the tuple of word vectors a band here
+# gets, and ORs it unrolled by recursion over the tuple.
 
 # One-based bit test against the word vectors. `MarkedIndicesUnion` has no `getindex` by
 # design (see its docstring), so this also spares collecting it into an indexable mask,
@@ -200,9 +190,12 @@ end
     return ((word >> ((i - 1) & 63)) & 0x1) != 0
 end
 
-# The masked band bodies: `_dot_masked_band` and `_separable_masked_band`
-# (src/utils/linear_algebra.jl, src/space/inner_product.jl) over the mask's words rather
-# than the mask, the same walk and the same `muladd`s in the same order, so the same sums.
+# The masked band bodies: `_dot_masked_band` with a vector weight and with a
+# `SeparableWeights` one (src/utils/linear_algebra.jl, src/space/inner_product.jl) over the
+# mask's words rather than the mask, the same walk and the same `muladd`s in the same order,
+# so the same sums.
+# The `muladd` stays spelled out here: calling `_dot_term` (utils/linear_algebra.jl) from
+# this `@batch` body ran the boundary-mask reduction about 6% slower (2 threads, 401²).
 @noinline function _masked_words_band(u, v, w, chunks::Tuple, ax, nb::Int, b::Int)
     T = promote_type(eltype(u), eltype(v), eltype(w))
     s = zero(T)
@@ -244,7 +237,7 @@ function Bramble._batch_dot_masked(
     nb = Threads.nthreads()
     partials = _partials(T)
     chunks = _mask_chunks(mask)
-    ax = 1:length(first(chunks))
+    ax = 1:_mask_nwords(mask)
     hu, hv, hw = _hand_arrays((u, v, w))
     @batch for b in 1:nb
         @inbounds partials[b] = _masked_words_band(
@@ -306,7 +299,7 @@ function Bramble._batch_dot_masked(
     hu, hf, hv = _hand_arrays((u, w.factors, v))
     cart = CartesianIndices(dims)
     chunks = _mask_chunks(mask)
-    ax = 1:length(first(chunks))
+    ax = 1:_mask_nwords(mask)
     @batch for b in 1:nb
         @inbounds partials[b] = _separable_masked_words_band(
             _take(hu), _weights(_take(hf), dims), _take(hv), cart, chunks, ax, nb, b)
@@ -525,8 +518,8 @@ end
 # vectors and a `_MaskedKernel` its `BitVector`s, and any GC reference puts Polyester's
 # argument box on the heap. `v` crosses as a top-level loop argument and the kernel as one
 # `_batch_split` (`_split_or_whole` below), each task rebuilding it around the `PtrArray`s:
-# the `_RₕKernel` points, the `_AvgKernel`/`_AvgScatterKernel` half points and the weight
-# build's `Fix1(__prod, factors)` vectors in place. A `_MaskedKernel`'s masks first become
+# the `_RₕKernel` points, the `_AvgKernel` half points and the weight build's
+# `Fix1(__prod, factors)` vectors in place. A `_MaskedKernel`'s masks first become
 # their 64-bit word vectors (`_for_host_raw`), each rebuilt as `_ChunkBits`, a bit test over
 # the words. A single-iteration `@batch` runs its body inline on the plain `Vector`s, which
 # the rebuild accepts as well.
@@ -562,7 +555,6 @@ end
 _splits_kernel(::Type) = false
 _splits_kernel(::Type{<:_RₕKernel{F}}) where {F} = isbitstype(F)
 _splits_kernel(::Type{<:_AvgKernel{F}}) where {F} = isbitstype(F)
-_splits_kernel(::Type{<:_AvgScatterKernel{F}}) where {F} = isbitstype(F)
 _splits_kernel(::Type{<:Base.Fix1{typeof(__prod), <:Tuple{Vararg{AbstractVector}}}}) = true
 _splits_kernel(::Type{<:_MaskedKernel{K}}) where {K} = _splits_kernel(K)
 
@@ -936,123 +928,12 @@ function Bramble._batch_scatter_for!(mats::Tuple, idxs::AbstractArray, g::G) whe
     return _batch_scatter_each!(mats, idxs, g)
 end
 
-# --- _batch_bilinear_colour_sweep!/_batch_bilinear_band_sweep! (src/assembly/bilinear_execution.jl) --- #
-#
-# Direct translations of `_sweep_bilinear_colour!`/`_sweep_band_colour!`'s `CpuThreaded`
-# bodies: each colour/band is independent by construction (the caller's colouring already
-# guarantees no two concurrently-swept points target the same matrix entry), so swapping the
-# scheduler changes nothing about correctness. `_scatter_point!` is the single shared entry
-# rule both this and the `CpuThreaded` sweep call, so the two can never drift apart on what a
-# stencil tap writes.
-#
-# `A::AbstractMatrix` (matching the `CpuThreaded` reference signature in
-# bilinear_execution.jl), rather than the stub's fully unconstrained `A`, so this is a genuine
-# specialisation of the `src/` stub and not a redefinition of the identical signature.
-# Redefining it aborts the module body partway, leaving everything defined after it
-# uninstalled, so a bilinear `assemble!` under `CpuPolyester` reaches the `src/` error stub
-# with Polyester loaded.
-#
-# Each signature here must match the `CpuThreaded` reference in `bilinear_execution.jl`.
-# A mismatched arity makes dispatch fall through silently to the `src/` error stub, whose
-# message ("you forgot to load Polyester") is then wrong. Diff against
-# `bilinear_execution.jl` whenever it changes.
-#
-# A `SparseMatrixCSC` does not cross `@batch` whole, since it holds GC references, which put
-# the argument box on the heap. Its `colptr`, `rowval` and `nzval` cross as top-level loop
-# arguments, and each task rebuilds them as a `_ScatterCSC` (bilinear_traversal.jl), whose
-# position search and write are the `SparseMatrixCSC` ones. `sp`, `term` and `mesh_markers`
-# cross as one `_batch_split` (`_split_or_whole` below), as in the replay hooks. The caller
-# (`_sweep_bilinear!`) has already bound the term on the host (`_bind_walk`), so no `Symbol`
-# region reaches the split. A single-iteration `@batch` runs its body inline on the plain
-# `Vector`s, which `_ScatterCSC` and the rebuild accept as well. Any other matrix type (a
-# dense `Matrix`, a device matrix with its mirror) crosses whole, as before. No local is
-# named `cp`, because `@batch` takes a name bound in `Base` for a global and does not pass
-# it, so the loop would close over the local and fail to compile to a `cfunction`.
-
-function Bramble._batch_bilinear_colour_sweep!(
-        A::AbstractMatrix, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
-)
-    @batch for I in _ascending(idxs)
-        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
-    end
-    return nothing
-end
-
-function Bramble._batch_bilinear_band_sweep!(
-        A::AbstractMatrix, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α
-)
-    @batch for b in _ascending(bidx)
-        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
-            _scatter_point!(
-                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
-            )
-        end
-    end
-    return nothing
-end
-
-@_task function _csc_point!(skel, arrays, cptr, rval, nzv, I, lin_indices, row_offset,
-        col_offset, α)
-    s, tm, mm = _rejoin(skel, arrays)
-    _scatter_point!(_ScatterCSC(cptr, rval, nzv), tm, s, I, lin_indices, mm, row_offset,
-        col_offset, α)
-    return nothing
-end
-
-function Bramble._batch_bilinear_colour_sweep!(
-        A::SparseMatrixCSC, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
-)
-    cptr, rval, nzv = A.colptr, A.rowval, A.nzval
-    skel, arrays = _split_or_whole((sp, term, mesh_markers), cptr, rval, nzv)
-    failed = false
-    @batch reduction=((|, failed),) for I in _ascending(idxs)
-        failed |= _csc_point_threw(skel, arrays, cptr, rval, nzv, I, lin_indices,
-            row_offset, col_offset, α)
-    end
-    failed && _rerun_on_host(idxs) do I
-        _scatter_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
-    end
-    return nothing
-end
-
-@_task function _csc_band!(skel, arrays, cptr, rval, nzv, rest, ax, nbands, b,
-        lin_indices, row_offset, col_offset, α)
-    s, tm, mm = _rejoin(skel, arrays)
-    Ab = _ScatterCSC(cptr, rval, nzv)
-    for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
-        _scatter_point!(Ab, tm, s, I, lin_indices, mm, row_offset, col_offset, α)
-    end
-    return nothing
-end
-
-function Bramble._batch_bilinear_band_sweep!(
-        A::SparseMatrixCSC, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers,
-        row_offset, col_offset, α
-)
-    cptr, rval, nzv = A.colptr, A.rowval, A.nzval
-    skel, arrays = _split_or_whole((sp, term, mesh_markers), cptr, rval, nzv)
-    failed = false
-    @batch reduction=((|, failed),) for b in _ascending(bidx)
-        failed |= _csc_band_threw(skel, arrays, cptr, rval, nzv, rest, ax, nbands, b,
-            lin_indices, row_offset, col_offset, α)
-    end
-    failed && _rerun_on_host(bidx) do b
-        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
-            _scatter_point!(
-                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
-        end
-    end
-    return nothing
-end
-
-# --- _threaded_replay_policy/_batch_bilinear_band_replay!/_batch_bilinear_colour_replay! ---- #
+# --- _batch_bilinear_band_replay!/_batch_bilinear_colour_replay! ---- #
 # (src/assembly/bilinear_execution.jl)
 #
-# Opts `CpuPolyester` into the warmed-refill replay `CpuThreaded` already gets: without this,
-# `_leaf_replays` never answers `true` for a `CpuPolyester` leaf, so its units keep searching
-# even once a recording exists. `target::_ReplayTarget` -- rather than the stub's unconstrained
-# `target` -- is what makes each of these a genuine specialisation of its `src/` stub, the same
-# `A::AbstractMatrix` reasoning the sweep hooks above give. A matrix-free product
+# `target::_ReplayTarget` -- rather than the stub's unconstrained `target` -- is what makes
+# each of these a genuine specialisation of its `src/` stub, so a redefinition of the stub's
+# own signature cannot abort the module body partway. A matrix-free product
 # (`MatrixFreeOperator`, src/assembly/matrix_free.jl) sweeps through
 # the same two hooks with an `_ActionTarget`, the sink adding `α * w * x[col]` into
 # `y[row]`: the colouring and the per-point step (`_replay_point!`) are the same.
@@ -1073,8 +954,6 @@ end
 # that the split does not apply, and the loop captures the parts whole, which boxes as every
 # hook did before gpena/Bramble.jl#437. The storage vectors join the test (`hot`), so a
 # `BigFloat` matrix or vector falls back too.
-Bramble._threaded_replay_policy(::CpuPolyester) = true
-
 # The skeleton of parts that cross `@batch` whole (`_split_or_whole`).
 struct _Whole end
 
@@ -1126,13 +1005,86 @@ end
 @inline _replay_join(y, x, c::Tuple{_Hot{:pair_action}, Vararg}) = _PairActionSink(
     y, x, Base.tail(c)...)
 
-@_task function _replay_band!(skel, arrays, h1, h2, rest, ax, nbands, b, lin_indices,
-        row_offset, col_offset)
-    c, s, tm, mm = _rejoin(skel, arrays)
-    t = _replay_join(h1, h2, c)
+# The sweep hooks' shared body. A replay and a right-hand-side scatter differ only in the
+# step each task runs per point, `_point(kind, ...)`, which each task builds around the
+# arrays it received. So one `@batch` body walks bands and one walks a colour's points, for
+# all four hooks, as `_sweep_coloured!` and its loops (bilinear_execution.jl) do for
+# `CpuThreaded`. `h1`, `h2` are the storage vectors crossing as top-level loop arguments,
+# `cold` the parts crossing as one `_batch_split`, and `lin_indices`, `k1`, `k2` the step's
+# isbits rest (`row_offset`, `col_offset` for a replay, `offset`, `α` for a scatter). They
+# cross one by one: as one tuple, a 401² `CpuPolyester` right-hand side ran 1.1x slower.
+#
+# The steps are callable structs rather than closures: a closure was not inlined into the
+# band loop, which ran a 401² `CpuPolyester` assembly 1.57x slower.
+struct _Replay end
+struct _Scatter end
+
+struct _ReplayStep{T, M, S, L, K}
+    target::T
+    term::M
+    sp::S
+    lin_indices::L
+    mesh_markers::K
+    row_offset::Int
+    col_offset::Int
+end
+@inline (p::_ReplayStep)(I) = _replay_point!(
+    p.target, p.term, p.sp, I, p.lin_indices, p.mesh_markers, p.row_offset, p.col_offset)
+
+struct _ScatterStep{B, S, M, L, K, A}
+    b::B
+    sp::S
+    term::M
+    lin_indices::L
+    mesh_markers::K
+    offset::Int
+    α::A
+end
+@inline (p::_ScatterStep)(I) = _scatter_linear_point!(
+    p.b, p.sp, p.term, I, p.lin_indices, p.mesh_markers, p.offset, p.α)
+
+@inline _point(::_Replay, h1, h2, (c, s, tm, mm), lin_indices, ro, co) = _ReplayStep(
+    _replay_join(h1, h2, c), tm, s, lin_indices, mm, ro, co)
+@inline _point(::_Scatter, b, _, (s, tm, mm), lin_indices, offset, α) = _ScatterStep(
+    b, s, tm, lin_indices, mm, offset, α)
+
+@_task function _sweep_band!(kind, skel, arrays, h1, h2, lin_indices, k1, k2, rest, ax,
+        nbands, b)
+    point = _point(kind, h1, h2, _rejoin(skel, arrays), lin_indices, k1, k2)
     for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
-        _replay_point!(t, tm, s, I, lin_indices, mm, row_offset, col_offset)
+        point(I)
     end
+    return nothing
+end
+
+function _batch_bands!(kind, h1, h2, cold, lin_indices, k1, k2, ax, bidx, nbands, rest)
+    skel, arrays = _split_or_whole(cold, h1, h2)
+    failed = false
+    @batch reduction=((|, failed),) for b in _ascending(bidx)
+        failed |= _sweep_band_threw(kind, skel, arrays, h1, h2, lin_indices, k1, k2, rest,
+            ax, nbands, b)
+    end
+    failed && _rerun_on_host(bidx) do b
+        point = _point(kind, h1, h2, cold, lin_indices, k1, k2)
+        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
+            point(I)
+        end
+    end
+    return nothing
+end
+
+@_task function _sweep_one!(kind, skel, arrays, h1, h2, lin_indices, k1, k2, I)
+    _point(kind, h1, h2, _rejoin(skel, arrays), lin_indices, k1, k2)(I)
+    return nothing
+end
+
+function _batch_points!(kind, h1, h2, cold, lin_indices, k1, k2, idxs)
+    skel, arrays = _split_or_whole(cold, h1, h2)
+    failed = false
+    @batch reduction=((|, failed),) for I in _ascending(idxs)
+        failed |= _sweep_one_threw(kind, skel, arrays, h1, h2, lin_indices, k1, k2, I)
+    end
+    failed && _rerun_on_host(I -> _point(kind, h1, h2, cold, lin_indices, k1, k2)(I), idxs)
     return nothing
 end
 
@@ -1140,50 +1092,25 @@ function Bramble._batch_bilinear_band_replay!(
         target::Union{_ReplayTarget, _ActionTarget}, sp, term, ax, bidx, nbands, rest,
         lin_indices, mesh_markers, row_offset, col_offset
 )
-    h1, h2, cold = _replay_parts(target)
-    skel, arrays = _split_or_whole((cold, sp, term, mesh_markers), h1, h2)
-    failed = false
-    @batch reduction=((|, failed),) for b in _ascending(bidx)
-        failed |= _replay_band_threw(skel, arrays, h1, h2, rest, ax, nbands, b,
-            lin_indices, row_offset, col_offset)
-    end
-    failed && _rerun_on_host(bidx) do b
-        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
-            _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset,
-                col_offset)
-        end
-    end
-    return nothing
-end
-
-@_task function _replay_one!(skel, arrays, h1, h2, I, lin_indices, row_offset, col_offset)
-    c, s, tm, mm = _rejoin(skel, arrays)
-    _replay_point!(
-        _replay_join(h1, h2, c), tm, s, I, lin_indices, mm, row_offset, col_offset)
-    return nothing
+    h1, h2, c = _replay_parts(target)
+    return _batch_bands!(_Replay(), h1, h2, (c, sp, term, mesh_markers), lin_indices,
+        row_offset, col_offset, ax, bidx, nbands, rest)
 end
 
 function Bramble._batch_bilinear_colour_replay!(
         target::Union{_ReplayTarget, _ActionTarget}, sp, term, idxs, lin_indices, mesh_markers,
         row_offset, col_offset
 )
-    h1, h2, cold = _replay_parts(target)
-    skel, arrays = _split_or_whole((cold, sp, term, mesh_markers), h1, h2)
-    failed = false
-    @batch reduction=((|, failed),) for I in _ascending(idxs)
-        failed |= _replay_one_threw(skel, arrays, h1, h2, I, lin_indices, row_offset,
-            col_offset)
-    end
-    failed && _rerun_on_host(idxs) do I
-        _replay_point!(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
-    end
-    return nothing
+    h1, h2, c = _replay_parts(target)
+    return _batch_points!(_Replay(), h1, h2, (c, sp, term, mesh_markers), lin_indices,
+        row_offset, col_offset, idxs)
 end
 
 # --- _batch_linear_colour_sweep!/_batch_linear_band_sweep! (src/assembly/linear.jl) ---- #
 #
 # As above, for the right-hand-side sweep: `_scatter_linear_point!` is the shared entry rule
-# with `_sweep_colour!`/`_sweep_linear_band_colour!`'s `CpuThreaded` bodies.
+# with the `CpuThreaded` sweep's `_LinearPoint`, and the bodies are the replay's own
+# (`_batch_bands!`, `_batch_points!`).
 #
 # `b::AbstractVector` (matching the `CpuThreaded` reference signature in linear.jl), for the
 # same reason the bilinear pair above is now constrained on `A`.
@@ -1196,47 +1123,16 @@ end
 # single-iteration `@batch` runs its body inline on the plain `Vector`s, which the rebuild
 # accepts as well. Parts that do not split cross whole (`_split_or_whole` above).
 
-@_task function _linear_point!(skel, arrays, b, I, lin_indices, offset, α)
-    s, tm, mm = _rejoin(skel, arrays)
-    _scatter_linear_point!(b, s, tm, I, lin_indices, mm, offset, α)
-    return nothing
-end
-
 function Bramble._batch_linear_colour_sweep!(b::AbstractVector, sp, term, idxs, lin_indices, mesh_markers, offset, α)
-    skel, arrays = _split_or_whole((sp, term, mesh_markers), b)
-    failed = false
-    @batch reduction=((|, failed),) for I in _ascending(idxs)
-        failed |= _linear_point_threw(skel, arrays, b, I, lin_indices, offset, α)
-    end
-    failed && _rerun_on_host(idxs) do I
-        _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
-    end
-    return nothing
-end
-
-@_task function _linear_band!(skel, arrays, b, rest, ax, nbands, k, lin_indices, offset, α)
-    s, tm, mm = _rejoin(skel, arrays)
-    for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
-        _scatter_linear_point!(b, s, tm, I, lin_indices, mm, offset, α)
-    end
-    return nothing
+    return _batch_points!(
+        _Scatter(), b, nothing, (sp, term, mesh_markers), lin_indices, offset, α, idxs)
 end
 
 function Bramble._batch_linear_band_sweep!(
         b::AbstractVector, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
 )
-    skel, arrays = _split_or_whole((sp, term, mesh_markers), b)
-    failed = false
-    @batch reduction=((|, failed),) for k in _ascending(bidx)
-        failed |= _linear_band_threw(skel, arrays, b, rest, ax, nbands, k, lin_indices,
-            offset, α)
-    end
-    failed && _rerun_on_host(bidx) do k
-        for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
-            _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
-        end
-    end
-    return nothing
+    return _batch_bands!(_Scatter(), b, nothing, (sp, term, mesh_markers), lin_indices,
+        offset, α, ax, bidx, nbands, rest)
 end
 
 # --- _batch_difference_engine!/_batch_average_engine!/_batch_centered_average_engine! ---- #

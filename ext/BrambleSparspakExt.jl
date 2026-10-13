@@ -21,7 +21,7 @@ using Bramble:
                innerₕ,
                boundary_symbols
 using Sparspak: Sparspak, sparspaklu, sparspaklu!
-using LinearAlgebra: LinearAlgebra, ldiv!
+using LinearAlgebra: LinearAlgebra, SingularException, ldiv!
 using SparseArrays: SparseArrays, SparseMatrixCSC
 using PrecompileTools: @setup_workload, @compile_workload
 
@@ -33,11 +33,37 @@ end
 Base.size(fact::ConcreteSparspakFactorization) = (fact.dim, fact.dim)
 Base.size(fact::ConcreteSparspakFactorization, d::Integer) = d <= 2 ? fact.dim : 1
 
+# Sparspak never throws `SingularException`. A rank-deficient or structurally singular
+# matrix reaches an internal `error("An empty problem. No matrix.")` (its n == 0 guard, hit
+# once elimination has no pivot left), and a stored zero pivot or an empty row/column goes
+# through the solve unchecked and leaves `Inf`/`NaN` in the solution. Both are reported the
+# way SuiteSparse, MUMPS and Accelerate report them. The index 0 is not a pivot position.
+const SPARSPAK_EMPTY_PROBLEM = "An empty problem. No matrix."
+
+# Runs `f()` on an `n`×`n` matrix; Sparspak's empty-problem `ErrorException` becomes a
+# `SingularException(0)` (matched by message and only for n > 0, where it means no pivot).
+@inline function _singular_on_empty(f::F, n::Integer) where {F}
+    try
+        return f()
+    catch err
+        n > 0 && err isa ErrorException && err.msg == SPARSPAK_EMPTY_PROBLEM &&
+            throw(SingularException(0))
+        rethrow()
+    end
+end
+
+# Throws `SingularException(0)` when a solve of a finite right-hand side left a non-finite
+# entry in `x`. A non-finite right-hand side legitimately propagates and is not blamed on `A`.
+function _check_finite_solution(x::AbstractVector, finite_rhs::Bool)
+    finite_rhs && !all(isfinite, x) && throw(SingularException(0))
+    return x
+end
+
 function Bramble._sparspak_factorize(A::SparseMatrixCSC)
     m, n = size(A)
     m == n || throw(DimensionMismatch("Matrix must be square for sparse direct solve, got $(m)×$(n)"))
 
-    lu = sparspaklu(A)
+    lu = _singular_on_empty(() -> sparspaklu(A), n)
     return ConcreteSparspakFactorization{eltype(A), typeof(lu)}(lu, n)
 end
 
@@ -51,8 +77,9 @@ function LinearAlgebra.ldiv!(
     length(x) == n || throw(
         DimensionMismatch("Output vector length $(length(x)) does not match matrix dimension $n"),
     )
-    ldiv!(x, fact.lu, b)
-    return x
+    finite_rhs = all(isfinite, b)
+    _singular_on_empty(() -> ldiv!(x, fact.lu, b), n)
+    return _check_finite_solution(x, finite_rhs)
 end
 
 function LinearAlgebra.ldiv!(
@@ -62,8 +89,9 @@ function LinearAlgebra.ldiv!(
     length(b) == n || throw(
         DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
     )
-    ldiv!(fact.lu, b)
-    return b
+    finite_rhs = all(isfinite, b)
+    _singular_on_empty(() -> ldiv!(fact.lu, b), n)
+    return _check_finite_solution(b, finite_rhs)
 end
 
 # Disambiguates the two equally specific candidates for a `VectorElement` destination:
@@ -81,7 +109,9 @@ function LinearAlgebra.ldiv!(
 end
 
 function Base.:\(fact::ConcreteSparspakFactorization, b::AbstractVector)
-    return fact.lu \ b
+    finite_rhs = all(isfinite, b)
+    x = _singular_on_empty(() -> fact.lu \ b, fact.dim)
+    return _check_finite_solution(x, finite_rhs)
 end
 
 # `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
@@ -99,7 +129,7 @@ function Bramble._sparspak_refactor!(fact::ConcreteSparspakFactorization, A::Spa
     (m == fact.dim && n == fact.dim) || throw(
         DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
     )
-    sparspaklu!(fact.lu, A; allow_pattern_change = false)
+    _singular_on_empty(() -> sparspaklu!(fact.lu, A; allow_pattern_change = false), n)
     return fact
 end
 

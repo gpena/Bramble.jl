@@ -66,7 +66,6 @@ See also: [`space`](@ref), [`VectorElement`](@ref)
 # The zero-argument method below is all `size` ever needs from `VectorElement`: `Base`'s
 # fallback already answers `size(uₕ, dim)` as `size(uₕ)[dim]` without a second definition.
 @inline Base.size(uₕ::VectorElement) = size(uₕ.data)
-@forward VectorElement.data (Bramble.show,)
 
 # A VectorElement wraps a vector, so indexing is linear; without this the
 # AbstractArray default of IndexCartesian() is used.
@@ -178,6 +177,13 @@ If `α` is provided, the components are initialized to `α`.
 """
 @inline element(Wₕ::AbstractSpaceType) = element(Wₕ, eltype(backend(Wₕ)))
 
+# A call whose second argument infers no narrower than `Any` (`Rₕ`, `avgₕ` or `assemble` on
+# an abstract `f`, whose element type is then unknown) matches every two-argument method
+# below. With one allowed match, inference gives up on such a call instead of inferring
+# each method on an abstract argument, and records no backedge on `element`: a method an
+# extension adds later invalidates none of them (gpena/Bramble.jl#755).
+Base.Experimental.@max_methods 1 function element end
+
 """
     element(Wₕ::AbstractSpaceType, ::Type{T}) -> VectorElement
 
@@ -222,9 +228,15 @@ Returns a [`VectorElement`](@ref) for a grid space `Wₕ` with the same coeffici
     # Into the storage, not the wrapper, for the same reason as the fill above: the
     # wrapper's only `copyto!` is the broadcast one, so a plain vector source reaches
     # Base's element-by-element `AbstractArray` copy and scalar-indexes a device array.
-    copyto!(parent(elem), v)
+    copyto!(parent(elem), _element_coefficients(v))
     return elem
 end
+
+# The vector `element(Wₕ, v)` copies from: `v` itself, or the one a wrapper holds.
+# BrambleSciMLExt adds a SciML `LinearSolution`, which is an `AbstractVector` around its
+# `u`. A hook rather than an `element` method, so that loading the extension changes no
+# method a caller of `element` was compiled against (gpena/Bramble.jl#755).
+@inline _element_coefficients(v::AbstractVector) = v
 
 """
     ldiv!(uₕ::VectorElement, A::Factorization, F) -> VectorElement
@@ -586,8 +598,8 @@ end
 @inline Base.:*(Vₕ::NTuple{D, VectorElement}, uₕ::VectorElement) where {D} = uₕ * Vₕ
 
 """
-    f::Function * uₕ::VectorElement -> VectorElement
-    uₕ::VectorElement * f::Function -> VectorElement
+    f::Function * uₕ::VectorElement{<:ScalarGridSpace} -> VectorElement
+    uₕ::VectorElement{<:ScalarGridSpace} * f::Function -> VectorElement
 
 Project the continuous function `f` onto `uₕ`'s own space and scale `uₕ` pointwise by it
 (gpena/Bramble.jl#197): equivalent to `Rₕ(space(uₕ), f) .* uₕ`, computed as a single
@@ -595,9 +607,10 @@ Project the continuous function `f` onto `uₕ`'s own space and scale `uₕ` poi
 in place) rather than one allocation for the projection and a second for the broadcast.
 
 `f` is restricted to `space(uₕ)` first, so `(x -> x[1] < 1) * uₕ` is an ordinary
-`VectorElement`.
+`VectorElement`. Only scalar spaces have a method: on a composite element the product
+is a `MethodError` (gpena/Bramble.jl#702); scale a leaf `uₕ(i)` instead.
 """
-@inline function Base.:*(f::F, uₕ::VectorElement) where {F <: Function}
+@inline function Base.:*(f::F, uₕ::VectorElement{<:ScalarGridSpace}) where {F <: Function}
     Wₕ = space(uₕ)
     # Same destination type `Rₕ(Wₕ, f) .* uₕ` would have promoted to, allocated once and
     # filled in place (`Rₕ!`) instead of allocating a projected element and then a second
@@ -607,7 +620,7 @@ in place) rather than one allocation for the projection and a second for the bro
     dest .*= uₕ
     return dest
 end
-@inline Base.:*(uₕ::VectorElement, f::F) where {F <: Function} = f * uₕ
+@inline Base.:*(uₕ::VectorElement{<:ScalarGridSpace}, f::F) where {F <: Function} = f * uₕ
 
 # --- Display ---------------------------------------------------------------------- #
 #

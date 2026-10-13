@@ -220,6 +220,43 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
         @test !(r_combined ≈ r_left + r_bottom)
     end
 
+    @testset "Marker validation" begin
+        # Bad markers must name the problem, not raise a BoundsError or a MethodError on a
+        # private helper. `thrown` returns what `f` threw, or `nothing` if it returned.
+        thrown(f) =
+            try
+                f()
+                nothing
+            catch err
+                err
+            end
+
+        # labels :left and :right, which `(:left, :left)` below needs
+        I = domain(interval(0.0, 1.0), :left => :xmin, :right => :xmax)
+        Wₕ = gridspace(mesh(I, 13, false))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(x -> 1.0, v))
+        uₕ = Rₕ(Wₕ, x -> x[1])
+        A = assemble(a)
+        F = assemble(l)
+
+        e0 = thrown(() -> reaction(a, l, uₕ; marker = ()))
+        @test e0 isa ArgumentError && occursin("names no label", sprint(showerror, e0))
+
+        for m in ([:left], ("left",), "left")
+            e = thrown(() -> reaction(a, l, uₕ; marker = m))
+            @test e isa ArgumentError && occursin(repr(m), sprint(showerror, e))
+            # the same check on the matrix methods, which share the marker parsing
+            e = thrown(() -> reaction!(zeros(ndofs(Wₕ)), A, F, uₕ; marker = m))
+            @test e isa ArgumentError && occursin(repr(m), sprint(showerror, e))
+            e = thrown(() -> reaction_density(A, F, uₕ; marker = m))
+            @test e isa ArgumentError && occursin(repr(m), sprint(showerror, e))
+        end
+
+        # a repeated label is the same selection as the label once
+        @test reaction(a, l, uₕ; marker = (:left, :left)) ≈ reaction(a, l, uₕ; marker = :left)
+    end
+
     @testset "Composite space: per-component reactions" begin
         # Two independent copies of the 1D problem stacked as a composite space; each
         # component solves its own manufactured problem, so a component-restricted
@@ -555,22 +592,16 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
             st = Base.invokelatest(iterate, m)[2]
             @test Base.invokelatest(iterate, m, st)[1] == idx[2] + 3
 
-            # per-leaf entries: the union mask, offset, size and selection of each leaf
+            # per-leaf entries: the per-label masks, offset, size and selection of each leaf
             entries = Base.invokelatest(
-                Bramble._reaction_leaf_entries, leaves, (:left, :right), nothing)
-            @test length(entries) == 1
-            @test Base.invokelatest(
-                Bramble._reaction_leaf_entries_impl, leaves, (:left, :right), nothing, 1) ==
-                  entries
-            mask, off, nn, active = entries[1]
-            @test findall(mask) == idx
-            @test (off, nn, active) == (0, n₁, true)
-            entries_b = Base.invokelatest(
                 Bramble._reaction_leaf_entries!, leaves, (:left, :right), nothing)
-            @test findall(entries_b[1][1][1]) == rows(Ω₁, :left, 0)
-            @test findall(entries_b[1][1][2]) == rows(Ω₁, :right, 0)
+            @test length(entries) == 1
+            masks, off, nn, active = entries[1]
+            @test findall(masks[1]) == rows(Ω₁, :left, 0)
+            @test findall(masks[2]) == rows(Ω₁, :right, 0)
+            @test (off, nn, active) == (0, n₁, true)
             for row in 1:n₁
-                @test Base.invokelatest(Bramble._reaction_row_marked, entries_b, row) ==
+                @test Base.invokelatest(Bramble._reaction_row_marked, entries, row) ==
                       (row in idx)
             end
             @test !Base.invokelatest(Bramble._reaction_row_marked, (), 1)

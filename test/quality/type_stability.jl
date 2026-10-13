@@ -190,20 +190,27 @@ end
     # gpena/Bramble.jl#549. The band sweeps pick one colour or two from `prod(strides)`, a
     # runtime value; a tuple of one or two ranges made that slot a Union. `@inferred` and
     # JET pass either way (the return type is concrete and the split is not dispatch), so
-    # only the untyped-slot types show it.
+    # only the unoptimised slot and SSA types show it. Both assemblies band through
+    # `_sweep_coloured!`, one instance per point functor; a Union with a range or a tuple of
+    # ranges among its arms is the pattern, whichever step or colour value carries it.
     @testset "Sweep band slots" begin
-        bad(ct) = filter(
-            T -> T isa Union &&
-                 any(S -> S <: Tuple{Vararg{StepRange{Int, Int}}}, Base.uniontypes(T)),
-            ct.slottypes)
+        ranged(S) = S <: AbstractRange || S <: Tuple{Vararg{AbstractRange}}
+        seen(ct) = filter(T -> T isa Type, [ct.slottypes; ct.ssavaluetypes])
+        bad(ct) = filter(T -> T isa Union && any(ranged, Base.uniontypes(T)), seen(ct))
         slots(f, types) = first(code_typed(f, types; optimize = false)).first
         a = form(Wₕ2, Wₕ2, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         l = form(Wₕ2, v -> innerₕ(x -> 1.0, D₋ₓ(v)))
-        cb = slots(Bramble._sweep_bilinear!,
-            (typeof(assemble(a)), typeof(Wₕ2), typeof(a.ast), NTuple{2, Int}, Int, Int, Bool))
-        cl = slots(Bramble._sweep_parallel!,
-            (Vector{Float64}, typeof(Wₕ2), typeof(l.ast), typeof(Bramble.indices(Ωₕ2)),
-                NTuple{2, Int}, Int, Bool))
+        grid = Bramble.indices(Ωₕ2)
+        lin = LinearIndices(grid)
+        ab, am = Bramble._bind_walk(a.ast, Wₕ2)
+        lb, lm = Bramble._bind_walk(l.ast, Wₕ2)
+        pb = Bramble._BilinearPoint(assemble(a), Wₕ2, ab, lin, am, 0, 0, true)
+        pl = Bramble._LinearPoint(zeros(ndofs(Wₕ2)), Wₕ2, lb, lin, lm, 0, true)
+        sweep(p) = slots(Bramble._sweep_coloured!,
+            (Bramble.CpuThreaded, typeof(p), typeof(grid), NTuple{2, Int}))
+        cb, cl = sweep(pb), sweep(pl)
+        # the slots are those of the banding body, not of a forwarder
+        @test any(T -> T <: StepRange{Int, Int}, seen(cb))
         @test isempty(bad(cb))
         @test isempty(bad(cl))
         # Control: the pattern #549 removed is flagged by the same filter.

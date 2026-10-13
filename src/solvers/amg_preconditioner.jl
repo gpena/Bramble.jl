@@ -46,6 +46,8 @@ hierarchy from it, but for the SPD matrix the theory assumes, assemble through
 [`assemble`](@ref)`(a, l; symmetrize = true)` and pass that matrix to the `AbstractMatrix`
 method instead.
 
+A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
+
 Requires [AlgebraicMultigrid.jl](https://github.com/JuliaLinearAlgebra/AlgebraicMultigrid.jl);
 call `using AlgebraicMultigrid` before calling this function.
 
@@ -73,6 +75,7 @@ function amg_preconditioner(
         a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, kwargs...
 )
     A = assemble(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
+    A = _as_csc(A)
     return _amg_preconditioner(A; kwargs...)
 end
 

@@ -272,8 +272,11 @@ end
 # with the grid). Passed straight to `concatenate_stencils` instead, the `Union` is split
 # at that call and each branch builds a concrete tuple. The split has a limit: the stencil
 # has one shape per combination of restricted summands' markers, and past two restricted
-# summands in one sum the compiler stops splitting (four linear `innerₕ` terms, three of
-# them restricted, still box per point).
+# summands in one sum the compiler stops splitting. `form`, bilinear and linear alike,
+# therefore splits a product with more than two into products of at most two
+# (`_split_restricted_products`, bilinear.jl and linear.jl), each walked apart, and both
+# paths assemble with 0 B. A product left whole, as it would split into more than 16 or
+# its constant scales keep several types, still boxes per point (gpena/Bramble.jl#727).
 @inline _concat_summand_stencils(::Tuple{}, space, I, markers, lin_idx::Int) = ()
 @inline function _concat_summand_stencils(ts::Tuple, space, I, markers, lin_idx::Int)
     head = local_stencil(first(ts), space, I, markers, lin_idx)
@@ -446,9 +449,8 @@ _is_source_only(::LazyOp) = false
 # ==============================================================================
 
 # Functions across `linear.jl`/`bilinear.jl`/`jacobian_pattern.jl` (`_check_block_meshes`,
-# `_route_terms!`, `_route_terms_parallel!`, `_pattern_blocks_jacobian!`,
-# `_assemble_blocks_parallel!`) walk a form's `OperatorAdd` tree to send each summand where
-# it belongs, all with the same shape: recurse left, recurse right, done. Recursing the tree
+# `_route_terms!`, `_route_terms_parallel!`, `_pattern_blocks_jacobian!`) walk a form's
+# `OperatorAdd` tree to send each summand where it belongs, all with the same shape: recurse left, recurse right, done. Recursing the tree
 # rather than flattening it into a vector of terms first preserves concrete types: a
 # flattened vector is `Vector{Any}` and makes every term a dynamic read, whereas recursing
 # keeps each term concretely typed at its own call and costs nothing.
@@ -484,7 +486,7 @@ _is_source_only(::LazyOp) = false
 end
 
 # `op` second, one mutated argument returned unchanged: `_route_terms!`,
-# `_route_terms_parallel!`, `_assemble_blocks!`, `_assemble_blocks_parallel!`.
+# `_route_terms_parallel!`, `_assemble_blocks!`.
 @inline function _visit_operator_add2(f::F, first_arg, op::OperatorAdd, rest...) where {F}
     map(t -> f(first_arg, t, rest...), _summands(op))
     return first_arg

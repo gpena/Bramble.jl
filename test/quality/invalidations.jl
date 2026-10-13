@@ -75,6 +75,39 @@ end
     end
 end
 
+# SciMLBase loaded first, so `using Bramble` also loads BrambleSciMLExt. Before #755 the
+# extension's `element(::AbstractSpaceType, ::LinearSolution)` alone invalidated 238
+# MethodInstances, 249 in all. The bound is the 11 left after it (the two `eltype` trees
+# #755 also names) plus 10.
+const _SCIML_INVALIDATION_BOUND = 21
+
+@testset "SciMLBase-loaded invalidations" begin
+    if isempty(VERSION.prerelease)
+        script = joinpath(@__DIR__, "invalidations_sciml_snoop.jl")
+        jl = Base.julia_cmd()
+        project = Base.active_project()
+
+        out = _subprocess_output(
+            `$jl --project=$project --startup-file=no $script`, "SciMLBase invalidation snoop"
+        )
+
+        if out !== nothing
+            # The extension must have loaded inside the snoop, or nothing of it is counted.
+            @test occursin("SCIML_EXT_LOADED=true", out)
+            m = match(r"SCIML_OWNED_INVALIDATED=(\d+)", out)
+            @test m !== nothing
+            if m !== nothing
+                n_invalidated = parse(Int, something(m.captures[1]))
+                @test n_invalidated <= _SCIML_INVALIDATION_BOUND
+                n_invalidated > _SCIML_INVALIDATION_BOUND &&
+                    @info "Package-owned invalidations found (SciMLBase loaded first):\n$out"
+            end
+        end
+    else
+        @test_skip "SciMLBase-loaded invalidation check skipped on prerelease Julia"
+    end
+end
+
 @testset "Polyester load invalidations" begin
     if isempty(VERSION.prerelease)
         jl = Base.julia_cmd()

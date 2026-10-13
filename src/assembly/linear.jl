@@ -86,7 +86,20 @@ end
 )
     resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:evaluate!); ast)
     _assemble_linear!(scratch, form, resolved_ast, nothing, nothing)
-    return dot(scratch, parent(vₕ))
+    return _contract_values(scratch, parent(vₕ))
+end
+
+# `l(vₕ)` contracts without conjugating, so neither may this: `dot` conjugates its first
+# argument and would return conj(l(vₕ)) for a complex source. A real `a` has nothing to
+# conjugate, and keeps `dot` (BLAS on the host, and a device array's own reduction).
+_contract_values(a::AbstractVector{<:Real}, b::AbstractVector) = dot(a, b)
+
+function _contract_values(a::AbstractVector, b::AbstractVector)
+    acc = zero(promote_type(eltype(a), eltype(b)))
+    @inbounds @simd for i in eachindex(a, b)
+        acc += a[i] * b[i]
+    end
+    return acc
 end
 
 @noinline function evaluate!(::AbstractVector, ::LinearForm, v::AbstractVector; kwargs...)
@@ -107,9 +120,14 @@ Return the resolved AST stored inside the linear form.
 """
 @inline resolve_form_ast(form::LinearForm) = form.ast
 
-@inline _validate_form_expression(::LazyOp{D}, ::Val{D}) where {D} = nothing
+# The kind (`Val(:linear)` or `Val(:bilinear)`) only picks the error message, so the
+# success path builds no string. The throwers take it untyped here, which keeps the
+# matching-dimension method the most specific one for every kind.
+@inline _validate_form_expression(::LazyOp{D}, ::Val{D}, ::Val) where {D} = nothing
+@inline _validate_form_expression(bad, ::Val, kind) = _throw_form_value(bad, kind)
+@inline _validate_form_expression(::LazyOp{E}, ::Val{D}, kind) where {E, D} = _throw_form_dimension(E, D, kind)
 
-@noinline function _validate_form_expression(bad, ::Val{D}) where {D}
+@noinline function _throw_form_value(bad, ::Val{:linear})
     throw(
         ArgumentError(
         "a linear form's expression has to build an operator over its test argument, and " *
@@ -119,11 +137,31 @@ Return the resolved AST stored inside the linear form.
     )
 end
 
-@noinline function _validate_form_expression(::LazyOp{E}, ::Val{D}) where {E, D}
+@noinline function _throw_form_value(bad, ::Val{:bilinear})
+    throw(
+        ArgumentError(
+        "the expression of a bilinear form has to build an operator over its trial and test " *
+        "arguments, and this one returned a $(typeof(bad)). Write it as a function of both " *
+        "(`(u, v) -> innerₕ(u, v)`) rather than as a value.",
+    ),
+    )
+end
+
+@noinline function _throw_form_dimension(E, D, ::Val{:linear})
     throw(
         ArgumentError(
         "a linear form's expression is $(E)-dimensional and its test space is $(D). The " *
         "operators in the expression have to come from the same space the form is built " *
+        "over.",
+    ),
+    )
+end
+
+@noinline function _throw_form_dimension(E, D, ::Val{:bilinear})
+    throw(
+        ArgumentError(
+        "the expression of a bilinear form is $(E)-dimensional and its trial space is $(D). " *
+        "The operators in the expression have to come from the spaces the form is built " *
         "over.",
     ),
     )
@@ -367,58 +405,70 @@ true
 function form(Wₕ, f)
     D = dim(Wₕ)
     raw_ast = f(test_function(Wₕ))
-    _validate_form_expression(raw_ast, Val(D))
-    ast = simplify_ast(_resolve_surfaces_for_space(resolve_ast(raw_ast), Wₕ))
+    _validate_form_expression(raw_ast, Val(D), Val(:linear))
+    ast = _split_restricted_products(
+        simplify_ast(_resolve_surfaces_for_space(resolve_ast(raw_ast), Wₕ)), eltype(Wₕ))
     _check_centered_meshes(ast, Wₕ)
     ast = _lower_sources_for_space(ast, Wₕ)
     _check_source_meshes(ast, Wₕ)
     return LinearForm{D, typeof(Wₕ), typeof(ast)}(Wₕ, ast)
 end
 
+# A product's test side holding three or more restricted summands is split as a bilinear
+# product's is (`_split_restricted_products`, bilinear.jl, gpena/Bramble.jl#727): grouped
+# by type, at most two a piece, its scales promoted to `E` when their common type promotes
+# to it, every piece one `LinearProduct` with the same source. Its source is left as it is:
+# a restricted source keeps one stencil type once `_typed_restrictions` (above) has typed it.
+function _split_restricted_products(op::LinearProduct{D, W}, ::Type{E}) where {D, W, E}
+    _holds_restriction(op.right_op) || return op
+    r = _uniform_scales(op.right_op, E)
+    rs = _operand_groups(_expanded_summands(r), Val(2))
+    length(rs) > 16 && return op
+    if length(rs) == 1 || _mixed_scales(r)
+        return r === op.right_op ? op :
+               LinearProduct{D, W, typeof(op.left_op), typeof(r)}(op.left_op, r)
+    end
+    return _linear_product_sum(op, rs)
+end
+
+# One `LinearProduct` per group, summed left to right; recursive on the tuple's type, so the
+# sum infers concretely.
+@inline _linear_product_sum(op::LinearProduct, rs::Tuple{Any}) = _linear_piece(op, rs[1])
+@inline _linear_product_sum(op::LinearProduct, rs::Tuple) = OperatorAdd(
+    _linear_product_sum(op, Base.front(rs)), _linear_piece(op, rs[end]))
+@inline _linear_piece(op::LinearProduct{D, W}, r) where {D, W} = LinearProduct{
+    D, W, typeof(op.left_op), typeof(r)}(op.left_op, r)
+
 # --- A VectorElement source must live on the leaf it is read on --- #
 #
 # `local_stencil(::SourceVector)` reads `op.vec[lin_idx]` at the walked leaf's linear index,
-# so a source from another mesh is read at the wrong points: a finer one silently, a coarser
-# one past its end. Only a source that kept its `VectorElement` (`_as_source`,
-# operators/inner.jl) knows its mesh; a plain vector, from a lowered closure or built by
-# hand, carries none and is skipped. Routed as `each_routed_leaf` routes, so a term naming
-# no component is checked against every leaf; one naming a component outside the space never
-# reaches here, as `_lower_sources_for_space` runs first in `form` and throws for it. The walk
-# reaches what `_host_sources` does.
-# Once, at `form`: points moved later (`change_points!`) are not caught, as in
-# `_same_mesh_or_throw` (jacobian_pattern.jl), whose predicate this is.
-_check_source_meshes(ast, Wₕ) = _check_source_mesh(ast, mesh(Wₕ))
-
-function _check_source_meshes(ast, Wₕ::CompositeGridSpace)
-    return _check_source_meshes_over_leaves(ast, leaf_spaces_offsets(Wₕ))
-end
-
-function _check_source_meshes_over_leaves(op::OperatorAdd, leaves)
-    _check_source_meshes_over_leaves(op.left_op, leaves)
-    _check_source_meshes_over_leaves(op.right_op, leaves)
-    return nothing
-end
-
-function _check_source_meshes_over_leaves(term::TERM, leaves) where {TERM}
-    target = test_component_or_nothing(term)
-    _foldl_leaves(nothing, leaves) do _, c, leaf
-        (target === nothing || target == c) && _check_source_mesh(term, mesh(first(leaf)))
-        return nothing
-    end
-    return nothing
-end
+# and `local_stencil(::GridFunctionScale)` its `grid_function[lin_idx]`, so a source or a
+# coefficient from another mesh is read at the wrong points: a finer one silently, a coarser
+# one past its end. Only an array that kept its `VectorElement` (`_as_source`,
+# operators/inner.jl, or `Rₕ` as a coefficient) knows its mesh; a plain vector, from a
+# lowered closure or built by hand, carries none and is skipped. Routed as
+# `_check_centered_meshes` routes, on the leaf the sweep walks; a linear form's test
+# components outside the space never reach here, as `_lower_sources_for_space` runs first
+# in `form` and throws for them. The walk reaches what `_host_sources` does. Once, at
+# `form`: points moved later (`change_points!`) are not caught, as in `_same_mesh`.
+_check_source_meshes(ast, Wₕ) = _check_source_meshes(ast, Wₕ, Wₕ)
+_check_source_meshes(ast, Wₕ, Vₕ) = _check_walked_meshes(_check_source_mesh, ast, Wₕ, Vₕ)
 
 _check_source_mesh(op, Ωₕ) = nothing
 
 function _check_source_mesh(op::SourceVector{D, <:VectorElement}, Ωₕ) where {D}
     Ωs = mesh(space(op.vec))
-    Ωs === Ωₕ ||
-        (npoints(Ωs, Tuple) == npoints(Ωₕ, Tuple) && host_points(Ωs) == host_points(Ωₕ)) ||
-        _throw_source_mesh(Ωs, Ωₕ)
+    _same_mesh(Ωs, Ωₕ) || _throw_source_mesh(Ωs, Ωₕ)
     return nothing
 end
 
-function _check_source_mesh(op::Union{OperatorAdd, LinearProduct}, Ωₕ)
+function _check_source_mesh(op::GridFunctionScale{D, <:VectorElement}, Ωₕ) where {D}
+    Ωs = mesh(space(op.grid_function))
+    _same_mesh(Ωs, Ωₕ) || _throw_source_mesh(Ωs, Ωₕ)
+    return _check_source_mesh(op.inner_op, Ωₕ)
+end
+
+function _check_source_mesh(op::Union{OperatorAdd, LinearProduct, BilinearProduct}, Ωₕ)
     _check_source_mesh(op.left_op, Ωₕ)
     _check_source_mesh(op.right_op, Ωₕ)
     return nothing
@@ -432,13 +482,13 @@ _check_source_mesh(op::UnaryWrapper, Ωₕ) = _check_source_mesh(op.inner_op, Ω
     ns, nh = npoints(Ωs, Tuple), npoints(Ωₕ, Tuple)
     # Equal counts would print two equal tuples, which show no reason for the refusal.
     which = ns == nh ? "the source is on another mesh of the same shape, $(ns) points" :
-            "the source's mesh has $(ns) points and the test space's $(nh)"
+            "the source's mesh has $(ns) points and the one it is read on $(nh)"
     throw(
         ArgumentError(
-        "a grid-function source of the linear form lives on another mesh than the test " *
-        "space it is read on: $(which). A source is read at the test space's " *
-        "own points, which name other places on another mesh. Interpolate it, as in " *
-        "`innerₕ(πₕ(uₕ), v)`, or build it with `Rₕ` on the test space.",
+        "a grid-function source or coefficient of the form lives on another mesh than the " *
+        "space it is read on: $(which). It is read at that space's own points, which " *
+        "name other places on another mesh. Interpolate it, as in `innerₕ(πₕ(uₕ), v)` " *
+        "or `πₕ(Wₕ, uₕ) * u`, or build it with `Rₕ` on the space the form walks.",
     ),
     )
 end
@@ -454,16 +504,20 @@ end
 # walks, so a composite whose collapsed leaf the term never touches still forms. A
 # component outside the space matches no leaf here and is refused where it was before. The
 # operand of an `InterpolationNode` lives on another mesh, so it is not entered. A linear
-# form walks its test space; `bilinear.jl`'s `form` passes both of its spaces.
+# form walks its test space; `bilinear.jl`'s `form` passes both of its spaces. The walk is
+# `_check_walked_meshes`, shared with `_check_source_meshes` above.
 _check_centered_meshes(ast, Vₕ) = _check_centered_meshes(ast, Vₕ, Vₕ)
+_check_centered_meshes(ast, Wₕ, Vₕ) = _check_walked_meshes(_check_centered_mesh, ast, Wₕ, Vₕ)
 
-function _check_centered_meshes(op::OperatorAdd, Wₕ, Vₕ)
-    _check_centered_meshes(op.left_op, Wₕ, Vₕ)
-    _check_centered_meshes(op.right_op, Wₕ, Vₕ)
+# Calls `check(term, Ωₕ)` for each term of `ast` on the mesh of every leaf the sweep walks
+# it over, routed as described above.
+function _check_walked_meshes(check::C, op::OperatorAdd, Wₕ, Vₕ) where {C}
+    _check_walked_meshes(check, op.left_op, Wₕ, Vₕ)
+    _check_walked_meshes(check, op.right_op, Wₕ, Vₕ)
     return nothing
 end
 
-function _check_centered_meshes(term, Wₕ, Vₕ)
+function _check_walked_meshes(check::C, term, Wₕ, Vₕ) where {C}
     # A term naming neither side is assembled on the diagonal blocks alone, the first
     # `min` of the two leaf counts (`_diagonal_blocks`), so only those leaves are checked.
     # A linear form passes its test space twice: every leaf, as `each_routed_leaf` routes.
@@ -471,20 +525,20 @@ function _check_centered_meshes(term, Wₕ, Vₕ)
               test_component_or_nothing(term) === nothing
     nmax = unnamed ? min(leaf_count(Wₕ), leaf_count(Vₕ)) : typemax(Int)
     _has_test_interp(term) &&
-        return _check_centered_on_side(term, Wₕ, trial_component_or_nothing, nmax)
-    return _check_centered_on_side(term, Vₕ, test_component_or_nothing, nmax)
+        return _check_on_side(check, term, Wₕ, trial_component_or_nothing, nmax)
+    return _check_on_side(check, term, Vₕ, test_component_or_nothing, nmax)
 end
 
-@inline function _check_centered_on_side(term, space, side_component::F, nmax) where {F}
-    return _check_centered_mesh(term, mesh(space))
+@inline function _check_on_side(check::C, term, space, side_component::F,
+        nmax) where {C, F}
+    return check(term, mesh(space))
 end
 
-@inline function _check_centered_on_side(
-        term, space::CompositeGridSpace, side_component::F, nmax) where {F}
+@inline function _check_on_side(check::C, term, space::CompositeGridSpace,
+        side_component::F, nmax) where {C, F}
     target = side_component(term)
     _foldl_leaves(nothing, leaf_spaces_offsets(space)) do _, c, leaf
-        (target === nothing ? c <= nmax : target == c) &&
-            _check_centered_mesh(term, mesh(first(leaf)))
+        (target === nothing ? c <= nmax : target == c) && check(term, mesh(first(leaf)))
         return nothing
     end
     return nothing
@@ -823,8 +877,49 @@ end
 # --- Helper cores for function barrier optimization ------------------------------- #
 
 # The scalar case is `_scatter_term!` (below) at offset zero: one leaf, the whole space.
-@inline _assemble_linear_core!(b::AbstractVector, space, ast::AST_TYPE, α = true) where {AST_TYPE} = _scatter_term!(
-    b, space, ast, 0, α)
+@inline function _assemble_linear_core!(
+        b::AbstractVector, space, ast::AST_TYPE, α = true) where {AST_TYPE}
+    _each_walk_unit(t -> _scatter_term!(b, space, t, 0, α), ast)
+    return b
+end
+
+# --- Walk units (gpena/Bramble.jl#727) --------------------------------------------- #
+#
+# A scalar space walks its whole form at once, every term's stencil concatenated at each
+# point, so the shapes of all restricted summands multiply: past two the `Union` is not
+# split and every point boxes, however `form` split the products
+# (`_split_restricted_products`). Such a form is walked one summand at a time instead,
+# each summand a walk of its own, as a composite space's terms already are. A form with at
+# most two restricted summands, the count read off its type, is walked once, as before.
+@inline _each_walk_unit(f::F, ast) where {F} = _unit_bits(ast) > 2 ?
+                                               (map(f, _walk_summands(ast)); nothing) :
+                                               (f(ast); nothing)
+@inline _fold_walk_units(f::F, ast, acc) where {F} = _unit_bits(ast) > 2 ?
+                                                     _fold_summands(f, _walk_summands(ast), acc) :
+                                                     f(ast, acc)
+
+# The summands walked apart: a scale over a sum (`2.0 * (l₁ + l₂ + l₃)`, `-(l₁ + l₂ + l₃)`)
+# is looked through, each summand walked under its own copy of the scale. The tree `form`
+# stored is not changed, so the scale is rebuilt per summand only here, in the walk.
+@inline _walk_summands(op::OperatorAdd) = (
+    _walk_summands(op.left_op)..., _walk_summands(op.right_op)...)
+@inline function _walk_summands(op::Union{OperatorScale, GridFunctionScale})
+    ts = _walk_summands(op.inner_op)
+    return ts isa Tuple{Any} ? (op,) : map(t -> _rewrap_inner(op, t), ts)
+end
+@inline _walk_summands(op) = (op,)
+@inline _fold_summands(f::F, ::Tuple{}, acc) where {F} = acc
+@inline _fold_summands(f::F, ts::Tuple, acc) where {F} = _fold_summands(
+    f, Base.tail(ts), f(first(ts), acc))
+
+# The restricted summands of a linear form, as `_shape_bits` (bilinear.jl) counts an
+# operand's, over both sides of each product and every restriction wrapping a product.
+@inline _unit_bits(op::OperatorAdd) = _unit_bits(op.left_op) + _unit_bits(op.right_op)
+@inline _unit_bits(op::LinearProduct) = _shape_bits(op.left_op) + _shape_bits(op.right_op)
+@inline _unit_bits(op::RegionRestriction) = (op.zero_stencil === nothing) +
+                                            _unit_bits(op.inner_op)
+@inline _unit_bits(op::UnaryWrapper) = _unit_bits(op.inner_op)
+@inline _unit_bits(op) = _shape_bits(op)
 
 # --- Parallel assembly partitioning ------------------------------------------------ #
 
@@ -933,6 +1028,26 @@ Shared by the banded and the point-coloured sweep, so the two cannot drift apart
     return nothing
 end
 
+# One point of a right-hand-side sweep (`_sweep_coloured!`, bilinear_execution.jl):
+# `_scatter_linear_point!` into `b` at `I`.
+struct _LinearPoint{B, S, M, L, K, A}
+    b::B
+    sp::S
+    term::M
+    lin_indices::L
+    mesh_markers::K
+    offset::Int
+    α::A
+end
+@inline (p::_LinearPoint)(I) = _scatter_linear_point!(
+    p.b, p.sp, p.term, I, p.lin_indices, p.mesh_markers, p.offset, p.α)
+
+@inline _sweep_bands!(policy, p::_LinearPoint, ax, bidx, nbands::Int, rest) = _sweep_linear_band_colour!(
+    policy, p.b, p.sp, p.term, ax, bidx, nbands, rest, p.lin_indices, p.mesh_markers,
+    p.offset, p.α)
+@inline _sweep_points!(policy, p::_LinearPoint, idxs) = _sweep_colour!(
+    policy, p.b, p.sp, p.term, idxs, p.lin_indices, p.mesh_markers, p.offset, p.α)
+
 """
     _sweep_linear_band_colour!(policy, b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α = true) -> Nothing
 
@@ -957,32 +1072,8 @@ reaches only its own point cannot collide at all, and then `bidx` is every band 
         offset::Int,
         α = true
 ) where {TERM}
-    return _static_or_serial(_static_linear_band_colour!, _serial_linear_band_colour!, b, sp,
-        term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α)
-end
-
-# The `Threads.@threads :static` loop of `_sweep_linear_band_colour!(::CpuThreaded, ...)` and
-# the same bands run in order on the calling task, the pair `_static_or_serial` picks between.
-@noinline function _static_linear_band_colour!(
-        b, sp, term::TERM, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
-) where {TERM}
-    Threads.@threads :static for k in bidx
-        for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
-            _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
-        end
-    end
-    return nothing
-end
-
-@noinline function _serial_linear_band_colour!(
-        b, sp, term::TERM, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
-) where {TERM}
-    for k in bidx
-        for I in CartesianIndices((rest..., _band_range(ax, nbands, k)))
-            _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
-        end
-    end
-    return nothing
+    point = _LinearPoint(b, sp, term, lin_indices, mesh_markers, offset, α)
+    return _threaded_bands!(point, ax, bidx, nbands, rest)
 end
 
 @noinline function _sweep_linear_band_colour!(
@@ -1019,35 +1110,15 @@ The only `src/` method errors naming Polyester.
 end
 
 # Dispatches on the *effective* execution policy (`_sweep_parallel!` computes it):
-# `CpuThreaded` keeps `Threads.@threads` exactly as before; `CpuPolyester` reaches its own hook
+# `CpuThreaded` runs the shared `Threads.@threads` loop; `CpuPolyester` reaches its own hook
 # instead, so it never silently threads with the wrong mechanism.
 # `CpuSerial` never reaches this function -- `_effective_parallel_policy` only ever hands it
 # `CpuThreaded` or `CpuPolyester`.
 @noinline function _sweep_colour!(
         ::CpuThreaded, b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int, α = true
 ) where {TERM}
-    return _static_or_serial(_static_linear_colour!, _serial_linear_colour!, b, sp, term, idxs,
-        lin_indices, mesh_markers, offset, α)
-end
-
-# The `Threads.@threads :static` loop of `_sweep_colour!(::CpuThreaded, ...)` and the same
-# loop run in order on the calling task, the pair `_static_or_serial` picks between.
-@noinline function _static_linear_colour!(
-        b, sp, term::TERM, idxs, lin_indices, mesh_markers, offset, α
-) where {TERM}
-    Threads.@threads :static for I in idxs
-        _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
-    end
-    return nothing
-end
-
-@noinline function _serial_linear_colour!(
-        b, sp, term::TERM, idxs, lin_indices, mesh_markers, offset, α
-) where {TERM}
-    for I in idxs
-        _scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α)
-    end
-    return nothing
+    point = _LinearPoint(b, sp, term, lin_indices, mesh_markers, offset, α)
+    return _threaded_colour!(point, idxs)
 end
 
 @noinline function _sweep_colour!(
@@ -1067,67 +1138,30 @@ naming Polyester.
     return _throw_cpubatch_without_polyester(:_batch_linear_colour_sweep!)
 end
 
-# Every colour in turn. `policy` is the *effective* policy (`_effective_parallel_policy(sp)`,
-# computed once here): `CpuSerial` is coerced to `CpuThreaded` since every call into this
-# function is already on the forced-threaded path (`_assemble_linear_parallel_core!`,
-# entered from a non-`CpuSerial` branch, or from `assemble_parallel!`'s own "regardless of
-# policy" contract); `CpuPolyester` passes through unchanged so the colour/band sweeps below
-# reach their own hook instead of `Threads.@threads`.
+# Every colour in turn (`_sweep_coloured!`, bilinear_execution.jl). `policy` is the
+# *effective* policy (`_effective_parallel_policy(sp)`, computed once here): `CpuSerial` is
+# coerced to `CpuThreaded` since every call into this function is already on the
+# forced-threaded path (`_assemble_linear_parallel_core!`, entered from a non-`CpuSerial`
+# branch, or from `assemble_parallel!`'s own "regardless of policy" contract);
+# `CpuPolyester` passes through unchanged so the colour/band sweeps reach their own hook
+# instead of `Threads.@threads`.
 function _sweep_parallel!(
         b::AbstractVector, sp, term::TERM, grid_inds, strides, offset::Int, α = true
 ) where {TERM}
-    Ωsp = mesh(sp)
-    lin_indices = LinearIndices(indices(Ωsp))
+    lin_indices = LinearIndices(indices(mesh(sp)))
     bound, mesh_markers = _bind_walk(term, sp)
-    policy = _effective_parallel_policy(sp)
-
-    # Bands before colours, for the reason spelled out in `_sweep_bilinear!`: two slabs
-    # instead of `prod(strides)` strided colours, each walked contiguously.
-    inds = grid_inds.indices
-    D = length(strides)
-    ax = inds[D]
-    nbands = _band_count(length(ax), strides[D], Threads.nthreads())
-
-    if nbands != 0
-        rest = Base.front(inds)
-        # One pass over every band when nothing can collide, else odd bands then even; the
-        # colour is a `StepRange` either way (see `_sweep_bilinear!`).
-        step = prod(strides) == 1 ? 1 : 2
-        for start in 1:step
-            _sweep_linear_band_colour!(
-                policy, b, sp, bound, ax, start:step:nbands, nbands, rest, lin_indices,
-                mesh_markers, offset, α
-            )
-        end
-        return b
-    end
-
-    if prod(strides) == 1
-        _sweep_colour!(policy, b, sp, bound, grid_inds, lin_indices, mesh_markers, offset, α)
-        return b
-    end
-
-    for c in CartesianIndices(strides)
-        _sweep_colour!(
-            policy,
-            b,
-            sp,
-            bound,
-            _colour_subgrid(grid_inds, c, strides),
-            lin_indices,
-            mesh_markers,
-            offset,
-            α
-        )
-    end
+    point = _LinearPoint(b, sp, bound, lin_indices, mesh_markers, offset, α)
+    _sweep_coloured!(_effective_parallel_policy(sp), point, grid_inds, strides)
     return b
 end
 
 function _assemble_linear_parallel_core!(
         b::AbstractVector, space, ast::AST_TYPE, α = true
 ) where {AST_TYPE}
-    strides = _term_colour_strides(ast)
-    _sweep_parallel!(b, space, ast, indices(mesh(space)), strides, 0, α)
+    _each_walk_unit(ast) do t
+        strides = _term_colour_strides(t)
+        return _sweep_parallel!(b, space, t, indices(mesh(space)), strides, 0, α)
+    end
     return b
 end
 
@@ -1224,7 +1258,7 @@ end
 # The scalar case is `_contract_term` (below) at offset zero: one leaf, the whole space.
 @inline _contract_linear_core(
     space, ast::AST_TYPE, v::AbstractVector, acc::T
-) where {AST_TYPE, T} = _contract_term(space, ast, 0, v, acc)
+) where {AST_TYPE, T} = _fold_walk_units((t, a) -> _contract_term(space, t, 0, v, a), ast, acc)
 
 function _contract_linear_core(
         space::CompositeGridSpace{N}, ast::AST_TYPE, v::AbstractVector, acc::T
@@ -1301,8 +1335,9 @@ end
               dirichlet_components = nothing) -> AbstractVector
 
 Refill `b` with the assembled `form` and return it with zero allocations (**0 bytes**).
-A form whose terms, once simplified, put three or more region-restricted summands in one
-product allocates per grid point (see gpena/Bramble.jl#727).
+A product with three or more region-restricted summands on its test side is split by `form`
+into products of at most two (gpena/Bramble.jl#727); one it leaves whole, as it would split
+into more than 16 or its constant scales keep several types, allocates per grid point.
 
 On a test space whose backend lives on a device (a Metal space, say), `b` is filled on the
 host and uploaded in one `copyto!`, as system matrices are: that path
@@ -1473,11 +1508,6 @@ function _host_sources(op::SourceVector{D}) where {D}
     return SourceVector{D, typeof(vec)}(vec)
 end
 
-function _host_sources(op::OperatorScale{D}) where {D}
-    inner = _host_sources(op.inner_op)
-    return OperatorScale{D, typeof(op.scalar), typeof(inner)}(op.scalar, inner)
-end
-
 function _host_sources(op::GridFunctionScale{D}) where {D}
     gf = _host_array(op.grid_function)
     inner = _host_sources(op.inner_op)
@@ -1496,24 +1526,13 @@ function _host_sources(op::LinearProduct{D, W}) where {D, W}
     return LinearProduct{D, W, typeof(left), typeof(right)}(left, right)
 end
 
-function _host_sources(op::ShiftNode{D, Dim}) where {D, Dim}
-    inner = _host_sources(op.inner_op)
-    return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
-end
-
-function _host_sources(op::RegionRestriction{D, R}) where {D, R}
-    inner = _host_sources(op.inner_op)
-    return _rebuild_restriction(op, op.region, inner)
-end
-
-# The `@node_family` nodes (`operators/node_family.jl`): one `inner_op` each, rebuilt
-# around the walked operand as their generated `_bind_interp_spaces` is.
-for N in (:BackwardDifference, :ForwardDifference, :CenteredDifference, :StarDifference,
-    :CrossWeightedDifference, :BackwardAverage, :ForwardAverage, :CenteredAverage, :JumpNode)
-    @eval function _host_sources(op::$N{D, Dim}) where {D, Dim}
-        inner = _host_sources(op.inner_op)
-        return $N{D, Dim, typeof(inner)}(inner)
-    end
+# The nodes holding one `inner_op` and nothing to copy: `OperatorScale`, `ShiftNode`,
+# `RegionRestriction` (its region and zero stencil kept) and the `@node_family` nodes
+# (`operators/node_family.jl`), each rebuilt around the walked operand by `_rewrap_inner`.
+function _host_sources(op::Union{OperatorScale, ShiftNode, RegionRestriction,
+        BackwardDifference, ForwardDifference, CenteredDifference, StarDifference,
+        CrossWeightedDifference, BackwardAverage, ForwardAverage, CenteredAverage, JumpNode})
+    return _rewrap_inner(op, _host_sources(op.inner_op))
 end
 
 """
@@ -1521,8 +1540,10 @@ end
 
 Refill `b` with the assembled `form` across threads and return it, regardless of
 `test_space(form)`'s backend execution policy. Unlike [`assemble!`](@ref), does not
-apply Dirichlet conditions. On a device test space the threaded sweep runs on a host mirror
-into a host buffer, uploaded to `b` in one `copyto!`, as in [`assemble!`](@ref).
+apply Dirichlet conditions. A stencil reaching neighbours is swept by colour, so the entries
+can differ from the serial sweep in the last bits; repeated threaded calls agree exactly.
+On a device test space the threaded sweep runs on a host
+mirror into a host buffer, uploaded to `b` in one `copyto!`, as in [`assemble!`](@ref).
 """
 function assemble_parallel!(b::AbstractVector, form::LinearForm, ast = nothing)
     resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)

@@ -120,6 +120,10 @@ the component-wise products:
 which is the only meaning it can have, so there is nothing ambiguous about accepting one.
 The two grid functions must have the same number of components.
 
+`uₕ` and `vₕ` must live on the same mesh, the same object or one with the same points (two
+`gridspace` calls over one mesh qualify); otherwise an `ArgumentError` is thrown, since the
+weights are read from `space(uₕ)`. The same holds for every inner product in this file.
+
 `markers` restricts the sum to the union of the labelled regions' points (a masked sum of
 the same cell measures, not a surface integral; see the note above `_combined_mask`).
 
@@ -215,7 +219,8 @@ general surface -- the weight stops factorising where the surface is cut at an i
 transverse index, and needs the explicit one-sided face sum -- and is refused rather than
 silently given the factorised weight. So is a face set holding both faces of an axis with two
 points or fewer, since every grid point lies on it. A `DimensionMismatch` is thrown when the
-storage of `uₕ` or `vₕ` does not hold one value per point of the mesh of `space(uₕ)`.
+storage of `uₕ` or `vₕ` does not hold one value per point of the mesh of `space(uₕ)`, and an
+`ArgumentError` when the two live on different meshes, as for [`innerₕ`](@ref).
 
 The symbolic twin, for use inside a form, is `inner_Γ(g, v; markers = …)`
 (`operators/inner.jl`). It takes its regions as a keyword, to sit beside `innerₕ`; this
@@ -244,6 +249,7 @@ function inner_Γ(
         vₕ::VectorElement{<:ScalarGridSpace{D}},
         labels::Vararg{Symbol, N}
 ) where {D, N}
+    _check_inner_meshes(uₕ, vₕ)
     Ωₕ = mesh(space(uₕ))
     mask = _surface_mask(Ωₕ, labels)
     _no_faces(mask) && _throw_no_surface_labels()
@@ -550,10 +556,9 @@ end
 # instead splits the single line itself (`1:n₁`) into bands via `_band_range`, with the
 # trailing product `c` fixed at `one(T)`.
 #
-# The masked methods split the mask's 64-bit words into bands exactly as
-# `_threaded_dot_masked` (`src/utils/linear_algebra.jl`) does, and read `w` through a
-# `CartesianIndex` (`w[cart[i]]`), never the linear `Int` `getindex` this specialization
-# exists to avoid.
+# The masked reduction is `_threaded_dot_masked` (`src/utils/linear_algebra.jl`) itself: its
+# band reads `w` through a `CartesianIndex` (`w[cart[i]]`), never the linear `Int` `getindex`
+# this specialization exists to avoid.
 @noinline function _threaded_dot(
         u::AbstractVector, w::SeparableWeights{D, <:Any, VT}, v::AbstractVector
 ) where {D, VT}
@@ -621,82 +626,17 @@ end
     return s
 end
 
-@noinline function _threaded_dot_masked(
-        u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector, mask::BitVector
-) where {D}
-    n = length(w)
-    (length(u) == n == length(v) == length(mask)) ||
-        _throw_dot_dim_error(length(u), n, length(v), length(mask))
-    T = promote_type(eltype(u), eltype(w), eltype(v))
-    cart = CartesianIndices(w.dims)
-    nwords = length(mask.chunks)
-    nchunks = Threads.nthreads()
-    partials = zeros(T, nchunks)
-    ax = 1:nwords
-    _static_or_serial(_static_partials!, _serial_partials!, partials, nchunks,
-        _separable_masked_band, u, w, v, cart, mask, ax, nchunks)
-    return sum(partials)
+# The masked `SeparableWeights` reduction is `_threaded_dot_masked` itself
+# (`src/utils/linear_algebra.jl`), whose band reads `w` through `_masked_cart`. The term is
+# the one `_separable_masked_words_band` in `BramblePolyesterExt` keeps a copy of, so a change
+# here must be made there too (gpena/Bramble.jl#473).
+@inline _masked_cart(w::SeparableWeights) = CartesianIndices(w.dims)
+
+@inline function _masked_term(s, u, w, v, i, ::Type{T}, cart::CartesianIndices) where {T}
+    return muladd(conj(T(u[i])) * T(v[i]), T(w[cart[i]]), s)
 end
 
-@noinline function _threaded_dot_masked(
-        u::AbstractVector, w::SeparableWeights{D}, v::AbstractVector, mask::MarkedIndicesUnion
-) where {D}
-    n = length(w)
-    (length(u) == n == length(v) == mask.len) ||
-        _throw_dot_dim_error(length(u), n, length(v), mask.len)
-    T = promote_type(eltype(u), eltype(w), eltype(v))
-    cart = CartesianIndices(w.dims)
-    nwords = length(mask.chunks[1])
-    nchunks = Threads.nthreads()
-    partials = zeros(T, nchunks)
-    ax = 1:nwords
-    _static_or_serial(_static_partials!, _serial_partials!, partials, nchunks,
-        _separable_masked_band, u, w, v, cart, mask, ax, nchunks)
-    return sum(partials)
-end
-
-# The per-band partial sums of the two masked `SeparableWeights` `_threaded_dot_masked`
-# methods above, shared by their threaded and serial loops as the dense ones are.
-# `BramblePolyesterExt` keeps a copy over the mask's words (`_separable_masked_words_band`),
-# so a change here must be made there too (gpena/Bramble.jl#473).
-@noinline function _separable_masked_band(
-        u, w::SeparableWeights, v, cart, mask::BitVector, ax, nchunks::Int, b::Int
-)
-    T = promote_type(eltype(u), eltype(w), eltype(v))
-    chunks = mask.chunks
-    rng = _band_range(ax, nchunks, b)
-    s = zero(T)
-    @inbounds for widx in rng
-        word = chunks[widx]
-        base = (widx - 1) * 64
-        while word != zero(UInt64)
-            i = base + trailing_zeros(word) + 1
-            s = muladd(conj(T(u[i])) * T(v[i]), T(w[cart[i]]), s)
-            word &= word - 1
-        end
-    end
-    return s
-end
-
-@noinline function _separable_masked_band(
-        u, w::SeparableWeights, v, cart, mask::MarkedIndicesUnion, ax, nchunks::Int, b::Int
-)
-    T = promote_type(eltype(u), eltype(w), eltype(v))
-    rng = _band_range(ax, nchunks, b)
-    s = zero(T)
-    @inbounds for widx in rng
-        word = _reduce_or_chunk(mask.chunks, widx)
-        base = (widx - 1) * 64
-        while word != zero(UInt64)
-            i = base + trailing_zeros(word) + 1
-            s = muladd(conj(T(u[i])) * T(v[i]), T(w[cart[i]]), s)
-            word &= word - 1
-        end
-    end
-    return s
-end
-
-# Device counterparts of the three specializations above (gpena/Bramble.jl#94, #174).
+# Device counterparts of the specializations above (gpena/Bramble.jl#94, #174).
 # A device-backed space's `SeparableWeights.factors` are themselves device arrays, so the
 # `CartesianIndices`/scalar-`getindex` walk above would scalar-index the device once per
 # grid point -- not merely slow, an error under `GPUArrays`' default scalar-indexing guard.
@@ -830,11 +770,36 @@ See also: [`inner₊`](@ref), [`weights`](@ref), [`SeparableWeights`](@ref).
         ::Val{S};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {S, N}
+    _check_inner_meshes(uₕ, vₕ)
     w = weights(space(uₕ), Val(S))
     policy = execution_policy(space(uₕ))
     N == 0 && return _dot(policy, uₕ.data, w, vₕ.data)
     mask = _combined_marked_indices(mesh(space(uₕ)), markers)
     return _dot_masked(policy, uₕ.data, w, vₕ.data, mask)
+end
+
+# Every numeric inner product of two scalar grid functions reaches the one above, so the
+# mesh is checked there: once per call, once per leaf of a composite and once per entry of
+# a tuple. The weights are those of `space(uₕ)`, so a `vₕ` on another mesh of the same
+# size would be read at the wrong points (gpena/Bramble.jl#701). The rule is `form`'s
+# (`_same_mesh`): two `gridspace` calls over one mesh pass, unlike a broadcast (#181).
+@inline function _check_inner_meshes(uₕ::VectorElement, vₕ::VectorElement)
+    Ωu, Ωv = mesh(space(uₕ)), mesh(space(vₕ))
+    _same_mesh(Ωu, Ωv) || _throw_inner_mesh_mismatch(Ωu, Ωv)
+    return nothing
+end
+
+@noinline function _throw_inner_mesh_mismatch(Ωu, Ωv)
+    nu, nv = npoints(Ωu, Tuple), npoints(Ωv, Tuple)
+    # Equal counts would print two equal tuples, which show no reason for the refusal.
+    which = nu == nv ? "another mesh of the same shape, $(nu) points" :
+            "meshes of $(nu) and $(nv) points"
+    throw(
+        ArgumentError(
+        "an inner product needs both grid functions on the same mesh; they live on " *
+        "$(which).",
+    ),
+    )
 end
 
 @inline function _directional_inner_plus(
@@ -1056,22 +1021,34 @@ function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
     dim_u = get_dimension_from_type(u_type)
     dim_v = get_dimension_from_type(v_type)
 
-    u_is_tuple = u_type <: NTuple
-    v_is_tuple = v_type <: NTuple
+    # Every `Tuple`, not only an `NTuple`: a tuple whose entries differ in type, such as
+    # ∇ₕ(u) in 2D or a composite component beside a plain grid function, is no `NTuple`.
+    u_is_tuple = u_type <: Tuple
+    v_is_tuple = v_type <: Tuple
 
     # Two tuples must have the same arity; otherwise the extra entries would be dropped
-    # silently. The check covers every `Tuple`, not only an `NTuple`: a tuple whose
-    # entries differ in type, such as ∇ₕ(u) in 2D, is no `NTuple`. The message is spliced
-    # in as a String, as in the scalar branch below.
-    if u_type <: Tuple && v_type <: Tuple && fieldcount(u_type) != fieldcount(v_type)
+    # silently. The message is spliced in as a String, as in the scalar branch below.
+    if u_is_tuple && v_is_tuple && fieldcount(u_type) != fieldcount(v_type)
         len_u, len_v = fieldcount(u_type), fieldcount(v_type)
         return :(throw(DimensionMismatch($("Tuple lengths $len_u and $len_v do not match"))))
     end
 
+    # The entries of one tuple must live on meshes of one dimension: the direction count
+    # below is read off the first entry only, so a mix would be summed along the wrong
+    # directions, or fail deep inside, depending on the order of the entries.
+    for (is_tuple, T) in ((u_is_tuple, u_type), (v_is_tuple, v_type))
+        is_tuple || continue
+        dims = unique(filter(!isnothing, map(get_dimension_from_type, fieldtypes(T))))
+        if length(dims) > 1
+            msg = "Tuple entries live on meshes of dimensions $(join(dims, ", "))"
+            return :(throw(DimensionMismatch($msg)))
+        end
+    end
+
     # Prefer tuple arity when tuples are provided (e.g., inner₊((a,b), (c,d)) even in 1D).
-    D = if u_type <: NTuple
+    D = if u_is_tuple
         dim_u
-    elseif v_type <: NTuple
+    elseif v_is_tuple
         dim_v
     elseif !isnothing(dim_u) && !isnothing(dim_v)
         if dim_u == dim_v

@@ -102,10 +102,13 @@ using Kronecker: Kronecker
                 :MarkedIndicesUnion,
                 :_band_range,
                 :_reduce_or_chunk,
+                :_mask_word,
+                :_mask_nwords,
+                :_mask_length,
                 # `_ReplayTarget`, `_replay_point!`: the warmed-refill
                 # replay's target union and per-point step, called from
                 # `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` above the
-                # same way the searching sweep calls `_scatter_point!`. Neither is public.
+                # same way `_sweep_point!` calls the latter. Neither is public.
                 :_ReplayTarget,
                 # `_ActionTarget`: the matrix-free product's sink union,
                 # passed through the same two Polyester replay hooks as `_ReplayTarget`. Not
@@ -113,7 +116,6 @@ using Kronecker: Kronecker
                 :_ActionTarget,
                 :_replay_point!,
                 :_scatter_linear_point!,
-                :_scatter_point!,
                 :_throw_dot_dim_error,
                 :_write_components!,
                 # `SeparableWeights` (commit d8c34602): the Bramble internal `weights(Wₕ,
@@ -141,7 +143,7 @@ using Kronecker: Kronecker
                 # (src/space/vectorelement.jl). Neither exported nor public.
                 :_broadcast_band!,
                 # `ReplaySink`, `_PairReplaySink`, `_DiagonalReplayTarget`, `ActionSink`,
-                # `_PairActionSink`, `_ScatterCSC` (BramblePolyesterExt): the sink and target
+                # `_PairActionSink` (BramblePolyesterExt): the sink and target
                 # types the warmed-refill replay and the matrix-free product pass between
                 # Bramble's sweeps and the extension's `@batch` bodies, named in its method
                 # signatures and in `_batch_split`'s skeletons. None is exported or public.
@@ -150,13 +152,11 @@ using Kronecker: Kronecker
                 :_DiagonalReplayTarget,
                 :ActionSink,
                 :_PairActionSink,
-                :_ScatterCSC,
-                # `_AvgKernel`, `_AvgScatterKernel`, `_MaskedKernel`, `_RₕKernel`, `__prod`:
+                # `_AvgKernel`, `_MaskedKernel`, `_RₕKernel`, `__prod`:
                 # the per-point kernels of the cell-average, projection and restriction
                 # operators, run by the extension's `@batch` bodies as the `CpuThreaded` sweeps
                 # run them, and the diagonal product the separable weights share.
                 :_AvgKernel,
-                :_AvgScatterKernel,
                 :_MaskedKernel,
                 :_RₕKernel,
                 :__prod,
@@ -348,6 +348,9 @@ using Kronecker: Kronecker
     #   submodule, reached once to initialise MPI lazily on first use.
     # - `FACTOR`, `SOLVE`, `invoke_mumps!` (BrambleMUMPSExt): MUMPS's job-type constants and
     #   the low-level driver call its `ldiv!`/`refactor!` methods issue directly.
+    # - `Finalized`, `is_finalized` (BrambleMUMPSExt): the finalizer skips the free once
+    #   MPI has shut down and refuses a finalized instance (gpena/Bramble.jl#715); neither
+    #   package makes them public.
     # - `_suitesparse_factorize`, `_suitesparse_refactor!`, `_suitesparse_solve`
     #   (BrambleSuiteSparseExt): the same `_`-prefixed fallback idiom again, one entry point
     #   per SuiteSparse-backed `factorize`/`refactor!`/`\` method.
@@ -396,8 +399,7 @@ using Kronecker: Kronecker
                 :_scatter_add!,
                 :_zero_stored!,
                 # `_batch_for!`, `_batch_axis_for!`, `_batch_scatter_for!`, `_batch_dot`,
-                # `_batch_dot_masked`, `_batch_bilinear_colour_sweep!`,
-                # `_batch_bilinear_band_sweep!`, `_batch_linear_colour_sweep!`,
+                # `_batch_dot_masked`, `_batch_linear_colour_sweep!`,
                 # `_batch_linear_band_sweep!`: the
                 # `Polyester.@batch` counterparts of the `CpuThreaded` sweeps and reductions in
                 # `src/utils/linear_algebra.jl`, `src/assembly/bilinear_execution.jl` and
@@ -407,16 +409,10 @@ using Kronecker: Kronecker
                 :_batch_scatter_for!,
                 :_batch_dot,
                 :_batch_dot_masked,
-                :_batch_bilinear_colour_sweep!,
-                :_batch_bilinear_band_sweep!,
                 :_batch_linear_colour_sweep!,
                 :_batch_linear_band_sweep!,
-                # `_threaded_replay_policy`, `_batch_bilinear_band_replay!`,
-                # `_batch_bilinear_colour_replay!`:
-                # opt `CpuPolyester` into the warmed-refill replay and its `Polyester.@batch`
-                # counterparts of `_batch_bilinear_band_sweep!`/`_batch_bilinear_colour_sweep!`
-                # above, reached instead of them once a unit's leaf can replay.
-                :_threaded_replay_policy,
+                # `_batch_bilinear_band_replay!`, `_batch_bilinear_colour_replay!`: the
+                # `Polyester.@batch` counterparts of the `CpuThreaded` replay sweeps.
                 :_batch_bilinear_band_replay!,
                 :_batch_bilinear_colour_replay!,
                 # `_batch_difference_engine!`, `_batch_average_engine!`,
@@ -562,6 +558,8 @@ using Kronecker: Kronecker
                 :FACTOR,
                 :SOLVE,
                 :invoke_mumps!,
+                :Finalized,
+                :is_finalized,
                 :_suitesparse_factorize,
                 :_suitesparse_refactor!,
                 :_suitesparse_solve,
@@ -629,7 +627,12 @@ using Kronecker: Kronecker
                 # generated function rebuilds an operator wrapper around a new operand from
                 # the wrapper's own type; Base has no public accessor for a type's wrapper.
                 :typename,
-                :unwrap_unionall
+                :unwrap_unionall,
+                # `Base.Experimental.@max_methods` (src/space/vectorelement.jl): caps `element`
+                # at one method so a method an extension adds invalidates none of its callers
+                # (#755); neither the module nor the macro has a public spelling.
+                :Experimental,
+                Symbol("@max_methods")
             )
         ) === nothing
     end

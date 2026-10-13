@@ -210,6 +210,45 @@ using Bramble:
         @test !isposdef(j2)
     end
 
+    # Assembly does not conjugate the test side, so a non-real coefficient inside a side
+    # gives `LᵀGWGL`, which `g = im` makes negative definite (#687). Graded mesh.
+    @testset "Non-real coefficient in a side (#687)" begin
+        I = interval(0.0, 1.0)
+        Wg = gridspace(mesh(domain(I × I), (7, 6), (false, false)))
+        g = element(Wg, ComplexF64)
+        parent(g) .= im
+        a = form(Wg, Wg, (u, v) -> innerₕ(g * u, g * v))
+        @test !isposdef(Matrix(assemble(a)))
+        @test isposdef(a) === false
+        @test issymmetric(a)
+
+        # Deep inside a side: under a difference, in a sum, as a scalar or a `Ref`.
+        c = Ref(1.0 + 0.0im)
+        for f in ((u, v) -> innerₕ(D₋ₓ(g * u), D₋ₓ(g * v)),
+            (u, v) -> innerₕ(D₋ₓ(u + g * D₋ᵧ(u)), D₋ₓ(v + g * D₋ᵧ(v))),
+            (u, v) -> innerₕ(D₋ₓ(im * u), D₋ₓ(im * v)),
+            (u, v) -> innerₕ(D₋ₓ(c * u), D₋ₓ(c * v)))
+            @test isposdef(form(Wg, Wg, f)) === false
+        end
+        @test !isposdef(Matrix(assemble(form(
+            Wg, Wg, (u, v) -> innerₕ(D₋ₓ(im * u), D₋ₓ(im * v))))))
+
+        # Real coefficients, sign-changing or negative, keep answering `true`.
+        r = Rₕ(Wg, x -> x[1] - 0.5)
+        d = Ref(-2.0)
+        for f in ((u, v) -> innerₕ(r * u, r * v),
+            (u, v) -> innerₕ(D₋ₓ(r * u), D₋ₓ(r * v)),
+            (u, v) -> innerₕ(D₋ₓ(u + r * D₋ᵧ(u)), D₋ₓ(v + r * D₋ᵧ(v))),
+            (u, v) -> innerₕ(D₋ₓ(d * u), D₋ₓ(d * v)),
+            (u, v) -> innerₕ(u, v))
+            a_r = form(Wg, Wg, f)
+            @test isposdef(a_r) === true
+            M = Matrix(assemble(a_r))
+            @test M ≈ transpose(M)
+            @test minimum(eigvals(Symmetric(M))) >= -1e-10 * opnorm(M, 1)
+        end
+    end
+
     @testset "Identity and zero operators" begin
         k = form(Wₕ, Wₕ, (u, v) -> innerₕ(IdentityOperator(Wₕ), IdentityOperator(Wₕ)))
         @test issymmetric(k)

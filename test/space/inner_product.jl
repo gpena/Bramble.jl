@@ -6,6 +6,7 @@ using Bramble: norm₊
 using Bramble: D₋ᵧ, D₋ₓ, cell_measure, indices, inner₊ᵧ, inner₊₂, inner₊ₓ, norminf
 using Bramble: set_points!, weights
 using LinearAlgebra: norm
+using Random: Random
 using Supposition
 using ForwardDiff
 using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS, @test_allocs, _nonuniform_points
@@ -706,6 +707,48 @@ end
     # is what the element-type lookup is there to keep separate
     @test inner₊((uₕ, vₕ), (uₕ, vₕ)) ≈ inner₊ₓ(uₕ, uₕ) + inner₊ₓ(vₕ, vₕ)
 
+    @testset "Mixed-type tuple inner₊ and norm₊" begin
+        # A composite component is a view, so (c(1), w) is a Tuple but no NTuple. It must
+        # take the tuple path, entry i paired with direction i, and not be handed whole to
+        # the directional inner product. The mesh is non-uniform in both directions, so the
+        # x and y weights differ and a swapped pairing cannot agree.
+        I = interval(0.0, 1.0)
+        W = gridspace(mesh(domain(I × I), (6, 5), (false, false)))
+        c = Rₕ(W^2, x -> (x[1], x[2]^2))
+        w = Rₕ(W, x -> x[1] * x[2] + 1)
+        v = Rₕ(W, x -> exp(x[1]) - x[2])
+        c1 = c(1)
+        @test !(typeof((c1, w)) <: NTuple)
+
+        expected = inner₊ₓ(c1, c1) + inner₊ᵧ(w, w)
+        @test norm₊((c1, w))^2 ≈ expected
+        @test inner₊((c1, w), (c1, w)) ≈ expected
+        @test norm₊((w, c1))^2 ≈ inner₊ₓ(w, w) + inner₊ᵧ(c1, c1)
+        @test !(norm₊((w, c1)) ≈ norm₊((c1, w)))
+
+        # the same values as the homogeneous NTuple of plain copies
+        c1plain = Rₕ(W, x -> x[1])
+        @test inner₊((c1, w), (v, w)) ≈ inner₊((c1plain, w), (v, w))
+        @test inner₊((c1, w), (v, w)) ≈ inner₊ₓ(c1, v) + inner₊ᵧ(w, w)
+        @test inner₊((c1, w), (c1, v), Tuple) == (inner₊ₓ(c1, c1), inner₊ᵧ(w, v))
+
+        @test @inferred(inner₊((c1, w), (v, w))) isa Float64
+        @test @inferred(norm₊((c1, w))) isa Float64
+        @test_allocs inner₊((c1, w), (v, w))
+        @test_allocs norm₊((c1, w))
+
+        @test_throws DimensionMismatch inner₊((c1, w), (c1, w, v))
+
+        # entries on meshes of different dimension are an error in either order, not a
+        # sum over the first entry's directions
+        u1 = Rₕ(gridspace(mesh(domain(I), 7, false)), x -> x[1]^2 + 1)
+        @test_throws DimensionMismatch inner₊((u1, w), (u1, w))
+        @test_throws DimensionMismatch inner₊((w, u1), (w, u1))
+        @test_throws DimensionMismatch inner₊((u1, w), (u1, w), Tuple)
+        @test_throws DimensionMismatch norm₊((u1, w))
+        @test_throws DimensionMismatch norm₊((w, u1))
+    end
+
     @testset "Composite space inner product" begin
         # The inner product of a product space is the sum of the components', the only
         # natural definition across product components.
@@ -766,6 +809,80 @@ end
 # The maximum norm carries no quadrature weight, so every check below is against a value
 # computed independently of the grid: an analytic extremum attained at a grid point, or a
 # hand-placed spike whose magnitude is known.
+@testset "Inner products on two meshes (#701)" begin
+    # The weights are read from `space(uₕ)`, so a `vₕ` on another mesh was read at the
+    # wrong points: a 5×4 and a 4×5 grid function gave a number. Every numeric entry point
+    # must refuse, while the same mesh, or a rebuilt one with the same points, still works.
+    I = interval(0.0, 1.0)
+    Ωa = mesh(domain(I × I), (5, 4), (false, false))
+    Ωb = mesh(domain(I × I), (4, 5), (false, false))
+    a = Rₕ(gridspace(Ωa), x -> x[1] + 1)
+    b = Rₕ(gridspace(Ωb), x -> x[2] + 1)
+    # same counts as Ωa, other points: counts alone must not let it through
+    Ωu = mesh(domain(I × I), (5, 4), (true, true))
+    @test Bramble.npoints(Ωu, Tuple) == Bramble.npoints(Ωa, Tuple)
+    @test Bramble.host_points(Ωu) != Bramble.host_points(Ωa)
+    c = Rₕ(gridspace(Ωu), x -> x[2] + 1)
+
+    calls = (
+        innerₕ, inner₊, inner₊ₓ, inner₊ᵧ, (x, y) -> inner₊(x, y, Tuple),
+        (x, y) -> inner₊(x, y, 2), (x, y) -> inner₊(x, y, :x),
+        (x, y) -> inner₊(x, y, Val((1, 2))), (x, y) -> inner₊(x, y, Val(())),
+        (x, y) -> innerₕ(x, y; markers = (:boundary,)),
+        (x, y) -> inner₊ₓ(x, y; markers = (:boundary,)),
+        (x, y) -> inner_Γ(x, y, :boundary),
+        (x, y) -> inner₊((x, x), (y, y)), (x, y) -> inner₊((x, x), (y, y), Tuple)
+    )
+    for f in calls, (u, v) in ((a, b), (b, a), (a, c), (c, a))
+
+        @test_throws ArgumentError f(u, v)
+    end
+    # one mismatched entry in a tuple is enough
+    @test_throws ArgumentError inner₊((a, a), (a, c))
+    err = try
+        innerₕ(a, c)
+    catch e
+        e
+    end
+    @test occursin("same shape", sprint(showerror, err))
+
+    # a composite is checked leaf by leaf
+    ca = Rₕ(gridspace(Ωa)^2, x -> (x[1], x[2]))
+    cb = Rₕ(gridspace(Ωb)^2, x -> (x[1], x[2]))
+    cu = Rₕ(gridspace(Ωu)^2, x -> (x[1], x[2]))
+    @test_throws ArgumentError innerₕ(ca, cb)
+    @test_throws ArgumentError innerₕ(ca, cu)
+    @test_throws ArgumentError inner₊ₓ(ca(1), cu(2))
+
+    # two `gridspace` calls over one mesh, and a rebuilt mesh with the same points, pass
+    # with the value of the shared space, unlike a broadcast (#181)
+    a2 = Rₕ(gridspace(Ωa), x -> x[1] * x[2] + 1)
+    a1 = Rₕ(space(a), x -> x[1] * x[2] + 1)
+    @test innerₕ(a, a2) == innerₕ(a, a1)
+    @test inner₊(a, a2) == inner₊(a, a1)
+    @test inner_Γ(a, a2, :boundary) == inner_Γ(a, a1, :boundary)
+    Ωr = mesh(domain(I × I), (5, 4), (true, true))
+    @test Ωr !== Ωu
+    r = Rₕ(gridspace(Ωr), x -> x[1] + 1)
+    cu1 = Rₕ(gridspace(Ωu), x -> x[1] + 1)
+    @test innerₕ(c, r) == innerₕ(c, cu1)
+    @test inner₊((c, c), (r, r)) == inner₊((c, c), (cu1, cu1))
+    @test innerₕ(cu, Rₕ(gridspace(Ωr)^2, x -> (x[1], x[2]))) ≈ innerₕ(cu, cu)
+
+    # the check adds nothing to a same-mesh call on a non-uniform mesh
+    @test @inferred(innerₕ(a, a2)) isa Float64
+    @test @inferred(inner₊(a, a2)) isa Float64
+    @test @inferred(inner₊ₓ(a, a2)) isa Float64
+    @test @inferred(inner₊((a, a), (a2, a2))) isa Float64
+    @test @inferred(innerₕ(ca, ca)) isa Float64
+    @test_allocs innerₕ(a, a2)
+    @test_allocs inner₊(a, a2)
+    @test_allocs inner₊ₓ(a, a2)
+    @test_allocs inner₊((a, a), (a2, a2))
+    @test_allocs norm₊(a)
+    @test_allocs innerₕ(ca, ca)
+end
+
 @testset "Discrete maximum norm (#186)" begin
     @testset "Scalar spaces, 1D/2D/3D" begin
         # x ↦ x on a uniform mesh of [0,1] attains its maximum at the last grid point, so
@@ -1020,14 +1137,16 @@ end
             # and no labels at all
             @test_throws ArgumentError inner_Γ(one_h, one_h)
 
-            # storage that is not one value per point of the mesh of `space(uₕ)`: an
-            # element of a non-uniform (5, 5) mesh, on either side, and equal lengths that
-            # are wrong for the mesh
+            # an element of a non-uniform (5, 5) mesh, on either side, is on another mesh
+            # (#701); storage that is not one value per point of the mesh, on either side
+            # or with equal lengths wrong for the mesh, is a size error
             u5 = Rₕ(gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5),
                     (false, true))), x -> 1.0)
-            @test_throws DimensionMismatch inner_Γ(u5, one_h, :ymin)
-            @test_throws DimensionMismatch inner_Γ(one_h, u5, :ymax)
+            @test_throws ArgumentError inner_Γ(u5, one_h, :ymin)
+            @test_throws ArgumentError inner_Γ(one_h, u5, :ymax)
             ub = Bramble.VectorElement(ones(49), space(u5))
+            @test_throws DimensionMismatch inner_Γ(ub, u5, :ymin)
+            @test_throws DimensionMismatch inner_Γ(u5, ub, :ymax)
             @test_throws DimensionMismatch inner_Γ(ub, ub, :ymin)
 
             # a face set that is not (D-1)-dimensional on this mesh: with two points on an
@@ -1041,6 +1160,8 @@ end
         end
 
         @testset "Labels read as defined (#655)" begin
+            # An unlucky draw puts all 7 interior y-points at or below 0.5, opening `:a`.
+            Random.seed!(1)
             # A label the mesh holds is read off its marked points, never its name. On a
             # non-uniform mesh the lumped weight integrates g = 1 + x + 2y exactly on each
             # edge: 2 on x = 0, 3 on x = 1, 1.5 on y = 0, 3.5 on y = 1.

@@ -167,8 +167,8 @@ end
 
 @testset "SeparableWeights, CpuThreaded (#288)" begin
     # S2.2: `_dot`/`_dot_masked(CpuThreaded(), u, w, v[, mask])` must reach the
-    # `SeparableWeights` specializations of `_threaded_dot`/`_threaded_dot_masked`
-    # (`src/space/inner_product.jl`), not the dense methods above -- which would read `w`
+    # `SeparableWeights` specialization of `_threaded_dot` and the `SeparableWeights` term of
+    # `_threaded_dot_masked` (`src/space/inner_product.jl`), not the dense ones -- which would read `w`
     # through its linear `Int` `getindex` (an `O(D)` divrem per point, gpena/Bramble.jl#288)
     # instead of the line-walk the serial `SeparableWeights` kernel uses. Checked against the
     # untouched serial kernels at rtol=1e-12, for dense, `BitVector`-masked and two-marker
@@ -215,6 +215,21 @@ end
         return slot === Base.typename(SeparableWeights) && m === m_any
     end
 
+    # The masked reduction is one driver and one band for every weight (`_threaded_dot_masked`,
+    # `_dot_masked_band`), which read `w` through `_masked_cart(w)`: `nothing` for a vector
+    # and the `CartesianIndices` of a `SeparableWeights`. So the masked calls are checked to
+    # reach the term that reads `w[cart[i]]`, whose `cart` slot is a `CartesianIndices`
+    # (through the type name, as `cart` is a `UnionAll` there), while a plain vector reaches
+    # the `Nothing` term, the linear `getindex` read.
+    function _masked_term_slot(u, w, v)
+        cart = Bramble._masked_cart(w)
+        m = which(Bramble._masked_term,
+            Tuple{eltype(u), typeof(u), typeof(w), typeof(v), Int, Type{eltype(u)}, typeof(cart)})
+        return Base.typename(Base.unwrap_unionall(m.sig).parameters[end])
+    end
+    _masked_reaches_separable(u, w, v) = Bramble._masked_cart(w) isa CartesianIndices &&
+                                         _masked_term_slot(u, w, v) === Base.typename(CartesianIndices)
+
     @testset "D=$D, dims=$dims" for (D, dims) in grids
         w = _separable_weights(D, dims)
         @test w isa SeparableWeights
@@ -230,7 +245,7 @@ end
 
         mask = falses(n)
         n > 0 && (mask[1:2:n] .= true) # every other index set, exercises both branches
-        @test _reaches_separable(_threaded_dot_masked, (u, w, v, mask), BitVector)
+        @test _masked_reaches_separable(u, w, v)
         expected_m = _dot_masked(u, w, v, mask)
         got_m = _threaded_dot_masked(u, w, v, mask)
         @test isapprox(got_m, expected_m; rtol = 1.0e-12, atol = 1.0e-12)
@@ -244,8 +259,7 @@ end
         n > 0 && (mask2[2:3:n] .= true)
         union_mask = MarkedIndicesUnion((mask1, mask2))
         bit_union = mask1 .| mask2
-        @test _reaches_separable(
-            _threaded_dot_masked, (u, w, v, union_mask), MarkedIndicesUnion)
+        @test _masked_reaches_separable(u, w, v)
         expected_u = _dot_masked(u, w, v, bit_union)
         got_u = _threaded_dot_masked(u, w, v, union_mask)
         @test isapprox(got_u, expected_u; rtol = 1.0e-12, atol = 1.0e-12)
@@ -253,6 +267,17 @@ end
             _dot_masked(CpuThreaded(), u, w, v, union_mask), got_u;
             rtol = 1.0e-12, atol = 1.0e-12
         )
+    end
+
+    @testset "Plain weights read linearly" begin
+        # The negative control of `_masked_reaches_separable`: a plain vector weight has no
+        # `CartesianIndices` and reaches the `Nothing` term.
+        u = Float64[0.3 + 0.11 * i for i in 1:37]
+        w = Float64[0.5 + 0.01 * i for i in 1:37]
+        v = Float64[-0.6 + 0.07 * i for i in 1:37]
+        @test Bramble._masked_cart(w) === nothing
+        @test !_masked_reaches_separable(u, w, v)
+        @test _masked_term_slot(u, w, v) === Base.typename(Nothing)
     end
 end
 

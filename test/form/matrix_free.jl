@@ -481,7 +481,7 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         @test _mf_agree(op * x, assemble(a; dirichlet = :boundary) * x)
         @test_throws DimensionMismatch mul!(zeros(3), op, x)
         # Only the matrix's rows are read from a `dirichlet` pair; the values are not.
-        @test _mf_agree(matrix_free_operator(a; dirichlet = :boundary => 1.0) * x, op * x)
+        @test _mf_agree(matrix_free_operator(a; dirichlet = :boundary => (x -> 1.0)) * x, op * x)
     end
 
     # The sinks hold the Dirichlet mask as `BitVector` chunk words, and the cached geometry

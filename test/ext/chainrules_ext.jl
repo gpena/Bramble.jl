@@ -4,6 +4,7 @@ using Test
 using Bramble
 using ChainRulesCore: ChainRulesCore, rrule
 using SparseArrays
+using SuiteSparse
 using LinearAlgebra: Tridiagonal
 using ..TestUtils: _fd
 
@@ -53,6 +54,110 @@ using ..TestUtils: _fd
         @test nnz(Ā) == nnz(A)
         @test rowvals(Ā) == rowvals(A)
         @test Ā isa SparseMatrixCSC
+    end
+
+    # A complex A: the cotangent is -λ u' (conjugated u), checked on the real and the
+    # imaginary part of every stored entry, and F̄ on both parts of every right-hand side entry.
+    @testset "rrule: pullback matches FD, ComplexF64" begin
+        n = 5
+        A = sparse(Tridiagonal(fill(-1.0 + 0.2im, n - 1), fill(4.0 + 0.3im, n),
+            fill(-1.0 + 0.2im, n - 1)))
+        F = ComplexF64.(1:n) .+ 0.5im
+
+        J(B, f) = sum(abs2, Bramble.pde_solve(B, f))
+        u, pullback = rrule(Bramble.pde_solve, A, F)
+        @test u ≈ A \ F
+        _, Ā, F̄ = pullback(2 .* u)
+
+        h = 1e-6
+        # For real-valued J(z), the cotangent is ∂J/∂x + i ∂J/∂y.
+        function bump(k, δ)
+            B = copy(A)
+            nonzeros(B)[k] += δ
+            return B
+        end
+        for k in 1:nnz(A)
+            fd = (J(bump(k, h), F) - J(bump(k, -h), F)) / 2h +
+                 im * (J(bump(k, im * h), F) - J(bump(k, -im * h), F)) / 2h
+            @test nonzeros(Ā)[k]≈fd atol=1e-6
+        end
+        for i in 1:n
+            e = zeros(ComplexF64, n)
+            e[i] = h
+            fd = (J(A, F .+ e) - J(A, F .- e)) / 2h +
+                 im * (J(A, F .+ im .* e) - J(A, F .- im .* e)) / 2h
+            @test F̄[i]≈fd atol=1e-6
+        end
+        @test nnz(Ā) == nnz(A)
+        @test rowvals(Ā) == rowvals(A)
+    end
+
+    # The keyword form of the rule: the keywords reach the primal and the adjoint solve, and
+    # the cotangents equal the keyword-free rule's and a central difference. `A` is unsymmetric in the `:unsymmetric` case, so a wrong adjoint matrix (A for
+    # Aᴴ) would show; the complex cases have `A'` different from `transpose(A)`, and the
+    # `:symmetric` hint holds for `Aᴴ` as it does for `A`.
+    @testset "rrule: keywords reach both solves" begin
+        n = 5
+        h = 1e-6
+        real_spd = sparse(Tridiagonal(fill(-1.0, n - 1), fill(4.0, n), fill(-1.0, n - 1)))
+        real_unsym = sparse(Tridiagonal(fill(-1.5, n - 1), fill(4.0, n), fill(-0.5, n - 1)))
+        cunsym = sparse(Tridiagonal(fill(-1.5 + 0.4im, n - 1), fill(4.0 + 0.3im, n),
+            fill(-0.5 - 0.2im, n - 1)))
+        csym = sparse(Tridiagonal(fill(-1.0 + 0.2im, n - 1), fill(4.0 + 0.3im, n),
+            fill(-1.0 + 0.2im, n - 1)))
+        cases = (
+            (real_spd, collect(1.0:n), (; solver = :suitesparse)),
+            (real_spd, collect(1.0:n), (; sym = :spd)),
+            (real_spd, collect(1.0:n), (; solver = :suitesparse, sym = :spd)),
+            (real_unsym, collect(1.0:n), (; solver = :suitesparse, sym = :unsymmetric)),
+            (cunsym, ComplexF64.(1:n) .+ 0.5im, (; solver = :suitesparse)),
+            (cunsym, ComplexF64.(1:n) .+ 0.5im, (; solver = :suitesparse, sym = :unsymmetric)),
+            (csym, ComplexF64.(1:n) .+ 0.5im, (; solver = :suitesparse, sym = :symmetric))
+        )
+        for (A, F, kw) in cases
+            @testset "$(eltype(A)) $(kw)" begin
+                r = rrule(Bramble.pde_solve, A, F; kw...)
+                @test r !== nothing
+                u, pullback = r
+                u0, pullback0 = rrule(Bramble.pde_solve, A, F)
+                @test u ≈ u0
+                ȳ = 2 .* u
+                _, Ā, F̄ = pullback(ȳ)
+                _, Ā0, F̄0 = pullback0(ȳ)
+                @test Ā ≈ Ā0
+                @test F̄ ≈ F̄0
+                @test rowvals(Ā) == rowvals(A)
+
+                # Central differences of the keyword-free solve `B \ f`: a hint such as
+                # `sym = :spd` makes a solver read one triangle of `A`, so differencing the
+                # keyword solve in a stored entry it ignores would give zero.
+                J(B, f) = sum(abs2, B \ f)
+                function bump(k, δ)
+                    B = copy(A)
+                    nonzeros(B)[k] += δ
+                    return B
+                end
+                for k in 1:nnz(A)
+                    fd = (J(bump(k, h), F) - J(bump(k, -h), F)) / 2h
+                    if eltype(A) <: Complex
+                        fd += im * (J(bump(k, im * h), F) - J(bump(k, -im * h), F)) / 2h
+                    end
+                    @test nonzeros(Ā)[k]≈fd atol=1e-5
+                end
+                Jk(f) = sum(abs2, Bramble.pde_solve(A, f; kw...))
+                for i in 1:n
+                    e = zeros(eltype(F), n)
+                    e[i] = h
+                    fd = (Jk(F .+ e) - Jk(F .- e)) / 2h
+                    if eltype(F) <: Complex
+                        fd += im * (Jk(F .+ im .* e) - Jk(F .- im .* e)) / 2h
+                    end
+                    @test F̄[i]≈fd atol=1e-5
+                end
+            end
+        end
+        # An unknown keyword still reaches the backend and throws, instead of being dropped.
+        @test_throws ArgumentError rrule(Bramble.pde_solve, real_spd, collect(1.0:n); bogus = 1)
     end
 
     # ∂J/∂A must match a central difference when A(θ) genuinely varies with θ.

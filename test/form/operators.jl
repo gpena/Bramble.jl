@@ -225,6 +225,19 @@ const _ORIGIN_2D = (0, 0)
                 restrict_to(:nosuchregion, id), Wₕ, interior, nothing, lin[interior]
             ) == ()
 
+            # A tuple region is a union with or without a table: holding `:interior`
+            # makes it the whole grid, holding only named regions leaves it empty (#690).
+            full = local_stencil(id, Wₕ, interior, nothing, lin[interior])
+            @test !isempty(full)
+            for r in ((:interior,), (:interior, :bottom), (:bottom, :interior))
+                @test local_stencil(
+                    restrict_to(r, id), Wₕ, interior, nothing, lin[interior]
+                ) == full
+            end
+            @test local_stencil(
+                restrict_to((:bottom, :left), id), Wₕ, interior, nothing, lin[interior]
+            ) == ()
+
             # With a real table, a label the mesh lacks is refused when the walk binds it,
             # naming the labels the mesh has, rather than read as an empty region.
             @test_throws ArgumentError bind(restrict_to(:nosuchregion, id))
@@ -362,10 +375,15 @@ const _ORIGIN_2D = (0, 0)
         end
 
         @testset "Explicit directions" begin
-            for (f, dim) in ((inner₊ₓ, 1), (inner₊ᵧ, 2), (inner₊₂, 3))
+            for (f, dim) in ((inner₊ₓ, 1), (inner₊ᵧ, 2))
                 @test weight(f(u2, v2)) === InnerPlus{dim}
                 @test weight(f(Mₓ(u2), Mₓ(v2))) === InnerPlus{dim}
             end
+            # z is no direction of 2D leaves (#692); 3D leaves need no mesh
+            @test_throws ArgumentError inner₊₂(u2, v2)
+            u3, v3 = TrialFunction{3}(), TestFunction{3}()
+            @test weight(inner₊₂(u3, v3)) === InnerPlus{3}
+            @test weight(inner₊₂(Mₓ(u3), Mₓ(v3))) === InnerPlus{3}
         end
 
         @testset "Gradient tuple sum" begin

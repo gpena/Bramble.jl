@@ -1,10 +1,9 @@
 # bilinear_execution.jl: the strategies that scatter a `BilinearForm`'s values into an
 # already-allocated matrix -- the record/replay cache (`_assemble_bilinear_core_cached!`),
 # replayed either serially or across threads, and the band-coloured threaded sweep
-# (`_sweep_bilinear!`), which the threaded replay and the searching fallback
-# (`_assemble_bilinear_parallel_core!`) share. The threaded sweep owns its own grid loop so
-# threads can be handed disjoint bands; per point it either replays recorded positions
-# (`_replay_point!`) or searches for them (`_scatter_point!`).
+# (`_sweep_bilinear!`) the threaded replay runs. The threaded sweep owns its own grid loop so
+# threads can be handed disjoint bands; per point it replays recorded positions
+# (`_replay_point!`).
 
 # --- Record once, replay thereafter ------------------------------------------------ #
 #
@@ -18,8 +17,7 @@
 # The threaded refill (`assemble!` under `Parallel()`, and `assemble_parallel!` from any
 # policy) reads the same recording (gpena/Bramble.jl#338). Recording is one serial pass over
 # the coordinates, done once per matrix object; every fill after it, the recording one
-# included, sweeps the same bands and colours the searching sweep did and writes through
-# the recorded positions. One shared recording serves every band because `ReplaySink`
+# included, sweeps bands and colours and writes through the recorded positions. One shared recording serves every band because `ReplaySink`
 # addresses each point through `point_ptr[lin_idx]`, not a running counter, and colouring
 # keeps two concurrently-swept points off the same entry, so no per-band copy is needed.
 # `_ReplayMode` selects the serial (`_SerialReplay`) or threaded (`_ThreadedReplay`) replay
@@ -361,7 +359,7 @@ end
     return _foldl_blocks(next, blocks(term, trial_leaves, test_leaves)) do n, blk
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
-        # `host_weights` per block, as the searching sweep's `_assemble_blocks_parallel!` does.
+        # `host_weights` per block: a device leaf's weights cannot be read point by point.
         sp = host_weights(_walked_leaf(bound, blk.trial_leaf, blk.test_leaf))
         n += 1
         _replay_unit!(
@@ -400,8 +398,7 @@ end
 
 # The serial leaves: one unit, one walk (`visit_bilinear_stencil`). `p2`, the pair's second
 # bare product, and `offsets2`, its block's `(row_offset, col_offset)`, are unused here; the
-# threaded leaf needs `p2`'s reach to colour the sweep, and both to search the pair as its two
-# terms when its leaf cannot replay.
+# threaded leaf needs `p2`'s reach to colour the sweep.
 @inline _replay_unit!(::_SerialReplay, A, term, sp, row_offset, col_offset, segment, α) = _replay_segment!(
     A, term, sp, row_offset, col_offset, segment, α)
 @inline _replay_pair_unit!(
@@ -586,42 +583,10 @@ end
 
 # --- Threaded: band-coloured sweeps ------------------------------------------------ #
 #
-# The sweeps below take a *target* as their first argument: either the matrix itself, which
-# each point searches (`_scatter_point!`), or a replay sink over one unit's `Segment`, which
-# each point reads its positions from (`_replay_point!`). `_sweep_point!` picks between the
-# two by the target's type, so the band and colour logic is written once for both.
-
-# One grid point's stencil, scattered into the matrix by searching each entry's position.
-# The fallback of the threaded path: a form none of whose leaves can replay
-# (`_threaded_replays`), and one unit whose own walked leaf cannot (`_leaf_replays`).
-#
-# No device-specific parameter here (gpena/Bramble.jl#313): `add_to_sparse!` reads a device
-# matrix's own `mirror` field off `A` directly, so this function -- and every sweep function
-# between it and `_assemble_bilinear_parallel_core!` -- carries the same signature whether
-# `A` is host- or device-resident.
-@inline function _scatter_point!(
-        A::Union{AbstractMatrix, _ScatterCSC},
-        term::TERM,
-        sp,
-        I::CartesianIndex,
-        lin_indices,
-        mesh_markers,
-        row_offset::Int,
-        col_offset::Int,
-        α
-) where {TERM}
-    stencil = local_stencil(term, sp, I, mesh_markers, lin_indices[I])
-
-    # One point rather than the whole grid, so this cannot call `visit_bilinear_stencil`
-    # itself -- the threaded sweep owns the grid loop. It shares the entry rule instead, so
-    # the guard and the `AbsoluteColumn` case are still stated in exactly one place.
-    for (off_u, off_v, weight) in stencil
-        row, col = _entry_target(lin_indices, I, off_u, off_v, row_offset, col_offset)
-        row == 0 && continue
-        add_to_sparse!(A, row, col, α * weight, term)
-    end
-    return nothing
-end
+# The sweeps below take a replay *target* as their first argument: a replay sink over one
+# unit's `Segment` (or an action sink), which each point reads its positions from
+# (`_replay_point!`). `_sweep_point!` is the per-point step; the band and colour logic is
+# written once.
 
 # The interior of a diagonal `Segment` (1D only, `_diagonal_replay`) for one point: tap `k`
 # (zero-based `slot`) of the point of rank `n` lands at `base[k + 1] + stride[k + 1] * n`.
@@ -734,58 +699,22 @@ end
     return nothing
 end
 
-# One point of a sweep: a matrix target searches, a replay target replays. `α` is the
-# searching path's scaling; a replay target carries its own.
-@inline _sweep_point!(
-    A::Union{AbstractMatrix, _ScatterCSC}, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α) = _scatter_point!(
-    A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
+# One point of a sweep: the target replays. `α` is unused, as the replay target carries its
+# own.
 @inline _sweep_point!(
     t::_ReplayTarget, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, _) = _replay_point!(
     t, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
 
-# Whether one unit, walked over leaf `sp`, replays: under an effective policy whose sweeps
-# can replay, on either locality of matrix and leaf (gpena/Bramble.jl#318). A device matrix
-# replays positions recorded against its own `mirror` (`_scatter_position` searches the
-# mirror's CSR layout when the recording runs, and `_scatter_add!` writes `mirror.nzval`), and
-# a device leaf replays over `host_weights(sp)`, as the searching sweep walks it. A
-# `GpuPolicy` leaf's effective policy is `CpuThreaded` (`_coerce_serial_to_threaded`), so it
-# replays. `CpuThreaded` replays directly in `src/`; `CpuPolyester` replays too, via
-# `_threaded_replay_policy(::CpuPolyester) = true` and
-# `_batch_bilinear_band_replay!`/`_batch_bilinear_colour_replay!` in `ext/BramblePolyesterExt.jl`
-# (gpena/Bramble.jl#318). Decided per unit, from the leaf the sweep itself takes its
-# policy from (`_sweep_bilinear!`), never from the form's trial space: a composite's leaves,
-# or a cross-mesh form's two meshes, can each carry a different backend. Decided from types
-# alone, so the branch folds away.
-@inline _threaded_replay_policy(::CpuThreaded) = true
-@inline _threaded_replay_policy(::Any) = false
-@inline _leaf_replays(_A, sp) = _late(_threaded_replay_policy, _effective_parallel_policy(sp))
-
-# Whether a form's threaded refill uses the recording at all: at least one leaf on either
-# side that replays. A form none of whose leaves can replay keeps the
-# searching sweep whole, exactly as before the recording was threaded, rather than record
-# for nothing and then search unit by unit.
-@inline _space_replays(A, sp) = _leaf_replays(A, sp)
-@inline _space_replays(A, sp::CompositeGridSpace) = any(
-    l -> _leaf_replays(A, first(l)), leaf_spaces_offsets(sp))
-@inline _threaded_replays(A, trial_space, test_space) = _space_replays(A, trial_space) ||
-                                                        _space_replays(A, test_space)
-
 # The threaded leaves: one unit swept band by band (`_sweep_bilinear!`), coloured by the
 # unit's own row reach. A unit whose rows are not a fixed reach from its point (a test-side
-# interpolation) is replayed on one thread, as the searching sweep does
-# (`_sweep_bilinear_serial!`). A diagonal segment needs its own target type, so it gets its
-# own sweep instance, in 1D only (`_diagonal_replay`). A unit whose leaf
-# cannot replay (`_leaf_replays`) searches instead, on the matrix. The recording's other
-# units still replay. `sp` is already a host-weights leaf
-# (`host_weights`, taken once per leaf by the unit walk), since a device leaf's weights
-# cannot be read point by point.
+# interpolation) replays on one thread (`_sweep_bilinear_serial!`). A diagonal segment gets
+# its own target type, so its own sweep instance (1D only, `_diagonal_replay`). Host weights
+# only: `sp` already went through `host_weights`.
 @noinline function _replay_unit!(
         ::_ThreadedReplay, A::AbstractMatrix, term::TERM, sp, row_offset::Int,
         col_offset::Int, segment::Segment{D}, α
 ) where {TERM, D}
-    if !_leaf_replays(A, sp)
-        _sweep_unit!(A, sp, term, row_offset, col_offset, α)
-    elseif _diagonal_replay(Val(D)) && segment.is_diagonal
+    if _diagonal_replay(Val(D)) && segment.is_diagonal
         _sweep_unit!(_DiagonalReplayTarget(A, segment, α), sp, term, row_offset, col_offset)
     else
         _sweep_unit!(
@@ -796,16 +725,14 @@ end
     return nothing
 end
 
-# `α` scales a searching sweep (`target` the matrix); a replay target carries its own.
+# The replay target carries its own `α`.
 @inline function _sweep_unit!(
-        target, sp, term::TERM, row_offset::Int, col_offset::Int, α = true
+        target, sp, term::TERM, row_offset::Int, col_offset::Int
 ) where {TERM}
     if _has_test_interp(term)
-        _sweep_bilinear_serial!(target, sp, term, row_offset, col_offset, α)
+        _sweep_bilinear_serial!(target, sp, term, row_offset, col_offset)
     else
-        _sweep_bilinear!(
-            target, sp, term, _term_colour_strides(term), row_offset, col_offset, α
-        )
+        _sweep_bilinear!(target, sp, term, _term_colour_strides(term), row_offset, col_offset)
     end
     return nothing
 end
@@ -815,21 +742,10 @@ end
 # are exactly those transposed ones -- so two concurrently-swept points can meet on neither
 # write. Absolute rows on either side (test-side interpolation in `p1` or `p2`, or a
 # trial-side one in `p1`, which becomes a transposed row) fall back to one thread.
-#
-# A pair whose leaf cannot replay (`_leaf_replays`) is searched as its two terms, each on
-# the matrix with its own block's offsets, as the form's other terms would be: `p1` for the
-# half at `(row_offset, col_offset)`, `p2` for the transposed half at `offsets2`. Both
-# halves walk the same leaf `sp` (a pair carries no interpolation, so each term walks its
-# test leaf, and `half = 2` is the unit walked on `p2`'s).
 @noinline function _replay_pair_unit!(
         ::_ThreadedReplay, A::AbstractMatrix, p1::P1, p2::P2, sp, row_offset::Int,
-        col_offset::Int, offsets2::Tuple{Int, Int}, segment::Segment, α1, α2, half::Int
+        col_offset::Int, _offsets2::Tuple{Int, Int}, segment::Segment, α1, α2, half::Int
 ) where {P1, P2}
-    if !_leaf_replays(A, sp)
-        half != 2 && _sweep_unit!(A, sp, p1, row_offset, col_offset, α1)
-        half != 1 && _sweep_unit!(A, sp, p2, offsets2[1], offsets2[2], α2)
-        return nothing
-    end
     target = _PairReplaySink(
         A, segment.point_ptr, segment.positions, segment.positions_t, α1, α2, half
     )
@@ -841,9 +757,129 @@ end
     return nothing
 end
 
-# One colour, threaded, writing through `A` (a matrix or a `_ReplayTarget`, see
+# --- One band-then-colour sweep, bilinear and linear -------------------------------- #
+#
+# A threaded sweep runs its assembly's per-point step over a band-then-colour walk of the
+# grid. The step is a functor, `_BilinearPoint` below and `_LinearPoint` (linear.jl) for a
+# right-hand side, so the walk (`_sweep_coloured!`) and its `Threads.@threads` loops
+# (`_static_band_colour!`, `_static_colour!` and their serial pairs) are written once. Each
+# assembly keeps its own policy entries, `_sweep_band_colour!`/`_sweep_bilinear_colour!`
+# here and `_sweep_linear_band_colour!`/`_sweep_colour!` in linear.jl, which the driver
+# reaches through `_sweep_bands!`/`_sweep_points!`: the matrix-free product extends the
+# bilinear pair, and under `CpuPolyester` each pair calls its own `_batch_*` hooks.
+
+# One point of a bilinear sweep: `_sweep_point!` through `target` at `I`.
+struct _BilinearPoint{T, S, M, L, K, A}
+    target::T
+    sp::S
+    term::M
+    lin_indices::L
+    mesh_markers::K
+    row_offset::Int
+    col_offset::Int
+    α::A
+end
+@inline (p::_BilinearPoint)(I) = _sweep_point!(
+    p.target, p.term, p.sp, I, p.lin_indices, p.mesh_markers, p.row_offset, p.col_offset, p.α)
+
+@inline _sweep_bands!(policy, p::_BilinearPoint, ax, bidx, nbands::Int, rest) = _sweep_band_colour!(
+    policy, p.target, p.sp, p.term, ax, bidx, nbands, rest, p.lin_indices, p.mesh_markers,
+    p.row_offset, p.col_offset, p.α)
+@inline _sweep_points!(policy, p::_BilinearPoint, idxs) = _sweep_bilinear_colour!(
+    policy, p.target, p.sp, p.term, idxs, p.lin_indices, p.mesh_markers, p.row_offset,
+    p.col_offset, p.α)
+
+# The `Threads.@threads :static` loop over the slabs of one band colour and the same bands
+# run in order on the calling task, the pair `_static_or_serial` picks between. `point` is
+# the sweep's per-point functor.
+@noinline function _static_band_colour!(point::P, ax, bidx, nbands, rest) where {P}
+    Threads.@threads :static for b in bidx
+        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
+            point(I)
+        end
+    end
+    return nothing
+end
+
+@noinline function _serial_band_colour!(point::P, ax, bidx, nbands, rest) where {P}
+    for b in bidx
+        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
+            point(I)
+        end
+    end
+    return nothing
+end
+
+# The same pair over the points of one colour.
+@noinline function _static_colour!(point::P, idxs) where {P}
+    Threads.@threads :static for I in idxs
+        point(I)
+    end
+    return nothing
+end
+
+@noinline function _serial_colour!(point::P, idxs) where {P}
+    for I in idxs
+        point(I)
+    end
+    return nothing
+end
+
+# One band colour, or one point colour, under `CpuThreaded`.
+@inline _threaded_bands!(point::P, ax, bidx, nbands::Int, rest) where {P} = _static_or_serial(
+    _static_band_colour!, _serial_band_colour!, point, ax, bidx, nbands, rest)
+@inline _threaded_colour!(point::P, idxs) where {P} = _static_or_serial(
+    _static_colour!, _serial_colour!, point, idxs)
+
+"""
+    _sweep_coloured!(policy, point, grid_inds::CartesianIndices, strides) -> Nothing
+
+Call `point(I)` once for every `I` in `grid_inds`, across threads, so that no two points
+closer than `strides` run at once. `policy` is the *effective* policy
+([`_effective_parallel_policy`](@ref)), and `point` a `_BilinearPoint` or a `_LinearPoint`,
+whose `_sweep_bands!` and `_sweep_points!` methods pick the mechanism.
+
+Bands come first: a colour is then a slab of whole rows, walked contiguously, and there are
+two of them however wide the stencil is. Point colouring strides every axis and costs
+`prod(strides)` barriers, which on a nine-colour form was slower than not threading at all
+(`Dcₓ + Dcᵧ` at 1000x1000: 16.6 ms threaded against 16.4 ms serial, and 8.1 ms banded). A
+grid too short to band (a small grid, or a stencil reaching most of the last axis) is point
+coloured, which has no width requirement.
+"""
+function _sweep_coloured!(policy, point::P, grid_inds, strides) where {P}
+    inds = grid_inds.indices
+    D = length(strides)
+    ax = inds[D]
+    nbands = _band_count(length(ax), strides[D], Threads.nthreads())
+
+    if nbands != 0
+        rest = Base.front(inds)
+        # A term reaching only its own point cannot collide, so one pass takes every band:
+        # contiguous slabs without the second barrier, which such a term would otherwise
+        # pay for nothing (it doubled `assemble_parallel!`'s task allocations). The colour
+        # is a `StepRange` either way, odd bands before even, so its type never depends on
+        # the runtime test (a tuple of one or two ranges would be a Union, #549).
+        step = prod(strides) == 1 ? 1 : 2
+        for start in 1:step
+            _sweep_bands!(policy, point, ax, start:step:nbands, nbands, rest)
+        end
+        return nothing
+    end
+
+    if prod(strides) == 1
+        _sweep_points!(policy, point, grid_inds)
+        return nothing
+    end
+
+    for c in CartesianIndices(strides)
+        _sweep_points!(policy, point, _colour_subgrid(grid_inds, c, strides))
+    end
+    return nothing
+end
+
+# One colour, threaded, writing through `A` (a `_ReplayTarget` or an action target, see
 # `_sweep_point!`). Dispatches on the *effective* execution policy (`_sweep_bilinear!`
-# computes it): `CpuThreaded` keeps `Threads.@threads` exactly as before; `CpuPolyester`
+# computes it): `CpuThreaded` runs the shared `Threads.@threads` loop; `CpuPolyester`
 # reaches its own hook instead, so it never silently threads with the wrong mechanism
 # (gpena/Bramble.jl#190). `CpuSerial` never reaches this function --
 # `_effective_parallel_policy` only ever hands it `CpuThreaded` or `CpuPolyester`.
@@ -859,59 +895,8 @@ end
         col_offset::Int,
         α
 ) where {TERM}
-    return _static_or_serial(_static_bilinear_colour!, _serial_bilinear_colour!,
-        A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α)
-end
-
-# The `Threads.@threads :static` loop of `_sweep_bilinear_colour!(::CpuThreaded, ...)` and the
-# same loop run in order on the calling task, the pair `_static_or_serial` picks between.
-@noinline function _static_bilinear_colour!(
-        A, sp, term::TERM, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
-) where {TERM}
-    Threads.@threads :static for I in idxs
-        _sweep_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
-    end
-    return nothing
-end
-
-@noinline function _serial_bilinear_colour!(
-        A, sp, term::TERM, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
-) where {TERM}
-    for I in idxs
-        _sweep_point!(A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
-    end
-    return nothing
-end
-
-@noinline function _sweep_bilinear_colour!(
-        ::CpuPolyester,
-        A::AbstractMatrix,
-        sp,
-        term::TERM,
-        idxs,
-        lin_indices,
-        mesh_markers,
-        row_offset::Int,
-        col_offset::Int,
-        α
-) where {TERM}
-    return _late(
-        _batch_bilinear_colour_sweep!,
-        A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
-    )
-end
-
-"""
-    _batch_bilinear_colour_sweep!(A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α) -> Nothing
-
-[`CpuPolyester`](@ref)'s counterpart of the `Threads.@threads` body in
-`_sweep_bilinear_colour!`, filled by `BramblePolyesterExt` (gpena/Bramble.jl#190).
-The only `src/` method errors naming Polyester.
-"""
-@noinline function _batch_bilinear_colour_sweep!(
-        A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α
-)
-    return _throw_cpubatch_without_polyester(:_batch_bilinear_colour_sweep!)
+    point = _BilinearPoint(A, sp, term, lin_indices, mesh_markers, row_offset, col_offset, α)
+    return _threaded_colour!(point, idxs)
 end
 
 @noinline function _sweep_bilinear_colour!(
@@ -941,9 +926,8 @@ calling [`_replay_point!`](@ref)`(target, term, sp, I, lin_indices, mesh_markers
 col_offset)` per point. `target` is a [`_ReplayTarget`](@ref) or an action target. The
 loop captures none of them whole: the target's storage vector (`nzval`, or `y` and `x`)
 crosses as a top-level argument, the rest of `target`, `sp`, `term` and `mesh_markers` as one
-[`_batch_split`](@ref), rebuilt in each task (gpena/Bramble.jl#437). Reached only once
-`_threaded_replay_policy(::CpuPolyester)` answers `true`; the only `src/` method errors
-naming Polyester.
+[`_batch_split`](@ref), rebuilt in each task (gpena/Bramble.jl#437). The only `src/`
+method errors naming Polyester.
 """
 @noinline function _batch_bilinear_colour_replay!(
         target, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset
@@ -954,9 +938,8 @@ end
 """
     _sweep_band_colour!(policy, A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α) -> Nothing
 
-Scatter one band colour of `term` into `A` across threads. `A` is the matrix, searched per
-entry, or a [`_ReplayTarget`](@ref), whose recorded positions are written instead
-(gpena/Bramble.jl#338); the colouring below is the same for both.
+Scatter one band colour of `term` into `A` across threads. `A` is a [`_ReplayTarget`](@ref),
+whose recorded positions are written (gpena/Bramble.jl#338), or an action target.
 
 Each thread takes one slab of the last axis and walks it whole. Two grid points can only
 reach the same matrix entry when they are closer than `strides[D]` along that axis -- their
@@ -980,72 +963,8 @@ once.
         col_offset::Int,
         α
 ) where {TERM}
-    return _static_or_serial(_static_band_colour!, _serial_band_colour!, A, sp, term, ax, bidx,
-        nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α)
-end
-
-# The `Threads.@threads :static` loop of `_sweep_band_colour!(::CpuThreaded, ...)` and the
-# same bands run in order on the calling task, the pair `_static_or_serial` picks between.
-@noinline function _static_band_colour!(
-        A, sp, term::TERM, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset,
-        col_offset, α
-) where {TERM}
-    Threads.@threads :static for b in bidx
-        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
-            _sweep_point!(
-                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
-            )
-        end
-    end
-    return nothing
-end
-
-@noinline function _serial_band_colour!(
-        A, sp, term::TERM, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset,
-        col_offset, α
-) where {TERM}
-    for b in bidx
-        for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
-            _sweep_point!(
-                A, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
-            )
-        end
-    end
-    return nothing
-end
-
-@noinline function _sweep_band_colour!(
-        ::CpuPolyester,
-        A::AbstractMatrix,
-        sp,
-        term::TERM,
-        ax,
-        bidx,
-        nbands::Int,
-        rest,
-        lin_indices,
-        mesh_markers,
-        row_offset::Int,
-        col_offset::Int,
-        α
-) where {TERM}
-    return _late(
-        _batch_bilinear_band_sweep!,
-        A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α
-    )
-end
-
-"""
-    _batch_bilinear_band_sweep!(A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α) -> Nothing
-
-[`CpuPolyester`](@ref)'s counterpart of the `Threads.@threads` body in
-[`_sweep_band_colour!`](@ref), filled by `BramblePolyesterExt` (gpena/Bramble.jl#190). The
-only `src/` method errors naming Polyester.
-"""
-@noinline function _batch_bilinear_band_sweep!(
-        A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α
-)
-    return _throw_cpubatch_without_polyester(:_batch_bilinear_band_sweep!)
+    point = _BilinearPoint(A, sp, term, lin_indices, mesh_markers, row_offset, col_offset, α)
+    return _threaded_bands!(point, ax, bidx, nbands, rest)
 end
 
 @noinline function _sweep_band_colour!(
@@ -1078,8 +997,7 @@ end
 `bidx`, every `I` in `CartesianIndices((rest..., _band_range(ax, nbands, b)))` gets
 [`_replay_point!`](@ref)`(target, term, sp, I, lin_indices, mesh_markers, row_offset,
 col_offset)`. `target` is a [`_ReplayTarget`](@ref) or an action target, crossing `@batch`
-as [`_batch_bilinear_colour_replay!`](@ref) describes. Reached only once
-`_threaded_replay_policy(::CpuPolyester)` answers `true`; the only `src/` method errors
+as [`_batch_bilinear_colour_replay!`](@ref) describes. The only `src/` method errors
 naming Polyester.
 """
 @noinline function _batch_bilinear_band_replay!(
@@ -1115,187 +1033,38 @@ function _sweep_bilinear_serial!(
     return nothing
 end
 
-# Every colour in turn, using strided subgrids. `policy` is the *effective* policy
+# Every colour in turn (`_sweep_coloured!`). `policy` is the *effective* policy
 # (`_effective_parallel_policy(sp)`, computed once here): `CpuSerial` is coerced to
 # `CpuThreaded` since every call into this function is already on the forced-threaded path
-# (`_assemble_bilinear_parallel_core!`, always entered from a non-`CpuSerial` branch, or from
-# `assemble_parallel!`'s own "regardless of policy" contract); `CpuPolyester` passes through
-# unchanged so the colour/band sweeps below reach their own hook instead of `Threads.@threads`
+# (`_assemble_bilinear_parallel_cached!`, always entered from a non-`CpuSerial` branch, or
+# from `assemble_parallel!`'s own "regardless of policy" contract); `CpuPolyester` passes through
+# unchanged so the colour/band sweeps reach their own hook instead of `Threads.@threads`
 # (gpena/Bramble.jl#190).
 function _sweep_bilinear!(
         A, sp, term::TERM, strides, row_offset::Int, col_offset::Int, α = true
 ) where {TERM}
-    Ωₕ = mesh(sp)
-    grid_inds = indices(Ωₕ)
-    lin_indices = LinearIndices(grid_inds)
+    grid_inds = indices(mesh(sp))
     bound, mesh_markers = _bind_walk(term, sp)
-    policy = _effective_parallel_policy(sp)
-
-    # Bands first: a colour is then a slab of whole rows, walked contiguously, and there
-    # are two of them however wide the stencil is. Point colouring strides every axis and
-    # costs `prod(strides)` barriers, which on a nine-colour form was slower than not
-    # threading at all (gpena/Bramble.jl, `Dcₓ + Dcᵧ` at 1000x1000: 16.6 ms threaded
-    # against 16.4 ms serial, and 8.1 ms banded).
-    inds = grid_inds.indices
-    D = length(strides)
-    ax = inds[D]
-    nbands = _band_count(length(ax), strides[D], Threads.nthreads())
-
-    if nbands != 0
-        rest = Base.front(inds)
-        # A term reaching only its own point cannot collide, so one pass takes every band:
-        # contiguous slabs without the second barrier, which such a term would otherwise
-        # pay for nothing (it doubled `assemble_parallel!`'s task allocations). The colour
-        # is a `StepRange` either way, odd bands before even, so its type never depends on
-        # the runtime test (a tuple of one or two ranges would be a Union, #549).
-        step = prod(strides) == 1 ? 1 : 2
-        for start in 1:step
-            _sweep_band_colour!(
-                policy,
-                A,
-                sp,
-                bound,
-                ax,
-                start:step:nbands,
-                nbands,
-                rest,
-                lin_indices,
-                mesh_markers,
-                row_offset,
-                col_offset,
-                α
-            )
-        end
-        return A
-    end
-
-    # Too short to band (a small grid, or a stencil reaching most of the axis): point
-    # colouring has no width requirement.
-    if prod(strides) == 1
-        _sweep_bilinear_colour!(
-            policy, A, sp, bound, grid_inds, lin_indices, mesh_markers, row_offset, col_offset, α
-        )
-        return A
-    end
-
-    for c in CartesianIndices(strides)
-        _sweep_bilinear_colour!(
-            policy,
-            A,
-            sp,
-            bound,
-            _colour_subgrid(grid_inds, c, strides),
-            lin_indices,
-            mesh_markers,
-            row_offset,
-            col_offset,
-            α
-        )
-    end
-    return A
-end
-
-function _assemble_blocks_parallel!(
-        A::AbstractMatrix, op::OperatorAdd, trial_leaves, test_leaves, α = true
-)
-    return _visit_operator_add2(
-        _assemble_blocks_parallel!, A, op, trial_leaves, test_leaves, α
-    )
-end
-
-function _assemble_blocks_parallel!(
-        A::AbstractMatrix, term::TERM, trial_leaves, test_leaves, α = true
-) where {TERM}
-    _foldl_blocks(nothing, blocks(term, trial_leaves, test_leaves)) do _, blk
-        bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
-        _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
-        # `host_weights` (gpena/Bramble.jl#94): the mirror of the same fix to the
-        # *pattern* walk (`bilinear_pattern.jl`), now applied to the walk that *refills* the
-        # matrix. `local_stencil` below reads this leaf's weights and its mesh's spacings one
-        # grid point at a time (`compute_weight`, `operators/inner.jl`); on a device
-        # backend those are `MtlVector`s, and reading them element-by-element is exactly the
-        # `Scalar indexing is disallowed` this milestone has hit three times already
-        # (`_probe_point`, `spacing`/`forward_spacing`, and the pattern walk's own
-        # `SeparableWeights.__prod`). A no-op on a host leaf (`host_weights(Wc) === Wc`).
-        sp = host_weights(_walked_leaf(bound, blk.trial_leaf, blk.test_leaf))
-        if _has_test_interp(bound)
-            _sweep_bilinear_serial!(A, sp, bound, blk.row_offset, blk.col_offset, α)
-        else
-            _sweep_bilinear!(
-                A,
-                sp,
-                bound,
-                _term_colour_strides(bound),
-                blk.row_offset,
-                blk.col_offset,
-                α
-            )
-        end
-        return nothing
-    end
-    return A
-end
-
-# Matrix-type generic (gpena/Bramble.jl#190): the band-coloured sweep above
-# (`_scatter_point!`/`_sweep_bilinear!`/`_assemble_blocks_parallel!`) only ever calls
-# `add_to_sparse!`, itself matrix-type generic (`bilinear_traversal.jl`,
-# gpena/Bramble.jl#12), so nothing here races any differently for a dense `Matrix` than for
-# `SparseMatrixCSC` -- verified equal to the serial record/replay pass on a dense backend.
-# `_sweep_bilinear!` reads the space's effective policy itself
-# (`_effective_parallel_policy`) and only `Threads.@threads`es under `CpuThreaded`; a
-# `CpuPolyester` backend reaches its own hook instead of silently threading with the wrong
-# mechanism, so this function no longer needs a separate non-threading fallback for a matrix
-# type it cannot thread.
-function _assemble_bilinear_parallel_core!(
-        A::AbstractMatrix, trial_space, test_space, ast::AST_TYPE, α = true
-) where {AST_TYPE}
-    if _is_block_pair(trial_space, test_space)
-        # Every leaf block `_assemble_blocks_parallel!` walks below gets its own
-        # `host_weights` leaf (different leaves can sit on different meshes), but they all
-        # scatter into the same `A`, and therefore the same `A.mirror` -- `add_to_sparse!`
-        # reads it off `A` directly, so nothing needs resolving or threading through here
-        # (gpena/Bramble.jl#313).
-        _assemble_blocks_parallel!(
-            A, ast, leaf_spaces_offsets(trial_space), leaf_spaces_offsets(test_space), α
-        )
-        _flush_device_scatter!(A)
-        return A
-    end
-    bound = _bind_interp_spaces(ast, trial_space, test_space)
-    _check_block_meshes(bound, trial_space, test_space)
-    # `host_weights` (gpena/Bramble.jl#94): see `_assemble_blocks_parallel!` above for why.
-    sp = host_weights(_walked_leaf(bound, trial_space, test_space))
-    if _has_test_interp(bound)
-        _sweep_bilinear_serial!(A, sp, bound, 0, 0, α)
-    else
-        _sweep_bilinear!(A, sp, bound, _term_colour_strides(bound), 0, 0, α)
-    end
-    # A no-op for a host matrix; for a device one, copies `A`'s own mirror (gpena/Bramble.jl#313)
-    # back across in one bulk `copyto!` -- see `_flush_device_scatter!`'s own docstring
-    # (`bilinear_traversal.jl`).
-    _flush_device_scatter!(A)
+    point = _BilinearPoint(
+        A, sp, bound, LinearIndices(grid_inds), mesh_markers, row_offset, col_offset, α)
+    _sweep_coloured!(_effective_parallel_policy(sp), point, grid_inds, strides)
     return A
 end
 
 # The threaded refill's entry point (`assemble!` under a non-serial policy,
 # `assemble_parallel!` from any policy). Replays the form's recording across threads,
 # recording first when `cache` does not hold one for this exact `A` and `ast` (the recording
-# is serial; its own first fill already replays threaded). A form none of whose leaves can
-# replay (`_threaded_replays`) keeps the searching sweep; otherwise each unit decides for
-# itself from its own leaf (`_leaf_replays`). A device matrix replays too
+# is serial; its own first fill already replays threaded). Under `CpuPolyester` without
+# Polyester loaded the replay hooks throw naming it. A device matrix replays too
 # (gpena/Bramble.jl#318): its recording holds positions in its own `mirror`'s CSR layout, so
 # only the recording fill searches the mirror, and each fill ends in one bulk flush of the
-# mirror to the device, as the searching sweep's does.
+# mirror to the device.
 function _assemble_bilinear_parallel_cached!(
         A::AbstractMatrix, trial_space, test_space, ast, cache::_AssemblyCache, α = true
 )
-    if _threaded_replays(A, trial_space, test_space)
-        _assemble_bilinear_core_cached!(
-            _ThreadedReplay(), A, trial_space, test_space, ast, cache, α
-        )
-        _flush_device_scatter!(A)
-    else
-        _assemble_bilinear_parallel_core!(A, trial_space, test_space, ast, α)
-    end
+    _assemble_bilinear_core_cached!(
+        _ThreadedReplay(), A, trial_space, test_space, ast, cache, α
+    )
+    _flush_device_scatter!(A)
     return A
 end

@@ -188,11 +188,11 @@ function Bramble._linear_problem(
 end
 
 # `sol.u` is exactly the plain vector `element(Wₕ, ::AbstractVector)` already knows how to
-# wrap, so both unwrapping spellings just reroute to it. `Wₕ` is narrowed to
-# `AbstractSpaceType` -- a `LinearSolution` is itself an `AbstractVector`, so an untyped `Wₕ`
-# here would be ambiguous with `element(Wₕ::AbstractSpaceType, v::AbstractVector)` above:
-# neither method would be strictly more specific than the other.
-Bramble.element(Wₕ::Bramble.AbstractSpaceType, sol::LinearSolution) = Bramble.element(Wₕ, sol.u)
+# wrap, so both unwrapping spellings just reroute to it. A `LinearSolution` is itself an
+# `AbstractVector`, so `element(Wₕ, sol)` already reaches that method: the hook only hands
+# it `sol.u` to copy from. An `element` method of its own here invalidated every caller
+# compiled against `element(::AbstractSpaceType, ::Any)` (gpena/Bramble.jl#755).
+Bramble._element_coefficients(sol::LinearSolution) = sol.u
 Bramble.VectorElement(sol::LinearSolution, Wₕ::Bramble.AbstractSpaceType) = Bramble.element(Wₕ, sol.u)
 
 """
@@ -208,7 +208,7 @@ bare coefficient vector to wrap by hand.
 - `dirichlet`, `dirichlet_components`, `symmetrize`: forwarded to [`assemble`](@ref), exactly
   as [`linear_problem`](@ref) takes them.
 - `solver`: the `LinearSolve` algorithm, e.g. `KrylovJL_GMRES()`. Default `nothing`: `solve`
-  picks its own default.
+  picks its own default, a direct factorisation.
 - `preconditioner`: `:amg` to precondition an iterative `solver` with
   [`amg_preconditioner`](@ref) (requires
   [AlgebraicMultigrid.jl](https://github.com/JuliaLinearAlgebra/AlgebraicMultigrid.jl)),
@@ -218,7 +218,10 @@ bare coefficient vector to wrap by hand.
   already-built object with `ldiv!` to use as-is, or `nothing` (default) for none. Passed as
   `LinearSolve`'s `Pl` -- a `LinearProblem`'s own `Pl`/`Pr` keywords are not honoured by its
   Krylov algorithms, only ones given to `solve` itself, so this keyword lives here rather
-  than on [`linear_problem`](@ref).
+  than on [`linear_problem`](@ref). A direct `solver`, and the default `solver = nothing`,
+  would ignore it: any `preconditioner` other than `nothing` without an iterative `solver`
+  (a `LinearSolve` Krylov method such as `KrylovJL_CG()`) throws an `ArgumentError` before
+  anything is assembled.
 - Every other keyword forwards to `LinearSolve.solve`.
 
 # Examples
@@ -240,6 +243,7 @@ function SciMLBase.solve(
         dirichlet = nothing, dirichlet_components = nothing, symmetrize::Bool = false,
         solver = nothing, preconditioner = nothing, kwargs...
 )
+    _check_preconditioner_solver(preconditioner, solver)
     prob = linear_problem(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components,
         symmetrize = symmetrize
@@ -250,6 +254,31 @@ function SciMLBase.solve(
     return Bramble.element(trial_space(a), sol)
 end
 
+# A direct method (and `solve`'s default, `solver = nothing`) never reads `Pl`, so a
+# `preconditioner` handed to one would be built and then dropped silently: refuse it. "Krylov"
+# is `LinearSolve`'s own `AbstractKrylovSubspaceMethod` (`KrylovJL`, `KrylovKitJL`,
+# `IterativeSolversJL`), read off the loaded `LinearSolve` module: this extension is gated on
+# `SciMLBase` alone and does not depend on `LinearSolve`, but a `solver` of that type means it
+# is loaded.
+const _LINEARSOLVE_ID = Base.PkgId(Base.UUID("7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"), "LinearSolve")
+
+function _is_krylov_solver(solver)
+    LS = get(Base.loaded_modules, _LINEARSOLVE_ID, nothing)
+    return LS !== nothing && solver isa LS.AbstractKrylovSubspaceMethod
+end
+
+function _check_preconditioner_solver(preconditioner, solver)
+    (preconditioner === nothing || _is_krylov_solver(solver)) && return nothing
+    name = preconditioner isa Symbol ? repr(preconditioner) : "of type $(typeof(preconditioner))"
+    given = solver === nothing ? "the default direct solver" : "the solver $(typeof(solver))"
+    throw(
+        ArgumentError(
+        "preconditioner $name needs an iterative (Krylov) `solver`, such as " *
+        "`KrylovJL_CG()` or `KrylovJL_GMRES()`; $given would ignore it."
+    ),
+    )
+end
+
 # `preconditioner` is resolved here rather than inside `_linear_problem` -- a `LinearProblem`
 # built with `Pl`/`Pr` in its own keywords does not actually reach a Krylov algorithm's
 # solve; only a `Pl` given to `solve` itself does, verified against `LinearSolve` directly.
@@ -257,9 +286,11 @@ end
 # `BrambleAlgebraicMultigridExt`/`BrambleILUZeroExt`'s fallback-idiom counterparts to
 # `_amg_preconditioner`/`_ilu_preconditioner` (solvers/amg_preconditioner.jl,
 # solvers/ilu_preconditioner.jl) -- this extension calls them without ever depending on
-# `AlgebraicMultigrid`/`ILUZero` itself.
+# `AlgebraicMultigrid`/`ILUZero` itself. `prob.A` is CSR on a `csr_backend()` mesh, which
+# neither takes, so a `Symbol` preconditioner is built from its `SparseMatrixCSC` copy.
 _preconditioner_operator(::Nothing, ::AbstractMatrix) = nothing
 function _preconditioner_operator(preconditioner::Symbol, A::AbstractMatrix)
+    A = Bramble._as_csc(A)
     if preconditioner === :amg
         return Bramble._amg_operator(A)
     elseif preconditioner === :ilu0
