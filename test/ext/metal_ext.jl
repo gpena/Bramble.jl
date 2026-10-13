@@ -73,12 +73,17 @@ using ..TestUtils: _run_gpu_tests
             @test execution_policy(metal_backend(Float16)) === GpuKernel()
             @test metal_backend(Float32) isa Backend
             @test metal_backend(Float16) isa Backend
-            # Float64 is unsupported on Apple Silicon GPUs. The Metal-loaded method only
-            # matches `T <: Union{Float16, Float32}`, so `Float64` falls through to the
-            # generic "requires Metal.jl" stub in main `src/` by ordinary dispatch
-            # specificity -- the same `ErrorException` as the package-not-loaded case, even
-            # though Metal is loaded here; only the type is rejected.
-            @test_throws ErrorException metal_backend(Float64)
+            # Float64 is unsupported on Apple Silicon GPUs. With Metal loaded the extension
+            # rejects the type by name, rather than falling through to the "requires
+            # Metal.jl" stub in main `src/`.
+            @test_throws ArgumentError metal_backend(Float64)
+            @test_throws ArgumentError metal_backend(Int)
+            err = try
+                metal_backend(Float64)
+            catch e
+                e
+            end
+            @test occursin("Float64", sprint(showerror, err))
         end
 
         @testset "vector/matrix allocation" begin

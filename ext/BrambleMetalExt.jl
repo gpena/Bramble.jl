@@ -21,6 +21,12 @@ function Bramble._metal_backend(
 ) where {T <: Union{Float16, Float32}}
     return Backend{MtlVector{T}, MtlMatrix{T}, typeof(policy)}()
 end
+# Any other numeric type is rejected here, so it is not mistaken for a missing Metal.jl by
+# the `src` stub. A bare `::Type{T}` would replace that stub, hence `T <: Number`.
+function Bramble._metal_backend(::Type{T}, ::ExecutionPolicy) where {T <: Number}
+    reason = T <: AbstractFloat ? ": Apple Silicon GPUs have no $T" : ""
+    throw(ArgumentError("metal_backend supports Float16 and Float32 only, got $T$reason"))
+end
 
 # ---------------------------------------------------------------------------
 # ka_device. The device-kernel substrate seam
