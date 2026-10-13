@@ -37,8 +37,7 @@ const _PC_OPS_ALL = (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M
 # `Any`, so each call dispatches at run time: deliberate, because every operator is
 # then compiled and cached as a standalone method instance that a user's first call
 # reuses. The `foreach` variant, which afoldl unrolls into a static chain, caches
-# the chain as one instance instead and every alias costs its ~7 ms again on first
-# use: measured 460 ms against 254 ms for the loop over the calls in this file.
+# the chain as one instance instead and every alias costs its compile again on first use.
 function _pc_apply_each(ops, uₕ)
     for op in ops
         op(uₕ)

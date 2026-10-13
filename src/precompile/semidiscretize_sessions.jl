@@ -5,14 +5,8 @@
 # Not reachable from the form sessions: `Semidiscretization` is a new struct built on top
 # of an already-assembled `BilinearForm`/`LinearForm` pair. Its constraint handling
 # dispatches on one of four types (`NoConstraints`, `LabelsOnly`, `StaticConstraints`,
-# `TimeDependentConstraints`), but only the first two are covered here -- measured in a
-# fresh process, covering the other two bought nothing:
-#
-#     dirichlet     before (fresh)   after (this session)
-#     nothing            ~261 ms            ~0.15 ms   -- covered
-#     bare label          ~61 ms            ~1.4 ms    -- covered
-#     label => f(x)       ~51 ms            ~55 ms     -- NOT covered (see below)
-#     label => f(x, t)    ~56 ms            ~53 ms     -- NOT covered (see below)
+# `TimeDependentConstraints`), but only `NoConstraints` and `LabelsOnly` are covered here,
+# the other two bought nothing measurable.
 #
 # `StaticConstraints`/`TimeDependentConstraints` store the caller's own boundary closure
 # and call it per boundary point at residual/Jacobian time (`dirichlet_bc!`,
@@ -25,8 +19,7 @@
 # note), not the raw closure. A Dirichlet function is never resolved into anything, though:
 # it stays exactly the closure the caller wrote, so warming it here only ever helps a second
 # call to *this file's own* closure, never a user's. `NoConstraints` (no closure at all) and
-# `LabelsOnly` (zero-fill, no closure) have no such barrier. That is the whole gap between
-# the two "before" columns above holding up after this session and the other two not moving.
+# `LabelsOnly` (zero-fill, no closure) have no such barrier.
 #
 # Originally proposed as `nothing` and `label => f(x, t)` (gpena/Bramble.jl#141); the second
 # of those turned out to be exactly the kind of call this file cannot help, while `bare
@@ -117,9 +110,7 @@ function _pc_second_order_rhs_session(Wₕ::ScalarGridSpace)
     # keyword as much as the residual/show methods themselves -- is then resolved by runtime
     # type rather than inferred statically, and the compiled workload's own static calls above
     # do not cache that standalone, dynamically-reached entry point even though they cache the
-    # exact same concrete types (confirmed with SnoopCompileCore.@snoop_inference: 0 triggers
-    # for the static calls above in isolation, but the same calls reached dynamically still
-    # show up as a fresh compile). `invokelatest` forces each of those same dynamically-reached
+    # exact same concrete types. `invokelatest` forces each of those same dynamically-reached
     # paths here, so they get cached too.
     Base.invokelatest(semidiscretize_second_order, a, l; dirichlet = :boundary)
     Base.invokelatest(sd2, dv, v, u, nothing, 0.0)

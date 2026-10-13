@@ -114,7 +114,6 @@ if PRECOMPILE_WORKLOAD
             _pc_operator_session(e2, c2, Val(2))
             _pc_operator_session(e3, c3, Val(3))
 
-            # Divergence and curl of a 2D composite element, and their `∇ₕ ⋅`/`∇ₕ ×` spellings.
             divₕ(c2)
             curlₕ(c2)
             ∇ₕ ⋅ c2
@@ -142,12 +141,8 @@ if PRECOMPILE_WORKLOAD
                 Ωₕ2, be, :wall, x -> x[1] * x[2], (x, t) -> x[1] * x[2] * t, I_time, Val(2)
             )
 
-            # The 3D scalar Laplacian, non-uniform: both spellings a
-            # caller writes, `inner₊(∇ₕ(u), ∇ₕ(v))` (the tutorials' own, e.g.
-            # docs/src/getting_started.md) and the summed one-sided-difference form. Measured
-            # against the workload above with the one-walk change already in: +2.7 s
-            # precompile, +5.3 MiB cache, fresh-session first assemble+assemble! of the
-            # three-term form 0.79 s -> 0.011 s.
+            # The 3D scalar Laplacian, non-uniform, in both spellings a caller writes:
+            # `inner₊(∇ₕ(u), ∇ₕ(v))` (the tutorials') and the summed one-sided-difference form.
             Ωₕ3n = mesh(Ω3, (3, 3, 3), (false, false, false); backend = be)
             W3n = gridspace(Ωₕ3n)
             for f3 in (
@@ -189,7 +184,7 @@ if PRECOMPILE_WORKLOAD
             # (gpena/Bramble.jl#283).
             _pc_solver_session()
 
-            # The Parallel() execution policy (point 22), otherwise never constructed above.
+            # The Parallel() execution policy, otherwise never constructed above.
             _pc_parallel_policy_session(Ω1, 5)
 
             # Cross-mesh interpolation sessions (1D and 2D).
@@ -201,7 +196,6 @@ if PRECOMPILE_WORKLOAD
             # Exporters session (PGFPlots 1D and 2D).
             _pc_exporters_session(Ωₕ1, Ωₕ2)
 
-            # Markers and domains, including evaluation of a space-time domain.
             for X in (I1, S2)
                 m = markers(X, :f => (x -> true), :s => :left)
                 d = domain(X, m)
@@ -218,10 +212,11 @@ if PRECOMPILE_WORKLOAD
                 sprint(show, MIME"text/plain"(), d)
                 sprint(show, MIME"text/plain"(), m)
             end
+            # A domain called at a time, which evaluates its time-dependent marker.
             collect(labels(domain(I1, I_time, :moving => ((x, t) -> x > t))(0.5)))
 
-            # Labelled Float64 2D/3D domains of other shapes: four symbol pairs, two
-            # tuple-valued pairs, and a single 3D face, each meshed where the tutorials mesh it.
+            # Labelled Float64 2D/3D domains of other shapes, each meshed where the tutorials
+            # mesh it. Label spellings the tutorials use.
             Ω4 = domain(S2, :left => :xmin, :right => :xmax, :bottom => :ymin, :top => :ymax)
             mesh(Ω4, (4, 4), (false, false))
             domain(S2, :dirichlet => (:left, :right), :neumann => (:top, :bottom))

@@ -4,8 +4,7 @@
 # The symbolic layer is not reachable from the mesh/space/operator sessions: a `LazyOp`
 # tree is built from `IdentityOperator` and the trial/test leaves rather than from a grid
 # function, so none of its constructors, stencil evaluators or traits are inferred by
-# anything else there. Measured in a fresh session before this was added, the form paths
-# cost about 580 ms of first-call latency, of which `stencil_offsets` alone was 176 ms.
+# anything else there.
 
 # Every display path a type has: the two-argument `show` (the embeddable one-liner), the
 # `MIME"text/plain"` block, and `summary`, which array headers reach for independently of
@@ -30,8 +29,8 @@ function _pc_form_ast_interp(Wₕ::ScalarGridSpace, u)
 end
 _pc_form_ast_interp(::AbstractSpaceType, u) = nothing
 
-# Every node kind, built over one space, plus the traits each one answers. Returns a tree
-# with a trial and a test leaf so the caller can reach the products.
+# Every node kind, built over one space, plus the traits each one answers. Returns `id` and
+# the trial and test leaves, so the caller can build the products.
 function _pc_form_ast(Wₕ, ::Val{D}) where {D}
     id = IdentityOperator(Wₕ)
     z = ZeroOperator(Wₕ)
@@ -54,7 +53,6 @@ function _pc_form_ast(Wₕ, ::Val{D}) where {D}
     shift_op(id, 1, 1)
     restrict_to(:interior, D₋ₓ(id))
 
-    # scaling, sums and the vector forms
     scaled = 3 * D₋ₓ(id)
     summed = D₋ₓ(id) + D₊ₓ(id)
     resolve_ast(scaled)
@@ -300,12 +298,9 @@ function _pc_form_assembly(
     b = zeros(eltype(Wₕ), ndofs(Wₕ))
     bv = zeros(eltype(Vₕ), ndofs(Vₕ))
 
-    # Display for the space/element/form cluster (gpena/Bramble.jl#17, #45). None of it
-    # was reachable from the rest of this workload: these types had no `show` of their own
-    # until they gained one, and each has two independent methods now (the embeddable
-    # one-liner and the `MIME"text/plain"` block) plus a `summary` that array headers
-    # reach for. The composite space's detailed block takes a different branch from the
-    # scalar one, so both are named.
+    # Display of the space, element and form cluster: `show`, `MIME"text/plain"` and
+    # `summary` are separate methods, and the composite space's block takes another branch
+    # from the scalar one, so both are named.
     _pc_display(Wₕ)
     _pc_display(Vₕ)
     _pc_display(uₕ)
@@ -363,7 +358,6 @@ function _pc_form_assembly(
     assemble(af, lf; dirichlet = (label => f,), symmetrize = true)
     assemble(af, lf; dirichlet = bcs, symmetrize = true)
 
-    # Bilinear forms: mass, stiffness, combination, and transverse
     _pc_assemble_bilinear_shape_threaded(Wₕ, (u, v) -> innerₕ(u, v), label)
     _pc_assemble_bilinear_shape_threaded(Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)), label)
     _pc_assemble_bilinear_shape(Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)), label)
@@ -378,10 +372,10 @@ function _pc_form_assembly(
     return nothing
 end
 
-# `assemble_add!`, `reaction` and `reaction_density`: each
-# is its own entry point over a real `BilinearForm`/`LinearForm`/`VectorElement`, not reached
-# by the bare AST/stencil construction above or by any `assemble`/`assemble!` shape already
-# warmed -- `assemble_add!` takes its own cached-record path with an explicit scale
+# `assemble_add!`, `reaction` and `reaction_density` are separate entry points over a real
+# `BilinearForm`/`LinearForm`/`VectorElement`, not reached by the bare AST/stencil
+# construction above or by any `assemble`/`assemble!` shape already warmed --
+# `assemble_add!` takes its own cached-record path with an explicit scale
 # (`_assemble_bilinear_core_cached!`/`_assemble_linear_core!` in src/assembly/assemble_add.jl),
 # and `reaction`/`reaction_density` walk the unconstrained residual through
 # `leaf_spaces_offsets` (gpena/Bramble.jl#283).

@@ -24,8 +24,8 @@ function _pc_indexed(Ωₕ::AbstractMeshType, idx_tup)
     return nothing
 end
 
-# One full pass over the mesh interface: construction, queries, iteration,
-# mutation and display.
+# One full pass over the mesh interface: construction, queries, iteration and display
+# (mutation is `_pc_mesh_mutation`).
 function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
     Ωₕ = mesh(Ω, npts, unif; backend = be)
 
@@ -96,9 +96,7 @@ function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
     end
 
     Ωₕ[idx]
-    # Both display paths: the embeddable one-liner and the detailed `MIME"text/plain"`
-    # block, which are now separate methods rather than one flag-switched body
-    # (gpena/Bramble.jl#45).
+    # Both display paths: the one-liner and the `MIME"text/plain"` block.
     sprint(show, Ωₕ)
     sprint(show, MIME"text/plain"(), Ωₕ)
 
