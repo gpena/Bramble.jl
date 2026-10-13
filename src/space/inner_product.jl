@@ -61,7 +61,7 @@ end
 # cover. `N == 1` above skips this allocation, since the mesh's own stored mask can be read
 # directly without being unioned with anything.
 #
-# `dirichlet_bc!` (form/dirichlet_constraints.jl) is the other caller of this exact function,
+# `dirichlet_bc!` (assembly/dirichlet_constraints.jl) is the other caller of this exact function,
 # and its `SparseMatrixCSC` path needs random-access `getindex` on the result (`index_in_marker[j]`
 # for an arbitrary column `j`, not a walk), which a lazy union can't offer without also
 # duplicating `BitVector`'s own bit-indexing math. So this stays eager; `_combined_marked_indices`
@@ -107,7 +107,7 @@ Returns the discrete ``L^2`` inner product of the grid functions `uₕ` and `v�
   - 3D case
 
 ```math
-(\\textrm{u}_h, \\textrm{v}_h)_h \\vcentcolon = \\sum_{i=1}^{N_x} \\sum_{j=1}^{N_y}  \\sum_{l=1}^{N_z}  |\\square_{i,j,l}| \\textrm{u}_h(x_i,y_j) \\textrm{v}_h(x_i,y_j)
+(\\textrm{u}_h, \\textrm{v}_h)_h \\vcentcolon = \\sum_{i=1}^{N_x} \\sum_{j=1}^{N_y}  \\sum_{l=1}^{N_z}  |\\square_{i,j,l}| \\textrm{u}_h(x_i,y_j,z_l) \\textrm{v}_h(x_i,y_j,z_l)
 ```
 
 On a [`CompositeGridSpace`](@ref) it is the inner product of the product space, the sum of
@@ -149,12 +149,9 @@ true
     return inner₊(uₕ, vₕ, Val(()); markers = markers)
 end
 
-# Summed over the *leaves* (`components` flattens any nesting), unrolled via `map` over the
-# two tuples exactly as the old `ntuple(…, Val(NC))` did over the space's own structural
-# type parameter -- which is what a nested composite's u(i)/components disagree with (see
-# CONTEXT.md, gpena/Bramble.jl#64), so this can no longer read the leaf count off a type
-# parameter shared by both arguments; it has to check the actual leaf counts instead.
-# `markers` threads through unchanged: each leaf is restricted to the same regions.
+# Summed over the leaves (`components` flattens any nesting), so the leaf counts are
+# compared at run time: a nested composite's type parameter `N` counts top-level
+# sub-spaces, not leaves. `markers` restricts each leaf to the same regions.
 @inline function innerₕ(
         uₕ::VectorElement{<:CompositeGridSpace},
         vₕ::VectorElement{<:CompositeGridSpace};
@@ -460,10 +457,10 @@ end
 #                 Discrete Modified L² Inner Product and Norm                  #
 ################################################################################
 
-# Weight-side specializations of `_dot`/`_dot_masked` (src/utils/linear_algebra.jl) for a
-# lazy `SeparableWeights` (src/space/scalar_gridspace.jl): `weights(Wₕ, Val(S))` returns one
-# of these for every staggered set `S` that is neither `()` nor a singleton
-# (gpena/Bramble.jl#115, #234).
+# Weight-side specializations of `_dot`/`_dot_masked` (utils/linear_algebra.jl) for a
+# lazy `SeparableWeights` (scalar_gridspace.jl): `weights(Wₕ, Val(S))` returns one of these
+# for every staggered set `S` that is neither `()` nor a singleton (gpena/Bramble.jl#115,
+# #234).
 #
 # The unmasked `_dot` walks the grid one axis-1 line at a time. The outer loop runs over
 # `CartesianIndices(w.dims[2:D])`; for each line it forms the scalar
@@ -471,26 +468,14 @@ end
 # line's contiguous `dims[1]` entries, accumulating `conj(u[k]) * v[k] * factors[1][i₁]` with
 # the same `muladd` shape as the dense `_dot`. The line sum is then folded in as
 # `s = muladd(c, line_sum, s)`. For D = 1 there is one line and `c = one(T)`. Nothing is
-# allocated and the weight tensor is never formed. Measured on non-uniform 1000² and 100³
-# grids (minimum of 15 runs): innerₕ and inner₊ₓ each take 0.74-0.78x the time of a dense
-# `_dot` over the collected weights, which has a third full-length vector to read.
+# allocated and the weight tensor is never formed.
 #
 # The masked methods only visit marked indices, so they convert each linear index to a
 # `CartesianIndex` and read `w` through its `CartesianIndex` `getindex`, which multiplies
 # the per-axis factors directly instead of dividing by each axis length in turn.
 #
-# No separate `CpuPolyester` override is needed here: `inner₊(uₕ, vₕ, Val(S))` calls the
-# policy-dispatched `_dot`/`_dot_masked(policy, u, v, w[, mask])`
-# (`src/utils/linear_algebra.jl`), whose `CpuSerial` method falls through to the plain
-# three/four-argument methods below -- where ordinary dispatch on the weight argument's
-# runtime type reaches this specialization -- and whose `CpuThreaded` method likewise falls
-# through to `_threaded_dot`/`_threaded_dot_masked`, reaching the `CpuThreaded`
-# specializations of those two names declared further below (gpena/Bramble.jl#301)
-# rather than the dense `_threaded_dot`/`_threaded_dot_masked` in `src/utils/linear_algebra.jl`.
-# Its `CpuPolyester` method calls `_batch_dot`/`_batch_dot_masked` directly, before the
-# weight's type is ever consulted, so a `CpuPolyester` policy reaches the Polyester hook
-# (or its "not loaded" error) regardless of whether the weight is dense or a
-# `SeparableWeights`, never this loop.
+# `CpuSerial` and `CpuThreaded` reach these methods by dispatch on the weight type;
+# `CpuPolyester` goes to `_batch_dot`/`_batch_dot_masked` before the weight is consulted.
 @inline function _dot(
         u::AbstractVector, w::SeparableWeights{D, <:Any, VT}, v::AbstractVector
 ) where {D, VT}
@@ -549,18 +534,8 @@ end
     return s
 end
 
-# `CpuThreaded` specializations of the three serial methods above (gpena/Bramble.jl#301,
-# #288). `_dot`/`_dot_masked(policy, u, w, v[, mask])` (`src/utils/linear_algebra.jl`)
-# dispatch `CpuThreaded` to `_threaded_dot`/`_threaded_dot_masked`, and ordinary dispatch on
-# the weight argument's runtime type reaches these rather than the dense
-# `_threaded_dot(u::AbstractVector, v::AbstractVector, w::AbstractVector)` in
-# `src/utils/linear_algebra.jl` -- exactly as `CpuSerial` reaches the serial specializations
-# above instead of the dense kernel there. Without these, a `SeparableWeights` under
-# `CpuThreaded` fell through to that dense method, which reads `w` through its linear `Int`
-# `getindex` -- an `O(D)` `divrem` per point (gpena/Bramble.jl#288) -- once per grid point
-# rather than once per line. `CpuPolyester` is unaffected: it reaches
-# `_batch_dot`/`_batch_dot_masked` directly, before the weight's type is ever consulted (see
-# the comment above the serial methods).
+# `CpuThreaded` counterparts of the three methods above, reached by dispatch on the weight
+# type, so a `SeparableWeights` is never read through its linear `getindex`.
 #
 # The dense method splits `CartesianIndices(Base.tail(w.dims))` along its last axis into
 # `Threads.nthreads()` static bands via `_last_axis_chunks` (`src/utils/linear_algebra.jl`,
@@ -814,8 +789,8 @@ staggered set `S ⊆ 1:D`, [`weights`](@ref)`(space(uₕ), Val(S))`: entry `I` w
 `Val(())` is [`innerₕ`](@ref), and `Val((1,))`/`Val((2,))`/`Val((3,))` are
 [`inner₊ₓ`](@ref)/[`inner₊ᵧ`](@ref)/[`inner₊₂`](@ref) respectively -- those four functions
 are aliases of this one, sharing its implementation, and return the identical number to it
-because [`weights`](@ref)`(Wₕ, Val(S))` returns the very same dense vector for those four
-`S`, not a recomputed copy. Every other `S` -- a pair, or the full `1:D` combination --
+because [`weights`](@ref)`(Wₕ, Val(S))` returns the very same stored `SeparableWeights` for
+those four `S`, not a recomputed one. Every other `S` -- a pair, or the full `1:D` combination --
 reduces against a lazily-computed [`SeparableWeights`](@ref) instead, through the
 `_dot`/`_dot_masked` specializations above, so no `O(n^D)` vector is ever materialised for
 it.
@@ -920,7 +895,7 @@ For [`VectorElement`](@ref)s, it is defined as
   - 2D case
 
 ```math
-(\\textrm{u}_h, \\textrm{v}_h)_{+y} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}   h_{x,i} h_{y,j+1/2}   \\textrm{u}_h(x_i,y_j) \\textrm{v}_h(x_i,y_j)
+(\\textrm{u}_h, \\textrm{v}_h)_{+y} \\vcentcolon = \\sum_{i=1}^{N_x}\\sum_{j=1}^{N_y}   h_{x,i+1/2} h_{y,j}   \\textrm{u}_h(x_i,y_j) \\textrm{v}_h(x_i,y_j)
 ```
 
   - 3D case
@@ -970,7 +945,7 @@ integral).
 # `_dispatch_dim` (stencil.jl): a runtime `Integer` never reaches `Val` directly, since
 # `Val(d)` built from a non-constant `d` boxes it and nothing downstream can constant-fold
 # (gpena/Bramble.jl#146). Always three arms regardless of the mesh a caller eventually
-# applies the result to, exactly as `_vectorial_index_expr`'s `getindex` is -- an out-of-range
+# applies the result to, exactly as the vectorial operator aliases' `getindex` is -- an out-of-range
 # direction is caught downstream, by the operator the index yields.
 @inline function _inner_plus_val(d::Integer)
     d == 1 && return Val(1)
@@ -1029,12 +1004,11 @@ end
     return inner₊(uₕ, vₕ, _dim_index(s); markers = markers)
 end
 
-# --- Iteration and indexing protocol, following `_vectorial_index_expr` -------------- #
-# (stencil.jl, gpena/Bramble.jl#340): `inner₊ₓ`/`inner₊ᵧ`/`inner₊₂` are spliced in as
-# literals, so `inner₊[2]` is a call to a `@inline` function of a literal `Int` against
-# literal comparisons -- the compiler constant-folds it to the concrete function, same as
-# any vectorial alias in stencil.jl. Written by hand rather than generated, since `inner₊`
-# is not built by `@operator_family`.
+# --- Iteration and indexing protocol ------------------------------------------------- #
+# `inner₊ₓ`/`inner₊ᵧ`/`inner₊₂` are spliced in as literals, so `inner₊[2]` is a call to a
+# `@inline` function of a literal `Int` against literal comparisons -- the compiler
+# constant-folds it to the concrete function. Written by hand, following the vectorial
+# operator aliases `@operator_family` builds.
 @inline Base.iterate(::typeof(inner₊)) = (inner₊ₓ, 2)
 @inline Base.iterate(::typeof(inner₊), state::Int) = state == 2 ? (inner₊ᵧ, 3) :
                                                      state == 3 ? (inner₊₂, 4) : nothing
@@ -1062,11 +1036,7 @@ get_dimension_from_type(::Type) = nothing
 # The spatial dimension of a tuple's *elements*, which is not the tuple's arity: a mixed
 # term such as (Dx*u, Mx*u) on a one-dimensional mesh is a 2-tuple whose elements are 1D.
 #
-# Read off the first element through `fieldtypes`, which is public and defined for every
-# tuple type. Reading `.parameters[2]` instead threw a BoundsError on a 1-tuple, since
-# `Tuple{VectorElement{…}}` has one parameter, and did so from inside a generated
-# function, so `inner₊((uₕ,), (vₕ,))` failed at code generation rather than returning a
-# number.
+# Read through `fieldtypes`, which a 1-tuple also supports.
 function _tuple_element_dim(::Type{T}) where {T <: Tuple}
     ft = fieldtypes(T)
     return isempty(ft) ? nothing : get_dimension_from_type(first(ft))
@@ -1081,7 +1051,7 @@ end
 # already concrete (`Tuple{Int,Int}`), Julia's inliner does not reliably fold it down to the
 # *specific* compile-time value `Val(D)` needs from inside a caller. A plain `map` or `sum`
 # over an already concretely-sized `Tuple` is unrolled and specialized by Julia on its own
-# (see `form/common.jl`'s stencil primitives, which do not need `@generated`).
+# (the stencil primitives, which do not need `@generated`).
 function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
     dim_u = get_dimension_from_type(u_type)
     dim_v = get_dimension_from_type(v_type)
@@ -1379,8 +1349,10 @@ The result has the real type of the element type, as for [`normₕ`](@ref): each
 Returns the discrete version of the standard ``H^1`` norm of [`VectorElement`](@ref) `uₕ`.
 
 ```math
-\\Vert \\textrm{u}_h \\Vert_{1h} \\vcentcolon = \\sqrt{ \\Vert \\textrm{u}_h \\Vert_h^2 +  \\Vert \\nabla_h \\textrm{u}_h \\Vert_h^2   }
+\\Vert \\textrm{u}_h \\Vert_{1h} \\vcentcolon = \\sqrt{ \\Vert \\textrm{u}_h \\Vert_h^2 + |\\textrm{u}_h|_{1h}^2 }
 ```
+
+with ``|\\textrm{u}_h|_{1h} = \\Vert \\nabla_h \\textrm{u}_h \\Vert_+`` (see [`snorm₁ₕ`](@ref)).
 
 Built from the squared quantities directly: taking `normₕ` and `snorm₁ₕ` and squaring
 them back up would compute two square roots only to undo them.

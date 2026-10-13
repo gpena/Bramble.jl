@@ -199,8 +199,8 @@ Here, ``|\\cdot|`` denotes the measure of the set (length, area, or volume). See
 """
 struct ScalarGridSpace{
     D,
-    T,                               # Dimension and Element Type
-    VT <: AbstractVector{T},             # Vector Type
+    T,
+    VT <: AbstractVector{T},
     MType <: AbstractMeshType{D}
 } <: AbstractSpaceType{1}
     "the underlying mesh of the grid space."
@@ -264,10 +264,9 @@ end
 # field type at `SeparableWeights{D, T, VT}` for every `D`, and a second, dense-vector
 # variant of that field would need a further type parameter on `SpaceWeights` (and, since
 # `ScalarGridSpace` stores `SpaceWeights{D, T, VT}` in its own field type, on
-# `ScalarGridSpace` too) purely to special-case one dimension. Measured instead of assumed
-# (`docs/src/internals/space.md`): wrapping the 1D vector costs nothing detectable, since
-# `SeparableWeights` with one factor degenerates to that same vector's own indexing after
-# inlining. One dimension still skips building a *second* full-length vector for the
+# `ScalarGridSpace` too) purely to special-case one dimension. A one-factor
+# `SeparableWeights` inlines to that vector's own indexing, so wrapping the 1D vector costs
+# nothing. One dimension still skips building a *second* full-length vector for the
 # transverse factor -- there is none, since `aligned` and `cellfactor` already *are*
 # `innerplus₁` and `inner_h_vec` below, zero-copy.
 function space_weights(Ωₕ::AbstractMeshType{1})
@@ -307,11 +306,8 @@ function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
     VT = typeof(first(aligned))
     T = eltype(VT)
 
-    # `innerh` and each `innerplus[i]` used to be filled, full grid, by
-    # `_innerh_weights!`/`__innerplus_weights!` into a fresh `O(n^D)` vector apiece --
-    # exactly the cost this milestone removes (gpena/Bramble.jl#115): `SeparableWeights`
-    # answers the same values from `aligned`/`cellfactor` alone, computed at access time,
-    # so `space_weights` itself never allocates more than the `2D` per-axis vectors above.
+    # `innerh` and every `innerplus[i]` are lazy products of `aligned`/`cellfactor`, so
+    # `space_weights` allocates only the `2D` per-axis vectors above.
     innerh = SeparableWeights{D, T, VT}(cellfactor, npts_tuple)
     innerplus = ntuple(Val(D)) do i
         factors = ntuple(k -> k == i ? aligned[k] : cellfactor[k], Val(D))
@@ -471,7 +467,7 @@ end
 # The third instance of one recurring shape (`_probe_point`/`_restriction_eltype`,
 # `spacing`/`forward_spacing` with its `host_spacings`, and this one): a host-side accessor
 # left alone when the layer below it landed, blocking the next layer up.
-# `_pattern_size_hint`/`allocate_system_matrix` (`form/bilinear_pattern.jl`) walk a form's
+# `_pattern_size_hint`/`allocate_system_matrix` (`assembly/bilinear_pattern.jl`) walk a form's
 # AST through `local_stencil`, which reads a `ScalarGridSpace` through `weights(space,
 # ...)[i]` (`SeparableWeights`'s `getindex` -> `__prod` just below) for an `innerₕ`/
 # `inner₊*` node, and through `spacing`/`forward_spacing`
@@ -486,7 +482,7 @@ end
 # suggest on its own -- because mirroring the weights alone still throws one call deeper, at
 # the very next difference/average/jump node in the same AST. `Mesh1D`/`MeshnD` are genuine,
 # independently constructed mesh objects here, not a narrow duck-typed stand-in like
-# `stencil.jl`'s `_HostAxisSpacings` (built for one axis and four methods because that
+# `stencil_matrix.jl`'s `_HostAxisSpacings` (built for one axis and four methods because that
 # caller never needed more): every accessor any AST node could reach -- `point`, `spacing`,
 # `npoints`, `markers`, ... -- already has a correct host-side method on them, so nothing
 # new needs teaching.
@@ -596,7 +592,7 @@ Returns the number of degrees of freedom (grid points) in the space.
 # Methods
 
 - `ndofs(Wₕ)` - Returns total number of DOFs as an integer
-- `ndofs(Wₕ, Tuple)` - Returns DOFs per dimension as a tuple (Nₓ, Nᵧ, Nᵤ)
+- `ndofs(Wₕ, Tuple)` - Returns DOFs per dimension as a tuple (`Nₓ`, `Nᵧ`, `N_z`)
 
 # Examples
 
@@ -638,7 +634,7 @@ function _innerh_weights!(u::Array, Ωₕ::AbstractMeshType{1})
 end
 
 # Device counterpart (gpena/Bramble.jl#94, #174): `cell_measure(Ωₕ, i)` is
-# `_apply_hs_logic(half_spacing(Ωₕ, i))` (src/mesh/mesh1d.jl:292-296), the same formula at
+# `_apply_hs_logic(half_spacing(Ωₕ, i))` (mesh/mesh1d.jl), the same formula at
 # every index with no boundary special case, so it needs no `@kernel` of its own -- it is
 # `_apply_hs_logic` broadcast over the mesh's own `half_spacings` vector, which dispatches
 # to a GPUArrays broadcast kernel instead of scalar `getindex`/`setindex!`.
@@ -669,8 +665,7 @@ function _innerplus_weights!(u::VT, Ωₕ, component = 1) where {VT <: Array}
     T = eltype(VT)
     mesh_component = Ωₕ(component)
 
-    # These weights are the mesh's backward spacings with the first entry zeroed, which
-    # the mesh now caches, so this is a copy rather than a call per point.
+    # These weights are the mesh's cached backward spacings with the first entry zeroed.
     copyto!(u, spacings(mesh_component))
 
     @inbounds u[1] = zero(T)
@@ -738,7 +733,7 @@ function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where {VT <:
 end
 
 # Device counterpart: `half_spacing(Ωₕ, i)` is a bounds-checked read of `Ωₕ.half_spacings[i]`
-# with no boundary branch (src/mesh/mesh1d.jl:285-288), so this fill is exactly a copy of
+# with no boundary branch (mesh/mesh1d.jl), so this fill is exactly a copy of
 # that backing vector -- a bulk `copyto!`, not a per-index scalar read.
 function _innerplus_mean_weights!(u::AbstractVector, Ωₕ, component::Int = 1)
     mesh_component = Ωₕ(component)
@@ -763,11 +758,8 @@ end
 
 # --- Display ---------------------------------------------------------------------- #
 #
-# Neither grid space nor grid function had a `show` or `summary` method at all, so both
-# fell through to Julia's default: `summary(gridspace(...))` was 563 characters of nested
-# type parameters, and displaying one dumped every weight vector alongside it
-# (gpena/Bramble.jl#17). Two-argument `show` is the embeddable one-liner;
-# `MIME"text/plain"` is the detailed block (gpena/Bramble.jl#45).
+# Two-argument `show` is the embeddable one-liner; `MIME"text/plain"` is the detailed
+# block; `summary` reuses the one-liner.
 
 function Base.show(io::IO, Wₕ::ScalarGridSpace{D, T}) where {D, T}
     print(io, "ScalarGridSpace{$(D)D, $T, ", ndofs(Wₕ), " dofs}")

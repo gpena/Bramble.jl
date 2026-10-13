@@ -162,6 +162,54 @@ using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
     end
 end
 
+# The formulas the `inner₊ᵧ` and `norm₁ₕ` docstrings state, on non-uniform meshes (an
+# equispaced one would not tell `h_{x,i+1/2} h_{y,j}` from `h_{x,i} h_{y,j+1/2}`).
+@testset "inner₊ᵧ weight and norm₁ₕ formula" begin
+    # Non-uniform points of [0, 1], from step sizes that do not repeat.
+    steps(n) = [1.0 + 0.7 * sin(2.3k) ^ 2 for k in 1:(n - 1)]
+
+    @testset "inner₊ᵧ hand sum, 2D" begin
+        nx, ny = 5, 4
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (nx, ny), (false, false))
+        set_points!(Ωₕ(1), _nonuniform_points(steps(nx)))
+        set_points!(Ωₕ(2), _nonuniform_points(steps(ny)))
+        Wₕ = gridspace(Ωₕ)
+        u = Rₕ(Wₕ, x -> sin(3x[1]) + x[2]^2)
+        v = Rₕ(Wₕ, x -> cos(x[1]) * x[2] + 1.0)
+        U = reshape(parent(u), nx, ny)
+        V = reshape(parent(v), nx, ny)
+
+        # `h_{y,j}` is the backward spacing, zero at `j = 1`; `h_{x,i+1/2}` the cell measure.
+        hy(j) = j == 1 ? 0.0 : spacing(Ωₕ(2), j)
+        expected = sum(
+            cell_measure(Ωₕ(1), i) * hy(j) * U[i, j] * V[i, j] for i in 1:nx, j in 1:ny
+        )
+        @test inner₊ᵧ(u, v) ≈ expected
+
+        # The weight `inner₊ₓ` has, `h_{x,i} h_{y,j+1/2}`, gives another number here.
+        swapped = sum(
+            (i == 1 ? 0.0 : spacing(Ωₕ(1), i)) * cell_measure(Ωₕ(2), j) * U[i, j] * V[i, j]
+            for i in 1:nx, j in 1:ny
+        )
+        @test !isapprox(inner₊ᵧ(u, v), swapped; rtol = 1.0e-3)
+    end
+
+    @testset "norm₁ₕ² = normₕ² + norm₊(∇ₕ u)², $(D)D" for D in 1:(WITH_3D_TESTS ? 3 : 2)
+        ns = (6, 5, 4)[1:D]
+        Ω = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), Val(D))))
+        Ωₕ = mesh(Ω, ns, ntuple(_ -> false, Val(D)))
+        for d in 1:D
+            set_points!(Ωₕ(d), _nonuniform_points(steps(ns[d])))
+        end
+        Wₕ = gridspace(Ωₕ)
+        u = Rₕ(Wₕ, x -> sum(sin(3d * x[d]) + x[d]^2 for d in 1:D))
+
+        grad = norm₊(∇ₕ(u))^2
+        @test grad > 0
+        @test norm₁ₕ(u)^2 ≈ normₕ(u)^2 + grad
+    end
+end
+
 # Runtime `inner₊(uₕ, vₕ, Val(S))` for every staggered set `S ⊆ 1:D`
 # (`innerₕ`, `inner₊ₓ`, `inner₊ᵧ` and `inner₊₂` are the `S = ()` and singleton cases,
 # aliases sharing this implementation). Every other `S`, a pair or the full `1:D` set,
