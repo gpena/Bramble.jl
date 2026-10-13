@@ -7,12 +7,12 @@
 # ## Problem
 #
 # ```math
-# -\nabla \cdot (\epsilon \nabla u) + b \, \mathbf{1} \cdot \nabla u = g \text{ in } \Omega,
+# -\nabla \cdot (\epsilon \nabla u) - b \, \mathbf{1} \cdot \nabla u = g \text{ in } \Omega,
 # \qquad u = u_{\text{exact}} \text{ on } \partial\Omega, \qquad \Omega = (0,1)^D
 # ```
 #
 # with a constant diffusion coefficient ``\epsilon`` and a constant convective speed ``b`` along
-# every coordinate direction at once: the vector field ``b(1,\dots,1)``. The manufactured
+# every coordinate direction at once: the vector field ``-b(1,\dots,1)``. The manufactured
 # solution is the same as the other two examples, ``u_{\text{exact}}(x) = e^{\sum_i x_i}``, so
 # ``g = -D\,(b+\epsilon)\,u_{\text{exact}}``.
 #
