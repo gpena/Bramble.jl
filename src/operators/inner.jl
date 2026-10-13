@@ -415,7 +415,7 @@ function _resolved_on_walked(op, W, Wₕ, Vₕ)
     _has_surface_labels(op) || return W
     unnamed = trial_component_or_nothing(op) === nothing &&
               test_component_or_nothing(op) === nothing
-    nmax = unnamed ? min(_leaf_count(Wₕ), _leaf_count(Vₕ)) : 1
+    nmax = unnamed ? min(leaf_count(Wₕ), leaf_count(Vₕ)) : 1
     _has_test_interp(op) &&
         return _resolved_on_side(op, W, Wₕ, trial_component_or_nothing, nmax)
     return _resolved_on_side(op, W, Vₕ, test_component_or_nothing, nmax)
@@ -435,7 +435,8 @@ function _resolved_on_side(
     end
     R = _resolved_inner(W, mesh(first(first(leaves))))
     for c in 2:min(nmax, length(leaves))
-        _resolved_inner(W, mesh(first(leaves[c]))) === R || _throw_surface_leaves_disagree()
+        _resolved_inner(W, mesh(first(leaves[c]))) === R ||
+            _throw_surface_leaves_disagree(W, 1, c)
     end
     return R
 end
@@ -452,11 +453,17 @@ _type_has_labels(T::DataType) = any(p -> p isa Type && _type_has_labels(p), T.pa
 _type_has_labels(::Any) = false
 @generated _has_surface_labels(::T) where {T} = _type_has_labels(T)
 
-@noinline function _throw_surface_leaves_disagree()
+# The labels an unresolved surface weight holds; `InnerGammaNormal`'s case is in
+# operators/normal.jl.
+_surface_labels(::Type{InnerGamma{_SurfaceLabels{L}}}) where {L} = L
+
+@noinline function _throw_surface_leaves_disagree(::Type{W}, a::Int, b::Int) where {W}
+    held = join((":$s" for s in _surface_labels(W)), ", ")
     throw(
         ArgumentError(
-        "inner_Γ: a term naming no component reaches leaves whose meshes read its " *
-        "markers as different faces; name the component the term is for (`v(i)`).",
+        "inner_Γ: a term naming no component reaches leaves $a and $b, whose meshes " *
+        "read the markers $held as different faces; name the component the term is " *
+        "for (`v(i)`).",
     ),
     )
 end
@@ -536,13 +543,8 @@ function inner₊(
     return _inner₊_same_dim(Val(D), left, right, markers)
 end
 
-# Split on `Val(D)` rather than branching on `D == 1` at runtime: `D` is a type parameter,
-# known at compile time, so the choice belongs at dispatch (gpena/Bramble.jl#59). Kept as an
-# inner helper, not a second `inner₊` method on `LazyOp{1}`, `LazyOp{1}`: that concrete-D
-# signature is no longer a subtype of the `BackwardDifference{D,Dim}`-paired overloads below
-# (unlike this method's shared, still-generic-in-D one), and is genuinely ambiguous against
-# them for D=1 -- confirmed by trying it first and watching precompilation fail on exactly
-# that call shape.
+# Split on `Val(D)`: an `inner₊(::LazyOp{1}, ::LazyOp{1})` method would be ambiguous at
+# `D = 1` with the `BackwardDifference{D,Dim}` pair above.
 function _inner₊_same_dim(::Val{1}, left, right, markers::NTuple{N, Symbol}) where {N}
     return _inner(InnerPlus{1}(), left, right, markers)
 end
@@ -935,22 +937,9 @@ end
 # Zero-Allocation Stencil Evaluators
 # ==============================================================================
 
-# `_same_operator_shape` answers, for `innerₕ(L(u), L(v))` with the same `L`
-# on both sides, that `op.left_op` and `op.right_op` are the same operator chain up to
-# substituting `TrialFunction` for `TestFunction` at the leaves: exactly the
-# condition under which `local_stencil(op.left_op, …)` and `local_stencil(op.right_op, …)`
-# compute the identical tuple of `(offset, coefficient)` pairs. The two are then multiplied
-# pairwise regardless, so half of those products (`left[i][2]*left[j][2]` and
-# `left[j][2]*left[i][2]`) are the same number computed twice.
-# `multiply_stencils_bilinear_symmetric` computes each such product once and reuses it for
-# both `(i, j)` and `(j, i)`, so the fast path below runs `local_stencil` on one side only and
-# still returns the same `N²`-entry tuple `multiply_stencils_bilinear` would have, just with
-# `N(N+1)/2` multiplications behind it instead of `N²`.
-#
-# This check depends only on `op.left_op`/`op.right_op`'s structure, not on which space the
-# trial and test argument range over: unlike `issymmetric`/`isposdef`,
-# which additionally require the same space, it answers a strictly local question ("do the two
-# sides compute the same numbers here") and is safe regardless.
+# When both sides are the same operator chain (`_same_operator_shape`), their stencils
+# are equal, so the symmetric product computes each of the `N(N+1)/2` distinct products
+# once. The test is structural only and holds whatever spaces the trial and test range over.
 @inline function local_stencil(
         op::BilinearProduct{D, InnerType}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D, InnerType}
@@ -1041,14 +1030,8 @@ end
 # One method for `Tuple{}` settles all of them. It throws rather than returning zero: an
 # empty tuple carries no direction to integrate over, so reaching here means a caller
 # built a form with no components, and a silent zero would hide that.
-#=
-Needs its own `markers` keyword, not just the positional disambiguation: with `markers` added
-to every `NTuple{D,...}` overload above, they all tie again at `D = 0` specifically for the
-*keyword-call* dispatch (`Tuple{}` matches `NTuple{0,LazyOp{0}}`, `NTuple{0,Function}`,
-`NTuple{0,Number}`, `NTuple{0,VectorElement}` and `NTuple{0,<:Tuple}` identically), even
-though the plain positional call already resolves through this method with no keywords at
-all. Aqua's ambiguity check is what caught it.
-=#
+#
+# It takes `markers` too: keyword-call dispatch ties at `D = 0` the same way.
 @noinline function inner₊(
         ::Tuple{}, ::Tuple{}; markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
 ) where {M}

@@ -1,11 +1,10 @@
 # normal.jl
 #
 # The file holds both halves of the normal family: the numerical operators, which act on grid
-# functions and build matrices, and then the AST nodes that the same names build when handed
-# a `LazyOp`. It is included after the AST core (`ast/ast.jl`, `common.jl`,
-# `expression.jl`, `operators/node_family.jl`), which the node half needs.
+# functions, and then the AST nodes that the same names build when handed a `LazyOp`. It is
+# included after the AST core (`ast/ast.jl`, `common.jl`, `expression.jl`,
+# `operators/node_family.jl`), which the node half needs.
 
-# normal.jl
 # The outward unit normal as a discrete grid function (gpena/Bramble.jl#213).
 #
 # `normal_vector(Ωₕ, :xmax)` (mesh/queries.jl) answers the geometric question: the constant
@@ -54,16 +53,8 @@ function normal_vector(Wₕ::ScalarGridSpace{D}, marker::Symbol) where {D}
     facet = boundary_symbol_to_cartesian(indices(Ωₕ))[face]
     lin = LinearIndices(indices(Ωₕ))
 
-    # `element(Wₕ, zero(eltype(Wₕ)))` fills through the `VectorElement` wrapper's generic
-    # `setindex!`, which scalar-writes a device array once per point (a gap in
-    # `element(::AbstractSpaceType, ::Number)`, src/space/vectorelement.jl, outside this
-    # file's ownership). Building the element uninitialized and zeroing its `parent` directly
-    # reaches the array's own `fill!` instead -- correct and no slower on a host array either.
     T = eltype(Wₕ)
-    nₕ = ntuple(_ -> element(Wₕ, T), Val(D))
-    for d in 1:D
-        fill!(parent(nₕ[d]), zero(T))
-    end
+    nₕ = ntuple(_ -> element(Wₕ, zero(T)), Val(D))
     _fill_normal!(locality(backend(Wₕ)), nₕ, facet, ν, lin, Val(D))
     return nₕ
 end
@@ -73,7 +64,7 @@ end
 # one face; any other label is already a face name and is returned as it is.
 @inline function _normal_face_name(Ωₕ::AbstractMeshType{D}, marker::Symbol) where {D}
     haskey(markers(Ωₕ), marker) || return marker
-    mask = _surface_mask(Ωₕ, (marker,))
+    mask = _surface_mask(Ωₕ, (marker,), "normal_vector")
     nfaces = sum(d -> mask[d][1] + mask[d][2], 1:D)
     nfaces == 1 || _throw_normal_not_one_face(marker, nfaces)
     axis = findfirst(d -> mask[d][1] || mask[d][2], 1:D)
@@ -120,7 +111,6 @@ end
 # ==============================================================================
 # ==============================================================================
 
-# normal.jl
 # The outward normal as a symbol inside a form, and the normal derivative built on it
 # (gpena/Bramble.jl#213).
 #
@@ -243,6 +233,7 @@ function _resolved_inner(
         ::Type{InnerGammaNormal{_SurfaceLabels{L}, DIM}}, Ωₕ) where {L, DIM}
     return InnerGammaNormal{_surface_mask(Ωₕ, L), DIM}
 end
+_surface_labels(::Type{InnerGammaNormal{_SurfaceLabels{L}, DIM}}) where {L, DIM} = L
 
 # The sum is built with `ntuple(Val(D))` so each weight is a type rather than a runtime value,
 # the same reason `_inner_source_tuple` is written that way.
@@ -462,10 +453,6 @@ end
 
 # --- Expression rendering (gpena/Bramble.jl#274) ----------------------------------- #
 
-# `_inner_name` (src/operators/inner.jl) gets its `InnerGammaNormal` case here --
-# no forward declaration needed, only consistent naming. Named after `InnerGamma`'s own
-# `"inner_Γ"` (both are surface integrals) plus the directional subscript
-# `InnerPlus{Dim}`/`_inner_name` already appends for its own directional weight, since this
-# type's docstring calls itself "the directional counterpart of InnerGamma": the subscript is
-# what distinguishes a term carrying one signed transverse measure from the lumped one.
+# `InnerGammaNormal`'s case of `_inner_name` (operators/inner.jl): `inner_Γ` plus the
+# direction subscript, as `InnerPlus{Dim}` gets.
 _inner_name(::InnerGammaNormal{MASK, DIM}) where {MASK, DIM} = "inner_Γ" * _BRAMBLE_var2symbol[DIM]

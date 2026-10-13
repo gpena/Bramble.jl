@@ -18,12 +18,8 @@ mask applies, and whether the sweep is threaded -- and asks the rule only for a 
 kernel. `Rₕ!` (`restriction.jl`) and `avgₕ!` (`cell_average.jl`) keep their own public
 signatures and docstrings and become thin wrappers over `project!`.
 
-**The threading trap this closes.** Before this, the masked paths of both families were
-plain serial loops that ignored `execution_policy`, while the unmasked ones threaded. A
-caller who added `markers = (...)` silently lost threading, with nothing in either
-interface saying so. Masking is now a property of the kernel (`_MaskedKernel` below), not
-of the sweep, so both go through the same `_sweep_for!` and the policy is honoured
-either way.
+Masking is a property of the kernel (`_MaskedKernel`), not of the sweep, so masked and
+unmasked calls go through the same `_sweep_for!` and honour `execution_policy` alike.
 =#
 
 """
@@ -97,7 +93,7 @@ function _rule_component end
 # top-level arguments rather than nested inside a wrapper struct.
 #
 # Both default to `false` -- "no device kernel for this rule/space combination" -- so
-# `project!` falls back to the generic sweep above unchanged: on `HostLocality` that is
+# `project!` falls back to the generic sweep below unchanged: on `HostLocality` that is
 # every call (the CPU path never even asks); on `DeviceLocality` every `PointValue`/
 # `CellAverage`, masked or not, on a mesh of any dimension answers `true`. A future rule
 # this file has not been taught about falls through to `_sweep_for!`/`_sweep_scatter_for!`'s
@@ -285,10 +281,8 @@ end
 @inline _in_any_marker(::Tuple{}, i) = false
 @inline _in_any_marker(masks::Tuple, i) = (@inbounds masks[1][i]) || _in_any_marker(Base.tail(masks), i)
 
-# Off-region entries are written as zero rather than skipped. The serial loops this
-# replaces did `fill!(raw, 0)` first and then wrote only the masked entries, which leaves
-# exactly the same array -- but writing every entry is what lets the masked sweep be the
-# same threaded sweep as the unmasked one.
+# Off-region entries are written as zero, not skipped, so the masked sweep is the
+# unmasked one.
 struct _MaskedKernel{K, M, Z}
     kernel::K
     masks::M
