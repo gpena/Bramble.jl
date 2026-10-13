@@ -648,7 +648,14 @@ else
         I = interval(0.0f0, 1.0f0)
         f = (u, v) -> 2 * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
         for (dom, dims) in ((I × I, (31, 17)), (I × I × I, (9, 8, 7)))
-            Ωd = mesh(domain(dom), dims, ntuple(_ -> false, length(dims)); backend = metal_backend())
+            # Seeded as in "fdm_solve (#323)" below, so both testsets build the same meshes
+            # whatever the global RNG holds (seeds 1:100 scanned unseeded: no fails).
+            Bramble._seed_mesh1d_rng!(1)
+            Ωd = try
+                mesh(domain(dom), dims, ntuple(_ -> false, length(dims)); backend = metal_backend())
+            finally
+                Bramble._unseed_mesh1d_rng!()
+            end
             Wd = gridspace(Ωd)
             Wh = host_weights(Wd)
             Kd = kronecker_operator(form(Wd, Wd, f))
