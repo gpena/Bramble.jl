@@ -1,6 +1,7 @@
 module MeshConstructorsTests
 
 using Test
+using Random
 using Bramble
 using Bramble: _expand_uniform, Backend, Serial, stepsize, Mesh1D, MeshnD, is_uniform
 using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
@@ -226,6 +227,33 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
         @test_logs mesh(Ω_disagree, 8; warn_marker_mismatch = false)
         @test_logs (:warn, r"boundary") mesh(Ω_disagree, (8, 8); warn_marker_mismatch = true)
         @test_logs mesh(Ω_disagree, (8, 8); warn_marker_mismatch = false)
+    end
+
+    @testset "Endpoints pinned to a and b" begin
+        # `a + (n - 1) * h` ends at 0.9999999999999999 here (gpena/Bramble.jl#695)
+        m50 = mesh(domain(interval(0.0, 1.0)), 50)
+        @test last(points(m50)) === 1.0
+        @test is_uniform(m50)
+        @test last(points(mesh(domain(interval(0.0f0, 1.0f0)), 50))) === 1.0f0
+
+        # a seeded sweep of uniform and non-uniform intervals, both ends pinned
+        rng = Random.Xoshiro(7)
+        missed = Tuple{Float64, Float64, Int, Bool}[]
+        for _ in 1:300
+            a = rand(rng) - 0.5
+            b = a + 0.1 + rand(rng)
+            n = rand(rng, 3:60)
+            for u in (true, false)
+                p = points(mesh(domain(interval(a, b)), n, u))
+                (first(p) == a && last(p) == b) || push!(missed, (a, b, n, u))
+            end
+        end
+        @test isempty(missed)
+
+        # an equality marker on the last node marks a whole side of a 50 x 50 square
+        I = interval(0.0, 1.0)
+        Ω = domain(I × I, :r => x -> x[1] == 1.0)
+        @test count(Bramble.index_in_marker(mesh(Ω, (50, 50), (true, true)), :r)) == 50
     end
 
     @testset "Zero allocations in _expand_uniform" begin

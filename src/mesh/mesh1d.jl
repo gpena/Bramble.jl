@@ -843,14 +843,15 @@ end
 # instead of adding a genuinely more specific dispatch (method overwriting is an error during
 # precompilation).
 """
-    _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, h, n::Int, dev) -> Nothing
+    _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, b, h, n::Int, dev) -> Nothing
 
 Fills all four of a uniform mesh's arrays -- `pts`, `half_pts`, `spacings` and
 `half_spacings` -- in a single `KernelAbstractions.@kernel` launch on `dev`, over
-`1:(n + 1)` work items: `pts[i] = a + (i - 1) * h`, `spacings[i] = h`, `half_spacings[i] =
-h / 2` at `i = 1` or `i = n` and `h` elsewhere, and `half_pts[i] = a` at `i = 1`,
-`a + (n - 1) * h` at `i = n + 1`, and the midpoint formula in between. Every entry comes
-from `a`, `h` and `n` alone, with no read of `pts` itself -- the fusion of the uniform
+`1:(n + 1)` work items: `pts[i] = a + (i - 1) * h` except `pts[n] = b`, `spacings[i] = h`,
+`half_spacings[i] = h / 2` at `i = 1` or `i = n` and `h` elsewhere, and `half_pts[i] = a`
+at `i = 1`, `b` at `i = n + 1`, and the midpoint formula in between. The last point is `b`
+itself, since `a + (n - 1) * h` can miss it by an ulp (gpena/Bramble.jl#695). Every entry
+comes from `a`, `b`, `h` and `n` alone, with no read of `pts` itself -- the fusion of the uniform
 point fill, `_launch_spacing!`, `_launch_half_points!`
 and `_launch_half_spacing!` into one kernel for a uniform device mesh
 (gpena/Bramble.jl#303).
@@ -859,7 +860,7 @@ and `_launch_half_spacing!` into one kernel for a uniform device mesh
 - `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
   kernel to reach (`_throw_no_ka_mesh_kernel`).
 """
-function _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, h, n, dev)
+function _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, b, h, n, dev)
     _throw_no_ka_mesh_kernel("_launch_uniform_mesh1d_init!")
 end
 
@@ -973,6 +974,9 @@ _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_
         @simd ivdep for i in eachindex(x)
             x[i] = aₛ + (i - 1) * h
         end
+        # `aₛ + (npts - 1) * h` can miss `b` by an ulp, so an equality marker such as
+        # `x -> x == b` would mark nothing: pin the last node (gpena/Bramble.jl#695).
+        x[npts] = bₛ
     else
         # For a non-uniform grid, first generate points in the canonical interval [0, 1].
         x[1] = zero(T)
@@ -984,6 +988,10 @@ _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_
 
         # Scale and shift the points from [0, 1] to the target interval [a, b].
         @. x = a + x * (b - a)
+
+        # `a + 1 * (b - a)` can miss `b` by an ulp: pin both ends (gpena/Bramble.jl#695).
+        x[1] = a
+        x[npts] = b
 
         # Redraw any interior point the draw or the map left equal to a neighbour.
         _redraw_tied_points!(x, a, b)
@@ -1106,7 +1114,7 @@ end
 
 # Fused device counterpart of `_points!` + `spacing!` + `half_points!` + `half_spacing!`
 # together (gpena/Bramble.jl#303): one kernel launch fills `pts`, `half_pts`, `spacings`
-# and `half_spacings` from `a`, `h` and `n` alone. `_mesh` below is the only caller, before
+# and `half_spacings` from `a`, `b`, `h` and `n` alone. `_mesh` below is the only caller, before
 # a `Mesh1D` exists to pass in, which is why this takes the raw arrays rather than `Ωₕ`.
 @inline function _uniform_mesh1d_init!(
         pts::AbstractVector,
@@ -1114,12 +1122,13 @@ end
         spacings,
         half_spacings,
         a,
+        b,
         h,
         n::Int,
         backend
 )
     dev = ka_device(backend)
-    _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, h, n, dev)
+    _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, b, h, n, dev)
     return nothing
 end
 
@@ -1212,6 +1221,7 @@ function _mesh(
             _spacings,
             _half_spacings,
             a,
+            b,
             h,
             n_points,
             backend

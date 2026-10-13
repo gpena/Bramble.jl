@@ -63,24 +63,25 @@ import Bramble:
 # points, spacings, half points and half spacings together, replacing a uniform point fill
 # plus the three sequential launches below (`_launch_spacing!`, `_launch_half_points!`,
 # `_launch_half_spacing!`) for a uniform device mesh. Every entry is closed-form arithmetic
-# on `a`, `h` and `n` alone -- unlike `_half_points_kernel!`/`_half_spacing_kernel!` below,
+# on `a`, `b`, `h` and `n` alone -- unlike `_half_points_kernel!`/`_half_spacing_kernel!` below,
 # which read `pts`/`h` back from global memory, this kernel reads nothing. `src/mesh/mesh1d.jl`
 # dispatches only the uniform, non-collapsed, device-backed, `n >= 2` case here; a
 # non-uniform or host-backed mesh keeps going through the three kernels below.
 # ---------------------------------------------------------------------------
 
-@kernel function _uniform_mesh1d_init_kernel!(pts, half_pts, spacings, half_spacings, a, h, n)
+@kernel function _uniform_mesh1d_init_kernel!(pts, half_pts, spacings, half_spacings, a, b, h, n)
     i = @index(Global)
     @inbounds begin
         if i <= n
-            pts[i] = a + (i - 1) * h
+            # the last node is `b` itself, not `a + (n - 1) * h` (gpena/Bramble.jl#695)
+            pts[i] = i == n ? b : a + (i - 1) * h
             spacings[i] = h
             half_spacings[i] = (i == 1 || i == n) ? h / 2 : h
         end
         if i == 1
             half_pts[i] = a
         elseif i == n + 1
-            half_pts[i] = a + (n - 1) * h
+            half_pts[i] = b
         else
             half_pts[i] = a + (2i - 3) * h / 2
         end
@@ -89,9 +90,9 @@ end
 
 function _launch_uniform_mesh1d_init!(
         pts::AbstractVector, half_pts::AbstractVector, spacings::AbstractVector,
-        half_spacings::AbstractVector, a, h, n::Int, dev
+        half_spacings::AbstractVector, a, b, h, n::Int, dev
 )
-    _uniform_mesh1d_init_kernel!(dev)(pts, half_pts, spacings, half_spacings, a, h, n; ndrange = n + 1)
+    _uniform_mesh1d_init_kernel!(dev)(pts, half_pts, spacings, half_spacings, a, b, h, n; ndrange = n + 1)
     return nothing
 end
 
