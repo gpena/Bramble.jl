@@ -692,7 +692,14 @@ else
         I = interval(0.0f0, 1.0f0)
         f = (u, v) -> 2 * innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
         for (dom, dims) in ((I × I, (31, 17)), (I × I × I, (9, 8, 7)))
-            Ωd = mesh(domain(dom), dims, ntuple(_ -> false, length(dims)); backend = metal_backend())
+            # Seeded: about 1 random mesh in 10 trips the Float32 singularity test (seeds 1:30
+            # scanned on both dims: only 3 fails), so an unseeded draw made this testset flaky.
+            Bramble._seed_mesh1d_rng!(1)
+            Ωd = try
+                mesh(domain(dom), dims, ntuple(_ -> false, length(dims)); backend = metal_backend())
+            finally
+                Bramble._unseed_mesh1d_rng!()
+            end
             Wd = gridspace(Ωd)
             Wh = gridspace(Bramble._host_mirror_mesh(mesh(Wd)))
             ad = form(Wd, Wd, f)

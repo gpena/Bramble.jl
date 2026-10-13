@@ -8,7 +8,6 @@ import LinearAlgebra: mul!
 using SparseArrays: SparseArrays, SparseMatrixCSC
 
 import Bramble: vector, matrix, _backend_eye, _backend_zeros, ka_device
-using PrecompileTools: @setup_workload, @compile_workload
 
 # ---------------------------------------------------------------------------
 # Convenience constructor
@@ -369,40 +368,5 @@ const _metal_sparse_csc_mul_message = "mul! is not supported for MetalSparseMatr
                                       "(matching JuliaGPU/Metal.jl#909's own convention) " *
                                       "-- convert to CSR first, e.g. " *
                                       "`Bramble.metal_sparse_csr(SparseArrays.SparseMatrixCSC(A))`."
-
-if Bramble.PRECOMPILE_WORKLOAD && Sys.isapple() && Metal.functional()
-    @setup_workload begin
-        @compile_workload begin
-            b = Bramble.metal_backend(Float32)
-            v = Bramble.vector(b, 4)
-            M = Bramble.matrix(b, 4, 4)
-            Bramble._backend_eye(b, 4)
-            Bramble._backend_zeros(b, 4)
-            Bramble.ka_device(b)
-
-            S = SparseMatrixCSC{Float32, Int32}(LinearAlgebra.I, 4, 4)
-            csr = Bramble.metal_sparse_csr(S)
-            csc = Bramble.metal_sparse_csc(S)
-            y = Bramble.vector(b, 4)
-            x = Bramble.vector(b, 4)
-            mul!(y, csr, x, 1.0f0, 0.0f0)
-
-            I1 = Bramble.interval(0.0f0, 1.0f0)
-            dom1 = Bramble.domain(I1, :left => :left, :right => :right)
-            m1 = Bramble.mesh(dom1, 4, true; backend = b)
-            w1 = Bramble.gridspace(m1)
-            u1 = Bramble.Rₕ(w1, x -> sin(Float32(pi) * x[1]))
-            Bramble.D₋ₓ(u1)
-            Bramble.innerₕ(u1, u1)
-
-            dom2 = Bramble.domain(I1 × I1)
-            m2 = Bramble.mesh(dom2, 4, true; backend = b)
-            w2 = Bramble.gridspace(m2)
-            u2 = Bramble.Rₕ(w2, x -> sin(Float32(pi) * x[1]) * cos(Float32(pi) * x[2]))
-            Bramble.D₋ₓ(u2)
-            Bramble.innerₕ(u2, u2)
-        end
-    end
-end
 
 end # module BrambleMetalExt
