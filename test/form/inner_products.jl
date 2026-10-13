@@ -610,4 +610,12 @@ end
     end
 end
 
+@testset "One-sided block term (#356)" begin
+    # A term naming the trial component alone builds; assembling it is what refuses.
+    Ωc = mesh(domain(interval(0.0, 1.0)), 9, false)
+    V = gridspace(Ωc, Val(2))
+    a = form(V, V, (u, v) -> innerₕ(u[1], v))
+    @test_throws ArgumentError assemble(a)
+end
+
 end # module FormInnerProductsTests

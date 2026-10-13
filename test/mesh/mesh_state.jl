@@ -124,6 +124,17 @@ end
         @test length(markers(Ωₕ)[:boundary]) == 9
     end
 
+    @testset "Same count keeps custom labels" begin
+        Ωₕ = mesh(domain(I, :a => x -> x < 0.4), 70, false)::Mesh1D
+        a0 = copy(markers(Ωₕ)[:a])
+        # x^1.2 keeps both ends and the order of the points, and moves the interior ones.
+        p = collect(points(Ωₕ)) .^ 1.2
+        set_points!(Ωₕ, p)
+        @test points(Ωₕ) == p && npoints(Ωₕ) == 70
+        @test markers(Ωₕ)[:a] == a0
+        @test words_agree(Ωₕ)
+    end
+
     @testset "Word matrix: build and rebuild" begin
         for Ωₕ in _meshes()
             @test words_agree(Ωₕ)

@@ -88,6 +88,17 @@ struct NotAFunctionPredicate end
         @test boundary_symbols(typeof(Ω2)) == (:xmin, :xmax, :ymin, :ymax)
     end
 
+    # The viewpoint aliases name different faces per dimension: `:left` is the `x` minimum
+    # in 1D and 2D, the `y` minimum in 3D.
+    @testset "Viewpoint aliases per dimension" begin
+        @test Bramble._boundary_symbol_alias(Val(1), :left) === :xmin
+        @test Bramble._boundary_symbol_alias(Val(2), :left) === :xmin
+        @test Bramble._boundary_symbol_alias(Val(3), :left) === :ymin
+        @test Bramble._boundary_symbol_alias(Val(2), :bottom) === :ymin
+        @test Bramble._boundary_symbol_alias(Val(3), :bottom) === :zmin
+        @test Bramble._boundary_symbol_alias(Val(3), :top) === :zmax
+    end
+
     # Invariant: `process_identifier` normalizes symbols, tuples, and vectors
     # of symbols into canonical boundary representations. Function-valued pairs
     # are stored directly as closures and are not routed through `process_identifier`.

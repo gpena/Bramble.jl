@@ -81,6 +81,27 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
         @test errors_right_nu[end] < 0.15 * errors_right_nu[1]
     end
 
+    # The two ends together carry the discrete net source `(f_h, 1)_h`, to round-off, on a
+    # non-uniform mesh. That sum is not the integral: it reaches `2π` only at second order.
+    @testset "1D: both ends sum to the net source" begin
+        sol(x) = sin(pi * x[1])
+        src(x) = pi^2 * sin(pi * x[1])
+        I = domain(interval(0.0, 1.0), :left => :xmin, :right => :xmax)
+        Random.seed!(20260915)
+        Ωₕ = mesh(I, 33, false)
+        Wₕ = gridspace(Ωₕ)
+
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, src), v))
+        A, F = assemble(a, l; dirichlet = :boundary => sol)
+
+        uₕ = element(Wₕ)
+        uₕ .= A \ F
+
+        both = reaction(a, l, uₕ; marker = :left) + reaction(a, l, uₕ; marker = :right)
+        @test both ≈ sum(assemble(l)) atol = 1e-10
+    end
+
     # Flux on each side; conservation holds to round-off.
     @testset "2D flux: each side, conservation" begin
         # u = sin(πx)sin(πy), f = 2π² sin(πx)sin(πy). By symmetry every side carries the

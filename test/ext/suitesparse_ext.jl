@@ -92,6 +92,14 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         fact_q = suitesparse_factorize(A_unsym; sym = :unsymmetric, q = collect(n:-1:1))
         @test isapprox(fact_q \ F_unsym, A_unsym \ F_unsym; atol = 1.0e-12)
         @test_throws ArgumentError suitesparse_factorize(A_unsym; sym = :unsymmetric, q = [1])
+
+        # UMFPACK's `control`, as `SparseArrays.UMFPACK.get_umfpack_control` returns it: an
+        # edited vector must reach the factorization, which keeps its own copy of it.
+        control = SparseArrays.UMFPACK.get_umfpack_control(Float64, Int)
+        control[SparseArrays.UMFPACK.JL_UMFPACK_IRSTEP] = 3.0
+        fact_ctl = suitesparse_factorize(A_unsym; sym = :unsymmetric, control = control)
+        @test fact_ctl.fact.control == control
+        @test isapprox(fact_ctl \ F_unsym, A_unsym \ F_unsym; atol = 1.0e-12)
     end
 
     # SPQR solves least-squares problems on rectangular systems.
