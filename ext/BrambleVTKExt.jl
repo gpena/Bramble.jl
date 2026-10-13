@@ -16,14 +16,18 @@ using Bramble:
 using WriteVTK: WriteVTK, vtk_grid, vtk_save, paraview_collection
 using PrecompileTools: @setup_workload, @compile_workload
 
-function Bramble._export_vtk(
-        filename::AbstractString, Ωₕ::AbstractMeshType, fields::Pair...
-)
+function _vtk_file(filename::AbstractString, Ωₕ::AbstractMeshType, fields)
     vtk = vtk_grid(filename, _vtk_axes(Ωₕ)...)
     for (name, data) in fields
         vtk[name] = _vtk_data(data)
     end
-    return vtk_save(vtk)
+    return vtk
+end
+
+function Bramble._export_vtk(
+        filename::AbstractString, Ωₕ::AbstractMeshType, fields::Pair...
+)
+    return vtk_save(_vtk_file(filename, Ωₕ, fields))
 end
 
 # Wraps the `WriteVTK.CollectionFile` (a type WriteVTK does not make public) so that
@@ -38,11 +42,7 @@ end
 
 function Base.setindex!(coll::_VTKCollection, entry::Tuple, t::Real)
     filename, Ωₕ, fields... = entry
-    vtk = vtk_grid(filename, _vtk_axes(Ωₕ)...)
-    for (name, data) in fields
-        vtk[name] = _vtk_data(data)
-    end
-    coll.pvd[t] = vtk
+    coll.pvd[t] = _vtk_file(filename, Ωₕ, fields)
     return coll
 end
 

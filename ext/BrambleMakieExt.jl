@@ -47,18 +47,11 @@ function Makie.convert_arguments(
     return (Makie.Point2f.(points(mesh(uₕ)), parent(uₕ)),)
 end
 
-# `VectorElement <: AbstractVector`, so before `convert_arguments` above is ever reached,
-# Makie's own `expand_dimensions(::PointBased, ::AbstractVector{<:Real})` intercepts it.
-# That is a generic "bare numeric vector" fallback meant for plain arrays, which auto-generates an
-# index axis. It matches `VectorElement` by that generic type alone, and the pipeline it
-# routes into fails several layers down with `Cannot convert Point{2,Float64} to Float32`,
-# an error that names neither this extension nor `VectorElement` and gives no hint that the
-# real cause is dispatch happening one stage earlier than `convert_arguments`.
-#
-# Calling `convert_arguments` directly bypasses the full pipeline and never shows this;
-# `methods(Makie.expand_dimensions)` lists the intercepting signature. This override matches `VectorElement` more specifically, so
-# it wins ordinary dispatch, and returns the two coordinate vectors `convert_arguments`
-# above expects to have been given directly.
+# `VectorElement <: AbstractVector`, so Makie's generic
+# `expand_dimensions(::PointBased, ::AbstractVector{<:Real})` (an index axis for a bare
+# numeric vector) fires before `convert_arguments` is reached, and the pipeline fails
+# several layers down with `Cannot convert Point{2,Float64} to Float32`. This more
+# specific method wins and hands `convert_arguments` the two coordinate vectors.
 function Makie.expand_dimensions(
         ::Makie.PointBased, uₕ::VectorElement{<:ScalarGridSpace{1}}
 )

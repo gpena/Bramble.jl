@@ -20,8 +20,8 @@
 # the `Int` literal `2` promotes to the array's own float type instead, matching what the
 # CPU path computes to within rounding, never forcing `Float64`.
 #
-# No `@compile_workload` here: a kernel needs a real device to precompile against, and this
-# extension names none. `BrambleMetalExt` does have one, gated on `Metal.functional()`.
+# No `@compile_workload` here or in `BrambleMetalExt`: a kernel needs a device at precompile
+# time, and `Metal.functional()` is `false` while precompiling (gpena/Bramble.jl#711).
 module BrambleKernelAbstractionsExt
 
 using Bramble: Bramble

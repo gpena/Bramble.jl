@@ -16,10 +16,7 @@ using SciMLSensitivity: SciMLSensitivity, InterpolatingAdjoint, QuadratureAdjoin
 # a discrete or continuous adjoint for a general time-stepping method is substantially more
 # machinery, so this wraps `SciMLSensitivity.adjoint_sensitivities` instead of writing one.
 #
-# Composed directly against a `Semidiscretization`-backed `ode_problem`/`solve` trajectory
-# while investigating #239 (posted to the issue), including the mutating residual and the
-# singular (index-1 DAE) mass matrix a constrained problem has -- neither needed a bespoke
-# workaround, once three caller-side gaps were closed:
+# Three caller-side gaps a `Semidiscretization` trajectory needs closed (gpena/Bramble.jl#239):
 #
 # 1. The function wrapper of the default specialization. `DiffEqBase` wraps `f` (and `jac`,
 #    `tgrad`) for the `p`-eltype the *forward* solve ran at; computing a `p`-vjp, or a

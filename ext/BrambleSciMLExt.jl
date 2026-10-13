@@ -227,8 +227,10 @@ bare coefficient vector to wrap by hand.
 uₕ = solve(a, l; dirichlet = bcs)
 
 using AlgebraicMultigrid
-uₕ = solve(a, l; dirichlet = bcs, solver = KrylovJL_CG(), preconditioner = :amg)
+uₕ = solve(a, l; dirichlet = bcs, symmetrize = true, solver = KrylovJL_CG(), preconditioner = :amg)
 ```
+
+`KrylovJL_CG` needs `symmetrize = true` so that `A` stays symmetric after the Dirichlet rows.
 
 See also [`linear_problem`](@ref), [`amg_preconditioner`](@ref), [`ilu_preconditioner`](@ref),
 [`element`](@ref).

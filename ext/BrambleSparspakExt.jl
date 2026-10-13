@@ -87,8 +87,7 @@ end
 # `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
 # factorizations against a complex right-hand side, and `ConcreteSparspakFactorization <:
 # Factorization`, so that method and the one above are equally specific for a complex vector
-# -- the call would be ambiguous without this one. It restates what `LinearAlgebra` does:
-# solve the real and imaginary parts separately and recombine them.
+# -- the call would be ambiguous without this one.
 function Base.:\(
         fact::ConcreteSparspakFactorization{T}, b::Vector{Complex{T}}
 ) where {T <: Union{Float32, Float64}}

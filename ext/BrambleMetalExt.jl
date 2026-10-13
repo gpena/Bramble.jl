@@ -14,25 +14,8 @@ using PrecompileTools: @setup_workload, @compile_workload
 # Convenience constructor
 # ---------------------------------------------------------------------------
 
-"""
-	metal_backend(T::Type = Float32; policy = GpuKernel())
-
-Returns a [`Backend`](@ref) that uses Apple Metal GPU arrays via
-[Metal.jl](https://github.com/JuliaGPU/Metal.jl).
-
-The default element type is `Float32` because Metal natively supports
-32-bit floats. `Float16` is also supported. `Float64` is NOT supported
-on Apple Silicon GPUs.
-
-# Examples
-
-```julia
-using Bramble, Metal
-b   = metal_backend()          # Backend{MtlVector{Float32}, MtlMatrix{Float32}, GpuKernel}
-b32 = metal_backend(Float32)   # same
-b16 = metal_backend(Float16)   # half-precision
-```
-"""
+# `Bramble._metal_backend` backs the public `metal_backend`, whose docstring lives on the
+# `src` stub. The element type is `Float16` or `Float32`: Apple Silicon GPUs have no `Float64`.
 function Bramble._metal_backend(
         ::Type{T}, policy::ExecutionPolicy
 ) where {T <: Union{Float16, Float32}}

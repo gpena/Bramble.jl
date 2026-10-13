@@ -1177,7 +1177,7 @@ function _fdm_solve_core(K::KroneckerLinearOperator{T, D}, F::AbstractVector, di
 end
 
 """
-    fdm_solve(a::BilinearForm, F::AbstractVector; dirichlet = nothing) -> Vector
+    fdm_solve(a::BilinearForm, F::AbstractVector; dirichlet = nothing) -> AbstractVector
 
 Solve `assemble(a) \\ F` (or, with `dirichlet = :boundary`, `assemble(a; dirichlet =
 :boundary) \\ F` for an `F` that is already zero on the boundary) from one-dimensional
@@ -1198,8 +1198,8 @@ Symmetric `A_d` on every axis: fast diagonalisation, one generalised eigendecomp
 per axis. A non-symmetric one (advection): a complex generalised Schur factorisation per
 axis and a triangular back substitution, so no ill-conditioned eigenvectors enter. Setup
 is `O(n_d^3)` per axis and a solve `O(N Σ_d n_d)`, for `N` unknowns and `n_d` points
-along axis `d`. The Schur route is host-only. A device `F` is copied to the host once and
-the solution back once.
+along axis `d`. The Schur route is host-only. The solution is a vector of `F`'s storage
+type, so a device `F` is copied to the host once and the solution back once.
 
 `dirichlet`:
 
@@ -1251,7 +1251,7 @@ function Bramble.fdm_solve(a::BilinearForm, F::AbstractVector; dirichlet = nothi
 end
 
 """
-    fdm_solve(K::KroneckerLinearOperator, F::AbstractVector) -> Vector
+    fdm_solve(K::KroneckerLinearOperator, F::AbstractVector) -> AbstractVector
 
 Unconstrained solve, by the same route as the `BilinearForm` method, directly from an already-built
 [`KroneckerLinearOperator`](@ref) (see [`kronecker_operator`](@ref)), reusing its own
