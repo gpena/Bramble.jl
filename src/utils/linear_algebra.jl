@@ -767,28 +767,6 @@ end
 # `GpuPolicy` the device methods further down.
 
 """
-    _dot(policy::ExecutionPolicy, u, w, v) -> Number
-
-Policy-dispatched [`_dot`](@ref): [`CpuSerial`](@ref) falls through to the plain
-three-vector method; [`CpuThreaded`](@ref) reaches [`_threaded_dot`](@ref);
-[`CpuPolyester`](@ref) reaches [`_batch_dot`](@ref).
-"""
-@inline _dot(::CpuSerial, u, w, v) = _dot(u, w, v)
-@inline _dot(::CpuThreaded, u, w, v) = _threaded_dot(u, w, v)
-@noinline _dot(::CpuPolyester, u, w, v) = _late(_batch_dot, u, w, v)
-
-"""
-    _dot_masked(policy::ExecutionPolicy, u, w, v, mask) -> Number
-
-Policy-dispatched [`_dot_masked`](@ref): [`CpuSerial`](@ref) falls through to the plain
-masked method; [`CpuThreaded`](@ref) reaches [`_threaded_dot_masked`](@ref);
-[`CpuPolyester`](@ref) reaches [`_batch_dot_masked`](@ref).
-"""
-@inline _dot_masked(::CpuSerial, u, w, v, mask) = _dot_masked(u, w, v, mask)
-@inline _dot_masked(::CpuThreaded, u, w, v, mask) = _threaded_dot_masked(u, w, v, mask)
-@noinline _dot_masked(::CpuPolyester, u, w, v, mask) = _late(_batch_dot_masked, u, w, v, mask)
-
-"""
     _threaded_dot(u::AbstractVector, w::AbstractVector, v::AbstractVector) -> Number
 
 [`CpuThreaded`](@ref)'s own counterpart of [`_dot`](@ref): partitions `1:length(u)` into
@@ -959,10 +937,9 @@ end
 #===========================================================================#
 # Device reductions (gpena/Bramble.jl#94, #174).
 #
-# `CpuSerial`/`CpuThreaded`/`CpuPolyester` above are each a concrete `CpuPolicy`, so a
-# `GpuPolicy` (`GpuKernel`) never matches one of them and falls through to the generic
-# `ExecutionPolicy` method below instead. That method derives locality from the policy
-# itself -- `locality(::GpuPolicy) = DeviceLocality()` (`src/utils/backend.jl`) -- the same
+# Every policy, CPU or GPU, reaches the generic `ExecutionPolicy` method below. It derives
+# locality from the policy itself -- `locality(::CpuPolicy) = HostLocality()`,
+# `locality(::GpuPolicy) = DeviceLocality()` (`src/utils/backend.jl`) -- the same
 # "legality first, strategy second" shape `_sweep_for!` uses, so the actual device
 # implementation keys on `DeviceLocality`, never on `GpuPolicy` alone: a call site that
 # later starts passing a `Locality` directly (as `_device_project!` now does, gpena/Bramble.jl#298)
@@ -976,17 +953,32 @@ end
 # array once per set bit).
 #===========================================================================#
 
+"""
+    _dot(policy::ExecutionPolicy, u, w, v) -> Number
+
+Policy-dispatched [`_dot`](@ref): derives the locality from `policy` and dispatches on the
+pair. On the host, [`CpuSerial`](@ref) reaches the plain three-vector method,
+[`CpuThreaded`](@ref) reaches [`_threaded_dot`](@ref) and [`CpuPolyester`](@ref) reaches
+[`_batch_dot`](@ref); a [`GpuPolicy`](@ref) reaches the device methods below.
+"""
 @inline _dot(policy::ExecutionPolicy, u, w, v) = _dot(locality(policy), policy, u, w, v)
+
+"""
+    _dot_masked(policy::ExecutionPolicy, u, w, v, mask) -> Number
+
+Policy-dispatched [`_dot_masked`](@ref): as [`_dot`](@ref)`(policy, u, w, v)`, with the plain
+masked method, [`_threaded_dot_masked`](@ref) and [`_batch_dot_masked`](@ref) on the host.
+"""
 @inline _dot_masked(policy::ExecutionPolicy, u, w, v, mask) = _dot_masked(
     locality(policy), policy, u, w, v, mask)
 
-# Completes the `(Locality, ExecutionPolicy)` dispatch the two lines above open, the same
-# shape `_sweep_for!` already uses: a `HostLocality` destination reaches straight back to the
-# concrete-policy methods above (identical CPU behaviour to calling those methods directly --
-# `CpuThreaded` included), the `DeviceLocality`/`GpuPolicy` methods below are the device side,
-# and the catch-all at the end of this file throws via `_throw_locality_mismatch` for the two
-# mismatched pairings. Without these, `report_package` only sees the `(DeviceLocality,
-# GpuPolicy)` case and flags the rest as unreachable dispatch.
+# Completes the `(Locality, ExecutionPolicy)` dispatch the methods above open, the same
+# shape `_sweep_for!` already uses: the `HostLocality` methods below are the whole CPU side
+# (reached through the policy-level methods, or by a caller passing a locality), the
+# `DeviceLocality`/`GpuPolicy` methods after them are the device side, and the catch-all at
+# the end of this file throws via `_throw_locality_mismatch` for the two mismatched
+# pairings. Without these, `report_package` only sees the `(DeviceLocality, GpuPolicy)`
+# case and flags the rest as unreachable dispatch.
 @inline _dot(::HostLocality, ::CpuSerial, u, w, v) = _dot(u, w, v)
 @inline _dot(::HostLocality, ::CpuThreaded, u, w, v) = _threaded_dot(u, w, v)
 @noinline _dot(::HostLocality, ::CpuPolyester, u, w, v) = _late(_batch_dot, u, w, v)
