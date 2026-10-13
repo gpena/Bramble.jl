@@ -338,13 +338,25 @@ function resolve_ast(op::GridFunctionScale{D, VType}) where {D, VType}
     return GridFunctionScale{D, VType, typeof(inner)}(op.grid_function, inner)
 end
 
+# A function times a term is read as a zero-argument thunk (`SourceVector`'s docstring), so
+# `f * innerₕ(1.0, v)` with `f(x)` a function of position would fail in the call below with
+# a `MethodError` naming no cause. Checked here, once per form, never per point.
 function resolve_ast(op::GridFunctionScale{D, <:Function}) where {D}
+    applicable(op.grid_function) || _throw_not_a_thunk()
     vec = op.grid_function()
     inner = resolve_ast(op.inner_op)
     return GridFunctionScale{D, typeof(vec), typeof(inner)}(vec, inner)
 end
 
 resolve_ast(ops::NTuple{N, Any}) where {N} = map(resolve_ast, ops)
+
+@noinline function _throw_not_a_thunk()
+    throw(ArgumentError("a function times a term, `f * op`, is read as a zero-argument " *
+                        "thunk returning the values to scale by, and this function has " *
+                        "no zero-argument method. For a source that is a function of " *
+                        "position write `innerₕ(f, v)`; for a coefficient restrict it to " *
+                        "the grid first, `Rₕ(W, f) * op`."))
+end
 
 # The two scaling wrappers' half of `_bind_interp_spaces` (operators/interpolation.jl),
 # beside their `resolve_ast` because they are the same walk. `GridFunctionScale`'s thunk

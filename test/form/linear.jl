@@ -943,6 +943,37 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             dim_li)
     end
 
+    @testset "Function of position times a term" begin
+        # `f * op` reads `f` as a zero-argument thunk; a function of position failed in the
+        # thunk call with a `MethodError` naming no cause (gpena/Bramble.jl#761). Plain,
+        # restricted and summed terms all resolve through one check, which names the fixes.
+        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), (9,), (true,)))
+        f = x -> 1 + x[1]
+        for (label, g) in Any[("plain", v -> f * innerₕ(1.0, v)),
+            ("restricted", v -> f * innerₕ(1.0, restrict_to(:boundary, v))),
+            ("summed", v -> f * (innerₕ(1.0, v) + innerₕ(2.0, v)))]
+            @testset "$label" begin
+                e = try
+                    form(W1, g)
+                    nothing
+                catch err
+                    err
+                end
+                @test e isa ArgumentError
+                msg = e isa ArgumentError ? sprint(showerror, e) : ""
+                @test occursin("zero-argument", msg)
+                @test occursin("innerₕ(f, v)", msg)
+                @test occursin("Rₕ(W, f) * op", msg)
+            end
+        end
+        # a thunk still scales, and both suggested spellings give the same source
+        vals = collect(1.0:Float64(ndofs(W1)))
+        @test assemble(form(W1, v -> (() -> vals) * innerₕ(1.0, v))) ≈
+              vals .* assemble(form(W1, v -> innerₕ(1.0, v)))
+        @test assemble(form(W1, v -> innerₕ(f, v))) ≈
+              assemble(form(W1, v -> innerₕ(Rₕ(W1, f), v)))
+    end
+
     @testset "Invalid component error" begin
         # It used to contribute nothing, in silence. On a two-block space
         # `innerₕ(1.0, v(3))` assembled to zeros, and summed with a valid term it dropped
