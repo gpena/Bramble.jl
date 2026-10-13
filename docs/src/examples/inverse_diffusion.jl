@@ -8,11 +8,11 @@
 # [`pde_solve`](@ref)'s adjoint rule: one extra linear solve gives the gradient with respect
 # to *every* parameter at once, instead of one extra solve *per* parameter.
 #
-# This page is generated from `docs/src/examples/inverse_diffusion.jl` by Literate.jl, and the
-# same file runs under `test/examples/inverse_diffusion.jl` with the assertions that the page
-# renders but does not check. Lines marked `#src` there are the assertions; they never reach
-# the page. It needs `Enzyme` and runs behind the `ad`/`full` test groups, unlike the other
-# example pages -- see that test file for why.
+# This script runs under `test/examples/inverse_diffusion.jl` with the assertions that it
+# does not render. Lines marked `#src` here are the assertions; Literate.jl drops them from a
+# rendered page. The script is not part of the published manual. It needs `Enzyme` and runs
+# behind the `ad`/`full` test groups (with `BRAMBLE_TEST_AD=true`), unlike the other example
+# pages -- see that test file for why.
 #
 # ## Problem
 #
@@ -37,9 +37,7 @@
 #     rewritten and unrewritten `BilinearForm` types wherever the compiler could not fold the
 #     comparison, and Enzyme's strict-aliasing type analysis rejects a `Union` outright.
 #     Restricting those rewrites to `Integer` coefficients fixed it -- [`pde_solve`](@ref)'s
-#     own docstring has the details, and the one limit that remains (a stencil above roughly a
-#     dozen machine words, so any difference operator in 2D or 3D): the single 1D term below
-#     is well inside it.
+#     own docstring has the details.
 #
 # ## Discretisation and the forward solve
 
@@ -68,7 +66,8 @@ end
 #
 # Five interior points, `κ_true`'s exact solution there plus a small fixed perturbation
 # standing in for measurement noise -- fixed rather than `Random`-drawn, so the page renders
-# the same numbers every build.
+# the same numbers every build. The mesh above is uniform so that these indices sit at the
+# round abscissae ``x = 0.125, 0.25, 0.5, 0.75, 0.875``; nothing else in the problem needs it.
 
 obs_idx = (6, 11, 21, 31, 36)
 noise = (0.0021, -0.0035, 0.0012, -0.0018, 0.0027)
@@ -109,6 +108,7 @@ end
 # more than a factor of two away.
 @test isapprox(κ, κ_true; atol = 0.02)                                                #src
 @test loss(κ) < loss(0.3)                                                             #src
+@test Enzyme.gradient(mode, Enzyme.Const(loss), 0.5)[1] ≈ (loss(0.5 + 1e-6) - loss(0.5 - 1e-6)) / 2e-6 rtol = 1e-6 #src
 
 # ## Cost: one extra solve, not one per parameter
 #
