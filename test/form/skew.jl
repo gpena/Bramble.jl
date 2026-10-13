@@ -98,6 +98,20 @@ using ..TestUtils: @test_allocs, WITH_3D_TESTS
               assemble(form(Wₕ, Wₕ, skew_symmetric(wₕ)))
     end
 
+    @testset "advection operator is concrete" begin
+        # each direction must reach `Dc` as a literal `Val`, or every build dispatches
+        # dynamically and compiles abstract `simplify_ast` paths
+        for D in 1:2
+            Ω = D == 1 ? mesh(domain(interval(0.0, 1.0)), 5, false) :
+                mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5),
+                (false, false))
+            Wₕ = gridspace(Ω)
+            A = Bramble._advection_operator(ntuple(_ -> element(Wₕ, 1.0), D))
+            rt = Base.return_types(A, (typeof(Bramble.trial_function(Wₕ)),))
+            @test isconcretetype(only(rt))
+        end
+    end
+
     @testset "It composes with a symmetric term" begin
         # added to a diffusion term, the symmetric part of the sum is the diffusion alone:
         # the convective part contributes nothing to it, which is the whole point
