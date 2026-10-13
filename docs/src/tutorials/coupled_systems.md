@@ -41,11 +41,12 @@ lands in block ``(j, i)``, so off-diagonal coupling is written the same way.
 `innerₕ(u[1], v[2])` fills the block that couples the first unknown to the second equation.
 
 Indices are checked against the number of blocks when the form is built: `u[3]` on a
-two-component space raises an `ArgumentError`. A term must name both components or neither:
+two-component space raises an `ArgumentError`. A term must name both components or neither,
+and a term that names one and not the other raises when the matrix is assembled:
 
 ```@example coupled
 try
-    form(Vₕ, Vₕ, (u, v) -> innerₕ(u[1], v))
+    assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u[1], v)))
 catch e
     showerror(stdout, e)
 end
@@ -91,8 +92,7 @@ labels to every leaf. Call `assemble!` or `dirichlet_bc!` again with another
 The composite spaces above stack copies of *one* space, so every leaf shares a mesh. A
 composite space can also be built from a tuple of leaves over different meshes. A term that
 couples two such leaves must move a value from one grid to the other. That is the job of
-[`πₕ`](@ref), applied to the trial function alone (the [operators tutorial](operators.md)
-has the numeric side and a diagram of the interpolant). It names no source space. The space
+[`πₕ`](@ref), applied to the trial function alone. It names no source space. The space
 it interpolates from is the trial function's own, and assembly supplies it once the leaf is
 known.
 

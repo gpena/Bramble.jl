@@ -306,18 +306,18 @@ Four families combine the same one-sided differences in different ways:
 | `D₋` | ``\{i-1, i\}`` | 1 | 1 | truncated to `0` at the first point |
 | `Dc` | ``\{i-1, i+1\}``, divided by the full span | 1 | 2 | truncated to `0` at both ends |
 | `D̽` | ``\{i-1, i, i+1\}``, a weighted mean of two backward differences | 2 | 2 | no convention of its own: falls back to `D₊`/`D₋` |
-| `D̃` | ``\{i, i+1\}``, divided by the averaged spacing | 1 (summation by parts holds exactly) | 1 | truncated to `0` at the last point, like `D₊` |
+| `D̃` | ``\{i, i+1\}``, divided by the averaged spacing | 1 on smoothly graded grids, not consistent where neighbouring spacings differ by an O(1) ratio (random grids); summation by parts holds exactly | 1 | truncated to `0` at the last point, like `D₊` |
 
-On a uniform grid ``h_i = h_{i+1}``: `D̽` and `Dc` collapse to the mean of `D₋` and `D₊`, and `D̃` collapses to `D₊`. They separate only where the spacing varies, which is why a uniform-grid benchmark cannot tell them apart.
+On a uniform grid ``h_i = h_{i+1}``: `D̽` and `Dc` collapse to the mean of `D₋` and `D₊`, and `D̃` collapses to `D₊`. They separate only where the spacing varies, which is why a uniform-grid benchmark cannot tell them apart. `D̃` is meant to be used paired with `innerₕ`, for the summation by parts, and not as a pointwise approximation of the derivative on a random grid.
 
 ### [The direction as an argument](@id operators_direction_argument)
 
 The direction can also come from a variable rather than from the name. Index the vectorial operator with it: `∇ₕ[d]` is the coordinate operator itself, so `∇ₕ[1]`, `∇ₕ[:x]` and `D₋ₓ` are the same function object, and `dx, dy = ∇ₕ` destructures it. The same holds for `∇̃ₕ`, `∇cₕ`, `∇̽ₕ`, `jumpₕ`, `Mₕ` and `Mcₕ`.
 
-That makes a loop over directions writable, which the subscript names cannot express on their own. The discrete ``H^1`` seminorm squared, in any dimension:
+That makes a loop over directions writable, which the subscript names cannot express on their own. The discrete ``H^1`` seminorm squared, in any dimension, with the `inner₊` weights of the backward gradient, next to `snorm₁ₕ`:
 
 ```@example operators
-sum(innerₕ(∇ₕ[d](vₕ), ∇ₕ[d](vₕ)) for d in 1:dim(mesh(space(vₕ))))
+sum(inner₊(∇ₕ[d](vₕ), ∇ₕ[d](vₕ), d) for d in 1:dim(mesh(space(vₕ)))), snorm₁ₕ(vₕ)^2
 ```
 
 Underneath, every family has a stem that takes the direction as a second argument, and the coordinate suffix is spelling it:

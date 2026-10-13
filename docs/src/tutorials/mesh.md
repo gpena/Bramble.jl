@@ -62,7 +62,7 @@ change_points!(Ωₕ_graded, collect(range(0.0, 1.0, length = npoints(Ωₕ_grad
 points(Ωₕ_graded), hₘₐₓ(Ωₕ_graded)
 ```
 
-Squaring the uniform points packs them near ``x = 0`` and stretches the cells near ``x = 1``, so `hₘₐₓ` is no longer ``0.1``. `Bramble.set_points!` is the variant that also accepts a different point count: it rebuilds the `:boundary` and `:interior` markers for the new grid, and refuses a mesh carrying custom labels.
+Squaring the uniform points packs them near ``x = 0`` and stretches the cells near ``x = 1``, so `hₘₐₓ` is no longer ``0.1``. `Bramble.set_points!` is the variant that also accepts a different point count: it rebuilds the `:boundary` and `:interior` markers for the new grid, and refuses to change the point count of a mesh carrying custom labels.
 
 !!! tip "Try this"
     Replace the exponent `2` by `3`. The points crowd closer to ``x = 0`` and `hₘₐₓ` grows.
@@ -397,7 +397,7 @@ X = interval(0.0, 1.0) × interval(0.0, 2.0)
 
 ### Points and half points
 
-`points` returns the coordinate vector, or a tuple of them above 1D. A single coordinate comes from `point(Ωₕ, idx)` or from indexing, with a linear index, a tuple or a `CartesianIndex`:
+`points` returns the coordinate vector, or a tuple of them above 1D. A single coordinate comes from `point(Ωₕ, idx)` or from indexing. Above 1D `idx` is a `CartesianIndex` (or `i, j` in brackets; `point` also takes a tuple of per-axis indices), never a linear index:
 
 ```@example mesh
 Ωₕ_fig[3], point(Ωₕ_fig, 3), Ωₕ_2d[2, 5], point(Ωₕ_2d, CartesianIndex(2, 5))
