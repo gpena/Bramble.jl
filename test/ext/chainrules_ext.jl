@@ -55,6 +55,42 @@ using ..TestUtils: _fd
         @test Ā isa SparseMatrixCSC
     end
 
+    # A complex A: the cotangent is -λ u' (conjugated u), checked on the real and the
+    # imaginary part of every stored entry, and F̄ on both parts of every right-hand side entry.
+    @testset "rrule: pullback matches FD, ComplexF64" begin
+        n = 5
+        A = sparse(Tridiagonal(fill(-1.0 + 0.2im, n - 1), fill(4.0 + 0.3im, n),
+            fill(-1.0 + 0.2im, n - 1)))
+        F = ComplexF64.(1:n) .+ 0.5im
+
+        J(B, f) = sum(abs2, Bramble.pde_solve(B, f))
+        u, pullback = rrule(Bramble.pde_solve, A, F)
+        @test u ≈ A \ F
+        _, Ā, F̄ = pullback(2 .* u)
+
+        h = 1e-6
+        # For real-valued J(z), the cotangent is ∂J/∂x + i ∂J/∂y.
+        function bump(k, δ)
+            B = copy(A)
+            nonzeros(B)[k] += δ
+            return B
+        end
+        for k in 1:nnz(A)
+            fd = (J(bump(k, h), F) - J(bump(k, -h), F)) / 2h +
+                 im * (J(bump(k, im * h), F) - J(bump(k, -im * h), F)) / 2h
+            @test nonzeros(Ā)[k]≈fd atol=1e-6
+        end
+        for i in 1:n
+            e = zeros(ComplexF64, n)
+            e[i] = h
+            fd = (J(A, F .+ e) - J(A, F .- e)) / 2h +
+                 im * (J(A, F .+ im .* e) - J(A, F .- im .* e)) / 2h
+            @test F̄[i]≈fd atol=1e-6
+        end
+        @test nnz(Ā) == nnz(A)
+        @test rowvals(Ā) == rowvals(A)
+    end
+
     # ∂J/∂A must match a central difference when A(θ) genuinely varies with θ.
     @testset "rrule: ∂J/∂A on a varying A(θ)" begin
         n = 6

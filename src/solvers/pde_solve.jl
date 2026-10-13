@@ -85,11 +85,13 @@ above.
 
 With `ChainRulesCore.jl` loaded, `BrambleChainRulesExt`'s `rrule` solves the adjoint system
 `Aᵀ λ = ∂J/∂u` once, reusing the forward solve's own factorisation, and returns
-`∂J/∂A = -λ uᵀ` restricted to `A`'s sparsity (never densified) and `∂J/∂F = λ`. `using Enzyme`
+`∂J/∂A = -λ u'` (conjugate transpose, the ChainRules convention for a complex `A`; `-λ uᵀ`
+for real data) restricted to `A`'s sparsity (never densified) and `∂J/∂F = λ`. `using Enzyme`
 is enough for the same adjoint through `BrambleEnzymeExt`'s native `EnzymeRules` rule; do not
 call `Enzyme.@import_rrule`, whose bridge drops the cotangent's explicit zeros from `nzval`
-and returns a wrong gradient without any error. `Mooncake` cannot represent a
-`SparseMatrixCSC` cotangent at all and is unsupported.
+and returns a wrong gradient without any error. The Enzyme rule keeps the unconjugated
+`-λ uᵀ` and is not validated for complex `A`, whose convention differs. `Mooncake` cannot
+represent a `SparseMatrixCSC` cotangent at all and is unsupported.
 
 A closure capturing a grid space or a form needs `Enzyme.Const(f)` and
 `Enzyme.set_runtime_activity(Enzyme.Reverse)`, as the automatic

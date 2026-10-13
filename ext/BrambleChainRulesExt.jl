@@ -19,7 +19,8 @@ Adjoint rule for [`pde_solve`](@ref): for a scalar functional `J` of the solutio
 pullback solves `Aᵀ λ = ∂J/∂u` once -- via `fact' \\ b` against the *same* LU factorisation the
 forward solve already computed, which is exact and requires no second factorisation whether or
 not `A` is symmetric (a constrained row's `eₖ` replacement, `dirichlet_bc!`'s own convention,
-makes even a naturally symmetric form structurally asymmetric) -- and returns `∂J/∂A = -λ uᵀ`
+makes even a naturally symmetric form structurally asymmetric) -- and returns `∂J/∂A = -λ u'`
+(`u'` the conjugate transpose, so a complex `A` conjugates `u`; for real data this is `-λ uᵀ`)
 restricted to `A`'s own stored entries (never densified) and `∂J/∂F = λ`.
 """
 function ChainRulesCore.rrule(::typeof(pde_solve), A::SparseMatrixCSC, F::AbstractVector)
@@ -31,8 +32,7 @@ function ChainRulesCore.rrule(::typeof(pde_solve), A::SparseMatrixCSC, F::Abstra
         rows = rowvals(A)
         Āv = nonzeros(Ā)
         for j in axes(A, 2), k in nzrange(A, j)
-
-            Āv[k] = -λ[rows[k]] * u[j]
+            Āv[k] = -λ[rows[k]] * conj(u[j])
         end
         return (NoTangent(), Ā, λ)
     end
