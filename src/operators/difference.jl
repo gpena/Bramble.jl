@@ -18,10 +18,6 @@
 # that consumes a difference.
 
 # --- Type System for Dispatch ---
-# GridDirection, Forward and Backward moved to stencil.jl (gpena/Bramble.jl#42): the
-# generic one-sided traversal framework average.jl, jump.jl and inner_product.jl also
-# build on, not just the difference operators here.
-
 # A centered stencil reads both neighbours rather than one, so it is truncated on two
 # boundary slices rather than one. `_average_engine!` and the shared `_stencil_ranges`
 # take a one-sided direction only; the centered traversal is separate, below, and both
@@ -77,9 +73,9 @@ end
     ::Backward, ::Val{false}, cur, other, h, i
 ) = (cur - other) / _get_h_val(h, i)
 
-# The scaled (finite difference) and centered families' boundary case -- zero, for any
-# direction -- is covered by the one `_compute_difference(::GridDirection, ::Val{true}, ...)`
-# method below, after the interior kernels.
+# The finite-difference boundary case (zero) is the one `GridDirection` method below; the
+# centered families' is the `CenteredStencil` method after it, which `CrossWeighted`
+# overrides.
 
 # The centered kernels take the three points of their stencil in grid order, rather than
 # a point and its neighbour. `Centered` does not read the middle one; it is passed anyway
@@ -185,14 +181,10 @@ width gives half of it, the boundary cell being a half cell.
 """
 @inline star_spacings(Ωₕ::Mesh1D) = StarSpacings(spacings(Ωₕ))
 
-# The device kernels below take `h` as a plain top-level array or `nothing`, never as a
-# wrapper struct: a struct nesting a device array fails kernel compilation even as a
-# top-level kernel argument (`ext/BrambleKernelAbstractionsExt.jl`'s module comment explains
-# why, gpena/Bramble.jl#94, #174). `StarSpacings` is exactly such a wrapper, so its lazy
-# averaging is materialized into a plain vector once, with the same two-array bulk
-# arithmetic the device kernels for the mesh's own O(n) setup use, before any difference
-# kernel launches. Every other shape `_apply_spaced!` ever derives -- `nothing`, or a plain
-# vector/view of cached spacings -- is already kernel-safe and passes through unchanged.
+# Device kernels take `h` as a plain array or `nothing`, never a wrapper struct (a struct
+# nesting a device array fails kernel compilation; see the module comment of
+# `ext/BrambleKernelAbstractionsExt.jl`). `StarSpacings` is materialized here; every
+# other `h` passes through.
 @inline _resolve_device_spacing(::Nothing) = nothing
 @inline _resolve_device_spacing(h::AbstractVector) = h
 @inline function _resolve_device_spacing(h::StarSpacings)
@@ -594,11 +586,8 @@ function _difference_operator(
     return difference_shift(Ωₕ, Val(DIFF_DIM), Val(0), Val(-1))
 end
 
-# `spacing_func` carries a type parameter so Julia specialises on it. An argument of
-# function type is not specialised on unless the body calls it directly, and this one used
-# to be wrapped in a `Base.Fix1` instead, so the closure stayed boxed and every grid point
-# paid a dynamic dispatch: 12047 us and 6.5 MB on a 450x450 grid against 322 us and no
-# allocation once the parameter is named and the submesh is hoisted.
+# `spacing_func::F` is a type parameter so the per-point call specialises; untyped, every
+# grid point pays a dynamic dispatch.
 #
 # It is the per-index function rather than the mesh's cached spacing vector on purpose.
 # The vector's truncated entry is not meaningful, whereas `spacing_for_derivative` returns
@@ -621,7 +610,6 @@ function _derivative_weights!(
     return nothing
 end
 
-# Configuration array to define forward and backward difference operators.
 const _DIFFERENCE_OP_CONFIGS = [
     (
         direction = Forward(),
@@ -661,9 +649,7 @@ const _DIFFERENCE_OP_CONFIGS = [
     )
 ]
 
-# Metaprogramming loop to generate all specified difference operators.
 for config in _DIFFERENCE_OP_CONFIGS
-    # Extract ALL values from `config` into local variables here.
     dir_instance = config.direction
     diff_name = config.diff_name
     finite_diff_name = config.finite_diff_name
@@ -681,13 +667,12 @@ for config in _DIFFERENCE_OP_CONFIGS
     unscaled_stencil_op = config.unscaled_stencil_op
     finite_stencil_op = config.finite_stencil_op
 
-    # This first @eval block is fine because it doesn't depend on any inner loops.
     @eval begin
         # --- In-place applicators ---
         @doc """
             $($(QuoteNode(Symbol(diff_name, :_dim!))))(out, in, [h], dims, diff_dim)
 
-        Low-level, in-place function to compute the **unscaled** $($dir_string_lowercase) difference of vector `in` along dimension `diff_dim`, storing the result in `out`. This function computes ``$($math_op)``.
+        In-place $($dir_string_lowercase) difference of `in` along `diff_dim`, written into `out`: ``$($math_op)``, divided by `h` when it is given (the finite difference) and unscaled without it.
         """
         function $(Symbol(diff_name, :_dim!))(
                 out, in, h, dims::NTuple{D, Int}, diff_dim::Val{DIFF_DIM}
@@ -718,11 +703,8 @@ for config in _DIFFERENCE_OP_CONFIGS
             _derivative_weights!(v, Ωₕ, $spacing_func, diff_dim)
         end
 
-        # --- Retained Kronecker oracle (gpena/Bramble.jl#185) ---
-        #
-        # The bodies `$diff_name`/`$finite_diff_name` used to have, kept under `_kron_`
-        # names so `kronecker_operator_matrix` has an independent construction to check
-        # `stencil_matrix` against.
+        # Kronecker oracle (gpena/Bramble.jl#185): an independent construction that
+        # `stencil_matrix` is checked against.
         @inline $(Symbol(:_kron_, diff_name))(Ωₕ::AbstractMeshType, dim_val::Val) = _difference_operator(Ωₕ, $dir_instance, dim_val)
 
         function $(Symbol(:_kron_, finite_diff_name))(
@@ -814,21 +796,12 @@ end
 
 # --- The three centred families: D̃, Dc, D̽ₕ ------------------------------------ #
 #
-# Each family's grid-function form is the same three-method shape `_DIFFERENCE_OP_CONFIGS`
-# already generates above for the two one-sided families: a scalar `!`, a composite `!`
-# recursing into it, and a non-mutating wrapper built on `_apply_spaced!` -- differing only
-# in the spacing function, the precondition, and the direction tag. The composite `!`
-# method's own rationale (a leaf's mesh is not necessarily the whole composite's, so
-# whatever `spacing_func` derives is rebuilt per leaf, gpena/Bramble.jl#79) lives once, on
-# `_apply_spaced!`'s composite method above, rather than repeated per family here.
-#
-# Each is its own `@operator_family` call rather than an entry in a shared config array:
-# these three have no unscaled/finite split and no weight function, and each alias's own
-# docstring text ("over the averaged spacing", "truncated to zero", "second order... where
-# Dc is first") is bespoke prose rather than something `math_op`/`dir_string` could
-# template. That prose travels as a string literal carrying `{direction}`/`{suffix}`
-# placeholders, which is what a macro can take; it was a closure per family until
-# gpena/Bramble.jl#258 removed the `Core.eval` these were generated through.
+# The three centred families, one `@operator_family` call each: the same grid-function trio
+# as the one-sided families, with their own spacing, precondition and direction tag, and
+# bespoke prose passed as `{direction}`/`{suffix}` templates. The composite `!` method's
+# rationale (a leaf's mesh is not necessarily the whole composite's, so whatever
+# `spacing_func` derives is rebuilt per leaf, gpena/Bramble.jl#79) lives once, on
+# `_apply_spaced!`'s composite method above.
 
 @operator_family(base=forward_star_difference,
     stem=D̃,
@@ -1068,8 +1041,7 @@ end
 
 # --- Retained Kronecker oracle (gpena/Bramble.jl#185) --------------------------------- #
 #
-# The bodies the three functions above used to have, kept so `kronecker_operator_matrix`
-# has an independent construction to check `stencil_matrix` against.
+# An independent construction that `stencil_matrix` is checked against.
 
 function _kron_forward_star_difference(
         Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ)
@@ -1189,9 +1161,8 @@ end
 # Zero-Allocation Stencil Evaluators
 # ==============================================================================
 
-# Taps and weights, consumed by the one `local_stencil` in `form/stencil_eval.jl` and --
-# the point of declaring them -- by `stencil_offsets` in `form/stencil_pattern.jl`, which
-# used to spell the same reach out a second time (gpena/Bramble.jl#70).
+# Taps and weights, read by `local_stencil` (assembly/stencil_eval.jl) and
+# `stencil_offsets` (ast/stencil_pattern.jl).
 @inline _stencil_taps(::BackwardDifference) = (Val(0), Val(-1))
 @inline _stencil_taps(::ForwardDifference) = (Val(1), Val(0))
 
@@ -1316,10 +1287,9 @@ end
 # comparisons that `Dcₓ` and `D̽ₓ` carry there describe arithmetic, and the arithmetic of
 # these nodes is `_stencil_weights` below, which documents itself.
 #
-# `D̽ₕ` is the one family whose dispatch alias and tuple-valued alias are the same name
-# (gpena/Bramble.jl#349: the family formerly called `Dₕ`), so `D̽ₕ(op)` gives the `D`-tuple
-# and `D̽ₕ(op, Val(2))` the `y` node. They coexist by arity, which is the decision
-# gpena/Bramble.jl#140 asked to be made on purpose rather than by merge.
+# `D̽ₕ` is the one family whose dispatch alias and tuple-valued alias are the same name,
+# so `D̽ₕ(op)` gives the `D`-tuple and `D̽ₕ(op, Val(2))` the `y` node. They coexist by
+# arity.
 
 @node_family(node=CenteredDifference,
     stem=Dc,
@@ -1429,7 +1399,7 @@ const ExtendedDifferenceNode{D, Dim} = Union{
 #
 # `form(Wₕ, Vₕ, f)` (bilinear.jl) already hands `f` the space's own `TrialFunction{D,N}`/
 # `TestFunction{D,N}`, and that object is already tuple-like: `u(i)` and `components(u)`
-# (form/component.jl) address its `N` immediate subspaces, and
+# (ast/component.jl) address its `N` immediate subspaces, and
 # `TrialFunction`/`TestFunction` already answer `iterate`/`getindex`/`length`. What is
 # missing is passing `u` itself, unindexed, straight to a vectorial operator. `∇ₕ(u)` on a
 # composite `u` would hit the generic `∇ₕ(op::LazyOp{D})` method above, differencing the
@@ -1479,7 +1449,7 @@ end
 
 # --- εₕ, divₕ: symmetric strain and staggered divergence over composite functions ---- #
 #
-# Placement settled by gpena/Bramble.jl#234 (issue comment, 2026-09-18): ε_ii on the face
+# Placement (gpena/Bramble.jl#234): ε_ii on the face
 # centre normal to axis `i` (a bare backward difference, no averaging), ε_ij for `i != j` on
 # the edge centre the pair `{i,j}` shares (each side's cross difference averaged once, onto
 # that edge), and div u on the cell centre every axis shares. No collocation choice is
@@ -1495,12 +1465,9 @@ end
 # `LazyOp` is scalar-valued, expansion happens at the builder" (gpena/Bramble.jl#234).
 #
 # `εₕ`/`divₕ` differ from `operators/vector_calculus.jl`'s *runtime* `divₕ`
-# (gpena/Bramble.jl#158) the way every symbolic/numeric pair in this package can (CONTEXT.md):
-# the runtime `divₕ` sums raw backward differences with no cross-axis averaging, read at the
-# mesh's own nodes; placing every one of the `D` terms here at the same shared quadrature
-# point first is what makes `inner₊(divₕ(u), divₕ(v))` well posed. The name is shared on
-# purpose -- both are "the backward-difference divergence" -- and the two are never mixed in
-# one expression, so nothing has to choose between them.
+# (gpena/Bramble.jl#158) the way every symbolic/numeric pair in this package can (CONTEXT.md).
+# The runtime `divₕ` (vector_calculus.jl) shares the name; the two are never mixed in one
+# expression.
 
 @inline function _vc_bwd(op, d::Int)
     d == 1 && return D₋ₓ(op)

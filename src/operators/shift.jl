@@ -92,17 +92,14 @@ end
     dims = npoints(Ωₕ, Tuple)
     be = backend(Ωₕ)
 
-    # Determine the operator for the current (outermost) dimension D.
     if DIFF_DIM == D
         op_current = _Eye(be, dims[D], Val(i))
     else
         op_current = backend_eye(be, dims[D])
     end
 
-    # Recurse on the inner dimensions (from D-1 down to 1).
     op_lower_dims = _recursive_shift(Ωₕ, Val(D - 1), Val(DIFF_DIM), Val(i))
 
-    # Combine them: M_D ⊗ (M_{D-1} ⊗ ...)
     return op_current ⊗ op_lower_dims
 end
 
@@ -110,7 +107,8 @@ end
     shift(Ωₕ::AbstractMeshType, ::Val{SHIFT_DIM}, ::Val{i})
 
 Returns the matrix that shifts a grid function by `i` points along direction
-`SHIFT_DIM`, as a sparse operator over the flattened degrees of freedom of `Ωₕ`.
+`SHIFT_DIM`, in the backend's `matrix_type`, over the flattened degrees of freedom of
+`Ωₕ`.
 
 # Arguments
 
@@ -153,9 +151,9 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 `i == 0` short-circuits to the identity of the whole grid without building any Kronecker
 product.
 
-This is the building block of the difference, jump and average matrices: a backward
-difference is `shift(Ωₕ, dim, Val(0)) - shift(Ωₕ, dim, Val(-1))`, and the other families
-differ only in which pair of shifts they subtract or average.
+It builds the `S₊`/`S₋` matrix forms and the Kronecker oracle
+[`kronecker_operator_matrix`](@ref); the operator families' own matrices come from
+[`stencil_matrix`](@ref).
 
 See also: [`⊗`](@ref), [`diff₋ₓ`](@ref).
 """

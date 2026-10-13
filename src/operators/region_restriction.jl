@@ -104,10 +104,7 @@ end
     # guarantees the label, geometric or user-redefined), so it is read directly like every
     # other region, no exception for `:interior` here. There is exactly one case that still
     # needs one: `markers === nothing`, the "no marker context at all" sentinel above, where
-    # `:interior` is defined as the whole grid and every other region as empty. Read
-    # directly, a real `:interior` used to be silently overridden by "not :boundary", which
-    # discarded a deliberately redefined `:interior` even though the mesh warns that a
-    # custom definition wins (mesh/marker.jl).
+    # `:interior` is defined as the whole grid and every other region as empty.
     if _in_region(op, markers, lin_idx)
         return local_stencil(op.inner_op, space, I, markers, lin_idx)
     else
