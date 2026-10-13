@@ -236,6 +236,25 @@ at this level, so the default here is `false`.
 # (gpena/Bramble.jl#68).
 #===========================================================================#
 
+# Refuses a mesh carrying a marker label beyond `:boundary`/`:interior`: a point-count
+# change leaves it sized for the old grid and there is no domain here to re-evaluate it
+# from. `caller` completes "... was asked to <verb> a mesh carrying custom markers", and
+# `remedy` names the call that keeps them.
+function _check_only_geometric_labels(Ωₕ, caller::String, remedy::String)
+    extra_labels = setdiff(keys(markers(Ωₕ)), (:boundary, :interior))
+    isempty(extra_labels) || _throw_drops_markers(caller, extra_labels, remedy)
+    return nothing
+end
+
+@noinline function _throw_drops_markers(caller::String, extra_labels, remedy::String)
+    throw(
+        ArgumentError(
+        "$caller a mesh carrying custom markers $(Tuple(extra_labels)), and there is no " *
+        "domain here to re-evaluate them onto the new points. $remedy",
+    ),
+    )
+end
+
 # The one-argument form: no domain to re-derive custom markers from, so a mesh carrying
 # any is refused outright rather than silently losing them. The public contract for both
 # this and the two-argument form below is documented once, on the
@@ -259,26 +278,15 @@ function iterative_refinement!(Ωₕ::AbstractMeshType)
     # refuses rather than drops it with a warning the caller could miss
     # (gpena/Bramble.jl#19). The two-argument form below does not route through this
     # method at all, precisely so it never triggers this check on its own account.
-    old_markers = markers(Ωₕ)
-    extra_labels = setdiff(keys(old_markers), (:boundary, :interior))
-    isempty(extra_labels) || _throw_refinement_drops_markers(extra_labels)
+    _check_only_geometric_labels(Ωₕ,
+        "iterative_refinement!(Ωₕ) was asked to refine",
+        "Call iterative_refinement!(Ωₕ, domain_markers) instead to keep them.")
 
     _refine_indices!(Ωₕ)
     fresh_markers = MeshMarkers()
     _ensure_geometric_markers!(fresh_markers, Ωₕ)
     markers!(Ωₕ, fresh_markers)
     return nothing
-end
-
-@noinline function _throw_refinement_drops_markers(extra_labels)
-    throw(
-        ArgumentError(
-        "iterative_refinement!(Ωₕ) was asked to refine a mesh carrying custom markers " *
-        "$(Tuple(extra_labels)), and there is no domain here to re-evaluate them onto " *
-        "the refined points. Call iterative_refinement!(Ωₕ, domain_markers) instead to " *
-        "keep them.",
-    ),
-    )
 end
 
 # The two-argument form: a real domain to re-derive markers from, so refinement always
@@ -384,8 +392,8 @@ end
     points(Ωₕ::AbstractMeshType) -> Union{Vector, NTuple}
 
 Return the coordinates of the mesh points.
-  - For 1D meshes ([`Mesh1D`](@ref)), returns a coordinate vector `Vector{T}` of length ``N_x``.
-  - For nD meshes ([`MeshnD`](@ref)), returns an `NTuple{D, Vector{T}}` containing the 1D coordinate vectors along each axis.
+  - For 1D meshes ([`Mesh1D`](@ref)), returns a coordinate vector `AbstractVector{T}` (a `Vector` on the host) of length ``N_x``.
+  - For nD meshes ([`MeshnD`](@ref)), returns an `NTuple{D, AbstractVector{T}}` (`Vector`s on the host) containing the 1D coordinate vectors along each axis.
 
 See also: [`point`](@ref).
 """
@@ -405,10 +413,9 @@ function point end
 """
     half_points(Ωₕ::AbstractMeshType)
 
-Return the precomputed cell centers (half-points) for each coordinate axis:
-```math
-x_{i+1/2} = \\frac{x_i + x_{i+1}}{2}, \\quad i = 1, \\dots, N-1.
-```
+Return the cell boundaries (half-points) along each axis: `N + 1` values,
+``x_{1/2} = x_1``, ``x_{i+1/2} = (x_i + x_{i+1})/2`` for ``i = 1, \\dots, N-1``, and
+``x_{N+1/2} = x_N``.
 """
 function half_points end
 
@@ -503,10 +510,11 @@ Return the control volume (length, area, or volume) of the cell centered at inde
 function cell_measure end
 
 """
-    iterative_refinement!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers]) -> AbstractMeshType
+    iterative_refinement!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers]; warn_marker_mismatch = true) -> Nothing
 
 Refine the mesh `Ωₕ` in-place by halving each existing cell (inserting new points at midpoints).
-If domain markers are supplied, they are re-evaluated onto the refined grid points.
+If domain markers are supplied, they are re-evaluated onto the refined grid points. `warn_marker_mismatch` is passed on to
+`set_markers!` then.
 
 Without `domain_markers`, any custom marker `Ωₕ` carries beyond `:boundary`/`:interior` has
 no domain here to re-derive it from, so this throws an `ArgumentError` rather than silently
@@ -528,10 +536,11 @@ on the inconsistent grid.
 function iterative_refinement! end
 
 """
-    change_points!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers], pts) -> AbstractMeshType
+    change_points!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers], pts; warn_marker_mismatch = true) -> Nothing
 
 Update the coordinates of mesh `Ωₕ` in-place using new point coordinates in `pts`,
 recalculating all cached half-points and cell spacings.
+With `domain_markers`, `warn_marker_mismatch` is passed on to `set_markers!`.
 
 !!! warning "Invalidates every ScalarGridSpace already built on Ωₕ"
     Bumps `Ωₕ`'s mesh version (gpena/Bramble.jl#221; see [`set_points!`](@ref), which this

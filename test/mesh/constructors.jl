@@ -19,6 +19,13 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
         @test @inferred(_expand_uniform((true, false, true), Val(3))) === (true, false, true)
     end
 
+    @testset "mesh docstring" begin
+        # The docstring must attach to `mesh`, not to a helper defined next to it.
+        doc = string(@doc mesh)
+        @test occursin("isotropic", doc)
+        @test occursin("warn_marker_mismatch", doc)
+    end
+
     @testset "Direct CartesianProduct input" begin
         I = interval(0.0, 1.0)
         X2 = interval(0.0, 1.0) × interval(0.0, 2.0)

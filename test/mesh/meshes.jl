@@ -540,6 +540,15 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
         @test npoints(c2, Tuple) == npoints(Ω2, Tuple)
         @test c2(1) !== Ω2(1)                    # submeshes copied
         @test points(c2(1)) == points(Ω2(1))
+
+        # `deepcopy` draws a fresh marker stamp, as `copy` does, so no two meshes share one.
+        d1 = deepcopy(Ωₕ)
+        @test Bramble._marker_stamp(d1) != Bramble._marker_stamp(Ωₕ)
+        @test Bramble._marker_stamp(c1) != Bramble._marker_stamp(Ωₕ)
+        d2 = deepcopy(Ω2)
+        @test Bramble._marker_stamp(d2) != Bramble._marker_stamp(Ω2)
+        @test Bramble._marker_stamp(c2) != Bramble._marker_stamp(Ω2)
+        @test markers(d1)[:boundary] == markers(Ωₕ)[:boundary]
     end
 
     @testset "Trivial refinement" begin
@@ -556,7 +565,6 @@ end
 @testset "Cached spacings" begin
     import Bramble:
                     spacings,
-                    spacings!,
                     spacing!,
                     backward_spacings_for_derivative,
                     forward_spacings_for_derivative
@@ -576,6 +584,11 @@ end
             @test all(
                 forward_spacing(Ωₕ, i) == spacings(Ωₕ)[i == n ? n : i + 1] for i in 1:n
             )
+            # `half_points` holds the N + 1 cell boundaries, the end points at both ends
+            hp = Bramble.half_points(Ωₕ)
+            @test length(hp) == npoints(Ωₕ) + 1
+            @test hp[1] == pts[1] && hp[end] == pts[end]
+            @test all(hp[i] ≈ (pts[i - 1] + pts[i]) / 2 for i in 2:n)
         end
     end
 

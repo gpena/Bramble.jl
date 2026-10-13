@@ -28,6 +28,8 @@ are evaluated on demand from the tensor-product submeshes.
   - `marker_ids`: `Dict{Symbol, Int}`, the column of each label in `words`.
   - `words`: `Matrix{UInt64}`, the marker bits, one column of `BitVector` chunks per label.
   - `uid`: an identity unique to this mesh, kept across its mutations.
+  - `marker_stamp`: a counter value drawn afresh at construction and at every marker
+    replacement.
 
 A `MeshnD` stores no state of its own: its submeshes can be mutated directly, so the
 [`MeshnDState`](@ref) the walk reads is built on demand by [`_walk_mesh`](@ref).
@@ -140,8 +142,8 @@ const _MeshnDLike{D} = Union{MeshnD{D}, MeshnDState{D}}
 # change, and never equal across meshes or across two stores.
 @inline _marker_stamp(Ωₕ::MeshnD) = Ωₕ.marker_stamp
 
-# Replaces the marker dictionary, its label table and the word matrix together (O6: a label
-# set may change after construction; the word matrix is rebuilt, never resized).
+# Replaces the marker dictionary, its label table and the word matrix together. A label set
+# may change after construction; the word matrix is rebuilt, never resized.
 function _store_markers!(Ωₕ::MeshnD, mesh_markers)
     mm = convert(MeshMarkers, mesh_markers)
     ids, words = _marker_table(mm, npoints(Ωₕ))
@@ -199,7 +201,6 @@ function _mesh(
         backend;
         warn_marker_mismatch::Bool = true
 ) where {D}
-    # Ensure the dimension of the domain matches the length of the input tuples.
     dim(Ω) == D || _throw_domain_dim_mismatch(dim(Ω), D)
     _set = set(Ω)
 
@@ -209,17 +210,13 @@ function _mesh(
     npts_with_collapsed = ntuple(i -> _storage_collapsed(_set(i)..., backend) ? 1 : npts[i],
         Val(D))
 
-    # Generate the CartesianIndices for the full D-dimensional grid.
     idxs = generate_indices(npts_with_collapsed)
 
-    # Create the tuple of 1D submeshes that form the basis of the tensor-product grid.
     _submeshes = submeshes(Ω, npts_with_collapsed, unif, backend)
 
-    # Instantiate the MeshnD object with an empty marker dictionary.
     mesh_markers = MeshMarkers()
     output_mesh = MeshnD(_set, mesh_markers, idxs, backend, _submeshes)
 
-    # Now that the mesh object is created, populate its markers based on the domain's markers.
     set_markers!(output_mesh, markers(Ω); warn_marker_mismatch)
 
     return output_mesh
@@ -308,7 +305,6 @@ macro generate_mesh_ntuple_func_with_idx(fname)
     )
 end
 
-# ntuple wrappers
 @generate_mesh_ntuple_func points
 @generate_mesh_ntuple_func half_points
 @generate_mesh_ntuple_func half_spacings
@@ -332,7 +328,6 @@ See also: [`half_spacings`](@ref), [`cell_measures`](@ref).
 @generate_mesh_ntuple_func spacings
 @generate_mesh_ntuple_func forward_spacings
 
-# ntuple wrappers with an index
 @generate_mesh_ntuple_func_with_idx point
 @generate_mesh_ntuple_func_with_idx half_point
 @generate_mesh_ntuple_func_with_idx spacing
@@ -371,10 +366,8 @@ individual cell is the product of its per-axis widths; see [`cell_measure`](@ref
 # way: `hypot` is increasing in each argument and the per-axis index sets are independent,
 # so the minimum over the whole index set sits at the per-axis minima.
 #
-# This is a diagonal, not an edge length. It used to be the smallest per-axis spacing,
-# which made hₘₐₓ and hₘᵢₙ measure two different things: on a 33x33 grid over
-# [0,1]x[0,1e-8] the pair read 0.031 and 3.1e-10, one a diagonal and one an edge. For a
-# per-axis extent, ask a submesh: `hₘᵢₙ(Ωₕ(i))`.
+# This is a diagonal, not an edge length. For a per-axis extent, ask a submesh:
+# `hₘᵢₙ(Ωₕ(i))`.
 @inline hₘᵢₙ(Ωₕ::_MeshnDLike{D}) where {D} = hypot(ntuple(i -> hₘᵢₙ(Ωₕ(i)), Val(D))...)
 
 @inline function cell_measure(Ωₕ::_MeshnDLike{D}, idx) where {D}
@@ -456,12 +449,14 @@ function Base.copy(Ωₕ::MeshnD{D}) where {D}
     )
 end
 
-# A deepcopy is an independent mutable mesh with a fresh identity; its submeshes get theirs
-# through the `Mesh1D` method, and its version stays the sum of theirs (each keeps its own).
+# A deepcopy is an independent mutable mesh with a fresh identity and marker stamp; its
+# submeshes get theirs through the `Mesh1D` method, and its version stays the sum of theirs
+# (each keeps its own).
 function Base.deepcopy_internal(Ωₕ::MeshnD, dict::IdDict)
     haskey(dict, Ωₕ) && return dict[Ωₕ]::typeof(Ωₕ)
     c = invoke(Base.deepcopy_internal, Tuple{Any, IdDict}, Ωₕ, dict)::typeof(Ωₕ)
     c.uid = _next_mesh_uid()
+    c.marker_stamp = _next_mesh_uid()
     return c
 end
 
@@ -493,23 +488,18 @@ function _show_meshnd_detailed(io::IO, Ωₕ::MeshnD{D, BT, CI, SM, T}) where {D
     # Check if all dimensions are collapsed (topological dimension is 0)
     collapsed = (topodim == 0)
 
-    # Header
     print_mesh_header(pp, "MeshnD", D, T, npts_tuple)
     println(io)
 
-    # Summary line
     print_mesh_summary(pp, npts_tuple, topodim, collapsed)
 
-    # Domain information
     print_mesh_domain_info(pp, set(Ωₕ))
 
-    # Spacing information
     if !collapsed
         uniform_tuple = ntuple(i -> is_uniform(Ωₕ(i)), Val(D))
         print_mesh_spacing_info(pp, uniform_tuple, hₘₐₓ(Ωₕ))
     end
 
-    # Markers information
     print_mesh_markers(pp, markers(Ωₕ))
     return nothing
 end
