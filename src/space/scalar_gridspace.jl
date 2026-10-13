@@ -643,19 +643,6 @@ function _innerh_weights!(u::AbstractVector, Ωₕ::AbstractMeshType{1})
     return nothing
 end
 
-# No longer called by `space_weights` for `D ≥ 2` (gpena/Bramble.jl#115): the
-# `SeparableWeights` `innerh` there is `cellfactor` itself, needing no full-grid fill.
-# Kept as the tested, directly-callable building block it always was.
-function _innerh_weights!(u, Ωₕ::AbstractMeshType{D}) where {D}
-    # The submeshes already hold these, so they are read rather than rebuilt: the
-    # comprehension this replaces allocated one vector per axis on every call.
-    cell_measures_per_component = ntuple(k -> cell_measures(Ωₕ(k)), Val(D))
-    dims = npoints(Ωₕ, Tuple)
-    v = Base.ReshapedArray(u, dims, ())
-    __innerplus_weights!(execution_policy(Ωₕ), v, cell_measures_per_component)
-    return nothing
-end
-
 """
     _innerplus_weights!(u::VT, Ωₕ, component = 1) where VT
 
@@ -685,75 +672,8 @@ function _innerplus_weights!(u::AbstractVector, Ωₕ, component = 1)
     return nothing
 end
 
-"""
-    _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where VT
-
-Builds a set of weights based on the half spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the [`points`](@ref). The values are stored in vector `u`.
-
-# The two boundary entries (gpena/Bramble.jl#236)
-
-`u[1]`/`u[N]` are `half_spacing(mesh_component, ·)` there -- the boundary half-cell width,
-the same nonzero value [`cell_measure`](@ref) already uses for `innerₕ`'s own weight --
-**not** zero. They used to be hand-zeroed, which matches neither the docstrings of
-[`inner₊ₓ`](@ref)/[`inner₊ᵧ`](@ref)/[`inner₊₂`](@ref) (a sum over *every* transverse index,
-boundary included) nor [`weights`](@ref)'s own, and deleted real quadrature weight: a node
-on two or more boundary hyperplanes got zero weight from every staggered direction and was
-absent from the assembled operator entirely -- the staggered Neumann Laplacian's kernel was
-larger than the physical one, with identically-zero rows at those nodes, and a free-surface
-elasticity stiffness matrix built the same way came out indefinite (negative eigenvalues),
-not merely singular.
-
-**Whether the zero was load-bearing for the discrete summation-by-parts identities was
-checked, not assumed**, before this was changed: `test/space/sbp_identities.jl`'s own
-property tests (1D/2D/3D, uniform and non-uniform meshes, Supposition-generated random
-grids) all still hold, unmodified, against this weight. The reason is structural, not
-coincidental -- every one of those identities is stated for a test function vanishing on
-the boundary, and the boundary remainder a discrete integration by parts leaves behind is a
-function of that test function's own boundary values, not of this weight. With the test
-function already zero there, the remainder was already zero on its own account; the
-boundary zeroing this weight used to carry was redundant with that, never the thing making
-the identity hold. No boundary term needed writing out explicitly, because none was ever
-implicit in the weight to begin with.
-
-Fixing this also makes the natural (unconstrained, traction-free) Neumann boundary
-condition `inner₊` encodes correct: a scalar Neumann Poisson MMS on the old weight
-converged at order ≈1.04 (an inconsistent discretisation dressed as a working one); on this
-weight it is a clean order 2, matching every other Neumann/traction-free path in this
-package.
-"""
-function _innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where {VT <: Array}
-    mesh_component = Ωₕ(component)
-    N = npoints(mesh_component)
-
-    @inbounds @simd for i in 1:N
-        u[i] = half_spacing(mesh_component, i)
-    end
-
-    return nothing
-end
-
-# Device counterpart: `half_spacing(Ωₕ, i)` is a bounds-checked read of `Ωₕ.half_spacings[i]`
-# with no boundary branch (mesh/mesh1d.jl), so this fill is exactly a copy of
-# that backing vector -- a bulk `copyto!`, not a per-index scalar read.
-function _innerplus_mean_weights!(u::AbstractVector, Ωₕ, component::Int = 1)
-    mesh_component = Ωₕ(component)
-    copyto!(u, half_spacings(mesh_component))
-    return nothing
-end
-
 @inline function __prod(diags::NTuple{D, Any}, I) where {D}
     return prod(ntuple(i -> @inbounds(diags[i][I[i]]), Val(D)))
-end
-
-"""
-    __innerplus_weights!(policy, v, innerplus_per_component)
-
-Builds the weights for the modified discrete ``L^2`` inner product on the space of grid functions [`ScalarGridSpace`](@ref). The result is stored in vector `v`.
-"""
-function __innerplus_weights!(policy, v, innerplus_per_component)
-    idxs = CartesianIndices(v)
-    f = Base.Fix1(__prod, innerplus_per_component)
-    return _sweep_for!(policy, v, idxs, f)
 end
 
 # --- Display ---------------------------------------------------------------------- #

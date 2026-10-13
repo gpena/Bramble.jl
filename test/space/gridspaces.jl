@@ -8,16 +8,11 @@ using Bramble:
                __prod,
                _innerplus_weights!,
                spacing,
-               _innerh_weights!,
-               _innerplus_mean_weights!,
-               __innerplus_weights!,
                half_spacing,
                space_weights,
                SpaceWeights
 using Bramble: Innerh, Innerplus
 using Bramble: VectorGridSpace, mesh_type
-using Bramble: vector
-using LinearAlgebra: norm
 using Random
 using Supposition
 using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS
@@ -43,38 +38,6 @@ using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
             v2 = ([1.0, 2.0], [3.0, 4.0, 5.0])
             idx2 = CartesianIndex(2, 3)
             @test __prod(v2, idx2) ≈ 2.0 * 5.0 ≈ 10.0
-        end
-
-        @testset "_innerh_weights!" begin
-            u2 = vector(backend(mesh2d), npoints(mesh2d))
-            _innerh_weights!(u2, mesh2d)
-            expected_norm = 0.05952940449895328
-            @test norm(u2) ≈ expected_norm
-        end
-
-        @testset "_innerplus_mean_weights!" begin
-            # The transverse factor: every entry, boundary included, is the mesh's own
-            # half_spacing there. This differs from _innerplus_weights!, the *aligned*
-            # factor, whose first entry is correctly zero (no cell behind node 1 along the
-            # direction being differenced). Zeroing the two boundary entries here would
-            # delete real quadrature weight; see _innerplus_mean_weights!'s docstring.
-            u = vector(backend(mesh1d), npoints(mesh1d))
-            N = npoints(mesh1d)
-            _innerplus_mean_weights!(u, mesh1d, 1)
-            for i in 1:N
-                @test u[i] ≈ half_spacing(mesh1d, i)
-            end
-            @test u[1] > 0 && u[N] > 0
-        end
-
-        @testset "__innerplus_weights!" begin
-            npts_tup = npoints(mesh2d, Tuple)
-            v = zeros(Float64, npts_tup)
-            comp_weights = (rand(npts_tup[1]), rand(npts_tup[2]))
-            __innerplus_weights!(Serial(), v, comp_weights)
-
-            idx = CartesianIndex(3, 4)
-            @test v[idx] ≈ comp_weights[1][idx[1]] * comp_weights[2][idx[2]]
         end
     end
 

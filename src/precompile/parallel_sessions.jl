@@ -11,7 +11,7 @@
 #
 # One 1D session is enough to specialize the shared, policy-independent cores
 # (`Rₕ!`/`avgₕ!`'s kernel structs, `assemble!`/`assemble`'s `execution_policy(...) isa
-# Serial` branch resolving the other way, `__innerplus_weights!`'s Parallel method):
+# Serial` branch resolving the other way, the space weights' Parallel sweep):
 # it is not a second copy of the Serial sessions above, and 2D/3D and the composite/
 # Dirichlet/interpolation paths are deliberately left out, the same economy the assembly
 # sessions above already apply to 3D.

@@ -247,11 +247,6 @@ function _pa_paths()
             du = similar(u)
             _pa_case(() -> r(du, u, nothing, 0.0), () -> copy(du))
         end))
-    push!(P, ("space weights", true, 0, (n, p) -> begin
-        Ω = _pa_jitter(n, p)
-        u = zeros(npoints(Ω))
-        _pa_case(() -> Bramble._innerh_weights!(u, Ω), () -> copy(u))
-    end))
     push!(P, (
         "avgₕ! masked", false, 0, (n, p) -> begin
             u = element(_pa_space(n, p))
@@ -489,8 +484,9 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
 
     # The `@noinline` CpuPolyester arm takes its kernel as `f::F ... where {F}`: an untyped
     # `f` only passed through is compiled on `::Function`, and `_late` then calls the hook
-    # dynamically (gpena/Bramble.jl#460). The `Fix1` kernel `__innerplus_weights!` builds,
-    # on non-uniform factors, gives the CpuSerial result and specialises the arm on `Fix1`.
+    # dynamically (gpena/Bramble.jl#460). The `Fix1(__prod, factors)` kernel the space
+    # weights build, on non-uniform factors, gives the CpuSerial result and specialises
+    # the arm on `Fix1`.
     @testset "Fix1 kernel, CpuPolyester arm (#460)" begin
         for dims in ((37,), (23, 29), (7, 9, 11))
             diags = map(n -> sort!(rand(Xoshiro(n), n)), dims)
