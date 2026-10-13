@@ -263,9 +263,10 @@ and `ndofs(test_space(a))`. The result's type is promoted from the element types
 and `v`, so a `ForwardDiff.Dual` in either argument comes through.
 
 On a CPU backend the call allocates only the one cell its sum runs in (a
-`ContractionSink`'s), whatever the grid size; a form with three or more
-region-restricted summands in one product allocates per point, as in `assemble!`
-(gpena/Bramble.jl#727).
+`ContractionSink`'s), whatever the grid size. A product with three or more
+region-restricted summands is split by `form` into products of at most two
+(gpena/Bramble.jl#727); one it leaves whole, as it would split into more than 16 or its
+constant scales keep several types, allocates per point, as in `assemble!`.
 Each call has its own cell, so tasks may call one form at once. On a GPU backend the matrix
 is assembled and multiplied, as the walk reads its vectors on the host.
 
@@ -686,9 +687,10 @@ end
     assemble!(A::AbstractMatrix, form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -> AbstractMatrix
 
 Assemble the `BilinearForm` into the preallocated matrix `A`, allocating nothing (**0 bytes**)
-when `A` is the default `SparseMatrixCSC`. A form whose terms, once simplified, put three or
-more region-restricted summands in one product allocates per grid point (see
-gpena/Bramble.jl#727).
+when `A` is the default `SparseMatrixCSC`. A product with three or more region-restricted
+summands is split by `form` into products of at most two (gpena/Bramble.jl#727); one it
+leaves whole, as it would split into more than 16 or its constant scales keep several types,
+allocates per grid point.
 
 Runs serially or across threads following `form.trial_space`'s backend
 [`execution_policy`](@ref): [`Serial`](@ref) (the default) or [`Parallel`](@ref).

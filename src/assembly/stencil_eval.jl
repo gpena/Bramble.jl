@@ -272,10 +272,11 @@ end
 # with the grid). Passed straight to `concatenate_stencils` instead, the `Union` is split
 # at that call and each branch builds a concrete tuple. The split has a limit: the stencil
 # has one shape per combination of restricted summands' markers, and past two restricted
-# summands in one sum the compiler stops splitting. A bilinear `form` therefore splits a
-# product with more than two into products of two (`_split_restricted_products`,
-# bilinear.jl). A linear form does not, so four linear `innerₕ` terms, three of them
-# restricted, still box per point.
+# summands in one sum the compiler stops splitting. `form`, bilinear and linear alike,
+# therefore splits a product with more than two into products of at most two
+# (`_split_restricted_products`, bilinear.jl and linear.jl), each walked apart, and both
+# paths assemble with 0 B. A product left whole, as it would split into more than 16 or
+# its constant scales keep several types, still boxes per point (gpena/Bramble.jl#727).
 @inline _concat_summand_stencils(::Tuple{}, space, I, markers, lin_idx::Int) = ()
 @inline function _concat_summand_stencils(ts::Tuple, space, I, markers, lin_idx::Int)
     head = local_stencil(first(ts), space, I, markers, lin_idx)

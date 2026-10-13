@@ -1269,6 +1269,86 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
                     2 * assemble(form(W, v -> innerₕ(1.0, restrict_to(:boundary, v))))
             @test b ≈ parts
         end
+
+        # Past two restricted summands the `Union` is not split and every point boxed
+        # (16400, 20256 and 38800 B for three, four and five summands on this 7x9 grid):
+        # `form` now splits such a product into products of at most two, and a form with
+        # more than two is walked one summand at a time (gpena/Bramble.jl#727). The vector
+        # must be the terms' assembled apart.
+        R = restrict_to
+        Ωm = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :l => :left, :r => :right,
+            :b => :bottom, :t => :top, :c => x -> x[1] < 0.5)
+        W = gridspace(mesh(Ωm, (7, 9), (false, false)))
+        labels = (:l, :r, :b, :t, :c)
+        g = element(W)
+        g .= 1.0 .+ (1:length(g)) ./ 7
+        function _check_split(terms; bytes = 0)
+            lf = form(W, v -> sum(t(v) for t in terms))
+            b = assemble(lf)
+            bytes === nothing || @test restricted_bytes(b, lf) == bytes
+            parts = sum(assemble(form(W, t)) for t in terms)
+            @test b ≈ parts
+            vₕ = Rₕ(W, x -> 1 + x[1] * x[2])
+            @test lf(vₕ) ≈ sum(parts .* parent(vₕ))
+            b2 = zero(b)
+            assemble_parallel!(b2, lf)
+            @test b2 == b
+            return b, parts
+        end
+        for k in 3:5
+            on(s) = v -> innerₕ(x -> 1 + x[1], R(s, v))
+            b, parts = _check_split(Tuple(on(s) for s in labels[1:k]))
+            @test b == parts
+            _check_split((v -> innerₕ(x -> 1 + x[1], v), Tuple(on(s) for s in labels[1:k])...))
+            # Each its own source, so `simplify_ast` folds nothing: k products, one walk each.
+            _check_split(Tuple(v -> innerₕ(i * g, R(labels[i], v)) for i in 1:k))
+            _check_split((v -> innerₕ(1.0, v),
+                Tuple(v -> 2.0 * innerₕ(g, D₋ₓ(R(s, v))) for s in labels[1:k])...))
+        end
+        # A restriction over a sum is distributed over it; constant scales of several types
+        # are converted to the space's element type (12816 B for `2.0R + 3R` before).
+        _check_split((v -> innerₕ(g, R(:c, v + R(:l, v) + R(:r, v))), v -> innerₕ(g, R(:b, v))))
+        _check_split((v -> innerₕ(x -> 1.0, 2.0 * R(:l, v)), v -> innerₕ(x -> 1.0, 3 * R(:r, v))))
+        _check_split((v -> innerₕ(g, v), v -> innerₕ(g, 2.0 * R(:l, v)),
+            v -> innerₕ(g, 3 * R(:r, v)), v -> innerₕ(g, (1 // 2) * R(:b, v))))
+        # A complex scale on a Float64 mesh is not promoted to: left as built, it still
+        # allocates, and must still agree with its parts.
+        _check_split((v -> innerₕ(g, (1.0 + 2.0im) * R(:l, v)), v -> innerₕ(g, 3 * R(:r, v)),
+                v -> innerₕ(g, 2.0 * R(:b, v))); bytes = nothing)
+        # Summands of one type are paired whatever order they are written in.
+        _check_split((v -> innerₕ(g, R(:l, v)), v -> innerₕ(g, 2.0 * R(:r, v)),
+            v -> innerₕ(g, R(:b, v))))
+
+        # A scale over a sum of three restricted products is walked a summand at a time
+        # under the scale: walked whole it boxed per point (48816 B in 2D, 4624 B in 1D).
+        Ω1 = domain(interval(0.0, 1.0), :a => x -> x[1] < 0.3, :b => x -> x[1] > 0.6,
+            :c => x -> 0.2 < x[1] < 0.5)
+        for Ws in (gridspace(mesh(Ω1, 13, false)), W)
+            ls = Tuple(v -> innerₕ(1.0, R(s, v)) for s in (Ws === W ? (:l, :b, :c) : (:a, :b, :c)))
+            parts = sum(assemble(form(Ws, l)) for l in ls)
+            for (c, wrap) in ((2.0, x -> 2.0 * x), (-1, x -> -x))
+                lf = form(Ws, v -> wrap(ls[1](v) + ls[2](v) + ls[3](v)))
+                b = assemble(lf)
+                @test restricted_bytes(b, lf) == 0
+                @test b ≈ c * parts
+                b2 = zero(b)
+                assemble_parallel!(b2, lf)
+                @test b2 == b
+                vₕ = Rₕ(Ws, x -> 1 + x[1])
+                @test lf(vₕ) ≈ c * sum(parts .* parent(vₕ))
+            end
+        end
+
+        # A form holding no restriction comes back as `simplify_ast` built it, mixed scale
+        # types and all; the split of a restricted one infers its concrete result.
+        _ast(f) = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+            Bramble.resolve_ast(f(Bramble.test_function(W))), W))
+        ast = _ast(v -> innerₕ(g, 0.1 * v + 3 * D₋ₓ(v) + (1 // 3) * D₋ᵧ(v)))
+        @test Bramble._split_restricted_products(ast, Float64) === ast
+        ast = _ast(v -> innerₕ(g, g * R(:l, v) + g * R(:r, v) + g * R(:b, v) + g * R(:t, v)))
+        rt = Base.return_types(Bramble._split_restricted_products, (typeof(ast), Type{Float64}))
+        @test length(rt) == 1 && isconcretetype(only(rt))
+        @test Bramble._split_restricted_products(ast, Float64) isa Bramble.OperatorAdd
     end
 
     WITH_AD_TESTS && @testset "Assembled residual differentiation" begin

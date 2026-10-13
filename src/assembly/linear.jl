@@ -407,12 +407,38 @@ function form(Wₕ, f)
     D = dim(Wₕ)
     raw_ast = f(test_function(Wₕ))
     _validate_form_expression(raw_ast, Val(D), Val(:linear))
-    ast = simplify_ast(_resolve_surfaces_for_space(resolve_ast(raw_ast), Wₕ))
+    ast = _split_restricted_products(
+        simplify_ast(_resolve_surfaces_for_space(resolve_ast(raw_ast), Wₕ)), eltype(Wₕ))
     _check_centered_meshes(ast, Wₕ)
     ast = _lower_sources_for_space(ast, Wₕ)
     _check_source_meshes(ast, Wₕ)
     return LinearForm{D, typeof(Wₕ), typeof(ast)}(Wₕ, ast)
 end
+
+# A product's test side holding three or more restricted summands is split as a bilinear
+# product's is (`_split_restricted_products`, bilinear.jl, gpena/Bramble.jl#727): grouped
+# by type, at most two a piece, its scales promoted to `E` when they share that type, every
+# piece one `LinearProduct` with the same source. Its source is left as it is: a restricted
+# source keeps one stencil type once `_typed_restrictions` (above) has typed it.
+function _split_restricted_products(op::LinearProduct{D, W}, ::Type{E}) where {D, W, E}
+    _holds_restriction(op.right_op) || return op
+    r = _uniform_scales(op.right_op, E)
+    rs = _operand_groups(_expanded_summands(r), Val(2))
+    length(rs) > 16 && return op
+    if length(rs) == 1 || _mixed_scales(r)
+        return r === op.right_op ? op :
+               LinearProduct{D, W, typeof(op.left_op), typeof(r)}(op.left_op, r)
+    end
+    return _linear_product_sum(op, rs)
+end
+
+# One `LinearProduct` per group, summed left to right; recursive on the tuple's type, so the
+# sum infers concretely.
+@inline _linear_product_sum(op::LinearProduct, rs::Tuple{Any}) = _linear_piece(op, rs[1])
+@inline _linear_product_sum(op::LinearProduct, rs::Tuple) = OperatorAdd(
+    _linear_product_sum(op, Base.front(rs)), _linear_piece(op, rs[end]))
+@inline _linear_piece(op::LinearProduct{D, W}, r) where {D, W} = LinearProduct{
+    D, W, typeof(op.left_op), typeof(r)}(op.left_op, r)
 
 # --- A VectorElement source must live on the leaf it is read on --- #
 #
@@ -852,8 +878,49 @@ end
 # --- Helper cores for function barrier optimization ------------------------------- #
 
 # The scalar case is `_scatter_term!` (below) at offset zero: one leaf, the whole space.
-@inline _assemble_linear_core!(b::AbstractVector, space, ast::AST_TYPE, α = true) where {AST_TYPE} = _scatter_term!(
-    b, space, ast, 0, α)
+@inline function _assemble_linear_core!(
+        b::AbstractVector, space, ast::AST_TYPE, α = true) where {AST_TYPE}
+    _each_walk_unit(t -> _scatter_term!(b, space, t, 0, α), ast)
+    return b
+end
+
+# --- Walk units (gpena/Bramble.jl#727) --------------------------------------------- #
+#
+# A scalar space walks its whole form at once, every term's stencil concatenated at each
+# point, so the shapes of all restricted summands multiply: past two the `Union` is not
+# split and every point boxes, however `form` split the products
+# (`_split_restricted_products`). Such a form is walked one summand at a time instead,
+# each summand a walk of its own, as a composite space's terms already are. A form with at
+# most two restricted summands, the count read off its type, is walked once, as before.
+@inline _each_walk_unit(f::F, ast) where {F} = _unit_bits(ast) > 2 ?
+                                               (map(f, _walk_summands(ast)); nothing) :
+                                               (f(ast); nothing)
+@inline _fold_walk_units(f::F, ast, acc) where {F} = _unit_bits(ast) > 2 ?
+                                                     _fold_summands(f, _walk_summands(ast), acc) :
+                                                     f(ast, acc)
+
+# The summands walked apart: a scale over a sum (`2.0 * (l₁ + l₂ + l₃)`, `-(l₁ + l₂ + l₃)`)
+# is looked through, each summand walked under its own copy of the scale. The tree `form`
+# stored is not changed, so the scale is rebuilt per summand only here, in the walk.
+@inline _walk_summands(op::OperatorAdd) = (
+    _walk_summands(op.left_op)..., _walk_summands(op.right_op)...)
+@inline function _walk_summands(op::Union{OperatorScale, GridFunctionScale})
+    ts = _walk_summands(op.inner_op)
+    return ts isa Tuple{Any} ? (op,) : map(t -> _rewrap_inner(op, t), ts)
+end
+@inline _walk_summands(op) = (op,)
+@inline _fold_summands(f::F, ::Tuple{}, acc) where {F} = acc
+@inline _fold_summands(f::F, ts::Tuple, acc) where {F} = _fold_summands(
+    f, Base.tail(ts), f(first(ts), acc))
+
+# The restricted summands of a linear form, as `_shape_bits` (bilinear.jl) counts an
+# operand's, over both sides of each product and every restriction wrapping a product.
+@inline _unit_bits(op::OperatorAdd) = _unit_bits(op.left_op) + _unit_bits(op.right_op)
+@inline _unit_bits(op::LinearProduct) = _shape_bits(op.left_op) + _shape_bits(op.right_op)
+@inline _unit_bits(op::RegionRestriction) = (op.zero_stencil === nothing) +
+                                            _unit_bits(op.inner_op)
+@inline _unit_bits(op::UnaryWrapper) = _unit_bits(op.inner_op)
+@inline _unit_bits(op) = _shape_bits(op)
 
 # --- Parallel assembly partitioning ------------------------------------------------ #
 
@@ -1092,8 +1159,10 @@ end
 function _assemble_linear_parallel_core!(
         b::AbstractVector, space, ast::AST_TYPE, α = true
 ) where {AST_TYPE}
-    strides = _term_colour_strides(ast)
-    _sweep_parallel!(b, space, ast, indices(mesh(space)), strides, 0, α)
+    _each_walk_unit(ast) do t
+        strides = _term_colour_strides(t)
+        return _sweep_parallel!(b, space, t, indices(mesh(space)), strides, 0, α)
+    end
     return b
 end
 
@@ -1190,7 +1259,7 @@ end
 # The scalar case is `_contract_term` (below) at offset zero: one leaf, the whole space.
 @inline _contract_linear_core(
     space, ast::AST_TYPE, v::AbstractVector, acc::T
-) where {AST_TYPE, T} = _contract_term(space, ast, 0, v, acc)
+) where {AST_TYPE, T} = _fold_walk_units((t, a) -> _contract_term(space, t, 0, v, a), ast, acc)
 
 function _contract_linear_core(
         space::CompositeGridSpace{N}, ast::AST_TYPE, v::AbstractVector, acc::T
@@ -1267,8 +1336,9 @@ end
               dirichlet_components = nothing) -> AbstractVector
 
 Refill `b` with the assembled `form` and return it with zero allocations (**0 bytes**).
-A form whose terms, once simplified, put three or more region-restricted summands in one
-product allocates per grid point (see gpena/Bramble.jl#727).
+A product with three or more region-restricted summands on its test side is split by `form`
+into products of at most two (gpena/Bramble.jl#727); one it leaves whole, as it would split
+into more than 16 or its constant scales keep several types, allocates per grid point.
 
 On a test space whose backend lives on a device (a Metal space, say), `b` is filled on the
 host and uploaded in one `copyto!`, as system matrices are: that path
