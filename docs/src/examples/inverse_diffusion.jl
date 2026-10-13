@@ -108,7 +108,9 @@ end
 # more than a factor of two away.
 @test isapprox(κ, κ_true; atol = 0.02)                                                #src
 @test loss(κ) < loss(0.3)                                                             #src
-@test Enzyme.gradient(mode, Enzyme.Const(loss), 0.5)[1] ≈ (loss(0.5 + 1e-6) - loss(0.5 - 1e-6)) / 2e-6 rtol = 1e-6 #src
+fd_check = (loss(0.5 + 1e-6) - loss(0.5 - 1e-6)) / 2e-6                               #src
+ad_check = Enzyme.gradient(mode, Enzyme.Const(loss), 0.5)[1]                          #src
+@test ad_check ≈ fd_check rtol = 1e-6                                                 #src
 
 # ## Cost: one extra solve, not one per parameter
 #

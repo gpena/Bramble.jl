@@ -146,7 +146,9 @@ println("(κ, β) = ", (κ, β))
 @test isapprox(κ, κ_true; atol = 0.01)                                                #src
 @test isapprox(β, β_true; atol = 0.01)                                                #src
 @test loss(κ, β) < loss(0.2, 0.3)                                                     #src
-@test collect(∂J(0.4, 0.5)) ≈ [(loss(0.4 + 1e-5, 0.5) - loss(0.4 - 1e-5, 0.5)) / 2e-5, (loss(0.4, 0.5 + 1e-5) - loss(0.4, 0.5 - 1e-5)) / 2e-5] rtol = 1e-3 #src
+fd_κ = (loss(0.4 + 1e-5, 0.5) - loss(0.4 - 1e-5, 0.5)) / 2e-5                         #src
+fd_β = (loss(0.4, 0.5 + 1e-5) - loss(0.4, 0.5 - 1e-5)) / 2e-5                         #src
+@test collect(∂J(0.4, 0.5)) ≈ [fd_κ, fd_β] rtol = 1e-3                                #src
 
 # ## Cost: independent of parameter count and saved steps
 #
