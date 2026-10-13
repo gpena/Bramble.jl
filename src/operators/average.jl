@@ -114,9 +114,10 @@ end
 # `_compute_average`.
 @inline @propagate_inbounds _compute_average(::Centered, ::Val{false}, back, cur, fwd) = (back + 2 * cur + fwd) / 4
 
-# Folding this into `_centered_average_band!(…, 1, 1)` measured about 9% slower serial
-# `Mcₓ!` on a 2D 513² non-uniform grid (median 111.5 vs 102.0 µs, gpena/Bramble.jl#734),
-# so it keeps its own loop.
+# Folding this into `_centered_average_band!(…, 1, 1)` measured about 8% slower serial
+# `Mcₓ!` on a 2D 513² non-uniform grid (median 109.0 vs 101.3 µs, spreads 108.1–109.5 vs
+# 101.0–101.8 over four alternating process pairs, 1-min load 2.6–3.5 on AC, 2026-10-14;
+# level on 3D 65³, gpena/Bramble.jl#734), so it keeps its own loop.
 function _centered_average_engine!(out, in_ref, dims::NTuple{D, Int}, ::Val{DIM}) where {D, DIM}
     li = LinearIndices(dims)
     step = _stencil_step(Val(DIM), Val(D))
