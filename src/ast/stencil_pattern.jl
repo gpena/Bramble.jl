@@ -22,6 +22,8 @@ The grid offsets the operator `op` reaches, sorted and without repeats.
 
 Read from the AST rather than from an evaluated stencil, and the two agree: a truncated
 point keeps its offsets and zeroes its coefficients, so the set does not vary over the grid.
+A [`RegionRestriction`](@ref) is the exception: outside its region it contributes no entry
+at all, so the set is the reach wherever it contributes.
 The one node whose reach is not fixed by its type is [`ShiftNode`](@ref), which carries its
 step as a field; the value is available here because this walks the built tree.
 
@@ -59,12 +61,9 @@ end
 
 # --- the operators ------------------------------------------------------------------ #
 
-# A difference, an average or a jump reaches the point and one or two neighbours, and which
-# ones is precisely the tap set its stencil is built from. That used to be written out a
-# second time here, once per node, so the reach and the stencil agreed only by both being
-# maintained: it now reads the node's own `_stencil_taps` (gpena/Bramble.jl#70). `_reach`
-# sorts and de-duplicates, so the taps' evaluation order does not matter to it -- only the
-# set does, which is why the same declaration serves both.
+# A difference, an average or a jump reaches exactly its `_stencil_taps`, the same
+# declaration its stencil is built from (gpena/Bramble.jl#70), so reach and stencil cannot
+# drift. `_reach` sorts and de-duplicates, so tap order does not matter.
 function stencil_offsets(op::TappedNode{D, Dim}) where {D, Dim}
     return _reach(
         stencil_offsets(op.inner_op), Val(Dim), map(_shift_delta, _stencil_taps(op))
@@ -88,16 +87,9 @@ stencil_offsets(op::RegionRestriction) = stencil_offsets(op.inner_op)
 # the right offsets), so its reach is the test side's.
 stencil_offsets(op::LinearProduct) = stencil_offsets(op.right_op)
 
-# A bilinear product's stencil entries are (row offset, column offset, value) triples, so
-# the general "what does this reach" question is genuinely ambiguous between the two sets.
-# The one caller that matters (`_colour_strides`, form/linear.jl, used for both the linear
-# and bilinear parallel-assembly paths) only ever needs the row side, though: `add_to_sparse!`
-# (form/bilinear.jl) finds a fixed nzval slot for each stored (row, col) pair, so two writes
-# can only collide if both their row AND column coincide. If colouring already keeps rows
-# from coinciding, the pair can't either, whatever the columns are -- so this reduces to the
-# test factor's reach, the same way `stencil_offsets(::LinearProduct)` above already does.
-# Building the full sparsity pattern (both sets) is a different question, answered
-# separately by walking `local_stencil` directly (`_coord_walk!`, form/bilinear_pattern.jl).
+# Row (test-side) reach only: its one caller, `_colour_strides` (`assembly/linear.jl`), needs
+# rows alone, because two writes collide only if row and column both coincide. The full
+# pattern is `_coord_walk!`'s (`assembly/bilinear_pattern.jl`).
 stencil_offsets(op::BilinearProduct) = stencil_offsets(op.right_op)
 
 function stencil_offsets(op::OperatorAdd)
@@ -112,7 +104,7 @@ The largest `|offset|` component anywhere in `op`'s stencil, trial and test side
 Unlike [`stencil_offsets`](@ref), which keeps only the test-side (row) reach at a
 `BilinearProduct` because that is all its one caller (`_colour_strides`) needs, this keeps
 both. It exists for `visit_bilinear_stencil`'s interior/boundary split
-(`form/bilinear_traversal.jl`, gpena/Bramble.jl#160), which has to guard every offset an
+(`assembly/bilinear_traversal.jl`, gpena/Bramble.jl#160), which has to guard every offset an
 entry can carry -- trial and test alike, not just the row's -- before it can skip the guard
 anywhere.
 
@@ -139,9 +131,10 @@ _stencil_margin(op::IdentityOperator) = 0
 _stencil_margin(op::ZeroOperator) = 0
 
 # A tapped node's own step is always exactly 1: every `_stencil_taps` entry across every
-# difference, average and jump is drawn from `{-1, 0, 1}` (`stencil_eval.jl`), so composing
-# margin here is `+1` regardless of which node it is -- the same fact `_reach` relies on to
-# shift the offset set by one tap.
+# difference, average and jump is drawn from `{-1, 0, 1}` (the `_stencil_taps` methods in
+# `operators/difference.jl`, `average.jl` and `jump.jl`), so composing margin here is `+1`
+# regardless of which node it is -- the same fact `_reach` relies on to shift the offset
+# set by one tap.
 _stencil_margin(op::TappedNode) = _stencil_margin(op.inner_op) + 1
 
 # A shift's step is its own field, unlike a tap's, and unbounded: `shift_op` takes any
@@ -154,12 +147,12 @@ _stencil_margin(op::GridFunctionScale) = _stencil_margin(op.inner_op)
 _stencil_margin(op::RegionRestriction) = _stencil_margin(op.inner_op)
 
 # Names an absolute column on another mesh via `locate_cell`, never a grid-relative offset on
-# the mesh being walked -- see `stencil_offsets(::InterpolationNode)` just above.
+# the mesh being walked -- see `stencil_offsets(::InterpolationNode)` in `operators/interpolation.jl`.
 _stencil_margin(op::InterpolationNode) = 0
 
 # The one place trial and test reach actually differ: `left_op` is what `off_u` (trial/column)
 # ranges over, `right_op` what `off_v` (test/row) does (`multiply_stencils_bilinear`,
-# `form/common.jl`), so the margin has to cover whichever side reaches further.
+# `ast/common.jl`), so the margin has to cover whichever side reaches further.
 function _stencil_margin(op::BilinearProduct)
     return max(_stencil_margin(op.left_op), _stencil_margin(op.right_op))
 end

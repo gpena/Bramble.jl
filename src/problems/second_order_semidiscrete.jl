@@ -91,7 +91,9 @@ Built by [`semidiscretize_second_order`](@ref); read back with [`mass_matrix`](@
 - `damping_matrix`: `C`, with zero rows on the constrained degrees of freedom, or `nothing`.
 - `mass_matrix`: `M`, with zero rows on the constrained degrees of freedom.
 - `source_vector`: the reusable `F` buffer, refilled in place.
-- `constraints`: how the source's boundary values are reached -- one of `NoConstraints`, `LabelsOnly`, `StaticConstraints` or `TimeDependentConstraints`.
+- `constraints`: how the source's boundary values are reached -- one of `NoConstraints`,
+  `LabelsOnly`, `StaticConstraints`, `TimeDependentConstraints` or
+  `TimeParamDependentConstraints`.
 - `labels`: constrained boundary labels.
 - `components`: leaf components the labels bind to, or `nothing` for all.
 """
@@ -327,7 +329,7 @@ function _second_order_ode_function(::Any)
 end
 
 """
-    second_order_ode_problem(sd::SecondOrderSemidiscretization, du₀, u₀, I::CartesianProduct{1}; p) -> SecondOrderODEProblem
+    second_order_ode_problem(sd::SecondOrderSemidiscretization, du₀, u₀, I; p) -> SecondOrderODEProblem
     second_order_ode_problem(K::BilinearForm, l::LinearForm, du₀, u₀, I; p, kwargs...) -> SecondOrderODEProblem
 
 Build the `SecondOrderODEProblem` stepping `sd` over the time domain `I`, from the initial

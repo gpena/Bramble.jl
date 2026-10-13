@@ -1,7 +1,7 @@
 # nonlinear_problem.jl
 #
 # `nonlinear_problem`: the SciMLBase handoff for a steady nonlinear residual, alongside
-# `ode_problem`/`linear_problem` (form/semidiscrete_problems.jl). Implemented in `BrambleSciMLExt`,
+# `ode_problem`/`linear_problem` (problems/semidiscrete_problems.jl). Implemented in `BrambleSciMLExt`,
 # same `_`-prefixed fallback idiom as those two and `ast_sparsity_detector`/`export_vtk`: the
 # extension's method narrows on `u0` (`::AbstractVector`, which a `VectorElement` already is)
 # rather than on `residual`, which has no Bramble type to narrow to -- an arbitrary residual
@@ -10,12 +10,7 @@
 # `::Any, ::Any` fallback, which is all Julia's method-overwrite check requires (the same
 # trick `_export_vtk` uses, narrowing its *second* argument rather than its first).
 #
-# Unlike `ode_problem`, no consistent-initial-condition step is needed here: every Bramble
-# worked example builds `residual` from an assembled `BilinearForm`, `A(u) * u - F`, and a
-# Dirichlet row is already the identity there (see `assemble`) -- so `R_i(u) = u_i - g_i`
-# corrects any initial guess in the very first Newton step, with nothing extra to enforce.
-# `ode_problem`'s consistency step exists only because a differential-algebraic solver's very
-# first step assumes it, which a root-finder never does.
+# No consistent-initial-condition step: see the docstring.
 
 """
     nonlinear_problem(residual, u0; jacobian = nothing, jac_prototype = nothing, kwargs...) -> NonlinearProblem

@@ -458,10 +458,9 @@ end
 
 @inline _assemble_source!(F::AbstractVector, sd::AbstractSemidiscretization, ::NoConstraints, p, t) = assemble!(F, sd.source)
 
-# The conditions are applied through `apply_dirichlet_conditions!` rather than `assemble!`'s
-# `dirichlet` keyword, which would re-run `_normalize_dirichlet` on every call: for
-# constraints that is `Tuple(labels(bcs))` over a generator, and it allocates once per step.
-# The labels were normalised once, in `semidiscretize`, and are passed straight through.
+# The conditions are applied through `apply_dirichlet_conditions!` with the labels
+# `semidiscretize` normalised once, rather than through `assemble!`'s `dirichlet` keyword,
+# which would normalise them again on every step.
 @inline function _assemble_source!(
         F::AbstractVector, sd::AbstractSemidiscretization, c::StaticConstraints, p, t
 )

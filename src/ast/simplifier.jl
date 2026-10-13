@@ -62,8 +62,10 @@ rewrite over the expression alone does not have. Since gpena/Bramble.jl#10 that 
 supplied by `_bind_interp_spaces` at block time, so the fold is available to a pass that
 runs there -- not to this one.
 
-Bit-exact with the unsimplified AST: every rule is an algebraic identity over the scalars,
-grid functions and components involved, not an approximation.
+Bit-exact with the unsimplified AST for finite coefficients: every rule is an algebraic
+identity over the scalars, grid functions and components involved. The one exception is the
+`Integer` zero collapse, which drops a term whose coefficients hold `NaN` or `Inf`, where
+`0 * NaN` would have given `NaN`.
 =#
 
 # --- Zero/identity recognition ------------------------------------------------------ #
@@ -86,39 +88,11 @@ grid functions and components involved, not an approximation.
 @inline _scale_parts(op::OperatorScale) = (op.scalar, op.inner_op)
 @inline _scale_parts(op::LazyOp) = (1, op)
 
-# `c * A` for a coefficient just computed by combining/factoring/lifting -- collapsing back
-# to the identity/zero cases a fresh `OperatorScale(c, A)` would otherwise re-introduce.
-#
-# Only for an `Integer` coefficient, and that restriction is the whole point
-# (gpena/Bramble.jl#240). Collapsing on the *value* of `c` makes the node type this returns
-# -- and so the `AST` type parameter of the `BilinearForm`/`LinearForm` built from it --
-# depend on a number the compiler may not know: with `c` a runtime `Float64`, `form` infers
-# as `Union{BilinearForm{...,ZeroOperator}, BilinearForm{...,OperatorScale},
-# BilinearForm{...,<inner>}}` instead of one concrete type. That costs every caller a
-# dynamic dispatch through the assembly engine, and it is exactly the `Union` Enzyme's
-# strict-aliasing type analysis rejects with `IllegalTypeAnalysisException`, which is what
-# blocks a gradient with respect to an operator's own coefficient.
-#
-# An `Integer` coefficient keeps the collapse because that is where it is worth having: `1`
-# is what `_scale_parts` reports for every bare node (so every lifted inner product would
-# otherwise gain a `1 *` wrapper it never had), `0` is what `A - A` and `A + 0 * B` reduce
-# to, and no AD backend differentiates an `Integer`. A floating-point coefficient is treated
-# as an opaque runtime value instead -- write `0 * A` / `1 * A`, not `0.0 * A` / `1.0 * A`,
-# to get the structural collapse.
-#
-# The restriction buys stability only because an `Integer` coefficient is, in practice, a
-# literal: `iszero`/`isone` are then constant-folded and this method has one return type per
-# call site. That is a real contract, not an accident, so state it plainly -- **an `Integer`
-# coefficient must be a compile-time constant**. A genuinely runtime one (`n::Int` read from a
-# parameter) cannot be folded and this method returns
-# `Union{ZeroOperator{D,Nothing}, typeof(A), OperatorScale{D,typeof(c),typeof(A)}}`, which is
-# the same instability the `Float64` case was restricted to avoid. There is no way to ask, from
-# inside a function, whether a value is known to inference, and removing the value branch
-# altogether would cost `0 * A` and `1 * A` their collapse -- both documented, and `1` is what
-# `_scale_parts` reports for every bare node. So the hole stays, deliberately, with a narrow
-# fix available to the caller: pass a runtime scalar as a `Float64` (`float(n)`) or wrap it in
-# a `Ref`. `test/form/simplifier.jl` pins the `Union` so a future change to this trade-off has
-# to be made on purpose.
+# `c * A` for a freshly computed coefficient, collapsing `0 * A` and `1 * A`. Only for an
+# `Integer` `c` (gpena/Bramble.jl#240): the collapse reads the value, so it is type-stable
+# only when `c` is a compile-time constant. A runtime `Float64` would make `form` a `Union`
+# (and Enzyme rejects that). A runtime `Int` does the same, deliberately: pass `float(n)` or
+# a `Ref`. `test/form/simplifier.jl` pins that `Union`.
 @inline function _wrap_scale(c::Integer, A::LazyOp)
     iszero(c) && return _zero_of(A)
     isone(c) && return A
@@ -178,10 +152,10 @@ end
 # different *node type* depending on the answer, so an answer the compiler cannot fold makes
 # `form`'s return type a `Union` of the rewritten and unrewritten trees -- the same defect
 # gpena/Bramble.jl#240 fixed for coefficient *values*, one level down, in the subtrees those
-# coefficients scale. It bit every sum of two same-shaped terms carrying runtime data, not
-# only the duplicate expressions it was once thought to: `innerₕ(g₁ * u, v) + innerₕ(g₂ * u, v)`
-# for distinct grid functions `g₁`, `g₂` inferred as `Union{OperatorAdd, OperatorScale}`, and
-# `IllegalTypeAnalysisException` is what Enzyme makes of that.
+# coefficients scale. It bites every sum of two same-shaped terms carrying runtime data:
+# `innerₕ(g₁ * u, v) + innerₕ(g₂ * u, v)` for distinct grid functions `g₁`, `g₂` inferred
+# as `Union{OperatorAdd, OperatorScale}`, and `IllegalTypeAnalysisException` is what Enzyme
+# makes of that.
 #
 # `issingletontype` is exactly the property needed: a type with no non-singleton fields has
 # one value, so any two of its instances are `===` and `_ast_equal` is constant-`true` after
@@ -353,24 +327,10 @@ function simplify_ast(op::OperatorAdd)
     cr, ar = _scale_parts(right)
 
     if _statically_equal(al, ar) && _ast_equal(al, ar)
-        # Combine like terms: `c1 * A + c2 * A -> (c1 + c2) * A`. `_ast_equal` stays the
-        # definition of "the same subtree"; `_statically_equal` in front of it is the gate on
-        # whether that question may be *asked* at all. This branch and the fall-through below
-        # return different node types, so the decision has to be one inference can fold
-        # (gpena/Bramble.jl#240 -- see `_statically_equal`'s own comment for the `Union` this
-        # otherwise produces). Past a `true` gate the type is a singleton and `_ast_equal`
-        # folds to `true` as well, so the pair costs one constant, not two comparisons.
-        #
-        # Routing-safe because a singleton type has no runtime `component_idx` for the two
-        # sides to disagree on -- `IndexedTrialFunction`/`IndexedTestFunction` carry theirs as
-        # a field, so they are never singletons and never reach here.
-        #
-        # Only when both coefficients are static numbers -- summing across a `RefValue`
-        # would freeze a value meant to keep changing. With a `RefValue` on either side
-        # control falls through to the `OperatorAdd` at the bottom. Not even the same `Ref`
-        # on both sides combines: `cl === cr` on two `RefValue`s of one type is object
-        # identity, a run-time value, so `form` would infer a `Union`
-        # (gpena/Bramble.jl#527). A `Rational` on either side does not combine (`_folds`).
+        # Combine like terms: `c1 * A + c2 * A -> (c1 + c2) * A`, gated on `_statically_equal`
+        # so the branch folds (see there). A singleton type has no `component_idx` to
+        # disagree on. Static, non-`Rational` coefficients only (`_folds`); a `Ref`, even the
+        # same one on both sides, falls through (gpena/Bramble.jl#527).
         _folds(cl) && _folds(cr) && return _wrap_scale(cl + cr, al)
     elseif (left isa OperatorScale || right isa OperatorScale) &&
            cl isa Integer &&
@@ -600,12 +560,10 @@ end
 
 # --- Stencil shifts: simplified inside, never folded --------------------------------- #
 
-# A shift is kept as built. `Shift₀(u)` used to be elided and two nested shifts in one sense
-# merged into their sum, but the amount is a field, not a type parameter: both rewrites chose
-# the node type from a runtime value, and `form` inferred a `Union` (gpena/Bramble.jl#530).
-# Keeping them costs nothing in value. A zero shift reads the point itself; shifts in one
-# sense leave the grid where their sum does. Opposite senses were never merged, since a shift
-# reads 0 off the grid and `S₊ₓ(S₋ₓ(u))` is 0 at the last point (gpena/Bramble.jl#352).
+# A shift is kept as built, `Shift₀(u)` and nested shifts included: the amount is a field, so
+# folding would choose the node type from a runtime value and `form` would infer a `Union`
+# (gpena/Bramble.jl#530). Opposite senses never cancel: a shift reads 0 off the grid, so
+# `S₊ₓ(S₋ₓ(u))` is 0 at the last point (gpena/Bramble.jl#352).
 function simplify_ast(op::ShiftNode{D, Dim}) where {D, Dim}
     inner = simplify_ast(op.inner_op)
     return if inner === op.inner_op

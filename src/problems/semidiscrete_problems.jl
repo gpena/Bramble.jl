@@ -68,7 +68,7 @@ function _ode_function(::Any; kwargs...)
 end
 
 """
-    ode_problem(sd::Semidiscretization, u₀, I::CartesianProduct{1}; kwargs...) -> ODEProblem
+    ode_problem(sd::Semidiscretization, u₀, I; kwargs...) -> ODEProblem
     ode_problem(a::BilinearForm, l::LinearForm, u₀, I; kwargs...) -> ODEProblem
 
 Build the `ODEProblem` stepping `sd` over the time domain `I`, from the initial condition
