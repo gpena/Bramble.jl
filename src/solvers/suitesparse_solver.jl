@@ -14,7 +14,7 @@ via `\\`, and non-allocating numeric refactoring via `suitesparse_refactor!`.
 abstract type SuiteSparseFactorization{T} <: Factorization{T} end
 
 """
-    suitesparse_factorize(A::AbstractMatrix; sym = :auto, kwargs...) -> SuiteSparseFactorization
+    suitesparse_factorize(A::SparseMatrixCSC; sym = :auto, kwargs...) -> SuiteSparseFactorization
     suitesparse_factorize(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
                           sym = :auto, kwargs...) -> SuiteSparseFactorization
 
@@ -134,7 +134,7 @@ end
 # these need no `using SuiteSparse` and no extension.
 
 """
-    suitesparse_qr_factorize(A::AbstractMatrix; tol = ..., ordering = ..., kwargs...) -> QRSparse
+    suitesparse_qr_factorize(A::SparseMatrixCSC; tol = ..., ordering = ..., kwargs...) -> QRSparse
     suitesparse_qr_factorize(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
                              kwargs...) -> QRSparse
 

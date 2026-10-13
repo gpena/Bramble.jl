@@ -44,14 +44,18 @@ Accelerate's native `libSparse` on macOS.
   large. A singular `A` with a zero pivot throws, whatever the right-hand side. A nearly
   singular one may return a large solution without an error, and so may a singular one
   whose zero pivot rounds to about `eps`, as a pure-Neumann Laplacian's does.
-- `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`) selects Hermitian positive definite Cholesky.
+- `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`) selects Hermitian positive
+  definite Cholesky.
 - `sym = :symmetric` or `2` (or `kind = :ldlt`) selects Hermitian indefinite ``LDL^T``.
   These two take a Hermitian `A` only: any other `A`, real or complex, throws an
   `ArgumentError`.
-- `sym = :unsymmetric` or `0` (or `kind = :lu` / `:lutpp`) selects general unsymmetric LU with threshold partial pivoting.
+- `sym = :unsymmetric` or `0` (or `kind = :lu` / `:lutpp`) selects general unsymmetric LU
+  with threshold partial pivoting.
 - `kind = :qr` selects sparse QR factorization.
 
-Any keyword other than `sym` and `kind` throws a `MethodError`.
+On a matrix, any keyword other than `sym` and `kind` throws a `MethodError`. The form method
+also takes `dirichlet` and `dirichlet_components`, and refuses `symmetrize` with an
+`ArgumentError`.
 
 A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first, so a
 dense-backed form uses `libSparse`; `accelerate_factorize(::Matrix)` itself stays dense

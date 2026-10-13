@@ -36,10 +36,13 @@ A failed factorisation (`INFOG(1) < 0`) throws for every `sym`: a `SingularExcep
 zero pivot (`INFOG(1) = -10`), an error otherwise.
 
 # Control parameters
-- `icntl`: Optional dictionary or collection of pairs of integer control parameters (e.g., `7 => 1` for user/METIS ordering, `14 => 30` for memory relaxation).
-- `cntl`: Optional dictionary or collection of pairs of real control parameters (e.g., `1 => 0.01` for numerical pivoting threshold).
+- `icntl`: Optional dictionary or collection of pairs of integer control parameters (e.g.,
+  `7 => 1` for user/METIS ordering, `14 => 30` for memory relaxation).
+- `cntl`: Optional dictionary or collection of pairs of real control parameters (e.g.,
+  `1 => 0.01` for numerical pivoting threshold).
 
-Any other keyword throws a `MethodError`.
+On a matrix, any other keyword throws a `MethodError`. The form method also takes `dirichlet`
+and `dirichlet_components`, and refuses `symmetrize` with an `ArgumentError`.
 
 A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
 

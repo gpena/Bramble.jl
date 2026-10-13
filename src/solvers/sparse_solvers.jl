@@ -111,25 +111,11 @@ function sparse_factorize(
     return sparse_factorize(A; solver = solver, sym = sym, kwargs...)
 end
 
-# `SparseMatricesCSR.jl` is a weakdep (Project.toml's `[weakdeps]`/`[extensions]` entry
-# `BrambleSparseMatricesCSRExt = "SparseMatricesCSR"`), so `SparseMatrixCSR` cannot be named
-# as a compile-time type anywhere in `src/` -- Bramble itself never depends on the package
-# that defines it. `pde_solve.jl`'s own `:default` route already reaches an optional backend
-# the same way (`Base.get_extension(Bramble, :BrambleAppleAccelerateExt)`), so the two helpers
-# below follow that pattern: ask whether the CSR extension is loaded, and if so, whether `A`
-# is an instance of the type *that extension itself* bound when it did
-# `using SparseMatricesCSR: SparseMatricesCSR, SparseMatrixCSR, sparsecsr`
-# (`ext/BrambleSparseMatricesCSRExt.jl`) -- `ext.SparseMatrixCSR` is that same binding,
-# reachable by reflection without Bramble ever importing it.
-#
-# No native CSR solve path exists anywhere in the dependency stack -- neither
-# `SparseMatricesCSR.jl` nor SuiteSparse/MUMPS/Sparspak/Accelerate define an `ldiv!`,
-# `factorize`, or `\` that takes a `SparseMatrixCSR` (see `docs/src/internals/csr_solvers.md`).
-# The only implementation here is therefore an O(nnz) conversion to `SparseMatrixCSC` -- the
-# same row-major -> column-major triplet re-layout `benchmark/backends.jl`'s `_to_csc` already
-# performs, rather than an O(n²) `Matrix(A)` -- followed by an ordinary CSC solve, so every
-# keyword and every backend choice `sparse_factorize`/`pde_solve` already support for
-# `SparseMatrixCSC` works for `SparseMatrixCSR` for free.
+# `SparseMatricesCSR` is a weakdep, so `SparseMatrixCSR` cannot be named in `src/`: `_is_csr`
+# asks whether `BrambleSparseMatricesCSRExt` is loaded and whether `A` is an instance of the type
+# that extension bound. No backend solves a CSR matrix natively
+# (`docs/src/internals/csr_solvers.md`), so a CSR `A` is converted to CSC in O(nnz) and the CSC
+# methods take it from there.
 _csr_extension() = Base.get_extension(Bramble, :BrambleSparseMatricesCSRExt)
 
 function _is_csr(A)
@@ -168,16 +154,9 @@ function _throw_unsupported_matrix(name::String, A)
     throw(ArgumentError("$name takes a SparseMatrixCSC; got a $(typeof(A))."))
 end
 
-# `assemble(a::BilinearForm)` is generic over the backend's matrix type (gpena/Bramble.jl#12)
-# and a dense-backed form assembles into a `Matrix`, not a `SparseMatrixCSC` -- so the call
-# above genuinely can reach here. `sparse_factorize` only ever supported `SparseMatrixCSC`
-# (test/form/sparse_solvers.jl, "Type safety: sparse_factorize only accepts SparseMatrixCSC",
-# `@test_throws MethodError`), and this states that as an actual method instead of leaving it
-# an inference-only gap, raising the same exception a plain dispatch failure would, just reachable
-# from an analysis that has to consider every backend a `BilinearForm` could name. A
-# `SparseMatrixCSR` is the one exception, converted via `_csr_to_csc` and delegated back into
-# this same dispatcher, so it still ends up at exactly one of the `SparseMatrixCSC` branches
-# above.
+# Only a `SparseMatrixCSC` is supported (test/solvers/sparse_solvers.jl keeps the `MethodError`).
+# This method states that, and converts a CSR matrix and delegates back, so every
+# `AbstractMatrix` argument ends at a `SparseMatrixCSC` method or a `MethodError`.
 function sparse_factorize(A::AbstractMatrix; kwargs...)
     _is_csr(A) && return sparse_factorize(_csr_to_csc(A); kwargs...)
     throw(MethodError(sparse_factorize, (A,)))
