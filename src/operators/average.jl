@@ -23,35 +23,11 @@
 # `zero(cur)` rather than a literal keeps the element type of the grid.
 @inline @propagate_inbounds _compute_average(::GridDirection, ::Val{true}, cur) = zero(cur)
 
-# The traversal is shared with the difference engine; see _stencil_ranges in
-# operators/stencil.jl.
-function _average_engine!(
-        out, in_ref, dims::NTuple{D, Int}, dir::GridDirection, ::Val{DIM}
-) where {D, DIM}
-    li = LinearIndices(dims)
-    step = _stencil_step(Val(DIM), Val(D))
-    interior, boundary = _stencil_ranges(axes(li), Val(DIM), dir)
-
-    @inbounds @simd for I in CartesianIndices(interior)
-        idx = li[I]
-        out[idx] = _compute_average(
-            dir, Val(false), in_ref[idx], in_ref[li[_neighbour(dir, I, step)]]
-        )
-    end
-
-    @inbounds @simd for I in CartesianIndices(boundary)
-        idx = li[I]
-        out[idx] = _compute_average(dir, Val(true), in_ref[idx])
-    end
-
-    return nothing
-end
-
 #------------------------------------------------------------------------------------------#
 # Device kernel launch stub (gpena/Bramble.jl#94, #174)
 #
 # `_apply_averaged!` reaches this once `execution_policy` names a `GpuPolicy`, instead of
-# `_average_engine!`'s scalar-indexing CPU sweep above. `ext/BrambleKernelAbstractionsExt.jl`
+# `_average_band!`'s scalar-indexing CPU sweep below. `ext/BrambleKernelAbstractionsExt.jl`
 # fills it in with a `KernelAbstractions.@kernel` that calls the very `_compute_average`
 # methods above, once per grid point -- see `operators/difference.jl`'s matching stub for
 # why that keeps the device and host answers identical by construction. Without the
@@ -74,8 +50,8 @@ end
 Fills `out` with the two-point average (`_compute_average`) of `in_ref` along the axis
 `dim_val`, in direction `dir` (`Forward`/`Backward`), truncating the one boundary slice with
 no neighbour to zero, via a `KernelAbstractions.@kernel` launch on `dev`, filled by
-`ext/BrambleKernelAbstractionsExt.jl`. The device counterpart of `_average_engine!`'s CPU
-sweep above.
+`ext/BrambleKernelAbstractionsExt.jl`. The device counterpart of `_average_band!`'s CPU
+sweep below.
 
 # Throws
 - `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
@@ -83,21 +59,26 @@ sweep above.
 """
 _launch_average_engine!(out, in_ref, dims, dir, dim_val, dev) = _throw_no_ka_average_kernel("_launch_average_engine!")
 
+# The checks both scalar `_apply_averaged!` methods make before their engine call.
+@inline function _check_averaged(vₕ, uₕ, ::Val{DIM}) where {DIM}
+    _check_no_alias(vₕ, uₕ)
+    _check_same_grid(vₕ, uₕ)
+    # The direction check matters because a `Val` past the mesh dimension would otherwise
+    # make `_stencil_ranges` treat every point as both interior and boundary and return all
+    # zeros.
+    _check_stencil_dim(DIM, length(_grid_dims(uₕ)))
+    return nothing
+end
+
 # Shared by every averaging direction (gpena/Bramble.jl#44): the alias check and the engine
 # call, once, rather than once per direction and again inside each one's composite closure.
 @inline function _apply_averaged!(
         vₕ::VectorElement{<:ScalarGridSpace},
         uₕ::VectorElement{<:ScalarGridSpace},
         dir::GridDirection,
-        dim_val::Val{DIM}
-) where {DIM}
-    _check_no_alias(vₕ, uₕ)
-    _check_same_grid(vₕ, uₕ)
-    # The direction check matters because a `Val` past the mesh dimension would otherwise
-    # make `_stencil_ranges` treat every point as both interior and boundary and return all
-    # zeros.
-    D = length(_grid_dims(uₕ))
-    _check_stencil_dim(DIM, D)
+        dim_val::Val
+)
+    _check_averaged(vₕ, uₕ, dim_val)
     sp = space(uₕ)
     if execution_policy(sp) isa GpuPolicy
         dev = ka_device(backend(sp))
@@ -133,6 +114,9 @@ end
 # `_compute_average`.
 @inline @propagate_inbounds _compute_average(::Centered, ::Val{false}, back, cur, fwd) = (back + 2 * cur + fwd) / 4
 
+# Folding this into `_centered_average_band!(…, 1, 1)` measured about 9% slower serial
+# `Mcₓ!` on a 2D 513² non-uniform grid (median 111.5 vs 102.0 µs, gpena/Bramble.jl#734),
+# so it keeps its own loop.
 function _centered_average_engine!(out, in_ref, dims::NTuple{D, Int}, ::Val{DIM}) where {D, DIM}
     li = LinearIndices(dims)
     step = _stencil_step(Val(DIM), Val(D))
@@ -159,7 +143,8 @@ end
 # Policy-dispatched CPU average engines (gpena/Bramble.jl#356)
 #
 # The same split `_difference_engine!`'s policy methods make (operators/difference.jl):
-# `CpuSerial` runs the engines above unchanged, `CpuThreaded` runs one band of the grid's
+# `CpuSerial` runs the whole grid (the forward/backward average as the single band `1, 1`,
+# the centered one through its own engine above), `CpuThreaded` runs one band of the grid's
 # last axis per thread, and `CpuPolyester` reaches the `_batch_…` hooks
 # `BramblePolyesterExt` fills.
 #------------------------------------------------------------------------------------------#
@@ -167,8 +152,11 @@ end
 """
     _average_band!(out, in_ref, dims::NTuple{D, Int}, dir::GridDirection, dim_val::Val, nbands::Int, b::Int) -> Nothing
 
-Runs `_average_engine!`'s loops for `dir` on the `b`-th of `nbands` slabs of the grid cut
-along its last axis, as [`_difference_band!`](@ref) does for the difference.
+Fills the `b`-th of `nbands` slabs of the grid cut along its last axis with the two-point
+average of `in_ref` along `dim_val` in direction `dir`, zero on the one boundary slice with no
+neighbour, as [`_difference_band!`](@ref) does for the difference; `1, 1` is the whole grid,
+the serial `_average_engine!`. The traversal is shared with the difference engine; see
+`_stencil_ranges` in operators/stencil.jl.
 """
 @inline function _average_band!(
         out, in_ref, dims::NTuple{D, Int}, dir::GridDirection, ::Val{DIM}, nbands::Int, b::Int
@@ -273,6 +261,11 @@ end
     return _throw_cpubatch_without_polyester(:_batch_centered_average_engine!)
 end
 
+# The serial forward/backward engine: the band engine above over the single band `1, 1`,
+# the whole grid.
+@inline _average_engine!(out, in_ref, dims, dir, dim_val) = _average_band!(
+    out, in_ref, dims, dir, dim_val, 1, 1)
+
 @inline _average_engine!(::CpuSerial, out, in_ref, dims, dir, dim_val) = _average_engine!(
     out, in_ref, dims, dir, dim_val)
 @inline _average_engine!(::CpuThreaded, out, in_ref, dims, dir, dim_val) = _threaded_average_engine!(
@@ -298,15 +291,9 @@ end
         vₕ::VectorElement{<:ScalarGridSpace},
         uₕ::VectorElement{<:ScalarGridSpace},
         ::Centered,
-        dim_val::Val{DIM}
-) where {DIM}
-    _check_no_alias(vₕ, uₕ)
-    _check_same_grid(vₕ, uₕ)
-    # The direction check matters because a `Val` past the mesh dimension would otherwise
-    # make `_stencil_ranges` treat every point as both interior and boundary and return all
-    # zeros.
-    D = length(_grid_dims(uₕ))
-    _check_stencil_dim(DIM, D)
+        dim_val::Val
+)
+    _check_averaged(vₕ, uₕ, dim_val)
     sp = space(uₕ)
     (execution_policy(sp) isa GpuPolicy || locality(typeof(vₕ.data)) isa DeviceLocality ||
      locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_centered_average()
