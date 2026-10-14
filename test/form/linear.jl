@@ -7,6 +7,7 @@ using Bramble: execution_policy
 import Bramble: M₊ᵧ
 using ForwardDiff
 using LinearAlgebra: Diagonal, diag, dot, I
+using SparseArrays: nnz
 using Bramble:
                LinearForm,
                form,
@@ -35,6 +36,7 @@ using Bramble:
                D̽ᵧ,
                D̽₂,
                D₊ₓ,
+               D₊ᵧ,
                Dcₓ,
                Mcₓ,
                S₊ₓ,
@@ -1410,8 +1412,10 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             g = element(W)
             g .= 1.0 .+ (1:length(g)) ./ 7
             # `wrap(x) == c * unit(x)`: the scaled form must be `c` times the unit one.
-            for D in Ds, (label, c, wrap, unit) in (("2.0", 2.0, x -> 2.0 * x, identity),
-                ("-1", -1, x -> -x, identity), ("2.0 * g", 2.0, x -> 2.0 * (g * x), x -> g * x))
+            for D in Ds,
+                (label, c, wrap, unit) in (("2.0", 2.0, x -> 2.0 * x, identity),
+                    ("-1", -1, x -> -x, identity), ("2.0 * g", 2.0, x -> 2.0 * (g * x), x -> g * x))
+
                 @testset "$(length(np))D $D($label R)" begin
                     a = form(W, W, (u, v) -> innerₕ(u, D(wrap(R(:l, v)))))
                     A = assemble(a)
@@ -1439,6 +1443,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         sources = (source_function(x -> x + 1, Val(1)),
             source_function(x -> 1 / (x * (1 - x)), Val(1)))
         for op in (D₊ₓ, D₋ₓ, D̽ₓ, Dcₓ, Mcₓ, jumpₓ, S₊ₓ), sf in sources
+
             rhs(u) = assemble(form(Ws, v -> innerₕ(op(2.0 * (u * R(:interior, sf))), v)))
             @test isequal(rhs(u_end), rhs(u_fin))
             # the vector the walk gave before the shift followed the chain (2afe89a4)
@@ -1464,6 +1469,66 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             lf = form(W, v -> innerₕ(1.0, nested(v)))
             y = assemble(lf)
             @test y ≈ 6 * assemble(form(W, v -> innerₕ(1.0, S₊ₓ(R(:c, R(:d, v))))))
+            @test bytes(y, lf) == 0
+        end
+    end
+
+    @testset "Nested difference of restriction" begin
+        # A tap over a difference of a restriction re-evaluated it at the neighbour, `()` or
+        # a full tuple by marker, and three taps boxed: `D̽ₓ(D̽ᵧ(R(:l, v)))` 83232 B a refill
+        # on this grid, `D̽ₓ(D₊ᵧ(R))` 49248 B. The oracle is the restriction as a mask
+        # coefficient, which walks no restriction; the stored entries are pinned, since a
+        # tap padded with zeros in place stored more (131 -> 176 for `D₋ₓ(D₊ᵧ(R))`).
+        R = restrict_to
+        bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
+        I1 = interval(0.0, 1.0)
+        Ωg = mesh(domain(I1 × I1, :l => :left, :r => :right, :b => :bottom), (7, 9),
+            (false, false))
+        Bramble.change_points!(Ωg,
+            (range(0.0, 1.0; length = 7) .^ 1.25, range(0.0, 1.0; length = 9) .^ 1.5))
+        W = gridspace(Ωg)
+        g = element(W)
+        g .= 1.0 .+ (1:length(g)) ./ 7
+        ml = Rₕ(W, x -> x[1] == 0 ? 1.0 : 0.0)
+        mb = Rₕ(W, x -> x[2] == 0 ? 1.0 : 0.0)
+        wraps = (("l", X -> R(:l, X), X -> ml * X),
+            ("2b", X -> 2.0 * R(:b, X), X -> 2.0 * (mb * X)))
+        # Stored entries (test side, trial side, both sides), as many as at 6eeabebe.
+        nests = (("D̽ₓD̽ᵧ", X -> D̽ₓ(D̽ᵧ(X)), (322, 322, 747), (323, 323, 725)),
+            ("D̽ₓD₊ᵧ", X -> D̽ₓ(D₊ᵧ(X)), (170, 170, 281), (171, 171, 319)),
+            ("D₋ₓD₊ᵧD₋ₓ", X -> D₋ₓ(D₊ᵧ(D₋ₓ(X))), (204, 204, 400), (194, 194, 425)),
+            ("McₓD̽ᵧ", X -> Mcₓ(D̽ᵧ(X)), (322, 322, 747), (323, 323, 725)),
+            ("D₊ₓD₋ₓ", X -> D₊ₓ(D₋ₓ(X)), (117, 117, 171), (123, 123, 181)))
+        for (n, N, nl, nc) in nests, ((w, wrap, masked), pins) in zip(wraps, (nl, nc))
+
+            @testset "$n($w)" begin
+                sides = ((u, v) -> innerₕ(u, N(wrap(v))), (u, v) -> innerₕ(N(wrap(u)), v),
+                    (u, v) -> innerₕ(N(wrap(u)), N(wrap(v))))
+                masks = ((u, v) -> innerₕ(u, N(masked(v))), (u, v) -> innerₕ(N(masked(u)), v),
+                    (u, v) -> innerₕ(N(masked(u)), N(masked(v))))
+                for (f, fm, k) in zip(sides, masks, pins)
+                    a = form(W, W, f)
+                    A = assemble(a)
+                    @test count(!iszero, A) > 0
+                    @test A ≈ assemble(form(W, W, fm))
+                    @test nnz(A) == k
+                    @test bytes(A, a) == 0
+                end
+                lf = form(W, v -> innerₕ(g, N(wrap(v))))
+                y = assemble(lf)
+                @test y ≈ assemble(form(W, v -> innerₕ(g, N(masked(v)))))
+                @test bytes(y, lf) == 0
+            end
+        end
+
+        # A probed restriction's chain is not walked outside its region: a source under a
+        # second, disjoint restriction is never called (it throws there), and the vector is
+        # zero at 0 B (1440 B when the shifted chain read the inner region outside `:l`).
+        sf = source_function(x -> x[1] > 0.5 ? error("read outside :l") : 1.0, Val(2))
+        for op in (D̽ₓ, Mcₓ)
+            lf = form(W, v -> innerₕ(op(2.0 * R(:l, 3 * R(:r, sf))), v))
+            y = assemble(lf)
+            @test all(iszero, y)
             @test bytes(y, lf) == 0
         end
     end

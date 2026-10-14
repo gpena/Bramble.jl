@@ -273,13 +273,28 @@ end
     return (scale_stencil(s, _scale_value(op, lin_shift)), outside)
 end
 @inline function _shifted_chain(
-        op::RegionRestriction, space, I, markers, vdim, delta, lin_shift::Int
+        op::RegionRestriction{<:Any, <:Any, <:Any, Nothing}, space, I, markers, vdim, delta,
+        lin_shift::Int
 )
     out = !_in_region(op, markers, lin_shift)
     _scales_restriction(op.inner_op) || return (
         shifted_inner_stencil(op, nothing, space, I, markers, vdim, delta), out)
     s, outside = _shifted_chain(op.inner_op, space, I, markers, vdim, delta, lin_shift)
     return (s, out | outside)
+end
+# A probed restriction answers its zero stencil outside its region, as `_probed_chain` does,
+# and the chain below it is not walked there: a source restricted further down is never
+# called outside this region, and a region disjoint from this one (`D̽ₓ(2.0 *
+# restrict_to(:l, 3 * restrict_to(:r, f)))`, left unprobed by `form`) answers `()` as it
+# did before the chain was shifted, not a zeroed entry the walk boxed on (1440 B).
+@inline function _shifted_chain(
+        op::_ProbedRestriction, space, I, markers, vdim, delta, lin_shift::Int
+)
+    _in_region(op, markers, lin_shift) || return (
+        shift_stencil(op.zero_stencil, vdim, delta), true)
+    _scales_restriction(op.inner_op) || return (
+        shifted_inner_stencil(op, nothing, space, I, markers, vdim, delta), false)
+    return _shifted_chain(op.inner_op, space, I, markers, vdim, delta, lin_shift)
 end
 
 # --- AST resolution ---------------------------------------------------------------- #
