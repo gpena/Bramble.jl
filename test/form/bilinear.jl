@@ -723,17 +723,187 @@ using Bramble:
         _check_split(((u, v) -> innerₕ(u, R(:c, v + R(:l, v) + R(:r, v))),
             (u, v) -> innerₕ(u, R(:b, v))))
         _check_split(((u, v) -> innerₕ(u, R(:c, R(:l, v) + R(:r, v) + R(:b, v))),))
+        # A difference is distributed over a restricted sum the same way, every difference
+        # node alike: `D₋ₓ(R(:c, v + R(:l, v) + R(:r, v)))` allocated 70272 B and
+        # `D₋ₓ(v + R(:l, v) + R(:r, v) + R(:b, v))` 116528 B (gpena/Bramble.jl#759). The
+        # pattern is the unsplit product's, which keeps the zero weights of the restricted
+        # entries the parts drop: the seeded mesh pins it.
+        Random.seed!(20261014)
+        Wd = gridspace(mesh(Ωm, (7, 9), (false, false)))
+        for (Dop, nnz_a, nnz_b) in ((D₋ₓ, 90, 117), (Bramble.D₊ᵧ, 92, 119),
+            (Bramble.Dcₓ, 108, 108), (Bramble.D̃ₓ, 90, 117), (Bramble.D̽ᵧ, 148, 175))
+            for (whole, parts, nnz_whole) in (
+                ((u, v) -> innerₕ(u, Dop(R(:c, v + R(:l, v) + R(:r, v)))),
+                Tuple((u, v) -> innerₕ(u, Dop(R(:c, g(v))))
+                for g in (identity, v -> R(:l, v), v -> R(:r, v))), nnz_a),
+                ((u, v) -> innerₕ(u, Dop(v + R(:l, v) + R(:r, v) + R(:b, v))),
+                Tuple((u, v) -> innerₕ(u, Dop(g(v)))
+                for g in (identity, v -> R(:l, v), v -> R(:r, v), v -> R(:b, v))),
+                nnz_b))
+                a = form(Wd, Wd, whole)
+                A = assemble(a)
+                @test _loop_bytes(A, a) == 0
+                P = sum(assemble(form(Wd, Wd, p)) for p in parts)
+                @test Matrix(A) ≈ Matrix(P)
+                @test nnz(A) == nnz_whole
+            end
+        end
+        # A difference over a restricted difference has more stencil shapes than one
+        # restriction: `D₋ₓ(D₊ᵧ(R(:l, v)))` and its `:r` twin paired in one product boxed
+        # (62496 B, 78624 B under `R(:c, …)`, 25776 B for the linear form), so each such
+        # summand takes a product of its own, at any depth: three levels split in two too.
+        # Past 16 products they pair as before rather than leave the product whole (673104
+        # B paired, 3413584 B whole, seventeen summands).
+        DD = v -> D₋ₓ(Bramble.D₊ᵧ(v))
+        for (whole, parts, nnz_whole) in (
+            ((u, v) -> innerₕ(u, DD(R(:l, v) + R(:r, v))),
+            ((u, v) -> innerₕ(u, DD(R(:l, v))), (u, v) -> innerₕ(u, DD(R(:r, v)))), 131),
+            ((u, v) -> innerₕ(u, DD(R(:c, v + R(:l, v) + R(:r, v)))),
+            Tuple((u, v) -> innerₕ(u, DD(R(:c, g(v))))
+            for g in (identity, v -> R(:l, v), v -> R(:r, v))), 176),
+            ((u, v) -> innerₕ(DD(R(:l, u) + R(:r, u)), v),
+            ((u, v) -> innerₕ(DD(R(:l, u)), v), (u, v) -> innerₕ(DD(R(:r, u)), v)), 131))
+            a = form(Wd, Wd, whole)
+            A = assemble(a)
+            @test _loop_bytes(A, a) == 0
+            P = sum(assemble(form(Wd, Wd, p)) for p in parts)
+            @test Matrix(A) ≈ Matrix(P)
+            @test nnz(A) == nnz_whole
+        end
+        fd = element(Wd)
+        fd .= 1.0 .+ (1:length(fd)) ./ 11
+        l = form(Wd, v -> innerₕ(fd, DD(R(:l, v) + R(:r, v))))
+        b = assemble(l)
+        @test _loop_bytes(b, l) == 0
+        @test b ≈ assemble(form(Wd, v -> innerₕ(fd, DD(R(:l, v))))) +
+                  assemble(form(Wd, v -> innerₕ(fd, DD(R(:r, v)))))
+        _products(op::Bramble.OperatorAdd) = _products(op.left_op) + _products(op.right_op)
+        _products(op::Bramble.BilinearProduct) = 1
+        DDD = v -> Bramble.D₊ₓ(DD(v))
+        @test _products(resolve_form_ast(form(Wd, Wd,
+            (u, v) -> innerₕ(u, DDD(R(:l, v) + R(:r, v)))))) == 2
+        @test _products(resolve_form_ast(form(Wd, Wd,
+            (u, v) -> innerₕ(u, DD(foldl(+, (R(:l, v) for _ in 1:17))))))) == 9
+        # Averages and jumps are distributed and counted as differences are, in any mix:
+        # `Mₓ(D₊ᵧ(R(:l, v) + R(:r, v)))` and `D₋ₓ(M₊ᵧ(…))` refilled 38304 B, the four-summand
+        # average 244976 B, the linear form 122880 B, though each piece refilled with 0 B.
+        Mav = Bramble.Mₓ
+        for (outer, inner, nnz_c) in ((Mav, Bramble.D₊ᵧ, 176), (D₋ₓ, M₊ᵧ, 176),
+            (Bramble.jumpₓ, Bramble.D₊ᵧ, 167), (Mav, M₊ᵧ, 176))
+            W2 = v -> outer(inner(v))
+            for (whole, gs, nnz_whole) in (
+                ((u, v) -> innerₕ(u, W2(R(:l, v) + R(:r, v))),
+                (v -> R(:l, v), v -> R(:r, v)), 131),
+                ((u, v) -> innerₕ(u, W2(R(:c, v + R(:l, v) + R(:r, v)))),
+                (v -> R(:c, v), v -> R(:c, R(:l, v)), v -> R(:c, R(:r, v))), nnz_c))
+                a = form(Wd, Wd, whole)
+                A = assemble(a)
+                @test _loop_bytes(A, a) == 0
+                P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(u, W2(g(v))))) for g in gs)
+                @test Matrix(A) ≈ Matrix(P)
+                @test nnz(A) == nnz_whole
+            end
+        end
+        R4 = v -> R(:l, v) + R(:r, v) + R(:b, v) + R(:t, v)
+        a = form(Wd, Wd, (u, v) -> innerₕ(u, Mav(Bramble.D₊ᵧ(R4(v)))))
+        A = assemble(a)
+        @test _loop_bytes(A, a) == 0
+        MD = v -> Mav(Bramble.D₊ᵧ(v))
+        P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(u, MD(R(s, v)))))
+        for s in (:l, :r, :b, :t))
+        @test Matrix(A) ≈ Matrix(P)
+        l = form(Wd, v -> innerₕ(fd, MD(R(:l, v) + R(:r, v))))
+        b = assemble(l)
+        @test _loop_bytes(b, l) == 0
+        @test b ≈ sum(assemble(form(Wd, v -> innerₕ(fd, MD(R(s, v))))) for s in (:l, :r))
+        # With restricted summands on both sides an average is left whole, as before: its
+        # pieces box there whatever the split, and each adds a walk. Distributed there, or
+        # kept whole beside a split difference, the forms below refilled more than these
+        # caps, their bytes before averages were distributed (157600 B against 130512 B).
+        whole = (u, v) -> innerₕ(MD(R(:l, u) + R(:r, u)), MD(R(:b, v) + R(:t, v)))
+        @test _products(resolve_form_ast(form(Wd, Wd, whole))) == 1
+        P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(MD(R(s, u)), MD(R(t, v)))))
+        for s in (:l, :r) for t in (:b, :t))
+        @test Matrix(assemble(form(Wd, Wd, whole))) ≈ Matrix(P)
+        RL = u -> R(:l, u) + R(:r, u)
+        RB = v -> R(:b, v) + R(:t, v)
+        JD = v -> Bramble.jumpₓ(Bramble.D₊ᵧ(v))
+        for (whole, cap) in (
+            ((u, v) -> innerₕ(DD(R4(u)), DD(RB(v))), 278560),
+            ((u, v) -> innerₕ(DD(R(:c, u + RL(u))), DD(R(:c, v + RB(v)))), 382032),
+            ((u, v) -> innerₕ(MD(RL(u)), MD(RB(v)) + v), 130512),
+            ((u, v) -> innerₕ(MD(RL(u)) + u, MD(RB(v))), 129952),
+            ((u, v) -> innerₕ(MD(RL(u)) + JD(RB(u)), MD(RB(v)) + JD(RL(v))), 368176))
+            a = form(Wd, Wd, whole)
+            A = assemble(a)
+            @test _loop_bytes(A, a) <= cap
+        end
+        l = form(Wd, v -> innerₕ(fd, R(:c, MD(RL(v)))))
+        b = assemble(l)
+        @test _loop_bytes(b, l) <= 74928
+        @test b ≈ sum(assemble(form(Wd, v -> innerₕ(fd, R(:c, MD(R(s, v)))))) for s in (:l, :r))
+
+        # With restrictions on both sides, a plain summand beside a restriction of another
+        # operand (`v + R(:t, D₋ₓ(v))`, or `D₋ₓ(u)` beside `D₋ₓ(R(:l, u))`) gave stencils of
+        # four lengths and boxed: 11152, 15104, 33056 and 16480 B, and 16704 B for one piece
+        # of the third form (gpena/Bramble.jl#759). The plain summand now takes a product of
+        # its own; the pattern is the products', which keep the restricted entries' zeros.
+        # Where that group would take a product past 16 pieces, the plain summand joins a
+        # restricted one as before, not leaving the product whole: the last two forms
+        # refilled 1205744 and 88544 B whole, and must keep the bytes they had split.
+        L3 = (D₋ₓ, u -> D₋ₓ(R(:l, u)), u -> D₋ₓ(R(:t, u)))
+        R3 = (D₋ₓ, v -> D₋ₓ(R(:b, v)), v -> D₋ₓ(R(:r, v)))
+        L5 = (D₋ₓ, (u -> D₋ₓ(R(s, u)) for s in (:l, :r, :b, :t))...)
+        U5 = (identity, (u -> R(s, u) for s in (:l, :r, :b, :t))...)
+        V5 = (identity, (v -> R(s, D₋ₓ(v)) for s in (:l, :r, :b, :t))...)
+        for (lhs, rhs, nnz_whole, max_bytes) in (
+            ((identity, u -> R(:l, u)), (identity, v -> R(:t, D₋ₓ(v))), 69, 0),
+            ((D₋ₓ, u -> R(:l, D₋ₓ(u))), (identity, v -> R(:t, D₋ₓ(v))), 123, 0),
+            (L3, R3, 171, 0),
+            ((identity, D₋ₓ, u -> R(:l, u)), (identity, v -> R(:t, v)), 117, 0),
+            ((D₋ₓ, u -> D₋ₓ(R(:l, u))), (v -> D₋ₓ(R(:r, v)),), 126, 0),
+            (L5, L5[1:4], 171, 82848),
+            (U5, V5, 82, 11952))
+            a = form(Wd, Wd, (u, v) -> innerₕ(sum(f(u) for f in lhs), sum(g(v) for g in rhs)))
+            A = assemble(a)
+            @test _loop_bytes(A, a) <= max_bytes
+            P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(f(u), g(v))))
+            for f in lhs for g in rhs)
+            @test Matrix(A) ≈ Matrix(P)
+            @test nnz(A) == nnz_whole
+        end
         _check_split(((u, v) -> innerₕ(u, 2.0 * R(:l, v)), (u, v) -> innerₕ(u, 3 * R(:r, v))))
         _check_split((
             (u, v) -> innerₕ(u, v), (u, v) -> innerₕ(u, 2.0 * R(:l, v)),
             (u, v) -> innerₕ(u, 3 * R(:r, v)), (u, v) -> innerₕ(u, (1 // 2) * R(:b, v))))
-        # A complex scale on a Float64 mesh is not promoted to, so this form is left as
-        # built and still allocates; it must still agree with its parts.
-        _check_split(
-            (
-                (u, v) -> innerₕ(u, (1.0 + 2.0im) * R(:l, v)), (u, v) -> innerₕ(u, 3 * R(:r, v)),
-                (u, v) -> innerₕ(u, 2.0 * R(:b, v)));
-            bytes = nothing)
+        # A negated or scaled restriction under a difference beside other summands boxed at
+        # every refill though each piece refilled with 0 B (gpena/Bramble.jl#759): 52608 B
+        # for the negated D₋ₓ sum, 49248 B for each D̽ᵧ form; 0 B since 1ed87350, which
+        # shifts a constant scale over a restriction by the restriction's rule. The pattern
+        # keeps the unsplit product's zero weights, so it is bounded, not equal.
+        for (whole, parts, nnz_max) in (
+            ((u, v) -> innerₕ(u, D₋ₓ(-R(:l, v) + R(:r, v) - R(:b, v) + v)),
+            ((u, v) -> innerₕ(u, D₋ₓ(-R(:l, v))), (u, v) -> innerₕ(u, D₋ₓ(R(:r, v))),
+                (u, v) -> innerₕ(u, D₋ₓ(-R(:b, v))), (u, v) -> innerₕ(u, D₋ₓ(v))), 117),
+            ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(v - R(:l, v))),
+            ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(v)),
+                (u, v) -> innerₕ(u, Bramble.D̽ᵧ(-R(:l, v)))), 175),
+            ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(2.0 * R(:l, v) + v)),
+            ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(2.0 * R(:l, v))),
+                (u, v) -> innerₕ(u, Bramble.D̽ᵧ(v))), 175))
+            a = form(Wd, Wd, whole)
+            A = assemble(a)
+            @test _loop_bytes(A, a) == 0
+            P = sum(assemble(form(Wd, Wd, p)) for p in parts)
+            @test Matrix(A) ≈ Matrix(P)
+            @test nnz(A) <= nnz_max
+        end
+        # A complex scale on a Float64 mesh widens the others to ComplexF64, as scales are
+        # never narrowed: the form refills with 0 B (15680 B when left mixed), its values
+        # those of the mixed form bit for bit, and it agrees with its parts.
+        _check_split((
+            (u, v) -> innerₕ(u, (1.0 + 2.0im) * R(:l, v)), (u, v) -> innerₕ(u, 3 * R(:r, v)),
+            (u, v) -> innerₕ(u, 2.0 * R(:b, v))))
         # A `Ref` scale is left in place, so the matrix still follows it.
         k = Ref(2.0)
         a = form(W, W, (u, v) -> innerₕ(u, k * R(:l, v)) + innerₕ(u, 3 * R(:r, v)))
@@ -754,37 +924,175 @@ using Bramble:
                   Any[typeof(ast)]
         end
 
-        # A form holding no restriction comes back as `simplify_ast` built it, mixed scale
-        # types and all: converting them would change its values (a Float32 mesh, an Int
-        # beyond 2^53, a BigFloat coefficient).
-        f = (u, v) -> innerₕ(u, 0.1 * v + 3 * D₋ₓ(v) + (1 // 3) * D₋ᵧ(v))
-        ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
-            resolve_ast(f(Bramble.trial_function(W), Bramble.test_function(W))), W, W))
-        @test Bramble._split_restricted_products(ast, Float64) === ast
+        # A form holding no restriction comes back as `simplify_ast` built it when its
+        # scales agree in type. When they differ they are only ever widened, to the type of
+        # their products with a weight of the mesh's (`π` beside an Int on a Float32 mesh
+        # stays Float32, a Float64 literal stays Float64, an Int past 2^53 converts as
+        # `Int * Float64` does): each form keeps the unsplit one's element type and values,
+        # and refills with 0 B (9072 B on the Float32 mesh when left mixed).
+        _built(S, f) = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+            resolve_ast(f(Bramble.trial_function(S), Bramble.test_function(S))), S, S))
+        _scale_types(op::Bramble.OperatorAdd) = (
+            _scale_types(op.left_op)..., _scale_types(op.right_op)...)
+        _scale_types(op::Bramble.OperatorScale) = (typeof(op.scalar),)
+        _scale_types(op) = ()
+        Ω32u = domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0))
+        W32u = gridspace(mesh(Ω32u, (7, 9), (false, false); backend = backend(Float32)))
+        for (S, f) in ((W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))),
+            (W, (u, v) -> innerₕ(u, 2.0 * v + 3.0 * D₋ₓ(v))),
+            (W32u, (u, v) -> innerₕ(u, 2 * v + 3 * D₋ₓ(v))),
+            (W32u, (u, v) -> innerₕ(u, 0.1 * v + 0.3 * D₋ₓ(v))))
+            ast = _built(S, f)
+            @test Bramble._split_restricted_products(ast, eltype(S)) === ast
+        end
+        for (S, f, T, exact) in (
+            (W, (u, v) -> innerₕ(u, 0.1 * v + 3 * D₋ₓ(v) + (1 // 3) * D₋ᵧ(v)), Float64,
+            true),
+            (W, (u, v) -> innerₕ(u, (2^53 + 1) * v + 0.5 * D₋ₓ(v)), Float64, true),
+            (W32u, (u, v) -> innerₕ(u, 0.1 * v + 3 * D₋ₓ(v)), Float64, false),
+            (W32u, (u, v) -> innerₕ(0.1 * u + 3 * D₋ₓ(u), v), Float64, false),
+            (W32u, (u, v) -> innerₕ(u, π * v + 3 * D₋ₓ(v)), Float32, false))
+            ast = _built(S, f)
+            split = Bramble._split_restricted_products(ast, eltype(S))
+            for (side, op) in ((ast.left_op, split.left_op), (ast.right_op, split.right_op))
+                side isa Bramble.OperatorAdd || continue
+                @test all(==(T), _scale_types(op))
+                @test all(t -> promote_type(t, T) === T, _scale_types(side))
+            end
+            a = form(S, S, f)
+            A = assemble(a)
+            U = assemble(Bramble.BilinearForm{2, typeof(S), typeof(S), typeof(ast)}(
+                S, S, ast, Bramble._AssemblyCache{2}(ast)))
+            @test eltype(A) === eltype(U) === T
+            @test _loop_bytes(A, a) == 0
+            @test exact ? Matrix(A) == Matrix(U) :
+                  isapprox(Matrix(A), Matrix(U); rtol = 1e-6)
+        end
+        # Scales joining to a type that is not bits are left mixed: every product with a
+        # BigFloat allocates, and converting the Int or Float64 to one took the refill from
+        # 56688 and 63744 B to 106368 B.
+        for (f, cap) in (((u, v) -> innerₕ(u, big(0.1) * v + 3 * D₋ₓ(v)), 56688),
+            ((u, v) -> innerₕ(u, big(3) * v + 0.5 * D₋ₓ(v)), 63744))
+            ast = _built(W, f)
+            @test Bramble._split_restricted_products(ast, Float64) === ast
+            a = form(W, W, f)
+            A = assemble(a)
+            @test eltype(A) === BigFloat
+            @test _loop_bytes(A, a) <= cap
+        end
 
-        # A scale over a restricted sum is not distributed over it: distributed, a grid
-        # function scale took `form` 12.8 s to compile here, and over four summands LLVM
-        # never finished.
+        # A grid function scale over a restricted sum is distributed over its summands as
+        # the product splits. Left whole, `g * (R(:l, u) + R(:r, u))` was one summand of two
+        # bits, and one on each side boxed (11872 B; 19024 B for four summands on the test
+        # side alone). Distributed over the split products' nested sums instead, `form`
+        # took 12.8 s to compile the first form below, and over four summands LLVM never
+        # finished.
         g = element(W)
         g .= 1.0 .+ (1:length(g)) ./ 7
         t = @elapsed form(W, W, (u, v) -> innerₕ(u, g * (R(:l, v) + R(:r, v)) + R(:b, v)))
         @test t < 2.0
+        t = @elapsed form(W, W,
+            (u, v) -> innerₕ(u, g * (R(:l, v) + R(:r, v) + R(:b, v) + R(:t, v))))
+        @test t < 2.0
+        function _check_scaled(whole, lhs, rhs; nnz_equal = true)
+            a = form(W, W, whole)
+            A = assemble(a)
+            @test _loop_bytes(A, a) == 0
+            P = sum(assemble(form(W, W, (u, v) -> innerₕ(f(u), h(v))))
+            for f in lhs for h in rhs)
+            @test Matrix(A) ≈ Matrix(P)
+            nnz_equal && @test nnz(A) == nnz(P)
+            return A, P
+        end
+        gR(s) = u -> g * R(s, u)
+        _check_scaled(
+            (u, v) -> innerₕ(g * (R(:l, u) + R(:r, u)), g * (R(:b, v) + R(:t, v))),
+            (gR(:l), gR(:r)), (gR(:b), gR(:t)))
+        _check_scaled((u, v) -> innerₕ(u, g * (R(:l, v) + R(:r, v) + R(:b, v) + R(:t, v))),
+            (identity,), Tuple(gR(s) for s in (:l, :r, :b, :t)))
+        # A plain summand beside the restrictions stays where `_joins_restriction` puts it:
+        # left whole, these two boxed 55232 and 158432 B.
+        RD(s) = u -> R(s, D₋ₓ(u))
+        gRD(s) = u -> g * R(s, D₋ₓ(u))
+        _check_scaled(
+            (u, v) -> innerₕ(u + R(:l, D₋ₓ(u)), g * (v + R(:t, D₋ₓ(v)) + R(:b, v))),
+            (identity, RD(:l)), (v -> g * v, gRD(:t), gR(:b)); nnz_equal = false)
+        _check_scaled(
+            (u, v) -> innerₕ(u + R(:l, D₋ₓ(u)) + R(:r, D₋ₓ(u)) + R(:b, D₋ₓ(u)) +
+                             R(:t, D₋ₓ(u)),
+                g * (v + R(:l, D₋ₓ(v)) + R(:r, D₋ₓ(v)) + R(:b, D₋ₓ(v)))),
+            (identity, (RD(s) for s in (:l, :r, :b, :t))...),
+            (v -> g * v, (gRD(s) for s in (:l, :r, :b))...); nnz_equal = false)
+        # With such a sum too long to split on both sides, each plain summand keeps a
+        # product of its own, as before the scale was distributed: joined to the sum, the
+        # first form refilled 135520 B against 71792 B on a grid with one more marker.
+        gd = element(Wd)
+        parent(gd) .= parent(g)
+        for (lhs, rhs, max_bytes) in (
+            ((identity, u -> gd * (R(:l, u) + R(:r, u) + R(:c, u))),
+            (identity, v -> gd * (R(:b, v) + R(:t, v) + R(:c, v))), 72800),
+            ((u -> u + R(:c, D₋ₓ(u)), u -> gd * (R(:l, u) + R(:r, u) + R(:t, u))),
+            (identity, v -> gd * (R(:b, D₋ₓ(v)) + R(:t, v) + R(:c, v))), 91376))
+            a = form(Wd, Wd, (u, v) -> innerₕ(lhs[1](u) + lhs[2](u), rhs[1](v) + rhs[2](v)))
+            A = assemble(a)
+            @test _loop_bytes(A, a) <= max_bytes
+            P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(f(u), h(v))))
+            for f in lhs for h in rhs)
+            @test Matrix(A) ≈ Matrix(P)
+        end
+        # An infinite value of `g` stays where its parts put it, and no finite entry
+        # becomes NaN.
+        gi = copy(g)
+        gi[1] = Inf
+        a = form(W, W,
+            (u, v) -> innerₕ(gi * (R(:l, u) + R(:r, u)), gi * (R(:b, v) + R(:t, v))))
+        A = Matrix(assemble(a))
+        P = sum(Matrix(assemble(form(W, W, (u, v) -> innerₕ(gi * R(s, u), gi * R(z, v)))))
+        for s in (:l, :r) for z in (:b, :t))
+        @test any(isinf, P) && !any(isnan, P)
+        @test isequal(A, P)
+        # With such sums on both sides, every piece carries two grid functions' types: past
+        # four pieces the product stays whole, as it was, since sixteen took the first
+        # `assemble` 4.0 s against 0.51 s whole.
+        for k in 3:4
+            labels_k = labels[1:k]
+            f = (u, v) -> innerₕ(g * sum(R(s, u) for s in labels_k),
+                g * sum(R(s, v) for s in reverse(labels_k)))
+            t = @elapsed a = form(W, W, f)
+            @test t < 2.0
+            @test _products(resolve_form_ast(a)) == 1
+            P = sum(assemble(form(W, W, (u, v) -> innerₕ(g * R(s, u), g * R(z, v))))
+            for s in labels_k for z in labels_k)
+            @test Matrix(assemble(a)) ≈ Matrix(P)
+        end
 
-        # On a Float32 mesh the scales are not promoted to a Float64 they share with
-        # nothing, and with scales still mixed the product is not split either: the form
-        # is the one `simplify_ast` built and its matrix the unsplit one, bit for bit.
+        # On a Float32 mesh a Float64 literal beside an Int widens the Int to Float64, never
+        # narrows the literal to Float32, and `π` beside an Int goes to Float32, as `π * 1f0`
+        # does, not to the Float64 `promote_type` gives the two: each matrix keeps the
+        # unsplit form's element type and its parts' values up to the rounding of the
+        # products' order, and refills with 0 B (39680 B for the first when left mixed).
         Ω32 = domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0), :l => :left,
             :r => :right, :b => :bottom)
         W32 = gridspace(mesh(Ω32, (7, 9), (false, false); backend = backend(Float32)))
-        f = (u, v) -> innerₕ(u, 0.1 * R(:l, v) + 3 * D₋ₓ(v) + R(:r, v) + R(:b, v))
-        a = form(W32, W32, f)
-        ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
-            resolve_ast(f(Bramble.trial_function(W32), Bramble.test_function(W32))), W32, W32))
-        @test Bramble._uniform_scales(ast.right_op, Float32) === ast.right_op
-        @test resolve_form_ast(a) === ast
-        unsplit = Bramble.BilinearForm{2, typeof(W32), typeof(W32), typeof(ast)}(
-            W32, W32, ast, Bramble._AssemblyCache{2}(ast))
-        @test Matrix(assemble(a)) == Matrix(assemble(unsplit))
+        for (c, T) in ((0.1, Float64), (π, Float32))
+            terms = ((u, v) -> innerₕ(u, c * R(:l, v)), (u, v) -> innerₕ(u, 3 * D₋ₓ(v)),
+                (u, v) -> innerₕ(u, R(:r, v)), (u, v) -> innerₕ(u, R(:b, v)))
+            f = (u, v) -> innerₕ(u, c * R(:l, v) + 3 * D₋ₓ(v) + R(:r, v) + R(:b, v))
+            a = form(W32, W32, f)
+            A = assemble(a)
+            ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+                resolve_ast(f(Bramble.trial_function(W32), Bramble.test_function(W32))),
+                W32, W32))
+            unsplit = Bramble.BilinearForm{2, typeof(W32), typeof(W32), typeof(ast)}(
+                W32, W32, ast, Bramble._AssemblyCache{2}(ast))
+            U = assemble(unsplit)
+            parts = sum(assemble(form(W32, W32, t)) for t in terms)
+            @test eltype(A) === eltype(U) === T
+            @test _loop_bytes(A, a) == 0
+            @test isapprox(Matrix(A), Matrix(U); rtol = 1e-6)
+            @test isapprox(Matrix(A), Matrix(parts); rtol = 1e-6)
+            @test nnz(A) == nnz(U)
+        end
 
         # Scales of different types whose common type is not `E` but promotes to it (`Int`
         # with `Rational` on a Float64 mesh) are converted to `E` too, as `Int * Float64`

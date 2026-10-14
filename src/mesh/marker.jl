@@ -179,7 +179,9 @@ function set_markers!(Ωₕ::AbstractMeshType, domain_markers; warn_marker_misma
     # `:boundary`/`:interior` are reserved, always-available markers; see note above _ensure_geometric_markers!.
     _ensure_geometric_markers!(mesh_markers, Ωₕ; warn_marker_mismatch)
 
-    _store_markers!(Ωₕ, mesh_markers)
+    # The labels a predicate of position defines are remembered: moving the points leaves
+    # them stale, which `change_points!(Ωₕ, pts)` refuses rather than lets pass.
+    _store_markers!(Ωₕ, mesh_markers, Symbol[m.label for m in conditions(domain_markers)])
     return nothing
 end
 

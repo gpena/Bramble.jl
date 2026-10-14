@@ -354,23 +354,25 @@ _check_space_components(ast, ::CompositeGridSpace, side_component, side) = nothi
 # pattern is the same; each extra product costs one walk. Zero entries padded into the
 # restriction would also keep one shape, but the coordinate walk puts them in the pattern.
 #
-# Every method first asks whether `op`'s type holds a `RegionRestriction` at all
-# (`_holds_restriction`, read off the type once), so a form without one is returned as it
-# was built and compiles nothing past that question.
+# Every method first asks whether `op`'s type holds a `RegionRestriction` or a product
+# operand whose scales differ in type (`_needs_rewrite`, read off the type once), so a form
+# with neither is returned as it was built and compiles nothing past that question. A
+# product holding no restriction only has its operands' scales widened (`_uniform_scales`).
 _split_restricted_products(op, ::Type) = op
 
 function _split_restricted_products(op::OperatorAdd, ::Type{E}) where {E}
-    _holds_restriction(op) || return op
+    _needs_rewrite(op) || return op
     l = _split_restricted_products(op.left_op, E)
     r = _split_restricted_products(op.right_op, E)
     return l === op.left_op && r === op.right_op ? op : OperatorAdd(l, r)
 end
 
 # A scale over a split product is distributed over the products, so each stays its own
-# unit. A scale inside a product's operand is never distributed.
+# unit. A grid function scale inside a product's operand is distributed only as the
+# product is split (`_product_summands`).
 function _split_restricted_products(
         op::Union{OperatorScale, GridFunctionScale}, ::Type{E}) where {E}
-    _holds_restriction(op) || return op
+    _needs_rewrite(op) || return op
     inner = _split_restricted_products(op.inner_op, E)
     return inner === op.inner_op ? op : _distribute_scale(op, inner)
 end
@@ -384,13 +386,52 @@ end
 # at most one from each; with them on one side only, at most two from it. The counts are
 # read off the operand types, so a product with at most two folds to its early return.
 function _split_restricted_products(op::BilinearProduct{D, W}, ::Type{E}) where {D, W, E}
-    _holds_restriction(op) || return op
+    _needs_rewrite(op) || return op
+    _holds_restriction(op) || return _widened_product(op, E)
     l = _uniform_scales(op.left_op, E)
     r = _uniform_scales(op.right_op, E)
     nl = _vanishing_count(l)
     nr = _vanishing_count(r)
-    ls = _operand_groups(_expanded_summands(l), Val(nr == 0 ? 2 : 1))
-    rs = _operand_groups(_expanded_summands(r), Val(nl == 0 ? 2 : 1))
+    capl = Val(nr == 0 ? 2 : 1)
+    capr = Val(nl == 0 ? 2 : 1)
+    paired = Val(nl > 0 && nr > 0)
+    # A grid function scale over a restricted sum is distributed over it
+    # (`_product_summands`), but with such sums on both sides only while the product splits
+    # into at most four pieces: each piece then carries two grid functions' types and costs
+    # the first `assemble` about 0.25 s to infer, and sixteen took 4.0 s against 0.51 s for
+    # the product left whole.
+    sl = _scaled_sum(l, paired)
+    sr = _scaled_sum(r, paired)
+    if sl || sr
+        ls, rs = _capped_groups(
+            _product_summands, paired, l, r, capl, capr, Val(true), Val(true))
+        length(ls) * length(rs) <= (sl && sr ? 4 : 16) &&
+            return _split_product(op, l, r, ls, rs)
+    end
+    # Left whole, such a scaled sum boxes whatever the other side's grouping, so a plain
+    # summand there joins a restricted one rather than adding a boxing product of its own
+    # (55232 B against 41792 B for `innerₕ(u + Rₕ(:l, D₋ₓ(u)), g * (v + Rₕ(:t, D₋ₓ(v)) +
+    # Rₕ(:b, v)))` on a 7x9 grid before the scale was distributed). With such a sum on
+    # both sides each plain summand keeps its own group: joined, `innerₕ(u + g * (Rₕ(:l, u)
+    # + Rₕ(:r, u) + Rₕ(:c, u)), v + g * (…))` refilled 135520 B against 71792 B.
+    ls, rs = _capped_groups(_summands_of, paired, l, r, capl, capr, Val(!sr || sl),
+        Val(!sl || sr))
+    return _split_product(op, l, r, ls, rs)
+end
+
+# A plain summand's own group (`_joins_restriction`) is one more per side; where that takes
+# the product past the cap in `_split_product`, the plain summands join the first group as
+# they did before it, rather than the product being left whole (1205744 B against 82848 B
+# for a plain and four restricted differences against three).
+function _capped_groups(summands::F, paired, l, r, capl, capr, sepl, sepr) where {F}
+    ls = _operand_groups(summands(l, paired), capl, sepl)
+    rs = _operand_groups(summands(r, paired), capr, sepr)
+    length(ls) * length(rs) > 16 || return ls, rs
+    return _operand_groups(summands(l, paired), capl, Val(false)),
+    _operand_groups(summands(r, paired), capr, Val(false))
+end
+
+function _split_product(op::BilinearProduct{D, W}, l, r, ls, rs) where {D, W}
     # Each product is a walk of its own and a type to compile, and restrictions on both
     # sides multiply them: past 16 (six distinct types a side made 36, a first assemble
     # up to 15 times slower and more bytes than the unsplit product), it stays as built.
@@ -415,26 +456,89 @@ end
 precompile(_type_holds_restriction, (Any,))
 @generated _holds_restriction(::T) where {T} = _type_holds_restriction(T)
 
+# Whether a product in the form type `T`, reached as `_split_restricted_products` descends,
+# has an operand whose outermost scales differ in type (`_scales_differ`, read off the
+# types): `0.1 * v + 3 * D₋ₓ(v)`. Asked with `_type_holds_restriction` as one question, so a
+# form with uniform scales and no restriction folds to itself (+17–26% on the first `form`
+# of the 3D elasticity form when every product was rewritten).
+function _type_mixed_scales(T)
+    T isa DataType || return false
+    T <: BilinearProduct && return _type_scales_differ(T.parameters[3]) ||
+                                   _type_scales_differ(T.parameters[4])
+    T <: OperatorAdd && return _type_mixed_scales(T.parameters[2]) ||
+                               _type_mixed_scales(T.parameters[3])
+    T <: Union{OperatorScale, GridFunctionScale} &&
+        return _type_mixed_scales(T.parameters[3])
+    return false
+end
+function _type_scales_differ(T)
+    T isa DataType && T <: OperatorAdd || return false
+    scales = Tuple{Any, Bool}[]  # (scale type, read live through a `Ref`)
+    _type_collect_scales!(scales, T)
+    S = mapreduce(first, promote_type, scales; init = Union{})
+    return any(((s, live),) -> !live && s !== S, scales)
+end
+function _type_collect_scales!(scales, T)
+    T isa DataType || return scales
+    if T <: OperatorAdd
+        _type_collect_scales!(scales, T.parameters[2])
+        _type_collect_scales!(scales, T.parameters[3])
+    elseif T <: OperatorScale
+        S = T.parameters[2]
+        live = S isa DataType && S <: Base.RefValue
+        push!(scales, (live ? S.parameters[1] : S, live))
+    end
+    return scales
+end
+precompile(_type_mixed_scales, (Any,))
+@generated _needs_rewrite(::T) where {T} = _type_holds_restriction(T) ||
+                                           _type_mixed_scales(T)
+
 # A summed operand whose summands' constant scales differ in type (`2.0 * Rₕ(:l, v) +
 # 3 * Rₕ(:r, v)`) has a stencil whose weights differ in type from summand to summand, and
 # the walk boxes it at every point even with two restricted summands. Those scales, the
-# outermost of each summand only, are converted to the spaces' element type `E` the walk
-# computes in, when their common `promote_type` promotes to `E` (`Int` with `Rational` on a
-# `Float64` mesh): the entries are promoted to `E` anyway, and `Int * Float64` and
-# `Rational * Float64` convert the same way. A `Ref` scale is read live, so it is left as it
-# is and only its value type joins the promotion. Only a product holding a restriction gets
-# here, and an operand whose scales agree is returned untouched, as is one whose common type
-# does not promote to `E`: on a Float32 mesh, a `Float64` scale would move the values and
-# add a third weight type, not remove one. `simplify_ast` keeps
-# the literals (its folding reads them).
+# outermost of each summand only, are converted to the type their products with a weight
+# of the spaces' element type `E` join to (`_scale_product_type`), never narrowed to `E`:
+# `Int` with `Rational` on a `Float64` mesh go to `Float64` as `Int * Float64` does, `π`
+# beside an `Int` on a Float32 mesh go to `Float32` as `π * 1f0` does, and a `Float64`
+# literal beside an `Int` on a Float32 mesh takes the `Int` to `Float64`, so the entries
+# keep the `Float64` they had and move only by the order of the products' rounding (39680 B
+# before on a 7x9 grid for `0.1 * Rₕ(:l, v) + 3 * D₋ₓ(v) + Rₕ(:r, v) + Rₕ(:b, v)`). An
+# unscaled summand needs no unit scale: its weights are `E`'s and it is grouped apart from
+# the scaled ones. A `Ref` scale is read live, so it is left as it is and only its value
+# type joins the promotion. A product gets here only if it holds a restriction or such an
+# operand (`_needs_rewrite`), and an operand whose scales agree is returned untouched.
+# Without a restriction the scales are widened the same way (9072 B before for
+# `0.1 * v + 3 * D₋ₓ(v)` on a Float32 mesh). `simplify_ast` keeps the literals (its
+# folding reads them).
 _uniform_scales(op, ::Type) = op
-# Scales still of several types after that keep the walk boxing whatever the split does, and
-# a split then only adds walks (45648 B against 39680 B on a Float32 mesh), so it is skipped.
+# With no restriction there is no split to gain, so scales joining to a type that is not
+# bits are left as they are. Every product with a `BigFloat` allocates anyway, and an `Int`
+# converted to one only adds allocations (56688 -> 106368 B for `big(0.1) * v +
+# 3 * D₋ₓ(v)`).
+function _widened_product(op::BilinearProduct{D, W}, ::Type{E}) where {D, W, E}
+    l = _bits_uniform_scales(op.left_op, E)
+    r = _bits_uniform_scales(op.right_op, E)
+    return BilinearProduct{D, W, typeof(l), typeof(r)}(l, r)
+end
+_bits_uniform_scales(op, ::Type{E}) where {E} = isbitstype(_scale_product_type(op, E)) ?
+                                                _uniform_scales(op, E) : op
+# Scales still of several types after that would keep the walk boxing whatever the split
+# does, and a split then only adds walks (45648 B against 39680 B on a Float32 mesh when it
+# narrowed nothing and widened nothing), so it is skipped.
 @inline _mixed_scales(op) = _scales_differ(op, _scale_type(op))
 function _uniform_scales(op::OperatorAdd, ::Type{E}) where {E}
     T = _scale_type(op)
-    return promote_type(T, E) === E && _scales_differ(op, T) ? _promote_scales(op, E) : op
+    return _scales_differ(op, T) ? _promote_scales(op, _scale_product_type(op, E)) : op
 end
+
+# The type of each scale's product with an `E` weight, joined over the summands: `π * 1f0`
+# is a `Float32`, though `promote_type(Irrational{:π}, Int)` is `Float64`.
+@inline _scale_product_type(op::OperatorScale, ::Type{E}) where {E} = Base.promote_op(
+    *, _scalar_type(op.scalar), E)
+@inline _scale_product_type(op::OperatorAdd, ::Type{E}) where {E} = promote_type(
+    _scale_product_type(op.left_op, E), _scale_product_type(op.right_op, E))
+@inline _scale_product_type(::Any, ::Type) = Union{}
 
 @inline _scale_type(op::OperatorScale) = _scalar_type(op.scalar)
 @inline _scale_type(op::OperatorAdd) = promote_type(
@@ -460,8 +564,7 @@ _promote_scalar(x::Base.RefValue, T) = x
 
 # How many restricted summands `op` holds, under any wrapper, as a bound on the stencil
 # shapes it brings (at most `2^bits`). A restriction nested in another adds no shape: both
-# answer `()` or the same full tuple. `g * (Rₕ(:l, v) + Rₕ(:r, v))` counts two, and stays
-# one summand, since a scale is never distributed.
+# answer `()` or the same full tuple. `g * (Rₕ(:l, v) + Rₕ(:r, v))` counts two.
 @inline _shape_bits(op::RegionRestriction) = op.zero_stencil === nothing ?
                                              max(1, _shape_bits(op.inner_op)) :
                                              _shape_bits(op.inner_op)
@@ -472,13 +575,50 @@ _promote_scalar(x::Base.RefValue, T) = x
 # An operand's summands with every unprobed restriction over a sum distributed over it:
 # `Rₕ(:c, v + Rₕ(:l, v))` is `Rₕ(:c, v) + Rₕ(:c, Rₕ(:l, v))`, entry for entry. Left whole,
 # the restriction would be one summand of too many shapes to group.
-@inline _expanded_summands(op::OperatorAdd) = (
-    _expanded_summands(op.left_op)..., _expanded_summands(op.right_op)...)
-@inline function _expanded_summands(op::RegionRestriction)
+@inline _expanded_summands(op) = _summands_of(op, Val(false))
+@inline _summands_of(op::OperatorAdd, paired) = (
+    _summands_of(op.left_op, paired)..., _summands_of(op.right_op, paired)...)
+@inline function _summands_of(op::RegionRestriction, paired)
     op.zero_stencil === nothing || return (op,)
-    return map(x -> _rewrap_inner(op, x), _expanded_summands(op.inner_op))
+    return map(x -> _rewrap_inner(op, x), _summands_of(op.inner_op, paired))
 end
-@inline _expanded_summands(op) = (op,)
+# A difference, average or jump is linear in its operand entry for entry, so one over a
+# sum holding a restriction distributes the same way: `D₋ₓ(Rₕ(:c, v + Rₕ(:l, v)))` is
+# `D₋ₓ(Rₕ(:c, v)) + D₋ₓ(Rₕ(:c, Rₕ(:l, v)))`, and `Mₓ(D₊ᵧ(Rₕ(:l, v) + Rₕ(:r, v)))` is
+# `Mₓ(D₊ᵧ(Rₕ(:l, v))) + Mₓ(D₊ᵧ(Rₕ(:r, v)))` (gpena/Bramble.jl#759). An operand with no
+# restriction is left whole, so an unrestricted one compiles nothing new.
+const _DifferenceNode = Union{BackwardDifference, ForwardDifference, CenteredDifference,
+    StarDifference, CrossWeightedDifference}
+const _AverageNode = Union{JumpNode, BackwardAverage, ForwardAverage, CenteredAverage}
+const _StencilNode = Union{_DifferenceNode, _AverageNode}
+@inline function _summands_of(op::_StencilNode, paired)
+    _holds_restriction(op.inner_op) || return (op,)
+    return map(x -> _rewrap_inner(op, x), _summands_of(op.inner_op, paired))
+end
+# With restricted summands on both sides (`paired`) an average or jump is left whole, as
+# before its distribution: each piece meets the other side's in a product of its own, and
+# where those box anyway the split only adds walks. `innerₕ(Mₓ(D₊ᵧ(Rₕ(:l, u) +
+# Rₕ(:r, u))), Mₓ(D₊ᵧ(Rₕ(:b, v) + Rₕ(:t, v))) + v)` refilled 157600 B against 130512 B.
+@inline _summands_of(op::_AverageNode, ::Val{true}) = (op,)
+@inline _summands_of(op, paired) = (op,)
+
+# A product's operand expanded as above, and a grid function scale over a sum holding a
+# restriction distributed over its summands: `g * (Rₕ(:l, v) + Rₕ(:r, v))` is
+# `g * Rₕ(:l, v) + g * Rₕ(:r, v)`, entry for entry. Left whole it is one summand of two
+# bits, and on both sides four bits in one product boxed (11872 B on a 7x9 grid). Each
+# scaled summand is rewrapped once, here, as a flat tuple the type-level grouping then
+# sums: distributing it over the split products' nested sums instead took `form` 12.8 s
+# to compile for `g * (Rₕ + Rₕ) + Rₕ`, and LLVM never finished over four summands.
+@inline _product_summands(op::OperatorAdd, paired) = (
+    _product_summands(op.left_op, paired)..., _product_summands(op.right_op, paired)...)
+@inline function _product_summands(op::GridFunctionScale, paired)
+    _holds_restriction(op.inner_op) || return (op,)
+    return map(x -> _rewrap_inner(op, x), _product_summands(op.inner_op, paired))
+end
+@inline _product_summands(op, paired) = _summands_of(op, paired)
+# Whether `_product_summands` distributes a scale in `op`, read off the tuple lengths.
+@inline _scaled_sum(op, paired) = length(_product_summands(op, paired)) !=
+                                  length(_summands_of(op, paired))
 
 # The bits of `_expanded_summands(op)` summed, read off the types alone so the count folds
 # to a constant.
@@ -504,29 +644,84 @@ end
 # type are paired in the order they come, up to `cap` bits a sum, and a summand of more bits
 # takes a sum of its own; the summands with no bits join the first sum. Which sums come out
 # depends on the types, not on the order the summands were written in.
-function _type_shape_bits(T)
+#
+# A difference reads its operand at two points, so one over a restricted difference has
+# more stencil shapes than its restriction's bit says: `D₋ₓ(D₊ᵧ(Rₕ(:l, v)))` and its `:r`
+# twin, paired in one sum, boxed (62496 B, gpena/Bramble.jl#759). An average or a jump
+# reads several points too: `Mₓ(D₊ᵧ(Rₕ(:l, v)))` and `D₋ₓ(M₊ᵧ(Rₕ(:l, v)))` with their twins
+# boxed 38304 B. Each such level over a restricted one adds a bit, so such a summand takes a
+# sum of its own at any depth.
+function _type_shape_bits(T, nested::Bool = true)
     if T <: RegionRestriction
-        inner = _type_shape_bits(fieldtype(T, :inner_op))
+        inner = _type_shape_bits(fieldtype(T, :inner_op), nested)
         return fieldtype(T, :zero_stencil) === Nothing ? max(1, inner) : inner
+    elseif nested && T <: _StencilNode
+        I = fieldtype(T, :inner_op)
+        inner = _type_shape_bits(I)
+        return inner > 0 && _type_restricted_stencil(I) ? inner + 1 : inner
     elseif T <: UnaryWrapper
-        return _type_shape_bits(fieldtype(T, :inner_op))
+        return _type_shape_bits(fieldtype(T, :inner_op), nested)
     elseif T <: OperatorAdd
-        return _type_shape_bits(fieldtype(T, :left_op)) +
-               _type_shape_bits(fieldtype(T, :right_op))
+        return _type_shape_bits(fieldtype(T, :left_op), nested) +
+               _type_shape_bits(fieldtype(T, :right_op), nested)
     end
     return 0
 end
 
-# The summands of `Ts` (indices) as groups: one per sum, the first holding every summand
-# with no bits.
-function _type_groups(Ts::Vector{Any}, cap::Int)
+# Whether `T` holds, under any wrapper or sum, a difference, average or jump over a
+# restriction.
+function _type_restricted_stencil(T)
+    if T <: _StencilNode
+        return _type_shape_bits(fieldtype(T, :inner_op)) > 0
+    elseif T <: UnaryWrapper
+        return _type_restricted_stencil(fieldtype(T, :inner_op))
+    elseif T <: OperatorAdd
+        return _type_restricted_stencil(fieldtype(T, :left_op)) ||
+               _type_restricted_stencil(fieldtype(T, :right_op))
+    end
+    return false
+end
+# The same count at run time, read off the type, so a linear form walks two such summands
+# apart (`_unit_bits`, linear.jl): walked as one, `D₋ₓ(D₊ᵧ(Rₕ(:l, v) + Rₕ(:r, v)))` boxed.
+@generated _shape_bits(::T) where {T <: _StencilNode} = _type_shape_bits(T)
+
+# `T` with every scale and restriction around it peeled off: what a summand's full stencil
+# is built from, entry for entry, so two summands with the same core have stencils of the
+# same length.
+function _type_core(T)
+    while T <: Union{OperatorScale, GridFunctionScale, RegionRestriction}
+        T = fieldtype(T, :inner_op)
+    end
+    return T
+end
+
+# With restricted summands on both sides (`cap == 1`), every product's stencil length is
+# one of a left length times a right one, and past three distinct lengths the walk's
+# `Union` widens to `Tuple{Vararg}` and boxes at every point. A restricted summand alone
+# brings `0` or `q` entries; a plain summand of `p` entries beside it brings `p` or `p + q`,
+# and only `q == p` keeps the lengths on both sides at `n` and `2n`, three products in all.
+# So a lone plain summand joins a restriction of its own core (`u + Rₕ(:l, u)`, a scale on
+# either allowed), and otherwise the plain summands take a sum of their own:
+# `v + Rₕ(:t, D₋ₓ(v))`, `D₋ₓ(u) + D₋ₓ(Rₕ(:l, u))` and `u + D₋ₓ(u) + Rₕ(:l, u)` boxed
+# 11152 B to 16704 B (gpena/Bramble.jl#759).
+function _joins_restriction(P, K)
+    while K <: Union{OperatorScale, GridFunctionScale}
+        K = fieldtype(K, :inner_op)
+    end
+    return K <: RegionRestriction && _type_core(K) === _type_core(P)
+end
+
+# The summands of `Ts` (indices) as groups: one per sum, the plain summands (no bits)
+# joining the first group, or, both sides restricted and `separate` set, as
+# `_joins_restriction` allows.
+function _type_groups(Ts::Vector{Any}, cap::Int, separate::Bool, nested::Bool = true)
     # Plain loops over plain vectors: compiled once into the package image (`precompile`
     # below), with no closure or generator of its own left to compile per session.
     plain = Int[]
     kinds = Any[]
     members = Vector{Int}[]
     for i in 1:length(Ts)
-        if _type_shape_bits(Ts[i]) == 0
+        if _type_shape_bits(Ts[i], nested) == 0
             push!(plain, i)
             continue
         end
@@ -539,16 +734,29 @@ function _type_groups(Ts::Vector{Any}, cap::Int)
         end
     end
     groups = Vector{Int}[]
+    firsts = Int[]
     for k in 1:length(kinds)
-        per = max(1, cap ÷ _type_shape_bits(kinds[k]))
+        per = max(1, cap ÷ _type_shape_bits(kinds[k], nested))
         same = members[k]
+        push!(firsts, length(groups) + 1)
         for j in 1:per:length(same)
             push!(groups, same[j:min(j + per - 1, length(same))])
         end
     end
     isempty(groups) && return [plain]
-    groups[1] = vcat(plain, groups[1])
-    return groups
+    if isempty(plain) || cap > 1 || !separate
+        groups[1] = vcat(plain, groups[1])
+        return groups
+    end
+    if length(plain) == 1
+        for k in 1:length(kinds)
+            if _joins_restriction(Ts[plain[1]], kinds[k])
+                groups[firsts[k]] = vcat(plain, groups[firsts[k]])
+                return groups
+            end
+        end
+    end
+    return pushfirst!(groups, plain)
 end
 
 function _sum_expr(name::Symbol, idx::Vector{Int})
@@ -559,35 +767,49 @@ function _sum_expr(name::Symbol, idx::Vector{Int})
     return ex
 end
 
-function _groups_expr(Ts::Vector{Any}, cap::Int)
+# A one-sided operand's nested-difference bits (`_type_shape_bits`) can give it more than
+# the 16 sums a product splits into (seventeen `D₋ₓ(D₊ᵧ(Rₕ(s, v)))`), and the product would
+# then stay whole (3413584 B against 673104 B paired); it is then paired as before them.
+function _groups_expr(Ts::Vector{Any}, cap::Int, separate::Bool)
+    groups = _type_groups(Ts, cap, separate)
+    length(groups) > 16 && (groups = _type_groups(Ts, cap, separate, false))
     ex = Expr(:tuple)
-    for g in _type_groups(Ts, cap)
+    for g in groups
         push!(ex.args, _sum_expr(:ts, g))
     end
     return ex
 end
 
+# The products are summed as a balanced tree, in the same order: a left-deep sum's node
+# types hold their whole subtree, of total size quadratic in the product count, and every
+# walk over the form is inferred over them. A grid function scale's type is long, and
+# sixteen scaled pieces summed left-deep took the first `assemble` 4.6 s.
 function _product_sum_expr(D::Int, W, Ls::Vector{Any}, Rs::Vector{Any})
-    ex = nothing
-    for i in 1:length(Ls), j in 1:length(Rs)
-
-        t = :(BilinearProduct{$D, $W, $(Ls[i]), $(Rs[j])}(ls[$i], rs[$j]))
-        ex = ex === nothing ? t : :(OperatorAdd($ex, $t))
+    exs = Any[:(BilinearProduct{$D, $W, $(Ls[i]), $(Rs[j])}(ls[$i], rs[$j]))
+              for i in 1:length(Ls) for j in 1:length(Rs)]
+    while length(exs) > 1
+        exs = Any[k < length(exs) ? :(OperatorAdd($(exs[k]), $(exs[k + 1]))) : exs[k]
+                  for k in 1:2:length(exs)]
     end
-    return ex
+    return exs[1]
 end
 
 # The generators below run this Julia code at compile time; compiled into the package
 # image, it does not cost the first restricted `form` of a session its own compilation.
-precompile(_type_groups, (Vector{Any}, Int))
-precompile(_type_shape_bits, (Any,))
+precompile(_type_groups, (Vector{Any}, Int, Bool, Bool))
+precompile(_type_shape_bits, (Any, Bool))
+precompile(_type_restricted_stencil, (Any,))
+precompile(_type_core, (Any,))
+precompile(_joins_restriction, (Any, Any))
 precompile(_sum_expr, (Symbol, Vector{Int}))
-precompile(_groups_expr, (Vector{Any}, Int))
+precompile(_groups_expr, (Vector{Any}, Int, Bool))
 precompile(_product_sum_expr, (Int, Any, Vector{Any}, Vector{Any}))
 
 # `ts`'s summands regrouped into the sums `_type_groups` gives, as a tuple of operands.
-@generated _operand_groups(ts::Tuple, ::Val{cap}) where {cap} = _groups_expr(
-    collect(ts.parameters), cap)
+@generated _operand_groups(ts::Tuple, ::Val{cap}, ::Val{separate}) where {cap, separate} = _groups_expr(
+    collect(ts.parameters), cap, separate)
+# A linear form's one side (linear.jl) has a cap of 2, where `separate` changes nothing.
+@inline _operand_groups(ts::Tuple, cap::Val) = _operand_groups(ts, cap, Val(false))
 
 # The sum of one product per pair of a left and a right group.
 @generated _product_sum(op::BilinearProduct{D, W}, ls::Tuple, rs::Tuple) where {D, W} = _product_sum_expr(

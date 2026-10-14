@@ -122,7 +122,7 @@ function _pc_mesh_mutation(Ωₕ::AbstractMeshType, dm)
     iterative_refinement!(bare)
     iterative_refinement!(deepcopy(Ωₕ), dm)
     pts = points(Ωₕ)
-    change_points!(deepcopy(Ωₕ), pts)
+    change_points!(deepcopy(bare), points(bare))
     change_points!(deepcopy(Ωₕ), dm, pts)
     markers!(deepcopy(Ωₕ), copy(markers(Ωₕ)))
     return nothing

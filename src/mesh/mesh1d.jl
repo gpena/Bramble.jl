@@ -79,6 +79,11 @@ dictionary and the label-to-column table of the state's marker words.
     accessors ([`points`](@ref), [`spacings`](@ref), ...).
   - `marker_stamp`: a counter value drawn afresh at construction and at every marker
     replacement, so a cached marker read can tell the markers changed.
+  - `predicate_labels`: the labels `set_markers!` defined by a predicate of position, whose
+    sets a point change leaves stale (see [`change_points!`](@ref)).
+  - `parent_predicate_labels`: the same labels of the [`MeshnD`](@ref) this mesh is a
+    submesh of, stamped by the parent's `set_markers!`; the parent's sets depend on this
+    axis, so moving it alone is refused.
 
 See also: [`MeshnD`](@ref), [`mesh`](@ref), [`AbstractMeshType`](@ref).
 """
@@ -92,17 +97,23 @@ mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVe
     state::Mesh1DState{BT, CI, VT, T, Matrix{UInt64}}
     "a fresh counter value at construction and at every marker replacement."
     marker_stamp::UInt64
+    "the labels defined by a predicate of position, which moving the points leaves stale."
+    predicate_labels::Vector{Symbol}
+    "the predicate labels of the parent mesh, when this is one of its submeshes."
+    parent_predicate_labels::Vector{Symbol}
 end
 
-# The mesh over `state` with a fresh marker stamp.
-function Mesh1D(markers::MeshMarkers, marker_ids::Dict{Symbol, Int}, state::Mesh1DState)
-    return Mesh1D(markers, marker_ids, state, _next_mesh_uid())
+# The mesh over `state` with a fresh marker stamp, and the predicate labels given or none.
+function Mesh1D(markers::MeshMarkers, marker_ids::Dict{Symbol, Int}, state::Mesh1DState,
+        predicate_labels::Vector{Symbol} = Symbol[])
+    return Mesh1D(markers, marker_ids, state, _next_mesh_uid(), predicate_labels, Symbol[])
 end
 
 # The mesh over `s` with `markers`, the label table and the state's words built together.
-function _mesh1d_with_markers(markers::MeshMarkers, s::Mesh1DState)
+function _mesh1d_with_markers(markers::MeshMarkers, s::Mesh1DState,
+        predicate_labels::Vector{Symbol} = Symbol[])
     ids, words = _marker_table(markers, length(s.pts))
-    return Mesh1D(markers, ids, _restate(s; words))
+    return Mesh1D(markers, ids, _restate(s; words), predicate_labels)
 end
 
 """
@@ -116,7 +127,9 @@ function _rebackend(Ωₕ::Mesh1D, be::Backend, f::F) where {F}
     s = _st(Ωₕ)
     r = Mesh1DState(s.set, s.indices, be, f(s.pts), f(s.half_pts), f(s.half_spacings),
         f(s.spacings), s.collapsed, s.version, s.uniform, s.words, _next_mesh_uid())
-    return Mesh1D(markers(Ωₕ), _marker_ids(Ωₕ), r)
+    m = Mesh1D(markers(Ωₕ), _marker_ids(Ωₕ), r, copy(_predicate_labels(Ωₕ)))
+    setfield!(m, :parent_predicate_labels, _parent_predicate_labels(Ωₕ))
+    return m
 end
 
 # Both a `Mesh1D` and its state answer the geometric accessors below, reading the state.
@@ -168,13 +181,20 @@ end
 # change, and never equal across meshes or across two stores.
 @inline _marker_stamp(Ωₕ::Mesh1D) = getfield(Ωₕ, :marker_stamp)
 
+# The labels `set_markers!` defined by a predicate of position; every other store clears them.
+@inline _predicate_labels(Ωₕ::Mesh1D) = getfield(Ωₕ, :predicate_labels)
+
+# The predicate labels of the parent a submesh was stamped with, empty for any other mesh.
+@inline _parent_predicate_labels(Ωₕ::Mesh1D) = getfield(Ωₕ, :parent_predicate_labels)
+
 # Replaces the marker dictionary, its label table and the state's words together. A label
 # set may change after construction; the word matrix is rebuilt, never resized.
-function _store_markers!(Ωₕ::Mesh1D, mesh_markers)
+function _store_markers!(Ωₕ::Mesh1D, mesh_markers, predicate_labels = Symbol[])
     mm = convert(MeshMarkers, mesh_markers)
     ids, words = _marker_table(mm, npoints(Ωₕ))
     setfield!(Ωₕ, :markers, mm)
     setfield!(Ωₕ, :marker_ids, ids)
+    setfield!(Ωₕ, :predicate_labels, Symbol[predicate_labels...])
     _set_state!(Ωₕ, _restate(_st(Ωₕ); words))
     setfield!(Ωₕ, :marker_stamp, _next_mesh_uid())
     return nothing
@@ -463,7 +483,9 @@ words assembly reads) for the new grid. A mesh carrying any other label has no d
 to re-evaluate it onto the new points, so such a resize throws an `ArgumentError` before
 anything changes. Build `mesh(Ω, length(pts))` and call
 [`change_points!`](@ref)`(Ωₕ, markers(Ω), pts)` instead. A call that keeps the point count
-leaves every marker alone, custom labels included.
+leaves every marker alone, so a label defined by a predicate of position would keep the set
+the old points gave it: a mesh carrying one is refused with an `ArgumentError`, again naming
+`change_points!(Ωₕ, markers(Ω), pts)`. Face labels are index-based and stay valid.
 
 Bumps `Ωₕ`'s mesh version (gpena/Bramble.jl#221): every [`ScalarGridSpace`](@ref) already
 built on `Ωₕ` -- via [`gridspace`](@ref), directly or as a leaf of a
@@ -475,6 +497,17 @@ to it.
 """
 function set_points!(Ωₕ::Mesh1D, pts)
     _check_set_points(Ωₕ, pts)
+    _check_not_submesh_of_predicate_parent(Ωₕ, "set_points!(Ωₕ, pts) was asked to move")
+    length(_st(Ωₕ).pts) == length(pts) && _check_no_predicate_labels(Ωₕ,
+        "set_points!(Ωₕ, pts) was asked to move",
+        "change_points!(Ωₕ, markers(Ω), pts)")
+    return _set_points!(Ωₕ, pts)
+end
+
+# `set_points!` after its checks: the geometry, with every marker left as it is unless the
+# point count changes. What `change_points!` moves the points with, since it has its own
+# checks and re-evaluates the markers or refuses them itself.
+function _set_points!(Ωₕ::Mesh1D, pts)
     n = length(pts)
     if length(_st(Ωₕ).pts) == n
         _set_points_geometry!(Ωₕ, pts)
@@ -1373,11 +1406,21 @@ end
 @inline _nothing_to_refine(Ωₕ::Mesh1D) = is_collapsed(Ωₕ) || npoints(Ωₕ) <= 1
 
 function change_points!(Ωₕ::Mesh1D, pts)
+    _check_not_submesh_of_predicate_parent(Ωₕ, "change_points!(Ωₕ, pts) was asked to move")
+    _check_no_predicate_labels(Ωₕ,
+        "change_points!(Ωₕ, pts) was asked to move",
+        "change_points!(Ωₕ, markers(Ω), pts)")
+    return _change_points!(Ωₕ, pts)
+end
+
+# The geometry alone, with markers left as they are: what the three-argument form moves the
+# points with before it re-evaluates every marker.
+function _change_points!(Ωₕ::Mesh1D, pts)
     npts = npoints(Ωₕ)
     npts == length(pts) || _throw_point_count_mismatch(npts, length(pts))
 
-    set_points!(Ωₕ, pts)
-    return nothing
+    _check_set_points(Ωₕ, pts)
+    return _set_points!(Ωₕ, pts)
 end
 
 """
@@ -1393,7 +1436,7 @@ function Base.copy(Ωₕ::Mesh1D)
     c = Mesh1DState(s.set, s.indices, s.backend, copy(s.pts), copy(s.half_pts),
         copy(s.half_spacings), copy(s.spacings), s.collapsed, s.version, s.uniform, s.words,
         _next_mesh_uid())
-    return _mesh1d_with_markers(deepcopy(markers(Ωₕ)), c)
+    return _mesh1d_with_markers(deepcopy(markers(Ωₕ)), c, copy(_predicate_labels(Ωₕ)))
 end
 
 # A deepcopy is an independent mutable mesh, so it gets a fresh identity: with the uid

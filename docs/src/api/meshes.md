@@ -62,7 +62,12 @@ in place, and changes the version, so a state taken before the call is stale. Se
 The dictionary that `markers(Ωₕ)` returns is read-only. Editing it in place is unsupported:
 the word matrix assembly reads is not rebuilt, and a label added that way has no column. To
 change the labels use `markers!` or `set_markers!` (both private; see the same internals
-page), or `change_points!` and `iterative_refinement!`, which re-evaluate them.
+page). The three-argument forms, `change_points!(Ωₕ, markers(Ω), pts)` and
+`iterative_refinement!(Ωₕ, markers(Ω))`, re-evaluate them at the new points. The
+two-argument `change_points!(Ωₕ, pts)` keeps the face labels, which are index-based. It and
+`set_points!` refuse a mesh carrying a label defined by a predicate of position, whose set
+would go stale, and a move of a submesh of one; `change_points!(Ωₕ, markers(Ω), pts)` on the
+whole mesh is the way to move it.
 
 ## Mesh adaptation and mutation
 

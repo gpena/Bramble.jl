@@ -111,7 +111,9 @@ function _coarsen_mesh(Ωf::AbstractMeshType{D}) where {D}
     for (label, bv) in markers(Ωf)
         coarse_markers[label] = _every_other_entry(bv, nf)
     end
-    markers!(Ωc, coarse_markers)
+    # The predicate labels stay recorded: a coarse level moved by the two-argument
+    # `change_points!` would otherwise keep sets the old points gave them.
+    _store_markers!(Ωc, coarse_markers, _predicate_labels(Ωf))
     return Ωc
 end
 

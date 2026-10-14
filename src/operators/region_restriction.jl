@@ -237,6 +237,72 @@ end
     return scale_stencil(shifted, _in_region(inner_op, markers, lins[Ishift]) ? one(T) : zero(T))
 end
 
+# A constant scale over a restriction, directly or through further scales and restrictions,
+# is shifted along that chain rather than re-evaluated at the neighbour. The trait path gave
+# `()` or a full tuple by the neighbour's marker, and three such taps
+# (`D̽ₓ(2 * restrict_to(:l, v))`) concatenate to more stencil shapes than inference splits,
+# so the walk boxed on every refill. Any other scale keeps the trait path; the branch folds.
+@inline _scales_restriction(::RegionRestriction) = true
+@inline _scales_restriction(op::Union{OperatorScale, GridFunctionScale}) = _scales_restriction(
+    op.inner_op)
+@inline _scales_restriction(::Any) = false
+
+@inline function shifted_inner_stencil(
+        inner_op::OperatorScale, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
+) where {D, Dim}
+    # Over a tapped node over a restriction (`D̽ₓ(2.0 * D̽ᵧ(restrict_to(:l, v)))`), the node's
+    # own shift (`_fixed_shift`, assembly/stencil_eval.jl), of one length, is scaled.
+    _fixes_restriction(inner_op) && !_scales_restriction(inner_op.inner_op) &&
+        return scale_stencil(
+            shifted_inner_stencil(inner_op.inner_op, nothing, space, I, markers, Val(Dim), delta),
+            _scale_value(inner_op, 0))
+    _scales_restriction(inner_op.inner_op) || return _shifted_inner_stencil(
+        stencil_shift_trait(inner_op), inner_op, inner, space, I, markers, Val(Dim), delta)
+    m = mesh(space)
+    d = _shift_delta(delta)
+    Ishift = _clamped_shift(m, I, Val(Dim), d)
+    s, outside = _shifted_chain(
+        inner_op, space, I, markers, Val(Dim), delta, LinearIndices(indices(m))[Ishift])
+    # Zeroed at the top, as `_chain_stencil` zeroes the unshifted chain: a coefficient not
+    # finite outside a region (or at a clamped, off-grid neighbour) still gives 0, not NaN.
+    return outside || Ishift[Dim] != I[Dim] + d ? _zero_entries(s) : s
+end
+
+# The chain's stencil shifted to the neighbour `lin_shift`, and whether that neighbour lies
+# outside any restriction on the way down. Scales multiply in their value there; the
+# innermost restriction shifts its operand by its own rule above.
+@inline function _shifted_chain(
+        op::Union{OperatorScale, GridFunctionScale}, space, I, markers, vdim, delta,
+        lin_shift::Int
+)
+    s, outside = _shifted_chain(op.inner_op, space, I, markers, vdim, delta, lin_shift)
+    return (scale_stencil(s, _scale_value(op, lin_shift)), outside)
+end
+@inline function _shifted_chain(
+        op::RegionRestriction{<:Any, <:Any, <:Any, Nothing}, space, I, markers, vdim, delta,
+        lin_shift::Int
+)
+    out = !_in_region(op, markers, lin_shift)
+    _scales_restriction(op.inner_op) || return (
+        shifted_inner_stencil(op, nothing, space, I, markers, vdim, delta), out)
+    s, outside = _shifted_chain(op.inner_op, space, I, markers, vdim, delta, lin_shift)
+    return (s, out | outside)
+end
+# A probed restriction answers its zero stencil outside its region, as `_probed_chain` does,
+# and the chain below it is not walked there: a source restricted further down is never
+# called outside this region, and a region disjoint from this one (`D̽ₓ(2.0 *
+# restrict_to(:l, 3 * restrict_to(:r, f)))`, left unprobed by `form`) answers `()` as it
+# did before the chain was shifted, not a zeroed entry the walk boxed on (1440 B).
+@inline function _shifted_chain(
+        op::_ProbedRestriction, space, I, markers, vdim, delta, lin_shift::Int
+)
+    _in_region(op, markers, lin_shift) || return (
+        shift_stencil(op.zero_stencil, vdim, delta), true)
+    _scales_restriction(op.inner_op) || return (
+        shifted_inner_stencil(op, nothing, space, I, markers, vdim, delta), false)
+    return _shifted_chain(op.inner_op, space, I, markers, vdim, delta, lin_shift)
+end
+
 # --- AST resolution ---------------------------------------------------------------- #
 
 function resolve_ast(op::RegionRestriction{D, RegionType}) where {D, RegionType}

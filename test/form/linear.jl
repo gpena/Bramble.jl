@@ -7,6 +7,7 @@ using Bramble: execution_policy
 import Bramble: M₊ᵧ
 using ForwardDiff
 using LinearAlgebra: Diagonal, diag, dot, I
+using SparseArrays: nnz
 using Bramble:
                LinearForm,
                form,
@@ -32,6 +33,14 @@ using Bramble:
                Innerplus,
                evaluate!,
                D̽ₓ,
+               D̽ᵧ,
+               D̽₂,
+               D₊ₓ,
+               D₊ᵧ,
+               Dcₓ,
+               Mcₓ,
+               S₊ₓ,
+               source_function,
                D₋ᵧ,
                D₋ₓ,
                Mᵧ,
@@ -40,7 +49,7 @@ using Bramble:
                inner₊ₓ,
                jumpₓ,
                weights
-using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
+using ..TestUtils: alloc_test, @test_allocs, WITH_3D_TESTS, WITH_AD_TESTS, _graded_mesh
 
 # Assembling the right-hand side of a system.
 #
@@ -943,6 +952,37 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             dim_li)
     end
 
+    @testset "Function of position times a term" begin
+        # `f * op` reads `f` as a zero-argument thunk; a function of position failed in the
+        # thunk call with a `MethodError` naming no cause (gpena/Bramble.jl#761). Plain,
+        # restricted and summed terms all resolve through one check, which names the fixes.
+        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), (9,), (true,)))
+        f = x -> 1 + x[1]
+        for (label, g) in Any[("plain", v -> f * innerₕ(1.0, v)),
+            ("restricted", v -> f * innerₕ(1.0, restrict_to(:boundary, v))),
+            ("summed", v -> f * (innerₕ(1.0, v) + innerₕ(2.0, v)))]
+            @testset "$label" begin
+                e = try
+                    form(W1, g)
+                    nothing
+                catch err
+                    err
+                end
+                @test e isa ArgumentError
+                msg = e isa ArgumentError ? sprint(showerror, e) : ""
+                @test occursin("zero-argument", msg)
+                @test occursin("innerₕ(f, v)", msg)
+                @test occursin("Rₕ(W, f) * op", msg)
+            end
+        end
+        # a thunk still scales, and both suggested spellings give the same source
+        vals = collect(1.0:Float64(ndofs(W1)))
+        @test assemble(form(W1, v -> (() -> vals) * innerₕ(1.0, v))) ≈
+              vals .* assemble(form(W1, v -> innerₕ(1.0, v)))
+        @test assemble(form(W1, v -> innerₕ(f, v))) ≈
+              assemble(form(W1, v -> innerₕ(Rₕ(W1, f), v)))
+    end
+
     @testset "Invalid component error" begin
         # It used to contribute nothing, in silence. On a two-block space
         # `innerₕ(1.0, v(3))` assembled to zeros, and summed with a valid term it dropped
@@ -1306,17 +1346,17 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
                 Tuple(v -> 2.0 * innerₕ(g, D₋ₓ(R(s, v))) for s in labels[1:k])...))
         end
         # A restriction over a sum is distributed over it; constant scales of several types
-        # are converted to the space's element type (12816 B for `2.0R + 3R` before).
+        # are widened to the type of their product with the element weight, never narrowed
+        # (12816 B for `2.0R + 3R` before).
         _check_split((v -> innerₕ(g, R(:c, v + R(:l, v) + R(:r, v))), v -> innerₕ(g, R(:b, v))))
         _check_split((v -> innerₕ(x -> 1.0, 2.0 * R(:l, v)), v -> innerₕ(x -> 1.0, 3 * R(:r, v))))
         _check_split((v -> innerₕ(g, v), v -> innerₕ(g, 2.0 * R(:l, v)),
             v -> innerₕ(g, 3 * R(:r, v)), v -> innerₕ(g, (1 // 2) * R(:b, v))))
-        # A complex scale on a Float64 mesh is not promoted to: left as built, it still
-        # allocates, and must still agree with its parts.
+        # A complex scale on a Float64 mesh widens the form to ComplexF64, which refills
+        # without allocating, and must still agree with its parts.
         _check_split(
             (v -> innerₕ(g, (1.0 + 2.0im) * R(:l, v)), v -> innerₕ(g, 3 * R(:r, v)),
-                v -> innerₕ(g, 2.0 * R(:b, v)));
-            bytes = nothing)
+            v -> innerₕ(g, 2.0 * R(:b, v))))
         # Summands of one type are paired whatever order they are written in.
         _check_split((v -> innerₕ(g, R(:l, v)), v -> innerₕ(g, 2.0 * R(:r, v)),
             v -> innerₕ(g, R(:b, v))))
@@ -1341,16 +1381,242 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             end
         end
 
-        # A form holding no restriction comes back as `simplify_ast` built it, mixed scale
-        # types and all; the split of a restricted one infers its concrete result.
-        _ast(f) = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
-            Bramble.resolve_ast(f(Bramble.test_function(W))), W))
-        ast = _ast(v -> innerₕ(g, 0.1 * v + 3 * D₋ₓ(v) + (1 // 3) * D₋ᵧ(v)))
+        # A form holding no restriction comes back as `simplify_ast` built it when its test
+        # side's scales agree in type. When they differ they are only ever widened, to the
+        # type of their products with a weight of the mesh's (`π` beside an Int on a
+        # Float32 mesh stays Float32, a Float64 literal stays Float64): each form keeps the
+        # unwidened one's element type and values, and refills with 0 B (14112 B on the
+        # Float32 mesh when left mixed, 27216 B for the sum of two products).
+        _ast(f, S = W) = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+            Bramble.resolve_ast(f(Bramble.test_function(S))), S))
+        _scale_types(op::Bramble.OperatorAdd) = (
+            _scale_types(op.left_op)..., _scale_types(op.right_op)...)
+        _scale_types(op::Bramble.OperatorScale) = (typeof(op.scalar),)
+        _scale_types(op) = ()
+        I32 = interval(0.0f0, 1.0f0)
+        W32 = gridspace(mesh(domain(I32 × I32), (7, 9), (false, false); backend = backend(Float32)))
+        f32 = x -> 1 + x[1]
+        for (S, h) in ((W, v -> innerₕ(g, 2.0 * v + 3.0 * D₋ₓ(v))),
+            (W32, v -> innerₕ(f32, 2 * v + 3 * D₋ₓ(v))),
+            (W32, v -> innerₕ(f32, 0.1 * v + 0.3 * D₋ₓ(v)) + innerₕ(1.0, v)))
+            ast = _ast(h, S)
+            @test Bramble._split_restricted_products(ast, eltype(S)) === ast
+        end
+        for (S, h, T, exact) in (
+            (W, v -> innerₕ(g, 0.1 * v + 3 * D₋ₓ(v) + (1 // 3) * D₋ᵧ(v)), Float64, true),
+            (W32, v -> innerₕ(f32, 0.1 * v + 3 * D₋ₓ(v)), Float64, false),
+            (W32, v -> innerₕ(f32, π * v + 3 * D₋ₓ(v)), Float32, false),
+            (W32, v -> innerₕ(f32, 0.1 * v + 3 * D₋ₓ(v)) + innerₕ(1.0, v), Float64, false),
+            (W32, v -> 2.0 * innerₕ(f32, Ref(0.1) * v + 3 * D₋ₓ(v)), Float64, false))
+            ast = _ast(h, S)
+            split = Bramble._split_restricted_products(ast, eltype(S))
+            if ast isa Bramble.LinearProduct
+                @test all(==(T), _scale_types(split.right_op))
+                @test all(t -> promote_type(t, T) === T, _scale_types(ast.right_op))
+            end
+            lf = form(S, h)
+            b = assemble(lf)
+            lowered = Bramble._lower_sources_for_space(ast, S)
+            U = assemble(Bramble.LinearForm{2, typeof(S), typeof(lowered)}(S, lowered))
+            @test eltype(b) === eltype(U) === T
+            @test restricted_bytes(b, lf) == 0
+            @test exact ? b == U : isapprox(b, U; rtol = 1e-6)
+        end
+        # Scales joining to a type that is not bits are left mixed: every product with a
+        # BigFloat allocates, and converting the Int to one only adds allocations.
+        h = v -> innerₕ(g, big(0.1) * v + 3 * D₋ₓ(v))
+        ast = _ast(h)
         @test Bramble._split_restricted_products(ast, Float64) === ast
+        lf = form(W, h)
+        b = assemble(lf)
+        @test eltype(b) === BigFloat
+        @test restricted_bytes(b, lf) <= 65760
+
+        # The zero stencil a typed restriction stores past 32 entries: `map` boxed it.
+        s40 = ntuple(k -> (k, 2, isodd(k) ? 1.5k : k), 40)
+        @test Bramble._zero_entries(s40) == map(t -> (Base.front(t)..., zero(t[end])), s40)
+        @test alloc_test(Bramble._zero_entries, s40) == 0
+
+        # The split of a restricted form infers its concrete result.
         ast = _ast(v -> innerₕ(g, g * R(:l, v) + g * R(:r, v) + g * R(:b, v) + g * R(:t, v)))
         rt = Base.return_types(Bramble._split_restricted_products, (typeof(ast), Type{Float64}))
         @test length(rt) == 1 && isconcretetype(only(rt))
         @test Bramble._split_restricted_products(ast, Float64) isa Bramble.OperatorAdd
+    end
+
+    @testset "Cross-weighted scaled restriction" begin
+        # `D̽` taps its operand at three points. A constant scale over a restriction was
+        # re-evaluated at each neighbour, `()` or a full tuple by its marker, and three such
+        # taps made more stencil shapes than inference splits: every refill boxed (14112 B
+        # bilinear on this 7x9 grid, D̽ₓ 14544 B) where `D̽ᵧ(R)`, `D̽ᵧ(2v)` and `D₋ₓ(2R)`
+        # allocated nothing. The forms below are bilinear and linear both, on graded grids.
+        R = restrict_to
+        bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
+        I1 = interval(0.0, 1.0)
+        cases = ((I1, (11,), (D̽ₓ,)), (I1 × I1, (7, 9), (D̽ₓ, D̽ᵧ)),
+            # the 3D case runs in `slow` (gpena/Bramble.jl#650)
+            (WITH_3D_TESTS ? ((I1 × I1 × I1, (4, 5, 6), (D̽ₓ, D̽ᵧ, D̽₂)),) : ())...)
+        for (S, np, Ds) in cases
+            Ωg = mesh(domain(S, :l => :left), np, ntuple(_ -> false, length(np)))
+            pts = ntuple(d -> range(0.0, 1.0; length = np[d]) .^ (1 + 0.25d), length(np))
+            Bramble.change_points!(Ωg, length(np) == 1 ? only(pts) : pts)
+            W = gridspace(Ωg)
+            g = element(W)
+            g .= 1.0 .+ (1:length(g)) ./ 7
+            # `wrap(x) == c * unit(x)`: the scaled form must be `c` times the unit one.
+            for D in Ds,
+                (label, c, wrap, unit) in (("2.0", 2.0, x -> 2.0 * x, identity),
+                    ("-1", -1, x -> -x, identity), ("2.0 * g", 2.0, x -> 2.0 * (g * x), x -> g * x))
+
+                @testset "$(length(np))D $D($label R)" begin
+                    a = form(W, W, (u, v) -> innerₕ(u, D(wrap(R(:l, v)))))
+                    A = assemble(a)
+                    A1 = assemble(form(W, W, (u, v) -> innerₕ(u, D(unit(R(:l, v))))))
+                    # The restriction is live: it drops some of the unrestricted entries.
+                    full = assemble(form(W, W, (u, v) -> innerₕ(u, D(unit(v)))))
+                    @test 0 < count(!iszero, A1) < count(!iszero, full)
+                    @test A ≈ c * A1
+                    @test bytes(A, a) == 0
+                    lf = form(W, v -> innerₕ(g, D(wrap(R(:l, v)))))
+                    y = assemble(lf)
+                    @test y ≈ c * assemble(form(W, v -> innerₕ(g, D(unit(R(:l, v))))))
+                    @test bytes(y, lf) == 0
+                end
+            end
+        end
+
+        # A coefficient infinite outside the region it multiplies is zeroed with the region,
+        # never `Inf * 0 = NaN`, in every node that taps a neighbour: the vector is the one a
+        # finite coefficient gives, for a finite source and one infinite at both ends.
+        ns = 9
+        Ws = gridspace(mesh(domain(I1), ns, true))
+        u_end = [1 < i < ns ? 2.0 : Inf for i in 1:ns]
+        u_fin = fill(2.0, ns)
+        sources = (source_function(x -> x + 1, Val(1)),
+            source_function(x -> 1 / (x * (1 - x)), Val(1)))
+        for op in (D₊ₓ, D₋ₓ, D̽ₓ, Dcₓ, Mcₓ, jumpₓ, S₊ₓ), sf in sources
+
+            rhs(u) = assemble(form(Ws, v -> innerₕ(op(2.0 * (u * R(:interior, sf))), v)))
+            @test isequal(rhs(u_end), rhs(u_fin))
+            # the vector the walk gave before the shift followed the chain (2afe89a4)
+            op === D₊ₓ && sf === first(sources) &&
+                @test isequal(rhs(u_end), [2.25, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, -7.5, 0.0])
+        end
+
+        # A scale over a restriction of a scaled restriction shifts without boxing (6912 B
+        # in 2D, 960 B in 1D, when the shift recursed through one scale per restriction).
+        for (S, np) in ((I1, (11,)), (I1 × I1, (7, 9)))
+            W = gridspace(mesh(domain(S, :c => x -> x[1] < 0.6, :d => x -> x[1] > 0.2), np,
+                ntuple(_ -> false, length(np))))
+            nested(v) = S₊ₓ(2.0 * R(:c, 3 * R(:d, v)))
+            want = 6 * assemble(form(W, W, (u, v) -> innerₕ(u, S₊ₓ(R(:c, R(:d, v))))))
+            @test count(!iszero, want) > 0
+            for (side, fn) in (("test", (u, v) -> innerₕ(u, nested(v))),
+                ("trial", (u, v) -> innerₕ(nested(u), v)))
+                a = form(W, W, fn)
+                A = assemble(a)
+                @test A ≈ (side == "test" ? want : transpose(want))
+                @test bytes(A, a) == 0
+            end
+            lf = form(W, v -> innerₕ(1.0, nested(v)))
+            y = assemble(lf)
+            @test y ≈ 6 * assemble(form(W, v -> innerₕ(1.0, S₊ₓ(R(:c, R(:d, v))))))
+            @test bytes(y, lf) == 0
+        end
+    end
+
+    @testset "Nested difference of restriction" begin
+        # A tap over a difference of a restriction re-evaluated it at the neighbour, `()` or
+        # a full tuple by marker, and three taps boxed: `D̽ₓ(D̽ᵧ(R(:l, v)))` 83232 B a refill
+        # on this grid, `D̽ₓ(D₊ᵧ(R))` 49248 B. The oracle is the restriction as a mask
+        # coefficient, which walks no restriction; the stored entries are pinned, since a
+        # tap padded with zeros in place stored more (131 -> 176 for `D₋ₓ(D₊ᵧ(R))`).
+        R = restrict_to
+        bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
+        I1 = interval(0.0, 1.0)
+        Ωg = mesh(domain(I1 × I1, :l => :left, :r => :right, :b => :bottom), (7, 9),
+            (false, false))
+        Bramble.change_points!(Ωg,
+            (range(0.0, 1.0; length = 7) .^ 1.25, range(0.0, 1.0; length = 9) .^ 1.5))
+        W = gridspace(Ωg)
+        g = element(W)
+        g .= 1.0 .+ (1:length(g)) ./ 7
+        ml = Rₕ(W, x -> x[1] == 0 ? 1.0 : 0.0)
+        mb = Rₕ(W, x -> x[2] == 0 ? 1.0 : 0.0)
+        wraps = (("l", X -> R(:l, X), X -> ml * X),
+            ("2b", X -> 2.0 * R(:b, X), X -> 2.0 * (mb * X)))
+        # Stored entries (test side, trial side, both sides), as many as at 6eeabebe.
+        nests = (("D̽ₓD̽ᵧ", X -> D̽ₓ(D̽ᵧ(X)), (322, 322, 747), (323, 323, 725)),
+            ("D̽ₓD₊ᵧ", X -> D̽ₓ(D₊ᵧ(X)), (170, 170, 281), (171, 171, 319)),
+            ("D₋ₓD₊ᵧD₋ₓ", X -> D₋ₓ(D₊ᵧ(D₋ₓ(X))), (204, 204, 400), (194, 194, 425)),
+            ("McₓD̽ᵧ", X -> Mcₓ(D̽ᵧ(X)), (322, 322, 747), (323, 323, 725)),
+            ("D₊ₓD₋ₓ", X -> D₊ₓ(D₋ₓ(X)), (117, 117, 171), (123, 123, 181)),
+            # a sum of nested nodes: both sides refilled 463040 B with its tap 0 a union
+            ("D̽ₓ(D̽ᵧ+D₋ₓ)", X -> D̽ₓ(D̽ᵧ(X) + D₋ₓ(X)), (466, 466, 1259), (472, 472, 1267)))
+        for (n, N, nl, nc) in nests, ((w, wrap, masked), pins) in zip(wraps, (nl, nc))
+
+            @testset "$n($w)" begin
+                sides = ((u, v) -> innerₕ(u, N(wrap(v))), (u, v) -> innerₕ(N(wrap(u)), v),
+                    (u, v) -> innerₕ(N(wrap(u)), N(wrap(v))))
+                masks = ((u, v) -> innerₕ(u, N(masked(v))), (u, v) -> innerₕ(N(masked(u)), v),
+                    (u, v) -> innerₕ(N(masked(u)), N(masked(v))))
+                for (f, fm, k) in zip(sides, masks, pins)
+                    a = form(W, W, f)
+                    A = assemble(a)
+                    @test count(!iszero, A) > 0
+                    @test A ≈ assemble(form(W, W, fm))
+                    @test nnz(A) == k
+                    @test bytes(A, a) == 0
+                end
+                lf = form(W, v -> innerₕ(g, N(wrap(v))))
+                y = assemble(lf)
+                @test y ≈ assemble(form(W, v -> innerₕ(g, N(masked(v)))))
+                @test bytes(y, lf) == 0
+            end
+        end
+
+        # A probed restriction's chain is not walked outside its region: a source under a
+        # second, disjoint restriction is never called (it throws there), and the vector is
+        # zero at 0 B (1440 B when the shifted chain read the inner region outside `:l`).
+        sf = source_function(x -> x[1] > 0.5 ? error("read outside :l") : 1.0, Val(2))
+        for op in (D̽ₓ, Mcₓ)
+            lf = form(W, v -> innerₕ(op(2.0 * R(:l, 3 * R(:r, sf))), v))
+            y = assemble(lf)
+            @test all(iszero, y)
+            @test bytes(y, lf) == 0
+        end
+
+        # Restricted sums and scales between the nodes, both sides (each refilled more than
+        # before with the outer tap 0 left a union, and `Mₓ(D₊ᵧ(R(:c, R(:l) + R(:r))))`
+        # stored 270 entries, not 189, with zeros left at the point).
+        Wu = gridspace(mesh(
+            domain(I1 × I1, :l => :left, :r => :right, :b => :bottom,
+                :t => :top, :c => x -> x[1] < 0.5),
+            (7, 9), (true, true)))
+        m(f) = Rₕ(Wu, x -> f(x) ? 1.0 : 0.0)
+        ml, mr = m(x -> x[1] == 0), m(x -> x[1] == 1)
+        mb, mt, mc = m(x -> x[2] == 0), m(x -> x[2] == 1), m(x -> x[1] < 0.5)
+        LR(X) = R(:l, X) + R(:r, X)
+        BT(X) = R(:b, X) + R(:t, X)
+        for (n, f, fm, k) in (
+            ("MD(Rc)", (u, v) -> innerₕ(Mₓ(D₊ᵧ(R(:c, LR(u)))), Mₓ(D₊ᵧ(BT(v)))),
+            (u, v) -> innerₕ(Mₓ(D₊ᵧ(mc * (ml * u + mr * u))), Mₓ(D₊ᵧ(mb * v + mt * v))),
+            189),
+            ("DRD", (u, v) -> innerₕ(D₋ₓ(R(:c, D₊ᵧ(LR(u)))), D₋ₓ(R(:c, D₊ᵧ(BT(v))))),
+            (u, v) -> innerₕ(D₋ₓ(mc * D₊ᵧ(ml * u + mr * u)), D₋ₓ(mc * D₊ᵧ(mb * v + mt * v))),
+            108),
+            ("D̽(2D̽)", (u, v) -> innerₕ(D̽ₓ(2.0 * D̽ᵧ(LR(u))), D̽ₓ(2.0 * D̽ᵧ(LR(v)))),
+            (u, v) -> innerₕ(D̽ₓ(2.0 * D̽ᵧ(ml * u + mr * u)), D̽ₓ(2.0 * D̽ᵧ(ml * v + mr * v))),
+            827))
+            @testset "$n" begin
+                a = form(Wu, Wu, f)
+                A = assemble(a)
+                @test count(!iszero, A) > 0
+                @test A ≈ assemble(form(Wu, Wu, fm))
+                @test nnz(A) == k
+                @test bytes(A, a) == 0
+            end
+        end
     end
 
     WITH_AD_TESTS && @testset "Assembled residual differentiation" begin

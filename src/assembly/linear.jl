@@ -337,7 +337,8 @@ end
 
 # The zero of every coefficient, offsets kept: `zero` rather than a `false` scale, so the
 # zero is `+0.0` whatever the sign of the probed value.
-@inline _zero_entries(s::Tuple) = map(t -> (Base.front(t)..., zero(t[end])), s)
+# `_each_entry` rather than `map`, which boxes past 32 entries.
+@inline _zero_entries(s::Tuple) = _each_entry(t -> (Base.front(t)..., zero(t[end])), s)
 
 # A label's column in the word matrix, or 0 for a label the mesh lacks: the walk reports
 # that one (`_validate_term_markers`), not `form`.
@@ -416,11 +417,21 @@ end
 
 # A product's test side holding three or more restricted summands is split as a bilinear
 # product's is (`_split_restricted_products`, bilinear.jl, gpena/Bramble.jl#727): grouped
-# by type, at most two a piece, its scales promoted to `E` when their common type promotes
-# to it, every piece one `LinearProduct` with the same source. Its source is left as it is:
-# a restricted source keeps one stencil type once `_typed_restrictions` (above) has typed it.
+# by type, at most two a piece, every piece one `LinearProduct` with the same source. Its
+# source is left as it is, since a restricted source keeps one stencil type once
+# `_typed_restrictions` (above) has typed it. The test side's outermost scales, when they
+# differ in type, are widened as a bilinear operand's are (`_uniform_scales`), to the type
+# of their products with an `E` weight and never narrowed to `E`. Without a restriction
+# that happens only when the type is bits (`_widened_product`, 14112 B before for
+# `0.1 * v + 3 * D₋ₓ(v)` on a Float32 mesh), and a form whose test sides' scales agree
+# folds to itself at compile time (`_needs_rewrite`, which reads the test side through
+# the method below, defined before bilinear.jl's generator that calls it).
+_type_mixed_scales(T::Type{<:LinearProduct}) = T isa DataType &&
+                                               _type_scales_differ(T.parameters[4])
+
 function _split_restricted_products(op::LinearProduct{D, W}, ::Type{E}) where {D, W, E}
-    _holds_restriction(op.right_op) || return op
+    _needs_rewrite(op) || return op
+    _holds_restriction(op.right_op) || return _widened_product(op, E)
     r = _uniform_scales(op.right_op, E)
     rs = _operand_groups(_expanded_summands(r), Val(2))
     length(rs) > 16 && return op
@@ -429,6 +440,11 @@ function _split_restricted_products(op::LinearProduct{D, W}, ::Type{E}) where {D
                LinearProduct{D, W, typeof(op.left_op), typeof(r)}(op.left_op, r)
     end
     return _linear_product_sum(op, rs)
+end
+
+function _widened_product(op::LinearProduct{D, W}, ::Type{E}) where {D, W, E}
+    r = _bits_uniform_scales(op.right_op, E)
+    return LinearProduct{D, W, typeof(op.left_op), typeof(r)}(op.left_op, r)
 end
 
 # One `LinearProduct` per group, summed left to right; recursive on the tuple's type, so the

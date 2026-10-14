@@ -96,7 +96,8 @@ end
         s0 = _walk_mesh(Ωₕ)
         p = collect(points(Ωₕ))
         p[2] = (p[1] + p[2]) / 2
-        change_points!(Ωₕ, p)
+        # The mesh carries the predicate label :c, so the three-argument form moves it.
+        change_points!(Ωₕ, markers(domain(I, :l => :left, :c => x -> x < 0.4)), p)
         s1 = _walk_mesh(Ωₕ)
         # Same length: the arrays are updated in place, the version tells staleness.
         @test points(s1) === points(s0) && points(s1) == p
@@ -124,8 +125,112 @@ end
         @test length(markers(Ωₕ)[:boundary]) == 9
     end
 
-    @testset "Same count keeps custom labels" begin
-        Ωₕ = mesh(domain(I, :a => x -> x < 0.4), 70, false)::Mesh1D
+    @testset "Moving points: predicate labels" begin
+        # The 1D probe of the bug: `:c` is `x < 0.5` at the old points, and the squared
+        # points put two more of them below 0.5.
+        Ω = domain(I, :c => x -> x[1] < 0.5, :l => :left)
+        pts = collect(range(0.0, 1.0; length = 7)) .^ 2
+        Ωₕ = mesh(Ω, 7, true)
+        c0 = copy(markers(Ωₕ)[:c])
+        v0, p0 = _mesh_version(Ωₕ), copy(points(Ωₕ))
+        @test c0 == Bool[1, 1, 1, 0, 0, 0, 0]
+        err = try
+            change_points!(Ωₕ, pts)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("change_points!(Ωₕ, markers(Ω), pts)", err.msg)
+        @test occursin("(:c,)", err.msg)
+        # Refused before anything changed.
+        @test points(Ωₕ) == p0 && _mesh_version(Ωₕ) == v0
+        @test markers(Ωₕ)[:c] == c0
+        # The three-argument form re-evaluates the predicate at the new points.
+        change_points!(Ωₕ, markers(Ω), pts)
+        @test markers(Ωₕ)[:c] == Bool[1, 1, 1, 1, 1, 0, 0] && words_agree(Ωₕ)
+        # ... and a mesh it moved is still refused by the two-argument form.
+        @test_throws ArgumentError change_points!(Ωₕ, pts)
+
+        # Face labels are index-based and stay valid, in 1D and 2D.
+        Ωf = domain(I, :l => :left, :r => (:left, :right))
+        Mf = mesh(Ωf, 7, true)
+        change_points!(Mf, pts)
+        @test points(Mf) == pts && markers(Mf)[:l] == Bool[1, 0, 0, 0, 0, 0, 0]
+        Ω2 = domain(I × I, :l => :left, :b => :bottom)
+        M2 = mesh(Ω2, (5, 6), (true, true))
+        q = (collect(range(0.0, 1.0; length = 5)) .^ 2,
+            collect(range(0.0, 1.0; length = 6)) .^ 2)
+        l0 = copy(markers(M2)[:l])
+        change_points!(M2, q)
+        @test points(M2) == q && markers(M2)[:l] == l0 && words_agree(M2)
+
+        # A 2D predicate is refused, before any axis moves.
+        M3 = mesh(domain(I × I, :l => :left, :c => x -> x[1] < 0.5), (5, 6), (true, true))
+        v3 = _mesh_version(M3)
+        @test_throws ArgumentError change_points!(M3, q)
+        @test _mesh_version(M3) == v3
+    end
+
+    @testset "Predicate labels follow the mesh" begin
+        Ω = domain(I, :c => x -> x[1] < 0.5, :l => :left)
+        Ωₕ = mesh(Ω, 7, true)
+        pts = collect(range(0.0, 1.0; length = 7)) .^ 2
+        # Copies, host mirrors and refinement keep the refusal.
+        @test_throws ArgumentError change_points!(copy(Ωₕ), pts)
+        @test_throws ArgumentError change_points!(deepcopy(Ωₕ), pts)
+        be = Bramble.backend(Ωₕ)
+        @test_throws ArgumentError change_points!(Bramble._rebackend(Ωₕ, be, copy), pts)
+        r = copy(Ωₕ)
+        iterative_refinement!(r, markers(Ω))
+        @test_throws ArgumentError change_points!(r, collect(range(0.0, 1.0; length = 13)))
+        # A hand-set label set has no predicate to re-evaluate, and a re-evaluation by
+        # `set_markers!` of face labels alone clears the record.
+        mm = Bramble.MeshMarkers()
+        mm[:boundary] = copy(markers(Ωₕ)[:boundary])
+        mm[:interior] = copy(markers(Ωₕ)[:interior])
+        markers!(Ωₕ, mm)
+        change_points!(Ωₕ, pts)
+        @test points(Ωₕ) == pts
+        Bramble.set_markers!(Ωₕ, markers(domain(I, :l => :left)))
+        change_points!(Ωₕ, collect(range(0.0, 1.0; length = 7)))
+        @test points(Ωₕ) == range(0.0, 1.0; length = 7)
+    end
+
+    @testset "Submesh moves: predicate parent" begin
+        # `Ωₕ(1)` is the parent's shared submesh, and the parent's `:c` depends on its
+        # points: a move of it alone is refused in every form, before anything changes.
+        Ω = domain(I × I, :c => x -> x[1] < 0.5, :l => :left)
+        M = mesh(Ω, (7, 5), (true, true))
+        q = collect(range(0.0, 1.0; length = 7)) .^ 2
+        c0, p0, v0 = copy(markers(M)[:c]), copy(points(M(1))), _mesh_version(M)
+        msgs = ["a submesh of a mesh carrying predicate markers (:c,)",
+            "change_points!(Ωₕ, markers(Ω), pts)", "points of every axis"]
+        @test_throws msgs set_points!(M(1), q)
+        @test_throws msgs change_points!(M(1), q)
+        @test_throws msgs change_points!(M(1), markers(interval(0.0, 1.0)), q)
+        @test points(M(1)) == p0 && _mesh_version(M) == v0 && markers(M)[:c] == c0
+        # A copy stamps its own submeshes, and the original stays refused.
+        @test_throws ArgumentError set_points!(copy(M)(1), q)
+        # The parent-level three-argument call moves both and re-evaluates `:c`.
+        qy = collect(range(0.0, 1.0; length = 5))
+        change_points!(M, markers(Ω), (q, qy))
+        @test markers(M)[:c] == (repeat(q, 5) .< 0.5)
+        # `markers!` on the parent drops the predicate labels, and the submesh is free.
+        markers!(M, copy(markers(M)))
+        set_points!(M(1), collect(range(0.0, 1.0; length = 7)))
+        # Face labels and bare parents: submeshes move as before.
+        Mf = mesh(domain(I × I, :l => :left), (7, 5), (true, true))
+        set_points!(Mf(1), q)
+        change_points!(Mf(2), qy .^ 2)
+        @test points(Mf(1)) == q && markers(Mf)[:l] == markers(copy(Mf))[:l]
+        Mb = mesh(domain(I × I), (7, 5), (true, true))
+        set_points!(Mb(1), q)
+        @test points(Mb(1)) == q
+    end
+
+    @testset "Same count keeps face labels" begin
+        Ωₕ = mesh(domain(I, :a => :left), 70, false)::Mesh1D
         a0 = copy(markers(Ωₕ)[:a])
         # x^1.2 keeps both ends and the order of the points, and moves the interior ones.
         p = collect(points(Ωₕ)) .^ 1.2
@@ -133,6 +238,20 @@ end
         @test points(Ωₕ) == p && npoints(Ωₕ) == 70
         @test markers(Ωₕ)[:a] == a0
         @test words_agree(Ωₕ)
+    end
+
+    @testset "set_points! refuses predicate labels" begin
+        Ω = domain(I, :c => x -> x < 0.4, :l => :left)
+        Ωₕ = mesh(Ω, 70, false)::Mesh1D
+        c0, p0, v0 = copy(markers(Ωₕ)[:c]), copy(points(Ωₕ)), _mesh_version(Ωₕ)
+        p = p0 .^ 1.2
+        @test_throws ["set_points!(Ωₕ, pts)", "(:c,)",
+            "change_points!(Ωₕ, markers(Ω), pts)"] set_points!(Ωₕ, p)
+        # Refused before anything changed.
+        @test points(Ωₕ) == p0 && _mesh_version(Ωₕ) == v0 && markers(Ωₕ)[:c] == c0
+        # The three-argument form moves it and re-evaluates the label.
+        change_points!(Ωₕ, markers(Ω), p)
+        @test points(Ωₕ) == p && markers(Ωₕ)[:c] == (p .< 0.4) && words_agree(Ωₕ)
     end
 
     @testset "Word matrix: build and rebuild" begin
@@ -202,7 +321,8 @@ end
         @test deepcopy(_walk_mesh(a)).uid == _walk_mesh(a).uid
         # Kept across a point change.
         u = _walk_mesh(a).uid
-        change_points!(a, map(collect, points(a)))
+        Ω2 = domain(I × I, :l => :left, :c => x -> x[1] + x[2] < 0.7)
+        change_points!(a, markers(Ω2), map(collect, points(a)))
         @test _walk_mesh(a).uid == u
     end
 

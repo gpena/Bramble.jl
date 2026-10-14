@@ -131,7 +131,11 @@ const TappedNode{D, Dim} = Union{
 @inline function local_stencil(
         op::TappedNode{D, Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D, Dim}
-    inner = local_stencil(op.inner_op, space, I, markers, lin_idx)
+    # A tapped operand over a restriction answers with one length (`_fixed_stencil` below).
+    inner = _nests_fixed(op.inner_op) ?
+            _fixed_operand(op.inner_op, space, I, markers, lin_idx, Val(Dim),
+        _off_tap(_stencil_taps(op))) :
+            local_stencil(op.inner_op, space, I, markers, lin_idx)
     return _fold_taps(
         op,
         inner,
@@ -143,6 +147,132 @@ const TappedNode{D, Dim} = Union{
         _stencil_weights(op, space, I)
     )
 end
+
+# A tap reaching a tapped node over a restriction (`D̽ₓ(D̽ᵧ(restrict_to(:l, v)))`) re-evaluated
+# it at the neighbour, where the restriction's own tap 0 answers `()` or a full tuple by the
+# neighbour's marker; three such taps concatenate to more stencil shapes than inference
+# splits, and every refill boxed (83232 B on 7x9, gpena/Bramble.jl#759). The node is instead
+# evaluated at the neighbour with that restriction zeroed outside its region, so the tap has
+# one length at every point, and relabelled as the trait path relabels it. The predicate
+# reads types only, so the branch folds; a source-only operand keeps the trait path.
+@inline _fixes_restriction(op::RegionRestriction) = !_is_source_only(op)
+@inline _fixes_restriction(op::Union{OperatorScale, GridFunctionScale}) = !_is_source_only(op) &&
+                                                                          (_scales_restriction(op) ||
+                                                                           op.inner_op isa TappedNode &&
+                                                                           _fixes_restriction(op.inner_op))
+@inline _fixes_restriction(op::TappedNode) = _fixes_restriction(op.inner_op)
+@inline _fixes_restriction(op::OperatorAdd) = _fixes_restriction(op.left_op) ||
+                                              _fixes_restriction(op.right_op)
+@inline _fixes_restriction(::Any) = false
+
+@inline function shifted_inner_stencil(
+        inner_op::TappedNode{D}, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
+) where {D, Dim}
+    _fixes_restriction(inner_op) || return _shifted_inner_stencil(
+        stencil_shift_trait(inner_op), inner_op, inner, space, I, markers, Val(Dim), delta)
+    # Out of line, as `_reevaluated_shift` is for any operand deeper than a leaf.
+    return @noinline _fixed_shift(inner_op, space, I, markers, Val(Dim), _shift_delta(delta))
+end
+
+# `_reevaluated_shift` with the node's stencil at the neighbour of fixed length.
+@inline function _fixed_shift(
+        op, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta::Int
+) where {D, Dim}
+    m = mesh(space)
+    Ishift = _clamped_shift(m, I, Val(Dim), delta)
+    at = _fixed_stencil(op, space, Ishift, markers, LinearIndices(indices(m))[Ishift])
+    T = eltype(space)
+    on_grid = Ishift[Dim] == I[Dim] + delta ? one(T) : zero(T)
+    return scale_stencil(shift_stencil(at, Val(Dim), delta), on_grid)
+end
+
+# `op`'s stencil at `J`, of one length at every point. A tapped node over a restriction, or
+# over a chain of scales and restrictions, takes as its tap 0 that chain shifted by zero
+# (`_shifted_chain`); outside a region it takes that chain zeroed and relabelled onto one of
+# its other taps, entries the point visits anyway, so the pattern gains none
+# (`D₋ₓ(D₊ᵧ(Rₕ(:l, v)))` grew 131 -> 176 stored entries zeroed in place). Its other taps are
+# fixed by the shift rules already, and any other operand already has one length. A node
+# over such a node takes it as its own tap 0 too (`local_stencil` above): left a union of two
+# lengths, the product of two sides compiled three long stencils, not one (first assemble of
+# `D̽ₓ(D̽ᵧ(Rₕ(:l, D₋ₓ(u))))` on both sides 14.9 s, against 2.4 s with one).
+@inline _fixed_stencil(op, space, J, markers, lin::Int) = local_stencil(
+    op, space, J, markers, lin)
+@inline function _fixed_stencil(
+        op::TappedNode{D, Dim}, space, J::CartesianIndex{D}, markers, lin::Int
+) where {D, Dim}
+    _fixes_restriction(op) || return local_stencil(op, space, J, markers, lin)
+    taps = _stencil_taps(op)
+    inner = _fixed_operand(op.inner_op, space, J, markers, lin, Val(Dim), _off_tap(taps))
+    return _fold_taps(op, inner, space, J, markers, Val(Dim), taps, _stencil_weights(op, space, J))
+end
+
+# A node over such a node takes its tap 0 the same way (`local_stencil` above), through any
+# sum, scale or restriction between them (`D̽ₓ(D̽ᵧ(R) + D₋ₓ(R))`, `D₋ₓ(Rₕ(:c, D₊ᵧ(…)))`):
+# a tap 0 left a union made the product of two sides box harder than before (317696 ->
+# 463040 B, 106784 -> 146752 B on 7x9) and compile three long stencils, not one.
+@inline _nests_fixed(op::TappedNode) = _fixes_restriction(op)
+@inline _nests_fixed(op::OperatorAdd) = _nests_fixed(op.left_op) || _nests_fixed(op.right_op)
+@inline _nests_fixed(op::Union{RegionRestriction, OperatorScale, GridFunctionScale}) = _nests_fixed(
+    op.inner_op) && _fixes_restriction(op)
+@inline _nests_fixed(::Any) = false
+
+# A tapped node's tap 0 at `J`, of one length, `off` its first other tap. A restriction (or a
+# chain of scales over one) with `J` outside its region answers its own tap at `off` zeroed:
+# the entries that tap visits, so the pattern gains none; zeros left in place at `J` stored
+# more (`D₋ₓ(D₊ᵧ(Rₕ(:l, v)))` 131 -> 176, `Mₓ(D₊ᵧ(Rₕ(:c, Rₕ(:l, u) + Rₕ(:r, u))))` 189 ->
+# 270, a restriction under a sum). Inside, the chain is walked at `J`, a sum or a tapped
+# node below it summand by summand; the zero is never multiplied by a scale above it.
+@inline _fixed_operand(op, space, J, markers, lin::Int, vdim, off) = local_stencil(
+    op, space, J, markers, lin)
+@inline _fixed_operand(op::TappedNode, space, J, markers, lin::Int, vdim, off) = _fixed_stencil(
+    op, space, J, markers, lin)
+@inline function _fixed_operand(op::OperatorAdd, space, J, markers, lin::Int, vdim, off)
+    _fixes_restriction(op) || return local_stencil(op, space, J, markers, lin)
+    return _concat_operands(_summands(op), space, J, markers, lin, vdim, off)
+end
+@inline _concat_operands(ts::Tuple{Any}, space, J, markers, lin::Int, vdim, off) = _fixed_operand(
+    ts[1], space, J, markers, lin, vdim, off)
+@inline _concat_operands(ts::Tuple, space, J, markers, lin::Int, vdim, off) = concatenate_stencils(
+    _fixed_operand(ts[1], space, J, markers, lin, vdim, off),
+    _concat_operands(Base.tail(ts), space, J, markers, lin, vdim, off))
+@inline function _fixed_operand(
+        op::Union{RegionRestriction, OperatorScale, GridFunctionScale}, space, J, markers,
+        lin::Int, vdim, off
+)
+    _scales_restriction(op) || return _fixes_restriction(op) ?
+           scale_stencil(
+        _fixed_operand(op.inner_op, space, J, markers, lin, vdim, off), _scale_value(op, lin)) :
+           local_stencil(op, space, J, markers, lin)
+    _fixes_restriction(op) || return local_stencil(op, space, J, markers, lin)
+    _chain_out(op, markers, lin) && return _zero_entries(
+        shifted_inner_stencil(op, nothing, space, J, markers, vdim, off))
+    return _chain_in(op, space, J, markers, lin, vdim, off)
+end
+
+# Whether `lin` lies outside a restriction of the chain of scales and restrictions at `op`.
+@inline _chain_out(op::Union{OperatorScale, GridFunctionScale}, markers, lin::Int) = _chain_out(
+    op.inner_op, markers, lin)
+@inline function _chain_out(op::RegionRestriction, markers, lin::Int)
+    _in_region(op, markers, lin) || return true
+    return _scales_restriction(op.inner_op) && _chain_out(op.inner_op, markers, lin)
+end
+
+# The chain at `J`, every restriction on it holding `J`: scaled at `J`, and below the last
+# restriction a sum or a tapped node fixed in turn, anything else shifted by zero there.
+@inline _chain_in(op::Union{OperatorScale, GridFunctionScale}, space, J, markers, lin::Int,
+    vdim, off) = scale_stencil(
+    _chain_in(op.inner_op, space, J, markers, lin, vdim, off), _scale_value(op, lin))
+@inline function _chain_in(op::RegionRestriction, space, J, markers, lin::Int, vdim, off)
+    inner = op.inner_op
+    _scales_restriction(inner) && return _chain_in(inner, space, J, markers, lin, vdim, off)
+    inner isa Union{OperatorAdd, TappedNode} && _fixes_restriction(inner) &&
+        return _fixed_operand(inner, space, J, markers, lin, vdim, off)
+    return shifted_inner_stencil(op, nothing, space, J, markers, vdim, Val(0))
+end
+
+# A node's first tap other than 0 (`D₋ₓ`'s is its second): every node with a tap 0 has one.
+@inline _off_tap(taps::Tuple{Val{0}, Any, Vararg}) = taps[2]
+@inline _off_tap(taps::Tuple) = taps[1]
 
 @inline local_stencil(
     ::TrialFunction{D}, space, I::CartesianIndex{D}, markers, lin_idx::Int
@@ -338,13 +468,25 @@ function resolve_ast(op::GridFunctionScale{D, VType}) where {D, VType}
     return GridFunctionScale{D, VType, typeof(inner)}(op.grid_function, inner)
 end
 
+# A function times a term is read as a zero-argument thunk (`SourceVector`'s docstring), so
+# `f * innerₕ(1.0, v)` with `f(x)` a function of position would fail in the call below with
+# a `MethodError` naming no cause. Checked here, once per form, never per point.
 function resolve_ast(op::GridFunctionScale{D, <:Function}) where {D}
+    applicable(op.grid_function) || _throw_not_a_thunk()
     vec = op.grid_function()
     inner = resolve_ast(op.inner_op)
     return GridFunctionScale{D, typeof(vec), typeof(inner)}(vec, inner)
 end
 
 resolve_ast(ops::NTuple{N, Any}) where {N} = map(resolve_ast, ops)
+
+@noinline function _throw_not_a_thunk()
+    throw(ArgumentError("a function times a term, `f * op`, is read as a zero-argument " *
+                        "thunk returning the values to scale by, and this function has " *
+                        "no zero-argument method. For a source that is a function of " *
+                        "position write `innerₕ(f, v)`; for a coefficient restrict it to " *
+                        "the grid first, `Rₕ(W, f) * op`."))
+end
 
 # The two scaling wrappers' half of `_bind_interp_spaces` (operators/interpolation.jl),
 # beside their `resolve_ast` because they are the same walk. `GridFunctionScale`'s thunk

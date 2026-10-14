@@ -3,6 +3,7 @@ module FormReplayMarkersTests
 using Test
 using Bramble
 using SparseArrays
+using Random
 using Bramble: CpuSerial, CpuThreaded, backend, assemble_add!, assemble_parallel!,
                allocate_system_matrix, restrict_to, D₋ₓ, set_points!, _marker_stamp,
                _pattern_stamp
@@ -95,6 +96,7 @@ end
         case in (:scalar, :pair, :cross), path in (:assemble, :allocate),
         entry in (:assemble!, :assemble_add!, :assemble_parallel!)
         @testset "shrink" begin
+            Random.seed!(20261014)
             W, a, Ω = _setup(pol, case)
             A = path === :assemble ? assemble(a) : allocate_system_matrix(a)
             assemble!(A, a)
@@ -155,7 +157,16 @@ _allocs(A, a) = @allocated assemble!(A, a)
 end
 
 @testset "set_points! keeps the stamp" begin
+    # A mesh carrying a predicate marker is refused, and nothing moves.
     Ω = _mesh1(31, CpuSerial())
+    p0 = collect(points(Ω))
+    stamp = _marker_stamp(Ω)
+    @test_throws ArgumentError set_points!(Ω, p0 .^ 2)
+    @test points(Ω) == p0
+    @test _marker_stamp(Ω) == stamp
+
+    # Re-stored markers are plain sets: no predicate label remains, so the move is allowed.
+    Bramble.markers!(Ω, copy(markers(Ω)))
     W = gridspace(Ω)
     a = form(W, W, _term)
     assemble(a)

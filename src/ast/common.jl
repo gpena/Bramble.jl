@@ -21,20 +21,44 @@ Zero-initialized offset tuple of dimension `D`.
 """
 @inline zero_offset(::Val{D}) where {D} = ntuple(x -> 0, Val(D))
 
+# `f` over every entry of a stencil. `ntuple` over `Val(length(s))`, never `map`: over a
+# `Tuple` of more than 32 entries `map` collects into a `Vector{Any}` and allocates at every
+# grid point. The closure is inlined so each `s[k]` reads at a constant `k`, which keeps a
+# stencil whose entries differ in type (`Int` and `Float64` weights) from boxing.
+#
+# Past `_INLINED_ENTRIES` the unrolled tuple is built out of line, once per stencil type,
+# rather than inlined at every caller. Inlined, the compiler's own passes over hundreds of
+# unrolled entries at each call site took the first matrix-free product of
+# `innerₕ(D̽ᵧD̽ₓD̽ₓu, D̽ᵧD̽ₓD̽ₓv)` (729 entries) on a 9x8 grid from 0.2 s to minutes.
+@inline function _each_entry(f::F, s::Tuple) where {F}
+    length(s) > _INLINED_ENTRIES && return _each_entry_outlined(f, s)
+    return _each_entry_inlined(f, s)
+end
+
+@inline function _each_entry_inlined(f::F, s::Tuple) where {F}
+    return ntuple(Val(length(s))) do k
+        @inline
+        return f(s[k])
+    end
+end
+
+@noinline _each_entry_outlined(f::F, s::Tuple) where {F} = _each_entry_inlined(f, s)
+
+const _INLINED_ENTRIES = 32
+
 """
     shift_stencil(inner::Tuple, ::Val{Dim}, delta)
 
 Shifts all coordinates in a stencil tuple by `delta` in dimension `Dim`.
 
-`map` over a `Tuple` unrolls and stays type-stable at compile time in Julia, with zero
-allocations and an identical inferred return type, so code generation would buy nothing
-here.
+`_each_entry` unrolls and stays type-stable at any stencil length, with zero allocations,
+so code generation would buy nothing here.
 """
-@inline shift_stencil(inner::Tuple, ::Val{Dim}, ::Val{Delta}) where {Dim, Delta} = map(
+@inline shift_stencil(inner::Tuple, ::Val{Dim}, ::Val{Delta}) where {Dim, Delta} = _each_entry(
     t -> (
         shift_offset(t[1], Dim, Delta), t[2]), inner)
 
-@inline shift_stencil(inner::Tuple, ::Val{Dim}, delta::Int) where {Dim} = map(
+@inline shift_stencil(inner::Tuple, ::Val{Dim}, delta::Int) where {Dim} = _each_entry(
     t -> (
         shift_offset(t[1], Dim, delta), t[2]), inner)
 
@@ -48,15 +72,44 @@ here.
 @inline _flatten_tuples(::Tuple{}) = ()
 @inline _flatten_tuples(t::Tuple) = (first(t)..., _flatten_tuples(Base.tail(t))...)
 
+# Every (left, right) pair, left-major: entry `k` pairs `left[i]` with `right[j]`, the order
+# `_flatten_tuples` of a nested `map` gave. One flat `ntuple` rather than `_each_entry` per
+# left entry: nested, a right operand past 32 entries allocates. Out of line past
+# `_INLINED_ENTRIES` pairs, as `_each_entry` is.
+@inline function _each_pair(f::F, left::Tuple, right::Tuple) where {F}
+    length(left) * length(right) > _INLINED_ENTRIES && return _each_pair_outlined(f, left, right)
+    return _each_pair_inlined(f, left, right)
+end
+
+# One left entry (a linear product's contracted source) is read as `left[1]`, not by an index
+# computed per pair: its weight may be a `Union` (`false` for an empty source stencil), and
+# under `--code-coverage` the computed index boxed it on every refill (6048 B on 7x9).
+@inline function _each_pair(f::F, left::Tuple{Any}, right::Tuple) where {F}
+    l = left[1]
+    return _each_entry(r -> f(l, r), right)
+end
+
+@noinline _each_pair_outlined(f::F, left::Tuple, right::Tuple) where {F} = _each_pair_inlined(
+    f, left, right)
+
+@inline function _each_pair_inlined(f::F, left::Tuple, right::Tuple) where {F}
+    n = length(right)
+    return ntuple(Val(length(left) * n)) do k
+        @inline
+        return f(left[(k - 1) ÷ n + 1], right[(k - 1) % n + 1])
+    end
+end
+
 @inline function multiply_stencils_bilinear(left::Tuple, right::Tuple, vol::Number)
-    _flatten_tuples(map(l -> map(r -> (l[1], r[1], l[2] * r[2] * vol), right), left))
+    _each_pair((l, r) -> (l[1], r[1], l[2] * r[2] * vol), left, right)
 end
 
 @inline function multiply_stencils_linear(left::Tuple, right::Tuple, vol::Number)
-    _flatten_tuples(map(l -> map(r -> (r[1], l[2] * r[2] * vol), right), left))
+    _each_pair((l, r) -> (r[1], l[2] * r[2] * vol), left, right)
 end
 
-@inline scale_stencil(inner::Tuple, scalar::Number) = map(t -> (Base.front(t)..., t[end] * scalar), inner)
+@inline scale_stencil(inner::Tuple, scalar::Number) = _each_entry(
+    t -> (Base.front(t)..., t[end] * scalar), inner)
 
 """
     entry_offsets(stencil::Tuple)
@@ -83,12 +136,14 @@ compare stencils against literal tuples all stay as they are. Enzyme differentia
 to 63 machine words -- a failure at a large stencil is really
 `_peelable` selecting the guarded walk, not an aggregate Enzyme cannot type.
 
-`map` over a `Tuple` unrolls and stays type-stable, the same property the rest of the
-stencil algebra in this file relies on, so neither call allocates.
+Both are an `ntuple` over `Val(length(stencil))`, which unrolls at any length, so neither
+call allocates whatever the stencil's size. `map` would not do: over a `Tuple` of more than
+32 entries Base's `map` collects into a `Vector{Any}` and boxes, and a product of two
+nested operands (`innerₕ(D̽ₓ(D₋ₓ(u)), D̽ₓ(D₋ₓ(v)))`) is that long at every grid point.
 """
-@inline entry_offsets(stencil::Tuple) = map(Base.front, stencil)
+@inline entry_offsets(stencil::Tuple) = _each_entry(Base.front, stencil)
 
-@inline entry_weights(stencil::Tuple) = map(last, stencil)
+@inline entry_weights(stencil::Tuple) = _each_entry(last, stencil)
 
 @doc (@doc entry_offsets) entry_weights
 
@@ -175,9 +230,10 @@ point. A `Function` inside a `GridFunctionScale` is something else entirely: a
 zero-argument thunk returning the vector or number to scale by, called as `f()` both
 here and in `resolve_ast`. It defers building that vector until the form is resolved.
 
-So `(x -> x[1]) * D₋ₓ(u)` does not do what it reads as: the thunk call fails, because the
-function wants a point. A function of position belongs in a `SourceFunction`, or should be
-restricted to the grid with `Rₕ` first and passed as the vector it becomes.
+So `(x -> x[1]) * D₋ₓ(u)` does not do what it reads as: the function wants a point, and
+`resolve_ast` throws an `ArgumentError` naming both fixes. A function of position belongs
+in a `SourceFunction`, or should be restricted to the grid with `Rₕ` first and passed as
+the vector it becomes.
 """
 struct SourceVector{D, VType <: AbstractVector} <: LazyOp{D}
     vec::VType
