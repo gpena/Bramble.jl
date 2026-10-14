@@ -81,6 +81,14 @@ so code generation would buy nothing here.
     return _each_pair_inlined(f, left, right)
 end
 
+# One left entry (a linear product's contracted source) is read as `left[1]`, not by an index
+# computed per pair: its weight may be a `Union` (`false` for an empty source stencil), and
+# under `--code-coverage` the computed index boxed it on every refill (6048 B on 7x9).
+@inline function _each_pair(f::F, left::Tuple{Any}, right::Tuple) where {F}
+    l = left[1]
+    return _each_entry(r -> f(l, r), right)
+end
+
 @noinline _each_pair_outlined(f::F, left::Tuple, right::Tuple) where {F} = _each_pair_inlined(
     f, left, right)
 
