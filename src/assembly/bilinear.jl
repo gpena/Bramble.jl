@@ -389,8 +389,20 @@ function _split_restricted_products(op::BilinearProduct{D, W}, ::Type{E}) where 
     r = _uniform_scales(op.right_op, E)
     nl = _vanishing_count(l)
     nr = _vanishing_count(r)
-    ls = _operand_groups(_expanded_summands(l), Val(nr == 0 ? 2 : 1))
-    rs = _operand_groups(_expanded_summands(r), Val(nl == 0 ? 2 : 1))
+    capl = Val(nr == 0 ? 2 : 1)
+    capr = Val(nl == 0 ? 2 : 1)
+    ls = _operand_groups(_expanded_summands(l), capl, Val(true))
+    rs = _operand_groups(_expanded_summands(r), capr, Val(true))
+    # A plain summand's own group (`_joins_restriction`) is one more per side; where that
+    # takes the product past the cap below, the plain summands join the first group as
+    # they did before it, rather than the product being left whole (1205744 B against
+    # 82848 B for a plain and four restricted differences against three).
+    length(ls) * length(rs) > 16 || return _split_product(op, l, r, ls, rs)
+    return _split_product(op, l, r, _operand_groups(_expanded_summands(l), capl, Val(false)),
+        _operand_groups(_expanded_summands(r), capr, Val(false)))
+end
+
+function _split_product(op::BilinearProduct{D, W}, l, r, ls, rs) where {D, W}
     # Each product is a walk of its own and a type to compile, and restrictions on both
     # sides multiply them: past 16 (six distinct types a side made 36, a first assemble
     # up to 15 times slower and more bytes than the unsplit product), it stays as built.
@@ -554,8 +566,9 @@ function _joins_restriction(P, K)
 end
 
 # The summands of `Ts` (indices) as groups: one per sum, the plain summands (no bits)
-# joining the first group, or, both sides restricted, as `_joins_restriction` allows.
-function _type_groups(Ts::Vector{Any}, cap::Int)
+# joining the first group, or, both sides restricted and `separate` set, as
+# `_joins_restriction` allows.
+function _type_groups(Ts::Vector{Any}, cap::Int, separate::Bool)
     # Plain loops over plain vectors: compiled once into the package image (`precompile`
     # below), with no closure or generator of its own left to compile per session.
     plain = Int[]
@@ -585,7 +598,7 @@ function _type_groups(Ts::Vector{Any}, cap::Int)
         end
     end
     isempty(groups) && return [plain]
-    if isempty(plain) || cap > 1
+    if isempty(plain) || cap > 1 || !separate
         groups[1] = vcat(plain, groups[1])
         return groups
     end
@@ -608,9 +621,9 @@ function _sum_expr(name::Symbol, idx::Vector{Int})
     return ex
 end
 
-function _groups_expr(Ts::Vector{Any}, cap::Int)
+function _groups_expr(Ts::Vector{Any}, cap::Int, separate::Bool)
     ex = Expr(:tuple)
-    for g in _type_groups(Ts, cap)
+    for g in _type_groups(Ts, cap, separate)
         push!(ex.args, _sum_expr(:ts, g))
     end
     return ex
@@ -628,17 +641,19 @@ end
 
 # The generators below run this Julia code at compile time; compiled into the package
 # image, it does not cost the first restricted `form` of a session its own compilation.
-precompile(_type_groups, (Vector{Any}, Int))
+precompile(_type_groups, (Vector{Any}, Int, Bool))
 precompile(_type_shape_bits, (Any,))
 precompile(_type_core, (Any,))
 precompile(_joins_restriction, (Any, Any))
 precompile(_sum_expr, (Symbol, Vector{Int}))
-precompile(_groups_expr, (Vector{Any}, Int))
+precompile(_groups_expr, (Vector{Any}, Int, Bool))
 precompile(_product_sum_expr, (Int, Any, Vector{Any}, Vector{Any}))
 
 # `ts`'s summands regrouped into the sums `_type_groups` gives, as a tuple of operands.
-@generated _operand_groups(ts::Tuple, ::Val{cap}) where {cap} = _groups_expr(
-    collect(ts.parameters), cap)
+@generated _operand_groups(ts::Tuple, ::Val{cap}, ::Val{separate}) where {cap, separate} = _groups_expr(
+    collect(ts.parameters), cap, separate)
+# A linear form's one side (linear.jl) has a cap of 2, where `separate` changes nothing.
+@inline _operand_groups(ts::Tuple, cap::Val) = _operand_groups(ts, cap, Val(false))
 
 # The sum of one product per pair of a left and a right group.
 @generated _product_sum(op::BilinearProduct{D, W}, ls::Tuple, rs::Tuple) where {D, W} = _product_sum_expr(

@@ -753,17 +753,25 @@ using Bramble:
         # four lengths and boxed: 11152, 15104, 33056 and 16480 B, and 16704 B for one piece
         # of the third form (gpena/Bramble.jl#759). The plain summand now takes a product of
         # its own; the pattern is the products', which keep the restricted entries' zeros.
+        # Where that group would take a product past 16 pieces, the plain summand joins a
+        # restricted one as before, not leaving the product whole: the last two forms
+        # refilled 1205744 and 88544 B whole, and must keep the bytes they had split.
         L3 = (D₋ₓ, u -> D₋ₓ(R(:l, u)), u -> D₋ₓ(R(:t, u)))
         R3 = (D₋ₓ, v -> D₋ₓ(R(:b, v)), v -> D₋ₓ(R(:r, v)))
-        for (lhs, rhs, nnz_whole) in (
-            ((identity, u -> R(:l, u)), (identity, v -> R(:t, D₋ₓ(v))), 69),
-            ((D₋ₓ, u -> R(:l, D₋ₓ(u))), (identity, v -> R(:t, D₋ₓ(v))), 123),
-            (L3, R3, 171),
-            ((identity, D₋ₓ, u -> R(:l, u)), (identity, v -> R(:t, v)), 117),
-            ((D₋ₓ, u -> D₋ₓ(R(:l, u))), (v -> D₋ₓ(R(:r, v)),), 126))
+        L5 = (D₋ₓ, (u -> D₋ₓ(R(s, u)) for s in (:l, :r, :b, :t))...)
+        U5 = (identity, (u -> R(s, u) for s in (:l, :r, :b, :t))...)
+        V5 = (identity, (v -> R(s, D₋ₓ(v)) for s in (:l, :r, :b, :t))...)
+        for (lhs, rhs, nnz_whole, max_bytes) in (
+            ((identity, u -> R(:l, u)), (identity, v -> R(:t, D₋ₓ(v))), 69, 0),
+            ((D₋ₓ, u -> R(:l, D₋ₓ(u))), (identity, v -> R(:t, D₋ₓ(v))), 123, 0),
+            (L3, R3, 171, 0),
+            ((identity, D₋ₓ, u -> R(:l, u)), (identity, v -> R(:t, v)), 117, 0),
+            ((D₋ₓ, u -> D₋ₓ(R(:l, u))), (v -> D₋ₓ(R(:r, v)),), 126, 0),
+            (L5, L5[1:4], 171, 82848),
+            (U5, V5, 82, 11952))
             a = form(Wd, Wd, (u, v) -> innerₕ(sum(f(u) for f in lhs), sum(g(v) for g in rhs)))
             A = assemble(a)
-            @test _loop_bytes(A, a) == 0
+            @test _loop_bytes(A, a) <= max_bytes
             P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(f(u), g(v))))
             for f in lhs for g in rhs)
             @test Matrix(A) ≈ Matrix(P)
