@@ -53,9 +53,14 @@ routing at all) or a documented dead end (a hidden scalar defeating symmetry det
 A `ShiftNode` is simplified inside but kept as built: `Shift₀(u)` stays, and nested shifts
 are not merged, since the amount is a runtime field (gpena/Bramble.jl#530).
 
-What is not attempted: this stops at `BilinearProduct`/`LinearProduct`/`ShiftNode` and does
-not descend into differences, averages, jumps, restrictions or interpolation -- a scalar or
-shift buried one layer further in (`D₋ₓ(2 * u)`, say) is not reached. Nor does it fold
+A difference, average, jump, shift or restriction over a component-mixing sum distributes
+over it, `D₋ₓ(v(1) + v(2)) -> D₋ₓ(v(1)) + D₋ₓ(v(2))`, so that sum assembles whatever wraps
+it (gpena/Bramble.jl#759).
+
+What is not attempted otherwise: this stops at `BilinearProduct`/`LinearProduct`/
+`ShiftNode` and does not descend into differences, averages, jumps, restrictions or
+interpolation -- a scalar or shift buried one layer further in (`D₋ₓ(2 * u)`, say) is not
+reached. Nor does it fold
 `πₕ(u)` away when the space it interpolates from is the one `u` is assembled against: that
 equality is only known once a concrete trial space is available, which a context-free
 rewrite over the expression alone does not have. Since gpena/Bramble.jl#10 that space is
@@ -193,9 +198,10 @@ end
 #
 # `_component_class` is the non-throwing mirror those two need: a third value, `Mixed()`,
 # stands for "this subtree already names more than one component" instead of throwing.
-# `Mixed() !== <anything>`, including another `Mixed()` from an unrelated subtree, so two
-# differently-mixing sides still compare as "differ" -- which is the answer `_mixes_components`
-# needs (mixed *anything* is never routable as one opaque term). This mirrors
+# `_mixes_components` asks whether the two sides *combine* to `Mixed()`, so a side that
+# already mixes makes the pair mix, even beside another mixing side: `Mixed()` is a singleton,
+# so two of them are `===`, and comparing the classes alone let `(v(1) + v(2)) + (v(2) +
+# v(1))` through undistributed (mixed *anything* is never routable as one term). This mirrors
 # `trial_component_or_nothing`/`test_component_or_nothing`'s own recursion field for field,
 # not just the top-level shape, so it agrees with them everywhere they do answer.
 struct _MixedComponents end
@@ -236,17 +242,19 @@ end
 # The answer is a value, not a type: it compares the two `component_idx::Int` fields. A
 # literal index (`v(1) + v(2)`) constant-folds, but a runtime component index (`v(i)` with
 # `i` an argument) leaves it to run time, so each distribution gate below (`OperatorScale`,
-# `GridFunctionScale`, `BilinearProduct`, `LinearProduct`) makes `form`'s type a `Union` of
-# the distributed and undistributed trees when a sum of runtime-indexed terms sits inside one
-# inner product or under a scalar or grid-function coefficient shared by the whole sum, even
+# `GridFunctionScale`, `BilinearProduct`, `LinearProduct`, `_LinearWrapper`) makes `form`'s
+# type a `Union` of the distributed and undistributed trees when a sum of runtime-indexed
+# terms sits inside one inner product, under a difference, average, jump, shift or
+# restriction, or under a scalar or grid-function coefficient shared by the whole sum, even
 # when every term names the same `i` (gpena/Bramble.jl#529). Separate inner products, each
 # with its own coefficient, never reach those gates and infer concretely. Kept on purpose:
 # distributing every sum that is not `_component_free` would infer concretely, but costs a
 # sweep for every same-component sum (`v(1) + D₋ₓ(v(1))`). The factor rule in
 # `simplify_ast(::OperatorAdd)` uses `_component_free` instead, which is decided by type.
 @inline function _mixes_components(a::LazyOp, b::LazyOp)
-    return _trial_component_class(a) !== _trial_component_class(b) ||
-           _test_component_class(a) !== _test_component_class(b)
+    trial = _component_combine(_trial_component_class(a), _trial_component_class(b))
+    test = _component_combine(_test_component_class(a), _test_component_class(b))
+    return trial isa _MixedComponents || test isa _MixedComponents
 end
 
 # --- The pass ------------------------------------------------------------------------ #
@@ -574,9 +582,62 @@ end
 # `S₊ₓ(S₋ₓ(u))` is 0 at the last point (gpena/Bramble.jl#352).
 function simplify_ast(op::ShiftNode{D, Dim}) where {D, Dim}
     inner = simplify_ast(op.inner_op)
+    _mixes(inner) && return _distribute_wrapper(op, inner)
     return if inner === op.inner_op
         op
     else
         ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
     end
+end
+
+# --- Linear wrappers over a component-mixing sum ------------------------------------ #
+
+# Differences, averages, jumps, shifts and restrictions are linear in their operand, entry
+# for entry, so `D₋ₓ(v(1) + v(2))` is `D₋ₓ(v(1)) + D₋ₓ(v(2))` exactly. Left whole, a sum
+# naming two components is one term `block_of` cannot route, while the same sum bare or
+# under a scale is distributed above, so whether a form assembled hung on how it was
+# grouped (gpena/Bramble.jl#759). Each of these now distributes over a mixing operand, all
+# the way down a chain of them, as a scale does. An operand naming one component, or none,
+# is returned as built and never simplified. `_mixes` reads `_component_class`, which is
+# `nothing` or an `Int` by type for an operand with no sum, so such a form compiles as it
+# did. A sum of indexed terms under a wrapper is told apart by its `Int` fields, as the
+# other gates do, and its form infers the distributed tree too before the literal folds.
+# `InterpolationNode` is linear too but is left whole. Its source space is bound per block,
+# by the leaf it wraps (`_bind_interp_spaces`), and that path is not exercised here.
+const _LinearWrapper = Union{
+    BackwardDifference,
+    ForwardDifference,
+    CenteredDifference,
+    StarDifference,
+    CrossWeightedDifference,
+    JumpNode,
+    BackwardAverage,
+    ForwardAverage,
+    CenteredAverage,
+    RegionRestriction
+}
+
+# Whether `op` names more than one component on either side.
+@inline _mixes(op) = _trial_component_class(op) isa _MixedComponents ||
+                     _test_component_class(op) isa _MixedComponents
+
+function simplify_ast(op::_LinearWrapper)
+    _mixes(op.inner_op) || return op
+    return _distribute_wrapper(op, op.inner_op)
+end
+
+# `op` distributed over its mixing operand `inner`. A sum is split as it stands, each piece
+# simplified on its own, so the branch a same-component sum compiles but never takes stays
+# small. Anything else (a scale, another wrapper) is simplified first and split if that
+# leaves a sum; a mixing operand that does not (a wrapper this pass does not split) is
+# rewrapped, and `block_of` rejects it as before.
+function _distribute_wrapper(op, inner::OperatorAdd)
+    return OperatorAdd(
+        simplify_ast(_rewrap_inner(op, inner.left_op)),
+        simplify_ast(_rewrap_inner(op, inner.right_op))
+    )
+end
+function _distribute_wrapper(op, inner)
+    s = simplify_ast(inner)
+    return s isa OperatorAdd ? _distribute_wrapper(op, s) : _rewrap_inner(op, s)
 end

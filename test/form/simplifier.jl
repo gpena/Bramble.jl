@@ -30,6 +30,9 @@ using Bramble:
                Innerplus,
                D₋₂,
                D₋ₓ,
+               D₊ᵧ,
+               Mₓ,
+               jumpₓ,
                inner₊ᵧ,
                inner₊ₓ,
                weights,
@@ -640,6 +643,110 @@ end
     end
 end
 
+# --- Linear wrappers over a component-mixing sum (gpena/Bramble.jl#759) ------------- #
+#
+# A difference, average, jump, shift or restriction is linear in its operand, so one over a
+# sum naming two components distributes over it, as a scale does. Each form is checked
+# against the sum of its parts, each part assembled as its own form: the parts land in
+# different blocks, so a term routed to the wrong block fails the comparison.
+
+_rt_comp_wrapped(i::Int, V) = form(V, V, (u, v) -> innerₕ(u(i), D₋ₓ(v(i))))
+_lit_wrapped_mixed(V) = form(V, V, (u, v) -> innerₕ(u(1), D₋ₓ(v(1) + v(2))))
+_lit_mixed_pair(V) = form(V, V, (u, v) -> innerₕ(u(1), (v(1) + v(2)) + (v(2) + v(1))))
+
+@testset "wrapper over mixed sum (#759)" begin
+    I = interval(0.0, 1.0)
+    Ωd = domain(I × I, :l => :left, :r => :right, :b => :bottom, :t => :top)
+    Wₕ = gridspace(mesh(Ωd, (7, 9), (false, false)))   # non-uniform in both directions
+    Vₕ = Wₕ × Wₕ
+    R = Bramble.restrict_to
+    M(f) = Matrix(assemble(form(Vₕ, Vₕ, f)))
+
+    cases = (
+        "D₋ₓ, test side" => ((u, v) -> innerₕ(u(1), D₋ₓ(v(1) + v(2))),
+            (u, v) -> innerₕ(u(1), D₋ₓ(v(1))), (u, v) -> innerₕ(u(1), D₋ₓ(v(2)))),
+        "Mₓ, test side" => ((u, v) -> innerₕ(u(1), Mₓ(v(1) + v(2))),
+            (u, v) -> innerₕ(u(1), Mₓ(v(1))), (u, v) -> innerₕ(u(1), Mₓ(v(2)))),
+        "D₋ₓ, trial side" => ((u, v) -> innerₕ(D₋ₓ(u(1) + u(2)), v(1)),
+            (u, v) -> innerₕ(D₋ₓ(u(1)), v(1)), (u, v) -> innerₕ(D₋ₓ(u(2)), v(1))),
+        "jump" => ((u, v) -> innerₕ(u(2), jumpₓ(v(1) + 3.0 * v(2))),
+            (u, v) -> innerₕ(u(2), jumpₓ(v(1))), (u, v) -> innerₕ(u(2), jumpₓ(3.0 * v(2)))),
+        "shift" => ((u, v) -> innerₕ(u(1), S₊ₓ(v(1) + v(2))),
+            (u, v) -> innerₕ(u(1), S₊ₓ(v(1))), (u, v) -> innerₕ(u(1), S₊ₓ(v(2)))),
+        "restriction" => ((u, v) -> innerₕ(u(1), R(:l, v(1) + v(2))),
+            (u, v) -> innerₕ(u(1), R(:l, v(1))), (u, v) -> innerₕ(u(1), R(:l, v(2)))),
+        "D₋ₓ over restrictions" => (
+            (u, v) -> innerₕ(u(1), D₋ₓ(R(:l, v(1)) + R(:r, v(2)))),
+            (u, v) -> innerₕ(u(1), D₋ₓ(R(:l, v(1)))),
+            (u, v) -> innerₕ(u(1), D₋ₓ(R(:r, v(2))))),
+        "D₋ₓ ∘ D₊ᵧ, scaled summand" => (
+            (u, v) -> innerₕ(u(1), D₋ₓ(D₊ᵧ(v(1) + 2.0 * v(2)))),
+            (u, v) -> innerₕ(u(1), D₋ₓ(D₊ᵧ(v(1)))),
+            (u, v) -> innerₕ(u(1), D₋ₓ(D₊ᵧ(2.0 * v(2))))),
+        "D₋ₓ ∘ Mₓ" => ((u, v) -> innerₕ(u(1), D₋ₓ(Mₓ(v(1) + v(2)))),
+            (u, v) -> innerₕ(u(1), D₋ₓ(Mₓ(v(1)))), (u, v) -> innerₕ(u(1), D₋ₓ(Mₓ(v(2))))),
+        "R ∘ D₋ₓ" => ((u, v) -> innerₕ(u(1), R(:r, D₋ₓ(v(1) + v(2)))),
+            (u, v) -> innerₕ(u(1), R(:r, D₋ₓ(v(1)))), (u, v) -> innerₕ(u(1), R(:r, D₋ₓ(v(2))))),
+        "scale inside D₋ₓ" => ((u, v) -> innerₕ(u(1), D₋ₓ(2.0 * (v(1) + v(2)))),
+            (u, v) -> innerₕ(u(1), D₋ₓ(2.0 * v(1))), (u, v) -> innerₕ(u(1), D₋ₓ(2.0 * v(2)))),
+        "both sides" => ((u, v) -> innerₕ(D₋ₓ(u(1) + u(2)), Mₓ(v(1) + v(2))),
+            (u, v) -> innerₕ(D₋ₓ(u(1)), Mₓ(v(1) + v(2))),
+            (u, v) -> innerₕ(D₋ₓ(u(2)), Mₓ(v(1) + v(2))))
+    )
+    @testset "$name" for (name, (whole, p1, p2)) in cases
+        a = form(Vₕ, Vₕ, whole)
+        @test resolve_form_ast(a) isa OperatorAdd
+        P1, P2 = M(p1), M(p2)
+        @test any(!iszero, P1) && any(!iszero, P2)
+        @test Matrix(assemble(a)) ≈ P1 + P2
+    end
+
+    @testset "two mixing summands, bare and under D₋ₓ" begin
+        # Both halves already mix, so their classes are the same `Mixed()`: compared alone,
+        # they read as agreeing and the sum was left whole.
+        @test M((u, v) -> innerₕ(u(1), (v(1) + v(2)) + (v(2) + v(1)))) ≈
+              2 .* (M((u, v) -> innerₕ(u(1), v(1))) + M((u, v) -> innerₕ(u(1), v(2))))
+        @test M((u, v) -> innerₕ(u(1), D₋ₓ((v(1) + v(2)) + (v(2) + 2.0 * v(1))))) ≈
+              M((u, v) -> innerₕ(u(1), D₋ₓ(3.0 * v(1)))) +
+              M((u, v) -> innerₕ(u(1), D₋ₓ(2.0 * v(2))))
+    end
+
+    @testset "linear form" begin
+        L(f) = assemble(form(Vₕ, f))
+        whole = L(v -> innerₕ(1.0, D₋ₓ(v(1) + 100.0 * v(2))))
+        p1, p2 = L(v -> innerₕ(1.0, D₋ₓ(v(1)))), L(v -> innerₕ(1.0, D₋ₓ(100.0 * v(2))))
+        @test any(!iszero, p1) && any(!iszero, p2)
+        @test whole ≈ p1 + p2
+    end
+
+    @testset "one component or none: returned as built" begin
+        # The rewrite reads the operand's component class, a type when it holds no
+        # mixing sum, so these come back as the very object given and compile as before.
+        u, v = trial_function(Vₕ), test_function(Vₕ)
+        uₛ, vₛ = trial_function(Wₕ), test_function(Wₕ)
+        for raw in (innerₕ(u(1), D₋ₓ(v(1) + 2.0 * D₊ᵧ(v(1)))),
+            innerₕ(u(1), R(:l, D₋ₓ(v(1) + v(1)))),
+            innerₕ(D₋ₓ(u(2) + u(2)), Mₓ(v(1) + D₋ₓ(v(1)))),
+            innerₕ(Mₓ(uₛ + D₋ₓ(uₛ)), jumpₓ(vₛ + 2 * vₛ)),
+            innerₕ(R(:l, uₛ + uₛ), D₋ₓ(R(:r, vₛ) + vₛ)))
+            ast = resolve_ast(raw)
+            @test simplify_ast(ast) === ast
+        end
+    end
+
+    @testset "inference" begin
+        V = typeof(Vₕ)
+        concrete(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
+        @test concrete(_rt_comp_wrapped, (Int, V))
+        @test concrete(_lit_wrapped_mixed, (V,))
+        @test concrete(_lit_mixed_pair, (V,))
+    end
+
+    # The routing query is still asked of an undistributed operand, and still refuses it.
+    @test_throws ArgumentError Bramble.test_component_or_nothing(
+        D₋ₓ(test_function(Vₕ)(1) + test_function(Vₕ)(2)))
+end
+
 # --- Type stability under a runtime coefficient ------------------------------------- #
 #
 # Every rewrite in `simplify_ast` decides what *node type* to return, so a rule that reads a
@@ -758,7 +865,7 @@ end
 
 # --- Shared inner-product arguments ------------------------------------------------- #
 
-using Bramble: D₊ₓ, D₊ᵧ, Dcₓ
+using Bramble: D₊ₓ, Dcₓ
 
 function _nprod(x, T)
     (x isa T ? 1 : 0) +
