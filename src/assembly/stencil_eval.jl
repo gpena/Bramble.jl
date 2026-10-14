@@ -157,7 +157,9 @@ end
 # reads types only, so the branch folds; a source-only operand keeps the trait path.
 @inline _fixes_restriction(op::RegionRestriction) = !_is_source_only(op)
 @inline _fixes_restriction(op::Union{OperatorScale, GridFunctionScale}) = !_is_source_only(op) &&
-    (_scales_restriction(op) || op.inner_op isa TappedNode && _fixes_restriction(op.inner_op))
+                                                                          (_scales_restriction(op) ||
+                                                                           op.inner_op isa TappedNode &&
+                                                                           _fixes_restriction(op.inner_op))
 @inline _fixes_restriction(op::TappedNode) = _fixes_restriction(op.inner_op)
 @inline _fixes_restriction(op::OperatorAdd) = _fixes_restriction(op.left_op) ||
                                               _fixes_restriction(op.right_op)
@@ -237,7 +239,8 @@ end
         op::Union{RegionRestriction, OperatorScale, GridFunctionScale}, space, J, markers,
         lin::Int, vdim, off
 )
-    _scales_restriction(op) || return _fixes_restriction(op) ? scale_stencil(
+    _scales_restriction(op) || return _fixes_restriction(op) ?
+           scale_stencil(
         _fixed_operand(op.inner_op, space, J, markers, lin, vdim, off), _scale_value(op, lin)) :
            local_stencil(op, space, J, markers, lin)
     _fixes_restriction(op) || return local_stencil(op, space, J, markers, lin)

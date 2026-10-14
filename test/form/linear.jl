@@ -1588,8 +1588,10 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         # Restricted sums and scales between the nodes, both sides (each refilled more than
         # before with the outer tap 0 left a union, and `Mₓ(D₊ᵧ(R(:c, R(:l) + R(:r))))`
         # stored 270 entries, not 189, with zeros left at the point).
-        Wu = gridspace(mesh(domain(I1 × I1, :l => :left, :r => :right, :b => :bottom,
-                :t => :top, :c => x -> x[1] < 0.5), (7, 9), (true, true)))
+        Wu = gridspace(mesh(
+            domain(I1 × I1, :l => :left, :r => :right, :b => :bottom,
+                :t => :top, :c => x -> x[1] < 0.5),
+            (7, 9), (true, true)))
         m(f) = Rₕ(Wu, x -> f(x) ? 1.0 : 0.0)
         ml, mr = m(x -> x[1] == 0), m(x -> x[1] == 1)
         mb, mt, mc = m(x -> x[2] == 0), m(x -> x[2] == 1), m(x -> x[1] < 0.5)
@@ -1597,14 +1599,14 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         BT(X) = R(:b, X) + R(:t, X)
         for (n, f, fm, k) in (
             ("MD(Rc)", (u, v) -> innerₕ(Mₓ(D₊ᵧ(R(:c, LR(u)))), Mₓ(D₊ᵧ(BT(v)))),
-                (u, v) -> innerₕ(Mₓ(D₊ᵧ(mc * (ml * u + mr * u))), Mₓ(D₊ᵧ(mb * v + mt * v))),
-                189),
+            (u, v) -> innerₕ(Mₓ(D₊ᵧ(mc * (ml * u + mr * u))), Mₓ(D₊ᵧ(mb * v + mt * v))),
+            189),
             ("DRD", (u, v) -> innerₕ(D₋ₓ(R(:c, D₊ᵧ(LR(u)))), D₋ₓ(R(:c, D₊ᵧ(BT(v))))),
-                (u, v) -> innerₕ(D₋ₓ(mc * D₊ᵧ(ml * u + mr * u)), D₋ₓ(mc * D₊ᵧ(mb * v + mt * v))),
-                108),
+            (u, v) -> innerₕ(D₋ₓ(mc * D₊ᵧ(ml * u + mr * u)), D₋ₓ(mc * D₊ᵧ(mb * v + mt * v))),
+            108),
             ("D̽(2D̽)", (u, v) -> innerₕ(D̽ₓ(2.0 * D̽ᵧ(LR(u))), D̽ₓ(2.0 * D̽ᵧ(LR(v)))),
-                (u, v) -> innerₕ(D̽ₓ(2.0 * D̽ᵧ(ml * u + mr * u)), D̽ₓ(2.0 * D̽ᵧ(ml * v + mr * v))),
-                827))
+            (u, v) -> innerₕ(D̽ₓ(2.0 * D̽ᵧ(ml * u + mr * u)), D̽ₓ(2.0 * D̽ᵧ(ml * v + mr * v))),
+            827))
             @testset "$n" begin
                 a = form(Wu, Wu, f)
                 A = assemble(a)
