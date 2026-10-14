@@ -160,9 +160,13 @@ end
         )
         # Scale-normalised, because a random grid can put several orders of magnitude between
         # the smallest and the largest cell and the two sides are then sums of terms much
-        # larger than their difference.
-        scaled_agree(lhs, rhs) = isapprox(
-            lhs, rhs; atol = 1e-10 * max(abs(lhs), abs(rhs), 1.0), rtol = 1e-10
+        # larger than their difference. The result can be orders of magnitude smaller than
+        # the terms it cancels (6 from terms of 1e6 on a 1D draw), so the floor also follows
+        # the terms: `scale` bounds them by the fields' peaks over the thinnest cell.
+        green_scale(u, v, pts...) = maximum(abs, u) * maximum(abs, v) / minimum(minimum(diff(p)) for p in pts)
+        scaled_agree(lhs, rhs, scale = 0.0) = isapprox(
+            lhs, rhs;
+            atol = max(1e-10 * max(abs(lhs), abs(rhs), 1.0), 64 * eps() * scale), rtol = 1e-10
         )
         #holds(lhs, rhs) = lhs <= rhs * (1 + 1e-10) + 1e-12
 
@@ -178,7 +182,8 @@ end
             Wₕ = gridspace(Ωₕ)
             uₕ = element(Wₕ, _zero_boundary!(copy(u_raw[1:n])))
             vₕ = element(Wₕ, _zero_boundary!(copy(v_raw[1:n])))
-            scaled_agree(innerₕ(Δₕ(uₕ), vₕ), -inner₊(∇ₕ(uₕ), ∇ₕ(vₕ)))
+            scaled_agree(innerₕ(Δₕ(uₕ), vₕ), -inner₊(∇ₕ(uₕ), ∇ₕ(vₕ)),
+                green_scale(parent(uₕ), parent(vₕ), pts))
         end
 
         @check function check_green_2d(
@@ -195,7 +200,8 @@ end
             Wₕ = gridspace(Ωₕ)
             uₕ = _boundary_vanishing(Wₕ, u_raw, dims)
             vₕ = _boundary_vanishing(Wₕ, v_raw, dims)
-            scaled_agree(innerₕ(Δₕ(uₕ), vₕ), -inner₊(∇ₕ(uₕ), ∇ₕ(vₕ)))
+            scaled_agree(innerₕ(Δₕ(uₕ), vₕ), -inner₊(∇ₕ(uₕ), ∇ₕ(vₕ)),
+                green_scale(parent(uₕ), parent(vₕ), px, py))
         end
 
         @check function check_green_3d(
@@ -217,7 +223,8 @@ end
             Wₕ = gridspace(Ωₕ)
             uₕ = _boundary_vanishing(Wₕ, u_raw, dims)
             vₕ = _boundary_vanishing(Wₕ, v_raw, dims)
-            scaled_agree(innerₕ(Δₕ(uₕ), vₕ), -inner₊(∇ₕ(uₕ), ∇ₕ(vₕ)))
+            scaled_agree(innerₕ(Δₕ(uₕ), vₕ), -inner₊(∇ₕ(uₕ), ∇ₕ(vₕ)),
+                green_scale(parent(uₕ), parent(vₕ), px, py, pz))
         end
 
         # The inequalities, over the same arbitrary partitions: 2.2 and the three of 2.3 at
