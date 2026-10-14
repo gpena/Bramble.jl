@@ -354,13 +354,14 @@ _check_space_components(ast, ::CompositeGridSpace, side_component, side) = nothi
 # pattern is the same; each extra product costs one walk. Zero entries padded into the
 # restriction would also keep one shape, but the coordinate walk puts them in the pattern.
 #
-# Every method first asks whether `op`'s type holds a `RegionRestriction` at all
-# (`_holds_restriction`, read off the type once), so a form without one is returned as it
-# was built and compiles nothing past that question.
+# Every method first asks whether `op`'s type holds a `RegionRestriction` or a product
+# operand whose scales differ in type (`_needs_rewrite`, read off the type once), so a form
+# with neither is returned as it was built and compiles nothing past that question. A
+# product holding no restriction only has its operands' scales widened (`_uniform_scales`).
 _split_restricted_products(op, ::Type) = op
 
 function _split_restricted_products(op::OperatorAdd, ::Type{E}) where {E}
-    _holds_restriction(op) || return op
+    _needs_rewrite(op) || return op
     l = _split_restricted_products(op.left_op, E)
     r = _split_restricted_products(op.right_op, E)
     return l === op.left_op && r === op.right_op ? op : OperatorAdd(l, r)
@@ -370,7 +371,7 @@ end
 # unit. A scale inside a product's operand is never distributed.
 function _split_restricted_products(
         op::Union{OperatorScale, GridFunctionScale}, ::Type{E}) where {E}
-    _holds_restriction(op) || return op
+    _needs_rewrite(op) || return op
     inner = _split_restricted_products(op.inner_op, E)
     return inner === op.inner_op ? op : _distribute_scale(op, inner)
 end
@@ -384,9 +385,10 @@ end
 # at most one from each; with them on one side only, at most two from it. The counts are
 # read off the operand types, so a product with at most two folds to its early return.
 function _split_restricted_products(op::BilinearProduct{D, W}, ::Type{E}) where {D, W, E}
-    _holds_restriction(op) || return op
+    _needs_rewrite(op) || return op
     l = _uniform_scales(op.left_op, E)
     r = _uniform_scales(op.right_op, E)
+    _holds_restriction(op) || return BilinearProduct{D, W, typeof(l), typeof(r)}(l, r)
     nl = _vanishing_count(l)
     nr = _vanishing_count(r)
     capl = Val(nr == 0 ? 2 : 1)
@@ -427,6 +429,44 @@ end
 precompile(_type_holds_restriction, (Any,))
 @generated _holds_restriction(::T) where {T} = _type_holds_restriction(T)
 
+# Whether a product in the form type `T`, reached as `_split_restricted_products` descends,
+# has an operand whose outermost scales differ in type (`_scales_differ`, read off the
+# types): `0.1 * v + 3 * D₋ₓ(v)`. Asked with `_type_holds_restriction` as one question, so a
+# form with uniform scales and no restriction folds to itself (+17–26% on the first `form`
+# of the 3D elasticity form when every product was rewritten).
+function _type_mixed_scales(T)
+    T isa DataType || return false
+    T <: BilinearProduct && return _type_scales_differ(T.parameters[3]) ||
+                                   _type_scales_differ(T.parameters[4])
+    T <: OperatorAdd && return _type_mixed_scales(T.parameters[2]) ||
+                               _type_mixed_scales(T.parameters[3])
+    T <: Union{OperatorScale, GridFunctionScale} &&
+        return _type_mixed_scales(T.parameters[3])
+    return false
+end
+function _type_scales_differ(T)
+    T isa DataType && T <: OperatorAdd || return false
+    scales = Tuple{Any, Bool}[]  # (scale type, read live through a `Ref`)
+    _type_collect_scales!(scales, T)
+    S = mapreduce(first, promote_type, scales; init = Union{})
+    return any(((s, live),) -> !live && s !== S, scales)
+end
+function _type_collect_scales!(scales, T)
+    T isa DataType || return scales
+    if T <: OperatorAdd
+        _type_collect_scales!(scales, T.parameters[2])
+        _type_collect_scales!(scales, T.parameters[3])
+    elseif T <: OperatorScale
+        S = T.parameters[2]
+        live = S isa DataType && S <: Base.RefValue
+        push!(scales, (live ? S.parameters[1] : S, live))
+    end
+    return scales
+end
+precompile(_type_mixed_scales, (Any,))
+@generated _needs_rewrite(::T) where {T} = _type_holds_restriction(T) ||
+                                           _type_mixed_scales(T)
+
 # A summed operand whose summands' constant scales differ in type (`2.0 * Rₕ(:l, v) +
 # 3 * Rₕ(:r, v)`) has a stencil whose weights differ in type from summand to summand, and
 # the walk boxes it at every point even with two restricted summands. Those scales, the
@@ -439,9 +479,11 @@ precompile(_type_holds_restriction, (Any,))
 # before on a 7x9 grid for `0.1 * Rₕ(:l, v) + 3 * D₋ₓ(v) + Rₕ(:r, v) + Rₕ(:b, v)`). An
 # unscaled summand needs no unit scale: its weights are `E`'s and it is grouped apart from
 # the scaled ones. A `Ref` scale is read live, so it is left as it is and only its value
-# type joins the promotion. Only a product holding a restriction gets here, and an operand
-# whose scales agree is returned untouched. `simplify_ast` keeps the literals (its folding
-# reads them).
+# type joins the promotion. A product gets here only if it holds a restriction or such an
+# operand (`_needs_rewrite`), and an operand whose scales agree is returned untouched.
+# Without a restriction the scales are widened the same way (9072 B before for
+# `0.1 * v + 3 * D₋ₓ(v)` on a Float32 mesh). `simplify_ast` keeps the literals (its
+# folding reads them).
 _uniform_scales(op, ::Type) = op
 # Scales still of several types after that would keep the walk boxing whatever the split
 # does, and a split then only adds walks (45648 B against 39680 B on a Float32 mesh when it

@@ -844,13 +844,50 @@ using Bramble:
                   Any[typeof(ast)]
         end
 
-        # A form holding no restriction comes back as `simplify_ast` built it, mixed scale
-        # types and all: converting them would change its values (a Float32 mesh, an Int
-        # beyond 2^53, a BigFloat coefficient).
-        f = (u, v) -> innerₕ(u, 0.1 * v + 3 * D₋ₓ(v) + (1 // 3) * D₋ᵧ(v))
-        ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
-            resolve_ast(f(Bramble.trial_function(W), Bramble.test_function(W))), W, W))
-        @test Bramble._split_restricted_products(ast, Float64) === ast
+        # A form holding no restriction comes back as `simplify_ast` built it when its
+        # scales agree in type. When they differ they are only ever widened, to the type of
+        # their products with a weight of the mesh's (`π` beside an Int on a Float32 mesh
+        # stays Float32, a Float64 literal stays Float64, an Int past 2^53 converts as
+        # `Int * Float64` does): each form keeps the unsplit one's element type and values,
+        # and refills with 0 B (9072 B on the Float32 mesh when left mixed).
+        _built(S, f) = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+            resolve_ast(f(Bramble.trial_function(S), Bramble.test_function(S))), S, S))
+        _scale_types(op::Bramble.OperatorAdd) = (
+            _scale_types(op.left_op)..., _scale_types(op.right_op)...)
+        _scale_types(op::Bramble.OperatorScale) = (typeof(op.scalar),)
+        _scale_types(op) = ()
+        Ω32u = domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0))
+        W32u = gridspace(mesh(Ω32u, (7, 9), (false, false); backend = backend(Float32)))
+        for (S, f) in ((W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))),
+            (W, (u, v) -> innerₕ(u, 2.0 * v + 3.0 * D₋ₓ(v))),
+            (W32u, (u, v) -> innerₕ(u, 2 * v + 3 * D₋ₓ(v))),
+            (W32u, (u, v) -> innerₕ(u, 0.1 * v + 0.3 * D₋ₓ(v))))
+            ast = _built(S, f)
+            @test Bramble._split_restricted_products(ast, eltype(S)) === ast
+        end
+        for (S, f, T, exact) in (
+            (W, (u, v) -> innerₕ(u, 0.1 * v + 3 * D₋ₓ(v) + (1 // 3) * D₋ᵧ(v)), Float64,
+            true),
+            (W, (u, v) -> innerₕ(u, (2^53 + 1) * v + 0.5 * D₋ₓ(v)), Float64, true),
+            (W32u, (u, v) -> innerₕ(u, 0.1 * v + 3 * D₋ₓ(v)), Float64, false),
+            (W32u, (u, v) -> innerₕ(0.1 * u + 3 * D₋ₓ(u), v), Float64, false),
+            (W32u, (u, v) -> innerₕ(u, π * v + 3 * D₋ₓ(v)), Float32, false))
+            ast = _built(S, f)
+            split = Bramble._split_restricted_products(ast, eltype(S))
+            for (side, op) in ((ast.left_op, split.left_op), (ast.right_op, split.right_op))
+                side isa Bramble.OperatorAdd || continue
+                @test all(==(T), _scale_types(op))
+                @test all(t -> promote_type(t, T) === T, _scale_types(side))
+            end
+            a = form(S, S, f)
+            A = assemble(a)
+            U = assemble(Bramble.BilinearForm{2, typeof(S), typeof(S), typeof(ast)}(
+                S, S, ast, Bramble._AssemblyCache{2}(ast)))
+            @test eltype(A) === eltype(U) === T
+            @test _loop_bytes(A, a) == 0
+            @test exact ? Matrix(A) == Matrix(U) :
+                  isapprox(Matrix(A), Matrix(U); rtol = 1e-6)
+        end
 
         # A scale over a restricted sum is not distributed over it: distributed, a grid
         # function scale took `form` 12.8 s to compile here, and over four summands LLVM
