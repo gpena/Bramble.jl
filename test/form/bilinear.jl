@@ -818,6 +818,28 @@ using Bramble:
         _check_split((
             (u, v) -> innerₕ(u, v), (u, v) -> innerₕ(u, 2.0 * R(:l, v)),
             (u, v) -> innerₕ(u, 3 * R(:r, v)), (u, v) -> innerₕ(u, (1 // 2) * R(:b, v))))
+        # A negated or scaled restriction under a difference beside other summands boxed at
+        # every refill though each piece refilled with 0 B (gpena/Bramble.jl#759): 52608 B
+        # for the negated D₋ₓ sum, 49248 B for each D̽ᵧ form; 0 B since 1ed87350, which
+        # shifts a constant scale over a restriction by the restriction's rule. The pattern
+        # keeps the unsplit product's zero weights, so it is bounded, not equal.
+        for (whole, parts, nnz_max) in (
+            ((u, v) -> innerₕ(u, D₋ₓ(-R(:l, v) + R(:r, v) - R(:b, v) + v)),
+            ((u, v) -> innerₕ(u, D₋ₓ(-R(:l, v))), (u, v) -> innerₕ(u, D₋ₓ(R(:r, v))),
+                (u, v) -> innerₕ(u, D₋ₓ(-R(:b, v))), (u, v) -> innerₕ(u, D₋ₓ(v))), 117),
+            ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(v - R(:l, v))),
+            ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(v)),
+                (u, v) -> innerₕ(u, Bramble.D̽ᵧ(-R(:l, v)))), 175),
+            ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(2.0 * R(:l, v) + v)),
+            ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(2.0 * R(:l, v))),
+                (u, v) -> innerₕ(u, Bramble.D̽ᵧ(v))), 175))
+            a = form(Wd, Wd, whole)
+            A = assemble(a)
+            @test _loop_bytes(A, a) == 0
+            P = sum(assemble(form(Wd, Wd, p)) for p in parts)
+            @test Matrix(A) ≈ Matrix(P)
+            @test nnz(A) <= nnz_max
+        end
         # A complex scale on a Float64 mesh widens the others to ComplexF64, as scales are
         # never narrowed: the form refills with 0 B (15680 B when left mixed), its values
         # those of the mixed form bit for bit, and it agrees with its parts.
