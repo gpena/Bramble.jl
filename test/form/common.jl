@@ -3,8 +3,9 @@ module FormCommonTests
 using Test
 using Bramble
 # Internal names: defined and documented, not exported.
-import Bramble: D₊ₓ, M₊ₓ, M₊ᵧ
-using LinearAlgebra: issymmetric, Diagonal, I as Id
+import Bramble: D₊ₓ, M₊ₓ, M₊ᵧ, D̽ₓ
+using LinearAlgebra: issymmetric, Diagonal, I as Id, mul!
+using SparseArrays: nnz
 using Bramble:
                TrialFunction,
                TestFunction,
@@ -179,6 +180,42 @@ using Bramble:
         @test !_offsets_seen_before(entry_offsets(dup), 1, dup[1][1], dup[1][2])
         @test !_offsets_seen_before(entry_offsets(dup), 2, dup[2][1], dup[2][2])
         @test _offsets_seen_before(entry_offsets(dup), 3, dup[3][1], dup[3][2])
+    end
+
+    @testset "Past 32 entries (#759)" begin
+        # Base's `map` over a `Tuple` longer than 32 collects into a `Vector{Any}` and
+        # allocates; a product of two nested operands is that long at every grid point.
+        # Weights alternate `Float64` and `Int`, so a read at a non-constant index boxes too.
+        bytes(f, args...) = (f(args...); f(args...); @allocated f(args...))
+        b40 = ntuple(k -> ((k, 1), (1, k), isodd(k) ? 1.5k : k), 40)
+        s40 = ntuple(k -> ((k, 2), isodd(k) ? 1.5k : k), 40)
+        s2 = (((0, 0), 2.0), ((1, 0), 3))
+        @test entry_offsets(b40) == map(Base.front, b40)
+        @test entry_weights(b40) == map(last, b40)
+        @test bytes(st -> (entry_offsets(st), entry_weights(st)), b40) == 0
+
+        # the rest of the stencil algebra builds the same long tuples, without allocating
+        @test scale_stencil(s40, 2.0) == map(t -> (t[1], t[2] * 2.0), s40)
+        @test shift_stencil(s40, Val(2), 3) == map(t -> (shift_offset(t[1], 2, 3), t[2]), s40)
+        @test multiply_stencils_bilinear(s2, s40, 0.5) ==
+              Tuple((l[1], r[1], l[2] * r[2] * 0.5) for l in s2 for r in s40)
+        @test multiply_stencils_linear(s40, s2, 0.5) ==
+              Tuple((r[1], l[2] * r[2] * 0.5) for l in s40 for r in s2)
+        @test bytes(scale_stencil, s40, 2.0) == 0
+        @test bytes(shift_stencil, s40, Val(2), 3) == 0
+        @test bytes(multiply_stencils_bilinear, s2, s40, 0.5) == 0
+        @test bytes(multiply_stencils_bilinear, s40, s2, 0.5) == 0
+        @test bytes(multiply_stencils_linear, s2, s40, 0.5) == 0
+
+        # end to end: the product stencil of `D̽ₓ(D₋ₓ(u))` with itself is longer than 32
+        Ωₕ79 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, false))
+        W79 = gridspace(Ωₕ79)
+        a = form(W79, W79, (u, v) -> innerₕ(D̽ₓ(D₋ₓ(u)), D̽ₓ(D₋ₓ(v))))
+        A = assemble(a)
+        @test nnz(A) == 333
+        x = sin.(1:size(A, 2))
+        @test mul!(similar(x), matrix_free_operator(a), x) ≈ A * x
+        @test bytes(assemble!, A, a) == 0
     end
 
     @testset "Unit leaf stencils" begin
