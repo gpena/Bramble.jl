@@ -818,13 +818,12 @@ using Bramble:
         _check_split((
             (u, v) -> innerₕ(u, v), (u, v) -> innerₕ(u, 2.0 * R(:l, v)),
             (u, v) -> innerₕ(u, 3 * R(:r, v)), (u, v) -> innerₕ(u, (1 // 2) * R(:b, v))))
-        # A complex scale on a Float64 mesh is not promoted to, so this form is left as
-        # built and still allocates; it must still agree with its parts.
-        _check_split(
-            (
-                (u, v) -> innerₕ(u, (1.0 + 2.0im) * R(:l, v)), (u, v) -> innerₕ(u, 3 * R(:r, v)),
-                (u, v) -> innerₕ(u, 2.0 * R(:b, v)));
-            bytes = nothing)
+        # A complex scale on a Float64 mesh widens the others to ComplexF64, as scales are
+        # never narrowed: the form refills with 0 B (15680 B when left mixed), its values
+        # those of the mixed form bit for bit, and it agrees with its parts.
+        _check_split((
+            (u, v) -> innerₕ(u, (1.0 + 2.0im) * R(:l, v)), (u, v) -> innerₕ(u, 3 * R(:r, v)),
+            (u, v) -> innerₕ(u, 2.0 * R(:b, v))))
         # A `Ref` scale is left in place, so the matrix still follows it.
         k = Ref(2.0)
         a = form(W, W, (u, v) -> innerₕ(u, k * R(:l, v)) + innerₕ(u, 3 * R(:r, v)))
