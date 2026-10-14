@@ -276,6 +276,26 @@ end
     )
 end
 
+# Refuses moving a submesh of a mesh carrying predicate labels. The parent's sets depend on
+# the points of every axis, and a move of one axis alone, in any form, leaves them as the old
+# points gave them (`Ωₕ(i)` is the shared submesh, so nothing re-evaluates the parent).
+function _check_not_submesh_of_predicate_parent(Ωₕ, caller::String)
+    labels = _parent_predicate_labels(Ωₕ)
+    isempty(labels) || _throw_submesh_of_predicate_parent(caller, labels)
+    return nothing
+end
+
+@noinline function _throw_submesh_of_predicate_parent(caller::String, labels)
+    throw(
+        ArgumentError(
+        "$caller a submesh of a mesh carrying predicate markers $(Tuple(labels)), whose " *
+        "sets depend on the points of every axis and would stay as the old points gave " *
+        "them. Call change_points!(Ωₕ, markers(Ω), pts) on the whole mesh instead, with " *
+        "the points of every axis as a tuple.",
+    ),
+    )
+end
+
 # The one-argument form: no domain to re-derive custom markers from, so a mesh carrying
 # any is refused outright rather than silently losing them. The public contract for both
 # this and the two-argument form below is documented once, on the
@@ -330,6 +350,8 @@ function change_points!(
         pts;
         warn_marker_mismatch::Bool = true
 )
+    _check_not_submesh_of_predicate_parent(Ωₕ,
+        "change_points!(Ωₕ, domain_markers, pts) was asked to move")
     _change_points!(Ωₕ, pts)
     set_markers!(Ωₕ, domain_markers; warn_marker_mismatch)
     return nothing

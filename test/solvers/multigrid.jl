@@ -115,7 +115,7 @@ end
     pts = collect(range(0.0, 1.0; length = 5)) .^ 2
     @test markers(Ωc)[:c] == Bool[1, 1, 0, 0, 0]
     @test_throws ["change_points!(Ωₕ, pts)", "(:c,)",
-        "change_points!(Ωₕ, domain_markers, pts)"] Bramble.change_points!(Ωc, pts)
+        "change_points!(Ωₕ, markers(Ω), pts)"] Bramble.change_points!(Ωc, pts)
     @test points(Ωc) == range(0.0, 1.0; length = 5)
     Bramble.change_points!(Ωc, markers(Ω), pts)
     @test markers(Ωc)[:c] == Bool[1, 1, 1, 0, 0]

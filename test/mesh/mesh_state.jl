@@ -141,7 +141,7 @@ end
             e
         end
         @test err isa ArgumentError
-        @test occursin("change_points!(Ωₕ, domain_markers, pts)", err.msg)
+        @test occursin("change_points!(Ωₕ, markers(Ω), pts)", err.msg)
         @test occursin("(:c,)", err.msg)
         # Refused before anything changed.
         @test points(Ωₕ) == p0 && _mesh_version(Ωₕ) == v0
@@ -195,6 +195,38 @@ end
         Bramble.set_markers!(Ωₕ, markers(domain(I, :l => :left)))
         change_points!(Ωₕ, collect(range(0.0, 1.0; length = 7)))
         @test points(Ωₕ) == range(0.0, 1.0; length = 7)
+    end
+
+    @testset "Submesh moves: predicate parent" begin
+        # `Ωₕ(1)` is the parent's shared submesh, and the parent's `:c` depends on its
+        # points: a move of it alone is refused in every form, before anything changes.
+        Ω = domain(I × I, :c => x -> x[1] < 0.5, :l => :left)
+        M = mesh(Ω, (7, 5), (true, true))
+        q = collect(range(0.0, 1.0; length = 7)) .^ 2
+        c0, p0, v0 = copy(markers(M)[:c]), copy(points(M(1))), _mesh_version(M)
+        msgs = ["a submesh of a mesh carrying predicate markers (:c,)",
+            "change_points!(Ωₕ, markers(Ω), pts)", "points of every axis"]
+        @test_throws msgs set_points!(M(1), q)
+        @test_throws msgs change_points!(M(1), q)
+        @test_throws msgs change_points!(M(1), markers(interval(0.0, 1.0)), q)
+        @test points(M(1)) == p0 && _mesh_version(M) == v0 && markers(M)[:c] == c0
+        # A copy stamps its own submeshes, and the original stays refused.
+        @test_throws ArgumentError set_points!(copy(M)(1), q)
+        # The parent-level three-argument call moves both and re-evaluates `:c`.
+        qy = collect(range(0.0, 1.0; length = 5))
+        change_points!(M, markers(Ω), (q, qy))
+        @test markers(M)[:c] == (repeat(q, 5) .< 0.5)
+        # `markers!` on the parent drops the predicate labels, and the submesh is free.
+        markers!(M, copy(markers(M)))
+        set_points!(M(1), collect(range(0.0, 1.0; length = 7)))
+        # Face labels and bare parents: submeshes move as before.
+        Mf = mesh(domain(I × I, :l => :left), (7, 5), (true, true))
+        set_points!(Mf(1), q)
+        change_points!(Mf(2), qy .^ 2)
+        @test points(Mf(1)) == q && markers(Mf)[:l] == markers(copy(Mf))[:l]
+        Mb = mesh(domain(I × I), (7, 5), (true, true))
+        set_points!(Mb(1), q)
+        @test points(Mb(1)) == q
     end
 
     @testset "Same count keeps face labels" begin

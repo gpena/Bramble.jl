@@ -151,12 +151,26 @@ const _MeshnDLike{D} = Union{MeshnD{D}, MeshnDState{D}}
 # The labels `set_markers!` defined by a predicate of position; every other store clears them.
 @inline _predicate_labels(Ωₕ::MeshnD) = Ωₕ.predicate_labels
 
+# Tells each submesh the predicate labels of its parent.
+function _stamp_submeshes!(submeshes::Tuple, labels::Vector{Symbol})
+    for s in submeshes
+        setfield!(s, :parent_predicate_labels, labels)
+    end
+    return nothing
+end
+
+# A `MeshnD` is nobody's submesh.
+@inline _parent_predicate_labels(::MeshnD) = Symbol[]
+
 # Replaces the marker dictionary, its label table and the word matrix together. A label set
 # may change after construction; the word matrix is rebuilt, never resized.
 function _store_markers!(Ωₕ::MeshnD, mesh_markers, predicate_labels = Symbol[])
     mm = convert(MeshMarkers, mesh_markers)
     ids, words = _marker_table(mm, npoints(Ωₕ))
     Ωₕ.predicate_labels = Symbol[predicate_labels...]
+    # The submeshes are shared with whoever holds `Ωₕ(i)`, and moving one alone would leave
+    # these labels stale, so each learns them (every other store clears them).
+    _stamp_submeshes!(Ωₕ.submeshes, Ωₕ.predicate_labels)
     Ωₕ.markers = mm
     Ωₕ.marker_ids = ids
     Ωₕ.words = words
@@ -445,7 +459,7 @@ end
 function change_points!(Ωₕ::MeshnD, pts)
     _check_no_predicate_labels(Ωₕ,
         "change_points!(Ωₕ, pts) was asked to move",
-        "change_points!(Ωₕ, domain_markers, pts)")
+        "change_points!(Ωₕ, markers(Ω), pts)")
     return _change_points!(Ωₕ, pts)
 end
 
@@ -472,10 +486,12 @@ Create a copy of mesh `Ωₕ`. The copy is shallow with respect to immutable fie
 (`submeshes`, `markers`). The copy and each of its submeshes get an identity of their own.
 """
 function Base.copy(Ωₕ::MeshnD{D}) where {D}
-    return MeshnD(
+    c = MeshnD(
         Ωₕ.set, deepcopy(Ωₕ.markers), Ωₕ.indices, Ωₕ.backend, map(copy, Ωₕ.submeshes),
         copy(Ωₕ.predicate_labels)
     )
+    _stamp_submeshes!(c.submeshes, c.predicate_labels)
+    return c
 end
 
 # A deepcopy is an independent mutable mesh with a fresh identity and marker stamp; its

@@ -626,7 +626,7 @@ import Base: diff
             # and Far, before anything changes. Endpoint is a face label.
             Ωₕ_copy1 = deepcopy(Ωₕ)
             @test_throws ["change_points!(Ωₕ, pts)", "(:NearStart, :Far)",
-                "change_points!(Ωₕ, domain_markers, pts)"] change_points!(
+                "change_points!(Ωₕ, markers(Ω), pts)"] change_points!(
                 Ωₕ_copy1, new_pts_valid)
             @test points(Ωₕ_copy1) ≈ [0.0, 0.5, 1.0, 1.5, 2.0]
             @test all(==(Bool[1, 0, 0, 0, 0]), stored_masks(Ωₕ_copy1, :NearStart))
