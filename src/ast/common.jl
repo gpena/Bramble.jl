@@ -25,12 +25,26 @@ Zero-initialized offset tuple of dimension `D`.
 # `Tuple` of more than 32 entries `map` collects into a `Vector{Any}` and allocates at every
 # grid point. The closure is inlined so each `s[k]` reads at a constant `k`, which keeps a
 # stencil whose entries differ in type (`Int` and `Float64` weights) from boxing.
+#
+# Past `_INLINED_ENTRIES` the unrolled tuple is built out of line, once per stencil type,
+# rather than inlined at every caller. Inlined, the compiler's own passes over hundreds of
+# unrolled entries at each call site took the first matrix-free product of
+# `innerₕ(D̽ᵧD̽ₓD̽ₓu, D̽ᵧD̽ₓD̽ₓv)` (729 entries) on a 9x8 grid from 0.2 s to minutes.
 @inline function _each_entry(f::F, s::Tuple) where {F}
+    length(s) > _INLINED_ENTRIES && return _each_entry_outlined(f, s)
+    return _each_entry_inlined(f, s)
+end
+
+@inline function _each_entry_inlined(f::F, s::Tuple) where {F}
     return ntuple(Val(length(s))) do k
         @inline
         return f(s[k])
     end
 end
+
+@noinline _each_entry_outlined(f::F, s::Tuple) where {F} = _each_entry_inlined(f, s)
+
+const _INLINED_ENTRIES = 32
 
 """
     shift_stencil(inner::Tuple, ::Val{Dim}, delta)
@@ -60,8 +74,17 @@ so code generation would buy nothing here.
 
 # Every (left, right) pair, left-major: entry `k` pairs `left[i]` with `right[j]`, the order
 # `_flatten_tuples` of a nested `map` gave. One flat `ntuple` rather than `_each_entry` per
-# left entry: nested, a right operand past 32 entries allocates.
+# left entry: nested, a right operand past 32 entries allocates. Out of line past
+# `_INLINED_ENTRIES` pairs, as `_each_entry` is.
 @inline function _each_pair(f::F, left::Tuple, right::Tuple) where {F}
+    length(left) * length(right) > _INLINED_ENTRIES && return _each_pair_outlined(f, left, right)
+    return _each_pair_inlined(f, left, right)
+end
+
+@noinline _each_pair_outlined(f::F, left::Tuple, right::Tuple) where {F} = _each_pair_inlined(
+    f, left, right)
+
+@inline function _each_pair_inlined(f::F, left::Tuple, right::Tuple) where {F}
     n = length(right)
     return ntuple(Val(length(left) * n)) do k
         @inline

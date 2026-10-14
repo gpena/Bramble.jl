@@ -574,7 +574,7 @@ end
 @inline _mf_visit!(::CpuSerial, s, term, sp, ro::Int, co::Int) = (
     visit_bilinear_stencil(s, term, sp, ro, co); nothing)
 @inline _mf_visit!(::CpuSerial, s::_ActionTarget, term, sp, ro::Int, co::Int) = _mf_walk!(
-    s, term, sp, ro, co, _mf_gathers(term))
+    s, term, sp, ro, co, Val(_mf_gathers(term)))
 @inline function _mf_visit!(p::CpuPolicy, s, term::TERM, sp, ro::Int, co::Int) where {TERM}
     if _has_test_interp(term)
         visit_bilinear_stencil(s, term, sp, ro, co)
@@ -590,7 +590,7 @@ end
 @inline _mf_visit_pair!(::CpuSerial, s, p1, _p2, sp, ro::Int, co::Int) = (
     visit_bilinear_stencil(s, p1, sp, ro, co); nothing)
 @inline _mf_visit_pair!(::CpuSerial, s::_PairActionSink, p1, p2, sp, ro::Int, co::Int) = _mf_walk!(
-    s, p1, sp, ro, co, _mf_gathers(p1) && !_has_test_interp(p2))
+    s, p1, sp, ro, co, Val(_mf_gathers(p1) && !_has_test_interp(p2)))
 @inline function _mf_visit_pair!(
         p::CpuPolicy, s, p1::P1, p2::P2, sp, ro::Int, co::Int
 ) where {P1, P2}
@@ -693,11 +693,16 @@ _mf_tapped(op::Union{OperatorScale, GridFunctionScale}) = _mf_tapped(op.inner_op
 _mf_tapped(_) = _MF_LONG
 
 # A serial unit: the interior gathered and the shell scattered, or, when it cannot be
-# gathered, `visit_bilinear_stencil`'s scatter.
-@inline function _mf_walk!(s, term::TERM, sp, ro::Int, co::Int, gathers::Bool) where {TERM}
+# gathered, `visit_bilinear_stencil`'s scatter. Whether it gathers is a type, not a `Bool`:
+# a `false` argument still lets inference reach the gather, and on a long stencil (a
+# product of two nested differences, hundreds of entries) its unrolled rows took minutes to
+# compile for a unit that never runs them.
+@inline _mf_walk!(s, term, sp, ro::Int, co::Int, ::Val{false}) = (
+    visit_bilinear_stencil(s, term, sp, ro, co); nothing)
+@inline function _mf_walk!(s, term::TERM, sp, ro::Int, co::Int, ::Val{true}) where {TERM}
     grid_inds = indices(mesh(sp))
     margin = _stencil_margin(term)
-    if gathers && _peelable(axes(grid_inds), margin)
+    if _peelable(axes(grid_inds), margin)
         _mf_gather_unit!(s, term, sp, ro, co, _full_range(last(axes(grid_inds))))
         _mf_whole(s.geom, term, sp) || _mf_scatter_shell!(s, term, sp, ro, co)
     else

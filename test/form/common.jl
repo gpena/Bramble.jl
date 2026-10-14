@@ -3,7 +3,7 @@ module FormCommonTests
 using Test
 using Bramble
 # Internal names: defined and documented, not exported.
-import Bramble: D₊ₓ, M₊ₓ, M₊ᵧ, D̽ₓ
+import Bramble: D₊ₓ, M₊ₓ, M₊ᵧ, D̽ₓ, D̽ᵧ, D̃ₓ
 using LinearAlgebra: issymmetric, Diagonal, I as Id, mul!
 using SparseArrays: nnz
 using Bramble:
@@ -214,8 +214,20 @@ using Bramble:
         A = assemble(a)
         @test nnz(A) == 333
         x = sin.(1:size(A, 2))
-        @test mul!(similar(x), matrix_free_operator(a), x) ≈ A * x
+        M = matrix_free_operator(a)
+        @test mul!(similar(x), M, x) ≈ A * x
         @test bytes(assemble!, A, a) == 0
+        @test bytes(mul!, similar(x), M, x) == 0
+
+        # 324 entries, and a unit the matrix-free product scatters: its first product
+        # compiled the unused gather's unrolled rows, 0.2 s grown to over a minute
+        b = form(W79, W79, (u, v) -> innerₕ(D̽ᵧ(D̽ₓ(D̃ₓ(u))), D̽ᵧ(D̽ₓ(D̃ₓ(v)))))
+        B = assemble(b)
+        y = similar(x)
+        t = @elapsed mul!(y, matrix_free_operator(b), x)
+        @test t < 20
+        @test y ≈ B * x
+        @test bytes(assemble!, B, b) == 0
     end
 
     @testset "Unit leaf stencils" begin
