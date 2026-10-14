@@ -28,10 +28,10 @@ are evaluated on demand from the tensor-product submeshes.
   - `marker_ids`: `Dict{Symbol, Int}`, the column of each label in `words`.
   - `words`: `Matrix{UInt64}`, the marker bits, one column of `BitVector` chunks per label.
   - `uid`: an identity unique to this mesh, kept across its mutations.
-  - `predicate_labels`: the labels `set_markers!` defined by a predicate of position, whose
-    sets a point change leaves stale (see [`change_points!`](@ref)).
   - `marker_stamp`: a counter value drawn afresh at construction and at every marker
     replacement.
+  - `predicate_labels`: the labels `set_markers!` defined by a predicate of position, whose
+    sets a point change leaves stale (see [`change_points!`](@ref)).
 
 A `MeshnD` stores no state of its own: its submeshes can be mutated directly, so the
 [`MeshnDState`](@ref) the walk reads is built on demand by [`_walk_mesh`](@ref).

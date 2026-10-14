@@ -60,10 +60,9 @@ it (gpena/Bramble.jl#759).
 What is not attempted otherwise: this stops at `BilinearProduct`/`LinearProduct`/
 `ShiftNode` and does not descend into differences, averages, jumps, restrictions or
 interpolation -- a scalar or shift buried one layer further in (`D₋ₓ(2 * u)`, say) is not
-reached. Nor does it fold
-`πₕ(u)` away when the space it interpolates from is the one `u` is assembled against: that
-equality is only known once a concrete trial space is available, which a context-free
-rewrite over the expression alone does not have. Since gpena/Bramble.jl#10 that space is
+reached. Nor does it fold `πₕ(u)` away when the space it interpolates from is the one `u` is
+assembled against: that equality is only known once a concrete trial space is available,
+which a context-free rewrite over the expression alone does not have. Since gpena/Bramble.jl#10 that space is
 supplied by `_bind_interp_spaces` at block time, so the fold is available to a pass that
 runs there -- not to this one.
 

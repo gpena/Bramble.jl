@@ -1346,17 +1346,17 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_3D_TESTS, WITH_AD_TESTS, _grad
                 Tuple(v -> 2.0 * innerₕ(g, D₋ₓ(R(s, v))) for s in labels[1:k])...))
         end
         # A restriction over a sum is distributed over it; constant scales of several types
-        # are converted to the space's element type (12816 B for `2.0R + 3R` before).
+        # are widened to the type of their product with the element weight, never narrowed
+        # (12816 B for `2.0R + 3R` before).
         _check_split((v -> innerₕ(g, R(:c, v + R(:l, v) + R(:r, v))), v -> innerₕ(g, R(:b, v))))
         _check_split((v -> innerₕ(x -> 1.0, 2.0 * R(:l, v)), v -> innerₕ(x -> 1.0, 3 * R(:r, v))))
         _check_split((v -> innerₕ(g, v), v -> innerₕ(g, 2.0 * R(:l, v)),
             v -> innerₕ(g, 3 * R(:r, v)), v -> innerₕ(g, (1 // 2) * R(:b, v))))
-        # A complex scale on a Float64 mesh is not promoted to: left as built, it still
-        # allocates, and must still agree with its parts.
+        # A complex scale on a Float64 mesh widens the form to ComplexF64, which refills
+        # without allocating, and must still agree with its parts.
         _check_split(
             (v -> innerₕ(g, (1.0 + 2.0im) * R(:l, v)), v -> innerₕ(g, 3 * R(:r, v)),
-                v -> innerₕ(g, 2.0 * R(:b, v)));
-            bytes = nothing)
+            v -> innerₕ(g, 2.0 * R(:b, v))))
         # Summands of one type are paired whatever order they are written in.
         _check_split((v -> innerₕ(g, R(:l, v)), v -> innerₕ(g, 2.0 * R(:r, v)),
             v -> innerₕ(g, R(:b, v))))

@@ -64,8 +64,10 @@ the word matrix assembly reads is not rebuilt, and a label added that way has no
 change the labels use `markers!` or `set_markers!` (both private; see the same internals
 page). The three-argument forms, `change_points!(Ωₕ, markers(Ω), pts)` and
 `iterative_refinement!(Ωₕ, markers(Ω))`, re-evaluate them at the new points. The
-two-argument `change_points!(Ωₕ, pts)` keeps the face labels, which are index-based, and
-refuses a mesh carrying a label defined by a predicate of position, whose set would go stale.
+two-argument `change_points!(Ωₕ, pts)` keeps the face labels, which are index-based. It and
+`set_points!` refuse a mesh carrying a label defined by a predicate of position, whose set
+would go stale, and a move of a submesh of one; `change_points!(Ωₕ, markers(Ω), pts)` on the
+whole mesh is the way to move it.
 
 ## Mesh adaptation and mutation
 
