@@ -32,6 +32,8 @@ using Bramble:
                Innerplus,
                evaluate!,
                D̽ₓ,
+               D̽ᵧ,
+               D̽₂,
                D₋ᵧ,
                D₋ₓ,
                Mᵧ,
@@ -1382,6 +1384,45 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         rt = Base.return_types(Bramble._split_restricted_products, (typeof(ast), Type{Float64}))
         @test length(rt) == 1 && isconcretetype(only(rt))
         @test Bramble._split_restricted_products(ast, Float64) isa Bramble.OperatorAdd
+    end
+
+    @testset "Cross-weighted scaled restriction" begin
+        # `D̽` taps its operand at three points. A constant scale over a restriction was
+        # re-evaluated at each neighbour, `()` or a full tuple by its marker, and three such
+        # taps made more stencil shapes than inference splits: every refill boxed (14112 B
+        # bilinear on this 7x9 grid, D̽ₓ 14544 B) where `D̽ᵧ(R)`, `D̽ᵧ(2v)` and `D₋ₓ(2R)`
+        # allocated nothing. The forms below are bilinear and linear both, on graded grids.
+        R = restrict_to
+        bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
+        I1 = interval(0.0, 1.0)
+        cases = ((I1, (11,), (D̽ₓ,)), (I1 × I1, (7, 9), (D̽ₓ, D̽ᵧ)),
+            (I1 × I1 × I1, (4, 5, 6), (D̽ₓ, D̽ᵧ, D̽₂)))
+        for (S, np, Ds) in cases
+            Ωg = mesh(domain(S, :l => :left), np, ntuple(_ -> false, length(np)))
+            pts = ntuple(d -> range(0.0, 1.0; length = np[d]) .^ (1 + 0.25d), length(np))
+            Bramble.change_points!(Ωg, length(np) == 1 ? only(pts) : pts)
+            W = gridspace(Ωg)
+            g = element(W)
+            g .= 1.0 .+ (1:length(g)) ./ 7
+            # `wrap(x) == c * unit(x)`: the scaled form must be `c` times the unit one.
+            for D in Ds, (label, c, wrap, unit) in (("2.0", 2.0, x -> 2.0 * x, identity),
+                ("-1", -1, x -> -x, identity), ("2.0 * g", 2.0, x -> 2.0 * (g * x), x -> g * x))
+                @testset "$(length(np))D $D($label R)" begin
+                    a = form(W, W, (u, v) -> innerₕ(u, D(wrap(R(:l, v)))))
+                    A = assemble(a)
+                    A1 = assemble(form(W, W, (u, v) -> innerₕ(u, D(unit(R(:l, v))))))
+                    # The restriction is live: it drops some of the unrestricted entries.
+                    full = assemble(form(W, W, (u, v) -> innerₕ(u, D(unit(v)))))
+                    @test 0 < count(!iszero, A1) < count(!iszero, full)
+                    @test A ≈ c * A1
+                    @test bytes(A, a) == 0
+                    lf = form(W, v -> innerₕ(g, D(wrap(R(:l, v)))))
+                    y = assemble(lf)
+                    @test y ≈ c * assemble(form(W, v -> innerₕ(g, D(unit(R(:l, v))))))
+                    @test bytes(y, lf) == 0
+                end
+            end
+        end
     end
 
     WITH_AD_TESTS && @testset "Assembled residual differentiation" begin

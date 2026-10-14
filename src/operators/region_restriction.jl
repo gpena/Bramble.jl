@@ -237,6 +237,28 @@ end
     return scale_stencil(shifted, _in_region(inner_op, markers, lins[Ishift]) ? one(T) : zero(T))
 end
 
+# A constant scale over a restriction, directly or through further scales, shifts its operand
+# by that operand's own rule (the restriction's above, `GridFunctionScale`'s in ast/common.jl)
+# and scales the result, as `GridFunctionScale` does. The trait path would re-evaluate the
+# scaled restriction at the neighbour, `()` or a full tuple by its marker, and three such taps
+# (`D̽ₓ(2 * restrict_to(:l, v))`) concatenate to more stencil shapes than inference splits,
+# so the walk boxed on every refill. Any other scale keeps the trait path; the branch folds.
+@inline _scales_restriction(::RegionRestriction) = true
+@inline _scales_restriction(op::Union{OperatorScale, GridFunctionScale}) = _scales_restriction(
+    op.inner_op)
+@inline _scales_restriction(::Any) = false
+
+@inline function shifted_inner_stencil(
+        inner_op::OperatorScale, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
+) where {D, Dim}
+    _scales_restriction(inner_op.inner_op) || return _shifted_inner_stencil(
+        stencil_shift_trait(inner_op), inner_op, inner, space, I, markers, Val(Dim), delta)
+    lin_idx = LinearIndices(indices(mesh(space)))[I]
+    sub = local_stencil(inner_op.inner_op, space, I, markers, lin_idx)
+    shifted = shifted_inner_stencil(inner_op.inner_op, sub, space, I, markers, Val(Dim), delta)
+    return scale_stencil(shifted, _scale_value(inner_op, lin_idx))
+end
+
 # --- AST resolution ---------------------------------------------------------------- #
 
 function resolve_ast(op::RegionRestriction{D, RegionType}) where {D, RegionType}
