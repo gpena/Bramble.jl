@@ -10,6 +10,7 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("operators.jl")
         include("inner_products.jl")
         include("linear.jl")
+        include("linear_restriction.jl")
         include("dirac.jl")
         include("source_operators.jl")
         # Behind `slow`: `for (nm, op) in (("D₋ₓ", D₋ₓ), ("D₊ₓ", D₊ₓ), ...)` binds `op` to a
