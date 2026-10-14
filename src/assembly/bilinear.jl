@@ -386,9 +386,9 @@ end
 # read off the operand types, so a product with at most two folds to its early return.
 function _split_restricted_products(op::BilinearProduct{D, W}, ::Type{E}) where {D, W, E}
     _needs_rewrite(op) || return op
+    _holds_restriction(op) || return _widened_product(op, E)
     l = _uniform_scales(op.left_op, E)
     r = _uniform_scales(op.right_op, E)
-    _holds_restriction(op) || return BilinearProduct{D, W, typeof(l), typeof(r)}(l, r)
     nl = _vanishing_count(l)
     nr = _vanishing_count(r)
     capl = Val(nr == 0 ? 2 : 1)
@@ -485,6 +485,17 @@ precompile(_type_mixed_scales, (Any,))
 # `0.1 * v + 3 * D₋ₓ(v)` on a Float32 mesh). `simplify_ast` keeps the literals (its
 # folding reads them).
 _uniform_scales(op, ::Type) = op
+# With no restriction there is no split to gain, so scales joining to a type that is not
+# bits are left as they are. Every product with a `BigFloat` allocates anyway, and an `Int`
+# converted to one only adds allocations (56688 -> 106368 B for `big(0.1) * v +
+# 3 * D₋ₓ(v)`).
+function _widened_product(op::BilinearProduct{D, W}, ::Type{E}) where {D, W, E}
+    l = _bits_uniform_scales(op.left_op, E)
+    r = _bits_uniform_scales(op.right_op, E)
+    return BilinearProduct{D, W, typeof(l), typeof(r)}(l, r)
+end
+_bits_uniform_scales(op, ::Type{E}) where {E} = isbitstype(_scale_product_type(op, E)) ?
+                                                _uniform_scales(op, E) : op
 # Scales still of several types after that would keep the walk boxing whatever the split
 # does, and a split then only adds walks (45648 B against 39680 B on a Float32 mesh when it
 # narrowed nothing and widened nothing), so it is skipped.

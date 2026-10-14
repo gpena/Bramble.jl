@@ -888,6 +888,18 @@ using Bramble:
             @test exact ? Matrix(A) == Matrix(U) :
                   isapprox(Matrix(A), Matrix(U); rtol = 1e-6)
         end
+        # Scales joining to a type that is not bits are left mixed: every product with a
+        # BigFloat allocates, and converting the Int or Float64 to one took the refill from
+        # 56688 and 63744 B to 106368 B.
+        for (f, cap) in (((u, v) -> innerₕ(u, big(0.1) * v + 3 * D₋ₓ(v)), 56688),
+            ((u, v) -> innerₕ(u, big(3) * v + 0.5 * D₋ₓ(v)), 63744))
+            ast = _built(W, f)
+            @test Bramble._split_restricted_products(ast, Float64) === ast
+            a = form(W, W, f)
+            A = assemble(a)
+            @test eltype(A) === BigFloat
+            @test _loop_bytes(A, a) <= cap
+        end
 
         # A scale over a restricted sum is not distributed over it: distributed, a grid
         # function scale took `form` 12.8 s to compile here, and over four summands LLVM
