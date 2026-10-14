@@ -784,6 +784,47 @@ using Bramble:
             (u, v) -> innerₕ(u, DDD(R(:l, v) + R(:r, v)))))) == 2
         @test _products(resolve_form_ast(form(Wd, Wd,
             (u, v) -> innerₕ(u, DD(foldl(+, (R(:l, v) for _ in 1:17))))))) == 9
+        # Averages and jumps are distributed and counted as differences are, in any mix:
+        # `Mₓ(D₊ᵧ(R(:l, v) + R(:r, v)))` and `D₋ₓ(M₊ᵧ(…))` refilled 38304 B, the four-summand
+        # average 244976 B, the linear form 122880 B, though each piece refilled with 0 B.
+        Mav = Bramble.Mₓ
+        for (outer, inner, nnz_c) in ((Mav, Bramble.D₊ᵧ, 176), (D₋ₓ, M₊ᵧ, 176),
+            (Bramble.jumpₓ, Bramble.D₊ᵧ, 167), (Mav, M₊ᵧ, 176))
+            W2 = v -> outer(inner(v))
+            for (whole, gs, nnz_whole) in (
+                ((u, v) -> innerₕ(u, W2(R(:l, v) + R(:r, v))),
+                (v -> R(:l, v), v -> R(:r, v)), 131),
+                ((u, v) -> innerₕ(u, W2(R(:c, v + R(:l, v) + R(:r, v)))),
+                (v -> R(:c, v), v -> R(:c, R(:l, v)), v -> R(:c, R(:r, v))), nnz_c))
+                a = form(Wd, Wd, whole)
+                A = assemble(a)
+                @test _loop_bytes(A, a) == 0
+                P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(u, W2(g(v))))) for g in gs)
+                @test Matrix(A) ≈ Matrix(P)
+                @test nnz(A) == nnz_whole
+            end
+        end
+        R4 = v -> R(:l, v) + R(:r, v) + R(:b, v) + R(:t, v)
+        a = form(Wd, Wd, (u, v) -> innerₕ(u, Mav(Bramble.D₊ᵧ(R4(v)))))
+        A = assemble(a)
+        @test _loop_bytes(A, a) == 0
+        MD = v -> Mav(Bramble.D₊ᵧ(v))
+        P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(u, MD(R(s, v)))))
+        for s in (:l, :r, :b, :t))
+        @test Matrix(A) ≈ Matrix(P)
+        l = form(Wd, v -> innerₕ(fd, MD(R(:l, v) + R(:r, v))))
+        b = assemble(l)
+        @test _loop_bytes(b, l) == 0
+        @test b ≈ sum(assemble(form(Wd, v -> innerₕ(fd, MD(R(s, v))))) for s in (:l, :r))
+        # One such summand on each side boxes in every piece, so the product stays whole:
+        # split into four, both forms refilled 157168 B against 92096 B whole.
+        for W2 in (MD, DD)
+            whole = (u, v) -> innerₕ(W2(R(:l, u) + R(:r, u)), W2(R(:b, v) + R(:t, v)))
+            @test _products(resolve_form_ast(form(Wd, Wd, whole))) == 1
+            P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(W2(R(s, u)), W2(R(t, v)))))
+            for s in (:l, :r) for t in (:b, :t))
+            @test Matrix(assemble(form(Wd, Wd, whole))) ≈ Matrix(P)
+        end
 
         # With restrictions on both sides, a plain summand beside a restriction of another
         # operand (`v + R(:t, D₋ₓ(v))`, or `D₋ₓ(u)` beside `D₋ₓ(R(:l, u))`) gave stencils of

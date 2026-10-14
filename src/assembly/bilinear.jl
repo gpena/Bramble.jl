@@ -434,7 +434,8 @@ function _split_product(op::BilinearProduct{D, W}, l, r, ls, rs) where {D, W}
     # sides multiply them: past 16 (six distinct types a side made 36, a first assemble
     # up to 15 times slower and more bytes than the unsplit product), it stays as built.
     length(ls) * length(rs) > 16 && return op
-    if (length(ls) == 1 && length(rs) == 1) || _mixed_scales(l) || _mixed_scales(r)
+    if (length(ls) == 1 && length(rs) == 1) || _mixed_scales(l) || _mixed_scales(r) ||
+       _boxes_whole(l, r, ls, rs)
         return l === op.left_op && r === op.right_op ? op :
                BilinearProduct{D, W, typeof(l), typeof(r)}(l, r)
     end
@@ -579,13 +580,15 @@ _promote_scalar(x::Base.RefValue, T) = x
     op.zero_stencil === nothing || return (op,)
     return map(x -> _rewrap_inner(op, x), _expanded_summands(op.inner_op))
 end
-# A difference is linear in its operand entry for entry, so one over a sum holding a
-# restriction distributes the same way: `D₋ₓ(Rₕ(:c, v + Rₕ(:l, v)))` is
-# `D₋ₓ(Rₕ(:c, v)) + D₋ₓ(Rₕ(:c, Rₕ(:l, v)))` (gpena/Bramble.jl#759). An operand with no
-# restriction is left whole, so an unrestricted difference compiles nothing new.
-const _DifferenceNode = Union{BackwardDifference, ForwardDifference, CenteredDifference,
-    StarDifference, CrossWeightedDifference}
-@inline function _expanded_summands(op::_DifferenceNode)
+# A difference, average or jump is linear in its operand entry for entry, so one over a
+# sum holding a restriction distributes the same way: `D₋ₓ(Rₕ(:c, v + Rₕ(:l, v)))` is
+# `D₋ₓ(Rₕ(:c, v)) + D₋ₓ(Rₕ(:c, Rₕ(:l, v)))`, and `Mₓ(D₊ᵧ(Rₕ(:l, v) + Rₕ(:r, v)))` is
+# `Mₓ(D₊ᵧ(Rₕ(:l, v))) + Mₓ(D₊ᵧ(Rₕ(:r, v)))` (gpena/Bramble.jl#759). An operand with no
+# restriction is left whole, so an unrestricted one compiles nothing new.
+const _StencilNode = Union{BackwardDifference, ForwardDifference, CenteredDifference,
+    StarDifference, CrossWeightedDifference, JumpNode, BackwardAverage, ForwardAverage,
+    CenteredAverage}
+@inline function _expanded_summands(op::_StencilNode)
     _holds_restriction(op.inner_op) || return (op,)
     return map(x -> _rewrap_inner(op, x), _expanded_summands(op.inner_op))
 end
@@ -635,16 +638,18 @@ end
 #
 # A difference reads its operand at two points, so one over a restricted difference has
 # more stencil shapes than its restriction's bit says: `D₋ₓ(D₊ᵧ(Rₕ(:l, v)))` and its `:r`
-# twin, paired in one sum, boxed (62496 B, gpena/Bramble.jl#759). Each difference level over
-# a restricted difference adds a bit, so such a summand takes a sum of its own at any depth.
+# twin, paired in one sum, boxed (62496 B, gpena/Bramble.jl#759). An average or a jump
+# reads several points too: `Mₓ(D₊ᵧ(Rₕ(:l, v)))` and `D₋ₓ(M₊ᵧ(Rₕ(:l, v)))` with their twins
+# boxed 38304 B. Each such level over a restricted one adds a bit, so such a summand takes a
+# sum of its own at any depth.
 function _type_shape_bits(T, nested::Bool = true)
     if T <: RegionRestriction
         inner = _type_shape_bits(fieldtype(T, :inner_op), nested)
         return fieldtype(T, :zero_stencil) === Nothing ? max(1, inner) : inner
-    elseif nested && T <: _DifferenceNode
+    elseif nested && T <: _StencilNode
         I = fieldtype(T, :inner_op)
         inner = _type_shape_bits(I)
-        return inner > 0 && _type_restricted_difference(I) ? inner + 1 : inner
+        return inner > 0 && _type_restricted_stencil(I) ? inner + 1 : inner
     elseif T <: UnaryWrapper
         return _type_shape_bits(fieldtype(T, :inner_op), nested)
     elseif T <: OperatorAdd
@@ -654,21 +659,33 @@ function _type_shape_bits(T, nested::Bool = true)
     return 0
 end
 
-# Whether `T` holds, under any wrapper or sum, a difference over a restriction.
-function _type_restricted_difference(T)
-    if T <: _DifferenceNode
+# Whether `T` holds, under any wrapper or sum, a difference, average or jump over a
+# restriction.
+function _type_restricted_stencil(T)
+    if T <: _StencilNode
         return _type_shape_bits(fieldtype(T, :inner_op)) > 0
     elseif T <: UnaryWrapper
-        return _type_restricted_difference(fieldtype(T, :inner_op))
+        return _type_restricted_stencil(fieldtype(T, :inner_op))
     elseif T <: OperatorAdd
-        return _type_restricted_difference(fieldtype(T, :left_op)) ||
-               _type_restricted_difference(fieldtype(T, :right_op))
+        return _type_restricted_stencil(fieldtype(T, :left_op)) ||
+               _type_restricted_stencil(fieldtype(T, :right_op))
     end
     return false
 end
 # The same count at run time, read off the type, so a linear form walks two such summands
 # apart (`_unit_bits`, linear.jl): walked as one, `D₋ₓ(D₊ᵧ(Rₕ(:l, v) + Rₕ(:r, v)))` boxed.
-@generated _shape_bits(::T) where {T <: _DifferenceNode} = _type_shape_bits(T)
+@generated _shape_bits(::T) where {T <: _StencilNode} = _type_shape_bits(T)
+
+# Whether a product whose operands are one summand each, as built, stays whole: every group
+# on both sides has two bits or more (`_type_shape_bits`), so a piece taking one from each
+# side boxes whatever the split, and each piece adds a walk. Split into four,
+# `innerₕ(Mₓ(D₊ᵧ(Rₕ(:l, u) + Rₕ(:r, u))), Mᵧ(D₊ₓ(Rₕ(:b, v) + Rₕ(:t, v))))` refilled 157168 B
+# against 92096 B whole. Operands written as sums split as before: kept whole, a sum of
+# five such summands against three took the first `assemble` 4.1 s against 1.3 s.
+@inline _boxes_whole(l, r, ls, rs) = !(l isa OperatorAdd) && !(r isa OperatorAdd) &&
+                                     _boxes_alone(ls) && _boxes_alone(rs)
+@generated _boxes_alone(::T) where {T <: Tuple} = all(
+    G -> _type_shape_bits(G) >= 2, T.parameters)
 
 # `T` with every scale and restriction around it peeled off: what a summand's full stencil
 # is built from, entry for entry, so two summands with the same core have stencils of the
@@ -783,7 +800,7 @@ end
 # image, it does not cost the first restricted `form` of a session its own compilation.
 precompile(_type_groups, (Vector{Any}, Int, Bool, Bool))
 precompile(_type_shape_bits, (Any, Bool))
-precompile(_type_restricted_difference, (Any,))
+precompile(_type_restricted_stencil, (Any,))
 precompile(_type_core, (Any,))
 precompile(_joins_restriction, (Any, Any))
 precompile(_sum_expr, (Symbol, Vector{Int}))
