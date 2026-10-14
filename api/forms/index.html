@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=4f16c364">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=f788936d">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -95,7 +95,7 @@
 <div class="md-docstring" id="Bramble.form">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.form</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L285-L338" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L352-L405" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -103,8 +103,8 @@
 <pre><code class="language-julia">form(Wₕ, f) -&gt; LinearForm</code></pre>
 </div>
 <p>Construct a <code class="md-code-inline">LinearForm</code> over the test space <code class="md-code-inline">Wₕ</code> using the linear expression <code class="md-code-inline">f</code>.</p>
-<p>Construction resolves the AST once and runs <a href="../../internals/form/#Bramble.simplify_ast-Tuple{Bramble.LazyOp}"><code class="md-code-inline">simplify_ast</code></a> over it – factoring common scalings and shared inner-product arguments, combining like terms, and eliding zero-scaled ones – before it is stored. Grid partitioning for parallel assembly is determined from the resolved AST during assembly (see <code class="md-code-inline">_colour_strides</code>).</p>
-<p>Every <code class="md-code-inline">SourceFunction</code> reachable from the simplified AST – a source term built directly from a plain function, <code class="md-code-inline">f(x)</code>, rather than a <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> or a <code class="md-code-inline">Ref</code> – is then sampled once against its own leaf&#39;s space and lowered to a <code class="md-code-inline">SourceVector</code> because a brand-new closure passed as a source would force a full recompilation of the assembly pipeline on every distinct closure, since Julia gives it its own type; assembling against the fixed <code class="md-code-inline">SourceVector</code> shape instead means that cost is paid once, here, not on every later <code class="md-code-inline">assemble!</code>/<code class="md-code-inline">assemble</code> call. This changes what a raw closure that captures mutable state does: it is evaluated once, now, not re-evaluated on later assemblies. <code class="md-code-inline">VectorElement</code> and <code class="md-code-inline">Ref</code> coefficients are unaffected – see the note on <code class="md-code-inline">_lower_sources</code> in <code class="md-code-inline">form/common.jl</code> for why, and for the documented alternative (<code class="md-code-inline">update_coefficients!</code>) a source meant to keep varying should use instead.</p>
+<p>Construction resolves the AST once and runs <a href="../../internals/form/#Bramble.simplify_ast-Tuple{Bramble.LazyOp}"><code class="md-code-inline">simplify_ast</code></a> over it – factoring common scalings and shared inner-product arguments, combining like terms, and eliding zero-scaled ones – before it is stored. Grid partitioning for parallel assembly is determined from the resolved AST during assembly (see <code class="md-code-inline">_term_colour_strides</code>).</p>
+<p>Every <code class="md-code-inline">SourceFunction</code> reachable from the simplified AST – a source term built directly from a plain function, <code class="md-code-inline">f(x)</code>, rather than a <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> or a <code class="md-code-inline">Ref</code> – is then sampled once against its own leaf&#39;s space and lowered to a <code class="md-code-inline">SourceVector</code> because a brand-new closure passed as a source would force a full recompilation of the assembly pipeline on every distinct closure, since Julia gives it its own type; assembling against the fixed <code class="md-code-inline">SourceVector</code> shape instead means that cost is paid once, here, not on every later <code class="md-code-inline">assemble!</code>/<code class="md-code-inline">assemble</code> call. This changes what a raw closure that captures mutable state does: it is evaluated once, now, not re-evaluated on later assemblies. <code class="md-code-inline">VectorElement</code> and <code class="md-code-inline">Ref</code> coefficients are unaffected – see the note on <code class="md-code-inline">_lower_sources</code> in <code class="md-code-inline">ast/common.jl</code> for why, and for the documented alternative (<code class="md-code-inline">update_coefficients!</code>) a source meant to keep varying should use instead.</p>
 <p>The one exception is an interpolant <a href="../../api/spaces/#Bramble.πₕ"><code class="md-code-inline">πₕ</code></a><code class="md-code-inline">(uₕ)</code>, which is never sampled: every <code class="md-code-inline">assemble</code>/<code class="md-code-inline">assemble!</code> evaluates it on <code class="md-code-inline">uₕ</code>&#39;s current values, and throws an <code class="md-code-inline">ArgumentError</code> once <code class="md-code-inline">uₕ</code>&#39;s mesh has moved.</p>
 <p>A source under <code class="md-code-inline">restrict_to</code> is also called once here, at the first point of its region that the assembly reads (inside every enclosing region, moved by every enclosing shift), so that outside its region it answers a zero of the type it has inside and its stencil keeps one type at every point. It is never called at a point no assembly reads, with one exception: the point comes from the markers as they stand at <code class="md-code-inline">form</code>, so after <code class="md-code-inline">markers!</code> moves the region the source has been called once at a point of the old one. A region with no such point at <code class="md-code-inline">form</code> keeps the empty stencil. In return:</p>
 <ul class="md-list-tight">
@@ -157,7 +157,7 @@ a = form(Vₕ, Vₕ, (u, v) -&gt; inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + in
 <pre><code class="language-julia">expression(form::Union{LinearForm,BilinearForm}) -&gt; String</code></pre>
 </div>
 <p>Render <code class="md-code-inline">form</code>&#39;s resolved AST (<code class="md-code-inline">form.ast</code>) in Bramble&#39;s own operator notation.</p>
-<p>Left untyped on purpose: <code class="md-code-inline">LinearForm</code>/<code class="md-code-inline">BilinearForm</code> are defined in <code class="md-code-inline">form/linear.jl</code> and <code class="md-code-inline">form/bilinear.jl</code>, included well after this file, so a <code class="md-code-inline">Union{LinearForm,BilinearForm}</code> annotation here would need those names to exist at <code class="md-code-inline">include</code> time. Every <code class="md-code-inline">LazyOp</code> node has its own, more specific <code class="md-code-inline">expression</code> method, so this untyped fallback only ever catches forms.</p>
+<p>Left untyped on purpose: <code class="md-code-inline">LinearForm</code>/<code class="md-code-inline">BilinearForm</code> are defined in <code class="md-code-inline">assembly/linear.jl</code> and <code class="md-code-inline">assembly/bilinear.jl</code>, included well after this file, so a <code class="md-code-inline">Union{LinearForm,BilinearForm}</code> annotation here would need those names to exist at <code class="md-code-inline">include</code> time. Every <code class="md-code-inline">LazyOp</code> node has its own, more specific <code class="md-code-inline">expression</code> method, so this untyped fallback only ever catches forms.</p>
 </div>
 </div>
 <h2 id="Point-(Dirac)-sources" class="md-heading">Point (Dirac) sources<a href="#Point-(Dirac)-sources" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -247,7 +247,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.assemble">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L464-L477" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L627-L640" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -272,7 +272,7 @@ for step in 1:nsteps
     assemble!(A, a)                    # or assemble_parallel!(A, a)
 end</code></pre>
 </div>
-<p>Runs serially or across threads following <code class="md-code-inline">form.trial_space</code>&#39;s backend <a href="../../api/utilities/#Bramble.execution_policy"><code class="md-code-inline">execution_policy</code></a>: <a href="../../api/utilities/#Bramble.Serial"><code class="md-code-inline">Serial</code></a> by default. Optional <code class="md-code-inline">dirichlet</code> applies boundary conditions to the matrix – a label <code class="md-code-inline">Symbol</code>, a <code class="md-code-inline">Tuple</code> of labels, a <code class="md-code-inline">label =&gt; f</code> <code class="md-code-inline">Pair</code> (values ignored on the matrix side), or constraints from <a href="../../api/forms/#Bramble.dirichlet_constraints"><code class="md-code-inline">dirichlet_constraints</code></a>; see <a href="../../internals/form/#Bramble._normalize_dirichlet-Tuple{Nothing}"><code class="md-code-inline">_normalize_dirichlet</code></a> for every accepted form. <code class="md-code-inline">dirichlet_components</code> restricts which leaf components of a composite trial space they bind to (see <a href="../../api/forms/#Bramble.dirichlet_bc!"><code class="md-code-inline">dirichlet_bc!</code></a>).</p>
+<p>Runs serially or across threads following <code class="md-code-inline">form.trial_space</code>&#39;s backend <a href="../../api/utilities/#Bramble.execution_policy"><code class="md-code-inline">execution_policy</code></a>: <a href="../../api/utilities/#Bramble.Serial"><code class="md-code-inline">Serial</code></a> by default. Optional <code class="md-code-inline">dirichlet</code> applies boundary conditions to the matrix – a label <code class="md-code-inline">Symbol</code>, a <code class="md-code-inline">Tuple</code> of labels, a <code class="md-code-inline">label =&gt; f</code> <code class="md-code-inline">Pair</code> (values ignored on the matrix side), or constraints from <a href="../../api/forms/#Bramble.dirichlet_constraints"><code class="md-code-inline">dirichlet_constraints</code></a>; see <a href="../../internals/form/#Bramble._normalize_dirichlet-Tuple{Nothing}"><code class="md-code-inline">_normalize_dirichlet</code></a> for every accepted form. <code class="md-code-inline">dirichlet_components</code> restricts which leaf components of a composite test space they bind to (see <a href="../../api/forms/#Bramble.dirichlet_bc!"><code class="md-code-inline">dirichlet_bc!</code></a>).</p>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -292,7 +292,7 @@ u = A \ F</code></pre>
 <div class="md-docstring" id="Bramble.assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1156-L1186" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1349-L1382" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -300,7 +300,7 @@ u = A \ F</code></pre>
 <pre><code class="language-julia">assemble!(b::AbstractVector, form::LinearForm; dirichlet = nothing,
           dirichlet_components = nothing) -&gt; AbstractVector</code></pre>
 </div>
-<p>Refill <code class="md-code-inline">b</code> with the assembled <code class="md-code-inline">form</code> and return it with zero allocations (<strong>0 bytes</strong>).</p>
+<p>Refill <code class="md-code-inline">b</code> with the assembled <code class="md-code-inline">form</code> and return it with zero allocations (<strong>0 bytes</strong>). A product with three or more region-restricted summands on its test side is split by <code class="md-code-inline">form</code> into products of at most two (gpena/Bramble.jl#727); one it leaves whole, as it would split into more than 16 or its constant scales keep several types, allocates per grid point.</p>
 <p>On a test space whose backend lives on a device (a Metal space, say), <code class="md-code-inline">b</code> is filled on the host and uploaded in one <code class="md-code-inline">copyto!</code>, as system matrices are: that path allocates a host buffer and host mirrors of the space on every call, so the zero-allocation guarantee is the host path&#39;s alone.</p>
 <p><code class="md-code-inline">assemble!</code> uses the pre-resolved <code class="md-code-inline">form.ast</code> stored directly inside the form.</p>
 <p><strong>Live coefficients</strong></p>
@@ -332,7 +332,7 @@ u = A \ F</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">assemble!(A::AbstractMatrix, form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -&gt; AbstractMatrix</code></pre>
 </div>
-<p>Assemble the <code class="md-code-inline">BilinearForm</code> into the preallocated matrix <code class="md-code-inline">A</code>, allocating nothing (<strong>0 bytes</strong>) when <code class="md-code-inline">A</code> is the default <code class="md-code-inline">SparseMatrixCSC</code>.</p>
+<p>Assemble the <code class="md-code-inline">BilinearForm</code> into the preallocated matrix <code class="md-code-inline">A</code>, allocating nothing (<strong>0 bytes</strong>) when <code class="md-code-inline">A</code> is the default <code class="md-code-inline">SparseMatrixCSC</code>. A product with three or more region-restricted summands is split by <code class="md-code-inline">form</code> into products of at most two (gpena/Bramble.jl#727); one it leaves whole, as it would split into more than 16 or its constant scales keep several types, allocates per grid point.</p>
 <p>Runs serially or across threads following <code class="md-code-inline">form.trial_space</code>&#39;s backend <a href="../../api/utilities/#Bramble.execution_policy"><code class="md-code-inline">execution_policy</code></a>: <a href="../../api/utilities/#Bramble.Serial"><code class="md-code-inline">Serial</code></a> (the default) or <a href="../../api/utilities/#Bramble.Parallel"><code class="md-code-inline">Parallel</code></a>. <a href="../../api/forms/#Bramble.assemble_parallel!"><code class="md-code-inline">assemble_parallel!</code></a> is a separate, lower-level entry point that always threads, ignoring the backend&#39;s policy.</p>
 <p><code class="md-code-inline">assemble!</code> uses the pre-resolved <code class="md-code-inline">form.ast</code> stored directly inside the form.</p>
 <p><strong>Live coefficients</strong></p>
@@ -347,14 +347,14 @@ u = A \ F</code></pre>
 <div class="md-docstring" id="Bramble.assemble_parallel!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble_parallel!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1374-L1381" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1554-L1563" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">assemble_parallel!(b::AbstractVector, form::LinearForm) -&gt; AbstractVector</code></pre>
 </div>
-<p>Refill <code class="md-code-inline">b</code> with the assembled <code class="md-code-inline">form</code> across threads and return it, regardless of <code class="md-code-inline">test_space(form)</code>&#39;s backend execution policy. Unlike <a href="../../api/forms/#Bramble.assemble!"><code class="md-code-inline">assemble!</code></a>, does not apply Dirichlet conditions. On a device test space the threaded sweep runs on a host mirror into a host buffer, uploaded to <code class="md-code-inline">b</code> in one <code class="md-code-inline">copyto!</code>, as in <a href="../../api/forms/#Bramble.assemble!"><code class="md-code-inline">assemble!</code></a>.</p>
+<p>Refill <code class="md-code-inline">b</code> with the assembled <code class="md-code-inline">form</code> across threads and return it, regardless of <code class="md-code-inline">test_space(form)</code>&#39;s backend execution policy. Unlike <a href="../../api/forms/#Bramble.assemble!"><code class="md-code-inline">assemble!</code></a>, does not apply Dirichlet conditions. A stencil reaching neighbours is swept by colour, so the entries can differ from the serial sweep in the last bits; repeated threaded calls agree exactly. On a device test space the threaded sweep runs on a host mirror into a host buffer, uploaded to <code class="md-code-inline">b</code> in one <code class="md-code-inline">copyto!</code>, as in <a href="../../api/forms/#Bramble.assemble!"><code class="md-code-inline">assemble!</code></a>.</p>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -423,7 +423,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.is_separable">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.is_separable</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L110-L165" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L122-L177" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -477,7 +477,7 @@ is_separable(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(fₕ * u, v)))  # false: var
 <div class="md-docstring" id="Bramble.kronecker_operator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.kronecker_operator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L488-L539" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L501-L552" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -515,7 +515,7 @@ K * x ≈ assemble(a) * x</code></pre>
 <div class="md-docstring" id="Bramble.KroneckerLinearOperator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.KroneckerLinearOperator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L233-L302" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L245-L316" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -525,7 +525,7 @@ K * x ≈ assemble(a) * x</code></pre>
 <p>A matrix-free linear operator for a separable <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> (see <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a>): the sum, over its terms, of a Kronecker product of <code class="md-code-inline">D</code> one-dimensional factor matrices, applied in one fused pass over the grid (<code class="md-code-inline">LinearAlgebra.mul!(y, K, x)</code>, or the five-argument <code class="md-code-inline">mul!(y, K, x, α, β)</code> computing <code class="md-code-inline">α * K * x + β * y</code>) rather than ever materialising the <code class="md-code-inline">D</code>-dimensional matrix: each entry of <code class="md-code-inline">y</code> is its own term-weighted combination of <code class="md-code-inline">x</code> at that grid point and its neighbours along the axes where a term&#39;s factor is not diagonal, written once. For a <code class="md-code-inline">200^3</code> mesh the factors together hold <code class="md-code-inline">O(200)</code> numbers per axis instead of the assembled matrix&#39;s <code class="md-code-inline">O(200^3)</code> stored entries.</p>
 <p>A term&#39;s factors need be neither diagonal nor symmetric, and a term may have non-diagonal factors on several axes. A mixed derivative <code class="md-code-inline">D₋ₓ(D₋ᵧ(u))</code> has non-diagonal factors on two axes, and an advection term has a non-symmetric one. A factor that is not symmetric is applied through the CSC of its transpose, so the product is exact for it. Which forms have such factors is <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a>&#39;s list.</p>
 <p>Build one with <a href="../../api/forms/#Bramble.kronecker_operator"><code class="md-code-inline">kronecker_operator</code></a>. Subtypes <code class="md-code-inline">AbstractMatrix{T}</code> so it plugs into <code class="md-code-inline">LinearProblem</code>/<code class="md-code-inline">KrylovJL_CG</code> (<code class="md-code-inline">LinearSolve.jl</code>) the same way an assembled matrix does, and supports <code class="md-code-inline">size</code>, <code class="md-code-inline">eltype</code>, <code class="md-code-inline">getindex</code>, <code class="md-code-inline">Base.:*</code>, three- and five-argument <code class="md-code-inline">mul!</code>, <code class="md-code-inline">LinearAlgebra.issymmetric</code>, and <code class="md-code-inline">SparseMatrixCSC(K)</code> (an explicit <code class="md-code-inline">kron</code> of the factors, for testing and inspection: the very matrix this operator avoids forming). <code class="md-code-inline">issymmetric(K)</code> is computed from the factors, not assumed: it is <code class="md-code-inline">false</code> as soon as one factor of one term is not symmetric, even for a form whose matrix happens to be symmetric. <code class="md-code-inline">mul!</code> refuses vectors that are not 1-based (an <code class="md-code-inline">OffsetArray</code>, say), which would otherwise give a wrong product silently.</p>
-<p><code class="md-code-inline">K</code> holds no work buffers: it stores only its <code class="md-code-inline">D</code> one-dimensional factors and its execution policy, so it is immutable after construction and safe to share across threads (concurrent <code class="md-code-inline">mul!</code> calls on one <code class="md-code-inline">K</code> never race). The fused pass needs no scratch either. A serial host <code class="md-code-inline">mul!</code> allocates nothing, and so does a <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> product: each task rebuilds the light structs around plain arrays, so Polyester&#39;s argument box stays on the stack. <code class="md-code-inline">mul!</code> is generic over the element type, so ForwardDiff <code class="md-code-inline">Dual</code>s pass through. The <code class="md-code-inline">scratch = (b1, b2)</code> keyword that <code class="md-code-inline">mul!(y, K, x; scratch)</code> and <code class="md-code-inline">mul!(y, K, x, α, β; scratch)</code> accept is kept so existing callers still work, and is ignored.</p>
+<p><code class="md-code-inline">K</code> holds no work buffers: it stores its <code class="md-code-inline">D</code> one-dimensional factors per term, its execution policy, and the mesh and mesh version it checks for staleness, so it is immutable after construction and safe to share across threads (concurrent <code class="md-code-inline">mul!</code> calls on one <code class="md-code-inline">K</code> never race). The fused pass needs no scratch either. A serial host <code class="md-code-inline">mul!</code> allocates nothing, and so does a <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> product: each task rebuilds the light structs around plain arrays, so Polyester&#39;s argument box stays on the stack. <code class="md-code-inline">mul!</code> is generic over the element type, so ForwardDiff <code class="md-code-inline">Dual</code>s pass through. The <code class="md-code-inline">scratch = (b1, b2)</code> keyword that <code class="md-code-inline">mul!(y, K, x; scratch)</code> and <code class="md-code-inline">mul!(y, K, x, α, β; scratch)</code> accept is kept so existing callers still work, and is ignored.</p>
 <p><code class="md-code-inline">P</code> is the execution policy of the space the operator was built on (<code class="md-code-inline">execution_policy(backend(trial_space(a)))</code>), kept as the <code class="md-code-inline">policy</code> field. On the host, a <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> operator runs the grid lines along axis 1 in one contiguous chunk per thread under <code class="md-code-inline">Threads.@threads :static</code> (serially when nested in a threaded loop), a <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> one as <code class="md-code-inline">Polyester.@batch</code> tasks (<code class="md-code-inline">using Polyester</code> required); every other policy runs them serially. Each line writes its own slice of <code class="md-code-inline">y</code>, so all give the same result bit for bit. An operator built directly from its terms, <code class="md-code-inline">KroneckerLinearOperator{T, D, TermsT}(terms, dims, n)</code>, is <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a>.</p>
 <p>On a device-backed form (gpena/Bramble.jl#323) the factors are built on the host and then moved to the space backend&#39;s device storage, so <code class="md-code-inline">mul!</code> with device <code class="md-code-inline">x</code>/<code class="md-code-inline">y</code> runs entirely on the device, as one <code class="md-code-inline">KernelAbstractions</code> kernel with one work item per entry of <code class="md-code-inline">y</code> (<code class="md-code-inline">using KernelAbstractions</code> required). The kernel reads at most one non-diagonal factor per term and that factor&#39;s columns as its rows, so <code class="md-code-inline">kronecker_operator</code> refuses, on such a form, a term with non-diagonal factors on several axes and a term with a non-symmetric factor: build those on a host backend. <code class="md-code-inline">getindex</code> and <code class="md-code-inline">SparseMatrixCSC(K)</code> stay host-only and throw an <code class="md-code-inline">ArgumentError</code> on such an operator.</p>
 <p>The factors are read from the mesh once, when the operator is built (gpena/Bramble.jl#442): <code class="md-code-inline">K</code> keeps that mesh (<code class="md-code-inline">M</code> is its type) and its version then. After an in-place mutation of the mesh (<code class="md-code-inline">set_points!</code>, <code class="md-code-inline">change_points!</code>, <code class="md-code-inline">iterative_refinement!</code>), <code class="md-code-inline">mul!</code>, <code class="md-code-inline">getindex</code>, <code class="md-code-inline">SparseMatrixCSC(K)</code>, <code class="md-code-inline">fdm_solve(K, F)</code> and <code class="md-code-inline">Kronecker.kronecker(K)</code> throw an <code class="md-code-inline">ArgumentError</code>, as a space&#39;s stale weights do; build the operator again on the mutated mesh. An operator built directly from its terms has no mesh (<code class="md-code-inline">M</code> is <code class="md-code-inline">Nothing</code>) and never goes stale.</p>
@@ -536,7 +536,7 @@ K * x ≈ assemble(a) * x</code></pre>
 <div class="md-docstring" id="Bramble.fdm_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fdm_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L26-L47" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L25-L46" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -553,7 +553,7 @@ fdm_solve(K::KroneckerLinearOperator, F::AbstractVector) -&gt; Vector</code></pr
 <div class="md-docstring" id="Bramble.fdm_factorize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fdm_factorize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L102-L148" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L103-L149" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -593,7 +593,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.fdm_factorize!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fdm_factorize!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L151-L210" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L152-L211" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -638,7 +638,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.fdm_solve!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fdm_solve!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L213-L232" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L214-L235" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -652,6 +652,8 @@ end</code></pre>
 <li><p><code class="md-code-inline">DimensionMismatch</code>: <code class="md-code-inline">x</code> or <code class="md-code-inline">F</code> does not have <code class="md-code-inline">size(f, 1)</code> entries.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">x</code> or <code class="md-code-inline">F</code> is not 1-based.</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">F</code> holds a complex value; solve its real and imaginary parts separately.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code> naming <code class="md-code-inline">fdm_factorize!</code>: the last <a href="../../api/forms/#Bramble.fdm_factorize!"><code class="md-code-inline">fdm_factorize!</code></a> of <code class="md-code-inline">f</code> was refused because the system is singular or its mass is not symmetric positive definite. Refill <code class="md-code-inline">f</code> before solving again.</p>
 </li>
@@ -775,11 +777,11 @@ assemble_add!(F, l_source, θ)   # F += θ[] * l_source&#39;s contribution</code
 </div>
 </div>
 <h2 id="Jacobian-sparsity" class="md-heading">Jacobian sparsity<a href="#Jacobian-sparsity" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>For a Newton residual built from a <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> with a live nonlinear coefficient, <code class="md-code-inline">jacobian_pattern</code> reads the Jacobian&#39;s sparsity pattern directly off the form&#39;s AST, without AD tracing. <code class="md-code-inline">ast_sparsity_detector</code> wraps it as an <code class="md-code-inline">ADTypes.AbstractSparsityDetector</code>, ready to hand <code class="md-code-inline">AutoSparse</code> directly (requires <a href="https://github.com/SciML/ADTypes.jl">ADTypes.jl</a>).</p>
+<p>For a Newton residual built from a <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> with a live nonlinear coefficient, <code class="md-code-inline">jacobian_pattern</code> reads the Jacobian&#39;s sparsity pattern directly off the form&#39;s AST, without AD tracing. <code class="md-code-inline">ast_sparsity_detector</code> wraps it as an <code class="md-code-inline">ADTypes.AbstractSparsityDetector</code>, ready to hand <code class="md-code-inline">AutoSparse</code> directly (requires <a href="https://github.com/SciML/ADTypes.jl">ADTypes.jl</a>). No test runs the <code class="md-code-inline">AutoSparse</code> wrapper until v4.3.0, when the AD backends return.</p>
 <div class="md-docstring" id="Bramble.jacobian_pattern">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian_pattern</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/jacobian_pattern.jl#L77-L138" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/jacobian_pattern.jl#L124-L187" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -807,7 +809,7 @@ sparse_ad = AutoSparse(AutoForwardDiff();
 pattern = jacobian_pattern(a, U -&gt; U(2), U -&gt; U(1))   # block (1,1) reads U(2), (2,2) reads U(1)</code></pre>
 </div>
 <p><strong>Dependencies through πₕ</strong></p>
-<p>A dependency like the ones above is read at offsets from the point being walked, so the leaf it names must be discretised on the mesh the term is walked on. When the coefficient lives on that mesh but was computed from a trial function on another one, the dependency says how, through <a href="../../api/spaces/#Bramble.πₕ"><code class="md-code-inline">πₕ</code></a>: <code class="md-code-inline">U -&gt; πₕ(U)</code> for <code class="md-code-inline">cvals = α.(πₕ(Wₐ, uₕ))</code>, <code class="md-code-inline">U -&gt; Mₕ(πₕ(U))</code> for <code class="md-code-inline">cvals = α.(Mₕ(πₕ(Wₐ, uₕ)))</code>, and <code class="md-code-inline">U -&gt; πₕ(U(2))</code> for a coefficient interpolated from component 2 of a composite trial space. At each walked point the pattern then adds, to every row the term reaches there, the source-mesh columns that composition reads: the corners of the cell the point falls in, and for an operator applied outside <code class="md-code-inline">πₕ</code> the corners at each neighbour that operator reaches. A dependency naming a leaf on another mesh without <code class="md-code-inline">πₕ</code> (<code class="md-code-inline">U -&gt; Mₕ(U)</code>) is refused with an <code class="md-code-inline">ArgumentError</code>. So is one naming a component the trial space does not have (<code class="md-code-inline">U -&gt; U(3)</code> on <code class="md-code-inline">W × W</code>).</p>
+<p>A dependency like the ones above is read at offsets from the point being walked, so the leaf it names must be discretised on the mesh the term is walked on. When the coefficient lives on that mesh but was computed from a trial function on another one, the dependency says how, through <a href="../../api/spaces/#Bramble.πₕ"><code class="md-code-inline">πₕ</code></a>: <code class="md-code-inline">U -&gt; πₕ(U)</code> for <code class="md-code-inline">cvals = α.(πₕ(Wₐ, uₕ))</code>, <code class="md-code-inline">U -&gt; Mₕ(πₕ(U))</code> for <code class="md-code-inline">cvals = α.(Mₕ(πₕ(Wₐ, uₕ)))</code>, and <code class="md-code-inline">U -&gt; πₕ(U(2))</code> for a coefficient interpolated from component 2 of a composite trial space. At each walked point the pattern then adds, to every row the term reaches there, the source-mesh columns that composition reads at every point the coefficient is read: the reach of the operators enclosing it, so <code class="md-code-inline">{0, -1}</code> in <code class="md-code-inline">D₋ₓ(cvals * πₕ(u))</code> and <code class="md-code-inline">{-1, 1}</code> in <code class="md-code-inline">Dcₓ(cvals * Dcₓ(πₕ(u)))</code>. Those columns are the corners of the cell that point falls in, and for an operator applied outside <code class="md-code-inline">πₕ</code> the corners at each neighbour that operator reaches. A dependency naming a leaf on another mesh without <code class="md-code-inline">πₕ</code> (<code class="md-code-inline">U -&gt; Mₕ(U)</code>) is refused with an <code class="md-code-inline">ArgumentError</code>. So is one naming a component the trial space does not have (<code class="md-code-inline">U -&gt; U(3)</code> on <code class="md-code-inline">W × W</code>).</p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">using Bramble: jacobian_pattern
@@ -820,7 +822,7 @@ pattern = jacobian_pattern(a, U -&gt; Mₕ(πₕ(U)))</code></pre>
 <div class="md-docstring" id="Bramble.ast_sparsity_detector">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ast_sparsity_detector</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/jacobian_pattern.jl#L504-L520" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/jacobian_pattern.jl#L563-L579" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -839,8 +841,6 @@ sparse_ad = AutoSparse(AutoForwardDiff();
 </div>
 </div>
 <p>Time integration, differentiable linear solves, and the sparse/iterative solver backends move to their own <a href="../../api_sciml/">scientific computing reference</a>: the SciML stack (<code class="md-code-inline">semidiscretize</code>, <code class="md-code-inline">ode_problem</code>, <code class="md-code-inline">linear_problem</code>, <code class="md-code-inline">nonlinear_problem</code>, ...), second-order wave problems, <code class="md-code-inline">pde_solve</code>&#39;s adjoint rule, AMG preconditioning, the SuiteSparse/Apple Accelerate/MUMPS direct solvers, and <code class="md-code-inline">type_cached_assemble!</code>.</p>
-<h2 id="Bandwidth-analysis" class="md-heading">Bandwidth analysis<a href="#Bandwidth-analysis" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">bandwidths</code>/<code class="md-code-inline">blockbandwidths</code> are private; see the <a href="../../internals/form/">forms internals page</a>.</p>
 <h2 id="Dirichlet-conditions" class="md-heading">Dirichlet conditions<a href="#Dirichlet-conditions" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-docstring" id="Bramble.DirichletConstraint">
 <div class="md-docstring-header">
@@ -880,7 +880,7 @@ sparse_ad = AutoSparse(AutoForwardDiff();
 <div class="md-docstring" id="Bramble.dirichlet_bc!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.dirichlet_bc!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L268-L277" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L302-L311" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -917,6 +917,11 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only</code></
 </div>
 <p>Write Dirichlet values into <code class="md-code-inline">v</code> at the points marked by <code class="md-code-inline">labels</code>.</p>
 <p><code class="md-code-inline">bcs</code> may be unevaluated constraints or time-evaluated constraints (see <a href="../../internals/form/#Bramble.ConstraintMarkers"><code class="md-code-inline">ConstraintMarkers</code></a>). Only the marked entries are modified, with complexity proportional to the boundary cardinality.</p>
+<p><strong>Throws</strong></p>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">ArgumentError</code>: if a label in <code class="md-code-inline">labels</code> has no condition in <code class="md-code-inline">bcs</code>.</p>
+</li>
+</ul>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -938,7 +943,10 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only</code></
 <div class="md-docstring" id="Bramble.symmetrize!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.symmetrize!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L709-L719" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L772-L774" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<p><code class="md-code-inline">symmetrize!(A, F, Wₕ::ScalarGridSpace, labels...; components = nothing)</code>: the same on <code class="md-code-inline">mesh(Wₕ)</code>; <code class="md-code-inline">components</code> may only be <code class="md-code-inline">nothing</code> or <code class="md-code-inline">1</code></p>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -955,6 +963,7 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only</code></
 <li><p>Zero out off-diagonal elements in the <code class="md-code-inline">i</code>-th column of <code class="md-code-inline">A</code>.</p>
 </li>
 </ul>
+<p>A non-square <code class="md-code-inline">A</code> (a form whose test and trial spaces differ in size) has no symmetry to restore and throws an <code class="md-code-inline">ArgumentError</code>.</p>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -964,7 +973,7 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only</code></
 <p>Symmetrize a coupled linear system leaf space by leaf space.</p>
 <p>The counterpart of the composite <code class="md-code-inline">dirichlet_bc!</code>: each leaf&#39;s marker mask is read at that leaf&#39;s offset into the global system without allocating full-system masks. <code class="md-code-inline">leaf_spaces_offsets</code> returns a tuple, enabling loop unrolling and type stability.</p>
 <p>Takes the same <code class="md-code-inline">components</code> keyword as composite <code class="md-code-inline">dirichlet_bc!</code>, restricting which leaf components <code class="md-code-inline">labels</code> binds to (1-based positions in <code class="md-code-inline">leaf_spaces_offsets(Wₕ)</code>). <code class="md-code-inline">components = nothing</code> (the default) applies to every leaf.</p>
-<p>Combines every label into one mask per leaf (<code class="md-code-inline">_combined_mask</code>, space/inner<em>product.jl) rather than visiting each leaf once per label: by the time <code class="md-code-inline">symmetrize!</code> runs, `dirichlet</em>bc!<code class="md-code-inline">has already zeroed every marked row of</code>A<code class="md-code-inline">off its diagonal (the documented order of use), so for any two marked indices</code>i<code class="md-code-inline">,</code>k<code class="md-code-inline">in the combined set,</code>A[k, i] == 0`. That makes each marked index&#39;s elimination read/write entries that no other marked index&#39;s elimination touches, so the order they are visited in – one combined pass here vs. the old label-by-label passes – cannot change the result: a row marked by more than one label would previously just be visited again with nothing left to eliminate (idempotent), which the union mask now skips instead.</p>
+<p>Combines every label into one mask per leaf (<code class="md-code-inline">_combined_mask</code>, space/inner<em>product.jl) rather than visiting each leaf once per label: by the time <code class="md-code-inline">symmetrize!</code> runs, `dirichlet</em>bc!<code class="md-code-inline">has already zeroed every marked row of</code>A<code class="md-code-inline">off its diagonal (the documented order of use), so for any two marked indices</code>i<code class="md-code-inline">,</code>k<code class="md-code-inline">in the combined set,</code>A[k, i] == 0`. That makes each marked index&#39;s elimination read/write entries that no other marked index&#39;s elimination touches, so the order they are visited in cannot change the result, and a row marked by several labels is visited once.</p>
 </div>
 </div>
 <h2 id="Boundary-flux-/-reaction-extraction" class="md-heading">Boundary flux / reaction extraction<a href="#Boundary-flux-/-reaction-extraction" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -972,7 +981,7 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only</code></
 <div class="md-docstring" id="Bramble.reaction">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L344-L383" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L353-L392" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -980,7 +989,7 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only</code></
 <pre><code class="language-julia">reaction(A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement; marker, components = nothing) -&gt; Real</code></pre>
 </div>
 <p>Net flux through the region(s) named by <code class="md-code-inline">marker</code>, from the <strong>unconstrained</strong> operator <code class="md-code-inline">A</code> and load <code class="md-code-inline">F</code> (<code class="md-code-inline">assemble(a)</code>/<code class="md-code-inline">assemble(l)</code> with no <code class="md-code-inline">dirichlet</code> keyword – <code class="md-code-inline">dirichlet_bc!</code> would have already overwritten the rows this needs).</p>
-<p><code class="md-code-inline">marker</code> is a <code class="md-code-inline">Symbol</code> or a <code class="md-code-inline">Tuple</code> of them, exactly as <code class="md-code-inline">dirichlet</code> accepts one or several labels; overlap between markers is counted once (<code class="md-code-inline">_combined_mask</code>, the same union <code class="md-code-inline">dirichlet_bc!</code> uses). <code class="md-code-inline">components</code> restricts a composite space&#39;s leaves (1-based positions in <code class="md-code-inline">leaf_spaces_offsets</code>, <code class="md-code-inline">nothing</code> meaning every leaf).</p>
+<p><code class="md-code-inline">marker</code> is a <code class="md-code-inline">Symbol</code> or a <code class="md-code-inline">Tuple</code> of them, exactly as <code class="md-code-inline">dirichlet</code> accepts one or several labels; overlap between markers is counted once (the same union <code class="md-code-inline">dirichlet_bc!</code> takes). <code class="md-code-inline">components</code> restricts a composite space&#39;s leaves (1-based positions in <code class="md-code-inline">leaf_spaces_offsets</code>, <code class="md-code-inline">nothing</code> meaning every leaf).</p>
 <p><strong>Sign and scaling</strong></p>
 <p>Positive means flux leaving the domain along the outward normal: for <code class="md-code-inline">-Δu = f</code>, <code class="md-code-inline">∮_Γ reaction = ∫_Ω f</code> to round-off. The residual already carries the cell-measure weighting the form&#39;s inner product imposes, so no further rescaling is applied here – see <a href="../../api/forms/#Bramble.reaction_density"><code class="md-code-inline">reaction_density</code></a> for the pointwise quantity that does.</p>
 <p><strong>Examples</strong></p>
@@ -1014,7 +1023,7 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
 <div class="md-docstring" id="Bramble.reaction!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L415-L425" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L425-L435" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1027,14 +1036,15 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
 <div class="md-docstring" id="Bramble.reaction_density">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction_density</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L453-L461" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L490-L505" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">reaction_density(A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement; marker, components = nothing) -&gt; VectorElement</code></pre>
 </div>
-<p>The pointwise counterpart of <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a>: a grid function, zero away from <code class="md-code-inline">marker</code>, equal at each marked point to the physical flux <strong>density</strong> there – <code class="md-code-inline">reaction</code>&#39;s summand divided by that point&#39;s own cell measure (<code class="md-code-inline">weights(space, Innerh())</code>), so that summing <code class="md-code-inline">density .* weights</code> over the marker recovers <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a>&#39;s scalar exactly. Meant to be exported and plotted, e.g. <code class="md-code-inline">export_vtk(filename, Ωₕ, &quot;reaction&quot; =&gt; reaction_density(...))</code>.</p>
+<p>The pointwise counterpart of <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a>: a grid function, zero away from <code class="md-code-inline">marker</code>, equal at each marked point to the boundary flux density <code class="md-code-inline">q·n</code> there, which converges under refinement. It is <code class="md-code-inline">reaction</code>&#39;s summand divided by the point&#39;s surface weight on the faces the marker covers, the weight <a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a> integrates with, so <code class="md-code-inline">inner_Γ(element(space, 1.0), density, faces...)</code> recovers <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a>&#39;s scalar. Meant to be exported and plotted, e.g. <code class="md-code-inline">export_vtk(filename, Ωₕ, &quot;reaction&quot; =&gt; reaction_density(...))</code>.</p>
+<p>The faces are read off the marked points, not the label&#39;s name: a face counts when every point of it is marked, except possibly its edges and corners. A corner on two such faces divides by the sum of their weights. A marked point on no such face (an interior marker, or part of a face) throws <code class="md-code-inline">ArgumentError</code>; <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a> still gives its net flux.</p>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1047,7 +1057,7 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
 <div class="md-docstring" id="Bramble.reaction_density!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction_density!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L494-L504" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L539-L549" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1074,7 +1084,6 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
           <a class="md-toc-link md-toc-h2" href="#Matrix-free-operators">Matrix-free operators</a>
           <a class="md-toc-link md-toc-h2" href="#Additive-accumulation">Additive accumulation</a>
           <a class="md-toc-link md-toc-h2" href="#Jacobian-sparsity">Jacobian sparsity</a>
-          <a class="md-toc-link md-toc-h2" href="#Bandwidth-analysis">Bandwidth analysis</a>
           <a class="md-toc-link md-toc-h2" href="#Dirichlet-conditions">Dirichlet conditions</a>
           <a class="md-toc-link md-toc-h2" href="#Boundary-flux-/-reaction-extraction">Boundary flux / reaction extraction</a>
           <a class="md-toc-link md-toc-h2" href="#Structural-properties">Structural properties</a>
@@ -1095,6 +1104,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=4f16c364"></script>
+  <script src="../../assets/materialdocs.js?v=f788936d"></script>
 </body>
 </html>

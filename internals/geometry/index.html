@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=2f135f3b">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=8a406c82">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -147,7 +147,7 @@ eltype(::Type{&lt;:CartesianProduct{D, T}}) -&gt; Type{T}</code></pre>
 <div class="md-docstring" id="Base.first-Tuple{Bramble.CartesianProduct{1}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.first</code> — <span class="md-docstring-sig">Tuple{Bramble.CartesianProduct{1}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L197-L202" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L194-L199" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -161,7 +161,7 @@ last(X::CartesianProduct{1}) -&gt; T</code></pre>
 <div class="md-docstring" id="Base.in-Tuple{Number, Bramble.CartesianProduct{1}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.in</code> — <span class="md-docstring-sig">Tuple{Number, Bramble.CartesianProduct{1}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L252-L256" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L249-L253" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -204,7 +204,7 @@ is_collapsed(X::CartesianProduct, i::Integer) -&gt; Bool</code></pre>
 <div class="md-docstring" id="Bramble.point_type-Union{Tuple{Bramble.CartesianProduct{1, T}}, Tuple{T}} where T">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.point_type</code> — <span class="md-docstring-sig">Union{Tuple{Bramble.CartesianProduct{1, T}}, Tuple{T}} where T</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L239-L246" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L236-L243" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -220,20 +220,20 @@ point_type(::Type{&lt;:CartesianProduct{D, T}}) -&gt; Type{NTuple{D, T}}</code><
 <div class="md-docstring" id="Bramble.print_set_axes-Union{Tuple{D}, Tuple{Bramble.PrettyPrinter, Bramble.CartesianProduct{D}}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.print_set_axes</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Bramble.PrettyPrinter, Bramble.CartesianProduct{D}}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L317-L323" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L314-L320" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">print_set_axes(pp::PrettyPrinter, X::CartesianProduct{D})</code></pre>
 </div>
-<p>Print one <code class="md-code-inline">label: [min, max]</code> line per coordinate of a multi-dimensional set, collapsing degenerate axes. The companion of <a href="../../internals/geometry/#Bramble.print_set_extent-Tuple{Bramble.PrettyPrinter, Bramble.CartesianProduct}"><code class="md-code-inline">print_set_extent</code></a> for <code class="md-code-inline">D &gt; 1</code>, and likewise shared with <code class="md-code-inline">Domain</code>&#39;s renderer.</p>
+<p>Print one <code class="md-code-inline">label: [min, max]</code> line per coordinate of a multi-dimensional set, collapsing degenerate axes. The companion of <a href="../../internals/geometry/#Bramble.print_set_extent-Tuple{Bramble.PrettyPrinter, Bramble.CartesianProduct{1}}"><code class="md-code-inline">print_set_extent</code></a> for <code class="md-code-inline">D &gt; 1</code>, and likewise shared with <code class="md-code-inline">Domain</code>&#39;s renderer.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.print_set_extent-Tuple{Bramble.PrettyPrinter, Bramble.CartesianProduct}">
+<div class="md-docstring" id="Bramble.print_set_extent-Tuple{Bramble.PrettyPrinter, Bramble.CartesianProduct{1}}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.print_set_extent</code> — <span class="md-docstring-sig">Tuple{Bramble.PrettyPrinter, Bramble.CartesianProduct}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L293-L303" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble.print_set_extent</code> — <span class="md-docstring-sig">Tuple{Bramble.PrettyPrinter, Bramble.CartesianProduct{1}}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L290-L300" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -285,7 +285,7 @@ point_type(::Type{&lt;:CartesianProduct{D, T}}) -&gt; Type{NTuple{D, T}}</code><
 <div class="md-docstring" id="Bramble.DomainMarkers-Tuple{Number, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DomainMarkers</code> — <span class="md-docstring-sig">Tuple{Number, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L481-L487" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L468-L474" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -298,7 +298,7 @@ point_type(::Type{&lt;:CartesianProduct{D, T}}) -&gt; Type{NTuple{D, T}}</code><
 <div class="md-docstring" id="Bramble.DomainMarkers-Tuple{Number}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DomainMarkers</code> — <span class="md-docstring-sig">Tuple{Number}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L446-L452" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L433-L439" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -311,7 +311,7 @@ point_type(::Type{&lt;:CartesianProduct{D, T}}) -&gt; Type{NTuple{D, T}}</code><
 <div class="md-docstring" id="Bramble.EvaluatedDomainMarkers">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.EvaluatedDomainMarkers</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L330-L340" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L316-L326" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -331,7 +331,7 @@ point_type(::Type{&lt;:CartesianProduct{D, T}}) -&gt; Type{NTuple{D, T}}</code><
 <div class="md-docstring" id="Bramble.EvaluatedParametricDomainMarkers">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.EvaluatedParametricDomainMarkers</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L455-L474" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L442-L461" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -400,7 +400,7 @@ point_type(::Type{&lt;:CartesianProduct{D, T}}) -&gt; Type{NTuple{D, T}}</code><
 <div class="md-docstring" id="Bramble.conditions-Tuple{Bramble.EvaluatedDomainMarkers}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.conditions</code> — <span class="md-docstring-sig">Tuple{Bramble.EvaluatedDomainMarkers}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L360-L378" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L346-L364" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -415,7 +415,7 @@ point_type(::Type{&lt;:CartesianProduct{D, T}}) -&gt; Type{NTuple{D, T}}</code><
 <div class="md-docstring" id="Bramble.conditions-Tuple{Bramble.EvaluatedParametricDomainMarkers}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.conditions</code> — <span class="md-docstring-sig">Tuple{Bramble.EvaluatedParametricDomainMarkers}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L493-L517" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L480-L504" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -486,7 +486,7 @@ labels(domain_markers::DomainMarkers)</code></pre>
 <div class="md-docstring" id="Bramble.label_identifiers-Tuple{Bramble.EvaluatedDomainMarkers}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.label_identifiers</code> — <span class="md-docstring-sig">Tuple{Bramble.EvaluatedDomainMarkers}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L421-L428" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L408-L415" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -540,12 +540,12 @@ labels(edm::EvaluatedDomainMarkers)</code></pre>
 <div class="md-docstring" id="Bramble.symbols-Tuple{Bramble.EvaluatedDomainMarkers}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.symbols</code> — <span class="md-docstring-sig">Tuple{Bramble.EvaluatedDomainMarkers}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L346-L350" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L332-L336" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">symbols(edm::EvaluatedDomainMarkers) -&gt; Set{Marker{Symbol}}</code></pre>
+<pre><code class="language-julia">symbols(edm::EvaluatedDomainMarkers) -&gt; Tuple</code></pre>
 </div>
 <p>Return single-symbol markers from the underlying domain markers.</p>
 </div>
@@ -566,12 +566,12 @@ labels(edm::EvaluatedDomainMarkers)</code></pre>
 <div class="md-docstring" id="Bramble.tuples-Tuple{Bramble.EvaluatedDomainMarkers}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.tuples</code> — <span class="md-docstring-sig">Tuple{Bramble.EvaluatedDomainMarkers}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L353-L357" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L339-L343" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">tuples(edm::EvaluatedDomainMarkers) -&gt; Set{Marker{Set{Symbol}}}</code></pre>
+<pre><code class="language-julia">tuples(edm::EvaluatedDomainMarkers) -&gt; Tuple</code></pre>
 </div>
 <p>Return multi-symbol markers from the underlying domain markers.</p>
 </div>
@@ -771,7 +771,7 @@ point_type(::Type{&lt;:Domain{SetType}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.get_dimension_label-Tuple{Int64}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.get_dimension_label</code> — <span class="md-docstring-sig">Tuple{Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/pretty_print.jl#L240-L244" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/pretty_print.jl#L239-L243" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -870,7 +870,7 @@ point_type(::Type{&lt;:Domain{SetType}}) -&gt; Type</code></pre>
 <pre><code class="language-julia">print_joined(f, pp::PrettyPrinter, items; sep = &quot;, &quot;)</code></pre>
 </div>
 <p>Print each of <code class="md-code-inline">items</code> by calling <code class="md-code-inline">f(item)</code>, separating consecutive ones with <code class="md-code-inline">sep</code>.</p>
-<p>Replaces seven hand-rolled variants of the same loop across the geometry and mesh renderers (gpena/Bramble.jl#47): <code class="md-code-inline">i &lt; length(xs) &amp;&amp; print(io, &quot;, &quot;)</code> in five places and a <code class="md-code-inline">first</code> flag in <code class="md-code-inline">print_marker_summary</code>, which had to guard three optional groups. <code class="md-code-inline">f</code> is passed as a closure in the same style as <code class="md-code-inline">_each_marked</code> in <code class="md-code-inline">form/dirichlet_constraints.jl</code>, which measured at zero allocations, so the pattern costs nothing here.</p>
+<p>Replaces seven hand-rolled variants of the same loop across the geometry and mesh renderers (gpena/Bramble.jl#47): <code class="md-code-inline">i &lt; length(xs) &amp;&amp; print(io, &quot;, &quot;)</code> in five places and a <code class="md-code-inline">first</code> flag in <code class="md-code-inline">print_marker_summary</code>, which had to guard three optional groups. <code class="md-code-inline">f</code> is passed as a closure in the same style as <code class="md-code-inline">_each_marked</code> in <code class="md-code-inline">assembly/dirichlet_constraints.jl</code>, which measured at zero allocations, so the pattern costs nothing here.</p>
 <p><code class="md-code-inline">items</code> may be any iterable; the separator is written <em>before</em> each entry after the first, so an empty or single-element collection prints no separator at all and a caller with optional groups just filters them out rather than tracking whether anything came before.</p>
 </div>
 </div>
@@ -890,7 +890,7 @@ point_type(::Type{&lt;:Domain{SetType}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.print_labels_list-Tuple{Bramble.PrettyPrinter, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.print_labels_list</code> — <span class="md-docstring-sig">Tuple{Bramble.PrettyPrinter, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/pretty_print.jl#L196-L200" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/pretty_print.jl#L195-L199" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -942,7 +942,7 @@ point_type(::Type{&lt;:Domain{SetType}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.show_block-Tuple{Any, IO}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.show_block</code> — <span class="md-docstring-sig">Tuple{Any, IO}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/pretty_print.jl#L210-L225" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/pretty_print.jl#L209-L224" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -996,6 +996,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=2f135f3b"></script>
+  <script src="../../assets/materialdocs.js?v=8a406c82"></script>
 </body>
 </html>

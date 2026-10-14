@@ -169,8 +169,9 @@ uₕ_r = element(Wₕ)
 parent(uₕ_r) .= sol_rosenbrock.u[end]
 normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ_r)
 
-# No `AutoFiniteDiff()` and no BDF fallback: the default forward-mode `autodiff` differentiates
-# the Jacobian through `u` only, and `tgrad` supplies the `t`-derivative directly.
+# No `AutoFiniteDiff()` and no BDF fallback: `ode_problem` already hands the solver the exact
+# Jacobian ``-A``, and `tgrad` supplies the `t`-derivative, so `Rodas5P` differentiates nothing.
+@test prob_rosenbrock.f.jac !== nothing                                          #src
 @test 1.0e-5 < normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ_r) < 5.0e-5               #src
 #
 # ## A time-dependent operator
@@ -279,12 +280,22 @@ maximum(abs.(u_be .- sol_t_fbdf.u[end]))
 # ## Convergence under refinement
 #
 # Second order in space is the promise. Refining the mesh while holding the time tolerance far
-# below the spatial error isolates it:
+# below the spatial error isolates it. The uniform mesh above would flatter the rate: on it
+# ``\sin(\pi x)`` is an exact discrete eigenmode of the Laplacian, a special case that says
+# little about the scheme. The series therefore runs on one seeded random coarse mesh,
+# refined in place with [`iterative_refinement!`](@ref) so every finer level is the same
+# random mesh, dyadically split. The domain carries no `:left` or `:right` marker, which
+# the one-argument `iterative_refinement!` would refuse to drop. The uniform mesh stays
+# above, where the check on the mass matrix needs a known grid weight ``h``:
 
-function heat_series(ns)
+using Random
+
+function heat_series(levels; n0 = 11)
+    Random.seed!(20260903)
+    Ωs = domain(interval(0.0, 1.0))
+    Ωc = mesh(Ωs, n0, false)
     hs, errs = Float64[], Float64[]
-    for n in ns
-        Ωc = mesh(Ω, n)
+    for level in 1:levels
         Wc = gridspace(Ωc)
         fc = element(Wc, 0.0)
         ac = form(Wc, Wc, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
@@ -302,11 +313,12 @@ function heat_series(ns)
         parent(uc) .= solc.u[end]
         push!(hs, hₘₐₓ(Ωc))
         push!(errs, normₕ(Rₕ(Wc, x -> uexact(x, 1.0)) - uc))
+        level < levels && iterative_refinement!(Ωc)
     end
     return hs, errs
 end
 
-hs, errs = heat_series((11, 21, 41, 81, 161))
+hs, errs = heat_series(5)   # 11 up to 161 points
 orders = [log(errs[i] / errs[i + 1]) / log(hs[i] / hs[i + 1]) for i in 1:(length(errs) - 1)]
 
 #-
@@ -316,6 +328,12 @@ all(>(1.95), orders)    # second order is the promise
 # The line above renders `true` on the page and asserts nothing there; this is where the   #src
 # rate is pinned, so a decay to first order fails the suite instead of publishing `false`.  #src
 @test all(>(1.95), orders)                                       #src
+
+#-
+
+include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
+convergence_plot([(hs, errs, "1D heat", "#5B5FC7")]; # hide
+    title = "Heat equation, ‖·‖ₕ at t = 1") # hide
 
 # ## Time-dependent boundary data
 #
@@ -350,8 +368,7 @@ u_end = sol_drive.u[end]
 # climbing towards the straight line ``1 - x`` that the source-free steady problem gives, but
 # has not arrived, with ``0.44`` at the midpoint against the steady ``0.5``. It has not had time, since
 # the left end was still moving over the whole interval, so diffusion is chasing a boundary
-# value that never settled. Holding ``g`` fixed and stepping further is what reaches the line,
-# and the [steady solve](#Steady-problems-and-LinearSolve) below is its limit.
+# value that never settled. Holding ``g`` fixed and stepping further is what reaches the line.
 #
 # ## Steady problems and LinearSolve
 #

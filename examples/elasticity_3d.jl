@@ -233,6 +233,8 @@ const ρg = 1.0e-4
 
 Ω = domain(box((0.0, 0.0, 0.0), (L, W, H)), :clamped => :back)
 
+# The mesh is uniform, so that with odd `ny` and `nz` the tip node sits on the beam axis
+# that Euler-Bernoulli predicts the deflection of.
 function cantilever(n)
     Ωₕ = mesh(Ω, n, (true, true, true))
     Vₕ = gridspace(Ωₕ)^Val(3)

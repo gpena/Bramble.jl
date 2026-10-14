@@ -13,11 +13,12 @@
 # backward solve gives the gradient with respect to *both* at once, the same O(1)-in-parameter-
 # count trade the steady page's adjoint rule makes.
 #
-# This page is generated from `docs/src/examples/transient_inverse_problem.jl` by
-# Literate.jl, and the same file runs under `test/examples/transient_inverse_problem.jl` with
-# the assertions that the page renders but does not check. It needs `SciMLSensitivity` and
-# runs behind the `ext`/`full` test groups, unlike the every-push example pages -- see that
-# test file for why.
+# This script runs under `test/examples/transient_inverse_problem.jl` with the assertions
+# that it does not render. Lines marked `#src` here are the assertions; Literate.jl drops
+# them from a rendered page. The script is not part of the published manual. It needs
+# `SciMLSensitivity` and runs behind the `ad`/`full` test groups (with
+# `BRAMBLE_TEST_AD=true`), unlike the every-push example pages -- see that test file for why.
+# No test runs this page until v4.3.0, when the AD backends return.
 #
 # ## Problem
 #
@@ -62,11 +63,9 @@ end
 
 # ## The forward solve
 #
-# `specialize = SciMLBase.FullSpecialize` is required, not optional, for
-# [`Bramble.adjoint_sensitivities`](@ref) to reach this trajectory afterwards: without it, the
-# adjoint's own `β`-vjp calls the residual with a differently-typed `β` than the forward
-# solve used, and the default specialization's function wrapper raises rather than
-# differentiates -- [`ode_problem`](@ref)'s own docstring has the reasoning.
+# `specialize = SciMLBase.FullSpecialize` is not needed for
+# [`Bramble.adjoint_sensitivities`](@ref) to reach this trajectory afterwards, on any
+# backend; this example passes it anyway.
 
 using SciMLBase, OrdinaryDiffEqBDF
 
@@ -79,11 +78,13 @@ end
 
 # ## Observations along the trajectory
 #
-# As on [the steady page](inverse_diffusion.md), the observations are synthetic. Three interior points, the true trajectory there at each of the five times above plus a
-# small fixed perturbation standing in for measurement noise -- fixed rather than
-# `Random`-drawn, so the page renders the same numbers every build. Fifteen data points in
-# all (three points × five times), the "trajectory" the steady page's single-time-point
-# recovery has no equivalent of.
+# As on [the steady page](inverse_diffusion.md), the observations are synthetic. Three
+# interior points, the true trajectory there at each of the five times above plus a small
+# fixed perturbation standing in for measurement noise -- fixed rather than `Random`-drawn,
+# so the page renders the same numbers every build. The mesh is uniform so that these three
+# indices sit at ``x = 0.25, 0.5, 0.75``; nothing else needs it. Fifteen data points in all
+# (three points × five times), the "trajectory" the steady page's single-time-point recovery
+# has no equivalent of.
 
 obs_idx = (11, 21, 31)
 noise = (0.003, -0.004, 0.002)
@@ -146,6 +147,9 @@ println("(κ, β) = ", (κ, β))
 @test isapprox(κ, κ_true; atol = 0.01)                                                #src
 @test isapprox(β, β_true; atol = 0.01)                                                #src
 @test loss(κ, β) < loss(0.2, 0.3)                                                     #src
+fd_κ = (loss(0.4 + 1e-5, 0.5) - loss(0.4 - 1e-5, 0.5)) / 2e-5                         #src
+fd_β = (loss(0.4, 0.5 + 1e-5) - loss(0.4, 0.5 - 1e-5)) / 2e-5                         #src
+@test collect(∂J(0.4, 0.5)) ≈ [fd_κ, fd_β] rtol = 1e-3                                #src
 
 # ## Cost: independent of parameter count and saved steps
 #

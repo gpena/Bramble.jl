@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Linear and bilinear forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=654bc0d0">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e1a96966">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Linear and bilinear forms — Bramble.jl">
   <meta property="og:title" content="Linear and bilinear forms — Bramble.jl">
@@ -218,7 +218,7 @@ issymmetric(c)  # different operators either side</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">false</code></pre>
 </div>
-<p>A positive answer says <code class="md-code-inline">cholesky</code> is worth trying on the result rather than a general factorization. The check costs a few nanoseconds, against tens of microseconds to assemble even this small a matrix.</p>
+<p>A positive answer says <code class="md-code-inline">cholesky</code> is worth trying on the result rather than a general factorization. <code class="md-code-inline">isposdef</code> answers for semi-definiteness: this matrix has the constants in its kernel, so it is singular until the Dirichlet conditions below are applied.</p>
 <h2 id="form_dirichlet" class="md-heading">Dirichlet conditions and a Poisson problem<a href="#form_dirichlet" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>Boundary conditions come in two pieces, because a matrix and a right-hand side need different things done to them. Labels on the domain say where:</p>
 <div class="md-multi-output">
@@ -297,7 +297,7 @@ reaction(ad, ld, uh_elt; marker = :left), reaction(ad, ld, uh_elt; marker = :rig
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(3.139068950903201, 3.139068950903206)</code></pre>
 </div>
-<p>Both come out near <span class="md-math md-math-inline">\(\pi\)</span>. For <span class="md-math md-math-inline">\(u = \sin(\pi x)\)</span> the flux <span class="md-math md-math-inline">\(-u&#39;\)</span> leaving the domain is <span class="md-math md-math-inline">\(\pi\)</span> at each end, and the two together recover the net source <span class="md-math md-math-inline">\(\int_0^1 \pi^2 \sin(\pi x)\,dx = 2\pi\)</span> to round-off, at any resolution. The sign convention is in the docstring of <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a>; <a href="../../api/forms/#Bramble.reaction_density"><code class="md-code-inline">reaction_density</code></a> gives the pointwise quantity, suitable for <a href="../../api/exporters/#Bramble.export_vtk"><code class="md-code-inline">export_vtk</code></a>.</p>
+<p>Both come out near <span class="md-math md-math-inline">\(\pi\)</span>. For <span class="md-math md-math-inline">\(u = \sin(\pi x)\)</span> the flux <span class="md-math md-math-inline">\(-u&#39;\)</span> leaving the domain is <span class="md-math md-math-inline">\(\pi\)</span> at each end, and the two together recover the discrete net source <span class="md-math md-math-inline">\((f_h, 1)_h\)</span> to round-off at any resolution, which approaches <span class="md-math md-math-inline">\(2\pi\)</span> at second order (<span class="md-math md-math-inline">\(6.2781\)</span> here). The sign convention is in the docstring of <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a>; <a href="../../api/forms/#Bramble.reaction_density"><code class="md-code-inline">reaction_density</code></a> gives the pointwise quantity, suitable for <a href="../../api/exporters/#Bramble.export_vtk"><code class="md-code-inline">export_vtk</code></a>.</p>
 <h2 id="Threading" class="md-heading">Threading<a href="#Threading" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>Assembly reads the execution policy off the space it is given. A space whose backend says <code class="md-code-inline">Parallel()</code> assembles on several threads, and nothing about the call changes.</p>
 <h2 id="Reference" class="md-heading">Reference<a href="#Reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -376,7 +376,7 @@ sum(assemble(l_neumann))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">3.0</code></pre>
 </div>
-<p>That is <span class="md-math md-math-inline">\(g(x_N)\)</span> exactly, whatever the refinement. In 1D a face is a point of measure 1, so the term is the endpoint pairing <span class="md-math md-math-inline">\(g(x_N)\,v(x_N)\)</span>. In 2D the same expression is an edge integral weighted by the transverse half-spacing, and in 3D a face integral. <code class="md-code-inline">inner_Γ</code> integrates over whole coordinate faces (<code class="md-code-inline">:boundary</code>, <code class="md-code-inline">:xmin</code> to <code class="md-code-inline">:zmax</code>, or a viewpoint alias) and needs no marker in <code class="md-code-inline">domain(...)</code>.</p>
+<p>That is <span class="md-math md-math-inline">\(g(x_N)\)</span> exactly, whatever the refinement. In 1D a face is a point of measure 1, so the term is the endpoint pairing <span class="md-math md-math-inline">\(g(x_N)\,v(x_N)\)</span>. In 2D the same expression is an edge integral weighted by the transverse half-spacing, and in 3D a face integral. <code class="md-code-inline">inner_Γ</code> integrates over whole coordinate faces. A label is read from its definition: a marker in <code class="md-code-inline">domain(...)</code> selects the faces its points cover, so under <code class="md-code-inline">:left =&gt; :ymin</code> the label <code class="md-code-inline">:left</code> is the bottom edge. A label that is not a marker is a face name (<code class="md-code-inline">:xmin</code> to <code class="md-code-inline">:zmax</code>, or a viewpoint alias) and needs no marker; <code class="md-code-inline">:boundary</code> is a marker every mesh holds, the union of its faces.</p>
 <p>A marker that exists nowhere the term reaches is an error, not a silent zero:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -413,9 +413,9 @@ sum(assemble(l_flux))</code></pre>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">a_dup = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v) + innerₕ(u, v))
-Bramble.resolve_form_ast(a_dup)     # 2 * innerₕ(u, v): one term, not two</code></pre>
+expression(a_dup)     # 2 * innerₕ(u, v): one term, not two</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">Bramble.OperatorScale{1, Int64, Bramble.BilinearProduct{1, Bramble.InnerH, Bramble.TrialFunction{1, 1}, Bramble.TestFunction{1, 1}}}(2, Bramble.BilinearProduct{1, Bramble.InnerH, Bramble.TrialFunction{1, 1}, Bramble.TestFunction{1, 1}}(Bramble.TrialFunction{1, 1}(), Bramble.TestFunction{1, 1}()))</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">&quot;2 * innerₕ(u, v)&quot;</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -436,7 +436,7 @@ Matrix(assemble(a_off)) ≈ Matrix(assemble(form(Wₕ, Wₕ, (u, v) -&gt; inner�
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
 <div class="md-admonition-body">
-<p>Replace <code class="md-code-inline">0 *</code> by <code class="md-code-inline">0.0 *</code> in <code class="md-code-inline">a_off</code> and compare <code class="md-code-inline">Bramble.resolve_form_ast(a_off)</code>. A <code class="md-code-inline">Float64</code> coefficient is only known at run time, so the rule does not fire.</p>
+<p>Replace <code class="md-code-inline">0 *</code> by <code class="md-code-inline">0.0 *</code> in <code class="md-code-inline">a_off</code> and compare <code class="md-code-inline">expression(a_off)</code>. A <code class="md-code-inline">Float64</code> coefficient is only known at run time, so the rule does not fire.</p>
 </div>
 </div>
 <p>Two limits apply. A rule whose outcomes have different node types fires only when the compiler settles it from types, so a scalar coefficient must be an <code class="md-code-inline">Integer</code> for the like-term and factoring rules to apply. A <code class="md-code-inline">Float64</code> known at run time, or a <code class="md-code-inline">Ref</code>, leaves the terms apart: same numbers, one extra sweep. And the pass stops at an inner product&#39;s own arguments, so a scalar buried in a difference such as <code class="md-code-inline">innerₕ(D₋ₓ(2 * u), v)</code> is invisible to it. Write <code class="md-code-inline">2 * innerₕ(D₋ₓ(u), v)</code> instead.</p>
@@ -479,6 +479,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=654bc0d0"></script>
+  <script src="../../assets/materialdocs.js?v=e1a96966"></script>
 </body>
 </html>

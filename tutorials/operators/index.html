@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Difference, jump and average operators — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=170b5a13">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=788b11d2">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Difference, jump and average operators — Bramble.jl">
   <meta property="og:title" content="Difference, jump and average operators — Bramble.jl">
@@ -467,23 +467,23 @@ parent(∇ₕ ⋅ uv) == parent(divₕ(uv)), parent(∇ₕ × uv) == parent(curl
 <tr>
 <td style="text-align:left"><code class="md-code-inline">D̃</code></td>
 <td style="text-align:left"><span class="md-math md-math-inline">\(\{i, i+1\}\)</span>, divided by the averaged spacing</td>
-<td style="text-align:left">1 (summation by parts holds exactly)</td>
+<td style="text-align:left">1 on smoothly graded grids, not consistent where neighbouring spacings differ by an O(1) ratio (random grids); summation by parts holds exactly</td>
 <td style="text-align:left">1</td>
 <td style="text-align:left">truncated to <code class="md-code-inline">0</code> at the last point, like <code class="md-code-inline">D₊</code></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>On a uniform grid <span class="md-math md-math-inline">\(h_i = h_{i+1}\)</span>: <code class="md-code-inline">D̽</code> and <code class="md-code-inline">Dc</code> collapse to the mean of <code class="md-code-inline">D₋</code> and <code class="md-code-inline">D₊</code>, and <code class="md-code-inline">D̃</code> collapses to <code class="md-code-inline">D₊</code>. They separate only where the spacing varies, which is why a uniform-grid benchmark cannot tell them apart.</p>
+<p>On a uniform grid <span class="md-math md-math-inline">\(h_i = h_{i+1}\)</span>: <code class="md-code-inline">D̽</code> and <code class="md-code-inline">Dc</code> collapse to the mean of <code class="md-code-inline">D₋</code> and <code class="md-code-inline">D₊</code>, and <code class="md-code-inline">D̃</code> collapses to <code class="md-code-inline">D₊</code>. They separate only where the spacing varies, which is why a uniform-grid benchmark cannot tell them apart. <code class="md-code-inline">D̃</code> is meant to be used paired with <code class="md-code-inline">innerₕ</code>, for the summation by parts, and not as a pointwise approximation of the derivative on a random grid.</p>
 <h3 id="operators_direction_argument" class="md-heading">The direction as an argument<a href="#operators_direction_argument" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>The direction can also come from a variable rather than from the name. Index the vectorial operator with it: <code class="md-code-inline">∇ₕ[d]</code> is the coordinate operator itself, so <code class="md-code-inline">∇ₕ[1]</code>, <code class="md-code-inline">∇ₕ[:x]</code> and <code class="md-code-inline">D₋ₓ</code> are the same function object, and <code class="md-code-inline">dx, dy = ∇ₕ</code> destructures it. The same holds for <code class="md-code-inline">∇̃ₕ</code>, <code class="md-code-inline">∇cₕ</code>, <code class="md-code-inline">∇̽ₕ</code>, <code class="md-code-inline">jumpₕ</code>, <code class="md-code-inline">Mₕ</code> and <code class="md-code-inline">Mcₕ</code>.</p>
-<p>That makes a loop over directions writable, which the subscript names cannot express on their own. The discrete <span class="md-math md-math-inline">\(H^1\)</span> seminorm squared, in any dimension:</p>
+<p>That makes a loop over directions writable, which the subscript names cannot express on their own. The discrete <span class="md-math md-math-inline">\(H^1\)</span> seminorm squared, in any dimension, with the <code class="md-code-inline">inner₊</code> weights of the backward gradient, next to <code class="md-code-inline">snorm₁ₕ</code>:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">sum(innerₕ(∇ₕ[d](vₕ), ∇ₕ[d](vₕ)) for d in 1:dim(mesh(space(vₕ))))</code></pre>
+<pre><code class="language-julia">sum(inner₊(∇ₕ[d](vₕ), ∇ₕ[d](vₕ), d) for d in 1:dim(mesh(space(vₕ)))), snorm₁ₕ(vₕ)^2</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">4.166666666666667</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(5.0, 5.000000000000001)</code></pre>
 </div>
 <p>Underneath, every family has a stem that takes the direction as a second argument, and the coordinate suffix is spelling it:</p>
 <div class="md-table-wrap">
@@ -566,6 +566,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=170b5a13"></script>
+  <script src="../../assets/materialdocs.js?v=788b11d2"></script>
 </body>
 </html>

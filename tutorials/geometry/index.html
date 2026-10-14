@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry tutorial — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=282efe07">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=ae8275c9">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry tutorial — Bramble.jl">
   <meta property="og:title" content="Geometry tutorial — Bramble.jl">
@@ -119,7 +119,7 @@ dim(rod), center(rod), collect(labels(rod))</code></pre>
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
 <div class="md-admonition-body">
-<p>Replace the interval by <code class="md-code-inline">interval(0.0, 10.0) × interval(0.0, 1.0)</code> and keep the two markers. <code class="md-code-inline">dim</code> becomes 2, and <code class="md-code-inline">:left</code> and <code class="md-code-inline">:right</code> now name the two short sides of a strip: the same words mean the same faces in every dimension.</p>
+<p>Replace the interval by <code class="md-code-inline">interval(0.0, 10.0) × interval(0.0, 1.0)</code> and keep the two markers. <code class="md-code-inline">dim</code> becomes 2, and <code class="md-code-inline">:left</code> and <code class="md-code-inline">:right</code> still name the two short sides of a 2D strip, but in 3D they are the <code class="md-code-inline">y</code> faces.</p>
 </div>
 </div>
 <hr class="md-hr">
@@ -229,11 +229,11 @@ dim(Ω), center(Ω), (0.5, 0.5) ∈ Ω, Bramble.is_collapsed(Ω)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(2, (0.5, 0.5), true, false)</code></pre>
 </div>
-<p><a href="../../internals/geometry/#Bramble.set-Tuple{Bramble.CartesianProduct}"><code class="md-code-inline">Bramble.set</code></a> returns the underlying set. Next, the <a href="../../tutorials/mesh/#tutorial_mesh">mesh tutorial</a> discretizes a domain into points.</p>
+<p><a href="../../internals/geometry/#Bramble.set-Tuple{Bramble.CartesianProduct}"><code class="md-code-inline">Bramble.set</code></a> (private, hence the prefix) returns the underlying set. Next, the <a href="../../tutorials/mesh/#tutorial_mesh">mesh tutorial</a> discretizes a domain into points.</p>
 <hr class="md-hr">
 <h2 id="geometry_reference" class="md-heading">Reference<a href="#geometry_reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <h3 id="Boundary-symbols" class="md-heading">Boundary symbols<a href="#Boundary-symbols" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>Boundary symbols are coordinate-aligned, so the same name means the same face in every dimension:</p>
+<p>The canonical names mean the same face in every dimension; the viewpoint aliases do not (<code class="md-code-inline">:left</code> is <code class="md-code-inline">:xmin</code> in 1D and 2D, <code class="md-code-inline">:ymin</code> in 3D):</p>
 <ul class="md-list-tight">
 <li><p><strong>1D</strong>: <code class="md-code-inline">:xmin</code> (<code class="md-code-inline">:left</code>), <code class="md-code-inline">:xmax</code> (<code class="md-code-inline">:right</code>)</p>
 </li>
@@ -315,7 +315,7 @@ dim(Ω), center(Ω), (0.5, 0.5) ∈ Ω, Bramble.is_collapsed(Ω)</code></pre>
 </svg>
 </figure>
 <h3 id="Collapsed-sets" class="md-heading">Collapsed sets<a href="#Collapsed-sets" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>A dimension is <strong>collapsed</strong> when its interval is degenerate (<span class="md-math md-math-inline">\(a = b\)</span>), which is how a surface or interface embedded in a higher-dimensional space is written. <code class="md-code-inline">dim</code> is the embedding dimension and <code class="md-code-inline">topo_dim</code> the topological one; they differ only for a collapsed set. <a href="../../internals/geometry/#Bramble.is_collapsed-Union{Tuple{T}, Tuple{T, T}} where T&lt;:Number"><code class="md-code-inline">Bramble.is_collapsed</code></a> answers per axis; it is public but not exported, hence the prefix:</p>
+<p>A dimension is <strong>collapsed</strong> when its interval is degenerate (<span class="md-math md-math-inline">\(a = b\)</span>), which is how a surface or interface embedded in a higher-dimensional space is written. <code class="md-code-inline">dim</code> is the embedding dimension and <code class="md-code-inline">topo_dim</code> the topological one; they differ only for a collapsed set. <a href="../../internals/geometry/#Bramble.is_collapsed-Union{Tuple{T}, Tuple{T, T}} where T&lt;:Number"><code class="md-code-inline">Bramble.is_collapsed</code></a> answers per axis; it is private, hence the prefix:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -350,7 +350,7 @@ collect(labels(m_cond)), m_time(1.5)      # the second is the marker set frozen 
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">([:inflow, :hot_spot], Bramble.EvaluatedDomainMarkers{Bramble.DomainMarkers{Tuple{}, Tuple{}, Tuple{Bramble.Marker{Main.var&quot;#5#6&quot;}}}, Float64}(DomainMarkers(1 total), 1.5))</code></pre>
 </div>
-<p><code class="md-code-inline">labels</code> flattens the three marker kinds through <code class="md-code-inline">Iterators.flatten</code>. Inside a loop that must not allocate, iterate <code class="md-code-inline">label_symbols</code>, <code class="md-code-inline">label_tuples</code> or <code class="md-code-inline">label_conditions</code> instead.</p>
+<p><code class="md-code-inline">labels</code> returns one tuple of every label, symbol markers first, then tuple markers, then predicate markers, built without allocating. The helpers <code class="md-code-inline">label_symbols</code>, <code class="md-code-inline">label_tuples</code> and <code class="md-code-inline">label_conditions</code> behind it are internal.</p>
       </article>
       <footer class="md-footer">
 <p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
@@ -384,6 +384,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=282efe07"></script>
+  <script src="../../assets/materialdocs.js?v=ae8275c9"></script>
 </body>
 </html>

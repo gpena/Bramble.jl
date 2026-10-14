@@ -108,7 +108,7 @@ A = assemble(a; dirichlet = :boundary)
 
 bytes_operator = Base.summarysize(op)
 bytes_matrix = Base.summarysize(A)
-(ndofs = ndofs(Wₕ), operator_bytes = bytes_operator, csr_bytes = bytes_matrix,
+(ndofs = ndofs(Wₕ), operator_bytes = bytes_operator, matrix_bytes = bytes_matrix,
     ratio = round(bytes_matrix / bytes_operator; digits = 1))
 
 @test bytes_operator < bytes_matrix #src
@@ -336,14 +336,11 @@ end
 @test lead_of("mixed", 2) == :even #src
 @test lead_of("mixed", 3) == :kronecker #src
 @test all(r -> r.matrix_free_threaded < 0.5, filter(r -> r.form == "coefficient", threaded_product)) #src
-@test all(lead_of("coefficient", d, :matrix_free_serial, serial_product) == :kronecker
-for d in (2, 3)) #src
+@test all(lead_of("coefficient", d, :matrix_free_serial, serial_product) == :kronecker for d in (2, 3)) #src
 @test lead_of("mixed", 3, :matrix_free_serial, serial_product) == :kronecker #src
 @test lead_of("mixed", 2, :matrix_free_serial, serial_product) == :even #src
-@test all(lead_of("advection", d, :matrix_free_serial, serial_product) == :even
-for d in (2, 3)) #src
-@test all(r -> 1 / 1.2 < r.matrix_free_serial < 1,
-    filter(r -> r.form == "laplace", serial_product)) #src
+@test all(lead_of("advection", d, :matrix_free_serial, serial_product) == :even for d in (2, 3)) #src
+@test all(r -> 1 / 1.2 < r.matrix_free_serial < 1, filter(r -> r.form == "laplace", serial_product)) #src
 
 # The preference above is read at the largest size. Below it, the threaded Kronecker product
 # is not always the faster one. The sizes at which it is not, per form class:
@@ -386,9 +383,9 @@ shown(memory)
 
 @test all(r -> r.matrix_free_threaded > 10, memory) #src
 @test all(r -> r.assembled < 0.01, memory) #src
-@test all(r -> r.matrix_free_threaded > 1 && r.assembled < 1,
-    reduce(vcat, [route_ratios("product", "bytes_held", f; against = ["matrix_free_threaded", "assembled"])
-                  for f in forms])) #src
+memory_against = ["matrix_free_threaded", "assembled"] #src
+memory_by_size = reduce(vcat, [route_ratios("product", "bytes_held", f; against = memory_against) for f in forms]) #src
+@test all(r -> r.matrix_free_threaded > 1 && r.assembled < 1, memory_by_size) #src
 
 # **Solve.** Conjugate gradients to the same tolerance with each operator, for the two
 # symmetric positive definite classes only, since CG needs symmetry. The mixed and
@@ -414,8 +411,7 @@ shown(references)
 
 @test all(r -> lead(r.matrix_free_threaded) == :kronecker && r.assembled < 1, solve_ratios) #src
 @test all(r -> r.fdm_solve > 1, references) #src
-@test all(r -> r.fdm_solve > 1,
-    route_ratios("solve", "time_s", "laplace"; against = ["fdm_solve"])) #src
+@test all(r -> r.fdm_solve > 1, route_ratios("solve", "time_s", "laplace"; against = ["fdm_solve"])) #src
 @test only(r.direct for r in references if r.dim == 2) > 1 #src
 @test only(r.direct for r in references if r.dim == 3) < 1 #src
 

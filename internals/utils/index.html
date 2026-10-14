@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Utilities — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=bf71aa26">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=8aa04e60">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Utilities — Bramble.jl">
   <meta property="og:title" content="Utilities — Bramble.jl">
@@ -91,41 +91,10 @@
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/internals/utils.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Utilities" class="md-heading">Utilities<a href="#Utilities" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <h2 id="Backend" class="md-heading">Backend<a href="#Backend" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<div class="md-docstring" id="Bramble.Backend">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.Backend</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L358-L380" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">Backend{VT, MT, EP}()</code></pre>
-</div>
-<p>Compile-time descriptor specifying vector type <code class="md-code-inline">VT</code>, matrix type <code class="md-code-inline">MT</code>, and execution policy <code class="md-code-inline">EP</code>.</p>
-<p><strong>Type parameters</strong></p>
-<ul class="md-list-tight">
-<li><p><code class="md-code-inline">VT&lt;:DenseVector</code>: Concrete dense vector type (for CPU or GPU).</p>
-</li>
-<li><p><code class="md-code-inline">MT&lt;:AbstractMatrix</code>: Concrete matrix type (e.g. <code class="md-code-inline">SparseMatrixCSC{Float64, Int}</code> or <code class="md-code-inline">Matrix{Float64}</code>).</p>
-</li>
-<li><p><code class="md-code-inline">EP&lt;:ExecutionPolicy</code>: Execution policy (<a href="../../api/utilities/#Bramble.Serial"><code class="md-code-inline">Serial</code></a>, <a href="../../api/utilities/#Bramble.Parallel"><code class="md-code-inline">Parallel</code></a>, or <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>).</p>
-</li>
-</ul>
-<p>All three parameters must agree on <a href="../../api/utilities/#Bramble.locality"><code class="md-code-inline">locality</code></a>: a backend is meant to be wholly host – a <code class="md-code-inline">Vector</code> alongside a CPU sparse or dense matrix, run under a <a href="../../api/utilities/#Bramble.CpuPolicy"><code class="md-code-inline">CpuPolicy</code></a> – or wholly device – once a vendor is chosen, <code class="md-code-inline">VT</code>, <code class="md-code-inline">MT</code> and the policy are all that vendor&#39;s. Any other combination (a device <code class="md-code-inline">VT</code> with a host <code class="md-code-inline">MT</code>, a device <code class="md-code-inline">VT</code> with a <code class="md-code-inline">CpuPolicy</code>, or a host <code class="md-code-inline">VT</code> with a <code class="md-code-inline">GpuPolicy</code>) is rejected at construction rather than accepted and left to fail on first use (gpena/Bramble.jl#298, #296).</p>
-<p><strong>Throws</strong></p>
-<ul class="md-list-tight">
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">locality(VT) != locality(EP())</code>.</p>
-</li>
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">locality(MT) != locality(VT)</code>.</p>
-</li>
-</ul>
-<p>See also: <a href="../../api/utilities/#Bramble.backend"><code class="md-code-inline">backend</code></a>, <a href="../../api/utilities/#Bramble.vector_type"><code class="md-code-inline">vector_type</code></a>, <a href="../../api/utilities/#Bramble.matrix_type"><code class="md-code-inline">matrix_type</code></a>, <a href="../../api/utilities/#Bramble.execution_policy"><code class="md-code-inline">execution_policy</code></a>, <a href="../../api/utilities/#Bramble.locality"><code class="md-code-inline">locality</code></a>.</p>
-</div>
-</div>
 <div class="md-docstring" id="Base.eltype-Union{Tuple{Bramble.Backend{VT, MT, EP}}, Tuple{EP}, Tuple{MT}, Tuple{VT}} where {VT, MT, EP}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.eltype</code> — <span class="md-docstring-sig">Union{Tuple{Bramble.Backend{VT, MT, EP}}, Tuple{EP}, Tuple{MT}, Tuple{VT}} where {VT, MT, EP}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L702-L707" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L704-L709" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -136,104 +105,26 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <p>Return the coordinate and scalar element type of vector type <code class="md-code-inline">VT</code> configured in <code class="md-code-inline">backend</code>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.backend_eye-Tuple{Bramble.Backend, Integer}">
+<div class="md-docstring" id="Bramble._gpu_functional-Tuple{Val}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.backend_eye</code> — <span class="md-docstring-sig">Tuple{Bramble.Backend, Integer}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L674-L678" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble._gpu_functional</code> — <span class="md-docstring-sig">Tuple{Val}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L807-L825" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">backend_eye(backend::Backend, n::Integer) -&gt; AbstractMatrix</code></pre>
+<pre><code class="language-julia">_gpu_functional(::Val{name}) -&gt; Bool</code></pre>
 </div>
-<p>Construct an <span class="md-math md-math-inline">\(n \times n\)</span> identity matrix matching the matrix type configured in <code class="md-code-inline">backend</code>.</p>
-</div>
-</div>
-<div class="md-docstring" id="Bramble.backend_zeros-Tuple{Bramble.Backend, Integer}">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.backend_zeros</code> — <span class="md-docstring-sig">Tuple{Bramble.Backend, Integer}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L691-L695" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">backend_zeros(backend::Backend, n::Integer) -&gt; AbstractMatrix</code></pre>
-</div>
-<p>Construct an <span class="md-math md-math-inline">\(n \times n\)</span> zero matrix matching the matrix type configured in <code class="md-code-inline">backend</code>.</p>
-</div>
-</div>
-<div class="md-docstring" id="Bramble.supports_undef_construction-Tuple{Type{&lt;:AbstractArray}}">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.supports_undef_construction</code> — <span class="md-docstring-sig">Tuple{Type{&lt;:AbstractArray}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L557-L580" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">supports_undef_construction(::Type{AT}) -&gt; Bool</code></pre>
-</div>
-<p>Whether an array type builds from an <code class="md-code-inline">undef</code> initializer, <code class="md-code-inline">AT(undef, dims...)</code>, rather than from its dimensions alone, <code class="md-code-inline">AT(dims...)</code>.</p>
-<p>The contract a custom array type opts into to be usable as a backend&#39;s <code class="md-code-inline">vector_type</code> or <code class="md-code-inline">matrix_type</code>. <code class="md-code-inline">true</code> by default, which is what every <code class="md-code-inline">AbstractArray</code> in <code class="md-code-inline">Base</code> and in every GPU package this repository has seen answers; a type constructed from its size alone declares otherwise:</p>
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">Bramble.supports_undef_construction(::Type{&lt;:MySizedArray}) = false</code></pre>
-</div>
-<p>Read at compile time from the type, so the branch it guards folds away (gpena/Bramble.jl#100). This replaced a <code class="md-code-inline">try</code>/<code class="md-code-inline">catch</code> that called the <code class="md-code-inline">undef</code> constructor and caught its failure to decide the same question: exceptions as a dispatch mechanism, which blocks the compiler from seeing through the allocation path, and which reported a genuinely broken array type as &quot;tried both, both failed&quot; rather than as the one thing that was wrong. The three shipped backends never reached it either way – <code class="md-code-inline">Vector</code>, <code class="md-code-inline">DenseMatrix</code> and <code class="md-code-inline">SparseMatrixCSC</code> each have their own <code class="md-code-inline">@inline</code> method below – so what this buys is a stated contract for the types that do.</p>
-</div>
-</div>
-<h2 id="Device-dispatch" class="md-heading">Device dispatch<a href="#Device-dispatch" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<div class="md-docstring" id="Bramble.ka_device">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.ka_device</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/device_kernels.jl#L14-L30" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">ka_device(be) -&gt; KernelAbstractions.Backend</code></pre>
-</div>
-<p>Return the <code class="md-code-inline">KernelAbstractions.jl</code> device backend that runs kernels for the Bramble <a href="../../internals/utils/#Bramble.Backend"><code class="md-code-inline">Backend</code></a> <code class="md-code-inline">be</code>.</p>
-<p>This is the extension contract every device backend implements: <code class="md-code-inline">BrambleMetalExt</code> adds a method for a <code class="md-code-inline">Backend</code> built from <code class="md-code-inline">MtlVector</code>/<code class="md-code-inline">MtlMatrix</code>, returning <code class="md-code-inline">Metal.MetalBackend()</code>, and a future GPU extension does the same for its own array types. Every <code class="md-code-inline">@kernel</code> declared in <code class="md-code-inline">BrambleKernelAbstractionsExt</code> is written against <code class="md-code-inline">KernelAbstractions.Backend</code> alone, so it becomes available on a new device the moment that device supplies this one method.</p>
-<p><strong>Throws</strong></p>
-<ul class="md-list-tight">
-<li><p><code class="md-code-inline">ErrorException</code>: if no loaded package defines <code class="md-code-inline">ka_device</code> for <code class="md-code-inline">be</code>. Requires <code class="md-code-inline">using KernelAbstractions</code> and the package that supplies <code class="md-code-inline">be</code>&#39;s device (for example <code class="md-code-inline">using Metal</code> for a Metal backend).</p>
-</li>
-</ul>
-</div>
-</div>
-<div class="md-docstring" id="Bramble.ka_synchronize">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.ka_synchronize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/device_kernels.jl#L43-L81" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">ka_synchronize(x) -&gt; Nothing</code></pre>
-</div>
-<p>Block the calling thread until every <code class="md-code-inline">KernelAbstractions.jl</code> kernel and device transfer already queued against <code class="md-code-inline">x</code>&#39;s device backend has completed.</p>
-<p>Through gpena/Bramble.jl#94, every <code class="md-code-inline">@kernel</code> launch in <code class="md-code-inline">BrambleKernelAbstractionsExt</code> called this right after launching, unconditionally. gpena/Bramble.jl#302/#306 removed that: under <a href="../../api/utilities/#Bramble.GpuKernel"><code class="md-code-inline">GpuKernel</code></a> – the only <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a> there is – a kernel launch now only enqueues onto the device&#39;s own command queue and returns, so a chain of operators (<code class="md-code-inline">D₋ₓ</code> into <code class="md-code-inline">D₋ᵧ</code>, say) pipelines instead of paying a host round-trip after each step. Kernels enqueued on the same queue still run in that queue&#39;s order, so this is <em>not</em> needed between chained device calls, only at a genuine host boundary:</p>
-<ul class="md-list-tight">
-<li><p>converting a device array to a host one (<code class="md-code-inline">Array(...)</code>, <code class="md-code-inline">host_points</code>, ...), or any other host-side read, reduction or assertion – though a <code class="md-code-inline">GPUArrays</code> reduction that returns a plain host scalar (<code class="md-code-inline">sum</code>, which <code class="md-code-inline">_dot</code>&#39;s device method in <code class="md-code-inline">src/utils/linear_algebra.jl</code> uses, and so <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">normₕ</code> too) already synchronises by fetching that scalar, with no call to this function needed;</p>
-</li>
-<li><p>a write that reaches device memory some way other than a <code class="md-code-inline">@kernel</code> launch on that same queue – a plain <code class="md-code-inline">copyto!</code>, which queues asynchronously exactly like a kernel launch does, but is not one of the launches above. <code class="md-code-inline">_flush_device_scatter!</code> (<code class="md-code-inline">src/assembly/bilinear_traversal.jl</code>) is this function&#39;s first caller for exactly that reason: it ends a device-resident matrix&#39;s assembly with <code class="md-code-inline">copyto!(A.nzVal, mirror.nzval)</code>, and calling this right after is what keeps <code class="md-code-inline">assemble</code>/<code class="md-code-inline">assemble!</code> from returning before that write lands (a race found at <code class="md-code-inline">n = 513</code> over repeated assemblies, invisible at a small test size);</p>
-</li>
-<li><p>an explicit call from user code that needs a hard barrier before doing something this package cannot see, such as timing a device computation in isolation.</p>
-</li>
-</ul>
-<p>Same idiom as <a href="../../internals/utils/#Bramble.ka_device"><code class="md-code-inline">ka_device</code></a>: a helpful error naming the packages to load, not a bare <code class="md-code-inline">MethodError</code>, and the real method comes from <code class="md-code-inline">BrambleKernelAbstractionsExt</code> (<code class="md-code-inline">synchronize(get_backend(x))</code>) – written against <code class="md-code-inline">KernelAbstractions</code> alone, so a future GPU backend inherits it for free.</p>
-<p><strong>Throws</strong></p>
-<ul class="md-list-tight">
-<li><p><code class="md-code-inline">ErrorException</code>: if no loaded package defines <code class="md-code-inline">ka_synchronize</code> for <code class="md-code-inline">x</code>. Requires <code class="md-code-inline">using KernelAbstractions</code>.</p>
-</li>
-</ul>
+<p>Whether the GPU extension named by <code class="md-code-inline">name</code> (a <code class="md-code-inline">Symbol</code>, e.g. <code class="md-code-inline">:metal</code>) has a functional device, not merely that the corresponding package loaded.</p>
+<p>Defaults to <code class="md-code-inline">false</code> for every name: loading a GPU package extension (<code class="md-code-inline">using Metal</code>, and in future <code class="md-code-inline">using CUDA</code>/<code class="md-code-inline">using AMDGPU</code>) succeeds on any platform, whether or not that host actually has the accelerator&#39;s hardware and drivers – it degrades gracefully rather than erroring. <code class="md-code-inline">ext/BrambleMetalExt.jl</code> overrides this for <code class="md-code-inline">Val(:metal)</code> with <code class="md-code-inline">Metal.functional()</code>, the one call that actually probes the device (gpena/Bramble.jl#192). <a href="../../api/utilities/#Bramble.gpu_backend"><code class="md-code-inline">gpu_backend</code></a> requires both this and the extension being loaded.</p>
+<p>It is declared with the generic <code class="md-code-inline">::Val</code> signature (rather than <code class="md-code-inline">::Val{:metal}</code> itself) so that <code class="md-code-inline">BrambleMetalExt</code>&#39;s own <code class="md-code-inline">Val(:metal)</code> method is strictly more specific than this stub – otherwise the extension&#39;s method would silently overwrite this one instead of adding to it, which precompilation reports as method overwriting.</p>
 </div>
 </div>
 <h2 id="Linear-algebra" class="md-heading">Linear algebra<a href="#Linear-algebra" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-docstring" id="Bramble.MarkedIndices">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.MarkedIndices</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L596-L607" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L586-L597" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -247,7 +138,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.MarkedIndicesUnion">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.MarkedIndicesUnion</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L629-L639" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L619-L632" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -256,12 +147,13 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 </div>
 <p>Lazily iterates the 1-based positions where the union of <code class="md-code-inline">masks</code> is set.</p>
 <p>The multi-marker counterpart of <a href="../../internals/utils/#Bramble.MarkedIndices"><code class="md-code-inline">MarkedIndices</code></a>: <code class="md-code-inline">_combined_mask</code> (space/inner_product.jl) used to materialize the union into a fresh <code class="md-code-inline">BitVector</code> via <code class="md-code-inline">copy</code> + <code class="md-code-inline">.|=</code> before walking it, one heap allocation per call (gpena/Bramble.jl#149). This ORs each mask&#39;s 64-bit chunk on the fly instead, so the union is never materialized – still proportional to the number of set bits, still a whole-word skip wherever every mask&#39;s chunk is zero, and allocates nothing.</p>
+<p>All <code class="md-code-inline">masks</code> must have the same length: <code class="md-code-inline">len</code> is taken from the first, and no constructor check compares the others, so a longer or shorter mask reads indices outside <code class="md-code-inline">1:len</code>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._LastAxisChunks">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._LastAxisChunks</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L419-L428" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L414-L423" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -275,7 +167,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._band_count-Tuple{Int64, Int64, Int64}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._band_count</code> — <span class="md-docstring-sig">Tuple{Int64, Int64, Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L402-L411" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L397-L406" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -289,7 +181,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._band_range-Tuple{AbstractRange, Int64, Int64}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._band_range</code> — <span class="md-docstring-sig">Tuple{AbstractRange, Int64, Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L382-L394" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L377-L389" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -304,102 +196,103 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._dot-Tuple{AbstractVector, AbstractVector, AbstractVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot</code> — <span class="md-docstring-sig">Tuple{AbstractVector, AbstractVector, AbstractVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L669-L692" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L697-L724" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_dot(u::AbstractVector, v::AbstractVector, w::AbstractVector) -&gt; Real</code></pre>
+<pre><code class="language-julia">_dot(u::AbstractVector, w::AbstractVector, v::AbstractVector) -&gt; Number</code></pre>
 </div>
 <p>Compute the weighted trilinear dot product</p>
 <div class="md-math md-math-display">
-\[\sum_{i=1}^n u_i v_i w_i\]
+\[\sum_{i=1}^n \overline{u_i} w_i v_i\]
 </div>
 <p>Accumulates via fused multiply-add operations (<code class="md-code-inline">muladd</code>) with <code class="md-code-inline">@simd</code> vectorization.</p>
+<p>The first argument is conjugated (gpena/Bramble.jl#644), and so is <code class="md-code-inline">u</code> in every policy and device counterpart below; the weight is the second argument, as in every caller. <code class="md-code-inline">conj</code> of a <code class="md-code-inline">Real</code> is the identity, so real data, <code class="md-code-inline">Dual</code>s included, gives the same bits as the unconjugated product.</p>
 <p>A same-eltype specialization used to sit alongside this one, skipping the <code class="md-code-inline">promote_type</code> call and the <code class="md-code-inline">T(...)</code> conversions on the (dispatch-favoured) assumption that they cost something. Compared by <code class="md-code-inline">@code_llvm</code>/<code class="md-code-inline">@code_native</code> with matching element types (gpena/Bramble.jl#71): identical generated code, since <code class="md-code-inline">promote_type(T, T, T) === T</code> and <code class="md-code-inline">T(x::T)</code> is an identity conversion the compiler elides. One method now covers both cases.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">u</code>: First vector.</p>
+<li><p><code class="md-code-inline">u</code>: First vector, the one that is conjugated.</p>
 </li>
-<li><p><code class="md-code-inline">v</code>: Second vector.</p>
+<li><p><code class="md-code-inline">w</code>: The weights, second in the call as at every caller.</p>
 </li>
-<li><p><code class="md-code-inline">w</code>: Weight vector.</p>
+<li><p><code class="md-code-inline">v</code>: Third vector.</p>
 </li>
 </ul>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">DimensionMismatch</code>: If <code class="md-code-inline">length(u)</code>, <code class="md-code-inline">length(v)</code>, and <code class="md-code-inline">length(w)</code> do not match.</p>
+<li><p><code class="md-code-inline">DimensionMismatch</code>: If <code class="md-code-inline">length(u)</code>, <code class="md-code-inline">length(w)</code>, and <code class="md-code-inline">length(v)</code> do not match.</p>
 </li>
 </ul>
-</div>
-</div>
-<div class="md-docstring" id="Bramble._dot-Tuple{Bramble.CpuSerial, Any, Any, Any}">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble._dot</code> — <span class="md-docstring-sig">Tuple{Bramble.CpuSerial, Any, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L775-L781" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_dot(policy::ExecutionPolicy, u, v, w) -&gt; Real</code></pre>
-</div>
-<p>Policy-dispatched <a href="../../internals/space/#Bramble._dot-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector}} where D"><code class="md-code-inline">_dot</code></a>: <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a> falls through to the plain three-vector method; <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> reaches <a href="../../internals/utils/#Bramble._threaded_dot-Tuple{AbstractVector, AbstractVector, AbstractVector}"><code class="md-code-inline">_threaded_dot</code></a>; <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> reaches <a href="../../internals/utils/#Bramble._batch_dot-Tuple{Any, Any, Any}"><code class="md-code-inline">_batch_dot</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._dot-Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, AbstractVector, AbstractVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot</code> — <span class="md-docstring-sig">Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, AbstractVector, AbstractVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L1006-L1015" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L996-L1005" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_dot(::DeviceLocality, ::GpuPolicy, u::AbstractVector, v::AbstractVector, w::AbstractVector) -&gt; Real</code></pre>
+<pre><code class="language-julia">_dot(::DeviceLocality, ::GpuPolicy, u::AbstractVector, w::AbstractVector, v::AbstractVector) -&gt; Number</code></pre>
 </div>
-<p>The device counterpart of <a href="../../internals/space/#Bramble._dot-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector}} where D"><code class="md-code-inline">_dot</code></a><code class="md-code-inline">(u, v, w)</code>: <code class="md-code-inline">sum(u .* v .* w)</code>, one broadcasted <code class="md-code-inline">GPUArrays</code> reduction, reached once a <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a> derives <a href="../../api/utilities/#Bramble.DeviceLocality"><code class="md-code-inline">DeviceLocality</code></a> from itself.</p>
+<p>The device counterpart of <a href="../../internals/space/#Bramble._dot-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector}} where D"><code class="md-code-inline">_dot</code></a><code class="md-code-inline">(u, w, v)</code>: <code class="md-code-inline">sum(conj.(u) .* w .* v)</code>, one broadcasted <code class="md-code-inline">GPUArrays</code> reduction, reached once a <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a> derives <a href="../../api/utilities/#Bramble.DeviceLocality"><code class="md-code-inline">DeviceLocality</code></a> from itself.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">DimensionMismatch</code>: If <code class="md-code-inline">length(u)</code>, <code class="md-code-inline">length(v)</code>, and <code class="md-code-inline">length(w)</code> do not match.</p>
+<li><p><code class="md-code-inline">DimensionMismatch</code>: If <code class="md-code-inline">length(u)</code>, <code class="md-code-inline">length(w)</code>, and <code class="md-code-inline">length(v)</code> do not match.</p>
 </li>
 </ul>
+</div>
+</div>
+<div class="md-docstring" id="Bramble._dot-Tuple{Bramble.ExecutionPolicy, Any, Any, Any}">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._dot</code> — <span class="md-docstring-sig">Tuple{Bramble.ExecutionPolicy, Any, Any, Any}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L962-L969" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_dot(policy::ExecutionPolicy, u, w, v) -&gt; Number</code></pre>
+</div>
+<p>Policy-dispatched <a href="../../internals/space/#Bramble._dot-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector}} where D"><code class="md-code-inline">_dot</code></a>: derives the locality from <code class="md-code-inline">policy</code> and dispatches on the pair. On the host, <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a> reaches the plain three-vector method, <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> reaches <a href="../../internals/utils/#Bramble._threaded_dot-Tuple{AbstractVector, AbstractVector, AbstractVector}"><code class="md-code-inline">_threaded_dot</code></a> and <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> reaches <a href="../../internals/utils/#Bramble._batch_dot-Tuple{Any, Any, Any}"><code class="md-code-inline">_batch_dot</code></a>; a <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a> reaches the device methods below.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._dot_band-Tuple{Any, Any, Any, Any, Int64, Int64}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot_band</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any, Any, Int64, Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L831-L840" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L837-L846" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_dot_band(u, v, w, ax, nchunks::Int, k::Int) -&gt; Real</code></pre>
+<pre><code class="language-julia">_dot_band(u, w, v, ax, nchunks::Int, k::Int) -&gt; Number</code></pre>
 </div>
-<p>The <code class="md-code-inline">k</code>-th of <code class="md-code-inline">nchunks</code> partial sums of <a href="../../internals/utils/#Bramble._threaded_dot-Tuple{AbstractVector, AbstractVector, AbstractVector}"><code class="md-code-inline">_threaded_dot</code></a>, over the band <a href="../../internals/utils/#Bramble._band_range-Tuple{AbstractRange, Int64, Int64}"><code class="md-code-inline">_band_range</code></a><code class="md-code-inline">(ax, nchunks, k)</code>. One compiled body serves both the threaded loop and the serial one <a href="../../internals/utils/#Bramble._static_or_serial-Union{Tuple{N}, Tuple{G}, Tuple{F}, Tuple{F, G, Vararg{Any, N}}} where {F, G, N}"><code class="md-code-inline">_static_or_serial</code></a> falls back to, so the two return the same partial sums bitwise. <code class="md-code-inline">BramblePolyesterExt</code> runs <code class="md-code-inline">_dot_band</code> and keeps a copy of <a href="../../internals/utils/#Bramble._dot_masked_band-Tuple{Any, Any, Any, BitVector, Any, Int64, Int64}"><code class="md-code-inline">_dot_masked_band</code></a> over the mask&#39;s words (<code class="md-code-inline">_masked_words_band</code>), so a change here must be made there too (gpena/Bramble.jl#473).</p>
+<p>The <code class="md-code-inline">k</code>-th of <code class="md-code-inline">nchunks</code> partial sums of <a href="../../internals/utils/#Bramble._threaded_dot-Tuple{AbstractVector, AbstractVector, AbstractVector}"><code class="md-code-inline">_threaded_dot</code></a>, over the band <a href="../../internals/utils/#Bramble._band_range-Tuple{AbstractRange, Int64, Int64}"><code class="md-code-inline">_band_range</code></a><code class="md-code-inline">(ax, nchunks, k)</code>. One compiled body serves both the threaded loop and the serial one <a href="../../internals/utils/#Bramble._static_or_serial-Union{Tuple{N}, Tuple{G}, Tuple{F}, Tuple{F, G, Vararg{Any, N}}} where {F, G, N}"><code class="md-code-inline">_static_or_serial</code></a> falls back to, so the two return the same partial sums bitwise. <code class="md-code-inline">BramblePolyesterExt</code> runs <code class="md-code-inline">_dot_band</code> and keeps a copy of <a href="../../internals/utils/#Bramble._dot_masked_band-Tuple{Any, Any, Any, Union{Bramble.MarkedIndicesUnion, BitVector}, Any, Int64, Int64}"><code class="md-code-inline">_dot_masked_band</code></a> over the mask&#39;s words (<code class="md-code-inline">_masked_words_band</code>), so a change here must be made there too (gpena/Bramble.jl#473).</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._dot_masked-Tuple{AbstractVector, AbstractVector, AbstractVector, BitVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot_masked</code> — <span class="md-docstring-sig">Tuple{AbstractVector, AbstractVector, AbstractVector, BitVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L706-L729" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L738-L761" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector) -&gt; Real</code></pre>
+<pre><code class="language-julia">_dot_masked(u::AbstractVector, w::AbstractVector, v::AbstractVector, mask::BitVector) -&gt; Number</code></pre>
 </div>
 <p>Compute the weighted dot product restricted to indices where <code class="md-code-inline">mask</code> is true:</p>
 <div class="md-math md-math-display">
-\[\sum_{i \in \mathrm{supp}(\mathrm{mask})} u_i v_i w_i\]
+\[\sum_{i \in \mathrm{supp}(\mathrm{mask})} \overline{u_i} w_i v_i\]
 </div>
 <p>Walks <code class="md-code-inline">MarkedIndices(mask)</code>, so the work is proportional to the number of set bits rather than to <code class="md-code-inline">length(mask)</code>.</p>
 <p>As with <code class="md-code-inline">_dot</code>, a same-eltype specialization used to sit alongside this one; <code class="md-code-inline">@code_llvm</code>/<code class="md-code-inline">@code_native</code> with matching element types (gpena/Bramble.jl#71) showed identical generated code, so one method now covers both cases.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">u</code>: First vector.</p>
+<li><p><code class="md-code-inline">u</code>: First vector, the one that is conjugated.</p>
 </li>
-<li><p><code class="md-code-inline">v</code>: Second vector.</p>
+<li><p><code class="md-code-inline">w</code>: The weights, second in the call as at every caller.</p>
 </li>
-<li><p><code class="md-code-inline">w</code>: Weight vector.</p>
+<li><p><code class="md-code-inline">v</code>: Third vector.</p>
 </li>
 <li><p><code class="md-code-inline">mask</code>: Boolean selection mask.</p>
 </li>
@@ -411,30 +304,17 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 </ul>
 </div>
 </div>
-<div class="md-docstring" id="Bramble._dot_masked-Tuple{Bramble.CpuSerial, Vararg{Any, 4}}">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble._dot_masked</code> — <span class="md-docstring-sig">Tuple{Bramble.CpuSerial, Vararg{Any, 4}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L786-L792" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_dot_masked(policy::ExecutionPolicy, u, v, w, mask) -&gt; Real</code></pre>
-</div>
-<p>Policy-dispatched <a href="../../internals/space/#Bramble._dot_masked-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, BitVector}} where D"><code class="md-code-inline">_dot_masked</code></a>: <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a> falls through to the plain masked method; <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> reaches <a href="../../internals/utils/#Bramble._threaded_dot_masked-Tuple{AbstractVector, AbstractVector, AbstractVector, BitVector}"><code class="md-code-inline">_threaded_dot_masked</code></a>; <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> reaches <a href="../../internals/utils/#Bramble._batch_dot_masked-NTuple{4, Any}"><code class="md-code-inline">_batch_dot_masked</code></a>.</p>
-</div>
-</div>
 <div class="md-docstring" id="Bramble._dot_masked-Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, AbstractVector, AbstractVector, BitVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot_masked</code> — <span class="md-docstring-sig">Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, AbstractVector, AbstractVector, BitVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L1024-L1033" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L1014-L1023" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_dot_masked(::DeviceLocality, ::GpuPolicy, u, v, w, mask::BitVector) -&gt; Real</code></pre>
+<pre><code class="language-julia">_dot_masked(::DeviceLocality, ::GpuPolicy, u, w, v, mask::BitVector) -&gt; Number</code></pre>
 </div>
-<p>The device counterpart of <a href="../../internals/space/#Bramble._dot_masked-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, BitVector}} where D"><code class="md-code-inline">_dot_masked</code></a><code class="md-code-inline">(u, v, w, mask)</code>: <code class="md-code-inline">mask</code> is copied onto <code class="md-code-inline">u</code>&#39;s own device once, then the masked sum is <code class="md-code-inline">sum(u .* v .* w .* md)</code>, one broadcasted reduction instead of a walk over <a href="../../internals/utils/#Bramble.MarkedIndices"><code class="md-code-inline">MarkedIndices</code></a>.</p>
+<p>The device counterpart of <a href="../../internals/space/#Bramble._dot_masked-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, BitVector}} where D"><code class="md-code-inline">_dot_masked</code></a><code class="md-code-inline">(u, w, v, mask)</code>: <code class="md-code-inline">mask</code> is copied onto <code class="md-code-inline">u</code>&#39;s own device once, then the masked sum is <code class="md-code-inline">sum(conj.(u) .* w .* v .* md)</code>, one broadcasted reduction instead of a walk over <a href="../../internals/utils/#Bramble.MarkedIndices"><code class="md-code-inline">MarkedIndices</code></a>.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">DimensionMismatch</code>: If vector or mask lengths do not match.</p>
@@ -445,12 +325,12 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._dot_masked-Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, AbstractVector, AbstractVector, Bramble.MarkedIndicesUnion}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot_masked</code> — <span class="md-docstring-sig">Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, AbstractVector, AbstractVector, Bramble.MarkedIndicesUnion}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L1045-L1054" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L1035-L1044" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_dot_masked(::DeviceLocality, ::GpuPolicy, u, v, w, mask::MarkedIndicesUnion) -&gt; Real</code></pre>
+<pre><code class="language-julia">_dot_masked(::DeviceLocality, ::GpuPolicy, u, w, v, mask::MarkedIndicesUnion) -&gt; Number</code></pre>
 </div>
 <p>The multi-marker counterpart of the <code class="md-code-inline">BitVector</code> method above: <code class="md-code-inline">mask</code> is walked once, on the host, to build a plain <code class="md-code-inline">BitVector</code> (the same union <code class="md-code-inline">_combined_mask</code> would have materialized), which is then copied onto <code class="md-code-inline">u</code>&#39;s own device exactly as above.</p>
 <p><strong>Throws</strong></p>
@@ -460,37 +340,49 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 </ul>
 </div>
 </div>
-<div class="md-docstring" id="Bramble._dot_masked_band-Tuple{Any, Any, Any, BitVector, Any, Int64, Int64}">
+<div class="md-docstring" id="Bramble._dot_masked-Tuple{Bramble.ExecutionPolicy, Vararg{Any, 4}}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble._dot_masked_band</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any, BitVector, Any, Int64, Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L903-L912" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble._dot_masked</code> — <span class="md-docstring-sig">Tuple{Bramble.ExecutionPolicy, Vararg{Any, 4}}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L972-L977" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_dot_masked_band(u, v, w, mask::BitVector, ax, nchunks::Int, k::Int) -&gt; Real
-_dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -&gt; Real</code></pre>
+<pre><code class="language-julia">_dot_masked(policy::ExecutionPolicy, u, w, v, mask) -&gt; Number</code></pre>
 </div>
-<p>The <code class="md-code-inline">k</code>-th of <code class="md-code-inline">nchunks</code> partial sums of <a href="../../internals/utils/#Bramble._threaded_dot_masked-Tuple{AbstractVector, AbstractVector, AbstractVector, BitVector}"><code class="md-code-inline">_threaded_dot_masked</code></a>, over the mask words <a href="../../internals/utils/#Bramble._band_range-Tuple{AbstractRange, Int64, Int64}"><code class="md-code-inline">_band_range</code></a><code class="md-code-inline">(ax, nchunks, k)</code>. As <a href="../../internals/utils/#Bramble._dot_band-Tuple{Any, Any, Any, Any, Int64, Int64}"><code class="md-code-inline">_dot_band</code></a>, one compiled body serves the threaded loop and the serial one. <code class="md-code-inline">BramblePolyesterExt</code> runs <a href="../../internals/utils/#Bramble._dot_band-Tuple{Any, Any, Any, Any, Int64, Int64}"><code class="md-code-inline">_dot_band</code></a> and keeps a copy of <code class="md-code-inline">_dot_masked_band</code> over the mask&#39;s words (<code class="md-code-inline">_masked_words_band</code>), so a change here must be made there too (gpena/Bramble.jl#473).</p>
+<p>Policy-dispatched <a href="../../internals/space/#Bramble._dot_masked-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, BitVector}} where D"><code class="md-code-inline">_dot_masked</code></a>: as <a href="../../internals/space/#Bramble._dot-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector}} where D"><code class="md-code-inline">_dot</code></a><code class="md-code-inline">(policy, u, w, v)</code>, with the plain masked method, <a href="../../internals/utils/#Bramble._threaded_dot_masked-Tuple{AbstractVector, AbstractVector, AbstractVector, Union{Bramble.MarkedIndicesUnion, BitVector}}"><code class="md-code-inline">_threaded_dot_masked</code></a> and <a href="../../internals/utils/#Bramble._batch_dot_masked-NTuple{4, Any}"><code class="md-code-inline">_batch_dot_masked</code></a> on the host.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble._dot_masked_band-Tuple{Any, Any, Any, Union{Bramble.MarkedIndicesUnion, BitVector}, Any, Int64, Int64}">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._dot_masked_band</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any, Union{Bramble.MarkedIndicesUnion, BitVector}, Any, Int64, Int64}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L893-L904" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_dot_masked_band(u, w, v, mask::Union{BitVector, MarkedIndicesUnion}, ax, nchunks::Int, k::Int) -&gt; Number</code></pre>
+</div>
+<p>The <code class="md-code-inline">k</code>-th of <code class="md-code-inline">nchunks</code> partial sums of <a href="../../internals/utils/#Bramble._threaded_dot_masked-Tuple{AbstractVector, AbstractVector, AbstractVector, Union{Bramble.MarkedIndicesUnion, BitVector}}"><code class="md-code-inline">_threaded_dot_masked</code></a>, over the mask words <a href="../../internals/utils/#Bramble._band_range-Tuple{AbstractRange, Int64, Int64}"><code class="md-code-inline">_band_range</code></a><code class="md-code-inline">(ax, nchunks, k)</code>. As <a href="../../internals/utils/#Bramble._dot_band-Tuple{Any, Any, Any, Any, Int64, Int64}"><code class="md-code-inline">_dot_band</code></a>, one compiled body serves the threaded loop and the serial one. A <code class="md-code-inline">SeparableWeights</code> weight goes through it too. The band reads such a weight through its <code class="md-code-inline">CartesianIndices</code> (<code class="md-code-inline">_masked_cart</code>, <code class="md-code-inline">_masked_term</code>) and never through the linear <code class="md-code-inline">getindex</code>. <code class="md-code-inline">BramblePolyesterExt</code> runs <a href="../../internals/utils/#Bramble._dot_band-Tuple{Any, Any, Any, Any, Int64, Int64}"><code class="md-code-inline">_dot_band</code></a> and keeps a copy of <code class="md-code-inline">_dot_masked_band</code> over the mask&#39;s words (<code class="md-code-inline">_masked_words_band</code> and <code class="md-code-inline">_separable_masked_words_band</code>), so a change here must be made there too (gpena/Bramble.jl#473).</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._effective_parallel_policy-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._effective_parallel_policy</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L232-L241" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L221-L233" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">_effective_parallel_policy(sp) -&gt; CpuPolicy</code></pre>
 </div>
-<p>The policy a forced-threaded sweep (<code class="md-code-inline">assemble_parallel!</code>, or the non-serial branch of <code class="md-code-inline">assemble!</code>/<code class="md-code-inline">assemble_add!</code>) actually runs under: <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a> is coerced to <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> – a threaded sweep threads even from a serially configured backend, which is the entire point of forcing it – while <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> and <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> pass through unchanged, so a <code class="md-code-inline">CpuPolyester</code> backend still runs its own (Polyester) sweep, or errors clearly without it, rather than silently substituting <code class="md-code-inline">Threads.@threads</code>.</p>
+<p>The policy a forced-threaded sweep (<code class="md-code-inline">assemble_parallel!</code>, or the non-serial branch of <code class="md-code-inline">assemble!</code>/<code class="md-code-inline">assemble_add!</code>) actually runs under: <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a> is coerced to <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> – a threaded sweep threads even from a serially configured backend, which is the entire point of forcing it – while <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> and <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> keep their own policy, so a <code class="md-code-inline">CpuPolyester</code> backend still runs its own (Polyester) sweep, or errors clearly without it, rather than silently substituting <code class="md-code-inline">Threads.@threads</code>. A <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a> is coerced to <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> as well (<code class="md-code-inline">bilinear_traversal.jl</code>): the colour-banded sweep is storage-generic, so a device backend runs the same <code class="md-code-inline">Threads.@threads</code> sweep.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._in_threaded_region-Tuple{}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._in_threaded_region</code> — <span class="md-docstring-sig">Tuple{}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L246-L257" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L238-L249" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -503,7 +395,7 @@ _dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -&
 <div class="md-docstring" id="Bramble._is_static_nesting_error-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._is_static_nesting_error</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L260-L266" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L252-L258" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -516,7 +408,7 @@ _dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -&
 <div class="md-docstring" id="Bramble._last_axis_chunks-Union{Tuple{D}, Tuple{CartesianIndices{D, R} where R&lt;:NTuple{D, OrdinalRange{Int64, Int64}}, Integer}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._last_axis_chunks</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{CartesianIndices{D, R} where R&lt;:NTuple{D, OrdinalRange{Int64, Int64}}, Integer}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L435-L440" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L430-L435" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -529,7 +421,7 @@ _dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -&
 <div class="md-docstring" id="Bramble._serial_for!-Tuple{Any, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._serial_for!</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L365-L374" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L360-L369" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -551,7 +443,7 @@ _dot_masked_band(u, v, w, mask::MarkedIndicesUnion, ax, nchunks::Int, k::Int) -&
 <div class="md-docstring" id="Bramble._static_bands!-Union{Tuple{N}, Tuple{F}, Tuple{F, Int64, Vararg{Any, N}}} where {F, N}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._static_bands!</code> — <span class="md-docstring-sig">Union{Tuple{N}, Tuple{F}, Tuple{F, Int64, Vararg{Any, N}}} where {F, N}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L323-L330" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L318-L325" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -565,7 +457,7 @@ _serial_bands!(f, nbands::Int, args...) -&gt; Nothing</code></pre>
 <div class="md-docstring" id="Bramble._static_or_serial-Union{Tuple{N}, Tuple{G}, Tuple{F}, Tuple{F, G, Vararg{Any, N}}} where {F, G, N}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._static_or_serial</code> — <span class="md-docstring-sig">Union{Tuple{N}, Tuple{G}, Tuple{F}, Tuple{F, G, Vararg{Any, N}}} where {F, G, N}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L270-L287" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L265-L282" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -580,7 +472,7 @@ _serial_bands!(f, nbands::Int, args...) -&gt; Nothing</code></pre>
 <div class="md-docstring" id="Bramble._static_partials!-Union{Tuple{N}, Tuple{F}, Tuple{Any, Int64, F, Vararg{Any, N}}} where {F, N}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._static_partials!</code> — <span class="md-docstring-sig">Union{Tuple{N}, Tuple{F}, Tuple{Any, Int64, F, Vararg{Any, N}}} where {F, N}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L300-L308" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L295-L303" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -623,7 +515,7 @@ _sweep_for!(policy::ExecutionPolicy, v::AbstractArray, idxs, f::Function) -&gt; 
 <div class="md-docstring" id="Bramble._sweep_scatter_for!-Union{Tuple{G}, Tuple{Bramble.HostLocality, Bramble.CpuSerial, Tuple, Any, G}} where G">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._sweep_scatter_for!</code> — <span class="md-docstring-sig">Union{Tuple{G}, Tuple{Bramble.HostLocality, Bramble.CpuSerial, Tuple, Any, G}} where G</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L507-L530" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L497-L520" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -652,7 +544,7 @@ _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -&g
 <div class="md-docstring" id="Bramble._threaded_axis_for!-Union{Tuple{F}, Tuple{Any, CartesianIndices, F}} where F">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._threaded_axis_for!</code> — <span class="md-docstring-sig">Union{Tuple{F}, Tuple{Any, CartesianIndices, F}} where F</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L462-L467" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L452-L457" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -665,36 +557,35 @@ _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -&g
 <div class="md-docstring" id="Bramble._threaded_dot-Tuple{AbstractVector, AbstractVector, AbstractVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._threaded_dot</code> — <span class="md-docstring-sig">Tuple{AbstractVector, AbstractVector, AbstractVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L797-L817" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L804-L823" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_threaded_dot(u::AbstractVector, v::AbstractVector, w::AbstractVector) -&gt; Real</code></pre>
+<pre><code class="language-julia">_threaded_dot(u::AbstractVector, w::AbstractVector, v::AbstractVector) -&gt; Number</code></pre>
 </div>
 <p><a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>&#39;s own counterpart of <a href="../../internals/space/#Bramble._dot-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector}} where D"><code class="md-code-inline">_dot</code></a>: partitions <code class="md-code-inline">1:length(u)</code> into <code class="md-code-inline">Threads.nthreads()</code> static bands via <a href="../../internals/utils/#Bramble._band_range-Tuple{AbstractRange, Int64, Int64}"><code class="md-code-inline">_band_range</code></a>, each <code class="md-code-inline">Threads.@threads :static</code> task accumulating its own <code class="md-code-inline">muladd</code>/<code class="md-code-inline">@simd</code> partial sum, landed in a fixed <code class="md-code-inline">Threads.nthreads()</code>-length buffer and summed serially once every task has returned. Where a <code class="md-code-inline">:static</code> loop cannot start (<a href="../../internals/utils/#Bramble._static_or_serial-Union{Tuple{N}, Tuple{G}, Tuple{F}, Tuple{F, G, Vararg{Any, N}}} where {F, G, N}"><code class="md-code-inline">_static_or_serial</code></a>) the same bands run in turn on the calling task, through the same <a href="../../internals/utils/#Bramble._dot_band-Tuple{Any, Any, Any, Any, Int64, Int64}"><code class="md-code-inline">_dot_band</code></a>, so the value is unchanged bitwise.</p>
-<p>The buffer&#39;s size depends only on the thread count, never on <code class="md-code-inline">length(u)</code>, so allocation is independent of vector length rather than zero (gpena/Bramble.jl#301 Departures) – no size threshold falls back to the serial kernel below a cutoff, and no new dependency is pulled in to avoid the buffer.</p>
-<p>Kept in an isolated function, the same reason <a href="../../internals/utils/#Bramble._threaded_for!-Union{Tuple{F}, Tuple{Any, Any, F}} where F"><code class="md-code-inline">_threaded_for!</code></a> is, to keep <code class="md-code-inline">Threads.@threads</code> from boxing a closure over <code class="md-code-inline">u</code>/<code class="md-code-inline">v</code>/<code class="md-code-inline">w</code> on paths that execute serially.</p>
+<p>The buffer&#39;s size depends only on the thread count, never on <code class="md-code-inline">length(u)</code>, so allocation is independent of vector length rather than zero. No size threshold falls back to the serial kernel below a cutoff, and no new dependency is pulled in to avoid the buffer.</p>
+<p>Kept in an isolated function, the same reason <a href="../../internals/utils/#Bramble._threaded_for!-Union{Tuple{F}, Tuple{Any, Any, F}} where F"><code class="md-code-inline">_threaded_for!</code></a> is, to keep <code class="md-code-inline">Threads.@threads</code> from boxing a closure over <code class="md-code-inline">u</code>/<code class="md-code-inline">w</code>/<code class="md-code-inline">v</code> on paths that execute serially.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">DimensionMismatch</code>: If <code class="md-code-inline">length(u)</code>, <code class="md-code-inline">length(v)</code>, and <code class="md-code-inline">length(w)</code> do not match.</p>
+<li><p><code class="md-code-inline">DimensionMismatch</code>: If <code class="md-code-inline">length(u)</code>, <code class="md-code-inline">length(w)</code>, and <code class="md-code-inline">length(v)</code> do not match.</p>
 </li>
 </ul>
 </div>
 </div>
-<div class="md-docstring" id="Bramble._threaded_dot_masked-Tuple{AbstractVector, AbstractVector, AbstractVector, BitVector}">
+<div class="md-docstring" id="Bramble._threaded_dot_masked-Tuple{AbstractVector, AbstractVector, AbstractVector, Union{Bramble.MarkedIndicesUnion, BitVector}}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble._threaded_dot_masked</code> — <span class="md-docstring-sig">Tuple{AbstractVector, AbstractVector, AbstractVector, BitVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L851-L872" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble._threaded_dot_masked</code> — <span class="md-docstring-sig">Tuple{AbstractVector, AbstractVector, AbstractVector, Union{Bramble.MarkedIndicesUnion, BitVector}}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L857-L877" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::BitVector) -&gt; Real
-_threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, mask::MarkedIndicesUnion) -&gt; Real</code></pre>
+<pre><code class="language-julia">_threaded_dot_masked(u::AbstractVector, w::AbstractVector, v::AbstractVector, mask::Union{BitVector, MarkedIndicesUnion}) -&gt; Number</code></pre>
 </div>
 <p><a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>&#39;s own counterpart of <a href="../../internals/space/#Bramble._dot_masked-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, BitVector}} where D"><code class="md-code-inline">_dot_masked</code></a>: partitions the mask&#39;s 64-bit <em>words</em> (not <code class="md-code-inline">1:length(u)</code>) into <code class="md-code-inline">Threads.nthreads()</code> static bands, so the work stays proportional to the number of set bits rather than to <code class="md-code-inline">length(u)</code> – masks here are typically a mesh marker such as <code class="md-code-inline">:boundary</code>, <code class="md-code-inline">O(perimeter)</code> set bits inside an <code class="md-code-inline">O(n^D)</code> index range, and walking every index (as an earlier version of this function did) turned that sparsity into a slowdown under <code class="md-code-inline">CpuThreaded</code> relative to plain <code class="md-code-inline">CpuSerial</code>.</p>
-<p>Each task loads its band&#39;s words once (<code class="md-code-inline">mask.chunks[w]</code> for a <code class="md-code-inline">BitVector</code>, joined across markers via <code class="md-code-inline">_reduce_or_chunk</code> for a <a href="../../internals/utils/#Bramble.MarkedIndicesUnion"><code class="md-code-inline">MarkedIndicesUnion</code></a>), skips whole zero words, and walks a nonzero word&#39;s set bits with <code class="md-code-inline">trailing_zeros</code>/<code class="md-code-inline">word &amp; (word - 1)</code>, the same walk <a href="../../internals/utils/#Bramble.MarkedIndices"><code class="md-code-inline">MarkedIndices</code></a>/<a href="../../internals/utils/#Bramble.MarkedIndicesUnion"><code class="md-code-inline">MarkedIndicesUnion</code></a> use. No bounds guard against <code class="md-code-inline">length(u)</code> is needed for the padding bits of the final word, for the same reason <a href="../../internals/utils/#Bramble.MarkedIndices"><code class="md-code-inline">MarkedIndices</code></a> needs none: a <code class="md-code-inline">BitVector</code>&#39;s own invariant guarantees they are zero, and a <a href="../../internals/utils/#Bramble.MarkedIndicesUnion"><code class="md-code-inline">MarkedIndicesUnion</code></a> ORs only <code class="md-code-inline">BitVector</code>s of that same length together.</p>
+<p>Each task loads its band&#39;s words once (<code class="md-code-inline">_mask_word</code>: <code class="md-code-inline">mask.chunks[w]</code> for a <code class="md-code-inline">BitVector</code>, joined across markers for a <a href="../../internals/utils/#Bramble.MarkedIndicesUnion"><code class="md-code-inline">MarkedIndicesUnion</code></a>), skips whole zero words, and walks a nonzero word&#39;s set bits with <code class="md-code-inline">trailing_zeros</code>/<code class="md-code-inline">word &amp; (word - 1)</code>, the same walk <a href="../../internals/utils/#Bramble.MarkedIndices"><code class="md-code-inline">MarkedIndices</code></a>/<a href="../../internals/utils/#Bramble.MarkedIndicesUnion"><code class="md-code-inline">MarkedIndicesUnion</code></a> use. No bounds guard against <code class="md-code-inline">length(u)</code> is needed for the padding bits of the final word, for the same reason <a href="../../internals/utils/#Bramble.MarkedIndices"><code class="md-code-inline">MarkedIndices</code></a> needs none: a <code class="md-code-inline">BitVector</code>&#39;s own invariant guarantees they are zero, and a <a href="../../internals/utils/#Bramble.MarkedIndicesUnion"><code class="md-code-inline">MarkedIndicesUnion</code></a> ORs only <code class="md-code-inline">BitVector</code>s of that same length together.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">DimensionMismatch</code>: If vector or mask lengths do not match.</p>
@@ -705,7 +596,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._threaded_for!-Union{Tuple{F}, Tuple{Any, Any, F}} where F">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._threaded_for!</code> — <span class="md-docstring-sig">Union{Tuple{F}, Tuple{Any, Any, F}} where F</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L345-L353" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L340-L348" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -719,7 +610,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._threaded_scatter_for!-Union{Tuple{G}, Tuple{Tuple, Any, G}} where G">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._threaded_scatter_for!</code> — <span class="md-docstring-sig">Union{Tuple{G}, Tuple{Tuple, Any, G}} where G</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L550-L558" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L540-L548" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -733,7 +624,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._throw_gpu_in_cpu_loop-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._throw_gpu_in_cpu_loop</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L114-L126" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L103-L115" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -756,7 +647,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._throw_locality_mismatch-Tuple{Bramble.HostLocality, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._throw_locality_mismatch</code> — <span class="md-docstring-sig">Tuple{Bramble.HostLocality, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L71-L92" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L60-L81" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -782,7 +673,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._write_components!-Tuple{Tuple{}, Tuple, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._write_components!</code> — <span class="md-docstring-sig">Tuple{Tuple{}, Tuple, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L494-L500" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L484-L490" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -797,7 +688,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._batch_axis_for!-Tuple{Any, CartesianIndices, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_axis_for!</code> — <span class="md-docstring-sig">Tuple{Any, CartesianIndices, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L222-L227" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L211-L216" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -810,12 +701,12 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._batch_dot-Tuple{Any, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_dot</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L946-L951" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L923-L928" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_batch_dot(u, v, w) -&gt; Real</code></pre>
+<pre><code class="language-julia">_batch_dot(u, w, v) -&gt; Number</code></pre>
 </div>
 <p><a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>&#39;s counterpart of <a href="../../internals/space/#Bramble._dot-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector}} where D"><code class="md-code-inline">_dot</code></a>, filled by <code class="md-code-inline">BramblePolyesterExt</code>. The only <code class="md-code-inline">src/</code> method errors naming Polyester.</p>
 </div>
@@ -823,12 +714,12 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._batch_dot_masked-NTuple{4, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_dot_masked</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L956-L961" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L933-L938" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_batch_dot_masked(u, v, w, mask) -&gt; Real</code></pre>
+<pre><code class="language-julia">_batch_dot_masked(u, w, v, mask) -&gt; Number</code></pre>
 </div>
 <p><a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>&#39;s counterpart of <a href="../../internals/space/#Bramble._dot_masked-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, BitVector}} where D"><code class="md-code-inline">_dot_masked</code></a>, filled by <code class="md-code-inline">BramblePolyesterExt</code>. The only <code class="md-code-inline">src/</code> method errors naming Polyester.</p>
 </div>
@@ -836,7 +727,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._batch_for!-Tuple{Any, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_for!</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L211-L217" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L200-L206" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -849,7 +740,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._batch_scatter_for!-Tuple{Tuple, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_scatter_for!</code> — <span class="md-docstring-sig">Tuple{Tuple, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L576-L581" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L566-L571" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -863,7 +754,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._gpu_for!-NTuple{4, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._gpu_for!</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L150-L167" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L139-L156" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -882,7 +773,7 @@ _threaded_dot_masked(u::AbstractVector, v::AbstractVector, w::AbstractVector, ma
 <div class="md-docstring" id="Bramble._gpu_scatter_for!-NTuple{4, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._gpu_scatter_for!</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L170-L180" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/linear_algebra.jl#L159-L169" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1004,7 +895,6 @@ true</code></pre>
       <div class="md-toc-inner">
         <p class="md-toc-title">On this page</p>
           <a class="md-toc-link md-toc-h2" href="#Backend">Backend</a>
-          <a class="md-toc-link md-toc-h2" href="#Device-dispatch">Device dispatch</a>
           <a class="md-toc-link md-toc-h2" href="#Linear-algebra">Linear algebra</a>
           <a class="md-toc-link md-toc-h2" href="#The-CpuPolyester-sweep-hooks">The CpuPolyester sweep hooks</a>
           <a class="md-toc-link md-toc-h2" href="#The-GpuPolicy-sweep-hooks">The GpuPolicy sweep hooks</a>
@@ -1027,6 +917,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=bf71aa26"></script>
+  <script src="../../assets/materialdocs.js?v=8aa04e60"></script>
 </body>
 </html>

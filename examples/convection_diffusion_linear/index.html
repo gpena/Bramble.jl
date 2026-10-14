@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Convection-diffusion equation — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=a86388f7">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=7b256bc5">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Convection-diffusion equation — Bramble.jl">
   <meta property="og:title" content="Convection-diffusion equation — Bramble.jl">
@@ -93,10 +93,10 @@
 <p>One more linear operator, built the same way as the <a href="../../examples/poisson_linear/">Poisson example</a>: diffusion plus a constant convective term, in 1D, 2D and 3D. Every number and every plot below was produced by the code shown.</p>
 <h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-math md-math-display">
-\[-\nabla \cdot (\epsilon \nabla u) + b \, \mathbf{1} \cdot \nabla u = g \text{ in } \Omega,
+\[-\nabla \cdot (\epsilon \nabla u) - b \, \mathbf{1} \cdot \nabla u = g \text{ in } \Omega,
 \qquad u = u_{\text{exact}} \text{ on } \partial\Omega, \qquad \Omega = (0,1)^D\]
 </div>
-<p>with a constant diffusion coefficient <span class="md-math md-math-inline">\(\epsilon\)</span> and a constant convective speed <span class="md-math md-math-inline">\(b\)</span> along every coordinate direction at once: the vector field <span class="md-math md-math-inline">\(b(1,\dots,1)\)</span>. The manufactured solution is the same as the other two examples, <span class="md-math md-math-inline">\(u_{\text{exact}}(x) = e^{\sum_i x_i}\)</span>, so <span class="md-math md-math-inline">\(g = -D\,(b+\epsilon)\,u_{\text{exact}}\)</span>.</p>
+<p>with a constant diffusion coefficient <span class="md-math md-math-inline">\(\epsilon\)</span> and a constant convective speed <span class="md-math md-math-inline">\(b\)</span> along every coordinate direction at once: the vector field <span class="md-math md-math-inline">\(-b(1,\dots,1)\)</span>. The manufactured solution is the same as the other two examples, <span class="md-math md-math-inline">\(u_{\text{exact}}(x) = e^{\sum_i x_i}\)</span>, so <span class="md-math md-math-inline">\(g = -D\,(b+\epsilon)\,u_{\text{exact}}\)</span>.</p>
 <h2 id="Adding-the-convective-term" class="md-heading">Adding the convective term<a href="#Adding-the-convective-term" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -881,6 +881,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=a86388f7"></script>
+  <script src="../../assets/materialdocs.js?v=7b256bc5"></script>
 </body>
 </html>

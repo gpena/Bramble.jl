@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Spaces — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=c30a65bc">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=8f919936">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Spaces — Bramble.jl">
   <meta property="og:title" content="Spaces — Bramble.jl">
@@ -221,7 +221,7 @@ norm_value = normₕ(uₕ)  # Equivalent to sqrt(innerₕ(uₕ, uₕ))</code></p
 <pre><code class="language-julia">Innerplus &lt;: InnerProductType</code></pre>
 </div>
 <p>Selector for modified discrete <span class="md-math md-math-inline">\(L^2\)</span> inner products using staggered grid spacings.</p>
-<p>These inner products use a combination of forward spacings <span class="md-math md-math-inline">\(h_i\)</span> and centered cell  widths <span class="md-math md-math-inline">\(h_{i+1/2}\)</span>, appearing naturally in energy estimates for finite difference  operators. Different spatial directions may have different weight formulas.</p>
+<p>These inner products use a combination of backward spacings <span class="md-math md-math-inline">\(h_i = x_i - x_{i-1}\)</span> (zero at the first node) and cell widths <span class="md-math md-math-inline">\(h_{i+1/2}\)</span>, appearing naturally in energy estimates for finite difference operators. Different spatial directions may have different weight formulas.</p>
 <p>The modified inner products are used for:</p>
 <ul class="md-list-tight">
 <li><p>Proving discrete energy stability</p>
@@ -250,7 +250,7 @@ result_y = inner₊ᵧ(uₕ, vₕ)  # Modified inner product, y-direction</code>
 <div class="md-docstring" id="Bramble.mesh_type">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.mesh_type</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L255-L260" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L256-L261" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -316,7 +316,7 @@ SpaceWeights{D, T, VT}(innerh, innerplus, aligned::NTuple{D, VT}, cellfactor::NT
 <div class="md-docstring" id="Base.eltype-Union{Tuple{Bramble.ScalarGridSpace{D, T, VT, MType} where {VT&lt;:AbstractVector{T}, MType&lt;:Bramble.AbstractMeshType{D}}}, Tuple{T}, Tuple{D}} where {D, T}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.eltype</code> — <span class="md-docstring-sig">Union{Tuple{Bramble.ScalarGridSpace{D, T, VT, MType} where {VT&lt;:AbstractVector{T}, MType&lt;:Bramble.AbstractMeshType{D}}}, Tuple{T}, Tuple{D}} where {D, T}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L615-L622" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L611-L618" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -328,23 +328,10 @@ eltype(::Type{&lt;:ScalarGridSpace}) -&gt; Type</code></pre>
 <p>See also: <a href="../../api/utilities/#Bramble.backend"><code class="md-code-inline">backend</code></a></p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.__innerplus_weights!-Tuple{Any, Any, Any}">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.__innerplus_weights!</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L753-L757" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">__innerplus_weights!(policy, v, innerplus_per_component)</code></pre>
-</div>
-<p>Builds the weights for the modified discrete <span class="md-math md-math-inline">\(L^2\)</span> inner product on the space of grid functions <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a>. The result is stored in vector <code class="md-code-inline">v</code>.</p>
-</div>
-</div>
 <div class="md-docstring" id="Bramble._innerh_weights!-Tuple{Array, Bramble.AbstractMeshType{1}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._innerh_weights!</code> — <span class="md-docstring-sig">Tuple{Array, Bramble.AbstractMeshType{1}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L626-L630" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L622-L626" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -354,27 +341,10 @@ eltype(::Type{&lt;:ScalarGridSpace}) -&gt; Type</code></pre>
 <p>Builds the weights for the standard discrete <span class="md-math md-math-inline">\(L^2\)</span> inner product, <span class="md-math md-math-inline">\(inner_h(\cdot, \cdot)\)</span>, on the space of grid functions, following the order of the points provided by <code class="md-code-inline">indices(Ωₕ)</code>. The values are stored in vector <code class="md-code-inline">u</code>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble._innerplus_mean_weights!-Union{Tuple{VT}, Tuple{VT, Any}, Tuple{VT, Any, Int64}} where VT&lt;:Array">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble._innerplus_mean_weights!</code> — <span class="md-docstring-sig">Union{Tuple{VT}, Tuple{VT, Any}, Tuple{VT, Any, Int64}} where VT&lt;:Array</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L693-L728" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_innerplus_mean_weights!(u::VT, Ωₕ, component::Int = 1) where VT</code></pre>
-</div>
-<p>Builds a set of weights based on the half spacings, associated with the <code class="md-code-inline">component</code>-th direction, for the modified discrete <span class="md-math md-math-inline">\(L^2\)</span> inner product on the space of grid functions, following the order of the <a href="../../api/meshes/#Bramble.points"><code class="md-code-inline">points</code></a>. The values are stored in vector <code class="md-code-inline">u</code>.</p>
-<p><strong>The two boundary entries (gpena/Bramble.jl#236)</strong></p>
-<p><code class="md-code-inline">u[1]</code>/<code class="md-code-inline">u[N]</code> are <code class="md-code-inline">half_spacing(mesh_component, ·)</code> there – the boundary half-cell width, the same nonzero value <a href="../../api/meshes/#Bramble.cell_measure"><code class="md-code-inline">cell_measure</code></a> already uses for <code class="md-code-inline">innerₕ</code>&#39;s own weight – <strong>not</strong> zero. They used to be hand-zeroed, which matches neither the docstrings of <a href="../../api/inner_products/#Bramble.inner₊ₓ"><code class="md-code-inline">inner₊ₓ</code></a>/<a href="../../api/inner_products/#Bramble.inner₊ᵧ"><code class="md-code-inline">inner₊ᵧ</code></a>/<a href="../../api/inner_products/#Bramble.inner₊₂"><code class="md-code-inline">inner₊₂</code></a> (a sum over <em>every</em> transverse index, boundary included) nor <a href="../../api/spaces/#Bramble.weights"><code class="md-code-inline">weights</code></a>&#39;s own, and deleted real quadrature weight: a node on two or more boundary hyperplanes got zero weight from every staggered direction and was absent from the assembled operator entirely – the staggered Neumann Laplacian&#39;s kernel was larger than the physical one, with identically-zero rows at those nodes, and a free-surface elasticity stiffness matrix built the same way came out indefinite (negative eigenvalues), not merely singular.</p>
-<p><strong>Whether the zero was load-bearing for the discrete summation-by-parts identities was checked, not assumed</strong>, before this was changed: <code class="md-code-inline">test/space/sbp_identities.jl</code>&#39;s own property tests (1D/2D/3D, uniform and non-uniform meshes, Supposition-generated random grids) all still hold, unmodified, against this weight. The reason is structural, not coincidental – every one of those identities is stated for a test function vanishing on the boundary, and the boundary remainder a discrete integration by parts leaves behind is a function of that test function&#39;s own boundary values, not of this weight. With the test function already zero there, the remainder was already zero on its own account; the boundary zeroing this weight used to carry was redundant with that, never the thing making the identity hold. No boundary term needed writing out explicitly, because none was ever implicit in the weight to begin with.</p>
-<p>Fixing this also makes the natural (unconstrained, traction-free) Neumann boundary condition <code class="md-code-inline">inner₊</code> encodes correct: a scalar Neumann Poisson MMS on the old weight converged at order ≈1.04 (an inconsistent discretisation dressed as a working one); on this weight it is a clean order 2, matching every other Neumann/traction-free path in this package.</p>
-</div>
-</div>
 <div class="md-docstring" id="Bramble._innerplus_weights!-Union{Tuple{VT}, Tuple{VT, Any}, Tuple{VT, Any, Any}} where VT&lt;:Array">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._innerplus_weights!</code> — <span class="md-docstring-sig">Union{Tuple{VT}, Tuple{VT, Any}, Tuple{VT, Any, Any}} where VT&lt;:Array</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L663-L667" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L646-L650" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -387,7 +357,7 @@ eltype(::Type{&lt;:ScalarGridSpace}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.host_weights-Tuple{Bramble.ScalarGridSpace}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.host_weights</code> — <span class="md-docstring-sig">Tuple{Bramble.ScalarGridSpace}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L530-L551" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L526-L547" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -417,10 +387,36 @@ host_weights(w::SeparableWeights) -&gt; SeparableWeights</code></pre>
 <p>The <code class="md-code-inline">Int</code> spelling only accepts <code class="md-code-inline">1 &lt;= N &lt;= 3</code>, each branch-unswitched to a literal <code class="md-code-inline">Wₕ^Val(N)</code> call: Julia&#39;s return-type inference only union-splits up to 3 concrete types, so this is the largest range that stays inferrable even when <code class="md-code-inline">N</code> is a runtime value the compiler cannot constant-fold (e.g. threaded through a generic function argument). It also covers every mesh dimension this package supports (<code class="md-code-inline">Wₕ^dim(mesh)</code>). For <code class="md-code-inline">N &gt; 3</code>, call <code class="md-code-inline">Wₕ^Val(N)</code> directly, which has no upper bound.</p>
 </div>
 </div>
+<div class="md-docstring" id="Base.getindex-Tuple{Bramble.CompositeGridSpace, Int64}">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Base.getindex</code> — <span class="md-docstring-sig">Tuple{Bramble.CompositeGridSpace, Int64}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vector_gridspace.jl#L169-L174" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">getindex(Wₕ::CompositeGridSpace, i::Int) -&gt; AbstractSpaceType</code></pre>
+</div>
+<p>Returns the <code class="md-code-inline">i</code>-th top-level sub-space of <code class="md-code-inline">Wₕ</code>. It is itself a composite when <code class="md-code-inline">Wₕ</code> is nested. <code class="md-code-inline">leaf_count</code> counts the scalar leaves across all levels.</p>
+</div>
+</div>
+<div class="md-docstring" id="Base.length-Union{Tuple{Bramble.CompositeGridSpace{N}}, Tuple{N}} where N">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Base.length</code> — <span class="md-docstring-sig">Union{Tuple{Bramble.CompositeGridSpace{N}}, Tuple{N}} where N</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vector_gridspace.jl#L177-L182" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">length(Wₕ::CompositeGridSpace) -&gt; Int</code></pre>
+</div>
+<p>Returns the number of top-level sub-spaces of <code class="md-code-inline">Wₕ</code>. A nested composite counts its direct children; <code class="md-code-inline">leaf_count</code> counts the scalar leaves.</p>
+</div>
+</div>
 <div class="md-docstring" id="Bramble._shares_one_mesh-Tuple{Tuple}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._shares_one_mesh</code> — <span class="md-docstring-sig">Tuple{Tuple}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vector_gridspace.jl#L145-L157" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vector_gridspace.jl#L147-L159" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -434,7 +430,7 @@ host_weights(w::SeparableWeights) -&gt; SeparableWeights</code></pre>
 <div class="md-docstring" id="Bramble.leaf_count-Tuple{Bramble.ScalarGridSpace}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.leaf_count</code> — <span class="md-docstring-sig">Tuple{Bramble.ScalarGridSpace}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vector_gridspace.jl#L217-L222" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vector_gridspace.jl#L231-L236" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -447,7 +443,7 @@ host_weights(w::SeparableWeights) -&gt; SeparableWeights</code></pre>
 <div class="md-docstring" id="Bramble.leaf_spaces_offsets-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.leaf_spaces_offsets</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vector_gridspace.jl#L207-L214" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vector_gridspace.jl#L221-L228" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -461,7 +457,7 @@ host_weights(w::SeparableWeights) -&gt; SeparableWeights</code></pre>
 <div class="md-docstring" id="Base.copyto!-Tuple{Bramble.VectorElement, Bramble.VectorElement}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.copyto!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement, Bramble.VectorElement}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L499-L503" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L449-L455" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -469,12 +465,13 @@ host_weights(w::SeparableWeights) -&gt; SeparableWeights</code></pre>
 <pre><code class="language-julia">copyto!(dest::VectorElement, src::VectorElement) -&gt; VectorElement</code></pre>
 </div>
 <p>Copies the coefficients of <code class="md-code-inline">src</code> into <code class="md-code-inline">dest</code> in place, and returns <code class="md-code-inline">dest</code>.</p>
+<p><code class="md-code-inline">dest</code> and <code class="md-code-inline">src</code> must share one grid space (<code class="md-code-inline">===</code>); the size check alone is not enough.</p>
 </div>
 </div>
 <div class="md-docstring" id="Base.fill!-Tuple{Bramble.VectorElement, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.fill!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L90-L94" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L78-L82" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -484,16 +481,15 @@ host_weights(w::SeparableWeights) -&gt; SeparableWeights</code></pre>
 <p>Fills <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> <code class="md-code-inline">uₕ</code> with the value <code class="md-code-inline">α</code> and returns <code class="md-code-inline">uₕ</code>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Base.getindex-Union{Tuple{D}, Tuple{Bramble.VectorElement{var&quot;#s458&quot;, T} where {var&quot;#s458&quot;&lt;:(Bramble.ScalarGridSpace{D, T, VT, MType} where {T, VT&lt;:AbstractVector{T}, MType&lt;:Bramble.AbstractMeshType{D}}), T}, CartesianIndex{D}}} where D">
+<div class="md-docstring" id="Base.getindex-Tuple{Bramble.VectorElement{var&quot;#s466&quot;, T} where {var&quot;#s466&quot;&lt;:Bramble.ScalarGridSpace, T}, CartesianIndex}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Base.getindex</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Bramble.VectorElement{var&quot;#s458&quot;, T} where {var&quot;#s458&quot;&lt;:(Bramble.ScalarGridSpace{D, T, VT, MType} where {T, VT&lt;:AbstractVector{T}, MType&lt;:Bramble.AbstractMeshType{D}}), T}, CartesianIndex{D}}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L315-L348" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Base.getindex</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s466&quot;, T} where {var&quot;#s466&quot;&lt;:Bramble.ScalarGridSpace, T}, CartesianIndex}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L287-L319" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">getindex(uₕ::VectorElement{&lt;:ScalarGridSpace{D}}, I::CartesianIndex{D}) where {D}
-getindex(uₕ::VectorElement{&lt;:ScalarGridSpace}, I::CartesianIndex)</code></pre>
+<pre><code class="language-julia">getindex(uₕ::VectorElement{&lt;:ScalarGridSpace}, I::CartesianIndex)</code></pre>
 </div>
 <p>Access field degrees of freedom by grid coordinates through a <code class="md-code-inline">CartesianIndex</code>.</p>
 <p>Translates spatial grid coordinates directly into flat linear coefficient offsets using the mesh&#39;s <code class="md-code-inline">LinearIndices</code> with zero heap allocations and full <code class="md-code-inline">@inbounds</code> transparency.</p>
@@ -513,13 +509,13 @@ uₕ[I] == 42.0
 # A bare Integer multi-index is linear (trailing-index) indexing, not grid coordinates
 uₕ[5, 1] == parent(uₕ)[5]</code></pre>
 </div>
-<p>See also: <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a>, <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a>, <a href="../../api/spaces/#Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s34&quot;, T} where {var&quot;#s34&quot;&lt;:Bramble.ScalarGridSpace, T}}"><code class="md-code-inline">reshape</code></a></p>
+<p>See also: <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a>, <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a>, <a href="../../api/spaces/#Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s40&quot;, T} where {var&quot;#s40&quot;&lt;:Bramble.ScalarGridSpace, T}}"><code class="md-code-inline">reshape</code></a></p>
 </div>
 </div>
-<div class="md-docstring" id="Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s458&quot;, T} where {var&quot;#s458&quot;&lt;:Bramble.ScalarGridSpace, T}}">
+<div class="md-docstring" id="Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s466&quot;, T} where {var&quot;#s466&quot;&lt;:Bramble.ScalarGridSpace, T}}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Base.reshape</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s458&quot;, T} where {var&quot;#s458&quot;&lt;:Bramble.ScalarGridSpace, T}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L23-L35" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Base.reshape</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s466&quot;, T} where {var&quot;#s466&quot;&lt;:Bramble.ScalarGridSpace, T}}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L17-L28" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -533,19 +529,18 @@ uₕ[5, 1] == parent(uₕ)[5]</code></pre>
 <li><p>For an N-component vector space, it returns an N-tuple of arrays, one for each component.</p>
 </li>
 </ul>
-<p>This zero-argument form is specific to <code class="md-code-inline">VectorElement</code> and does not conflict with <code class="md-code-inline">reshape(A, dims)</code>; it does shadow <code class="md-code-inline">Base.reshape(A) = reshape(A, ())</code>&#39;s 0-dimensional result for this type specifically, in favor of the shape a grid function actually has. Replaces the former <code class="md-code-inline">to_matrix</code> outright (gpena/Bramble.jl#73).</p>
+<p>This zero-argument form is specific to <code class="md-code-inline">VectorElement</code> and does not conflict with <code class="md-code-inline">reshape(A, dims)</code>; it does shadow <code class="md-code-inline">Base.reshape(A) = reshape(A, ())</code>&#39;s 0-dimensional result for this type specifically, in favor of the shape a grid function actually has.</p>
 </div>
 </div>
-<div class="md-docstring" id="Base.setindex!-Union{Tuple{D}, Tuple{Bramble.VectorElement{var&quot;#s458&quot;, T} where {var&quot;#s458&quot;&lt;:(Bramble.ScalarGridSpace{D, T, VT, MType} where {T, VT&lt;:AbstractVector{T}, MType&lt;:Bramble.AbstractMeshType{D}}), T}, Any, CartesianIndex{D}}} where D">
+<div class="md-docstring" id="Base.setindex!-Tuple{Bramble.VectorElement{var&quot;#s466&quot;, T} where {var&quot;#s466&quot;&lt;:Bramble.ScalarGridSpace, T}, Any, CartesianIndex}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Base.setindex!</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Bramble.VectorElement{var&quot;#s458&quot;, T} where {var&quot;#s458&quot;&lt;:(Bramble.ScalarGridSpace{D, T, VT, MType} where {T, VT&lt;:AbstractVector{T}, MType&lt;:Bramble.AbstractMeshType{D}}), T}, Any, CartesianIndex{D}}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L365-L383" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Base.setindex!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s466&quot;, T} where {var&quot;#s466&quot;&lt;:Bramble.ScalarGridSpace, T}, Any, CartesianIndex}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L328-L345" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">setindex!(uₕ::VectorElement{&lt;:ScalarGridSpace{D}}, val, I::CartesianIndex{D}) where {D} -&gt; VectorElement
-setindex!(uₕ::VectorElement{&lt;:ScalarGridSpace}, val, I::CartesianIndex) -&gt; VectorElement</code></pre>
+<pre><code class="language-julia">setindex!(uₕ::VectorElement{&lt;:ScalarGridSpace}, val, I::CartesianIndex) -&gt; VectorElement</code></pre>
 </div>
 <p>Mutate field degrees of freedom by grid coordinates through a <code class="md-code-inline">CartesianIndex</code>, in-place.</p>
 <p>Translates spatial grid coordinates directly into flat linear coefficient offsets using the mesh&#39;s <code class="md-code-inline">LinearIndices</code> with zero heap allocations and full <code class="md-code-inline">@inbounds</code> transparency.</p>
@@ -556,7 +551,7 @@ setindex!(uₕ::VectorElement{&lt;:ScalarGridSpace}, val, I::CartesianIndex) -&g
 <div class="md-docstring" id="Bramble._batch_broadcast!-Tuple{Any, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_broadcast!</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L556-L562" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L508-L514" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -569,7 +564,7 @@ setindex!(uₕ::VectorElement{&lt;:ScalarGridSpace}, val, I::CartesianIndex) -&g
 <div class="md-docstring" id="Bramble._find_vec_in_broadcast-Tuple{Base.Broadcast.Broadcasted}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._find_vec_in_broadcast</code> — <span class="md-docstring-sig">Tuple{Base.Broadcast.Broadcasted}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L436-L464" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L389-L417" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -608,7 +603,7 @@ setindex!(uₕ::VectorElement{&lt;:ScalarGridSpace}, val, I::CartesianIndex) -&g
 <div class="md-docstring" id="Bramble.space_type-Union{Tuple{Type{&lt;:Bramble.VectorElement{S, T} where T}}, Tuple{S}} where S">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.space_type</code> — <span class="md-docstring-sig">Union{Tuple{Type{&lt;:Bramble.VectorElement{S, T} where T}}, Tuple{S}} where S</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L50-L66" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L39-L55" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -631,7 +626,7 @@ space_type(uₕ) === typeof(Wₕ)          # true</code></pre>
 <div class="md-docstring" id="Bramble.CellAverage">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.CellAverage</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L47-L52" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L43-L48" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -644,7 +639,7 @@ space_type(uₕ) === typeof(Wₕ)          # true</code></pre>
 <div class="md-docstring" id="Bramble.PointValue">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.PointValue</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L38-L42" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L34-L38" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -657,7 +652,7 @@ space_type(uₕ) === typeof(Wₕ)          # true</code></pre>
 <div class="md-docstring" id="Bramble.ProjectionRule">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ProjectionRule</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L29-L35" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L25-L31" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -670,7 +665,7 @@ space_type(uₕ) === typeof(Wₕ)          # true</code></pre>
 <div class="md-docstring" id="Bramble._device_backend-Tuple{Bramble.Backend}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._device_backend</code> — <span class="md-docstring-sig">Tuple{Bramble.Backend}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L221-L226" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L217-L222" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -683,7 +678,7 @@ space_type(uₕ) === typeof(Wₕ)          # true</code></pre>
 <div class="md-docstring" id="Bramble._device_masked_project!-Tuple{Bramble.HostLocality, Vararg{Any, 4}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._device_masked_project!</code> — <span class="md-docstring-sig">Tuple{Bramble.HostLocality, Vararg{Any, 4}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L174-L183" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L170-L179" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -697,7 +692,7 @@ _device_masked_project!(loc, rule, raws::Tuple, sp, markers, ::Val{NC}) -&gt; Bo
 <div class="md-docstring" id="Bramble._device_project!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._device_project!</code> — <span class="md-docstring-sig">Union{Tuple{Bramble.HostLocality, Any, Any, Any}, Tuple{Bramble.HostLocality, Vararg{Any, 4}}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L110-L122" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L106-L118" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -710,7 +705,7 @@ _device_masked_project!(loc, rule, raws::Tuple, sp, markers, ::Val{NC}) -&gt; Bo
 <div class="md-docstring" id="Bramble._device_scatter_project!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._device_scatter_project!</code> — <span class="md-docstring-sig">Union{Tuple{Bramble.HostLocality, Any, Any, Any, Val}, Tuple{Bramble.HostLocality, Any, Any, Any, Val, Any}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L126-L132" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L122-L128" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -723,7 +718,7 @@ _device_masked_project!(loc, rule, raws::Tuple, sp, markers, ::Val{NC}) -&gt; Bo
 <div class="md-docstring" id="Bramble._marker_index_list-Union{Tuple{N}, Tuple{AbstractArray, Any, NTuple{N, Symbol}}} where N">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._marker_index_list</code> — <span class="md-docstring-sig">Union{Tuple{N}, Tuple{AbstractArray, Any, NTuple{N, Symbol}}} where N</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L151-L160" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L147-L156" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -741,7 +736,7 @@ _device_masked_project!(loc, rule, raws::Tuple, sp, markers, ::Val{NC}) -&gt; Bo
 <div class="md-docstring" id="Bramble._offload_backend-Union{Tuple{Bramble.Backend{VT, MT, EP}}, Tuple{EP}, Tuple{MT}, Tuple{VT}} where {VT, MT, EP}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._offload_backend</code> — <span class="md-docstring-sig">Union{Tuple{Bramble.Backend{VT, MT, EP}}, Tuple{EP}, Tuple{MT}, Tuple{VT}} where {VT, MT, EP}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L211-L216" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L207-L212" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -754,7 +749,7 @@ _device_masked_project!(loc, rule, raws::Tuple, sp, markers, ::Val{NC}) -&gt; Bo
 <div class="md-docstring" id="Bramble._offload_project!-Union{Tuple{N}, Tuple{Bramble.Backend, Any, Any, Any, NTuple{N, Symbol}}} where N">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._offload_project!</code> — <span class="md-docstring-sig">Union{Tuple{N}, Tuple{Bramble.Backend, Any, Any, Any, NTuple{N, Symbol}}} where N</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L240-L248" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L236-L244" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -768,7 +763,7 @@ _offload_project!(db, rule, raws::Tuple, sp, markers, ::Val{NC}) -&gt; Bool</cod
 <div class="md-docstring" id="Bramble._on_device-Tuple{Any, Tuple}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._on_device</code> — <span class="md-docstring-sig">Tuple{Any, Tuple}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L229-L234" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L225-L230" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -781,7 +776,7 @@ _offload_project!(db, rule, raws::Tuple, sp, markers, ::Val{NC}) -&gt; Bool</cod
 <div class="md-docstring" id="Bramble._rule_component">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._rule_component</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L78-L83" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L74-L79" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -794,7 +789,7 @@ _offload_project!(db, rule, raws::Tuple, sp, markers, ::Val{NC}) -&gt; Bool</cod
 <div class="md-docstring" id="Bramble._rule_kernel">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._rule_kernel</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L60-L67" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L56-L63" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -807,7 +802,7 @@ _offload_project!(db, rule, raws::Tuple, sp, markers, ::Val{NC}) -&gt; Bool</cod
 <div class="md-docstring" id="Bramble._rule_scatter_kernel">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._rule_scatter_kernel</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L70-L75" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L66-L71" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -820,7 +815,7 @@ _offload_project!(db, rule, raws::Tuple, sp, markers, ::Val{NC}) -&gt; Bool</cod
 <div class="md-docstring" id="Bramble.project!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.project!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L302-L311" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/projection.jl#L296-L305" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -834,7 +829,7 @@ _offload_project!(db, rule, raws::Tuple, sp, markers, ::Val{NC}) -&gt; Bool</cod
 <div class="md-docstring" id="Bramble._device_project!-2">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._device_project!</code> — <span class="md-docstring-sig">Union{Tuple{Bramble.DeviceLocality, Bramble.PointValue, AbstractVector, Bramble.ScalarGridSpace{1, T, VT, MType} where {T, VT&lt;:AbstractVector{T}, MType&lt;:Bramble.AbstractMeshType{1}}}, Tuple{Bramble.DeviceLocality, Bramble.PointValue, AbstractVector, Bramble.ScalarGridSpace{1, T, VT, MType} where {T, VT&lt;:AbstractVector{T}, MType&lt;:Bramble.AbstractMeshType{1}}, Any}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L190-L201" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L187-L198" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -848,7 +843,7 @@ _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::Sc
 <div class="md-docstring" id="Bramble._device_scatter_project!-Union{Tuple{NC}, Tuple{Bramble.DeviceLocality, Bramble.PointValue, Tuple, Any, Val{NC}}, Tuple{Bramble.DeviceLocality, Bramble.PointValue, Tuple, Any, Val{NC}, Any}} where NC">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._device_scatter_project!</code> — <span class="md-docstring-sig">Union{Tuple{NC}, Tuple{Bramble.DeviceLocality, Bramble.PointValue, Tuple, Any, Val{NC}}, Tuple{Bramble.DeviceLocality, Bramble.PointValue, Tuple, Any, Val{NC}, Any}} where NC</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L220-L231" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L217-L228" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -861,7 +856,7 @@ _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::Sc
 <div class="md-docstring" id="Bramble._launch_restriction!-NTuple{5, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_restriction!</code> — <span class="md-docstring-sig">NTuple{5, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L124-L136" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L121-L133" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -879,7 +874,7 @@ _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::Sc
 <div class="md-docstring" id="Bramble._launch_restriction_nd!-NTuple{6, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_restriction_nd!</code> — <span class="md-docstring-sig">NTuple{6, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L159-L169" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L156-L166" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -897,7 +892,7 @@ _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::Sc
 <div class="md-docstring" id="Bramble._launch_restriction_scatter!-NTuple{5, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_restriction_scatter!</code> — <span class="md-docstring-sig">NTuple{5, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L139-L149" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L136-L146" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -915,7 +910,7 @@ _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::Sc
 <div class="md-docstring" id="Bramble._launch_restriction_scatter_nd!-NTuple{6, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_restriction_scatter_nd!</code> — <span class="md-docstring-sig">NTuple{6, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L172-L183" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L169-L180" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -933,7 +928,7 @@ _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::Sc
 <div class="md-docstring" id="Bramble.AVG_QUAD_POINTS">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.AVG_QUAD_POINTS</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L368-L389" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L345-L366" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -956,7 +951,7 @@ _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::Sc
 <div class="md-docstring" id="Bramble._cell_average-Union{Tuple{T}, Tuple{NQ}, Tuple{Any, AbstractVector, CartesianIndex{1}, NTuple{NQ, T}, NTuple{NQ, T}}} where {NQ, T}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._cell_average</code> — <span class="md-docstring-sig">Union{Tuple{T}, Tuple{NQ}, Tuple{Any, AbstractVector, CartesianIndex{1}, NTuple{NQ, T}, NTuple{NQ, T}}} where {NQ, T}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L429-L460" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L406-L438" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -965,7 +960,7 @@ _device_project!(::DeviceLocality, rule::PointValue, raw::AbstractVector, sp::Sc
 _cell_average(f, x::AbstractVector, i::Int, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}) where {NQ, T}
 _cell_average(f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::NTuple{NQ, T}, wts::NTuple{NQ, T}) where {D, NQ, T}</code></pre>
 </div>
-<p><code class="md-code-inline">NQ</code>-point Gauss-Legendre average of <code class="md-code-inline">f</code> over the cell spanned by the half points around <code class="md-code-inline">idx</code>, along every axis at once. Scalar or composite (<code class="md-code-inline">NTuple</code>) by <code class="md-code-inline">f</code>&#39;s own return type: broadcasting <code class="md-code-inline">.+</code>/<code class="md-code-inline">.*</code> over a <code class="md-code-inline">Number</code> accumulator computes exactly the scalar arithmetic <code class="md-code-inline">+</code>/<code class="md-code-inline">*</code> would, and over an <code class="md-code-inline">NTuple</code> accumulator the per-component sum, so no <code class="md-code-inline">::Val{NC}</code> or caller-built seed is needed to tell the two apart (gpena/Bramble.jl#102, #148). The accumulator is seeded with the zero of the first weighted term <code class="md-code-inline">wts[1] .* f(pt)</code> rather than <code class="md-code-inline">zero(T)</code>, so the result is the promotion of <code class="md-code-inline">T</code> (the mesh&#39;s element type) and <code class="md-code-inline">f</code>&#39;s return type: a <code class="md-code-inline">ForwardDiff.Dual</code> under AD stays a <code class="md-code-inline">Dual</code> (gpena/Bramble.jl#148), and an <code class="md-code-inline">f</code> narrower than the mesh type (<code class="md-code-inline">Int</code>, or <code class="md-code-inline">Float32</code> on a <code class="md-code-inline">Float64</code> mesh) gives a sum whose type does not change mid-loop (gpena/Bramble.jl#523).</p>
+<p><code class="md-code-inline">NQ</code>-point Gauss-Legendre average of <code class="md-code-inline">f</code> over the cell spanned by the half points around <code class="md-code-inline">idx</code>, along every axis at once. Scalar or composite (<code class="md-code-inline">NTuple</code>) by <code class="md-code-inline">f</code>&#39;s own return type: broadcasting <code class="md-code-inline">.+</code>/<code class="md-code-inline">.*</code> over a <code class="md-code-inline">Number</code> accumulator computes exactly the scalar arithmetic <code class="md-code-inline">+</code>/<code class="md-code-inline">*</code> would, and over an <code class="md-code-inline">NTuple</code> accumulator the per-component sum, so no <code class="md-code-inline">::Val{NC}</code> or caller-built seed is needed to tell the two apart (gpena/Bramble.jl#102, #148). The accumulator is seeded with the first weighted term itself rather than <code class="md-code-inline">zero(T)</code>, and the loop runs over the remaining nodes, so <code class="md-code-inline">f</code> is called exactly <code class="md-code-inline">NQ^D</code> times per cell (gpena/Bramble.jl#693) and the result is the promotion of <code class="md-code-inline">T</code> (the mesh&#39;s element type) and <code class="md-code-inline">f</code>&#39;s return type: a <code class="md-code-inline">ForwardDiff.Dual</code> under AD stays a <code class="md-code-inline">Dual</code> (gpena/Bramble.jl#148), and an <code class="md-code-inline">f</code> narrower than the mesh type (<code class="md-code-inline">Int</code>, or <code class="md-code-inline">Float32</code> on a <code class="md-code-inline">Float64</code> mesh) gives a sum whose type does not change mid-loop (gpena/Bramble.jl#523).</p>
 <p>A one-dimensional mesh answers <code class="md-code-inline">half_points</code> with a plain vector but indexes with <code class="md-code-inline">CartesianIndex{1}</code>; the <code class="md-code-inline">CartesianIndex{1}</code> method unwraps that to the <code class="md-code-inline">Int</code> the <code class="md-code-inline">x::AbstractVector</code> method takes, which is the only thing the 1D/<code class="md-code-inline">D</code>-dimensional split in this file ever did (gpena/Bramble.jl#69). The 1D, 2D and 3D methods are specialised for the meshes this package builds (<code class="md-code-inline">D &lt;= 3</code>); the generic <code class="md-code-inline">NTuple{D}</code> method exists for dispatch correctness at any <code class="md-code-inline">D</code> and is tested directly rather than through a mesh.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
@@ -988,7 +983,7 @@ _cell_average(f, x::NTuple{D}, idx::CartesianIndex{D}, nodes::NTuple{NQ, T}, wts
 <div class="md-docstring" id="Bramble._device_project!-3">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._device_project!</code> — <span class="md-docstring-sig">Union{Tuple{Bramble.DeviceLocality, Bramble.CellAverage, AbstractVector, Bramble.ScalarGridSpace{1, T, VT, MType} where {T, VT&lt;:AbstractVector{T}, MType&lt;:Bramble.AbstractMeshType{1}}}, Tuple{Bramble.DeviceLocality, Bramble.CellAverage, AbstractVector, Bramble.ScalarGridSpace{1, T, VT, MType} where {T, VT&lt;:AbstractVector{T}, MType&lt;:Bramble.AbstractMeshType{1}}, Any}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L296-L308" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L273-L285" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1002,7 +997,7 @@ _device_project!(::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::S
 <div class="md-docstring" id="Bramble._device_scatter_project!-Union{Tuple{NC}, Tuple{Bramble.DeviceLocality, Bramble.CellAverage, Tuple, Any, Val{NC}}, Tuple{Bramble.DeviceLocality, Bramble.CellAverage, Tuple, Any, Val{NC}, Any}} where NC">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._device_scatter_project!</code> — <span class="md-docstring-sig">Union{Tuple{NC}, Tuple{Bramble.DeviceLocality, Bramble.CellAverage, Tuple, Any, Val{NC}}, Tuple{Bramble.DeviceLocality, Bramble.CellAverage, Tuple, Any, Val{NC}, Any}} where NC</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L329-L337" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L306-L314" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1015,7 +1010,7 @@ _device_project!(::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::S
 <div class="md-docstring" id="Bramble._gauss_rule-Union{Tuple{T}, Tuple{N}, Tuple{Val{N}, Type{T}}} where {N, T}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._gauss_rule</code> — <span class="md-docstring-sig">Union{Tuple{T}, Tuple{N}, Tuple{Val{N}, Type{T}}} where {N, T}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L392-L402" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L369-L379" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1029,7 +1024,7 @@ _device_project!(::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::S
 <div class="md-docstring" id="Bramble._launch_cell_average!-NTuple{7, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_cell_average!</code> — <span class="md-docstring-sig">NTuple{7, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L225-L239" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L202-L216" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1047,7 +1042,7 @@ _device_project!(::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::S
 <div class="md-docstring" id="Bramble._launch_cell_average_nd!-NTuple{8, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_cell_average_nd!</code> — <span class="md-docstring-sig">NTuple{8, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L264-L274" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L241-L251" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1065,7 +1060,7 @@ _device_project!(::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::S
 <div class="md-docstring" id="Bramble._launch_cell_average_scatter!-NTuple{7, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_cell_average_scatter!</code> — <span class="md-docstring-sig">NTuple{7, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L242-L252" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L219-L229" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1083,7 +1078,7 @@ _device_project!(::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::S
 <div class="md-docstring" id="Bramble._launch_cell_average_scatter_nd!-NTuple{8, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_cell_average_scatter_nd!</code> — <span class="md-docstring-sig">NTuple{8, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L279-L289" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L256-L266" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1101,7 +1096,7 @@ _device_project!(::DeviceLocality, rule::CellAverage, raw::AbstractVector, sp::S
 <div class="md-docstring" id="Bramble.ShiftNode">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ShiftNode</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L431-L439" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L429-L437" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1144,7 +1139,7 @@ result = I₂ ⊗ I₃  # 6×6 identity matrix</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">_Eye(be::Backend, npts, ::Val{i})</code></pre>
 </div>
-<p>Internal helper to create identity or shifted diagonal matrices, in the matrix type the backend <code class="md-code-inline">be</code> chose, routed through <a href="../../internals/utils/#Bramble.backend_eye-Tuple{Bramble.Backend, Integer}"><code class="md-code-inline">backend_eye</code></a>/<code class="md-code-inline">matrix_type(be)</code> rather than a package-specific lazy type, so the result always matches whatever <code class="md-code-inline">matrix_type</code> the caller&#39;s backend picked.</p>
+<p>Internal helper to create identity or shifted diagonal matrices, in the matrix type the backend <code class="md-code-inline">be</code> chose, routed through <a href="../../api/utilities/#Bramble.backend_eye"><code class="md-code-inline">backend_eye</code></a>/<code class="md-code-inline">matrix_type(be)</code> rather than a package-specific lazy type, so the result always matches whatever <code class="md-code-inline">matrix_type</code> the caller&#39;s backend picked.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">be::Backend</code>: the backend whose <code class="md-code-inline">matrix_type</code> the result is built in.</p>
@@ -1167,7 +1162,7 @@ result = I₂ ⊗ I₃  # 6×6 identity matrix</code></pre>
 <div class="md-docstring" id="Bramble._shift_band!-Union{Tuple{DIM}, Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Bramble.GridDirection, Val{DIM}, Int64, Int64}} where {D, DIM}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._shift_band!</code> — <span class="md-docstring-sig">Union{Tuple{DIM}, Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Bramble.GridDirection, Val{DIM}, Int64, Int64}} where {D, DIM}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L207-L214" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L205-L212" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1180,7 +1175,7 @@ result = I₂ ⊗ I₃  # 6×6 identity matrix</code></pre>
 <div class="md-docstring" id="Bramble._throw_shift_dim_type_error-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._throw_shift_dim_type_error</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L445-L452" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L443-L451" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1188,13 +1183,13 @@ result = I₂ ⊗ I₃  # 6×6 identity matrix</code></pre>
 <pre><code class="language-julia">shift_op(op::LazyOp{D}, ::Val{Dim}, amount::Int) where {D, Dim}
 shift_op(op::LazyOp{D}, dim::Int, amount::Int) where D</code></pre>
 </div>
-<p>Shifts the stencil of <code class="md-code-inline">op</code> by <code class="md-code-inline">amount</code> grid points in dimension <code class="md-code-inline">Dim</code> (or <code class="md-code-inline">dim</code>). A direction that is not an <code class="md-code-inline">Int</code> in <code class="md-code-inline">1:D</code> throws an <code class="md-code-inline">ArgumentError</code>. The <code class="md-code-inline">Int</code> direction forwards to the <code class="md-code-inline">Val</code> form, so a literal direction still gives a concrete node type.</p>
+<p>Shifts the stencil of <code class="md-code-inline">op</code> by <code class="md-code-inline">amount</code> grid points in dimension <code class="md-code-inline">Dim</code> (or <code class="md-code-inline">dim</code>). A direction that is a <code class="md-code-inline">Bool</code>, not an integer, or outside <code class="md-code-inline">1:D</code> throws an <code class="md-code-inline">ArgumentError</code>. The <code class="md-code-inline">Int</code> direction forwards to the <code class="md-code-inline">Val</code> form, so a literal direction still gives a concrete node type.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.kronecker_operator_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.kronecker_operator_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L170-L184" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L168-L182" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1208,14 +1203,14 @@ shift_op(op::LazyOp{D}, dim::Int, amount::Int) where D</code></pre>
 <div class="md-docstring" id="Bramble.shift-Union{Tuple{i}, Tuple{SHIFT_DIM}, Tuple{Bramble.AbstractMeshType, Val{SHIFT_DIM}, Val{i}}} where {SHIFT_DIM, i}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.shift</code> — <span class="md-docstring-sig">Union{Tuple{i}, Tuple{SHIFT_DIM}, Tuple{Bramble.AbstractMeshType, Val{SHIFT_DIM}, Val{i}}} where {SHIFT_DIM, i}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L109-L161" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/shift.jl#L106-L159" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">shift(Ωₕ::AbstractMeshType, ::Val{SHIFT_DIM}, ::Val{i})</code></pre>
 </div>
-<p>Returns the matrix that shifts a grid function by <code class="md-code-inline">i</code> points along direction <code class="md-code-inline">SHIFT_DIM</code>, as a sparse operator over the flattened degrees of freedom of <code class="md-code-inline">Ωₕ</code>.</p>
+<p>Returns the matrix that shifts a grid function by <code class="md-code-inline">i</code> points along direction <code class="md-code-inline">SHIFT_DIM</code>, in the backend&#39;s <code class="md-code-inline">matrix_type</code>, over the flattened degrees of freedom of <code class="md-code-inline">Ωₕ</code>.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">SHIFT_DIM</code>: the direction to shift along, <code class="md-code-inline">1</code> for <span class="md-math md-math-inline">\(x\)</span>, <code class="md-code-inline">2</code> for <span class="md-math md-math-inline">\(y\)</span>, <code class="md-code-inline">3</code> for <span class="md-math md-math-inline">\(z\)</span>.</p>
@@ -1246,14 +1241,14 @@ shift(Ωₕ, Val(2), Val(i))  ==  _Eye(be, n_y, Val(i)) ⊗ backend_eye(be, nₓ
 shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ * n_y)</code></pre>
 </div>
 <p><code class="md-code-inline">i == 0</code> short-circuits to the identity of the whole grid without building any Kronecker product.</p>
-<p>This is the building block of the difference, jump and average matrices: a backward difference is <code class="md-code-inline">shift(Ωₕ, dim, Val(0)) - shift(Ωₕ, dim, Val(-1))</code>, and the other families differ only in which pair of shifts they subtract or average.</p>
+<p>It builds the <code class="md-code-inline">S₊</code>/<code class="md-code-inline">S₋</code> matrix forms and the Kronecker oracle <a href="../../internals/space/#Bramble.kronecker_operator_matrix"><code class="md-code-inline">kronecker_operator_matrix</code></a>; the operator families&#39; own matrices come from <a href="../../internals/space/#Bramble.stencil_matrix-Union{Tuple{Dim}, Tuple{Bramble.AbstractMeshType, Bramble.StencilOp{Dim}}} where Dim"><code class="md-code-inline">stencil_matrix</code></a>.</p>
 <p>See also: <a href="../../internals/space/#Bramble.:⊗-Tuple{Any, Any}"><code class="md-code-inline">⊗</code></a>, <a href="../../internals/space/#Bramble.diff₋ₓ-Tuple{Any}"><code class="md-code-inline">diff₋ₓ</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.OperatorArgument">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.OperatorArgument</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L107-L119" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L108-L120" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1267,7 +1262,7 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 <div class="md-docstring" id="Bramble.StencilOp">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.StencilOp</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L244-L250" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L236-L242" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1280,7 +1275,7 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 <div class="md-docstring" id="Bramble._alias_bang_expr-NTuple{7, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._alias_bang_expr</code> — <span class="md-docstring-sig">NTuple{7, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L318-L338" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L310-L330" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1297,7 +1292,7 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 <div class="md-docstring" id="Bramble._alias_expr-NTuple{7, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._alias_expr</code> — <span class="md-docstring-sig">NTuple{7, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L382-L412" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L374-L404" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1316,7 +1311,7 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 <div class="md-docstring" id="Bramble._dimensional_expr-NTuple{6, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dimensional_expr</code> — <span class="md-docstring-sig">NTuple{6, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L563-L588" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L556-L578" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1325,7 +1320,7 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
                   opening_sentence = &quot;&quot;, source = nothing)</code></pre>
 </div>
 <p>Returns the expressions defining one family&#39;s dimensional entry point, as a <code class="md-code-inline">Vector{Expr}</code>: <code class="md-code-inline">alias_name(arg, d)</code> for <code class="md-code-inline">d</code> a <code class="md-code-inline">Val</code>, an <code class="md-code-inline">Int</code> or a <code class="md-code-inline">Symbol</code>.</p>
-<p>The name gpena/Bramble.jl#74 adds over machinery that was already there. Every family bottoms out in a <code class="md-code-inline">Val</code>-parameterised base function, and the 63 subscript aliases are one-line <code class="md-code-inline">Val</code> bindings over it; what was missing was a way to say &quot;this operator, along <em>that</em> direction&quot; with the direction a value. <code class="md-code-inline">sum(D₋(uₕ, d) for d in 1:D)</code> is the first dimension-agnostic form the package can express, and the subscripts stop being the only way in.</p>
+<p>Every family bottoms out in a <code class="md-code-inline">Val</code>-parameterised base function; this adds the entry point with the direction as a value, so <code class="md-code-inline">sum(D₋(uₕ, d) for d in 1:D)</code> is dimension-agnostic (gpena/Bramble.jl#74).</p>
 <p>The <code class="md-code-inline">Val</code> method is omitted when <code class="md-code-inline">alias_name</code> is <code class="md-code-inline">base_op_name</code> itself, as it is for <code class="md-code-inline">jump</code>: the family&#39;s own file already wrote that method, and generating it again would define <code class="md-code-inline">jump(arg, ::Val) = jump(arg, ::Val)</code>.</p>
 <p><code class="md-code-inline">alias_stem</code> is the family&#39;s subscript stem, which the docstring cross-references: it is <code class="md-code-inline">alias_name</code> for most families, but the averages put their entry point on the tuple-valued <code class="md-code-inline">Mₕ</code>/<code class="md-code-inline">M₊ₕ</code> while the per-coordinate aliases are still <code class="md-code-inline">Mₓ</code>/<code class="md-code-inline">M₊ₓ</code>, and <code class="md-code-inline">Mₕₓ</code> is not a name.</p>
 <p><code class="md-code-inline">opening_sentence</code> is the family&#39;s own prose template, substituted with <code class="md-code-inline">d</code> as the direction; the families that do not override it get the generic &quot;The <code class="md-code-inline">$dir_string</code> <code class="md-code-inline">$what</code> along the <code class="md-code-inline">d</code> direction, <span class="md-math md-math-inline">\($formula\)</span>.&quot; instead.</p>
@@ -1334,7 +1329,7 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 <div class="md-docstring" id="Bramble._grid_function_forms_expr-NTuple{4, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._grid_function_forms_expr</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L650-L680" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L640-L669" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1343,7 +1338,7 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
                           docstring = &quot;&quot;, source = nothing)</code></pre>
 </div>
 <p>Returns the expressions defining the three methods every directional operator family applies a grid function through, as a <code class="md-code-inline">Vector{Expr}</code>: <code class="md-code-inline">base_name!</code> on a scalar grid function, <code class="md-code-inline">base_name!</code> on a composite one, and the allocating <code class="md-code-inline">base_name</code> built on top of them.</p>
-<p>The three are byte-identical across the families apart from which applicator they call and what it takes before the direction (gpena/Bramble.jl#101); <code class="md-code-inline">difference.jl</code> and <code class="md-code-inline">average.jl</code> each generated them from their own <code class="md-code-inline">@eval</code> loop before this existed:</p>
+<p>The three are byte-identical across the families apart from which applicator they call and what it takes before the direction (gpena/Bramble.jl#101):</p>
 <div class="md-table-wrap">
 <table class="md-table">
 <thead>
@@ -1385,19 +1380,20 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 <div class="md-docstring" id="Bramble._operator_aliases_expr-NTuple{5, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._operator_aliases_expr</code> — <span class="md-docstring-sig">NTuple{5, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L710-L743" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L699-L730" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">_operator_aliases_expr(base_name, alias_stem, dir_string, what, formula;
-                       vectorial_alias = nothing, vectorial_note = &quot;&quot;,
-                       opening_sentence = &quot;&quot;, formula_note = &quot;&quot;, alias_note = &quot;&quot;,
-                       trailing_note = &quot;&quot;, bang_opening_sentence = &quot;&quot;, source = nothing)</code></pre>
+                       dispatch_alias = alias_stem, vectorial_alias = nothing,
+                       vectorial_dir_string = dir_string, vectorial_what = what,
+                       vectorial_note = &quot;&quot;, opening_sentence = &quot;&quot;, formula_note = &quot;&quot;,
+                       alias_note = &quot;&quot;, trailing_note = &quot;&quot;, bang_opening_sentence = &quot;&quot;,
+                       source = nothing)</code></pre>
 </div>
 <p>Returns the expressions defining one family&#39;s whole alias surface, as a <code class="md-code-inline">Vector{Expr}</code>: the per-coordinate <code class="md-code-inline">alias_stem</code> pair for every direction (<code class="md-code-inline">Dcₓ</code>/<code class="md-code-inline">Dcₓ!</code>, <code class="md-code-inline">Mᵧ</code>/<code class="md-code-inline">Mᵧ!</code>, …), the dimensional entry point <code class="md-code-inline">dispatch_alias(arg, d)</code>, and, when <code class="md-code-inline">vectorial_alias</code> is given, the <code class="md-code-inline">ₕ</code> alias over every coordinate at once.</p>
 <p><code class="md-code-inline">dispatch_alias</code> defaults to <code class="md-code-inline">alias_stem</code>, which is what every difference family wants: <code class="md-code-inline">D₋ₓ</code>, <code class="md-code-inline">D₋ᵧ</code>, <code class="md-code-inline">D₋₂</code> and <code class="md-code-inline">D₋(uₕ, d)</code>. The averages pass their tuple-valued alias instead, so that the family gains a direction argument without minting a bare <code class="md-code-inline">M</code> – the single most common local name in finite-element code, and one <code class="md-code-inline">using Bramble</code> would then reserve. Passing <code class="md-code-inline">nothing</code> skips the entry point altogether.</p>
-<p><a href="../../internals/space/#Bramble._alias_expr-NTuple{7, Any}"><code class="md-code-inline">_alias_expr</code></a>/<a href="../../internals/space/#Bramble._alias_bang_expr-NTuple{7, Any}"><code class="md-code-inline">_alias_bang_expr</code></a> and <a href="../../internals/space/#Bramble._vectorial_expr-NTuple{4, Any}"><code class="md-code-inline">_vectorial_expr</code></a> were already shared; the <em>loop</em> calling them was written out once per family in <code class="md-code-inline">difference.jl</code> and once more in <code class="md-code-inline">average.jl</code> (gpena/Bramble.jl#101). This is that loop.</p>
 <p>The five note keywords are prose templates rather than finished sentences: each may carry <code class="md-code-inline">{direction}</code> and <code class="md-code-inline">{suffix}</code>, substituted per alias by <a href="../../internals/space/#Bramble._subst-Tuple{AbstractString, Any, Any}"><code class="md-code-inline">_subst</code></a>. They were closures taking <code class="md-code-inline">(direction, suffix)</code> until gpena/Bramble.jl#258 – a macro sees the expression that would build a closure, never the closure itself, so the notes a family needs (&quot;over the averaged spacing&quot;, &quot;second order on a non-uniform grid, where <code class="md-code-inline">Dc{suffix}</code> is first&quot;) travel as string literals instead.</p>
 <p><code class="md-code-inline">vectorial_dir_string</code>/<code class="md-code-inline">vectorial_what</code> default to <code class="md-code-inline">dir_string</code>/<code class="md-code-inline">what</code> and exist for the families that describe the tuple-valued alias differently from the per-coordinate ones: <code class="md-code-inline">D̃</code>/<code class="md-code-inline">Dc</code>/<code class="md-code-inline">D̽</code> override every directional <code class="md-code-inline">opening_sentence</code> and so pass <code class="md-code-inline">dir_string</code> and <code class="md-code-inline">what</code> empty, while <code class="md-code-inline">D̃ₕ</code>/<code class="md-code-inline">Dcₕ</code>/<code class="md-code-inline">D̽ₕ</code> still want &quot;the centered difference of <code class="md-code-inline">arg</code> along every coordinate&quot;.</p>
 </div>
@@ -1405,7 +1401,7 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 <div class="md-docstring" id="Bramble._relocate!-Tuple{Any, Nothing}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._relocate!</code> — <span class="md-docstring-sig">Tuple{Any, Nothing}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L277-L289" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L269-L281" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1420,7 +1416,7 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 <div class="md-docstring" id="Bramble._subst-Tuple{AbstractString, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._subst</code> — <span class="md-docstring-sig">Tuple{AbstractString, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L304-L312" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L296-L304" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1434,7 +1430,7 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 <div class="md-docstring" id="Bramble._vectorial_expr-NTuple{4, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._vectorial_expr</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L459-L472" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L451-L464" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1449,7 +1445,7 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 <div class="md-docstring" id="Bramble._vectorial_index_expr-Tuple{Any, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._vectorial_index_expr</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L514-L533" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L506-L525" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1464,7 +1460,7 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 <div class="md-docstring" id="Bramble.@operator_family-Tuple">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.@operator_family</code> — <span class="md-docstring-sig">Tuple</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L837-L862" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil.jl#L824-L848" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1472,7 +1468,7 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 <pre><code class="language-julia">@operator_family(kwargs...)</code></pre>
 </div>
 <p>Defines one operator family&#39;s grid-function forms and its whole alias surface, declaratively.</p>
-<p>Replaces the <code class="md-code-inline">Core.eval</code> generators this file used to carry (gpena/Bramble.jl#258): the methods now arrive through macro expansion, so the parser sees each definition where it is written instead of the module growing methods while it loads.</p>
+<p>The methods arrive by macro expansion, so the parser sees each definition where it is written; nothing is <code class="md-code-inline">Core.eval</code>ed at load time (gpena/Bramble.jl#258).</p>
 <p>Keywords, all optional except <code class="md-code-inline">base</code> and <code class="md-code-inline">stem</code>:</p>
 <div class="md-table-wrap">
 <table class="md-table">
@@ -1524,20 +1520,20 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 <div class="md-docstring" id="Bramble._stencil_taps-Tuple{Bramble.BackwardFiniteDiffOp}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._stencil_taps</code> — <span class="md-docstring-sig">Tuple{Bramble.BackwardFiniteDiffOp}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil_matrix.jl#L21-L28" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil_matrix.jl#L14-L22" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">_stencil_taps(op::StencilOp) -&gt; NTuple{K,Int}</code></pre>
 </div>
-<p>The fixed neighbour offsets along <code class="md-code-inline">op</code>&#39;s axis that its stencil reads, in the same order <a href="../../internals/space/#Bramble._stencil_weights-Tuple{Bramble.UnscaledBackwardDiffOp, Union{Bramble.AbstractMeshType, Bramble._HostAxisSpacings}, CartesianIndex}"><code class="md-code-inline">_stencil_weights</code></a> returns their coefficients. A tap whose neighbour falls outside the grid contributes no entry at all (checked in <a href="../../internals/space/#Bramble.stencil_matrix-Union{Tuple{Dim}, Tuple{Bramble.AbstractMeshType, Bramble.StencilOp{Dim}}} where Dim"><code class="md-code-inline">stencil_matrix</code></a>), rather than a stored zero.</p>
+<p>The fixed neighbour offsets along <code class="md-code-inline">op</code>&#39;s axis that its stencil reads, in the same order <a href="../../internals/space/#Bramble._stencil_weights-Tuple{Bramble.UnscaledBackwardDiffOp, Union{Bramble.AbstractMeshType, Bramble._HostAxisSpacings}, CartesianIndex}"><code class="md-code-inline">_stencil_weights</code></a> returns their coefficients. A tap whose neighbour falls outside the grid contributes no entry at all (checked in <a href="../../internals/space/#Bramble.stencil_matrix-Union{Tuple{Dim}, Tuple{Bramble.AbstractMeshType, Bramble.StencilOp{Dim}}} where Dim"><code class="md-code-inline">stencil_matrix</code></a>). A tap that stays on the grid is always stored, even where its weight is exactly zero: the stencil, not the value, decides the pattern.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._stencil_weights-Tuple{Bramble.UnscaledBackwardDiffOp, Union{Bramble.AbstractMeshType, Bramble._HostAxisSpacings}, CartesianIndex}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._stencil_weights</code> — <span class="md-docstring-sig">Tuple{Bramble.UnscaledBackwardDiffOp, Union{Bramble.AbstractMeshType, Bramble._HostAxisSpacings}, CartesianIndex}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil_matrix.jl#L94-L108" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil_matrix.jl#L73-L87" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1551,7 +1547,7 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 <div class="md-docstring" id="Bramble.stencil_matrix-Union{Tuple{Dim}, Tuple{Bramble.AbstractMeshType, Bramble.StencilOp{Dim}}} where Dim">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.stencil_matrix</code> — <span class="md-docstring-sig">Union{Tuple{Dim}, Tuple{Bramble.AbstractMeshType, Bramble.StencilOp{Dim}}} where Dim</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil_matrix.jl#L297-L311" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/stencil_matrix.jl#L255-L269" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1566,7 +1562,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.DifferenceNode">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DifferenceNode</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1227-L1238" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1205-L1216" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1581,7 +1577,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.ExtendedDifferenceNode">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ExtendedDifferenceNode</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1408-L1414" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1385-L1391" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1594,7 +1590,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.BackwardDifference">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.BackwardDifference</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1138-L1142" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1117-L1121" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1607,7 +1603,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.CenteredDifference">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.CenteredDifference</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1256-L1266" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1234-L1244" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1624,7 +1620,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.CrossWeightedDifference">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.CrossWeightedDifference</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1287-L1302" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1265-L1280" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1642,7 +1638,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.ForwardDifference">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ForwardDifference</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1147-L1151" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1126-L1130" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1655,7 +1651,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.StarDifference">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.StarDifference</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1271-L1282" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1249-L1260" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1672,7 +1668,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.StarSpacings">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.StarSpacings</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L156-L165" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L152-L161" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1686,7 +1682,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble._CenteredStrainTensor">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._CenteredStrainTensor</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1678-L1684" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1652-L1658" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1699,7 +1695,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble._DivergenceTerms">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._DivergenceTerms</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1598-L1604" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1572-L1578" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1712,7 +1708,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble._StrainTensor">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._StrainTensor</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1536-L1543" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1510-L1517" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1725,7 +1721,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble._batch_difference_engine!-NTuple{6, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_difference_engine!</code> — <span class="md-docstring-sig">NTuple{6, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L484-L489" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L476-L481" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1738,7 +1734,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble._difference_band!-Union{Tuple{DIM}, Tuple{D}, Tuple{H}, Tuple{Any, Any, H, NTuple{D, Int64}, Bramble.GridDirection, Val{DIM}, Int64, Int64}} where {H, D, DIM}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._difference_band!</code> — <span class="md-docstring-sig">Union{Tuple{DIM}, Tuple{D}, Tuple{H}, Tuple{Any, Any, H, NTuple{D, Int64}, Bramble.GridDirection, Val{DIM}, Int64, Int64}} where {H, D, DIM}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L405-L412" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L397-L404" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1751,7 +1747,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble._launch_difference_centered!-NTuple{7, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_difference_centered!</code> — <span class="md-docstring-sig">NTuple{7, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L551-L563" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L543-L555" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1769,7 +1765,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble._launch_difference_onesided!-NTuple{7, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_difference_onesided!</code> — <span class="md-docstring-sig">NTuple{7, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L531-L544" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L523-L536" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1787,7 +1783,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble._threaded_difference_engine!-Union{Tuple{D}, Tuple{H}, Tuple{Any, Any, H, NTuple{D, Int64}, Bramble.GridDirection, Val}} where {H, D}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._threaded_difference_engine!</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{H}, Tuple{Any, Any, H, NTuple{D, Int64}, Bramble.GridDirection, Val}} where {H, D}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L469-L476" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L461-L468" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1800,7 +1796,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.backward_derivative_weights!-Tuple{AbstractVector, Bramble.AbstractMeshType, Val}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backward_derivative_weights!</code> — <span class="md-docstring-sig">Tuple{AbstractVector, Bramble.AbstractMeshType, Val}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L710-L714" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L695-L699" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1813,7 +1809,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.backward_difference-Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backward_difference</code> — <span class="md-docstring-sig">Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L737-L741" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L719-L723" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1826,20 +1822,20 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.backward_difference_dim!-Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backward_difference_dim!</code> — <span class="md-docstring-sig">Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L687-L691" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L672-L676" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">backward_difference_dim!(out, in, [h], dims, diff_dim)</code></pre>
 </div>
-<p>Low-level, in-place function to compute the <strong>unscaled</strong> backward difference of vector <code class="md-code-inline">in</code> along dimension <code class="md-code-inline">diff_dim</code>, storing the result in <code class="md-code-inline">out</code>. This function computes <span class="md-math md-math-inline">\(u_{i} - u_{i-1}\)</span>.</p>
+<p>In-place backward difference of <code class="md-code-inline">in</code> along <code class="md-code-inline">diff_dim</code>, written into <code class="md-code-inline">out</code>: <span class="md-math md-math-inline">\(u_{i} - u_{i-1}\)</span>, divided by <code class="md-code-inline">h</code> when it is given (the finite difference) and unscaled without it.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.backward_finite_difference-Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backward_finite_difference</code> — <span class="md-docstring-sig">Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L744-L748" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L726-L730" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1849,10 +1845,10 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <p>Constructs the backward <strong>finite difference</strong> operator, which approximates the first derivative using the formula <span class="md-math md-math-inline">\(\frac{u_{i} - u_{i-1}}{h_i}\)</span>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.centered_difference!-Tuple{Bramble.VectorElement{var&quot;#s1338&quot;, T} where {var&quot;#s1338&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s459&quot;, T} where {var&quot;#s459&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}">
+<div class="md-docstring" id="Bramble.centered_difference!-Tuple{Bramble.VectorElement{var&quot;#s1319&quot;, T} where {var&quot;#s1319&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s467&quot;, T} where {var&quot;#s467&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.centered_difference!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s1338&quot;, T} where {var&quot;#s1338&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s459&quot;, T} where {var&quot;#s459&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L868-L886" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble.centered_difference!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s1319&quot;, T} where {var&quot;#s1319&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s467&quot;, T} where {var&quot;#s467&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L841-L859" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1872,7 +1868,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.centered_difference-Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.centered_difference</code> — <span class="md-docstring-sig">Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1035-L1042" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1008-L1015" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1880,13 +1876,13 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <pre><code class="language-julia">centered_difference(Ωₕ::AbstractMeshType, dim_val::Val)</code></pre>
 </div>
 <p>The centered difference along <code class="md-code-inline">dim_val</code>, as a sparse matrix.</p>
-<p>Reaches one point either side, so both end rows are empty and the mesh needs at least three points along the direction.</p>
+<p>Reaches one point either side, so both end rows are zero and the mesh needs at least three points along the direction.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.cross_weighted_difference!-Tuple{Bramble.VectorElement{var&quot;#s1338&quot;, T} where {var&quot;#s1338&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s459&quot;, T} where {var&quot;#s459&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}">
+<div class="md-docstring" id="Bramble.cross_weighted_difference!-Tuple{Bramble.VectorElement{var&quot;#s1319&quot;, T} where {var&quot;#s1319&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s467&quot;, T} where {var&quot;#s467&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.cross_weighted_difference!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s1338&quot;, T} where {var&quot;#s1338&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s459&quot;, T} where {var&quot;#s459&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L905-L929" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble.cross_weighted_difference!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s1319&quot;, T} where {var&quot;#s1319&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s467&quot;, T} where {var&quot;#s467&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L878-L902" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1908,7 +1904,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.cross_weighted_difference-Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.cross_weighted_difference</code> — <span class="md-docstring-sig">Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1051-L1060" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1024-L1033" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1922,7 +1918,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₊-Tuple{Union{Bramble.AbstractMeshType, Bramble.AbstractSpaceType, Bramble.VectorElement}, Int64}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₊</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.AbstractMeshType, Bramble.AbstractSpaceType, Bramble.VectorElement}, Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L771-L791" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L753-L773" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1938,7 +1934,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₊ᵧ!-Tuple{Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₊ᵧ!</code> — <span class="md-docstring-sig">Tuple{Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L771-L787" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L753-L769" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1954,7 +1950,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₊ᵧ-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₊ᵧ</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L771-L783" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L753-L765" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1969,7 +1965,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₊₂!-Tuple{Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₊₂!</code> — <span class="md-docstring-sig">Tuple{Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L771-L787" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L753-L769" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1985,7 +1981,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₊₂-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₊₂</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L771-L783" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L753-L765" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2000,7 +1996,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₊ₓ!-Tuple{Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₊ₓ!</code> — <span class="md-docstring-sig">Tuple{Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L771-L787" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L753-L769" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2016,7 +2012,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₊ₓ-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₊ₓ</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L771-L783" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L753-L765" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2031,7 +2027,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₊ₕ-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₊ₕ</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L771-L784" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L753-L766" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2046,7 +2042,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₋-Tuple{Union{Bramble.AbstractMeshType, Bramble.AbstractSpaceType, Bramble.VectorElement}, Int64}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₋</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.AbstractMeshType, Bramble.AbstractSpaceType, Bramble.VectorElement}, Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L793-L813" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L775-L795" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2062,7 +2058,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₋ᵧ!-Tuple{Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₋ᵧ!</code> — <span class="md-docstring-sig">Tuple{Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L793-L809" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L775-L791" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2078,7 +2074,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₋ᵧ-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₋ᵧ</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L793-L805" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L775-L787" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2093,7 +2089,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₋₂!-Tuple{Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₋₂!</code> — <span class="md-docstring-sig">Tuple{Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L793-L809" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L775-L791" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2109,7 +2105,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₋₂-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₋₂</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L793-L805" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L775-L787" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2124,7 +2120,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₋ₓ!-Tuple{Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₋ₓ!</code> — <span class="md-docstring-sig">Tuple{Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L793-L809" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L775-L791" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2140,7 +2136,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₋ₓ-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₋ₓ</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L793-L805" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L775-L787" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2155,7 +2151,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.diff₋ₕ-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diff₋ₕ</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L793-L806" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L775-L788" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2170,7 +2166,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.forward_derivative_weights!-Tuple{AbstractVector, Bramble.AbstractMeshType, Val}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.forward_derivative_weights!</code> — <span class="md-docstring-sig">Tuple{AbstractVector, Bramble.AbstractMeshType, Val}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L710-L714" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L695-L699" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2183,7 +2179,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.forward_difference-Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.forward_difference</code> — <span class="md-docstring-sig">Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L737-L741" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L719-L723" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2196,20 +2192,20 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.forward_difference_dim!-Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.forward_difference_dim!</code> — <span class="md-docstring-sig">Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L687-L691" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L672-L676" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">forward_difference_dim!(out, in, [h], dims, diff_dim)</code></pre>
 </div>
-<p>Low-level, in-place function to compute the <strong>unscaled</strong> forward difference of vector <code class="md-code-inline">in</code> along dimension <code class="md-code-inline">diff_dim</code>, storing the result in <code class="md-code-inline">out</code>. This function computes <span class="md-math md-math-inline">\(u_{i+1} - u_i\)</span>.</p>
+<p>In-place forward difference of <code class="md-code-inline">in</code> along <code class="md-code-inline">diff_dim</code>, written into <code class="md-code-inline">out</code>: <span class="md-math md-math-inline">\(u_{i+1} - u_i\)</span>, divided by <code class="md-code-inline">h</code> when it is given (the finite difference) and unscaled without it.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.forward_finite_difference-Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.forward_finite_difference</code> — <span class="md-docstring-sig">Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L744-L748" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L726-L730" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2219,10 +2215,10 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <p>Constructs the forward <strong>finite difference</strong> operator, which approximates the first derivative using the formula <span class="md-math md-math-inline">\(\frac{u_{i+1} - u_i}{h_i}\)</span>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.forward_star_difference!-Tuple{Bramble.VectorElement{var&quot;#s457&quot;, T} where {var&quot;#s457&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s263&quot;, T} where {var&quot;#s263&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}">
+<div class="md-docstring" id="Bramble.forward_star_difference!-Tuple{Bramble.VectorElement{var&quot;#s465&quot;, T} where {var&quot;#s465&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s265&quot;, T} where {var&quot;#s265&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.forward_star_difference!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s457&quot;, T} where {var&quot;#s457&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s263&quot;, T} where {var&quot;#s263&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L833-L850" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble.forward_star_difference!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s465&quot;, T} where {var&quot;#s465&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s265&quot;, T} where {var&quot;#s265&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L806-L823" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2242,7 +2238,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.forward_star_difference-Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.forward_star_difference</code> — <span class="md-docstring-sig">Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1023-L1030" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L996-L1003" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2250,13 +2246,13 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <pre><code class="language-julia">forward_star_difference(Ωₕ::AbstractMeshType, dim_val::Val)</code></pre>
 </div>
 <p>The forward difference over the averaged spacing along <code class="md-code-inline">dim_val</code>, as a sparse matrix.</p>
-<p>The forward difference scaled by the averaged spacing instead of the forward one. The last point along the direction has no forward neighbour, so its row is empty.</p>
+<p>The forward difference scaled by the averaged spacing instead of the forward one. The last point along the direction has no forward neighbour, so its row is zero.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.star_spacings-Tuple{Bramble.Mesh1D}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.star_spacings</code> — <span class="md-docstring-sig">Tuple{Bramble.Mesh1D}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L176-L185" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L172-L181" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2270,7 +2266,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.JumpNode">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.JumpNode</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/jump.jl#L137-L144" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/jump.jl#L126-L133" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2312,7 +2308,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.AverageNode">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.AverageNode</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L746-L753" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L673-L680" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2326,7 +2322,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.BackwardAverage">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.BackwardAverage</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L633-L637" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L560-L564" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2339,7 +2335,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.CenteredAverage">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.CenteredAverage</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L651-L656" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L578-L583" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2352,7 +2348,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.ForwardAverage">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ForwardAverage</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L642-L646" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L569-L573" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2365,20 +2361,20 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble._average_band!-Union{Tuple{DIM}, Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Bramble.GridDirection, Val{DIM}, Int64, Int64}} where {D, DIM}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._average_band!</code> — <span class="md-docstring-sig">Union{Tuple{DIM}, Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Bramble.GridDirection, Val{DIM}, Int64, Int64}} where {D, DIM}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L214-L219" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L153-L161" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">_average_band!(out, in_ref, dims::NTuple{D, Int}, dir::GridDirection, dim_val::Val, nbands::Int, b::Int) -&gt; Nothing</code></pre>
 </div>
-<p>Runs <code class="md-code-inline">_average_engine!</code>&#39;s loops for <code class="md-code-inline">dir</code> on the <code class="md-code-inline">b</code>-th of <code class="md-code-inline">nbands</code> slabs of the grid cut along its last axis, as <a href="../../internals/space/#Bramble._difference_band!-Union{Tuple{DIM}, Tuple{D}, Tuple{H}, Tuple{Any, Any, H, NTuple{D, Int64}, Bramble.GridDirection, Val{DIM}, Int64, Int64}} where {H, D, DIM}"><code class="md-code-inline">_difference_band!</code></a> does for the difference.</p>
+<p>Fills the <code class="md-code-inline">b</code>-th of <code class="md-code-inline">nbands</code> slabs of the grid cut along its last axis with the two-point average of <code class="md-code-inline">in_ref</code> along <code class="md-code-inline">dim_val</code> in direction <code class="md-code-inline">dir</code>, zero on the one boundary slice with no neighbour, as <a href="../../internals/space/#Bramble._difference_band!-Union{Tuple{DIM}, Tuple{D}, Tuple{H}, Tuple{Any, Any, H, NTuple{D, Int64}, Bramble.GridDirection, Val{DIM}, Int64, Int64}} where {H, D, DIM}"><code class="md-code-inline">_difference_band!</code></a> does for the difference; <code class="md-code-inline">1, 1</code> is the whole grid, the serial <code class="md-code-inline">_average_engine!</code>. The traversal is shared with the difference engine; see <code class="md-code-inline">_stencil_ranges</code> in operators/stencil.jl.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._batch_average_engine!-NTuple{5, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_average_engine!</code> — <span class="md-docstring-sig">NTuple{5, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L303-L308" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L245-L250" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2391,7 +2387,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble._batch_centered_average_engine!-NTuple{4, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_centered_average_engine!</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L313-L318" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L255-L260" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2404,7 +2400,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble._centered_average_band!-Union{Tuple{DIM}, Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Val{DIM}, Int64, Int64}} where {D, DIM}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._centered_average_band!</code> — <span class="md-docstring-sig">Union{Tuple{DIM}, Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Val{DIM}, Int64, Int64}} where {D, DIM}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L244-L249" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L186-L191" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2417,14 +2413,14 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble._launch_average_engine!-NTuple{6, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_average_engine!</code> — <span class="md-docstring-sig">NTuple{6, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L118-L130" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L47-L59" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">_launch_average_engine!(out::AbstractVector, in_ref, dims::Tuple, dir::GridDirection, dim_val::Val, dev) -&gt; Nothing</code></pre>
 </div>
-<p>Fills <code class="md-code-inline">out</code> with the two-point average (<code class="md-code-inline">_compute_average</code>) of <code class="md-code-inline">in_ref</code> along the axis <code class="md-code-inline">dim_val</code>, in direction <code class="md-code-inline">dir</code> (<code class="md-code-inline">Forward</code>/<code class="md-code-inline">Backward</code>), truncating the one boundary slice with no neighbour to zero, via a <code class="md-code-inline">KernelAbstractions.@kernel</code> launch on <code class="md-code-inline">dev</code>, filled by <code class="md-code-inline">ext/BrambleKernelAbstractionsExt.jl</code>. The device counterpart of <code class="md-code-inline">_average_engine!</code>&#39;s CPU sweep above.</p>
+<p>Fills <code class="md-code-inline">out</code> with the two-point average (<code class="md-code-inline">_compute_average</code>) of <code class="md-code-inline">in_ref</code> along the axis <code class="md-code-inline">dim_val</code>, in direction <code class="md-code-inline">dir</code> (<code class="md-code-inline">Forward</code>/<code class="md-code-inline">Backward</code>), truncating the one boundary slice with no neighbour to zero, via a <code class="md-code-inline">KernelAbstractions.@kernel</code> launch on <code class="md-code-inline">dev</code>, filled by <code class="md-code-inline">ext/BrambleKernelAbstractionsExt.jl</code>. The device counterpart of <code class="md-code-inline">_average_band!</code>&#39;s CPU sweep below.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">ErrorException</code>: no <code class="md-code-inline">KernelAbstractions</code> extension is loaded, so there is no device kernel to reach (<code class="md-code-inline">_throw_no_ka_average_kernel</code>).</p>
@@ -2435,7 +2431,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble._threaded_average_engine!-Union{Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Bramble.GridDirection, Val}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._threaded_average_engine!</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Bramble.GridDirection, Val}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L276-L282" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L218-L224" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2448,7 +2444,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble._threaded_centered_average_engine!-Union{Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Val}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._threaded_centered_average_engine!</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Val}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L290-L295" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L232-L237" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2461,7 +2457,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.backward_average-Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backward_average</code> — <span class="md-docstring-sig">Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L539-L543" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L469-L473" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2471,10 +2467,10 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <p>Constructs or applies the backward averaging operator, representing the operation <span class="md-math md-math-inline">\(\frac{u_{i-1} + u_{i}}{2}\)</span>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.backward_average_dim!-Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}">
+<div class="md-docstring" id="Bramble.backward_average_dim!-Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.backward_average_dim!</code> — <span class="md-docstring-sig">Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L499-L503" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble.backward_average_dim!</code> — <span class="md-docstring-sig">Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L436-L440" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2487,7 +2483,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.centered_average-Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.centered_average</code> — <span class="md-docstring-sig">Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L539-L543" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L469-L473" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2497,10 +2493,10 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <p>Constructs or applies the centered averaging operator, representing the operation <span class="md-math md-math-inline">\(\frac{u_{i-1} + 2 u_{i} + u_{i+1}}{4}\)</span>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.centered_average_dim!-Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}">
+<div class="md-docstring" id="Bramble.centered_average_dim!-Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.centered_average_dim!</code> — <span class="md-docstring-sig">Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L499-L503" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble.centered_average_dim!</code> — <span class="md-docstring-sig">Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L436-L440" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2513,7 +2509,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.forward_average-Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.forward_average</code> — <span class="md-docstring-sig">Union{Tuple{DIM}, Tuple{Bramble.AbstractMeshType, Val{DIM}}} where DIM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L539-L543" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L469-L473" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2523,10 +2519,10 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <p>Constructs or applies the forward averaging operator, representing the operation <span class="md-math md-math-inline">\(\frac{u_{i} + u_{i+1}}{2}\)</span>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.forward_average_dim!-Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}">
+<div class="md-docstring" id="Bramble.forward_average_dim!-Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.forward_average_dim!</code> — <span class="md-docstring-sig">Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L499-L503" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble.forward_average_dim!</code> — <span class="md-docstring-sig">Union{Tuple{DIFF_DIM}, Tuple{D}, Tuple{Any, Any, NTuple{D, Int64}, Val{DIFF_DIM}}} where {D, DIFF_DIM}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L436-L440" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2539,7 +2535,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.InterpolationNode">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.InterpolationNode</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L703-L729" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L666-L692" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2556,7 +2552,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.TestSide">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.TestSide</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L736-L749" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L699-L712" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2572,7 +2568,7 @@ TestSide</code></pre>
 <div class="md-docstring" id="Bramble.TrialSide">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.TrialSide</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L736-L749" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L699-L712" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2588,7 +2584,7 @@ TestSide</code></pre>
 <div class="md-docstring" id="Bramble._walked_leaf-Tuple{Any, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._walked_leaf</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L1043-L1052" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L1005-L1014" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2596,18 +2592,18 @@ TestSide</code></pre>
 <pre><code class="language-julia">_walked_leaf(term, trial_leaf, test_leaf)</code></pre>
 </div>
 <p>The leaf whose grid the assembly sweep walks for <code class="md-code-inline">term</code>, and whose weights and markers its stencil sees.</p>
-<p>The test leaf, as it has always been, unless the term interpolates on the test side: then the rows are named absolutely and the trial leaf is the one that stays native, so it supplies the grid, the quadrature weight and the columns.</p>
+<p>The test leaf, unless the term interpolates on the test side: then the rows are named absolutely and the trial leaf is the one that stays native, so it supplies the grid, the quadrature weight and the columns.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._dot-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L714-L720" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L659-L665" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_dot(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v) -&gt; Real</code></pre>
+<pre><code class="language-julia">_dot(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v) -&gt; Number</code></pre>
 </div>
 <p>The device counterpart of <a href="../../internals/space/#Bramble._dot-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector}} where D"><code class="md-code-inline">_dot</code></a><code class="md-code-inline">(u, w::SeparableWeights, v)</code> above: the weight tensor is materialized once via <code class="md-code-inline">_separable_weights_full</code>, then the product with <code class="md-code-inline">u</code> and <code class="md-code-inline">v</code> (reshaped to the grid&#39;s own <code class="md-code-inline">dims</code>, not copied) is one broadcasted reduction.</p>
 </div>
@@ -2615,12 +2611,12 @@ TestSide</code></pre>
 <div class="md-docstring" id="Bramble._dot_masked-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, BitVector}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot_masked</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, BitVector}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L731-L737" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L676-L682" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_dot_masked(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v, mask::BitVector) -&gt; Real</code></pre>
+<pre><code class="language-julia">_dot_masked(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v, mask::BitVector) -&gt; Number</code></pre>
 </div>
 <p>The device counterpart of the <code class="md-code-inline">BitVector</code>-masked specialization above: <code class="md-code-inline">mask</code> (always host memory, gpena/Bramble.jl#298) is copied onto <code class="md-code-inline">u</code>&#39;s own device once, reshaped to <code class="md-code-inline">dims</code> alongside <code class="md-code-inline">u</code> and <code class="md-code-inline">v</code>, and the masked sum is one broadcasted reduction.</p>
 </div>
@@ -2628,12 +2624,12 @@ TestSide</code></pre>
 <div class="md-docstring" id="Bramble._dot_masked-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, Bramble.MarkedIndicesUnion}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot_masked</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, Bramble.MarkedIndicesUnion}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L752-L757" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L697-L702" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_dot_masked(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v, mask::MarkedIndicesUnion) -&gt; Real</code></pre>
+<pre><code class="language-julia">_dot_masked(::DeviceLocality, ::GpuPolicy, u, w::SeparableWeights, v, mask::MarkedIndicesUnion) -&gt; Number</code></pre>
 </div>
 <p>The multi-marker counterpart: <code class="md-code-inline">mask</code> is walked once, on the host, into a plain <code class="md-code-inline">BitVector</code>, then handled exactly as the <code class="md-code-inline">BitVector</code> method above.</p>
 </div>
@@ -2641,22 +2637,22 @@ TestSide</code></pre>
 <div class="md-docstring" id="Bramble._surface_sum-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, Bramble.AbstractMeshType{D}, Any, AbstractVector, AbstractVector}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._surface_sum</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, Bramble.AbstractMeshType{D}, Any, AbstractVector, AbstractVector}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L277-L297" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L303-L324" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_surface_sum(::DeviceLocality, ::GpuPolicy, Ωₕ, mask, u, v) -&gt; Real</code></pre>
+<pre><code class="language-julia">_surface_sum(::DeviceLocality, ::GpuPolicy, Ωₕ, mask, u, v) -&gt; Number</code></pre>
 </div>
 <p>Device counterpart of <a href="../../internals/space/#Bramble._surface_sum-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, Bramble.AbstractMeshType{D}, Any, AbstractVector, AbstractVector}} where D"><code class="md-code-inline">_surface_sum</code></a> above: a canonical face (or a union of them) is a set of at most <code class="md-code-inline">2D</code> axis-aligned <code class="md-code-inline">(D-1)</code>-dimensional slices of the grid, so the CPU walk over every grid point – reading <code class="md-code-inline">half_spacings</code> and <code class="md-code-inline">u</code>/<code class="md-code-inline">v</code> one scalar at a time – becomes, per active face, one broadcasted reduction over that slice.</p>
-<p><code class="md-code-inline">u</code> and <code class="md-code-inline">v</code> are reshaped to the grid&#39;s own <code class="md-code-inline">dims</code> (a view, not a copy). For each axis <code class="md-code-inline">d</code> and side (<code class="md-code-inline">min</code>/<code class="md-code-inline">max</code>) the mask marks, <code class="md-code-inline">selectdim</code> takes the boundary slice directly – no mask array is built or walked here, unlike <a href="../../internals/space/#Bramble._dot_masked-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, BitVector}} where D"><code class="md-code-inline">_dot_masked</code></a>&#39;s device path, since a coordinate face is already a contiguous slice rather than an arbitrary marked set. The transverse surface measure for that slice is built once from <a href="../../internals/mesh/#Bramble.host_half_spacings-Tuple{Union{Bramble.Mesh1D{BT, CI, VT, T}, Bramble.Mesh1DState{BT, CI, VT, T}} where {BT, CI, VT, T}}"><code class="md-code-inline">host_half_spacings</code></a> (never read on the device), then copied onto <code class="md-code-inline">u</code>&#39;s own device in one transfer via <a href="../../internals/space/#Bramble._transverse_weight_device-Union{Tuple{D}, Tuple{d}, Tuple{Bramble.AbstractMeshType{D}, Any, Val{d}, Val{D}}} where {d, D}"><code class="md-code-inline">_transverse_weight_device</code></a>; the reduction itself is <code class="md-code-inline">sum(su .* sv .* w)</code>, no <code class="md-code-inline">@kernel</code>.</p>
+<p><code class="md-code-inline">u</code> and <code class="md-code-inline">v</code> are reshaped to the grid&#39;s own <code class="md-code-inline">dims</code> (a view, not a copy). For each axis <code class="md-code-inline">d</code> and side (<code class="md-code-inline">min</code>/<code class="md-code-inline">max</code>) the mask marks, <code class="md-code-inline">selectdim</code> takes the boundary slice directly – no mask array is built or walked here, unlike <a href="../../internals/space/#Bramble._dot_masked-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, BitVector}} where D"><code class="md-code-inline">_dot_masked</code></a>&#39;s device path, since a coordinate face is already a contiguous slice rather than an arbitrary marked set. The transverse surface measure for that slice is built once from <a href="../../internals/mesh/#Bramble.host_half_spacings-Tuple{Union{Bramble.Mesh1D{BT, CI, VT, T}, Bramble.Mesh1DState{BT, CI, VT, T}} where {BT, CI, VT, T}}"><code class="md-code-inline">host_half_spacings</code></a> (never read on the device), then copied onto <code class="md-code-inline">u</code>&#39;s own device in one transfer via <a href="../../internals/space/#Bramble._transverse_weight_device-Union{Tuple{D}, Tuple{d}, Tuple{Bramble.AbstractMeshType{D}, Any, Val{d}, Val{D}}} where {d, D}"><code class="md-code-inline">_transverse_weight_device</code></a>; the reduction itself is <code class="md-code-inline">sum(conj.(su) .* sv .* w)</code>, no <code class="md-code-inline">@kernel</code>.</p>
 <p>Faces are summed independently rather than through one shared mask, exactly as the host <code class="md-code-inline">_surface_weight_dir</code> recursion does: a corner point on two active faces receives both faces&#39; contributions, which is the intended, non-double-counting definition documented above <code class="md-code-inline">_face_mask</code>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._transverse_weight_device-Union{Tuple{D}, Tuple{d}, Tuple{Bramble.AbstractMeshType{D}, Any, Val{d}, Val{D}}} where {d, D}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._transverse_weight_device</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{d}, Tuple{Bramble.AbstractMeshType{D}, Any, Val{d}, Val{D}}} where {d, D}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L337-L350" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L364-L377" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2694,6 +2690,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=c30a65bc"></script>
+  <script src="../../assets/materialdocs.js?v=8f919936"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Exporters — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=c4b7012e">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=fb9f61fb">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Exporters — Bramble.jl">
   <meta property="og:title" content="Exporters — Bramble.jl">
@@ -94,7 +94,7 @@
 <div class="md-docstring" id="Bramble.export_vtk">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.export_vtk</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/exporters/vtk_export.jl#L1-L32" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/exporters/vtk_export.jl#L1-L34" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -103,7 +103,7 @@
 export_vtk(filename::AbstractString, uₕ::VectorElement, name::AbstractString = &quot;u&quot;) -&gt; Vector{String}</code></pre>
 </div>
 <p>Write <code class="md-code-inline">Ωₕ</code>, and any number of named fields over it, to a VTK rectilinear grid file (<code class="md-code-inline">.vtr</code>).</p>
-<p>Each entry in <code class="md-code-inline">fields</code> is <code class="md-code-inline">name =&gt; data</code>, where <code class="md-code-inline">data</code> is a <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> over a grid space on <code class="md-code-inline">Ωₕ</code> (scalar or composite) or a plain array already shaped like the grid. The second method is a shorthand for a single field, named <code class="md-code-inline">&quot;u&quot;</code> unless told otherwise.</p>
+<p>Each entry in <code class="md-code-inline">fields</code> is <code class="md-code-inline">name =&gt; data</code>, where <code class="md-code-inline">data</code> is a <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> over a grid space on <code class="md-code-inline">Ωₕ</code> (scalar or composite) or a plain array already shaped like the grid. A composite whose components live on different meshes throws an <code class="md-code-inline">ArgumentError</code>: export each component against its own mesh. The second method is a shorthand for a single field, named <code class="md-code-inline">&quot;u&quot;</code> unless told otherwise.</p>
 <p>A 1D mesh gets a degenerate second axis rather than being refused: VTK has no dedicated 1D grid type, but a rectilinear grid one point deep in <code class="md-code-inline">y</code> opens and renders correctly.</p>
 <p>Requires <a href="https://github.com/JuliaVTK/WriteVTK.jl">WriteVTK.jl</a>; call <code class="md-code-inline">using WriteVTK</code> before calling this.</p>
 <p><strong>Examples</strong></p>
@@ -183,7 +183,7 @@ export_vtk(joinpath(mktempdir(), &quot;solution&quot;), Wₕ, sol; times = 0:0.1
 <div class="md-docstring" id="Bramble.export_pgfplots">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.export_pgfplots</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/exporters/pgfplots_export.jl#L74-L116" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/exporters/pgfplots_export.jl#L75-L118" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -193,7 +193,7 @@ export_pgfplots(filename::AbstractString, Ωₕ::AbstractMeshType{2}, field::Pai
 export_pgfplots(filename::AbstractString, uₕ::VectorElement, name::AbstractString = &quot;u&quot;) -&gt; String</code></pre>
 </div>
 <p>Write grid data to a plain-text table, laid out the way <code class="md-code-inline">pgfplots</code> reads it directly: no external package needed, since the format is just whitespace-separated numbers.</p>
-<p>On a 1D mesh, any number of named fields become columns: <code class="md-code-inline">x name₁ name₂ ...</code>, one row per grid point, readable with <code class="md-code-inline">\addplot table {file.dat}</code> or <code class="md-code-inline">\addplot table[y=name] {file.dat}</code> to pick one column by name. A composite <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> expands into one column per component, named <code class="md-code-inline">name_1</code>, <code class="md-code-inline">name_2</code>, and so on.</p>
+<p>On a 1D mesh, any number of named fields become columns: <code class="md-code-inline">x name₁ name₂ ...</code>, one row per grid point, readable with <code class="md-code-inline">\addplot table {file.dat}</code> or <code class="md-code-inline">\addplot table[y=name] {file.dat}</code> to pick one column by name. A composite <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> expands into one column per component, named <code class="md-code-inline">name_1</code>, <code class="md-code-inline">name_2</code>, and so on. A composite whose components live on different meshes throws an <code class="md-code-inline">ArgumentError</code>: export each component against its own mesh.</p>
 <p>On a 2D mesh, exactly one field is written as <code class="md-code-inline">x y z</code> triples (pgfplots&#39; <code class="md-code-inline">surf</code>/<code class="md-code-inline">mesh</code> format has no way to encode more than one value per point) with a blank line after each run of constant <code class="md-code-inline">x</code>. That blank line is what tells <code class="md-code-inline">\addplot3[surf] table {file.dat}</code> where one row of the grid ends and the next begins; without it the same numbers plot as a shredded zigzag instead of a surface. A composite element is refused with a message saying so, rather than silently writing one of its components.</p>
 <p><code class="md-code-inline">data</code> in a field pair can be a <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a>, or a plain array already shaped like the grid (a vector in 1D, a vector or a <code class="md-code-inline">(nx, ny)</code> matrix in 2D).</p>
 <p>A 3D mesh is refused: <code class="md-code-inline">\addplot3[surf]</code> plots a height field over a 2D domain, not a true 3D volume, so a 3D mesh has no faithful representation in this format. See <a href="../../api/exporters/#Bramble.export_vtk"><code class="md-code-inline">export_vtk</code></a>.</p>
@@ -231,6 +231,6 @@ export_pgfplots(&quot;surface&quot;, Ω2, &quot;u&quot; =&gt; v2)   # writes sur
   <script>hljs.highlightAll();</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=c4b7012e"></script>
+  <script src="../../assets/materialdocs.js?v=fb9f61fb"></script>
 </body>
 </html>

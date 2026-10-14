@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=6dbf153d">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=dac94e92">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -94,7 +94,7 @@
 <div class="md-docstring" id="Bramble._batch_linear_band_sweep!-NTuple{11, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_linear_band_sweep!</code> — <span class="md-docstring-sig">NTuple{11, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L857-L863" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1115-L1121" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -107,7 +107,7 @@
 <div class="md-docstring" id="Bramble._batch_linear_colour_sweep!-NTuple{8, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_linear_colour_sweep!</code> — <span class="md-docstring-sig">NTuple{8, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L908-L914" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1146-L1152" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -120,21 +120,21 @@
 <div class="md-docstring" id="Bramble._zero_stored!-Tuple{SparseArrays.SparseMatrixCSC}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._zero_stored!</code> — <span class="md-docstring-sig">Tuple{SparseArrays.SparseMatrixCSC}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L172-L183" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L163-L174" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">_zero_stored!(A::AbstractMatrix) -&gt; AbstractMatrix</code></pre>
 </div>
-<p>Zero every value a refill will touch, before <code class="md-code-inline">_assemble_bilinear_core_cached!</code>/ <code class="md-code-inline">_assemble_bilinear_parallel_core!</code> add each term&#39;s contribution back in.</p>
+<p>Zero every value a refill will touch, before <code class="md-code-inline">_assemble_bilinear_core_cached!</code>/ <code class="md-code-inline">_assemble_bilinear_parallel_cached!</code> add each term&#39;s contribution back in.</p>
 <p>Part of the matrix-type seam (gpena/Bramble.jl#12): <code class="md-code-inline">SparseMatrixCSC</code> only has to zero its stored <code class="md-code-inline">nzval</code> entries (the sparsity pattern itself never changes between refills), while a dense <code class="md-code-inline">Matrix</code> – the seam&#39;s positive control – has no such distinction and zeros the whole backing array. A future backend (tridiagonal, banded, ...) implements whichever of the two shapes its own storage has.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._scatter_add!-Tuple{SparseArrays.SparseMatrixCSC, Integer, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._scatter_add!</code> — <span class="md-docstring-sig">Tuple{SparseArrays.SparseMatrixCSC, Integer, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L67-L77" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L66-L76" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -155,8 +155,8 @@
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">_scatter_position(A::AbstractMatrix, row::Int, col::Int) -&gt; Int</code></pre>
 </div>
-<p>Where entry <code class="md-code-inline">(row, col)</code> lives in <code class="md-code-inline">A</code>&#39;s own storage, or <code class="md-code-inline">0</code> for a matrix type that can answer &quot;not stored&quot; (only <code class="md-code-inline">SparseMatrixCSC</code> does; every dense fallback below always answers a valid position).</p>
-<p>The seam a new backend&#39;s matrix type implements to plug into assembly (gpena/Bramble.jl#12): <code class="md-code-inline">DiagonalReplaySink</code>, the positions search of the coordinate walk (<code class="md-code-inline">_coordinates_to_positions!</code>) and <a href="../../internals/form/#Bramble.add_to_sparse!-Tuple{Union{Bramble._ScatterCSC, AbstractMatrix}, Int64, Int64, Number, Any}"><code class="md-code-inline">add_to_sparse!</code></a> reduce to this and <a href="../../internals/form/#Bramble._scatter_add!-Tuple{SparseArrays.SparseMatrixCSC, Integer, Any}"><code class="md-code-inline">_scatter_add!</code></a> once the raw <code class="md-code-inline">nzval</code>/ linear-index field access each used to do directly is factored out here. <code class="md-code-inline">ReplaySink</code> and its kin replay those positions into <code class="md-code-inline">_scatter_storage(A)</code>, the array <code class="md-code-inline">_scatter_add!</code> writes.</p>
+<p>Where entry <code class="md-code-inline">(row, col)</code> lives in <code class="md-code-inline">A</code>&#39;s own storage, or <code class="md-code-inline">0</code> for a matrix type that can answer &quot;not stored&quot; (a CSC or CSR search, host or mirror, does; the dense fallback always answers a valid position).</p>
+<p>The seam a new backend&#39;s matrix type implements to plug into assembly (gpena/Bramble.jl#12): <code class="md-code-inline">DiagonalReplaySink</code>, the positions search of the coordinate walk (<code class="md-code-inline">_coordinates_to_positions!</code>) and <a href="../../internals/form/#Bramble.add_to_sparse!-Tuple{AbstractMatrix, Int64, Int64, Number, Any}"><code class="md-code-inline">add_to_sparse!</code></a> reduce to this and <a href="../../internals/form/#Bramble._scatter_add!-Tuple{SparseArrays.SparseMatrixCSC, Integer, Any}"><code class="md-code-inline">_scatter_add!</code></a> once the raw <code class="md-code-inline">nzval</code>/ linear-index field access each used to do directly is factored out here. <code class="md-code-inline">ReplaySink</code> and its kin replay those positions into <code class="md-code-inline">_scatter_storage(A)</code>, the array <code class="md-code-inline">_scatter_add!</code> writes.</p>
 <p>The <code class="md-code-inline">SparseMatrixCSC</code> method is exactly the position search this file always ran: a linear scan of the column when it holds few entries, a binary search otherwise – both rely on <code class="md-code-inline">SparseMatrixCSC</code>&#39;s own invariant that <code class="md-code-inline">rowval</code> is sorted within each column. It returns <code class="md-code-inline">Int</code> whatever the matrix&#39;s index type. The column bounds are converted before the search, so an <code class="md-code-inline">Int32</code> matrix answers the same <code class="md-code-inline">Int</code> positions as an <code class="md-code-inline">Int</code> one. The generic <code class="md-code-inline">AbstractMatrix</code> fallback needs no search at all: every <code class="md-code-inline">(row, col)</code> inside the matrix&#39;s bounds is &quot;stored&quot; for a dense backend, at <code class="md-code-inline">LinearIndices(A)[row, col]</code>.</p>
 </div>
 </div>
@@ -174,30 +174,30 @@
 <p>The one place a fresh system matrix is born (gpena/Bramble.jl#12): every backend&#39;s matrix type implements exactly this to be usable with <a href="../../api/forms/#Bramble.allocate_system_matrix"><code class="md-code-inline">allocate_system_matrix</code></a>. <code class="md-code-inline">SparseMatrixCSC</code>&#39;s method is <code class="md-code-inline">sparse!</code> itself, consuming <code class="md-code-inline">I</code>/<code class="md-code-inline">J</code> in place. The generic <code class="md-code-inline">AbstractMatrix</code> fallback – the dense <code class="md-code-inline">Matrix{Float64}</code> positive control among them – allocates zeros and scatters into it, since a dense matrix has no sparsity pattern to build.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble._batch_bilinear_band_sweep!-NTuple{12, Any}">
+<div class="md-docstring" id="Bramble._batch_bilinear_band_replay!-NTuple{11, Any}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble._batch_bilinear_band_sweep!</code> — <span class="md-docstring-sig">NTuple{12, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L1035-L1041" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble._batch_bilinear_band_replay!</code> — <span class="md-docstring-sig">NTuple{11, Any}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L992-L1002" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_batch_bilinear_band_sweep!(A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α) -&gt; Nothing</code></pre>
+<pre><code class="language-julia">_batch_bilinear_band_replay!(target, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset) -&gt; Nothing</code></pre>
 </div>
-<p><a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>&#39;s counterpart of the <code class="md-code-inline">Threads.@threads</code> body in <a href="../../internals/form/#Bramble._sweep_band_colour!-Union{Tuple{TERM}, Tuple{Bramble.CpuThreaded, Any, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64, Int64, Any}} where TERM"><code class="md-code-inline">_sweep_band_colour!</code></a>, filled by <code class="md-code-inline">BramblePolyesterExt</code> (gpena/Bramble.jl#190). The only <code class="md-code-inline">src/</code> method errors naming Polyester.</p>
+<p><a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>&#39;s counterpart of the <code class="md-code-inline">Threads.@threads</code> body in <a href="../../internals/form/#Bramble._sweep_band_colour!-Union{Tuple{TERM}, Tuple{Bramble.CpuThreaded, Any, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64, Int64, Any}} where TERM"><code class="md-code-inline">_sweep_band_colour!</code></a> when it replays (gpena/Bramble.jl#338): for each band <code class="md-code-inline">b</code> in <code class="md-code-inline">bidx</code>, every <code class="md-code-inline">I</code> in <code class="md-code-inline">CartesianIndices((rest..., _band_range(ax, nbands, b)))</code> gets <a href="../../internals/form/#Bramble._replay_point!-Union{Tuple{TERM}, Tuple{SINK}, Tuple{SINK, TERM, Any, CartesianIndex, Any, Any, Int64, Int64}} where {SINK, TERM}"><code class="md-code-inline">_replay_point!</code></a><code class="md-code-inline">(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)</code>. <code class="md-code-inline">target</code> is a <a href="../../internals/form/#Bramble._ReplayTarget"><code class="md-code-inline">_ReplayTarget</code></a> or an action target, crossing <code class="md-code-inline">@batch</code> as <a href="../../internals/form/#Bramble._batch_bilinear_colour_replay!-NTuple{8, Any}"><code class="md-code-inline">_batch_bilinear_colour_replay!</code></a> describes. The only <code class="md-code-inline">src/</code> method errors naming Polyester.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble._batch_bilinear_colour_sweep!-NTuple{9, Any}">
+<div class="md-docstring" id="Bramble._batch_bilinear_colour_replay!-NTuple{8, Any}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble._batch_bilinear_colour_sweep!</code> — <span class="md-docstring-sig">NTuple{9, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L901-L907" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble._batch_bilinear_colour_replay!</code> — <span class="md-docstring-sig">NTuple{8, Any}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L920-L931" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_batch_bilinear_colour_sweep!(A, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset, α) -&gt; Nothing</code></pre>
+<pre><code class="language-julia">_batch_bilinear_colour_replay!(target, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset) -&gt; Nothing</code></pre>
 </div>
-<p><a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>&#39;s counterpart of the <code class="md-code-inline">Threads.@threads</code> body in <code class="md-code-inline">_sweep_bilinear_colour!</code>, filled by <code class="md-code-inline">BramblePolyesterExt</code> (gpena/Bramble.jl#190). The only <code class="md-code-inline">src/</code> method errors naming Polyester.</p>
+<p><a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>&#39;s counterpart of the <code class="md-code-inline">Threads.@threads</code> body in <code class="md-code-inline">_sweep_bilinear_colour!</code> when it replays (gpena/Bramble.jl#338): the same loop over <code class="md-code-inline">idxs</code>, calling <a href="../../internals/form/#Bramble._replay_point!-Union{Tuple{TERM}, Tuple{SINK}, Tuple{SINK, TERM, Any, CartesianIndex, Any, Any, Int64, Int64}} where {SINK, TERM}"><code class="md-code-inline">_replay_point!</code></a><code class="md-code-inline">(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)</code> per point. <code class="md-code-inline">target</code> is a <a href="../../internals/form/#Bramble._ReplayTarget"><code class="md-code-inline">_ReplayTarget</code></a> or an action target. The loop captures none of them whole: the target&#39;s storage vector (<code class="md-code-inline">nzval</code>, or <code class="md-code-inline">y</code> and <code class="md-code-inline">x</code>) crosses as a top-level argument, the rest of <code class="md-code-inline">target</code>, <code class="md-code-inline">sp</code>, <code class="md-code-inline">term</code> and <code class="md-code-inline">mesh_markers</code> as one <a href="../../internals/utils/#Bramble._batch_split-Tuple{Any}"><code class="md-code-inline">_batch_split</code></a>, rebuilt in each task (gpena/Bramble.jl#437). The only <code class="md-code-inline">src/</code> method errors naming Polyester.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.GridFunctionScale">
@@ -308,7 +308,7 @@
 <div class="md-docstring" id="Bramble.AbsoluteColumn">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.AbsoluteColumn</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L220-L231" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L276-L287" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -322,7 +322,7 @@
 <div class="md-docstring" id="Bramble.AbsoluteRow">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.AbsoluteRow</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L236-L247" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L292-L303" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -336,7 +336,7 @@
 <div class="md-docstring" id="Bramble.IndexedTestFunction">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.IndexedTestFunction</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L147-L153" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L202-L208" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -349,7 +349,7 @@
 <div class="md-docstring" id="Bramble.IndexedTrialFunction">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.IndexedTrialFunction</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L135-L142" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L190-L197" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -362,7 +362,7 @@
 <div class="md-docstring" id="Bramble.PointDependentStencil">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.PointDependentStencil</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L282-L288" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L338-L344" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -375,7 +375,7 @@
 <div class="md-docstring" id="Bramble.SourceConstant">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.SourceConstant</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L186-L197" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L242-L253" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -389,7 +389,7 @@
 <div class="md-docstring" id="Bramble.SourceFunction">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.SourceFunction</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L158-L162" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L213-L217" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -402,7 +402,7 @@
 <div class="md-docstring" id="Bramble.SourceVector">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.SourceVector</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L167-L181" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L222-L237" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -411,13 +411,13 @@
 </div>
 <p>An AST node representing a source term defined by a discrete vector of values.</p>
 <p>Note the division of labour with <code class="md-code-inline">GridFunctionScale</code>, which also carries values per grid point. A <code class="md-code-inline">SourceFunction</code> holds a function of position, <code class="md-code-inline">f(x)</code>, evaluated at the point. A <code class="md-code-inline">Function</code> inside a <code class="md-code-inline">GridFunctionScale</code> is something else entirely: a zero-argument thunk returning the vector or number to scale by, called as <code class="md-code-inline">f()</code> both here and in <code class="md-code-inline">resolve_ast</code>. It defers building that vector until the form is resolved.</p>
-<p>So <code class="md-code-inline">(x -&gt; x[1]) * D₋ₓ(u)</code> does not do what it reads as: the thunk call fails, because the function wants a point. A function of position belongs in a <code class="md-code-inline">SourceFunction</code>, or should be restricted to the grid with <code class="md-code-inline">Rₕ</code> first and passed as the vector it becomes.</p>
+<p>So <code class="md-code-inline">(x -&gt; x[1]) * D₋ₓ(u)</code> does not do what it reads as: the function wants a point, and <code class="md-code-inline">resolve_ast</code> throws an <code class="md-code-inline">ArgumentError</code> naming both fixes. A function of position belongs in a <code class="md-code-inline">SourceFunction</code>, or should be restricted to the grid with <code class="md-code-inline">Rₕ</code> first and passed as the vector it becomes.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.TestFunction">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.TestFunction</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L124-L129" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L179-L184" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -430,7 +430,7 @@
 <div class="md-docstring" id="Bramble.TranslationInvariantStencil">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.TranslationInvariantStencil</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L274-L279" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L330-L335" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -443,7 +443,7 @@
 <div class="md-docstring" id="Bramble.TrialFunction">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.TrialFunction</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L116-L121" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L171-L176" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -456,7 +456,7 @@
 <div class="md-docstring" id="Bramble._grid_function_value-Tuple{Any, Int64}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._grid_function_value</code> — <span class="md-docstring-sig">Tuple{Any, Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L475-L487" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L531-L543" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -464,13 +464,13 @@
 <pre><code class="language-julia">_grid_function_value(grid_function, lin_idx::Int)</code></pre>
 </div>
 <p>The value a <a href="../../internals/form/#Bramble.GridFunctionScale"><code class="md-code-inline">GridFunctionScale</code></a> coefficient contributes at linear index <code class="md-code-inline">lin_idx</code>.</p>
-<p><code class="md-code-inline">grid_function</code> is whatever <code class="md-code-inline">GridFunctionScale.grid_function</code> may hold: a zero-argument <code class="md-code-inline">Function</code> thunk deferred until <code class="md-code-inline">resolve_ast</code> calls it (see <a href="../../internals/form/#Bramble.SourceVector"><code class="md-code-inline">SourceVector</code></a>&#39;s docstring for why a thunk, not a plain vector, is the wire format), a bare <code class="md-code-inline">Number</code> for a uniform scale, or an array of per-point values. Shared by <code class="md-code-inline">local_stencil(::GridFunctionScale, ...)</code> (<code class="md-code-inline">form/stencil_eval.jl</code>), which reads the coefficient at the point being visited, and the <code class="md-code-inline">shifted_inner_stencil</code> override below, which reads it at the point a tap shifts to – previously the same three-way branch, written out twice.</p>
+<p><code class="md-code-inline">grid_function</code> is whatever <code class="md-code-inline">GridFunctionScale.grid_function</code> may hold: a zero-argument <code class="md-code-inline">Function</code> thunk deferred until <code class="md-code-inline">resolve_ast</code> calls it (see <a href="../../internals/form/#Bramble.SourceVector"><code class="md-code-inline">SourceVector</code></a>&#39;s docstring for why a thunk, not a plain vector, is the wire format), a bare <code class="md-code-inline">Number</code> for a uniform scale, or an array of per-point values. Shared by <code class="md-code-inline">local_stencil(::GridFunctionScale, ...)</code> (<code class="md-code-inline">assembly/stencil_eval.jl</code>), which reads the coefficient at the point being visited, and the <code class="md-code-inline">shifted_inner_stencil</code> override below, which reads it at the point a tap shifts to – previously the same three-way branch, written out twice.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._in_grid-Union{Tuple{D}, Tuple{Any, CartesianIndex{D}}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._in_grid</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Any, CartesianIndex{D}}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L329-L338" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L385-L394" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -484,7 +484,7 @@
 <div class="md-docstring" id="Bramble.entry_offsets-Tuple{Tuple}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.entry_offsets</code> — <span class="md-docstring-sig">Tuple{Tuple}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L61-L88" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L114-L143" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -495,13 +495,13 @@ entry_weights(stencil::Tuple)</code></pre>
 <p>A stencil&#39;s offsets and its coefficients, as two separate containers: <code class="md-code-inline">entry_offsets</code> keeps each entry&#39;s offsets alone (<code class="md-code-inline">(off_u, off_v)</code> for a bilinear entry, <code class="md-code-inline">(off_v,)</code> for a linear one) and <code class="md-code-inline">entry_weights</code> keeps the coefficients.</p>
 <p>Taken apart for <code class="md-code-inline">Enzyme</code>, which cannot type a stencil entry&#39;s mixed <code class="md-code-inline">Int</code>/<code class="md-code-inline">Float64</code> tuple in a function that reads <em>both</em> halves of it and is not inlined into the function being differentiated. All three conditions are needed, measured one at a time: the same loop written inside the differentiated closure compiles, so does one that reads only the offsets, and so does one that reads only the weights – what fails is the combination, with <code class="md-code-inline">EnzymeNoTypeError</code> inside <code class="md-code-inline">_visit_guarded_region!</code>. Reading the offsets from a container of <code class="md-code-inline">Int</code>s and the weights from a container of <code class="md-code-inline">Float64</code>s removes it, for a coefficient scaling the form and for a <code class="md-code-inline">VectorElement</code> coefficient alike, in 1D, 2D and 3D.</p>
 <p>The stencil itself is unchanged: <code class="md-code-inline">local_stencil</code> returns what it always did, and the split happens where the entries are consumed (<code class="md-code-inline">_visit_entries</code>). That is enough, and the narrower change: every <code class="md-code-inline">local_stencil</code> method, the stencil algebra above and the tests that compare stencils against literal tuples all stay as they are. Enzyme differentiates <code class="md-code-inline">local_stencil</code> and <code class="md-code-inline">scale_stencil</code> themselves correctly at any stencil size measured, up to 63 machine words – a failure at a large stencil is really <code class="md-code-inline">_peelable</code> selecting the guarded walk, not an aggregate Enzyme cannot type.</p>
-<p><code class="md-code-inline">map</code> over a <code class="md-code-inline">Tuple</code> unrolls and stays type-stable, the same property the rest of the stencil algebra in this file relies on, so neither call allocates.</p>
+<p>Both are an <code class="md-code-inline">ntuple</code> over <code class="md-code-inline">Val(length(stencil))</code>, which unrolls at any length, so neither call allocates whatever the stencil&#39;s size. <code class="md-code-inline">map</code> would not do: over a <code class="md-code-inline">Tuple</code> of more than 32 entries Base&#39;s <code class="md-code-inline">map</code> collects into a <code class="md-code-inline">Vector{Any}</code> and boxes, and a product of two nested operands (<code class="md-code-inline">innerₕ(D̽ₓ(D₋ₓ(u)), D̽ₓ(D₋ₓ(v)))</code>) is that long at every grid point.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.entry_weights">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.entry_weights</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L61-L88" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L114-L143" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -512,7 +512,7 @@ entry_weights(stencil::Tuple)</code></pre>
 <p>A stencil&#39;s offsets and its coefficients, as two separate containers: <code class="md-code-inline">entry_offsets</code> keeps each entry&#39;s offsets alone (<code class="md-code-inline">(off_u, off_v)</code> for a bilinear entry, <code class="md-code-inline">(off_v,)</code> for a linear one) and <code class="md-code-inline">entry_weights</code> keeps the coefficients.</p>
 <p>Taken apart for <code class="md-code-inline">Enzyme</code>, which cannot type a stencil entry&#39;s mixed <code class="md-code-inline">Int</code>/<code class="md-code-inline">Float64</code> tuple in a function that reads <em>both</em> halves of it and is not inlined into the function being differentiated. All three conditions are needed, measured one at a time: the same loop written inside the differentiated closure compiles, so does one that reads only the offsets, and so does one that reads only the weights – what fails is the combination, with <code class="md-code-inline">EnzymeNoTypeError</code> inside <code class="md-code-inline">_visit_guarded_region!</code>. Reading the offsets from a container of <code class="md-code-inline">Int</code>s and the weights from a container of <code class="md-code-inline">Float64</code>s removes it, for a coefficient scaling the form and for a <code class="md-code-inline">VectorElement</code> coefficient alike, in 1D, 2D and 3D.</p>
 <p>The stencil itself is unchanged: <code class="md-code-inline">local_stencil</code> returns what it always did, and the split happens where the entries are consumed (<code class="md-code-inline">_visit_entries</code>). That is enough, and the narrower change: every <code class="md-code-inline">local_stencil</code> method, the stencil algebra above and the tests that compare stencils against literal tuples all stay as they are. Enzyme differentiates <code class="md-code-inline">local_stencil</code> and <code class="md-code-inline">scale_stencil</code> themselves correctly at any stencil size measured, up to 63 machine words – a failure at a large stencil is really <code class="md-code-inline">_peelable</code> selecting the guarded walk, not an aggregate Enzyme cannot type.</p>
-<p><code class="md-code-inline">map</code> over a <code class="md-code-inline">Tuple</code> unrolls and stays type-stable, the same property the rest of the stencil algebra in this file relies on, so neither call allocates.</p>
+<p>Both are an <code class="md-code-inline">ntuple</code> over <code class="md-code-inline">Val(length(stencil))</code>, which unrolls at any length, so neither call allocates whatever the stencil&#39;s size. <code class="md-code-inline">map</code> would not do: over a <code class="md-code-inline">Tuple</code> of more than 32 entries Base&#39;s <code class="md-code-inline">map</code> collects into a <code class="md-code-inline">Vector{Any}</code> and boxes, and a product of two nested operands (<code class="md-code-inline">innerₕ(D̽ₓ(D₋ₓ(u)), D̽ₓ(D₋ₓ(v)))</code>) is that long at every grid point.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.shift_offset-Union{Tuple{D}, Tuple{NTuple{D, Int64}, Int64, Int64}} where D">
@@ -531,7 +531,7 @@ entry_weights(stencil::Tuple)</code></pre>
 <div class="md-docstring" id="Bramble.shift_stencil-Union{Tuple{Delta}, Tuple{Dim}, Tuple{Tuple, Val{Dim}, Val{Delta}}} where {Dim, Delta}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.shift_stencil</code> — <span class="md-docstring-sig">Union{Tuple{Delta}, Tuple{Dim}, Tuple{Tuple, Val{Dim}, Val{Delta}}} where {Dim, Delta}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L24-L32" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L49-L56" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -539,13 +539,13 @@ entry_weights(stencil::Tuple)</code></pre>
 <pre><code class="language-julia">shift_stencil(inner::Tuple, ::Val{Dim}, delta)</code></pre>
 </div>
 <p>Shifts all coordinates in a stencil tuple by <code class="md-code-inline">delta</code> in dimension <code class="md-code-inline">Dim</code>.</p>
-<p><code class="md-code-inline">map</code> over a <code class="md-code-inline">Tuple</code> unrolls and stays type-stable at compile time in Julia, with zero allocations and an identical inferred return type, so code generation would buy nothing here.</p>
+<p><code class="md-code-inline">_each_entry</code> unrolls and stays type-stable at any stencil length, with zero allocations, so code generation would buy nothing here.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.shifted_inner_stencil-Union{Tuple{Dim}, Tuple{D}, Tuple{Any, Any, Any, CartesianIndex{D}, Any, Val{Dim}, Any}} where {D, Dim}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.shifted_inner_stencil</code> — <span class="md-docstring-sig">Union{Tuple{Dim}, Tuple{D}, Tuple{Any, Any, Any, CartesianIndex{D}, Any, Val{Dim}, Any}} where {D, Dim}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L341-L375" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L397-L431" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -570,7 +570,7 @@ entry_weights(stencil::Tuple)</code></pre>
 <div class="md-docstring" id="Bramble.source_function-Union{Tuple{D}, Tuple{Any, Val{D}}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.source_function</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Any, Val{D}}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L570-L574" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L612-L616" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -583,7 +583,7 @@ entry_weights(stencil::Tuple)</code></pre>
 <div class="md-docstring" id="Bramble.sum_stencil_values-Tuple{Tuple}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.sum_stencil_values</code> — <span class="md-docstring-sig">Tuple{Tuple}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L95-L109" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L150-L164" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -597,7 +597,7 @@ entry_weights(stencil::Tuple)</code></pre>
 <div class="md-docstring" id="Bramble.test_function-Union{Tuple{Val{D}}, Tuple{D}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.test_function</code> — <span class="md-docstring-sig">Union{Tuple{Val{D}}, Tuple{D}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L561-L566" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L603-L608" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -611,7 +611,7 @@ test_function(space::AbstractSpaceType) -&gt; TestFunction{dim(space), leaf_coun
 <div class="md-docstring" id="Bramble.trial_function-Union{Tuple{Val{D}}, Tuple{D}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.trial_function</code> — <span class="md-docstring-sig">Union{Tuple{Val{D}}, Tuple{D}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L552-L557" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/common.jl#L594-L599" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -659,7 +659,7 @@ trial_function(space::AbstractSpaceType) -&gt; TrialFunction{dim(space), leaf_co
 <pre><code class="language-julia">UnaryWrapper{D}</code></pre>
 </div>
 <p>The AST nodes that wrap exactly one operand in an <code class="md-code-inline">inner_op</code> field.</p>
-<p>Thirteen node types, and the reason they are worth naming together: a query about a term usually has the same answer for a wrapper as for the operand inside it, so each such query used to be registered against all thirteen by hand – one line apiece, per query (gpena/Bramble.jl#52). A query that forgot one inherited a fallback instead, and every fallback in this family is a plausible wrong answer rather than an error: <code class="md-code-inline">test_component_or_nothing</code> answering <code class="md-code-inline">nothing</code> sends a term to every block.</p>
+<p>Fourteen node types, and the reason they are worth naming together: a query about a term usually has the same answer for a wrapper as for the operand inside it, so each such query used to be registered against all fourteen by hand – one line apiece, per query (gpena/Bramble.jl#52). A query that forgot one inherited a fallback instead, and every fallback in this family is a plausible wrong answer rather than an error: <code class="md-code-inline">test_component_or_nothing</code> answering <code class="md-code-inline">nothing</code> sends a term to every block.</p>
 <p>Written as a union of concrete types rather than reached through a generic child accessor, deliberately. Dispatch resolves it at compile time and each method still reads <code class="md-code-inline">op.inner_op</code> directly, so nothing on the assembly path pays for the generality.</p>
 <p>Products and sums are not members. <code class="md-code-inline">BilinearProduct</code> and <code class="md-code-inline">LinearProduct</code> hold two operands with different roles – trial on the left, test on the right – so a query about the test component reads <code class="md-code-inline">right_op</code> alone, and <code class="md-code-inline">OperatorAdd</code> has to reconcile both sides. Those stay written out, which is the point: what is left explicit is what genuinely differs.</p>
 </div>
@@ -667,22 +667,22 @@ trial_function(space::AbstractSpaceType) -&gt; TrialFunction{dim(space), leaf_co
 <div class="md-docstring" id="Bramble._is_source_only-Tuple{Union{Bramble.BackwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.BackwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CrossWeightedDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.JumpNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ShiftNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StarDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}} where D}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._is_source_only</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.BackwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.BackwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CrossWeightedDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.JumpNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ShiftNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StarDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}} where D}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/stencil_eval.jl#L397-L416" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/stencil_eval.jl#L543-L563" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">_is_source_only(op::LazyOp) -&gt; Bool</code></pre>
 </div>
-<p>Whether a <code class="md-code-inline">LazyOp</code> subtree is source-only: built entirely from sources (<code class="md-code-inline">SourceFunction</code>/<code class="md-code-inline">SourceVector</code>) and the plain operators that wrap them, never bottoming out in a <code class="md-code-inline">TrialFunction</code>/<code class="md-code-inline">IndexedTrialFunction</code> leaf.</p>
-<p><code class="md-code-inline">innerₕ</code>&#39;s <code class="md-code-inline">l::Function</code>/<code class="md-code-inline">l::Number</code>/<code class="md-code-inline">l::VectorElement</code> overloads (<code class="md-code-inline">operators/inner.jl</code>) never need this: those three types are never anything but a source, so wrapping them in a <code class="md-code-inline">LinearProduct</code> is unconditional. The question only exists for an argument that already arrived as a <code class="md-code-inline">LazyOp</code>: <code class="md-code-inline">πₕ(uₕ)</code> (<a href="../../api/spaces/#Bramble.interpolate_at"><code class="md-code-inline">interpolate_at</code></a>) or <code class="md-code-inline">D₋ₓ(πₕ(uₕ))</code> are sources too, just already wrapped, and the generic <code class="md-code-inline">innerₕ(::LazyOp, ::LazyOp)</code> used to build a <code class="md-code-inline">BilinearProduct</code> regardless, which is the wrong AST shape for a <code class="md-code-inline">LinearForm</code>&#39;s assembly walk, since a <code class="md-code-inline">BilinearProduct</code>&#39;s stencil carries a pair of offsets (trial and test), where <code class="md-code-inline">_scatter_term!</code> (<code class="md-code-inline">form/linear.jl</code>) expects one.</p>
+<p>Whether a <code class="md-code-inline">LazyOp</code> subtree is source-only: built entirely from sources (<code class="md-code-inline">SourceFunction</code>, <code class="md-code-inline">SourceVector</code>, <code class="md-code-inline">SourceConstant</code>, <code class="md-code-inline">DiracSource</code>) and the plain operators that wrap them, never bottoming out in a <code class="md-code-inline">TrialFunction</code>/<code class="md-code-inline">IndexedTrialFunction</code> leaf.</p>
+<p><code class="md-code-inline">innerₕ</code>&#39;s <code class="md-code-inline">l::Function</code>/<code class="md-code-inline">l::Number</code>/<code class="md-code-inline">l::VectorElement</code> overloads (<code class="md-code-inline">operators/inner.jl</code>) never need this: those three types are never anything but a source, so wrapping them in a <code class="md-code-inline">LinearProduct</code> is unconditional. The question only exists for an argument that already arrived as a <code class="md-code-inline">LazyOp</code>: <code class="md-code-inline">πₕ(uₕ)</code> (<a href="../../api/spaces/#Bramble.interpolate_at"><code class="md-code-inline">interpolate_at</code></a>) or <code class="md-code-inline">D₋ₓ(πₕ(uₕ))</code> are sources too, just already wrapped, and the generic <code class="md-code-inline">innerₕ(::LazyOp, ::LazyOp)</code> used to build a <code class="md-code-inline">BilinearProduct</code> regardless, which is the wrong AST shape for a <code class="md-code-inline">LinearForm</code>&#39;s assembly walk, since a <code class="md-code-inline">BilinearProduct</code>&#39;s stencil carries a pair of offsets (trial and test), where <code class="md-code-inline">_scatter_term!</code> (<code class="md-code-inline">assembly/linear.jl</code>) expects one.</p>
 <p>A missing case defaults to <code class="md-code-inline">false</code> (the fallback <code class="md-code-inline">::LazyOp</code> method below), which is conservative, since that is exactly the behavior every node had before this predicate existed (always <code class="md-code-inline">BilinearProduct</code>) for anything not explicitly listed as source-only.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._ast_equal-Tuple{Bramble.LazyOp, Bramble.LazyOp}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._ast_equal</code> — <span class="md-docstring-sig">Tuple{Bramble.LazyOp, Bramble.LazyOp}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/simplifier.jl#L148-L161" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/simplifier.jl#L134-L147" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -696,7 +696,7 @@ trial_function(space::AbstractSpaceType) -&gt; TrialFunction{dim(space), leaf_co
 <div class="md-docstring" id="Bramble.simplify_ast-Tuple{Bramble.LazyOp}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.simplify_ast</code> — <span class="md-docstring-sig">Tuple{Bramble.LazyOp}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/simplifier.jl#L272-L281" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/simplifier.jl#L261-L270" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -725,7 +725,7 @@ trial_function(space::AbstractSpaceType) -&gt; TrialFunction{dim(space), leaf_co
 <div class="md-docstring" id="Bramble.Block">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Block</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L124-L138" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L124-L134" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -733,13 +733,13 @@ trial_function(space::AbstractSpaceType) -&gt; TrialFunction{dim(space), leaf_co
 <pre><code class="language-julia">Block{TrialLeaf, TestLeaf}</code></pre>
 </div>
 <p>One leaf-space pair&#39;s rectangle within a composite system matrix: the concrete trial and test leaf spaces a term couples, and the row/column offset each contributes to that rectangle&#39;s position in the assembled matrix.</p>
-<p>Matrix rows are indexed by the test function (see <code class="md-code-inline">bilinear.jl</code>&#39;s file header), so <code class="md-code-inline">row_offset</code> always comes from <code class="md-code-inline">test_leaf</code>&#39;s offset in <code class="md-code-inline">leaf_spaces_offsets</code>, and <code class="md-code-inline">col_offset</code> from <code class="md-code-inline">trial_leaf</code>&#39;s. That asymmetry used to be carried by convention across six call sites, each unpacking a bare <code class="md-code-inline">(tc, sc)</code> tuple into <code class="md-code-inline">first</code>/<code class="md-code-inline">last</code> calls in the right order – one of which got it backwards (gpena/Bramble.jl#48). Naming it here means a caller reads <code class="md-code-inline">blk.row_offset</code>/<code class="md-code-inline">blk.col_offset</code> off the type instead of re-deriving which positional element means which.</p>
+<p>Matrix rows are indexed by the test function (see <code class="md-code-inline">bilinear.jl</code>&#39;s file header). <code class="md-code-inline">row_offset</code> always comes from <code class="md-code-inline">test_leaf</code>&#39;s offset and <code class="md-code-inline">col_offset</code> from <code class="md-code-inline">trial_leaf</code>&#39;s, so a caller reads them off the type instead of unpacking a positional <code class="md-code-inline">(tc, sc)</code> tuple.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._NamedBlock">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._NamedBlock</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L158-L170" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L154-L166" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -753,7 +753,7 @@ trial_function(space::AbstractSpaceType) -&gt; TrialFunction{dim(space), leaf_co
 <div class="md-docstring" id="Bramble._at_leaf-Union{Tuple{L}, Tuple{F}, Tuple{F, Tuple{L, Vararg{L}}, Int64}} where {F, L}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._at_leaf</code> — <span class="md-docstring-sig">Union{Tuple{L}, Tuple{F}, Tuple{F, Tuple{L, Vararg{L}}, Int64}} where {F, L}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L302-L311" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L298-L307" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -766,7 +766,7 @@ trial_function(space::AbstractSpaceType) -&gt; TrialFunction{dim(space), leaf_co
 <div class="md-docstring" id="Bramble._bind_marker_ids-Tuple{Any, Bramble.AbstractMeshType}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._bind_marker_ids</code> — <span class="md-docstring-sig">Tuple{Any, Bramble.AbstractMeshType}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L419-L426" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L414-L421" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -779,7 +779,7 @@ trial_function(space::AbstractSpaceType) -&gt; TrialFunction{dim(space), leaf_co
 <div class="md-docstring" id="Bramble._bind_walk-Tuple{Any, Bramble.AbstractMeshType}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._bind_walk</code> — <span class="md-docstring-sig">Tuple{Any, Bramble.AbstractMeshType}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L387-L404" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L382-L399" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -794,7 +794,7 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 <div class="md-docstring" id="Bramble._collect_region_labels-Tuple{Bramble.RegionRestriction}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._collect_region_labels</code> — <span class="md-docstring-sig">Tuple{Bramble.RegionRestriction}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L326-L337" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L322-L333" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -808,7 +808,7 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 <div class="md-docstring" id="Bramble._foldl_block_pairs-Union{Tuple{B2}, Tuple{B1}, Tuple{F}, Tuple{F, Any, Tuple{B1, Vararg{B1}}, Tuple{B2, Vararg{B2}}}} where {F, B1&lt;:Bramble.Block, B2&lt;:Bramble.Block}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._foldl_block_pairs</code> — <span class="md-docstring-sig">Union{Tuple{B2}, Tuple{B1}, Tuple{F}, Tuple{F, Any, Tuple{B1, Vararg{B1}}, Tuple{B2, Vararg{B2}}}} where {F, B1&lt;:Bramble.Block, B2&lt;:Bramble.Block}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L257-L263" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L253-L259" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -821,7 +821,7 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 <div class="md-docstring" id="Bramble._foldl_blocks-Union{Tuple{B}, Tuple{F}, Tuple{F, Any, Tuple{B, Vararg{B}}}} where {F, B&lt;:Bramble.Block}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._foldl_blocks</code> — <span class="md-docstring-sig">Union{Tuple{B}, Tuple{F}, Tuple{F, Any, Tuple{B, Vararg{B}}}} where {F, B&lt;:Bramble.Block}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L238-L246" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L234-L242" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -834,7 +834,7 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 <div class="md-docstring" id="Bramble._foldl_leaves-Union{Tuple{L}, Tuple{F}, Tuple{F, Any, Tuple{L, Vararg{L}}}} where {F, L}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._foldl_leaves</code> — <span class="md-docstring-sig">Union{Tuple{L}, Tuple{F}, Tuple{F, Any, Tuple{L, Vararg{L}}}} where {F, L}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L280-L286" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L276-L282" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -847,7 +847,7 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 <div class="md-docstring" id="Bramble._validate_term_markers-Tuple{Any, Any, String}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._validate_term_markers</code> — <span class="md-docstring-sig">Tuple{Any, Any, String}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L356-L365" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L351-L360" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -874,7 +874,7 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 <div class="md-docstring" id="Bramble.blocks-Tuple{Any, Tuple, Tuple}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.blocks</code> — <span class="md-docstring-sig">Tuple{Any, Tuple, Tuple}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L196-L207" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/block_extract.jl#L192-L203" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -916,7 +916,7 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 <div class="md-docstring" id="Bramble._stencil_margin-Tuple{Bramble.TrialFunction}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._stencil_margin</code> — <span class="md-docstring-sig">Tuple{Bramble.TrialFunction}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/stencil_pattern.jl#L107-L129" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/stencil_pattern.jl#L99-L121" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -924,58 +924,15 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 <pre><code class="language-julia">_stencil_margin(op) -&gt; Int</code></pre>
 </div>
 <p>The largest <code class="md-code-inline">|offset|</code> component anywhere in <code class="md-code-inline">op</code>&#39;s stencil, trial and test sides combined.</p>
-<p>Unlike <a href="../../internals/form/#Bramble.stencil_offsets"><code class="md-code-inline">stencil_offsets</code></a>, which keeps only the test-side (row) reach at a <code class="md-code-inline">BilinearProduct</code> because that is all its one caller (<code class="md-code-inline">_colour_strides</code>) needs, this keeps both. It exists for <code class="md-code-inline">visit_bilinear_stencil</code>&#39;s interior/boundary split (<code class="md-code-inline">form/bilinear_traversal.jl</code>, gpena/Bramble.jl#160), which has to guard every offset an entry can carry – trial and test alike, not just the row&#39;s – before it can skip the guard anywhere.</p>
+<p>Unlike <a href="../../internals/form/#Bramble.stencil_offsets"><code class="md-code-inline">stencil_offsets</code></a>, which keeps only the test-side (row) reach at a <code class="md-code-inline">BilinearProduct</code> because that is all its one caller (<code class="md-code-inline">_colour_strides</code>) needs, this keeps both. It exists for <code class="md-code-inline">visit_bilinear_stencil</code>&#39;s interior/boundary split (<code class="md-code-inline">assembly/bilinear_traversal.jl</code>, gpena/Bramble.jl#160), which has to guard every offset an entry can carry – trial and test alike, not just the row&#39;s – before it can skip the guard anywhere.</p>
 <p>Answered as a scalar rather than the offset set <code class="md-code-inline">stencil_offsets</code> returns: the traversal only needs a margin to build a rectangular interior box from, and a scalar costs no allocation to compute, where reusing <code class="md-code-inline">stencil_offsets</code> (built on <code class="md-code-inline">union</code>-ing <code class="md-code-inline">Vector</code>s) would mean paying that cost inside <code class="md-code-inline">visit_bilinear_stencil</code> itself on the <code class="md-code-inline">ReplaySink</code> path, once per <code class="md-code-inline">assemble!</code> call rather than once per form.</p>
 <p>A composed reach past magnitude 1 is not a hypothetical this ignores: <code class="md-code-inline">D₋ₓ(D₋ₓ(u))</code> and <code class="md-code-inline">Shift(u, dim, 2)</code> both carry offsets wider than the one step a single difference or a unit shift would suggest, which is why this walks the same tree <code class="md-code-inline">stencil_offsets</code> does rather than assuming every node caps out at 1.</p>
-</div>
-</div>
-<div class="md-docstring" id="Bramble.bandwidths-Tuple{Any}">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.bandwidths</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/stencil_pattern.jl#L259-L284" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">bandwidths(a::BilinearForm) -&gt; Tuple{Int, Int}</code></pre>
-</div>
-<p>The lower and upper bandwidth <code class="md-code-inline">(l, u)</code> of the matrix <code class="md-code-inline">a</code> assembles into, in the lexicographic ordering <a href="../../api/meshes/#Bramble.indices"><code class="md-code-inline">indices</code></a><code class="md-code-inline">(Ωₕ)</code> walks: column-major, first axis fastest. Row <code class="md-code-inline">i</code> can only carry a stored entry in column <code class="md-code-inline">j</code> when <code class="md-code-inline">-l &lt;= j - i &lt;= u</code>.</p>
-<p>Read entirely from the resolved AST, without assembling anything. <code class="md-code-inline">a</code> is a sum of <code class="md-code-inline">BilinearProduct</code> terms; for each, <a href="../../internals/form/#Bramble.stencil_offsets"><code class="md-code-inline">stencil_offsets</code></a> gives the trial (column) and test (row) reach along every axis. An offset <code class="md-code-inline">(o₁, …, o_D)</code> moves the lexicographic index by <code class="md-code-inline">o₁ + o₂n₁ + o₃n₁n₂ + …</code>, where <code class="md-code-inline">(n₁, …, n_D)</code> are the mesh&#39;s per-axis point counts (<a href="../../api/meshes/#Bramble.npoints"><code class="md-code-inline">npoints</code></a><code class="md-code-inline">(Ωₕ, Tuple)</code>). <code class="md-code-inline">l</code> and <code class="md-code-inline">u</code> are the largest such distance, negated and as-is, taken over every pairing of a trial offset with a test offset with the corresponding row&#39;s offset, over every term of the sum.</p>
-<p><strong>Throws</strong></p>
-<ul class="md-list-tight">
-<li><p><code class="md-code-inline">ArgumentError</code>: the trial or test space is a <code class="md-code-inline">CompositeGridSpace</code>; the form contains an interpolation operator (<code class="md-code-inline">πₕ</code>); or the trial and test spaces couple two leaves that share neither a mesh nor an interpolation between them.</p>
-</li>
-</ul>
-<p>This is internal: it is not exported, and has had no active consumer since the banded backends were dropped in v3.3.0. Reach it as <code class="md-code-inline">Bramble.bandwidths</code> or with <code class="md-code-inline">using Bramble: bandwidths</code>.</p>
-<p>See also: <a href="../../internals/form/#Bramble.blockbandwidths-Tuple{Any}"><code class="md-code-inline">blockbandwidths</code></a>, <a href="../../internals/form/#Bramble.stencil_offsets"><code class="md-code-inline">stencil_offsets</code></a>.</p>
-</div>
-</div>
-<div class="md-docstring" id="Bramble.blockbandwidths-Tuple{Any}">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.blockbandwidths</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/stencil_pattern.jl#L302-L326" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">blockbandwidths(a::BilinearForm) -&gt; Tuple{Tuple{Int, Int}, Tuple{Int, Int}}</code></pre>
-</div>
-<p>The block bandwidth and sub-block bandwidth of the matrix <code class="md-code-inline">a</code> assembles into, reading its lexicographic index as an outer block along the last axis and an inner lexicographic index over the remaining <code class="md-code-inline">D - 1</code> axes – the layout <code class="md-code-inline">BlockBandedMatrices.jl</code>&#39;s <code class="md-code-inline">BandedBlockBandedMatrix</code> expects, <code class="md-code-inline">(blockbandwidths, subblockbandwidths)</code>.</p>
-<p>For <code class="md-code-inline">D == 1</code> every block is a single point, so this is <code class="md-code-inline">(bandwidths(a), (0, 0))</code>.</p>
-<p>For <code class="md-code-inline">D &gt;= 2</code>, blocks are the <code class="md-code-inline">n₁⋯n_{D-1}</code>-point rectangles indexed by the <code class="md-code-inline">D</code>-th axis: <code class="md-code-inline">l_blk</code>/<code class="md-code-inline">u_blk</code> are the largest reach a term&#39;s <code class="md-code-inline">D</code>-th-axis offsets carry between a trial and a test point, <code class="md-code-inline">l_sub</code>/<code class="md-code-inline">u_sub</code> the largest lexicographic distance the remaining <code class="md-code-inline">D - 1</code> axes carry, both computed the same way <a href="../../internals/form/#Bramble.bandwidths-Tuple{Any}"><code class="md-code-inline">bandwidths</code></a> computes its one pair, just restricted to their own axes.</p>
-<p><strong>Throws</strong></p>
-<ul class="md-list-tight">
-<li><p><code class="md-code-inline">ArgumentError</code>: same conditions as <a href="../../internals/form/#Bramble.bandwidths-Tuple{Any}"><code class="md-code-inline">bandwidths</code></a>.</p>
-</li>
-</ul>
-<p>This is internal: it is not exported, and has had no active consumer since the banded backends were dropped in v3.3.0. Reach it as <code class="md-code-inline">Bramble.blockbandwidths</code> or with <code class="md-code-inline">using Bramble: blockbandwidths</code>.</p>
-<p>See also: <a href="../../internals/form/#Bramble.bandwidths-Tuple{Any}"><code class="md-code-inline">bandwidths</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.stencil_offsets">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.stencil_offsets</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/stencil_pattern.jl#L18-L30" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/stencil_pattern.jl#L18-L32" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -983,7 +940,7 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 <pre><code class="language-julia">stencil_offsets(op) -&gt; Vector{NTuple{D, Int}}</code></pre>
 </div>
 <p>The grid offsets the operator <code class="md-code-inline">op</code> reaches, sorted and without repeats.</p>
-<p>Read from the AST rather than from an evaluated stencil, and the two agree: a truncated point keeps its offsets and zeroes its coefficients, so the set does not vary over the grid. The one node whose reach is not fixed by its type is <a href="../../internals/space/#Bramble.ShiftNode"><code class="md-code-inline">ShiftNode</code></a>, which carries its step as a field; the value is available here because this walks the built tree.</p>
+<p>Read from the AST rather than from an evaluated stencil, and the two agree: a truncated point keeps its offsets and zeroes its coefficients, so the set does not vary over the grid. A <a href="../../internals/form/#Bramble.RegionRestriction"><code class="md-code-inline">RegionRestriction</code></a> is the exception: outside its region it contributes no entry at all, so the set is the reach wherever it contributes. The one node whose reach is not fixed by its type is <a href="../../internals/space/#Bramble.ShiftNode"><code class="md-code-inline">ShiftNode</code></a>, which carries its step as a field; the value is available here because this walks the built tree.</p>
 <p>For a <code class="md-code-inline">BilinearProduct</code> this is the row (test-side) reach only, not the full row/column pattern – see the note on that method.</p>
 </div>
 </div>
@@ -1003,7 +960,7 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 <div class="md-docstring" id="Bramble.BilinearProduct">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.BilinearProduct</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/inner.jl#L75-L79" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/inner.jl#L76-L80" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1016,7 +973,7 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 <div class="md-docstring" id="Bramble.InnerGamma">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.InnerGamma</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/inner.jl#L62-L72" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/inner.jl#L62-L73" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1024,7 +981,7 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 <pre><code class="language-julia">InnerGamma{MASK} &lt;: AbstractInnerProduct</code></pre>
 </div>
 <p>Quadrature weights for the <span class="md-math md-math-inline">\((D-1)\)</span>-dimensional surface integral over the grid faces <code class="md-code-inline">MASK</code> names (gpena/Bramble.jl#157).</p>
-<p><code class="md-code-inline">MASK</code> is the per-axis <code class="md-code-inline">(min, max)</code> face mask <code class="md-code-inline">_face_mask</code> (mesh/queries.jl) resolves the form&#39;s <code class="md-code-inline">markers</code> into, carried as a type parameter rather than a field so the node stays a singleton the like-term simplifier can fold and <code class="md-code-inline">compute_weight</code> reads a compile-time literal. It is resolved once, when the form is built.</p>
+<p><code class="md-code-inline">MASK</code> is the per-axis <code class="md-code-inline">(min, max)</code> face mask <code class="md-code-inline">_surface_mask</code> (mesh/queries.jl) resolves the form&#39;s <code class="md-code-inline">markers</code> into, carried as a type parameter rather than a field so the node stays a singleton the like-term simplifier can fold and <code class="md-code-inline">compute_weight</code> reads a compile-time literal. Building the node holds the labels (<code class="md-code-inline">_SurfaceLabels</code>); <code class="md-code-inline">form</code> resolves them once, against the mesh of the test space (<code class="md-code-inline">_resolve_surfaces</code>).</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.InnerH">
@@ -1071,7 +1028,7 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 <div class="md-docstring" id="Bramble.LinearProduct">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.LinearProduct</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/inner.jl#L87-L91" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/inner.jl#L88-L92" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1084,7 +1041,7 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 <div class="md-docstring" id="Bramble.inner_plus-Union{Tuple{N}, Tuple{D}, Tuple{NTuple{D, Bramble.LazyOp{D}}, NTuple{D, Bramble.LazyOp{D}}}} where {D, N}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.inner_plus</code> — <span class="md-docstring-sig">Union{Tuple{N}, Tuple{D}, Tuple{NTuple{D, Bramble.LazyOp{D}}, NTuple{D, Bramble.LazyOp{D}}}} where {D, N}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/inner.jl#L250-L258" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/inner.jl#L262-L270" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1117,17 +1074,24 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 </ul>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.restrict_to-Union{Tuple{D}, Tuple{Any, Bramble.LazyOp{D}}} where D">
+<div class="md-docstring" id="Bramble.restrict_to-Union{Tuple{D}, Tuple{Union{Symbol, Tuple{Vararg{Symbol}}}, Bramble.LazyOp{D}}} where D">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.restrict_to</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Any, Bramble.LazyOp{D}}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/region_restriction.jl#L36-L49" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble.restrict_to</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Union{Symbol, Tuple{Vararg{Symbol}}}, Bramble.LazyOp{D}}} where D</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/region_restriction.jl#L36-L62" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">restrict_to(region, op::LazyOp{D}) -&gt; RegionRestriction</code></pre>
 </div>
-<p>Restrict the operator <code class="md-code-inline">op</code> to a specific mesh region or boundary identifier.</p>
+<p>Restrict the operator <code class="md-code-inline">op</code> to a mesh region named by a marker label.</p>
+<p><code class="md-code-inline">region</code> is one of two forms:</p>
+<ul class="md-list-tight">
+<li><p>a <code class="md-code-inline">Symbol</code>, the label of a domain marker (<code class="md-code-inline">:interior</code>, <code class="md-code-inline">:boundary</code>, <code class="md-code-inline">:left</code>, a name the domain was given);</p>
+</li>
+<li><p>a tuple of <code class="md-code-inline">Symbol</code>s, the union of those labels.</p>
+</li>
+</ul>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -1135,8 +1099,142 @@ _bind_walk(term, sp::ScalarGridSpace) -&gt; Tuple{bound_term, Union{AbstractMatr
 restrict_to(:interior, U)
 
 # Restrict to a boundary region
-restrict_to(:left, U)</code></pre>
+restrict_to(:left, U)
+
+# Restrict to the union of two regions
+restrict_to((:left, :right), U)</code></pre>
 </div>
+<p><strong>Throws</strong></p>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">ArgumentError</code>: if <code class="md-code-inline">region</code> is neither a <code class="md-code-inline">Symbol</code> nor a tuple of <code class="md-code-inline">Symbol</code>s. A region given by a predicate is not supported: name it as a domain marker instead (<code class="md-code-inline">domain(S, :name =&gt; x -&gt; ...)</code>) and restrict to <code class="md-code-inline">:name</code>.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="md-docstring" id="Bramble._node_alias_expr-NTuple{5, Any}">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._node_alias_expr</code> — <span class="md-docstring-sig">NTuple{5, Any}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/node_family.jl#L71-L76" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_node_alias_expr(alias_name, dispatch_name, direction, direction_index, what; source = nothing)</code></pre>
+</div>
+<p>Returns the expression defining one per-coordinate alias, <code class="md-code-inline">alias_name(op)</code> as <code class="md-code-inline">dispatch_name(op, Val(direction_index))</code>, with its docstring attached.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble._node_bind_expr-Tuple{Any}">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._node_bind_expr</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/node_family.jl#L171-L179" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_node_bind_expr(node_name; source = nothing)</code></pre>
+</div>
+<p>Returns the expression defining <code class="md-code-inline">_bind_interp_spaces</code> for one node family.</p>
+<p>The interpolation binding pass (<code class="md-code-inline">operators/interpolation.jl</code>) walks a term the way <code class="md-code-inline">resolve_ast</code> does, and a directional node&#39;s share of that walk is the same line per family as its <code class="md-code-inline">resolve_ast</code>: rebuild with the bound operand inside.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble._node_dimensional_expr-NTuple{4, Any}">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._node_dimensional_expr</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/node_family.jl#L33-L42" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_node_dimensional_expr(node_name, alias_name, alias_stem, what; source = nothing)</code></pre>
+</div>
+<p>Returns the expressions defining a node family&#39;s dimensional entry point, <code class="md-code-inline">alias_name(op::LazyOp{D}, ::Val{Dim})</code>, as a <code class="md-code-inline">Vector{Expr}</code>.</p>
+<p><code class="md-code-inline">Val</code> only, and deliberately: <code class="md-code-inline">Dim</code> lands in the node&#39;s type, so an <code class="md-code-inline">Int</code> direction would make the return type a <code class="md-code-inline">Union</code> of the three nodes it could be. The space layer&#39;s <code class="md-code-inline">Int</code> and <code class="md-code-inline">Symbol</code> forms have no counterpart here.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble._node_resolve_expr-Tuple{Any}">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._node_resolve_expr</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/node_family.jl#L155-L160" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_node_resolve_expr(node_name; source = nothing)</code></pre>
+</div>
+<p>Returns the expression defining <code class="md-code-inline">resolve_ast</code> for one node family: resolve the inner operator once and rebuild the node around it.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble._node_vectorial_expr-Tuple{Any, Any, Any}">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._node_vectorial_expr</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/node_family.jl#L98-L113" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_node_vectorial_expr(alias_name, dispatch_name, what; componentwise = false,
+                     source = nothing)</code></pre>
+</div>
+<p>Returns the expressions defining a node family&#39;s tuple-valued alias, as a <code class="md-code-inline">Vector{Expr}</code>: <code class="md-code-inline">alias_name(op)</code> giving a <code class="md-code-inline">D</code>-tuple of nodes, and the bare node rather than a one-tuple in one dimension, as <code class="md-code-inline">∇ₕ</code> and <code class="md-code-inline">∇₊ₕ</code> have always done.</p>
+<p><code class="md-code-inline">componentwise = true</code> adds the method that maps the alias over a tuple of scalar symbolic functions, which is how a composite space&#39;s components reach it. Only the two gradients carry it; nothing calls <code class="md-code-inline">Mₕ((u1, u2))</code>.</p>
+<p><code class="md-code-inline">ntuple</code> with a <code class="md-code-inline">Val</code> length unrolls, so <code class="md-code-inline">dim</code> is a literal in each unrolled body and the <code class="md-code-inline">Val(dim)</code> it builds is a compile-time constant – not the boxed <code class="md-code-inline">Val</code> of gpena/Bramble.jl#146, which came from a <code class="md-code-inline">Val(i)</code> under a runtime loop bound.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.@node_family-Tuple">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.@node_family</code> — <span class="md-docstring-sig">Tuple</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/node_family.jl#L194-L217" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">@node_family(kwargs...)</code></pre>
+</div>
+<p>Defines one AST node family&#39;s whole alias surface and its <code class="md-code-inline">resolve_ast</code>, declaratively.</p>
+<p>Keywords, all optional except <code class="md-code-inline">node</code>, <code class="md-code-inline">stem</code> and <code class="md-code-inline">what</code>:</p>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:left">Keyword</th>
+<th style="text-align:left">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">node</code></td>
+<td style="text-align:left">the node struct, e.g. <code class="md-code-inline">BackwardDifference</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">stem</code></td>
+<td style="text-align:left">the alias stem, e.g. <code class="md-code-inline">D₋</code>, giving <code class="md-code-inline">D₋ₓ</code>, <code class="md-code-inline">D₋ᵧ</code>, <code class="md-code-inline">D₋₂</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">what</code></td>
+<td style="text-align:left">names the quantity in the generated prose, e.g. <code class="md-code-inline">&quot;backward finite difference&quot;</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">dispatch_alias</code></td>
+<td style="text-align:left">the name carrying <code class="md-code-inline">f(op, ::Val{Dim})</code>; defaults to <code class="md-code-inline">stem</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">vectorial_alias</code></td>
+<td style="text-align:left">the tuple-valued alias over every coordinate, e.g. <code class="md-code-inline">∇ₕ</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">componentwise</code></td>
+<td style="text-align:left"><code class="md-code-inline">true</code> adds <code class="md-code-inline">alias(ops::Tuple)</code>; only the two gradients use it</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">resolve</code></td>
+<td style="text-align:left"><code class="md-code-inline">false</code> skips the generated <code class="md-code-inline">resolve_ast</code>, for a node that writes its own</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="md-code-inline">_bind_interp_spaces</code> is generated unconditionally: it is the same rebuild as <code class="md-code-inline">resolve_ast</code>, and a family that opts out of the latter still has to pass a bound operand through.</p>
+<p>The space-layer counterpart is <code class="md-code-inline">@operator_family</code> in <code class="md-code-inline">operators/stencil.jl</code>, and the generators it shares – <code class="md-code-inline">_relocate!</code> for line attribution, and <code class="md-code-inline">_BRAMBLE_var2symbol</code> / <code class="md-code-inline">_BRAMBLE_var2label</code> for the coordinate suffixes – are the same ones used here.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.ConstraintMarkers">
@@ -1155,7 +1253,7 @@ restrict_to(:left, U)</code></pre>
 <div class="md-docstring" id="Bramble._dirichlet_bc_indices!-Tuple{AbstractMatrix, BitVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dirichlet_bc_indices!</code> — <span class="md-docstring-sig">Tuple{AbstractMatrix, BitVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L521-L532" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L586-L597" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1169,7 +1267,7 @@ restrict_to(:left, U)</code></pre>
 <div class="md-docstring" id="Bramble._dirichlet_bc_indices!-Tuple{SparseArrays.SparseMatrixCSC, BitVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dirichlet_bc_indices!</code> — <span class="md-docstring-sig">Tuple{SparseArrays.SparseMatrixCSC, BitVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L550-L565" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L615-L630" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1184,7 +1282,7 @@ restrict_to(:left, U)</code></pre>
 <div class="md-docstring" id="Bramble._has_device_csr_mirror-Tuple{Type{&lt;:AbstractMatrix}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._has_device_csr_mirror</code> — <span class="md-docstring-sig">Tuple{Type{&lt;:AbstractMatrix}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L620-L626" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L684-L690" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1197,7 +1295,7 @@ restrict_to(:left, U)</code></pre>
 <div class="md-docstring" id="Bramble._launch_dirichlet_rows_csr!-NTuple{4, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_dirichlet_rows_csr!</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L667-L679" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L731-L743" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1216,7 +1314,7 @@ restrict_to(:left, U)</code></pre>
 <div class="md-docstring" id="Bramble._normalize_dirichlet-Tuple{Nothing}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._normalize_dirichlet</code> — <span class="md-docstring-sig">Tuple{Nothing}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L159-L171" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L181-L193" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1260,7 +1358,7 @@ assemble!(b, l) # zero allocations, evaluates with α = 2.5</code></pre>
 <div class="md-docstring" id="Bramble._colour_strides-Union{Tuple{Array{NTuple{D, Int64}, 1}}, Tuple{D}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._colour_strides</code> — <span class="md-docstring-sig">Union{Tuple{Array{NTuple{D, Int64}, 1}}, Tuple{D}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L671-L684" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L942-L955" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1275,12 +1373,12 @@ assemble!(b, l) # zero allocations, evaluates with α = 2.5</code></pre>
 <div class="md-docstring" id="Bramble._scatter_linear_point!-Union{Tuple{TERM}, Tuple{AbstractVector, Any, TERM, CartesianIndex, Any, Any, Int64}, Tuple{AbstractVector, Any, TERM, CartesianIndex, Any, Any, Int64, Any}} where TERM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._scatter_linear_point!</code> — <span class="md-docstring-sig">Union{Tuple{TERM}, Tuple{AbstractVector, Any, TERM, CartesianIndex, Any, Any, Int64}, Tuple{AbstractVector, Any, TERM, CartesianIndex, Any, Any, Int64, Any}} where TERM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L756-L762" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1018-L1024" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset) -&gt; Nothing</code></pre>
+<pre><code class="language-julia">_scatter_linear_point!(b, sp, term, I, lin_indices, mesh_markers, offset, α = true) -&gt; Nothing</code></pre>
 </div>
 <p>Add one grid point&#39;s stencil contributions to <code class="md-code-inline">b</code>.</p>
 <p>Shared by the banded and the point-coloured sweep, so the two cannot drift apart.</p>
@@ -1289,12 +1387,12 @@ assemble!(b, l) # zero allocations, evaluates with α = 2.5</code></pre>
 <div class="md-docstring" id="Bramble._sweep_linear_band_colour!-Union{Tuple{TERM}, Tuple{Bramble.CpuThreaded, AbstractVector, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64}, Tuple{Bramble.CpuThreaded, AbstractVector, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64, Any}} where TERM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._sweep_linear_band_colour!</code> — <span class="md-docstring-sig">Union{Tuple{TERM}, Tuple{Bramble.CpuThreaded, AbstractVector, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64}, Tuple{Bramble.CpuThreaded, AbstractVector, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64, Any}} where TERM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L785-L794" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1067-L1076" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_sweep_linear_band_colour!(b, sp, term, ax, parity, nbands, rest, lin_indices, mesh_markers, offset) -&gt; Nothing</code></pre>
+<pre><code class="language-julia">_sweep_linear_band_colour!(policy, b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α = true) -&gt; Nothing</code></pre>
 </div>
 <p>Scatter one band colour of <code class="md-code-inline">term</code> into <code class="md-code-inline">b</code> across threads.</p>
 <p>Two points collide only when they write the same entry of <code class="md-code-inline">b</code>, which needs their difference to lie inside the stencil&#39;s reach in every axis at once. Being at least <code class="md-code-inline">strides[D]</code> apart along the banded axis rules that out on its own, so alternate slabs never race. A term that reaches only its own point cannot collide at all, and then <code class="md-code-inline">bidx</code> is every band at once.</p>
@@ -1303,7 +1401,7 @@ assemble!(b, l) # zero allocations, evaluates with α = 2.5</code></pre>
 <div class="md-docstring" id="Bramble.resolve_form_ast-Tuple{Bramble.LinearForm}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.resolve_form_ast</code> — <span class="md-docstring-sig">Tuple{Bramble.LinearForm}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L103-L107" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L116-L120" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1329,7 +1427,7 @@ assemble!(b, l) # zero allocations, evaluates with α = 2.5</code></pre>
 <div class="md-docstring" id="Bramble.BilinearForm">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.BilinearForm</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L214-L239" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L205-L230" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1362,7 +1460,7 @@ assemble!(A, a) # zero allocations, evaluates with β = 3.0</code></pre>
 <div class="md-docstring" id="Bramble.BilinearForm-Tuple{Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.BilinearForm</code> — <span class="md-docstring-sig">Tuple{Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L261-L296" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L252-L289" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1371,7 +1469,7 @@ assemble!(A, a) # zero allocations, evaluates with β = 3.0</code></pre>
 </div>
 <p>The form evaluated at a trial function <code class="md-code-inline">u</code> and a test function <code class="md-code-inline">v</code>: <code class="md-code-inline">vᴴ A u</code> for <code class="md-code-inline">A = assemble(a)</code>, without <code class="md-code-inline">A</code>. One walk of the form&#39;s stencil, the one <a href="../../api/forms/#Bramble.matrix_free_operator"><code class="md-code-inline">matrix_free_operator</code></a>&#39;s serial <code class="md-code-inline">mul!</code> makes, adds <code class="md-code-inline">conj(v[row]) * weight * u[col]</code> for every entry into a single scalar. No Dirichlet rows are applied, as <code class="md-code-inline">assemble(a)</code> applies none.</p>
 <p><code class="md-code-inline">u</code> and <code class="md-code-inline">v</code> are <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a>s or plain vectors, of lengths <code class="md-code-inline">ndofs(trial_space(a))</code> and <code class="md-code-inline">ndofs(test_space(a))</code>. The result&#39;s type is promoted from the element types of <code class="md-code-inline">A</code>, <code class="md-code-inline">u</code> and <code class="md-code-inline">v</code>, so a <code class="md-code-inline">ForwardDiff.Dual</code> in either argument comes through.</p>
-<p>On a CPU backend the call allocates only the one cell its sum runs in (a <code class="md-code-inline">ContractionSink</code>&#39;s), whatever the grid size, except on a form with a region restriction (<code class="md-code-inline">restrict_to</code>), whose stencil evaluation allocates as it does in <code class="md-code-inline">assemble!</code>. Each call has its own cell, so tasks may call one form at once. On a GPU backend the matrix is assembled and multiplied, as the walk reads its vectors on the host.</p>
+<p>On a CPU backend the call allocates only the one cell its sum runs in (a <code class="md-code-inline">ContractionSink</code>&#39;s), whatever the grid size. A product with three or more region-restricted summands is split by <code class="md-code-inline">form</code> into products of at most two (gpena/Bramble.jl#727); one it leaves whole, as it would split into more than 16 or its constant scales keep several types, allocates per point, as in <code class="md-code-inline">assemble!</code>. Each call has its own cell, so tasks may call one form at once. On a GPU backend the matrix is assembled and multiplied, as the walk reads its vectors on the host.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">DimensionMismatch</code>: <code class="md-code-inline">u</code> or <code class="md-code-inline">v</code> has the wrong length.</p>
@@ -1394,35 +1492,20 @@ true</code></pre>
 </div>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.NzvalSegment">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.NzvalSegment</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L16-L27" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">NzvalSegment = Tuple{Vector{Int},Vector{Int}}</code></pre>
-</div>
-<p>One term&#39;s recorded nzval positions for one block, as <code class="md-code-inline">(point_ptr, positions)</code>.</p>
-<p><code class="md-code-inline">point_ptr[lin_idx]:point_ptr[lin_idx + 1] - 1</code> is the slice of <code class="md-code-inline">positions</code> holding grid point <code class="md-code-inline">lin_idx</code>&#39;s own entries, in the order a scatter walk visits them. Addressed per point rather than by a shared running counter, so a replay stays correct whatever order the grid is visited in.</p>
-<p>See also: <a href="../../internals/form/#Bramble.ReplaySink"><code class="md-code-inline">ReplaySink</code></a>.</p>
-</div>
-</div>
 <div class="md-docstring" id="Bramble.Segment">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Segment</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L30-L71" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L9-L50" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">Segment{D}</code></pre>
 </div>
-<p>One term&#39;s recorded nzval positions for one block, on a <code class="md-code-inline">D</code>-dimensional structured grid. Replaces a former <code class="md-code-inline">Union{NzvalSegment,DiagonalSegment{D}}</code> (<code class="md-code-inline">AnySegment{D}</code>) with a single concrete struct (gpena/Bramble.jl#240): <code class="md-code-inline">Enzyme</code>&#39;s strict-aliasing type analysis rejects a <code class="md-code-inline">Union</code> return outright (<code class="md-code-inline">IllegalTypeAnalysisException</code>), regardless of whether the segment itself is ever the target of differentiation, so <code class="md-code-inline">_try_diagonal_segment</code> needed a return type Enzyme can reason about – a discriminated struct, not a two-branch <code class="md-code-inline">Union</code>.</p>
+<p>One term&#39;s recorded nzval positions for one block, on a <code class="md-code-inline">D</code>-dimensional structured grid. A single concrete struct, with <code class="md-code-inline">is_diagonal</code> discriminating the two shapes (gpena/Bramble.jl#240): <code class="md-code-inline">Enzyme</code>&#39;s strict-aliasing type analysis rejects a <code class="md-code-inline">Union</code> return outright (<code class="md-code-inline">IllegalTypeAnalysisException</code>), regardless of whether the segment itself is ever the target of differentiation, so <code class="md-code-inline">_try_diagonal_segment</code> returns a type Enzyme can reason about, never a two-branch <code class="md-code-inline">Union</code>.</p>
 <p><code class="md-code-inline">is_diagonal</code> selects which shape is populated:</p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">false</code> (flat). <code class="md-code-inline">point_ptr</code>/<code class="md-code-inline">positions</code> cover every entry, exactly as <a href="../../internals/form/#Bramble.NzvalSegment"><code class="md-code-inline">NzvalSegment</code></a> always has; <code class="md-code-inline">base</code>/<code class="md-code-inline">stride</code>/<code class="md-code-inline">interior</code> are unused placeholders (empty, zero).</p>
+<li><p><code class="md-code-inline">false</code> (flat). <code class="md-code-inline">point_ptr</code>/<code class="md-code-inline">positions</code> cover every entry; <code class="md-code-inline">base</code>/<code class="md-code-inline">stride</code>/<code class="md-code-inline">interior</code> are unused placeholders (empty, zero).</p>
 </li>
 <li><p><code class="md-code-inline">true</code> (diagonal, gpena/Bramble.jl#160). <code class="md-code-inline">point_ptr</code>/<code class="md-code-inline">positions</code> cover only the boundary shell; <code class="md-code-inline">base</code>/<code class="md-code-inline">stride</code>/<code class="md-code-inline">P</code>/<code class="md-code-inline">interior</code> carry the interior&#39;s per-tap stride arithmetic – interior entries are <code class="md-code-inline">base[k] + stride[k] * n</code> for the <code class="md-code-inline">n</code>-th point <code class="md-code-inline">interior</code>&#39;s own iteration order visits (<code class="md-code-inline">n</code> zero-based), rather than one stored <code class="md-code-inline">Int</code> per entry, so <code class="md-code-inline">positions</code> never carries the interior&#39;s <code class="md-code-inline">O(N * P)</code> share at all. 1D forms only (<code class="md-code-inline">_diagonal_replay</code>), since from 2D up no difference term&#39;s interior has a constant stride.</p>
 </li>
@@ -1436,7 +1519,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.resolve_form_ast-Tuple{Bramble.BilinearForm}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.resolve_form_ast</code> — <span class="md-docstring-sig">Tuple{Bramble.BilinearForm}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L303-L307" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L296-L300" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1449,7 +1532,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.test_space-Tuple{Bramble.BilinearForm}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.test_space</code> — <span class="md-docstring-sig">Tuple{Bramble.BilinearForm}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L254-L258" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L245-L249" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1462,7 +1545,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.trial_space-Tuple{Bramble.BilinearForm}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.trial_space</code> — <span class="md-docstring-sig">Tuple{Bramble.BilinearForm}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L247-L251" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear.jl#L238-L242" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1475,7 +1558,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.DiagonalReplaySink">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DiagonalReplaySink</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1160-L1176" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1063-L1079" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1487,25 +1570,10 @@ true</code></pre>
 <p>See also: <a href="../../internals/form/#Bramble.visit_bilinear_stencil-Union{Tuple{TERM}, Tuple{SINK2}, Tuple{SINK1}, Tuple{SINK1, SINK2, TERM, Any, Int64, Int64}} where {SINK1, SINK2, TERM}"><code class="md-code-inline">visit_bilinear_stencil</code></a>, <code class="md-code-inline">_replay_segment!</code>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.PatternSink">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.PatternSink</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L953-L963" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">PatternSink(I_vec::Vector{Int}, J_vec::Vector{Int})</code></pre>
-</div>
-<p>Collect the <code class="md-code-inline">(row, col)</code> coordinates a term can reach, for building a sparsity pattern.</p>
-<p>Appends each coordinate to <code class="md-code-inline">I_vec</code> and <code class="md-code-inline">J_vec</code>, for a caller to hand to <code class="md-code-inline">sparse!</code>. The only sink that de-duplicates (<a href="../../internals/form/#Bramble._sink_dedups-Tuple{Any}"><code class="md-code-inline">_sink_dedups</code></a>): a coordinate named twice by one point&#39;s stencil is one entry of the pattern, and the weights it carries are not read here at all.</p>
-<p>See also: <a href="../../internals/form/#Bramble.visit_bilinear_stencil-Union{Tuple{TERM}, Tuple{SINK2}, Tuple{SINK1}, Tuple{SINK1, SINK2, TERM, Any, Int64, Int64}} where {SINK1, SINK2, TERM}"><code class="md-code-inline">visit_bilinear_stencil</code></a>.</p>
-</div>
-</div>
 <div class="md-docstring" id="Bramble.ReplaySink">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ReplaySink</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1051-L1073" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L954-L976" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1522,7 +1590,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._CoordSink">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._CoordSink</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1000-L1016" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L903-L919" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1537,7 +1605,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._DeviceSparseMirror">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._DeviceSparseMirror</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L179-L195" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L158-L174" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1551,7 +1619,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._PairReplaySink">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._PairReplaySink</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1098-L1110" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1001-L1013" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1565,7 +1633,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._entry_target-Tuple{Any, CartesianIndex, Any, Any, Int64, Int64}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._entry_target</code> — <span class="md-docstring-sig">Tuple{Any, CartesianIndex, Any, Any, Int64, Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L549-L566" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L511-L528" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1586,7 +1654,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._flush_device_scatter!-Tuple{AbstractMatrix}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._flush_device_scatter!</code> — <span class="md-docstring-sig">Tuple{AbstractMatrix}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L202-L221" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L181-L200" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1596,13 +1664,13 @@ true</code></pre>
 <p>Copy <code class="md-code-inline">A</code>&#39;s own host-staged mirror (<code class="md-code-inline">A.mirror.nzval</code>) back to its device storage in one bulk <code class="md-code-inline">copyto!</code>, and block until that copy has actually landed.</p>
 <p>A no-op for a host matrix. <code class="md-code-inline">bilinear_execution.jl</code> calls this exactly once, after its band-coloured sweep returns.</p>
 <p>One <code class="md-code-inline">copyto!</code> of the whole array per assembly, not one per entry (the first version scattered each entry straight to <code class="md-code-inline">A.nzVal</code> piecemeal; correct, but hundreds of thousands of 4-byte device transfers on a real matrix).</p>
-<p>The <code class="md-code-inline">copyto!</code> alone was not enough either: a device write queues asynchronously exactly like a <code class="md-code-inline">@kernel</code> launch does, and every kernel launch in this milestone is followed by a <code class="md-code-inline">synchronize</code> – this one was not, so <code class="md-code-inline">assemble</code>/<code class="md-code-inline">assemble!</code> could return before the copy had actually landed, and a caller reading <code class="md-code-inline">A</code> right after got whatever was there so far. <a href="../../internals/utils/#Bramble.ka_synchronize"><code class="md-code-inline">ka_synchronize</code></a> is the fix, following that same kernel-launch idiom for a caller that has a device array but no kernel of its own.</p>
+<p>The <code class="md-code-inline">copyto!</code> alone was not enough either: a device write queues asynchronously exactly like a <code class="md-code-inline">@kernel</code> launch does, and every kernel launch in this milestone is followed by a <code class="md-code-inline">synchronize</code> – this one was not, so <code class="md-code-inline">assemble</code>/<code class="md-code-inline">assemble!</code> could return before the copy had actually landed, and a caller reading <code class="md-code-inline">A</code> right after got whatever was there so far. <a href="../../api/utilities/#Bramble.ka_synchronize"><code class="md-code-inline">ka_synchronize</code></a> is the fix, following that same kernel-launch idiom for a caller that has a device array but no kernel of its own.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._replay_add!-Tuple{AbstractArray, Integer, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._replay_add!</code> — <span class="md-docstring-sig">Tuple{AbstractArray, Integer, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L132-L137" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L111-L116" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1615,7 +1683,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._scatter_storage-Tuple{SparseArrays.SparseMatrixCSC}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._scatter_storage</code> — <span class="md-docstring-sig">Tuple{SparseArrays.SparseMatrixCSC}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L88-L107" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L87-L106" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1627,25 +1695,10 @@ true</code></pre>
 <p>What the replay sinks (<a href="../../internals/form/#Bramble.ReplaySink"><code class="md-code-inline">ReplaySink</code></a>, <code class="md-code-inline">_PairReplaySink</code>, <code class="md-code-inline">_StrideReplaySink</code>, <code class="md-code-inline">_DiagonalReplayTarget</code>) hold instead of <code class="md-code-inline">A</code>, so a sparse sink carries plain vectors only and a threaded sweep can hand it across a task boundary as is (gpena/Bramble.jl#437). Each sink adds through <a href="../../internals/form/#Bramble._replay_add!-Tuple{AbstractArray, Integer, Any}"><code class="md-code-inline">_replay_add!</code></a>, the same <code class="md-code-inline">+=</code> as <code class="md-code-inline">_scatter_add!</code>, so a replay stores the same bits as before.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble._sink_dedups-Tuple{Any}">
+<div class="md-docstring" id="Bramble._sink_entry!">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble._sink_dedups</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L499-L512" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_sink_dedups(sink) -&gt; Bool</code></pre>
-</div>
-<p>Whether <code class="md-code-inline">sink</code> wants repeated <code class="md-code-inline">(off_u, off_v)</code> pairs within one point&#39;s stencil collapsed to a single entry.</p>
-<p>The sparsity pattern wants each <code class="md-code-inline">(row, col)</code> once however many stencil entries name it, and a value sink wants every one of them, because repeated entries accumulate. Getting this backwards gives a wrong matrix rather than an error, so it is answered by dispatch on the sink type: the default is <code class="md-code-inline">false</code>, and the branch folds away at compile time, leaving the value sweeps with no de-duplication scan at all.</p>
-<p>See also: <a href="../../internals/form/#Bramble.visit_bilinear_stencil-Union{Tuple{TERM}, Tuple{SINK2}, Tuple{SINK1}, Tuple{SINK1, SINK2, TERM, Any, Int64, Int64}} where {SINK1, SINK2, TERM}"><code class="md-code-inline">visit_bilinear_stencil</code></a>, <a href="../../internals/form/#Bramble.PatternSink"><code class="md-code-inline">PatternSink</code></a>.</p>
-</div>
-</div>
-<div class="md-docstring" id="Bramble._sink_entry!-Tuple{Bramble.PatternSink, Int64, Int64, Any, Int64}">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble._sink_entry!</code> — <span class="md-docstring-sig">Tuple{Bramble.PatternSink, Int64, Int64, Any, Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L970-L979" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble._sink_entry!</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L876-L885" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1659,7 +1712,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._sink_needs_coordinates-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._sink_needs_coordinates</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L515-L528" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L477-L490" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1667,14 +1720,14 @@ true</code></pre>
 <pre><code class="language-julia">_sink_needs_coordinates(sink) -&gt; Bool</code></pre>
 </div>
 <p>Whether <code class="md-code-inline">sink</code> reads the <code class="md-code-inline">(row, col)</code> an entry computes, rather than discarding it.</p>
-<p>The default is <code class="md-code-inline">true</code>. <a href="../../internals/form/#Bramble.ReplaySink"><code class="md-code-inline">ReplaySink</code></a> answers <code class="md-code-inline">false</code>: its <a href="../../internals/form/#Bramble._sink_entry!-Tuple{Bramble.PatternSink, Int64, Int64, Any, Int64}"><code class="md-code-inline">_sink_entry!</code></a> ignores <code class="md-code-inline">row</code> and <code class="md-code-inline">col</code> entirely, since the <code class="md-code-inline">nzval</code> position is already recorded in <code class="md-code-inline">sink.positions</code>. <code class="md-code-inline">false</code> lets <a href="../../internals/form/#Bramble._step_entry!-Union{Tuple{SINK}, Tuple{SINK, Any, Any, Any, Any, Any, Int64, Int64, Int64}} where SINK"><code class="md-code-inline">_step_entry!</code></a> skip the linear-index lookups and offset additions that would only be discarded, while still running the bounds checks that decide whether the entry survives at all – dropped entries must match the record pass exactly, or <code class="md-code-inline">slot</code> drifts out of step with <code class="md-code-inline">positions</code>.</p>
+<p>The default is <code class="md-code-inline">true</code>. <a href="../../internals/form/#Bramble.ReplaySink"><code class="md-code-inline">ReplaySink</code></a> answers <code class="md-code-inline">false</code>: its <a href="../../internals/form/#Bramble._sink_entry!"><code class="md-code-inline">_sink_entry!</code></a> ignores <code class="md-code-inline">row</code> and <code class="md-code-inline">col</code> entirely, since the <code class="md-code-inline">nzval</code> position is already recorded in <code class="md-code-inline">sink.positions</code>. <code class="md-code-inline">false</code> lets <a href="../../internals/form/#Bramble._step_entry!-Union{Tuple{SINK}, Tuple{SINK, Any, Any, Any, Any, Any, Int64, Int64, Int64}} where SINK"><code class="md-code-inline">_step_entry!</code></a> skip the linear-index lookups and offset additions that would only be discarded, while still running the bounds checks that decide whether the entry survives at all – dropped entries must match the record pass exactly, or <code class="md-code-inline">slot</code> drifts out of step with <code class="md-code-inline">positions</code>.</p>
 <p>See also: <a href="../../internals/form/#Bramble._step_entry!-Union{Tuple{SINK}, Tuple{SINK, Any, Any, Any, Any, Any, Int64, Int64, Int64}} where SINK"><code class="md-code-inline">_step_entry!</code></a>, <a href="../../internals/form/#Bramble._trial_inbounds-Tuple{Any, CartesianIndex, Any}"><code class="md-code-inline">_trial_inbounds</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._sink_point!-Tuple{Any, Int64, CartesianIndex}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._sink_point!</code> — <span class="md-docstring-sig">Tuple{Any, Int64, CartesianIndex}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L531-L546" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L493-L508" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1683,13 +1736,13 @@ true</code></pre>
 </div>
 <p>Announce grid point <code class="md-code-inline">lin_idx</code> (at cartesian index <code class="md-code-inline">I</code>) to <code class="md-code-inline">sink</code>, and answer the base slot for its entries.</p>
 <p>The default answers <code class="md-code-inline">0</code>. <code class="md-code-inline">_CoordSink</code> uses the call to open that point&#39;s slice of the position list; <a href="../../internals/form/#Bramble.ReplaySink"><code class="md-code-inline">ReplaySink</code></a> answers the start of that slice, which the traversal then adds the entry ordinal to. Addressing each point from its own base is what lets a replay stay correct regardless of the order grid points are visited in, without any sink having to carry a mutable cursor. <code class="md-code-inline">I</code> is passed alongside <code class="md-code-inline">lin_idx</code> for <a href="../../internals/form/#Bramble.DiagonalReplaySink"><code class="md-code-inline">DiagonalReplaySink</code></a>, which addresses a point by its rank in <code class="md-code-inline">LinearIndices(interior)</code> rather than by <code class="md-code-inline">lin_idx</code> – every other sink ignores it.</p>
-<p>See also: <a href="../../internals/form/#Bramble.visit_bilinear_stencil-Union{Tuple{TERM}, Tuple{SINK2}, Tuple{SINK1}, Tuple{SINK1, SINK2, TERM, Any, Int64, Int64}} where {SINK1, SINK2, TERM}"><code class="md-code-inline">visit_bilinear_stencil</code></a>, <a href="../../internals/form/#Bramble._sink_entry!-Tuple{Bramble.PatternSink, Int64, Int64, Any, Int64}"><code class="md-code-inline">_sink_entry!</code></a>.</p>
+<p>See also: <a href="../../internals/form/#Bramble.visit_bilinear_stencil-Union{Tuple{TERM}, Tuple{SINK2}, Tuple{SINK1}, Tuple{SINK1, SINK2, TERM, Any, Int64, Int64}} where {SINK1, SINK2, TERM}"><code class="md-code-inline">visit_bilinear_stencil</code></a>, <a href="../../internals/form/#Bramble._sink_entry!"><code class="md-code-inline">_sink_entry!</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._step_entry!-Union{Tuple{SINK}, Tuple{SINK, Any, Any, Any, Any, Any, Int64, Int64, Int64}} where SINK">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._step_entry!</code> — <span class="md-docstring-sig">Union{Tuple{SINK}, Tuple{SINK, Any, Any, Any, Any, Any, Int64, Int64, Int64}} where SINK</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L577-L587" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L539-L549" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1697,13 +1750,13 @@ true</code></pre>
 <pre><code class="language-julia">_step_entry!(sink, lin_indices, I, off_u, off_v, weight, row_offset::Int, col_offset::Int, slot::Int) -&gt; Bool</code></pre>
 </div>
 <p>One entry: guard it, and hand it to the sink if it lands inside. Answers whether it did, so the caller can advance the slot.</p>
-<p>Fused rather than &quot;compute the target, then act on it&quot; (<a href="../../internals/form/#Bramble._entry_target-Tuple{Any, CartesianIndex, Any, Any, Int64, Int64}"><code class="md-code-inline">_entry_target</code></a>, which the tests use and <code class="md-code-inline">_scatter_point!</code> shares) because returning a <code class="md-code-inline">(row, col)</code> sentinel tuple has to be merged from three return points: measured against the hand-written loop it cost 5 extra phi nodes, 4 integer adds and 3 comparisons per entry, with identical loads, stores and calls.</p>
+<p>Fused rather than &quot;compute the target, then act on it&quot; (<a href="../../internals/form/#Bramble._entry_target-Tuple{Any, CartesianIndex, Any, Any, Int64, Int64}"><code class="md-code-inline">_entry_target</code></a>, which the tests use) because returning a <code class="md-code-inline">(row, col)</code> sentinel tuple has to be merged from three return points: measured against the hand-written loop it cost 5 extra phi nodes, 4 integer adds and 3 comparisons per entry, with identical loads, stores and calls.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._step_entry_unguarded!-Union{Tuple{SINK}, Tuple{SINK, Any, Any, Any, Any, Any, Int64, Int64, Int64}} where SINK">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._step_entry_unguarded!</code> — <span class="md-docstring-sig">Union{Tuple{SINK}, Tuple{SINK, Any, Any, Any, Any, Any, Int64, Int64, Int64}} where SINK</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L613-L620" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L575-L582" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1716,7 +1769,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._test_inbounds-Tuple{Any, CartesianIndex, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._test_inbounds</code> — <span class="md-docstring-sig">Tuple{Any, CartesianIndex, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L447-L452" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L426-L431" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1729,7 +1782,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._test_row-Tuple{Any, CartesianIndex, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._test_row</code> — <span class="md-docstring-sig">Tuple{Any, CartesianIndex, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L431-L439" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L410-L418" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1743,7 +1796,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._test_row_unguarded-Tuple{Any, CartesianIndex, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._test_row_unguarded</code> — <span class="md-docstring-sig">Tuple{Any, CartesianIndex, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L458-L463" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L437-L442" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1756,7 +1809,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._trial_column-Tuple{Any, CartesianIndex, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._trial_column</code> — <span class="md-docstring-sig">Tuple{Any, CartesianIndex, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L398-L409" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L377-L388" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1771,7 +1824,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._trial_column_unguarded-Tuple{Any, CartesianIndex, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._trial_column_unguarded</code> — <span class="md-docstring-sig">Tuple{Any, CartesianIndex, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L467-L476" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L446-L455" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1785,7 +1838,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._trial_inbounds-Tuple{Any, CartesianIndex, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._trial_inbounds</code> — <span class="md-docstring-sig">Tuple{Any, CartesianIndex, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L417-L424" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L396-L403" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1795,10 +1848,10 @@ true</code></pre>
 <p>Whether <code class="md-code-inline">off_u</code>&#39;s trial index survives, without computing the linear index <a href="../../internals/form/#Bramble._trial_column-Tuple{Any, CartesianIndex, Any}"><code class="md-code-inline">_trial_column</code></a> would return – for sinks that only need to know whether the entry lands, not where (<a href="../../internals/form/#Bramble._sink_needs_coordinates-Tuple{Any}"><code class="md-code-inline">_sink_needs_coordinates</code></a>). An <a href="../../internals/form/#Bramble.AbsoluteColumn"><code class="md-code-inline">AbsoluteColumn</code></a> always survives, matching <code class="md-code-inline">_trial_column</code>: it names a source column directly and is never <code class="md-code-inline">0</code>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.add_to_sparse!-Tuple{Union{Bramble._ScatterCSC, AbstractMatrix}, Int64, Int64, Number, Any}">
+<div class="md-docstring" id="Bramble.add_to_sparse!-Tuple{AbstractMatrix, Int64, Int64, Number, Any}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.add_to_sparse!</code> — <span class="md-docstring-sig">Tuple{Union{Bramble._ScatterCSC, AbstractMatrix}, Int64, Int64, Number, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L353-L377" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Bramble.add_to_sparse!</code> — <span class="md-docstring-sig">Tuple{AbstractMatrix, Int64, Int64, Number, Any}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L332-L356" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1820,7 +1873,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.visit_bilinear_stencil-Union{Tuple{TERM}, Tuple{SINK2}, Tuple{SINK1}, Tuple{SINK1, SINK2, TERM, Any, Int64, Int64}} where {SINK1, SINK2, TERM}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.visit_bilinear_stencil</code> — <span class="md-docstring-sig">Union{Tuple{TERM}, Tuple{SINK2}, Tuple{SINK1}, Tuple{SINK1, SINK2, TERM, Any, Int64, Int64}} where {SINK1, SINK2, TERM}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L829-L870" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L767-L809" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1835,7 +1888,7 @@ visit_bilinear_stencil(interior_sink, boundary_sink, term, sp, row_offset::Int, 
 <p>The two-sink form lets the interior and the boundary shell be handled by different sinks – only <a href="../../internals/form/#Bramble.DiagonalReplaySink"><code class="md-code-inline">DiagonalReplaySink</code></a> needs this, pairing itself (interior) with an ordinary <a href="../../internals/form/#Bramble.ReplaySink"><code class="md-code-inline">ReplaySink</code></a> (boundary shell), so the one-sink form below is the thin, common case.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">sink</code> (or <code class="md-code-inline">interior_sink</code>/<code class="md-code-inline">boundary_sink</code>): What to do per entry. The sinks are <a href="../../internals/form/#Bramble.PatternSink"><code class="md-code-inline">PatternSink</code></a>, <a href="../../internals/form/#Bramble.ReplaySink"><code class="md-code-inline">ReplaySink</code></a> and <a href="../../internals/form/#Bramble.DiagonalReplaySink"><code class="md-code-inline">DiagonalReplaySink</code></a>; the contract is in <a href="../../internals/form/#Bramble._sink_entry!-Tuple{Bramble.PatternSink, Int64, Int64, Any, Int64}"><code class="md-code-inline">_sink_entry!</code></a>, <a href="../../internals/form/#Bramble._sink_point!-Tuple{Any, Int64, CartesianIndex}"><code class="md-code-inline">_sink_point!</code></a> and <a href="../../internals/form/#Bramble._sink_dedups-Tuple{Any}"><code class="md-code-inline">_sink_dedups</code></a>.</p>
+<li><p><code class="md-code-inline">sink</code> (or <code class="md-code-inline">interior_sink</code>/<code class="md-code-inline">boundary_sink</code>): What to do per entry. The sinks are <code class="md-code-inline">_CoordSink</code> (pattern and positions), <a href="../../internals/form/#Bramble.ReplaySink"><code class="md-code-inline">ReplaySink</code></a>, <code class="md-code-inline">_PairReplaySink</code> and <a href="../../internals/form/#Bramble.DiagonalReplaySink"><code class="md-code-inline">DiagonalReplaySink</code></a> (values); the contract is in <a href="../../internals/form/#Bramble._sink_entry!"><code class="md-code-inline">_sink_entry!</code></a> and <a href="../../internals/form/#Bramble._sink_point!-Tuple{Any, Int64, CartesianIndex}"><code class="md-code-inline">_sink_point!</code></a>.</p>
 </li>
 <li><p><code class="md-code-inline">term</code>: The AST node whose stencil is evaluated at each point.</p>
 </li>
@@ -1849,13 +1902,13 @@ visit_bilinear_stencil(interior_sink, boundary_sink, term, sp, row_offset::Int, 
 <li><p>The boundary-shell sink (<code class="md-code-inline">sink</code> itself, in the one-sink form), so a caller can read what it collected.</p>
 </li>
 </ul>
-<p>See also: <a href="../../api/forms/#Bramble.allocate_system_matrix"><code class="md-code-inline">allocate_system_matrix</code></a>, <a href="../../internals/form/#Bramble.add_to_sparse!-Tuple{Union{Bramble._ScatterCSC, AbstractMatrix}, Int64, Int64, Number, Any}"><code class="md-code-inline">add_to_sparse!</code></a>.</p>
+<p>See also: <a href="../../api/forms/#Bramble.allocate_system_matrix"><code class="md-code-inline">allocate_system_matrix</code></a>, <a href="../../internals/form/#Bramble.add_to_sparse!-Tuple{AbstractMatrix, Int64, Int64, Number, Any}"><code class="md-code-inline">add_to_sparse!</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._ReplayTarget">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._ReplayTarget</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L670-L679" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L638-L647" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1866,36 +1919,10 @@ visit_bilinear_stencil(interior_sink, boundary_sink, term, sp, row_offset::Int, 
 <p>See also: <a href="../../internals/form/#Bramble._replay_point!-Union{Tuple{TERM}, Tuple{SINK}, Tuple{SINK, TERM, Any, CartesianIndex, Any, Any, Int64, Int64}} where {SINK, TERM}"><code class="md-code-inline">_replay_point!</code></a>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble._batch_bilinear_band_replay!-NTuple{11, Any}">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble._batch_bilinear_band_replay!</code> — <span class="md-docstring-sig">NTuple{11, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L1070-L1081" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_batch_bilinear_band_replay!(target, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset) -&gt; Nothing</code></pre>
-</div>
-<p><a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>&#39;s counterpart of the <code class="md-code-inline">Threads.@threads</code> body in <a href="../../internals/form/#Bramble._sweep_band_colour!-Union{Tuple{TERM}, Tuple{Bramble.CpuThreaded, Any, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64, Int64, Any}} where TERM"><code class="md-code-inline">_sweep_band_colour!</code></a> when it replays (gpena/Bramble.jl#338): for each band <code class="md-code-inline">b</code> in <code class="md-code-inline">bidx</code>, every <code class="md-code-inline">I</code> in <code class="md-code-inline">CartesianIndices((rest..., _band_range(ax, nbands, b)))</code> gets <a href="../../internals/form/#Bramble._replay_point!-Union{Tuple{TERM}, Tuple{SINK}, Tuple{SINK, TERM, Any, CartesianIndex, Any, Any, Int64, Int64}} where {SINK, TERM}"><code class="md-code-inline">_replay_point!</code></a><code class="md-code-inline">(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)</code>. <code class="md-code-inline">target</code> is a <a href="../../internals/form/#Bramble._ReplayTarget"><code class="md-code-inline">_ReplayTarget</code></a> or an action target, crossing <code class="md-code-inline">@batch</code> as <a href="../../internals/form/#Bramble._batch_bilinear_colour_replay!-NTuple{8, Any}"><code class="md-code-inline">_batch_bilinear_colour_replay!</code></a> describes. Reached only once <code class="md-code-inline">_threaded_replay_policy(::CpuPolyester)</code> answers <code class="md-code-inline">true</code>; the only <code class="md-code-inline">src/</code> method errors naming Polyester.</p>
-</div>
-</div>
-<div class="md-docstring" id="Bramble._batch_bilinear_colour_replay!-NTuple{8, Any}">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble._batch_bilinear_colour_replay!</code> — <span class="md-docstring-sig">NTuple{8, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L932-L944" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">_batch_bilinear_colour_replay!(target, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset) -&gt; Nothing</code></pre>
-</div>
-<p><a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>&#39;s counterpart of the <code class="md-code-inline">Threads.@threads</code> body in <code class="md-code-inline">_sweep_bilinear_colour!</code> when it replays (gpena/Bramble.jl#338): the same loop over <code class="md-code-inline">idxs</code>, calling <a href="../../internals/form/#Bramble._replay_point!-Union{Tuple{TERM}, Tuple{SINK}, Tuple{SINK, TERM, Any, CartesianIndex, Any, Any, Int64, Int64}} where {SINK, TERM}"><code class="md-code-inline">_replay_point!</code></a><code class="md-code-inline">(target, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)</code> per point. <code class="md-code-inline">target</code> is a <a href="../../internals/form/#Bramble._ReplayTarget"><code class="md-code-inline">_ReplayTarget</code></a> or an action target. The loop captures none of them whole: the target&#39;s storage vector (<code class="md-code-inline">nzval</code>, or <code class="md-code-inline">y</code> and <code class="md-code-inline">x</code>) crosses as a top-level argument, the rest of <code class="md-code-inline">target</code>, <code class="md-code-inline">sp</code>, <code class="md-code-inline">term</code> and <code class="md-code-inline">mesh_markers</code> as one <a href="../../internals/utils/#Bramble._batch_split-Tuple{Any}"><code class="md-code-inline">_batch_split</code></a>, rebuilt in each task (gpena/Bramble.jl#437). Reached only once <code class="md-code-inline">_threaded_replay_policy(::CpuPolyester)</code> answers <code class="md-code-inline">true</code>; the only <code class="md-code-inline">src/</code> method errors naming Polyester.</p>
-</div>
-</div>
 <div class="md-docstring" id="Bramble._replay_point!-Union{Tuple{TERM}, Tuple{SINK}, Tuple{SINK, TERM, Any, CartesianIndex, Any, Any, Int64, Int64}} where {SINK, TERM}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._replay_point!</code> — <span class="md-docstring-sig">Union{Tuple{TERM}, Tuple{SINK}, Tuple{SINK, TERM, Any, CartesianIndex, Any, Any, Int64, Int64}} where {SINK, TERM}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L682-L696" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L650-L664" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1910,18 +1937,32 @@ visit_bilinear_stencil(interior_sink, boundary_sink, term, sp, row_offset::Int, 
 <div class="md-docstring" id="Bramble._sweep_band_colour!-Union{Tuple{TERM}, Tuple{Bramble.CpuThreaded, Any, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64, Int64, Any}} where TERM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._sweep_band_colour!</code> — <span class="md-docstring-sig">Union{Tuple{TERM}, Tuple{Bramble.CpuThreaded, Any, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64, Int64, Any}} where TERM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L951-L964" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L938-L950" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">_sweep_band_colour!(policy, A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α) -&gt; Nothing</code></pre>
 </div>
-<p>Scatter one band colour of <code class="md-code-inline">term</code> into <code class="md-code-inline">A</code> across threads. <code class="md-code-inline">A</code> is the matrix, searched per entry, or a <a href="../../internals/form/#Bramble._ReplayTarget"><code class="md-code-inline">_ReplayTarget</code></a>, whose recorded positions are written instead (gpena/Bramble.jl#338); the colouring below is the same for both.</p>
+<p>Scatter one band colour of <code class="md-code-inline">term</code> into <code class="md-code-inline">A</code> across threads. <code class="md-code-inline">A</code> is a <a href="../../internals/form/#Bramble._ReplayTarget"><code class="md-code-inline">_ReplayTarget</code></a>, whose recorded positions are written (gpena/Bramble.jl#338), or an action target.</p>
 <p>Each thread takes one slab of the last axis and walks it whole. Two grid points can only reach the same matrix entry when they are closer than <code class="md-code-inline">strides[D]</code> along that axis – their stencil footprints cannot meet otherwise – so slabs of at least that width, taken every other one, never write the same entry concurrently, whatever the remaining axes do. A term that reaches only its own point cannot collide at all, and then <code class="md-code-inline">bidx</code> is every band at once.</p>
 </div>
 </div>
-<h3 id="Point-sources,-bandwidth-analysis-and-structural-properties" class="md-heading">Point sources, bandwidth analysis and structural properties<a href="#Point-sources,-bandwidth-analysis-and-structural-properties" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<div class="md-docstring" id="Bramble._sweep_coloured!-Union{Tuple{P}, Tuple{Any, P, Any, Any}} where P">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._sweep_coloured!</code> — <span class="md-docstring-sig">Union{Tuple{P}, Tuple{Any, P, Any, Any}} where P</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L834-L848" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_sweep_coloured!(policy, point, grid_inds::CartesianIndices, strides) -&gt; Nothing</code></pre>
+</div>
+<p>Call <code class="md-code-inline">point(I)</code> once for every <code class="md-code-inline">I</code> in <code class="md-code-inline">grid_inds</code>, across threads, so that no two points closer than <code class="md-code-inline">strides</code> run at once. <code class="md-code-inline">policy</code> is the <em>effective</em> policy (<a href="../../internals/utils/#Bramble._effective_parallel_policy-Tuple{Any}"><code class="md-code-inline">_effective_parallel_policy</code></a>), and <code class="md-code-inline">point</code> a <code class="md-code-inline">_BilinearPoint</code> or a <code class="md-code-inline">_LinearPoint</code>, whose <code class="md-code-inline">_sweep_bands!</code> and <code class="md-code-inline">_sweep_points!</code> methods pick the mechanism.</p>
+<p>Bands come first: a colour is then a slab of whole rows, walked contiguously, and there are two of them however wide the stencil is. Point colouring strides every axis and costs <code class="md-code-inline">prod(strides)</code> barriers, which on a nine-colour form was slower than not threading at all (<code class="md-code-inline">Dcₓ + Dcᵧ</code> at 1000x1000: 16.6 ms threaded against 16.4 ms serial, and 8.1 ms banded). A grid too short to band (a small grid, or a stencil reaching most of the last axis) is point coloured, which has no width requirement.</p>
+</div>
+</div>
+<h3 id="Point-sources-and-structural-properties" class="md-heading">Point sources and structural properties<a href="#Point-sources-and-structural-properties" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <div class="md-docstring" id="Bramble.DiracSource">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DiracSource</code></h4>
@@ -1948,7 +1989,7 @@ visit_bilinear_stencil(interior_sink, boundary_sink, term, sp, row_offset::Int, 
 <div class="md-docstring" id="LinearAlgebra.issymmetric-Tuple{Bramble.BilinearForm}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>LinearAlgebra.issymmetric</code> — <span class="md-docstring-sig">Tuple{Bramble.BilinearForm}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/symmetry.jl#L327-L363" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/symmetry.jl#L373-L409" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1980,14 +2021,14 @@ issymmetric(Matrix(assemble(a; dirichlet = :boundary)))   # false: rows zeroed, 
 <div class="md-docstring" id="LinearAlgebra.isposdef-Tuple{Bramble.BilinearForm}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>LinearAlgebra.isposdef</code> — <span class="md-docstring-sig">Tuple{Bramble.BilinearForm}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/symmetry.jl#L369-L385" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/symmetry.jl#L415-L434" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">isposdef(a::BilinearForm) -&gt; Bool</code></pre>
 </div>
-<p>Whether <code class="md-code-inline">a</code> is symmetric positive semi-definite by the <code class="md-code-inline">LᵀWL</code> construction <code class="md-code-inline">issymmetric</code> checks: true only when every term is <code class="md-code-inline">innerₕ(L(u), L(v))</code> (a transposed pair need not be semi-definite, so one makes the answer <code class="md-code-inline">false</code>) and every scaling along the way is by a positive number, which is what keeps that positivity from being flipped or collapsed.</p>
+<p>Whether <code class="md-code-inline">a</code> is symmetric positive semi-definite by the <code class="md-code-inline">LᵀWL</code> construction <code class="md-code-inline">issymmetric</code> checks: true only when every term is <code class="md-code-inline">innerₕ(L(u), L(v))</code> (a transposed pair need not be semi-definite, so one makes the answer <code class="md-code-inline">false</code>) and every scaling along the way is by a positive number, which is what keeps that positivity from being flipped or collapsed. A <code class="md-code-inline">Ref</code> scale is read when <code class="md-code-inline">isposdef</code> is called, so the answer follows its value at that moment and may change after the <code class="md-code-inline">Ref</code> is updated. A non-real scale or coefficient, complex included, answers <code class="md-code-inline">false</code>.</p>
 <p>Purely structural, like <code class="md-code-inline">issymmetric</code>, and for the same reason conservative: this does not prove positive-definite (which also needs <code class="md-code-inline">L</code> to have trivial kernel), only that the assembled matrix is symmetric positive semi-definite, enough to make <code class="md-code-inline">cholesky</code> worth attempting first rather than a general factorization.</p>
 <p>Describes the <em>unconstrained</em> operator, exactly as <code class="md-code-inline">issymmetric</code> does: a matrix assembled with <code class="md-code-inline">dirichlet</code> needs <a href="../../api/forms/#Bramble.symmetrize!"><code class="md-code-inline">symmetrize!</code></a> after <a href="../../api/forms/#Bramble.dirichlet_bc!"><code class="md-code-inline">dirichlet_bc!</code></a> before either symmetry or positive-definiteness holds of it, <code class="md-code-inline">isposdef(a)</code> being <code class="md-code-inline">true</code> notwithstanding.</p>
 </div>
@@ -2001,7 +2042,7 @@ issymmetric(Matrix(assemble(a; dirichlet = :boundary)))   # false: rows zeroed, 
       <div class="md-toc-inner">
         <p class="md-toc-title">On this page</p>
           <a class="md-toc-link md-toc-h2" href="#The-extension-contract">The extension contract</a>
-            <a class="md-toc-link md-toc-h3" href="#Point-sources,-bandwidth-analysis-and-structural-properties">Point sources, bandwidth analysis and structural properties</a>
+            <a class="md-toc-link md-toc-h3" href="#Point-sources-and-structural-properties">Point sources and structural properties</a>
       </div>
     </aside>
   </div>
@@ -2019,6 +2060,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=6dbf153d"></script>
+  <script src="../../assets/materialdocs.js?v=dac94e92"></script>
 </body>
 </html>

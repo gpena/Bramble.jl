@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mesh tutorial — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e1ce9e45">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b61a5ac7">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Mesh tutorial — Bramble.jl">
   <meta property="og:title" content="Mesh tutorial — Bramble.jl">
@@ -161,7 +161,7 @@ points(Ωₕ_graded), hₘₐₓ(Ωₕ_graded)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.010000000000000002, 0.04000000000000001, 0.09, 0.16000000000000003, 0.25, 0.36, 0.48999999999999994, 0.6400000000000001, 0.81, 1.0], 0.18999999999999995)</code></pre>
 </div>
-<p>Squaring the uniform points packs them near <span class="md-math md-math-inline">\(x = 0\)</span> and stretches the cells near <span class="md-math md-math-inline">\(x = 1\)</span>, so <code class="md-code-inline">hₘₐₓ</code> is no longer <span class="md-math md-math-inline">\(0.1\)</span>. <code class="md-code-inline">Bramble.set_points!</code> is the variant that also accepts a different point count: it rebuilds the <code class="md-code-inline">:boundary</code> and <code class="md-code-inline">:interior</code> markers for the new grid, and refuses a mesh carrying custom labels.</p>
+<p>Squaring the uniform points packs them near <span class="md-math md-math-inline">\(x = 0\)</span> and stretches the cells near <span class="md-math md-math-inline">\(x = 1\)</span>, so <code class="md-code-inline">hₘₐₓ</code> is no longer <span class="md-math md-math-inline">\(0.1\)</span>. <code class="md-code-inline">Bramble.set_points!</code> is the variant that also accepts a different point count: it rebuilds the <code class="md-code-inline">:boundary</code> and <code class="md-code-inline">:interior</code> markers for the new grid, and refuses to change the point count of a mesh carrying custom labels. It also refuses any move of a mesh carrying a label defined by a predicate of position, and of a submesh of one, since those sets would stay as the old points gave them; call <code class="md-code-inline">change_points!(Ωₕ, markers(Ω), pts)</code> on the whole mesh instead.</p>
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
 <div class="md-admonition-body">
@@ -519,7 +519,7 @@ npoints(Ωₕ_ref, Tuple), sum(index_in_marker(Ωₕ_ref, :obstacle))</code></pr
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
 </div>
 <h3 id="Points-and-half-points" class="md-heading">Points and half points<a href="#Points-and-half-points" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p><code class="md-code-inline">points</code> returns the coordinate vector, or a tuple of them above 1D. A single coordinate comes from <code class="md-code-inline">point(Ωₕ, idx)</code> or from indexing, with a linear index, a tuple or a <code class="md-code-inline">CartesianIndex</code>:</p>
+<p><code class="md-code-inline">points</code> returns the coordinate vector, or a tuple of them above 1D. A single coordinate comes from <code class="md-code-inline">point(Ωₕ, idx)</code> or from indexing. Above 1D <code class="md-code-inline">idx</code> is a <code class="md-code-inline">CartesianIndex</code> (or <code class="md-code-inline">i, j</code> in brackets; <code class="md-code-inline">point</code> also takes a tuple of per-axis indices), never a linear index:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -618,6 +618,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=e1ce9e45"></script>
+  <script src="../../assets/materialdocs.js?v=b61a5ac7"></script>
 </body>
 </html>

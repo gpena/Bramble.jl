@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces and discrete functions — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=fb429128">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=92d9bf16">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces and discrete functions — Bramble.jl">
   <meta property="og:title" content="Grid spaces and discrete functions — Bramble.jl">
@@ -151,7 +151,7 @@ innerₕ(uₕ, vₕ), normₕ(uₕ), normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)</c
 </div>
 <p>The norm of <span class="md-math md-math-inline">\(\sin(\pi x)\)</span> on <span class="md-math md-math-inline">\([0, 1]\)</span> is <span class="md-math md-math-inline">\(1/\sqrt{2} \approx 0.707\)</span>, which <code class="md-code-inline">normₕ</code> reproduces here. The discrete Sobolev norms are built on the backward gradient <span class="md-math md-math-inline">\(\nabla_{-h}\)</span>:</p>
 <div class="md-math md-math-display">
-\[|u_h|_{1,h}^2 = \sum_{d=1}^D \|D_{-x_d} u_h\|_h^2, \qquad
+\[|u_h|_{1,h}^2 = \sum_{d=1}^D \|D_{-x_d} u_h\|_+^2, \qquad
 \|u_h\|_{1,h}^2 = \|u_h\|_h^2 + |u_h|_{1,h}^2.\]
 </div>
 <div class="md-multi-output">
@@ -223,7 +223,7 @@ normₕ(uvec)^2 ≈ normₕ(uvec(1))^2 + normₕ(uvec(2))^2</code></pre>
 </div>
 <h2 id="Reference" class="md-heading">Reference<a href="#Reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <h3 id="Constructors" class="md-heading">Constructors<a href="#Constructors" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p><code class="md-code-inline">Wₕ^Val(N)</code> is type stable whatever <code class="md-code-inline">N</code> is, while <code class="md-code-inline">Wₕ^2</code> relies on the literal being constant-folded and only reaches <code class="md-code-inline">N ≤ 3</code>. <a href="../../api/spaces/#Bramble.vector_gridspace"><code class="md-code-inline">vector_gridspace</code></a><code class="md-code-inline">(Ωₕ, 2)</code> builds the same space straight from a mesh, and <code class="md-code-inline">CompositeGridSpace((Wₕ, Wₕ))</code> builds one from spaces that need not be identical:</p>
+<p><code class="md-code-inline">Wₕ^Val(N)</code> is type stable whatever <code class="md-code-inline">N</code> is, while <code class="md-code-inline">Wₕ^2</code> relies on the literal being constant-folded and only reaches <code class="md-code-inline">N ≤ 3</code>. <a href="../../api/spaces/#Bramble.vector_gridspace"><code class="md-code-inline">vector_gridspace</code></a><code class="md-code-inline">(Ωₕ, 2)</code> builds the same space straight from a mesh, and <code class="md-code-inline">Bramble.CompositeGridSpace((Wₕ, Wₕ))</code> builds one from spaces that need not be identical:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -232,7 +232,7 @@ normₕ(uvec)^2 ≈ normₕ(uvec(1))^2 + normₕ(uvec(2))^2</code></pre>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
 <h3 id="Weights" class="md-heading">Weights<a href="#Weights" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p><code class="md-code-inline">weights(Wₕ)</code> returns the whole <code class="md-code-inline">SpaceWeights</code> bundle, and a weight vector comes from naming the inner product it belongs to. <code class="md-code-inline">Bramble.Innerh</code> and <code class="md-code-inline">Bramble.Innerplus</code> are public but not exported, hence the prefix. <code class="md-code-inline">weights</code> is not defined for a composite space, since its leaves may live on different meshes: call it on a <a href="../../api/spaces/#Bramble.components"><code class="md-code-inline">components</code></a> leaf instead.</p>
+<p><code class="md-code-inline">weights(Wₕ)</code> returns the whole <code class="md-code-inline">SpaceWeights</code> bundle, and a weight vector comes from naming the inner product it belongs to. <code class="md-code-inline">Bramble.Innerh</code> and <code class="md-code-inline">Bramble.Innerplus</code> are internal, hence the prefix. <code class="md-code-inline">weights</code> is not defined for a composite space, since its leaves may live on different meshes: call it on a <a href="../../api/spaces/#Bramble.components"><code class="md-code-inline">components</code></a> leaf instead.</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -505,6 +505,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=fb429128"></script>
+  <script src="../../assets/materialdocs.js?v=92d9bf16"></script>
 </body>
 </html>

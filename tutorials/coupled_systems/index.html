@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Coupled systems — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b5de5dfb">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b948af2a">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Coupled systems — Bramble.jl">
   <meta property="og:title" content="Coupled systems — Bramble.jl">
@@ -116,22 +116,17 @@ size(Ac)</code></pre>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(66, 66)</code></pre>
 </div>
 <p>Sixty-six by sixty-six: two blocks of 33 in one matrix. A term naming <code class="md-code-inline">u[i]</code> and <code class="md-code-inline">v[j]</code> lands in block <span class="md-math md-math-inline">\((j, i)\)</span>, so off-diagonal coupling is written the same way. <code class="md-code-inline">innerₕ(u[1], v[2])</code> fills the block that couples the first unknown to the second equation.</p>
-<p>Indices are checked against the number of blocks when the form is built: <code class="md-code-inline">u[3]</code> on a two-component space raises an <code class="md-code-inline">ArgumentError</code>. A term must name both components or neither:</p>
+<p>Indices are checked against the number of blocks when the form is built: <code class="md-code-inline">u[3]</code> on a two-component space raises an <code class="md-code-inline">ArgumentError</code>. A term must name both components or neither, and a term that names one and not the other raises when the matrix is assembled:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">try
-    form(Vₕ, Vₕ, (u, v) -&gt; innerₕ(u[1], v))
+    assemble(form(Vₕ, Vₕ, (u, v) -&gt; innerₕ(u[1], v)))
 catch e
     showerror(stdout, e)
 end</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi"><span class="sgr36"><span class="sgr1">BilinearForm</span></span> {<span class="sgr33">1D</span>, <span class="sgr33">Float64</span>}:
-  <span class="sgr32">Trial space</span>: <span class="sgr34">CompositeGridSpace{2 components, 66 dofs}</span>
-  <span class="sgr32">Test space</span>: <span class="sgr34">CompositeGridSpace{2 components, 66 dofs}  (same as trial)</span>
-  <span class="sgr32">Matrix</span>: <span class="sgr34">66 × 66</span>
-  <span class="sgr32">Symmetric</span>: <span class="sgr34">no</span>
-  <span class="sgr32">Expression</span>: <span class="sgr34">innerₕ(u(1), v)</span></code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError: a term of this form names its trial component but not its test one. A block of a bilinear form takes a component from each side: write innerₕ(u(i), v(j)) for one block, or innerₕ(u, v) for the same integrand on every diagonal block.</code></pre>
 </div>
 <p>Naming one and leaving the other open has no reading as mathematics, because the term would belong to every equation at once. Naming neither is fine and means the diagonal, applied to every block.</p>
 <div class="md-admonition md-admonition-tip">
@@ -160,7 +155,7 @@ Ac2 = assemble(ac2; dirichlet = (:left, :right), dirichlet_components = 1)</code
 </div>
 </div>
 <h2 id="Interpolating-between-the-leaves-of-a-heterogeneous-space" class="md-heading">Interpolating between the leaves of a heterogeneous space<a href="#Interpolating-between-the-leaves-of-a-heterogeneous-space" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>The composite spaces above stack copies of <em>one</em> space, so every leaf shares a mesh. A composite space can also be built from a tuple of leaves over different meshes. A term that couples two such leaves must move a value from one grid to the other. That is the job of <a href="../../api/spaces/#Bramble.πₕ"><code class="md-code-inline">πₕ</code></a>, applied to the trial function alone (the <a href="../../tutorials/operators/">operators tutorial</a> has the numeric side and a diagram of the interpolant). It names no source space. The space it interpolates from is the trial function&#39;s own, and assembly supplies it once the leaf is known.</p>
+<p>The composite spaces above stack copies of <em>one</em> space, so every leaf shares a mesh. A composite space can also be built from a tuple of leaves over different meshes. A term that couples two such leaves must move a value from one grid to the other. That is the job of <a href="../../api/spaces/#Bramble.πₕ"><code class="md-code-inline">πₕ</code></a>, applied to the trial function alone. It names no source space. The space it interpolates from is the trial function&#39;s own, and assembly supplies it once the leaf is known.</p>
 <figure>
 <svg viewBox="0 0 720 170" width="100%" style="max-width:640px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
      xmlns="http://www.w3.org/2000/svg" role="img"
@@ -256,6 +251,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=b5de5dfb"></script>
+  <script src="../../assets/materialdocs.js?v=b948af2a"></script>
 </body>
 </html>

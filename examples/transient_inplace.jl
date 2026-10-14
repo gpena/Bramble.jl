@@ -9,8 +9,8 @@
 # writes into the solution vector that already exists, so a Crank-Nicolson step allocates
 # nothing at all.
 #
-# This page is generated from `docs/src/examples/transient_inplace.jl` by Literate.jl, and
-# the same file runs under `test/examples/pages.jl`, where the `#src` assertions execute.
+# This script runs under `test/examples/pages.jl`, where the `#src` assertions execute; it is
+# not part of the published manual.
 #
 # ## Problem
 #
@@ -38,6 +38,9 @@ uexact(x, t) = exp(-t) * sinpi(x[1])
 Ω = domain(interval(0.0, 1.0), :left => :left, :right => :right)
 Ωₕ = mesh(Ω, 201)
 Wₕ = gridspace(Ωₕ)
+
+# The mesh is uniform, but the order measured at the end of the page does not rely on that:
+# the reference run shares whatever mesh is used.
 
 m = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
 k = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
@@ -76,9 +79,8 @@ fact = sparse_factorize(A; sym = :unsymmetric)
 # ## The source, without a closure per step
 #
 # The source separates as ``f(x,t) = e^{-t} s(x)``, so the spatial part is restricted once and
-# the time factor is a `Ref` the form reads live. Nothing is rebuilt between steps, and no
-# closure is created inside the loop, which is what a per-step allocation would otherwise come
-# from.
+# the time factor is a `Ref` the form reads live. Nothing is rebuilt between steps; the `Ref`
+# keeps the time factor out of the form's type, so the form is built once.
 
 sₕ = Rₕ(Wₕ, x -> (π^2 - 1) * sinpi(x[1]))
 decay = Ref(1.0)
@@ -108,8 +110,8 @@ function step!(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)
 end
 
 # The measurement goes through a function of its own, with the buffers passed in as
-# arguments. `@allocated` written at top level reports the caller's boxing of the globals it
-# reads rather than the routine's own work, and that alone shows 32 bytes here.
+# arguments. `@allocated` written at top level can report the caller's boxing of the globals
+# it reads rather than the routine's own work, so the barrier is the safer habit.
 
 function step_allocation(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)
     step!(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)             # warm up: compile first
@@ -155,10 +157,12 @@ surface_plot(ust; title = "u(x, t) = e⁻ᵗ sin(πx), the solution being steppe
 
 # ## Crank-Nicolson order in time
 #
-# Crank-Nicolson is second order in `Δt`. The spatial mesh is held fixed and fine enough that
-# its own error stays below the time error being measured:
+# Crank-Nicolson is second order in `Δt`. Measured against the exact solution the error would
+# stop shrinking at the spatial error of this mesh, so it is measured against the same scheme
+# on the same mesh with a much smaller step. The spatial error is then the same in both and
+# drops out of the difference, which is left with the time error alone:
 
-function crank_nicolson_error(nsteps)
+function crank_nicolson(nsteps)
     Δt = 1 / nsteps
     A = allocate_system_matrix(pattern)
     B = similar(A)
@@ -180,19 +184,31 @@ function crank_nicolson_error(nsteps)
         step!(u, F, decay, B, fact, l, Ωₕ, bcs, (n - 0.5) * Δt)
     end
 
-    return normₕ(u - Rₕ(Wₕ, x -> uexact(x, 1.0)))
+    return u
 end
 
-e₁, e₂ = crank_nicolson_error(25), crank_nicolson_error(50)
-order = log2(e₁ / e₂)
+uref = crank_nicolson(6400)
+nsteps = [25, 50, 100, 200]
+Δts = 1 ./ nsteps
+errs = [normₕ(crank_nicolson(n) - uref) for n in nsteps]
+orders = [log2(errs[i] / errs[i + 1]) for i in 1:(length(errs) - 1)]
 
-@test 1.8 < order < 3.0                                                                    #src
+# Every observed order must sit within a few hundredths of two, which a first-order        #src
+# stepper, at order one, would miss by far.                                                #src
+@test all(o -> 1.95 < o < 2.05, orders)                                                    #src
 
-e₁, e₂, order
+orders
 
-# Above two, because the spatial error is not negligible at the coarser step and cancels part
-# of the time error rather than adding to it. Refining `Δt` further would bring the measured
-# order back down onto two and then flatten, as the spatial error takes over.
+#-
+
+include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
+convergence_plot([(Δts, errs, "Crank-Nicolson", "#5B5FC7")]; # hide
+    title = "Crank-Nicolson, ‖·‖ₕ at t = 1 against the Δt = 1/6400 run") # hide
+
+# The orders are two to within a few parts in a thousand, and the errors sit on the
+# dashed line of slope two. Against the exact solution the same four errors would flatten
+# out and then grow back toward the spatial error of the mesh, about `6e-6`, which says
+# nothing about the time stepping.
 #
 # ## Where to go next
 #

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=f1bc6511">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=d4c21ea0">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces — Bramble.jl">
   <meta property="og:title" content="Grid spaces — Bramble.jl">
@@ -235,7 +235,7 @@ gridspace(Ωₕ::AbstractMeshType, N::Int) -&gt; CompositeGridSpace{N}</code></p
 </div>
 <p>Constructs a vector function space with <code class="md-code-inline">N</code> components on mesh <code class="md-code-inline">Ωₕ</code>. The underlying scalar space and its weights are computed once and shared across components.</p>
 <p><code class="md-code-inline">N == 1</code> yields the <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a> itself rather than a one-component composite, for both spellings. The element interface is uniform either way: <code class="md-code-inline">uₕ(1)</code> and <code class="md-code-inline">components(uₕ)</code> work on a scalar element.</p>
-<p>The <code class="md-code-inline">Val</code> form is always type stable. The <code class="md-code-inline">Int</code> form is stable wherever <code class="md-code-inline">N</code> is a literal or otherwise constant-foldable, and returns a small <code class="md-code-inline">Union</code> when <code class="md-code-inline">N</code> is only known at run time; prefer <code class="md-code-inline">Val</code> on hot paths.</p>
+<p>The <code class="md-code-inline">Val</code> form is always type stable. The <code class="md-code-inline">Int</code> form is stable wherever <code class="md-code-inline">N</code> is a literal or otherwise constant-foldable, and has a non-concrete return type when <code class="md-code-inline">N</code> is only known at run time; prefer <code class="md-code-inline">Val</code>, or <code class="md-code-inline">Wₕ^N</code> for <code class="md-code-inline">N ≤ 3</code>, on hot paths.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.vector_gridspace">
@@ -256,7 +256,7 @@ gridspace(Ωₕ::AbstractMeshType, N::Int) -&gt; CompositeGridSpace{N}</code></p
 <div class="md-docstring" id="Bramble.ndofs">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ndofs</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L278-L295" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L279-L296" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -268,7 +268,7 @@ ndofs(Wₕ::AbstractSpaceType, ::Type{Tuple}) -&gt; NTuple{N, Int}</code></pre>
 <div class="md-admonition md-admonition-warning">
 <p class="md-admonition-title">The `Tuple` form means something different for a composite space</p>
 <div class="md-admonition-body">
-<p>On a <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a>, <code class="md-code-inline">ndofs(Wₕ, Tuple)</code> is the grid&#39;s shape, with one entry per <strong>spatial dimension</strong> (<code class="md-code-inline">Nₓ</code>, <code class="md-code-inline">Nᵧ</code>, ...). On a <a href="../../api/spaces/#Bramble.CompositeGridSpace"><code class="md-code-inline">CompositeGridSpace</code></a>, it is instead one entry per <strong>component</strong>, each that component&#39;s own (scalar) DOF count, unrelated to spatial dimension, and not a shape a <code class="md-code-inline">prod</code> should be taken over. Code that does not know in advance which kind of space it was given should reach for one of the two unambiguous forms instead: <code class="md-code-inline">npoints(mesh(Wₕ), Tuple)</code> for the grid shape, or <code class="md-code-inline">map(ndofs, spaces(Wₕ))</code> for the per-component counts. Mixing them up is not hypothetical, since <code class="md-code-inline">src/operators/difference.jl</code>&#39;s <code class="md-code-inline">_grid_dims</code> avoids <code class="md-code-inline">ndofs(Wₕ, Tuple)</code> for exactly this reason, after a 3-component 4×6 space addressed 13824 slots into 72 and segfaulted under an <code class="md-code-inline">@inbounds</code> engine.</p>
+<p>On a <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a>, <code class="md-code-inline">ndofs(Wₕ, Tuple)</code> is the grid&#39;s shape, with one entry per <strong>spatial dimension</strong> (<code class="md-code-inline">Nₓ</code>, <code class="md-code-inline">Nᵧ</code>, ...). On a <a href="../../api/spaces/#Bramble.CompositeGridSpace"><code class="md-code-inline">CompositeGridSpace</code></a>, it is instead one entry per <strong>top-level sub-space</strong>, each that sub-space&#39;s total DOF count, unrelated to spatial dimension, and not a shape a <code class="md-code-inline">prod</code> should be taken over. A nested sub-space&#39;s entry counts all its leaves; <code class="md-code-inline">leaf_count</code> counts the scalar leaves. Code that does not know in advance which kind of space it was given should reach for one of the two unambiguous forms instead: <code class="md-code-inline">npoints(mesh(Wₕ), Tuple)</code> for the grid shape, or <code class="md-code-inline">map(ndofs, spaces(Wₕ))</code> for the per-component counts. Mixing them up is not hypothetical, since <code class="md-code-inline">_grid_dims</code> (<code class="md-code-inline">src/operators/stencil.jl</code>) reads the grid shape from the mesh, not from <code class="md-code-inline">ndofs(Wₕ, Tuple)</code>, for exactly this reason.</p>
 </div>
 </div>
 </div>
@@ -276,7 +276,7 @@ ndofs(Wₕ::AbstractSpaceType, ::Type{Tuple}) -&gt; NTuple{N, Int}</code></pre>
 <div class="md-docstring" id="Bramble.weights">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.weights</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L331-L408" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L327-L404" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -333,7 +333,7 @@ result = dot(uₕ.data, w_h, vₕ.data)  # Weighted inner product</code></pre>
 <div class="md-docstring" id="Bramble.spaces">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.spaces</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L307-L311" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L312-L316" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -346,7 +346,7 @@ result = dot(uₕ.data, w_h, vₕ.data)  # Weighted inner product</code></pre>
 <div class="md-docstring" id="Bramble.space">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.space</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L220-L224" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L221-L225" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -373,7 +373,7 @@ result = dot(uₕ.data, w_h, vₕ.data)  # Weighted inner product</code></pre>
 <div class="md-docstring" id="Bramble.ncomponents">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ncomponents</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L298-L303" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L299-L308" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -382,6 +382,7 @@ result = dot(uₕ.data, w_h, vₕ.data)  # Weighted inner product</code></pre>
 ncomponents(::Type{&lt;:AbstractSpaceType}) -&gt; Int</code></pre>
 </div>
 <p>Returns the number of field components of the function space (e.g. 1 for scalar, D for vector).</p>
+<p>On a <a href="../../api/spaces/#Bramble.CompositeGridSpace"><code class="md-code-inline">CompositeGridSpace</code></a> it counts the top-level sub-spaces: a nested composite counts its direct children. <code class="md-code-inline">leaf_count</code> counts the scalar leaves, and <code class="md-code-inline">components(uₕ)</code> lists them.</p>
 </div>
 </div>
 <h2 id="Vector-elements-and-grid-functions" class="md-heading">Vector elements and grid functions<a href="#Vector-elements-and-grid-functions" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -412,7 +413,7 @@ VectorElement{S, T, VT}(data::VT, space::S)</code></pre>
 <div class="md-docstring" id="Bramble.element">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.element</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L185-L191" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L171-L177" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -442,7 +443,7 @@ element(Wₕ::AbstractSpaceType, α::Number) -&gt; VectorElement</code></pre>
 <div class="md-docstring" id="Base.parent-Tuple{Bramble.VectorElement}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.parent</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L16-L20" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L10-L14" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -452,10 +453,10 @@ element(Wₕ::AbstractSpaceType, α::Number) -&gt; VectorElement</code></pre>
 <p>Returns the coefficient vector containing the degrees of freedom of <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> <code class="md-code-inline">uₕ</code>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s34&quot;, T} where {var&quot;#s34&quot;&lt;:Bramble.ScalarGridSpace, T}}">
+<div class="md-docstring" id="Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s40&quot;, T} where {var&quot;#s40&quot;&lt;:Bramble.ScalarGridSpace, T}}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Base.reshape</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s34&quot;, T} where {var&quot;#s34&quot;&lt;:Bramble.ScalarGridSpace, T}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L23-L35" title="View source">source</a>
+<h4 class="md-docstring-binding"><code>Base.reshape</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s40&quot;, T} where {var&quot;#s40&quot;&lt;:Bramble.ScalarGridSpace, T}}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L17-L28" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -469,13 +470,13 @@ element(Wₕ::AbstractSpaceType, α::Number) -&gt; VectorElement</code></pre>
 <li><p>For an N-component vector space, it returns an N-tuple of arrays, one for each component.</p>
 </li>
 </ul>
-<p>This zero-argument form is specific to <code class="md-code-inline">VectorElement</code> and does not conflict with <code class="md-code-inline">reshape(A, dims)</code>; it does shadow <code class="md-code-inline">Base.reshape(A) = reshape(A, ())</code>&#39;s 0-dimensional result for this type specifically, in favor of the shape a grid function actually has. Replaces the former <code class="md-code-inline">to_matrix</code> outright (gpena/Bramble.jl#73).</p>
+<p>This zero-argument form is specific to <code class="md-code-inline">VectorElement</code> and does not conflict with <code class="md-code-inline">reshape(A, dims)</code>; it does shadow <code class="md-code-inline">Base.reshape(A) = reshape(A, ())</code>&#39;s 0-dimensional result for this type specifically, in favor of the shape a grid function actually has.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.components">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.components</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L169-L174" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L156-L161" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -497,7 +498,7 @@ components(op::LazyOp, space::AbstractSpaceType) -&gt; Tuple</code></pre>
 <div class="md-docstring" id="Bramble.component_range">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.component_range</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L101-L108" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L89-L96" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -510,7 +511,7 @@ components(op::LazyOp, space::AbstractSpaceType) -&gt; Tuple</code></pre>
 <div class="md-docstring" id="Bramble.component_ranges">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.component_ranges</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L116-L123" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L104-L111" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -524,29 +525,44 @@ components(op::LazyOp, space::AbstractSpaceType) -&gt; Tuple</code></pre>
 <div class="md-docstring" id="Base.:*-Tuple{Function, Bramble.VectorElement}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.:*</code> — <span class="md-docstring-sig">Tuple{Function, Bramble.VectorElement}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L666-L686" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/JuliaLang/julia/blob/96ca370cf0e339faf45a7ba863793f6c7c6980fb/base/docs/basedocs.jl#L3281-L3316" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">f::Function * uₕ::VectorElement -&gt; VectorElement
-uₕ::VectorElement * f::Function -&gt; VectorElement</code></pre>
+<pre><code class="language-julia">*(x, y...)</code></pre>
 </div>
-<p>Project the continuous function <code class="md-code-inline">f</code> onto <code class="md-code-inline">uₕ</code>&#39;s own space and scale <code class="md-code-inline">uₕ</code> pointwise by it (gpena/Bramble.jl#197): equivalent to <code class="md-code-inline">Rₕ(space(uₕ), f) .* uₕ</code>, computed as a single <code class="md-code-inline">VectorElement</code> allocation (<code class="md-code-inline">Rₕ!</code> projects <code class="md-code-inline">f</code> directly into it, then it is scaled by <code class="md-code-inline">uₕ</code> in place) rather than one allocation for the projection and a second for the broadcast.</p>
-<p>A plain <code class="md-code-inline">Function</code> has no meaning as a grid function on its own – a form built from <code class="md-code-inline">innerₕ(f, v)</code> restricts it first through <a href="../../internals/form/#Bramble.source_function-Union{Tuple{D}, Tuple{Any, Val{D}}} where D"><code class="md-code-inline">source_function</code></a>/<a href="../../api/forms/#Bramble.form"><code class="md-code-inline">form</code></a>&#39;s own lowering, but <code class="md-code-inline">f * uₕ</code> outside a form (or a continuous spatial <em>condition</em> multiplying a grid function, <code class="md-code-inline">(x -&gt; x[1] &lt; 1) * uₕ</code>) had no operator to reach that with:</p>
+<p>Multiplication operator.</p>
+<p>Infix <code class="md-code-inline">x*y*z*...</code> calls this function with all arguments, i.e. <code class="md-code-inline">*(x, y, z, ...)</code>, which by default then calls <code class="md-code-inline">(x*y) * z * ...</code> starting from the left.</p>
+<p>Juxtaposition such as <code class="md-code-inline">2pi</code> also calls <code class="md-code-inline">*(2, pi)</code>. Note that this operation has higher precedence than a literal <code class="md-code-inline">*</code>. Note also that juxtaposition &quot;0x...&quot; (integer zero times a variable whose name starts with <code class="md-code-inline">x</code>) is forbidden as it clashes with unsigned integer literals: <code class="md-code-inline">0x01 isa UInt8</code>.</p>
+<p>Note that overflow is possible for most integer types, including the default <code class="md-code-inline">Int</code>, when multiplying large numbers.</p>
+<p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">julia&gt; (x -&gt; x[1] &lt; 1) * uₕ
-ERROR: MethodError: no method matching *(::Function, ::VectorElement)</code></pre>
+<pre><code class="language-julia-repl">julia&gt; 2 * 7 * 8
+112
+
+julia&gt; *(2, 7, 8)
+112
+
+julia&gt; [2 0; 0 3] * [1, 10]  # matrix * vector
+2-element Vector{Int64}:
+  2
+ 30
+
+julia&gt; 1/2pi, 1/2*pi  # juxtaposition has higher precedence
+(0.15915494309189535, 1.5707963267948966)
+
+julia&gt; x = [1, 2]; x&#39;x  # adjoint vector * vector
+5</code></pre>
 </div>
-<p>now restricts <code class="md-code-inline">f</code> to <code class="md-code-inline">space(uₕ)</code> and multiplies elementwise, so the result is an ordinary <code class="md-code-inline">VectorElement</code>, usable anywhere one is – including as a <code class="md-code-inline">SourceFunction</code>-lowered term inside another form.</p>
 </div>
 </div>
 <h2 id="Restriction-and-averaging-operators" class="md-heading">Restriction and averaging operators<a href="#Restriction-and-averaging-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-docstring" id="Bramble.Rₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Rₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L359-L394" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L356-L391" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -631,7 +647,7 @@ Rₕ!(uₕ, x -&gt; (f₁(x), f₂(x)))          # one function returning all co
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">avgₕ(Wₕ::AbstractSpaceType, f; quad_points = AVG_QUAD_POINTS, markers = ()) -&gt; VectorElement</code></pre>
+<pre><code class="language-julia">avgₕ(Wₕ::AbstractSpaceType, f; quad_points = Val(AVG_QUAD_POINTS), markers = ()) -&gt; VectorElement</code></pre>
 </div>
 <p>Returns a <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> with the average of function <code class="md-code-inline">f</code> with respect to the <a href="../../api/meshes/#Bramble.cell_measure"><code class="md-code-inline">cell_measure</code></a> of <code class="md-code-inline">mesh(Wₕ)</code> around each grid point.</p>
 <p>Each cell average is a tensor-product Gauss-Legendre rule with <code class="md-code-inline">quad_points</code> points per direction, exact for polynomials of degree <code class="md-code-inline">2 * quad_points - 1</code>.</p>
@@ -655,19 +671,20 @@ Rₕ!(uₕ, x -&gt; (f₁(x), f₂(x)))          # one function returning all co
 <pre><code class="language-julia">avgₕ(Wₕ, x -&gt; sin(x))
 avgₕ(Wₕ, x -&gt; sin(x[1]) * x[2]; quad_points = Val(4))</code></pre>
 </div>
-<p>On a Metal (or other device) backend, <code class="md-code-inline">f</code> runs <em>on the device</em> inside the quadrature kernel, evaluated <code class="md-code-inline">quad_points^D</code> times per cell (gpena/Bramble.jl#94, #174), so it must be GPU-compilable in the same sense <a href="../../api/spaces/#Bramble.Rₕ!"><code class="md-code-inline">Rₕ!</code></a>&#39;s docstring describes. A masked call runs the same kernel over just the marked cells, after zeroing the result on the device (gpena/Bramble.jl#297).</p>
+<p>On a Metal (or other device) backend, <code class="md-code-inline">f</code> runs <em>on the device</em> inside the quadrature kernel, evaluated <code class="md-code-inline">quad_points^D</code> times per cell (gpena/Bramble.jl#94, #174, #693), so it must be GPU-compilable in the same sense <a href="../../api/spaces/#Bramble.Rₕ!"><code class="md-code-inline">Rₕ!</code></a>&#39;s docstring describes. A masked call runs the same kernel over just the marked cells, after zeroing the result on the device (gpena/Bramble.jl#297).</p>
 <p>See also: <a href="../../api/spaces/#Bramble.avgₕ!"><code class="md-code-inline">avgₕ!</code></a>, <a href="../../api/spaces/#Bramble.Rₕ"><code class="md-code-inline">Rₕ</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.avgₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.avgₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L70-L96" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L70-L97" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">avgₕ!(uₕ::VectorElement, f; quad_points = AVG_QUAD_POINTS, markers = ()) -&gt; VectorElement</code></pre>
+<pre><code class="language-julia">avgₕ!(uₕ::VectorElement, f; quad_points = Val(AVG_QUAD_POINTS), markers = ()) -&gt; VectorElement
+avgₕ!(uₕ::VectorElement, f, quad_points::Val) -&gt; VectorElement</code></pre>
 </div>
 <p>In-place version of the averaging operator <a href="../../api/spaces/#Bramble.avgₕ"><code class="md-code-inline">avgₕ</code></a>. Returns <code class="md-code-inline">uₕ</code>.</p>
 <p>Evaluates the tensor-product Gauss-Legendre cell average of <code class="md-code-inline">f</code> and writes the result into <code class="md-code-inline">uₕ</code>.</p>
@@ -699,11 +716,11 @@ avgₕ(Wₕ, x -&gt; sin(x[1]) * x[2]; quad_points = Val(4))</code></pre>
 <li><p><code class="md-code-inline">πₕ(u)</code> over a <strong>trial function</strong> is the <strong>bilinear operator</strong>, contributing matrix columns rather than values. For the <em>unknown</em> side. It names no source space: that is the trial function&#39;s own, and assembly supplies it once the leaf is known.</p>
 </li>
 </ul>
-<p>See the <a href="../../tutorials/operators/">operators tutorial</a> for the numeric side and the pattern this exists for: a heterogeneous composite space whose leaves live on different meshes.</p>
+<p>This exists for the pattern of a heterogeneous composite space whose leaves live on different meshes.</p>
 <div class="md-docstring" id="Bramble.interpolate_at">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.interpolate_at</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L166-L209" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L162-L205" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -718,7 +735,7 @@ avgₕ(Wₕ, x -&gt; sin(x[1]) * x[2]; quad_points = Val(4))</code></pre>
 </li>
 <li><p><code class="md-code-inline">:clamp</code>: clamp <code class="md-code-inline">x</code> to the domain first, then interpolate there.</p>
 </li>
-<li><p><code class="md-code-inline">:extrapolate</code>: the original behaviour – blend using the boundary cell&#39;s own corner weights and slope, unclamped, which is a linear extrapolation rather than a hold.</p>
+<li><p><code class="md-code-inline">:extrapolate</code>: blend with the boundary cell&#39;s own corner weights and slope, unclamped: a linear extrapolation rather than a hold.</p>
 </li>
 <li><p>a <code class="md-code-inline">Number</code> (e.g. <code class="md-code-inline">0.0</code>, <code class="md-code-inline">NaN</code>): return this value outright, bypassing the blend.</p>
 </li>
@@ -732,7 +749,7 @@ avgₕ(Wₕ, x -&gt; sin(x[1]) * x[2]; quad_points = Val(4))</code></pre>
 <div class="md-docstring" id="Bramble.πₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.πₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L345-L374" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L358-L387" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -766,14 +783,14 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.πₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.πₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L453-L461" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L465-L473" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">πₕ(Wₕ::ScalarGridSpace, src::VectorElement; outside = :error) -&gt; VectorElement</code></pre>
 </div>
-<p>Evaluates <code class="md-code-inline">Rₕ(Wₕ, x -&gt; interpolate_at(src, x; outside))</code>; see <a href="../../api/spaces/#Bramble.πₕ!"><code class="md-code-inline">πₕ!</code></a>. Distinguished by multiple dispatch from the one-argument symbolic wrapper <code class="md-code-inline">πₕ(uₕ)</code> in <code class="md-code-inline">operators/interpolation.jl</code>. The element type is promoted from <code class="md-code-inline">Wₕ</code>&#39;s and <code class="md-code-inline">src</code>&#39;s own, so interpolating a <code class="md-code-inline">Dual</code>-valued <code class="md-code-inline">src</code> yields a <code class="md-code-inline">Dual</code>-valued result on an undifferentiated <code class="md-code-inline">Wₕ</code>. <code class="md-code-inline">outside</code> is forwarded to <a href="../../api/spaces/#Bramble.interpolate_at"><code class="md-code-inline">interpolate_at</code></a> unchanged.</p>
+<p>Evaluates <code class="md-code-inline">Rₕ(Wₕ, x -&gt; interpolate_at(src, x; outside))</code>; see <a href="../../api/spaces/#Bramble.πₕ!"><code class="md-code-inline">πₕ!</code></a>. Distinguished by multiple dispatch from the one-argument symbolic wrapper <code class="md-code-inline">πₕ(uₕ)</code>, defined below. The element type is promoted from <code class="md-code-inline">Wₕ</code>&#39;s and <code class="md-code-inline">src</code>&#39;s own, so interpolating a <code class="md-code-inline">Dual</code>-valued <code class="md-code-inline">src</code> yields a <code class="md-code-inline">Dual</code>-valued result on an undifferentiated <code class="md-code-inline">Wₕ</code>. <code class="md-code-inline">outside</code> is forwarded to <a href="../../api/spaces/#Bramble.interpolate_at"><code class="md-code-inline">interpolate_at</code></a> unchanged.</p>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -799,7 +816,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.interpolation_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.interpolation_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L569-L595" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L533-L559" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -841,6 +858,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=f1bc6511"></script>
+  <script src="../../assets/materialdocs.js?v=d4c21ea0"></script>
 </body>
 </html>
