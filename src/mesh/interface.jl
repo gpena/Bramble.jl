@@ -258,20 +258,20 @@ end
 # Refuses a point change that leaves a predicate-defined label stale: a label `set_markers!`
 # built from a predicate of position (`:c => x -> x[1] < 0.5`) holds the set the old points
 # gave, and there is no domain here to evaluate it at the new ones. Face labels are index-based
-# and stay valid, so they pass.
-function _check_no_predicate_labels(Ωₕ)
+# and stay valid, so they pass. `caller` completes "... was asked to move a mesh carrying
+# predicate markers ...", and `remedy` names the call that re-evaluates them.
+function _check_no_predicate_labels(Ωₕ, caller::String, remedy::String)
     labels = _predicate_labels(Ωₕ)
-    isempty(labels) || _throw_predicate_labels_stale(labels)
+    isempty(labels) || _throw_predicate_labels_stale(caller, labels, remedy)
     return nothing
 end
 
-@noinline function _throw_predicate_labels_stale(labels)
+@noinline function _throw_predicate_labels_stale(caller::String, labels, remedy::String)
     throw(
         ArgumentError(
-        "change_points!(Ωₕ, pts) was asked to move a mesh carrying predicate markers " *
-        "$(Tuple(labels)), whose sets depend on the points and would stay as the old " *
-        "points gave them. Call change_points!(Ωₕ, domain_markers, pts) instead to " *
-        "re-evaluate them.",
+        "$caller a mesh carrying predicate markers $(Tuple(labels)), whose sets depend " *
+        "on the points and would stay as the old points gave them. Call $remedy " *
+        "instead to re-evaluate them.",
     ),
     )
 end

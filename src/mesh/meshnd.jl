@@ -443,7 +443,9 @@ end
 # refusal on a later axis leaves the earlier ones and the version as they were, as
 # `_refine_indices!` does for a tie.
 function change_points!(Ωₕ::MeshnD, pts)
-    _check_no_predicate_labels(Ωₕ)
+    _check_no_predicate_labels(Ωₕ,
+        "change_points!(Ωₕ, pts) was asked to move",
+        "change_points!(Ωₕ, domain_markers, pts)")
     return _change_points!(Ωₕ, pts)
 end
 

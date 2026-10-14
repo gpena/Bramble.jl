@@ -473,7 +473,9 @@ words assembly reads) for the new grid. A mesh carrying any other label has no d
 to re-evaluate it onto the new points, so such a resize throws an `ArgumentError` before
 anything changes. Build `mesh(Ω, length(pts))` and call
 [`change_points!`](@ref)`(Ωₕ, markers(Ω), pts)` instead. A call that keeps the point count
-leaves every marker alone, custom labels included.
+leaves every marker alone, so a label defined by a predicate of position would keep the set
+the old points gave it: a mesh carrying one is refused with an `ArgumentError`, again naming
+`change_points!(Ωₕ, markers(Ω), pts)`. Face labels are index-based and stay valid.
 
 Bumps `Ωₕ`'s mesh version (gpena/Bramble.jl#221): every [`ScalarGridSpace`](@ref) already
 built on `Ωₕ` -- via [`gridspace`](@ref), directly or as a leaf of a
@@ -485,6 +487,16 @@ to it.
 """
 function set_points!(Ωₕ::Mesh1D, pts)
     _check_set_points(Ωₕ, pts)
+    length(_st(Ωₕ).pts) == length(pts) && _check_no_predicate_labels(Ωₕ,
+        "set_points!(Ωₕ, pts) was asked to move",
+        "change_points!(Ωₕ, markers(Ω), pts)")
+    return _set_points!(Ωₕ, pts)
+end
+
+# `set_points!` after its checks: the geometry, with every marker left as it is unless the
+# point count changes. What `change_points!` moves the points with, since it has its own
+# checks and re-evaluates the markers or refuses them itself.
+function _set_points!(Ωₕ::Mesh1D, pts)
     n = length(pts)
     if length(_st(Ωₕ).pts) == n
         _set_points_geometry!(Ωₕ, pts)
@@ -1383,7 +1395,9 @@ end
 @inline _nothing_to_refine(Ωₕ::Mesh1D) = is_collapsed(Ωₕ) || npoints(Ωₕ) <= 1
 
 function change_points!(Ωₕ::Mesh1D, pts)
-    _check_no_predicate_labels(Ωₕ)
+    _check_no_predicate_labels(Ωₕ,
+        "change_points!(Ωₕ, pts) was asked to move",
+        "change_points!(Ωₕ, domain_markers, pts)")
     return _change_points!(Ωₕ, pts)
 end
 
@@ -1393,8 +1407,8 @@ function _change_points!(Ωₕ::Mesh1D, pts)
     npts = npoints(Ωₕ)
     npts == length(pts) || _throw_point_count_mismatch(npts, length(pts))
 
-    set_points!(Ωₕ, pts)
-    return nothing
+    _check_set_points(Ωₕ, pts)
+    return _set_points!(Ωₕ, pts)
 end
 
 """

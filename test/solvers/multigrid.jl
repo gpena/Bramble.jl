@@ -106,6 +106,25 @@ _mg_agree(a, b) = isapprox(a, b; rtol = 1e-13, atol = 1e-13)
           "GeometricMeshHierarchy{2D, 3 levels, (3, 5) to (9, 17) pts}"
 end
 
+@testset "gmg: coarse levels and moved points" begin
+    # A coarse level keeps the predicate labels of the fine mesh, so the two-argument
+    # `change_points!` refuses it rather than leave the sets the old points gave.
+    Ω = domain(interval(0.0, 1.0), :c => x -> x[1] < 0.5)
+    H = GeometricMeshHierarchy(mesh(Ω, 9, true), 2)
+    Ωc = H[1]
+    pts = collect(range(0.0, 1.0; length = 5)) .^ 2
+    @test markers(Ωc)[:c] == Bool[1, 1, 0, 0, 0]
+    @test_throws ["change_points!(Ωₕ, pts)", "(:c,)",
+        "change_points!(Ωₕ, domain_markers, pts)"] Bramble.change_points!(Ωc, pts)
+    @test points(Ωc) == range(0.0, 1.0; length = 5)
+    Bramble.change_points!(Ωc, markers(Ω), pts)
+    @test markers(Ωc)[:c] == Bool[1, 1, 1, 0, 0]
+    # A hierarchy over face labels is moved by the two-argument form as before.
+    Hf = GeometricMeshHierarchy(mesh(domain(interval(0.0, 1.0), :l => :left), 9, true), 2)
+    Bramble.change_points!(Hf[1], pts)
+    @test points(Hf[1]) == pts && markers(Hf[1])[:l] == Bool[1, 0, 0, 0, 0]
+end
+
 # `P` is `interpolation_matrix` of the fine space from the coarse one, never built by the
 # transfers; `coarsen!` is `Pᵀ` without scaling.
 @testset "gmg: prolongation and transpose" begin

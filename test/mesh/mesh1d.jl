@@ -445,8 +445,7 @@ import Base: diff
 
         # On non-uniform points the predicates read the stored points: a uniform
         # coordinate rebuilt from the index would put 0.25, 0.5, 0.75 in their place.
-        set_points!(Ωₕ, [0.0, 0.1, 0.2, 0.3, 1.0])
-        set_markers!(Ωₕ, dm)
+        change_points!(Ωₕ, dm, [0.0, 0.1, 0.2, 0.3, 1.0])
         check_masks(Ωₕ; lower = Bool[1, 1, 1, 1, 0], upper = Bool[0, 0, 0, 0, 1],
             point = Bool[0, 0, 0, 0, 0])
     end

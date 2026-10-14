@@ -197,8 +197,8 @@ end
         @test points(Ωₕ) == range(0.0, 1.0; length = 7)
     end
 
-    @testset "Same count keeps custom labels" begin
-        Ωₕ = mesh(domain(I, :a => x -> x < 0.4), 70, false)::Mesh1D
+    @testset "Same count keeps face labels" begin
+        Ωₕ = mesh(domain(I, :a => :left), 70, false)::Mesh1D
         a0 = copy(markers(Ωₕ)[:a])
         # x^1.2 keeps both ends and the order of the points, and moves the interior ones.
         p = collect(points(Ωₕ)) .^ 1.2
@@ -206,6 +206,20 @@ end
         @test points(Ωₕ) == p && npoints(Ωₕ) == 70
         @test markers(Ωₕ)[:a] == a0
         @test words_agree(Ωₕ)
+    end
+
+    @testset "set_points! refuses predicate labels" begin
+        Ω = domain(I, :c => x -> x < 0.4, :l => :left)
+        Ωₕ = mesh(Ω, 70, false)::Mesh1D
+        c0, p0, v0 = copy(markers(Ωₕ)[:c]), copy(points(Ωₕ)), _mesh_version(Ωₕ)
+        p = p0 .^ 1.2
+        @test_throws ["set_points!(Ωₕ, pts)", "(:c,)",
+            "change_points!(Ωₕ, markers(Ω), pts)"] set_points!(Ωₕ, p)
+        # Refused before anything changed.
+        @test points(Ωₕ) == p0 && _mesh_version(Ωₕ) == v0 && markers(Ωₕ)[:c] == c0
+        # The three-argument form moves it and re-evaluates the label.
+        change_points!(Ωₕ, markers(Ω), p)
+        @test points(Ωₕ) == p && markers(Ωₕ)[:c] == (p .< 0.4) && words_agree(Ωₕ)
     end
 
     @testset "Word matrix: build and rebuild" begin
