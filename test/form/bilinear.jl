@@ -923,13 +923,73 @@ using Bramble:
             @test _loop_bytes(A, a) <= cap
         end
 
-        # A scale over a restricted sum is not distributed over it: distributed, a grid
-        # function scale took `form` 12.8 s to compile here, and over four summands LLVM
-        # never finished.
+        # A grid function scale over a restricted sum is distributed over its summands as
+        # the product splits. Left whole, `g * (R(:l, u) + R(:r, u))` was one summand of two
+        # bits, and one on each side boxed (11872 B; 19024 B for four summands on the test
+        # side alone). Distributed over the split products' nested sums instead, `form`
+        # took 12.8 s to compile the first form below, and over four summands LLVM never
+        # finished.
         g = element(W)
         g .= 1.0 .+ (1:length(g)) ./ 7
         t = @elapsed form(W, W, (u, v) -> innerₕ(u, g * (R(:l, v) + R(:r, v)) + R(:b, v)))
         @test t < 2.0
+        t = @elapsed form(W, W,
+            (u, v) -> innerₕ(u, g * (R(:l, v) + R(:r, v) + R(:b, v) + R(:t, v))))
+        @test t < 2.0
+        function _check_scaled(whole, lhs, rhs; nnz_equal = true)
+            a = form(W, W, whole)
+            A = assemble(a)
+            @test _loop_bytes(A, a) == 0
+            P = sum(assemble(form(W, W, (u, v) -> innerₕ(f(u), h(v))))
+            for f in lhs for h in rhs)
+            @test Matrix(A) ≈ Matrix(P)
+            nnz_equal && @test nnz(A) == nnz(P)
+            return A, P
+        end
+        gR(s) = u -> g * R(s, u)
+        _check_scaled(
+            (u, v) -> innerₕ(g * (R(:l, u) + R(:r, u)), g * (R(:b, v) + R(:t, v))),
+            (gR(:l), gR(:r)), (gR(:b), gR(:t)))
+        _check_scaled((u, v) -> innerₕ(u, g * (R(:l, v) + R(:r, v) + R(:b, v) + R(:t, v))),
+            (identity,), Tuple(gR(s) for s in (:l, :r, :b, :t)))
+        # A plain summand beside the restrictions stays where `_joins_restriction` puts it:
+        # left whole, these two boxed 55232 and 158432 B.
+        RD(s) = u -> R(s, D₋ₓ(u))
+        gRD(s) = u -> g * R(s, D₋ₓ(u))
+        _check_scaled(
+            (u, v) -> innerₕ(u + R(:l, D₋ₓ(u)), g * (v + R(:t, D₋ₓ(v)) + R(:b, v))),
+            (identity, RD(:l)), (v -> g * v, gRD(:t), gR(:b)); nnz_equal = false)
+        _check_scaled(
+            (u, v) -> innerₕ(u + R(:l, D₋ₓ(u)) + R(:r, D₋ₓ(u)) + R(:b, D₋ₓ(u)) +
+                             R(:t, D₋ₓ(u)),
+                g * (v + R(:l, D₋ₓ(v)) + R(:r, D₋ₓ(v)) + R(:b, D₋ₓ(v)))),
+            (identity, (RD(s) for s in (:l, :r, :b, :t))...),
+            (v -> g * v, (gRD(s) for s in (:l, :r, :b))...); nnz_equal = false)
+        # An infinite value of `g` stays where its parts put it, and no finite entry
+        # becomes NaN.
+        gi = copy(g)
+        gi[1] = Inf
+        a = form(W, W,
+            (u, v) -> innerₕ(gi * (R(:l, u) + R(:r, u)), gi * (R(:b, v) + R(:t, v))))
+        A = Matrix(assemble(a))
+        P = sum(Matrix(assemble(form(W, W, (u, v) -> innerₕ(gi * R(s, u), gi * R(z, v)))))
+        for s in (:l, :r) for z in (:b, :t))
+        @test any(isinf, P) && !any(isnan, P)
+        @test isequal(A, P)
+        # With such sums on both sides, every piece carries two grid functions' types: past
+        # four pieces the product stays whole, as it was, since sixteen took the first
+        # `assemble` 4.0 s against 0.51 s whole.
+        for k in 3:4
+            labels_k = labels[1:k]
+            f = (u, v) -> innerₕ(g * sum(R(s, u) for s in labels_k),
+                g * sum(R(s, v) for s in reverse(labels_k)))
+            t = @elapsed a = form(W, W, f)
+            @test t < 2.0
+            @test _products(resolve_form_ast(a)) == 1
+            P = sum(assemble(form(W, W, (u, v) -> innerₕ(g * R(s, u), g * R(z, v))))
+            for s in labels_k for z in labels_k)
+            @test Matrix(assemble(a)) ≈ Matrix(P)
+        end
 
         # On a Float32 mesh a Float64 literal beside an Int widens the Int to Float64, never
         # narrows the literal to Float32, and `π` beside an Int goes to Float32, as `π * 1f0`

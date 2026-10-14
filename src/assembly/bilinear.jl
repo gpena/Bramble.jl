@@ -368,7 +368,8 @@ function _split_restricted_products(op::OperatorAdd, ::Type{E}) where {E}
 end
 
 # A scale over a split product is distributed over the products, so each stays its own
-# unit. A scale inside a product's operand is never distributed.
+# unit. A grid function scale inside a product's operand is distributed only as the
+# product is split (`_product_summands`).
 function _split_restricted_products(
         op::Union{OperatorScale, GridFunctionScale}, ::Type{E}) where {E}
     _needs_rewrite(op) || return op
@@ -393,15 +394,36 @@ function _split_restricted_products(op::BilinearProduct{D, W}, ::Type{E}) where 
     nr = _vanishing_count(r)
     capl = Val(nr == 0 ? 2 : 1)
     capr = Val(nl == 0 ? 2 : 1)
-    ls = _operand_groups(_expanded_summands(l), capl, Val(true))
-    rs = _operand_groups(_expanded_summands(r), capr, Val(true))
-    # A plain summand's own group (`_joins_restriction`) is one more per side; where that
-    # takes the product past the cap below, the plain summands join the first group as
-    # they did before it, rather than the product being left whole (1205744 B against
-    # 82848 B for a plain and four restricted differences against three).
-    length(ls) * length(rs) > 16 || return _split_product(op, l, r, ls, rs)
-    return _split_product(op, l, r, _operand_groups(_expanded_summands(l), capl, Val(false)),
-        _operand_groups(_expanded_summands(r), capr, Val(false)))
+    # A grid function scale over a restricted sum is distributed over it
+    # (`_product_summands`), but with such sums on both sides only while the product splits
+    # into at most four pieces: each piece then carries two grid functions' types and costs
+    # the first `assemble` about 0.25 s to infer, and sixteen took 4.0 s against 0.51 s for
+    # the product left whole.
+    sl = _scaled_sum(l)
+    sr = _scaled_sum(r)
+    if sl || sr
+        ls, rs = _capped_groups(_product_summands, l, r, capl, capr, Val(true), Val(true))
+        length(ls) * length(rs) <= (sl && sr ? 4 : 16) &&
+            return _split_product(op, l, r, ls, rs)
+    end
+    # Left whole, such a scaled sum boxes whatever the other side's grouping, so a plain
+    # summand there joins a restricted one rather than adding a boxing product of its own
+    # (55232 B against 41792 B for `innerₕ(u + Rₕ(:l, D₋ₓ(u)), g * (v + Rₕ(:t, D₋ₓ(v)) +
+    # Rₕ(:b, v)))` on a 7x9 grid before the scale was distributed).
+    ls, rs = _capped_groups(_expanded_summands, l, r, capl, capr, Val(!sr), Val(!sl))
+    return _split_product(op, l, r, ls, rs)
+end
+
+# A plain summand's own group (`_joins_restriction`) is one more per side; where that takes
+# the product past the cap in `_split_product`, the plain summands join the first group as
+# they did before it, rather than the product being left whole (1205744 B against 82848 B
+# for a plain and four restricted differences against three).
+function _capped_groups(summands::F, l, r, capl, capr, sepl, sepr) where {F}
+    ls = _operand_groups(summands(l), capl, sepl)
+    rs = _operand_groups(summands(r), capr, sepr)
+    length(ls) * length(rs) > 16 || return ls, rs
+    return _operand_groups(summands(l), capl, Val(false)),
+    _operand_groups(summands(r), capr, Val(false))
 end
 
 function _split_product(op::BilinearProduct{D, W}, l, r, ls, rs) where {D, W}
@@ -537,8 +559,7 @@ _promote_scalar(x::Base.RefValue, T) = x
 
 # How many restricted summands `op` holds, under any wrapper, as a bound on the stencil
 # shapes it brings (at most `2^bits`). A restriction nested in another adds no shape: both
-# answer `()` or the same full tuple. `g * (Rₕ(:l, v) + Rₕ(:r, v))` counts two, and stays
-# one summand, since a scale is never distributed.
+# answer `()` or the same full tuple. `g * (Rₕ(:l, v) + Rₕ(:r, v))` counts two.
 @inline _shape_bits(op::RegionRestriction) = op.zero_stencil === nothing ?
                                              max(1, _shape_bits(op.inner_op)) :
                                              _shape_bits(op.inner_op)
@@ -566,6 +587,23 @@ const _DifferenceNode = Union{BackwardDifference, ForwardDifference, CenteredDif
     return map(x -> _rewrap_inner(op, x), _expanded_summands(op.inner_op))
 end
 @inline _expanded_summands(op) = (op,)
+
+# A product's operand expanded as above, and a grid function scale over a sum holding a
+# restriction distributed over its summands: `g * (Rₕ(:l, v) + Rₕ(:r, v))` is
+# `g * Rₕ(:l, v) + g * Rₕ(:r, v)`, entry for entry. Left whole it is one summand of two
+# bits, and on both sides four bits in one product boxed (11872 B on a 7x9 grid). Each
+# scaled summand is rewrapped once, here, as a flat tuple the type-level grouping then
+# sums: distributing it over the split products' nested sums instead took `form` 12.8 s
+# to compile for `g * (Rₕ + Rₕ) + Rₕ`, and LLVM never finished over four summands.
+@inline _product_summands(op::OperatorAdd) = (
+    _product_summands(op.left_op)..., _product_summands(op.right_op)...)
+@inline function _product_summands(op::GridFunctionScale)
+    _holds_restriction(op.inner_op) || return (op,)
+    return map(x -> _rewrap_inner(op, x), _product_summands(op.inner_op))
+end
+@inline _product_summands(op) = _expanded_summands(op)
+# Whether `_product_summands` distributes a scale in `op`, read off the tuple lengths.
+@inline _scaled_sum(op) = length(_product_summands(op)) != length(_expanded_summands(op))
 
 # The bits of `_expanded_summands(op)` summed, read off the types alone so the count folds
 # to a constant.
@@ -724,14 +762,18 @@ function _groups_expr(Ts::Vector{Any}, cap::Int, separate::Bool)
     return ex
 end
 
+# The products are summed as a balanced tree, in the same order: a left-deep sum's node
+# types hold their whole subtree, of total size quadratic in the product count, and every
+# walk over the form is inferred over them. A grid function scale's type is long, and
+# sixteen scaled pieces summed left-deep took the first `assemble` 4.6 s.
 function _product_sum_expr(D::Int, W, Ls::Vector{Any}, Rs::Vector{Any})
-    ex = nothing
-    for i in 1:length(Ls), j in 1:length(Rs)
-
-        t = :(BilinearProduct{$D, $W, $(Ls[i]), $(Rs[j])}(ls[$i], rs[$j]))
-        ex = ex === nothing ? t : :(OperatorAdd($ex, $t))
+    exs = Any[:(BilinearProduct{$D, $W, $(Ls[i]), $(Rs[j])}(ls[$i], rs[$j]))
+              for i in 1:length(Ls) for j in 1:length(Rs)]
+    while length(exs) > 1
+        exs = Any[k < length(exs) ? :(OperatorAdd($(exs[k]), $(exs[k + 1]))) : exs[k]
+                  for k in 1:2:length(exs)]
     end
-    return ex
+    return exs[1]
 end
 
 # The generators below run this Julia code at compile time; compiled into the package
