@@ -1498,7 +1498,9 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             ("D̽ₓD₊ᵧ", X -> D̽ₓ(D₊ᵧ(X)), (170, 170, 281), (171, 171, 319)),
             ("D₋ₓD₊ᵧD₋ₓ", X -> D₋ₓ(D₊ᵧ(D₋ₓ(X))), (204, 204, 400), (194, 194, 425)),
             ("McₓD̽ᵧ", X -> Mcₓ(D̽ᵧ(X)), (322, 322, 747), (323, 323, 725)),
-            ("D₊ₓD₋ₓ", X -> D₊ₓ(D₋ₓ(X)), (117, 117, 171), (123, 123, 181)))
+            ("D₊ₓD₋ₓ", X -> D₊ₓ(D₋ₓ(X)), (117, 117, 171), (123, 123, 181)),
+            # a sum of nested nodes: both sides refilled 463040 B with its tap 0 a union
+            ("D̽ₓ(D̽ᵧ+D₋ₓ)", X -> D̽ₓ(D̽ᵧ(X) + D₋ₓ(X)), (466, 466, 1259), (472, 472, 1267)))
         for (n, N, nl, nc) in nests, ((w, wrap, masked), pins) in zip(wraps, (nl, nc))
 
             @testset "$n($w)" begin
@@ -1530,6 +1532,36 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             y = assemble(lf)
             @test all(iszero, y)
             @test bytes(y, lf) == 0
+        end
+
+        # Restricted sums and scales between the nodes, both sides (each refilled more than
+        # before with the outer tap 0 left a union, and `Mₓ(D₊ᵧ(R(:c, R(:l) + R(:r))))`
+        # stored 270 entries, not 189, with zeros left at the point).
+        Wu = gridspace(mesh(domain(I1 × I1, :l => :left, :r => :right, :b => :bottom,
+                :t => :top, :c => x -> x[1] < 0.5), (7, 9), (true, true)))
+        m(f) = Rₕ(Wu, x -> f(x) ? 1.0 : 0.0)
+        ml, mr = m(x -> x[1] == 0), m(x -> x[1] == 1)
+        mb, mt, mc = m(x -> x[2] == 0), m(x -> x[2] == 1), m(x -> x[1] < 0.5)
+        LR(X) = R(:l, X) + R(:r, X)
+        BT(X) = R(:b, X) + R(:t, X)
+        for (n, f, fm, k) in (
+            ("MD(Rc)", (u, v) -> innerₕ(Mₓ(D₊ᵧ(R(:c, LR(u)))), Mₓ(D₊ᵧ(BT(v)))),
+                (u, v) -> innerₕ(Mₓ(D₊ᵧ(mc * (ml * u + mr * u))), Mₓ(D₊ᵧ(mb * v + mt * v))),
+                189),
+            ("DRD", (u, v) -> innerₕ(D₋ₓ(R(:c, D₊ᵧ(LR(u)))), D₋ₓ(R(:c, D₊ᵧ(BT(v))))),
+                (u, v) -> innerₕ(D₋ₓ(mc * D₊ᵧ(ml * u + mr * u)), D₋ₓ(mc * D₊ᵧ(mb * v + mt * v))),
+                108),
+            ("D̽(2D̽)", (u, v) -> innerₕ(D̽ₓ(2.0 * D̽ᵧ(LR(u))), D̽ₓ(2.0 * D̽ᵧ(LR(v)))),
+                (u, v) -> innerₕ(D̽ₓ(2.0 * D̽ᵧ(ml * u + mr * u)), D̽ₓ(2.0 * D̽ᵧ(ml * v + mr * v))),
+                827))
+            @testset "$n" begin
+                a = form(Wu, Wu, f)
+                A = assemble(a)
+                @test count(!iszero, A) > 0
+                @test A ≈ assemble(form(Wu, Wu, fm))
+                @test nnz(A) == k
+                @test bytes(A, a) == 0
+            end
         end
     end
 

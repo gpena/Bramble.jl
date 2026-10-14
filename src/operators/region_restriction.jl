@@ -250,6 +250,11 @@ end
 @inline function shifted_inner_stencil(
         inner_op::OperatorScale, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
 ) where {D, Dim}
+    # Over a tapped node over a restriction (`D̽ₓ(2.0 * D̽ᵧ(restrict_to(:l, v)))`), the node's
+    # own shift (`_fixed_shift`, assembly/stencil_eval.jl), of one length, is scaled.
+    _fixes_restriction(inner_op) && !_scales_restriction(inner_op.inner_op) && return scale_stencil(
+        shifted_inner_stencil(inner_op.inner_op, nothing, space, I, markers, Val(Dim), delta),
+        _scale_value(inner_op, 0))
     _scales_restriction(inner_op.inner_op) || return _shifted_inner_stencil(
         stencil_shift_trait(inner_op), inner_op, inner, space, I, markers, Val(Dim), delta)
     m = mesh(space)
