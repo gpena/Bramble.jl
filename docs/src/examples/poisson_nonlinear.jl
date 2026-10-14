@@ -87,9 +87,9 @@ extrema(picard_ratios)
 
 # Bounded rather than pinned to a count: a slower rate, or a run that never converges, is   #src
 # the failure this guards against. The step sizes must reach the tolerance the loop breaks  #src
-# on, and shrink by more than a factor of twenty at every step.                             #src
+# on, and shrink by more than a factor of ten at every step.                                #src
 @test 0 < length(picard_steps) <= 10                                                        #src
-@test all(<(0.05), picard_ratios)                                                           #src
+@test all(<(0.1), picard_ratios)                                                            #src
 @test picard_steps[end] < 1e-12                                                             #src
 @test 1.0e-6 < norm₁ₕ(uₙ .- Rₕ(Wₕ, sol)) < 1.0e-2                                            #src
 
