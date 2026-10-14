@@ -255,6 +255,27 @@ end
     )
 end
 
+# Refuses a point change that leaves a predicate-defined label stale: a label `set_markers!`
+# built from a predicate of position (`:c => x -> x[1] < 0.5`) holds the set the old points
+# gave, and there is no domain here to evaluate it at the new ones. Face labels are index-based
+# and stay valid, so they pass.
+function _check_no_predicate_labels(Ωₕ)
+    labels = _predicate_labels(Ωₕ)
+    isempty(labels) || _throw_predicate_labels_stale(labels)
+    return nothing
+end
+
+@noinline function _throw_predicate_labels_stale(labels)
+    throw(
+        ArgumentError(
+        "change_points!(Ωₕ, pts) was asked to move a mesh carrying predicate markers " *
+        "$(Tuple(labels)), whose sets depend on the points and would stay as the old " *
+        "points gave them. Call change_points!(Ωₕ, domain_markers, pts) instead to " *
+        "re-evaluate them.",
+    ),
+    )
+end
+
 # The one-argument form: no domain to re-derive custom markers from, so a mesh carrying
 # any is refused outright rather than silently losing them. The public contract for both
 # this and the two-argument form below is documented once, on the
@@ -309,7 +330,7 @@ function change_points!(
         pts;
         warn_marker_mismatch::Bool = true
 )
-    change_points!(Ωₕ, pts)
+    _change_points!(Ωₕ, pts)
     set_markers!(Ωₕ, domain_markers; warn_marker_mismatch)
     return nothing
 end
@@ -550,7 +571,14 @@ function iterative_refinement! end
 
 Update the coordinates of mesh `Ωₕ` in-place using new point coordinates in `pts`,
 recalculating all cached half-points and cell spacings.
-With `domain_markers`, `warn_marker_mismatch` is passed on to `set_markers!`.
+With `domain_markers`, every marker is re-evaluated at the new points, and
+`warn_marker_mismatch` is passed on to `set_markers!`.
+
+Without `domain_markers`, a label defined by a predicate of position (`:c => x -> x[1] < 0.5`)
+would keep the set the old points gave it, so a mesh carrying one is refused with an
+`ArgumentError` before anything changes: call `change_points!(Ωₕ, markers(Ω), pts)`
+instead. Face labels (`:l => :left`) are index-based, stay valid when points move, and are
+accepted.
 
 !!! warning "Invalidates every ScalarGridSpace already built on Ωₕ"
     Bumps `Ωₕ`'s mesh version (gpena/Bramble.jl#221; see [`set_points!`](@ref), which this

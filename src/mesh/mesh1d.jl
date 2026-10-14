@@ -79,6 +79,8 @@ dictionary and the label-to-column table of the state's marker words.
     accessors ([`points`](@ref), [`spacings`](@ref), ...).
   - `marker_stamp`: a counter value drawn afresh at construction and at every marker
     replacement, so a cached marker read can tell the markers changed.
+  - `predicate_labels`: the labels `set_markers!` defined by a predicate of position, whose
+    sets a point change leaves stale (see [`change_points!`](@ref)).
 
 See also: [`MeshnD`](@ref), [`mesh`](@ref), [`AbstractMeshType`](@ref).
 """
@@ -92,17 +94,21 @@ mutable struct Mesh1D{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVe
     state::Mesh1DState{BT, CI, VT, T, Matrix{UInt64}}
     "a fresh counter value at construction and at every marker replacement."
     marker_stamp::UInt64
+    "the labels defined by a predicate of position, which moving the points leaves stale."
+    predicate_labels::Vector{Symbol}
 end
 
-# The mesh over `state` with a fresh marker stamp.
-function Mesh1D(markers::MeshMarkers, marker_ids::Dict{Symbol, Int}, state::Mesh1DState)
-    return Mesh1D(markers, marker_ids, state, _next_mesh_uid())
+# The mesh over `state` with a fresh marker stamp, and the predicate labels given or none.
+function Mesh1D(markers::MeshMarkers, marker_ids::Dict{Symbol, Int}, state::Mesh1DState,
+        predicate_labels::Vector{Symbol} = Symbol[])
+    return Mesh1D(markers, marker_ids, state, _next_mesh_uid(), predicate_labels)
 end
 
 # The mesh over `s` with `markers`, the label table and the state's words built together.
-function _mesh1d_with_markers(markers::MeshMarkers, s::Mesh1DState)
+function _mesh1d_with_markers(markers::MeshMarkers, s::Mesh1DState,
+        predicate_labels::Vector{Symbol} = Symbol[])
     ids, words = _marker_table(markers, length(s.pts))
-    return Mesh1D(markers, ids, _restate(s; words))
+    return Mesh1D(markers, ids, _restate(s; words), predicate_labels)
 end
 
 """
@@ -116,7 +122,7 @@ function _rebackend(Ωₕ::Mesh1D, be::Backend, f::F) where {F}
     s = _st(Ωₕ)
     r = Mesh1DState(s.set, s.indices, be, f(s.pts), f(s.half_pts), f(s.half_spacings),
         f(s.spacings), s.collapsed, s.version, s.uniform, s.words, _next_mesh_uid())
-    return Mesh1D(markers(Ωₕ), _marker_ids(Ωₕ), r)
+    return Mesh1D(markers(Ωₕ), _marker_ids(Ωₕ), r, copy(_predicate_labels(Ωₕ)))
 end
 
 # Both a `Mesh1D` and its state answer the geometric accessors below, reading the state.
@@ -168,13 +174,17 @@ end
 # change, and never equal across meshes or across two stores.
 @inline _marker_stamp(Ωₕ::Mesh1D) = getfield(Ωₕ, :marker_stamp)
 
+# The labels `set_markers!` defined by a predicate of position; every other store clears them.
+@inline _predicate_labels(Ωₕ::Mesh1D) = getfield(Ωₕ, :predicate_labels)
+
 # Replaces the marker dictionary, its label table and the state's words together. A label
 # set may change after construction; the word matrix is rebuilt, never resized.
-function _store_markers!(Ωₕ::Mesh1D, mesh_markers)
+function _store_markers!(Ωₕ::Mesh1D, mesh_markers, predicate_labels = Symbol[])
     mm = convert(MeshMarkers, mesh_markers)
     ids, words = _marker_table(mm, npoints(Ωₕ))
     setfield!(Ωₕ, :markers, mm)
     setfield!(Ωₕ, :marker_ids, ids)
+    setfield!(Ωₕ, :predicate_labels, Symbol[predicate_labels...])
     _set_state!(Ωₕ, _restate(_st(Ωₕ); words))
     setfield!(Ωₕ, :marker_stamp, _next_mesh_uid())
     return nothing
@@ -1373,6 +1383,13 @@ end
 @inline _nothing_to_refine(Ωₕ::Mesh1D) = is_collapsed(Ωₕ) || npoints(Ωₕ) <= 1
 
 function change_points!(Ωₕ::Mesh1D, pts)
+    _check_no_predicate_labels(Ωₕ)
+    return _change_points!(Ωₕ, pts)
+end
+
+# The geometry alone, with markers left as they are: what the three-argument form moves the
+# points with before it re-evaluates every marker.
+function _change_points!(Ωₕ::Mesh1D, pts)
     npts = npoints(Ωₕ)
     npts == length(pts) || _throw_point_count_mismatch(npts, length(pts))
 
@@ -1393,7 +1410,7 @@ function Base.copy(Ωₕ::Mesh1D)
     c = Mesh1DState(s.set, s.indices, s.backend, copy(s.pts), copy(s.half_pts),
         copy(s.half_spacings), copy(s.spacings), s.collapsed, s.version, s.uniform, s.words,
         _next_mesh_uid())
-    return _mesh1d_with_markers(deepcopy(markers(Ωₕ)), c)
+    return _mesh1d_with_markers(deepcopy(markers(Ωₕ)), c, copy(_predicate_labels(Ωₕ)))
 end
 
 # A deepcopy is an independent mutable mesh, so it gets a fresh identity: with the uid

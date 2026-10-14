@@ -28,6 +28,8 @@ are evaluated on demand from the tensor-product submeshes.
   - `marker_ids`: `Dict{Symbol, Int}`, the column of each label in `words`.
   - `words`: `Matrix{UInt64}`, the marker bits, one column of `BitVector` chunks per label.
   - `uid`: an identity unique to this mesh, kept across its mutations.
+  - `predicate_labels`: the labels `set_markers!` defined by a predicate of position, whose
+    sets a point change leaves stale (see [`change_points!`](@ref)).
   - `marker_stamp`: a counter value drawn afresh at construction and at every marker
     replacement.
 
@@ -72,16 +74,19 @@ mutable struct MeshnD{D, BT <: Backend, CI <: CartesianIndices{D}, SM <: Tuple, 
     uid::UInt64
     "a fresh counter value at construction and at every marker replacement."
     marker_stamp::UInt64
+    "the labels defined by a predicate of position, which moving the points leaves stale."
+    predicate_labels::Vector{Symbol}
 end
 
-# The mesh over the given marker table and words, with a fresh identity and marker stamp.
+# The mesh over the given marker table and words, with a fresh identity and marker stamp,
+# and the predicate labels given or none.
 function MeshnD(
         set::CartesianProduct{D}, markers::MeshMarkers, indices::CartesianIndices{D},
         backend::Backend, submeshes::Tuple, marker_ids::Dict{Symbol, Int},
-        words::Matrix{UInt64}, uid::UInt64
+        words::Matrix{UInt64}, uid::UInt64, predicate_labels::Vector{Symbol} = Symbol[]
 ) where {D}
     return MeshnD(set, markers, indices, backend, submeshes, marker_ids, words, uid,
-        _next_mesh_uid())
+        _next_mesh_uid(), predicate_labels)
 end
 
 """
@@ -92,10 +97,11 @@ fresh identity.
 """
 function MeshnD(
         set::CartesianProduct{D}, markers::MeshMarkers, indices::CartesianIndices{D},
-        backend::Backend, submeshes::Tuple
+        backend::Backend, submeshes::Tuple, predicate_labels::Vector{Symbol} = Symbol[]
 ) where {D}
     ids, words = _marker_table(markers, length(indices))
-    return MeshnD(set, markers, indices, backend, submeshes, ids, words, _next_mesh_uid())
+    return MeshnD(set, markers, indices, backend, submeshes, ids, words, _next_mesh_uid(),
+        predicate_labels)
 end
 
 """
@@ -142,11 +148,15 @@ const _MeshnDLike{D} = Union{MeshnD{D}, MeshnDState{D}}
 # change, and never equal across meshes or across two stores.
 @inline _marker_stamp(Ωₕ::MeshnD) = Ωₕ.marker_stamp
 
+# The labels `set_markers!` defined by a predicate of position; every other store clears them.
+@inline _predicate_labels(Ωₕ::MeshnD) = Ωₕ.predicate_labels
+
 # Replaces the marker dictionary, its label table and the word matrix together. A label set
 # may change after construction; the word matrix is rebuilt, never resized.
-function _store_markers!(Ωₕ::MeshnD, mesh_markers)
+function _store_markers!(Ωₕ::MeshnD, mesh_markers, predicate_labels = Symbol[])
     mm = convert(MeshMarkers, mesh_markers)
     ids, words = _marker_table(mm, npoints(Ωₕ))
+    Ωₕ.predicate_labels = Symbol[predicate_labels...]
     Ωₕ.markers = mm
     Ωₕ.marker_ids = ids
     Ωₕ.words = words
@@ -432,7 +442,13 @@ end
 # Every axis is checked, for its count and for its values, before any is mutated, so a
 # refusal on a later axis leaves the earlier ones and the version as they were, as
 # `_refine_indices!` does for a tie.
-function change_points!(Ωₕ::MeshnD{D}, pts) where {D}
+function change_points!(Ωₕ::MeshnD, pts)
+    _check_no_predicate_labels(Ωₕ)
+    return _change_points!(Ωₕ, pts)
+end
+
+# The geometry alone, with markers left as they are (see the `Mesh1D` method).
+function _change_points!(Ωₕ::MeshnD{D}, pts) where {D}
     @inbounds for i in 1:D
         n = npoints(Ωₕ(i))
         n == length(pts[i]) || _throw_point_count_mismatch(n, length(pts[i]))
@@ -441,7 +457,7 @@ function change_points!(Ωₕ::MeshnD{D}, pts) where {D}
         _check_set_points(Ωₕ(i), pts[i])
     end
     @inbounds for i in 1:D
-        change_points!(Ωₕ(i), pts[i])
+        _change_points!(Ωₕ(i), pts[i])
     end
     return nothing
 end
@@ -455,7 +471,8 @@ Create a copy of mesh `Ωₕ`. The copy is shallow with respect to immutable fie
 """
 function Base.copy(Ωₕ::MeshnD{D}) where {D}
     return MeshnD(
-        Ωₕ.set, deepcopy(Ωₕ.markers), Ωₕ.indices, Ωₕ.backend, map(copy, Ωₕ.submeshes)
+        Ωₕ.set, deepcopy(Ωₕ.markers), Ωₕ.indices, Ωₕ.backend, map(copy, Ωₕ.submeshes),
+        copy(Ωₕ.predicate_labels)
     )
 end
 

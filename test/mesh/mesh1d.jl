@@ -623,14 +623,14 @@ import Base: diff
             new_pts_invalid_len = [0.0, 1.0, 2.0]
             new_pts_invalid_ends = [0.1, 0.5, 1.0, 1.5, 2.1]
 
-            # Test valid change without marker update
+            # The two-argument form refuses a mesh carrying the predicate labels NearStart
+            # and Far, before anything changes. Endpoint is a face label.
             Ωₕ_copy1 = deepcopy(Ωₕ)
-            change_points!(Ωₕ_copy1, new_pts_valid)
-            @test points(Ωₕ_copy1) ≈ new_pts_valid
-            # the two-argument form keeps the markers of the old points (0.5 ≥ 0.3)
+            @test_throws ["change_points!(Ωₕ, pts)", "(:NearStart, :Far)",
+                "change_points!(Ωₕ, domain_markers, pts)"] change_points!(
+                Ωₕ_copy1, new_pts_valid)
+            @test points(Ωₕ_copy1) ≈ [0.0, 0.5, 1.0, 1.5, 2.0]
             @test all(==(Bool[1, 0, 0, 0, 0]), stored_masks(Ωₕ_copy1, :NearStart))
-            @test all(==(Bool[0, 0, 0, 0, 1]), stored_masks(Ωₕ_copy1, :Endpoint))
-            @test all(==(Bool[0, 1, 1, 1, 1]), stored_masks(Ωₕ_copy1, :Far))
 
             # Test valid change *with* marker update
             Ωₕ_copy2 = deepcopy(Ωₕ)
@@ -643,7 +643,7 @@ import Base: diff
 
             # A different point count is rejected and leaves the points untouched.
             Ωₕ_copy3 = deepcopy(Ωₕ)
-            @test_throws DimensionMismatch change_points!(Ωₕ_copy3, new_pts_invalid_len)
+            @test_throws DimensionMismatch change_points!(Ωₕ_copy3, dm, new_pts_invalid_len)
             @test points(Ωₕ_copy3) ≈ [0.0, 0.5, 1.0, 1.5, 2.0]
         end
     end
