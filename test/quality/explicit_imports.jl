@@ -376,6 +376,11 @@ using Kronecker: Kronecker
                 :_each_marked,
                 :_kron_coeff,
                 :_kron_scalar,
+                # `_throw_plot_composite`, `_throw_plot_dim` (BramblePlotsExt, BrambleMakieExt):
+                # the shared refusals each plotting extension raises for a composite or a
+                # non-2D element, called as `Bramble.name(...)`. Not a user call.
+                :_throw_plot_composite,
+                :_throw_plot_dim,
                 # `_allocate_from_pattern` (BrambleMetalExt, BrambleSparseMatricesCSRExt): the
                 # system-matrix allocation hook a storage backend specialises on its own sparse
                 # type, same shape as `_csr_backend` above.
