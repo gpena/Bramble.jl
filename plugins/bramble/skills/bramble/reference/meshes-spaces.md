@@ -48,6 +48,10 @@ Bramble.index_in_marker(Ωₕ, :walls)      # BitVector mask for marker
 Bramble.set_points!(Ωₕ, new_points), Bramble.change_points!(Ωₕ, new_points), iterative_refinement!(Ωₕ, ...)
 ```
 
+`change_points!(Ωₕ, pts)` and `set_points!` throw an `ArgumentError` on a mesh with a label
+`set_markers!` built from a predicate of position (`:c => x -> x[1] < 0.5`): the set would stay
+stale. Use `change_points!(Ωₕ, domain_markers, pts)`, which sets the markers again; face labels are fine.
+
 ## Discrete spaces & vector elements
 
 ```julia
