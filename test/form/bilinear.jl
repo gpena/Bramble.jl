@@ -861,21 +861,29 @@ using Bramble:
         t = @elapsed form(W, W, (u, v) -> innerₕ(u, g * (R(:l, v) + R(:r, v)) + R(:b, v)))
         @test t < 2.0
 
-        # On a Float32 mesh the scales are not promoted to a Float64 they share with
-        # nothing, and with scales still mixed the product is not split either: the form
-        # is the one `simplify_ast` built and its matrix the unsplit one, bit for bit.
+        # On a Float32 mesh a Float64 literal beside an Int widens the Int to Float64, never
+        # narrows the literal to Float32: the matrix keeps its Float64 element type and its
+        # parts' values up to the rounding of the products' order, and refills with 0 B
+        # (39680 B when the scales were left mixed).
         Ω32 = domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0), :l => :left,
             :r => :right, :b => :bottom)
         W32 = gridspace(mesh(Ω32, (7, 9), (false, false); backend = backend(Float32)))
+        terms = ((u, v) -> innerₕ(u, 0.1 * R(:l, v)), (u, v) -> innerₕ(u, 3 * D₋ₓ(v)),
+            (u, v) -> innerₕ(u, R(:r, v)), (u, v) -> innerₕ(u, R(:b, v)))
         f = (u, v) -> innerₕ(u, 0.1 * R(:l, v) + 3 * D₋ₓ(v) + R(:r, v) + R(:b, v))
         a = form(W32, W32, f)
+        A = assemble(a)
         ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
             resolve_ast(f(Bramble.trial_function(W32), Bramble.test_function(W32))), W32, W32))
-        @test Bramble._uniform_scales(ast.right_op, Float32) === ast.right_op
-        @test resolve_form_ast(a) === ast
         unsplit = Bramble.BilinearForm{2, typeof(W32), typeof(W32), typeof(ast)}(
             W32, W32, ast, Bramble._AssemblyCache{2}(ast))
-        @test Matrix(assemble(a)) == Matrix(assemble(unsplit))
+        U = assemble(unsplit)
+        parts = sum(assemble(form(W32, W32, t)) for t in terms)
+        @test eltype(A) === eltype(U) === Float64
+        @test _loop_bytes(A, a) == 0
+        @test isapprox(Matrix(A), Matrix(U); rtol = 1e-6)
+        @test isapprox(Matrix(A), Matrix(parts); rtol = 1e-6)
+        @test nnz(A) == nnz(U)
 
         # Scales of different types whose common type is not `E` but promotes to it (`Int`
         # with `Rational` on a Float64 mesh) are converted to `E` too, as `Int * Float64`
