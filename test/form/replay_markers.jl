@@ -3,6 +3,7 @@ module FormReplayMarkersTests
 using Test
 using Bramble
 using SparseArrays
+using Random
 using Bramble: CpuSerial, CpuThreaded, backend, assemble_add!, assemble_parallel!,
                allocate_system_matrix, restrict_to, D₋ₓ, set_points!, _marker_stamp,
                _pattern_stamp
@@ -95,6 +96,7 @@ end
         case in (:scalar, :pair, :cross), path in (:assemble, :allocate),
         entry in (:assemble!, :assemble_add!, :assemble_parallel!)
         @testset "shrink" begin
+            Random.seed!(20261014)
             W, a, Ω = _setup(pol, case)
             A = path === :assemble ? assemble(a) : allocate_system_matrix(a)
             assemble!(A, a)
