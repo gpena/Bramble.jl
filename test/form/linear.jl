@@ -1505,9 +1505,16 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_3D_TESTS, WITH_AD_TESTS, _grad
 
         # A scale over a restriction of a scaled restriction shifts without boxing (6912 B
         # in 2D, 960 B in 1D, when the shift recursed through one scale per restriction).
+        # The interior points are random, so the mesh is seeded: an unseeded draw can leave
+        # both restrictions' overlap empty, and `want` is all zero (CI, gpena/Bramble.jl#768).
         for (S, np) in ((I1, (11,)), (I1 × I1, (7, 9)))
-            W = gridspace(mesh(domain(S, :c => x -> x[1] < 0.6, :d => x -> x[1] > 0.2), np,
-                ntuple(_ -> false, length(np))))
+            Bramble._seed_mesh1d_rng!(2)
+            W = try
+                gridspace(mesh(domain(S, :c => x -> x[1] < 0.6, :d => x -> x[1] > 0.2), np,
+                    ntuple(_ -> false, length(np))))
+            finally
+                Bramble._unseed_mesh1d_rng!()
+            end
             nested(v) = S₊ₓ(2.0 * R(:c, 3 * R(:d, v)))
             want = 6 * assemble(form(W, W, (u, v) -> innerₕ(u, S₊ₓ(R(:c, R(:d, v))))))
             @test count(!iszero, want) > 0
