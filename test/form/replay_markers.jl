@@ -155,7 +155,16 @@ _allocs(A, a) = @allocated assemble!(A, a)
 end
 
 @testset "set_points! keeps the stamp" begin
+    # A mesh carrying a predicate marker is refused, and nothing moves.
     Ω = _mesh1(31, CpuSerial())
+    p0 = collect(points(Ω))
+    stamp = _marker_stamp(Ω)
+    @test_throws ArgumentError set_points!(Ω, p0 .^ 2)
+    @test points(Ω) == p0
+    @test _marker_stamp(Ω) == stamp
+
+    # Re-stored markers are plain sets: no predicate label remains, so the move is allowed.
+    Bramble.markers!(Ω, copy(markers(Ω)))
     W = gridspace(Ω)
     a = form(W, W, _term)
     assemble(a)

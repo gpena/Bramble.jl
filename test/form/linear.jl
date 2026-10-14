@@ -49,7 +49,7 @@ using Bramble:
                inner₊ₓ,
                jumpₓ,
                weights
-using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
+using ..TestUtils: alloc_test, @test_allocs, WITH_3D_TESTS, WITH_AD_TESTS, _graded_mesh
 
 # Assembling the right-hand side of a system.
 #
@@ -1454,7 +1454,8 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
         I1 = interval(0.0, 1.0)
         cases = ((I1, (11,), (D̽ₓ,)), (I1 × I1, (7, 9), (D̽ₓ, D̽ᵧ)),
-            (I1 × I1 × I1, (4, 5, 6), (D̽ₓ, D̽ᵧ, D̽₂)))
+            # the 3D case runs in `slow` (gpena/Bramble.jl#650)
+            (WITH_3D_TESTS ? ((I1 × I1 × I1, (4, 5, 6), (D̽ₓ, D̽ᵧ, D̽₂)),) : ())...)
         for (S, np, Ds) in cases
             Ωg = mesh(domain(S, :l => :left), np, ntuple(_ -> false, length(np)))
             pts = ntuple(d -> range(0.0, 1.0; length = np[d]) .^ (1 + 0.25d), length(np))
