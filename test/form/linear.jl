@@ -34,6 +34,11 @@ using Bramble:
                D̽ₓ,
                D̽ᵧ,
                D̽₂,
+               D₊ₓ,
+               Dcₓ,
+               Mcₓ,
+               S₊ₓ,
+               source_function,
                D₋ᵧ,
                D₋ₓ,
                Mᵧ,
@@ -1422,6 +1427,44 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
                     @test bytes(y, lf) == 0
                 end
             end
+        end
+
+        # A coefficient infinite outside the region it multiplies is zeroed with the region,
+        # never `Inf * 0 = NaN`, in every node that taps a neighbour: the vector is the one a
+        # finite coefficient gives, for a finite source and one infinite at both ends.
+        ns = 9
+        Ws = gridspace(mesh(domain(I1), ns, true))
+        u_end = [1 < i < ns ? 2.0 : Inf for i in 1:ns]
+        u_fin = fill(2.0, ns)
+        sources = (source_function(x -> x + 1, Val(1)),
+            source_function(x -> 1 / (x * (1 - x)), Val(1)))
+        for op in (D₊ₓ, D₋ₓ, D̽ₓ, Dcₓ, Mcₓ, jumpₓ, S₊ₓ), sf in sources
+            rhs(u) = assemble(form(Ws, v -> innerₕ(op(2.0 * (u * R(:interior, sf))), v)))
+            @test isequal(rhs(u_end), rhs(u_fin))
+            # the vector the walk gave before the shift followed the chain (2afe89a4)
+            op === D₊ₓ && sf === first(sources) &&
+                @test isequal(rhs(u_end), [2.25, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, -7.5, 0.0])
+        end
+
+        # A scale over a restriction of a scaled restriction shifts without boxing (6912 B
+        # in 2D, 960 B in 1D, when the shift recursed through one scale per restriction).
+        for (S, np) in ((I1, (11,)), (I1 × I1, (7, 9)))
+            W = gridspace(mesh(domain(S, :c => x -> x[1] < 0.6, :d => x -> x[1] > 0.2), np,
+                ntuple(_ -> false, length(np))))
+            nested(v) = S₊ₓ(2.0 * R(:c, 3 * R(:d, v)))
+            want = 6 * assemble(form(W, W, (u, v) -> innerₕ(u, S₊ₓ(R(:c, R(:d, v))))))
+            @test count(!iszero, want) > 0
+            for (side, fn) in (("test", (u, v) -> innerₕ(u, nested(v))),
+                ("trial", (u, v) -> innerₕ(nested(u), v)))
+                a = form(W, W, fn)
+                A = assemble(a)
+                @test A ≈ (side == "test" ? want : transpose(want))
+                @test bytes(A, a) == 0
+            end
+            lf = form(W, v -> innerₕ(1.0, nested(v)))
+            y = assemble(lf)
+            @test y ≈ 6 * assemble(form(W, v -> innerₕ(1.0, S₊ₓ(R(:c, R(:d, v))))))
+            @test bytes(y, lf) == 0
         end
     end
 

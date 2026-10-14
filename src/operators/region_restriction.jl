@@ -237,10 +237,9 @@ end
     return scale_stencil(shifted, _in_region(inner_op, markers, lins[Ishift]) ? one(T) : zero(T))
 end
 
-# A constant scale over a restriction, directly or through further scales, shifts its operand
-# by that operand's own rule (the restriction's above, `GridFunctionScale`'s in ast/common.jl)
-# and scales the result, as `GridFunctionScale` does. The trait path would re-evaluate the
-# scaled restriction at the neighbour, `()` or a full tuple by its marker, and three such taps
+# A constant scale over a restriction, directly or through further scales and restrictions,
+# is shifted along that chain rather than re-evaluated at the neighbour. The trait path gave
+# `()` or a full tuple by the neighbour's marker, and three such taps
 # (`D̽ₓ(2 * restrict_to(:l, v))`) concatenate to more stencil shapes than inference splits,
 # so the walk boxed on every refill. Any other scale keeps the trait path; the branch folds.
 @inline _scales_restriction(::RegionRestriction) = true
@@ -253,10 +252,34 @@ end
 ) where {D, Dim}
     _scales_restriction(inner_op.inner_op) || return _shifted_inner_stencil(
         stencil_shift_trait(inner_op), inner_op, inner, space, I, markers, Val(Dim), delta)
-    lin_idx = LinearIndices(indices(mesh(space)))[I]
-    sub = local_stencil(inner_op.inner_op, space, I, markers, lin_idx)
-    shifted = shifted_inner_stencil(inner_op.inner_op, sub, space, I, markers, Val(Dim), delta)
-    return scale_stencil(shifted, _scale_value(inner_op, lin_idx))
+    m = mesh(space)
+    d = _shift_delta(delta)
+    Ishift = _clamped_shift(m, I, Val(Dim), d)
+    s, outside = _shifted_chain(
+        inner_op, space, I, markers, Val(Dim), delta, LinearIndices(indices(m))[Ishift])
+    # Zeroed at the top, as `_chain_stencil` zeroes the unshifted chain: a coefficient not
+    # finite outside a region (or at a clamped, off-grid neighbour) still gives 0, not NaN.
+    return outside || Ishift[Dim] != I[Dim] + d ? _zero_entries(s) : s
+end
+
+# The chain's stencil shifted to the neighbour `lin_shift`, and whether that neighbour lies
+# outside any restriction on the way down. Scales multiply in their value there; the
+# innermost restriction shifts its operand by its own rule above.
+@inline function _shifted_chain(
+        op::Union{OperatorScale, GridFunctionScale}, space, I, markers, vdim, delta,
+        lin_shift::Int
+)
+    s, outside = _shifted_chain(op.inner_op, space, I, markers, vdim, delta, lin_shift)
+    return (scale_stencil(s, _scale_value(op, lin_shift)), outside)
+end
+@inline function _shifted_chain(
+        op::RegionRestriction, space, I, markers, vdim, delta, lin_shift::Int
+)
+    out = !_in_region(op, markers, lin_shift)
+    _scales_restriction(op.inner_op) || return (
+        shifted_inner_stencil(op, nothing, space, I, markers, vdim, delta), out)
+    s, outside = _shifted_chain(op.inner_op, space, I, markers, vdim, delta, lin_shift)
+    return (s, out | outside)
 end
 
 # --- AST resolution ---------------------------------------------------------------- #
