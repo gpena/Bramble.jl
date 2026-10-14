@@ -816,15 +816,32 @@ using Bramble:
         b = assemble(l)
         @test _loop_bytes(b, l) == 0
         @test b ≈ sum(assemble(form(Wd, v -> innerₕ(fd, MD(R(s, v))))) for s in (:l, :r))
-        # One such summand on each side boxes in every piece, so the product stays whole:
-        # split into four, both forms refilled 157168 B against 92096 B whole.
-        for W2 in (MD, DD)
-            whole = (u, v) -> innerₕ(W2(R(:l, u) + R(:r, u)), W2(R(:b, v) + R(:t, v)))
-            @test _products(resolve_form_ast(form(Wd, Wd, whole))) == 1
-            P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(W2(R(s, u)), W2(R(t, v)))))
-            for s in (:l, :r) for t in (:b, :t))
-            @test Matrix(assemble(form(Wd, Wd, whole))) ≈ Matrix(P)
+        # With restricted summands on both sides an average is left whole, as before: its
+        # pieces box there whatever the split, and each adds a walk. Distributed there, or
+        # kept whole beside a split difference, the forms below refilled more than these
+        # caps, their bytes before averages were distributed (157600 B against 130512 B).
+        whole = (u, v) -> innerₕ(MD(R(:l, u) + R(:r, u)), MD(R(:b, v) + R(:t, v)))
+        @test _products(resolve_form_ast(form(Wd, Wd, whole))) == 1
+        P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(MD(R(s, u)), MD(R(t, v)))))
+        for s in (:l, :r) for t in (:b, :t))
+        @test Matrix(assemble(form(Wd, Wd, whole))) ≈ Matrix(P)
+        RL = u -> R(:l, u) + R(:r, u)
+        RB = v -> R(:b, v) + R(:t, v)
+        JD = v -> Bramble.jumpₓ(Bramble.D₊ᵧ(v))
+        for (whole, cap) in (
+            ((u, v) -> innerₕ(DD(R4(u)), DD(RB(v))), 278560),
+            ((u, v) -> innerₕ(DD(R(:c, u + RL(u))), DD(R(:c, v + RB(v)))), 382032),
+            ((u, v) -> innerₕ(MD(RL(u)), MD(RB(v)) + v), 130512),
+            ((u, v) -> innerₕ(MD(RL(u)) + u, MD(RB(v))), 129952),
+            ((u, v) -> innerₕ(MD(RL(u)) + JD(RB(u)), MD(RB(v)) + JD(RL(v))), 368176))
+            a = form(Wd, Wd, whole)
+            A = assemble(a)
+            @test _loop_bytes(A, a) <= cap
         end
+        l = form(Wd, v -> innerₕ(fd, R(:c, MD(RL(v)))))
+        b = assemble(l)
+        @test _loop_bytes(b, l) <= 74928
+        @test b ≈ sum(assemble(form(Wd, v -> innerₕ(fd, R(:c, MD(R(s, v)))))) for s in (:l, :r))
 
         # With restrictions on both sides, a plain summand beside a restriction of another
         # operand (`v + R(:t, D₋ₓ(v))`, or `D₋ₓ(u)` beside `D₋ₓ(R(:l, u))`) gave stencils of
