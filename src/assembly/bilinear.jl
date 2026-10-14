@@ -430,9 +430,10 @@ precompile(_type_holds_restriction, (Any,))
 # A summed operand whose summands' constant scales differ in type (`2.0 * Rₕ(:l, v) +
 # 3 * Rₕ(:r, v)`) has a stencil whose weights differ in type from summand to summand, and
 # the walk boxes it at every point even with two restricted summands. Those scales, the
-# outermost of each summand only, are converted to the wider of their common type and the
-# spaces' element type `E`, `promote_type(T, E)`, never narrowed to `E`: `Int` with
-# `Rational` on a `Float64` mesh go to `Float64` as `Int * Float64` does, and a `Float64`
+# outermost of each summand only, are converted to the type their products with a weight
+# of the spaces' element type `E` join to (`_scale_product_type`), never narrowed to `E`:
+# `Int` with `Rational` on a `Float64` mesh go to `Float64` as `Int * Float64` does, `π`
+# beside an `Int` on a Float32 mesh go to `Float32` as `π * 1f0` does, and a `Float64`
 # literal beside an `Int` on a Float32 mesh takes the `Int` to `Float64`, so the entries
 # keep the `Float64` they had and move only by the order of the products' rounding (39680 B
 # before on a 7x9 grid for `0.1 * Rₕ(:l, v) + 3 * D₋ₓ(v) + Rₕ(:r, v) + Rₕ(:b, v)`). An
@@ -448,8 +449,16 @@ _uniform_scales(op, ::Type) = op
 @inline _mixed_scales(op) = _scales_differ(op, _scale_type(op))
 function _uniform_scales(op::OperatorAdd, ::Type{E}) where {E}
     T = _scale_type(op)
-    return _scales_differ(op, T) ? _promote_scales(op, promote_type(T, E)) : op
+    return _scales_differ(op, T) ? _promote_scales(op, _scale_product_type(op, E)) : op
 end
+
+# The type of each scale's product with an `E` weight, joined over the summands: `π * 1f0`
+# is a `Float32`, though `promote_type(Irrational{:π}, Int)` is `Float64`.
+@inline _scale_product_type(op::OperatorScale, ::Type{E}) where {E} = Base.promote_op(
+    *, _scalar_type(op.scalar), E)
+@inline _scale_product_type(op::OperatorAdd, ::Type{E}) where {E} = promote_type(
+    _scale_product_type(op.left_op, E), _scale_product_type(op.right_op, E))
+@inline _scale_product_type(::Any, ::Type) = Union{}
 
 @inline _scale_type(op::OperatorScale) = _scalar_type(op.scalar)
 @inline _scale_type(op::OperatorAdd) = promote_type(
