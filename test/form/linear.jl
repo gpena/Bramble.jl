@@ -1381,12 +1381,63 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             end
         end
 
-        # A form holding no restriction comes back as `simplify_ast` built it, mixed scale
-        # types and all; the split of a restricted one infers its concrete result.
-        _ast(f) = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
-            Bramble.resolve_ast(f(Bramble.test_function(W))), W))
-        ast = _ast(v -> innerₕ(g, 0.1 * v + 3 * D₋ₓ(v) + (1 // 3) * D₋ᵧ(v)))
+        # A form holding no restriction comes back as `simplify_ast` built it when its test
+        # side's scales agree in type. When they differ they are only ever widened, to the
+        # type of their products with a weight of the mesh's (`π` beside an Int on a
+        # Float32 mesh stays Float32, a Float64 literal stays Float64): each form keeps the
+        # unwidened one's element type and values, and refills with 0 B (14112 B on the
+        # Float32 mesh when left mixed, 27216 B for the sum of two products).
+        _ast(f, S = W) = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+            Bramble.resolve_ast(f(Bramble.test_function(S))), S))
+        _scale_types(op::Bramble.OperatorAdd) = (
+            _scale_types(op.left_op)..., _scale_types(op.right_op)...)
+        _scale_types(op::Bramble.OperatorScale) = (typeof(op.scalar),)
+        _scale_types(op) = ()
+        I32 = interval(0.0f0, 1.0f0)
+        W32 = gridspace(mesh(domain(I32 × I32), (7, 9), (false, false); backend = backend(Float32)))
+        f32 = x -> 1 + x[1]
+        for (S, h) in ((W, v -> innerₕ(g, 2.0 * v + 3.0 * D₋ₓ(v))),
+            (W32, v -> innerₕ(f32, 2 * v + 3 * D₋ₓ(v))),
+            (W32, v -> innerₕ(f32, 0.1 * v + 0.3 * D₋ₓ(v)) + innerₕ(1.0, v)))
+            ast = _ast(h, S)
+            @test Bramble._split_restricted_products(ast, eltype(S)) === ast
+        end
+        for (S, h, T, exact) in (
+            (W, v -> innerₕ(g, 0.1 * v + 3 * D₋ₓ(v) + (1 // 3) * D₋ᵧ(v)), Float64, true),
+            (W32, v -> innerₕ(f32, 0.1 * v + 3 * D₋ₓ(v)), Float64, false),
+            (W32, v -> innerₕ(f32, π * v + 3 * D₋ₓ(v)), Float32, false),
+            (W32, v -> innerₕ(f32, 0.1 * v + 3 * D₋ₓ(v)) + innerₕ(1.0, v), Float64, false),
+            (W32, v -> 2.0 * innerₕ(f32, Ref(0.1) * v + 3 * D₋ₓ(v)), Float64, false))
+            ast = _ast(h, S)
+            split = Bramble._split_restricted_products(ast, eltype(S))
+            if ast isa Bramble.LinearProduct
+                @test all(==(T), _scale_types(split.right_op))
+                @test all(t -> promote_type(t, T) === T, _scale_types(ast.right_op))
+            end
+            lf = form(S, h)
+            b = assemble(lf)
+            lowered = Bramble._lower_sources_for_space(ast, S)
+            U = assemble(Bramble.LinearForm{2, typeof(S), typeof(lowered)}(S, lowered))
+            @test eltype(b) === eltype(U) === T
+            @test restricted_bytes(b, lf) == 0
+            @test exact ? b == U : isapprox(b, U; rtol = 1e-6)
+        end
+        # Scales joining to a type that is not bits are left mixed: every product with a
+        # BigFloat allocates, and converting the Int to one only adds allocations.
+        h = v -> innerₕ(g, big(0.1) * v + 3 * D₋ₓ(v))
+        ast = _ast(h)
         @test Bramble._split_restricted_products(ast, Float64) === ast
+        lf = form(W, h)
+        b = assemble(lf)
+        @test eltype(b) === BigFloat
+        @test restricted_bytes(b, lf) <= 65760
+
+        # The zero stencil a typed restriction stores past 32 entries: `map` boxed it.
+        s40 = ntuple(k -> (k, 2, isodd(k) ? 1.5k : k), 40)
+        @test Bramble._zero_entries(s40) == map(t -> (Base.front(t)..., zero(t[end])), s40)
+        @test alloc_test(Bramble._zero_entries, s40) == 0
+
+        # The split of a restricted form infers its concrete result.
         ast = _ast(v -> innerₕ(g, g * R(:l, v) + g * R(:r, v) + g * R(:b, v) + g * R(:t, v)))
         rt = Base.return_types(Bramble._split_restricted_products, (typeof(ast), Type{Float64}))
         @test length(rt) == 1 && isconcretetype(only(rt))
