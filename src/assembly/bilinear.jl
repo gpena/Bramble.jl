@@ -526,18 +526,43 @@ end
 # type are paired in the order they come, up to `cap` bits a sum, and a summand of more bits
 # takes a sum of its own; the summands with no bits join the first sum. Which sums come out
 # depends on the types, not on the order the summands were written in.
-function _type_shape_bits(T)
+#
+# A difference reads its operand at two points, so one over a restricted difference has
+# more stencil shapes than its restriction's bit says: `D₋ₓ(D₊ᵧ(Rₕ(:l, v)))` and its `:r`
+# twin, paired in one sum, boxed (62496 B, gpena/Bramble.jl#759). Each difference level over
+# a restricted difference adds a bit, so such a summand takes a sum of its own at any depth.
+function _type_shape_bits(T, nested::Bool = true)
     if T <: RegionRestriction
-        inner = _type_shape_bits(fieldtype(T, :inner_op))
+        inner = _type_shape_bits(fieldtype(T, :inner_op), nested)
         return fieldtype(T, :zero_stencil) === Nothing ? max(1, inner) : inner
+    elseif nested && T <: _DifferenceNode
+        I = fieldtype(T, :inner_op)
+        inner = _type_shape_bits(I)
+        return inner > 0 && _type_restricted_difference(I) ? inner + 1 : inner
     elseif T <: UnaryWrapper
-        return _type_shape_bits(fieldtype(T, :inner_op))
+        return _type_shape_bits(fieldtype(T, :inner_op), nested)
     elseif T <: OperatorAdd
-        return _type_shape_bits(fieldtype(T, :left_op)) +
-               _type_shape_bits(fieldtype(T, :right_op))
+        return _type_shape_bits(fieldtype(T, :left_op), nested) +
+               _type_shape_bits(fieldtype(T, :right_op), nested)
     end
     return 0
 end
+
+# Whether `T` holds, under any wrapper or sum, a difference over a restriction.
+function _type_restricted_difference(T)
+    if T <: _DifferenceNode
+        return _type_shape_bits(fieldtype(T, :inner_op)) > 0
+    elseif T <: UnaryWrapper
+        return _type_restricted_difference(fieldtype(T, :inner_op))
+    elseif T <: OperatorAdd
+        return _type_restricted_difference(fieldtype(T, :left_op)) ||
+               _type_restricted_difference(fieldtype(T, :right_op))
+    end
+    return false
+end
+# The same count at run time, read off the type, so a linear form walks two such summands
+# apart (`_unit_bits`, linear.jl): walked as one, `D₋ₓ(D₊ᵧ(Rₕ(:l, v) + Rₕ(:r, v)))` boxed.
+@generated _shape_bits(::T) where {T <: _DifferenceNode} = _type_shape_bits(T)
 
 # `T` with every scale and restriction around it peeled off: what a summand's full stencil
 # is built from, entry for entry, so two summands with the same core have stencils of the
@@ -568,14 +593,14 @@ end
 # The summands of `Ts` (indices) as groups: one per sum, the plain summands (no bits)
 # joining the first group, or, both sides restricted and `separate` set, as
 # `_joins_restriction` allows.
-function _type_groups(Ts::Vector{Any}, cap::Int, separate::Bool)
+function _type_groups(Ts::Vector{Any}, cap::Int, separate::Bool, nested::Bool = true)
     # Plain loops over plain vectors: compiled once into the package image (`precompile`
     # below), with no closure or generator of its own left to compile per session.
     plain = Int[]
     kinds = Any[]
     members = Vector{Int}[]
     for i in 1:length(Ts)
-        if _type_shape_bits(Ts[i]) == 0
+        if _type_shape_bits(Ts[i], nested) == 0
             push!(plain, i)
             continue
         end
@@ -590,7 +615,7 @@ function _type_groups(Ts::Vector{Any}, cap::Int, separate::Bool)
     groups = Vector{Int}[]
     firsts = Int[]
     for k in 1:length(kinds)
-        per = max(1, cap ÷ _type_shape_bits(kinds[k]))
+        per = max(1, cap ÷ _type_shape_bits(kinds[k], nested))
         same = members[k]
         push!(firsts, length(groups) + 1)
         for j in 1:per:length(same)
@@ -621,9 +646,14 @@ function _sum_expr(name::Symbol, idx::Vector{Int})
     return ex
 end
 
+# A one-sided operand's nested-difference bits (`_type_shape_bits`) can give it more than
+# the 16 sums a product splits into (seventeen `D₋ₓ(D₊ᵧ(Rₕ(s, v)))`), and the product would
+# then stay whole (3413584 B against 673104 B paired); it is then paired as before them.
 function _groups_expr(Ts::Vector{Any}, cap::Int, separate::Bool)
+    groups = _type_groups(Ts, cap, separate)
+    length(groups) > 16 && (groups = _type_groups(Ts, cap, separate, false))
     ex = Expr(:tuple)
-    for g in _type_groups(Ts, cap, separate)
+    for g in groups
         push!(ex.args, _sum_expr(:ts, g))
     end
     return ex
@@ -641,8 +671,9 @@ end
 
 # The generators below run this Julia code at compile time; compiled into the package
 # image, it does not cost the first restricted `form` of a session its own compilation.
-precompile(_type_groups, (Vector{Any}, Int, Bool))
-precompile(_type_shape_bits, (Any,))
+precompile(_type_groups, (Vector{Any}, Int, Bool, Bool))
+precompile(_type_shape_bits, (Any, Bool))
+precompile(_type_restricted_difference, (Any,))
 precompile(_type_core, (Any,))
 precompile(_joins_restriction, (Any, Any))
 precompile(_sum_expr, (Symbol, Vector{Int}))

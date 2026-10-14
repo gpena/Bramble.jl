@@ -748,6 +748,43 @@ using Bramble:
                 @test nnz(A) == nnz_whole
             end
         end
+        # A difference over a restricted difference has more stencil shapes than one
+        # restriction: `D₋ₓ(D₊ᵧ(R(:l, v)))` and its `:r` twin paired in one product boxed
+        # (62496 B, 78624 B under `R(:c, …)`, 25776 B for the linear form), so each such
+        # summand takes a product of its own, at any depth: three levels split in two too.
+        # Past 16 products they pair as before rather than leave the product whole (673104
+        # B paired, 3413584 B whole, seventeen summands).
+        DD = v -> D₋ₓ(Bramble.D₊ᵧ(v))
+        for (whole, parts, nnz_whole) in (
+            ((u, v) -> innerₕ(u, DD(R(:l, v) + R(:r, v))),
+            ((u, v) -> innerₕ(u, DD(R(:l, v))), (u, v) -> innerₕ(u, DD(R(:r, v)))), 131),
+            ((u, v) -> innerₕ(u, DD(R(:c, v + R(:l, v) + R(:r, v)))),
+            Tuple((u, v) -> innerₕ(u, DD(R(:c, g(v))))
+            for g in (identity, v -> R(:l, v), v -> R(:r, v))), 176),
+            ((u, v) -> innerₕ(DD(R(:l, u) + R(:r, u)), v),
+            ((u, v) -> innerₕ(DD(R(:l, u)), v), (u, v) -> innerₕ(DD(R(:r, u)), v)), 131))
+            a = form(Wd, Wd, whole)
+            A = assemble(a)
+            @test _loop_bytes(A, a) == 0
+            P = sum(assemble(form(Wd, Wd, p)) for p in parts)
+            @test Matrix(A) ≈ Matrix(P)
+            @test nnz(A) == nnz_whole
+        end
+        fd = element(Wd)
+        fd .= 1.0 .+ (1:length(fd)) ./ 11
+        l = form(Wd, v -> innerₕ(fd, DD(R(:l, v) + R(:r, v))))
+        b = assemble(l)
+        @test _loop_bytes(b, l) == 0
+        @test b ≈ assemble(form(Wd, v -> innerₕ(fd, DD(R(:l, v))))) +
+                  assemble(form(Wd, v -> innerₕ(fd, DD(R(:r, v)))))
+        _products(op::Bramble.OperatorAdd) = _products(op.left_op) + _products(op.right_op)
+        _products(op::Bramble.BilinearProduct) = 1
+        DDD = v -> Bramble.D₊ₓ(DD(v))
+        @test _products(resolve_form_ast(form(Wd, Wd,
+            (u, v) -> innerₕ(u, DDD(R(:l, v) + R(:r, v)))))) == 2
+        @test _products(resolve_form_ast(form(Wd, Wd,
+            (u, v) -> innerₕ(u, DD(foldl(+, (R(:l, v) for _ in 1:17))))))) == 9
+
         # With restrictions on both sides, a plain summand beside a restriction of another
         # operand (`v + R(:t, D₋ₓ(v))`, or `D₋ₓ(u)` beside `D₋ₓ(R(:l, u))`) gave stencils of
         # four lengths and boxed: 11152, 15104, 33056 and 16480 B, and 16704 B for one piece
