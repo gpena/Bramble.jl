@@ -409,8 +409,11 @@ function _split_restricted_products(op::BilinearProduct{D, W}, ::Type{E}) where 
     # Left whole, such a scaled sum boxes whatever the other side's grouping, so a plain
     # summand there joins a restricted one rather than adding a boxing product of its own
     # (55232 B against 41792 B for `innerₕ(u + Rₕ(:l, D₋ₓ(u)), g * (v + Rₕ(:t, D₋ₓ(v)) +
-    # Rₕ(:b, v)))` on a 7x9 grid before the scale was distributed).
-    ls, rs = _capped_groups(_expanded_summands, l, r, capl, capr, Val(!sr), Val(!sl))
+    # Rₕ(:b, v)))` on a 7x9 grid before the scale was distributed). With such a sum on
+    # both sides each plain summand keeps its own group: joined, `innerₕ(u + g * (Rₕ(:l, u)
+    # + Rₕ(:r, u) + Rₕ(:c, u)), v + g * (…))` refilled 135520 B against 71792 B.
+    ls, rs = _capped_groups(_expanded_summands, l, r, capl, capr, Val(!sr || sl),
+        Val(!sl || sr))
     return _split_product(op, l, r, ls, rs)
 end
 

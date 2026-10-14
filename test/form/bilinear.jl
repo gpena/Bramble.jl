@@ -965,6 +965,23 @@ using Bramble:
                 g * (v + R(:l, D₋ₓ(v)) + R(:r, D₋ₓ(v)) + R(:b, D₋ₓ(v)))),
             (identity, (RD(s) for s in (:l, :r, :b, :t))...),
             (v -> g * v, (gRD(s) for s in (:l, :r, :b))...); nnz_equal = false)
+        # With such a sum too long to split on both sides, each plain summand keeps a
+        # product of its own, as before the scale was distributed: joined to the sum, the
+        # first form refilled 135520 B against 71792 B on a grid with one more marker.
+        gd = element(Wd)
+        parent(gd) .= parent(g)
+        for (lhs, rhs, max_bytes) in (
+            ((identity, u -> gd * (R(:l, u) + R(:r, u) + R(:c, u))),
+            (identity, v -> gd * (R(:b, v) + R(:t, v) + R(:c, v))), 72800),
+            ((u -> u + R(:c, D₋ₓ(u)), u -> gd * (R(:l, u) + R(:r, u) + R(:t, u))),
+            (identity, v -> gd * (R(:b, D₋ₓ(v)) + R(:t, v) + R(:c, v))), 91376))
+            a = form(Wd, Wd, (u, v) -> innerₕ(lhs[1](u) + lhs[2](u), rhs[1](v) + rhs[2](v)))
+            A = assemble(a)
+            @test _loop_bytes(A, a) <= max_bytes
+            P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(f(u), h(v))))
+            for f in lhs for h in rhs)
+            @test Matrix(A) ≈ Matrix(P)
+        end
         # An infinite value of `g` stays where its parts put it, and no finite entry
         # becomes NaN.
         gi = copy(g)
