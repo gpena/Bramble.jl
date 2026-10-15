@@ -267,6 +267,10 @@ end
         "values")
     @test Bramble.ndofs(constrained(W, u -> (:xmin => u => 1e-20, :ymin => u => 1e-20))) ==
           Bramble.ndofs(W) - (sum(ON.sizes(Ω)) - 1)
+    # a rounding zero meets an exact one: sin(π x) at x = 1 is 1.2e-16
+    @test Bramble.ndofs(constrained(W, u -> (:ymin => u => (x -> sin(π * x[1])),
+        :xmax => u => 0.0, :xmax => ∂ₙ(u) => 0.0))) ==
+          Bramble.ndofs(W) - (sum(ON.sizes(Ω)) - 1) - ON.sizes(Ω)[2]
     @test refuses(() -> constrained(W, u -> (:xmin => u => 0.0, :left => u => 0.0)),
         "two Dirichlet relations")
     @test refuses(() -> constrained(W, u -> (:xmax => rob(u) => 0.0, :xmax => ∂ₙ(u) => 0.0)),

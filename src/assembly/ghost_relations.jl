@@ -277,7 +277,8 @@ end
 # The padded points the Dirichlet relations fix, as a mask over the padded grid, and their
 # values: the data at each physical node of the facet, `data(point(Ωₕ, I))` as `dirichlet`
 # evaluates it. A node of two such facets (a corner) takes the first value, and the second
-# must agree with it to a relative `√eps` of the larger of the two.
+# must agree with it to a relative `√eps` of the larger of the two, plus `10 eps` of the
+# largest datum of all, so that a rounding zero (`sin(π x)` at `x = 1`) meets an exact one.
 function _dirichlet_values(G::GhostMesh{D}, drels, ::Type{T}) where {D, T}
     Ωₕ = physical_mesh(G)
     plin = LinearIndices(npoints(G, Tuple))
@@ -295,9 +296,10 @@ function _dirichlet_values(G::GhostMesh{D}, drels, ::Type{T}) where {D, T}
     fixed = falses(length(plin))
     g = zeros(S, length(plin))
     first_name = Vector{Symbol}(undef, length(plin))
+    floor = isempty(vals) ? zero(real(S)) : 10 * eps(real(S)) * maximum(abs, vals)
     for (p, v, name) in zip(pts, vals, names)
         if fixed[p]
-            abs(g[p] - v) <= sqrt(eps(real(S))) * max(abs(g[p]), abs(v)) ||
+            abs(g[p] - v) <= sqrt(eps(real(S))) * max(abs(g[p]), abs(v)) + floor ||
                 _throw_dirichlet_disagree(first_name[p], name, g[p], v)
         else
             fixed[p], g[p], first_name[p] = true, v, name
